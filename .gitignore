@@ -1,0 +1,4 @@
+params_secret.py
+docs/_*
+*/__pycache__/*
+__pycache__/*
