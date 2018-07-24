@@ -1,10 +1,10 @@
-from one import OneAbstract
-import one_ibl.utils
-import one_ibl.params as par
-from one_ibl.misc import is_uuid_string, pprint
 import numpy as np
 import os
 from dataclasses import dataclass, field
+import ibllib.webclient as wc
+from ibllib.misc import is_uuid_string, pprint
+from open_neuro_data.one import OneAbstract
+import one_ibl.params as par
 
 
 @dataclass
@@ -24,8 +24,8 @@ class ONE(OneAbstract):
 
     def __init__(self):
         # Init connection to the database
-        self._alyxClient = one_ibl.utils.AlyxClient()
-        self._alyxClient.authenticate(username=par.ALYX_LOGIN, password=par.ALYX_PWD)
+        self._alyxClient = wc.AlyxClient(username=par.ALYX_LOGIN, password=par.ALYX_PWD,
+                                         base_url=par.BASE_URL)
 
     def load(self, eid, dataset_types=None, dclass_output=False):
         """
@@ -70,10 +70,10 @@ class ONE(OneAbstract):
             for [i, sdt] in enumerate(session_dtypes):
                 if sdt == dt:
                     urlstr = ses['data_dataset_session_related'][i]['data_url']
-                    fil = one_ibl.utils.http_download_file(urlstr,
-                                                           username=par.HTTP_DATA_SERVER_LOGIN,
-                                                           password=par.HTTP_DATA_SERVER_PWD)
-                    out.eid.append(ses['url'])
+                    fil = wc.http_download_file(urlstr,
+                                                username=par.HTTP_DATA_SERVER_LOGIN,
+                                                password=par.HTTP_DATA_SERVER_PWD)
+                    out.eid.append(eid_str)
                     out.dataset_type.append(dt)
                     out.url.append(urlstr)
                     out.local_path.append(fil)
@@ -84,7 +84,7 @@ class ONE(OneAbstract):
             if fil and os.path.splitext(fil)[1] == '.npy':
                 out.data[ind] = np.load(file=fil)
             if fil and os.path.splitext(fil)[1] == '.json':
-                pass #FIXME would be nice to implement json read but param from matlab RIG fails
+                pass  # FIXME would be nice to implement json read but param from matlab RIG fails
         if dclass_output:
             return out
         # if required, parse the output as a list that matches dataset types provided
@@ -115,7 +115,7 @@ class ONE(OneAbstract):
         field = ('name', 'username', 'nickname')
         if not table:
             table = tlist
-        if isinstance(table,str):
+        if isinstance(table, str):
             table = [table]
         full_out = []
         list_out = []
@@ -150,7 +150,7 @@ class ONE(OneAbstract):
         """
         # TODO add a lab field in the session table of ALyx to add as a query
         # make sure string inputs are interpreted as lists for dataset types and users
-        dataset_types = [dataset_types] if isinstance(dataset_types,str) else dataset_types
+        dataset_types = [dataset_types] if isinstance(dataset_types, str) else dataset_types
         users = [users] if isinstance(users, str) else users
         # start creating the url
         url = '/sessions?'

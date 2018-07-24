@@ -55,13 +55,13 @@ class TestLoad(unittest.TestCase):
         # Test when the dataset type requested is not unique
         myone = self.One
         # test with a single table, list format
-        [l,f] = myone.list(table=['users'])
+        [l, f] = myone.list(table=['users'])
         self.assertTrue(isinstance(l[0], str) and isinstance(l[0], str))
         # test with a single table, string format
-        [l,f] = myone.list(table='users')
+        [l, f] = myone.list(table='users')
         self.assertTrue(isinstance(l[0], str) and isinstance(l[0], str))
         # test with a single table, string format
-        [l,f] = myone.list(table=['users','dataset_type'])
+        [l, f] = myone.list(table=['users', 'dataset_type'])
         self.assertTrue(isinstance(l[0], list) and isinstance(l[0], list))
 
     def test_search_simple(self):
@@ -77,7 +77,7 @@ class TestLoad(unittest.TestCase):
         sl2, sd2 = myone.search(users='Morgane')
         self.assertTrue(sl1 == sl2 and sd1 == sd2)
         # test for the dataset type
-        dtyp = ['expDefinition','Parameters','wheel.timestamps']
+        dtyp = ['expDefinition', 'Parameters', 'wheel.timestamps']
         sl, sd = myone.search(dataset_types=dtyp)
         self.assertTrue(sl)
 
