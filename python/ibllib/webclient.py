@@ -137,6 +137,17 @@ class AlyxClient:
     _headers = ''
 
     def __init__(self, **kwargs):
+        """
+        Create a client instance that allows to GET and POST to the Alyx server
+        Constructor attempts to authenticate with credentials in params.py
+
+        :param username: Alyx database user
+        :type username: str
+        :param password: Alyx database password
+        :type password: str
+        :param base_url: Alyx server address, including port and protocol
+        :type base_url: str
+        """
         self.authenticate(**kwargs)
 
     def authenticate(self, username='', password='', base_url=''):
@@ -171,7 +182,8 @@ class AlyxClient:
         :return: (dict/list) json interpreted dictionary from response
         """
         rest_query = rest_query.replace(self._base_url, '')
-        r = requests.get(self._base_url + rest_query, stream=True, headers=self._headers, data=None)
+        r = requests.get(self._base_url + rest_query, stream=True, headers=self._headers,
+                         data=None)
         if r and r.status_code in (200, 201):
             return json.loads(r.text)
         else:
@@ -187,5 +199,6 @@ class AlyxClient:
         :return: response object
         """
         rest_query = rest_query.replace(self._base_url, '')
-        r = requests.post(self._base_url + rest_query, stream=True, headers=self._headers, data=None)
+        r = requests.post(self._base_url + rest_query, stream=True, headers=self._headers,
+                          data=None)
         return r

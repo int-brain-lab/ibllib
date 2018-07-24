@@ -29,24 +29,11 @@ pprint(list_types)
 pprint(dtypes)
 
 ## Search users
-sl , sd =  myone.search(users=['Morgane','miles','armin'])
+sl, sd = myone.search(users=['Morgane','miles','armin'])
 pprint(sl)
 
 ## Search by date
-sl , sd =  myone.search(users='miles', date_range=['2018-03-01', '2018-03-24'])
-
-
-ses = ac.get('/sessions?date_range=2018-03-01,2018-04-01&users=miles')
-# NB: pour l'implémentation bien faire attention à mettre la date de fin plus un jour pour que le dernier jour soit inclu
-dmin = min([isostr2date(s['start_time']+'.00') for s in ses])
-dmax = max([isostr2date(s[  'end_time']+'.00') for s in ses])
-
-print(np.unique([s['users'] for s in ses]))
-
-
-##
-import datetime
-
+sl, sd = myone.search(users='miles', date_range=['2018-03-01', '2018-03-24'])
 
 
 
