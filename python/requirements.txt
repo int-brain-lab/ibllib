@@ -1,0 +1,4 @@
+dataclasses
+numpy
+requests
+json
