@@ -1,4 +1,4 @@
-import one_ibl.params_secret as sec
+import oneibl.params_secret as sec
 # import one_ibl.params as par
 
 # BASE_URL = "https://alyx.cortexlab.net"

@@ -1,5 +1,5 @@
 ## Single session with an URL
-from one_ibl.one import ONE
+from oneibl.one import ONE
 myone = ONE() # need to instantiate the class to have the API. But the methods may be static in other implementations
 
 eid = 'http://localhost:8000/sessions/698361f6-b7d0-447d-a25d-42afdef7a0da'
@@ -7,7 +7,8 @@ eid = 'http://localhost:8000/sessions/698361f6-b7d0-447d-a25d-42afdef7a0da'
 sess = myone._alyxClient.get(eid)
 
 ## Implements the list
-from one_ibl.misc import pprint
+from oneibl.misc import pprint
+
 
 
 
@@ -29,10 +30,10 @@ with open(json_file) as f:
 ##
 ##
 import getpass
-from one_ibl.utils import AlyxClient
-from one_ibl.misc import pprint, isostr2date, date2isostr
+from oneibl.utils import AlyxClient
+from oneibl.misc import pprint, isostr2date, date2isostr
 import pandas
-import one_ibl.params as par
+import oneibl.params as par
 import numpy as np
 
 ac = AlyxClient(username=par.ALYX_LOGIN , password=par.sec.ALYX_PWD)
@@ -49,11 +50,11 @@ users_set[nusers==3]
 # we should probably have a lab field in the database
 ##
 ## Single session with an URL
-import one_ibl.one
+import oneibl.one
 import importlib
-importlib.reload(one_ibl.one)
-from one_ibl.one import ONE
-from one_ibl.misc import pprint
+importlib.reload(oneibl.one)
+from oneibl.one import ONE
+from oneibl.misc import pprint
 
 myone = ONE() # need to instantiate the class
 

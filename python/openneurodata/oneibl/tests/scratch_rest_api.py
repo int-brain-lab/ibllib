@@ -2,7 +2,7 @@ import requests
 from getpass import getpass
 import urllib.request
 import timeit
-import one_ibl.params as par
+import oneibl.params as par
 
 ALYX_PWD = getpass()
 

@@ -1,6 +1,6 @@
-from one_ibl.one import ONE
 import unittest
 import numpy as np
+from oneibl.one import ONE
 
 
 class TestLoad(unittest.TestCase):

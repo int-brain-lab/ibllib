@@ -4,7 +4,7 @@ from ibllib.webclient import AlyxClient
 import time
 import os
 import pandas
-import one_ibl.params as par
+import oneibl.params as par
 import numpy as np
 # small library of useful functions
 import json

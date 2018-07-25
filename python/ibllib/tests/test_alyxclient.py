@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 import os
 import ibllib.webclient as wc
-import one_ibl.params as par
+import oneibl.params as par
 
 
 class TestDownloadHTTP(unittest.TestCase):
