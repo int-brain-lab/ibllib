@@ -12,17 +12,14 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# import os
+import os
 import sys
-# sys.path.insert(0, os.path.abspath('.'))
-# FIXME: this won't build anywhere else
+sys.path.insert(0, os.path.abspath('.'))
+sys.path.insert(0, os.path.abspath('../python/alf'))
+sys.path.insert(0, os.path.abspath('../python/open_neuro_data'))
+sys.path.insert(0, os.path.abspath('../python/ibllib'))
 print('Python %s on %s' % (sys.version, sys.platform))
-sys.path.extend(['/home/owinter/PycharmProjects/IBL_Main/alyx-client',
-                 '/home/owinter/PycharmProjects/IBL_Main/openNeuroData',
-                 '/home/owinter/PycharmProjects/IBL_Main/test_alyx',
-                 '/home/owinter/PycharmProjects/IBL_Main/wip',
-                 '/home/owinter/PycharmProjects/IBL_Main'
-                 ])
+
 
 
 # -- Project information -----------------------------------------------------
