@@ -7,7 +7,7 @@
 The first step is to import the ONE class. In the IBL case, the class has to be instantiated: behind the scenes, the constructor connects to the Alyx database and gets credentials. The connections settings are defined in the *params.py* and the *params_secret.py* files.
 
 ```python
-from one_ibl.one import ONE
+from oneibl.one import ONE
 myone = ONE() # need to instantiate the class to have the API.
 ```
 
@@ -25,7 +25,7 @@ Depending on the use case, it may be handier to wrap the arrays in a dataclass
 (a structure for Matlab users) so that a bit of context is included with the array.
 This could be useful for custom format, or if the user wants to re-access the files locally:
 ```python
-from one_ibl.misc import pprint
+from urllib.misc import pprint
 my_data = myone.load(eid, dataset_types=dataset_types, dclass_output=True)
 pprint(my_data.local_path)
 pprint(my_data.dataset_type)
@@ -74,7 +74,7 @@ The methods allow to access 3 tables of the current database:
 
 For example to print a list of the dataset-types in the command window:
 ```python
-from one_ibl.one import ONE
+from oneibl.one import ONE
 myone = ONE() # need to instantiate the class to have the API.
 myone.list(table='dataset-types', verbose=True)
 ```
@@ -82,7 +82,7 @@ myone.list(table='dataset-types', verbose=True)
 One can also select several fields
 
 ```python
-from one_ibl.misc import pprint
+from urllib.misc import pprint
 list_types , dtypes = myone.list(table=['dataset-types','users'])
 pprint(list_types)
 pprint(dtypes)
@@ -165,7 +165,7 @@ This is the simplest case that queries EEIDs (sessions) associated with a subjec
 be one subject per session.
 
 ```python
-from one_ibl.one import ONE
+from oneibl.one import ONE
 myone = ONE() # need to instantiate the class to have the API.
 sl , sd =  myone.search(subjects=['Morgane','miles','armin'])
 ```
@@ -187,5 +187,3 @@ The following would get all of the dataset for which Morgane is an owner or a co
 sl , sd =  myone.search(users=['Morgane'])
 pprint(sl)
 ```
-
-

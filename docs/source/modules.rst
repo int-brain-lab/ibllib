@@ -1,7 +1,16 @@
-one_ibl
+ibllib
 =======
 
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 2
 
-   one_ibl
+   ibllib
+
+
+oneibl
+=======
+
+.. toctree::
+   :maxdepth: 2
+
+   oneibl

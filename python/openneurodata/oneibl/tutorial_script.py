@@ -1,5 +1,5 @@
 ## Init
-from one_ibl.one import ONE
+from oneibl.one import ONE
 myone = ONE() # need to instantiate the class to have the API.
 
 ## Load #1
@@ -9,7 +9,7 @@ t, cr, cl = myone.load(eid, dataset_types=dataset_types)
 
 ## Load #2
 my_data = myone.load(eid, dataset_types=dataset_types, dclass_output=True)
-from one_ibl.misc import pprint
+from ibllib.misc import pprint
 pprint(my_data.local_path)
 pprint(my_data.dataset_type)
 
