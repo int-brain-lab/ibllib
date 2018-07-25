@@ -3,8 +3,8 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to ONE IBL's documentation!
-===================================
+Welcome to IBL code library documentation!
+==========================================
 
 This is such a very nice rst file.
 
@@ -21,6 +21,7 @@ Developer's guide
 .. toctree::
    :maxdepth: 2
 
-   /source/one_ibl
+   /source/ibllib
+   /source/oneibl
 
 * :ref:`genindex`
