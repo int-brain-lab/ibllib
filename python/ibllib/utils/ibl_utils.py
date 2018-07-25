@@ -11,21 +11,23 @@ def timing(f):
     """
     Timing decorator will print time took in milliseconds
     """
-    def wrap(*args):
+    def wrap(*args, **kwargs):
         time1 = time.time()
-        ret = f(*args)
+        ret = f(*args, **kwargs)
         time2 = time.time()
-        print('%s function took %0.3f ms' % (f, (time2-time1)*1000.0))
+        print('{} function elapsed time = {} ms'.format(f, (time2 - time1) *
+                                                        1000.0))
         return ret
 
     return wrap
 
 
+@timing
 def iflatten(x):
     result = []
     for el in x:
         if isinstance(el, collections.Iterable) and not isinstance(el, str):
-            result.extend(flatten(el))
+            result.extend(iflatten(el))
         else:
             result.append(el)
     return result
@@ -43,16 +45,18 @@ def flat_gen(x):
             # for sub in flatten(el):
             #     yield sub
 
-
+@timing
 def flatten(x):
     return list(flat_gen(x))
 
 
 if __name__ == '__main__':
+
+
     x = [1, 2, 3, [1, 2]]
-    result = []
-    for el in x:
-        if isinstance(el, collections.Iterable) and not isinstance(el, str):
-            result.extend(flatten(el))
-        else:
-            result.append(el)
+
+    iflatten(x)
+
+    flatten(x)
+
+    print("Done!")
