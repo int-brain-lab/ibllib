@@ -1,1 +1,15 @@
+## Documentation
 https://ibllib.readthedocs.io/en/latest/
+
+## Requirements
+Requires Python 3.6 or higher.
+
+Requires Matlab R2014b or higher.
+
+## Development practices
+Gitflow.
+
+-   run tests
+-   flake8
+-   build documentation
+

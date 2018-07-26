@@ -7,6 +7,7 @@ class TestLoad(unittest.TestCase):
 
     def setUp(self):
         # Init connection to the database
+        # TODO force credentials on test server
         self.One = ONE()
 
     def test_load(self):
@@ -65,7 +66,6 @@ class TestLoad(unittest.TestCase):
         self.assertTrue(isinstance(l[0], list) and isinstance(l[0], list))
 
     def test_search_simple(self):
-        # Test when the dataset type requested is not unique
         myone = self.One
         # Test users
         usr = ['Morgane', 'miles', 'armin']
