@@ -163,3 +163,16 @@ source_parsers = {
    '.md': 'recommonmark.parser.CommonMarkParser',
 }
 source_suffix = ['.rst', '.md']
+
+
+from unittest.mock import MagicMock
+
+
+class Mock(MagicMock):
+    @classmethod
+    def __getattr__(cls, name):
+        return MagicMock()
+
+
+MOCK_MODULES = ['oneibl.params_secret']
+sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
