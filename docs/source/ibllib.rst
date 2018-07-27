@@ -94,7 +94,7 @@ __________________
 ibllib.misc.pprint
 __________________
 
-.. automodule:: ibllib.misc.misc.pprint
+.. automodule:: ibllib.misc.pprint
     :members:
     :undoc-members:
     :show-inheritance:
