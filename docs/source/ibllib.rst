@@ -1,4 +1,4 @@
-ibllib package
+ibllib API
 ================
 
 Module contents

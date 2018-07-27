@@ -25,5 +25,7 @@ Developer's guide
 
    /source/ibllib
    /source/oneibl
+   /source/alf
+
 
 * :ref:`genindex`
