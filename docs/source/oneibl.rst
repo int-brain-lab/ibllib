@@ -1,4 +1,4 @@
-oneibl package
+oneibl API
 ==============
 
 oneibl.one module
