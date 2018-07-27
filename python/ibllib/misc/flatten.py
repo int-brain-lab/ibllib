@@ -4,7 +4,7 @@
 # @Last Modified by: Niccolò Bonacchi
 # @Last Modified time: 25-07-2018 03:56:29.2929
 """
- Flatten a nested Iterable excluding strings and dicts.
+Flatten a nested Iterable excluding strings and dicts.
 
 Converts nested Iterable into flat list. Will not iterate through strings or
 dicts.

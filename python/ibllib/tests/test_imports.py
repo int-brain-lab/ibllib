@@ -27,5 +27,7 @@ class TestImports(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    ti = TestImports()
+    ti.test_all_imports()
     print(dir())
     print("Done!")
