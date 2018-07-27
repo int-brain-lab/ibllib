@@ -14,6 +14,27 @@ from math import factorial
 
 
 def savitzky_golay(y, window_size, order, deriv=0, rate=1):
+    """
+    Smoothes input signal with a Savitzky-Golay function.
+
+    Uses a kernel of size "window_size" and a polinomial fit of order "order".
+
+    :param y: [description]
+    :type y: [type]
+    :param window_size: [description]
+    :type window_size: [type]
+    :param order: [description]
+    :type order: [type]
+    :param deriv: [description], defaults to 0
+    :param deriv: int, optional
+    :param rate: [description], defaults to 1
+    :param rate: int, optional
+    :raises ValueError: [description]
+    :raises TypeError: [description]
+    :raises TypeError: [description]
+    :return: [description]
+    :rtype: [type]
+    """
     y = np.array(y)
 
     try:
