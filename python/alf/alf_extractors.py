@@ -13,7 +13,7 @@ Each DatasetType in the IBL pipeline should have one extractor function.
 :return: n/a
 :rtype: n/a
 """
-import raw_data_loaders as raw
+import ibllib.io.raw_data_loaders as raw
 import numpy as np
 import os
 

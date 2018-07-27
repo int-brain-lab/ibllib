@@ -3,18 +3,29 @@
 # @Date: Thursday, July 26th 2018, 4:22:08 pm
 # @Last Modified by:   Niccolò Bonacchi
 # @Last Modified time: 2018-07-26 18:02:27
-import sys
-sys.path.insert(0, '/home/nico/Projects/IBL/IBL-github/ibllib/python/')
-from ibllib.misc import pprint
-import ibllib as ibl
-import ibllib.misc as misc
+import unittest
+
+
+class TestImports(unittest.TestCase):
+    def test_all_imports(self):
+        import ibllib
+        import ibllib as ibl
+        from ibllib import misc, io, dsp, webclient, time
+        import ibllib.dsp as dsp
+        import ibllib.io as io
+        import ibllib.misc as misc
+        import ibllib.time
+        import ibllib.webclient
+        import ibllib.io.raw_data_loaders as raw
+        from ibllib.misc import pprint, flatten, timing, is_uuid_string
+        from ibllib.io import raw_data_loaders
+        from ibllib.io.raw_data_loaders import (load_data, load_settings,
+                                                load_encoder_events,
+                                                load_encoder_positions,
+                                                load_encoder_trial_info)
+        from ibllib.dsp import savitzky_golay, smooth, smooth_demo
 
 
 if __name__ == '__main__':
-    print(ibl)
-    print(ibl.misc)
-    print(ibl.misc.pprint)
-    print(ibl.misc.is_uuid_string)
-    print(ibl.misc.timing)
-    print(ibl.misc.flatten)
+    print(dir())
     print("Done!")
