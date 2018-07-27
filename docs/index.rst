@@ -13,6 +13,8 @@ This is such a very nice rst file.
 
    one
    tutorial
+   alyx_install
+   alf
 
 
 Developer's guide

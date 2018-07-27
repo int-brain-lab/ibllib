@@ -1,4 +1,7 @@
-## INSTALL UBUNTU SEREVR 16.04
+# Alyx installation instructions
+
+
+## Install ubuntu serevr 16.04
 
 Install ubuntu server 16.04, pick a user name and a server name.
 
@@ -27,7 +30,7 @@ Type in your password:
 OK, now you can start installing all the required software:
 
 
-## POSTGRES INSTALLATION AND SETUP
+## Postgres installation and setup
 
 Install postgresql and python3-pip (we'll need this for later) ubuntu server should already have it.
 
@@ -85,7 +88,7 @@ Now you can quit postgres prompt and install alyx:
     postgres=# \q
     myuser@myalyx~$
 
-## ALYX
+## Alyx
 
 If not already there, change to your home folder:
 
