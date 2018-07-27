@@ -4,7 +4,7 @@ oneibl package
 oneibl.one module
 -----------------
 
-.. automodule:: oneibl.one
+.. automodule:: openneurodata.oneibl.one
     :members:
     :undoc-members:
     :show-inheritance:
