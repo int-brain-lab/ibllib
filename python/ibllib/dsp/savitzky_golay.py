@@ -9,11 +9,11 @@ Created on Wed Jan 14 11:30:29 2015
 
 @author: nico
 """
+import numpy as np
+from math import factorial
 
 
 def savitzky_golay(y, window_size, order, deriv=0, rate=1):
-    import numpy as np
-    from math import factorial
     y = np.array(y)
 
     try:

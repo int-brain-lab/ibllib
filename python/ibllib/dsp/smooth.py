@@ -1,7 +1,7 @@
 from numpy import *
 from pylab import *
 import numpy
-
+# TODO: REFACTOR!!
 
 def smooth(x, window_len=11, window='blackman'):
     """smooth the data using a window with requested size.
