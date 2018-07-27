@@ -33,8 +33,9 @@ class Subject(object):
         >>> sub.folder("test_mouse")
          /home/nico/Projects/IBL/IBL-github/IBL_root/pybpod_data/test_mouse
     """
-    def __init__(self, ROOT_DATA_FOLDER):
-        self.root_data_folder = ROOT_DATA_FOLDER
+
+    def __init__(self, root_data_folder):
+        self.root_data_folder = root_data_folder
 
     @property
     def all_names(self):
@@ -62,8 +63,8 @@ class Subject(object):
 
 # TODO: decorate methods with mouse_name check
 class Session(object):
-    def __init__(self, ROOT_DATA_FOLDER):
-        self.subj = Subject(ROOT_DATA_FOLDER)
+    def __init__(self, root_data_folder):
+        self.subj = Subject(root_data_folder)
 
     @property
     def all_dates(self):
@@ -133,9 +134,9 @@ class Session(object):
 
 # XXX: BROKEN SINCE INTRODUCTION OF raw_behavior_folder
 class File(object):
-    def __init__(self, ROOT_DATA_FOLDER):
-        self.subj = Subject(ROOT_DATA_FOLDER)
-        self.sess = Session(ROOT_DATA_FOLDER)
+    def __init__(self, root_data_folder):
+        self.subj = Subject(root_data_folder)
+        self.sess = Session(root_data_folder)
 
     @property
     def all_file_paths(self):
@@ -158,7 +159,7 @@ class File(object):
             return out_paths
 
     def session_file_paths(self, session_name=None):
-        path = os.path.join(ROOT_DATA_FOLDER, session_name)
+        path = os.path.join(root_data_folder, session_name)
         return [os.path.join(path, x) for x in os.listdir(path)]
 
     @staticmethod
@@ -228,47 +229,36 @@ class File(object):
 
 class Data(object):
     """docstring for Data"""
-    def __init__(self, ROOT_DATA_FOLDER):
-        self.subj = Subject(ROOT_DATA_FOLDER)
-        self.sess = Session(ROOT_DATA_FOLDER)
-        self.file = File(ROOT_DATA_FOLDER)
+
+    def __init__(self, root_data_folder):
+        self.subj = Subject(root_data_folder)
+        self.sess = Session(root_data_folder)
+        self.file = File(root_data_folder)
 
 
 if __name__ == '__main__':
-    ROOT_DATA_FOLDER = '/home/nico/Projects/IBL/IBL-github/IBL_root/pybpod_data'
+    ROOT_DATA_FOLDER = '/home/nico/Projects/IBL/IBL-github/iblrig/pybpod_data'
     sub = Subject(ROOT_DATA_FOLDER)
-    print('\n')
-    print('# SUBJECT #\n')
-    print('>>> sub = Subject(folder)')
-    print('>>> sub.all_names\n', sub.all_names)
-    print('>>> sub.all_folders\n', sub.all_folders)
-    print('>>> sub.folder()\n', sub.folder())
-    print('>>> sub.folder("test_mouse")\n', sub.folder('test_mouse'))
+    sub.all_names
+    sub.all_folders
+    sub.folder()
+    sub.folder('test_mouse')
 
     sess = Session(ROOT_DATA_FOLDER)
-    print('\n')
-    print('# SESSION #\n')
-    print('>>> sess = Session(ROOT_DATA_FOLDER)')
-    print('>>> sess.all_dates\n', sess.all_dates)
-    print('>>> sess.dates()\n', sess.dates())
-    print('>>> sess.dates("test_mouse")\n', sess.dates('test_mouse'))
-    print('>>> sess.all_dates_paths\n', sess.all_dates_paths)
-    print('>>> sess.dates_paths("test_mouse")\n',
-          sess.dates_paths('test_mouse'))
-    print('>>> sess.all_paths\n', sess.all_paths)
-    print('>>> sess.all_names\n', sess.all_names)
-    print('>>> sess.paths("test_mouse")\n', sess.paths('test_mouse'))
-    print('>>> sess.names("test_mouse")\n', sess.names('test_mouse'))
+    sess.all_dates
+    sess.dates()
+    sess.dates('test_mouse')
+    sess.all_dates_paths
+    sess.dates_paths('test_mouse')
+    sess.all_paths
+    sess.all_names
+    sess.paths('test_mouse')
+    sess.names('test_mouse')
 
     file = File(ROOT_DATA_FOLDER)
-    print('\n')
-    print('# FILE #\n')
-    print('>>> file = File(ROOT_DATA_FOLDER)')
-    print('>>> file.all_file_paths\n', file.all_file_paths)
-    print('>>> file.mouse_file_paths("test_mouse")\n',
-          file.mouse_file_paths('test_mouse'))
-    print('>>> file.session_file_paths("test_mouse/2018-07-11/11")\n',
-          file.session_file_paths('test_mouse/2018-07-11/11'))
+    file.all_file_paths
+    file.mouse_file_paths('test_mouse')
+    file.session_file_paths('test_mouse/2018-07-11/11')
 
 # Experiment reference
 # validator
