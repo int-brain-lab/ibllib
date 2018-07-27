@@ -7,7 +7,7 @@ import os
 import re
 import json
 import dateutil.parser
-from ibl_utils import flatten
+from ibllib.misc import flatten
 
 
 class Subject(object):
