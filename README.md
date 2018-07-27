@@ -1,3 +1,7 @@
+#Note:
+These libs are still in alpha. Vesion numbers 0.\*.\* are considered unstable and
+not completely documented.
+
 ## Documentation
 https://ibllib.readthedocs.io/en/latest/
 
