@@ -54,10 +54,11 @@ import oneibl.one
 import importlib
 importlib.reload(oneibl.one)
 from oneibl.one import ONE
-from oneibl.misc import pprint
+from ibllib.misc import pprint
 
 myone = ONE() # need to instantiate the class
 
+ac = myone._alyxClient
 
 ## FIXME: comment faire un AND
 ses = ac.get('/sessions?users=Morgane') # 183 results: this is not a strict lookup (ie. can't return only Morgane's sessions)
@@ -79,3 +80,6 @@ dmax = max([isostr2date(s[  'end_time']+'.00') for s in ses])
 print(np.unique([s['users'] for s in ses]))
 
 
+##
+myone._alyxClient.authenticate(username='dfia',password= 'asdf', base_url='http://localhost:8000')
+myone._alyxClient._token
