@@ -11,7 +11,7 @@ Requires Python 3.6 or higher.
 Requires Matlab R2014b or higher.
 
 ## Development practices
-Gitflow.
+Gitflow and Semantic Versioning.
 
 -   run tests
 -   flake8

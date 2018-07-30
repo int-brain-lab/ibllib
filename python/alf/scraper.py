@@ -12,42 +12,47 @@ from ibllib.misc import flatten
 
 class Subject(object):
     """
-    Subject object scrapes folder structure given
-    ROOT_DATA_FOLDER for subjects i.e. ../lab/Subjects folder
-    Properties:
-        all_names: (str) all subject names in ROOT_DATA_FOLDER
-        all_foders: (str) all subject folder paths
-    Methods:
-        folder: in: (str) mouse_name
-                out: (str) absolute folder path for mouse_name
-    Usage:
+    Scrapes folder structure for subjects.
 
-        subj = Subject(ROOT_DATA_FOLDER)
-        >>> sub.all_names
-         ['test_mouse2', 'test_mouse']
-        >>> sub.all_folders
-         ['/absolute/path/to/Subjects/test_mouse2',
-          '/absolute/path/to/Subjects/test_mouse']
-        >>> sub.folder()
-         I need a mouse name...
-        >>> sub.folder("test_mouse")
-         /home/nico/Projects/IBL/IBL-github/IBL_root/pybpod_data/test_mouse
+    Requires a ROOT_DATA_FOLDER for subject data i.e.
+    ../lab_name/Subjects folder
     """
-    def __init__(self, ROOT_DATA_FOLDER):
-        self.root_data_folder = ROOT_DATA_FOLDER
+
+    def __init__(self, root_data_folder):
+        self.root_data_folder = root_data_folder
 
     @property
     def all_names(self):
-        """Subject names are only defined by the folder in the main Subjects
+        """
+        Get all folders from main subjects folder.
+
+        Subject names are defined by being a folder in the main Subjects
         folder.
-        TODO: check alyx for all subject names to match folder names"""
-        return [x for x in os.listdir(self.root_data_folder)]
+
+        :TODO: check alyx for all subject names to match folder names
+        """
+        return [x for x in os.listdir(self.root_data_folder) if
+                os.path.isdir(os.path.join(self.root_data_folder, x))]
 
     @property
     def all_folders(self):
+        """
+        Get all subject folder paths found in root data folder.
+
+        :return: All path strings of all subject folders found.
+        :rtype: list
+        """
         return [os.path.join(self.root_data_folder, x) for x in self.all_names]
 
-    def folder(self, mouse_name=None):
+    def folder(self, mouse_name):
+        """
+        Get path of main mouse_name folder.
+
+        :param mouse_name: Name of subject.
+        :type mouse_name: str
+        :return: Absolute folder path for mouse_name
+        :rtype: str
+        """
         if mouse_name is None:
             return 'I need a mouse name...'
         elif mouse_name not in self.all_names:
@@ -62,8 +67,8 @@ class Subject(object):
 
 # TODO: decorate methods with mouse_name check
 class Session(object):
-    def __init__(self, ROOT_DATA_FOLDER):
-        self.subj = Subject(ROOT_DATA_FOLDER)
+    def __init__(self, root_data_folder):
+        self.subj = Subject(root_data_folder)
 
     @property
     def all_dates(self):
@@ -133,9 +138,9 @@ class Session(object):
 
 # XXX: BROKEN SINCE INTRODUCTION OF raw_behavior_folder
 class File(object):
-    def __init__(self, ROOT_DATA_FOLDER):
-        self.subj = Subject(ROOT_DATA_FOLDER)
-        self.sess = Session(ROOT_DATA_FOLDER)
+    def __init__(self, root_data_folder):
+        self.subj = Subject(root_data_folder)
+        self.sess = Session(root_data_folder)
 
     @property
     def all_file_paths(self):
@@ -158,7 +163,7 @@ class File(object):
             return out_paths
 
     def session_file_paths(self, session_name=None):
-        path = os.path.join(ROOT_DATA_FOLDER, session_name)
+        path = os.path.join(self.subj.root_data_folder, session_name)
         return [os.path.join(path, x) for x in os.listdir(path)]
 
     @staticmethod
@@ -202,9 +207,10 @@ class File(object):
         return
 
     def session_file_attributes(self, session_name=None, include_obj=False):
-        """Returns a list of all ALF attributes from a particular session
+        """
+        Returns a list of all ALF attributes from a particular session
         include_obj set to True will return list of unique obj.attrib
-                    set to False will retur only list od attribs"""
+        set to False will retur only list od attribs"""
         return
 
     def session_file_extensions(self, session_name=None):
@@ -228,47 +234,35 @@ class File(object):
 
 class Data(object):
     """docstring for Data"""
-    def __init__(self, ROOT_DATA_FOLDER):
-        self.subj = Subject(ROOT_DATA_FOLDER)
-        self.sess = Session(ROOT_DATA_FOLDER)
-        self.file = File(ROOT_DATA_FOLDER)
+
+    def __init__(self, root_data_folder):
+        self.subj = Subject(root_data_folder)
+        self.sess = Session(root_data_folder)
+        self.file = File(root_data_folder)
 
 
 if __name__ == '__main__':
-    ROOT_DATA_FOLDER = '/home/nico/Projects/IBL/IBL-github/IBL_root/pybpod_data'
+    ROOT_DATA_FOLDER = '/home/nico/Projects/IBL/IBL-github/iblrig/pybpod_data'
     sub = Subject(ROOT_DATA_FOLDER)
-    print('\n')
-    print('# SUBJECT #\n')
-    print('>>> sub = Subject(folder)')
-    print('>>> sub.all_names\n', sub.all_names)
-    print('>>> sub.all_folders\n', sub.all_folders)
-    print('>>> sub.folder()\n', sub.folder())
-    print('>>> sub.folder("test_mouse")\n', sub.folder('test_mouse'))
+    sub.all_names
+    sub.all_folders
+    sub.folder('test_mouse')
 
     sess = Session(ROOT_DATA_FOLDER)
-    print('\n')
-    print('# SESSION #\n')
-    print('>>> sess = Session(ROOT_DATA_FOLDER)')
-    print('>>> sess.all_dates\n', sess.all_dates)
-    print('>>> sess.dates()\n', sess.dates())
-    print('>>> sess.dates("test_mouse")\n', sess.dates('test_mouse'))
-    print('>>> sess.all_dates_paths\n', sess.all_dates_paths)
-    print('>>> sess.dates_paths("test_mouse")\n',
-          sess.dates_paths('test_mouse'))
-    print('>>> sess.all_paths\n', sess.all_paths)
-    print('>>> sess.all_names\n', sess.all_names)
-    print('>>> sess.paths("test_mouse")\n', sess.paths('test_mouse'))
-    print('>>> sess.names("test_mouse")\n', sess.names('test_mouse'))
+    sess.all_dates
+    sess.dates()
+    sess.dates('test_mouse')
+    sess.all_dates_paths
+    sess.dates_paths('test_mouse')
+    sess.all_paths
+    sess.all_names
+    sess.paths('test_mouse')
+    sess.names('test_mouse')
 
     file = File(ROOT_DATA_FOLDER)
-    print('\n')
-    print('# FILE #\n')
-    print('>>> file = File(ROOT_DATA_FOLDER)')
-    print('>>> file.all_file_paths\n', file.all_file_paths)
-    print('>>> file.mouse_file_paths("test_mouse")\n',
-          file.mouse_file_paths('test_mouse'))
-    print('>>> file.session_file_paths("test_mouse/2018-07-11/11")\n',
-          file.session_file_paths('test_mouse/2018-07-11/11'))
+    file.all_file_paths
+    file.mouse_file_paths('test_mouse')
+    file.session_file_paths('test_mouse/2018-07-11/11')
 
 # Experiment reference
 # validator

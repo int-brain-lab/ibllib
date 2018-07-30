@@ -13,6 +13,8 @@ This is such a very nice rst file.
 
    one
    tutorial
+   alyx_install
+   alf
 
 
 Developer's guide
@@ -23,5 +25,7 @@ Developer's guide
 
    /source/ibllib
    /source/oneibl
+   /source/alf
+
 
 * :ref:`genindex`
