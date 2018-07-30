@@ -17,3 +17,11 @@ alf.extractors module
     :members:
     :undoc-members:
     :show-inheritance:
+
+alf.scraper module
+-----------------------
+
+.. automodule:: alf.scraper
+    :members:
+    :undoc-members:
+    :show-inheritance:
