@@ -98,24 +98,3 @@ __________________
     :members:
     :undoc-members:
     :show-inheritance:
-
-
-ibllib.misc.pprint
-__________________
-
-.. automodule:: ibllib.misc.pprint
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
-ibllib.misc.is_uuid_string
-__________________________
-
-.. automodule:: ibllib.misc.is_uuid_string
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
-
