@@ -2,3 +2,4 @@ dataclasses
 numpy
 requests
 matplotlib
+pandas
