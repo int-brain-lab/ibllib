@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.abspath('../python/openneurodata'))
 sys.path.insert(0, os.path.abspath('../python/openneurodata/oneibl'))
 sys.path.insert(0, os.path.abspath('../python'))
 print('Python %s on %s' % (sys.version, sys.platform))
-
+autodoc_mock_imports = ['_tkinter']
 
 
 # -- Project information -----------------------------------------------------
