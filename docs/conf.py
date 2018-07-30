@@ -14,6 +14,8 @@
 #
 import os
 import sys
+import matplotlib
+matplotlib.use('agg')
 sys.path.insert(0, os.path.abspath('.'))
 sys.path.insert(0, os.path.abspath('../python/alf'))
 sys.path.insert(0, os.path.abspath('../python/openneurodata'))
