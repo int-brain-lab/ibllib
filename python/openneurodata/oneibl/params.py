@@ -12,4 +12,4 @@ HTTP_DATA_SERVER = r'http://ibl.flatironinstitute.org/cortexlab'
 HTTP_DATA_SERVER_LOGIN = 'ibl'
 HTTP_DATA_SERVER_PWD = sec.HTTP_DATA_SERVER_PWD  # password for data server
 
-CACHE_DIR = ''  # if empty it will download in the user download directory
+CACHE_DIR = '/home/owinter/Downloads/FlatIronCache'  # if empty it will download in the user download directory
