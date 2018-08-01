@@ -7,13 +7,16 @@ https://ibllib.readthedocs.io/en/latest/
 
 ## Requirements
 Requires Python 3.6 or higher.
+Requires Matlab R2016b or higher (jsonencode function).
 
-Requires Matlab R2014b or higher.
 
 ## Development practices
 Gitflow.
 
+Python
 -   run tests
 -   flake8
 -   build documentation
 
+Matlab
+-   run tests
