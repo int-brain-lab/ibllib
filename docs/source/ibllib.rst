@@ -19,6 +19,15 @@ ibllib.webclient module
     :show-inheritance:
 
 
+ibllib.time module
+-----------------------
+
+.. automodule:: ibllib.time
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
 ibllib.dsp module
 -----------------
 
@@ -89,24 +98,3 @@ __________________
     :members:
     :undoc-members:
     :show-inheritance:
-
-
-ibllib.misc.pprint
-__________________
-
-.. automodule:: ibllib.misc.pprint
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
-ibllib.misc.is_uuid_string
-__________________________
-
-.. automodule:: ibllib.misc.misc.is_uuid_string
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
-

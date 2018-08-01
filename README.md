@@ -11,7 +11,7 @@ Requires Matlab R2016b or higher (jsonencode function).
 
 
 ## Development practices
-Gitflow.
+Gitflow and Semantic Versioning.
 
 Python
 -   run tests

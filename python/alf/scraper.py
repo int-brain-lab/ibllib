@@ -12,26 +12,10 @@ from ibllib.misc import flatten
 
 class Subject(object):
     """
-    Subject object scrapes folder structure given
-    ROOT_DATA_FOLDER for subjects i.e. ../lab/Subjects folder
-    Properties:
-        all_names: (str) all subject names in ROOT_DATA_FOLDER
-        all_foders: (str) all subject folder paths
-    Methods:
-        folder: in: (str) mouse_name
-                out: (str) absolute folder path for mouse_name
-    Usage:
+    Scrapes folder structure for subjects.
 
-        subj = Subject(ROOT_DATA_FOLDER)
-        >>> sub.all_names
-         ['test_mouse2', 'test_mouse']
-        >>> sub.all_folders
-         ['/absolute/path/to/Subjects/test_mouse2',
-          '/absolute/path/to/Subjects/test_mouse']
-        >>> sub.folder()
-         I need a mouse name...
-        >>> sub.folder("test_mouse")
-         /home/nico/Projects/IBL/IBL-github/IBL_root/pybpod_data/test_mouse
+    Requires a ROOT_DATA_FOLDER for subject data i.e.
+    ../lab_name/Subjects folder
     """
 
     def __init__(self, root_data_folder):
@@ -39,16 +23,36 @@ class Subject(object):
 
     @property
     def all_names(self):
-        """Subject names are only defined by the folder in the main Subjects
+        """
+        Get all folders from main subjects folder.
+
+        Subject names are defined by being a folder in the main Subjects
         folder.
-        TODO: check alyx for all subject names to match folder names"""
-        return [x for x in os.listdir(self.root_data_folder)]
+
+        :TODO: check alyx for all subject names to match folder names
+        """
+        return [x for x in os.listdir(self.root_data_folder) if
+                os.path.isdir(os.path.join(self.root_data_folder, x))]
 
     @property
     def all_folders(self):
+        """
+        Get all subject folder paths found in root data folder.
+
+        :return: All path strings of all subject folders found.
+        :rtype: list
+        """
         return [os.path.join(self.root_data_folder, x) for x in self.all_names]
 
-    def folder(self, mouse_name=None):
+    def folder(self, mouse_name):
+        """
+        Get path of main mouse_name folder.
+
+        :param mouse_name: Name of subject.
+        :type mouse_name: str
+        :return: Absolute folder path for mouse_name
+        :rtype: str
+        """
         if mouse_name is None:
             return 'I need a mouse name...'
         elif mouse_name not in self.all_names:
@@ -159,7 +163,7 @@ class File(object):
             return out_paths
 
     def session_file_paths(self, session_name=None):
-        path = os.path.join(root_data_folder, session_name)
+        path = os.path.join(self.subj.root_data_folder, session_name)
         return [os.path.join(path, x) for x in os.listdir(path)]
 
     @staticmethod
@@ -203,9 +207,10 @@ class File(object):
         return
 
     def session_file_attributes(self, session_name=None, include_obj=False):
-        """Returns a list of all ALF attributes from a particular session
+        """
+        Returns a list of all ALF attributes from a particular session
         include_obj set to True will return list of unique obj.attrib
-                    set to False will retur only list od attribs"""
+        set to False will retur only list od attribs"""
         return
 
     def session_file_extensions(self, session_name=None):
@@ -241,7 +246,6 @@ if __name__ == '__main__':
     sub = Subject(ROOT_DATA_FOLDER)
     sub.all_names
     sub.all_folders
-    sub.folder()
     sub.folder('test_mouse')
 
     sess = Session(ROOT_DATA_FOLDER)
