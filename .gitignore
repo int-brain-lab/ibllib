@@ -1,4 +1,5 @@
 docs/_*
 __pycache__
+*.*~
 # this fixes a dummy version on the public repository
 #git update-index --assume-unchanged python/openneurodata/oneibl/params_secret.py

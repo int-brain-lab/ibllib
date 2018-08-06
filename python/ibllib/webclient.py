@@ -163,8 +163,12 @@ class AlyxClient:
         :type base_url: str
         """
         self._base_url = base_url
-        self._token = requests.post(base_url + '/auth-token',
-                                    data=dict(username=username, password=password)).json()
+        rep = requests.post(base_url + '/auth-token',
+                                    data=dict(username=username, password=password))
+        self._token = rep.json()
+        if not (list(self._token.keys()) == ['token']):
+            raise Exception('Alyx authentication error. Check your ./oneibl/params.py and'
+                            './oneibl/params_secret.py')
         self._headers = {
                 'Authorization': 'Token {}'.format(list(self._token.values())[0]),
                 'Accept': 'application/json',

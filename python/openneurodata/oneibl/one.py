@@ -72,7 +72,8 @@ class ONE(OneAbstract):
                     urlstr = ses['data_dataset_session_related'][i]['data_url']
                     fil = wc.http_download_file(urlstr,
                                                 username=par.HTTP_DATA_SERVER_LOGIN,
-                                                password=par.HTTP_DATA_SERVER_PWD)
+                                                password=par.HTTP_DATA_SERVER_PWD,
+                                                cache_dir=par.CACHE_DIR)
                     out.eid.append(eid_str)
                     out.dataset_type.append(dt)
                     out.url.append(urlstr)
