@@ -139,7 +139,8 @@ class AlyxClient:
     def __init__(self, **kwargs):
         """
         Create a client instance that allows to GET and POST to the Alyx server
-        Constructor attempts to authenticate with credentials in params.py
+        For oneibl, constructor attempts to authenticate with credentials in params.py
+        For standalone cases, AlyxClient(username='', password='', base_url='')
 
         :param username: Alyx database user
         :type username: str
@@ -164,9 +165,10 @@ class AlyxClient:
         """
         self._base_url = base_url
         rep = requests.post(base_url + '/auth-token',
-                                    data=dict(username=username, password=password))
+                            data=dict(username=username, password=password))
         self._token = rep.json()
         if not (list(self._token.keys()) == ['token']):
+            print(rep)
             raise Exception('Alyx authentication error. Check your ./oneibl/params.py and'
                             './oneibl/params_secret.py')
         self._headers = {
@@ -179,6 +181,8 @@ class AlyxClient:
         """
         Sends a GET request to the Alyx server. Will raise an exception on any status_code
          other than 200, 201.
+        For the dictionary contents and list of endpoints, refer to:
+        https://alyx.internationalbrainlab.org/docs
 
         :param rest_query: example: '/sessions?user=Hamish'.
         :type rest_query: str
@@ -193,16 +197,22 @@ class AlyxClient:
         else:
             raise Exception(r)
 
-    def post(self, rest_query):
+    def post(self, rest_query, data=None):
         """
         Sends a POST request to the Alyx server.
+        For the dictionary contents, refer to:
+        https://alyx.internationalbrainlab.org/docs
 
-        :param: rest_query (string).
+        :param rest_query: (required)the endpoint as full or relative URL
         :type rest_query: str
+        :param data: json encoded string
+        :type data: None, dict or str
 
         :return: response object
         """
+        if isinstance(data, dict):
+            data = json.dumps(data)
         rest_query = rest_query.replace(self._base_url, '')
         r = requests.post(self._base_url + rest_query, stream=True, headers=self._headers,
-                          data=None)
+                          data=data)
         return r

@@ -83,3 +83,35 @@ print(np.unique([s['users'] for s in ses]))
 ##
 myone._alyxClient.authenticate(username='dfia',password= 'asdf', base_url='http://localhost:8000')
 myone._alyxClient._token
+
+##
+from oneibl.one import ONE
+myone = ONE() # need to instantiate the class
+
+subject = {'nickname':'toto',
+           'responsible_user':'olivier',
+           'protocol_number': '1',
+            'project':'<Project_test_IBL>',
+           'genotype': []}
+
+subject = {'nickname':'toto',
+           'responsible_user':'olivier',
+           'protocol_number': '1',
+            'project':'<Project_test_IBL>'}
+
+r = myone._alyxClient.post('/subjects', data=subject)
+
+##
+session =  {'subject': 'clns0730',
+            'procedures': ['Behavior training/tasks'],
+            'narrative': 'auto-generated session',
+            'start_time': '2018-05-18T12:12:12',
+            'type': 'Base',
+            'number':'1',
+            'users': ['olivier']}
+
+
+r = myone._alyxClient.post('/sessions', data=session)
+
+##
+r = myone._alyxClient.get('/data-repositories')
