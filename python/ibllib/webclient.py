@@ -195,6 +195,7 @@ class AlyxClient:
         if r and r.status_code in (200, 201):
             return json.loads(r.text)
         else:
+            print(self._base_url + rest_query)
             raise Exception(r)
 
     def post(self, rest_query, data=None):

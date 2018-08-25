@@ -161,6 +161,7 @@ class ONE(OneAbstract):
             url = url + '&users=' + ','.join(users)
         if subject:
             url = url + '&subject=' + subject
+        # TODO make the datrange more flexible: one date only from, to etc...
         if date_range:
             url = url + '&date_range=' + ','.join(date_range)
         # implements the loading itself
