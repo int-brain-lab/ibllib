@@ -159,7 +159,7 @@ You can use screen to run the server and detatch form it so you can logoff the s
 Use -S to name the screen session
 
     myuser@myalyx~/alyx/alyx$ screen -S alyx
-    myuser@myalyx~/alyx/alyx$ sudo python3 manage.py sunserver 0.0.0.0:8000
+    myuser@myalyx~/alyx/alyx$ sudo python3 manage.py runserver 0.0.0.0:8000
 
 To detach from session type:
 

@@ -1,5 +1,8 @@
 # ONE Tutorial
 
+Before you begin, make sure you have installed ibllib properly on your system as per the instructions.
+For this tutorial we will be connecting to a  test database with a test user. The default paremeters from the git repository have the proper configuration.
+
 
 ## Initialize
 
@@ -13,7 +16,7 @@ myone = ONE() # need to instantiate the class to have the API.
 
 ## Load method
 ### General Use
-The IBL uses sessions UUID as per the Alyx database as experiments ID.
+Similar to the Alyx database, this library uses sessions UUID as experiments ID.
 If the EEID is known, one can access directly the numpy arrays this way:
 ```python
 dataset_types = ['cwStimOn.times', 'cwStimOn.contrastRight', 'cwStimOn.contrastLeft']
