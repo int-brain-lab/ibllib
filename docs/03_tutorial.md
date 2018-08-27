@@ -19,30 +19,30 @@ myone = ONE() # need to instantiate the class to have the API.
 Similar to the Alyx database, this library uses sessions UUID as experiments ID.
 If the EEID is known, one can access directly the numpy arrays this way:
 ```python
-dataset_types = ['cwStimOn.times', 'cwStimOn.contrastRight', 'cwStimOn.contrastLeft']
-eid = 'http://localhost:8000/sessions/698361f6-b7d0-447d-a25d-42afdef7a0da'
-t, cr, cl = myone.load(eid, dataset_types=dataset_types)
+dataset_types = ['clusters.templateWaveforms', 'clusters.probes', 'clusters.depths']
+eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
+wf, pr, d = myone.load(eid, dataset_types=dataset_types)
 ```
 
 Depending on the use case, it may be handier to wrap the arrays in a dataclass
 (a structure for Matlab users) so that a bit of context is included with the array.
 This could be useful for custom format, or if the user wants to re-access the files locally:
 ```python
-from urllib.misc import pprint
 my_data = myone.load(eid, dataset_types=dataset_types, dclass_output=True)
+from ibllib.misc import pprint
 pprint(my_data.local_path)
 pprint(my_data.dataset_type)
 ```
 ```python
 [
-    "/home/owinter/Downloads/cwStimOn.times.97379d2f-9352-4250-adef-b429501adae7.npy",
-    "/home/owinter/Downloads/cwStimOn.contrastRight.d9024963-d0fa-4025-9d32-3afecf96c964.npy",
-    "/home/owinter/Downloads/cwStimOn.contrastLeft.b916b777-2630-46fd-a545-09e18befde2e.npy"
+    "/home/owinter/Downloads/FlatIronCache/clusters.templateWaveforms.2291afac-1d42-4021-a07c-c5539865f42c.npy",
+    "/home/owinter/Downloads/FlatIronCache/clusters.probes.66567f54-a5f4-45d1-a9e6-b103ece86339.npy",
+    "/home/owinter/Downloads/FlatIronCache/clusters.depths.a26662b5-ff9c-4f15-a8cf-5e9c9e85690f.npy"
 ]
 [
-    "cwStimOn.times",
-    "cwStimOn.contrastRight",
-    "cwStimOn.contrastLeft"
+    "clusters.templateWaveforms",
+    "clusters.probes",
+    "clusters.depths"
 ]
 ```
 The dataclass contains the following keys, each of which contains a list of 3 items corresponding the the 3 queried datasets
@@ -57,14 +57,17 @@ The dataclass contains the following keys, each of which contains a list of 3 it
 It is also possible to query all datasets attached to a given session, in which case
 the output has to be a dictionary:
 ```python
-my_data = myone.load(eid)
+eid, ses_info = myone.search(subject='flowers')
+my_data = myone.load(eid[0])
+pprint(my_data.dataset_type)
 ```
 
 ### Specific cases
 If a dataset type queried doesn't exist or is not on the FlatIron server, an empty list
 is returned. This allows to keep the proper order of output arguments
 ```python
-dataset_types = ['cwStimOn.times', 'thisDataset.IveJustMadeUp', 'cwStimOn.contrastLeft']
+eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
+dataset_types = ['clusters.probes', 'thisDataset.IveJustMadeUp', 'clusters.depths']
 t, empty, cl = myone.load(eid, dataset_types=dataset_types)
 ```
 Returns an empty list for *cr* so that *t* and *cl* still get assigned the proper values.
@@ -85,7 +88,6 @@ myone.list(table='dataset-types', verbose=True)
 One can also select several fields
 
 ```python
-from urllib.misc import pprint
 list_types , dtypes = myone.list(table=['dataset-types','users'])
 pprint(list_types)
 pprint(dtypes)
@@ -93,64 +95,94 @@ pprint(dtypes)
 This will give the following output:
 ```
 [
-    "Block",
-    "cwFeedback.rewardVolume",
-    "cwFeedback.times",
-    "cwFeedback.type",
-    "cwGoCue.times",
-    "cwResponse.choice",
-    "cwResponse.times",
-    "cwStimOn.contrastLeft",
-    "cwStimOn.contrastRight",
-    "cwStimOn.times",
-    "cwTrials.inclTrials",
-    "cwTrials.intervals",
-    "cwTrials.repNum",
-    "expDefinition",
-    "galvoLog",
-    "Hardware Info",
-    "lfp.raw",
-    "Parameters",
-    "photometry.calciumLeft_normalized",
-    "photometry.calciumRight_normalized",
-    "photometry.timestamps",
-    "unknown",
-    "wheel.position",
-    "wheel.timestamps",
-    "wheel.velocity"
+    [
+        "Channel mapping",
+        "channels.brainLocation",
+        "channels.probe",
+        "channels.rawRow",
+        "channels.site",
+        "channels.sitePositions",
+        "clusters.amps",
+        "clusters.depths",
+        "clusters.meanWaveforms",
+        "clusters.peakChannel",
+        "clusters._phy_annotation",
+        "clusters.probes",
+        "clusters.templateWaveforms",
+        "clusters.waveformDuration",
+        "ephys.raw",
+        "ephys.timestamps",
+        "eye.area",
+        "eye.blink",
+        "eye.raw",
+        "eye.timestamps",
+        "eye.xyPos",
+        "_ibl_code.files",
+        "_ibl_encoderEvents.bonsai_raw",
+        "_ibl_encoderPositions.bonsai_raw",
+        "_ibl_encoderTrialInfo.bonsai_raw",
+        "_ibl_extraRewards.times",
+        "_ibl_lickPiezo.raw",
+        "_ibl_lickPiezo.timestamps",
+        "_ibl_passiveBeeps.times",
+        "_ibl_passiveNoise.intervals",
+        "_ibl_passiveTrials.contrastLeft",
+        "_ibl_passiveTrials.contrastRight",
+        "_ibl_passiveTrials.included",
+        "_ibl_passiveTrials.stimOn_times",
+        "_ibl_passiveValveClicks.times",
+        "_ibl_passiveWhiteNoise.times",
+        "_ibl_pycwBasic.data",
+        "_ibl_pycwBasic.settings",
+        "_ibl_sparseNoise.times",
+        "_ibl_sparseNoise.xyPos",
+        "_ibl_trials.choice",
+        "_ibl_trials.contrastLeft",
+        "_ibl_trials.contrastRight",
+        "_ibl_trials.feedback_times",
+        "_ibl_trials.feedbackType",
+        "_ibl_trials.goCue_times",
+        "_ibl_trials.included",
+        "_ibl_trials.intervals",
+        "_ibl_trials.repNum",
+        "_ibl_trials.response_times",
+        "_ibl_trials.stimOn_times",
+        "_ibl_wheelMoves.intervals",
+        "_ibl_wheelMoves.type",
+        "_ibl_wheel.position",
+        "lfp.raw",
+        "lfp.timestamps",
+        "licks.times",
+        "probes.description",
+        "probes.insertion",
+        "probes.rawFilename",
+        "probes.sitePositions",
+        "raw_behavior_data",
+        "raw_ephys_data",
+        "raw_imaging_data",
+        "raw_video_data",
+        "spikes.amps",
+        "spikes.clusters",
+        "spikes.depths",
+        "spikes.times",
+        "spontaneous.intervals",
+        "unknown"
     ],
     [
-        "miles",
-        "i-chun",
-        "lauren",
-        "cyrille",
-        "marius",
-        "julien",
-        "matteo",
-        "julie",
-        "mush",
-        "daisuke",
-        "Philip",
-        "claire",
-        "carsen",
-        "peter",
-        "Stephane",
-        "Anna",
-        "max",
-
+        "jmontijn",
+        "nbonacchi",
+        "olivier",
+        "test_user"
+    ]
+]
 [
-    {
-        "name": "Block",
-        "created_by": "miles",
-        "description": "",
-        "filename_pattern": "*_Block.*"
-    },
-    {
-        "name": "cwFeedback.rewardVolume",
-        "created_by": "miles",
-        "description": "Size of the water reward given in microlitres",
-        "filename_pattern": "cwFeedback.rewardVolume.*"
-    },
+    [
+        {
+            "name": "Channel mapping",
+            "created_by": "olivier",
+            "description": "NOTE \"channel\" refers ONLY to those channels that made it through to spike sorting (probably not all of them). \"rawRow\" means a row in the raw recording file, of which there may be more",
+            "filename_pattern": "Channel mapping.*"
+        },
     # and so on...
 ```
 
@@ -170,23 +202,26 @@ be one subject per session.
 ```python
 from oneibl.one import ONE
 myone = ONE() # need to instantiate the class to have the API.
-sl , sd =  myone.search(subjects=['Morgane','miles','armin'])
+eid, ses_info = myone.search(subject='flowers')
+pprint(eid)
+pprint(ses_info)
+
 ```
-
-In the current version,
-
-### Many
-
 
 Here is the simple implementation of the filter, where we query for the EEIDs (sessions) co-owned by
-all of the following users: Morgane, miles and armin (case-sensitive).
+all of the following users: olivier and niccolo (case-sensitive).
 ```python
-sl , sd =  myone.search(users=['Morgane','miles','armin'])
-pprint(sl)
+eid, ses_info = myone.search(users=['nbonacchi', 'olivier'])
 ```
 
-The following would get all of the dataset for which Morgane is an owner or a co-owner:
+The following would get all of the dataset for which olivier is an owner or a co-owner:
 ```python
-sl , sd =  myone.search(users=['Morgane'])
-pprint(sl)
+eid , ses_info=  myone.search(users=['olivier'])
+pprint(eid)
 ```
+
+It is also possible to filter sessions using a date-range:
+```python
+eid, ses_info = myone.search(users='olivier', date_range=['2018-08-24', '2018-08-24'])
+```
+

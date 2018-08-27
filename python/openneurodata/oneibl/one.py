@@ -22,10 +22,9 @@ class SessionInfo:
 
 class ONE(OneAbstract):
 
-    def __init__(self):
+    def __init__(self, username=par.ALYX_LOGIN, password=par.ALYX_PWD, base_url=par.BASE_URL):
         # Init connection to the database
-        self._alyxClient = wc.AlyxClient(username=par.ALYX_LOGIN, password=par.ALYX_PWD,
-                                         base_url=par.BASE_URL)
+        self._alyxClient = wc.AlyxClient(username=username, password=password, base_url=base_url)
 
     def load(self, eid, dataset_types=None, dclass_output=False):
         """
@@ -54,7 +53,10 @@ class ONE(OneAbstract):
             eid = '/sessions/' + eid
         eid_str = eid[-36:]
         # get session json information as a dictionary from the alyx API
-        ses = self._alyxClient.get(eid)
+        ses = self._alyxClient.get('/sessions?id=' + eid_str)
+        if not ses:
+            raise FileNotFoundError('Session ' + eid_str + ' does not exist')
+        ses = ses[0]
         # if no dataset_type is provided:
         # a) force the output to be a dictionary that provides context to the data
         # b) download all types that have a data url specified

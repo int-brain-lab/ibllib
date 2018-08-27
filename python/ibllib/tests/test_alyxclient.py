@@ -6,6 +6,7 @@ import oneibl.params as par
 import tempfile
 import shutil
 
+
 class TestDownloadHTTP(unittest.TestCase):
 
     def setUp(self):
@@ -14,17 +15,17 @@ class TestDownloadHTTP(unittest.TestCase):
                                 base_url=par.BASE_URL)
 
     def test_download_datasets_with_api(self):
-        ac = self.ac # easier to debug in console
+        ac = self.ac  # easier to debug in console
         cache_dir = tempfile.mkdtemp()
 
         # Test 1: empty dir, dict mode
-        dset = ac.get('/datasets/4e6a6372-343b-49f9-8672-c8a9a2eaa246')
+        dset = ac.get('/datasets/6f3eb5f5-f6e8-4c1a-80e5-88e127a80893')
         url = wc.dataset_record_to_url(dset)
         file_name = wc.http_download_file_list(url, username=par.HTTP_DATA_SERVER_LOGIN,
                                                password=par.HTTP_DATA_SERVER_PWD,
                                                verbose=True, cache_dir=cache_dir)
         # Test 2: empty dir, list mode
-        dset = ac.get('/datasets?id=4e6a6372-343b-49f9-8672-c8a9a2eaa246')
+        dset = ac.get('/datasets?id=6f3eb5f5-f6e8-4c1a-80e5-88e127a80893')
         url = wc.dataset_record_to_url(dset)
         file_name = wc.http_download_file_list(url, username=par.HTTP_DATA_SERVER_LOGIN,
                                                password=par.HTTP_DATA_SERVER_PWD,

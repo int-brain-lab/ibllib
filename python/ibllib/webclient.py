@@ -76,7 +76,7 @@ def http_download_file(full_link_to_file, *, clobber=False,
     if verbose:
         print("Downloading: %s Bytes: %s" % (file_name, file_size))
     file_size_dl = 0
-    block_sz = 8192*64
+    block_sz = 8192*64*8
     f = open(file_name, 'wb')
     while True:
         buffer = u.read(block_sz)

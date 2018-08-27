@@ -3,9 +3,9 @@ from oneibl.one import ONE
 myone = ONE() # need to instantiate the class to have the API.
 
 ## Load #1
-dataset_types = ['cwStimOn.times', 'cwStimOn.contrastRight', 'cwStimOn.contrastLeft']
-eid = 'http://localhost:8000/sessions/698361f6-b7d0-447d-a25d-42afdef7a0da'
-t, cr, cl = myone.load(eid, dataset_types=dataset_types)
+dataset_types = ['clusters.templateWaveforms', 'clusters.probes', 'clusters.depths']
+eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
+wf, pr, d = myone.load(eid, dataset_types=dataset_types)
 
 ## Load #2
 my_data = myone.load(eid, dataset_types=dataset_types, dclass_output=True)
@@ -14,10 +14,13 @@ pprint(my_data.local_path)
 pprint(my_data.dataset_type)
 
 ## Load everything
-my_data = myone.load(eid)
+eid, ses_info = myone.search(subject='flowers')
+my_data = myone.load(eid[0])
+pprint(my_data.dataset_type)
 
 ## Load
-dataset_types = ['cwStimOn.times', 'thisDataset.IveJustMadeUp', 'cwStimOn.contrastLeft']
+eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
+dataset_types = ['clusters.probes', 'thisDataset.IveJustMadeUp', 'clusters.depths']
 t, empty, cl = myone.load(eid, dataset_types=dataset_types)
 
 ## List #1
@@ -29,11 +32,10 @@ pprint(list_types)
 pprint(dtypes)
 
 ## Search users
-sl, sd = myone.search(users=['Morgane','miles','armin'])
-pprint(sl)
+eid, ses_info = myone.search(users=['olivier'])
+pprint(ses_info)
+
+eid, ses_info = myone.search(users=['nbonacchi', 'olivier'])
 
 ## Search by date
-sl, sd = myone.search(users='miles', date_range=['2018-03-01', '2018-03-24'])
-
-
-
+eid = myone.search(users='olivier', date_range=['2018-08-24', '2018-08-24'])
