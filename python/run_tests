@@ -1,0 +1,2 @@
+python -m unittest ibllib/tests/test_*
+python -m unittest openneurodata/oneibl/tests/test_*
