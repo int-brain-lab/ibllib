@@ -6,7 +6,7 @@ from pathlib import Path
 with open("../README.md", 'r') as f:
     long_description = f.read()
 
-with open("./openneurodata/oneibl/params.py") as f:
+with open("./oneibl/params.py") as f:
     param_file = f.read()
 
 
