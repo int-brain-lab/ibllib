@@ -159,8 +159,8 @@ def load_encoder_trial_info(session_path):
 
 
 if __name__ == '__main__':
-    SESSION_PATH = "/home/nico/Projects/IBL/IBL-github/IBL_root/pybpod_data/\
-test_mouse/2018-07-11/11"
+    SESSION_PATH = "/home/nico/Projects/IBL/IBL-github/iblrig/pybpod_data/\
+test_mouse/2018-07-31/1/"
 
     settings = load_settings(SESSION_PATH)
     data = load_data(SESSION_PATH)
