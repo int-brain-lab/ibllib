@@ -3,7 +3,7 @@ import os
 from dataclasses import dataclass, field
 import ibllib.webclient as wc
 from ibllib.misc import is_uuid_string, pprint
-from openneurodata.one import OneAbstract
+from one import OneAbstract
 import oneibl.params as par
 
 

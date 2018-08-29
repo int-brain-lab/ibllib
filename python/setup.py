@@ -94,8 +94,6 @@ setup(
     author='IBL Staff',
     url="https://www.internationalbrainlab.com/",
     packages=find_packages(),  # same as name
-    package_dir={'oneibl': 'openneurodata/oneibl',
-                 'oneibl.example': 'openneurodata/oneibl/examples'},
     install_requires=['dataclasses', 'matplotlib', 'numpy', 'pandas',
                       'requests'],  # external packages as dependencies
     scripts=[]
