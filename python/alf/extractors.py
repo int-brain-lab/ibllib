@@ -195,9 +195,30 @@ def get_trials_repNum(session_path, save=False):
     return repNum
 
 
+def get_rewardVolume(session_path, save=False):
+    """
+    Load reward volume delivered for each trial.
+
+    Uses reward_current to accumulate the amount of
+
+    :param session_path: Absoulte path of session folder
+    :type session_path: str
+    """
+    trial_volume = [x['reward_current']
+                    if x['trial_correct'] else 0 for x in data]
+    rewardVolume = np.cumsum(trial_volume)
+    assert len(rewardVolume) == len(data)
+    if save:
+        check_alf_folder(session_path)
+        fpath = os.path.join(session_path, 'alf', '_ibl_trials.rewardVolume.npy')
+        np.save(fpath, repNum)
+    return rewardVolume
+
+
 if __name__ == '__main__':
-    SESSION_PATH = "/home/nico/Projects/IBL/IBL-github/IBL_root/pybpod_data/\
-test_mouse/2018-07-11/11"
+    SESSION_PATH = "/home/nico/Projects/IBL/IBL-github/iblrig/pybpod_data/\
+test_mouse/2018-07-31/1/"
+    save = True
 
     data = raw.load_data(SESSION_PATH)
     starts = [t['behavior_data']['Trial start timestamp'] for t in data]
@@ -206,22 +227,27 @@ test_mouse/2018-07-11/11"
     dead_time = np.array(starts)[1:] - np.array(ends)[:-1]
     dead_time = np.append(np.array([0]), dead_time)
 
-    feedbackType = get_trials_feedbackType(SESSION_PATH, save=False)
+    feedbackType = get_trials_feedbackType(SESSION_PATH, save=save)
     contrastLeft, contrastRight = get_trials_contrastLR(
-        SESSION_PATH, save=False)
-    choice = get_trials_choice(SESSION_PATH, save=False)
+        SESSION_PATH, save=save)
+    choice = get_trials_choice(SESSION_PATH, save=save)
     rep = np.array([t['contrast']['type'] == 'repeat_contrast' for t in data])
-    repNum = get_trials_repNum(SESSION_PATH, save=False)
+    repNum = get_trials_repNum(SESSION_PATH, save=save)
     print(list(zip(rep.astype(int), repNum)))
+
+    rewardVolume = get_rewardVolume(SESSION_PATH, save=save)
 
     ft = os.path.join(SESSION_PATH, 'alf', '_ibl_trials.feedbackType.npy')
     cl = os.path.join(SESSION_PATH, 'alf', '_ibl_trials.contrastLeft.npy')
     cr = os.path.join(SESSION_PATH, 'alf', '_ibl_trials.contrastRight.npy')
     sc = os.path.join(SESSION_PATH, 'alf', '_ibl_trials.choice.npy')
     rn = os.path.join(SESSION_PATH, 'alf', '_ibl_trials.repNum.npy')
+    rv = os.path.join(SESSION_PATH, 'alf', '_ibl_trials.rewardVolume.npy')
     print(np.load(ft).dtype)
     print(np.load(cl).dtype)
     print(np.load(cr).dtype)
     print(np.load(sc).dtype)
     print(np.load(rn).dtype)
+    print(np.load(rv).dtype)
+
     print("Done!")
