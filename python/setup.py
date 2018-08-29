@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 from getpass import getpass
 import os
 from pathlib import Path
@@ -13,7 +13,14 @@ with open("./openneurodata/oneibl/params.py") as f:
 def _get_par(pname):
     for l in param_file.split('\n'):
         if l.startswith(pname):
-            return l.split('=')[-1].replace('"', '').replace("'", '').strip()
+            parstr = l.split('=')[-1]
+            parstr = parstr.strip()
+            if parstr.startswith('r'):
+                parstr = parstr[1:]
+            torep = ['"', "'"]
+            for tr in torep:
+                parstr = parstr.replace(tr, '')
+            return parstr.strip()
 
 
 def _set_par(fname, replacements):
@@ -33,10 +40,10 @@ def _set_par(fname, replacements):
 
 
 # User Input Data
-BASE_URL = input("Enter the URL of Alyx Instance [" + _get_par('BASE_URL') + "]:")\
-    or _get_par('BASE_URL')
+BASE_URL = input("Enter the URL of Alyx Instance [" + _get_par('BASE_URL') + "]:") \
+           or _get_par('BASE_URL')
 print(BASE_URL)
-ALYX_LOGIN = input("Enter Alyx username [" + _get_par('ALYX_LOGIN') + "]:")\
+ALYX_LOGIN = input("Enter Alyx username [" + _get_par('ALYX_LOGIN') + "]:") \
              or _get_par('ALYX_LOGIN')
 print(ALYX_LOGIN)
 
@@ -79,17 +86,17 @@ replacements = {
 _set_par("./openneurodata/oneibl/params_secret.py", replacements)
 
 setup(
-   name='ibllib',
-   version='0.1.2',
-   description='IBL libraries',
-   license="MIT",
-   long_description=long_description,
-   author='IBL Staff',
-   url="https://www.internationalbrainlab.com/",
-   packages=['ibllib', 'oneibl', 'oneibl.examples'],  # same as name
-   package_dir={'oneibl': 'openneurodata/oneibl',
-                'oneibl.example': 'openneurodata/oneibl/examples'},
-   install_requires=['dataclasses', 'matplotlib', 'numpy', 'pandas',
-                     'requests'],  # external packages as dependencies
-   scripts=[]
+    name='ibllib',
+    version='0.1.2',
+    description='IBL libraries',
+    license="MIT",
+    long_description=long_description,
+    author='IBL Staff',
+    url="https://www.internationalbrainlab.com/",
+    packages=find_packages(),  # same as name
+    package_dir={'oneibl': 'openneurodata/oneibl',
+                 'oneibl.example': 'openneurodata/oneibl/examples'},
+    install_requires=['dataclasses', 'matplotlib', 'numpy', 'pandas',
+                      'requests'],  # external packages as dependencies
+    scripts=[]
 )
