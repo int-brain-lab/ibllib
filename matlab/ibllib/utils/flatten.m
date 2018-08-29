@@ -4,7 +4,7 @@ function in = flatten(in)
 % if struct array, un-nest the struct-array and returns a struct
 
 switch true
-    case isnumeric(in) | iscell(in)
+    case isnumeric(in) | iscell(in) | ischar(in)
         in = in(:);
         return
     case isstruct(in)

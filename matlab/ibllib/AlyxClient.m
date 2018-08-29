@@ -43,15 +43,33 @@ classdef AlyxClient
     
     methods (Access = public)
         function rep = post(self,end_point, request_struct)
+            % rep = post(url, request_struct)
             url = [self.base_url  end_point];
             rep = webwrite(url,  jsonencode(request_struct), setfield( self.weboptions, 'RequestMethod', 'post') );
         end
         
          function rep = get(self,end_point)
+             % rep = get(url)
             url = [self.base_url  end_point];
             rep = webread(url, self.weboptions);
             rep = flatten(rep);
-        end
+         end
+        
+         function create_session(self, session_structure)
+             % self.create_session(session_structure)
+            %  session =  struct with fields: 
+            %        subject: 'clns0730'
+            %     procedures: {'Behavior training/tasks'}
+            %      narrative: 'auto-generated session'
+            %     start_time: '2018-07-30T12:00:00'
+            %           type: 'Base'
+            %         number: '1'
+            %          users: {'olivier'}
+             
+             
+             
+             
+         end
     end
     
         
