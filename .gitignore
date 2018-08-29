@@ -1,4 +1,4 @@
-docs/_*
+docs/_build
 __pycache__
 *.*~
 # this fixes a dummy version on the public repository

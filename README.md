@@ -1,13 +1,20 @@
 #Note:
 These libs are still in alpha. Vesion numbers 0.\*.\* are considered unstable and
 not completely documented.
+Syntax may not be preserved among releases.
 
 ## Documentation
 https://ibllib.readthedocs.io/en/latest/
 
+## Installation
+https://ibllib.readthedocs.io/en/develop/02_installation.html
+
 ## Requirements
-Requires Python 3.6 or higher.
-Requires Matlab R2016b or higher (jsonencode function).
+**OS**: Linux and Windows. Untested on Mac.
+
+**Python Module**: Python 3.6 or higher.
+
+**Matlab Module**: Matlab R2016b or higher (jsonencode function).
 
 
 ## Development practices

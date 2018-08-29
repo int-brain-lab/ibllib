@@ -1,5 +1,6 @@
 # Installation guide
-## Linux
+## Python Module
+### Linux
 Clone the github, setup a virtualenv, install requirements and install the IBL packages.
 ```
 git clone https://github.com/int-brain-lab/ibllib.git
@@ -17,3 +18,15 @@ source run_tests
 ```
 
 To run with Spyder, just link the Python Interpreter with the virtualenv you've created.
+
+### Windows
+
+## Matlab Package
+In a command line, clone the git (Linux) or download the zip file from GitHub (Windows).
+```
+git clone https://github.com/int-brain-lab/ibllib.git
+```
+
+```matlab
+AlyxClient.setup()
+```
