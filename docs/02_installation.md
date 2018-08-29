@@ -12,14 +12,29 @@ cd python
 python ./setup.py install
 ```
 
-Eventually run the tests, it needs credentials as defined above.
+Eventually run the tests, it needs Alyx and FlatIron credentials as defined above.
 ```
-source run_tests
+source run_tests.bat
 ```
 
 To run with Spyder, just link the Python Interpreter with the virtualenv you've created.
 
 ### Windows
+Clone the github
+```
+conda create -n ibllibenv
+conda activate ibllibenv
+cd ibllib/
+pip install -r ./python/requirements.txt
+cd python
+python setup.py install
+```
+
+Eventually run the tests, it needs Alyx and FlatIron credentials as defined above.
+```
+call run_tests.bat
+```
+
 
 ## Matlab Package
 In a command line, clone the git (Linux) or download the zip file from GitHub (Windows).

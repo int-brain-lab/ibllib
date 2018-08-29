@@ -25,7 +25,7 @@ def _set_par(fname, replacements):
     for key, value in replacements.items():
         for ind, l in enumerate(lfile):
             if l.startswith(key):
-                lfile[ind] = key + " = '" + value + "'"
+                lfile[ind] = key + " = r'" + value + "'"
                 break
     # overwrite
     with open(fname, 'w') as f:
