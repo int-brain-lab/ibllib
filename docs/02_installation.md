@@ -20,9 +20,13 @@ source run_tests.bat
 To run with Spyder, just link the Python Interpreter with the virtualenv you've created.
 
 ### Windows
-Clone the github.
+Clone the github if you have Git for Windows installed.
 ```
-conda install nb_conda
+git clone https://github.com/int-brain-lab/ibllib.git
+```
+Otherwise download the the zip file from the Github website and unzip.
+
+```
 conda create -n ibllibenv
 conda activate ibllibenv
 cd ibllib/python
