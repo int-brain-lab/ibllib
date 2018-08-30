@@ -3,8 +3,23 @@ import os
 from dataclasses import dataclass, field
 import ibllib.webclient as wc
 from ibllib.misc import is_uuid_string, pprint
-from one import OneAbstract
 import oneibl.params as par
+import abc
+
+
+class OneAbstract(abc.ABC):
+
+    @abc.abstractmethod
+    def load(self, eid, **kwargs):
+        return
+
+    @abc.abstractmethod
+    def list(self, **kwargs):
+        return
+
+    @abc.abstractmethod
+    def search(self, **kwargs):
+        return
 
 
 @dataclass
