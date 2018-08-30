@@ -1,5 +1,5 @@
 dataclasses
-numpy
-requests
 matplotlib
+numpy
 pandas
+requests

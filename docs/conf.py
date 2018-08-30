@@ -104,7 +104,7 @@ html_static_path = ['_static']
 # -- Options for HTMLHelp output ---------------------------------------------
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'one_ibldoc'
+htmlhelp_basename = 'ibllibdoc'
 
 
 # -- Options for LaTeX output ------------------------------------------------
@@ -131,7 +131,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'one_ibl.tex', 'one\\_ibl Documentation',
+    (master_doc, 'ibllib.tex', 'ibllib Documentation',
      'International Brain Laboratory', 'manual'),
 ]
 
@@ -141,7 +141,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'one_ibl', 'one_ibl Documentation',
+    (master_doc, 'ibllib', 'ibllib Documentation',
      [author], 1)
 ]
 
@@ -152,8 +152,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'one_ibl', 'one_ibl Documentation',
-     author, 'one_ibl', 'One line description of project.',
+    (master_doc, 'ibllib', 'ibllib Documentation',
+     author, 'ibllib', 'One line description of project.',
      'Miscellaneous'),
 ]
 
