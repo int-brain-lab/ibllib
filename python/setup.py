@@ -3,10 +3,13 @@ from getpass import getpass
 import os
 from pathlib import Path
 
+FILE_PARAM_PY = "./oneibl/params.py"
+FILE_PARAM_SECRET_PY = "./oneibl/params_secret.py"
+
 with open("../README.md", 'r') as f:
     long_description = f.read()
 
-with open("./oneibl/params.py") as f:
+with open(FILE_PARAM_PY) as f:
     param_file = f.read()
 
 
@@ -77,13 +80,13 @@ replacements = {
     'HTTP_DATA_SERVER_LOGIN': HTTP_DATA_SERVER_LOGIN,
     'CACHE_DIR': CACHE_DIR
 }
-_set_par("./openneurodata/oneibl/params.py", replacements)
+_set_par(FILE_PARAM_PY, replacements)
 
 replacements = {
     'HTTP_DATA_SERVER_PWD': HTTP_DATA_SERVER_PWD,
     'ALYX_PWD': ALYX_PWD
 }
-_set_par("./openneurodata/oneibl/params_secret.py", replacements)
+_set_par(FILE_PARAM_SECRET_PY, replacements)
 
 setup(
     name='ibllib',

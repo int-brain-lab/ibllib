@@ -20,13 +20,13 @@ source run_tests.bat
 To run with Spyder, just link the Python Interpreter with the virtualenv you've created.
 
 ### Windows
-Clone the github
+Clone the github.
 ```
+conda install nb_conda
 conda create -n ibllibenv
 conda activate ibllibenv
-cd ibllib/
-pip install -r ./python/requirements.txt
-cd python
+cd ibllib/python
+pip install -r requirements.txt
 python setup.py install
 ```
 
