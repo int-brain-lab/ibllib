@@ -6,22 +6,31 @@
 Welcome to IBL code library documentation!
 ==========================================
 
-This is such a very nice rst file.
+User Manual
+------------------------------------
 
 .. toctree::
    :maxdepth: 2
 
-   one
-   tutorial
+   01_overview
+   02_installation
+   03_tutorial
 
-
-Developer's guide
-==================
+Reference Information on ALF and ONE
+------------------------------------
 
 .. toctree::
    :maxdepth: 2
 
-   /source/ibllib
-   /source/oneibl
+   04_reference
+
+
+Contributer/Developer
+------------------------------------
+
+.. toctree::
+   :maxdepth: 2
+
+   05_developers
 
 * :ref:`genindex`
