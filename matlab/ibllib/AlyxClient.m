@@ -80,9 +80,9 @@ classdef AlyxClient
             % Will change once we settle on a proper way to handle parameters
             prefs = getpref('Alyx');
             if isempty(prefs), prefs = struct('base_url','','user','','password',''); end
-            base_url = input(['base_url (example: alyx.cortexlab.net), (current: ' prefs.base_url ') '], 's');
+            base_url = input(['base_url (example: https://test.alyx.internationalbrainlab.com), (current: ' prefs.base_url ') '], 's');
             if ~isempty(base_url), prefs.base_url = base_url; end
-            user = input(['user (example:olivier), (current: ' prefs.user ')'], 's'); 
+            user = input(['user (example:test_user), (current: ' prefs.user ')'], 's'); 
             if ~isempty(user), prefs.user = user; end
             password = passwordUI();
             if ~isempty(password), prefs.password = password; end

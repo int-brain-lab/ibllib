@@ -1,0 +1,2 @@
+python -m unittest ibllib/tests/test_*
+python -m unittest oneibl/tests/test_*
