@@ -203,7 +203,13 @@ def get_rewardVolume(session_path, save=False):
 
     :param session_path: Absoulte path of session folder
     :type session_path: str
+    :param save: wether to save the corresponding alf file
+                 to the alf folder, defaults to False
+    :param save: bool, optional
+    :return: numpy.ndarray
+    :rtype: dtype('int64')
     """
+    data = raw.load_data(session_path)
     trial_volume = [x['reward_current']
                     if x['trial_correct'] else 0 for x in data]
     rewardVolume = np.cumsum(trial_volume)
@@ -211,9 +217,37 @@ def get_rewardVolume(session_path, save=False):
     if save:
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf', '_ibl_trials.rewardVolume.npy')
-        np.save(fpath, repNum)
+        np.save(fpath, rewardVolume)
     return rewardVolume
 
+
+def get_feedbackTimes(session_path, save=False):
+    """
+    get_feedbackTimes [summary]
+
+    [description]
+
+    :param session_path: Absoulte path of session folder
+    :type session_path: str
+    :param save: wether to save the corresponding alf file
+                 to the alf folder, defaults to False
+    :param save: bool, optional
+    :return: numpy.ndarray
+    :rtype: dtype('float64')
+    """
+    data = raw.load_data(session_path)
+    rw_times = [tr['behavior_data']['States timestamps']['reward'][0][0]
+                for tr in data]
+    err_times = [tr['behavior_data']['States timestamps']['error'][0][0]
+                 for tr in data]
+    assert sum(np.isnan(rw_times) & np.isnan(err_times)) == 0
+    merge = [x if ~np.isnan(x) else y for x, y in zip(rw_times, err_times)]
+    if save:
+        check_alf_folder(session_path)
+        fpath = os.path.join(session_path, 'alf',
+                             '_ibl_trials.feedbackTimes.npy')
+        np.save(fpath, merge)
+    return np.array(merge)
 
 if __name__ == '__main__':
     SESSION_PATH = "/home/nico/Projects/IBL/IBL-github/iblrig/pybpod_data/\
