@@ -33,7 +33,43 @@ def load_settings(session_path):
     return settings
 
 
-def load_data(session_path):
+def trial_times_to_times(raw_trial):
+    """
+    Parse and convert all trial timestamps to absolute time.
+
+    0---BpodStart---TrialStart0---------TrialEnd0-----TrialStart1---TrialEnd1...
+                        0---ts0---ts1---tsN...
+    absTS = tsN + TrialStartN - BpodStart
+
+    :param raw_trial: raw tiral data
+    :type raw_trial: dict
+    :return: trial data with modified timestamps
+    :rtype: dict
+    """
+    ts_bs = raw_trial['behavior_data']['Bpod start timestamp']
+    ts_ts = raw_trial['behavior_data']['Trial start timestamp']
+    ts_te = raw_trial['behavior_data']['Trial end timestamp']
+
+    def convert(ts):
+        return ts + ts_ts - ts_bs
+
+    converted_events = {}
+    for k, v in raw_trial['behavior_data']['Events timestamps'].items():
+        converted_events.update({k: [convert(i) for i in v]})
+    raw_trial['behavior_data']['Events timestamps'] = converted_events
+
+    converted_states = {}
+    for k, v in raw_trial['behavior_data']['States timestamps'].items():
+        converted_states.update({k: [[convert(i) for i in x] for x in v]})
+    raw_trial['behavior_data']['States timestamps'] = converted_states
+
+    raw_trial['behavior_data']['Bpod start timestamp'] = convert(ts_bs)
+    raw_trial['behavior_data']['Trial start timestamp'] = convert(ts_ts)
+    raw_trial['behavior_data']['Trial end timestamp'] = convert(ts_te)
+    return raw_trial
+
+
+def load_data(session_path, time='absolute' or 'relative'):
     """
     Load PyBpod data files (.jsonable).
 
@@ -50,6 +86,8 @@ def load_data(session_path):
     with open(path, 'r') as f:
         for line in f:
             data.append(json.loads(line))
+    if time == 'absolute':
+        data = [trial_times_to_times(t) for t in data]
     return data
 
 
