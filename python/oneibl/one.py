@@ -41,7 +41,23 @@ class ONE(OneAbstract):
         # Init connection to the database
         self._alyxClient = wc.AlyxClient(username=username, password=password, base_url=base_url)
 
-    def load(self, eid, dataset_types=None, dclass_output=False):
+    def info(self, eid):
+        """
+        From a Session ID, queries Alyx database for session information.
+
+        :param eid: Experiment ID, for IBL this is the UUID of the Session as per Alyx
+         database. Could be a full Alyx URL:
+         'http://localhost:8000/sessions/698361f6-b7d0-447d-a25d-42afdef7a0da' or only the UUID:
+         '698361f6-b7d0-447d-a25d-42afdef7a0da'
+
+        :return: List of numpy arrays matching the size of dataset_types parameter, OR
+         a dataclass containing arrays and context data.
+        :rtype: dataclass SessionInfo
+        """
+        out = self.load(eid, dry_run=True)
+        return out
+
+    def load(self, eid, dataset_types=None, dclass_output=False, dry_run=False):
         """
         From a Session ID and dataset types, queries Alyx database, downloads the data
         from Globus, and loads into numpy array.
@@ -59,7 +75,7 @@ class ONE(OneAbstract):
 
         :return: List of numpy arrays matching the size of dataset_types parameter, OR
          a dataclass containing arrays and context data.
-        :rtype: list, dict
+        :rtype: list, dict, dataclass SessionInfo
         """
         # TODO: feature that downloads a list of datasets from a list of sessions,
         # TODO in this case force dictionary output
@@ -75,6 +91,8 @@ class ONE(OneAbstract):
         # if no dataset_type is provided:
         # a) force the output to be a dictionary that provides context to the data
         # b) download all types that have a data url specified
+        if isinstance(dataset_types, str):
+            dataset_types = [dataset_types]
         if not dataset_types:
             dclass_output = True
             dataset_types = [d['dataset_type'] for d in ses['data_dataset_session_related']
@@ -87,10 +105,13 @@ class ONE(OneAbstract):
             for [i, sdt] in enumerate(session_dtypes):
                 if sdt == dt:
                     urlstr = ses['data_dataset_session_related'][i]['data_url']
-                    fil = wc.http_download_file(urlstr,
-                                                username=par.HTTP_DATA_SERVER_LOGIN,
-                                                password=par.HTTP_DATA_SERVER_PWD,
-                                                cache_dir=par.CACHE_DIR)
+                    if not dry_run:
+                        fil = wc.http_download_file(urlstr,
+                                                    username=par.HTTP_DATA_SERVER_LOGIN,
+                                                    password=par.HTTP_DATA_SERVER_PWD,
+                                                    cache_dir=par.CACHE_DIR)
+                    else:
+                        fil = ''
                     out.eid.append(eid_str)
                     out.dataset_type.append(dt)
                     out.url.append(urlstr)
