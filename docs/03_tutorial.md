@@ -13,11 +13,30 @@ The first step is to import the ONE class. In the IBL case, the class has to be 
 from oneibl.one import ONE
 myone = ONE() # need to instantiate the class to have the API.
 ```
+## Info method
+Similar to the Alyx database, this library uses sessions UUID as experiments ID.
+If the EEID is known, one can get information about a session this way.
+```
+from ibllib.misc import pprint
+eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
+d = myone.info(eid)
+pprint(d.dataset_type)
+``` 
 
 ## Load method
 ### General Use
+
 Similar to the Alyx database, this library uses sessions UUID as experiments ID.
-If the EEID is known, one can access directly the numpy arrays this way:
+If the EEID is known,
+```
+from ibllib.misc import pprint
+eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
+d = myone.info(eid)
+pprint(d.dataset_type)
+``` 
+
+One can access directly the numpy arrays this way:
+
 ```python
 dataset_types = ['clusters.templateWaveforms', 'clusters.probes', 'clusters.depths']
 eid = '86e27228-8708-48d8-96ed-9aa61ab951db'

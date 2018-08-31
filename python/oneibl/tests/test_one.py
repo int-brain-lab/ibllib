@@ -37,6 +37,12 @@ class TestLoad(unittest.TestCase):
         aa = myone.load(eid, dataset_types=dataset_types)
         self.assertTrue(len(aa) == 2)
 
+    def test_load_str(self):
+        myone = self.One
+        eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
+        a = myone.load(eid, 'eye.raw')
+        self.assertTrue(len(a) == 1)
+
     def test_load_all_data_available(self):
         # Test without a dataset list should download everything and output a dictionary
         myone = self.One
@@ -82,6 +88,12 @@ class TestLoad(unittest.TestCase):
         dtyp = ['spikes.times', 'channels.site']
         sl, sd = myone.search(dataset_types=dtyp)
         self.assertTrue(len(sl) == 1)
+
+    def test_info(self):
+        myone = self.One
+        eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
+        a = myone.info(eid)
+        self.assertTrue(len(a.dataset_id) == 29)
 
 
 if __name__ == '__main__':
