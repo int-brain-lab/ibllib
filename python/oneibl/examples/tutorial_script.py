@@ -2,6 +2,12 @@
 from oneibl.one import ONE
 myone = ONE() # need to instantiate the class to have the API.
 
+## Info about a session
+from ibllib.misc import pprint
+eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
+d = myone.info(eid)
+pprint(d.dataset_type)
+
 ## Load #1
 dataset_types = ['clusters.templateWaveforms', 'clusters.probes', 'clusters.depths']
 eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
