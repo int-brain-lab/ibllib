@@ -179,7 +179,7 @@ class AlyxClient:
     def get(self, rest_query):
         """
         Sends a GET request to the Alyx server. Will raise an exception on any status_code
-         other than 200, 201.
+        other than 200, 201.
         For the dictionary contents and list of endpoints, refer to:
         https://alyx.internationalbrainlab.org/docs
 
