@@ -5,3 +5,5 @@ __pycache__
 #git update-index --assume-unchanged python/openneurodata/oneibl/params_secret.py
 python/scratch
 .idea/*
+
+python/oneibl/params_secret\.py

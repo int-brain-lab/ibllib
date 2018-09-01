@@ -79,7 +79,7 @@ def get_trials_feedbackType(session_path, save=False):
     feedbackType[reward] = 1
     feedbackType[error] = -1
     feedbackType[no_go] = 0
-    feedbackType = feedbackType.astype(int)
+    feedbackType = feedbackType.astype('int64')
     if save:
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
@@ -144,6 +144,7 @@ def get_trials_choice(session_path, save=False):
     :return: numpy.ndarray
     :rtype: dtype('int64')
     """
+    data = raw.load_data(session_path)
     sitm_side = np.array([np.sign(t['signed_contrast']) for t in data])
     trial_correct = np.array([t['trial_correct'] for t in data])
     choice = sitm_side.copy()
