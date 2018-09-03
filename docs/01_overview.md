@@ -5,3 +5,6 @@
 -   **Datajoint**: processing Pipeline for IBL neuroscience data.
 -   **FlatIron**: storage of bulky raw data time-series. The Alyx database points to the files on this server. It is accessible through HTTP, FTP and Globus.
 -   **ONE**: set of normatlized functions to access the IBL data. It queries the Alyx database and downloads data files from the FLatIron.
+
+## Getting started:
+Ipython notebook  [here](./_static/one_demo.html)
