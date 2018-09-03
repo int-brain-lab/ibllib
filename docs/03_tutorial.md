@@ -11,7 +11,7 @@ The first step is to import the ONE class. In the IBL case, the class has to be 
 
 ```python
 from oneibl.one import ONE
-myone = ONE() # need to instantiate the class to have the API.
+one = ONE() # need to instantiate the class to have the API.
 ```
 ## Info method
 Similar to the Alyx database, this library uses sessions UUID as experiments ID.
@@ -19,35 +19,33 @@ If the EEID is known, one can get information about a session this way.
 ```
 from ibllib.misc import pprint
 eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
-d = myone.info(eid)
-pprint(d.dataset_type)
+dlist = one.list(eid)
+pprint(dlist)
 ``` 
+
+For more detailed info, this will return a dataclass with dataset_type, url and dataset_id fields among others:
+```python
+d = one.session_data_info(eid)
+print(d)
+```
 
 ## Load method
 ### General Use
 
 Similar to the Alyx database, this library uses sessions UUID as experiments ID.
-If the EEID is known,
-```
-from ibllib.misc import pprint
-eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
-d = myone.info(eid)
-pprint(d.dataset_type)
-``` 
-
-One can access directly the numpy arrays this way:
+If the EEID is known, One can access directly the numpy arrays this way:
 
 ```python
 dataset_types = ['clusters.templateWaveforms', 'clusters.probes', 'clusters.depths']
 eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
-wf, pr, d = myone.load(eid, dataset_types=dataset_types)
+wf, pr, d = one.load(eid, dataset_types=dataset_types)
 ```
 
 Depending on the use case, it may be handier to wrap the arrays in a dataclass
-(a structure for Matlab users) so that a bit of context is included with the array.
-This could be useful for custom format, or if the user wants to re-access the files locally:
+(a structure for Matlab users) so that a bit of context is included with the array. This would be useful when concatenated information for datasets belonging to several sessions.
+
 ```python
-my_data = myone.load(eid, dataset_types=dataset_types, dclass_output=True)
+my_data = one.load(eid, dataset_types=dataset_types, dclass_output=True)
 from ibllib.misc import pprint
 pprint(my_data.local_path)
 pprint(my_data.dataset_type)
@@ -76,8 +74,8 @@ The dataclass contains the following keys, each of which contains a list of 3 it
 It is also possible to query all datasets attached to a given session, in which case
 the output has to be a dictionary:
 ```python
-eid, ses_info = myone.search(subject='flowers')
-my_data = myone.load(eid[0])
+eid, ses_info = one.search(subject='flowers')
+my_data = one.load(eid[0])
 pprint(my_data.dataset_type)
 ```
 
@@ -87,11 +85,11 @@ is returned. This allows to keep the proper order of output arguments
 ```python
 eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
 dataset_types = ['clusters.probes', 'thisDataset.IveJustMadeUp', 'clusters.depths']
-t, empty, cl = myone.load(eid, dataset_types=dataset_types)
+t, empty, cl = one.load(eid, dataset_types=dataset_types)
 ```
 Returns an empty list for *cr* so that *t* and *cl* still get assigned the proper values.
 
-## List method
+## ls method
 The methods allow to access 3 tables of the current database:
 -   dataset-type
 -   users
@@ -99,15 +97,15 @@ The methods allow to access 3 tables of the current database:
 
 For example to print a list of the dataset-types in the command window:
 ```python
-from oneibl.one import ONE
-myone = ONE() # need to instantiate the class to have the API.
-myone.list(table='dataset-types', verbose=True)
+dtypes, jsondtypes = one.ls_dataset_types()
+users, jsonusers = one.ls_users()
+subjects, jsonusers = one.ls_subjects()
 ```
+The second argument is a detailed Json list containing the transcript from the database REST query: this will provide table fields from the database.
 
-One can also select several fields
-
+Also possible to query multiple fields at once:
 ```python
-list_types , dtypes = myone.list(table=['dataset-types','users'])
+list_types , dtypes = one.ls(table=['dataset-types','users'])
 pprint(list_types)
 pprint(dtypes)
 ```
@@ -221,7 +219,7 @@ be one subject per session.
 ```python
 from oneibl.one import ONE
 myone = ONE() # need to instantiate the class to have the API.
-eid, ses_info = myone.search(subject='flowers')
+eid, ses_info = one.search(subject='flowers')
 pprint(eid)
 pprint(ses_info)
 
@@ -230,17 +228,17 @@ pprint(ses_info)
 Here is the simple implementation of the filter, where we query for the EEIDs (sessions) co-owned by
 all of the following users: olivier and niccolo (case-sensitive).
 ```python
-eid, ses_info = myone.search(users=['nbonacchi', 'olivier'])
+eid, ses_info = one.search(users=['nbonacchi', 'olivier'])
 ```
 
 The following would get all of the dataset for which olivier is an owner or a co-owner:
 ```python
-eid , ses_info=  myone.search(users=['olivier'])
+eid , ses_info=  one.search(users=['olivier'])
 pprint(eid)
 ```
 
 It is also possible to filter sessions using a date-range:
 ```python
-eid, ses_info = myone.search(users='olivier', date_range=['2018-08-24', '2018-08-24'])
+eid, ses_info = one.search(users='olivier', date_range=['2018-08-24', '2018-08-24'])
 ```
 

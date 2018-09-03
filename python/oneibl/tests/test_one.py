@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from oneibl.one import ONE
+from oneibl.one import ONE, SessionInfo
 
 
 class TestLoad(unittest.TestCase):
@@ -10,6 +10,13 @@ class TestLoad(unittest.TestCase):
         myone = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
                     password='TapetesBloc18')
         self.One = myone
+
+    def test_list(self):
+        myone = self.One
+        eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
+        a = myone.list(eid)
+        self.assertTrue(len(a) == 29)
+        self.assertTrue(isinstance(a, list))
 
     def test_load(self):
         # Test with 3 actual datasets predefined
@@ -50,21 +57,26 @@ class TestLoad(unittest.TestCase):
         a = myone.load(eid)
         self.assertTrue(len(a.data) == 5)
 
-    def test_session_does_not_exist(self):
-        eid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
-        self.assertRaises(FileNotFoundError, self.One.load, eid)
-
-    def test_list(self):
+    def test_ls(self):
         # Test when the dataset type requested is not unique
         myone = self.One
-        # test with a single table, list format
-        [l, f] = myone.list(table=['users'])
-        self.assertTrue(isinstance(l[0], str) and isinstance(l[0], str))
-        # test with a single table, string format
-        [l, f] = myone.list(table='subjects')
-        self.assertTrue(isinstance(l[0], str) and isinstance(l[0], str))
-        # test with a single table, string format
-        [l, f] = myone.list(table=['users', 'dataset-types'])
+        # test users
+        [l1, f] = myone.ls(table=['users'])
+        l2, f2 = myone.ls_users()
+        self.assertTrue(isinstance(l1[0], str) and isinstance(l1[0], str))
+        self.assertEqual(l1,l2)
+        # test subjects
+        [l1, f] = myone.ls(table='subjects')
+        l2, f2 = myone.ls_subjects()
+        self.assertTrue(isinstance(l1[0], str) and isinstance(l1[0], str))
+        self.assertEqual(l1,l2)
+        # test datasets
+        [l1, f] = myone.ls(table='dataset-types')
+        l2, f2 = myone.ls_dataset_types()
+        self.assertTrue(isinstance(l1[0], str) and isinstance(l1[0], str))
+        self.assertEqual(l1,l2)
+        # test with 2 tables, string format
+        [l, f] = myone.ls(table=['users', 'dataset-types'])
         self.assertTrue(isinstance(l[0], list) and len(l) == 2)
 
     def test_search_simple(self):
@@ -89,11 +101,16 @@ class TestLoad(unittest.TestCase):
         sl, sd = myone.search(dataset_types=dtyp)
         self.assertTrue(len(sl) == 1)
 
-    def test_info(self):
+    def test_session_data_info(self):
         myone = self.One
-        eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
-        a = myone.info(eid)
-        self.assertTrue(len(a.dataset_id) == 29)
+        eid = '3bca3bef-4173-49a3-85d7-596d62f0ae16'
+        dinfo = myone.session_data_info(eid)
+        self.assertTrue(isinstance(dinfo, SessionInfo))
+        print(dinfo)  # tests the __str__method of the dataclass
+
+    def test_session_does_not_exist(self):
+        eid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+        self.assertRaises(FileNotFoundError, self.One.load, eid)
 
 
 if __name__ == '__main__':
