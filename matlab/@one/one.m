@@ -1,23 +1,32 @@
-classdef oneibl
+classdef one
     %ONE Summary of this class goes here
     %   Detailed explanation goes here
     
     properties
-        Property1
+        alyx_client
     end
     
     methods
-        function obj = one(inputArg1,inputArg2)
-            %ONE Construct an instance of this class
-            %   Detailed explanation goes here
-            obj.Property1 = inputArg1 + inputArg2;
+        function self = one(varargin)
+            % myone = one()
+            % myone = one('base_url','https://test.alyx.internationalbrainlab.org',...
+            %             'user','test_user','password','pass');
+            p = inputParser;
+            addParameter(p,'user', prefs.user, @isstr)
+            addParameter(p,'password', prefs.password, @isstr)
+            addParameter(p,'base_url', prefs.base_url, @isstr)
+            parse(p,varargin{:});
+            for fn = fieldnames(p.Results)', eval([fn{1} '= p.Results.' (fn{1}) ';']); end
+            self.alyx_client = AlyxClient('user',user,'password',password,'base_url',base_url);
+            
         end
-        
-        function outputArg = method1(obj,inputArg)
-            %METHOD1 Summary of this method goes here
-            %   Detailed explanation goes here
-            outputArg = obj.Property1 + inputArg;
-        end
+    end
+    
+    methods
+        session_info = info(self, eeid)
+        varargout = load(self, eeid, varargin)
+        list_info = list(self, varargin)
+        search_result = search(self, varargin)
     end
 end
 

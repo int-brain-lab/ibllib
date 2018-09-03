@@ -13,9 +13,22 @@ classdef AlyxClient
     end
     
     methods
-        function self = AlyxClient()
-            % setup weboptions for 
-            self = self.getparameters();
+        function self = AlyxClient(varargin)
+            % ac = AlyxClient()
+            % ac = AlyxClient('user','test','password','pass','base_url',...
+            %                 'https://test.alyx.internationalbrainlab.org');
+            prefs = self.getparameters();
+            % Handle input arguments, input arguments always overwrite preferences
+            p = inputParser;
+            addParameter(p,'user', prefs.user, @isstr)
+            addParameter(p,'password', prefs.password, @isstr)
+            addParameter(p,'base_url', prefs.base_url, @isstr)
+            parse(p,varargin{:});
+            for fn = fieldnames(p.Results)'; eval(['self.' fn{1} '= p.Results.' (fn{1}) ';']); end
+            if isempty(self.password), self.password = prefs.password; end
+            if isempty(self.base_url), self.base_url = prefs.base_url; end
+            if isempty(self.user)    , self.user     = prefs.user;     end
+            % setup weboptions for REST queries
             self.weboptions = weboptions('MediaType','application/json','Timeout',self.timeout );      
             self = self.authenticate();
         end
@@ -23,20 +36,18 @@ classdef AlyxClient
     
     methods (Access=private)
         function self = authenticate(self)
+            % REST query to authenticate against Alyx and get an access token
             rep = self.post('/auth-token', struct('username', self.user, 'password', self.password));
             self.token = rep.token;
             self.weboptions.HeaderFields = { 'Authorization', ['Token ' self.token]};
         end
         
-        function self = getparameters(self)
-            % This may well be a temporary way to setup the client. At least it doesn't require a parameter files
+        function prefs = getparameters(self)
+            % Get parameters from preferences
             prefs = getpref('Alyx');
-            if isempty(prefs),
+            if isempty(prefs)
                 self.setup;
                 prefs = getpref('Alyx');
-            end
-            for ff = fields(prefs)'
-                eval(['self.' ff{1} '='  'prefs.' ff{1} ';']);
             end
         end
     end
@@ -45,7 +56,7 @@ classdef AlyxClient
         function rep = post(self,end_point, request_struct)
             % rep = post(url, request_struct)
             url = [self.base_url  end_point];
-            rep = webwrite(url,  jsonencode(request_struct), setfield( self.weboptions, 'RequestMethod', 'post') );
+            rep = webwrite(url,  jsonencode(request_struct), setfield(self.weboptions, 'RequestMethod', 'post') );
         end
         
          function rep = get(self,end_point)
@@ -55,21 +66,17 @@ classdef AlyxClient
             rep = flatten(rep);
          end
         
-         function create_session(self, session_structure)
-             % self.create_session(session_structure)
-            %  session =  struct with fields: 
-            %        subject: 'clns0730'
-            %     procedures: {'Behavior training/tasks'}
-            %      narrative: 'auto-generated session'
-            %     start_time: '2018-07-30T12:00:00'
-            %           type: 'Base'
-            %         number: '1'
-            %          users: {'olivier'}
-             
-             
-             
-             
-         end
+%          function create_session(self, session_structure)
+%              % self.create_session(session_structure)
+%             %  session =  struct with fields: 
+%             %        subject: 'clns0730'
+%             %     procedures: {'Behavior training/tasks'}
+%             %      narrative: 'auto-generated session'
+%             %     start_time: '2018-07-30T12:00:00'
+%             %           type: 'Base'
+%             %         number: '1'
+%             %          users: {'olivier'}
+%          end
     end
     
         
@@ -77,15 +84,28 @@ classdef AlyxClient
         function setup()
             % AlyxClient.setup()
             % Prompts the user for base_url, user and password and stores for subsequent uses.
-            % Will change once we settle on a proper way to handle parameters
             prefs = getpref('Alyx');
-            if isempty(prefs), prefs = struct('base_url','','user','','password',''); end
-            base_url = input(['base_url (example: https://test.alyx.internationalbrainlab.com), (current: ' prefs.base_url ') '], 's');
-            if ~isempty(base_url), prefs.base_url = base_url; end
+            if isempty(prefs),
+                prefs = struct('base_url','https://test.alyx.internationalbrainlab.org',...
+                               'user','test_user',...
+                               'password','');
+            end
+            % prompt for address
+            base_url = input(['base_url (example: https://test.alyx.internationalbrainlab.org), (current: ' prefs.base_url ') '], 's');
+            if ~isempty(base_url)
+                prefs.base_url = base_url;
+            end
+            % prompts for user
             user = input(['user (example:test_user), (current: ' prefs.user ')'], 's'); 
-            if ~isempty(user), prefs.user = user; end
+            if ~isempty(user)
+                prefs.user = user;
+            end
+            % prompts for password
             password = passwordUI();
-            if ~isempty(password), prefs.password = password; end
+            if ~isempty(password)
+                prefs.password = password;
+            end
+            % assign properties
             for ff = fields(prefs)'
                 setpref('Alyx', ff{1},  prefs.(ff{1}));
             end
