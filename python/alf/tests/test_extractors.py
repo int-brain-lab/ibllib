@@ -9,7 +9,6 @@ class TestExtractors(unittest.TestCase):
     def setUp(self):
         self.test_session = "/home/nico/Projects/IBL/IBL-github/iblrig/\
 pybpod_data/test_mouse/2018-07-31/1/"
-        print(self.test_session)
 
     def test_feedbackType(self):
         ft = get_trials_feedbackType(self.test_session, save=False)
@@ -29,7 +28,8 @@ pybpod_data/test_mouse/2018-07-31/1/"
 
     def test_choice(self):
         c = get_trials_choice(self.test_session, save=False)
-
+        self.assertTrue(isinstance(c, np.ndarray))
+        self.assertTrue(c.dtype == np.int64)
 
 if __name__ == '__main__':
     unittest.main()

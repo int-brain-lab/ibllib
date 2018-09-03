@@ -63,13 +63,15 @@ def trial_times_to_times(raw_trial):
         converted_states.update({k: [[convert(i) for i in x] for x in v]})
     raw_trial['behavior_data']['States timestamps'] = converted_states
 
-    raw_trial['behavior_data']['Bpod start timestamp'] = convert(ts_bs)
-    raw_trial['behavior_data']['Trial start timestamp'] = convert(ts_ts)
-    raw_trial['behavior_data']['Trial end timestamp'] = convert(ts_te)
+    # XXX: This is wrong!!! Bpod start trail start and end -= Bpod start!
+    shift = raw_trial['behavior_data']['Bpod start timestamp']
+    raw_trial['behavior_data']['Bpod start timestamp'] -= shift
+    raw_trial['behavior_data']['Trial start timestamp'] -= shift
+    raw_trial['behavior_data']['Trial end timestamp'] -= shift
     return raw_trial
 
 
-def load_data(session_path, time='absolute' or 'relative'):
+def load_data(session_path, time='absolute'):
     """
     Load PyBpod data files (.jsonable).
 
