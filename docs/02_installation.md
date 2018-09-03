@@ -14,10 +14,13 @@ python ./setup.py install
 
 Eventually run the tests, it needs Alyx and FlatIron credentials as defined above.
 ```
-source run_tests.bat
+source run_tests
 ```
-
 To run with Spyder, just link the Python Interpreter with the virtualenv you've created.
+To run with Jupyter, type in the command with your virtual environment activated as above:
+```
+jupyter notebook
+```
 
 ### Windows
 Clone the github if you have Git for Windows installed.
@@ -39,6 +42,9 @@ Eventually run the tests, it needs Alyx and FlatIron credentials as defined abov
 call run_tests.bat
 ```
 
+### Getting started
+Short introduction for the Ipython notebook [here](./_static/one_demo.html)
+A longer tutorial is available in the tutorial section.
 
 ## Matlab Package
 In a command line, clone the git (Linux) or download the zip file from GitHub (Windows).

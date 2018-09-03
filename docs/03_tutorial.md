@@ -3,6 +3,8 @@
 Before you begin, make sure you have installed ibllib properly on your system as per the instructions.
 For this tutorial we will be connecting to a  test database with a test user. The default paremeters from the git repository have the proper configuration.
 
+[Here](./_static/one_demo.html) is a shorter introduction to the One module in Ipython notebook format.
+
 
 ## Initialize
 
