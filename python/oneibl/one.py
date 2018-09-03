@@ -134,7 +134,10 @@ class ONE(OneAbstract):
                 out.data[ind] = np.load(file=fil)
             if fil and os.path.splitext(fil)[1] == '.json':
                 pass  # FIXME would be nice to implement json read but param from matlab RIG fails
-            # TODO: implement tsv and csv reads as well
+            if fil and os.path.splitext(fil)[1] == '.tsv':
+                pass # TODO: implement csv reads as well
+            if fil and os.path.splitext(fil)[1] == '.csv':
+                pass # TODO: implement tsv reads as well
         if dclass_output:
             return out
         # if required, parse the output as a list that matches dataset types provided
