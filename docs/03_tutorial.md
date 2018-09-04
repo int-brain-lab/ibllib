@@ -9,21 +9,37 @@ For this tutorial we will be connecting to a  test database with a test user. Th
 ## Initialize
 
 
-The first step is to import the ONE class. In the IBL case, the class has to be instantiated: behind the scenes, the constructor connects to the Alyx database and gets credentials. The connections settings are defined in the *params.py* and the *params_secret.py* files.
+The first step is to import the ONE class. In the IBL case, the class has to be instantiated: behind the scenes, the constructor connects to our cloud database and gets credentials. The connections settings are defined in the *params.py* and the *params_secret.py* files.
 
 ```python
 from oneibl.one import ONE
 one = ONE() # need to instantiate the class to have the API.
 ```
-## Info method
-Similar to the Alyx database, this library uses sessions UUID as experiments ID.
-If the EEID is known, one can get information about a session this way.
+## Find an experiment
+Each experiment is identified by a unique string known as the "experiment ID" (EID). (In our case, this string points to a URL on our server.) To find an EID, use the one.search command, for example:
+
 ```
-from ibllib.misc import pprint
-eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
-dlist = one.list(eid)
-pprint(dlist)
+eid, ses = one.search(users='olivier', date_range=['2018-08-24', '2018-08-24'])
+pprint(eid)
+```
+returns
+```
+[
+    "https://test.alyx.internationalbrainlab.org/sessions/86e27228-8708-48d8-96ed-9aa61ab951db"
+]
+```
+
+## Info method
+Once you know the EID, you can list all the datasets for the experiment using the list command:
+```
+one.list(eid[0])
 ``` 
+returns
+```
+['_ibl_lickPiezo.raw', '_ibl_lickPiezo.timestamps', '_ibl_wheel.position', 'channels.brainLocation', 'channels.probe', 'channels.rawRow', 'channels.site', 'channels.sitePositions', 'clusters._phy_annotation', 'clusters.depths', 'clusters.peakChannel', 'clusters.probes', 'clusters.templateWaveforms', 'clusters.waveformDuration', 'eye.area', 'eye.blink', 'eye.timestamps', 'eye.xyPos', 'licks.times', 'probes.description', 'probes.insertion', 'probes.rawFilename', 'probes.sitePositions', 'spikes.amps', 'spikes.clusters', 'spikes.depths', 'spikes.times', 'spontaneous.intervals', 'unknown']
+```
+
+
 
 For more detailed info, this will return a dataclass with dataset_type, url and dataset_id fields among others:
 ```python
@@ -34,8 +50,7 @@ print(d)
 ## Load method
 ### General Use
 
-Similar to the Alyx database, this library uses sessions UUID as experiments ID.
-If the EEID is known, One can access directly the numpy arrays this way:
+To load data for a given EID, use the `one.load` command:
 
 ```python
 dataset_types = ['clusters.templateWaveforms', 'clusters.probes', 'clusters.depths']
