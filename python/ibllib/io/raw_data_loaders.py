@@ -35,7 +35,8 @@ def load_settings(session_path):
 
 def trial_times_to_times(raw_trial):
     """
-    Parse and convert all trial timestamps to absolute time.
+    Parse and convert all trial timestamps to "absolute" time.
+    Float64 seconds from session start.
 
     0---BpodStart---TrialStart0---------TrialEnd0-----TrialStart1---TrialEnd1...
                         0---ts0---ts1---tsN...
@@ -63,11 +64,11 @@ def trial_times_to_times(raw_trial):
         converted_states.update({k: [[convert(i) for i in x] for x in v]})
     raw_trial['behavior_data']['States timestamps'] = converted_states
 
-    # XXX: This is wrong!!! Bpod start trail start and end -= Bpod start!
     shift = raw_trial['behavior_data']['Bpod start timestamp']
     raw_trial['behavior_data']['Bpod start timestamp'] -= shift
     raw_trial['behavior_data']['Trial start timestamp'] -= shift
     raw_trial['behavior_data']['Trial end timestamp'] -= shift
+    assert(raw_trial['behavior_data']['Bpod start timestamp'] == 0)
     return raw_trial
 
 
@@ -97,11 +98,11 @@ def load_encoder_events(session_path):
     """
     Load Rotary Encoder (RE) events raw data file.
 
-    Assumes that a folder calles "raw_behavior_data" exists in folder.
+    Assumes that a folder called "raw_behavior_data" exists in folder.
 
     On each trial the RE sends 3 events to Bonsai 1 - meaning trial start/turn
     off the stim; 2 - meaning show the current trial stimulus; and 3 - meaning
-    begin the closed loop making the stim move whit the RE. These events are
+    begin the closed loop making the stim move with the RE. These events are
     triggered by the state machine in the corrensponding states: trial_start,
     stim_on, closed_loop
 
@@ -135,7 +136,10 @@ def load_encoder_positions(session_path):
     """
     Load Rotary Encoder (RE) positions from raw data file.
 
-    Assumes that a folder calles "raw_behavior_data" exists in folder.
+    Assumes that a folder called "raw_behavior_data" exists in folder.
+    Positions are RE ticks [-512, 512] == [-180º, 180º]
+    0 == trial stim init position
+    Positive nums are rightwards movements (mouse) or RE CW (mouse)
 
     Variable line number, depends on movements.
 
