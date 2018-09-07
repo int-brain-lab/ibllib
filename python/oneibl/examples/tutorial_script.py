@@ -1,7 +1,7 @@
 ## Init
 from oneibl.one import ONE
-one = ONE() # need to instantiate the class to have the API.
-
+one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
+          password='TapetesBloc18')
 ## Info about a session
 eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
 list_of_datasets = one.list(eid)
@@ -22,7 +22,7 @@ pprint(my_data.local_path)
 pprint(my_data.dataset_type)
 
 ## Load everything
-eid, ses_info = one.search(subject='flowers')
+eid, ses_info = one.search(subjects='flowers')
 my_data = one.load(eid[0])
 pprint(my_data.dataset_type)
 

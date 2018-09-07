@@ -5,6 +5,16 @@ import ibllib.webclient as wc
 from ibllib.misc import is_uuid_string, pprint
 import oneibl.params as par
 import abc
+import pathlib
+
+
+def _cache_directory(cache_dir, ses):
+    if len(cache_dir) == 0:
+        cache_dir = str(pathlib.Path.home()) + os.sep + "Downloads" + os.sep + "FlatIron"
+    cache_dir += os.sep + par.CACHE_DIR + ses['subject'] + os.sep + ses['start_time'][0:10]
+    cache_dir += os.sep + str(ses['number'])
+    pathlib.Path(cache_dir).mkdir(parents=True, exist_ok=True)
+    return cache_dir
 
 
 class OneAbstract(abc.ABC):
@@ -23,7 +33,7 @@ class OneAbstract(abc.ABC):
 
 
 @dataclass
-class SessionInfo:
+class SessionDataInfo:
     """
     Dataclass that provides dataset list, dataset_id, local_path, dataset_type, url and eid fields
     """
@@ -86,7 +96,7 @@ class ONE(OneAbstract):
 
         :return: List of numpy arrays matching the size of dataset_types parameter, OR
          a dataclass containing arrays and context data.
-        :rtype: list, dict, dataclass SessionInfo
+        :rtype: list, dict, dataclass SessionDataInfo
         """
         # TODO: feature that downloads a list of datasets from a list of sessions,
         # TODO in this case force dictionary output
@@ -109,17 +119,18 @@ class ONE(OneAbstract):
                              if d['data_url']]
         # loop over each dataset related to the session ID and get list of files urls
         session_dtypes = [d['dataset_type'] for d in ses['data_dataset_session_related']]
-        out = SessionInfo()
+        out = SessionDataInfo()
         # this first loop only downloads the file to ease eventual refactoring
         for ind, dt in enumerate(dataset_types):
             for [i, sdt] in enumerate(session_dtypes):
                 if sdt == dt:
                     urlstr = ses['data_dataset_session_related'][i]['data_url']
                     if not dry_run:
+                        cache_dir = _cache_directory(par.CACHE_DIR, ses)
                         fil = wc.http_download_file(urlstr,
                                                     username=par.HTTP_DATA_SERVER_LOGIN,
                                                     password=par.HTTP_DATA_SERVER_PWD,
-                                                    cache_dir=par.CACHE_DIR)
+                                                    cache_dir=cache_dir)
                     else:
                         fil = ''
                     out.eid.append(eid_str)
@@ -129,7 +140,8 @@ class ONE(OneAbstract):
                     out.dataset_id.append(ses['data_dataset_session_related'][i]['id'])
                     out.data.append([])
         # then another loop over files and load them in numpy. If not npy, just pass empty list
-        for ind, fil in enumerate(out.local_path):  # this is where I miss switch case
+        # the data loading per format needs to be implemented in a generic function in ibllib/alf.
+        for ind, fil in enumerate(out.local_path):
             if fil and os.path.splitext(fil)[1] == '.npy':
                 out.data[ind] = np.load(file=fil)
             if fil and os.path.splitext(fil)[1] == '.json':
@@ -209,17 +221,17 @@ class ONE(OneAbstract):
         """
         return self.ls(table='users')
 
-    def search(self, dataset_types=None, users=None, subject='', date_range=None):
+    def search(self, dataset_types=None, users=None, subjects=None, date_range=None):
         """
         Applies a filter to the sessions (eid) table and returns a list of json dictionaries
          corresponding to sessions.
 
         :param dataset_types: list of dataset_types
-        :type dataset_types: list
+        :type dataset_types: list of str
         :param users: a list of users
-        :type users: list
-        :param subject: the subject nickname
-        :type subject: str
+        :type users: list or str
+        :param subjects: a list of subjects nickname
+        :type subjects: list or str
         :param date_range: list of 2 strings or list of 2 dates that define the range
         :type date_range: list
 
@@ -228,17 +240,19 @@ class ONE(OneAbstract):
         :rtype: list, list
         """
         # TODO add a lab field in the session table of Alyx to add as a query
-        # make sure string inputs are interpreted as lists for dataset types and users
-        dataset_types = [dataset_types] if isinstance(dataset_types, str) else dataset_types
-        users = [users] if isinstance(users, str) else users
+        # make sure string inputs are interpreted as lists
+        validate_input = lambda inarg: [inarg] if isinstance(inarg, str) else inarg
+        dataset_types = validate_input(dataset_types)
+        users = validate_input(users)
+        subjects = validate_input(subjects)
         # start creating the url
         url = '/sessions?'
         if dataset_types:
             url = url + 'dataset_types=' + ','.join(dataset_types)  # dataset_types query
         if users:
             url = url + '&users=' + ','.join(users)
-        if subject:
-            url = url + '&subject=' + subject
+        if subjects:
+            url = url + '&subject=' + ','.join(subjects)
         # TODO make the daterange more flexible: one date only from, to etc...
         if date_range:
             url = url + '&date_range=' + ','.join(date_range)

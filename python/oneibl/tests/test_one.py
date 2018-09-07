@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from oneibl.one import ONE, SessionInfo
+from oneibl.one import ONE, SessionDataInfo
 
 
 class TestLoad(unittest.TestCase):
@@ -105,7 +105,7 @@ class TestLoad(unittest.TestCase):
         myone = self.One
         eid = '3bca3bef-4173-49a3-85d7-596d62f0ae16'
         dinfo = myone.session_data_info(eid)
-        self.assertTrue(isinstance(dinfo, SessionInfo))
+        self.assertTrue(isinstance(dinfo, SessionDataInfo))
         print(dinfo)  # tests the __str__method of the dataclass
 
     def test_session_does_not_exist(self):

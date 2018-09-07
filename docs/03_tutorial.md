@@ -91,7 +91,7 @@ The dataclass contains the following keys, each of which contains a list of 3 it
 It is also possible to query all datasets attached to a given session, in which case
 the output has to be a dictionary:
 ```python
-eid, ses_info = one.search(subject='flowers')
+eid, ses_info = one.search(subjects='flowers')
 my_data = one.load(eid[0])
 pprint(my_data.dataset_type)
 ```
