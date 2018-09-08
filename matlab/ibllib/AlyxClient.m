@@ -52,20 +52,32 @@ classdef AlyxClient
         end
     end
     
-    methods (Access = public)
-        function rep = post(self,end_point, request_struct)
+    methods (Access = public)        
+         function rep = get(self,endpoint_url)
+             % rep = get(url)
+             % rep = ac.get('/sessions/86e27228-8708-48d8-96ed-9aa61ab951db')
+             % rep = ac.get('https://test.alyx.internationalbrainlab.org/sessions/86e27228-8708-48d8-96ed-9aa61ab951db')
+            if ~(strfind(endpoint_url, self.base_url)==1)
+                endpoint_url = [self.base_url  endpoint_url];
+            end
+            rep = webread(endpoint_url, self.weboptions);
+            rep = flatten(rep);
+         end
+         
+         function session_info = get_session(self, session_url)
+             % session_info = ac.get_session('86e27228-8708-48d8-96ed-9aa61ab951db')
+             % session_info = ac.get_session('https://test.alyx.internationalbrainlab.org/sessions/86e27228-8708-48d8-96ed-9aa61ab951db') 
+            if isempty(strfind(session_url, self.base_url))
+                session_url = [self.base_url '/sessions/' session_url];
+            end
+            session_info = self.get(session_url);
+         end
+         
+         function rep = post(self,end_point, request_struct)
             % rep = post(url, request_struct)
             url = [self.base_url  end_point];
             rep = webwrite(url,  jsonencode(request_struct), setfield(self.weboptions, 'RequestMethod', 'post') );
         end
-        
-         function rep = get(self,end_point)
-             % rep = get(url)
-            url = [self.base_url  end_point];
-            rep = webread(url, self.weboptions);
-            rep = flatten(rep);
-         end
-        
 %          function create_session(self, session_structure)
 %              % self.create_session(session_structure)
 %             %  session =  struct with fields: 

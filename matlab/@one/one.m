@@ -12,13 +12,12 @@ classdef one
             % myone = one('base_url','https://test.alyx.internationalbrainlab.org',...
             %             'user','test_user','password','pass');
             p = inputParser;
-            addParameter(p,'user', prefs.user, @isstr)
-            addParameter(p,'password', prefs.password, @isstr)
-            addParameter(p,'base_url', prefs.base_url, @isstr)
+            addParameter(p,'user', '', @isstr)
+            addParameter(p,'password', '', @isstr)
+            addParameter(p,'base_url', '', @isstr)
             parse(p,varargin{:});
             for fn = fieldnames(p.Results)', eval([fn{1} '= p.Results.' (fn{1}) ';']); end
             self.alyx_client = AlyxClient('user',user,'password',password,'base_url',base_url);
-            
         end
     end
     
