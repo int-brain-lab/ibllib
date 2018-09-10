@@ -4,6 +4,7 @@ classdef one
     
     properties
         alyx_client
+        ftp
     end
     
     methods
@@ -23,8 +24,8 @@ classdef one
     
     methods
         session_info = info(self, eeid)
+        dataset_list = list(self, eid)
         varargout = load(self, eeid, varargin)
-        list_info = list(self, varargin)
         search_result = search(self, varargin)
     end
 end

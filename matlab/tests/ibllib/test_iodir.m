@@ -38,7 +38,7 @@ classdef test_iodir < matlab.unittest.TestCase
     
     methods(TestMethodTeardown)
         function delete_dir(testCase)
-            rmdir(testCase.tdir, 's')
+            rmdir(testCase.tdir, 's');
         end
     end
     
