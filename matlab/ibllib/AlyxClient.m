@@ -97,22 +97,23 @@ classdef AlyxClient
             % AlyxClient.setup()
             % Prompts the user for base_url, user and password and stores for subsequent uses.
             prefs = getpref('Alyx');
-            if isempty(prefs),
+            if isempty(prefs)
                 prefs = struct('base_url','https://test.alyx.internationalbrainlab.org',...
                                'user','test_user',...
                                'password','');
             end
             % prompt for address
-            base_url = input(['base_url (example: https://test.alyx.internationalbrainlab.org), (current: ' prefs.base_url ') '], 's');
+            base_url = input(['Alyx full URL: (example: https://test.alyx.internationalbrainlab.org), (current: ' prefs.base_url ') '], 's');
             if ~isempty(base_url)
                 prefs.base_url = base_url;
             end
             % prompts for user
-            user = input(['user (example:test_user), (current: ' prefs.user ')'], 's'); 
+            user = input(['Alyx username (example:test_user), (current: ' prefs.user ')'], 's'); 
             if ~isempty(user)
                 prefs.user = user;
             end
             % prompts for password
+%             prefs.password
             password = passwordUI();
             if ~isempty(password)
                 prefs.password = password;

@@ -5,6 +5,7 @@ classdef one
     properties
         alyx_client
         ftp
+        params
     end
     
     methods
@@ -20,6 +21,10 @@ classdef one
             for fn = fieldnames(p.Results)', eval([fn{1} '= p.Results.' (fn{1}) ';']); end
             self.alyx_client = AlyxClient('user',user,'password',password,'base_url',base_url);
         end
+    end
+    
+    methods (Access=private)
+       par = get_params(self) 
     end
     
     methods

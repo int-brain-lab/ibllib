@@ -1,0 +1,12 @@
+ {
+  "ALYX_LOGIN": "olivier",
+  "ALYX_PWD": "perlinpinpin",
+  "CACHE_DIR": "asdfjfasd",
+  "BASE_URL": "https://dev.alyx.internationalbrainlab.org",
+  "FTP_DATA_SERVER": "ftp://ibl.flatironinstitute.com",
+  "FTP_DATA_SERVER_LOGIN": "iblftp",
+  "FTP_DATA_SERVER_PWD": "idajfa",
+  "HTTP_DATA_SERVER": "http://ibl.flatironinstitute.com",
+  "HTTP_DATA_SERVER_LOGIN": "iblmember",
+  "HTTP_DATA_SERVER_PWD": "idajfa"
+}

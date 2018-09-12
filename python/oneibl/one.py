@@ -7,6 +7,10 @@ import oneibl.params as par
 import abc
 import pathlib
 
+ENDPOINT_LIST = ('dataset-types', 'users', 'subjects')
+SESSION_FIELDS = ('subject', 'users', 'lab', 'type', 'start_time', 'end_time')
+SEARCH_TERMS = ('dataset_types', 'users', 'subjects', 'date_range')
+
 
 def _cache_directory(cache_dir, ses):
     if len(cache_dir) == 0:
@@ -62,21 +66,62 @@ class ONE(OneAbstract):
         # Init connection to the database
         self._alyxClient = wc.AlyxClient(username=username, password=password, base_url=base_url)
 
-    def list(self, eid):
+    def list(self, eid=None, keyword='dataset-type', details=False):
         """
         From a Session ID, queries Alyx database for datasets-types related to a session.
 
-        :param eid: Experiment ID, for IBL this is the UUID of the Session as per Alyx
-         database. Could be a full Alyx URL:
-         'http://localhost:8000/sessions/698361f6-b7d0-447d-a25d-42afdef7a0da' or only the UUID:
-         '698361f6-b7d0-447d-a25d-42afdef7a0da'
+        :param eid: Experiment ID, for IBL this is the UUID String of the Session as per Alyx
+         database. Example: '698361f6-b7d0-447d-a25d-42afdef7a0da'
 
-        :return: sorted list of dataset types belonging to the session
-        :rtype: dataclass SessionInfo
+         If None, returns the set of possible values. Only for the following keys:
+         ('users', 'dataset-types', subjects')
+
+        :type eid: str or list of strings
+
+        :return: list of strings, plus list of dictionaries if details option selected
+        :rtype:  list, list
         """
-        dses = self.load(eid, dry_run=True)
-        out = list(sorted(set(dses.dataset_type)))
-        return out
+        # recursive call for cases where a list is provided
+        if isinstance(eid, list):
+            out = []
+            for e in eid:
+                out.append(self.list(e, keyword=keyword, details=details))
+            if details and (keyword != 'dataset-type'):
+                return [out[0][0], out[1][0]], [out[0][1], out[1][1]]
+            else:
+                return out
+
+        #  this is for basic endpoints queries: dataset-type, users, and subjects with None
+        if eid is None:
+            out = self._ls(table=keyword)
+            if details:
+                return out
+            else:
+                return out[0]
+
+        # this is a query about datasets: need to unnest session info through the load function
+        if keyword == 'dataset-type':
+            dses = self.load(eid, dry_run=True)
+            dlist = list(sorted(set(dses.dataset_type)))
+            if details:
+                return dses
+            else:
+                return dlist
+
+        # other cases are about fields of the session alyx model
+        if (keyword.lower() != 'all') and (keyword not in SESSION_FIELDS):
+            raise ValueError("The field: " + keyword + " doesn't exist in the Session model." +
+                             "\n Here is a list of expected values: " + str(SESSION_FIELDS))
+
+        # get the session information
+        ses = self._alyxClient.get('/sessions?id=' + eid)
+
+        if keyword.lower() == 'all':
+            return ses  # TODO: return a dict of lists or dataclass instead of those nested arrays
+        elif details:
+            return ses[0][keyword], ses
+        else:
+            return ses[0][keyword]
 
     def load(self, eid, dataset_types=None, dclass_output=False, dry_run=False):
         """
@@ -147,9 +192,9 @@ class ONE(OneAbstract):
             if fil and os.path.splitext(fil)[1] == '.json':
                 pass  # FIXME would be nice to implement json read but param from matlab RIG fails
             if fil and os.path.splitext(fil)[1] == '.tsv':
-                pass # TODO: implement csv reads as well
+                pass  # TODO: implement csv reads as well
             if fil and os.path.splitext(fil)[1] == '.csv':
-                pass # TODO: implement tsv reads as well
+                pass  # TODO: implement tsv reads as well
         if dclass_output:
             return out
         # if required, parse the output as a list that matches dataset types provided
@@ -163,7 +208,7 @@ class ONE(OneAbstract):
                     list_out.append(out.data[i])
         return list_out
 
-    def ls(self, table=None, verbose=False):
+    def _ls(self, table=None, verbose=False):
         """
         Queries the database for a list of 'users' and/or 'dataset-types' and/or 'subjects' fields
 
@@ -176,17 +221,17 @@ class ONE(OneAbstract):
         :return: list of names to query, list of full raw output in json serialized format
         :rtype: list, list
         """
-        tlist = ('dataset-types', 'users', 'subjects')
-        field = ('name', 'username', 'nickname')
-        if not table:
-            table = tlist
+        key_name = ('name', 'username', 'nickname')
+        if not table or (table not in ENDPOINT_LIST):
+            raise ValueError("The attribute/endpoint: " + table + " doesn't exist \n" +
+                             "possible values are " + str(ENDPOINT_LIST))
         table = [table] if isinstance(table, str) else table
         full_out = []
         list_out = []
-        for ind, tab in enumerate(tlist):
+        for ind, tab in enumerate(ENDPOINT_LIST):
             if tab in table:
                 full_out.append(self._alyxClient.get('/' + tab))
-                list_out.append([f[field[ind]] for f in full_out[-1]])
+                list_out.append([f[key_name[ind]] for f in full_out[-1]])
         if verbose:
             pprint(list_out)
         if len(table) == 1:
@@ -194,34 +239,8 @@ class ONE(OneAbstract):
         else:
             return list_out, full_out
 
-    def ls_dataset_types(self):
-        """
-        Queries the database for a list of 'dataset-types'. Wrapper for self.ls.
-
-        :return: list of dataset types, list of full Json output from Alyx
-        :rtype: list, list
-        """
-        return self.ls(table='dataset-types')
-
-    def ls_subjects(self):
-        """
-        Queries the database for a list of 'subjects'. Wrapper for self.ls.
-
-        :return: list of subjects, list of full Json output from Alyx
-        :rtype: list, list
-        """
-        return self.ls(table='subjects')
-
-    def ls_users(self):
-        """
-        Queries the database for a list of 'users'. Wrapper for self.ls.
-
-        :return: list of users, list of full Json output from Alyx
-        :rtype: list, list
-        """
-        return self.ls(table='users')
-
-    def search(self, dataset_types=None, users=None, subjects=None, date_range=None):
+    def search(self, dataset_types=None, users=None, subjects=None, date_range=None,
+               details=False):
         """
         Applies a filter to the sessions (eid) table and returns a list of json dictionaries
          corresponding to sessions.
@@ -234,9 +253,11 @@ class ONE(OneAbstract):
         :type subjects: list or str
         :param date_range: list of 2 strings or list of 2 dates that define the range
         :type date_range: list
+        :param details: default False, returns also the session details as per the REST response
+        :type details: bool
 
-        :return: list of eids
-         list of json dictionaries, each entry corresponding to a matching session
+        :return: list of eids, if details is True, also returns a list of json dictionaries,
+         each entry corresponding to a matching session
         :rtype: list, list
         """
         # TODO add a lab field in the session table of Alyx to add as a query
@@ -258,19 +279,20 @@ class ONE(OneAbstract):
             url = url + '&date_range=' + ','.join(date_range)
         # implements the loading itself
         ses = self._alyxClient.get(url)
-        return [s['url'] for s in ses], ses
+        eids = [s['url'] for s in ses]  # flattens session info
+        eids = [e.split('/')[-1] for e in eids]  # remove url to make it portable
+        if details:
+            return eids, ses
+        else:
+            return eids
 
-    def session_data_info(self, eid):
+    @staticmethod
+    def search_terms():
         """
-        From a Session ID, queries Alyx database for dataset info related to a session.
+        Returns possible search terms to be used as keywords in the one.search method.
 
-        :param eid: Experiment ID, for IBL this is the UUID of the Session as per Alyx
-         database. Could be a full Alyx URL:
-         'http://localhost:8000/sessions/698361f6-b7d0-447d-a25d-42afdef7a0da' or only the UUID:
-         '698361f6-b7d0-447d-a25d-42afdef7a0da'
-
-        :return: a dataclass containing arrays and context data.
-        :rtype: dataclass SessionInfo
+        :return: a tuple containing possible search terms:
+        :rtype: tuple
         """
-        dses = self.load(eid, dry_run=True)
-        return dses
+        #  Implemented as a method to make sure this can't be changed
+        return SEARCH_TERMS

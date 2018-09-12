@@ -19,33 +19,51 @@ one = ONE() # need to instantiate the class to have the API.
 Each experiment is identified by a unique string known as the "experiment ID" (EID). (In our case, this string points to a URL on our server.) To find an EID, use the one.search command, for example:
 
 ```
+from ibllib.misc import pprint
 eid, ses = one.search(users='olivier', date_range=['2018-08-24', '2018-08-24'])
 pprint(eid)
 ```
 returns
 ```
 [
-    "https://test.alyx.internationalbrainlab.org/sessions/86e27228-8708-48d8-96ed-9aa61ab951db"
+    "86e27228-8708-48d8-96ed-9aa61ab951db"
 ]
 ```
+The searchable fields are listed with the following method:
+```
+one.search_terms()
 
-## Info method
+```
+
+## List method
 Once you know the EID, you can list all the datasets for the experiment using the list command:
 ```
-one.list(eid[0])
+one.list(eid)
 ``` 
 returns
 ```
 ['_ibl_lickPiezo.raw', '_ibl_lickPiezo.timestamps', '_ibl_wheel.position', 'channels.brainLocation', 'channels.probe', 'channels.rawRow', 'channels.site', 'channels.sitePositions', 'clusters._phy_annotation', 'clusters.depths', 'clusters.peakChannel', 'clusters.probes', 'clusters.templateWaveforms', 'clusters.waveformDuration', 'eye.area', 'eye.blink', 'eye.timestamps', 'eye.xyPos', 'licks.times', 'probes.description', 'probes.insertion', 'probes.rawFilename', 'probes.sitePositions', 'spikes.amps', 'spikes.clusters', 'spikes.depths', 'spikes.times', 'spontaneous.intervals', 'unknown']
 ```
 
-
-
-For more detailed info, this will return a dataclass with dataset_type, url and dataset_id fields among others:
+For more detailed datasets info, this will return a dataclass with dataset_type, url and dataset_id fields among others:
 ```python
-d = one.session_data_info(eid)
+d = one.list(eid, details=True)
 print(d)
 ```
+
+To navigate the database, it may be useful to get the range of possible keywords values to search for sessions.
+For example to print a list of the dataset-types, users and subjects in the command window:
+```python
+one.list(None, 'dataset-types')
+one.list(None, 'users')
+one.list(None, 'subjects')
+```
+
+To get all fields, ie. the full contextual information about the session.
+```python
+one.list(eid, 'all')
+```
+
 
 ## Load method
 ### General Use
@@ -106,120 +124,6 @@ t, empty, cl = one.load(eid, dataset_types=dataset_types)
 ```
 Returns an empty list for *cr* so that *t* and *cl* still get assigned the proper values.
 
-## ls method
-The methods allow to access 3 tables of the current database:
--   dataset-type
--   users
--   subjects
-
-For example to print a list of the dataset-types in the command window:
-```python
-dtypes, jsondtypes = one.ls_dataset_types()
-users, jsonusers = one.ls_users()
-subjects, jsonusers = one.ls_subjects()
-```
-The second argument is a detailed Json list containing the transcript from the database REST query: this will provide table fields from the database.
-
-Also possible to query multiple fields at once:
-```python
-list_types , dtypes = one.ls(table=['dataset-types','users'])
-pprint(list_types)
-pprint(dtypes)
-```
-This will give the following output:
-```
-[
-    [
-        "Channel mapping",
-        "channels.brainLocation",
-        "channels.probe",
-        "channels.rawRow",
-        "channels.site",
-        "channels.sitePositions",
-        "clusters.amps",
-        "clusters.depths",
-        "clusters.meanWaveforms",
-        "clusters.peakChannel",
-        "clusters._phy_annotation",
-        "clusters.probes",
-        "clusters.templateWaveforms",
-        "clusters.waveformDuration",
-        "ephys.raw",
-        "ephys.timestamps",
-        "eye.area",
-        "eye.blink",
-        "eye.raw",
-        "eye.timestamps",
-        "eye.xyPos",
-        "_ibl_code.files",
-        "_ibl_encoderEvents.bonsai_raw",
-        "_ibl_encoderPositions.bonsai_raw",
-        "_ibl_encoderTrialInfo.bonsai_raw",
-        "_ibl_extraRewards.times",
-        "_ibl_lickPiezo.raw",
-        "_ibl_lickPiezo.timestamps",
-        "_ibl_passiveBeeps.times",
-        "_ibl_passiveNoise.intervals",
-        "_ibl_passiveTrials.contrastLeft",
-        "_ibl_passiveTrials.contrastRight",
-        "_ibl_passiveTrials.included",
-        "_ibl_passiveTrials.stimOn_times",
-        "_ibl_passiveValveClicks.times",
-        "_ibl_passiveWhiteNoise.times",
-        "_ibl_pycwBasic.data",
-        "_ibl_pycwBasic.settings",
-        "_ibl_sparseNoise.times",
-        "_ibl_sparseNoise.xyPos",
-        "_ibl_trials.choice",
-        "_ibl_trials.contrastLeft",
-        "_ibl_trials.contrastRight",
-        "_ibl_trials.feedback_times",
-        "_ibl_trials.feedbackType",
-        "_ibl_trials.goCue_times",
-        "_ibl_trials.included",
-        "_ibl_trials.intervals",
-        "_ibl_trials.repNum",
-        "_ibl_trials.response_times",
-        "_ibl_trials.stimOn_times",
-        "_ibl_wheelMoves.intervals",
-        "_ibl_wheelMoves.type",
-        "_ibl_wheel.position",
-        "lfp.raw",
-        "lfp.timestamps",
-        "licks.times",
-        "probes.description",
-        "probes.insertion",
-        "probes.rawFilename",
-        "probes.sitePositions",
-        "raw_behavior_data",
-        "raw_ephys_data",
-        "raw_imaging_data",
-        "raw_video_data",
-        "spikes.amps",
-        "spikes.clusters",
-        "spikes.depths",
-        "spikes.times",
-        "spontaneous.intervals",
-        "unknown"
-    ],
-    [
-        "jmontijn",
-        "nbonacchi",
-        "olivier",
-        "test_user"
-    ]
-]
-[
-    [
-        {
-            "name": "Channel mapping",
-            "created_by": "olivier",
-            "description": "NOTE \"channel\" refers ONLY to those channels that made it through to spike sorting (probably not all of them). \"rawRow\" means a row in the raw recording file, of which there may be more",
-            "filename_pattern": "Channel mapping.*"
-        },
-    # and so on...
-```
-
 
 ## Search method
 The search methods allows to query the database to filter the list of UUIDs according to
@@ -245,17 +149,21 @@ pprint(ses_info)
 Here is the simple implementation of the filter, where we query for the EEIDs (sessions) co-owned by
 all of the following users: olivier and niccolo (case-sensitive).
 ```python
-eid, ses_info = one.search(users=['nbonacchi', 'olivier'])
+eid = one.search(users=['nbonacchi', 'olivier'])
+```
+To get all context information about the returned sessions, use the flag details:
+```python
+eid, session_details= one.search(users=['nbonacchi', 'olivier'], details=True)
 ```
 
 The following would get all of the dataset for which olivier is an owner or a co-owner:
 ```python
-eid , ses_info=  one.search(users=['olivier'])
+eid  = one.search(users=['olivier'])
 pprint(eid)
 ```
 
 It is also possible to filter sessions using a date-range:
 ```python
-eid, ses_info = one.search(users='olivier', date_range=['2018-08-24', '2018-08-24'])
+eid = one.search(users='olivier', date_range=['2018-08-24', '2018-08-24'])
 ```
 
