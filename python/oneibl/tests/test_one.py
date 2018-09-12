@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from oneibl.one import ONE, SessionInfo
+from oneibl.one import ONE
 
 
 class TestLoad(unittest.TestCase):
@@ -12,11 +12,31 @@ class TestLoad(unittest.TestCase):
         self.One = myone
 
     def test_list(self):
-        myone = self.One
+        one = self.One
+        # tests with a single input and a list input
+        EIDs = ['86e27228-8708-48d8-96ed-9aa61ab951db',
+                ['86e27228-8708-48d8-96ed-9aa61ab951db', '3bca3bef-4173-49a3-85d7-596d62f0ae16']]
+        for eid in EIDs:
+            dt = one.list(eid)  # returns dataset-type
+            dt = one.list(eid, details=True)
+            dt = one.list(eid, keyword='dataset-type')  # returns list
+            dt = one.list(eid, keyword='dataset-type', details=True)  # returns SessionDataInfo
+            for key in ('subject', 'users', 'lab', 'type', 'start_time', 'end_time'):
+                dt = one.list(eid, keyword=key)  # returns dataset-type
+                print(key, ': ', dt)
+            ses = one.list(eid, keyword='all')
+            usr, ses = one.list(eid, keyword='users', details=True)
+
+    def test_list_error(self):
+        one = self.One
+        a = 0
         eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
-        a = myone.list(eid)
-        self.assertTrue(len(a) == 29)
-        self.assertTrue(isinstance(a, list))
+        try:
+            one.list(eid, keyword='tutu')  # throws an error
+        except ValueError:
+            a = 1
+            pass
+        self.assertTrue(a == 1)
 
     def test_load(self):
         # Test with 3 actual datasets predefined
@@ -57,56 +77,27 @@ class TestLoad(unittest.TestCase):
         a = myone.load(eid)
         self.assertTrue(len(a.data) == 5)
 
-    def test_ls(self):
-        # Test when the dataset type requested is not unique
-        myone = self.One
-        # test users
-        [l1, f] = myone.ls(table=['users'])
-        l2, f2 = myone.ls_users()
-        self.assertTrue(isinstance(l1[0], str) and isinstance(l1[0], str))
-        self.assertEqual(l1,l2)
-        # test subjects
-        [l1, f] = myone.ls(table='subjects')
-        l2, f2 = myone.ls_subjects()
-        self.assertTrue(isinstance(l1[0], str) and isinstance(l1[0], str))
-        self.assertEqual(l1,l2)
-        # test datasets
-        [l1, f] = myone.ls(table='dataset-types')
-        l2, f2 = myone.ls_dataset_types()
-        self.assertTrue(isinstance(l1[0], str) and isinstance(l1[0], str))
-        self.assertEqual(l1,l2)
-        # test with 2 tables, string format
-        [l, f] = myone.ls(table=['users', 'dataset-types'])
-        self.assertTrue(isinstance(l[0], list) and len(l) == 2)
-
     def test_search_simple(self):
         myone = self.One
         # Test users
         usr = ['olivier', 'nbonacchi']
-        sl, sd = myone.search(users=usr)
+        sl, sd = myone.search(users=usr, details=True)
         self.assertTrue(isinstance(sl, list) and isinstance(sd, list))
         self.assertTrue(all([set(usr).issubset(set(u)) for u in [s['users'] for s in sd]]))
         # when the user is a string instead of a list
-        sl1, sd1 = myone.search(users=['olivier'])
-        sl2, sd2 = myone.search(users='olivier')
+        sl1, sd1 = myone.search(users=['olivier'], details=True)
+        sl2, sd2 = myone.search(users='olivier', details=True)
         self.assertTrue(sl1 == sl2 and sd1 == sd2)
         # test for the dataset type
         dtyp = ['spikes.times', 'titi.tata']
-        sl, sd = myone.search(dataset_types=dtyp)
+        sl, sd = myone.search(dataset_types=dtyp, details=True)
         self.assertTrue(len(sl) == 0)
         dtyp = ['channels.site']
-        sl, sd = myone.search(dataset_types=dtyp)
+        sl, sd = myone.search(dataset_types=dtyp, details=True)
         self.assertTrue(len(sl) == 2)
         dtyp = ['spikes.times', 'channels.site']
-        sl, sd = myone.search(dataset_types=dtyp)
+        sl, sd = myone.search(dataset_types=dtyp, details=True)
         self.assertTrue(len(sl) == 1)
-
-    def test_session_data_info(self):
-        myone = self.One
-        eid = '3bca3bef-4173-49a3-85d7-596d62f0ae16'
-        dinfo = myone.session_data_info(eid)
-        self.assertTrue(isinstance(dinfo, SessionInfo))
-        print(dinfo)  # tests the __str__method of the dataclass
 
     def test_session_does_not_exist(self):
         eid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
