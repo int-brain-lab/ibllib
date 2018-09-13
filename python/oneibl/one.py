@@ -6,6 +6,7 @@ from ibllib.misc import is_uuid_string, pprint
 import oneibl.params as par
 import abc
 import pathlib
+import requests
 
 ENDPOINT_LIST = ('dataset-types', 'users', 'subjects')
 SESSION_FIELDS = ('subject', 'users', 'lab', 'type', 'start_time', 'end_time')
@@ -61,10 +62,15 @@ class SessionDataInfo:
 
 
 class ONE(OneAbstract):
-
     def __init__(self, username=par.ALYX_LOGIN, password=par.ALYX_PWD, base_url=par.BASE_URL):
-        # Init connection to the database
-        self._alyxClient = wc.AlyxClient(username=username, password=password, base_url=base_url)
+    # Init connection to the database
+        try:
+            self._alyxClient = wc.AlyxClient(username=username, password=password,
+                                             base_url=base_url)
+        except requests.exceptions.ConnectionError:
+            raise ConnectionError("Can't connect to " + base_url + '. \n' +
+                                  'IP addresses are filtered on IBL database servers. \n' +
+                                  'Are you connecting from an IBL participating institution ?')
 
     def list(self, eid=None, keyword='dataset-type', details=False):
         """
