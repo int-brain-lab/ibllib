@@ -15,7 +15,7 @@ SEARCH_TERMS = ('dataset_types', 'users', 'subjects', 'date_range')
 def _cache_directory(cache_dir, ses):
     if len(cache_dir) == 0:
         cache_dir = str(pathlib.Path.home()) + os.sep + "Downloads" + os.sep + "FlatIron"
-    cache_dir += os.sep + par.CACHE_DIR + ses['subject'] + os.sep + ses['start_time'][0:10]
+    cache_dir += os.sep + ses['subject'] + os.sep + ses['start_time'][0:10]
     cache_dir += os.sep + str(ses['number'])
     pathlib.Path(cache_dir).mkdir(parents=True, exist_ok=True)
     return cache_dir
