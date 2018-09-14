@@ -2,17 +2,19 @@ import unittest
 import numpy as np
 import os
 import ibllib.webclient as wc
-import oneibl.params as par
+import oneibl.params
 import tempfile
 import shutil
+
+par = oneibl.params.get()
 
 
 class TestDownloadHTTP(unittest.TestCase):
 
     def setUp(self):
         # Init connection to the database
-        self.ac = wc.AlyxClient(username=par.ALYX_LOGIN, password=par.ALYX_PWD,
-                                base_url=par.BASE_URL)
+        self.ac = wc.AlyxClient(username='test_user', password='TapetesBloc18',
+                                base_url='https://test.alyx.internationalbrainlab.org')
 
     def test_download_datasets_with_api(self):
         ac = self.ac  # easier to debug in console

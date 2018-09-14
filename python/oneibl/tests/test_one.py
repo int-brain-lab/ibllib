@@ -33,7 +33,7 @@ class TestLoad(unittest.TestCase):
         eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
         try:
             one.list(eid, keyword='tutu')  # throws an error
-        except ValueError:
+        except KeyError:
             a = 1
             pass
         self.assertTrue(a == 1)

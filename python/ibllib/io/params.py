@@ -24,12 +24,15 @@ def getfile(str_params):
 
 def read(str_params):
     pfile = getfile(str_params)
-    with open(pfile) as fil:
-        par_dict = json.loads(fil.read())
-    return from_dict(par_dict)
+    if os.path.isfile(pfile):
+        with open(pfile) as fil:
+            par_dict = json.loads(fil.read())
+        return from_dict(par_dict)
+    else:
+        return None
 
 
 def write(str_params, par):
     pfile = getfile(str_params)
     with open(pfile, 'w') as fil:
-        json.dump(as_dict(par), fil)
+        json.dump(as_dict(par), fil, sort_keys=False, indent=4)

@@ -18,4 +18,3 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(par, par2)
         # at last delete the param file
         os.remove(params.getfile('toto'))
-
