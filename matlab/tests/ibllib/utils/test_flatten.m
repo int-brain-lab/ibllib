@@ -26,6 +26,19 @@ verifyTrue(testCase,  all(cellfun(@(x,y) all(x==y), tsf.c,  tso.c)));
 verifyTrue(testCase,  all(tso.d==tsf.d));
 verifyTrue(testCase,  all(tso.e(~isnan(tso.e))==tsf.e(~isnan(tsf.e)) ));
 verifyTrue(testCase,  all(tso.e(~isnan(tso.f))==tsf.e(~isnan(tsf.f)) ));
+
+% now test with an empty struct
+D = flatten(struct(...
+    'dataset_id', {},...
+    'local_path', {}));
+verifyFalse(testCase, isempty(D))
+
+% test with a scalar struct:
+D = struct('a', 1, 'b', 'turlu', 'c', [1 2]);
+D = flatten(D);
+verifyTrue(testCase, ischar(D.b));
+D = flatten(D, 'wrap_scalar', true);
+verifyTrue(testCase, iscell(D.b));
 end
 
 

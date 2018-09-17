@@ -1,4 +1,4 @@
-classdef test_iodir < matlab.unittest.TestCase
+classdef test_io_dir < matlab.unittest.TestCase
     
     properties
         tdir

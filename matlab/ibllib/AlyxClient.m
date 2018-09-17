@@ -57,7 +57,7 @@ classdef AlyxClient
              % rep = get(url)
              % rep = ac.get('/sessions/86e27228-8708-48d8-96ed-9aa61ab951db')
              % rep = ac.get('https://test.alyx.internationalbrainlab.org/sessions/86e27228-8708-48d8-96ed-9aa61ab951db')
-            if ~(strfind(endpoint_url, self.base_url)==1)
+            if isempty(strfind(endpoint_url, self.base_url))
                 endpoint_url = [self.base_url  endpoint_url];
             end
             rep = webread(endpoint_url, self.weboptions);
@@ -113,7 +113,7 @@ classdef AlyxClient
                 prefs.user = user;
             end
             % prompts for password
-%             prefs.password
+            % prefs.password
             password = passwordUI();
             if ~isempty(password)
                 prefs.password = password;

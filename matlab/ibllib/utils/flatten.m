@@ -1,7 +1,17 @@
-function in = flatten(in)
+function in = flatten(in, varargin)
+% out = flatten(in);
+% out = flatten(in, 'wrap_scalar', [false]);
 % If numeric, returns a 1D vector
 % If cell array, returns a 1D cell array
 % if struct array, un-nest the struct-array and returns a struct
+% if wrap_scalar is set to false, a scalar structure will not be serialized
+% and wrapped into strings and will result as a different type as a vector
+
+wrap_scalar = true;
+p = inputParser;
+addOptional(p,'wrap_scalar', false);
+parse(p,varargin{:});
+for fn = fieldnames(p.Results)', eval([fn{1} '= p.Results.' (fn{1}) ';']); end
 
 switch true
     case isnumeric(in) | iscell(in) | ischar(in)
@@ -11,7 +21,8 @@ switch true
         for m = 1: length(ff)
             if isstruct(in.(ff{m})), in.(ff{m}) = flatten(in.(ff{m})); end
         end
-    case isstruct(in) & length(in) > 1
+        if wrap_scalar, in = flatten_struct(in); end
+    case isstruct(in) & length(in) ~= 1
         in = flatten_struct(in);
 end
 

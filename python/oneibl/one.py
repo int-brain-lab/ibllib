@@ -16,11 +16,13 @@ _ENDPOINTS = {  # keynames are possible input arguments and values are actual en
      'dataset_types': 'dataset-types',
      'dataset-type': 'dataset-types',
      'dataset_type': 'dataset-types',
+     'dtypes': 'dataset-types',
+     'dtype': 'dataset-types',
      'users': 'users',
      'user': 'users',
      'subject': 'subjects',
-     'subjects': 'subjects'
-}
+     'subjects': 'subjects'}
+
 _SESSION_FIELDS = {  # keynames are possible input arguments and values are actual fields
     'subjects': 'subject',
     'subject': 'subject',
@@ -32,8 +34,7 @@ _SESSION_FIELDS = {  # keynames are possible input arguments and values are actu
     'start_time': 'start_time',
     'start-time': 'start_time',
     'end_time': 'end_time',
-    'end-time': 'end_time'
-}
+    'end-time': 'end_time'}
 
 _LIST_KEYWORDS = dict(_SESSION_FIELDS, **{
     'all': 'all',
@@ -43,8 +44,9 @@ _LIST_KEYWORDS = dict(_SESSION_FIELDS, **{
     'dataset-types': 'dataset-type',
     'dataset_types': 'dataset-type',
     'dataset-type': 'dataset-type',
-    'dataset_type': 'dataset-type'})
-
+    'dataset_type': 'dataset-type',
+    'dtypes': 'dataset-type',
+    'dtype': 'dataset-type'})
 
 SEARCH_TERMS = {  # keynames are possible input arguments and values are actual fields
     'data': 'dataset_types',

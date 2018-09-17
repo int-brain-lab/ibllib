@@ -1,19 +1,32 @@
-function setup()
-%SETUP Summary of this function goes here
-%   Detailed explanation goes here
-AlyxClient.setup()
+function par = setup()
 
-
-prefs = getpref('One');
-if isempty(prefs)
-    prefs = struct('base_url','https://test.alyx.internationalbrainlab.org',...
-        'user','test_user',...
-        'password','');
+default_params = struct(...
+    'ALYX_LOGIN',  'test_user',...
+    'ALYX_PWD',  '',...
+    'ALYX_URL',  'https://test.alyx.internationalbrainlab.org',...
+    'CACHE_DIR',  [ io.getuserdir filesep 'Downloads' filesep 'FlatIron'],...
+    'FTP_DATA_SERVER',  'ftp://ibl.flatironinstitute.com',...
+    'FTP_DATA_SERVER_LOGIN',  'iblftp',...
+    'FTP_DATA_SERVER_PWD',  '',...
+    'HTTP_DATA_SERVER',  'http://ibl.flatironinstitute.com',...
+    'HTTP_DATA_SERVER_LOGIN',  'iblmember',...
+    'HTTP_DATA_SERVER_PWD',  ''...
+);
+% load the current parameters and put default parameters if none exist
+par = io.read.jsonpref('one_params');
+if isempty(par), par=default_params; end
+for ff = fieldnames(default_params)'
+    cur_par = par.(ff{1});
+    if isempty(cur_par), cur_par = default_params(ff{1}); end
+    % if password field, use the special prompt
+    if strfind(ff{1}, 'PWD')
+        disp([ff{1}])
+        rep = gui_password('DialogTitle', ff{1} );
+    else
+        rep = input([ff{1} ': (current: ' cur_par ') '], 's');
+    end
+    if ~isempty(rep), cur_par = rep; end
+    par.(ff{1}) = cur_par;
 end
 
-%% Get it back afterwards
-par.alyx = getpref('Alyx')
-
-
-end
-
+par = io.write.jsonpref('one_params');
