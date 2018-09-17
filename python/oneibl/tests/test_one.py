@@ -47,6 +47,13 @@ class TestLoad(unittest.TestCase):
         t, cr, cl = myone.load(eid, dataset_types=dataset_types)
         d = myone.load(eid, dataset_types=dataset_types, dclass_output=True)
         self.assertTrue(np.all(d.data[0] == t))
+        # Now load with another dset inbetween that doesn't exist
+        t_, cr_, cl_ = myone.load(eid, dataset_types=['clusters.peakChannel', 'turlu',
+                                                      'clusters.probes'])
+        self.assertTrue(np.all(t == t_))
+        self.assertTrue(np.all(cl == cl_))
+        self.assertTrue(cr_ is None)
+
 
     def test_load_empty(self):
         # Test with a session that doesn't have any dataset on the Flat Iron
@@ -98,6 +105,8 @@ class TestLoad(unittest.TestCase):
         dtyp = ['spikes.times', 'channels.site']
         sl, sd = myone.search(dataset_types=dtyp, details=True)
         self.assertTrue(len(sl) == 1)
+        # test empty return for non-existent user
+        self.assertTrue(len(myone.search(users='asdfa')) == 0)
 
     def test_session_does_not_exist(self):
         eid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'

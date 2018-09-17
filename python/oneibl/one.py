@@ -62,14 +62,6 @@ SEARCH_TERMS = {  # keynames are possible input arguments and values are actual 
 par = oneibl.params.get()
 
 
-def _cache_directory(cache_dir, ses):
-    if len(cache_dir) == 0:
-        cache_dir = str(PurePath(Path.home(), "Downloads", "FlatIron"))
-    cache_dir = PurePath(cache_dir, ses['subject'],  ses['start_time'][0:10], str(ses['number']))
-    Path(cache_dir).mkdir(parents=True, exist_ok=True)
-    return str(cache_dir)
-
-
 class OneAbstract(abc.ABC):
 
     @abc.abstractmethod
@@ -226,12 +218,15 @@ class ONE(OneAbstract):
             for [i, sdt] in enumerate(session_dtypes):
                 if sdt == dt:
                     urlstr = ses['data_dataset_session_related'][i]['data_url']
+
                     if not dry_run:
-                        cache_dir = _cache_directory(par.CACHE_DIR, ses)
+                        rel_path = PurePath(urlstr.replace(par.HTTP_DATA_SERVER, '.')).parents[0]
+                        cache_dir = PurePath(par.CACHE_DIR, rel_path)
+                        Path(cache_dir).mkdir(parents=True, exist_ok=True)
                         fil = wc.http_download_file(urlstr,
                                                     username=par.HTTP_DATA_SERVER_LOGIN,
                                                     password=par.HTTP_DATA_SERVER_PWD,
-                                                    cache_dir=cache_dir)
+                                                    cache_dir=str(cache_dir))
                     else:
                         fil = ''
                     out.eid.append(eid_str)
@@ -358,7 +353,7 @@ class ONE(OneAbstract):
         return SEARCH_TERMS
 
     @staticmethod
-    def setup(self):
+    def setup():
         """
         Interactive command tool that populates parameter file for ONE IBL.
         """

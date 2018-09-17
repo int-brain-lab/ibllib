@@ -55,6 +55,10 @@ def setup():
              '(leave empty to keep current): '
     par["FTP_DATA_SERVER_PWD"] = getpass(prompt) or cpar
 
+    # default to home dir if empty dir somehow made it here
+    if len(par['CACHE_DIR']) == 0:
+        par['CACHE_DIR'] = str(PurePath(Path.home(), "Downloads", "FlatIron"))
+
     par = params.from_dict(par)
 
     # create directory if needed
@@ -62,6 +66,7 @@ def setup():
         os.mkdir(par.CACHE_DIR)
     params.write(_PAR_ID_STR, par)
     print('ONE Parameter file location: ' + params.getfile(_PAR_ID_STR))
+
 
 
 def get():

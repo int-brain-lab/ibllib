@@ -9,12 +9,21 @@ For this tutorial we will be connecting to a  test database with a test user. Th
 ## Initialize
 
 
-The first step is to import the ONE class. In the IBL case, the class has to be instantiated: behind the scenes, the constructor connects to our cloud database and gets credentials. The connections settings are defined in the *params.py* and the *params_secret.py* files.
+The first step is to import the ONE class. In the IBL case, the class has to be instantiated: behind the scenes, the constructor connects to our cloud database and gets credentials.
+The connections settings are defined in a json parameter file.
 
 ```python
 from oneibl.one import ONE
 one = ONE() # need to instantiate the class to have the API.
 ```
+
+The setup() function allows to update parameters via an user prompt.
+```python
+one.setup()
+```
+Another manner is to update the file manually. In Linux, the file is in:
+~/.one_params, in Windows.
+
 ## Find an experiment
 Each experiment is identified by a unique string known as the "experiment ID" (EID). (In our case, this string points to a URL on our server.) To find an EID, use the one.search command, for example:
 
