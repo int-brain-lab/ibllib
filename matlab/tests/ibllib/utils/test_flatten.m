@@ -2,7 +2,7 @@ function tests = test_flatten
 tests = functiontests(localfunctions);
 end
 
-function test_flatten_divers(testCase)
+function test_flatten_struct(testCase)
 tso.a = {'toto','titi','tata'}';
 tso.b = {'toto',[],'tata'}';
 tso.c = tso.a;
@@ -41,6 +41,15 @@ D = flatten(D, 'wrap_scalar', true);
 verifyTrue(testCase, iscell(D.b));
 end
 
+function test_flatten_arrays(testCase)
+% simple array
+a = round(rand(5,2));
+assertTrue(testCase, all(a(:)==flatten(a)))
+% test with logicals !
+a = logical(a);
+assertTrue(testCase, all(a(:)==flatten(a)))
+end
+
 
 function test_flatten_recursive(testCase)
 sn = struct('nest_number',{1;2}, 'nest_str',{'n1';'n2'});
@@ -57,12 +66,4 @@ verifyTrue(testCase, isequal(expect.nfield, res.nfield));
 verifyTrue(testCase, isequal(expect.name, res.name));
 verifyTrue(testCase, isequal(expect.number, res.number));
 
-end
-
-function flatten_test_scalar_structure(testCase)
-s = struct('name',{'toto' ; 'titi'},'number',{1;2});
-ss.toto = 'titi';
-ss.nest = s;
-res = flatten(ss);
-verifyTrue(testCase, isequal(flatten(sn), res.nest));
 end

@@ -14,7 +14,7 @@ parse(p,varargin{:});
 for fn = fieldnames(p.Results)', eval([fn{1} '= p.Results.' (fn{1}) ';']); end
 
 switch true
-    case isnumeric(in) | iscell(in) | ischar(in)
+    case isnumeric(in) | iscell(in) | ischar(in) | islogical(in)
         in = in(:);
     case isstruct(in) & length(in)==1
         ff = fieldnames(in);

@@ -49,7 +49,7 @@ classdef one
     
     methods
         session_info = info(self, eeid)
-        dataset_list = list(self, eid)
+        varargout = list(self, eid, varargin)
         varargout = load(self, eid, varargin)
         [eids, ses] = search(self, varargin)
         setup(self)

@@ -17,9 +17,44 @@ classdef test_one < matlab.unittest.TestCase
     methods(Test)
  
         function test_list(testCase)
-            r1 = testCase.one.list(testCase.eid);
-            testCase.verifyEqual(length(r1),29);
+            eid_ = '86e27228-8708-48d8-96ed-9aa61ab951db';
+            eids_ = {'86e27228-8708-48d8-96ed-9aa61ab951db', '3bca3bef-4173-49a3-85d7-596d62f0ae16'};
+            %% first functionality is a straight list of datasets without keyword
+            % test for a single session, list datasets
+            [dt, details]= testCase.one.list(eid_);
+            testCase.verifyEqual(length(dt),29);
+            % test for multiple sessions, list datasets
+            [dt, details]= testCase.one.list(eids_);
+            testCase.verifyEqual(length(dt),29);
+            testCase.verifyEqual(length(details.url),34);
+            %% second functionality is a straight query to the endpoint
+            [list ~] = testCase.one.list([],'keyword','data');
+            testCase.assertTrue(length(list)>40);
+            testCase.one.list([],'keyword','subject');
+            testCase.one.list([],'keyword','users');
+%             testCase.one.list([],'keyword','labs'); % Need to update Alyx test for this to work
         end
+%         for eid in EIDs:
+%             dt = one.list(eid)  # returns dataset-type
+%             dt = one.list(eid, details=True)
+%             dt = one.list(eid, keyword='dataset-type')  # returns list
+%             dt = one.list(eid, keyword='dataset-type', details=True)  # returns SessionDataInfo
+%             for key in ('subject', 'users', 'lab', 'type', 'start_time', 'end_time'):
+%                 dt = one.list(eid, keyword=key)  # returns dataset-type
+%                 print(key, ': ', dt)
+%             ses = one.list(eid, keyword='all')
+%             usr, ses = one.list(eid, keyword='users', details=True)
+% 
+%     def test_list_error(self):
+%         one = self.One
+%         a = 0
+%         eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
+%         try:
+%             one.list(eid, keyword='tutu')  # throws an error
+%         except KeyError:
+%             a = 1
+%             pass
+%         self.assertTrue(a == 1)
         
         function test_search(testCase)
             % test datenum string and double
@@ -72,5 +107,6 @@ classdef test_one < matlab.unittest.TestCase
             a = testCase.one.load(eid_);
             testCase.assertTrue(length(a.data) == 5)
         end
+        
     end
 end

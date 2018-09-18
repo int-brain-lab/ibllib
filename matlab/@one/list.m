@@ -1,8 +1,134 @@
-function dataset_list = list(self, eid)
-% dtypes = one.list(eid) : returns a cell array containing dataset types belonging to the current session
+function varargout = list(self, eid, varargin)
+% [dtypes details] = one.list(eid) : returns a cell array containing dataset types belonging to the current session
 % dtypes = one.list('86e27228-8708-48d8-96ed-9aa61ab951db');
 % dtypes = one.list('https://test.alyx.internationalbrainlab.org/sessions/86e27228-8708-48d8-96ed-9aa61ab951db');
 
-session_info = self.alyx_client.get_session(eid);
-session_data_info = session_info.data_dataset_session_related;
-dataset_list = unique(session_data_info.dataset_type);
+
+%% handle input arguments
+TYPO_PROOF = get_typo_list(eid);
+% substitute eventual typo with the proper parameter name
+for  ia = 1:2:length(varargin)
+    it = find(strcmpi(varargin{ia}, TYPO_PROOF(:,1)),1);
+    if isempty(it), continue; end
+    varargin(ia) = TYPO_PROOF(it,2);
+end
+% parse input arguments
+p = inputParser;
+addOptional(p,'keyword', 'dataset-type');
+parse(p,varargin{:});
+for fn = fieldnames(p.Results)', eval([fn{1} '= p.Results.' (fn{1}) ';']); end
+% make sure a typo in the keyword won't blow up
+ik = find(strcmpi(TYPO_PROOF(:,1), keyword));
+assert(length(ik)==1)
+keyword = TYPO_PROOF{ik,2};
+
+%% redirect to nested functions depending on input configuration
+switch true
+    case iscell(eid), recursive_call; return
+    case isempty(eid), list_rest_endpoint; return
+    otherwise list_session_field;
+end
+
+%% List REST table functionality
+
+%% List session field functionality
+% list of possible keywords
+%     {'all'         }
+%     {'dataset-type'}
+%     {'end_time'    }
+%     {'lab'         }
+%     {'start_time'  }
+%     {'subject'     }
+%     {'type'        }
+%     {'users'       }
+% If no keyword sepecified just output a list of datasets for the session queried
+
+
+    function recursive_call()
+        for m = 1:length(eid)
+            [tmp{1:2}] = self.list( eid{m}, varargin{:});
+            if m ==1, varargout = tmp; continue, end
+            % for next iterations, need to concatenate stuff
+            for n = 1:length(tmp)
+                switch true
+                    case iscell(tmp{n})
+                        varargout{n} = unique(cat(1, varargout{n}, tmp{n}));
+                    case isstruct(tmp{n})
+                        varargout{n} = cat_struct( varargout{n}, tmp{n});
+                end
+            end
+        end
+    end
+
+    function list_rest_endpoint()
+        details = self.alyx_client.get(['/' keyword] );
+        % this switch links keynames to the specific field to list
+        switch true
+            case any(strcmp(keyword, {'labs', 'dataset-types'}))
+                varargout{1} = details.name;
+            case strcmp(keyword, 'users')
+                varargout{1} = details.username;
+            case strcmp(keyword, 'subjects')
+                varargout{1} = details.nickname;
+        end
+        varargout{2} = details;
+    end
+
+    function list_session_field
+        switch true
+            case strcmp(keyword, 'dataset-type')
+                session_info = self.alyx_client.get_session(eid);
+                session_data_info = session_info.data_dataset_session_related;
+                session_data_info.eid = repmat({eid}, size(session_data_info.dataset_type,1),1);
+                dataset_list = unique(session_data_info.dataset_type);
+                varargout = {dataset_list, session_data_info};
+        end
+    end
+
+end
+
+function tlist = get_typo_list(eid)
+if ~isempty(eid)
+    tlist = {...
+        'subjects',  'subject';...
+        'subject',  'subject';...
+        'user',  'users';...
+        'users',  'users';...
+        'lab',  'lab';...
+        'labs',  'lab';...
+        'type',  'type';...
+        'start_time',  'start_time';...
+        'start-time', 'start_time';...
+        'end_time',  'end_time';...
+        'end-time', 'end_time';...
+        'all',  'all';...
+        'data',  'dataset-type';...
+        'dataset',  'dataset-type';...
+        'datasets',  'dataset-type';...
+        'dataset-types', 'dataset-type';...
+        'dataset_types',  'dataset-type';...
+        'dataset-type', 'dataset-type';...
+        'dataset_type',  'dataset-type';...
+        'dtypes',  'dataset-type';...
+        'dtype',  'dataset-type';...
+        };
+else % list for the REST table endpoints
+    tlist = {...
+        'data', 'dataset-types';...
+        'dataset', 'dataset-types';...
+        'datasets', 'dataset-types';...
+        'dataset-types', 'dataset-types';...
+        'dataset_types', 'dataset-types';...
+        'dataset-type', 'dataset-types';...
+        'dataset_type', 'dataset-types';...
+        'dtypes', 'dataset-types';...
+        'dtype', 'dataset-types';...
+        'users', 'users';...
+        'user', 'users';...
+        'subject', 'subjects';...
+        'subjects', 'subjects';...
+        'lab',  'labs';...
+        'labs',  'labs'...
+        };
+end
+end
