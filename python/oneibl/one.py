@@ -21,7 +21,9 @@ _ENDPOINTS = {  # keynames are possible input arguments and values are actual en
      'users': 'users',
      'user': 'users',
      'subject': 'subjects',
-     'subjects': 'subjects'}
+     'subjects': 'subjects',
+     'labs': 'labs',
+     'lab': 'labs'}
 
 _SESSION_FIELDS = {  # keynames are possible input arguments and values are actual fields
     'subjects': 'subject',
@@ -278,7 +280,8 @@ class ONE(OneAbstract):
         table_field_names = {
             'dataset-types': 'name',
             'users': 'username',
-            'subjects': 'nickname'}
+            'subjects': 'nickname',
+            'labs': 'name'}
         if not table or table not in list(set(_ENDPOINTS.keys())):
             raise KeyError("The attribute/endpoint: " + table + " doesn't exist \n" +
                            "possible values are " + str(set(_ENDPOINTS.values())))
