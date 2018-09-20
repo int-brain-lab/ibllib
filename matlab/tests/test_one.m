@@ -10,15 +10,16 @@ classdef test_one < matlab.unittest.TestCase
         function createObject(testCase)
             testCase.one = one('alyx_login', 'test_user', 'alyx_pwd', 'TapetesBloc18',...
                 'alyx_url', 'https://test.alyx.internationalbrainlab.org');
-            testCase.eid = '86e27228-8708-48d8-96ed-9aa61ab951db';
+            testCase.eid = 'cf264653-2deb-44cb-aa84-89b82507028a';
+            testCase.eid2 = '4e0b3320-47b7-416e-b842-c34dc9004cf8';
         end
     end
  
     methods(Test)
  
         function test_list(testCase)
-            eid_ = '86e27228-8708-48d8-96ed-9aa61ab951db';
-            eids_ = {'86e27228-8708-48d8-96ed-9aa61ab951db', '3bca3bef-4173-49a3-85d7-596d62f0ae16'};
+            eid_ = testCase.eid;
+            eids_ = {testCase.eid, testCase.eid2};
             %% first functionality is a straight list of datasets without keyword
             % test for a single session, list datasets
             [dt, details]= testCase.one.list(eid_);
@@ -87,7 +88,7 @@ classdef test_one < matlab.unittest.TestCase
         function test_load(testCase)
             % Test with 3 actual datasets predefined
             dataset_types = {'clusters.peakChannel', 'clusters._phy_annotation', 'clusters.probes'};
-            eid_ = 'https://test.alyx.internationalbrainlab.org/sessions/86e27228-8708-48d8-96ed-9aa61ab951db';
+            eid_ = ['https://test.alyx.internationalbrainlab.org/sessions/' testCase.eid];
             [pc, pa, cp] = testCase.one.load(eid_, 'dataset_types', dataset_types);
             % same with dclass output and check correspondency
             D = testCase.one.load(eid_, 'dataset_types', dataset_types, 'dclass_output', true);
@@ -103,8 +104,7 @@ classdef test_one < matlab.unittest.TestCase
             % test a single dtype in scalar
             a = testCase.one.load(testCase.eid, 'dataset_types', 'eye.area');
             % Test without a dataset list should download everything and output a dictionary
-            eid_ = '3bca3bef-4173-49a3-85d7-596d62f0ae16';
-            a = testCase.one.load(eid_);
+            a = testCase.one.load(testCase.eid2);
             testCase.assertTrue(length(a.data) == 5)
         end
         

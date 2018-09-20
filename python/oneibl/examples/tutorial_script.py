@@ -10,7 +10,7 @@ pprint(eid)
 one.search_terms()
 
 ## List dataset types for a session
-eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
+eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
 one.list(eid)
 ## More Info about a session
 d = one.list(eid, 'All')
@@ -27,7 +27,7 @@ one.list(None, 'subjects')
 
 ## Load #1
 dataset_types = ['clusters.templateWaveforms', 'clusters.probes', 'clusters.depths']
-eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
+eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
 wf, pr, d = one.load(eid, dataset_types=dataset_types)
 
 ## Load #2
@@ -42,7 +42,7 @@ my_data = one.load(eid[0])
 pprint(my_data.dataset_type)
 
 ## Load
-eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
+eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
 dataset_types = ['clusters.probes', 'thisDataset.IveJustMadeUp', 'clusters.depths']
 t, empty, cl = one.load(eid, dataset_types=dataset_types)
 

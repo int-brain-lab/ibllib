@@ -222,8 +222,7 @@ class ONE(OneAbstract):
             for [i, sdt] in enumerate(session_dtypes):
                 if sdt == dt:
                     urlstr = ses['data_dataset_session_related'][i]['data_url']
-
-                    if not dry_run:
+                    if urlstr and not dry_run:
                         rel_path = PurePath(urlstr.replace(par.HTTP_DATA_SERVER, '.')).parents[0]
                         cache_dir = PurePath(par.CACHE_DIR, rel_path)
                         Path(cache_dir).mkdir(parents=True, exist_ok=True)
