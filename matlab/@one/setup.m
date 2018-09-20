@@ -29,4 +29,4 @@ for ff = fieldnames(default_params)'
     par.(ff{1}) = cur_par;
 end
 
-par = io.write.jsonpref('one_params');
+par = io.write.jsonpref('one_params', par);

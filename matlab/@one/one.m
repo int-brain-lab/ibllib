@@ -52,7 +52,10 @@ classdef one
         varargout = list(self, eid, varargin)
         varargout = load(self, eid, varargin)
         [eids, ses] = search(self, varargin)
-        setup(self)
+    end
+    
+    methods (Static)
+         par = setup()
     end
 end
 
