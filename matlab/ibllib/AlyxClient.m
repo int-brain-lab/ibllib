@@ -70,6 +70,9 @@ classdef AlyxClient
             if isempty(strfind(session_url, self.base_url))
                 session_url = [self.base_url '/sessions/' session_url];
             end
+            % query the specific endpoint as the details as a slightly different output
+            is = find(session_url=='/',1,'last');
+            session_url = [session_url(1:is-1) '?id=' session_url(is+1:end) ];
             session_info = self.get(session_url);
          end
          

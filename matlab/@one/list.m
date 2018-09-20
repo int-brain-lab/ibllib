@@ -5,12 +5,12 @@ function varargout = list(self, eid, varargin)
 
 
 %% handle input arguments
-TYPO_PROOF = get_typo_list(eid);
+KEY_NAMES = get_typo_list(eid);
 % substitute eventual typo with the proper parameter name
 for  ia = 1:2:length(varargin)
-    it = find(strcmpi(varargin{ia}, TYPO_PROOF(:,1)),1);
+    it = find(strcmpi(varargin{ia}, KEY_NAMES(:,1)),1);
     if isempty(it), continue; end
-    varargin(ia) = TYPO_PROOF(it,2);
+    varargin(ia) = KEY_NAMES(it,2);
 end
 % parse input arguments
 p = inputParser;
@@ -18,15 +18,21 @@ addOptional(p,'keyword', 'dataset-type');
 parse(p,varargin{:});
 for fn = fieldnames(p.Results)', eval([fn{1} '= p.Results.' (fn{1}) ';']); end
 % make sure a typo in the keyword won't blow up
-ik = find(strcmpi(TYPO_PROOF(:,1), keyword));
-assert(length(ik)==1)
-keyword = TYPO_PROOF{ik,2};
+try
+    ik = find(strcmpi(KEY_NAMES(:,1), keyword));
+    keyword = KEY_NAMES{ik,2};
+catch
+    lc = cellfun(@(x) [newline ' ' x], unique(KEY_NAMES(:,2)), 'UniformOutput', false);
+    error(['Keyword: ' keyword ' is not a field of the session table. Allowed fields are: '...
+        newline  lc{:}])
+end
+
 
 %% redirect to nested functions depending on input configuration
 switch true
     case iscell(eid), recursive_call; return
     case isempty(eid), list_rest_endpoint; return
-    otherwise list_session_field;
+    otherwise, list_session_field;
 end
 
 %% List REST table functionality
@@ -55,6 +61,8 @@ end
                         varargout{n} = unique(cat(1, varargout{n}, tmp{n}));
                     case isstruct(tmp{n})
                         varargout{n} = cat_struct( varargout{n}, tmp{n});
+                    case ischar(tmp{n})
+                        varargout{n} = unique(cat(1, varargout{n}, tmp(n)));
                 end
             end
         end
@@ -75,13 +83,17 @@ end
     end
 
     function list_session_field
+        session_info = self.alyx_client.get_session(eid);
         switch true
             case strcmp(keyword, 'dataset-type')
-                session_info = self.alyx_client.get_session(eid);
                 session_data_info = session_info.data_dataset_session_related;
                 session_data_info.eid = repmat({eid}, size(session_data_info.dataset_type,1),1);
                 dataset_list = unique(session_data_info.dataset_type);
                 varargout = {dataset_list, session_data_info};
+            case strcmp(keyword, 'all')
+                varargout = {session_info, []};
+            otherwise
+                varargout = { session_info.(keyword), []};
         end
     end
 
@@ -89,7 +101,7 @@ end
 
 function tlist = get_typo_list(eid)
 if ~isempty(eid)
-    tlist = {...
+    tlist = cellstr({...
         'subjects',  'subject';...
         'subject',  'subject';...
         'user',  'users';...
@@ -111,9 +123,9 @@ if ~isempty(eid)
         'dataset_type',  'dataset-type';...
         'dtypes',  'dataset-type';...
         'dtype',  'dataset-type';...
-        };
+        });
 else % list for the REST table endpoints
-    tlist = {...
+    tlist = cellstr({...
         'data', 'dataset-types';...
         'dataset', 'dataset-types';...
         'datasets', 'dataset-types';...
@@ -129,6 +141,6 @@ else % list for the REST table endpoints
         'subjects', 'subjects';...
         'lab',  'labs';...
         'labs',  'labs'...
-        };
+        });
 end
 end

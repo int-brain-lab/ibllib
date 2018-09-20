@@ -9,8 +9,9 @@ class TestLoad(unittest.TestCase):
         # Init connection to the database
         one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
                     password='TapetesBloc18')
-        self.eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
-        self.eid2 = '4e0b3320-47b7-416e-b842-c34dc9004cf8'
+        eids = ['cf264653-2deb-44cb-aa84-89b82507028a', '4e0b3320-47b7-416e-b842-c34dc9004cf8']
+        self.eid = eids[0]
+        self.eid2 = eids[1]
         self.One = one
 
     def test_list(self):

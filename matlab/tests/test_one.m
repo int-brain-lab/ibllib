@@ -3,7 +3,7 @@ classdef test_one < matlab.unittest.TestCase
     properties
         one
         eid
-        eid_light
+        eid2
     end
  
     methods(TestMethodSetup)
@@ -29,22 +29,26 @@ classdef test_one < matlab.unittest.TestCase
             testCase.verifyEqual(length(dt),29);
             testCase.verifyEqual(length(details.url),34);
             %% second functionality is a straight query to the endpoint
-            [list ~] = testCase.one.list([],'keyword','data');
+            [list, ~] = testCase.one.list([],'keyword','data');
             testCase.assertTrue(length(list)>40);
             testCase.one.list([],'keyword','subject');
             testCase.one.list([],'keyword','users');
-%             testCase.one.list([],'keyword','labs'); % Need to update Alyx test for this to work
+            lab_list = testCase.one.list([],'keyword','labs'); 
+            testCase.assertTrue(length(lab_list) >=3);
+            %% third functionality is a query on the session table attributes:
+            for key = {'subject', 'users', 'lab', 'type', 'start_time', 'end_time'}
+                dt = testCase.one.list(eids_, 'keyword', key);
+                % this tests that the function aggregates unique sets
+                if any(strcmp(key, {'users','type'}))
+                    testCase.assertTrue(length(dt)==1)
+                else
+                    testCase.assertTrue(length(dt)==2)
+                end
+            end
+            %% This returns a structure of arrays for each session with all fields
+            ses = testCase.one.list(eids_, 'keyword', 'all');
+            testCase.assertTrue(all(structfun(@length, ses)==2))
         end
-%         for eid in EIDs:
-%             dt = one.list(eid)  # returns dataset-type
-%             dt = one.list(eid, details=True)
-%             dt = one.list(eid, keyword='dataset-type')  # returns list
-%             dt = one.list(eid, keyword='dataset-type', details=True)  # returns SessionDataInfo
-%             for key in ('subject', 'users', 'lab', 'type', 'start_time', 'end_time'):
-%                 dt = one.list(eid, keyword=key)  # returns dataset-type
-%                 print(key, ': ', dt)
-%             ses = one.list(eid, keyword='all')
-%             usr, ses = one.list(eid, keyword='users', details=True)
 % 
 %     def test_list_error(self):
 %         one = self.One
