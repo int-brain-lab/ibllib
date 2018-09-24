@@ -266,26 +266,33 @@ def get_stimOn_times(session_path, save=False):
         if 'BNC1High' in tr['behavior_data']['Events timestamps'].keys():
             bnc_h.append(np.array(tr['behavior_data']
                          ['Events timestamps']['BNC1High']))
+        else:
+            bnc_h.append(np.nan)
+        if 'BNC1Low' in tr['behavior_data']['Events timestamps'].keys():
             bnc_l.append(np.array(tr['behavior_data']
                          ['Events timestamps']['BNC1Low']))
         else:
-            bnc_h.append(np.nan)
             bnc_l.append(np.nan)
+
     stim_on = np.array(stim_on)
     bnc_h = np.array(bnc_h)
     bnc_l = np.array(bnc_l)
 
-    vec = []
+    stimOn_times = []
     for s, h, l in zip(stim_on, bnc_h, bnc_l):
-        if h is not np.nan:
-            vec.append([s, h[h > s][0], l[l > s][0]])
-        else:
-            vec.append(np.nan)
-        stimOn_times = [min([x[1]-x[0], x[2]-x[0]])
-                        if x is not np.nan else np.nan for x in vec]
-        sot_max = [max([x[1]-x[0], x[2]-x[0]])
-                   if x is not np.nan else np.nan for x in vec]
-    return stimOn_times, sot_max
+        hl = np.concatenate([h, l])
+        hl.sort()
+        stimOn_times.extend([hl[hl > s][0]])
+
+    # delays = np.asarray(stimOn_times) - np.asarray(stim_on)
+
+    if save:
+        check_alf_folder(session_path)
+        fpath = os.path.join(session_path, 'alf',
+                             '_ibl_trials.stimOn_times.npy')
+        np.save(fpath, np.array(stimOn_times))
+
+    return np.array(stimOn_times)
 
 
 def get_intervals(session_path, save=False):
@@ -475,7 +482,7 @@ def extract_trials(session_path, save=False):
 if __name__ == '__main__':
     SESSION_PATH = "/home/nico/Projects/IBL/IBL-github/iblrig/Subjects/\
 test_mouse/2018-09-19/1"
-    save = True
+    save = False
 
     data = raw.load_data(SESSION_PATH)
 
@@ -491,11 +498,9 @@ test_mouse/2018-09-19/1"
     rewardVolume = get_rewardVolume(SESSION_PATH, save=save)
     feedback_times = get_feedback_times(SESSION_PATH, save=save)
 
-    # TODO: check values!!!!
     stimOn_times = get_stimOn_times(SESSION_PATH, save=save)
 
     intervals = get_intervals(SESSION_PATH, save=save)
     response_times = get_response_times(SESSION_PATH, save=save)
-
 
     print("Done!")
