@@ -401,7 +401,7 @@ def get_response_times(session_path, save=False):
     return rt
 
 
-def get_goCue_times(session_path, save=False):
+def get_goCueTrigger_times(session_path, save=False):
     """
     Get trigger times of goCue from state machine.
 
@@ -430,9 +430,51 @@ def get_goCue_times(session_path, save=False):
     return goCue
 
 
+def get_goCueOnset_times(session_path, save=False):
+    """
+    Get trigger times of goCue from state machine.
+
+    Current software solution for triggering sounds uses PyBpod soft codes.
+    Delays can be in the order of 10's of ms. This is the time when the command
+    to play the sound was executed. To measure accurate time, either getting the
+    sound onset from the future microphone OR the new xonar soundcard and
+    setup developed by Sanworks guarantees a set latency (in testing).
+
+    :param session_path: Absoulte path of session folder
+    :type session_path: str
+    :param save: wether to save the corresponding alf file
+                 to the alf folder, defaults to False
+    :param save: bool, optional
+    :return: numpy.ndarray
+    :rtype: dtype('float64')
+    """
+    data = raw.load_data(session_path)
+    goCue = np.array([tr['behavior_data']['States timestamps']
+                      ['closed_loop'][0][0] for tr in data])
+    if save:
+        check_alf_folder(session_path)
+        fpath = os.path.join(session_path, 'alf',
+                             '_ibl_trials.goCue_times.npy')
+        np.save(fpath, goCue)
+    return goCue
+
+
+def extract_trials(session_path, save=False):
+    data = raw.load_data(session_path)
+    feedbackType = get_feedbackType(session_path, save=save)
+    contrastLeft, contrastRight = get_contrastLR(session_path, save=save)
+    choice = get_choice(session_path, save=save)
+    repNum = get_repNum(session_path, save=save)
+    rewardVolume = get_rewardVolume(session_path, save=save)
+    feedback_times = get_feedback_times(session_path, save=save)
+    stimOn_times = get_stimOn_times(session_path, save=save)
+    intervals = get_intervals(session_path, save=save)
+    response_times = get_response_times(session_path, save=save)
+
+
 if __name__ == '__main__':
-    SESSION_PATH = "/home/nico/Projects/IBL/IBL-github/iblrig/pybpod_data/\
-test_mouse/2018-07-31/1/"
+    SESSION_PATH = "/home/nico/Projects/IBL/IBL-github/iblrig/Subjects/\
+test_mouse/2018-09-19/1"
     save = True
 
     data = raw.load_data(SESSION_PATH)
