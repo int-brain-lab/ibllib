@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import requests
 import json
-
+from ibllib.misc import pprint
 
 def http_download_file_list(links_to_file_list, **kwargs):
     """
@@ -134,6 +134,7 @@ class AlyxClient:
     """
     _token = ''
     _headers = ''
+    _rest_schemes = ''
 
     def __init__(self, **kwargs):
         """
@@ -149,6 +150,21 @@ class AlyxClient:
         :type base_url: str
         """
         self.authenticate(**kwargs)
+        self._rest_schemes = self.get('/docs')
+        # the mixed accept application may cause errors sometimes, only necessary for the docs
+        self._headers['Accept'] = 'application/json'
+
+    def _generic_request(self, reqfunction, rest_query, data=None):
+        rest_query = rest_query.replace(self._base_url, '')
+        r = reqfunction(self._base_url + rest_query, stream=True, headers=self._headers,
+                         data=data)
+        if r and r.status_code in (200, 201):
+            return json.loads(r.text)
+        elif r and r.status_code == 204:
+            return
+        else:
+            print(self._base_url + rest_query)
+            raise Exception(r)
 
     def authenticate(self, username='', password='', base_url=''):
         """
@@ -172,9 +188,23 @@ class AlyxClient:
                             './oneibl/params_secret.py')
         self._headers = {
                 'Authorization': 'Token {}'.format(list(self._token.values())[0]),
-                'Accept': 'application/json',
+                'Accept': 'application/coreapi+json',
                 'Content-Type': 'application/json',
             }
+
+    def delete(self, rest_query):
+        """
+        Sends a DELETE request to the Alyx server. Will raise an exception on any status_code
+        other than 200, 201.
+
+        :param rest_query: examples:
+         '/weighings/c617562d-c107-432e-a8ee-682c17f9e698'
+         'https://test.alyx.internationalbrainlab.org/weighings/c617562d-c107-432e-a8ee-682c17f9e698'.
+        :type rest_query: str
+
+        :return: (dict/list) json interpreted dictionary from response
+        """
+        return self._generic_request(requests.delete, rest_query)
 
     def get(self, rest_query):
         """
@@ -188,20 +218,15 @@ class AlyxClient:
 
         :return: (dict/list) json interpreted dictionary from response
         """
-        rest_query = rest_query.replace(self._base_url, '')
-        r = requests.get(self._base_url + rest_query, stream=True, headers=self._headers,
-                         data=None)
-        if r and r.status_code in (200, 201):
-            return json.loads(r.text)
-        else:
-            print(self._base_url + rest_query)
-            raise Exception(r)
+        return self._generic_request(requests.get, rest_query)
 
     def post(self, rest_query, data=None):
         """
         Sends a POST request to the Alyx server.
         For the dictionary contents, refer to:
         https://alyx.internationalbrainlab.org/docs
+        The preferred and safer way to interact with the REST API is by
+         using the AlyxClient.rest method
 
         :param rest_query: (required)the endpoint as full or relative URL
         :type rest_query: str
@@ -212,7 +237,65 @@ class AlyxClient:
         """
         if isinstance(data, dict):
             data = json.dumps(data)
-        rest_query = rest_query.replace(self._base_url, '')
-        r = requests.post(self._base_url + rest_query, stream=True, headers=self._headers,
-                          data=data)
-        return r
+        return self._generic_request(requests.post, rest_query, data=data)
+
+    def rest(self, endpoint=None, action=None, data=None):
+        """
+        alyx_client.rest()
+        alyx_client.rest("sessions")
+        lab_info = alyx_client.rest('labs', 'read', 'mainenlab')
+        OR
+        lab_info = alyx_client.rest('labs', 'read', 'https://test.alyx.internationalbrainlab.org/labs/mainenlab')
+
+        :param endpoint:
+        :param action:
+        :param data:
+        :return:
+        """
+        # if endpoint is None, list available endpoints
+        if not endpoint:
+            pprint([k for k in self._rest_schemes.keys() if not k.startswith('_') and k])
+            return
+        # allow the user to enter an endpoint beginning with a slash
+        if endpoint.startswith('/'):
+            endpoint = endpoint[1:]
+        # make sure the queryied endpoint exists, if not throw an informative error
+        if endpoint not in self._rest_schemes.keys():
+            av = [k for k in self._rest_schemes.keys() if not k.startswith('_') and k]
+            raise ValueError('REST endpoint "' + endpoint + '" does not exist. Available ' +
+                             'endpoints are \n       ' + '\n       '.join(av))
+        endpoint_scheme = self._rest_schemes[endpoint]
+        # if action is None, list available actions for the required endpoint
+        if not action:
+            pprint(list(endpoint_scheme.keys()))
+            return
+        # make sure the the desired action exists, if not throw an informative error
+        if action not in endpoint_scheme.keys():
+            raise ValueError('Action "' + action + '" for REST endpoint "' + endpoint + '" does ' +
+                             'not exist. Available actions are: ' +
+                             '\n       ' + '\n       '.join(endpoint_scheme.keys()))
+        # if there is no data (except for list), show the user a list of fields
+        if action != 'list' and not data:
+            pprint(endpoint_scheme[action]['fields'])
+            return
+        if action == 'list':
+            assert(endpoint_scheme[action]['action'] == 'get')
+            return self.get('/' + endpoint)
+        if action == 'read':
+            assert(endpoint_scheme[action]['action'] == 'get')
+            return self.get('/' + endpoint + '/' + data.split('/')[-1])
+        elif action == 'create':
+            assert(endpoint_scheme[action]['action'] == 'post')
+            return self.post('/' + endpoint, data)
+        elif action == 'delete':
+            assert(endpoint_scheme[action]['action'] == 'delete')
+            return self.delete('/' + endpoint + '/' + data.split('/')[-1])
+        # TODO BELOW: implement and unit-tests
+        elif action == 'update':
+            assert(endpoint_scheme[action]['action'] == 'put')
+            pass
+        elif action == 'partial_update':
+            assert(endpoint_scheme[action]['action'] == 'patch')
+            pass
+
+
