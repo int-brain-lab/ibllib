@@ -17,7 +17,7 @@ classdef AlyxClient
             % ac = AlyxClient()
             % ac = AlyxClient('user','test','password','pass','base_url',...
             %                 'https://test.alyx.internationalbrainlab.org');
-            prefs = self.getparameters();
+            prefs = self.getparameters(length(varargin)<6);
             % Handle input arguments, input arguments always overwrite preferences
             p = inputParser;
             addParameter(p,'user', prefs.user, @isstr)
@@ -42,11 +42,16 @@ classdef AlyxClient
             self.weboptions.HeaderFields = { 'Authorization', ['Token ' self.token]};
         end
         
-        function prefs = getparameters(self)
+        function prefs = getparameters(self, prompt)
             % Get parameters from preferences
+            if nargin==0, prompt = true; end
             prefs = getpref('Alyx');
             if isempty(prefs)
-                self.setup;
+                if ~prompt
+                    prefs = struct('base_url','','user','','password','');
+                    return
+                end
+                self.setup(prompt);
                 prefs = getpref('Alyx');
             end
         end
@@ -79,7 +84,11 @@ classdef AlyxClient
          function rep = post(self,end_point, request_struct)
             % rep = post(url, request_struct)
             url = [self.base_url  end_point];
-            rep = webwrite(url,  jsonencode(request_struct), setfield(self.weboptions, 'RequestMethod', 'post') );
+            try
+                rep = webwrite(url,  jsonencode(request_struct), setfield(self.weboptions, 'RequestMethod', 'post') );
+            catch ME
+                error(['Connection issue while connecting to Alyx. Check your credentials !' newline ME.message])
+            end
         end
 %          function create_session(self, session_structure)
 %              % self.create_session(session_structure)
@@ -105,6 +114,7 @@ classdef AlyxClient
                                'user','test_user',...
                                'password','');
             end
+            if ~prompt, return, end
             % prompt for address
             base_url = input(['Alyx full URL: (example: https://test.alyx.internationalbrainlab.org), (current: ' prefs.base_url ') '], 's');
             if ~isempty(base_url)
@@ -117,7 +127,7 @@ classdef AlyxClient
             end
             % prompts for password
             % prefs.password
-            password = passwordUI();
+            password =  gui_password('DialogTitle', 'Enter password for Alyx instance');
             if ~isempty(password)
                 prefs.password = password;
             end

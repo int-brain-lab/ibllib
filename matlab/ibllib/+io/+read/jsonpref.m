@@ -10,6 +10,5 @@ par = fread(fid,Inf,'*char')';
 fclose(fid);
 
 par = jsondecode(par);
-
 end
 
