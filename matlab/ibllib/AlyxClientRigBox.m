@@ -27,12 +27,12 @@ classdef AlyxClientRigBox < AlyxClient
             else
                 block_files = io.dir(chem, 'pattern', '*_Block.mat', 'recursive', true);
             end
-            for m =103:length(block_files)
+            for m =1:length(block_files)
                 disp([ num2str(m,'%03.0f/') num2str(length(block_files),'%03.0f') '   '  block_files{m}])
                 d = load(block_files{m});
                 cpath = fileparts(block_files{m});
-                npy_exist = isempty(io.dir(cpath, 'pattern', '_ibl_*'));
-                npy_exist = npy_exist && isempty(io.dir(cpath, 'pattern', '_rigbox_*'));
+                npy_exist = ~isempty(io.dir(cpath, 'pattern', '_ibl_*'));
+                npy_exist = npy_exist && ~isempty(io.dir(cpath, 'pattern', '_rigbox_*'));
                 if npy_exist && ~force, continue, end
                 switch true
                     case ispc
