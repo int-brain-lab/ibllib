@@ -37,7 +37,11 @@ classdef AlyxClient
     methods (Access=private)
         function self = authenticate(self)
             % REST query to authenticate against Alyx and get an access token
-            rep = self.post('/auth-token', struct('username', self.user, 'password', self.password));
+            try
+                rep = self.post('/auth-token', struct('username', self.user, 'password', self.password));
+            catch ME
+                error(['Connection issue while connecting to Alyx. Check your credentials !' char(10) ME.message])
+            end
             self.token = rep.token;
             self.weboptions.HeaderFields = { 'Authorization', ['Token ' self.token]};
         end
@@ -82,14 +86,10 @@ classdef AlyxClient
          end
          
          function rep = post(self,end_point, request_struct)
-            % rep = post(url, request_struct)
-            url = [self.base_url  end_point];
-            try
-                rep = webwrite(url,  jsonencode(request_struct), setfield(self.weboptions, 'RequestMethod', 'post') );
-            catch ME
-                error(['Connection issue while connecting to Alyx. Check your credentials !' newline ME.message])
-            end
-        end
+             % rep = post(url, request_struct)
+             url = [self.base_url  end_point];
+             rep = webwrite(url,  jsonencode(request_struct), setfield(self.weboptions, 'RequestMethod', 'post') );
+         end
 %          function create_session(self, session_structure)
 %              % self.create_session(session_structure)
 %             %  session =  struct with fields: 

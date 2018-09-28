@@ -1,6 +1,8 @@
-classdef one
-    %ONE Summary of this class goes here
-    %   Detailed explanation goes here
+classdef One
+    
+% myone = One()
+% myone = One('alyx_url','https://test.alyx.internationalbrainlab.org',...
+%             'alyx_login','test_user','alyx_pwd','pass');
     
     properties
         alyx_client
@@ -9,11 +11,7 @@ classdef one
     end
     
     methods
-        function self = one(varargin)
-            % myone = one()
-            % myone = one('alyx_url','https://test.alyx.internationalbrainlab.org',...
-            %             'alyx_login','test_user','alyx_pwd','pass');
-            
+        function self = One(varargin)
             % Init preferences and parse input arguments
             self.par = io.read.jsonpref('one_params');
             if isempty(self.par), self.par = self.setup; end 

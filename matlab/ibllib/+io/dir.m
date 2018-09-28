@@ -1,6 +1,6 @@
 function file_list = dir(chem, varargin)
-% file_list = io.dir(folder_path, filter)
-% file_list = io.dir(folder_path, filter, 'recursive', false)
+% file_list = io.dir(folder_path, 'pattern', filter)
+% file_list = io.dir(folder_path, 'pattern', filter, 'recursive', false)
 % recursive: default is true (not implemented yet)
 % returns a cell-array list of full file paths 
 

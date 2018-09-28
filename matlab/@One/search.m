@@ -1,4 +1,8 @@
 function [eids,ses] = search(self,varargin)
+% [eids,ses] = one.search('keyword', values)
+% [eids,ses] = one.search('subjects', 'LEW008')
+% [eids,ses] = one.search(..., 'users', {'miles', 'morgan'}) % sessions with 2 users miles and morgan
+% [eids,ses] = one.search(..., 'date-range', datenum([2018 8 28 ; 2018 8 31]) )
 
 %% Typo proof parameters
 % first column are possible input arguments and values are actual fields
