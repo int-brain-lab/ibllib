@@ -14,7 +14,8 @@ The connections settings are defined in a json parameter file. The setup() stati
 One.setup
 ```
 Another manner is to update the file manually. In Linux, the file is in:
-~/.one_params, in Windows it's in the Roaming App directory (the function io.getappdir will return the directory).
+(~/.one_params), in Windows it's in the Roaming App directory (C:\Users\olivier\AppData\Roaming\.one_params) 
+The function io.getappdir will return the directory in case of doubt.
 
 ## Initialization
 The next step is to instantiate a one object with the credentials we've created. 

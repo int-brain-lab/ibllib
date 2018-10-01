@@ -57,7 +57,7 @@ Set Path, add with subfolders the '.\ibllib\matlab' directory.
 
 
 ```matlab
-one.setup
+One.setup
 
 ```
 
