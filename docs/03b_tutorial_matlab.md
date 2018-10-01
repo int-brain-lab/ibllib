@@ -1,11 +1,9 @@
-# ONE Tutorial
+# ONE Tutorial Matlab
 
 Before you begin, make sure you have installed ibllib properly on your system as per the instructions.
 For this tutorial we will be connecting to a  test database with a test user.
 
-
-## First connection to a database - setup
-
+## Initialization
 
 The first step is to instantiate the One class. In the IBL case, the class has to be instantiated: behind the scenes, the constructor connects to our cloud database and gets credentials.
 The connections settings are defined in a json parameter file. The setup() static method allows to update parameters via an user prompt.
@@ -17,7 +15,6 @@ Another manner is to update the file manually. In Linux, the file is in:
 (~/.one_params), in Windows it's in the Roaming App directory (C:\Users\olivier\AppData\Roaming\.one_params) 
 The function io.getappdir will return the directory in case of doubt.
 
-## Initialization
 The next step is to instantiate a one object with the credentials we've created. 
 ```matlab
 one = One();
