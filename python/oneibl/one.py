@@ -9,21 +9,21 @@ import requests
 import oneibl.params
 
 _ENDPOINTS = {  # keynames are possible input arguments and values are actual endpoints
-     'data': 'dataset-types',
-     'dataset': 'dataset-types',
-     'datasets': 'dataset-types',
-     'dataset-types': 'dataset-types',
-     'dataset_types': 'dataset-types',
-     'dataset-type': 'dataset-types',
-     'dataset_type': 'dataset-types',
-     'dtypes': 'dataset-types',
-     'dtype': 'dataset-types',
-     'users': 'users',
-     'user': 'users',
-     'subject': 'subjects',
-     'subjects': 'subjects',
-     'labs': 'labs',
-     'lab': 'labs'}
+    'data': 'dataset-types',
+    'dataset': 'dataset-types',
+    'datasets': 'dataset-types',
+    'dataset-types': 'dataset-types',
+    'dataset_types': 'dataset-types',
+    'dataset-type': 'dataset-types',
+    'dataset_type': 'dataset-types',
+    'dtypes': 'dataset-types',
+    'dtype': 'dataset-types',
+    'users': 'users',
+    'user': 'users',
+    'subject': 'subjects',
+    'subjects': 'subjects',
+    'labs': 'labs',
+    'lab': 'labs'}
 
 _SESSION_FIELDS = {  # keynames are possible input arguments and values are actual fields
     'subjects': 'subject',
@@ -86,7 +86,7 @@ class SessionDataInfo:
     """
     Dataclass that provides dataset list, dataset_id, local_path, dataset_type, url and eid fields
     """
-    data:  list = field(default_factory=list)
+    data: list = field(default_factory=list)
     dataset_id: list = field(default_factory=list)
     local_path: list = field(default_factory=list)
     dataset_type: list = field(default_factory=list)
@@ -100,8 +100,8 @@ class SessionDataInfo:
         str_out = ''
         d = self.__dict__
         for k in d.keys():
-            str_out += (k + '    : ' + str(type(d[k])) + ' , ' + str(len(d[k])) + ' items = '
-                        + str(d[k][0])) + '\n'
+            str_out += (k + '    : ' + str(type(d[k])) + ' , ' + str(len(d[k])) + ' items = ' +
+                        str(d[k][0])) + '\n'
         return str_out
 
 
@@ -122,11 +122,16 @@ class ONE(OneAbstract):
 
         :param eid: Experiment ID, for IBL this is the UUID String of the Session as per Alyx
          database. Example: '698361f6-b7d0-447d-a25d-42afdef7a0da'
-
          If None, returns the set of possible values. Only for the following keys:
          ('users', 'dataset-types', subjects')
-
         :type eid: str or list of strings
+
+        :param keyword: The attribute to be listed.
+        :type keyword: str
+
+        :param details: returns a second argument with a full dictionary to provide context
+        :type details: bool
+
 
         :return: list of strings, plus list of dictionaries if details option selected
         :rtype:  list, list

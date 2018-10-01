@@ -1,7 +1,7 @@
-function varargout = RunTests(files)
-% RunTests() %prints a list of tests available to run
-% results = RunTests('All'); runs all available tests
-% results = RunTests('/home/owinter/PycharmProjects/IBL_Main/ibllib/matlab/tests/utils/test_flatten.m');
+function varargout = RunTestsIBL(files)
+% RunTestsIBL() %prints a list of tests available to run
+% results = RunTestsIBL('All'); runs all available tests
+% results = RunTestsIBL('/home/owinter/PycharmProjects/IBL_Main/ibllib/matlab/tests/utils/test_flatten.m');
 % runs a single (string) or a list (cell) of tests
 varargout={}; res=[];
 switch true
@@ -14,7 +14,7 @@ switch true
     % 'All' specified, run all the tests found
     case nargin==1 && ischar(files) && strcmpi(files,'All')
         test_files = get_test_files();
-        varargout = {RunTests(test_files)};
+        varargout = {RunTestsIBL(test_files)};
     % Other string, try to use runtests on it
     case nargin==1 && ischar(files) && ~strcmpi(files,'All')
         varargout = {runtests(files)};

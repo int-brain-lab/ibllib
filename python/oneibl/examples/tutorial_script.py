@@ -53,7 +53,7 @@ eid = one.search(users=['olivier'])
 
 eid = one.search(users=['nbonacchi', 'olivier'])
 # with details
-eid, session_details = one.search(users=['nbonacchi', 'olivier'], details=True)
+eid, session_details = one.search(users=['test_user', 'olivier'], details=True)
 pprint(session_details)
 
 ## Search by date

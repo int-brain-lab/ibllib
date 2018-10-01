@@ -1,7 +1,16 @@
 function varargout = list(self, eid, varargin)
-% [dtypes details] = one.list(eid) : returns a cell array containing dataset types belonging to the current session
-% dtypes = one.list('86e27228-8708-48d8-96ed-9aa61ab951db');
-% dtypes = one.list('https://test.alyx.internationalbrainlab.org/sessions/86e27228-8708-48d8-96ed-9aa61ab951db');
+% [dtypes details] = one.list(eid)
+%       gets dataset types belonging to a session. eid can be a string of a
+%       cell array of strings.
+% [dtypes details] = one.list('cf264653-2deb-44cb-aa84-89b82507028a')
+%       dtypes is a cell array containing dataset types belonging to the current session
+%       details is a table containing a record per dataset belonging to the
+%       session with more attributes
+% session_info = one.list(eid,'keyword','all')
+%       returns all metadata about one or several sessions as a strucure
+% attrlist = one.list([],'keyword', 'data')
+%        Lists the range of possible values for the keyword specified.
+%        Keyword can be any of {'labs', 'datasets', 'users', subjects')
 
 
 %% handle input arguments

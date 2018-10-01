@@ -76,7 +76,7 @@ def http_download_file(full_link_to_file, *, clobber=False,
     if verbose:
         print("Downloading: %s Bytes: %s" % (file_name, file_size))
     file_size_dl = 0
-    block_sz = 8192*64*8
+    block_sz = 8192 * 64 * 8
     f = open(file_name, 'wb')
     while True:
         buffer = u.read(block_sz)
@@ -171,10 +171,9 @@ class AlyxClient:
             raise Exception('Alyx authentication error. Check your ./oneibl/params.py and'
                             './oneibl/params_secret.py')
         self._headers = {
-                'Authorization': 'Token {}'.format(list(self._token.values())[0]),
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-            }
+            'Authorization': 'Token {}'.format(list(self._token.values())[0]),
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'}
 
     def get(self, rest_query):
         """
