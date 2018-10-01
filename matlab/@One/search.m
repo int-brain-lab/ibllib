@@ -1,5 +1,6 @@
 function [eids,ses] = search(self,varargin)
 % [eids,ses] = one.search('keyword', values)
+% [eids,ses] = one.search('data', {'channels.brainLocation'})
 % [eids,ses] = one.search('subjects', 'LEW008')
 % [eids,ses] = one.search(..., 'users', {'miles', 'morgan'}) % sessions with 2 users miles and morgan
 % [eids,ses] = one.search(..., 'date-range', datenum([2018 8 28 ; 2018 8 31]) )
@@ -17,7 +18,9 @@ SEARCH_TERMS = {  ...
     'subject', 'subjects';...
     'subjects', 'subjects';...
     'date_range', 'date_range';...
-    'date-range', 'date_range'...
+    'date-range', 'date_range';...
+    'lab', 'labs';...
+    'labs', 'labs';
 };
 % substitute eventual typo with the proper parameter name
 for  ia = 1:2:length(varargin)
@@ -31,14 +34,17 @@ p = inputParser;
 addParameter(p,'dataset_types', {})
 addParameter(p,'users', {})
 addParameter(p,'subjects', {})
+addParameter(p,'labs', {})
 addParameter(p,'date_range', [], @(x) (isnumeric(x) & any(numel(x)==[0 2]) | ischar(x)))
 addParameter(p,'details', false)
 parse(p,varargin{:});
 for fn = fieldnames(p.Results)', eval([fn{1} '= p.Results.' (fn{1}) ';']); end
 %%
+if nargin ==1, eids = SEARCH_TERMS; ses=[]; return, end
 if ischar(dataset_types), dataset_types = {dataset_types}; end
 if ischar(users), users = {users}; end
 if ischar(subjects), subjects = {subjects}; end
+if ischar(labs), labs = {labs}; end
 if ~isempty(date_range) && isa(date_range,'double')
     date_range = mat2cell(datestr(date_range, 'yyyy-mm-dd'),[1 1],10);
 elseif ~isempty(date_range) && ischar(date_range)
@@ -50,6 +56,7 @@ url = append2url(url,'dataset_types', dataset_types);
 url = append2url(url,'users', users);
 url = append2url(url,'subject', subjects);
 url = append2url(url,'date_range', date_range);
+url = append2url(url,'labs', labs);
 
 ses = self.alyx_client.get(url);
 if isempty(ses), [ses, eids] = deal([]); return, end

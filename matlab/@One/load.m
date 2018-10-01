@@ -1,5 +1,7 @@
 function varargout = load(self, eid, varargin)
-
+%[d1, d2, d3] =  one.load(eid, 'data', dataset_types)
+%       For session with UUID eid, Loads the datasets specified in the cell array dataset_types
+% my_data = one.load(eid, 'data', dataset_types, 'dclass_output', true)
 
 %% handle input arguments
 TYPO_PROOF = {  ...

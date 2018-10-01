@@ -67,3 +67,5 @@ Eventually run the suite of Unit tests to check the installation:
 RunTestsIBL('All')
 
 ```
+
+A great place to start is with the tutorials of the next section.

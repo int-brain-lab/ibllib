@@ -39,7 +39,7 @@ classdef test_one < matlab.unittest.TestCase
             for key = {'subject', 'users', 'lab', 'type', 'start_time', 'end_time'}
                 dt = testCase.one.list(eids_, 'keyword', key);
                 % this tests that the function aggregates unique sets
-                if any(strcmp(key, {'users','type'}))
+                if any(strcmp(key, {'type'}))
                     testCase.assertTrue(length(dt)==1)
                 else
                     testCase.assertTrue(length(dt)==2)
