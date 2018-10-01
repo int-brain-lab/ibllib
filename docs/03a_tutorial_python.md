@@ -1,4 +1,4 @@
-# ONE Tutorial
+# ONE Tutorial Python
 
 Before you begin, make sure you have installed ibllib properly on your system as per the instructions.
 For this tutorial we will be connecting to a  test database with a test user.
