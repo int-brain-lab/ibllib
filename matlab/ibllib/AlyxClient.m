@@ -17,7 +17,7 @@ classdef AlyxClient
             % ac = AlyxClient()
             % ac = AlyxClient('user','test','password','pass','base_url',...
             %                 'https://test.alyx.internationalbrainlab.org');
-            prefs = self.getparameters();
+            prefs = self.getparameters(length(varargin)<6);
             % Handle input arguments, input arguments always overwrite preferences
             p = inputParser;
             addParameter(p,'user', prefs.user, @isstr)
@@ -37,16 +37,25 @@ classdef AlyxClient
     methods (Access=private)
         function self = authenticate(self)
             % REST query to authenticate against Alyx and get an access token
-            rep = self.post('/auth-token', struct('username', self.user, 'password', self.password));
+            try
+                rep = self.post('/auth-token', struct('username', self.user, 'password', self.password));
+            catch ME
+                error(['Connection issue while connecting to Alyx. Check your credentials !' char(10) ME.message])
+            end
             self.token = rep.token;
             self.weboptions.HeaderFields = { 'Authorization', ['Token ' self.token]};
         end
         
-        function prefs = getparameters(self)
+        function prefs = getparameters(self, prompt)
             % Get parameters from preferences
+            if nargin==0, prompt = true; end
             prefs = getpref('Alyx');
             if isempty(prefs)
-                self.setup;
+                if ~prompt
+                    prefs = struct('base_url','','user','','password','');
+                    return
+                end
+                self.setup(prompt);
                 prefs = getpref('Alyx');
             end
         end
@@ -57,7 +66,7 @@ classdef AlyxClient
              % rep = get(url)
              % rep = ac.get('/sessions/86e27228-8708-48d8-96ed-9aa61ab951db')
              % rep = ac.get('https://test.alyx.internationalbrainlab.org/sessions/86e27228-8708-48d8-96ed-9aa61ab951db')
-            if ~(strfind(endpoint_url, self.base_url)==1)
+            if isempty(strfind(endpoint_url, self.base_url))
                 endpoint_url = [self.base_url  endpoint_url];
             end
             rep = webread(endpoint_url, self.weboptions);
@@ -70,14 +79,17 @@ classdef AlyxClient
             if isempty(strfind(session_url, self.base_url))
                 session_url = [self.base_url '/sessions/' session_url];
             end
+            % query the specific endpoint as the details as a slightly different output
+            is = find(session_url=='/',1,'last');
+            session_url = [session_url(1:is-1) '?id=' session_url(is+1:end) ];
             session_info = self.get(session_url);
          end
          
          function rep = post(self,end_point, request_struct)
-            % rep = post(url, request_struct)
-            url = [self.base_url  end_point];
-            rep = webwrite(url,  jsonencode(request_struct), setfield(self.weboptions, 'RequestMethod', 'post') );
-        end
+             % rep = post(url, request_struct)
+             url = [self.base_url  end_point];
+             rep = webwrite(url,  jsonencode(request_struct), setfield(self.weboptions, 'RequestMethod', 'post') );
+         end
 %          function create_session(self, session_structure)
 %              % self.create_session(session_structure)
 %             %  session =  struct with fields: 
@@ -102,6 +114,7 @@ classdef AlyxClient
                                'user','test_user',...
                                'password','');
             end
+            if ~prompt, return, end
             % prompt for address
             base_url = input(['Alyx full URL: (example: https://test.alyx.internationalbrainlab.org), (current: ' prefs.base_url ') '], 's');
             if ~isempty(base_url)
@@ -113,8 +126,8 @@ classdef AlyxClient
                 prefs.user = user;
             end
             % prompts for password
-%             prefs.password
-            password = passwordUI();
+            % prefs.password
+            password =  gui_password('DialogTitle', 'Enter password for Alyx instance');
             if ~isempty(password)
                 prefs.password = password;
             end

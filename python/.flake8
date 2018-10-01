@@ -1,0 +1,10 @@
+[flake8]
+ignore =
+exclude =
+    .git,
+    __pycache__,
+    __init__.py,
+    scratch_*.py,
+    tutorial_script.py,
+    test_imports.py,
+max-complexity = 20

@@ -1,18 +1,74 @@
-import oneibl.params_secret as sec
 import os
+from ibllib.io import params
+from getpass import getpass
+from pathlib import Path, PurePath
 
-# BASE_URL = "http://localhost:8000"
-# BASE_URL = 'https://dev.alyx.internationalbrainlab.org'
-BASE_URL = 'https://test.alyx.internationalbrainlab.org'
+_PAR_ID_STR = 'one_params'
 
-ALYX_LOGIN = 'test_user'
-ALYX_PWD = sec.ALYX_PWD
 
-HTTP_DATA_SERVER = r'http://ibl.flatironinstitute.com'
-HTTP_DATA_SERVER_LOGIN = 'iblmember'
-HTTP_DATA_SERVER_PWD = sec.HTTP_DATA_SERVER_PWD  # password for data server
+def default():
+    par = {"ALYX_LOGIN": "test_user",
+           "ALYX_PWD": None,
+           "ALYX_URL": "https://test.alyx.internationalbrainlab.org",
+           "CACHE_DIR": str(PurePath(Path.home(), "Downloads", "FlatIron")),
+           "FTP_DATA_SERVER": "ftp://ibl.flatironinstitute.com",
+           "FTP_DATA_SERVER_LOGIN": "iblftp",
+           "FTP_DATA_SERVER_PWD": None,
+           "HTTP_DATA_SERVER": "http://ibl.flatironinstitute.com",
+           "HTTP_DATA_SERVER_LOGIN": "iblmember",
+           "HTTP_DATA_SERVER_PWD": None,
+           }
+    return params.from_dict(par)
 
-# if empty it will download in the user download directory
-CACHE_DIR = ''
-if CACHE_DIR and not os.path.isdir(CACHE_DIR):
-    os.mkdir(CACHE_DIR)
+
+# first get current and default parameters
+def setup():
+    par_current = params.read(_PAR_ID_STR)
+    par_default = default()
+    if par_current is None:
+        par_current = par_default
+
+    def _get_current_par(k):
+        cpar = getattr(par_current, k, None)
+        if cpar is None:
+            cpar = getattr(par_default, k, None)
+        return cpar
+
+    par = params.as_dict(par_current)
+    for k in par.keys():
+        cpar = _get_current_par(k)
+        if "PWD" not in k:
+            par[k] = input("Param " + k + ",  current value is [" + cpar + "]:") or cpar
+
+    cpar = _get_current_par("ALYX_PWD")
+    prompt = "Enter the Alyx password for " + par["ALYX_LOGIN"] + '(leave empty to keep current):'
+    par["ALYX_PWD"] = getpass(prompt) or cpar
+
+    cpar = _get_current_par("HTTP_DATA_SERVER_PWD")
+    prompt = "Enter the FlatIron HTTP password for " + par["HTTP_DATA_SERVER_LOGIN"] +\
+             '(leave empty to keep current): '
+    par["HTTP_DATA_SERVER_PWD"] = getpass(prompt) or cpar
+
+    cpar = _get_current_par("FTP_DATA_SERVER_PWD")
+    prompt = "Enter the FlatIron FTP password for " + par["FTP_DATA_SERVER_LOGIN"] +\
+             '(leave empty to keep current): '
+    par["FTP_DATA_SERVER_PWD"] = getpass(prompt) or cpar
+
+    # default to home dir if empty dir somehow made it here
+    if len(par['CACHE_DIR']) == 0:
+        par['CACHE_DIR'] = str(PurePath(Path.home(), "Downloads", "FlatIron"))
+
+    par = params.from_dict(par)
+
+    # create directory if needed
+    if par.CACHE_DIR and not os.path.isdir(par.CACHE_DIR):
+        os.mkdir(par.CACHE_DIR)
+    params.write(_PAR_ID_STR, par)
+    print('ONE Parameter file location: ' + params.getfile(_PAR_ID_STR))
+
+
+def get():
+    par = params.read(_PAR_ID_STR)
+    if par is None:
+        setup()
+    return params.read(_PAR_ID_STR)

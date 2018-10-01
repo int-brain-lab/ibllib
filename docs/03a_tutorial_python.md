@@ -1,7 +1,7 @@
 # ONE Tutorial
 
 Before you begin, make sure you have installed ibllib properly on your system as per the instructions.
-For this tutorial we will be connecting to a  test database with a test user. The default paremeters from the git repository have the proper configuration.
+For this tutorial we will be connecting to a  test database with a test user.
 
 [Here](./_static/one_demo.html) is a shorter introduction to the One module in Ipython notebook format.
 
@@ -9,12 +9,21 @@ For this tutorial we will be connecting to a  test database with a test user. Th
 ## Initialize
 
 
-The first step is to import the ONE class. In the IBL case, the class has to be instantiated: behind the scenes, the constructor connects to our cloud database and gets credentials. The connections settings are defined in the *params.py* and the *params_secret.py* files.
+The first step is to import the ONE class. In the IBL case, the class has to be instantiated: behind the scenes, the constructor connects to our cloud database and gets credentials.
+The connections settings are defined in a json parameter file.
 
 ```python
 from oneibl.one import ONE
 one = ONE() # need to instantiate the class to have the API.
 ```
+
+The setup() function allows to update parameters via an user prompt.
+```python
+one.setup()
+```
+Another manner is to update the file manually. In Linux, the file is in:
+~/.one_params, in Windows.
+
 ## Find an experiment
 Each experiment is identified by a unique string known as the "experiment ID" (EID). (In our case, this string points to a URL on our server.) To find an EID, use the one.search command, for example:
 
@@ -26,7 +35,7 @@ pprint(eid)
 returns
 ```
 [
-    "86e27228-8708-48d8-96ed-9aa61ab951db"
+    "cf264653-2deb-44cb-aa84-89b82507028a"
 ]
 ```
 The searchable fields are listed with the following method:
@@ -57,6 +66,7 @@ For example to print a list of the dataset-types, users and subjects in the comm
 one.list(None, 'dataset-types')
 one.list(None, 'users')
 one.list(None, 'subjects')
+one.list(None, 'labs')
 ```
 
 To get all fields, ie. the full contextual information about the session.
@@ -72,7 +82,7 @@ To load data for a given EID, use the `one.load` command:
 
 ```python
 dataset_types = ['clusters.templateWaveforms', 'clusters.probes', 'clusters.depths']
-eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
+eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
 wf, pr, d = one.load(eid, dataset_types=dataset_types)
 ```
 
@@ -122,7 +132,7 @@ eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
 dataset_types = ['clusters.probes', 'thisDataset.IveJustMadeUp', 'clusters.depths']
 t, empty, cl = one.load(eid, dataset_types=dataset_types)
 ```
-Returns an empty list for *cr* so that *t* and *cl* still get assigned the proper values.
+Returns an empty list for *cr* so that *t* and *cl* still get assigned the corresponding datasets values.
 
 
 ## Search method
@@ -147,13 +157,13 @@ pprint(ses_info)
 ```
 
 Here is the simple implementation of the filter, where we query for the EEIDs (sessions) co-owned by
-all of the following users: olivier and niccolo (case-sensitive).
+all of the following users: olivier and test_user (case-sensitive).
 ```python
-eid = one.search(users=['nbonacchi', 'olivier'])
+eid = one.search(users=['test_user', 'olivier'])
 ```
 To get all context information about the returned sessions, use the flag details:
 ```python
-eid, session_details= one.search(users=['nbonacchi', 'olivier'], details=True)
+eid, session_details= one.search(users=['test_user', 'olivier'], details=True)
 ```
 
 The following would get all of the dataset for which olivier is an owner or a co-owner:

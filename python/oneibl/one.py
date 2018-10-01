@@ -3,22 +3,67 @@ import os
 from dataclasses import dataclass, field
 import ibllib.webclient as wc
 from ibllib.misc import is_uuid_string, pprint
-import oneibl.params as par
 import abc
-import pathlib
+from pathlib import Path, PurePath
+import requests
+import oneibl.params
 
-ENDPOINT_LIST = ('dataset-types', 'users', 'subjects')
-SESSION_FIELDS = ('subject', 'users', 'lab', 'type', 'start_time', 'end_time')
-SEARCH_TERMS = ('dataset_types', 'users', 'subjects', 'date_range')
+_ENDPOINTS = {  # keynames are possible input arguments and values are actual endpoints
+    'data': 'dataset-types',
+    'dataset': 'dataset-types',
+    'datasets': 'dataset-types',
+    'dataset-types': 'dataset-types',
+    'dataset_types': 'dataset-types',
+    'dataset-type': 'dataset-types',
+    'dataset_type': 'dataset-types',
+    'dtypes': 'dataset-types',
+    'dtype': 'dataset-types',
+    'users': 'users',
+    'user': 'users',
+    'subject': 'subjects',
+    'subjects': 'subjects',
+    'labs': 'labs',
+    'lab': 'labs'}
 
+_SESSION_FIELDS = {  # keynames are possible input arguments and values are actual fields
+    'subjects': 'subject',
+    'subject': 'subject',
+    'user': 'users',
+    'users': 'users',
+    'lab': 'lab',
+    'labs': 'lab',
+    'type': 'type',
+    'start_time': 'start_time',
+    'start-time': 'start_time',
+    'end_time': 'end_time',
+    'end-time': 'end_time'}
 
-def _cache_directory(cache_dir, ses):
-    if len(cache_dir) == 0:
-        cache_dir = str(pathlib.Path.home()) + os.sep + "Downloads" + os.sep + "FlatIron"
-    cache_dir += os.sep + ses['subject'] + os.sep + ses['start_time'][0:10]
-    cache_dir += os.sep + str(ses['number'])
-    pathlib.Path(cache_dir).mkdir(parents=True, exist_ok=True)
-    return cache_dir
+_LIST_KEYWORDS = dict(_SESSION_FIELDS, **{
+    'all': 'all',
+    'data': 'dataset-type',
+    'dataset': 'dataset-type',
+    'datasets': 'dataset-type',
+    'dataset-types': 'dataset-type',
+    'dataset_types': 'dataset-type',
+    'dataset-type': 'dataset-type',
+    'dataset_type': 'dataset-type',
+    'dtypes': 'dataset-type',
+    'dtype': 'dataset-type'})
+
+SEARCH_TERMS = {  # keynames are possible input arguments and values are actual fields
+    'data': 'dataset_types',
+    'dataset': 'dataset_types',
+    'datasets': 'dataset_types',
+    'dataset-types': 'dataset_types',
+    'dataset_types': 'dataset_types',
+    'users': 'users',
+    'user': 'users',
+    'subject': 'subjects',
+    'subjects': 'subjects',
+    'date_range': 'date_range',
+    'date-range': 'date_range'
+}
+par = oneibl.params.get()
 
 
 class OneAbstract(abc.ABC):
@@ -41,7 +86,7 @@ class SessionDataInfo:
     """
     Dataclass that provides dataset list, dataset_id, local_path, dataset_type, url and eid fields
     """
-    data:  list = field(default_factory=list)
+    data: list = field(default_factory=list)
     dataset_id: list = field(default_factory=list)
     local_path: list = field(default_factory=list)
     dataset_type: list = field(default_factory=list)
@@ -55,16 +100,21 @@ class SessionDataInfo:
         str_out = ''
         d = self.__dict__
         for k in d.keys():
-            str_out += (k + '    : ' + str(type(d[k])) + ' , ' + str(len(d[k])) + ' items = '
-                        + str(d[k][0])) + '\n'
+            str_out += (k + '    : ' + str(type(d[k])) + ' , ' + str(len(d[k])) + ' items = ' +
+                        str(d[k][0])) + '\n'
         return str_out
 
 
 class ONE(OneAbstract):
-
-    def __init__(self, username=par.ALYX_LOGIN, password=par.ALYX_PWD, base_url=par.BASE_URL):
+    def __init__(self, username=par.ALYX_LOGIN, password=par.ALYX_PWD, base_url=par.ALYX_URL):
         # Init connection to the database
-        self._alyxClient = wc.AlyxClient(username=username, password=password, base_url=base_url)
+        try:
+            self._alyxClient = wc.AlyxClient(username=username, password=password,
+                                             base_url=base_url)
+        except requests.exceptions.ConnectionError:
+            raise ConnectionError("Can't connect to " + base_url + '. \n' +
+                                  'IP addresses are filtered on IBL database servers. \n' +
+                                  'Are you connecting from an IBL participating institution ?')
 
     def list(self, eid=None, keyword='dataset-type', details=False):
         """
@@ -72,15 +122,27 @@ class ONE(OneAbstract):
 
         :param eid: Experiment ID, for IBL this is the UUID String of the Session as per Alyx
          database. Example: '698361f6-b7d0-447d-a25d-42afdef7a0da'
-
          If None, returns the set of possible values. Only for the following keys:
          ('users', 'dataset-types', subjects')
-
         :type eid: str or list of strings
+
+        :param keyword: The attribute to be listed.
+        :type keyword: str
+
+        :param details: returns a second argument with a full dictionary to provide context
+        :type details: bool
+
 
         :return: list of strings, plus list of dictionaries if details option selected
         :rtype:  list, list
         """
+        # check and validate the input keyword
+        if keyword.lower() not in set(_LIST_KEYWORDS.keys()):
+            raise KeyError("The field: " + keyword + " doesn't exist in the Session model." +
+                           "\n Here is a list of expected values: " +
+                           str(set(_LIST_KEYWORDS.values())))
+        keyword = _LIST_KEYWORDS[keyword.lower()]  # accounts for possible typos
+
         # recursive call for cases where a list is provided
         if isinstance(eid, list):
             out = []
@@ -107,11 +169,6 @@ class ONE(OneAbstract):
                 return dses
             else:
                 return dlist
-
-        # other cases are about fields of the session alyx model
-        if (keyword.lower() != 'all') and (keyword not in SESSION_FIELDS):
-            raise ValueError("The field: " + keyword + " doesn't exist in the Session model." +
-                             "\n Here is a list of expected values: " + str(SESSION_FIELDS))
 
         # get the session information
         ses = self._alyxClient.get('/sessions?id=' + eid)
@@ -170,12 +227,14 @@ class ONE(OneAbstract):
             for [i, sdt] in enumerate(session_dtypes):
                 if sdt == dt:
                     urlstr = ses['data_dataset_session_related'][i]['data_url']
-                    if not dry_run:
-                        cache_dir = _cache_directory(par.CACHE_DIR, ses)
+                    if urlstr and not dry_run:
+                        rel_path = PurePath(urlstr.replace(par.HTTP_DATA_SERVER, '.')).parents[0]
+                        cache_dir = PurePath(par.CACHE_DIR, rel_path)
+                        Path(cache_dir).mkdir(parents=True, exist_ok=True)
                         fil = wc.http_download_file(urlstr,
                                                     username=par.HTTP_DATA_SERVER_LOGIN,
                                                     password=par.HTTP_DATA_SERVER_PWD,
-                                                    cache_dir=cache_dir)
+                                                    cache_dir=str(cache_dir))
                     else:
                         fil = ''
                     out.eid.append(eid_str)
@@ -214,30 +273,32 @@ class ONE(OneAbstract):
 
         :param table: the table (s) to query among: 'dataset-types','users'
          and 'subjects'; if empty or None assumes all tables
-        :type table: str, list
+        :type table: str
         :param verbose: [False] prints the list in the current window
         :type verbose: bool
 
         :return: list of names to query, list of full raw output in json serialized format
         :rtype: list, list
         """
-        key_name = ('name', 'username', 'nickname')
-        if not table or (table not in ENDPOINT_LIST):
-            raise ValueError("The attribute/endpoint: " + table + " doesn't exist \n" +
-                             "possible values are " + str(ENDPOINT_LIST))
-        table = [table] if isinstance(table, str) else table
+        assert (isinstance(table, str))
+        table_field_names = {
+            'dataset-types': 'name',
+            'users': 'username',
+            'subjects': 'nickname',
+            'labs': 'name'}
+        if not table or table not in list(set(_ENDPOINTS.keys())):
+            raise KeyError("The attribute/endpoint: " + table + " doesn't exist \n" +
+                           "possible values are " + str(set(_ENDPOINTS.values())))
         full_out = []
         list_out = []
-        for ind, tab in enumerate(ENDPOINT_LIST):
-            if tab in table:
-                full_out.append(self._alyxClient.get('/' + tab))
-                list_out.append([f[key_name[ind]] for f in full_out[-1]])
+        for ind, tab in enumerate(_ENDPOINTS):
+            if tab == table:
+                field_name = table_field_names[_ENDPOINTS[tab]]
+                full_out.append(self._alyxClient.get('/' + _ENDPOINTS[tab]))
+                list_out.append([f[field_name] for f in full_out[-1]])
         if verbose:
             pprint(list_out)
-        if len(table) == 1:
-            return list_out[0], full_out[0]
-        else:
-            return list_out, full_out
+        return list_out[0], full_out[0]
 
     def search(self, dataset_types=None, users=None, subjects=None, date_range=None,
                details=False):
@@ -262,7 +323,10 @@ class ONE(OneAbstract):
         """
         # TODO add a lab field in the session table of Alyx to add as a query
         # make sure string inputs are interpreted as lists
-        validate_input = lambda inarg: [inarg] if isinstance(inarg, str) else inarg
+
+        def validate_input(inarg):
+            return [inarg] if isinstance(inarg, str) else inarg
+
         dataset_types = validate_input(dataset_types)
         users = validate_input(users)
         subjects = validate_input(subjects)
@@ -296,3 +360,10 @@ class ONE(OneAbstract):
         """
         #  Implemented as a method to make sure this can't be changed
         return SEARCH_TERMS
+
+    @staticmethod
+    def setup():
+        """
+        Interactive command tool that populates parameter file for ONE IBL.
+        """
+        oneibl.params.setup()

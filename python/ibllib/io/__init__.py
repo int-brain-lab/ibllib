@@ -6,3 +6,5 @@
 from .raw_data_loaders import (load_data, load_settings,
                                load_encoder_positions, load_encoder_events,
                                load_encoder_trial_info)
+
+from .params import (as_dict, from_dict, getfile, read, write)
