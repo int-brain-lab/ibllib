@@ -242,7 +242,7 @@ class Data(object):
 
 
 if __name__ == '__main__':
-    ROOT_DATA_FOLDER = '/home/nico/Projects/IBL/IBL-github/iblrig/pybpod_data'
+    ROOT_DATA_FOLDER = '/home/nico/Projects/IBL/IBL-github/iblrig/Subjects'
     sub = Subject(ROOT_DATA_FOLDER)
     sub.all_names
     sub.all_folders

@@ -206,7 +206,7 @@ def get_rewardVolume(session_path, save=False):
     data = raw.load_data(session_path)
     trial_volume = [x['reward_current']
                     if x['trial_correct'] else 0 for x in data]
-    rewardVolume = np.cumsum(trial_volume)
+    rewardVolume = np.array(trial_volume).astype(np.float64)
     assert len(rewardVolume) == len(data)
     if save:
         check_alf_folder(session_path)
@@ -468,6 +468,7 @@ def get_goCueOnset_times(session_path, save=False):
 
 def extract_trials(session_path, save=False):
     data = raw.load_data(session_path)
+
     feedbackType = get_feedbackType(session_path, save=save)
     contrastLeft, contrastRight = get_contrastLR(session_path, save=save)
     choice = get_choice(session_path, save=save)
@@ -477,30 +478,30 @@ def extract_trials(session_path, save=False):
     stimOn_times = get_stimOn_times(session_path, save=save)
     intervals = get_intervals(session_path, save=save)
     response_times = get_response_times(session_path, save=save)
+    iti_dur = get_iti_duration(session_path, save=save)
 
+
+    # Missing datasettypes
+    # _ibl_trials.goCue_times
+    # _ibl_trials.deadTime
+    # _ibl_trials.probabilityLeft
 
 if __name__ == '__main__':
-    SESSION_PATH = "/home/nico/Projects/IBL/IBL-github/iblrig/Subjects/\
-test_mouse/2018-09-19/1"
-    save = False
+    session_path = "/home/nico/Projects/IBL/IBL-github/iblrig/Subjects/\
+test_mouse/2018-10-02/1"
+    save = True
 
-    data = raw.load_data(SESSION_PATH)
+    data = raw.load_data(session_path)
 
-
-    feedbackType = get_feedbackType(SESSION_PATH, save=save)
-    contrastLeft, contrastRight = get_contrastLR(
-        SESSION_PATH, save=save)
-    choice = get_choice(SESSION_PATH, save=save)
-    rep = np.array([t['contrast']['type'] == 'repeat_contrast' for t in data])
-    repNum = get_repNum(SESSION_PATH, save=save)
-    print(list(zip(rep.astype(int), repNum)))
-
-    rewardVolume = get_rewardVolume(SESSION_PATH, save=save)
-    feedback_times = get_feedback_times(SESSION_PATH, save=save)
-
-    stimOn_times = get_stimOn_times(SESSION_PATH, save=save)
-
-    intervals = get_intervals(SESSION_PATH, save=save)
-    response_times = get_response_times(SESSION_PATH, save=save)
+    feedbackType = get_feedbackType(session_path, save=save)
+    contrastLeft, contrastRight = get_contrastLR(session_path, save=save)
+    choice = get_choice(session_path, save=save)
+    repNum = get_repNum(session_path, save=save)
+    rewardVolume = get_rewardVolume(session_path, save=save)
+    feedback_times = get_feedback_times(session_path, save=save)
+    stimOn_times = get_stimOn_times(session_path, save=save)
+    intervals = get_intervals(session_path, save=save)
+    response_times = get_response_times(session_path, save=save)
+    iti_dur = get_iti_duration(session_path, save=save)
 
     print("Done!")
