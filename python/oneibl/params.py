@@ -7,18 +7,17 @@ _PAR_ID_STR = 'one_params'
 
 
 def default():
-    par = {
-      "ALYX_LOGIN": "test_user",
-      "ALYX_PWD": None,
-      "ALYX_URL": "https://test.alyx.internationalbrainlab.org",
-      "CACHE_DIR": str(PurePath(Path.home(), "Downloads", "FlatIron")),
-      "FTP_DATA_SERVER": "ftp://ibl.flatironinstitute.com",
-      "FTP_DATA_SERVER_LOGIN": "iblftp",
-      "FTP_DATA_SERVER_PWD": None,
-      "HTTP_DATA_SERVER": "http://ibl.flatironinstitute.com",
-      "HTTP_DATA_SERVER_LOGIN": "iblmember",
-      "HTTP_DATA_SERVER_PWD": None,
-      }
+    par = {"ALYX_LOGIN": "test_user",
+           "ALYX_PWD": None,
+           "ALYX_URL": "https://test.alyx.internationalbrainlab.org",
+           "CACHE_DIR": str(PurePath(Path.home(), "Downloads", "FlatIron")),
+           "FTP_DATA_SERVER": "ftp://ibl.flatironinstitute.com",
+           "FTP_DATA_SERVER_LOGIN": "iblftp",
+           "FTP_DATA_SERVER_PWD": None,
+           "HTTP_DATA_SERVER": "http://ibl.flatironinstitute.com",
+           "HTTP_DATA_SERVER_LOGIN": "iblmember",
+           "HTTP_DATA_SERVER_PWD": None,
+           }
     return params.from_dict(par)
 
 
@@ -66,7 +65,6 @@ def setup():
         os.mkdir(par.CACHE_DIR)
     params.write(_PAR_ID_STR, par)
     print('ONE Parameter file location: ' + params.getfile(_PAR_ID_STR))
-
 
 
 def get():

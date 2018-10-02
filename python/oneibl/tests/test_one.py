@@ -8,7 +8,7 @@ class TestLoad(unittest.TestCase):
     def setUp(self):
         # Init connection to the database
         one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
-                    password='TapetesBloc18')
+                  password='TapetesBloc18')
         eids = ['cf264653-2deb-44cb-aa84-89b82507028a', '4e0b3320-47b7-416e-b842-c34dc9004cf8']
         self.eid = eids[0]
         self.eid2 = eids[1]
@@ -43,7 +43,7 @@ class TestLoad(unittest.TestCase):
 
     def test_load(self):
         # Test with 3 actual datasets predefined
-        one= self.One
+        one = self.One
         dataset_types = ['clusters.peakChannel', 'clusters._phy_annotation', 'clusters.probes']
         eid = ('https://test.alyx.internationalbrainlab.org/'
                'sessions/' + self.eid)
@@ -52,15 +52,14 @@ class TestLoad(unittest.TestCase):
         self.assertTrue(np.all(d.data[0] == t))
         # Now load with another dset inbetween that doesn't exist
         t_, cr_, cl_ = one.load(eid, dataset_types=['clusters.peakChannel', 'turlu',
-                                                      'clusters.probes'])
+                                                    'clusters.probes'])
         self.assertTrue(np.all(t == t_))
         self.assertTrue(np.all(cl == cl_))
         self.assertTrue(cr_ is None)
 
-
     def test_load_empty(self):
         # Test with a session that doesn't have any dataset on the Flat Iron
-        one= self.One
+        one = self.One
         eid = self.eid
         dataset_types = ['wheel.velocity', 'wheel.timestamps']
         a, b = one.load(eid, dataset_types=dataset_types)
@@ -68,7 +67,7 @@ class TestLoad(unittest.TestCase):
 
     def test_load_from_uuid(self):
         # Test the query with only the UUID string and not the full URL (no data here)
-        one= self.One
+        one = self.One
         eid = self.eid
         dataset_types = ['wheel.velocity', 'wheel.timestamps']
         aa = one.load(eid, dataset_types=dataset_types)

@@ -1,9 +1,8 @@
 function file_list = dir(chem, varargin)
-% file_list = io.dir(folder_path, filter)
-% file_list = io.dir(folder_path, filter, 'recursive', false)
+% file_list = io.dir(folder_path, 'pattern', filter)
+% file_list = io.dir(folder_path, 'pattern', filter, 'recursive', false)
 % recursive: default is true (not implemented yet)
 % returns a cell-array list of full file paths 
-
 
 %% Input parser
 persistent p; % for recursive calls, avoids setting this up each time
@@ -17,8 +16,8 @@ for fn = fieldnames(p.Results)', eval([fn{1} '= p.Results.' (fn{1}) ';']); end
 %% dir part
 if chem(end) ~= filesep, chem = [ chem, filesep]; end
 file_list = dir([chem pattern]);
-% removes the current and previous directory from the list
-file_list = file_list(arrayfun(@(x) ~all(x.name=='.'), file_list));
+% removes directories from the list
+file_list = file_list(arrayfun(@(x) ~(x.isdir), file_list));
 file_list = arrayfun(@(x) [x.folder filesep x.name], file_list, 'UniformOutput', false);
 
 if ~recursive, return, end

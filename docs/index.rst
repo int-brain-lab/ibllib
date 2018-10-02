@@ -14,7 +14,8 @@ User Manual
 
    01_overview
    02_installation
-   03_tutorial
+   03a_tutorial_python
+   03b_tutorial_matlab
 
 Reference Information on ALF and ONE
 ------------------------------------

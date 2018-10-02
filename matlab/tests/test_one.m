@@ -8,7 +8,7 @@ classdef test_one < matlab.unittest.TestCase
  
     methods(TestMethodSetup)
         function createObject(testCase)
-            testCase.one = one('alyx_login', 'test_user', 'alyx_pwd', 'TapetesBloc18',...
+            testCase.one = One('alyx_login', 'test_user', 'alyx_pwd', 'TapetesBloc18',...
                 'alyx_url', 'https://test.alyx.internationalbrainlab.org');
             testCase.eid = 'cf264653-2deb-44cb-aa84-89b82507028a';
             testCase.eid2 = '4e0b3320-47b7-416e-b842-c34dc9004cf8';
@@ -39,7 +39,7 @@ classdef test_one < matlab.unittest.TestCase
             for key = {'subject', 'users', 'lab', 'type', 'start_time', 'end_time'}
                 dt = testCase.one.list(eids_, 'keyword', key);
                 % this tests that the function aggregates unique sets
-                if any(strcmp(key, {'users','type'}))
+                if any(strcmp(key, {'type'}))
                     testCase.assertTrue(length(dt)==1)
                 else
                     testCase.assertTrue(length(dt)==2)
