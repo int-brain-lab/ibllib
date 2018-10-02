@@ -1,17 +1,17 @@
-function password = passwordUI(varargin)
-% PASSWORDUI  Dialog for entering and creating passwords
-%   PW = PASSWORDUI() brings up a dialog for entering a password.
+function password = gui_password(varargin)
+% gui_password()
+%   PW = gui_password() brings up a dialog for entering a password.
 %       The dialog masks the characters with a "*".
-%   PW = PASSWORDUI(...) accepts up to 3 optional input arguments. The
-%       arguments can be:
-%       MODE - 'Query' or 'Create'. 'Query' asks the user to type the
+%   PW = gui_password(...) accepts parameters
+%       DialogTitle : title of window
+%       uiMode - 'Query' or 'Create'. 'Query' asks the user to type the
 %              password. 'Create' asks the user to create a new password.
 %              This requires the user to type the password twice. Default
 %              is 'Query'.
-%       MIN  - a positive number that indicates the minimum number of
+%       minChar  - a positive number that indicates the minimum number of
 %              characters the password should have. This is only used when
 %              the MODE is 'Create'. Default is 5.
-%       TYPE - 'AlphaOnly', 'NumOnly', 'AlphaNum', or 'AlphaNumSpecial'.
+%       PasswordType - 'AlphaOnly', 'NumOnly', 'AlphaNum', or 'AlphaNumSpecial'.
 %              Restricts the type of password when the MODE is 'Create'.
 %              Default is 'AlphaOnly'.
 %                'AlphaOnly' - Only alphabets.
@@ -24,9 +24,10 @@ function password = passwordUI(varargin)
 %               Special characters:  !"#$%&'()*+,-./:;<=>?@[\]^_`{|}
 %
 %   Examples:
-%       pw = passwordUI()
-%       pw = passwordUI('Create', 'AlphaNum')
-%       pw = passwordUI('Create', 'AlphaOnly', 8)
+%       pw = gui_password()
+%       pw = gui_password('DialogTitle', 'This will be displayed on top')
+%       pw = gui_password('uiMode', 'Create', 'PasswordType', 'AlphaNum')
+%       pw = gui_password('Create', 'AlphaOnly', 8)
 
 % Version History:
 %   1.0 - Oct 2010.
@@ -34,55 +35,25 @@ function password = passwordUI(varargin)
 % Jiro Doke
 % Copyright 2010 The MathWorks, Inc.
 
-narginchk(0, 3);
-
-% Defaults
-uiMode = 'Query';
-minChar = 5;
-passwordType = 'AlphaOnly';
-
-% Process input arguments
-for id = 1:nargin
-    if ischar(varargin{id})
-        val = validatestring(varargin{id}, ...
-            {'Query', 'Create', 'AlphaOnly', 'NumOnly', 'AlphaNum', ...
-            'AlphaNumSpecial'});
-        switch val
-            case {'Query', 'Create'}
-                uiMode = val;
-            case {'AlphaOnly', 'NumOnly', 'AlphaNum', 'AlphaNumSpecial'}
-                passwordType = val;
-        end
-    elseif isnumeric(varargin{id})
-        validateattributes(varargin{id}, {'numeric'}, ...
-            {'scalar', 'integer', 'positive'}, mfilename, 'MIN_CHAR');
-        minChar = varargin{id};
-    else
-        error('JDUTILS:passwordUI:InvalidArguments', ...
-            ['Invalid input arguments. Arguments must be a number ', ...
-            '(minimum number of characters), ''Query'', ''Create'' ', ...
-            '(UI mode), ''AlphaOnly'', ''NumOnly'', ''AlphaNum'', ', ...
-            '''AlphaNumSpecial'' (password type)']);
-    end
-end
+[uiMode, passwordType, minChar, DialogTitle]=deal([]);
+modstr = {'Query', 'Create', 'AlphaOnly', 'NumOnly', 'AlphaNum','AlphaNumSpecial'};
+ptyp = {'AlphaOnly', 'NumOnly', 'AlphaNum', 'AlphaNumSpecial'};
+p = inputParser;
+addParameter(p,'uiMode', 'Query', @(str) any(cellfun(@(x) strcmpi(x,str), modstr)))
+addParameter(p,'passwordType', 'AlphaOnly', @(str) any(cellfun(@(x) strcmpi(x,str), ptyp)))
+addParameter(p,'minChar', 5, @isscalar)
+addParameter(p,'DialogTitle', 'Enter Password:', @isstr)
+parse(p,varargin{:});
+for fn = fieldnames(p.Results)', eval([fn{1} '= p.Results.' (fn{1}) ';']); end
 
 num = 1;
 canceled = false;
 
 while true
-    if strcmp(uiMode, 'Query')      % Query Mode
-        dialogTitle = 'Enter Password:';
-    else                            % Create Mode
-        if num == 1     % First Try
-            dialogTitle = sprintf('Create Password: %s', passwordType);
-        else            % Re-type
-            dialogTitle = sprintf('Retype Password: %s', passwordType);
-        end
-    end
     
     fh = figure(...
         'Visible', 'off', ...
-        'Name', dialogTitle, ...
+        'Name', DialogTitle, ...
         'NumberTitle', 'off', ...
         'Units', 'Pixels', ...
         'Position', [0, 0, 500, 50], ...

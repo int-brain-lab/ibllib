@@ -7,7 +7,10 @@ Syntax may not be preserved among releases.
 https://ibllib.readthedocs.io/en/latest/
 
 ## Installation
-https://ibllib.readthedocs.io/en/develop/02_installation.html
+https://ibllib.readthedocs.io/en/latest/02_installation.html
+
+## Demonstration
+https://ibllib.readthedocs.io/en/latest/_static/one_demo.html
 
 ## Requirements
 **OS**: Linux and Windows. Untested on Mac.
