@@ -15,24 +15,6 @@ import pandas as pd
 from dateutil import parser
 
 
-def load_settings(session_path):
-    """
-    Load PyBpod Settings files (.json).
-
-    [description]
-
-    :param session_path: Absolute path of session folder
-    :type session_path: str
-    :return: Settings dictionary
-    :rtype: dict
-    """
-    path = os.path.join(session_path, "raw_behavior_data",
-                        "_ibl_pycwBasic.settings.json")
-    with open(path, 'r') as f:
-        settings = json.loads(f.readline())
-    return settings
-
-
 def trial_times_to_times(raw_trial):
     """
     Parse and convert all trial timestamps to "absolute" time.
@@ -84,7 +66,7 @@ def load_data(session_path, time='absolute'):
     :rtype: list of dicts
     """
     path = os.path.join(session_path, "raw_behavior_data",
-                        "_ibl_pycwBasic.data.jsonable")
+                        "_ibl_taskData.raw.jsonable")
     data = []
     with open(path, 'r') as f:
         for line in f:
@@ -92,6 +74,24 @@ def load_data(session_path, time='absolute'):
     if time == 'absolute':
         data = [trial_times_to_times(t) for t in data]
     return data
+
+
+def load_settings(session_path):
+    """
+    Load PyBpod Settings files (.json).
+
+    [description]
+
+    :param session_path: Absolute path of session folder
+    :type session_path: str
+    :return: Settings dictionary
+    :rtype: dict
+    """
+    path = os.path.join(session_path, "raw_behavior_data",
+                        "_ibl_taskSettings.raw.json")
+    with open(path, 'r') as f:
+        settings = json.loads(f.readline())
+    return settings
 
 
 def load_encoder_events(session_path):
@@ -124,7 +124,7 @@ def load_encoder_events(session_path):
     :rtype: Pandas.DataFrame
     """
     path = os.path.join(session_path, "raw_behavior_data",
-                        "_ibl_encoderEvents.bonsai_raw.csv")
+                        "_ibl_encoderEvents.raw.ssv")
     data = pd.read_csv(path, sep=' ', header=None)
     data = data.drop([0, 2, 5], axis=1)
     data.columns = ['re_ts', 'sm_ev', 'bns_ts']
@@ -160,7 +160,7 @@ def load_encoder_positions(session_path):
     :rtype: Pandas.DataFrame
     """
     path = os.path.join(session_path, "raw_behavior_data",
-                        "_ibl_encoderPositions.bonsai_raw.csv")
+                        "_ibl_encoderPositions.raw.ssv")
     data = pd.read_csv(path, sep=' ', header=None)
     data = data.drop([0, 4], axis=1)
     data.columns = ['re_ts', 're_pos', 'bns_ts']
@@ -193,7 +193,7 @@ def load_encoder_trial_info(session_path):
     :rtype: Pandas.DataFrame
     """
     path = os.path.join(session_path, "raw_behavior_data",
-                        "_ibl_encoderTrialInfo.bonsai_raw.csv")
+                        "_ibl_encoderTrialInfo.raw.ssv")
     data = pd.read_csv(path, sep=' ', header=None)
     data = data.drop([8], axis=1)
     data.columns = ['trial_num', 'stim_pos_init', 'stim_contrast', 'stim_freq',
@@ -201,15 +201,17 @@ def load_encoder_trial_info(session_path):
     data.bns_ts = pd.Series([parser.parse(x) for x in data.bns_ts])
     return data
 
-
+# Missing raw data file loaders
+# _ibl_ambientSensorData.raw.jsonable
+# _ibl_micData.raw.wav
 if __name__ == '__main__':
-    SESSION_PATH = "/home/nico/Projects/IBL/IBL-github/iblrig/pybpod_data/\
+    session_path = "/home/nico/Projects/IBL/IBL-github/iblrig/pybpod_data/\
 test_mouse/2018-07-31/1/"
 
-    settings = load_settings(SESSION_PATH)
-    data = load_data(SESSION_PATH)
-    eEvents = load_encoder_events(SESSION_PATH)
-    ePos = load_encoder_positions(SESSION_PATH)
-    eTI = load_encoder_trial_info(SESSION_PATH)
+    settings = load_settings(session_path)
+    data = load_data(session_path)
+    eEvents = load_encoder_events(session_path)
+    ePos = load_encoder_positions(session_path)
+    eTI = load_encoder_trial_info(session_path)
 
     print("Done!")
