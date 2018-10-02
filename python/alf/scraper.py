@@ -108,8 +108,8 @@ class Session(object):
     def name_from_folder(folder_or_list):
         if isinstance(folder_or_list, str):
             folder_or_list = [folder_or_list]
-        return ['{0}{2}{1}'.format(*y[-2:], os.path.sep) for y in
-                [x.split('/') for x in folder_or_list]]
+        return ['{0}{3}{1}{3}{2}'.format(*y[-3:], os.path.sep) for y in
+                [x.split(os.path.sep) for x in folder_or_list]]
 
     @property
     def all_names(self):
