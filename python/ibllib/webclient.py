@@ -280,7 +280,10 @@ class AlyxClient:
             return
         if action == 'list':
             assert(endpoint_scheme[action]['action'] == 'get')
-            return self.get('/' + endpoint)
+            url = '/' + endpoint
+            if data:
+                url = url + data
+            return self.get(url)
         if action == 'read':
             assert(endpoint_scheme[action]['action'] == 'get')
             return self.get('/' + endpoint + '/' + data.split('/')[-1])
@@ -297,5 +300,3 @@ class AlyxClient:
         elif action == 'partial_update':
             assert(endpoint_scheme[action]['action'] == 'patch')
             pass
-
-
