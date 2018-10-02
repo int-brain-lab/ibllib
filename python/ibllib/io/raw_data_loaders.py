@@ -174,6 +174,10 @@ def load_encoder_trial_info(session_path):
 
     Assumes that a folder calles "raw_behavior_data" exists in folder.
 
+    NOTE: Last trial probably inexistent data (Trial info is sent on trial start
+    and data is only saved on trial exit...) max(trialnum) should be N+1 if N
+    is the amount of trial data saved.
+
     Raw datafile Columns:
 
     >>> data.columns
@@ -205,8 +209,8 @@ def load_encoder_trial_info(session_path):
 # _ibl_ambientSensorData.raw.jsonable
 # _ibl_micData.raw.wav
 if __name__ == '__main__':
-    session_path = "/home/nico/Projects/IBL/IBL-github/iblrig/pybpod_data/\
-test_mouse/2018-07-31/1/"
+    session_path = "/home/nico/Projects/IBL/IBL-github/iblrig/Subjects/\
+test_mouse/2018-10-02/1"
 
     settings = load_settings(session_path)
     data = load_data(session_path)
