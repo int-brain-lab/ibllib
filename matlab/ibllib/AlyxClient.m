@@ -29,7 +29,10 @@ classdef AlyxClient
             if isempty(self.base_url), self.base_url = prefs.base_url; end
             if isempty(self.user)    , self.user     = prefs.user;     end
             % setup weboptions for REST queries
-            self.weboptions = weboptions('MediaType','application/json','Timeout',self.timeout );      
+            self.weboptions = weboptions(...
+                'MediaType','application/json',...
+                'Timeout',self.timeout, ...
+                'CertificateFilename',''); %R2016b does not handle certificates well
             self = self.authenticate();
         end
     end
