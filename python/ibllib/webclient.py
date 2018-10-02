@@ -150,6 +150,7 @@ class AlyxClient:
         :type base_url: str
         """
         self.authenticate(**kwargs)
+        self._headers['Accept'] = 'application/coreapi+json'
         self._rest_schemes = self.get('/docs')
         # the mixed accept application may cause errors sometimes, only necessary for the docs
         self._headers['Accept'] = 'application/json'
