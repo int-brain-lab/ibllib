@@ -9,7 +9,7 @@ Set the Matlab path, add with subfolders the '.\ibllib\matlab' directory.
 
 The first step is to instantiate the **One class**: behind the scenes, the constructor connects to the IBL cloud database and gets credentials. 
 
-The connections settings are defined in a json parameter file (named *.one_params*).
+The connections settings are defined in a JSON parameter file (named *.one_params*).
 In Linux, the file is in `~/.one_params`.
 In Windows, the file is in the Roaming App directory `C:\Users\olivier\AppData\Roaming\.one_params`.
 In Mac OS, the file is in the user directory `/Users/olivier/.one_params`.
@@ -36,21 +36,22 @@ FTP_DATA_SERVER: 		% Should be automatically set as: ftp://ibl.flatironinstitute
 FTP_DATA_SERVER_LOGIN:	% Should be automatically set as: iblftp - press ENTER
 FTP_DATA_SERVER_PWD		% Request Password for FTP from Olivier
 HTTP_DATA_SERVER: 		% Should be automatically set as: http://ibl.flatironinstitute.org  - press ENTER 
-HTTP_DATA_SERVER_LOGIN: % Should be automatically set as: current: iblmember  - press ENTER
+HTTP_DATA_SERVER_LOGIN: % Should be automatically set as: iblmember  - press ENTER
 HTTP_DATA_SERVER_PWD	% Request Password for HTTP from Olivier
 ```
 
 The path to the *.one_params* file is displayed in the Matlab prompt as `ans`.
 
-**Note that using `One.setup` changes the JSON file.**
+**Note that using `One.setup` changes the JSON *.one_params* file.**
 
 
 
-2. Update the *.one_params* file manually, for example via a text editor.
+2. Update the JSON *.one_params* file manually, for example via a text editor.
 
 
 Once the connections settings are defined, there is no need to instantiate the class One again if willing to connect with the credentials saved in the JSON *.one_params* file.
-The tutorial in the next section will show you how to change credentials withough changing the JSON file (useful for seldom connection).
+
+The tutorial in the next section will show you how to change credentials withough changing the JSON file (useful for seldom connection with different credentials).
 
 
 
@@ -63,8 +64,8 @@ RunTestsIBL('All')
 
 ```
 
-If you see any Failure message, report on GitHub or contact Olivier.
-If not, you are ready for the tutorial of the next section !
+If you see any Failure message, please report on GitHub or contact Olivier.
+If not, you are ready for the tutorial - go to next section !
 
 
 # ONE Matlab Tutorial
@@ -83,43 +84,56 @@ one = One();
 
 ### With different connection settings for single time use
 
-For this tutorial we will be connecting to a **test database** with a **test user**. As these credentials will be use for this tutorial only, we do not want to change the base parameters of the JSON *.one_params* file.
+For this tutorial we will be connecting to a **test database** with a **test user**. As these credentials will be used for this tutorial only, we do not want to change the base parameters of the JSON *.one_params* file.
 
 To change the credentials without changing the JSON *.one_params* file, type:
 ```matlab
-one = One('alyx_login', 'test_user', 'alyx_pwd', 'TapetesBloc18',...
-               'alyx_url', 'https://test.alyx.internationalbrainlab.org');
+one = One(	'alyx_login', 'test_user', ...
+			'alyx_pwd', 'TapetesBloc18', ...
+			'alyx_url', 'https://test.alyx.internationalbrainlab.org');
 ```
 
-
+You now have created an one object. This object has several fields, the following are of interest for analysis. Type help to retrieve the documentation on each field:
+```matlab
+help one.list
+help one.load
+help one.search
+```
 
 ## Find an experiment
 
-Each experiment is identified by a unique string known as the "experiment ID" (EID). (In our case, this string points to a URL on our server.) To find an EID, use the one.search command, for example:
+Each experiment is identified by a unique string known as the "experiment ID" (EID). To find an EID, use the `one.search` command.
+
+
+The following example shows how to find the experiment(s) performed by the user `olivier`, on the 24 Aug 2018:
 
 ```matlab
-[eid, ses] = one.search('users', 'olivier', 'date_range', datenum([2018 8 24 ; 2018 8 24])) ;
-
+[eid, ses] = one.search('users', {'olivier'}, 'date_range', datenum([2018 8 24 ; 2018 8 24])) ;
 ```
 returns
-```
+```matlab
 eid =
-
     'cf264653-2deb-44cb-aa84-89b82507028a'
 ```
 The searchable fields are listed by calling the search method with no parameters:
-```
-one.search()
+```matlab
+one.search
 
+% Example search keywords: 
+	'dataset_types'
+	'date_range'
+	'labs'
+	'subjects'
+	'users'
 ```
 
 ## List method
 Once you know the EID, you can list all the datasets for the experiment using the list command:
-```
+```matlab
 one.list(eid)
 ``` 
 returns
-```
+```matlab
 ans =
 
   29×1 cell array
@@ -155,7 +169,7 @@ ans =
     {'spontaneous.intervals'     }
 ```
 
-For more detailed datasets info, this will return a dataclass with dataset_type, url and dataset_id fields among others:
+For more detailed datasets info, this command will return a dataclass with `dataset_type`, `data_url` and `dataset_id` fields amongst others:
 ```matlab
 [dtypes details] = one.list(eid);
 details = 
@@ -171,7 +185,7 @@ details =
              eid: {29×1 cell}
 
 ```
-To get all fields, ie. the full contextual information about the session.
+To get the full contextual information about the session, get all fields:
 ```matlab
 ses_info = one.list(eid, 'keyword', 'all')
 ```
