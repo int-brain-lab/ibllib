@@ -4,6 +4,7 @@
 repository_name = 'mainenlab_rig01' ; 
 excluded_subjects = {'default'};
 chem = '/home/owinter/Documents/IBL/CCU_matlab_data/subjects';
+% those passwords have been changed on the database
 % one = One('alyx_login','root','alyx_pwd','Empusa77','alyx_url','https://dev.alyx.internationalbrainlab.org');
 one = One('alyx_login','root','alyx_pwd','Empusa77','alyx_url','http://localhost:8000');
 
