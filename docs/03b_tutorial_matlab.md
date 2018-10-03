@@ -1,26 +1,100 @@
-# ONE Tutorial Matlab
+# ONE Matlab Initialisation
 
-Before you begin, make sure you have installed ibllib properly on your system as per the instructions.
-For this tutorial we will be connecting to a  test database with a test user.
+Before you begin, make sure you have installed ibllib properly on your system as per the previous instructions.
 
-## Initialization
+Launch Matlab.
+Set the Matlab path, add with subfolders the '.\ibllib\matlab' directory.
 
-The first step is to instantiate the One class. In the IBL case, the class has to be instantiated: behind the scenes, the constructor connects to our cloud database and gets credentials.
-The connections settings are defined in a json parameter file. The setup() static method allows to update parameters via an user prompt.
+## Instantiate One class: Define connection settings
+
+The first step is to instantiate the **One class**: behind the scenes, the constructor connects to the IBL cloud database and gets credentials. 
+
+The connections settings are defined in a json parameter file (named *.one_params*).
+In Linux, the file is in `~/.one_params`.
+In Windows, the file is in the Roaming App directory `C:\Users\olivier\AppData\Roaming\.one_params`.
+In Mac OS, the file is in the user directory `/Users/olivier/.one_params`.
+In case of doubt, type the command `io.getappdir` in a Matlab prompt. It will return the directory of the *.one_params* file. 
+
+
+There are two manners to define the connection settings.
+
+1. The `setup()` static method allows to update parameters via a Matlab user prompt.
+In a Matlab prompt, write:
 
 ```matlab
 One.setup
 ```
-Another manner is to update the file manually. In Linux, the file is in:
-(~/.one_params), in Windows it's in the Roaming App directory (C:\Users\olivier\AppData\Roaming\.one_params) 
-The function io.getappdir will return the directory in case of doubt.
 
-The next step is to instantiate a one object with the credentials we've created. 
+You will be asked to enter the following information:
+
+```matlab
+ALYX_LOGIN 				% Input your IBL user name
+ALYX_PWD				% Input your IBL password
+ALYX_URL:				% Should be automatically set as: https://alyx.internationalbrainlab.org - press ENTER
+CACHE_DIR:				% Local repository, can ammend or press ENTER
+FTP_DATA_SERVER: 		% Should be automatically set as: ftp://ibl.flatironinstitute.org - press ENTER
+FTP_DATA_SERVER_LOGIN:	% Should be automatically set as: iblftp - press ENTER
+FTP_DATA_SERVER_PWD		% Request Password for FTP from Olivier
+HTTP_DATA_SERVER: 		% Should be automatically set as: http://ibl.flatironinstitute.org  - press ENTER 
+HTTP_DATA_SERVER_LOGIN: % Should be automatically set as: current: iblmember  - press ENTER
+HTTP_DATA_SERVER_PWD	% Request Password for HTTP from Olivier
+```
+
+The path to the *.one_params* file is displayed in the Matlab prompt as `ans`.
+
+**Note that using `One.setup` changes the JSON file.**
+
+
+
+2. Update the *.one_params* file manually, for example via a text editor.
+
+
+Once the connections settings are defined, there is no need to instantiate the class One again if willing to connect with the credentials saved in the JSON *.one_params* file.
+The tutorial in the next section will show you how to change credentials withough changing the JSON file (useful for seldom connection).
+
+
+
+## Run tests
+
+Once the One class is instantiated with your IBL credentials, run the suite of Unit tests to check the installation:
+
+```matlab
+RunTestsIBL('All')
+
+```
+
+If you see any Failure message, report on GitHub or contact Olivier.
+If not, you are ready for the tutorial of the next section !
+
+
+# ONE Matlab Tutorial
+
+## Create ONE object
+
+Once the One class is instantiated, we can create an **one object**. 
+
+### With default connection settings
+
+Type in Matlab prompt:
+
 ```matlab
 one = One();
 ```
 
+### With different connection settings for single time use
+
+For this tutorial we will be connecting to a **test database** with a **test user**. As these credentials will be use for this tutorial only, we do not want to change the base parameters of the JSON *.one_params* file.
+
+To change the credentials without changing the JSON *.one_params* file, type:
+```matlab
+one = One('alyx_login', 'test_user', 'alyx_pwd', 'TapetesBloc18',...
+               'alyx_url', 'https://test.alyx.internationalbrainlab.org');
+```
+
+
+
 ## Find an experiment
+
 Each experiment is identified by a unique string known as the "experiment ID" (EID). (In our case, this string points to a URL on our server.) To find an EID, use the one.search command, for example:
 
 ```matlab
