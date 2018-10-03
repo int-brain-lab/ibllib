@@ -33,7 +33,7 @@ classdef One
                 self.ftp = ftp(self.par.FTP_DATA_SERVER(7:end), ...
                                self.par.FTP_DATA_SERVER_LOGIN, ...
                                self.par.FTP_DATA_SERVER_PWD);
-                self.ftp.binary;
+                binary(self.ftp);
             catch err
                 warning(['Error ocurred while instantiating FTP client to FlatIron: ' err.message])
                 rethrow(err)
