@@ -46,26 +46,4 @@ call run_tests.bat
 Short introduction for the Ipython notebook [here](./_static/one_demo.html)
 A longer tutorial is available in the tutorial section.
 
-## Matlab Package
-In a command line, clone the git (Linux) or download the zip file from GitHub (Windows).
-```
-git clone https://github.com/int-brain-lab/ibllib.git
-```
-
-Launch Matlab.
-Set Path, add with subfolders the '.\ibllib\matlab' directory.
-
-
-```matlab
-One.setup
-
-```
-
-Eventually run the suite of Unit tests to check the installation:
-
-```matlab
-RunTestsIBL('All')
-
-```
-
-A great place to start is with the tutorials of the next section.
+Introduction to ONE
