@@ -38,9 +38,8 @@ def trial_times_to_times(raw_trial):
     Parse and convert all trial timestamps to "absolute" time.
     Float64 seconds from session start.
 
-    0---BpodStart---TrialStart0---------TrialEnd0-----TrialStart1---TrialEnd1...
-                        0---ts0---ts1---tsN...
-    absTS = tsN + TrialStartN - BpodStart
+    0---BpodStart---TrialStart0---------TrialEnd0-----TrialStart1---TrialEnd1...0---ts0---ts1---
+    tsN...absTS = tsN + TrialStartN - BpodStart
 
     :param raw_trial: raw tiral data
     :type raw_trial: dict
