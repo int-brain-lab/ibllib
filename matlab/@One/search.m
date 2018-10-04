@@ -30,7 +30,11 @@ SEARCH_TERMS = {  ...
 % substitute eventual typo with the proper parameter name
 for  ia = 1:2:length(varargin)
     it = find(strcmpi(varargin{ia}, SEARCH_TERMS(:,1)),1);
+    try
     assert(~isempty(it));
+    catch
+       error(['Incorrect input parameter name: ''' varargin{ia} '''']) 
+    end
     varargin(ia) = SEARCH_TERMS(it,2);
 end
 

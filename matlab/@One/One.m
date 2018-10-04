@@ -46,7 +46,6 @@ classdef One
     end
     
     methods
-        session_info = info(self, eeid)
         varargout = list(self, eid, varargin)
         varargout = load(self, eid, varargin)
         [eids, ses] = search(self, varargin)
