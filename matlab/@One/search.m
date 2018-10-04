@@ -45,7 +45,7 @@ addParameter(p,'details', false)
 parse(p,varargin{:});
 for fn = fieldnames(p.Results)', eval([fn{1} '= p.Results.' (fn{1}) ';']); end
 %%
-if nargin ==1, eids = SEARCH_TERMS; ses=[]; return, end
+if nargin ==1, eids = unique(SEARCH_TERMS(:,2)); ses=[]; return, end
 % make sure the date is in a proper format
 if ~isempty(date_range) && isa(date_range,'double')
     date_range = mat2cell(datestr(date_range, 'yyyy-mm-dd'),[1 1],10);

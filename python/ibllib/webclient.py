@@ -226,7 +226,7 @@ class AlyxClient:
         For the dictionary contents, refer to:
         https://alyx.internationalbrainlab.org/docs
         The preferred and safer way to interact with the REST API is by
-         using the AlyxClient.rest method
+        using the AlyxClient.rest method
 
         :param rest_query: (required)the endpoint as full or relative URL
         :type rest_query: str
