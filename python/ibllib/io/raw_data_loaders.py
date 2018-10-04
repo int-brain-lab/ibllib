@@ -33,7 +33,45 @@ def load_settings(session_path):
     return settings
 
 
-def load_data(session_path):
+def trial_times_to_times(raw_trial):
+    """
+    Parse and convert all trial timestamps to "absolute" time.
+    Float64 seconds from session start.
+
+    0---BpodStart---TrialStart0---------TrialEnd0-----TrialStart1---TrialEnd1...0---ts0---ts1---
+    tsN...absTS = tsN + TrialStartN - BpodStart
+
+    :param raw_trial: raw tiral data
+    :type raw_trial: dict
+    :return: trial data with modified timestamps
+    :rtype: dict
+    """
+    ts_bs = raw_trial['behavior_data']['Bpod start timestamp']
+    ts_ts = raw_trial['behavior_data']['Trial start timestamp']
+    ts_te = raw_trial['behavior_data']['Trial end timestamp']
+
+    def convert(ts):
+        return ts + ts_ts - ts_bs
+
+    converted_events = {}
+    for k, v in raw_trial['behavior_data']['Events timestamps'].items():
+        converted_events.update({k: [convert(i) for i in v]})
+    raw_trial['behavior_data']['Events timestamps'] = converted_events
+
+    converted_states = {}
+    for k, v in raw_trial['behavior_data']['States timestamps'].items():
+        converted_states.update({k: [[convert(i) for i in x] for x in v]})
+    raw_trial['behavior_data']['States timestamps'] = converted_states
+
+    shift = raw_trial['behavior_data']['Bpod start timestamp']
+    raw_trial['behavior_data']['Bpod start timestamp'] -= shift
+    raw_trial['behavior_data']['Trial start timestamp'] -= shift
+    raw_trial['behavior_data']['Trial end timestamp'] -= shift
+    assert(raw_trial['behavior_data']['Bpod start timestamp'] == 0)
+    return raw_trial
+
+
+def load_data(session_path, time='absolute'):
     """
     Load PyBpod data files (.jsonable).
 
@@ -50,6 +88,8 @@ def load_data(session_path):
     with open(path, 'r') as f:
         for line in f:
             data.append(json.loads(line))
+    if time == 'absolute':
+        data = [trial_times_to_times(t) for t in data]
     return data
 
 
@@ -57,11 +97,11 @@ def load_encoder_events(session_path):
     """
     Load Rotary Encoder (RE) events raw data file.
 
-    Assumes that a folder calles "raw_behavior_data" exists in folder.
+    Assumes that a folder called "raw_behavior_data" exists in folder.
 
     On each trial the RE sends 3 events to Bonsai 1 - meaning trial start/turn
     off the stim; 2 - meaning show the current trial stimulus; and 3 - meaning
-    begin the closed loop making the stim move whit the RE. These events are
+    begin the closed loop making the stim move with the RE. These events are
     triggered by the state machine in the corrensponding states: trial_start,
     stim_on, closed_loop
 
@@ -95,7 +135,10 @@ def load_encoder_positions(session_path):
     """
     Load Rotary Encoder (RE) positions from raw data file.
 
-    Assumes that a folder calles "raw_behavior_data" exists in folder.
+    Assumes that a folder called "raw_behavior_data" exists in folder.
+    Positions are RE ticks [-512, 512] == [-180º, 180º]
+    0 == trial stim init position
+    Positive nums are rightwards movements (mouse) or RE CW (mouse)
 
     Variable line number, depends on movements.
 
@@ -159,8 +202,8 @@ def load_encoder_trial_info(session_path):
 
 
 if __name__ == '__main__':
-    SESSION_PATH = "/home/nico/Projects/IBL/IBL-github/IBL_root/pybpod_data/\
-test_mouse/2018-07-11/11"
+    SESSION_PATH = "/home/nico/Projects/IBL/IBL-github/iblrig/pybpod_data/\
+test_mouse/2018-07-31/1/"
 
     settings = load_settings(SESSION_PATH)
     data = load_data(SESSION_PATH)
