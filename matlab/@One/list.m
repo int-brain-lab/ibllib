@@ -14,6 +14,7 @@ function varargout = list(self, eid, varargin)
 
 
 %% handle input arguments
+if nargin==1, eid=[]; end
 KEY_NAMES = get_typo_list(eid);
 % substitute eventual typo with the proper parameter name
 for  ia = 1:2:length(varargin)
