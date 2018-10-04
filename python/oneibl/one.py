@@ -115,6 +115,7 @@ class ONE(OneAbstract):
             raise ConnectionError("Can't connect to " + base_url + '. \n' +
                                   'IP addresses are filtered on IBL database servers. \n' +
                                   'Are you connecting from an IBL participating institution ?')
+        print('Connected to ' + base_url + ' as ' + username)
 
     def list(self, eid=None, keyword='dataset-type', details=False):
         """

@@ -38,6 +38,7 @@ classdef One
                 warning(['Error ocurred while instantiating FTP client to FlatIron: ' err.message])
                 rethrow(err)
             end
+            disp(['Connected to ' self.par.ALYX_URL ' as ' self.par.ALYX_LOGIN])
         end
     end
     
