@@ -1,6 +1,6 @@
 # ONE Matlab Initialisation
 
-Before you begin, make sure you have installed ibllib properly on your system as per the previous instructions.
+Before you begin, make sure you have installed ibllib properly on your system as per the previous instructions. Make sure your computer is connected to an IBL accredited network.
 
 Launch Matlab.
 Set the Matlab path, add with subfolders the '.\ibllib\matlab' directory.
@@ -13,7 +13,8 @@ The connections settings are defined in a JSON parameter file (named *.one_param
 In Linux, the file is in `~/.one_params`.
 In Windows, the file is in the Roaming App directory `C:\Users\olivier\AppData\Roaming\.one_params`.
 In Mac OS, the file is in the user directory `/Users/olivier/.one_params`.
-In case of doubt, type the command `io.getappdir` in a Matlab prompt. It will return the directory of the *.one_params* file. 
+In case of doubt, type the command `io.getappdir` in a Matlab prompt. It will return the directory of the JSON *.one_params* file. 
+Note: **The JSON *.one_params* file is uniquely stored, and shared across Matlab and Python.**
 
 
 There are two manners to define the connection settings.
@@ -49,7 +50,7 @@ The path to the *.one_params* file is displayed in the Matlab prompt as `ans`.
 2. Update the JSON *.one_params* file manually, for example via a text editor.
 
 
-Once the connections settings are defined, there is no need to instantiate the class One again if willing to connect with the credentials saved in the JSON *.one_params* file.
+Once the connections settings are defined, there is no need to setup the class One again if willing to connect with the credentials saved in the JSON *.one_params* file.
 
 The tutorial in the next section will show you how to change credentials withough changing the JSON file (useful for seldom connection with different credentials).
 
@@ -72,15 +73,18 @@ If not, you are ready for the tutorial - go to next section !
 
 ## Create ONE object
 
-Once the One class is instantiated, we can create an **one object**. 
+Once the One class is instantiated and setup, we can create an **one object** (here labelled `one`). 
 
 ### With default connection settings
 
-Type in Matlab prompt:
+Type in Matlab prompt: 
 
 ```matlab
-one = One();
+one = One();  % this line of code will be the first line to write everytime you re-open Matlab
 ```
+
+Note: connection parameters inserted via `one.setup` will modify the JSON *.one_params* file.
+
 
 ### With different connection settings for single time use
 
