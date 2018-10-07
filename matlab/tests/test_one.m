@@ -92,6 +92,9 @@ classdef test_one < matlab.unittest.TestCase
             b = testCase.one.search('user', {'olivier'});
             testCase.assertEqual(a, b)
             b = testCase.one.search('subject', 'asodjf');
+            % test the search for labs
+            a = testCase.one.search('lab','zadorlab');
+            testCase.assertEqual(testCase.eid2, a)
         end
         
         function test_load(testCase)

@@ -24,6 +24,7 @@ classdef One
             % Instantiate the Alyx Client connection
             try
                 self.alyx_client = AlyxClient('user',alyx_login,'password',alyx_pwd,'base_url',alyx_url);
+                disp(['Connected to ' self.alyx_client.base_url ' as ' self.alyx_client.user])
             catch err
                 warning(['Error ocurred while instantiating Alyx client: ' err.message])
                 rethrow(err)
@@ -38,7 +39,6 @@ classdef One
                 warning(['Error ocurred while instantiating FTP client to FlatIron: ' err.message])
                 rethrow(err)
             end
-            disp(['Connected to ' self.par.ALYX_URL ' as ' self.par.ALYX_LOGIN])
         end
     end
     
