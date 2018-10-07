@@ -150,7 +150,7 @@ class ONE(OneAbstract):
             for e in eid:
                 out.append(self.list(e, keyword=keyword, details=details))
             if details and (keyword != 'dataset-type'):
-                return [out[0][0], out[1][0]], [out[0][1], out[1][1]]
+                return [[o[0] for o in out], [o[1] for o in out]]
             else:
                 return out
 
