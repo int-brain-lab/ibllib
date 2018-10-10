@@ -32,23 +32,11 @@ def check_alf_folder(session_path):
 
 def get_positions(session_path, save=False):
     """
-    radius * 2 * pi / n_ticks
-    3.1 * 2 * np.pi / 1024
+    Positions in (cm) of RE relative to 0
+    **Optional:** saves _ibl_wheel.position.npy
 
-
-
-
-
-    Get the feedback that was delivered to subject.
-    **Optional:** saves _ibl_trials.feedbackType.npy
-
-    Checks in raw datafile for error and reward state.
-    Will raise an error if more than one of the mutually exclusive states have
-    been triggered.
-
-    Sets feedbackType to -1 if error state was trigered
-    Sets feedbackType to +1 if reward state was triggered
-    Sets feedbackType to 0 if no_go state was triggered
+    cmtick = radius (cm) * 2 * pi / n_ticks
+    cmtick = 3.1 * 2 * np.pi / 1024
 
     :param session_path: absolute path of session folder
     :type session_path: str
@@ -58,7 +46,13 @@ def get_positions(session_path, save=False):
     :return: numpy.ndarray
     :rtype: dtype('int64')
     """
-    data = raw.load_data(session_path)
+    data = raw.load_encoder_positions(session_path)
+    pos = data.re_pos.values
+    cmtick = 3.1 * 2 * np.pi / 1024
+    cmpos = pos * cmtick
+    dp = np.diff(data.re_pos)
+    dt = np.diff(data.re_ts)
+
     feedbackType = np.empty(len(data))
     feedbackType.fill(np.nan)
     reward = []
@@ -144,17 +138,27 @@ def get_timestamps(session_path, save=False):
     :rtype: dtype('int64')
     """
     data = raw.load_data(session_path)
-    sitm_side = np.array([np.sign(t['signed_contrast']) for t in data])
-    trial_correct = np.array([t['trial_correct'] for t in data])
-    choice = sitm_side.copy()
-    choice[trial_correct] = -choice[trial_correct]
-    choice = choice.astype(int)
+
     if save:
         check_alf_folder(session_path)
-        fpath = os.path.join(session_path, 'alf', '_ibl_trials.choice.npy')
+        fpath = os.path.join(session_path, 'alf', '_ibl_wheel.timestamps.npy')
         np.save(fpath, choice)
     return choice
 
+
+def get_trial_start_times(session_path, save=False):
+    data = raw.load_data(session_path)
+    trial_start_times = []
+    for tr in data:
+        trial_start_times.extend(
+            [x[0] for x in tr['behavior_data']['States timestamps']['trial_start']])
+    return np.array(trial_start_times)
+
+
+def get_trial_start_times_re(session_path, save=False):
+    evt = raw.load_encoder_events(session_path)
+    trial_start_times_re = evt.re_ts[evt.sm_ev[evt.sm_ev == 1].index].values / 1000
+    return trial_start_times_re
 
 
 def extract_wheel(session_path, save=False):
@@ -165,11 +169,12 @@ def extract_wheel(session_path, save=False):
 
 
 if __name__ == '__main__':
-    SESSION_PATH = "/home/nico/Projects/IBL/IBL-github/iblrig/Subjects/\
-test_mouse/2018-09-19/1"
+    session_path = "/home/nico/Projects/IBL/IBL-github/iblrig/test_dataset/\
+test_mouse/2018-10-02/1"
     save = False
 
-    data = raw.load_data(SESSION_PATH)
+    data = raw.load_data(session_path)
+    tst = get_trial_start_times(session_path)
 
 
     print("Done!")
