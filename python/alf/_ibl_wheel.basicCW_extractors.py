@@ -16,8 +16,11 @@ Each DatasetType in the IBL pipeline should have one extractor function.
 import ibllib.io.raw_data_loaders as raw
 import numpy as np
 import os
+from scipy import interpolate
+import pandas as pd
 
 
+# START of AUXILIARY FUNCS to be refactored out of the extracor files
 def check_alf_folder(session_path):
     """
     Check if alf folder exists, creates it if it doesn't.
@@ -28,6 +31,66 @@ def check_alf_folder(session_path):
     alf_folder = os.path.join(session_path, 'alf')
     if not os.path.exists(alf_folder):
         os.mkdir(alf_folder)
+
+
+def get_trial_start_times(session_path, save=False):
+    data = raw.load_data(session_path)
+    trial_start_times = []
+    for tr in data:
+        trial_start_times.extend(
+            [x[0] for x in tr['behavior_data']['States timestamps']['trial_start']])
+    return np.array(trial_start_times)
+
+
+def get_trial_start_times_re(session_path, save=False):
+    evt = raw.load_encoder_events(session_path)
+    trial_start_times_re = evt.re_ts[evt.sm_ev[evt.sm_ev == 1].index].values / 1000
+    return trial_start_times_re[:-1]
+
+
+def time_converter(session_path, kind='re2b'):
+    """
+    Create interp1d functions to convert values from one clok to another given a
+    set of syncronization pulses.
+
+    The task global sync pulse is at trial_start from Bpod to:
+    Rotary Encoder, Cameras and e-phys system.
+    Depends on getter functions that extract from the raw data the timestamps
+    of the trial_start sync pulse event for each clock.
+
+    kinds:
+    *2b:        _________   re2b        cam2b,      ephys2b
+    *2re:       b2re        _________   cam2re,     ephys2re
+    *2cam:      b2cam       re2cam      _________   ephys2cam
+    *2ephys:    b2ephys     re2ephys    cam2ephys   _________
+
+    Default converters for times are assumed to be of kind *2b unless ephys data
+    is present in that case converters for 'times' will be of kind *2ephys
+
+    TODO: implement new kinds as needed!
+
+    :param session_path: absolute path of session folder
+    :type session_path: str
+    :param kind: ['re2b', 'b2re'], defaults to 're2b'
+    :type kind: str, optional
+    :return: Function that converts from clock A to clock B defined by kind.
+    :rtype: scipy.interpolate.interpolate.interp1d
+    """
+    tst = get_trial_start_times(session_path)
+    tst_re = get_trial_start_times_re(session_path)
+
+    btimes_to_re_ts = interpolate.interp1d(
+        tst, tst_re, fill_value="extrapolate")
+    re_ts_to_times = interpolate.interp1d(
+        tst_re, tst, fill_value="extrapolate")
+
+    if kind == 're2b':
+        func = re_ts_to_times
+    elif kind == 'b2re':
+        func = btimes_to_re_ts
+
+    return func
+# END of AUXILIARY FUNCS to be refactored out of the extracor files
 
 
 def get_positions(session_path, save=False):
@@ -44,42 +107,74 @@ def get_positions(session_path, save=False):
                  to the alf folder, defaults to False
     :type save: bool, optional
     :return: numpy.ndarray
-    :rtype: dtype('int64')
+    :rtype: dtype('float64')
     """
-    data = raw.load_encoder_positions(session_path)
-    pos = data.re_pos.values
+    pos = raw.load_encoder_positions(session_path)
     cmtick = 3.1 * 2 * np.pi / 1024
-    cmpos = pos * cmtick
-    dp = np.diff(data.re_pos)
-    dt = np.diff(data.re_ts)
+    cmpos = pos.re_pos.values * cmtick
 
-    feedbackType = np.empty(len(data))
-    feedbackType.fill(np.nan)
-    reward = []
-    error = []
-    no_go = []
-    for t in data:
-        reward.append(~np.isnan(t['behavior_data']
-                                ['States timestamps']['reward'][0][0]))
-        error.append(~np.isnan(t['behavior_data']
-                               ['States timestamps']['error'][0][0]))
-        no_go.append(~np.isnan(t['behavior_data']
-                               ['States timestamps']['no_go'][0][0]))
-
-    if not all(np.sum([reward, error, no_go], axis=0) == np.ones(len(data))):
-        raise ValueError
-
-    feedbackType[reward] = 1
-    feedbackType[error] = -1
-    feedbackType[no_go] = 0
-    feedbackType = feedbackType.astype('int64')
     if save:
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.feedbackType.npy')
-        np.save(fpath, feedbackType)
-    return feedbackType
+                             '_ibl_wheel.position.npy')
+        np.save(fpath, cmpos)
+    return cmpos
 
+
+def get_times(session_path, save=False):
+    """
+    Gets Rotary Encoder timestamps (ms) for each position and converts to times.
+    **Optional:** saves _ibl_wheel.times.npy
+
+    Uses time_converter to extract and convert timstamps (ms) to times (s).
+
+    :param session_path: absolute path of session folder
+    :type session_path: str
+    :param save: wether to save the corresponding alf file
+                 to the alf folder, defaults to False
+    :type save: bool, optional
+    :return: numpy.ndarray
+    :rtype: dtype('float64')
+    """
+    re_ts_to_times = time_converter(session_path, kind='re2b')
+    pos_df = raw.load_encoder_positions(session_path)
+    pos_re_ts = pos_df.re_ts.values / 1000
+
+    rep_idx = np.where(np.diff(pos_re_ts) == 0)[0]
+
+
+    pos_times = re_ts_to_times(pos_re_ts)
+
+    if save:
+        check_alf_folder(session_path)
+        fpath = os.path.join(session_path, 'alf', '_ibl_wheel.times.npy')
+        np.save(fpath, pos_times)
+    return pos_times
+
+
+def get_time_n_position(session_path, save=False):
+
+    df = raw.load_encoder_positions(session_path)
+
+    cmtick = 3.1 * 2 * np.pi / 1024
+    # Convert position and timestamps to cm and seconds respectively
+    df.re_pos = df.re_pos.values * cmtick
+    df.re_ts = df.re_ts.values / 1000
+    # Find timestamps that are repeated
+    rep_idx = np.where(np.diff(df.re_ts) == 0)[0]
+    df.re_pos[rep_idx] = (df.re_pos[rep_idx].values +
+                          df.re_pos[rep_idx+1].values)/2
+    # get the converter function to translate re_ts into behavior times
+    convtime = time_converter(session_path, kind='re2b')
+    df.re_ts = convtime(df.re_ts.values)
+    # Now remove the repeted times that are rep_idx + 1
+
+
+    if save:
+        check_alf_folder(session_path)
+        fpath = os.path.join(session_path, 'alf', '_ibl_wheel.times.npy')
+        np.save(fpath, pos_times)
+    return
 
 def get_velocity(session_path, save=False):
     """
@@ -97,75 +192,24 @@ def get_velocity(session_path, save=False):
     :return: numpy.ndarray
     :rtype: dtype('float64')
     """
-    data = raw.load_data(session_path)
-    contrastLeft = np.array([t['signed_contrast'] for t in data])
-    contrastRight = contrastLeft.copy()
-    contrastLeft[contrastLeft > 0] = np.nan
-    contrastLeft = np.abs(contrastLeft)
-    contrastRight[contrastRight < 0] = np.nan
-    if save:
-        check_alf_folder(session_path)
-        lpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.contrastLeft.npy')
-        rpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.contrastRight.npy')
-
-        np.save(lpath, contrastLeft)
-        np.save(rpath, contrastRight)
-    return (contrastLeft, contrastRight)
-
-
-def get_timestamps(session_path, save=False):
-    """
-    Get the subject's choice in every trial.
-    **Optional:** saves _ibl_trials.choice.npy to alf folder.
-
-    Uses signed_contrast and trial_correct.
-    -1 is a CCW turn (towards the left)
-    +1 is a CW turn (towards the right)
-    0 is a no_go trial
-    If a trial is correct the choice of the animal was the inverse of the sign
-    of the contrast.
-
-    >>> choice[t] = -np.sign(signed_contrast[t]) if trial_correct[t]
-
-    :param session_path: absolute path of session folder
-    :type session_path: str
-    :param save: wether to save the corresponding alf file
-                 to the alf folder, defaults to False
-    :type save: bool, optional
-    :return: numpy.ndarray
-    :rtype: dtype('int64')
-    """
-    data = raw.load_data(session_path)
+    cmpos = get_positions(session_path)
+    stimes = get_times(session_path)
+    dp = np.diff(cmpos)
+    dt = np.diff(stimes)
+    velocity = dp / dt
 
     if save:
         check_alf_folder(session_path)
-        fpath = os.path.join(session_path, 'alf', '_ibl_wheel.timestamps.npy')
-        np.save(fpath, choice)
-    return choice
-
-
-def get_trial_start_times(session_path, save=False):
-    data = raw.load_data(session_path)
-    trial_start_times = []
-    for tr in data:
-        trial_start_times.extend(
-            [x[0] for x in tr['behavior_data']['States timestamps']['trial_start']])
-    return np.array(trial_start_times)
-
-
-def get_trial_start_times_re(session_path, save=False):
-    evt = raw.load_encoder_events(session_path)
-    trial_start_times_re = evt.re_ts[evt.sm_ev[evt.sm_ev == 1].index].values / 1000
-    return trial_start_times_re
+        fpath = os.path.join(session_path, 'alf',
+                             '_ibl_wheel.velocity.npy')
+        np.save(fpath, velocity)
+    return cmpos
 
 
 def extract_wheel(session_path, save=False):
-    data = raw.load_data(session_path)
     position = get_positions(session_path, save=save)
     velocity = get_velocity(session_path, save=save)
-    timestamps = get_timestamps(session_path, save=save)
+    times = get_times(session_path, save=save)
 
 
 if __name__ == '__main__':
@@ -174,7 +218,24 @@ test_mouse/2018-10-02/1"
     save = False
 
     data = raw.load_data(session_path)
-    tst = get_trial_start_times(session_path)
+    position = get_positions(session_path, save=save)
+    times = get_times(session_path, save=save)
+    velocity = get_velocity(session_path, save=save)
+
+
+    # extract_wheel(session_path, save=save)
+
+    cmpos = get_positions(session_path)
+    stimes = get_times(session_path)
+    dp = np.diff(cmpos)
+    dt = np.diff(stimes)
+    td = np.cumsum(dt) + dt/2
+
+    f = interpolate.interp1d(
+        np.cumsum(dt) + stimes[1]/2, velocity, fill_value="extrapolate")
+
+    import matplotlib.pyplot as plt
+    plt.plot(stimes[1:], dp/dt)
 
 
     print("Done!")

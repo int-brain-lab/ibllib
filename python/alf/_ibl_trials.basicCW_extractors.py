@@ -467,7 +467,6 @@ def get_goCueOnset_times(session_path, save=False):
 
 
 def extract_trials(session_path, save=False):
-    data = raw.load_data(session_path)
 
     feedbackType = get_feedbackType(session_path, save=save)
     contrastLeft, contrastRight = get_contrastLR(session_path, save=save)
