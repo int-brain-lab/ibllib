@@ -13,11 +13,14 @@ Each DatasetType in the IBL pipeline should have one extractor function.
 :return: n/a
 :rtype: n/a
 """
-import ibllib.io.raw_data_loaders as raw
-import numpy as np
 import os
-from scipy import interpolate
+
+import numpy as np
 import pandas as pd
+from scipy import interpolate
+
+import ibllib.io.raw_data_loaders as raw
+from ibllib.misc import structarr
 
 
 # START of AUXILIARY FUNCS to be refactored out of the extracor files
@@ -93,10 +96,19 @@ def time_converter(session_path, kind='re2b'):
 # END of AUXILIARY FUNCS to be refactored out of the extracor files
 
 
-def get_positions(session_path, save=False):
+def get_wheel_data(session_path, save=False):
     """
-    Positions in (cm) of RE relative to 0
-    **Optional:** saves _ibl_wheel.position.npy
+    Get wheel data from raw files and converts positions into centimeters and
+    timestamps into seconds.
+    **Optional:** saves _ibl_wheel.times.npy and _ibl_wheel.position.npy
+
+    Times:
+    Gets Rotary Encoder timestamps (ms) for each position and converts to times.
+
+    Uses time_converter to extract and convert timstamps (ms) to times (s).
+
+    Positions:
+    Positions are in (cm) of RE perim relative to 0. The 0 resets every trial.
 
     cmtick = radius (cm) * 2 * pi / n_ticks
     cmtick = 3.1 * 2 * np.pi / 1024
@@ -106,81 +118,49 @@ def get_positions(session_path, save=False):
     :param save: wether to save the corresponding alf file
                  to the alf folder, defaults to False
     :type save: bool, optional
-    :return: numpy.ndarray
-    :rtype: dtype('float64')
+    :return: Numpy structuresd array.
+    :rtype: numpy.ndarray
     """
-    pos = raw.load_encoder_positions(session_path)
-    cmtick = 3.1 * 2 * np.pi / 1024
-    cmpos = pos.re_pos.values * cmtick
-
-    if save:
-        check_alf_folder(session_path)
-        fpath = os.path.join(session_path, 'alf',
-                             '_ibl_wheel.position.npy')
-        np.save(fpath, cmpos)
-    return cmpos
-
-
-def get_times(session_path, save=False):
-    """
-    Gets Rotary Encoder timestamps (ms) for each position and converts to times.
-    **Optional:** saves _ibl_wheel.times.npy
-
-    Uses time_converter to extract and convert timstamps (ms) to times (s).
-
-    :param session_path: absolute path of session folder
-    :type session_path: str
-    :param save: wether to save the corresponding alf file
-                 to the alf folder, defaults to False
-    :type save: bool, optional
-    :return: numpy.ndarray
-    :rtype: dtype('float64')
-    """
-    re_ts_to_times = time_converter(session_path, kind='re2b')
-    pos_df = raw.load_encoder_positions(session_path)
-    pos_re_ts = pos_df.re_ts.values / 1000
-
-    rep_idx = np.where(np.diff(pos_re_ts) == 0)[0]
-
-
-    pos_times = re_ts_to_times(pos_re_ts)
-
-    if save:
-        check_alf_folder(session_path)
-        fpath = os.path.join(session_path, 'alf', '_ibl_wheel.times.npy')
-        np.save(fpath, pos_times)
-    return pos_times
-
-
-def get_time_n_position(session_path, save=False):
-
+    # TODO: move this to raw_data_loaders (use structured arrays instead of
+    # pandas DataFrames)
+    ############################################################################
     df = raw.load_encoder_positions(session_path)
-
+    names = df.columns.tolist()
+    data = structarr(names, shape=(df.index.max() + 1,))
+    data['re_ts'] = df.re_ts.values
+    data['re_pos'] = df.re_pos.values
+    data['bns_ts'] = df.bns_ts.values
+    ############################################################################
+    # ticks to cm factor
     cmtick = 3.1 * 2 * np.pi / 1024
     # Convert position and timestamps to cm and seconds respectively
-    df.re_pos = df.re_pos.values * cmtick
-    df.re_ts = df.re_ts.values / 1000
+    data['re_ts'] = data['re_ts'] / 1000.
+    data['re_pos'] = data['re_pos'] * cmtick
     # Find timestamps that are repeated
-    rep_idx = np.where(np.diff(df.re_ts) == 0)[0]
-    df.re_pos[rep_idx] = (df.re_pos[rep_idx].values +
-                          df.re_pos[rep_idx+1].values)/2
+    rep_idx = np.where(np.diff(data['re_ts']) == 0)[0]
+    # Change the value of the repeated position
+    data['re_pos'][rep_idx] = (data['re_pos'][rep_idx] +
+                               data['re_pos'][rep_idx + 1]) / 2
     # get the converter function to translate re_ts into behavior times
     convtime = time_converter(session_path, kind='re2b')
-    df.re_ts = convtime(df.re_ts.values)
+    data['re_ts'] = convtime(data['re_ts'])
     # Now remove the repeted times that are rep_idx + 1
-
+    data = np.delete(data, rep_idx + 1)
 
     if save:
         check_alf_folder(session_path)
-        fpath = os.path.join(session_path, 'alf', '_ibl_wheel.times.npy')
-        np.save(fpath, pos_times)
-    return
+        tpath = os.path.join(session_path, 'alf', '_ibl_wheel.times.npy')
+        ppath = os.path.join(session_path, 'alf', '_ibl_wheel.position.npy')
+        np.save(tpath, data['re_ts'])
+        np.save(ppath, data['re_pos'])
+
+    return data
+
 
 def get_velocity(session_path, save=False):
     """
-    Get left and right contrasts from raw datafile
-    **Optional:** save _ibl_trials.contrastLeft.npy and
-        _ibl_trials.contrastRight.npy to alf folder.
+    Compute velocity from non-uniformly acquired positions and timestamps.
+    **Optional:** save _ibl_trials.velocity.npy
 
     Uses signed_contrast to create left and right contrast vectors.
 
@@ -192,50 +172,69 @@ def get_velocity(session_path, save=False):
     :return: numpy.ndarray
     :rtype: dtype('float64')
     """
-    cmpos = get_positions(session_path)
-    stimes = get_times(session_path)
-    dp = np.diff(cmpos)
-    dt = np.diff(stimes)
-    velocity = dp / dt
+    data = get_wheel_data(session_path, save=False)
+    dp = np.diff(data['re_pos'])
+    dt = np.diff(data['re_ts'])
+    # Compute raw velocity
+    vel = dp / dt
+    # Compute velocity time scale
+    td = data['re_ts'][:-1] + dt/2
+
+    # Get the true velocity function
+    velocity = interpolate.interp1d(td, vel, fill_value="extrapolate")
 
     if save:
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
                              '_ibl_wheel.velocity.npy')
-        np.save(fpath, velocity)
-    return cmpos
+        np.save(fpath, velocity(data['re_ts']))
 
-
-def extract_wheel(session_path, save=False):
-    position = get_positions(session_path, save=save)
-    velocity = get_velocity(session_path, save=save)
-    times = get_times(session_path, save=save)
+    return velocity(data['re_ts'])
 
 
 if __name__ == '__main__':
+    # function code plus plot on test_dataset
+    import matplotlib.pyplot as plt
     session_path = "/home/nico/Projects/IBL/IBL-github/iblrig/test_dataset/\
 test_mouse/2018-10-02/1"
     save = False
 
-    data = raw.load_data(session_path)
-    position = get_positions(session_path, save=save)
-    times = get_times(session_path, save=save)
+    data = get_wheel_data(session_path, save=save)
     velocity = get_velocity(session_path, save=save)
 
+    df = raw.load_encoder_positions(session_path)
+    names = df.columns.tolist()
+    data = structarr(names, shape=(df.index.max() + 1,))
+    data['re_ts'] = df.re_ts.values
+    data['re_pos'] = df.re_pos.values
+    data['bns_ts'] = df.bns_ts.values
 
-    # extract_wheel(session_path, save=save)
+    cmtick = 3.1 * 2 * np.pi / 1024
+    # Convert position and timestamps to cm and seconds respectively
+    data['re_ts'] = data['re_ts'] / 1000.
+    data['re_pos'] = data['re_pos'] * cmtick
+    # Find timestamps that are repeated
+    rep_idx = np.where(np.diff(data['re_ts']) == 0)[0]
+    # Change the value of the repeated position
+    data['re_pos'][rep_idx] = (data['re_pos'][rep_idx] +
+                               data['re_pos'][rep_idx + 1]) / 2
+    # get the converter function to translate re_ts into behavior times
+    convtime = time_converter(session_path, kind='re2b')
+    data['re_ts'] = convtime(data['re_ts'])
+    # Now remove the repeted times that are rep_idx + 1
+    data = np.delete(data, rep_idx + 1)
 
-    cmpos = get_positions(session_path)
-    stimes = get_times(session_path)
-    dp = np.diff(cmpos)
-    dt = np.diff(stimes)
-    td = np.cumsum(dt) + dt/2
 
-    f = interpolate.interp1d(
-        np.cumsum(dt) + stimes[1]/2, velocity, fill_value="extrapolate")
-
-    import matplotlib.pyplot as plt
-    plt.plot(stimes[1:], dp/dt)
-
+    dp = np.diff(data['re_pos'])
+    dt = np.diff(data['re_ts'])
+    # Compute raw velocity
+    vel = dp / dt
+    # Compute velocity time scale
+    td = data['re_ts'][:-1] + dt/2
+    # Get the true velocity function
+    velocity = interpolate.interp1d(td, vel, fill_value="extrapolate")
+    # Checkit out
+    plt.plot(td, vel, '-o')
+    plt.plot(data['re_ts'], velocity(data['re_ts']), '-*')
 
     print("Done!")
