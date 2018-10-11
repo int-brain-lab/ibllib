@@ -35,6 +35,9 @@ conda activate ibllibenv
 cd ibllib/python
 pip install -r requirements.txt
 python setup.py install
+
+# To install in place type:
+pip install -e .
 ```
 
 Eventually run the tests, it needs Alyx and FlatIron credentials as defined above.
