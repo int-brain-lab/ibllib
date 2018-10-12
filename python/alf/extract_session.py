@@ -21,6 +21,8 @@ def get_task_name(session_path):
     extractor_type = task_name[:task_name.find('ChoiceWorld')]
     if any([extractor_type in x for x in dir()]):
         pass
+    else:
+        print("No extrators were found for {}ChoiceWorld".format(extractor_type))
     os.getcwd()
 
 if __name__ == '__main__':
