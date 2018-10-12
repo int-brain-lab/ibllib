@@ -13,8 +13,9 @@ User Manual
    :maxdepth: 2
 
    01_overview
-   02_installation
-   03a_tutorial_python
+   02a_installation_python
+   02b_tutorial_python
+   03a_installation_matlab
    03b_tutorial_matlab
 .. one comment here to test
 
