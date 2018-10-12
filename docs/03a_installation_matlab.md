@@ -56,11 +56,12 @@ HTTP_DATA_SERVER_PWD	% Request Password for HTTP from Olivier
 
 The path to the *.one_params* file is displayed in the Matlab prompt as `ans`.
 
-**Note that using `One.setup` changes the JSON *.one_params* file.** Also note that the file is shared across Python and Matlab.
+**Note that using `One.setup` changes the JSON *.one_params* file.** Also note that the file is shared across Python and Matlab platforms.
 
 
 
-2. Update the JSON *.one_params* file manually, for example via a text editor.
+2. Update the JSON *.one_params* file manually, for example via a text editor. 
+_Note_: In Mac OS, use the command nano in a terminal.
 
 
 Once the connections settings are defined, there is no need to setup the class One again if willing to connect with the credentials saved in the JSON *.one_params* file.
