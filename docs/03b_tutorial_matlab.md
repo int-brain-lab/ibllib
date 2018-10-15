@@ -1,92 +1,27 @@
-# ONE Matlab Initialisation
+# ONE Matlab Tutorial
 
 Before you begin, make sure you have installed ibllib properly on your system as per the previous instructions.
 
-Launch Matlab.
-Set the Matlab path, add with subfolders the '.\ibllib\matlab' directory.
-
-## Instantiate One class: Define connection settings
-
-The first step is to instantiate the **One class**: behind the scenes, the constructor connects to the IBL cloud database and gets credentials. 
-
-The connections settings are defined in a JSON parameter file (named *.one_params*).
-In Linux, the file is in `~/.one_params`.
-In Windows, the file is in the Roaming App directory `C:\Users\olivier\AppData\Roaming\.one_params`.
-In Mac OS, the file is in the user directory `/Users/olivier/.one_params`.
-In case of doubt, type the command `io.getappdir` in a Matlab prompt. It will return the directory of the *.one_params* file. 
-
-
-There are two manners to define the connection settings.
-
-1. The `setup()` static method allows to update parameters via a Matlab user prompt.
-In a Matlab prompt, write:
-
-```matlab
-One.setup
-```
-
-You will be asked to enter the following information:
-
-```matlab
-ALYX_LOGIN 				% Input your IBL user name
-ALYX_PWD				% Input your IBL password
-ALYX_URL:				% Should be automatically set as: https://alyx.internationalbrainlab.org - press ENTER
-CACHE_DIR:				% Local repository, can ammend or press ENTER
-FTP_DATA_SERVER: 		% Should be automatically set as: ftp://ibl.flatironinstitute.org - press ENTER
-FTP_DATA_SERVER_LOGIN:	% Should be automatically set as: iblftp - press ENTER
-FTP_DATA_SERVER_PWD		% Request Password for FTP from Olivier
-HTTP_DATA_SERVER: 		% Should be automatically set as: http://ibl.flatironinstitute.org  - press ENTER 
-HTTP_DATA_SERVER_LOGIN: % Should be automatically set as: iblmember  - press ENTER
-HTTP_DATA_SERVER_PWD	% Request Password for HTTP from Olivier
-```
-
-The path to the *.one_params* file is displayed in the Matlab prompt as `ans`.
-
-**Note that using `One.setup` changes the JSON *.one_params* file.**
-
-
-
-2. Update the JSON *.one_params* file manually, for example via a text editor.
-
-
-Once the connections settings are defined, there is no need to instantiate the class One again if willing to connect with the credentials saved in the JSON *.one_params* file.
-
-The tutorial in the next section will show you how to change credentials withough changing the JSON file (useful for seldom connection with different credentials).
-
-
-
-## Run tests
-
-Once the One class is instantiated with your IBL credentials, run the suite of Unit tests to check the installation:
-
-```matlab
-RunTestsIBL('All')
-
-```
-
-If you see any Failure message, please report on GitHub or contact Olivier.
-If not, you are ready for the tutorial - go to next section !
-
-
-# ONE Matlab Tutorial
-
 ## Create ONE object
 
-Once the One class is instantiated, we can create an **one object**. 
+Once the One class is instantiated and setup, we can create an **one object** (here labelled `one`). 
 
 ### With default connection settings
 
-Type in Matlab prompt:
+Type in Matlab prompt: 
 
 ```matlab
-one = One();
+one = One();  % this line of code will be the first line to write everytime you re-open Matlab
 ```
+
+**_Reminder_**: connection parameters inserted via `one.setup` will modify the JSON `.one_params` file [see installation notes here](03a_installation_matlab.html)
+
 
 ### With different connection settings for single time use
 
-For this tutorial we will be connecting to a **test database** with a **test user**. As these credentials will be used for this tutorial only, we do not want to change the base parameters of the JSON *.one_params* file.
+For this tutorial we will be connecting to a **test database** with a **test user**. As these credentials will be used for this tutorial only, we do not want to change the base parameters of the JSON `.one_params` file.
 
-To change the credentials without changing the JSON *.one_params* file, type:
+To change the credentials without changing the JSON `.one_params` file, type:
 ```matlab
 one = One(	'alyx_login', 'test_user', ...
 			'alyx_pwd', 'TapetesBloc18', ...
@@ -244,12 +179,12 @@ dimensions:
 ```
 The dataclass contains the following keys, each of which contains a list of 3 items corresponding the the 3 queried datasets
 
--   data cell(*array*): the array
--   dataset_id cell(*str*): the UUID of the dataset in Alyx
--   local_path cell(*str*): the local full path of the file
--   dataset_type cell(*str*): as per Alyx table
--   url cell(*str*): the link on the FlatIron server
--   eid cell(*str*): the session UUID in Alyx
+-   data `cell(*array*)`: the array
+-   dataset_id `cell(*str*)`: the UUID of the dataset in Alyx
+-   local_path `cell(*str*)`: the local full path of the file
+-   dataset_type `cell(*str*)`: as per Alyx table
+-   url `cell(*str*)`: the link on the FlatIron server
+-   eid `cell(*str*)`: the session UUID in Alyx
 
 It is also possible to query all datasets attached to a given session, in which case
 the output has to be a table/structure as seen above:
@@ -269,16 +204,16 @@ dataset_types = {'clusters.probes', 'thisDataset.IveJustMadeUp', 'clusters.depth
 [t, empty, cl ] = one.load(eid, 'data', dataset_types)
 isempty(empty) % true !
 ```
-Returns an empty array for *cr* so that *t* and *cl* still get assigned the corresponding datsets values.
+Returns an empty array for `empty` so that `t` and `cl` still get assigned the corresponding datasets values.
 
 
 ## Search method
 The search methods allows to query the database to filter the list of UUIDs according to
 the following fields:
--   dataset_types
--   users
--   subject
--   date_range
+-   `dataset_types`
+-   `users`
+-   `subject`
+-   `date_range`
 
 ### One-to-one matches: subjects
 This is the simplest case that queries EEIDs (sessions) associated with a subject. There can only
@@ -306,7 +241,7 @@ The following would get all of the dataset for which olivier is an owner or a co
 Note that unlike the first example, here we used an optional second output argument , to get all context information about the returned sessions.
 
 
-It is also possible to filter sessions using a date-range:
+It is also possible to filter sessions using a `date-range`:
 ```matlab
 eid = one.search('users','olivier', 'date_range', ['2018-08-24'; '2018-08-24'])
 ```
