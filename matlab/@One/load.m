@@ -60,7 +60,7 @@ for m = 1:length(ises)
     end
     if ~dry_run && (force_replace || ~exist(local_path, 'file'))
         disp(['Downloading ' local_path])
-        res =  self.ftp.mget(url_server_side, self.par.CACHE_DIR);
+        res =  mget(self.ftp, url_server_side, self.par.CACHE_DIR);
         assert(strcmp(res, local_path))
     end
     % loads the data

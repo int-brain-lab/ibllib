@@ -3,5 +3,4 @@
 # @Date: Friday, July 27th 2018, 1:54:49 pm
 # @Last Modified by: Niccolò Bonacchi
 # @Last Modified time: 27-07-2018 01:54:49.4949
-import alf.extractors as extractors
 import alf.scraper as scraper

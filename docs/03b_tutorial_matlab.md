@@ -1,51 +1,74 @@
-# ONE Tutorial Matlab
+# ONE Matlab Tutorial
 
-Before you begin, make sure you have installed ibllib properly on your system as per the instructions.
-For this tutorial we will be connecting to a  test database with a test user.
+Before you begin, make sure you have installed ibllib properly on your system as per the previous instructions.
 
-## Initialization
+## Create ONE object
 
-The first step is to instantiate the One class. In the IBL case, the class has to be instantiated: behind the scenes, the constructor connects to our cloud database and gets credentials.
-The connections settings are defined in a json parameter file. The setup() static method allows to update parameters via an user prompt.
+Once the One class is instantiated and setup, we can create an **one object** (here labelled `one`). 
+
+### With default connection settings
+
+Type in Matlab prompt: 
 
 ```matlab
-One.setup
+one = One();  % this line of code will be the first line to write everytime you re-open Matlab
 ```
-Another manner is to update the file manually. In Linux, the file is in:
-(~/.one_params), in Windows it's in the Roaming App directory (C:\Users\olivier\AppData\Roaming\.one_params) 
-The function io.getappdir will return the directory in case of doubt.
 
-The next step is to instantiate a one object with the credentials we've created. 
+Reminder: connection parameters inserted via `one.setup` will modify the JSON *.one_params* file.
+
+
+### With different connection settings for single time use
+
+For this tutorial we will be connecting to a **test database** with a **test user**. As these credentials will be used for this tutorial only, we do not want to change the base parameters of the JSON *.one_params* file.
+
+To change the credentials without changing the JSON *.one_params* file, type:
 ```matlab
-one = One();
+one = One(	'alyx_login', 'test_user', ...
+			'alyx_pwd', 'TapetesBloc18', ...
+			'alyx_url', 'https://test.alyx.internationalbrainlab.org');
+```
+
+You now have created an one object. This object has several fields, the following are of interest for analysis. Type help to retrieve the documentation on each field:
+```matlab
+help one.list
+help one.load
+help one.search
 ```
 
 ## Find an experiment
-Each experiment is identified by a unique string known as the "experiment ID" (EID). (In our case, this string points to a URL on our server.) To find an EID, use the one.search command, for example:
+
+Each experiment is identified by a unique string known as the "experiment ID" (EID). To find an EID, use the `one.search` command.
+
+
+The following example shows how to find the experiment(s) performed by the user `olivier`, on the 24 Aug 2018:
 
 ```matlab
-[eid, ses] = one.search('users', 'olivier', 'date_range', datenum([2018 8 24 ; 2018 8 24])) ;
-
+[eid, ses] = one.search('users', {'olivier'}, 'date_range', datenum([2018 8 24 ; 2018 8 24])) ;
 ```
 returns
-```
+```matlab
 eid =
-
     'cf264653-2deb-44cb-aa84-89b82507028a'
 ```
 The searchable fields are listed by calling the search method with no parameters:
-```
-one.search()
+```matlab
+one.search
 
+% Example search keywords: 
+	'dataset_types'
+	'date_range'
+	'labs'
+	'subjects'
+	'users'
 ```
 
 ## List method
 Once you know the EID, you can list all the datasets for the experiment using the list command:
-```
+```matlab
 one.list(eid)
 ``` 
 returns
-```
+```matlab
 ans =
 
   29×1 cell array
@@ -81,7 +104,7 @@ ans =
     {'spontaneous.intervals'     }
 ```
 
-For more detailed datasets info, this will return a dataclass with dataset_type, url and dataset_id fields among others:
+For more detailed datasets info, this command will return a dataclass with `dataset_type`, `data_url` and `dataset_id` fields amongst others:
 ```matlab
 [dtypes details] = one.list(eid);
 details = 
@@ -97,7 +120,7 @@ details =
              eid: {29×1 cell}
 
 ```
-To get all fields, ie. the full contextual information about the session.
+To get the full contextual information about the session, get all fields:
 ```matlab
 ses_info = one.list(eid, 'keyword', 'all')
 ```
