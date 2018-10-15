@@ -1,5 +1,7 @@
 # ONE Matlab Tutorial
 
+Before you begin, make sure you have installed ibllib properly on your system as per the previous instructions.
+
 ## Create ONE object
 
 Once the One class is instantiated and setup, we can create an **one object** (here labelled `one`). 
@@ -12,7 +14,7 @@ Type in Matlab prompt:
 one = One();  % this line of code will be the first line to write everytime you re-open Matlab
 ```
 
-Note: connection parameters inserted via `one.setup` will modify the JSON *.one_params* file.
+Reminder: connection parameters inserted via `one.setup` will modify the JSON *.one_params* file.
 
 
 ### With different connection settings for single time use
