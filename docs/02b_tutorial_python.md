@@ -24,12 +24,10 @@ Reminder: connection parameters inserted via `one.setup()` will modify the JSON 
 
 For this tutorial we will be connecting to a **test database** with a **test user**. As these credentials will be used for this tutorial only, we do not want to change the base parameters of the JSON *.one_params* file.
 
-
-TODO OLIVIER
-
-
-
-
+```python
+from oneibl.one import ONE
+one = ONE(username='test_user', password='TapetesBloc18',base_url='https://test.alyx.internationalbrainlab.org')
+```
 
 ## Find an experiment
 Each experiment is identified by a unique string known as the "experiment ID" (EID). To find an EID, use the `one.search` command.
