@@ -2,9 +2,9 @@
 
 ## Python-specific Dependencies
 
-Python-specific dependency : **Anaconda python distribution**.
+Python-specific dependency : **Python 3.6 or higher**.
 
-### Install Anaconda onto your machine
+### Install Anaconda/Miniconda onto your machine
 Download and install  the  Anaconda  python  distribution from here (chosing the right OS): https://www.anaconda.com/download/#download  
 _Note_ : Download the latest version.
 
@@ -67,32 +67,32 @@ python setup.py install
 The first step is to instantiate the **One class**: behind the scenes, the constructor connects to the IBL cloud database and gets credentials. 
 
 The connections settings are defined in a JSON parameter file (named *.one_params*).
-In Linux, the file is in `~/.one_params`.
-In Windows, the file is in the Roaming App directory `C:\Users\olivier\AppData\Roaming\.one_params`.
-In Mac OS, the file is in the user directory `/Users/olivier/.one_params`.
+-   In Linux, the file is in `~/.one_params`.
+-   In Windows, the file is in the Roaming App directory `C:\Users\olivier\AppData\Roaming\.one_params`.
+-   In Mac OS, the file is in the user directory `/Users/olivier/.one_params`.
+
 In case of doubt, type the command `io.getappdir` in a Matlab prompt. It will return the directory of the JSON *.one_params* file. 
-Note: **The JSON *.one_params* file is uniquely stored, and shared across Matlab and Python.**
+
+**_Note_: The JSON _.one_params_ file is uniquely stored, and shared across Matlab and Python.**
 
 
-There are two manners to define the connection settings.
+There are two ways to define the connection settings.
 
-1. The `setup()` static method allows to update parameters via a Python user prompt.
+#### 1. The `setup()` static method
 
 In a Python terminal, type: 
-_Note_: you can access a python terminal from a shell terminal by typing the command `python` in the ibllibenv virtual environment)
-_Note_:
-To run with Spyder, link the Python Interpreter to the virtual environment you created.
-To run with Jupyter, type in the command with your virtual environment activated as above:
-```
-jupyter notebook
-```
 
 ```python
 from oneibl.one import ONE
 one = ONE() # need to instantiate the class to have the API.
 one.setup() # For first time use, need to define connection credentials
-
 ```
+
+**_Note_**:
+-   you can access a python terminal from a shell terminal by typing the command `python` in the ibllibenv virtual environment)
+-   To run with _Spyder_, link the Python Interpreter to the virtual environment you created.
+-   To run with _Jupyter_, type in the command `jupyter notebook` with your virtual environment activated as above
+
 
 You will be asked to enter the following information:
 
@@ -109,10 +109,10 @@ HTTP_DATA_SERVER_LOGIN: # Should be automatically set as: iblmember  - press ENT
 HTTP_DATA_SERVER_PWD	# Request Password for HTTP from Olivier
 ```
 
-**Note that using `one.setup()` changes the JSON *.one_params* file.** Also note that the file is shared across Python and Matlab platforms.
+**Note: using `One.setup` changes the JSON *.one_params* file.** Also note that the file is shared across Python and Matlab platforms.
 
-2. Update the JSON *.one_params* file manually, for example via a text editor. 
-_Note_: In Mac OS, use the command nano in a terminal.
+#### 2. Edit the JSON *.one_params* file manually 
+**_Note_**: In Mac OS/Linux, use the command `nano` in a terminal.
 
 
 Once the connections settings are defined, there is no need to setup the class One again if willing to connect with the credentials saved in the JSON *.one_params* file.
@@ -123,10 +123,8 @@ The tutorial in the next section will show you how to change credentials withoug
 ### Run tests
 Exit the python terminal.
 In a shell terminal, in the ibllibenv, `cd python` (as above) and write the following:
-
-
-**Linux and Mac OS**: `source run_tests`
-**Windows**: `call run_tests.bat`
+-   **Linux and Mac OS**: `source run_tests`
+-   **Windows**: `call run_tests.bat`
 
 
 

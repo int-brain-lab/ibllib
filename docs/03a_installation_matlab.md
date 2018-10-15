@@ -3,36 +3,36 @@
 
 ## Matlab-specific Dependencies
 
-Matlab-specific dependency : **Matlab**.
+Matlab-specific dependency : **Matlab R2016b or higher**.
 
 ### Install Matlab onto your machine
-Download and install the latest Matlab version from here: https://www.mathworks.com/downloads/
+Download and install the latest Matlab version from here: [https://www.mathworks.com/downloads/](https://www.mathworks.com/downloads/)
 
 
 
-## Initilisation
+## Initialisation
 
 Before you begin, make sure you have installed ibllib properly on your system as per the previous instructions.
 Make sure your computer is connected to an IBL accredited network.
 
 Launch Matlab.
-Set the Matlab path, add with subfolders the '.\ibllib\matlab' directory.
+Set the Matlab path, add with subfolders the `.\ibllib\matlab` directory.
 
 ### Instantiate One class: Define connection settings
 
 The first step is to instantiate the **One class**: behind the scenes, the constructor connects to the IBL cloud database and gets credentials. 
 
 The connections settings are defined in a JSON parameter file (named *.one_params*).
-In Linux, the file is in `~/.one_params`.
-In Windows, the file is in the Roaming App directory `C:\Users\olivier\AppData\Roaming\.one_params`.
-In Mac OS, the file is in the user directory `/Users/olivier/.one_params`.
-In case of doubt, type the command `io.getappdir` in a Matlab prompt. It will return the directory of the JSON *.one_params* file. 
-Note: **The JSON *.one_params* file is uniquely stored, and shared across Matlab and Python.**
+-   In Linux, the file is in `~/.one_params`.
+-   In Windows, the file is in the Roaming App directory `C:\Users\olivier\AppData\Roaming\.one_params`.
+-   In Mac OS, the file is in the user directory `/Users/olivier/.one_params`.
+
+In case of doubt, type the command `io.getappdir` in a Matlab prompt. It will return the directory of the JSON `.one_params` file. 
 
 
 There are two manners to define the connection settings.
 
-1. The `setup()` static method allows to update parameters via a Matlab user prompt.
+### 1. The `setup()` static method in Matlab
 In a Matlab prompt, write:
 
 ```matlab
@@ -56,17 +56,17 @@ HTTP_DATA_SERVER_PWD	% Request Password for HTTP from Olivier
 
 The path to the *.one_params* file is displayed in the Matlab prompt as `ans`.
 
-**Note that using `One.setup` changes the JSON *.one_params* file.** Also note that the file is shared across Python and Matlab platforms.
+**Note: using `One.setup` changes the JSON *.one_params* file.** Also note that the file is shared across Python and Matlab platforms.
 
 
 
-2. Update the JSON *.one_params* file manually, for example via a text editor. 
-_Note_: In Mac OS, use the command nano in a terminal.
+### 2. Edit the JSON *.one_params* 
+**_Note_**: In Mac OS or Linux, use the command `nano` in a terminal.
 
 
 Once the connections settings are defined, there is no need to setup the class One again if willing to connect with the credentials saved in the JSON *.one_params* file.
 
-The tutorial in the next section will show you how to change credentials withough changing the JSON file (useful for seldom connection with different credentials).
+The tutorial in the next section will show you how to change credentials without changing the JSON file (useful for a temporary connection with different credentials).
 
 
 

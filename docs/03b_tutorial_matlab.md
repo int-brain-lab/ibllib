@@ -14,14 +14,14 @@ Type in Matlab prompt:
 one = One();  % this line of code will be the first line to write everytime you re-open Matlab
 ```
 
-Reminder: connection parameters inserted via `one.setup` will modify the JSON *.one_params* file.
+**_Reminder_**: connection parameters inserted via `one.setup` will modify the JSON `.one_params` file [see installation notes here](03a_installation_matlab.html)
 
 
 ### With different connection settings for single time use
 
-For this tutorial we will be connecting to a **test database** with a **test user**. As these credentials will be used for this tutorial only, we do not want to change the base parameters of the JSON *.one_params* file.
+For this tutorial we will be connecting to a **test database** with a **test user**. As these credentials will be used for this tutorial only, we do not want to change the base parameters of the JSON `.one_params` file.
 
-To change the credentials without changing the JSON *.one_params* file, type:
+To change the credentials without changing the JSON `.one_params` file, type:
 ```matlab
 one = One(	'alyx_login', 'test_user', ...
 			'alyx_pwd', 'TapetesBloc18', ...
@@ -179,12 +179,12 @@ dimensions:
 ```
 The dataclass contains the following keys, each of which contains a list of 3 items corresponding the the 3 queried datasets
 
--   data cell(*array*): the array
--   dataset_id cell(*str*): the UUID of the dataset in Alyx
--   local_path cell(*str*): the local full path of the file
--   dataset_type cell(*str*): as per Alyx table
--   url cell(*str*): the link on the FlatIron server
--   eid cell(*str*): the session UUID in Alyx
+-   data `cell(*array*)`: the array
+-   dataset_id `cell(*str*)`: the UUID of the dataset in Alyx
+-   local_path `cell(*str*)`: the local full path of the file
+-   dataset_type `cell(*str*)`: as per Alyx table
+-   url `cell(*str*)`: the link on the FlatIron server
+-   eid `cell(*str*)`: the session UUID in Alyx
 
 It is also possible to query all datasets attached to a given session, in which case
 the output has to be a table/structure as seen above:
@@ -204,16 +204,16 @@ dataset_types = {'clusters.probes', 'thisDataset.IveJustMadeUp', 'clusters.depth
 [t, empty, cl ] = one.load(eid, 'data', dataset_types)
 isempty(empty) % true !
 ```
-Returns an empty array for *cr* so that *t* and *cl* still get assigned the corresponding datsets values.
+Returns an empty array for `empty` so that `t` and `cl` still get assigned the corresponding datasets values.
 
 
 ## Search method
 The search methods allows to query the database to filter the list of UUIDs according to
 the following fields:
--   dataset_types
--   users
--   subject
--   date_range
+-   `dataset_types`
+-   `users`
+-   `subject`
+-   `date_range`
 
 ### One-to-one matches: subjects
 This is the simplest case that queries EEIDs (sessions) associated with a subject. There can only
@@ -241,7 +241,7 @@ The following would get all of the dataset for which olivier is an owner or a co
 Note that unlike the first example, here we used an optional second output argument , to get all context information about the returned sessions.
 
 
-It is also possible to filter sessions using a date-range:
+It is also possible to filter sessions using a `date-range`:
 ```matlab
 eid = one.search('users','olivier', 'date_range', ['2018-08-24'; '2018-08-24'])
 ```

@@ -17,7 +17,7 @@ from oneibl.one import ONE
 one = ONE() # need to instantiate the class to have the API. You will have to write these lines of code everytime you re-open python.
 ```
 
-Reminder: connection parameters inserted via `one.setup()` will modify the JSON *.one_params* file.
+Reminder: connection parameters inserted via `one.setup()` will modify the JSON *.one_params* file [see here](02a_installation_python.html)
 
 
 ### With different connection settings for single time use
@@ -26,8 +26,11 @@ For this tutorial we will be connecting to a **test database** with a **test use
 
 ```python
 from oneibl.one import ONE
-one = ONE(username='test_user', password='TapetesBloc18',base_url='https://test.alyx.internationalbrainlab.org')
+one = ONE(username='test_user',
+          password='TapetesBloc18',
+          base_url='https://test.alyx.internationalbrainlab.org')
 ```
+
 
 ## Find an experiment
 Each experiment is identified by a unique string known as the "experiment ID" (EID). To find an EID, use the `one.search` command.
