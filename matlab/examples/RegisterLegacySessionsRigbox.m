@@ -9,7 +9,7 @@ one = One('alyx_login','olivier','alyx_pwd','superpass','alyx_url','https://alyx
 
 %% Gather info about repository
 dr = one.alyx_client.get('/data-repository');
-host_name =  dr.dns{find(strcmp( dr.name, repository_name))};
+host_name =  dr.hostname{find(strcmp( dr.name, repository_name))};
 % dataset types, prepare the regexp to check files before register
 dtypes = one.alyx_client.get('/dataset-types');
 dtypes = structfun(@(x) x(~cellfun(@isempty, dtypes.filename_pattern)), dtypes, 'UniformOutput', false);
@@ -86,7 +86,7 @@ for m = 1:length(alfses.block_files)
         relative_path = folder{1}(icut:end);
         % create the registration strucure
         register_struct.created_by = one.alyx_client.user;
-        register_struct.dns = host_name;
+        register_struct.hostname = host_name;
         register_struct.path =  relative_path;
         register_struct.filenames = alfil.name(indf);
         rep = one.alyx_client.post('/register-file', register_struct);
