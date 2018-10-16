@@ -5,6 +5,7 @@ import requests
 import json
 from ibllib.misc import pprint
 
+
 def http_download_file_list(links_to_file_list, **kwargs):
     """
     Downloads a list of files from the flat Iron from a list of links.
@@ -157,8 +158,7 @@ class AlyxClient:
 
     def _generic_request(self, reqfunction, rest_query, data=None):
         rest_query = rest_query.replace(self._base_url, '')
-        r = reqfunction(self._base_url + rest_query, stream=True, headers=self._headers,
-                         data=data)
+        r = reqfunction(self._base_url + rest_query, stream=True, headers=self._headers, data=data)
         if r and r.status_code in (200, 201):
             return json.loads(r.text)
         elif r and r.status_code == 204:
@@ -245,7 +245,8 @@ class AlyxClient:
         alyx_client.rest("sessions")
         lab_info = alyx_client.rest('labs', 'read', 'mainenlab')
         OR
-        lab_info = alyx_client.rest('labs', 'read', 'https://test.alyx.internationalbrainlab.org/labs/mainenlab')
+        lab_info = alyx_client.rest('labs', 'read',
+                                    'https://test.alyx.internationalbrainlab.org/labs/mainenlab')
 
         :param endpoint:
         :param action:

@@ -23,7 +23,7 @@ try
     
     if length(FH.arrayShape)>1 && ~FH.fortranOrder
         data = reshape(data, FH.shape(end:-1:1));
-        data = permute(data, [length(FH.arrayShape):-1:1]);
+        data = permute(data, [length(FH.arrayShape):-1:1] );
     elseif length(FH.arrayShape)>1
         data = reshape(data, FH.arrayShape);
     end

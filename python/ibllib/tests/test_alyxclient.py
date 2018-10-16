@@ -20,9 +20,9 @@ class TestDownloadHTTP(unittest.TestCase):
     def test_rest_endpoint(self):
         # tests that non-existing endpoints /actions are caught properly
         with self.assertRaises(ValueError):
-            res = self.ac.rest(endpoint='turlu', action='create')
+            self.ac.rest(endpoint='turlu', action='create')
         with self.assertRaises(ValueError):
-            res = self.ac.rest(endpoint='sessions', action='turlu')
+            self.ac.rest(endpoint='sessions', action='turlu')
         # test with labs : get
         a = self.ac.rest('labs', 'list')
         self.assertTrue(len(a) == 3)
