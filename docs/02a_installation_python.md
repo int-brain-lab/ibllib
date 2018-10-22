@@ -5,7 +5,7 @@
 Python-specific dependency : **Python 3.6 or higher**.
 
 ### Install Anaconda/Miniconda onto your machine
-Download and install  the  Anaconda  python  distribution from here (chosing the right OS): https://www.anaconda.com/download/#download  
+Download and install  the  Anaconda  python  distribution from here (chosing the right OS): https://www.anaconda.com/download/#download
 _Note_ : Download the latest version.
 
 
@@ -51,27 +51,27 @@ source activate ibllibenv
 ```
 pip install -r ./python/requirements.txt
 cd python
-python ./setup.py install
+pip install -e .
 ```
 
 **Windows:**
 ```
 cd ibllib/python
 pip install -r requirements.txt
-python setup.py install
+pip install -e .
 ```
 
 
 ### Instantiate One class: Define connection settings
 
-The first step is to instantiate the **One class**: behind the scenes, the constructor connects to the IBL cloud database and gets credentials. 
+The first step is to instantiate the **One class**: behind the scenes, the constructor connects to the IBL cloud database and gets credentials.
 
 The connections settings are defined in a JSON parameter file (named *.one_params*).
 -   In Linux, the file is in `~/.one_params`.
 -   In Windows, the file is in the Roaming App directory `C:\Users\olivier\AppData\Roaming\.one_params`.
 -   In Mac OS, the file is in the user directory `/Users/olivier/.one_params`.
 
-In case of doubt, type the command `io.getappdir` in a Matlab prompt. It will return the directory of the JSON *.one_params* file. 
+In case of doubt, type the command `io.getappdir` in a Matlab prompt. It will return the directory of the JSON *.one_params* file.
 
 **_Note_: The JSON _.one_params_ file is uniquely stored, and shared across Matlab and Python.**
 
@@ -80,7 +80,7 @@ There are two ways to define the connection settings.
 
 #### 1. The `setup()` static method
 
-In a Python terminal, type: 
+In a Python terminal, type:
 
 ```python
 from oneibl.one import ONE
@@ -104,14 +104,14 @@ CACHE_DIR:				# Local repository, can ammend or press ENTER
 FTP_DATA_SERVER: 		# Should be automatically set as: ftp://ibl.flatironinstitute.org - press ENTER
 FTP_DATA_SERVER_LOGIN:	# Should be automatically set as: iblftp - press ENTER
 FTP_DATA_SERVER_PWD		# Request Password for FTP from Olivier
-HTTP_DATA_SERVER: 		# Should be automatically set as: http://ibl.flatironinstitute.org  - press ENTER 
+HTTP_DATA_SERVER: 		# Should be automatically set as: http://ibl.flatironinstitute.org  - press ENTER
 HTTP_DATA_SERVER_LOGIN: # Should be automatically set as: iblmember  - press ENTER
 HTTP_DATA_SERVER_PWD	# Request Password for HTTP from Olivier
 ```
 
 **Note: using `One.setup` changes the JSON *.one_params* file.** Also note that the file is shared across Python and Matlab platforms.
 
-#### 2. Edit the JSON *.one_params* file manually 
+#### 2. Edit the JSON *.one_params* file manually
 **_Note_**: In Mac OS/Linux, use the command `nano` in a terminal.
 
 
