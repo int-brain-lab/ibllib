@@ -48,7 +48,10 @@ _LIST_KEYWORDS = dict(_SESSION_FIELDS, **{
     'dataset-type': 'dataset-type',
     'dataset_type': 'dataset-type',
     'dtypes': 'dataset-type',
-    'dtype': 'dataset-type'})
+    'dtype': 'dataset-type',
+    'labs': 'lab',
+    'lab': 'lab'
+})
 
 SEARCH_TERMS = {  # keynames are possible input arguments and values are actual fields
     'data': 'dataset_types',
@@ -61,7 +64,9 @@ SEARCH_TERMS = {  # keynames are possible input arguments and values are actual 
     'subject': 'subjects',
     'subjects': 'subjects',
     'date_range': 'date_range',
-    'date-range': 'date_range'
+    'date-range': 'date_range',
+    'labs': 'lab',
+    'lab': 'lab'
 }
 par = oneibl.params.get()
 
@@ -115,6 +120,7 @@ class ONE(OneAbstract):
             raise ConnectionError("Can't connect to " + base_url + '. \n' +
                                   'IP addresses are filtered on IBL database servers. \n' +
                                   'Are you connecting from an IBL participating institution ?')
+        print('Connected to ' + base_url + ' as ' + username)
 
     def list(self, eid=None, keyword='dataset-type', details=False):
         """
@@ -149,7 +155,7 @@ class ONE(OneAbstract):
             for e in eid:
                 out.append(self.list(e, keyword=keyword, details=details))
             if details and (keyword != 'dataset-type'):
-                return [out[0][0], out[1][0]], [out[0][1], out[1][1]]
+                return [[o[0] for o in out], [o[1] for o in out]]
             else:
                 return out
 
@@ -301,7 +307,7 @@ class ONE(OneAbstract):
         return list_out[0], full_out[0]
 
     def search(self, dataset_types=None, users=None, subjects=None, date_range=None,
-               details=False):
+               lab=None, details=False):
         """
         Applies a filter to the sessions (eid) table and returns a list of json dictionaries
          corresponding to sessions.
@@ -312,6 +318,8 @@ class ONE(OneAbstract):
         :type users: list or str
         :param subjects: a list of subjects nickname
         :type subjects: list or str
+        :param lab: a str or list of lab names
+        :type lab: list or str
         :param date_range: list of 2 strings or list of 2 dates that define the range
         :type date_range: list
         :param details: default False, returns also the session details as per the REST response
@@ -330,6 +338,7 @@ class ONE(OneAbstract):
         dataset_types = validate_input(dataset_types)
         users = validate_input(users)
         subjects = validate_input(subjects)
+        lab = validate_input(lab)
         # start creating the url
         url = '/sessions?'
         if dataset_types:
@@ -338,6 +347,8 @@ class ONE(OneAbstract):
             url = url + '&users=' + ','.join(users)
         if subjects:
             url = url + '&subject=' + ','.join(subjects)
+        if lab:
+            url = url + '&lab=' + ','.join(lab)
         # TODO make the daterange more flexible: one date only from, to etc...
         if date_range:
             url = url + '&date_range=' + ','.join(date_range)

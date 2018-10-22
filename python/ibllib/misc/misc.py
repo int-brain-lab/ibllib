@@ -1,4 +1,5 @@
 # library of small functions
+import numpy as np
 import json
 import re
 
@@ -17,3 +18,21 @@ def is_uuid_string(string):
         return True
     else:
         return False
+
+
+def structarr(names, shape=None, formats=None):
+    if not formats:
+        formats = ['f8'] * len(names)
+    dtyp = np.dtype({'names': names, 'formats': formats})
+    return np.zeros(shape, dtype=dtyp)
+
+
+if __name__ == '__main__':
+    names = ['positions', 'times']
+    x = structarr(names, shape=(1500,))
+
+    x['positions'] = np.random.random(1500,)
+    x['times'] = np.arange(1500,)
+
+    x[1:10]['times']
+    b = x[1:10]

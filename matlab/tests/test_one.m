@@ -87,6 +87,14 @@ classdef test_one < matlab.unittest.TestCase
             [eids, ses] = testCase.one.search('dataset_types',dtyp);
             % test empty return for non-existent user
             [eids, ses] = testCase.one.search('subjects',{'turlu'});
+            % test without curly braces for user
+            a = testCase.one.search('user', 'olivier');
+            b = testCase.one.search('user', {'olivier'});
+            testCase.assertEqual(a, b)
+            b = testCase.one.search('subject', 'asodjf');
+            % test the search for labs
+            a = testCase.one.search('lab','zadorlab');
+            testCase.assertEqual(testCase.eid2, a)
         end
         
         function test_load(testCase)

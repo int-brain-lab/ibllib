@@ -3,7 +3,19 @@ import datetime
 
 
 def isostr2date(isostr):
-    return datetime.datetime.strptime(isostr, '%Y-%m-%dT%H:%M:%S.%f')
+    '''
+    Convert strings representing dates into datetime.datetime objects
+    ISO 8601: '2018-05-22T14:35:22.99585' or '2018-05-22T14:35:22'
+
+    :param isostr: a string, list of strings or panda Series / numpy arrays containing strings
+    :return: a scalar, list of
+    '''
+    if not isinstance(isostr, str):
+        return [isostr2date(el) for el in isostr]
+    if '.' not in isostr:
+        return datetime.datetime.strptime(isostr, '%Y-%m-%dT%H:%M:%S')
+    else:
+        return datetime.datetime.strptime(isostr, '%Y-%m-%dT%H:%M:%S.%f')
 
 
 def date2isostr(adate):

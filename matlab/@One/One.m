@@ -24,6 +24,7 @@ classdef One
             % Instantiate the Alyx Client connection
             try
                 self.alyx_client = AlyxClient('user',alyx_login,'password',alyx_pwd,'base_url',alyx_url);
+                disp(['Connected to ' self.alyx_client.base_url ' as ' self.alyx_client.user])
             catch err
                 warning(['Error ocurred while instantiating Alyx client: ' err.message])
                 rethrow(err)
@@ -33,7 +34,7 @@ classdef One
                 self.ftp = ftp(self.par.FTP_DATA_SERVER(7:end), ...
                                self.par.FTP_DATA_SERVER_LOGIN, ...
                                self.par.FTP_DATA_SERVER_PWD);
-                self.ftp.binary;
+                binary(self.ftp);
             catch err
                 warning(['Error ocurred while instantiating FTP client to FlatIron: ' err.message])
                 rethrow(err)
@@ -46,7 +47,6 @@ classdef One
     end
     
     methods
-        session_info = info(self, eeid)
         varargout = list(self, eid, varargin)
         varargout = load(self, eid, varargin)
         [eids, ses] = search(self, varargin)

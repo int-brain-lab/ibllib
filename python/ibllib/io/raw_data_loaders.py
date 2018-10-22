@@ -15,6 +15,70 @@ import pandas as pd
 from dateutil import parser
 
 
+def trial_times_to_times(raw_trial):
+    """
+    Parse and convert all trial timestamps to "absolute" time.
+    Float64 seconds from session start.
+
+    0---BpodStart---TrialStart0---------TrialEnd0-----TrialStart1---TrialEnd1...0---ts0---ts1---
+    tsN...absTS = tsN + TrialStartN - BpodStart
+
+    Bpod timestamps are in microseconds (µs)
+    PyBpod timestamps are is seconds (s)
+
+    :param raw_trial: raw tiral data
+    :type raw_trial: dict
+    :return: trial data with modified timestamps
+    :rtype: dict
+    """
+    ts_bs = raw_trial['behavior_data']['Bpod start timestamp']
+    ts_ts = raw_trial['behavior_data']['Trial start timestamp']
+    ts_te = raw_trial['behavior_data']['Trial end timestamp']
+
+    def convert(ts):
+        return ts + ts_ts - ts_bs
+
+    converted_events = {}
+    for k, v in raw_trial['behavior_data']['Events timestamps'].items():
+        converted_events.update({k: [convert(i) for i in v]})
+    raw_trial['behavior_data']['Events timestamps'] = converted_events
+
+    converted_states = {}
+    for k, v in raw_trial['behavior_data']['States timestamps'].items():
+        converted_states.update({k: [[convert(i) for i in x] for x in v]})
+    raw_trial['behavior_data']['States timestamps'] = converted_states
+
+    shift = raw_trial['behavior_data']['Bpod start timestamp']
+    raw_trial['behavior_data']['Bpod start timestamp'] -= shift
+    raw_trial['behavior_data']['Trial start timestamp'] -= shift
+    raw_trial['behavior_data']['Trial end timestamp'] -= shift
+    assert(raw_trial['behavior_data']['Bpod start timestamp'] == 0)
+    return raw_trial
+
+
+def load_data(session_path, time='absolute'):
+    """
+    Load PyBpod data files (.jsonable).
+
+    Bpod timestamps are in microseconds (µs)
+    PyBpod timestamps are is seconds (s)
+
+    :param session_path: Absolute path of session folder
+    :type session_path: str
+    :return: A list of len ntrials each trial being a dictionary
+    :rtype: list of dicts
+    """
+    path = os.path.join(session_path, "raw_behavior_data",
+                        "_ibl_taskData.raw.jsonable")
+    data = []
+    with open(path, 'r') as f:
+        for line in f:
+            data.append(json.loads(line))
+    if time == 'absolute':
+        data = [trial_times_to_times(t) for t in data]
+    return data
+
+
 def load_settings(session_path):
     """
     Load PyBpod Settings files (.json).
@@ -27,41 +91,21 @@ def load_settings(session_path):
     :rtype: dict
     """
     path = os.path.join(session_path, "raw_behavior_data",
-                        "_ibl_pycwBasic.settings.json")
+                        "_ibl_taskSettings.raw.json")
     with open(path, 'r') as f:
         settings = json.loads(f.readline())
     return settings
-
-
-def load_data(session_path):
-    """
-    Load PyBpod data files (.jsonable).
-
-    [description]
-
-    :param session_path: Absolute path of session folder
-    :type session_path: str
-    :return: A list of len ntrials each trial being a dictionary
-    :rtype: list of dicts
-    """
-    path = os.path.join(session_path, "raw_behavior_data",
-                        "_ibl_pycwBasic.data.jsonable")
-    data = []
-    with open(path, 'r') as f:
-        for line in f:
-            data.append(json.loads(line))
-    return data
 
 
 def load_encoder_events(session_path):
     """
     Load Rotary Encoder (RE) events raw data file.
 
-    Assumes that a folder calles "raw_behavior_data" exists in folder.
+    Assumes that a folder called "raw_behavior_data" exists in folder.
 
     On each trial the RE sends 3 events to Bonsai 1 - meaning trial start/turn
     off the stim; 2 - meaning show the current trial stimulus; and 3 - meaning
-    begin the closed loop making the stim move whit the RE. These events are
+    begin the closed loop making the stim move with the RE. These events are
     triggered by the state machine in the corrensponding states: trial_start,
     stim_on, closed_loop
 
@@ -72,9 +116,9 @@ def load_encoder_events(session_path):
     this reason these columns are dropped.
 
     >>> data.columns
-    >>> ['re_ts',   # Rotary Encoder Timestamp  'numpy.int64'
-         'sm_ev',   # State Machine Event       'numpy.int64'
-         'bns_ts']  # Bonsai Timestamp          'pandas.Timestamp'
+    >>> ['re_ts',   # Rotary Encoder Timestamp (ms) 'numpy.int64'
+         'sm_ev',   # State Machine Event           'numpy.int64'
+         'bns_ts']  # Bonsai Timestamp (int)        'pandas.Timestamp'
         # pd.to_datetime(data.bns_ts) to work in datetimes
 
     :param session_path: [description]
@@ -83,7 +127,7 @@ def load_encoder_events(session_path):
     :rtype: Pandas.DataFrame
     """
     path = os.path.join(session_path, "raw_behavior_data",
-                        "_ibl_encoderEvents.bonsai_raw.csv")
+                        "_ibl_encoderEvents.raw.ssv")
     data = pd.read_csv(path, sep=' ', header=None)
     data = data.drop([0, 2, 5], axis=1)
     data.columns = ['re_ts', 'sm_ev', 'bns_ts']
@@ -95,7 +139,10 @@ def load_encoder_positions(session_path):
     """
     Load Rotary Encoder (RE) positions from raw data file.
 
-    Assumes that a folder calles "raw_behavior_data" exists in folder.
+    Assumes that a folder called "raw_behavior_data" exists in folder.
+    Positions are RE ticks [-512, 512] == [-180º, 180º]
+    0 == trial stim init position
+    Positive nums are rightwards movements (mouse) or RE CW (mouse)
 
     Variable line number, depends on movements.
 
@@ -105,9 +152,9 @@ def load_encoder_positions(session_path):
     Position is always equal to 'Position' so this column was dropped.
 
     >>> data.columns
-    >>> ['re_ts',   # Rotary Encoder Timestamp  'numpy.int64'
-         're_pos',  # Rotary Encoder position   'numpy.int64'
-         'bns_ts']  # Bonsai Timestamp          'pandas.Timestamp'
+    >>> ['re_ts',   # Rotary Encoder Timestamp (ms)     'numpy.int64'
+         're_pos',  # Rotary Encoder position (ticks)   'numpy.int64'
+         'bns_ts']  # Bonsai Timestamp                  'pandas.Timestamp'
         # pd.to_datetime(data.bns_ts) to work in datetimes
 
     :param session_path: Absoulte path of session folder
@@ -116,7 +163,7 @@ def load_encoder_positions(session_path):
     :rtype: Pandas.DataFrame
     """
     path = os.path.join(session_path, "raw_behavior_data",
-                        "_ibl_encoderPositions.bonsai_raw.csv")
+                        "_ibl_encoderPositions.raw.ssv")
     data = pd.read_csv(path, sep=' ', header=None)
     data = data.drop([0, 4], axis=1)
     data.columns = ['re_ts', 're_pos', 'bns_ts']
@@ -129,6 +176,10 @@ def load_encoder_trial_info(session_path):
     Load Rotary Encoder trial info from raw data file.
 
     Assumes that a folder calles "raw_behavior_data" exists in folder.
+
+    NOTE: Last trial probably inexistent data (Trial info is sent on trial start
+    and data is only saved on trial exit...) max(trialnum) should be N+1 if N
+    is the amount of trial data saved.
 
     Raw datafile Columns:
 
@@ -149,7 +200,7 @@ def load_encoder_trial_info(session_path):
     :rtype: Pandas.DataFrame
     """
     path = os.path.join(session_path, "raw_behavior_data",
-                        "_ibl_encoderTrialInfo.bonsai_raw.csv")
+                        "_ibl_encoderTrialInfo.raw.ssv")
     data = pd.read_csv(path, sep=' ', header=None)
     data = data.drop([8], axis=1)
     data.columns = ['trial_num', 'stim_pos_init', 'stim_contrast', 'stim_freq',
@@ -157,15 +208,17 @@ def load_encoder_trial_info(session_path):
     data.bns_ts = pd.Series([parser.parse(x) for x in data.bns_ts])
     return data
 
-
+# Missing raw data file loaders
+# _ibl_ambientSensorData.raw.jsonable
+# _ibl_micData.raw.wav
 if __name__ == '__main__':
-    SESSION_PATH = "/home/nico/Projects/IBL/IBL-github/IBL_root/pybpod_data/\
-test_mouse/2018-07-11/11"
+    session_path = "/home/nico/Projects/IBL/IBL-github/iblrig/Subjects/\
+test_mouse/2018-10-02/1"
 
-    settings = load_settings(SESSION_PATH)
-    data = load_data(SESSION_PATH)
-    eEvents = load_encoder_events(SESSION_PATH)
-    ePos = load_encoder_positions(SESSION_PATH)
-    eTI = load_encoder_trial_info(SESSION_PATH)
+    settings = load_settings(session_path)
+    data = load_data(session_path)
+    eEvents = load_encoder_events(session_path)
+    ePos = load_encoder_positions(session_path)
+    eTI = load_encoder_trial_info(session_path)
 
     print("Done!")

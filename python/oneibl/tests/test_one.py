@@ -109,6 +109,8 @@ class TestLoad(unittest.TestCase):
         self.assertTrue(len(sl) == 1)
         # test empty return for non-existent user
         self.assertTrue(len(one.search(users='asdfa')) == 0)
+        # test search with the lab keyword
+        self.assertTrue(len(one.search(lab='zadorlab')) == 1)
 
     def test_session_does_not_exist(self):
         eid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'

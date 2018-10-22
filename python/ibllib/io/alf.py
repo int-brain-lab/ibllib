@@ -1,41 +1,34 @@
-# -*- coding: utf-8 -*-
-# @Author: nico
-# @Date:   2018-05-14 16:08:51
-# @Last Modified by:   Niccolò Bonacchi
-# @Last Modified time: 2018-07-03 13:08:07
 import os
 import re
-import json
-import dateutil.parser
 from ibllib.misc import flatten
 
 
-class Subject(object):
+class Scraper(object):
     """
     Scrapes folder structure for subjects.
 
     Requires a ROOT_DATA_FOLDER for subject data i.e.
     ../lab_name/Subjects folder
+
+    alf.Scraper(root_data_folder)
     """
 
     def __init__(self, root_data_folder):
         self.root_data_folder = root_data_folder
 
     @property
-    def all_names(self):
+    def subjects(self):
         """
         Get all folders from main subjects folder.
 
         Subject names are defined by being a folder in the main Subjects
         folder.
-
-        :TODO: check alyx for all subject names to match folder names
         """
         return [x for x in os.listdir(self.root_data_folder) if
                 os.path.isdir(os.path.join(self.root_data_folder, x))]
 
     @property
-    def all_folders(self):
+    def subject_folders(self):
         """
         Get all subject folder paths found in root data folder.
 
@@ -44,9 +37,9 @@ class Subject(object):
         """
         return [os.path.join(self.root_data_folder, x) for x in self.all_names]
 
-    def folder(self, mouse_name):
+    def path(root_path=None, subject=None, session=None, date_time=None, session_number=None):
         """
-        Get path of main mouse_name folder.
+        Get path
 
         :param mouse_name: Name of subject.
         :type mouse_name: str
