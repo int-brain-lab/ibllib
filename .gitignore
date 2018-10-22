@@ -7,8 +7,8 @@ python/scratch
 .idea/*
 .vscode/
 *checkpoint.ipynb
-
 build/
 venv/
 dist/
 ibllib.egg-info/
+.DS_Store
