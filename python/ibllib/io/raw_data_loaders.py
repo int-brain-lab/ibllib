@@ -23,6 +23,9 @@ def trial_times_to_times(raw_trial):
     0---BpodStart---TrialStart0---------TrialEnd0-----TrialStart1---TrialEnd1...0---ts0---ts1---
     tsN...absTS = tsN + TrialStartN - BpodStart
 
+    Bpod timestamps are in microseconds (µs)
+    PyBpod timestamps are is seconds (s)
+
     :param raw_trial: raw tiral data
     :type raw_trial: dict
     :return: trial data with modified timestamps
@@ -57,7 +60,8 @@ def load_data(session_path, time='absolute'):
     """
     Load PyBpod data files (.jsonable).
 
-    [description]
+    Bpod timestamps are in microseconds (µs)
+    PyBpod timestamps are is seconds (s)
 
     :param session_path: Absolute path of session folder
     :type session_path: str
@@ -112,9 +116,9 @@ def load_encoder_events(session_path):
     this reason these columns are dropped.
 
     >>> data.columns
-    >>> ['re_ts',   # Rotary Encoder Timestamp  'numpy.int64'
-         'sm_ev',   # State Machine Event       'numpy.int64'
-         'bns_ts']  # Bonsai Timestamp          'pandas.Timestamp'
+    >>> ['re_ts',   # Rotary Encoder Timestamp (ms) 'numpy.int64'
+         'sm_ev',   # State Machine Event           'numpy.int64'
+         'bns_ts']  # Bonsai Timestamp (int)        'pandas.Timestamp'
         # pd.to_datetime(data.bns_ts) to work in datetimes
 
     :param session_path: [description]
@@ -148,9 +152,9 @@ def load_encoder_positions(session_path):
     Position is always equal to 'Position' so this column was dropped.
 
     >>> data.columns
-    >>> ['re_ts',   # Rotary Encoder Timestamp  'numpy.int64'
-         're_pos',  # Rotary Encoder position   'numpy.int64'
-         'bns_ts']  # Bonsai Timestamp          'pandas.Timestamp'
+    >>> ['re_ts',   # Rotary Encoder Timestamp (ms)     'numpy.int64'
+         're_pos',  # Rotary Encoder position (ticks)   'numpy.int64'
+         'bns_ts']  # Bonsai Timestamp                  'pandas.Timestamp'
         # pd.to_datetime(data.bns_ts) to work in datetimes
 
     :param session_path: Absoulte path of session folder

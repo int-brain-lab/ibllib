@@ -467,7 +467,6 @@ def get_goCueOnset_times(session_path, save=False):
 
 
 def extract_trials(session_path, save=False):
-    data = raw.load_data(session_path)
 
     feedbackType = get_feedbackType(session_path, save=save)
     contrastLeft, contrastRight = get_contrastLR(session_path, save=save)
@@ -487,9 +486,9 @@ def extract_trials(session_path, save=False):
     # _ibl_trials.probabilityLeft
 
 if __name__ == '__main__':
-    session_path = "/home/nico/Projects/IBL/IBL-github/iblrig/Subjects/\
+    session_path = "/home/nico/Projects/IBL/IBL-github/iblrig/test_dataset/\
 test_mouse/2018-10-02/1"
-    save = True
+    save = False
 
     data = raw.load_data(session_path)
 
