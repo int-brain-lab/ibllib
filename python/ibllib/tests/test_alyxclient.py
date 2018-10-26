@@ -17,12 +17,41 @@ class TestDownloadHTTP(unittest.TestCase):
                                 base_url='https://test.alyx.internationalbrainlab.org')
         self.test_data_uuid = '3ddd45be-7d24-4fc7-9dd3-a98717342af6'
 
-    def test_rest_endpoint(self):
+    def test_generic_request(self):
+        a = self.ac.get('/labs')
+        b = self.ac.get('labs')
+        self.assertEqual(a, b)
+
+    def test_rest_endpoint_write(self):
+        # test object creation and deletion with weighings
+        wa = {'subject': 'flowers',
+              'date_time': '2018-06-30T12:34:57',
+              'weight': 22.2,
+              'user': 'olivier'
+              }
+        a = self.ac.rest('weighings', 'create', wa)
+        b = self.ac.rest('weighings', 'read', a['url'])
+        self.assertEqual(a, b)
+        self.ac.rest('weighings', 'delete', a['url'])
+        # test patch object with subjects
+        sub = self.ac.rest('subjects/flowers', 'list')
+        data = {'birth_date': '2018-04-01',
+                'death_date': '2018-09-09'}
+        sub = self.ac.rest('subjects/flowers', 'partial_update', data=data)
+        self.assertEqual(sub['birth_date'], data['birth_date'])
+        self.assertEqual(sub['death_date'], data['death_date'])
+        data = {'birth_date': '2018-04-02',
+                'death_date': '2018-09-10'}
+        sub = self.ac.rest('subjects/flowers', 'partial_update', data=data)
+        self.assertEqual(sub['birth_date'], data['birth_date'])
+        self.assertEqual(sub['death_date'], data['death_date'])
+
+    def test_rest_endpoint_read_only(self):
         # tests that non-existing endpoints /actions are caught properly
         with self.assertRaises(ValueError):
-            self.ac.rest(endpoint='turlu', action='create')
+            self.ac.rest(url='turlu', action='create')
         with self.assertRaises(ValueError):
-            self.ac.rest(endpoint='sessions', action='turlu')
+            self.ac.rest(url='sessions', action='turlu')
         # test with labs : get
         a = self.ac.rest('labs', 'list')
         self.assertTrue(len(a) == 3)
@@ -34,16 +63,14 @@ class TestDownloadHTTP(unittest.TestCase):
         d = self.ac.rest('labs', 'read',
                          'https://test.alyx.internationalbrainlab.org/labs/mainenlab')
         self.assertEqual(c, d)
-        # test object creation and deletion with weighings
-        wa = {'subject': 'flowers',
-              'date_time': '2018-06-30T12:34:57',
-              'weight': 22.2,
-              'user': 'olivier'
-              }
-        a = self.ac.rest('weighings', 'create', wa)
-        b = self.ac.rest('weighings', 'read', a['url'])
-        self.assertEqual(a, b)
-        self.ac.rest('weighings', 'delete', a['url'])
+        # test a more complex endpoint with a filter and a selection
+        sub = self.ac.rest('subjects/flowers', 'list')
+        sub1 = self.ac.rest('subjects?nickname=flowers', 'list')
+        self.assertTrue(len(sub1) == 1)
+        self.assertEqual(sub['nickname'], sub1[0]['nickname'])
+        # also make sure the action is overriden on a filter query
+        sub2 = self.ac.rest('/subjects?nickname=flowers')
+        self.assertEqual(sub1, sub2)
 
     def test_download_datasets_with_api(self):
         ac = self.ac  # easier to debug in console
