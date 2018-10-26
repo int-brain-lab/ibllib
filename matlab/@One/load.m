@@ -2,6 +2,8 @@ function varargout = load(self, eid, varargin)
 %[d1, d2, d3] =  one.load(eid, 'data', dataset_types)
 %       For session with UUID eid, Loads the datasets specified in the cell array dataset_types
 % my_data = one.load(eid, 'data', dataset_types, 'dclass_output', true)
+% my_data = one.load(..., 'cache_dir', '~/Documents/tmpanalysis') %
+% temporarly overrides the default cache dir from the parameter file
 
 %% handle input arguments
 TYPO_PROOF = {  ...
@@ -25,6 +27,7 @@ addOptional(p,'dataset_types', {});
 addOptional(p,'dry_run',false);
 addOptional(p,'force_replace',false);
 addOptional(p, 'dclass_output', false);
+addOptional(p, 'cache_dir', self.par.CACHE_DIR);
 parse(p,varargin{:});
 for fn = fieldnames(p.Results)', eval([fn{1} '= p.Results.' (fn{1}) ';']); end
 if ischar(dataset_types), dataset_types = {dataset_types}; end
@@ -54,13 +57,13 @@ for m = 1:length(ises)
     url_server_side = strrep( D.url{m},  self.par.HTTP_DATA_SERVER, '');
     % create the local path while keeping ALF convention for folder structure
     if isunix
-        local_path = [self.par.CACHE_DIR url_server_side];
+        local_path = [cache_dir url_server_side];
     else
-        local_path = [self.par.CACHE_DIR strrep(url_server_side, '/', filesep)];
+        local_path = [cache_dir strrep(url_server_side, '/', filesep)];
     end
     if ~dry_run && (force_replace || ~exist(local_path, 'file'))
         disp(['Downloading ' local_path])
-        res =  mget(self.ftp, url_server_side, self.par.CACHE_DIR);
+        res =  mget(self.ftp, url_server_side, cache_dir);
         assert(strcmp(res, local_path))
     end
     % loads the data

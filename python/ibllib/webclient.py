@@ -165,6 +165,7 @@ class AlyxClient:
             return
         else:
             print(self._base_url + rest_query)
+            print(r.text)
             raise Exception(r)
 
     def authenticate(self, username='', password='', base_url=''):

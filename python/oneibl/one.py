@@ -186,7 +186,7 @@ class ONE(OneAbstract):
         else:
             return ses[0][keyword]
 
-    def load(self, eid, dataset_types=None, dclass_output=False, dry_run=False):
+    def load(self, eid, dataset_types=None, dclass_output=False, dry_run=False, cache_dir=None):
         """
         From a Session ID and dataset types, queries Alyx database, downloads the data
         from Globus, and loads into numpy array.
@@ -201,6 +201,8 @@ class ONE(OneAbstract):
         :param dclass_output: [False]: forces the output as dataclass to provide context.
         :type dclass_output: bool
          If None or an empty dataset_type is specified, the output will be a dictionary by default.
+        :param cache_dir: temporarly overrides the cache_dir from the parameter file
+        :type cache_dir: str
 
         :return: List of numpy arrays matching the size of dataset_types parameter, OR
          a dataclass containing arrays and context data.
@@ -209,6 +211,8 @@ class ONE(OneAbstract):
         # TODO: feature that downloads a list of datasets from a list of sessions,
         # TODO in this case force dictionary output
         # if the input as an UUID, add the beginning of URL to it
+        if not cache_dir:
+            cache_dir = par.CACHE_DIR
         if is_uuid_string(eid):
             eid = '/sessions/' + eid
         eid_str = eid[-36:]
@@ -235,12 +239,12 @@ class ONE(OneAbstract):
                     urlstr = ses['data_dataset_session_related'][i]['data_url']
                     if urlstr and not dry_run:
                         rel_path = PurePath(urlstr.replace(par.HTTP_DATA_SERVER, '.')).parents[0]
-                        cache_dir = PurePath(par.CACHE_DIR, rel_path)
-                        Path(cache_dir).mkdir(parents=True, exist_ok=True)
+                        cache_dir_file = PurePath(cache_dir, rel_path)
+                        Path(cache_dir_file).mkdir(parents=True, exist_ok=True)
                         fil = wc.http_download_file(urlstr,
                                                     username=par.HTTP_DATA_SERVER_LOGIN,
                                                     password=par.HTTP_DATA_SERVER_PWD,
-                                                    cache_dir=str(cache_dir))
+                                                    cache_dir=str(cache_dir_file))
                     else:
                         fil = ''
                     out.eid.append(eid_str)
