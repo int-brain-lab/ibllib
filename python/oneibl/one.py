@@ -1,11 +1,14 @@
-import numpy as np
 import os
 from dataclasses import dataclass, field
-import ibllib.webclient as wc
-from ibllib.misc import is_uuid_string, pprint
 import abc
 from pathlib import Path, PurePath
 import requests
+
+import numpy as np
+import pandas as pd
+
+import ibllib.webclient as wc
+from ibllib.misc import is_uuid_string, pprint
 import oneibl.params
 
 _ENDPOINTS = {  # keynames are possible input arguments and values are actual endpoints
@@ -261,9 +264,9 @@ class ONE(OneAbstract):
             if fil and os.path.splitext(fil)[1] == '.json':
                 pass  # FIXME would be nice to implement json read but param from matlab RIG fails
             if fil and os.path.splitext(fil)[1] == '.tsv':
-                pass  # TODO: implement csv reads as well
+                out.data[ind] = pd.read_csv(fil, delimiter='\t')
             if fil and os.path.splitext(fil)[1] == '.csv':
-                pass  # TODO: implement tsv reads as well
+                out.data[ind] = pd.read_csv(fil)
         if dclass_output:
             return out
         # if required, parse the output as a list that matches dataset types provided
