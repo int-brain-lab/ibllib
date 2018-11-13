@@ -86,6 +86,12 @@ class TestLoad(unittest.TestCase):
         a = one.load(eid)
         self.assertTrue(len(a.data) == 5)
 
+    def test_load_fileformats(self):
+        # npy already works for other tests around, tsv and csv implemented so far
+        one = self.One
+        eid = self.eid
+        pdesc = one.load(eid, dataset_types=['probes.description'])
+
     def test_search_simple(self):
         one = self.One
         # Test users
