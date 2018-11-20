@@ -4,3 +4,4 @@ numpy
 pandas
 requests
 scipy
+seaborn
