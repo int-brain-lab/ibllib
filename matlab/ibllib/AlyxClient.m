@@ -88,11 +88,22 @@ classdef AlyxClient
             session_info = self.get(session_url);
          end
          
-         function rep = post(self,end_point, request_struct)
+         function rep = post(self, url , request_struct)
              % rep = post(url, request_struct)
-             url = [self.base_url  end_point];
-             rep = webwrite(url,  jsonencode(request_struct), setfield(self.weboptions, 'RequestMethod', 'post') );
+            if isempty(strfind(url, self.base_url))
+                url = [self.base_url  endpoint_url];
+            end
+            rep = webwrite(url,  jsonencode(request_struct), setfield(self.weboptions, 'RequestMethod', 'post') );
          end
+         
+         function rep = put(self, url, request_struct)
+             % rep = put(url, request_struct)
+            if isempty(strfind(url, self.base_url))
+                url = [self.base_url  endpoint_url];
+            end
+            rep = webwrite(url,  jsonencode(request_struct), setfield(self.weboptions, 'RequestMethod', 'put') );
+         end
+         
 %          function create_session(self, session_structure)
 %              % self.create_session(session_structure)
 %             %  session =  struct with fields: 

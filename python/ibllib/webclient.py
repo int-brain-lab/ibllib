@@ -303,6 +303,8 @@ class AlyxClient:
         # if there is no data (except for list), show the user a list of fields
         if action != 'list' and not data:
             pprint(endpoint_scheme[action]['fields'])
+            for act in endpoint_scheme[action]['fields']:
+                print( "'" + act['name'] + "': ...,")
             return
         if action == 'list':
             assert(endpoint_scheme[action]['action'] == 'get')
