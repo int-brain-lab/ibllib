@@ -91,7 +91,7 @@ classdef AlyxClient
          function rep = post(self, url , request_struct)
              % rep = post(url, request_struct)
             if isempty(strfind(url, self.base_url))
-                url = [self.base_url  endpoint_url];
+                url = [self.base_url  url];
             end
             rep = webwrite(url,  jsonencode(request_struct), setfield(self.weboptions, 'RequestMethod', 'post') );
          end
@@ -99,7 +99,7 @@ classdef AlyxClient
          function rep = put(self, url, request_struct)
              % rep = put(url, request_struct)
             if isempty(strfind(url, self.base_url))
-                url = [self.base_url  endpoint_url];
+                url = [self.base_url  url];
             end
             rep = webwrite(url,  jsonencode(request_struct), setfield(self.weboptions, 'RequestMethod', 'put') );
          end
