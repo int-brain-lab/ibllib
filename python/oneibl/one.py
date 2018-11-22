@@ -189,7 +189,8 @@ class ONE(OneAbstract):
         else:
             return ses[0][keyword]
 
-    def load(self, eid, dataset_types=None, dclass_output=False, dry_run=False, cache_dir=None):
+    def load(self, eid, dataset_types=None, dclass_output=False, dry_run=False, cache_dir=None,
+             download_only=False):
         """
         From a Session ID and dataset types, queries Alyx database, downloads the data
         from Globus, and loads into numpy array.
@@ -206,6 +207,8 @@ class ONE(OneAbstract):
          If None or an empty dataset_type is specified, the output will be a dictionary by default.
         :param cache_dir: temporarly overrides the cache_dir from the parameter file
         :type cache_dir: str
+        :param download_only: do not attempt to load data in memory, just download the files
+        :type download_only: bool
 
         :return: List of numpy arrays matching the size of dataset_types parameter, OR
          a dataclass containing arrays and context data.
@@ -259,6 +262,8 @@ class ONE(OneAbstract):
         # then another loop over files and load them in numpy. If not npy, just pass empty list
         # the data loading per format needs to be implemented in a generic function in ibllib/alf.
         for ind, fil in enumerate(out.local_path):
+            if download_only:
+                continue
             if fil and os.path.getsize(fil) == 0:
                 continue
             if fil and os.path.splitext(fil)[1] == '.npy':
