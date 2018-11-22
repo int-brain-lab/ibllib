@@ -183,7 +183,7 @@ class ONE(OneAbstract):
         ses = self._alyxClient.get('/sessions?id=' + eid)
 
         if keyword.lower() == 'all':
-            return ses  # TODO: return a dict of lists or dataclass instead of those nested arrays
+            return ses
         elif details:
             return ses[0][keyword], ses
         else:
@@ -259,6 +259,8 @@ class ONE(OneAbstract):
         # then another loop over files and load them in numpy. If not npy, just pass empty list
         # the data loading per format needs to be implemented in a generic function in ibllib/alf.
         for ind, fil in enumerate(out.local_path):
+            if fil and os.path.getsize(fil) == 0:
+                continue
             if fil and os.path.splitext(fil)[1] == '.npy':
                 out.data[ind] = np.load(file=fil)
             if fil and os.path.splitext(fil)[1] == '.json':
