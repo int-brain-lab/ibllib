@@ -5,10 +5,10 @@ one = ONE(base_url='https://dev.alyx.internationalbrainlab.org')
 ac = one._alyxClient
 
 # list all water administrations
-wa = ac.rest('water-administrations','list')
+wa = ac.rest('water-administrations', 'list')
 
 # to list administrations for one subject, it is better to use the subjects endpoint
-sub_info = ac.rest('subjects','read','ZM_346')
+sub_info = ac.rest('subjects', 'read', 'ZM_346')
 pprint(sub_info['water_administrations'])
 
 # this is how to programmatically create a water administration
@@ -23,4 +23,4 @@ wa_ = {
 
 # do not use the example on anything else than alyx-dev
 if ac._base_url != 'https://dev.alyx.internationalbrainlab.org':
-    rep = ac.rest('water-administrations','create',wa_)
+    rep = ac.rest('water-administrations', 'create', wa_)
