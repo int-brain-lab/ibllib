@@ -336,9 +336,7 @@ class ONE(OneAbstract):
          each entry corresponding to a matching session
         :rtype: list, list
         """
-        # TODO add a lab field in the session table of Alyx to add as a query
         # make sure string inputs are interpreted as lists
-
         def validate_input(inarg):
             return [inarg] if isinstance(inarg, str) else inarg
 
@@ -356,8 +354,8 @@ class ONE(OneAbstract):
             url = url + '&subject=' + ','.join(subjects)
         if lab:
             url = url + '&lab=' + ','.join(lab)
-        # TODO make the daterange more flexible: one date only from, to etc...
         if date_range:
+            date_range = _validate_date_range(date_range)
             url = url + '&date_range=' + ','.join(date_range)
         # implements the loading itself
         ses = self._alyxClient.get(url)
@@ -385,3 +383,14 @@ class ONE(OneAbstract):
         Interactive command tool that populates parameter file for ONE IBL.
         """
         oneibl.params.setup()
+
+
+def _validate_date_range(date_range):
+    """
+    Validates and arrange date range in a 2 elements list
+    """
+    if isinstance(date_range, str):
+        date_range = [date_range, date_range]
+    if len(date_range) == 1:
+        date_range = [date_range[0], date_range[0]]
+    return date_range
