@@ -17,6 +17,7 @@ def default():
            "HTTP_DATA_SERVER": "http://ibl.flatironinstitute.com",
            "HTTP_DATA_SERVER_LOGIN": "iblmember",
            "HTTP_DATA_SERVER_PWD": None,
+           "GLOBUS_CLIENT_ID": None,
            }
     return params.from_dict(par)
 
