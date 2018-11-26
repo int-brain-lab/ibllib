@@ -125,6 +125,10 @@ class ONE(OneAbstract):
                                   'Are you connecting from an IBL participating institution ?')
         print('Connected to ' + base_url + ' as ' + username)
 
+    @property
+    def alyx(self):
+        return self._alyxClient
+
     def list(self, eid=None, keyword='dataset-type', details=False):
         """
         From a Session ID, queries Alyx database for datasets-types related to a session.
