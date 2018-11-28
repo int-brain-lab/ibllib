@@ -13,6 +13,6 @@ setup(
     url="https://www.internationalbrainlab.com/",
     packages=find_packages(),  # same as name
     install_requires=['dataclasses', 'matplotlib', 'numpy', 'pandas',
-                      'requests'],  # external packages as dependencies
+                      'requests', 'scipy', 'seaborn'],  # external packages as dependencies
     scripts=[]
 )
