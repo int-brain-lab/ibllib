@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import requests
 import json
+import re
 from ibllib.misc import pprint
 
 
@@ -157,7 +158,13 @@ class AlyxClient:
         self._headers['Accept'] = 'application/json'
 
     def _generic_request(self, reqfunction, rest_query, data=None):
+        # if the data is a dictionary, it has to be converted to json text
+        if isinstance(data, dict):
+            data = json.dumps(data)
+        # makes sure the base url is the one from the instance
         rest_query = rest_query.replace(self._base_url, '')
+        if not rest_query.startswith('/'):
+            rest_query = '/' + rest_query
         r = reqfunction(self._base_url + rest_query, stream=True, headers=self._headers, data=data)
         if r and r.status_code in (200, 201):
             return json.loads(r.text)
@@ -165,6 +172,7 @@ class AlyxClient:
             return
         else:
             print(self._base_url + rest_query)
+            print(r.text)
             raise Exception(r)
 
     def authenticate(self, username='', password='', base_url=''):
@@ -185,8 +193,7 @@ class AlyxClient:
         self._token = rep.json()
         if not (list(self._token.keys()) == ['token']):
             print(rep)
-            raise Exception('Alyx authentication error. Check your ./oneibl/params.py and'
-                            './oneibl/params_secret.py')
+            raise Exception('Alyx authentication error. Check your credentials')
         self._headers = {
             'Authorization': 'Token {}'.format(list(self._token.values())[0]),
             'Accept': 'application/json',
@@ -220,26 +227,39 @@ class AlyxClient:
         """
         return self._generic_request(requests.get, rest_query)
 
-    def post(self, rest_query, data=None):
+    def patch(self, rest_query, data=None):
         """
-        Sends a POST request to the Alyx server.
+        Sends a PATCH request to the Alyx server.
         For the dictionary contents, refer to:
         https://alyx.internationalbrainlab.org/docs
-        The preferred and safer way to interact with the REST API is by
-        using the AlyxClient.rest method
 
         :param rest_query: (required)the endpoint as full or relative URL
         :type rest_query: str
-        :param data: json encoded string
+        :param data: json encoded string or dictionary
         :type data: None, dict or str
 
         :return: response object
         """
         if isinstance(data, dict):
             data = json.dumps(data)
+        return self._generic_request(requests.patch, rest_query, data=data)
+
+    def post(self, rest_query, data=None):
+        """
+        Sends a POST request to the Alyx server.
+        For the dictionary contents, refer to:
+        https://alyx.internationalbrainlab.org/docs
+
+        :param rest_query: (required)the endpoint as full or relative URL
+        :type rest_query: str
+        :param data: dictionary or json encoded string
+        :type data: None, dict or str
+
+        :return: response object
+        """
         return self._generic_request(requests.post, rest_query, data=data)
 
-    def rest(self, endpoint=None, action=None, data=None):
+    def rest(self, url=None, action=None, data=None):
         """
         alyx_client.rest()
         alyx_client.rest("sessions")
@@ -248,24 +268,29 @@ class AlyxClient:
         lab_info = alyx_client.rest('labs', 'read',
                                     'https://test.alyx.internationalbrainlab.org/labs/mainenlab')
 
-        :param endpoint:
+        :param url:
         :param action:
         :param data:
         :return:
         """
         # if endpoint is None, list available endpoints
-        if not endpoint:
+        if not url:
             pprint([k for k in self._rest_schemes.keys() if not k.startswith('_') and k])
             return
-        # allow the user to enter an endpoint beginning with a slash
-        if endpoint.startswith('/'):
-            endpoint = endpoint[1:]
+        # remove beginning slash if any
+        if url.startswith('/'):
+            url = url[1:]
+        # and split to the next slash or question mark
+        endpoint = re.findall("^/*[^?/]*", url)[0].replace('/', '')
         # make sure the queryied endpoint exists, if not throw an informative error
         if endpoint not in self._rest_schemes.keys():
             av = [k for k in self._rest_schemes.keys() if not k.startswith('_') and k]
             raise ValueError('REST endpoint "' + endpoint + '" does not exist. Available ' +
                              'endpoints are \n       ' + '\n       '.join(av))
         endpoint_scheme = self._rest_schemes[endpoint]
+        # on a filter request, override the default action parameter
+        if '?' in url:
+            action = 'list'
         # if action is None, list available actions for the required endpoint
         if not action:
             pprint(list(endpoint_scheme.keys()))
@@ -278,13 +303,14 @@ class AlyxClient:
         # if there is no data (except for list), show the user a list of fields
         if action != 'list' and not data:
             pprint(endpoint_scheme[action]['fields'])
+            for act in endpoint_scheme[action]['fields']:
+                print("'" + act['name'] + "': ...,")
             return
         if action == 'list':
             assert(endpoint_scheme[action]['action'] == 'get')
-            url = '/' + endpoint
             if data:
                 url = url + data
-            return self.get(url)
+            return self.get('/' + url)
         if action == 'read':
             assert(endpoint_scheme[action]['action'] == 'get')
             return self.get('/' + endpoint + '/' + data.split('/')[-1])
@@ -294,10 +320,10 @@ class AlyxClient:
         elif action == 'delete':
             assert(endpoint_scheme[action]['action'] == 'delete')
             return self.delete('/' + endpoint + '/' + data.split('/')[-1])
+        elif action == 'partial_update':
+            assert(endpoint_scheme[action]['action'] == 'patch')
+            return self.patch('/' + url, data)
         # TODO BELOW: implement and unit-tests
         elif action == 'update':
             assert(endpoint_scheme[action]['action'] == 'put')
-            pass
-        elif action == 'partial_update':
-            assert(endpoint_scheme[action]['action'] == 'patch')
             pass

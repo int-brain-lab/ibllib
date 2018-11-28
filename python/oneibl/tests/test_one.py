@@ -3,7 +3,42 @@ import numpy as np
 from oneibl.one import ONE
 
 
-class TestLoad(unittest.TestCase):
+class TestSearch(unittest.TestCase):
+
+    def setUp(self):
+        # Init connection to the database
+        one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
+                  password='TapetesBloc18')
+        self.One = one
+
+    def test_search_simple(self):
+        one = self.One
+        # Test users
+        usr = ['olivier', 'nbonacchi']
+        sl, sd = one.search(users=usr, details=True)
+        self.assertTrue(isinstance(sl, list) and isinstance(sd, list))
+        self.assertTrue(all([set(usr).issubset(set(u)) for u in [s['users'] for s in sd]]))
+        # when the user is a string instead of a list
+        sl1, sd1 = one.search(users=['olivier'], details=True)
+        sl2, sd2 = one.search(users='olivier', details=True)
+        self.assertTrue(sl1 == sl2 and sd1 == sd2)
+        # test for the dataset type
+        dtyp = ['spikes.times', 'titi.tata']
+        sl, sd = one.search(dataset_types=dtyp, details=True)
+        self.assertTrue(len(sl) == 0)
+        dtyp = ['channels.site']
+        sl, sd = one.search(dataset_types=dtyp, details=True)
+        self.assertTrue(len(sl) == 2)
+        dtyp = ['spikes.times', 'channels.site']
+        sl, sd = one.search(dataset_types=dtyp, details=True)
+        self.assertTrue(len(sl) == 1)
+        # test empty return for non-existent user
+        self.assertTrue(len(one.search(users='asdfa')) == 0)
+        # test search with the lab keyword
+        self.assertTrue(len(one.search(lab='zadorlab')) == 1)
+
+
+class TestList(unittest.TestCase):
 
     def setUp(self):
         # Init connection to the database
@@ -40,6 +75,18 @@ class TestLoad(unittest.TestCase):
             a = 1
             pass
         self.assertTrue(a == 1)
+
+
+class TestLoad(unittest.TestCase):
+
+    def setUp(self):
+        # Init connection to the database
+        one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
+                  password='TapetesBloc18')
+        eids = ['cf264653-2deb-44cb-aa84-89b82507028a', '4e0b3320-47b7-416e-b842-c34dc9004cf8']
+        self.eid = eids[0]
+        self.eid2 = eids[1]
+        self.One = one
 
     def test_load(self):
         # Test with 3 actual datasets predefined
@@ -86,35 +133,32 @@ class TestLoad(unittest.TestCase):
         a = one.load(eid)
         self.assertTrue(len(a.data) == 5)
 
-    def test_search_simple(self):
+    def test_load_fileformats(self):
+        # npy already works for other tests around, tsv and csv implemented so far
         one = self.One
-        # Test users
-        usr = ['olivier', 'nbonacchi']
-        sl, sd = one.search(users=usr, details=True)
-        self.assertTrue(isinstance(sl, list) and isinstance(sd, list))
-        self.assertTrue(all([set(usr).issubset(set(u)) for u in [s['users'] for s in sd]]))
-        # when the user is a string instead of a list
-        sl1, sd1 = one.search(users=['olivier'], details=True)
-        sl2, sd2 = one.search(users='olivier', details=True)
-        self.assertTrue(sl1 == sl2 and sd1 == sd2)
-        # test for the dataset type
-        dtyp = ['spikes.times', 'titi.tata']
-        sl, sd = one.search(dataset_types=dtyp, details=True)
-        self.assertTrue(len(sl) == 0)
-        dtyp = ['channels.site']
-        sl, sd = one.search(dataset_types=dtyp, details=True)
-        self.assertTrue(len(sl) == 2)
-        dtyp = ['spikes.times', 'channels.site']
-        sl, sd = one.search(dataset_types=dtyp, details=True)
-        self.assertTrue(len(sl) == 1)
-        # test empty return for non-existent user
-        self.assertTrue(len(one.search(users='asdfa')) == 0)
-        # test search with the lab keyword
-        self.assertTrue(len(one.search(lab='zadorlab')) == 1)
+        eid = self.eid
+        one.load(eid, dataset_types=['probes.description'])
 
     def test_session_does_not_exist(self):
         eid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
         self.assertRaises(FileNotFoundError, self.One.load, eid)
+
+
+class TestMisc(unittest.TestCase):
+
+    def test_validate_date_range(self):
+        from oneibl.one import _validate_date_range
+        # test with list of strings
+        expval = ['2018-11-04', '2018-11-04']
+        val = ['2018-11-04',
+               ['2018-11-04'],
+               ('2018-11-04'),
+               ['2018-11-04', '2018-11-04'],
+               ]
+        for v in val:
+            self.assertEqual(_validate_date_range(v), expval)
+        val = ('2018-11-04', '2018-11-04')
+        self.assertEqual(_validate_date_range(val), val)
 
 
 if __name__ == '__main__':

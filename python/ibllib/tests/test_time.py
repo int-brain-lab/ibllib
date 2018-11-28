@@ -3,6 +3,7 @@ import ibllib.time
 import datetime
 import pandas as pd
 
+
 class TestUtils(unittest.TestCase):
 
     def test_format_date_range(self):
@@ -27,4 +28,4 @@ class TestUtils(unittest.TestCase):
         self.assertTrue((d[0] == a) and (d[1] == b))
         # test with pandas series
         e = ibllib.time.isostr2date(pd.Series(c))
-        self.assertTrue((d[0] == a) and (d[1] == b))
+        self.assertTrue((e[0] == a) and (e[1] == b))

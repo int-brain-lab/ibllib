@@ -39,7 +39,8 @@ would interpolate head position and lfp to a common 1000 Hz sampling rate. The s
 #### Searching for experiments
 Finally, a user needs to be able to search the data released by a provider, to obtain the eIDs of experiments they want to analyze. To do so they would run a command like:
 ```
-eIDs, eInfo = ONE.search(lab='CortexLabUCL', subject='hercules', dataset_types=['spikes.times', 'spikes.clusters','headTracking.xyPos'])
+eIDs = ONE.search(lab='CortexLabUCL', subject='hercules', dataset_types=['spikes.times', 'spikes.clusters','headTracking.xyPos'])
+eIDs, eInfo = ONE.search(details=True, lab='CortexLabUCL', subject='hercules', dataset_types=['spikes.times', 'spikes.clusters','headTracking.xyPos'])
 ```
 This would find the eIDs for all experiments collected in the specified lab for the specified experimental subject, for which all of the required data is present. There will be more metadata options to refine the search (e.g. dates, genotypes, experimenter), and additional metadata on each matching experiment is returned in `eInfo`. However, the existence of dataset types is normally enough to find the data you want. For example, if you want to analyze electrophysiology in a particular behavior task, the experiments you want are exactly those with datasets describing the ephys recordings and that task's parameters.
 

@@ -1,11 +1,14 @@
-import numpy as np
 import os
 from dataclasses import dataclass, field
-import ibllib.webclient as wc
-from ibllib.misc import is_uuid_string, pprint
 import abc
 from pathlib import Path, PurePath
 import requests
+
+import numpy as np
+import pandas as pd
+
+import ibllib.webclient as wc
+from ibllib.misc import is_uuid_string, pprint
 import oneibl.params
 
 _ENDPOINTS = {  # keynames are possible input arguments and values are actual endpoints
@@ -122,6 +125,10 @@ class ONE(OneAbstract):
                                   'Are you connecting from an IBL participating institution ?')
         print('Connected to ' + base_url + ' as ' + username)
 
+    @property
+    def alyx(self):
+        return self._alyxClient
+
     def list(self, eid=None, keyword='dataset-type', details=False):
         """
         From a Session ID, queries Alyx database for datasets-types related to a session.
@@ -180,13 +187,14 @@ class ONE(OneAbstract):
         ses = self._alyxClient.get('/sessions?id=' + eid)
 
         if keyword.lower() == 'all':
-            return ses  # TODO: return a dict of lists or dataclass instead of those nested arrays
+            return ses
         elif details:
             return ses[0][keyword], ses
         else:
             return ses[0][keyword]
 
-    def load(self, eid, dataset_types=None, dclass_output=False, dry_run=False):
+    def load(self, eid, dataset_types=None, dclass_output=False, dry_run=False, cache_dir=None,
+             download_only=False):
         """
         From a Session ID and dataset types, queries Alyx database, downloads the data
         from Globus, and loads into numpy array.
@@ -201,6 +209,10 @@ class ONE(OneAbstract):
         :param dclass_output: [False]: forces the output as dataclass to provide context.
         :type dclass_output: bool
          If None or an empty dataset_type is specified, the output will be a dictionary by default.
+        :param cache_dir: temporarly overrides the cache_dir from the parameter file
+        :type cache_dir: str
+        :param download_only: do not attempt to load data in memory, just download the files
+        :type download_only: bool
 
         :return: List of numpy arrays matching the size of dataset_types parameter, OR
          a dataclass containing arrays and context data.
@@ -209,6 +221,8 @@ class ONE(OneAbstract):
         # TODO: feature that downloads a list of datasets from a list of sessions,
         # TODO in this case force dictionary output
         # if the input as an UUID, add the beginning of URL to it
+        if not cache_dir:
+            cache_dir = par.CACHE_DIR
         if is_uuid_string(eid):
             eid = '/sessions/' + eid
         eid_str = eid[-36:]
@@ -235,12 +249,12 @@ class ONE(OneAbstract):
                     urlstr = ses['data_dataset_session_related'][i]['data_url']
                     if urlstr and not dry_run:
                         rel_path = PurePath(urlstr.replace(par.HTTP_DATA_SERVER, '.')).parents[0]
-                        cache_dir = PurePath(par.CACHE_DIR, rel_path)
-                        Path(cache_dir).mkdir(parents=True, exist_ok=True)
+                        cache_dir_file = PurePath(cache_dir, rel_path)
+                        Path(cache_dir_file).mkdir(parents=True, exist_ok=True)
                         fil = wc.http_download_file(urlstr,
                                                     username=par.HTTP_DATA_SERVER_LOGIN,
                                                     password=par.HTTP_DATA_SERVER_PWD,
-                                                    cache_dir=str(cache_dir))
+                                                    cache_dir=str(cache_dir_file))
                     else:
                         fil = ''
                     out.eid.append(eid_str)
@@ -252,14 +266,18 @@ class ONE(OneAbstract):
         # then another loop over files and load them in numpy. If not npy, just pass empty list
         # the data loading per format needs to be implemented in a generic function in ibllib/alf.
         for ind, fil in enumerate(out.local_path):
+            if download_only:
+                continue
+            if fil and os.path.getsize(fil) == 0:
+                continue
             if fil and os.path.splitext(fil)[1] == '.npy':
                 out.data[ind] = np.load(file=fil)
             if fil and os.path.splitext(fil)[1] == '.json':
                 pass  # FIXME would be nice to implement json read but param from matlab RIG fails
             if fil and os.path.splitext(fil)[1] == '.tsv':
-                pass  # TODO: implement csv reads as well
+                out.data[ind] = pd.read_csv(fil, delimiter='\t')
             if fil and os.path.splitext(fil)[1] == '.csv':
-                pass  # TODO: implement tsv reads as well
+                out.data[ind] = pd.read_csv(fil)
         if dclass_output:
             return out
         # if required, parse the output as a list that matches dataset types provided
@@ -329,9 +347,7 @@ class ONE(OneAbstract):
          each entry corresponding to a matching session
         :rtype: list, list
         """
-        # TODO add a lab field in the session table of Alyx to add as a query
         # make sure string inputs are interpreted as lists
-
         def validate_input(inarg):
             return [inarg] if isinstance(inarg, str) else inarg
 
@@ -349,8 +365,8 @@ class ONE(OneAbstract):
             url = url + '&subject=' + ','.join(subjects)
         if lab:
             url = url + '&lab=' + ','.join(lab)
-        # TODO make the daterange more flexible: one date only from, to etc...
         if date_range:
+            date_range = _validate_date_range(date_range)
             url = url + '&date_range=' + ','.join(date_range)
         # implements the loading itself
         ses = self._alyxClient.get(url)
@@ -378,3 +394,14 @@ class ONE(OneAbstract):
         Interactive command tool that populates parameter file for ONE IBL.
         """
         oneibl.params.setup()
+
+
+def _validate_date_range(date_range):
+    """
+    Validates and arrange date range in a 2 elements list
+    """
+    if isinstance(date_range, str):
+        date_range = [date_range, date_range]
+    if len(date_range) == 1:
+        date_range = [date_range[0], date_range[0]]
+    return date_range
