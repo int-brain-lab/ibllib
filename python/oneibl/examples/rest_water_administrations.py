@@ -18,7 +18,8 @@ wa_ = {
     'water_administered': 25,
     'water_type': 'Water 10% Sucrose',
     'user': 'olivier',
-    'session': 'f4b13ba2-1308-4673-820e-0e0a3e0f2d73'}
+    'session': 'f4b13ba2-1308-4673-820e-0e0a3e0f2d73',
+    'adlib': True}
 
 # do not use the example on anything else than alyx-dev
 if one.alyx._base_url != 'https://dev.alyx.internationalbrainlab.org':
