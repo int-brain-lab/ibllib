@@ -43,6 +43,9 @@ class TestUtils(unittest.TestCase):
         # on the next path the parameter has been added to the param file
         par2 = params.read('toto', default=default)
         self.assertEqual(par2, params.from_dict(expected_result))
+        # check that it doesn't break if a named tuple is given instead of a dict
+        par3 = params.read('toto', default=par2)
+        self.assertEqual(par2, par3)
 
     def tearDown(self):
         # at last delete the param file

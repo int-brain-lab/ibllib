@@ -6,6 +6,8 @@ import json
 
 
 def as_dict(par):
+    if not par:
+        return None
     if isinstance(par, dict):
         return par
     else:
@@ -48,6 +50,7 @@ def read(str_params, default=None):
     else:
         par_dict = None
     # without default parameters
+    default = as_dict(default)
     if not default or default.keys() == par_dict.keys():
         return from_dict(par_dict)
     # if default parameters bring in a new parameter

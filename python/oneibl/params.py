@@ -69,7 +69,7 @@ def setup():
 
 
 def get():
-    par = params.read(_PAR_ID_STR)
+    par = params.read(_PAR_ID_STR, default=default())
     if par is None:
         setup()
     return params.read(_PAR_ID_STR)
