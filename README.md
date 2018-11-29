@@ -7,7 +7,7 @@ Syntax may not be preserved among releases.
 https://ibllib.readthedocs.io/en/latest/
 
 ## Installation
-https://ibllib.readthedocs.io/en/latest/02_installation.html
+https://ibllib.readthedocs.io/en/latest/01b_installation_general.html#
 
 ## Demonstration
 https://ibllib.readthedocs.io/en/latest/_static/one_demo.html
