@@ -94,23 +94,49 @@ class SessionDataInfo:
     """
     Dataclass that provides dataset list, dataset_id, local_path, dataset_type, url and eid fields
     """
-    data: list = field(default_factory=list)
+    dataset_type: list = field(default_factory=list)
     dataset_id: list = field(default_factory=list)
     local_path: list = field(default_factory=list)
-    dataset_type: list = field(default_factory=list)
-    url: list = field(default_factory=list)
     eid: list = field(default_factory=list)
+    url: list = field(default_factory=list)
+    data: list = field(default_factory=list)
 
     def __str__(self):
-        """
-        This is to make print outputs more useful"
-        """
         str_out = ''
         d = self.__dict__
         for k in d.keys():
             str_out += (k + '    : ' + str(type(d[k])) + ' , ' + str(len(d[k])) + ' items = ' +
                         str(d[k][0])) + '\n'
         return str_out
+
+    def __getitem__(self, ind):
+        return SessionDataInfo(
+            dataset_type=self.dataset_type[ind],
+            dataset_id=self.dataset_id[ind],
+            local_path=self.local_path[ind],
+            eid=self.eid[ind],
+            url=self.url[ind],
+            data=self.data[ind],
+        )
+
+    def __len__(self):
+        return len(self.dataset_type)
+
+    @staticmethod
+    def from_session_details(ses_info, dataset_types=None):
+        if not dataset_types:
+            dataset_types = [d['dataset_type'] for d in ses_info['data_dataset_session_related']
+                             if d['data_url']]
+        dsets = [d for d in ses_info['data_dataset_session_related']
+                 if d['dataset_type'] in dataset_types]
+        return SessionDataInfo(
+            dataset_type=[d['dataset_type'] for d in dsets],
+            dataset_id=[d['id'] for d in dsets],
+            local_path=[None for d in dsets],
+            eid=[ses_info['url'][-36:] for d in dsets],
+            url=[d['data_url'] for d in dsets],
+            data=[None for d in dsets],
+        )
 
 
 class ONE(OneAbstract):
@@ -194,7 +220,7 @@ class ONE(OneAbstract):
             return ses[0][keyword]
 
     def load(self, eid, dataset_types=None, dclass_output=False, dry_run=False, cache_dir=None,
-             download_only=False):
+             download_only=False, clobber=False):
         """
         From a Session ID and dataset types, queries Alyx database, downloads the data
         from Globus, and loads into numpy array.
@@ -213,21 +239,20 @@ class ONE(OneAbstract):
         :type cache_dir: str
         :param download_only: do not attempt to load data in memory, just download the files
         :type download_only: bool
+        :param clobber: force downloading even if files exists locally
+        :type clobber: bool
 
         :return: List of numpy arrays matching the size of dataset_types parameter, OR
          a dataclass containing arrays and context data.
         :rtype: list, dict, dataclass SessionDataInfo
         """
-        # TODO: feature that downloads a list of datasets from a list of sessions,
-        # TODO in this case force dictionary output
         # if the input as an UUID, add the beginning of URL to it
-        if not cache_dir:
-            cache_dir = par.CACHE_DIR
+        cache_dir = _get_cache_dir(cache_dir)
         if is_uuid_string(eid):
             eid = '/sessions/' + eid
         eid_str = eid[-36:]
         # get session json information as a dictionary from the alyx API
-        ses = self._alyxClient.get('/sessions?id=' + eid_str)
+        ses = self.alyx.get('/sessions?id=' + eid_str)
         if not ses:
             raise FileNotFoundError('Session ' + eid_str + ' does not exist')
         ses = ses[0]
@@ -239,56 +264,43 @@ class ONE(OneAbstract):
             dclass_output = True
             dataset_types = [d['dataset_type'] for d in ses['data_dataset_session_related']
                              if d['data_url']]
-        # loop over each dataset related to the session ID and get list of files urls
-        session_dtypes = [d['dataset_type'] for d in ses['data_dataset_session_related']]
-        out = SessionDataInfo()
-        # this first loop only downloads the file to ease eventual refactoring
-        for ind, dt in enumerate(dataset_types):
-            for [i, sdt] in enumerate(session_dtypes):
-                if sdt == dt:
-                    urlstr = ses['data_dataset_session_related'][i]['data_url']
-                    if urlstr and not dry_run:
-                        rel_path = PurePath(urlstr.replace(par.HTTP_DATA_SERVER, '.')).parents[0]
-                        cache_dir_file = PurePath(cache_dir, rel_path)
-                        Path(cache_dir_file).mkdir(parents=True, exist_ok=True)
-                        fil = wc.http_download_file(urlstr,
-                                                    username=par.HTTP_DATA_SERVER_LOGIN,
-                                                    password=par.HTTP_DATA_SERVER_PWD,
-                                                    cache_dir=str(cache_dir_file))
-                    else:
-                        fil = ''
-                    out.eid.append(eid_str)
-                    out.dataset_type.append(dt)
-                    out.url.append(urlstr)
-                    out.local_path.append(fil)
-                    out.dataset_id.append(ses['data_dataset_session_related'][i]['id'])
-                    out.data.append([])
-        # then another loop over files and load them in numpy. If not npy, just pass empty list
-        # the data loading per format needs to be implemented in a generic function in ibllib/alf.
-        for ind, fil in enumerate(out.local_path):
+        dc = SessionDataInfo.from_session_details(ses, dataset_types=dataset_types)
+        # loop over each dataset and download if necessary
+        for ind in range(len(dc)):
+            if dc.url[ind] and not dry_run:
+                rel_path = PurePath(dc.url[ind].replace(par.HTTP_DATA_SERVER, '.')).parents[0]
+                cache_dir_file = PurePath(cache_dir, rel_path)
+                Path(cache_dir_file).mkdir(parents=True, exist_ok=True)
+                dc.local_path[ind] = wc.http_download_file(dc.url[ind],
+                                                           username=par.HTTP_DATA_SERVER_LOGIN,
+                                                           password=par.HTTP_DATA_SERVER_PWD,
+                                                           cache_dir=str(cache_dir_file),
+                                                           clobber=clobber)
+        for ind, fil in enumerate(dc.local_path):
             if download_only:
                 continue
             if fil and os.path.getsize(fil) == 0:
                 continue
             if fil and os.path.splitext(fil)[1] == '.npy':
-                out.data[ind] = np.load(file=fil)
+                dc.data[ind] = np.load(file=fil)
             if fil and os.path.splitext(fil)[1] == '.json':
                 pass  # FIXME would be nice to implement json read but param from matlab RIG fails
             if fil and os.path.splitext(fil)[1] == '.tsv':
-                out.data[ind] = pd.read_csv(fil, delimiter='\t')
+                dc.data[ind] = pd.read_csv(fil, delimiter='\t')
             if fil and os.path.splitext(fil)[1] == '.csv':
-                out.data[ind] = pd.read_csv(fil)
+                dc.data[ind] = pd.read_csv(fil)
+        # parse output arguments
         if dclass_output:
-            return out
+            return dc
         # if required, parse the output as a list that matches dataset types provided
         list_out = []
         for dt in dataset_types:
-            if dt not in out.dataset_type:
+            if dt not in dc.dataset_type:
                 list_out.append(None)
                 continue
-            for i, x, in enumerate(out.dataset_type):
+            for i, x, in enumerate(dc.dataset_type):
                 if dt == x:
-                    list_out.append(out.data[i])
+                    list_out.append(dc.data[i])
         return list_out
 
     def _ls(self, table=None, verbose=False):
@@ -385,7 +397,7 @@ class ONE(OneAbstract):
         :return: a tuple containing possible search terms:
         :rtype: tuple
         """
-        #  Implemented as a method to make sure this can't be changed
+        #  Implemented as a method to make sure this stays private
         return SEARCH_TERMS
 
     @staticmethod
@@ -405,3 +417,12 @@ def _validate_date_range(date_range):
     if len(date_range) == 1:
         date_range = [date_range[0], date_range[0]]
     return date_range
+
+
+def _get_cache_dir(cache_dir):
+    if not cache_dir:
+        cache_dir = par.CACHE_DIR
+    # if empty in parameter file, do not allow and set default
+    if not cache_dir:
+        cache_dir = str(PurePath(Path.home(), "Downloads", "FlatIron"))
+    return cache_dir
