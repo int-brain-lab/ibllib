@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 import abc
 from pathlib import Path, PurePath
 import requests
+import json
 
 import numpy as np
 import pandas as pd
@@ -150,6 +151,7 @@ class ONE(OneAbstract):
                                   'IP addresses are filtered on IBL database servers. \n' +
                                   'Are you connecting from an IBL participating institution ?')
         print('Connected to ' + base_url + ' as ' + username)
+        # Init connection to Globus if needed
 
     @property
     def alyx(self):
@@ -271,28 +273,15 @@ class ONE(OneAbstract):
                 rel_path = PurePath(dc.url[ind].replace(par.HTTP_DATA_SERVER, '.')).parents[0]
                 cache_dir_file = PurePath(cache_dir, rel_path)
                 Path(cache_dir_file).mkdir(parents=True, exist_ok=True)
-                dc.local_path[ind] = wc.http_download_file(dc.url[ind],
-                                                           username=par.HTTP_DATA_SERVER_LOGIN,
-                                                           password=par.HTTP_DATA_SERVER_PWD,
-                                                           cache_dir=str(cache_dir_file),
-                                                           clobber=clobber)
-        for ind, fil in enumerate(dc.local_path):
-            if download_only:
-                continue
-            if fil and os.path.getsize(fil) == 0:
-                continue
-            if fil and os.path.splitext(fil)[1] == '.npy':
-                dc.data[ind] = np.load(file=fil)
-            if fil and os.path.splitext(fil)[1] == '.json':
-                pass  # FIXME would be nice to implement json read but param from matlab RIG fails
-            if fil and os.path.splitext(fil)[1] == '.tsv':
-                dc.data[ind] = pd.read_csv(fil, delimiter='\t')
-            if fil and os.path.splitext(fil)[1] == '.csv':
-                dc.data[ind] = pd.read_csv(fil)
+                dc.local_path[ind] = _download_file(dc.url[ind], str(cache_dir_file), clobber)
+        # load the files content in variables if requested
+        if not download_only:
+            for ind, fil in enumerate(dc.local_path):
+                dc.data[ind] = _load_file_content(fil)
         # parse output arguments
         if dclass_output:
             return dc
-        # if required, parse the output as a list that matches dataset types provided
+        # if required, parse the output as a list that matches dataset_types requested
         list_out = []
         for dt in dataset_types:
             if dt not in dc.dataset_type:
@@ -426,3 +415,26 @@ def _get_cache_dir(cache_dir):
     if not cache_dir:
         cache_dir = str(PurePath(Path.home(), "Downloads", "FlatIron"))
     return cache_dir
+
+
+def _download_file(url, cache_dir, clobber=False):
+    local_path = wc.http_download_file(url,
+                                       username=par.HTTP_DATA_SERVER_LOGIN,
+                                       password=par.HTTP_DATA_SERVER_PWD,
+                                       cache_dir=str(cache_dir),
+                                       clobber=clobber)
+    return local_path
+
+
+def _load_file_content(fil):
+    if fil and os.path.getsize(fil) == 0:
+        return
+    if fil and os.path.splitext(fil)[1] == '.npy':
+        return np.load(file=fil)
+    if fil and os.path.splitext(fil)[1] == '.json':
+        with open(fil) as _fil:
+            return json.loads(_fil.read())
+    if fil and os.path.splitext(fil)[1] == '.tsv':
+        return pd.read_csv(fil, delimiter='\t')
+    if fil and os.path.splitext(fil)[1] == '.csv':
+        return pd.read_csv(fil)
