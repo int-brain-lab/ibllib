@@ -129,6 +129,13 @@ class ONE(OneAbstract):
     def alyx(self):
         return self._alyxClient
 
+    def help(self, dataset_type):
+        if not isinstance(dataset_type, str):
+            warning('No dataset_type provided or wrong type. Should be str')
+            return
+        out = self.alyx.rest('dataset-types', 'read', dataset_type)
+        print(out['description'])
+
     def list(self, eid=None, keyword='dataset-type', details=False):
         """
         From a Session ID, queries Alyx database for datasets-types related to a session.
