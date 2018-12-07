@@ -7,7 +7,7 @@ import requests
 import numpy as np
 import pandas as pd
 
-import ibllib.webclient as wc
+import oneibl.webclient as wc
 from ibllib.misc import is_uuid_string, pprint
 import oneibl.params
 
@@ -128,6 +128,13 @@ class ONE(OneAbstract):
     @property
     def alyx(self):
         return self._alyxClient
+
+    def help(self, dataset_type):
+        if not isinstance(dataset_type, str):
+            print('No dataset_type provided or wrong type. Should be str')
+            return
+        out = self.alyx.rest('dataset-types', 'read', dataset_type)
+        print(out['description'])
 
     def list(self, eid=None, keyword='dataset-type', details=False):
         """
@@ -264,20 +271,10 @@ class ONE(OneAbstract):
                     out.dataset_id.append(ses['data_dataset_session_related'][i]['id'])
                     out.data.append([])
         # then another loop over files and load them in numpy. If not npy, just pass empty list
-        # the data loading per format needs to be implemented in a generic function in ibllib/alf.
         for ind, fil in enumerate(out.local_path):
             if download_only:
                 continue
-            if fil and os.path.getsize(fil) == 0:
-                continue
-            if fil and os.path.splitext(fil)[1] == '.npy':
-                out.data[ind] = np.load(file=fil)
-            if fil and os.path.splitext(fil)[1] == '.json':
-                pass  # FIXME would be nice to implement json read but param from matlab RIG fails
-            if fil and os.path.splitext(fil)[1] == '.tsv':
-                out.data[ind] = pd.read_csv(fil, delimiter='\t')
-            if fil and os.path.splitext(fil)[1] == '.csv':
-                out.data[ind] = pd.read_csv(fil)
+            out.data[ind] = _load_alf(fil)
         if dclass_output:
             return out
         # if required, parse the output as a list that matches dataset types provided
@@ -405,3 +402,16 @@ def _validate_date_range(date_range):
     if len(date_range) == 1:
         date_range = [date_range[0], date_range[0]]
     return date_range
+
+
+def _load_alf(fil):
+    if fil and os.path.getsize(fil) == 0:
+        return
+    if fil and os.path.splitext(fil)[1] == '.npy':
+        return np.load(file=fil)
+    if fil and os.path.splitext(fil)[1] == '.json':
+        pass  # FIXME would be nice to implement json read but param from matlab RIG fails
+    if fil and os.path.splitext(fil)[1] == '.tsv':
+        return pd.read_csv(fil, delimiter='\t')
+    if fil and os.path.splitext(fil)[1] == '.csv':
+        return pd.read_csv(fil)

@@ -8,8 +8,10 @@
 Module contains one loader function per raw datafile
 
 """
-import os
 import json
+import os
+import wave
+
 import numpy as np
 import pandas as pd
 from dateutil import parser
@@ -69,7 +71,7 @@ def load_data(session_path, time='absolute'):
     :rtype: list of dicts
     """
     path = os.path.join(session_path, "raw_behavior_data",
-                        "_ibl_taskData.raw.jsonable")
+                        "_iblrig_taskData.raw.jsonable")
     data = []
     with open(path, 'r') as f:
         for line in f:
@@ -91,7 +93,7 @@ def load_settings(session_path):
     :rtype: dict
     """
     path = os.path.join(session_path, "raw_behavior_data",
-                        "_ibl_taskSettings.raw.json")
+                        "_iblrig_taskSettings.raw.json")
     with open(path, 'r') as f:
         settings = json.loads(f.readline())
     return settings
@@ -127,7 +129,7 @@ def load_encoder_events(session_path):
     :rtype: Pandas.DataFrame
     """
     path = os.path.join(session_path, "raw_behavior_data",
-                        "_ibl_encoderEvents.raw.ssv")
+                        "_iblrig_encoderEvents.raw.ssv")
     data = pd.read_csv(path, sep=' ', header=None)
     data = data.drop([0, 2, 5], axis=1)
     data.columns = ['re_ts', 'sm_ev', 'bns_ts']
@@ -163,7 +165,7 @@ def load_encoder_positions(session_path):
     :rtype: Pandas.DataFrame
     """
     path = os.path.join(session_path, "raw_behavior_data",
-                        "_ibl_encoderPositions.raw.ssv")
+                        "_iblrig_encoderPositions.raw.ssv")
     data = pd.read_csv(path, sep=' ', header=None)
     data = data.drop([0, 4], axis=1)
     data.columns = ['re_ts', 're_pos', 'bns_ts']
@@ -200,7 +202,7 @@ def load_encoder_trial_info(session_path):
     :rtype: Pandas.DataFrame
     """
     path = os.path.join(session_path, "raw_behavior_data",
-                        "_ibl_encoderTrialInfo.raw.ssv")
+                        "_iblrig_encoderTrialInfo.raw.ssv")
     data = pd.read_csv(path, sep=' ', header=None)
     data = data.drop([8], axis=1)
     data.columns = ['trial_num', 'stim_pos_init', 'stim_contrast', 'stim_freq',
@@ -208,17 +210,67 @@ def load_encoder_trial_info(session_path):
     data.bns_ts = pd.Series([parser.parse(x) for x in data.bns_ts])
     return data
 
+
+def load_ambient_sensor(session_path):
+    """
+    Load Ambient Sensor data from session.
+
+    Probably could be extracted to DatasetTypes:
+    _ibl_trials.temperature_C, _ibl_trials.airPressure_mb,
+    _ibl_trials.relativeHumidity
+    Returns a list of dicts one dict per trial.
+    dict keys are:
+    dict_keys(['Temperature_C', 'AirPressure_mb', 'RelativeHumidity'])
+
+    :param session_path: Absoulte path of session folder
+    :type session_path: str
+    :return: list of dicts
+    :rtype: list
+    """
+    path = os.path.join(session_path, "raw_behavior_data",
+                        "_iblrig_ambientSensorData.raw.jsonable")
+    data = []
+    with open(path, 'r') as f:
+        for line in f:
+            data.append(json.loads(line))
+    return data
+
+
+def load_mic(session_path):
+    """
+    Load Microphone wav file to np.array of len nSamples
+
+    :param session_path: Absoulte path of session folder
+    :type session_path: str
+    :return: An array of values of the sound waveform
+    :rtype: numpy.array
+    """
+    path = os.path.join(session_path, "raw_behavior_data",
+                        "_iblrig_micData.raw.wav")
+    fp = wave.open(path)
+    nchan = fp.getnchannels()
+    N = fp.getnframes()
+    dstr = fp.readframes(N * nchan)
+    data = np.frombuffer(dstr, np.int16)
+    data = np.reshape(data, (-1, nchan))
+    return data
+
 # Missing raw data file loaders
-# _ibl_ambientSensorData.raw.jsonable
-# _ibl_micData.raw.wav
+# Camera timestamps and video
 if __name__ == '__main__':
-    session_path = "/home/nico/Projects/IBL/IBL-github/iblrig/Subjects/\
-test_mouse/2018-10-02/1"
+    data_folder = "/home/nico/Projects/IBL/IBL-github/iblrig/scratch/test_dataset"
+    session = "_iblrig_test_mouse/2018-11-29/002"
+    session_path = os.path.join(data_folder, session)
 
     settings = load_settings(session_path)
     data = load_data(session_path)
     eEvents = load_encoder_events(session_path)
     ePos = load_encoder_positions(session_path)
     eTI = load_encoder_trial_info(session_path)
+
+    ambient = load_ambient_sensor(session_path)
+    mic = load_mic(session_path)
+    # camTS = load_camera_timestapms(session_path)
+    # vid = load_video(session_path)
 
     print("Done!")

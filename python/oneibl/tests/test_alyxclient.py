@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 import os
-import ibllib.webclient as wc
+import oneibl.webclient as wc
 import oneibl.params
 import tempfile
 import shutil

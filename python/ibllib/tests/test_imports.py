@@ -8,22 +8,7 @@ import unittest
 
 class TestImports(unittest.TestCase):
     def test_all_imports(self):
-        import ibllib
-        import ibllib as ibl
-        from ibllib import misc, io, dsp, webclient, time
-        import ibllib.dsp as dsp
-        import ibllib.io as io
-        import ibllib.misc as misc
-        import ibllib.time
-        import ibllib.webclient
-        import ibllib.io.raw_data_loaders as raw
-        from ibllib.misc import pprint, flatten, timing, is_uuid_string
-        from ibllib.io import raw_data_loaders
-        from ibllib.io.raw_data_loaders import (load_data, load_settings,
-                                                load_encoder_events,
-                                                load_encoder_positions,
-                                                load_encoder_trial_info)
-        from ibllib.dsp import savitzky_golay, smooth, smooth_demo
+        pass
 
 
 if __name__ == '__main__':

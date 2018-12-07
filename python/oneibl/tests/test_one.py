@@ -76,6 +76,12 @@ class TestList(unittest.TestCase):
             pass
         self.assertTrue(a == 1)
 
+    def test_help(self):
+        one = self.One
+        dtypes = one.list(None, keyword='dataset-types')
+        one.help(dtypes[0])
+        one.help([])
+
 
 class TestLoad(unittest.TestCase):
 
