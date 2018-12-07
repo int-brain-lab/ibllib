@@ -131,7 +131,7 @@ class ONE(OneAbstract):
 
     def help(self, dataset_type):
         if not isinstance(dataset_type, str):
-            warning('No dataset_type provided or wrong type. Should be str')
+            print('No dataset_type provided or wrong type. Should be str')
             return
         out = self.alyx.rest('dataset-types', 'read', dataset_type)
         print(out['description'])
