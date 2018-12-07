@@ -62,17 +62,21 @@ classdef AlyxClient
                 prefs = getpref('Alyx');
             end
         end
+        
+        function url = format_url(self,url)
+            if isempty(strfind(url, self.base_url))
+                if ~startsWith(url, '/'), url = ['/' url]; end
+                url = [self.base_url  url];
+            end
+        end
     end
     
     methods (Access = public)        
-         function rep = get(self,endpoint_url)
+         function rep = get(self,url)
              % rep = get(url)
              % rep = ac.get('/sessions/86e27228-8708-48d8-96ed-9aa61ab951db')
              % rep = ac.get('https://test.alyx.internationalbrainlab.org/sessions/86e27228-8708-48d8-96ed-9aa61ab951db')
-            if isempty(strfind(endpoint_url, self.base_url))
-                endpoint_url = [self.base_url  endpoint_url];
-            end
-            rep = webread(endpoint_url, self.weboptions);
+            rep = webread(self.format_url(url), self.weboptions);
             rep = flatten(rep);
          end
          
@@ -89,21 +93,22 @@ classdef AlyxClient
          end
          
          function rep = post(self, url , request_struct)
-             % rep = post(url, request_struct)
-            if isempty(strfind(url, self.base_url))
-                url = [self.base_url  url];
-            end
-            rep = webwrite(url,  jsonencode(request_struct), setfield(self.weboptions, 'RequestMethod', 'post') );
+             % rep = ac.post(url, request_struct)
+            rep = webwrite(self.format_url(url),  jsonencode(request_struct),...
+                setfield(self.weboptions, 'RequestMethod', 'post') );
          end
          
          function rep = put(self, url, request_struct)
-             % rep = put(url, request_struct)
-            if isempty(strfind(url, self.base_url))
-                url = [self.base_url  url];
-            end
-            rep = webwrite(url,  jsonencode(request_struct), setfield(self.weboptions, 'RequestMethod', 'put') );
+             % rep = ac.put(url, request_struct)
+            rep = webwrite(self.format_url(url),  jsonencode(request_struct),...
+                setfield(self.weboptions, 'RequestMethod', 'put') );
          end
          
+         function rep = delete(self, url)
+             % rep = ac.delete(url)
+            rep = webread(self.format_url(url),...
+                setfield(self.weboptions, 'RequestMethod', 'delete'));
+         end
 %          function create_session(self, session_structure)
 %              % self.create_session(session_structure)
 %             %  session =  struct with fields: 

@@ -8,7 +8,7 @@ import json
 import numpy as np
 import pandas as pd
 
-import ibllib.webclient as wc
+import oneibl.webclient as wc
 from ibllib.misc import is_uuid_string, pprint
 import oneibl.params
 
@@ -156,6 +156,13 @@ class ONE(OneAbstract):
     @property
     def alyx(self):
         return self._alyxClient
+
+    def help(self, dataset_type):
+        if not isinstance(dataset_type, str):
+            print('No dataset_type provided or wrong type. Should be str')
+            return
+        out = self.alyx.rest('dataset-types', 'read', dataset_type)
+        print(out['description'])
 
     def list(self, eid=None, keyword='dataset-type', details=False):
         """

@@ -1,5 +1,5 @@
 import os
-from ibllib.io import params
+from ibllib.io import params as iopar
 from getpass import getpass
 from pathlib import Path, PurePath
 
@@ -19,12 +19,12 @@ def default():
            "HTTP_DATA_SERVER_PWD": None,
            "GLOBUS_CLIENT_ID": None,
            }
-    return params.from_dict(par)
+    return iopar.from_dict(par)
 
 
 # first get current and default parameters
 def setup():
-    par_current = params.read(_PAR_ID_STR)
+    par_current = iopar.read(_PAR_ID_STR)
     par_default = default()
     if par_current is None:
         par_current = par_default
@@ -35,11 +35,11 @@ def setup():
             cpar = getattr(par_default, k, None)
         return cpar
 
-    par = params.as_dict(par_current)
+    par = iopar.as_dict(par_current)
     for k in par.keys():
         cpar = _get_current_par(k)
         if "PWD" not in k:
-            par[k] = input("Param " + k + ",  current value is [" + cpar + "]:") or cpar
+            par[k] = input("Param " + k + ",  current value is [" + str(cpar) + "]:") or cpar
 
     cpar = _get_current_par("ALYX_PWD")
     prompt = "Enter the Alyx password for " + par["ALYX_LOGIN"] + '(leave empty to keep current):'
@@ -59,17 +59,17 @@ def setup():
     if len(par['CACHE_DIR']) == 0:
         par['CACHE_DIR'] = str(PurePath(Path.home(), "Downloads", "FlatIron"))
 
-    par = params.from_dict(par)
+    par = iopar.from_dict(par)
 
     # create directory if needed
     if par.CACHE_DIR and not os.path.isdir(par.CACHE_DIR):
         os.mkdir(par.CACHE_DIR)
-    params.write(_PAR_ID_STR, par)
-    print('ONE Parameter file location: ' + params.getfile(_PAR_ID_STR))
+    iopar.write(_PAR_ID_STR, par)
+    print('ONE Parameter file location: ' + iopar.getfile(_PAR_ID_STR))
 
 
 def get():
-    par = params.read(_PAR_ID_STR, default=default())
+    par = iopar.read(_PAR_ID_STR)
     if par is None:
         setup()
-    return params.read(_PAR_ID_STR)
+    return iopar.read(_PAR_ID_STR, default=default())

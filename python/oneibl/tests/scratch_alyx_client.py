@@ -1,11 +1,7 @@
 ##
-import getpass
-from ibllib.webclient import AlyxClient
-import time
+from oneibl.webclient import AlyxClient
 import os
 import pandas
-import oneibl.params as par
-import numpy as np
 # small library of useful functions
 import json
 import datetime
@@ -98,7 +94,7 @@ dset = ac.get('/datasets?dataset_type=cwResponse.choice')
 from data.models import Dataset
 from data.serializers import DatasetSerializer
 
-from django.db.models import Avg, Max, Min
+from django.db.models import Max, Min
 
 print(Dataset.objects.all().count())
 
