@@ -80,7 +80,7 @@ class TestList(unittest.TestCase):
         one = self.One
         dtypes = one.list(None, keyword='dataset-types')
         one.help(dtypes[0])
-        dtypes = one.list(None, keyword=['dataset-types'])
+        one.help([])
 
 
 class TestLoad(unittest.TestCase):
