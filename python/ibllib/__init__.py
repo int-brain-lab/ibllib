@@ -6,5 +6,4 @@
 import ibllib.dsp as dsp
 import ibllib.io as io
 import ibllib.misc as misc
-import ibllib.webclient as webclient
 import ibllib.time as time

@@ -1,6 +1,8 @@
-import ibllib.io.params as params
 import unittest
 import os
+import uuid
+
+import ibllib.io.params as params
 
 
 class TestUtils(unittest.TestCase):
@@ -46,6 +48,16 @@ class TestUtils(unittest.TestCase):
         # check that it doesn't break if a named tuple is given instead of a dict
         par3 = params.read('toto', default=par2)
         self.assertEqual(par2, par3)
+        # check that a non-existing parfile returns None
+        pstring = str(uuid.uuid4())
+        par = params.read(pstring)
+        self.assertIsNone(par)
+        # check that a non-existing parfile with default returns default
+        par = params.read(pstring, default=default)
+        self.assertEqual(par, params.from_dict(default))
+        # even if this default is a Params named tuple
+        par = params.read(pstring, default=par)
+        self.assertEqual(par, params.from_dict(default))
 
     def tearDown(self):
         # at last delete the param file

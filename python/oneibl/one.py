@@ -7,7 +7,7 @@ import requests
 import numpy as np
 import pandas as pd
 
-import ibllib.webclient as wc
+import oneibl.webclient as wc
 from ibllib.misc import is_uuid_string, pprint
 import oneibl.params
 
