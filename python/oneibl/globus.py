@@ -1,5 +1,5 @@
 from ibllib.io import globus
-from oneibl.one import ONE
+from oneibl.one import ONE, SessionDataInfo
 import oneibl.params
 
 par = oneibl.params.get()

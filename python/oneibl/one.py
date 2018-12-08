@@ -1,6 +1,4 @@
 import os
-from dataclasses import dataclass, field
-import abc
 from pathlib import Path, PurePath
 import requests
 import json
@@ -8,8 +6,11 @@ import json
 import numpy as np
 import pandas as pd
 
+from ibllib.misc import is_uuid_string, pprint, flatten
+from ibllib.io.one import OneAbstract
+
 import oneibl.webclient as wc
-from ibllib.misc import is_uuid_string, pprint
+from oneibl.dataclass import SessionDataInfo
 import oneibl.params
 
 _ENDPOINTS = {  # keynames are possible input arguments and values are actual endpoints
@@ -73,71 +74,6 @@ SEARCH_TERMS = {  # keynames are possible input arguments and values are actual 
     'lab': 'lab'
 }
 par = oneibl.params.get()
-
-
-class OneAbstract(abc.ABC):
-
-    @abc.abstractmethod
-    def load(self, eid, **kwargs):
-        return
-
-    @abc.abstractmethod
-    def list(self, **kwargs):
-        return
-
-    @abc.abstractmethod
-    def search(self, **kwargs):
-        return
-
-
-@dataclass
-class SessionDataInfo:
-    """
-    Dataclass that provides dataset list, dataset_id, local_path, dataset_type, url and eid fields
-    """
-    dataset_type: list = field(default_factory=list)
-    dataset_id: list = field(default_factory=list)
-    local_path: list = field(default_factory=list)
-    eid: list = field(default_factory=list)
-    url: list = field(default_factory=list)
-    data: list = field(default_factory=list)
-
-    def __str__(self):
-        str_out = ''
-        d = self.__dict__
-        for k in d.keys():
-            str_out += (k + '    : ' + str(type(d[k])) + ' , ' + str(len(d[k])) + ' items = ' +
-                        str(d[k][0])) + '\n'
-        return str_out
-
-    def __getitem__(self, ind):
-        return SessionDataInfo(
-            dataset_type=self.dataset_type[ind],
-            dataset_id=self.dataset_id[ind],
-            local_path=self.local_path[ind],
-            eid=self.eid[ind],
-            url=self.url[ind],
-            data=self.data[ind],
-        )
-
-    def __len__(self):
-        return len(self.dataset_type)
-
-    @staticmethod
-    def from_session_details(ses_info, dataset_types=None):
-        if not dataset_types:
-            dataset_types = [d['dataset_type'] for d in ses_info['data_dataset_session_related']
-                             if d['data_url']]
-        dsets = [d for d in ses_info['data_dataset_session_related']
-                 if d['dataset_type'] in dataset_types]
-        return SessionDataInfo(
-            dataset_type=[d['dataset_type'] for d in dsets],
-            dataset_id=[d['id'] for d in dsets],
-            local_path=[None for d in dsets],
-            eid=[ses_info['url'][-36:] for d in dsets],
-            url=[d['data_url'] for d in dsets],
-            data=[None for d in dsets],
-        )
 
 
 class ONE(OneAbstract):
@@ -219,7 +155,7 @@ class ONE(OneAbstract):
                 return dlist
 
         # get the session information
-        ses = self._alyxClient.get('/sessions?id=' + eid)
+        ses = self.alyx.get('/sessions?id=' + eid)
 
         if keyword.lower() == 'all':
             return ses
@@ -439,6 +375,7 @@ def _load_file_content(fil):
     if fil and os.path.splitext(fil)[1] == '.npy':
         return np.load(file=fil)
     if fil and os.path.splitext(fil)[1] == '.json':
+        return None
         with open(fil) as _fil:
             return json.loads(_fil.read())
     if fil and os.path.splitext(fil)[1] == '.tsv':
