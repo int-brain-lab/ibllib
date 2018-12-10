@@ -62,7 +62,7 @@ def _session_details_to_dataclasses(ses_info, **kwargs):
     return SessionDataInfo.from_datasets(dsets, **kwargs)
 
 
-@_session_details_to_dataclasses.register
+@_session_details_to_dataclasses.register(list)
 def _(ses_info: list, **kwargs):
     dsets = flatten([ses['data_dataset_session_related'] for ses in ses_info])
     return SessionDataInfo.from_datasets(dsets, **kwargs)

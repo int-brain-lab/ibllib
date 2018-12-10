@@ -93,7 +93,13 @@ class ONE(OneAbstract):
     def alyx(self):
         return self._alyxClient
 
-    def help(self, dataset_type):
+    def help(self, dataset_type=None):
+        if not dataset_type:
+            return self.alyx.rest('dataset-types', 'list')
+        if isinstance(dataset_type, list):
+            for dt in dataset_type:
+                self.help(dataset_type=dt)
+                return
         if not isinstance(dataset_type, str):
             print('No dataset_type provided or wrong type. Should be str')
             return
