@@ -7,4 +7,3 @@ exclude =
     scratch_*.py,
     tutorial_script.py,
     test_imports.py,
-max-complexity = 20

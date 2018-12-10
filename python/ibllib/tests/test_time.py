@@ -29,3 +29,10 @@ class TestUtils(unittest.TestCase):
         # test with pandas series
         e = ibllib.time.isostr2date(pd.Series(c))
         self.assertTrue((e[0] == a) and (e[1] == b))
+
+    def test_date2isostr(self):
+        expected = '2018-08-14T00:00:00'
+        day = datetime.date(2018, 8, 14)
+        self.assertEqual(expected, ibllib.time.date2isostr(day))
+        dt = datetime.datetime(2018, 8, 14)
+        self.assertEqual(expected, ibllib.time.date2isostr(day))

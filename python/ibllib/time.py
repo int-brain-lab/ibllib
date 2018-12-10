@@ -19,6 +19,8 @@ def isostr2date(isostr):
 
 
 def date2isostr(adate):
+    if type(adate) is datetime.date:
+        adate = datetime.datetime.fromordinal(adate.toordinal())
     return datetime.datetime.isoformat(adate)
 
 

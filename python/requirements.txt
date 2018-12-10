@@ -1,4 +1,5 @@
 dataclasses
+globus_sdk
 matplotlib
 numpy
 pandas
