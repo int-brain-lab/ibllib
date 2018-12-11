@@ -30,7 +30,7 @@ def check_alf_folder(session_path):
         os.mkdir(alf_folder)
 
 
-def get_feedbackType(session_path, save=False):
+def get_feedbackType(session_path, save=False, data=False):
     """
     Get the feedback that was delivered to subject.
     **Optional:** saves _ibl_trials.feedbackType.npy
@@ -51,7 +51,8 @@ def get_feedbackType(session_path, save=False):
     :return: numpy.ndarray
     :rtype: dtype('int64')
     """
-    data = raw.load_data(session_path)
+    if not data:
+        data = raw.load_data(session_path)
     feedbackType = np.empty(len(data))
     feedbackType.fill(np.nan)
     reward = []
@@ -80,7 +81,7 @@ def get_feedbackType(session_path, save=False):
     return feedbackType
 
 
-def get_contrastLR(session_path, save=False):
+def get_contrastLR(session_path, save=False, data=False):
     """
     Get left and right contrasts from raw datafile
     **Optional:** save _ibl_trials.contrastLeft.npy and
@@ -96,7 +97,8 @@ def get_contrastLR(session_path, save=False):
     :return: numpy.ndarray
     :rtype: dtype('float64')
     """
-    data = raw.load_data(session_path)
+    if not data:
+        data = raw.load_data(session_path)
     contrastLeft = np.array([t['signed_contrast'] for t in data])
     contrastRight = contrastLeft.copy()
     contrastLeft[contrastLeft > 0] = np.nan
@@ -114,7 +116,7 @@ def get_contrastLR(session_path, save=False):
     return (contrastLeft, contrastRight)
 
 
-def get_choice(session_path, save=False):
+def get_choice(session_path, save=False, data=False):
     """
     Get the subject's choice in every trial.
     **Optional:** saves _ibl_trials.choice.npy to alf folder.
@@ -136,7 +138,8 @@ def get_choice(session_path, save=False):
     :return: numpy.ndarray
     :rtype: dtype('int64')
     """
-    data = raw.load_data(session_path)
+    if not data:
+        data = raw.load_data(session_path)
     sitm_side = np.array([np.sign(t['signed_contrast']) for t in data])
     trial_correct = np.array([t['trial_correct'] for t in data])
     choice = sitm_side.copy()
@@ -149,7 +152,7 @@ def get_choice(session_path, save=False):
     return choice
 
 
-def get_repNum(session_path, save=False):
+def get_repNum(session_path, save=False, data=False):
     """
     Count the consecutive repeated trials.
     **Optional:** saves _ibl_trials.repNum.npy to alf folder.
@@ -168,7 +171,8 @@ def get_repNum(session_path, save=False):
     :rtype: dtype('int64')
     """
 
-    data = raw.load_data(session_path)
+    if not data:
+        data = raw.load_data(session_path)
     trial_repeated = np.array(
         [t['contrast']['type'] == 'repeat_contrast' for t in data])
     trial_repeated = trial_repeated.astype(int)
@@ -188,7 +192,7 @@ def get_repNum(session_path, save=False):
     return repNum
 
 
-def get_rewardVolume(session_path, save=False):
+def get_rewardVolume(session_path, save=False, data=False):
     """
     Load reward volume delivered for each trial.
     **Optional:** saves _ibl_trials.rewardVolume.npy
@@ -203,8 +207,9 @@ def get_rewardVolume(session_path, save=False):
     :return: numpy.ndarray
     :rtype: dtype('int64')
     """
-    data = raw.load_data(session_path)
-    trial_volume = [x['reward_current']
+    if not data:
+        data = raw.load_data(session_path)
+    trial_volume = [x['reward_amount']
                     if x['trial_correct'] else 0 for x in data]
     rewardVolume = np.array(trial_volume).astype(np.float64)
     assert len(rewardVolume) == len(data)
@@ -216,7 +221,7 @@ def get_rewardVolume(session_path, save=False):
     return rewardVolume
 
 
-def get_feedback_times(session_path, save=False):
+def get_feedback_times(session_path, save=False, data=False):
     """
     Get the times the water or error tone was delivered to the animal.
     **Optional:** saves _ibl_trials.feedback_times.npy
@@ -233,12 +238,16 @@ def get_feedback_times(session_path, save=False):
     :return: numpy.ndarray
     :rtype: dtype('float64')
     """
-    data = raw.load_data(session_path)
+    if not data:
+        data = raw.load_data(session_path)
     rw_times = [tr['behavior_data']['States timestamps']['reward'][0][0]
                 for tr in data]
     err_times = [tr['behavior_data']['States timestamps']['error'][0][0]
                  for tr in data]
-    assert sum(np.isnan(rw_times) & np.isnan(err_times)) == 0
+    nogo_times = [tr['behavior_data']['States timestamps']
+                   ['no_go'][0][0] for tr in data]
+    assert sum(np.isnan(rw_times) &
+               np.isnan(err_times) & np.isnan(nogo_times)) == 0
     merge = [x if ~np.isnan(x) else y for x, y in zip(rw_times, err_times)]
     if save:
         check_alf_folder(session_path)
@@ -248,7 +257,7 @@ def get_feedback_times(session_path, save=False):
     return np.array(merge)
 
 
-def get_stimOn_times(session_path, save=False):
+def get_stimOn_times(session_path, save=False, data=False):
     """
     Find the time of the statemachine command to turn on hte stim
     (state stim_on start or rotary_encoder_event2)
@@ -256,7 +265,8 @@ def get_stimOn_times(session_path, save=False):
     Screen is not displaying anything until then.
     (Frame changes are in BNC1High and BNC1Low)
     """
-    data = raw.load_data(session_path)
+    if not data:
+        data = raw.load_data(session_path)
     stim_on = []
     bnc_h = []
     bnc_l = []
@@ -295,7 +305,7 @@ def get_stimOn_times(session_path, save=False):
     return np.array(stimOn_times)
 
 
-def get_intervals(session_path, save=False):
+def get_intervals(session_path, save=False, data=False):
     """
     Trial start to trial end. Trial end includes 1 or 2 seconds of iti depending
     on if the trial was correct or not.
@@ -314,7 +324,8 @@ def get_intervals(session_path, save=False):
     :return: 2D numpy.ndarray (col0 = start, col1 = end)
     :rtype: dtype('float64')
     """
-    data = raw.load_data(session_path)
+    if not data:
+        data = raw.load_data(session_path)
     starts = [t['behavior_data']['Trial start timestamp'] for t in data]
     ends = [t['behavior_data']['Trial end timestamp'] for t in data]
     intervals = np.array([starts, ends]).T
@@ -326,7 +337,7 @@ def get_intervals(session_path, save=False):
     return intervals
 
 
-def get_iti_duration(session_path, save=False):
+def get_iti_duration(session_path, save=False, data=False):
     """
     Calculate duration of iti from state timestamps.
     **Optional:** saves _ibl_trials.iti_duration.npy
@@ -341,8 +352,9 @@ def get_iti_duration(session_path, save=False):
     :return: numpy.ndarray
     :rtype: dtype('float64')
     """
-    data = raw.load_data(session_path)
-    rt = get_response_times(session_path, save=False)
+    if not data:
+        data = raw.load_data(session_path)
+    rt = get_response_times(session_path, save=False, data=False)
     ends = np.array([t['behavior_data']['Trial end timestamp'] for t in data])
 
     iti_dur = ends - rt
@@ -354,7 +366,7 @@ def get_iti_duration(session_path, save=False):
     return iti_dur
 
 
-def get_deadTime(session_path, save=False):
+def get_deadTime(session_path, save=False, data=False):
     """
     Get the time between state machine exit and restart of next trial.
 
@@ -368,7 +380,8 @@ def get_deadTime(session_path, save=False):
     :return: numpy.ndarray
     :rtype: dtype('float64')
     """
-    data = raw.load_data(session_path)
+    if not data:
+        data = raw.load_data(session_path)
     starts = [t['behavior_data']['Trial start timestamp'] for t in data]
     ends = [t['behavior_data']['Trial end timestamp'] for t in data]
     # trial_len = np.array(ends) - np.array(starts)
@@ -382,7 +395,7 @@ def get_deadTime(session_path, save=False):
     return deadTime
 
 
-def get_response_times(session_path, save=False):
+def get_response_times(session_path, save=False, data=False):
     """
     Time (in absolute seconds from session start) when a response was recorded.
     **Optional:** saves _ibl_trials.response_times.npy
@@ -397,7 +410,8 @@ def get_response_times(session_path, save=False):
     :return: numpy.ndarray
     :rtype: dtype('float64')
     """
-    data = raw.load_data(session_path)
+    if not data:
+        data = raw.load_data(session_path)
     rt = np.array([tr['behavior_data']['States timestamps']['closed_loop'][0][1]
                    for tr in data])
     if save:
@@ -408,7 +422,7 @@ def get_response_times(session_path, save=False):
     return rt
 
 
-def get_goCueTrigger_times(session_path, save=False):
+def get_goCueTrigger_times(session_path, save=False, data=False):
     """
     Get trigger times of goCue from state machine.
 
@@ -426,7 +440,8 @@ def get_goCueTrigger_times(session_path, save=False):
     :return: numpy.ndarray
     :rtype: dtype('float64')
     """
-    data = raw.load_data(session_path)
+    if not data:
+        data = raw.load_data(session_path)
     goCue = np.array([tr['behavior_data']['States timestamps']
                       ['closed_loop'][0][0] for tr in data])
     if save:
@@ -437,7 +452,7 @@ def get_goCueTrigger_times(session_path, save=False):
     return goCue
 
 
-def get_goCueOnset_times(session_path, save=False):
+def get_goCueOnset_times(session_path, save=False, data=False):
     """
     Get trigger times of goCue from state machine.
 
@@ -455,7 +470,8 @@ def get_goCueOnset_times(session_path, save=False):
     :return: numpy.ndarray
     :rtype: dtype('float64')
     """
-    data = raw.load_data(session_path)
+    if not data:
+        data = raw.load_data(session_path)
     goCue = np.array([tr['behavior_data']['States timestamps']
                       ['closed_loop'][0][0] for tr in data])
     if save:
@@ -466,18 +482,20 @@ def get_goCueOnset_times(session_path, save=False):
     return goCue
 
 
-def extract_trials(session_path, save=False):
-
-    feedbackType = get_feedbackType(session_path, save=save)
-    contrastLeft, contrastRight = get_contrastLR(session_path, save=save)
-    choice = get_choice(session_path, save=save)
-    repNum = get_repNum(session_path, save=save)
-    rewardVolume = get_rewardVolume(session_path, save=save)
-    feedback_times = get_feedback_times(session_path, save=save)
-    stimOn_times = get_stimOn_times(session_path, save=save)
-    intervals = get_intervals(session_path, save=save)
-    response_times = get_response_times(session_path, save=save)
-    iti_dur = get_iti_duration(session_path, save=save)
+def extract_all(session_path, save=False, data=False):
+    if not data:
+        data = raw.load_data(session_path)
+    feedbackType = get_feedbackType(session_path, save=save, data=data)
+    contrastLeft, contrastRight = get_contrastLR(
+        session_path, save=save, data=data)
+    choice = get_choice(session_path, save=save, data=data)
+    repNum = get_repNum(session_path, save=save, data=data)
+    rewardVolume = get_rewardVolume(session_path, save=save, data=data)
+    feedback_times = get_feedback_times(session_path, save=save, data=data)
+    stimOn_times = get_stimOn_times(session_path, save=save, data=data)
+    intervals = get_intervals(session_path, save=save, data=data)
+    response_times = get_response_times(session_path, save=save, data=data)
+    iti_dur = get_iti_duration(session_path, save=save, data=data)
 
 
     # Missing datasettypes
@@ -486,21 +504,12 @@ def extract_trials(session_path, save=False):
     # _ibl_trials.probabilityLeft
 
 if __name__ == '__main__':
-    session_path = "/home/nico/Projects/IBL/IBL-github/iblrig/test_dataset/\
-test_mouse/2018-10-02/1"
-    save = False
+    main_data_path = "/home/nico/GoogleDriveNeuro/IBL/PRIVATE/iblrig_data/"
+    session_name = "6814/2018-12-06/001"
+    session_path = main_data_path + session_name
 
+    save = True
     data = raw.load_data(session_path)
-
-    feedbackType = get_feedbackType(session_path, save=save)
-    contrastLeft, contrastRight = get_contrastLR(session_path, save=save)
-    choice = get_choice(session_path, save=save)
-    repNum = get_repNum(session_path, save=save)
-    rewardVolume = get_rewardVolume(session_path, save=save)
-    feedback_times = get_feedback_times(session_path, save=save)
-    stimOn_times = get_stimOn_times(session_path, save=save)
-    intervals = get_intervals(session_path, save=save)
-    response_times = get_response_times(session_path, save=save)
-    iti_dur = get_iti_duration(session_path, save=save)
+    extract_all(session_path, save=save, data=data)
 
     print("Done!")
