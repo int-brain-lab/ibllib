@@ -11,7 +11,7 @@ Extract data OR return error to user saying that the task has no extractors
 import os
 from pathlib import Path
 
-from alf.extractors import *
+from alf.extractors import training_trials, training_wheel
 from ibllib.io import raw_data_loaders as raw
 
 
