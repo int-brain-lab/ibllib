@@ -46,7 +46,7 @@ class SessionDataInfo:
             dataset_type=[d['dataset_type'] for d in dsets],
             dataset_id=[d['id'] for d in dsets],
             local_path=[None for d in dsets],
-            eid=[None for d in dsets],  #[ses_info['url'][-36:] for d in dsets],
+            eid=[None for d in dsets],  # [ses_info['url'][-36:] for d in dsets],
             url=[d['data_url'] for d in dsets],
             data=[None for d in dsets],
         )

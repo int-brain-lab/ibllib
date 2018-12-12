@@ -8,7 +8,6 @@ Find task name
 Check if extractors for specific task exist
 Extract data OR return error to user saying that the task has no extractors
 """
-import os
 from pathlib import Path
 
 from alf.extractors import training_trials, training_wheel
@@ -44,7 +43,6 @@ def from_path(session_path, force=False):
     if extractor_type == 'training':
         training_trials.extract_all(session_path, save=True)
         training_wheel.extract_all(session_path, save=True)
-
 
 
 if __name__ == '__main__':

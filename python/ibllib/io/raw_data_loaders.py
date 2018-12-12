@@ -35,7 +35,7 @@ def trial_times_to_times(raw_trial):
     """
     ts_bs = raw_trial['behavior_data']['Bpod start timestamp']
     ts_ts = raw_trial['behavior_data']['Trial start timestamp']
-    ts_te = raw_trial['behavior_data']['Trial end timestamp']
+    # ts_te = raw_trial['behavior_data']['Trial end timestamp']
 
     def convert(ts):
         return ts + ts_ts - ts_bs
@@ -254,6 +254,7 @@ def load_mic(session_path):
     data = np.frombuffer(dstr, np.int16)
     data = np.reshape(data, (-1, nchan))
     return data
+
 
 # Missing raw data file loaders
 # Camera timestamps and video

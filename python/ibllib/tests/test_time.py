@@ -35,4 +35,4 @@ class TestUtils(unittest.TestCase):
         day = datetime.date(2018, 8, 14)
         self.assertEqual(expected, ibllib.time.date2isostr(day))
         dt = datetime.datetime(2018, 8, 14)
-        self.assertEqual(expected, ibllib.time.date2isostr(day))
+        self.assertEqual(expected, ibllib.time.date2isostr(dt))

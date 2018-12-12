@@ -6,7 +6,7 @@ import json
 import numpy as np
 import pandas as pd
 
-from ibllib.misc import is_uuid_string, pprint, flatten
+from ibllib.misc import is_uuid_string, pprint
 from ibllib.io.one import OneAbstract
 
 import oneibl.webclient as wc
