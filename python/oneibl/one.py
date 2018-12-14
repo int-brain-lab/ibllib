@@ -73,20 +73,25 @@ SEARCH_TERMS = {  # keynames are possible input arguments and values are actual 
     'labs': 'lab',
     'lab': 'lab'
 }
-par = oneibl.params.get()
 
 
 class ONE(OneAbstract):
-    def __init__(self, username=par.ALYX_LOGIN, password=par.ALYX_PWD, base_url=par.ALYX_URL):
+    def __init__(self, username=None, password=None, base_url=None):
+        # get parameters override if inputs provided
+        self._par = oneibl.params.get()
+        self._par = self._par.set('ALYX_LOGIN', username or self._par.ALYX_LOGIN)
+        self._par = self._par.set('ALYX_URL', base_url or self._par.ALYX_URL)
+        self._par = self._par.set('ALYX_PWD', password or self._par.ALYX_PWD)
         # Init connection to the database
         try:
-            self._alyxClient = wc.AlyxClient(username=username, password=password,
-                                             base_url=base_url)
+            self._alyxClient = wc.AlyxClient(username=self._par.ALYX_LOGIN,
+                                             password=self._par.ALYX_PWD,
+                                             base_url=self._par.ALYX_URL)
         except requests.exceptions.ConnectionError:
-            raise ConnectionError("Can't connect to " + base_url + '. \n' +
+            raise ConnectionError("Can't connect to " + self._par.ALYX_URL + '. \n' +
                                   'IP addresses are filtered on IBL database servers. \n' +
                                   'Are you connecting from an IBL participating institution ?')
-        print('Connected to ' + base_url + ' as ' + username)
+        print('Connected to ' + self._par.ALYX_URL + ' as ' + self._par.ALYX_LOGIN,)
         # Init connection to Globus if needed
 
     @property
@@ -198,7 +203,7 @@ class ONE(OneAbstract):
         :rtype: list, dict, dataclass SessionDataInfo
         """
         # if the input as an UUID, add the beginning of URL to it
-        cache_dir = _get_cache_dir(cache_dir)
+        cache_dir = self._get_cache_dir(cache_dir)
         if is_uuid_string(eid):
             eid = '/sessions/' + eid
         eid_str = eid[-36:]
@@ -219,10 +224,10 @@ class ONE(OneAbstract):
         # loop over each dataset and download if necessary
         for ind in range(len(dc)):
             if dc.url[ind] and not dry_run:
-                rel_path = PurePath(dc.url[ind].replace(par.HTTP_DATA_SERVER, '.')).parents[0]
-                cache_dir_file = PurePath(cache_dir, rel_path)
+                relpath = PurePath(dc.url[ind].replace(self._par.HTTP_DATA_SERVER, '.')).parents[0]
+                cache_dir_file = PurePath(cache_dir, relpath)
                 Path(cache_dir_file).mkdir(parents=True, exist_ok=True)
-                dc.local_path[ind] = _download_file(dc.url[ind], str(cache_dir_file), clobber)
+                dc.local_path[ind] = self._download_file(dc.url[ind], str(cache_dir_file), clobber)
         # load the files content in variables if requested
         if not download_only:
             for ind, fil in enumerate(dc.local_path):
@@ -327,6 +332,22 @@ class ONE(OneAbstract):
         else:
             return eids
 
+    def _get_cache_dir(self, cache_dir):
+        if not cache_dir:
+            cache_dir = self._par.CACHE_DIR
+        # if empty in parameter file, do not allow and set default
+        if not cache_dir:
+            cache_dir = str(PurePath(Path.home(), "Downloads", "FlatIron"))
+        return cache_dir
+
+    def _download_file(self, url, cache_dir, clobber=False):
+        local_path = wc.http_download_file(url,
+                                           username=self._par.HTTP_DATA_SERVER_LOGIN,
+                                           password=self._par.HTTP_DATA_SERVER_PWD,
+                                           cache_dir=str(cache_dir),
+                                           clobber=clobber)
+        return local_path
+
     @staticmethod
     def search_terms():
         """
@@ -355,24 +376,6 @@ def _validate_date_range(date_range):
     if len(date_range) == 1:
         date_range = [date_range[0], date_range[0]]
     return date_range
-
-
-def _get_cache_dir(cache_dir):
-    if not cache_dir:
-        cache_dir = par.CACHE_DIR
-    # if empty in parameter file, do not allow and set default
-    if not cache_dir:
-        cache_dir = str(PurePath(Path.home(), "Downloads", "FlatIron"))
-    return cache_dir
-
-
-def _download_file(url, cache_dir, clobber=False):
-    local_path = wc.http_download_file(url,
-                                       username=par.HTTP_DATA_SERVER_LOGIN,
-                                       password=par.HTTP_DATA_SERVER_PWD,
-                                       cache_dir=str(cache_dir),
-                                       clobber=clobber)
-    return local_path
 
 
 def _load_file_content(fil):
