@@ -280,7 +280,7 @@ class ONE(OneAbstract):
         return list_out[0], full_out[0]
 
     def search(self, dataset_types=None, users=None, subjects=None, date_range=None,
-               lab=None, details=False):
+               lab=None, number=None, details=False):
         """
         Applies a filter to the sessions (eid) table and returns a list of json dictionaries
          corresponding to sessions.
@@ -295,6 +295,8 @@ class ONE(OneAbstract):
         :type lab: list or str
         :param date_range: list of 2 strings or list of 2 dates that define the range
         :type date_range: list
+        :param number: session number
+        :type number: str or int
         :param details: default False, returns also the session details as per the REST response
         :type details: bool
 
@@ -316,6 +318,8 @@ class ONE(OneAbstract):
             url = url + 'dataset_types=' + ','.join(dataset_types)  # dataset_types query
         if users:
             url = url + '&users=' + ','.join(users)
+        if number:
+            url = url + '&number=' + str(number)
         if subjects:
             url = url + '&subject=' + ','.join(subjects)
         if lab:

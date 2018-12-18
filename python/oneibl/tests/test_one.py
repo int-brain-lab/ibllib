@@ -22,6 +22,8 @@ class TestSearch(unittest.TestCase):
         sl1, sd1 = one.search(users=['olivier'], details=True)
         sl2, sd2 = one.search(users='olivier', details=True)
         self.assertTrue(sl1 == sl2 and sd1 == sd2)
+        ses = one.search(users='olivier', number=6)
+        self.assertTrue(not ses)
         # test for the dataset type
         dtyp = ['spikes.times', 'titi.tata']
         sl, sd = one.search(dataset_types=dtyp, details=True)
