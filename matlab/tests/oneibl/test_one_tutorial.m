@@ -37,6 +37,9 @@ classdef test_one_tutorial < matlab.unittest.TestCase
             dataset_types = {'clusters.templateWaveforms', 'clusters.probes', 'clusters.depths'};
             eid = 'cf264653-2deb-44cb-aa84-89b82507028a';
             [wf, pr, d ]= one.load(eid, 'data' ,dataset_types);
+            
+            % addition to test the FTP server
+            [pr, d ]= one.load(eid, 'data' ,{'clusters.probes', 'clusters.depths'}, 'force_replace', true);
 
             assert(~isempty(wf))
             assert(~isempty(pr))
