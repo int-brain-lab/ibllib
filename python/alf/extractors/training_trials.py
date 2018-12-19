@@ -360,7 +360,7 @@ def get_iti_duration(session_path, save=False, data=False):
     if save:
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.iti_duration.npy')
+                             '_ibl_trials.itiDuration.npy')
         np.save(fpath, iti_dur)
     return iti_dur
 
