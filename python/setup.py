@@ -5,7 +5,7 @@ with open("../README.md", 'r') as f:
 
 setup(
     name='ibllib',
-    version='0.3.1',
+    version='0.4.6',
     description='IBL libraries',
     license="MIT",
     long_description=long_description,
