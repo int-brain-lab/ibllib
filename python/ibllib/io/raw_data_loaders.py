@@ -95,7 +95,7 @@ def load_settings(session_path):
     path = os.path.join(session_path, "raw_behavior_data",
                         "_iblrig_taskSettings.raw.json")
     with open(path, 'r') as f:
-        settings = json.loads(f.readline())
+        settings = json.load(f)
     return settings
 
 
@@ -259,8 +259,8 @@ def load_mic(session_path):
 # Missing raw data file loaders
 # Camera timestamps and video
 if __name__ == '__main__':
-    data_folder = "/home/nico/Projects/IBL/IBL-github/iblrig/scratch/test_dataset"
-    session = "_iblrig_test_mouse/2018-11-29/002"
+    data_folder = "/home/nico/Projects/IBL/IBL-github/iblrig_data/Subjects"
+    session = "_iblrig_test_mouse/2018-12-21/003"
     session_path = os.path.join(data_folder, session)
 
     settings = load_settings(session_path)
