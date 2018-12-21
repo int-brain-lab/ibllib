@@ -45,6 +45,21 @@ def from_path(session_path, force=False):
         training_wheel.extract_all(session_path, save=True)
 
 
+def bulk(subjects_folder):
+    ses_path = Path(subjects_folder).glob('**/extract_me.flag')
+    for p in ses_path:
+        print('Extracting', p.parent)
+        try:
+            from_path(p.parent, force=True)
+        except ValueError:
+            print('\x1b[6;30;42m' + str(p.parent) + ' failed' + '\x1b[0m')
+            continue
+        p.unlink()
+        flag_file = Path(p.parent, 'register_me.flag')
+        with open(flag_file, 'w+') as f:
+            f.write('')
+
+
 if __name__ == '__main__':
     main_data_path = "/home/nico/GoogleDriveNeuro/IBL/PRIVATE/iblrig_data/"
     session_name = "6814/2018-12-05/001"

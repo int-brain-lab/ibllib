@@ -19,6 +19,7 @@ class RegistrationClient:
     def register_sync(self, root_data_folder):
         flag_files = Path(root_data_folder).glob('**/register_me.flag')
         for flag_file in flag_files:
+            print('registering', flag_file.parent)
             self.register_session(flag_file.parent)
             flag_file.unlink()
 
@@ -97,6 +98,8 @@ class RegistrationClient:
                             '{0:03d}'.format(int(md['SESSION_NUMBER'])))
         F = {}  # empty dict whose keys will be relative paths and content filenames
         for fn in ses_path.glob('**/*.*'):
+            if fn.suffix == '.flag':
+                continue
             if not self._match_filename_dtypes(fn):
                 warnings.warn('No matching dataset type for: ' + str(fn))
                 continue
