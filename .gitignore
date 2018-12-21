@@ -9,6 +9,7 @@ python/scratch
 *checkpoint.ipynb
 build/
 venv/
+ibllibenv/
 dist/
 ibllib.egg-info/
 .DS_Store
