@@ -8,10 +8,9 @@ Find task name
 Check if extractors for specific task exist
 Extract data OR return error to user saying that the task has no extractors
 """
-import os
 from pathlib import Path
 
-from alf.extractors import *
+from alf.extractors import training_trials, training_wheel
 from ibllib.io import raw_data_loaders as raw
 
 
@@ -45,6 +44,20 @@ def from_path(session_path, force=False):
         training_trials.extract_all(session_path, save=True)
         training_wheel.extract_all(session_path, save=True)
 
+
+def bulk(subjects_folder):
+    ses_path = Path(subjects_folder).glob('**/extract_me.flag')
+    for p in ses_path:
+        print('Extracting', p.parent)
+        try:
+            from_path(p.parent, force=True)
+        except ValueError:
+            print('\x1b[6;30;42m' + str(p.parent) + ' failed' + '\x1b[0m')
+            continue
+        p.unlink()
+        flag_file = Path(p.parent, 'register_me.flag')
+        with open(flag_file, 'w+') as f:
+            f.write('')
 
 
 if __name__ == '__main__':

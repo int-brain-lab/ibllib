@@ -244,8 +244,8 @@ def get_feedback_times(session_path, save=False, data=False):
                 for tr in data]
     err_times = [tr['behavior_data']['States timestamps']['error'][0][0]
                  for tr in data]
-    nogo_times = [tr['behavior_data']['States timestamps']
-                   ['no_go'][0][0] for tr in data]
+    nogo_times = [tr['behavior_data']['States timestamps']['no_go'][0][0]
+                  for tr in data]
     assert sum(np.isnan(rw_times) &
                np.isnan(err_times) & np.isnan(nogo_times)) == 0
     merge = [x if ~np.isnan(x) else y for x, y in zip(rw_times, err_times)]
@@ -271,8 +271,7 @@ def get_stimOn_times(session_path, save=False, data=False):
     bnc_h = []
     bnc_l = []
     for tr in data:
-        stim_on.append(tr['behavior_data']
-                        ['States timestamps']['stim_on'][0][0])
+        stim_on.append(tr['behavior_data']['States timestamps']['stim_on'][0][0])
         if 'BNC1High' in tr['behavior_data']['Events timestamps'].keys():
             bnc_h.append(np.array(tr['behavior_data']
                          ['Events timestamps']['BNC1High']))
@@ -361,7 +360,7 @@ def get_iti_duration(session_path, save=False, data=False):
     if save:
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.iti_duration.npy')
+                             '_ibl_trials.itiDuration.npy')
         np.save(fpath, iti_dur)
     return iti_dur
 
@@ -496,12 +495,23 @@ def extract_all(session_path, save=False, data=False):
     intervals = get_intervals(session_path, save=save, data=data)
     response_times = get_response_times(session_path, save=save, data=data)
     iti_dur = get_iti_duration(session_path, save=save, data=data)
-
-
     # Missing datasettypes
     # _ibl_trials.goCue_times
     # _ibl_trials.deadTime
     # _ibl_trials.probabilityLeft
+    out = {'feedbackType': feedbackType,
+           'contrastLeft': contrastLeft,
+           'session_path': session_path,
+           'choice': choice,
+           'repNum': repNum,
+           'rewardVolume': rewardVolume,
+           'feedback_times': feedback_times,
+           'stimOn_times': stimOn_times,
+           'intervals': intervals,
+           'response_times': response_times,
+           'iti_dur': iti_dur}
+    return out
+
 
 if __name__ == '__main__':
     main_data_path = "/home/nico/GoogleDriveNeuro/IBL/PRIVATE/iblrig_data/"

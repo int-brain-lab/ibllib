@@ -1,5 +1,5 @@
 from ibllib.io import globus
-from oneibl.one import ONE, SessionDataInfo
+from oneibl.one import ONE
 import oneibl.params
 
 par = oneibl.params.get()
@@ -19,7 +19,6 @@ class OneGlobus(ONE):
 
     def download(self, eids):
         pass
-
 
 
 # transfer_object = globus.TransferData(

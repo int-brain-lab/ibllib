@@ -35,7 +35,7 @@ def trial_times_to_times(raw_trial):
     """
     ts_bs = raw_trial['behavior_data']['Bpod start timestamp']
     ts_ts = raw_trial['behavior_data']['Trial start timestamp']
-    ts_te = raw_trial['behavior_data']['Trial end timestamp']
+    # ts_te = raw_trial['behavior_data']['Trial end timestamp']
 
     def convert(ts):
         return ts + ts_ts - ts_bs
@@ -95,7 +95,7 @@ def load_settings(session_path):
     path = os.path.join(session_path, "raw_behavior_data",
                         "_iblrig_taskSettings.raw.json")
     with open(path, 'r') as f:
-        settings = json.loads(f.readline())
+        settings = json.load(f)
     return settings
 
 
@@ -255,11 +255,12 @@ def load_mic(session_path):
     data = np.reshape(data, (-1, nchan))
     return data
 
+
 # Missing raw data file loaders
 # Camera timestamps and video
 if __name__ == '__main__':
-    data_folder = "/home/nico/Projects/IBL/IBL-github/iblrig/scratch/test_dataset"
-    session = "_iblrig_test_mouse/2018-11-29/002"
+    data_folder = "/home/nico/Projects/IBL/IBL-github/iblrig_data/Subjects"
+    session = "_iblrig_test_mouse/2018-12-21/003"
     session_path = os.path.join(data_folder, session)
 
     settings = load_settings(session_path)

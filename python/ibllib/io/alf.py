@@ -37,7 +37,8 @@ class Scraper(object):
         """
         return [os.path.join(self.root_data_folder, x) for x in self.all_names]
 
-    def path(root_path=None, subject=None, session=None, date_time=None, session_number=None):
+    def path(self, root_path=None, subject=None, session=None, date_time=None,
+             session_number=None):
         """
         Get path
 
@@ -46,16 +47,21 @@ class Scraper(object):
         :return: Absolute folder path for mouse_name
         :rtype: str
         """
-        if mouse_name is None:
+        if subject is None:
             return 'I need a mouse name...'
-        elif mouse_name not in self.all_names:
+        elif subject not in self.all_names:
             return 'Unknown mouse...'
         else:
-            mid = re.compile('^.+' + os.path.sep + mouse_name + os.path.sep +
+            mid = re.compile('^.+' + os.path.sep + subject + os.path.sep +
                              '.+$')
-            end = re.compile('^.+' + os.path.sep + mouse_name + '$')
+            end = re.compile('^.+' + os.path.sep + subject + '$')
             return [x for x in self.all_folders
                     if mid.match(x) or end.match(x)][0]
+
+
+class Subject(object):
+    def __init__(self):
+        pass
 
 
 # TODO: decorate methods with mouse_name check

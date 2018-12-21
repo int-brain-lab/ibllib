@@ -17,8 +17,20 @@ def as_dict(par):
 def from_dict(par_dict):
     if not par_dict:
         return None
-    par = collections.namedtuple('Params', par_dict.keys())(**par_dict)
-    return par
+    # par = collections.namedtuple('Params', par_dict.keys())(**par_dict)
+    par = collections.namedtuple('Params', par_dict.keys())
+
+    class IBLParams(par):
+
+        def set(self, field, value):
+            d = as_dict(self)
+            d[field] = value
+            return from_dict(d)
+
+        def as_dict(self):
+            return as_dict(self)
+
+    return IBLParams(**par_dict)
 
 
 def getfile(str_params):
@@ -51,7 +63,7 @@ def read(str_params, default=None):
         par_dict = as_dict(default)
     # without default parameters
     default = as_dict(default)
-    # TODO : vehaviour for non existing file
+    # TODO : behaviour for non existing file
     # tat = params.read('rijafa', default={'toto': 'titi', 'tata': 1})
     if not default or default.keys() == par_dict.keys():
         return from_dict(par_dict)

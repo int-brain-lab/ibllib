@@ -5,8 +5,6 @@
 # @Last Modified time: 2018-07-03 13:08:07
 import os
 import re
-import json
-import dateutil.parser
 from ibllib.misc import flatten
 
 

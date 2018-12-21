@@ -6,7 +6,7 @@ import json
 import numpy as np
 import pandas as pd
 
-from ibllib.misc import is_uuid_string, pprint, flatten
+from ibllib.misc import is_uuid_string, pprint
 from ibllib.io.one import OneAbstract
 
 import oneibl.webclient as wc
@@ -73,27 +73,38 @@ SEARCH_TERMS = {  # keynames are possible input arguments and values are actual 
     'labs': 'lab',
     'lab': 'lab'
 }
-par = oneibl.params.get()
 
 
 class ONE(OneAbstract):
-    def __init__(self, username=par.ALYX_LOGIN, password=par.ALYX_PWD, base_url=par.ALYX_URL):
+    def __init__(self, username=None, password=None, base_url=None):
+        # get parameters override if inputs provided
+        self._par = oneibl.params.get()
+        self._par = self._par.set('ALYX_LOGIN', username or self._par.ALYX_LOGIN)
+        self._par = self._par.set('ALYX_URL', base_url or self._par.ALYX_URL)
+        self._par = self._par.set('ALYX_PWD', password or self._par.ALYX_PWD)
         # Init connection to the database
         try:
-            self._alyxClient = wc.AlyxClient(username=username, password=password,
-                                             base_url=base_url)
+            self._alyxClient = wc.AlyxClient(username=self._par.ALYX_LOGIN,
+                                             password=self._par.ALYX_PWD,
+                                             base_url=self._par.ALYX_URL)
         except requests.exceptions.ConnectionError:
-            raise ConnectionError("Can't connect to " + base_url + '. \n' +
+            raise ConnectionError("Can't connect to " + self._par.ALYX_URL + '. \n' +
                                   'IP addresses are filtered on IBL database servers. \n' +
                                   'Are you connecting from an IBL participating institution ?')
-        print('Connected to ' + base_url + ' as ' + username)
+        print('Connected to ' + self._par.ALYX_URL + ' as ' + self._par.ALYX_LOGIN,)
         # Init connection to Globus if needed
 
     @property
     def alyx(self):
         return self._alyxClient
 
-    def help(self, dataset_type):
+    def help(self, dataset_type=None):
+        if not dataset_type:
+            return self.alyx.rest('dataset-types', 'list')
+        if isinstance(dataset_type, list):
+            for dt in dataset_type:
+                self.help(dataset_type=dt)
+                return
         if not isinstance(dataset_type, str):
             print('No dataset_type provided or wrong type. Should be str')
             return
@@ -192,7 +203,7 @@ class ONE(OneAbstract):
         :rtype: list, dict, dataclass SessionDataInfo
         """
         # if the input as an UUID, add the beginning of URL to it
-        cache_dir = _get_cache_dir(cache_dir)
+        cache_dir = self._get_cache_dir(cache_dir)
         if is_uuid_string(eid):
             eid = '/sessions/' + eid
         eid_str = eid[-36:]
@@ -213,10 +224,10 @@ class ONE(OneAbstract):
         # loop over each dataset and download if necessary
         for ind in range(len(dc)):
             if dc.url[ind] and not dry_run:
-                rel_path = PurePath(dc.url[ind].replace(par.HTTP_DATA_SERVER, '.')).parents[0]
-                cache_dir_file = PurePath(cache_dir, rel_path)
+                relpath = PurePath(dc.url[ind].replace(self._par.HTTP_DATA_SERVER, '.')).parents[0]
+                cache_dir_file = PurePath(cache_dir, relpath)
                 Path(cache_dir_file).mkdir(parents=True, exist_ok=True)
-                dc.local_path[ind] = _download_file(dc.url[ind], str(cache_dir_file), clobber)
+                dc.local_path[ind] = self._download_file(dc.url[ind], str(cache_dir_file), clobber)
         # load the files content in variables if requested
         if not download_only:
             for ind, fil in enumerate(dc.local_path):
@@ -269,7 +280,7 @@ class ONE(OneAbstract):
         return list_out[0], full_out[0]
 
     def search(self, dataset_types=None, users=None, subjects=None, date_range=None,
-               lab=None, details=False):
+               lab=None, number=None, details=False):
         """
         Applies a filter to the sessions (eid) table and returns a list of json dictionaries
          corresponding to sessions.
@@ -284,6 +295,8 @@ class ONE(OneAbstract):
         :type lab: list or str
         :param date_range: list of 2 strings or list of 2 dates that define the range
         :type date_range: list
+        :param number: session number
+        :type number: str or int
         :param details: default False, returns also the session details as per the REST response
         :type details: bool
 
@@ -305,6 +318,8 @@ class ONE(OneAbstract):
             url = url + 'dataset_types=' + ','.join(dataset_types)  # dataset_types query
         if users:
             url = url + '&users=' + ','.join(users)
+        if number:
+            url = url + '&number=' + str(number)
         if subjects:
             url = url + '&subject=' + ','.join(subjects)
         if lab:
@@ -320,6 +335,22 @@ class ONE(OneAbstract):
             return eids, ses
         else:
             return eids
+
+    def _get_cache_dir(self, cache_dir):
+        if not cache_dir:
+            cache_dir = self._par.CACHE_DIR
+        # if empty in parameter file, do not allow and set default
+        if not cache_dir:
+            cache_dir = str(PurePath(Path.home(), "Downloads", "FlatIron"))
+        return cache_dir
+
+    def _download_file(self, url, cache_dir, clobber=False):
+        local_path = wc.http_download_file(url,
+                                           username=self._par.HTTP_DATA_SERVER_LOGIN,
+                                           password=self._par.HTTP_DATA_SERVER_PWD,
+                                           cache_dir=str(cache_dir),
+                                           clobber=clobber)
+        return local_path
 
     @staticmethod
     def search_terms():
@@ -349,24 +380,6 @@ def _validate_date_range(date_range):
     if len(date_range) == 1:
         date_range = [date_range[0], date_range[0]]
     return date_range
-
-
-def _get_cache_dir(cache_dir):
-    if not cache_dir:
-        cache_dir = par.CACHE_DIR
-    # if empty in parameter file, do not allow and set default
-    if not cache_dir:
-        cache_dir = str(PurePath(Path.home(), "Downloads", "FlatIron"))
-    return cache_dir
-
-
-def _download_file(url, cache_dir, clobber=False):
-    local_path = wc.http_download_file(url,
-                                       username=par.HTTP_DATA_SERVER_LOGIN,
-                                       password=par.HTTP_DATA_SERVER_PWD,
-                                       cache_dir=str(cache_dir),
-                                       clobber=clobber)
-    return local_path
 
 
 def _load_file_content(fil):

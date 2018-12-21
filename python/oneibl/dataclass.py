@@ -46,7 +46,7 @@ class SessionDataInfo:
             dataset_type=[d['dataset_type'] for d in dsets],
             dataset_id=[d['id'] for d in dsets],
             local_path=[None for d in dsets],
-            eid=[None for d in dsets],  #[ses_info['url'][-36:] for d in dsets],
+            eid=[None for d in dsets],  # [ses_info['url'][-36:] for d in dsets],
             url=[d['data_url'] for d in dsets],
             data=[None for d in dsets],
         )
@@ -62,7 +62,7 @@ def _session_details_to_dataclasses(ses_info, **kwargs):
     return SessionDataInfo.from_datasets(dsets, **kwargs)
 
 
-@_session_details_to_dataclasses.register
+@_session_details_to_dataclasses.register(list)
 def _(ses_info: list, **kwargs):
     dsets = flatten([ses['data_dataset_session_related'] for ses in ses_info])
     return SessionDataInfo.from_datasets(dsets, **kwargs)

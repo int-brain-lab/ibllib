@@ -16,14 +16,13 @@ Each DatasetType in the IBL pipeline should have one extractor function.
 import os
 
 import numpy as np
-import pandas as pd
 from scipy import interpolate
 
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
 
 
-# START of AUXILIARY FUNCS to be refactored out of the extracor files
+# START of AUXILIARY FUNCS to be refactored out of the extractor files
 def check_alf_folder(session_path):
     """
     Check if alf folder exists, creates it if it doesn't.
@@ -195,16 +194,17 @@ def get_velocity(session_path, save=False):
 def extract_all(session_path, save=False):
     data = get_wheel_data(session_path, save=save)
     velocity = get_velocity(session_path, save=save)
+    return data, velocity
 
 
 if __name__ == '__main__':
     # function code plus plot on test_dataset
-    import matplotlib.pyplot as plt
+    # import matplotlib.pyplot as plt
     main_data_path = "/home/nico/GoogleDriveNeuro/IBL/PRIVATE/iblrig_data/"
     session_name = "6814/2018-12-06/001"
     session_path = main_data_path + session_name
     save = True
-    extract_wheel(session_path, save=save)
+    # extract_wheel(session_path, save=save)
     # data = get_wheel_data(session_path, save=save)
     # velocity = get_velocity(session_path, save=save)
 
@@ -229,7 +229,6 @@ if __name__ == '__main__':
     # data['re_ts'] = convtime(data['re_ts'])
     # # Now remove the repeted times that are rep_idx + 1
     # data = np.delete(data, rep_idx + 1)
-
 
     # dp = np.diff(data['re_pos'])
     # dt = np.diff(data['re_ts'])
