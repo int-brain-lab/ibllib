@@ -133,7 +133,7 @@ def load_encoder_events(session_path):
     data = pd.read_csv(path, sep=' ', header=None)
     data = data.drop([0, 2, 5], axis=1)
     data.columns = ['re_ts', 'sm_ev', 'bns_ts']
-    data.bns_ts = pd.Series([parser.parse(x) for x in data.bns_ts])
+    data.bns_ts = data.bns_ts.apply(parser.parse)
     return data
 
 

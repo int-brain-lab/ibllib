@@ -156,7 +156,7 @@ def get_wheel_data(session_path, save=False):
     return data
 
 
-def get_velocity(session_path, save=False):
+def get_velocity(session_path, save=False, data_wheel=None):
     """
     Compute velocity from non-uniformly acquired positions and timestamps.
     **Optional:** save _ibl_trials.velocity.npy
@@ -171,13 +171,15 @@ def get_velocity(session_path, save=False):
     :return: numpy.ndarray
     :rtype: dtype('float64')
     """
-    data = get_wheel_data(session_path, save=False)
-    dp = np.diff(data['re_pos'])
-    dt = np.diff(data['re_ts'])
+
+    if not isinstance(data_wheel, np.ndarray):
+        data_wheel = get_wheel_data(session_path, save=False)
+    dp = np.diff(data_wheel['re_pos'])
+    dt = np.diff(data_wheel['re_ts'])
     # Compute raw velocity
     vel = dp / dt
     # Compute velocity time scale
-    td = data['re_ts'][:-1] + dt / 2
+    td = data_wheel['re_ts'][:-1] + dt / 2
 
     # Get the true velocity function
     velocity = interpolate.interp1d(td, vel, fill_value="extrapolate")
@@ -186,14 +188,14 @@ def get_velocity(session_path, save=False):
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
                              '_ibl_wheel.velocity.npy')
-        np.save(fpath, velocity(data['re_ts']))
+        np.save(fpath, velocity(data_wheel['re_ts']))
 
-    return velocity(data['re_ts'])
+    return velocity(data_wheel['re_ts'])
 
 
 def extract_all(session_path, save=False):
     data = get_wheel_data(session_path, save=save)
-    velocity = get_velocity(session_path, save=save)
+    velocity = get_velocity(session_path, save=save, data_wheel=data)
     return data, velocity
 
 
