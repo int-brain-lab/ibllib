@@ -290,10 +290,9 @@ def get_stimOn_times(session_path, save=False, data=False):
     stimOn_times = []
     for i in range(len(stim_on)):
         hl = np.sort(np.concatenate([bnc_h[i], bnc_l[i]]))
-        if np.all(np.isneginf(hl)):
+        stot = hl[hl > stim_on[i]]
+        if np.size == 0:
             stot = np.nan
-        else:
-            stot = hl[hl > stim_on[i]][0]
         stimOn_times.extend([stot])
 
     if save:
