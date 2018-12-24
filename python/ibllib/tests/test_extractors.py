@@ -9,7 +9,7 @@ from alf.extractors import training_trials
 class TestExtractTrialData(unittest.TestCase):
 
     def setUp(self):
-        self.session_path = data_path = Path(__file__).parent.joinpath('data')
+        self.session_path = Path(__file__).parent.joinpath('data')
         self.data = loaders.load_data(self.session_path)
 
     def test_stimOn_times(self):
@@ -18,3 +18,4 @@ class TestExtractTrialData(unittest.TestCase):
 
     def test_encoder_positions_duds(self):
         dy = loaders.load_encoder_positions(self.session_path)
+        self.assertTrue(dy.shape[0] == 2)
