@@ -169,6 +169,7 @@ def load_encoder_positions(session_path):
     data = pd.read_csv(path, sep=' ', header=None)
     data = data.drop([0, 4], axis=1)
     data.columns = ['re_ts', 're_pos', 'bns_ts']
+    data.dropna(inplace=True)
     data.bns_ts = data.bns_ts.apply(ciso8601.parse_datetime)
     return data
 
