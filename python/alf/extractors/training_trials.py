@@ -288,11 +288,13 @@ def get_stimOn_times(session_path, save=False, data=False):
     bnc_l = np.array(bnc_l)
 
     stimOn_times = []
-    for s, h, l in zip(stim_on, bnc_h, bnc_l):
-        hl = np.concatenate([h, l])
-        hl.sort()
-        stimOn_times.extend([hl[hl > s][0]])
-    # delays = np.asarray(stimOn_times) - np.asarray(stim_on)
+    for i in range(len(stim_on)):
+        hl = np.sort(np.concatenate([bnc_h[i], bnc_l[i]]))
+        if np.all(np.isneginf(hl)):
+            stot = np.nan
+        else:
+            stot = hl[hl > stim_on[i]][0]
+        stimOn_times.extend([stot])
 
     if save:
         check_alf_folder(session_path)
