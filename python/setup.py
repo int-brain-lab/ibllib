@@ -14,6 +14,6 @@ setup(
     packages=find_packages(),  # same as name
     install_requires=['dataclasses', 'matplotlib', 'numpy', 'pandas',
                       'requests', 'scipy', 'seaborn', 'globus_sdk',
-                      ciso8601],  # external packages as dependencies
+                      'ciso8601'],  # external packages as dependencies
     scripts=[]
 )
