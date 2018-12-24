@@ -276,12 +276,12 @@ def get_stimOn_times(session_path, save=False, data=False):
             bnc_h.append(np.array(tr['behavior_data']
                          ['Events timestamps']['BNC1High']))
         else:
-            bnc_h.append(np.nan)
+            bnc_h.append(np.array([np.NINF]))
         if 'BNC1Low' in tr['behavior_data']['Events timestamps'].keys():
             bnc_l.append(np.array(tr['behavior_data']
                          ['Events timestamps']['BNC1Low']))
         else:
-            bnc_l.append(np.nan)
+            bnc_l.append(np.array([np.NINF]))
 
     stim_on = np.array(stim_on)
     bnc_h = np.array(bnc_h)
@@ -292,7 +292,6 @@ def get_stimOn_times(session_path, save=False, data=False):
         hl = np.concatenate([h, l])
         hl.sort()
         stimOn_times.extend([hl[hl > s][0]])
-
     # delays = np.asarray(stimOn_times) - np.asarray(stim_on)
 
     if save:
