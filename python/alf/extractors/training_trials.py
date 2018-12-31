@@ -16,6 +16,7 @@ Each DatasetType in the IBL pipeline should have one extractor function.
 import ibllib.io.raw_data_loaders as raw
 import numpy as np
 import os
+import logging
 
 
 def check_alf_folder(session_path):
@@ -293,12 +294,12 @@ def get_stimOn_times(session_path, save=False, data=False):
         stot = hl[hl > stim_on[i]]
         if np.size == 0:
             stot = np.nan
+            logging.info('Missing BNC stimulus on for trial %i, session %s', i, session_path)
         stimOn_times.extend([stot])
 
     if save:
         check_alf_folder(session_path)
-        fpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.stimOn_times.npy')
+        fpath = os.path.join(session_path, 'alf', '_ibl_trials.stimOn_times.npy')
         np.save(fpath, np.array(stimOn_times))
 
     return np.array(stimOn_times)
