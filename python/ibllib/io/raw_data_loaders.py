@@ -17,6 +17,8 @@ import numpy as np
 import pandas as pd
 import ciso8601
 
+logger_ = logging.getLogger('ibllib')
+
 
 def trial_times_to_times(raw_trial):
     """
@@ -170,8 +172,8 @@ def load_encoder_positions(session_path):
     data = pd.read_csv(path, sep=' ', header=None)
     data = data.drop([0, 4], axis=1)
     data.columns = ['re_ts', 're_pos', 'bns_ts']
-    if any(data.isna()):
-        logging.warning('_iblrig_encoderPositions.raw.ssv has missing/incomplete records: %s',
+    if np.any(data.isna()):
+        logger_.warning('_iblrig_encoderPositions.raw.ssv has missing/incomplete records: %s',
                         session_path)
     data.dropna(inplace=True)
     data.bns_ts = data.bns_ts.apply(ciso8601.parse_datetime)
