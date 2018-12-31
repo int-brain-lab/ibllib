@@ -9,10 +9,9 @@ Module contains one loader function per raw datafile
 
 """
 import json
-import os
 import wave
 import logging
-
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import ciso8601
@@ -73,8 +72,7 @@ def load_data(session_path, time='absolute'):
     :return: A list of len ntrials each trial being a dictionary
     :rtype: list of dicts
     """
-    path = os.path.join(session_path, "raw_behavior_data",
-                        "_iblrig_taskData.raw.jsonable")
+    path = Path(session_path).joinpath("raw_behavior_data", "_iblrig_taskData.raw.jsonable")
     data = []
     with open(path, 'r') as f:
         for line in f:
@@ -95,8 +93,7 @@ def load_settings(session_path):
     :return: Settings dictionary
     :rtype: dict
     """
-    path = os.path.join(session_path, "raw_behavior_data",
-                        "_iblrig_taskSettings.raw.json")
+    path = Path(session_path).joinpath("raw_behavior_data", "_iblrig_taskSettings.raw.json")
     with open(path, 'r') as f:
         settings = json.load(f)
     return settings
@@ -131,11 +128,13 @@ def load_encoder_events(session_path):
     :return: dataframe w/ 3 cols and (ntrials * 3) lines
     :rtype: Pandas.DataFrame
     """
-    path = os.path.join(session_path, "raw_behavior_data",
-                        "_iblrig_encoderEvents.raw.ssv")
+    path = Path(session_path).joinpath("raw_behavior_data", "_iblrig_encoderEvents.raw.ssv")
     data = pd.read_csv(path, sep=' ', header=None)
     data = data.drop([0, 2, 5], axis=1)
     data.columns = ['re_ts', 'sm_ev', 'bns_ts']
+    if np.any(data.isna()):
+        logger_.warning('_iblrig_encoderEvents.raw.ssv has missing/incomplete records \n %s', path)
+    data.dropna(inplace=True)
     data.bns_ts = data.bns_ts.apply(ciso8601.parse_datetime)
     return data
 
@@ -167,14 +166,13 @@ def load_encoder_positions(session_path):
     :return: dataframe w/ 3 cols and N positions
     :rtype: Pandas.DataFrame
     """
-    path = os.path.join(session_path, "raw_behavior_data",
-                        "_iblrig_encoderPositions.raw.ssv")
+    path = Path(session_path).joinpath("raw_behavior_data", "_iblrig_encoderPositions.raw.ssv")
     data = pd.read_csv(path, sep=' ', header=None)
     data = data.drop([0, 4], axis=1)
     data.columns = ['re_ts', 're_pos', 'bns_ts']
     if np.any(data.isna()):
-        logger_.warning('_iblrig_encoderPositions.raw.ssv has missing/incomplete records: %s',
-                        session_path)
+        logger_.warning('_iblrig_encoderPositions.raw.ssv has missing/incomplete records \n %s',
+                        path)
     data.dropna(inplace=True)
     data.bns_ts = data.bns_ts.apply(ciso8601.parse_datetime)
     return data
@@ -208,8 +206,7 @@ def load_encoder_trial_info(session_path):
     :return: dataframe w/ 8 cols and ntrials lines
     :rtype: Pandas.DataFrame
     """
-    path = os.path.join(session_path, "raw_behavior_data",
-                        "_iblrig_encoderTrialInfo.raw.ssv")
+    path = Path(session_path).joinpath("raw_behavior_data", "_iblrig_encoderTrialInfo.raw.ssv")
     data = pd.read_csv(path, sep=' ', header=None)
     data = data.drop([8], axis=1)
     data.columns = ['trial_num', 'stim_pos_init', 'stim_contrast', 'stim_freq',
@@ -234,8 +231,8 @@ def load_ambient_sensor(session_path):
     :return: list of dicts
     :rtype: list
     """
-    path = os.path.join(session_path, "raw_behavior_data",
-                        "_iblrig_ambientSensorData.raw.jsonable")
+    path = Path(session_path).joinpath("raw_behavior_data",
+                                       "_iblrig_ambientSensorData.raw.jsonable")
     data = []
     with open(path, 'r') as f:
         for line in f:
@@ -252,8 +249,7 @@ def load_mic(session_path):
     :return: An array of values of the sound waveform
     :rtype: numpy.array
     """
-    path = os.path.join(session_path, "raw_behavior_data",
-                        "_iblrig_micData.raw.wav")
+    path = Path(session_path).joinpath("raw_behavior_data", "_iblrig_micData.raw.wav")
     fp = wave.open(path)
     nchan = fp.getnchannels()
     N = fp.getnframes()
@@ -261,24 +257,3 @@ def load_mic(session_path):
     data = np.frombuffer(dstr, np.int16)
     data = np.reshape(data, (-1, nchan))
     return data
-
-
-# Missing raw data file loaders
-# Camera timestamps and video
-if __name__ == '__main__':
-    data_folder = "/home/nico/Projects/IBL/IBL-github/iblrig_data/Subjects"
-    session = "_iblrig_test_mouse/2018-12-21/003"
-    session_path = os.path.join(data_folder, session)
-
-    settings = load_settings(session_path)
-    data = load_data(session_path)
-    eEvents = load_encoder_events(session_path)
-    ePos = load_encoder_positions(session_path)
-    eTI = load_encoder_trial_info(session_path)
-
-    ambient = load_ambient_sensor(session_path)
-    mic = load_mic(session_path)
-    # camTS = load_camera_timestapms(session_path)
-    # vid = load_video(session_path)
-
-    print("Done!")

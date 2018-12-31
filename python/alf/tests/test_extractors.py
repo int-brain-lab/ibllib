@@ -1,35 +1,22 @@
 import unittest
-import alf.extractors as ex
 import numpy as np
+import logging
+
+import alf.extractors as ex
 
 
 class TestExtractors(unittest.TestCase):
 
     def setUp(self):
-        self.test_session = "/home/nico/Projects/IBL/IBL-github/iblrig/\
-pybpod_data/test_mouse/2018-07-31/1/"
+        self.logger = logging.getLogger('ibllib').setLevel(50)
 
-    def test_feedbackType(self):
-        ft = ex.get_trials_feedbackType(self.test_session, save=False)
-        self.assertTrue(isinstance(ft, np.ndarray))
-        self.assertTrue(ft.dtype == np.int64)
-        # with self.assertRaises(ValueError):
-        #     get_trials_feedbackType(self.test_session, save=False)
-
-    def test_contrastLR(self):
-        lr = ex.get_trials_contrastLR(self.test_session, save=False)
-        self.assertTrue(len(lr) == 2)
-        self.assertTrue(isinstance(lr, tuple))
-        self.assertTrue(isinstance(lr[0], np.ndarray))
-        self.assertTrue(isinstance(lr[1], np.ndarray))
-        self.assertTrue(lr[0].dtype == np.float64)
-        self.assertTrue(lr[1].dtype == np.float64)
-
-    def test_choice(self):
-        c = ex.get_trials_choice(self.test_session, save=False)
-        self.assertTrue(isinstance(c, np.ndarray))
-        self.assertTrue(c.dtype == np.int64)
-
-
-if __name__ == '__main__':
-    unittest.main()
+    def test_interpolation(self):
+        # straight test that it returns an usable function
+        ta = np.array([0., 1., 2., 3., 4., 5.])
+        tb = np.array([0., 1.1, 2.0, 2.9, 4., 5.])
+        finterp = ex.time_interpolation(ta, tb)
+        self.assertTrue(np.all(finterp(ta) == tb))
+        # next test if sizes are not similar
+        tc = np.array([0., 1.1, 2.0, 2.9, 4., 5., 6.])
+        finterp = ex.time_interpolation(ta, tc)
+        self.assertTrue(np.all(finterp(ta) == tb))

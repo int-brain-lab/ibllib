@@ -14,12 +14,15 @@ Each DatasetType in the IBL pipeline should have one extractor function.
 :rtype: n/a
 """
 import os
+import logging
 
 import numpy as np
 from scipy import interpolate
 
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
+
+logger_ = logging.getLogger('ibllib')
 
 
 # START of AUXILIARY FUNCS to be refactored out of the extractor files
@@ -35,8 +38,9 @@ def check_alf_folder(session_path):
         os.mkdir(alf_folder)
 
 
-def get_trial_start_times(session_path, save=False):
-    data = raw.load_data(session_path)
+def get_trial_start_times(session_path, data=None):
+    if not data:
+        data = raw.load_data(session_path)
     trial_start_times = []
     for tr in data:
         trial_start_times.extend(
@@ -44,16 +48,17 @@ def get_trial_start_times(session_path, save=False):
     return np.array(trial_start_times)
 
 
-def get_trial_start_times_re(session_path, save=False):
-    evt = raw.load_encoder_events(session_path)
+def get_trial_start_times_re(session_path, evt=None):
+    if not evt:
+        evt = raw.load_encoder_events(session_path)
     trial_start_times_re = evt.re_ts[evt.sm_ev[evt.sm_ev == 1].index].values / 1000
     return trial_start_times_re[:-1]
 
 
-def time_converter(session_path, kind='re2b'):
+def time_converter_session(session_path, kind):
     """
-    Create interp1d functions to convert values from one clok to another given a
-    set of syncronization pulses.
+    Create interp1d functions to convert values from one clock to another given a
+    set of synchronization pulses.
 
     The task global sync pulse is at trial_start from Bpod to:
     Rotary Encoder, Cameras and e-phys system.
@@ -69,8 +74,6 @@ def time_converter(session_path, kind='re2b'):
     Default converters for times are assumed to be of kind *2b unless ephys data
     is present in that case converters for 'times' will be of kind *2ephys
 
-    TODO: implement new kinds as needed!
-
     :param session_path: absolute path of session folder
     :type session_path: str
     :param kind: ['re2b', 'b2re'], defaults to 're2b'
@@ -78,21 +81,30 @@ def time_converter(session_path, kind='re2b'):
     :return: Function that converts from clock A to clock B defined by kind.
     :rtype: scipy.interpolate.interpolate.interp1d
     """
-    tst = get_trial_start_times(session_path)
-    tst_re = get_trial_start_times_re(session_path)
-
-    btimes_to_re_ts = interpolate.interp1d(
-        tst, tst_re, fill_value="extrapolate")
-    re_ts_to_times = interpolate.interp1d(
-        tst_re, tst, fill_value="extrapolate")
-
+    # there should be a way to input data if already in memory
     if kind == 're2b':
-        func = re_ts_to_times
+        target = get_trial_start_times(session_path)
+        tref = get_trial_start_times_re(session_path)
     elif kind == 'b2re':
-        func = btimes_to_re_ts
+        tref = get_trial_start_times(session_path)
+        target = get_trial_start_times_re(session_path)
 
+    return time_interpolation(tref, target)
+
+
+def time_interpolation(tref, target):
+    """
+    From 2 arrays of timestamps, return an interpolation function that allows to go
+    from one to the other.
+    If sizes are different, only work with the first elements.
+    """
+    if tref.size != target.size:
+        logger_.warning('Time-stamp arrays have inconsistent size. Trimming to the smallest size')
+        siz = min(tref.size, target.size)
+        tref = tref[:siz]
+        target = target[:siz]
+    func = interpolate.interp1d(tref, target, fill_value="extrapolate")
     return func
-# END of AUXILIARY FUNCS to be refactored out of the extracor files
 
 
 def get_wheel_data(session_path, save=False):
@@ -120,16 +132,12 @@ def get_wheel_data(session_path, save=False):
     :return: Numpy structuresd array.
     :rtype: numpy.ndarray
     """
-    # TODO: move this to raw_data_loaders (use structured arrays instead of
-    # pandas DataFrames)
-    ############################################################################
     df = raw.load_encoder_positions(session_path)
     names = df.columns.tolist()
     data = structarr(names, shape=(df.index.max() + 1,))
     data['re_ts'] = df.re_ts.values
     data['re_pos'] = df.re_pos.values
     data['bns_ts'] = df.bns_ts.values
-    ############################################################################
     # ticks to cm factor
     cmtick = 3.1 * 2 * np.pi / 1024
     # Convert position and timestamps to cm and seconds respectively
@@ -141,7 +149,7 @@ def get_wheel_data(session_path, save=False):
     data['re_pos'][rep_idx] = (data['re_pos'][rep_idx] +
                                data['re_pos'][rep_idx + 1]) / 2
     # get the converter function to translate re_ts into behavior times
-    convtime = time_converter(session_path, kind='re2b')
+    convtime = time_converter_session(session_path, kind='re2b')
     data['re_ts'] = convtime(data['re_ts'])
     # Now remove the repeted times that are rep_idx + 1
     data = np.delete(data, rep_idx + 1)
