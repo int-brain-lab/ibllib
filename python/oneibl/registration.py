@@ -1,12 +1,14 @@
 from pathlib import Path
 import json
 import datetime
-import warnings
+import logging
 
 import ibllib.time
 from ibllib.misc import version
 from ibllib.io.raw_data_loaders import load_data
 from oneibl.one import ONE
+
+logger_ = logging.getLogger('ibllib.one')
 
 
 class RegistrationClient:
@@ -19,8 +21,17 @@ class RegistrationClient:
     def register_sync(self, root_data_folder):
         flag_files = Path(root_data_folder).glob('**/register_me.flag')
         for flag_file in flag_files:
-            print('registering', flag_file.parent)
-            self.register_session(flag_file.parent)
+            logger_.info('registering' + str(flag_file.parent))
+            status_str = self.register_session(flag_file.parent)
+            if status_str:
+                error_message = str(flag_file.parent) + ' failed registration'
+                error_message += '\n' + ' ' * 8 + status_str
+                logging.error(error_message)
+                err_file = flag_file.parent.joinpath('register_me.error')
+                flag_file.rename(err_file)
+                with open(err_file, 'w+') as f:
+                    f.write(error_message)
+                continue
             flag_file.unlink()
 
     def register_session(self, ses_path):
@@ -31,8 +42,10 @@ class RegistrationClient:
         md = _read_settings_json_compatibility_enforced(settings_json_file)
 
         # query alyx endpoints for subject, projects and repository information
-        subject = self.one.alyx.rest('subjects?nickname=' + md['SUBJECT_NAME'], 'list')[0]
-        assert(subject)
+        try:
+            subject = self.one.alyx.rest('subjects?nickname=' + md['SUBJECT_NAME'], 'list')[0]
+        except IndexError:
+            return 'Subject: ' + md['SUBJECT_NAME'] + " doesn't exist in Alyx"
 
         # find the first ibl matching project for the subject
         pname = [p for p in subject['projects'] if 'ibl' in p.lower()]
@@ -55,11 +68,16 @@ class RegistrationClient:
         start_time = ibllib.time.isostr2date(md['SESSION_DATETIME'])
         end_time = start_time + datetime.timedelta(seconds=ses_duration_secs)
 
-        # we may regret this in production but it checks data integrity
+        # this is the generic relative path: subject/yyyy-mm-dd/NNN
+        gen_rel_path = Path(subject['nickname'], md['SESSION_DATE'],
+                            '{0:03d}'.format(int(md['SESSION_NUMBER'])))
+
+        # checks that the number of actual trials and labeled number of trials check out
         assert(len(ses_data) == ses_data[-1]['trial_num'])
 
         # if nothing found create a new session in Alyx
         if not session:
+            logger_.info('creating session' + str(gen_rel_path))
             ses_ = {'subject': subject['nickname'],
                     'users': [username],
                     'location': md['PYBPOD_BOARD'],
@@ -93,18 +111,20 @@ class RegistrationClient:
 
         # register all files that match the Alyx patterns, warn user when files are encountered
         rename_files_compatibility(ses_path, md['IBLRIG_VERSION_TAG'])
-        # this is the generic relative path: subject/yyyy-mm-dd/NNN
-        gen_rel_path = Path(subject['nickname'], md['SESSION_DATE'],
-                            '{0:03d}'.format(int(md['SESSION_NUMBER'])))
         F = {}  # empty dict whose keys will be relative paths and content filenames
         for fn in ses_path.glob('**/*.*'):
-            if fn.suffix == '.flag':
+            if fn.suffix == '.flag' or fn.suffix == '.error':
                 continue
             if not self._match_filename_dtypes(fn):
-                warnings.warn('No matching dataset type for: ' + str(fn))
+                logger_.warning('No matching dataset type for: ' + str(fn))
                 continue
-            # makes the session information is consistent with the current generic path
-            assert (str(gen_rel_path) in str(fn))
+            # enforces that the session information is consistent with the current generic path
+            try:
+                assert (str(gen_rel_path) in str(fn))
+            except AssertionError:
+                strerr = 'ALF folder mismatch: data is in wrong subject/date/number folder. \n'
+                strerr += ' Expected ' + str(gen_rel_path) + ' actual was ' + str(fn)
+                return strerr
             # extract the relative path of the file
             rel_path = Path(str(fn)[str(fn).find(str(gen_rel_path)):]).parent
             if str(rel_path) not in F.keys():
@@ -114,7 +134,7 @@ class RegistrationClient:
 
         for rpath in F:
             r_ = {'created_by': username,
-                  'hostname': repository['hostname'],
+                  'name': repository['name'],
                   'path': rpath,
                   'filenames': F[rpath],
                   }
