@@ -25,7 +25,7 @@ def extractors_exist(session_path):
     if any([extractor_type in x for x in globals()]):
         return extractor_type
     else:
-        print(f"No extrators were found for {extractor_type}ChoiceWorld")
+        logger_.warning(f"No extractors were found for {extractor_type}ChoiceWorld")
         return False
 
 
@@ -51,12 +51,16 @@ def from_path(session_path, force=False):
 def bulk(subjects_folder):
     ses_path = Path(subjects_folder).glob('**/extract_me.flag')
     for p in ses_path:
-        print('Extracting', p.parent)
+        logger_.info('Extracting ' + str(p.parent))
         try:
             from_path(p.parent, force=True)
         except (ValueError, FileNotFoundError) as e:
             error_message = str(p.parent) + ' failed extraction' + '\n    ' + str(e)
             logging.error(error_message)
+            err_file = p.parent.joinpath('extract_me.error')
+            p.rename(err_file)
+            with open(err_file, 'w+') as f:
+                f.write(error_message)
             continue
         p.unlink()
         flag_file = Path(p.parent, 'register_me.flag')
