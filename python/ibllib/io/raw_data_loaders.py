@@ -257,3 +257,22 @@ def load_mic(session_path):
     data = np.frombuffer(dstr, np.int16)
     data = np.reshape(data, (-1, nchan))
     return data
+
+
+def read_flag_file(fil):
+    """
+    Flag files are *.flag files within a session folder used to schedule some jobs
+    If they are empty, should return True
+
+    :param session_path: Absoulte path of session folder
+    :type session_path: str
+    :return: An array of values of the sound waveform
+    :rtype: numpy.array
+    """
+    # the flag file may contains specific file names for a targeted extraction
+    with open(fil) as fid:
+        save = list(filter(None, fid.read().splitlines()))
+    # if empty, extract everything by default
+    if len(save) == 0:
+        save = True
+    return save

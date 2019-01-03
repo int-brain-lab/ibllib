@@ -119,7 +119,7 @@ def get_wheel_data(session_path, save=False):
     Uses time_converter to extract and convert timstamps (ms) to times (s).
 
     Positions:
-    Positions are in (cm) of RE perim relative to 0. The 0 resets every trial.
+    Positions are in (cm) of RE perimeter relative to 0. The 0 resets every trial.
 
     cmtick = radius (cm) * 2 * pi / n_ticks
     cmtick = 3.1 * 2 * np.pi / 1024
@@ -129,7 +129,7 @@ def get_wheel_data(session_path, save=False):
     :param save: wether to save the corresponding alf file
                  to the alf folder, defaults to False
     :type save: bool, optional
-    :return: Numpy structuresd array.
+    :return: Numpy structured array.
     :rtype: numpy.ndarray
     """
     df = raw.load_encoder_positions(session_path)
@@ -156,7 +156,7 @@ def get_wheel_data(session_path, save=False):
 
     if save:
         check_alf_folder(session_path)
-        tpath = os.path.join(session_path, 'alf', '_ibl_wheel.times.npy')
+        tpath = os.path.join(session_path, 'alf', '_ibl_wheel.timestamps.npy')
         ppath = os.path.join(session_path, 'alf', '_ibl_wheel.position.npy')
         np.save(tpath, data['re_ts'])
         np.save(ppath, data['re_pos'])

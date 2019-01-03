@@ -37,23 +37,30 @@ def is_extracted(session_path):
         return False
 
 
-def from_path(session_path, force=False):
+def from_path(session_path, force=False, save=True):
+    """
+    Extract a session from full ALF path (ex: '/scratch/witten/ibl_witten_01/2018-12-18/001')
+    force: (False) overwrite existing files
+    save: (True) boolean or list of ALF file names to extract
+    """
     extractor_type = extractors_exist(session_path)
     if is_extracted(session_path) and not force:
         print(f"Session {session_path} already extracted.")
         return
 
     if extractor_type == 'training':
-        training_trials.extract_all(session_path, save=True)
-        training_wheel.extract_all(session_path, save=True)
+        training_trials.extract_all(session_path, save=save)
+        training_wheel.extract_all(session_path, save=save)
 
 
 def bulk(subjects_folder):
     ses_path = Path(subjects_folder).glob('**/extract_me.flag')
     for p in ses_path:
         logger_.info('Extracting ' + str(p.parent))
+        # the flag file may contains specific file names for a targeted extraction
+        save = raw.read_flag_file(p)
         try:
-            from_path(p.parent, force=True)
+            from_path(p.parent, force=True, save=save)
         except (ValueError, FileNotFoundError) as e:
             error_message = str(p.parent) + ' failed extraction' + '\n    ' + str(e)
             logging.error(error_message)
@@ -63,9 +70,7 @@ def bulk(subjects_folder):
                 f.write(error_message)
             continue
         p.unlink()
-        flag_file = Path(p.parent, 'register_me.flag')
-        with open(flag_file, 'w+') as f:
-            f.write('')
+        p.rename(p.parent.joinpath('register_me.flag'))
 
 
 if __name__ == '__main__':

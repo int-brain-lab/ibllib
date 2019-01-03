@@ -74,7 +74,7 @@ def get_feedbackType(session_path, save=False, data=False):
     feedbackType[error] = -1
     feedbackType[no_go] = 0
     feedbackType = feedbackType.astype('int64')
-    if save:
+    if (isinstance(save, list) and '_ibl_trials.feedbackType.npy' in save) or save:
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
                              '_ibl_trials.feedbackType.npy')
@@ -107,12 +107,13 @@ def get_contrastLR(session_path, save=False, data=False):
     contrastRight[contrastRight < 0] = np.nan
     if save:
         check_alf_folder(session_path)
-        lpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.contrastLeft.npy')
-        rpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.contrastRight.npy')
-
-        np.save(lpath, contrastLeft)
+        if (isinstance(save, list) and '_ibl_trials.contrastLeft.npy' in save) or save:
+            lpath = os.path.join(session_path, 'alf',
+                                 '_ibl_trials.contrastLeft.npy')
+            np.save(lpath, contrastLeft)
+        if (isinstance(save, list) and '_ibl_trials.contrastRight.npy' in save) or save:
+            rpath = os.path.join(session_path, 'alf',
+                                 '_ibl_trials.contrastRight.npy')
         np.save(rpath, contrastRight)
     return (contrastLeft, contrastRight)
 
@@ -146,7 +147,7 @@ def get_choice(session_path, save=False, data=False):
     choice = sitm_side.copy()
     choice[trial_correct] = -choice[trial_correct]
     choice = choice.astype(int)
-    if save:
+    if (isinstance(save, list) and '_ibl_trials.choice.npy' in save) or save:
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf', '_ibl_trials.choice.npy')
         np.save(fpath, choice)
@@ -186,7 +187,7 @@ def get_repNum(session_path, save=False, data=False):
             continue
         c += 1
         repNum[i] = c
-    if save:
+    if (isinstance(save, list) and '_ibl_trials.repNum.npy' in save) or save:
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf', '_ibl_trials.repNum.npy')
         np.save(fpath, repNum)
@@ -214,7 +215,7 @@ def get_rewardVolume(session_path, save=False, data=False):
                     if x['trial_correct'] else 0 for x in data]
     rewardVolume = np.array(trial_volume).astype(np.float64)
     assert len(rewardVolume) == len(data)
-    if save:
+    if (isinstance(save, list) and '_ibl_trials.rewardVolume.npy' in save) or save:
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
                              '_ibl_trials.rewardVolume.npy')
@@ -250,7 +251,7 @@ def get_feedback_times(session_path, save=False, data=False):
     assert sum(np.isnan(rw_times) &
                np.isnan(err_times) & np.isnan(nogo_times)) == 0
     merge = [x if ~np.isnan(x) else y for x, y in zip(rw_times, err_times)]
-    if save:
+    if (isinstance(save, list) and '_ibl_trials.feedback_times.npy' in save) or save:
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
                              '_ibl_trials.feedback_times.npy')
@@ -297,7 +298,7 @@ def get_stimOn_times(session_path, save=False, data=False):
             logging.info('Missing BNC stimulus on for trial %i, session %s', i, session_path)
         stimOn_times.extend([stot])
 
-    if save:
+    if (isinstance(save, list) and '_ibl_trials.stimOn_times.npy' in save) or save:
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf', '_ibl_trials.stimOn_times.npy')
         np.save(fpath, np.array(stimOn_times))
@@ -329,7 +330,7 @@ def get_intervals(session_path, save=False, data=False):
     starts = [t['behavior_data']['Trial start timestamp'] for t in data]
     ends = [t['behavior_data']['Trial end timestamp'] for t in data]
     intervals = np.array([starts, ends]).T
-    if save:
+    if (isinstance(save, list) and '_ibl_trials.intervals.npy' in save) or save:
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
                              '_ibl_trials.intervals.npy')
@@ -358,7 +359,7 @@ def get_iti_duration(session_path, save=False, data=False):
     ends = np.array([t['behavior_data']['Trial end timestamp'] for t in data])
 
     iti_dur = ends - rt
-    if save:
+    if (isinstance(save, list) and '_ibl_trials.itiDuration.npy' in save) or save:
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
                              '_ibl_trials.itiDuration.npy')
@@ -387,7 +388,7 @@ def get_deadTime(session_path, save=False, data=False):
     # trial_len = np.array(ends) - np.array(starts)
     deadTime = np.array(starts)[1:] - np.array(ends)[:-1]
     deadTime = np.append(np.array([0]), deadTime)
-    if save:
+    if (isinstance(save, list) and '_ibl_trials.deadTime.npy' in save) or save:
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
                              '_ibl_trials.deadTime.npy')
@@ -414,7 +415,7 @@ def get_response_times(session_path, save=False, data=False):
         data = raw.load_data(session_path)
     rt = np.array([tr['behavior_data']['States timestamps']['closed_loop'][0][1]
                    for tr in data])
-    if save:
+    if (isinstance(save, list) and '_ibl_trials.response_times.npy' in save) or save:
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
                              '_ibl_trials.response_times.npy')
@@ -444,7 +445,7 @@ def get_goCueTrigger_times(session_path, save=False, data=False):
         data = raw.load_data(session_path)
     goCue = np.array([tr['behavior_data']['States timestamps']
                       ['closed_loop'][0][0] for tr in data])
-    if save:
+    if (isinstance(save, list) and '_ibl_trials.goCue_times.npy' in save) or save:
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
                              '_ibl_trials.goCue_times.npy')
@@ -474,7 +475,7 @@ def get_goCueOnset_times(session_path, save=False, data=False):
         data = raw.load_data(session_path)
     goCue = np.array([tr['behavior_data']['States timestamps']
                       ['closed_loop'][0][0] for tr in data])
-    if save:
+    if (isinstance(save, list) and '_ibl_trials.goCue_times.npy' in save) or save:
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
                              '_ibl_trials.goCue_times.npy')

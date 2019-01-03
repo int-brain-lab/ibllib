@@ -1,11 +1,12 @@
 import unittest
 import os
 import uuid
+import tempfile
 
 import ibllib.io.params as params
+import ibllib.io.raw_data_loaders as raw
 
-
-class TestUtils(unittest.TestCase):
+class TestsParams(unittest.TestCase):
 
     def setUp(self):
         self.par_dict = {'A': 'tata',
@@ -62,3 +63,24 @@ class TestUtils(unittest.TestCase):
     def tearDown(self):
         # at last delete the param file
         os.remove(params.getfile('toto'))
+
+
+class TestsRawDataLoaders(unittest.TestCase):
+
+    def setUp(self):
+        self.tempfile = tempfile.NamedTemporaryFile()
+
+    def testFlagFile(self):
+        # empty file should return True
+        self.assertEqual(raw.read_flag_file(self.tempfile.name), True)
+        # test with 2 lines and a trailing
+        with open(self.tempfile.name, 'w+') as fid:
+            fid.write('file1\nfile2\n')
+        self.assertEqual(raw.read_flag_file(self.tempfile.name), ['file1', 'file2'])
+        # test with 2 lines and a trailing, Windows convention
+        with open(self.tempfile.name, 'w+') as fid:
+            fid.write('file1\r\nfile2\r\n')
+        self.assertEqual(raw.read_flag_file(self.tempfile.name), ['file1', 'file2'])
+
+    def tearDown(self):
+        self.tempfile.close()
