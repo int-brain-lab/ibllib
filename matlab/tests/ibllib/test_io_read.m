@@ -8,5 +8,10 @@ classdef test_io_read < matlab.unittest.TestCase
             testCase.assertEqual(par, par_)
             delete([io.getappdir filesep '.' 'test_io_prefs'])
         end
+        
+        function test_empty_params(testCase)
+           par = io.read.jsonpref('this_doesnotexist');
+           testCase.assertEmpty(par)
+        end
     end
 end

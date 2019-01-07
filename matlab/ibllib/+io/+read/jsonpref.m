@@ -5,10 +5,6 @@ par = [];
 par_file = [io.getappdir filesep '.' str_params];
 if ~exist(par_file,'file'), return, end
 
-fid = fopen(par_file); 
-par = fread(fid,Inf,'*char')';
-fclose(fid);
-
-par = jsondecode(par);
+par = io.read.json(par_file);
 end
 
