@@ -32,7 +32,7 @@ class RegistrationClient:
                 with open(err_file, 'w+') as f:
                     f.write(error_message)
                 continue
-            flag_file.unlink()
+            flag_file.rename(flag_file.parent.joinpath('flat_iron_status.flag'))
 
     def register_session(self, ses_path):
         if isinstance(ses_path, str):

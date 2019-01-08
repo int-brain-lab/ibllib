@@ -69,7 +69,6 @@ def bulk(subjects_folder):
             with open(err_file, 'w+') as f:
                 f.write(error_message)
             continue
-        p.unlink()
         p.rename(p.parent.joinpath('register_me.flag'))
 
 
