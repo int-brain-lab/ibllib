@@ -17,6 +17,8 @@ class RegistrationClient:
         if not one:
             self.one = ONE()
         self.dtypes = self.one.alyx.rest('dataset-types', 'list')
+        self.file_extensions = [df['file_extension'] for df in
+                                self.one.alyx.rest('data-formats', 'list')]
 
     def register_sync(self, root_data_folder):
         flag_files = Path(root_data_folder).glob('**/register_me.flag')
@@ -117,6 +119,9 @@ class RegistrationClient:
                 continue
             if not self._match_filename_dtypes(fn):
                 logger_.warning('No matching dataset type for: ' + str(fn))
+                continue
+            if fn.suffix not in self.file_extensions:
+                logger_.warning('No matching dataformat (ie. file extension) for: ' + str(fn))
                 continue
             # enforces that the session information is consistent with the current generic path
             try:
