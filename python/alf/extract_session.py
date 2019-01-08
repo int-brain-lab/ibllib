@@ -72,11 +72,17 @@ def bulk(subjects_folder):
         p.rename(p.parent.joinpath('register_me.flag'))
 
 
-if __name__ == '__main__':
-    main_data_path = "/home/nico/GoogleDriveNeuro/IBL/PRIVATE/iblrig_data/"
-    session_name = "6814/2018-12-05/001"
-    session_path = main_data_path + session_name
-    force = True
-
-    from_path(session_path, force=force)
-    print(".")
+def create_extract_flags(root_data_folder):
+    # first part is to create extraction flags
+    ses_path = Path(root_data_folder).glob('**/raw_behavior_data')
+    for p in ses_path:
+        flag_file = Path(p).parent.joinpath('extract_me.flag')
+        if p.parent.joinpath('flatiron.flag').is_file():
+            continue
+        if p.parent.joinpath('extract_me.error').is_file():
+            continue
+        if p.parent.joinpath('register_me.error').is_file():
+            continue
+        with open(flag_file, 'w+') as f:
+            f.write('')
+        print(flag_file)
