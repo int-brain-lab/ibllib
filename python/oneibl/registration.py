@@ -5,10 +5,23 @@ import logging
 
 import ibllib.time
 from ibllib.misc import version
-from ibllib.io.raw_data_loaders import load_data
+import ibllib.io.raw_data_loaders as raw
 from oneibl.one import ONE
 
 logger_ = logging.getLogger('ibllib.one')
+
+
+# this is a decorator to add a logfile to each extraction and registration on top of the logging
+def log2sessionfile(func):
+    def func_wrapper(self, sessionpath, *args, **kwargs):
+        fh = logging.FileHandler(Path(sessionpath).joinpath('extract_register.log'))
+        str_format = '%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
+        fh.setFormatter(logging.Formatter(str_format))
+        logger_.addHandler(fh)
+        f = func(self, sessionpath, *args, **kwargs)
+        logger_.removeHandler(fh)
+        return f
+    return func_wrapper
 
 
 class RegistrationClient:
@@ -36,13 +49,18 @@ class RegistrationClient:
                 continue
             flag_file.rename(flag_file.parent.joinpath('flatiron.flag'))
 
+    @log2sessionfile
     def register_session(self, ses_path):
         if isinstance(ses_path, str):
             ses_path = Path(ses_path)
         # read meta data from the rig for the session from the task settings file
-        settings_json_file = [f for f in ses_path.glob('**/_iblrig_taskSettings.raw.json')][0]
+        settings_json_file = [f for f in ses_path.glob('**/_iblrig_taskSettings.raw.json')]
+        if not settings_json_file:
+            logger_.error(['could not find _iblrig_taskSettings.raw.json. Abort.'])
+            return
+        else:
+            settings_json_file = settings_json_file[0]
         md = _read_settings_json_compatibility_enforced(settings_json_file)
-
         # query alyx endpoints for subject, projects and repository information
         try:
             subject = self.one.alyx.rest('subjects?nickname=' + md['SUBJECT_NAME'], 'list')[0]
@@ -64,7 +82,7 @@ class RegistrationClient:
         username = user['username'] if user else subject['responsible_user']
 
         # load the trials data to get information about session duration
-        ses_data = load_data(ses_path)
+        ses_data = raw.load_data(ses_path)
         ses_duration_secs = ses_data[-1]['behavior_data']['Trial end timestamp'] - \
             ses_data[-1]['behavior_data']['Bpod start timestamp']
         start_time = ibllib.time.isostr2date(md['SESSION_DATETIME'])
@@ -115,7 +133,7 @@ class RegistrationClient:
         rename_files_compatibility(ses_path, md['IBLRIG_VERSION_TAG'])
         F = {}  # empty dict whose keys will be relative paths and content filenames
         for fn in ses_path.glob('**/*.*'):
-            if fn.suffix == '.flag' or fn.suffix == '.error':
+            if fn.suffix == '.flag' or fn.suffix == '.error' or fn.name == 'extract_register.log':
                 continue
             if not self._match_filename_dtypes(fn):
                 logger_.warning('No matching dataset type for: ' + str(fn))
@@ -184,3 +202,19 @@ def rename_files_compatibility(ses_path, version_tag):
         task_code = ses_path.glob('**/_ibl_trials.iti_duration.npy')
         for fn in task_code:
             fn.rename(fn.parent.joinpath('_ibl_trials.itiDuration.npy'))
+
+
+def create_register_flags(root_data_folder, force=False, file_list=None):
+    ses_path = Path(root_data_folder).glob('**/raw_behavior_data')
+    for p in ses_path:
+        flag_file = Path(p).parent.joinpath('register_me.flag')
+        if p.parent.joinpath('flatiron.flag').is_file() and not force:
+            continue
+        if p.parent.joinpath('extract_me.error').is_file() and not force:
+            continue
+        if p.parent.joinpath('register_me.error').is_file() and not force:
+            continue
+        if force and p.parent.joinpath('flatiron.flag').is_file():
+            p.parent.joinpath('flatiron.flag').unlink()
+        raw.write_flag_file(flag_file, file_list)
+        print(flag_file)

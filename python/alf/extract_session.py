@@ -17,6 +17,19 @@ from ibllib.io import raw_data_loaders as raw
 logger_ = logging.getLogger('ibllib.alf')
 
 
+# this is a decorator to add a logfile to each extraction and registration on top of the logging
+def log2sessionfile(func):
+    def func_wrapper(sessionpath, *args, **kwargs):
+        fh = logging.FileHandler(Path(sessionpath).joinpath('extract_register.log'))
+        str_format = '%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
+        fh.setFormatter(logging.Formatter(str_format))
+        logger_.addHandler(fh)
+        f = func(sessionpath, *args, **kwargs)
+        logger_.removeHandler(fh)
+        return f
+    return func_wrapper
+
+
 def extractors_exist(session_path):
     settings = raw.load_settings(session_path)
     task_name = settings['PYBPOD_PROTOCOL']
@@ -37,6 +50,7 @@ def is_extracted(session_path):
         return False
 
 
+@log2sessionfile
 def from_path(session_path, force=False, save=True):
     """
     Extract a session from full ALF path (ex: '/scratch/witten/ibl_witten_01/2018-12-18/001')
@@ -72,17 +86,20 @@ def bulk(subjects_folder):
         p.rename(p.parent.joinpath('register_me.flag'))
 
 
-def create_extract_flags(root_data_folder):
+def create_extract_flags(root_data_folder, force=False, file_list=None):
     # first part is to create extraction flags
     ses_path = Path(root_data_folder).glob('**/raw_behavior_data')
     for p in ses_path:
         flag_file = Path(p).parent.joinpath('extract_me.flag')
-        if p.parent.joinpath('flatiron.flag').is_file():
+        if p.parent.joinpath('flatiron.flag').is_file() and not force:
             continue
-        if p.parent.joinpath('extract_me.error').is_file():
+        if p.parent.joinpath('extract_me.error').is_file() and not force:
             continue
-        if p.parent.joinpath('register_me.error').is_file():
+        if p.parent.joinpath('register_me.error').is_file() and not force:
             continue
-        with open(flag_file, 'w+') as f:
-            f.write('')
+        if force and p.parent.joinpath('flatiron.flag').is_file():
+            p.parent.joinpath('flatiron.flag').unlink()
+        if force and p.parent.joinpath('register_me.flag').is_file():
+            p.parent.joinpath('register_me.flag').unlink()
+        raw.write_flag_file(flag_file, file_list)
         print(flag_file)
