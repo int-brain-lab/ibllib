@@ -395,3 +395,5 @@ def _load_file_content(fil):
         return pd.read_csv(fil, delimiter='\t')
     if fil and os.path.splitext(fil)[1] == '.csv':
         return pd.read_csv(fil)
+    if fil and os.path.splitext(fil)[1] == '.ssv':
+        return pd.read_csv(fil, delimiter=' ')
