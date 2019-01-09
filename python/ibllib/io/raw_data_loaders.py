@@ -263,11 +263,6 @@ def read_flag_file(fil):
     """
     Flag files are *.flag files within a session folder used to schedule some jobs
     If they are empty, should return True
-
-    :param session_path: Absoulte path of session folder
-    :type session_path: str
-    :return: An array of values of the sound waveform
-    :rtype: numpy.array
     """
     # the flag file may contains specific file names for a targeted extraction
     with open(fil) as fid:
@@ -276,3 +271,13 @@ def read_flag_file(fil):
     if len(save) == 0:
         save = True
     return save
+
+
+def write_flag_file(fname, file_list):
+    """
+    Flag files are *.flag files within a session folder used to schedule some jobs
+    Each line references to a file to extract or register
+    """
+    with open(fname, 'w+') as fid:
+        if file_list:
+            fid.write('\n'.join(file_list))
