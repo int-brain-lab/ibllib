@@ -135,7 +135,7 @@ def load_encoder_events(session_path):
     if np.any(data.isna()):
         logger_.warning('_iblrig_encoderEvents.raw.ssv has missing/incomplete records \n %s', path)
     data.dropna(inplace=True)
-    data.bns_ts = data.bns_ts.apply(ciso8601.parse_datetime)
+    data.bns_ts = data.bns_ts.apply(ciso8601.parse_datetime_as_naive)
     return data
 
 
@@ -174,7 +174,8 @@ def load_encoder_positions(session_path):
         logger_.warning('_iblrig_encoderPositions.raw.ssv has missing/incomplete records \n %s',
                         path)
     data.dropna(inplace=True)
-    data.bns_ts = data.bns_ts.apply(ciso8601.parse_datetime)
+    data.bns_ts = data.bns_ts.apply(ciso8601.parse_datetime_as_naive)
+
     return data
 
 
