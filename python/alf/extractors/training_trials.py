@@ -293,7 +293,7 @@ def get_stimOn_times(session_path, save=False, data=False):
     for i in range(len(stim_on)):
         hl = np.sort(np.concatenate([bnc_h[i], bnc_l[i]]))
         stot = hl[hl > stim_on[i]]
-        if np.size == 0:
+        if np.size(stot) == 0:
             stot = np.nan
             logging.info('Missing BNC stimulus on for trial %i, session %s', i, session_path)
         stimOn_times.extend([stot])
