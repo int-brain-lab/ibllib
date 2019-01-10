@@ -9,7 +9,7 @@ def freduce(x):
     """
     # support for multidimensional not done. If/when needed...
     siz = list(x.shape)
-    siz[0] = int(np.floor(siz[0]/2+1))
+    siz[0] = int(np.floor(siz[0] / 2 + 1))
     return x[:siz[0]]
 
 
@@ -22,5 +22,4 @@ def fexpand(x, ns=1):
     # support for multidimensional not done. If/when needed...
     siz = list(x.shape)
     dec = int(ns % 2)
-    return np.concatenate((x, np.conj(x[1:siz[0]-dec])), axis=0)
-
+    return np.concatenate((x, np.conj(x[1:siz[0] - dec])), axis=0)
