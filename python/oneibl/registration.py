@@ -196,12 +196,12 @@ def _read_settings_json_compatibility_enforced(json_file):
 
 def rename_files_compatibility(ses_path, version_tag):
     if version.le(version_tag, '3.2.3'):
-        task_code = ses_path.glob('**/_iblrig_TaskCodeFiles.raw.zip')
-        for fn in task_code:
-            fn.rename(fn.parent.joinpath('_iblrig_codeFiles.raw.zip'))
         task_code = ses_path.glob('**/_ibl_trials.iti_duration.npy')
         for fn in task_code:
             fn.rename(fn.parent.joinpath('_ibl_trials.itiDuration.npy'))
+    task_code = ses_path.glob('**/_iblrig_taskCodeFiles.raw.zip')
+    for fn in task_code:
+        fn.rename(fn.parent.joinpath('_iblrig_codeFiles.raw.zip'))
 
 
 def create_register_flags(root_data_folder, force=False, file_list=None):
