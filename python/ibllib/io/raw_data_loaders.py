@@ -167,6 +167,9 @@ def load_encoder_positions(session_path):
     :rtype: Pandas.DataFrame
     """
     path = Path(session_path).joinpath("raw_behavior_data", "_iblrig_encoderPositions.raw.ssv")
+    if path.stat().st_size == 0:
+        logger_.error("_iblrig_encoderPositions.raw.ssv is an empty file. ")
+        raise ValueError("_iblrig_encoderPositions.raw.ssv is an empty file. ABORT EXTRACTION. ")
     data = pd.read_csv(path, sep=' ', header=None)
     data = data.drop([0, 4], axis=1)
     data.columns = ['re_ts', 're_pos', 'bns_ts']
