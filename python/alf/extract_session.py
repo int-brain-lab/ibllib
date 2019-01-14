@@ -8,7 +8,6 @@ Find task name
 Check if extractors for specific task exist
 Extract data OR return error to user saying that the task has no extractors
 """
-import sys
 import logging
 from pathlib import Path
 import traceback
