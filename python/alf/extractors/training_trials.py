@@ -18,6 +18,8 @@ import numpy as np
 import os
 import logging
 
+logger_ = logging.getLogger('ibllib.alf')
+
 
 def check_alf_folder(session_path):
     """
@@ -289,14 +291,14 @@ def get_stimOn_times(session_path, save=False, data=False):
     bnc_h = np.array(bnc_h)
     bnc_l = np.array(bnc_l)
 
-    stimOn_times = []
+    stimOn_times = np.zeros_like(stim_on)
     for i in range(len(stim_on)):
         hl = np.sort(np.concatenate([bnc_h[i], bnc_l[i]]))
         stot = hl[hl > stim_on[i]]
         if np.size(stot) == 0:
-            stot = np.nan
-            logging.info('Missing BNC stimulus on for trial %i, session %s', i, session_path)
-        stimOn_times.extend([stot])
+            stot = np.array([np.nan])
+            logger_.info('Missing BNC stimulus on for trial %i, session %s', i, session_path)
+        stimOn_times[i] = stot[0]
 
     if (isinstance(save, list) and '_ibl_trials.stimOn_times.npy' in save) or save:
         check_alf_folder(session_path)
