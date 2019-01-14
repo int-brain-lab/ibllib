@@ -22,7 +22,7 @@ from scipy import interpolate
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
 
-logger_ = logging.getLogger('ibllib')
+logger_ = logging.getLogger('ibllib.alf')
 
 
 # START of AUXILIARY FUNCS to be refactored out of the extractor files
