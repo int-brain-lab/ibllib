@@ -77,10 +77,10 @@ def bulk(subjects_folder):
         save = raw.read_flag_file(p)
         try:
             from_path(p.parent, force=True, save=save)
-        except (ValueError, FileNotFoundError) as e:
+        except Exception as e:
             error_message = str(p.parent) + ' failed extraction' + '\n    ' + str(e)
+            error_message += traceback.format_exc()
             logger_.error(error_message)
-            logger_.error(traceback.print_tb(e.__traceback__))
             err_file = p.parent.joinpath('extract_me.error')
             p.rename(err_file)
             with open(err_file, 'w+') as f:
