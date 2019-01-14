@@ -58,6 +58,7 @@ def from_path(session_path, force=False, save=True):
     force: (False) overwrite existing files
     save: (True) boolean or list of ALF file names to extract
     """
+    logger_.info('Extracting ' + str(session_path))
     extractor_type = extractors_exist(session_path)
     if is_extracted(session_path) and not force:
         print(f"Session {session_path} already extracted.")
@@ -71,7 +72,6 @@ def from_path(session_path, force=False, save=True):
 def bulk(subjects_folder):
     ses_path = Path(subjects_folder).glob('**/extract_me.flag')
     for p in ses_path:
-        logger_.info('Extracting ' + str(p.parent))
         # the flag file may contains specific file names for a targeted extraction
         save = raw.read_flag_file(p)
         try:
