@@ -132,11 +132,7 @@ def load_encoder_events(session_path):
     data = pd.read_csv(path, sep=' ', header=None)
     data = data.drop([0, 2, 5], axis=1)
     data.columns = ['re_ts', 'sm_ev', 'bns_ts']
-    if np.any(data.isna()):
-        logger_.warning('_iblrig_encoderEvents.raw.ssv has missing/incomplete records \n %s', path)
-    data.dropna(inplace=True)
-    data.bns_ts = data.bns_ts.apply(ciso8601.parse_datetime_as_naive)
-    return data
+    return _groom_wheel_data(data, label='_iblrig_encoderEvents.raw.ssv', path=path)
 
 
 def load_encoder_positions(session_path):
@@ -173,13 +169,7 @@ def load_encoder_positions(session_path):
     data = pd.read_csv(path, sep=' ', header=None)
     data = data.drop([0, 4], axis=1)
     data.columns = ['re_ts', 're_pos', 'bns_ts']
-    if np.any(data.isna()):
-        logger_.warning('_iblrig_encoderPositions.raw.ssv has missing/incomplete records \n %s',
-                        path)
-    data.dropna(inplace=True)
-    data.bns_ts = data.bns_ts.apply(ciso8601.parse_datetime_as_naive)
-
-    return data
+    return _groom_wheel_data(data, label='_iblrig_encoderPositions.raw.ssv', path=path)
 
 
 def load_encoder_trial_info(session_path):
@@ -215,8 +205,7 @@ def load_encoder_trial_info(session_path):
     data = data.drop([8], axis=1)
     data.columns = ['trial_num', 'stim_pos_init', 'stim_contrast', 'stim_freq',
                     'stim_angle', 'stim_gain', 'stim_sigma', 'bns_ts']
-    data.bns_ts = data.bns_ts.apply(ciso8601.parse_datetime_as_naive)
-    return data
+    return _groom_wheel_data(data, label='_iblrig_encoderEvents.raw.ssv', path=path)
 
 
 def load_ambient_sensor(session_path):
@@ -285,3 +274,12 @@ def write_flag_file(fname, file_list):
     with open(fname, 'w+') as fid:
         if file_list:
             fid.write('\n'.join(file_list))
+
+
+def _groom_wheel_data(data, label='file ', path=''):
+    if np.any(data.isna()):
+        logger_.warning(label + 'has missing/incomplete records \n %s', path)
+    data.dropna(inplace=True)
+    data.drop(data.loc[data.bns_ts.apply(len) != 33].index, inplace=True)
+    data.bns_ts = data.bns_ts.apply(ciso8601.parse_datetime_as_naive)
+    return data
