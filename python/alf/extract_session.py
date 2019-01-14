@@ -8,8 +8,10 @@ Find task name
 Check if extractors for specific task exist
 Extract data OR return error to user saying that the task has no extractors
 """
+import sys
 import logging
 from pathlib import Path
+import traceback
 
 from alf.extractors import training_trials, training_wheel
 from ibllib.io import raw_data_loaders as raw
@@ -77,7 +79,8 @@ def bulk(subjects_folder):
             from_path(p.parent, force=True, save=save)
         except (ValueError, FileNotFoundError) as e:
             error_message = str(p.parent) + ' failed extraction' + '\n    ' + str(e)
-            logging.error(error_message)
+            logger_.error(error_message)
+            logger_.error(traceback.print_tb(e.__traceback__))
             err_file = p.parent.joinpath('extract_me.error')
             p.rename(err_file)
             with open(err_file, 'w+') as f:
