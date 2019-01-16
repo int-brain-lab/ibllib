@@ -89,9 +89,12 @@ class TestsRawDataLoaders(unittest.TestCase):
         # makes sure that read after write empty list returns True
         raw.write_flag_file(self.tempfile.name, [])
         self.assertEqual(raw.read_flag_file(self.tempfile.name), True)
-        # makes sure that read after write None also returns Ture
+        # makes sure that read after write None also returns True
         raw.write_flag_file(self.tempfile.name, None)
         self.assertEqual(raw.read_flag_file(self.tempfile.name), True)
+        # make sure that read after write with a string workds
+        raw.write_flag_file(self.tempfile.name, '_ibl_lickPiezo.raw')
+        self.assertEqual(raw.read_flag_file(self.tempfile.name), ['_ibl_lickPiezo.raw'])
 
     def tearDown(self):
         self.tempfile.close()
