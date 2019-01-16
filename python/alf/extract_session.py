@@ -24,7 +24,6 @@ def log2sessionfile(func):
         fh = logging.FileHandler(Path(sessionpath).joinpath('extract_register.log'))
         str_format = '%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
         fh.setFormatter(logging.Formatter(str_format))
-        fh.setFormatter(logging.INFO)
         logger_.addHandler(fh)
         f = func(sessionpath, *args, **kwargs)
         logger_.removeHandler(fh)

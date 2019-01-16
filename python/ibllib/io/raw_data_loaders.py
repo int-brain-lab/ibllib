@@ -307,7 +307,8 @@ def _groom_wheel_data(data, label='file ', path=''):
     return data
 
 
-def save_bool(save, dataset_type, logger=logging.getLogger('ibllib.alf')):
+def save_bool(save, dataset_type):
+    logger = logging.getLogger('ibllib.alf')
     if isinstance(save, bool):
         out = save
     elif isinstance(save, list):
