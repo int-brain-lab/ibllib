@@ -154,11 +154,12 @@ def get_wheel_data(session_path, save=False):
     # Now remove the repeted times that are rep_idx + 1
     data = np.delete(data, rep_idx + 1)
 
-    if save:
-        check_alf_folder(session_path)
+    check_alf_folder(session_path)
+    if raw.save_bool(save, '_ibl_wheel.timestamps.npy'):
         tpath = os.path.join(session_path, 'alf', '_ibl_wheel.timestamps.npy')
-        ppath = os.path.join(session_path, 'alf', '_ibl_wheel.position.npy')
         np.save(tpath, data['re_ts'])
+    if raw.save_bool(save, '_ibl_wheel.position.npy'):
+        ppath = os.path.join(session_path, 'alf', '_ibl_wheel.position.npy')
         np.save(ppath, data['re_pos'])
 
     return data
@@ -192,7 +193,7 @@ def get_velocity(session_path, save=False, data_wheel=None):
     # Get the true velocity function
     velocity = interpolate.interp1d(td, vel, fill_value="extrapolate")
 
-    if save:
+    if raw.save_bool(save, '_ibl_wheel.velocity.npy'):
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
                              '_ibl_wheel.velocity.npy')
@@ -205,51 +206,3 @@ def extract_all(session_path, save=False):
     data = get_wheel_data(session_path, save=save)
     velocity = get_velocity(session_path, save=save, data_wheel=data)
     return data, velocity
-
-
-if __name__ == '__main__':
-    # function code plus plot on test_dataset
-    # import matplotlib.pyplot as plt
-    main_data_path = "/home/nico/GoogleDriveNeuro/IBL/PRIVATE/iblrig_data/"
-    session_name = "6814/2018-12-06/001"
-    session_path = main_data_path + session_name
-    save = True
-    # extract_wheel(session_path, save=save)
-    # data = get_wheel_data(session_path, save=save)
-    # velocity = get_velocity(session_path, save=save)
-
-    # df = raw.load_encoder_positions(session_path)
-    # names = df.columns.tolist()
-    # data = structarr(names, shape=(df.index.max() + 1,))
-    # data['re_ts'] = df.re_ts.values
-    # data['re_pos'] = df.re_pos.values
-    # data['bns_ts'] = df.bns_ts.values
-
-    # cmtick = 3.1 * 2 * np.pi / 1024
-    # # Convert position and timestamps to cm and seconds respectively
-    # data['re_ts'] = data['re_ts'] / 1000.
-    # data['re_pos'] = data['re_pos'] * cmtick
-    # # Find timestamps that are repeated
-    # rep_idx = np.where(np.diff(data['re_ts']) == 0)[0]
-    # # Change the value of the repeated position
-    # data['re_pos'][rep_idx] = (data['re_pos'][rep_idx] +
-    #                            data['re_pos'][rep_idx + 1]) / 2
-    # # get the converter function to translate re_ts into behavior times
-    # convtime = time_converter(session_path, kind='re2b')
-    # data['re_ts'] = convtime(data['re_ts'])
-    # # Now remove the repeted times that are rep_idx + 1
-    # data = np.delete(data, rep_idx + 1)
-
-    # dp = np.diff(data['re_pos'])
-    # dt = np.diff(data['re_ts'])
-    # # Compute raw velocity
-    # vel = dp / dt
-    # # Compute velocity time scale
-    # td = data['re_ts'][:-1] + dt/2
-    # # Get the true velocity function
-    # velocity = interpolate.interp1d(td, vel, fill_value="extrapolate")
-    # # Checkit out
-    # plt.plot(td, vel, '-o')
-    # plt.plot(data['re_ts'], velocity(data['re_ts']), '-*')
-
-    print("Done!")

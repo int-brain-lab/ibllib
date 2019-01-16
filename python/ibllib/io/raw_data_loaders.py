@@ -305,3 +305,13 @@ def _groom_wheel_data(data, label='file ', path=''):
     data.drop(data.loc[data.bns_ts.apply(len) != 33].index, inplace=True)
     data.bns_ts = data.bns_ts.apply(ciso8601.parse_datetime_as_naive)
     return data
+
+
+def save_bool(save, dataset_type, logger=logging.getLogger('ibllib.alf')):
+    if isinstance(save, bool):
+        out = save
+    elif isinstance(save, list):
+        out = (dataset_type in save) or (Path(dataset_type).stem in save)
+    if out:
+        logger.info('extracting' + dataset_type)
+    return out
