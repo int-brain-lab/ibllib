@@ -72,7 +72,10 @@ def load_data(session_path, time='absolute'):
     :return: A list of len ntrials each trial being a dictionary
     :rtype: list of dicts
     """
-    path = Path(session_path).joinpath("raw_behavior_data", "_iblrig_taskData.raw.jsonable")
+    path = Path(session_path).joinpath("raw_behavior_data")
+    path = next(path.glob("_iblrig_taskData.raw*.jsonable"), None)
+    if not path:
+        return None
     data = []
     with open(path, 'r') as f:
         for line in f:
@@ -93,7 +96,10 @@ def load_settings(session_path):
     :return: Settings dictionary
     :rtype: dict
     """
-    path = Path(session_path).joinpath("raw_behavior_data", "_iblrig_taskSettings.raw.json")
+    path = Path(session_path).joinpath("raw_behavior_data")
+    path = next(path.glob("_iblrig_taskSettings.raw*.json"), None)
+    if not path:
+        return None
     with open(path, 'r') as f:
         settings = json.load(f)
     return settings
@@ -128,7 +134,10 @@ def load_encoder_events(session_path):
     :return: dataframe w/ 3 cols and (ntrials * 3) lines
     :rtype: Pandas.DataFrame
     """
-    path = Path(session_path).joinpath("raw_behavior_data", "_iblrig_encoderEvents.raw.ssv")
+    path = Path(session_path).joinpath("raw_behavior_data")
+    path = next(path.glob("_iblrig_encoderEvents.raw*.ssv"), None)
+    if not path:
+        return None
     data = pd.read_csv(path, sep=' ', header=None)
     data = data.drop([0, 2, 5], axis=1)
     data.columns = ['re_ts', 'sm_ev', 'bns_ts']
@@ -162,7 +171,10 @@ def load_encoder_positions(session_path):
     :return: dataframe w/ 3 cols and N positions
     :rtype: Pandas.DataFrame
     """
-    path = Path(session_path).joinpath("raw_behavior_data", "_iblrig_encoderPositions.raw.ssv")
+    path = Path(session_path).joinpath("raw_behavior_data")
+    path = next(path.glob("_iblrig_encoderPositions.raw*.ssv"), None)
+    if not path:
+        return None
     if path.stat().st_size == 0:
         logger_.error("_iblrig_encoderPositions.raw.ssv is an empty file. ")
         raise ValueError("_iblrig_encoderPositions.raw.ssv is an empty file. ABORT EXTRACTION. ")
@@ -200,7 +212,10 @@ def load_encoder_trial_info(session_path):
     :return: dataframe w/ 8 cols and ntrials lines
     :rtype: Pandas.DataFrame
     """
-    path = Path(session_path).joinpath("raw_behavior_data", "_iblrig_encoderTrialInfo.raw.ssv")
+    path = Path(session_path).joinpath("raw_behavior_data")
+    path = next(path.glob("_iblrig_encoderTrialInfo.raw*.ssv"), None)
+    if not path:
+        return None
     data = pd.read_csv(path, sep=' ', header=None)
     data = data.drop([8], axis=1)
     data.columns = ['trial_num', 'stim_pos_init', 'stim_contrast', 'stim_freq',
@@ -224,8 +239,10 @@ def load_ambient_sensor(session_path):
     :return: list of dicts
     :rtype: list
     """
-    path = Path(session_path).joinpath("raw_behavior_data",
-                                       "_iblrig_ambientSensorData.raw.jsonable")
+    path = Path(session_path).joinpath("raw_behavior_data")
+    path = next(path.glob("_iblrig_ambientSensorData.raw*.jsonable"), None)
+    if not path:
+        return None
     data = []
     with open(path, 'r') as f:
         for line in f:
@@ -242,7 +259,10 @@ def load_mic(session_path):
     :return: An array of values of the sound waveform
     :rtype: numpy.array
     """
-    path = Path(session_path).joinpath("raw_behavior_data", "_iblrig_micData.raw.wav")
+    path = Path(session_path).joinpath("raw_behavior_data")
+    path = next(path.glob("_iblrig_micData.raw*.wav"), None)
+    if not path:
+        return None
     fp = wave.open(path)
     nchan = fp.getnchannels()
     N = fp.getnframes()
