@@ -117,6 +117,13 @@ class RegistrationClient:
                     'json': json.dumps(md, indent=1),
                     }
             session = self.one.alyx.rest('sessions', 'create', data=ses_)
+            if md['SUBJECT_WEIGHT']:
+                wei_ = {'subject':  subject['nickname'],
+                        'date_time': ibllib.time.date2isostr(start_time),
+                        'weight': md['SUBJECT_WEIGHT'],
+                        'user': username
+                        }
+                self.one.alyx.rest('weighings', 'create', wei_)
         else:
             session = session[0]
 
@@ -194,6 +201,8 @@ def _read_settings_json_compatibility_enforced(json_file):
         #  change the date format to proper ISO
         dt = datetime.datetime.strptime(md['SESSION_DATETIME'], '%Y-%m-%d %H:%M:%S.%f')
         md['SESSION_DATETIME'] = ibllib.time.date2isostr(dt)
+        if 'SUBJECT_WEIGHT' not in md.keys():
+            md['SUBJECT_WEIGHT'] = None
     return md
 
 
