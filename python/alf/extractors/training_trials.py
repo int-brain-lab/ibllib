@@ -17,6 +17,7 @@ import ibllib.io.raw_data_loaders as raw
 import numpy as np
 import os
 import logging
+from pathlib import Path
 
 logger_ = logging.getLogger('ibllib.alf')
 
@@ -110,14 +111,23 @@ def get_contrastLR(session_path, save=False, data=False):
     # save if needed
     check_alf_folder(session_path)
     if raw.save_bool(save, '_ibl_trials.contrastLeft.npy'):
-        lpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.contrastLeft.npy')
+        lpath = os.path.join(session_path, 'alf', '_ibl_trials.contrastLeft.npy')
         np.save(lpath, contrastLeft)
     if raw.save_bool(save, '_ibl_trials.contrastRight.npy'):
-        rpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.contrastRight.npy')
+        rpath = os.path.join(session_path, 'alf', '_ibl_trials.contrastRight.npy')
         np.save(rpath, contrastRight)
     return (contrastLeft, contrastRight)
+
+
+def get_probaLR(session_path, save=False, data=False):
+    if not data:
+        data = raw.load_data(session_path)
+    pLeft = np.array([t['stim_probability_left'] for t in data])
+    pRight = 1 - pLeft
+    if raw.save_bool(save, '_ibl_trials.probabilityLeft.npy'):
+        lpath = Path(session_path).joinpath('alf', '_ibl_trials.contrastLeft.npy')
+        np.save(lpath, pLeft)
+    return pLeft, pRight
 
 
 def get_choice(session_path, save=False, data=False):
@@ -490,6 +500,7 @@ def extract_all(session_path, save=False, data=False):
     feedbackType = get_feedbackType(session_path, save=save, data=data)
     contrastLeft, contrastRight = get_contrastLR(
         session_path, save=save, data=data)
+    probabilityLeft, _ = get_probaLR(session_path, save=save, data=data)
     choice = get_choice(session_path, save=save, data=data)
     repNum = get_repNum(session_path, save=save, data=data)
     rewardVolume = get_rewardVolume(session_path, save=save, data=data)
@@ -498,12 +509,13 @@ def extract_all(session_path, save=False, data=False):
     intervals = get_intervals(session_path, save=save, data=data)
     response_times = get_response_times(session_path, save=save, data=data)
     iti_dur = get_iti_duration(session_path, save=save, data=data)
+    iti_dur = get_iti_duration(session_path, save=save, data=data)
     # Missing datasettypes
     # _ibl_trials.goCue_times
     # _ibl_trials.deadTime
-    # _ibl_trials.probabilityLeft
     out = {'feedbackType': feedbackType,
            'contrastLeft': contrastLeft,
+           'probabilityLeft': probabilityLeft,
            'session_path': session_path,
            'choice': choice,
            'repNum': repNum,

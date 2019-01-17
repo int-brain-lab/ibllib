@@ -37,8 +37,9 @@ class RegistrationClient:
     def register_sync(self, root_data_folder):
         flag_files = Path(root_data_folder).glob('**/register_me.flag')
         for flag_file in flag_files:
+            file_list = raw.read_flag_file(flag_file)
             logger_.info('registering' + str(flag_file.parent))
-            status_str = self.register_session(flag_file.parent)
+            status_str = self.register_session(flag_file.parent, file_list=file_list)
             if status_str:
                 error_message = str(flag_file.parent) + ' failed registration'
                 error_message += '\n' + ' ' * 8 + status_str
@@ -52,7 +53,7 @@ class RegistrationClient:
             flag_file.rename(flag_file.parent.joinpath('flatiron.flag'))
 
     @log2sessionfile
-    def register_session(self, ses_path):
+    def register_session(self, ses_path, file_list=None):
         if isinstance(ses_path, str):
             ses_path = Path(ses_path)
         # read meta data from the rig for the session from the task settings file
