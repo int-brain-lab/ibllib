@@ -9,7 +9,7 @@ from ibllib.misc import version
 import ibllib.io.raw_data_loaders as raw
 from oneibl.one import ONE
 
-logger_ = logging.getLogger('ibllib.one')
+logger_ = logging.getLogger('ibllib.alf')
 
 
 # this is a decorator to add a logfile to each extraction and registration on top of the logging
@@ -53,7 +53,7 @@ class RegistrationClient:
             flag_file.rename(flag_file.parent.joinpath('flatiron.flag'))
 
     @log2sessionfile
-    def register_session(self, ses_path, file_list=None):
+    def register_session(self, ses_path, file_list=True):
         if isinstance(ses_path, str):
             ses_path = Path(ses_path)
         # read meta data from the rig for the session from the task settings file
@@ -118,7 +118,7 @@ class RegistrationClient:
                     }
             session = self.one.alyx.rest('sessions', 'create', data=ses_)
             if md['SUBJECT_WEIGHT']:
-                wei_ = {'subject':  subject['nickname'],
+                wei_ = {'subject': subject['nickname'],
                         'date_time': ibllib.time.date2isostr(start_time),
                         'weight': md['SUBJECT_WEIGHT'],
                         'user': username
@@ -152,7 +152,9 @@ class RegistrationClient:
             if fn.suffix not in self.file_extensions:
                 logger_.warning('No matching dataformat (ie. file extension) for: ' + str(fn))
                 continue
-            # enforces that the session information is consistent with the current generic path
+            if not _register_bool(fn.name, file_list):
+                logger_.debug('Not in filelist: ' + str(fn))
+                continue
             try:
                 assert (str(gen_rel_path) in str(fn))
             except AssertionError:
@@ -165,6 +167,7 @@ class RegistrationClient:
                 F[str(rel_path)] = [fn.name]
             else:
                 F[str(rel_path)].append(fn.name)
+            logger_.info('Registering ' + str(fn))
 
         for rpath in F:
             r_ = {'created_by': username,
@@ -182,6 +185,14 @@ class RegistrationClient:
             if re.match(reg, Path(full_file).name, re.IGNORECASE):
                 return True
         return False
+
+
+def _register_bool(fn, file_list):
+    if isinstance(file_list, bool):
+        return file_list
+    if isinstance(file_list, str):
+        file_list = [file_list]
+    return any([fil in fn for fil in file_list])
 
 
 def _read_settings_json_compatibility_enforced(json_file):
