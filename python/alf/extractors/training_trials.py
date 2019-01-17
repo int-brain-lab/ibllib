@@ -488,10 +488,19 @@ def get_goCueOnset_times(session_path, save=False, data=False):
                       ['closed_loop'][0][0] for tr in data])
     if raw.save_bool(save, '_ibl_trials.goCue_times.npy'):
         check_alf_folder(session_path)
-        fpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.goCue_times.npy')
+        fpath = Path(session_path).joinpath('alf', '_ibl_trials.goCue_times.npy')
         np.save(fpath, goCue)
     return goCue
+
+
+def get_included_trials(session_path, save=False, data=False):
+    if not data:
+        data = raw.load_data(session_path)
+    trials_included = np.array([t['contrast']['type'] != "RepeatContrast" for t in data])
+    if raw.save_bool(save, '_ibl_trials.included'):
+        fpath = Path(session_path).joinpath('alf', '_ibl_trials.included.npy')
+        np.save(fpath, trials_included)
+    return trials_included
 
 
 def extract_all(session_path, save=False, data=False):
@@ -509,7 +518,7 @@ def extract_all(session_path, save=False, data=False):
     intervals = get_intervals(session_path, save=save, data=data)
     response_times = get_response_times(session_path, save=save, data=data)
     iti_dur = get_iti_duration(session_path, save=save, data=data)
-    iti_dur = get_iti_duration(session_path, save=save, data=data)
+    trials_included = get_included_trials(session_path, save=save, data=data)
     # Missing datasettypes
     # _ibl_trials.goCue_times
     # _ibl_trials.deadTime
@@ -524,17 +533,7 @@ def extract_all(session_path, save=False, data=False):
            'stimOn_times': stimOn_times,
            'intervals': intervals,
            'response_times': response_times,
-           'iti_dur': iti_dur}
+           'iti_dur': iti_dur,
+           'trials_included': trials_included}
     return out
 
-
-if __name__ == '__main__':
-    main_data_path = "/home/nico/GoogleDriveNeuro/IBL/PRIVATE/iblrig_data/"
-    session_name = "6814/2018-12-06/001"
-    session_path = main_data_path + session_name
-
-    save = True
-    data = raw.load_data(session_path)
-    extract_all(session_path, save=save, data=data)
-
-    print("Done!")
