@@ -2,6 +2,7 @@ from pathlib import Path
 import json
 import datetime
 import logging
+import traceback
 
 import ibllib.time
 from ibllib.misc import version
@@ -41,7 +42,8 @@ class RegistrationClient:
             if status_str:
                 error_message = str(flag_file.parent) + ' failed registration'
                 error_message += '\n' + ' ' * 8 + status_str
-                logging.error(error_message)
+                error_message += traceback.format_exc()
+                logger_.error(error_message)
                 err_file = flag_file.parent.joinpath('register_me.error')
                 flag_file.rename(err_file)
                 with open(err_file, 'w+') as f:
