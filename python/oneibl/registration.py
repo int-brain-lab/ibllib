@@ -143,7 +143,8 @@ class RegistrationClient:
         rename_files_compatibility(ses_path, md['IBLRIG_VERSION_TAG'])
         F = {}  # empty dict whose keys will be relative paths and content filenames
         for fn in ses_path.glob('**/*.*'):
-            if fn.suffix == '.flag' or fn.suffix == '.error' or fn.name == 'extract_register.log':
+            if fn.suffix in ['.flag', '.error', '.avi', '.log']:
+                logger_.debug('Excluded: ', str(fn))
                 continue
             if not self._match_filename_dtypes(fn):
                 logger_.warning('No matching dataset type for: ' + str(fn))
