@@ -15,14 +15,15 @@ def login():
             self.user = self.make_entry(self.parent, "User name:", 16, show='')
             self.password = self.make_entry(self.parent, "Password:", 16, show="*")
             # button to attempt to login
-            self.button = tk.Button(self.parent, borderwidth=4, text="Login", width=10, pady=8, command=self.get_value)
+            self.button = tk.Button(self.parent, borderwidth=4, text="Login", width=10, pady=8,
+                                    command=self.get_value)
             self.button.pack(side=tk.BOTTOM)
             self.user.focus_set()
             self.USR = None
             self.MDP = None
             self.root.bind('<Return>', self.push_enter)
 
-        def make_entry(self, parent, caption, width=None, **options):
+        def make_entry(self, _, caption, width=None, **options):
             tk.Label(self.parent, text=caption).pack(side=tk.TOP)
             entry = tk.Entry(self.parent, **options)
             if width:
