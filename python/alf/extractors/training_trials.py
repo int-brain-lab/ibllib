@@ -125,7 +125,7 @@ def get_probaLR(session_path, save=False, data=False):
     pLeft = np.array([t['stim_probability_left'] for t in data])
     pRight = 1 - pLeft
     if raw.save_bool(save, '_ibl_trials.probabilityLeft.npy'):
-        lpath = Path(session_path).joinpath('alf', '_ibl_trials.contrastLeft.npy')
+        lpath = Path(session_path).joinpath('alf', '_ibl_trials.probabilityLeft.npy')
         np.save(lpath, pLeft)
     return pLeft, pRight
 
