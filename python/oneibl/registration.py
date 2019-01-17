@@ -56,7 +56,7 @@ class RegistrationClient:
         if isinstance(ses_path, str):
             ses_path = Path(ses_path)
         # read meta data from the rig for the session from the task settings file
-        settings_json_file = [f for f in ses_path.glob('**/_iblrig_taskSettings.raw.json')]
+        settings_json_file = [f for f in ses_path.glob('**/_iblrig_taskSettings.raw*.json')]
         if not settings_json_file:
             logger_.error(['could not find _iblrig_taskSettings.raw.json. Abort.'])
             return
