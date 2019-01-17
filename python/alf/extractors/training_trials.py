@@ -213,7 +213,7 @@ def get_rewardVolume(session_path, save=False, data=False):
 
     Uses reward_current to accumulate the amount of
 
-    :param session_path: Absoulte path of session folder
+    :param session_path: Absolute path of session folder
     :type session_path: str
     :param save: wether to save the corresponding alf file
                  to the alf folder, defaults to False
@@ -244,7 +244,7 @@ def get_feedback_times(session_path, save=False, data=False):
     checks if theintersection of nans is empty, then
     merges the 2 vectors.
 
-    :param session_path: Absoulte path of session folder
+    :param session_path: Absolute path of session folder
     :type session_path: str
     :param save: wether to save the corresponding alf file
                  to the alf folder, defaults to False
@@ -328,7 +328,7 @@ def get_intervals(session_path, save=False, data=False):
 
     Uses the corrected Trial start and Trial end timpestamp values form PyBpod.
 
-    :param session_path: Absoulte path of session folder
+    :param session_path: Absolute path of session folder
     :type session_path: str
     :param save: wether to save the corresponding alf file
                  to the alf folder, defaults to False
@@ -356,7 +356,7 @@ def get_iti_duration(session_path, save=False, data=False):
 
     Uses Trial end timestamp and get_response_times to calculate iti.
 
-    :param session_path: Absoulte path of session folder
+    :param session_path: Absolute path of session folder
     :type session_path: str
     :param save: wether to save the corresponding alf file
                  to the alf folder, defaults to False
@@ -384,7 +384,7 @@ def get_deadTime(session_path, save=False, data=False):
 
     Uses the corrected Trial start and Trial end timpestamp values form PyBpod.
 
-    :param session_path: Absoulte path of session folder
+    :param session_path: Absolute path of session folder
     :type session_path: str
     :param save: wether to save the corresponding alf file
                  to the alf folder, defaults to False
@@ -414,7 +414,7 @@ def get_response_times(session_path, save=False, data=False):
 
     Uses the timestamp of the end of the closed_loop state.
 
-    :param session_path: Absoulte path of session folder
+    :param session_path: Absolute path of session folder
     :type session_path: str
     :param save: wether to save the corresponding alf file
                  to the alf folder, defaults to False
@@ -444,7 +444,7 @@ def get_goCueTrigger_times(session_path, save=False, data=False):
     sound onset from the future microphone OR the new xonar soundcard and
     setup developed by Sanworks guarantees a set latency (in testing).
 
-    :param session_path: Absoulte path of session folder
+    :param session_path: Absolute path of session folder
     :type session_path: str
     :param save: wether to save the corresponding alf file
                  to the alf folder, defaults to False
@@ -474,7 +474,7 @@ def get_goCueOnset_times(session_path, save=False, data=False):
     sound onset from the future microphone OR the new xonar soundcard and
     setup developed by Sanworks guarantees a set latency (in testing).
 
-    :param session_path: Absoulte path of session folder
+    :param session_path: Absolute path of session folder
     :type session_path: str
     :param save: wether to save the corresponding alf file
                  to the alf folder, defaults to False
@@ -536,4 +536,3 @@ def extract_all(session_path, save=False, data=False):
            'iti_dur': iti_dur,
            'trials_included': trials_included}
     return out
-
