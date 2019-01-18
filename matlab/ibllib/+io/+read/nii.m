@@ -1,7 +1,7 @@
 function [W, H] = nii(nii_file)
 % [W, H] = io.read.nii(nii_file);
 H = nii_read_header(nii_file);
-W = nii_read_volume(H);
+W = squeeze(nii_read_volume(H));
 
 
 function V = nii_read_volume(info)
@@ -30,21 +30,23 @@ fid=fopen(info.Filename,'rb');
   % Read Volume data
   switch(info.DataTypeStr)
       case 'INT8'
-        V = int8(fread(fid,datasize,'int8'));
+        V = fread(fid,datasize,'*int8');
       case 'UINT8'
-        V = uint8(fread(fid,datasize,'uint8'));
+        V = fread(fid,datasize,'*uint8');
       case 'INT16'
-        V = int16(fread(fid,datasize,'int16'));
+        V = fread(fid,datasize,'*int16');
       case 'UINT16'
-        V = uint16(fread(fid,datasize,'uint16'));
+        V = fread(fid,datasize,'*uint16');
       case 'INT32'
-        V = int32(fread(fid,datasize,'int32'));
+        V = fread(fid,datasize,'*int32');
       case 'UINT32'
-        V = uint32(fread(fid,datasize,'uint32'));
+        V = fread(fid,datasize,'*uint32');
       case 'INT64'
-        V = int64(fread(fid,datasize,'int64'));
+        V = fread(fid,datasize,'*int64');
       case 'UINT64'
-        V = uint64(fread(fid,datasize,'uint64'));    
+        V = fread(fid,datasize,'*uint64');
+      case 'FLOAT'
+        V = fread(fid,datasize,'*float');
       otherwise
         V = uint8(fread(fid,datasize,'uint8'));
   end
@@ -94,6 +96,7 @@ while(test)
     info.DimInfo=fread(fid, 1, 'uint8=>char')';
     swaptemp=fread(fid, 1, 'uint16')';
     info.Dimensions=fread(fid,7,'uint16')'; % dim = [ number of dimensions x,y,z,t,c1,c2,c3];
+    info.Dimensions(info.Dimensions==0) = 1;
   
     if(swaptemp(1)<1||swaptemp(1)>7), bswap=true; fclose(fid); else test=false; end
 end
@@ -122,7 +125,7 @@ datatypestr{16}={1536,'FLOAT128',   128}; % long double (128 bits)
 datatypestr{17}={1792,'COMPLEX128', 128}; % double pair (128 bits)       
 datatypestr{18}={2048,'COMPLEX256', 256}; % long double pair (256 bits)  
 datatypestr{19}={2304,'RGBA32', 32}; % 4 byte RGBA (32 bits/voxel) 
-info.datatypestr='UNKNOWN';
+info.DataTypeStr='UNKNOWN';
 info.bitvoxel=0;
 for i=1:19
     if(datatypestr{i}{1}==info.DataType)
