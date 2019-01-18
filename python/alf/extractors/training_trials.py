@@ -262,7 +262,8 @@ def get_feedback_times(session_path, save=False, data=False):
                   for tr in data]
     assert sum(np.isnan(rw_times) &
                np.isnan(err_times) & np.isnan(nogo_times)) == 0
-    merge = [x if ~np.isnan(x) else y for x, y in zip(rw_times, err_times)]
+    merge = np.array([np.array(times)[~np.isnan(times)] for times in
+                      zip(rw_times, err_times, nogo_times)]).squeeze()
     if raw.save_bool(save, '_ibl_trials.feedback_times.npy'):
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
