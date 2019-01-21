@@ -3,9 +3,12 @@ from pathlib import Path
 import numpy as np
 import logging
 import ciso8601
+import tempfile
 
 import alf.extractors as ex
 from ibllib.io import raw_data_loaders as loaders
+from alf import transfer_rig_data
+
 
 
 class TestExtractTrialData(unittest.TestCase):
@@ -44,3 +47,28 @@ class TestExtractTrialData(unittest.TestCase):
     def test_ciso8601(self):
         dt = ciso8601.parse_datetime('2018-01-16T14:21:32')
         self.assertFalse(not dt)
+
+
+class TestTransferRigData(unittest.TestCase):
+    def setUp(self):
+        self.root_data_folder = Path(tempfile.TemporaryDirectory())
+        self.session_path = self.root_data_folder / "src" / 'algernon' / '2019-01-21' / '001'
+        self.session_path.mkdir(parents=True, exist_ok=True)
+        loaders.write_flag_file(self.session_path.joinpath("transfer_me.flag"))
+        (self.session_path / "raw_behavior_data").mkdir()
+        (self.session_path / "raw_video_data").mkdir()
+        (self.session_path / "raw_behavior_data" / "random.data1.ext").touch()
+
+        # turn off logging for unit testing as we will purposely go into warning/error cases
+        self.logger = logging.getLogger('ibllib').setLevel(50)
+
+    def test_transfer(self):
+        src_subjects_path = self.root_data_folder / "src"
+        dst_subjects_path=self.root_data_folder / "dst"
+        transfer_rig_data.main(src_subjects_path, dst_subjects_path)
+
+
+
+
+    def tearDown(self):
+        shutil.rmtree(self.root_data_folder)
