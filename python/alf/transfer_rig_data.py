@@ -4,6 +4,7 @@
 # @Last Modified by: Niccolò Bonacchi
 # @Last Modified time: 16-01-2019 02:04:01.011
 import shutil
+from shutil import ignore_patterns as ig
 import sys
 from pathlib import Path
 
@@ -26,17 +27,25 @@ def main(local_folder: str, remote_folder: str) -> None:
         dst_session_paths.append(d)
 
     for src, dst in zip(src_session_paths, dst_session_paths):
-        flag = read_flag_file(src / "transfer_me.flag")
+        flag_file = src / "transfer_me.flag"
+        flag = read_flag_file(flag_file)
         if isinstance(flag, list):
             raise NotImplementedError
         else:
-            shutil.copytree(src, dst)
+            shutil.copytree(src, dst, ignore=ig(str(flag_file.name)))
+        # finally if folder was created delete the src flag_file
+        if dst.exists():
+            flag_file.unlink()
+            print(f"Copied to {remote_folder}: Session {flag_file.parent}")
 
 
 if __name__ == "__main__":
     # local_folder = "/home/nico/Projects/IBL/IBL-github/iblrig/scratch/test_iblrig_data/Subjects"
     # remote_folder = "/home/nico/Projects/IBL/IBL-github/iblrig/scratch/test_iblrig_data_on_server/Subjects"
-    if len(sys.argv) == 3:
+    # main(local_folder, remote_folder)
+    if len(sys.argv) < 3:
+        print("ERROR: Not enough inputs")
+    elif len(sys.argv) == 3:
         main(sys.argv[1], sys.argv[2])
-    elif len(sys.argv) == 4:
-        main(sys.argv[1], sys.argv[2], sys.argv[3])
+    else:
+        print("ERROR: Too many inputs")
