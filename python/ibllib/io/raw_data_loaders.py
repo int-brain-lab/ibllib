@@ -286,7 +286,7 @@ def read_flag_file(fil):
     return save
 
 
-def write_flag_file(fname, file_list: list):
+def write_flag_file(fname, file_list: list = None):
     """
     Flag files are *.flag files within a session folder used to schedule some jobs
     Each line references to a file to extract or register
