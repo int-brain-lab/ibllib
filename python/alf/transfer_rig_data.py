@@ -40,8 +40,6 @@ def main(local_folder: str, remote_folder: str) -> None:
 
 
 if __name__ == "__main__":
-    # local_folder = "/home/nico/Projects/IBL/IBL-github/iblrig/scratch/test_iblrig_data/Subjects"
-    # remote_folder = "/home/nico/Projects/IBL/IBL-github/iblrig/scratch/test_iblrig_data_on_server/Subjects"
     # main(local_folder, remote_folder)
     if len(sys.argv) < 3:
         print("ERROR: Not enough inputs")

@@ -29,5 +29,5 @@ def remove_empty_folders(folder: str or Path) -> None:
     for f in all_folders:
         try:
             f.rmdir()
-        except:
+        except Exception:
             continue
