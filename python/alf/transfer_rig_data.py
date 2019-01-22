@@ -3,19 +3,23 @@
 # @Date: Wednesday, January 16th 2019, 2:03:59 pm
 # @Last Modified by: Niccolò Bonacchi
 # @Last Modified time: 16-01-2019 02:04:01.011
+import logging
 import shutil
-from shutil import ignore_patterns as ig
 import sys
 from pathlib import Path
+from shutil import ignore_patterns as ig
 
-from ibllib.io.raw_data_loaders import read_flag_file
+import ibllib.io.flags as flags
+
+log = logging.getLogger('ibllib')
 
 
-def main(local_folder: str, remote_folder: str) -> None:
+def main(local_folder: str, remote_folder: str, force: bool = True) -> None:
     local_folder = Path(local_folder)
     remote_folder = Path(remote_folder)
 
-    src_session_paths = [x.parent for x in local_folder.rglob("transfer_me.flag")]
+    src_session_paths = [x.parent for x in local_folder.rglob(
+        "transfer_me.flag")]
 
     # Create all dst paths
     dst_session_paths = []
@@ -27,18 +31,21 @@ def main(local_folder: str, remote_folder: str) -> None:
         dst_session_paths.append(d)
 
     for src, dst in zip(src_session_paths, dst_session_paths):
-        flag_file = src / "transfer_me.flag"
-        flag = read_flag_file(flag_file)
+        src_flag_file = src / "transfer_me.flag"
+        flag = flags.read_flag_file(src_flag_file)
         if isinstance(flag, list):
             raise NotImplementedError
         else:
-            shutil.copytree(src, dst, ignore=ig(str(flag_file.name)))
+            if force:
+                shutil.rmtree(dst, ignore_errors=True)
+
+            shutil.copytree(src, dst, ignore=ig(str(src_flag_file.name)))
         # finally if folder was created delete the src flag_file
         if dst.exists():
-            flag = dst / 'extract_me.flag'
-            open(flag, 'a').close()
-            flag_file.unlink()
-            print(f"Copied to {remote_folder}: Session {flag_file.parent}")
+            dst_flag_file = dst / 'extract_me.flag'
+            open(dst_flag_file, 'a').close()
+            src_flag_file.unlink()
+            print(f"Copied to {remote_folder}: Session {src_flag_file.parent}")
 
 
 if __name__ == "__main__":
