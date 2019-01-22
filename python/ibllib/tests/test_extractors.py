@@ -1,13 +1,15 @@
+import logging
+import tempfile
 import unittest
 from pathlib import Path
-import numpy as np
-import logging
+
 import ciso8601
-import tempfile
+import numpy as np
 
 import alf.extractors as ex
-from ibllib.io import raw_data_loaders as loaders
+import ibllib.io.flags as flags
 from alf import transfer_rig_data
+from ibllib.io import raw_data_loaders as loaders
 
 
 class TestExtractTrialData(unittest.TestCase):
@@ -54,7 +56,7 @@ class TestTransferRigData(unittest.TestCase):
         self.root_data_folder = Path(self.tmp_dir.name)
         self.session_path = self.root_data_folder / "src" / 'algernon' / '2019-01-21' / '001'
         self.session_path.mkdir(parents=True, exist_ok=True)
-        loaders.write_flag_file(self.session_path.joinpath("transfer_me.flag"))
+        flags.write_flag_file(self.session_path.joinpath("transfer_me.flag"))
         (self.session_path / "raw_behavior_data").mkdir()
         (self.session_path / "raw_video_data").mkdir()
         (self.session_path / "raw_behavior_data" / "random.data1.ext").touch()
@@ -65,7 +67,19 @@ class TestTransferRigData(unittest.TestCase):
         transfer_rig_data.main(src_subjects_path, dst_subjects_path)
         gsrc = [x.name for x in list(src_subjects_path.rglob('*.*'))]
         gdst = [x.name for x in list(dst_subjects_path.rglob('*.*'))]
+        self.assertTrue('extract_me.flag' in gdst)
+        gdst = [x for x in gdst if x != 'extract_me.flag']
         self.assertEqual(gsrc, gdst)
+        # Test if folder exists not copy because no flag
+        transfer_rig_data.main(src_subjects_path, dst_subjects_path)
+        transfer_rig_data.main(src_subjects_path, dst_subjects_path)
+        # Test if flag exists and folder exists in dst
+        flags.write_flag_file(self.session_path.joinpath("transfer_me.flag"))
+        transfer_rig_data.main(src_subjects_path, dst_subjects_path)
 
     def tearDown(self):
         self.tmp_dir.cleanup()
+
+
+if __name__ == "__main__":
+    unittest.main(exit=False)

@@ -14,6 +14,8 @@ import traceback
 
 from alf.extractors import training_trials, training_wheel
 from ibllib.io import raw_data_loaders as raw
+import ibllib.io.flags as flags
+
 
 logger_ = logging.getLogger('ibllib.alf')
 
@@ -73,7 +75,7 @@ def bulk(subjects_folder):
     ses_path = Path(subjects_folder).glob('**/extract_me.flag')
     for p in ses_path:
         # the flag file may contains specific file names for a targeted extraction
-        save = raw.read_flag_file(p)
+        save = flags.read_flag_file(p)
         try:
             from_path(p.parent, force=True, save=save)
         except Exception as e:
@@ -86,22 +88,3 @@ def bulk(subjects_folder):
                 f.write(error_message)
             continue
         p.rename(p.parent.joinpath('register_me.flag'))
-
-
-def create_extract_flags(root_data_folder, force=False, file_list=None):
-    # first part is to create extraction flags
-    ses_path = Path(root_data_folder).glob('**/raw_behavior_data')
-    for p in ses_path:
-        flag_file = Path(p).parent.joinpath('extract_me.flag')
-        if p.parent.joinpath('flatiron.flag').is_file() and not force:
-            continue
-        if p.parent.joinpath('extract_me.error').is_file() and not force:
-            continue
-        if p.parent.joinpath('register_me.error').is_file() and not force:
-            continue
-        if force and p.parent.joinpath('flatiron.flag').is_file():
-            p.parent.joinpath('flatiron.flag').unlink()
-        if force and p.parent.joinpath('register_me.flag').is_file():
-            p.parent.joinpath('register_me.flag').unlink()
-        raw.write_flag_file(flag_file, file_list)
-        print(flag_file)

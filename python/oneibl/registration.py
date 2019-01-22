@@ -7,6 +7,8 @@ import traceback
 import ibllib.time
 from ibllib.misc import version
 import ibllib.io.raw_data_loaders as raw
+import ibllib.io.flags as flags
+
 from oneibl.one import ONE
 
 logger_ = logging.getLogger('ibllib.alf')
@@ -37,7 +39,7 @@ class RegistrationClient:
     def register_sync(self, root_data_folder):
         flag_files = Path(root_data_folder).glob('**/register_me.flag')
         for flag_file in flag_files:
-            file_list = raw.read_flag_file(flag_file)
+            file_list = flags.read_flag_file(flag_file)
             logger_.info('registering' + str(flag_file.parent))
             status_str = self.register_session(flag_file.parent, file_list=file_list)
             if status_str:
@@ -226,19 +228,3 @@ def rename_files_compatibility(ses_path, version_tag):
     task_code = ses_path.glob('**/_iblrig_taskCodeFiles.raw.zip')
     for fn in task_code:
         fn.rename(fn.parent.joinpath('_iblrig_codeFiles.raw.zip'))
-
-
-def create_register_flags(root_data_folder, force=False, file_list=None):
-    ses_path = Path(root_data_folder).glob('**/raw_behavior_data')
-    for p in ses_path:
-        flag_file = Path(p).parent.joinpath('register_me.flag')
-        if p.parent.joinpath('flatiron.flag').is_file() and not force:
-            continue
-        if p.parent.joinpath('extract_me.error').is_file() and not force:
-            continue
-        if p.parent.joinpath('register_me.error').is_file() and not force:
-            continue
-        if force and p.parent.joinpath('flatiron.flag').is_file():
-            p.parent.joinpath('flatiron.flag').unlink()
-        raw.write_flag_file(flag_file, file_list)
-        print(flag_file)

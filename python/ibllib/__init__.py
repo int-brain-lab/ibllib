@@ -4,7 +4,7 @@
 # @Last Modified by:   Niccolò Bonacchi
 # @Last Modified time: 2018-07-26 17:54:37
 from ibllib.dsp import savitzky_golay, smooth
-from ibllib.io import alf, globus, one, params, raw_data_loaders
+from ibllib.io import alf, globus, one, params, raw_data_loaders, flags
 from ibllib.misc import flatten, misc, timing
 import ibllib.time as time
 

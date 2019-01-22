@@ -272,32 +272,6 @@ def load_mic(session_path):
     return data
 
 
-def read_flag_file(fil):
-    """
-    Flag files are *.flag files within a session folder used to schedule some jobs
-    If they are empty, should return True
-    """
-    # the flag file may contains specific file names for a targeted extraction
-    with open(fil) as fid:
-        save = list(filter(None, fid.read().splitlines()))
-    # if empty, extract everything by default
-    if len(save) == 0:
-        save = True
-    return save
-
-
-def write_flag_file(fname, file_list: list = None):
-    """
-    Flag files are *.flag files within a session folder used to schedule some jobs
-    Each line references to a file to extract or register
-    """
-    with open(fname, 'w+') as fid:
-        if isinstance(file_list, str):
-            file_list = [file_list]
-        if file_list:
-            fid.write('\n'.join(file_list))
-
-
 def _groom_wheel_data(data, label='file ', path=''):
     if np.any(data.isna()):
         logger_.warning(label + 'has missing/incomplete records \n %s', path)
