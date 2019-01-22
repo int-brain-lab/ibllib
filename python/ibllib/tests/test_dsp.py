@@ -12,3 +12,7 @@ class TestFFT(unittest.TestCase):
 
         fs = np.fft.fftfreq(6)
         self.assertTrue(np.all(ft.freduce(fs) == fs[:-2]))
+
+
+if __name__ == "__main__":
+    unittest.main(exit=False)

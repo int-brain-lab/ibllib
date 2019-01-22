@@ -32,3 +32,7 @@ class TestVersionTags(unittest.TestCase):
         self.assertFalse(version.le(v0, v_))
         self.assertTrue(version.gt(v0, v_))
         self.assertFalse(version.lt(v0, v_))
+
+
+if __name__ == "__main__":
+    unittest.main(exit=False)

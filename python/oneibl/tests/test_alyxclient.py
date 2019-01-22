@@ -13,8 +13,9 @@ class TestDownloadHTTP(unittest.TestCase):
 
     def setUp(self):
         # Init connection to the database
-        self.ac = wc.AlyxClient(username='test_user', password='TapetesBloc18',
-                                base_url='https://test.alyx.internationalbrainlab.org')
+        self.ac = wc.AlyxClient(
+            username='test_user', password='TapetesBloc18',
+            base_url='https://test.alyx.internationalbrainlab.org')
         self.test_data_uuid = '3ddd45be-7d24-4fc7-9dd3-a98717342af6'
 
     def test_generic_request(self):
@@ -59,9 +60,11 @@ class TestDownloadHTTP(unittest.TestCase):
         self.assertTrue(a == b)
         # test with labs: read
         c = self.ac.rest('labs', 'read', 'mainenlab')
-        self.assertTrue([lab for lab in a if lab['name'] == 'mainenlab'][0] == c)
-        d = self.ac.rest('labs', 'read',
-                         'https://test.alyx.internationalbrainlab.org/labs/mainenlab')
+        self.assertTrue([lab for lab in a if
+                         lab['name'] == 'mainenlab'][0] == c)
+        d = self.ac.rest(
+            'labs', 'read',
+            'https://test.alyx.internationalbrainlab.org/labs/mainenlab')
         self.assertEqual(c, d)
         # test a more complex endpoint with a filter and a selection
         sub = self.ac.rest('subjects/flowers', 'list')
@@ -118,4 +121,4 @@ class TestDownloadHTTP(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main()
+    unittest.main(exit=False)
