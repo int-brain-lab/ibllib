@@ -1,7 +1,7 @@
 import csv
 
 
-def read_as_list(csv_file):
+def csv_as_list(csv_file):
     out = []
     with open(csv_file) as fid:
         cr = csv.reader(fid, delimiter=',')
