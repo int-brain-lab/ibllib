@@ -1,4 +1,4 @@
-cd .\ibllib\tests
+cd .\tests\ibllib
 python -m unittest discover
-cd ..\..\oneibl\tests
+cd ..\..\tests\oneibl
 python -m unittest discover
