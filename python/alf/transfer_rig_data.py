@@ -35,6 +35,8 @@ def main(local_folder: str, remote_folder: str) -> None:
             shutil.copytree(src, dst, ignore=ig(str(flag_file.name)))
         # finally if folder was created delete the src flag_file
         if dst.exists():
+            flag = dst / 'extract_me.flag'
+            open(flag, 'a').close()
             flag_file.unlink()
             print(f"Copied to {remote_folder}: Session {flag_file.parent}")
 
