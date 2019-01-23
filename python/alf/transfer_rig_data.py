@@ -12,6 +12,7 @@ from shutil import ignore_patterns as ig
 import ibllib.io.flags as flags
 
 log = logging.getLogger('ibllib')
+log.setLevel(logging.INFO)
 
 
 def main(local_folder: str, remote_folder: str, force: bool = True) -> None:
@@ -20,6 +21,10 @@ def main(local_folder: str, remote_folder: str, force: bool = True) -> None:
 
     src_session_paths = [x.parent for x in local_folder.rglob(
         "transfer_me.flag")]
+
+    if not src_session_paths:
+        log.info("Nothing to transfer, exiting...")
+        return
 
     # Create all dst paths
     dst_session_paths = []
@@ -38,14 +43,14 @@ def main(local_folder: str, remote_folder: str, force: bool = True) -> None:
         else:
             if force:
                 shutil.rmtree(dst, ignore_errors=True)
-
+            log.info(f"Copying {src}...")
             shutil.copytree(src, dst, ignore=ig(str(src_flag_file.name)))
         # finally if folder was created delete the src flag_file
         if dst.exists():
             dst_flag_file = dst / 'extract_me.flag'
             open(dst_flag_file, 'a').close()
             src_flag_file.unlink()
-            print(f"Copied to {remote_folder}: Session {src_flag_file.parent}")
+            log.info(f"Copied to {remote_folder}: Session {src_flag_file.parent}")
 
 
 if __name__ == "__main__":
