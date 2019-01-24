@@ -16,6 +16,10 @@ Each DatasetType in the IBL pipeline should have one extractor function.
 import ibllib.io.raw_data_loaders as raw
 import numpy as np
 import os
+import logging
+from pathlib import Path
+
+logger_ = logging.getLogger('ibllib.alf')
 
 
 def check_alf_folder(session_path):
@@ -73,7 +77,7 @@ def get_feedbackType(session_path, save=False, data=False):
     feedbackType[error] = -1
     feedbackType[no_go] = 0
     feedbackType = feedbackType.astype('int64')
-    if save:
+    if raw.save_bool(save, '_ibl_trials.feedbackType.npy'):
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
                              '_ibl_trials.feedbackType.npy')
@@ -104,16 +108,26 @@ def get_contrastLR(session_path, save=False, data=False):
     contrastLeft[contrastLeft > 0] = np.nan
     contrastLeft = np.abs(contrastLeft)
     contrastRight[contrastRight < 0] = np.nan
-    if save:
-        check_alf_folder(session_path)
-        lpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.contrastLeft.npy')
-        rpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.contrastRight.npy')
-
+    # save if needed
+    check_alf_folder(session_path)
+    if raw.save_bool(save, '_ibl_trials.contrastLeft.npy'):
+        lpath = os.path.join(session_path, 'alf', '_ibl_trials.contrastLeft.npy')
         np.save(lpath, contrastLeft)
+    if raw.save_bool(save, '_ibl_trials.contrastRight.npy'):
+        rpath = os.path.join(session_path, 'alf', '_ibl_trials.contrastRight.npy')
         np.save(rpath, contrastRight)
     return (contrastLeft, contrastRight)
+
+
+def get_probaLR(session_path, save=False, data=False):
+    if not data:
+        data = raw.load_data(session_path)
+    pLeft = np.array([t['stim_probability_left'] for t in data])
+    pRight = 1 - pLeft
+    if raw.save_bool(save, '_ibl_trials.probabilityLeft.npy'):
+        lpath = Path(session_path).joinpath('alf', '_ibl_trials.probabilityLeft.npy')
+        np.save(lpath, pLeft)
+    return pLeft, pRight
 
 
 def get_choice(session_path, save=False, data=False):
@@ -145,7 +159,7 @@ def get_choice(session_path, save=False, data=False):
     choice = sitm_side.copy()
     choice[trial_correct] = -choice[trial_correct]
     choice = choice.astype(int)
-    if save:
+    if raw.save_bool(save, '_ibl_trials.choice.npy'):
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf', '_ibl_trials.choice.npy')
         np.save(fpath, choice)
@@ -185,7 +199,7 @@ def get_repNum(session_path, save=False, data=False):
             continue
         c += 1
         repNum[i] = c
-    if save:
+    if raw.save_bool(save, '_ibl_trials.repNum.npy'):
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf', '_ibl_trials.repNum.npy')
         np.save(fpath, repNum)
@@ -199,7 +213,7 @@ def get_rewardVolume(session_path, save=False, data=False):
 
     Uses reward_current to accumulate the amount of
 
-    :param session_path: Absoulte path of session folder
+    :param session_path: Absolute path of session folder
     :type session_path: str
     :param save: wether to save the corresponding alf file
                  to the alf folder, defaults to False
@@ -213,7 +227,7 @@ def get_rewardVolume(session_path, save=False, data=False):
                     if x['trial_correct'] else 0 for x in data]
     rewardVolume = np.array(trial_volume).astype(np.float64)
     assert len(rewardVolume) == len(data)
-    if save:
+    if raw.save_bool(save, '_ibl_trials.rewardVolume.npy'):
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
                              '_ibl_trials.rewardVolume.npy')
@@ -230,7 +244,7 @@ def get_feedback_times(session_path, save=False, data=False):
     checks if theintersection of nans is empty, then
     merges the 2 vectors.
 
-    :param session_path: Absoulte path of session folder
+    :param session_path: Absolute path of session folder
     :type session_path: str
     :param save: wether to save the corresponding alf file
                  to the alf folder, defaults to False
@@ -248,8 +262,9 @@ def get_feedback_times(session_path, save=False, data=False):
                   for tr in data]
     assert sum(np.isnan(rw_times) &
                np.isnan(err_times) & np.isnan(nogo_times)) == 0
-    merge = [x if ~np.isnan(x) else y for x, y in zip(rw_times, err_times)]
-    if save:
+    merge = np.array([np.array(times)[~np.isnan(times)] for times in
+                      zip(rw_times, err_times, nogo_times)]).squeeze()
+    if raw.save_bool(save, '_ibl_trials.feedback_times.npy'):
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
                              '_ibl_trials.feedback_times.npy')
@@ -276,29 +291,28 @@ def get_stimOn_times(session_path, save=False, data=False):
             bnc_h.append(np.array(tr['behavior_data']
                          ['Events timestamps']['BNC1High']))
         else:
-            bnc_h.append(np.nan)
+            bnc_h.append(np.array([np.NINF]))
         if 'BNC1Low' in tr['behavior_data']['Events timestamps'].keys():
             bnc_l.append(np.array(tr['behavior_data']
                          ['Events timestamps']['BNC1Low']))
         else:
-            bnc_l.append(np.nan)
+            bnc_l.append(np.array([np.NINF]))
 
     stim_on = np.array(stim_on)
     bnc_h = np.array(bnc_h)
     bnc_l = np.array(bnc_l)
 
-    stimOn_times = []
-    for s, h, l in zip(stim_on, bnc_h, bnc_l):
-        hl = np.concatenate([h, l])
-        hl.sort()
-        stimOn_times.extend([hl[hl > s][0]])
-
-    # delays = np.asarray(stimOn_times) - np.asarray(stim_on)
-
-    if save:
+    stimOn_times = np.zeros_like(stim_on)
+    for i in range(len(stim_on)):
+        hl = np.sort(np.concatenate([bnc_h[i], bnc_l[i]]))
+        stot = hl[hl > stim_on[i]]
+        if np.size(stot) == 0:
+            stot = np.array([np.nan])
+            logger_.info('Missing BNC stimulus on for trial %i, session %s', i, session_path)
+        stimOn_times[i] = stot[0]
+    if raw.save_bool(save, '_ibl_trials.stimOn_times.npy'):
         check_alf_folder(session_path)
-        fpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.stimOn_times.npy')
+        fpath = os.path.join(session_path, 'alf', '_ibl_trials.stimOn_times.npy')
         np.save(fpath, np.array(stimOn_times))
 
     return np.array(stimOn_times)
@@ -315,7 +329,7 @@ def get_intervals(session_path, save=False, data=False):
 
     Uses the corrected Trial start and Trial end timpestamp values form PyBpod.
 
-    :param session_path: Absoulte path of session folder
+    :param session_path: Absolute path of session folder
     :type session_path: str
     :param save: wether to save the corresponding alf file
                  to the alf folder, defaults to False
@@ -328,7 +342,7 @@ def get_intervals(session_path, save=False, data=False):
     starts = [t['behavior_data']['Trial start timestamp'] for t in data]
     ends = [t['behavior_data']['Trial end timestamp'] for t in data]
     intervals = np.array([starts, ends]).T
-    if save:
+    if raw.save_bool(save, '_ibl_trials.intervals.npy'):
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
                              '_ibl_trials.intervals.npy')
@@ -343,7 +357,7 @@ def get_iti_duration(session_path, save=False, data=False):
 
     Uses Trial end timestamp and get_response_times to calculate iti.
 
-    :param session_path: Absoulte path of session folder
+    :param session_path: Absolute path of session folder
     :type session_path: str
     :param save: wether to save the corresponding alf file
                  to the alf folder, defaults to False
@@ -357,7 +371,7 @@ def get_iti_duration(session_path, save=False, data=False):
     ends = np.array([t['behavior_data']['Trial end timestamp'] for t in data])
 
     iti_dur = ends - rt
-    if save:
+    if raw.save_bool(save, '_ibl_trials.itiDuration.npy'):
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
                              '_ibl_trials.itiDuration.npy')
@@ -371,7 +385,7 @@ def get_deadTime(session_path, save=False, data=False):
 
     Uses the corrected Trial start and Trial end timpestamp values form PyBpod.
 
-    :param session_path: Absoulte path of session folder
+    :param session_path: Absolute path of session folder
     :type session_path: str
     :param save: wether to save the corresponding alf file
                  to the alf folder, defaults to False
@@ -386,7 +400,7 @@ def get_deadTime(session_path, save=False, data=False):
     # trial_len = np.array(ends) - np.array(starts)
     deadTime = np.array(starts)[1:] - np.array(ends)[:-1]
     deadTime = np.append(np.array([0]), deadTime)
-    if save:
+    if raw.save_bool(save, '_ibl_trials.deadTime.npy'):
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
                              '_ibl_trials.deadTime.npy')
@@ -401,7 +415,7 @@ def get_response_times(session_path, save=False, data=False):
 
     Uses the timestamp of the end of the closed_loop state.
 
-    :param session_path: Absoulte path of session folder
+    :param session_path: Absolute path of session folder
     :type session_path: str
     :param save: wether to save the corresponding alf file
                  to the alf folder, defaults to False
@@ -413,7 +427,7 @@ def get_response_times(session_path, save=False, data=False):
         data = raw.load_data(session_path)
     rt = np.array([tr['behavior_data']['States timestamps']['closed_loop'][0][1]
                    for tr in data])
-    if save:
+    if raw.save_bool(save, '_ibl_trials.response_times.npy'):
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
                              '_ibl_trials.response_times.npy')
@@ -431,7 +445,7 @@ def get_goCueTrigger_times(session_path, save=False, data=False):
     sound onset from the future microphone OR the new xonar soundcard and
     setup developed by Sanworks guarantees a set latency (in testing).
 
-    :param session_path: Absoulte path of session folder
+    :param session_path: Absolute path of session folder
     :type session_path: str
     :param save: wether to save the corresponding alf file
                  to the alf folder, defaults to False
@@ -443,7 +457,7 @@ def get_goCueTrigger_times(session_path, save=False, data=False):
         data = raw.load_data(session_path)
     goCue = np.array([tr['behavior_data']['States timestamps']
                       ['closed_loop'][0][0] for tr in data])
-    if save:
+    if raw.save_bool(save, '_ibl_trials.goCue_times.npy'):
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
                              '_ibl_trials.goCue_times.npy')
@@ -461,7 +475,7 @@ def get_goCueOnset_times(session_path, save=False, data=False):
     sound onset from the future microphone OR the new xonar soundcard and
     setup developed by Sanworks guarantees a set latency (in testing).
 
-    :param session_path: Absoulte path of session folder
+    :param session_path: Absolute path of session folder
     :type session_path: str
     :param save: wether to save the corresponding alf file
                  to the alf folder, defaults to False
@@ -473,12 +487,21 @@ def get_goCueOnset_times(session_path, save=False, data=False):
         data = raw.load_data(session_path)
     goCue = np.array([tr['behavior_data']['States timestamps']
                       ['closed_loop'][0][0] for tr in data])
-    if save:
+    if raw.save_bool(save, '_ibl_trials.goCue_times.npy'):
         check_alf_folder(session_path)
-        fpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.goCue_times.npy')
+        fpath = Path(session_path).joinpath('alf', '_ibl_trials.goCue_times.npy')
         np.save(fpath, goCue)
     return goCue
+
+
+def get_included_trials(session_path, save=False, data=False):
+    if not data:
+        data = raw.load_data(session_path)
+    trials_included = np.array([t['contrast']['type'] != "RepeatContrast" for t in data])
+    if raw.save_bool(save, '_ibl_trials.included'):
+        fpath = Path(session_path).joinpath('alf', '_ibl_trials.included.npy')
+        np.save(fpath, trials_included)
+    return trials_included
 
 
 def extract_all(session_path, save=False, data=False):
@@ -487,6 +510,7 @@ def extract_all(session_path, save=False, data=False):
     feedbackType = get_feedbackType(session_path, save=save, data=data)
     contrastLeft, contrastRight = get_contrastLR(
         session_path, save=save, data=data)
+    probabilityLeft, _ = get_probaLR(session_path, save=save, data=data)
     choice = get_choice(session_path, save=save, data=data)
     repNum = get_repNum(session_path, save=save, data=data)
     rewardVolume = get_rewardVolume(session_path, save=save, data=data)
@@ -495,12 +519,13 @@ def extract_all(session_path, save=False, data=False):
     intervals = get_intervals(session_path, save=save, data=data)
     response_times = get_response_times(session_path, save=save, data=data)
     iti_dur = get_iti_duration(session_path, save=save, data=data)
+    trials_included = get_included_trials(session_path, save=save, data=data)
     # Missing datasettypes
     # _ibl_trials.goCue_times
     # _ibl_trials.deadTime
-    # _ibl_trials.probabilityLeft
     out = {'feedbackType': feedbackType,
            'contrastLeft': contrastLeft,
+           'probabilityLeft': probabilityLeft,
            'session_path': session_path,
            'choice': choice,
            'repNum': repNum,
@@ -509,17 +534,6 @@ def extract_all(session_path, save=False, data=False):
            'stimOn_times': stimOn_times,
            'intervals': intervals,
            'response_times': response_times,
-           'iti_dur': iti_dur}
+           'iti_dur': iti_dur,
+           'trials_included': trials_included}
     return out
-
-
-if __name__ == '__main__':
-    main_data_path = "/home/nico/GoogleDriveNeuro/IBL/PRIVATE/iblrig_data/"
-    session_name = "6814/2018-12-06/001"
-    session_path = main_data_path + session_name
-
-    save = True
-    data = raw.load_data(session_path)
-    extract_all(session_path, save=save, data=data)
-
-    print("Done!")

@@ -1,11 +1,13 @@
 import unittest
 import os
 import uuid
+import tempfile
 
 import ibllib.io.params as params
+import ibllib.io.flags as flags
 
 
-class TestUtils(unittest.TestCase):
+class TestsParams(unittest.TestCase):
 
     def setUp(self):
         self.par_dict = {'A': 'tata',
@@ -62,3 +64,41 @@ class TestUtils(unittest.TestCase):
     def tearDown(self):
         # at last delete the param file
         os.remove(params.getfile('toto'))
+
+
+class TestsRawDataLoaders(unittest.TestCase):
+
+    def setUp(self):
+        self.tempfile = tempfile.NamedTemporaryFile()
+
+    def testFlagFile(self):
+        # empty file should return True
+        self.assertEqual(flags.read_flag_file(self.tempfile.name), True)
+        # test with 2 lines and a trailing
+        with open(self.tempfile.name, 'w+') as fid:
+            fid.write('file1\nfile2\n')
+        self.assertEqual(flags.read_flag_file(self.tempfile.name), ['file1', 'file2'])
+        # test with 2 lines and a trailing, Windows convention
+        with open(self.tempfile.name, 'w+') as fid:
+            fid.write('file1\r\nfile2\r\n')
+        self.assertEqual(flags.read_flag_file(self.tempfile.name), ['file1', 'file2'])
+        # test read after write
+        file_list = ['_ibl_extraRewards.times', '_ibl_lickPiezo.raw', '_ibl_lickPiezo.timestamps']
+        flags.write_flag_file(self.tempfile.name, file_list)
+        self.assertEqual(flags.read_flag_file(self.tempfile.name), file_list)
+        # makes sure that read after write empty list returns True
+        flags.write_flag_file(self.tempfile.name, [])
+        self.assertEqual(flags.read_flag_file(self.tempfile.name), True)
+        # makes sure that read after write None also returns True
+        flags.write_flag_file(self.tempfile.name, None)
+        self.assertEqual(flags.read_flag_file(self.tempfile.name), True)
+        # make sure that read after write with a string workds
+        flags.write_flag_file(self.tempfile.name, '_ibl_lickPiezo.raw')
+        self.assertEqual(flags.read_flag_file(self.tempfile.name), ['_ibl_lickPiezo.raw'])
+
+    def tearDown(self):
+        self.tempfile.close()
+
+
+if __name__ == "__main__":
+    unittest.main(exit=False)

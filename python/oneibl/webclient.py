@@ -259,6 +259,21 @@ class AlyxClient:
         """
         return self._generic_request(requests.post, rest_query, data=data)
 
+    def put(self, rest_query, data=None):
+        """
+        Sends a PUT request to the Alyx server.
+        For the dictionary contents, refer to:
+        https://alyx.internationalbrainlab.org/docs
+
+        :param rest_query: (required)the endpoint as full or relative URL
+        :type rest_query: str
+        :param data: dictionary or json encoded string
+        :type data: None, dict or str
+
+        :return: response object
+        """
+        return self._generic_request(requests.put, rest_query, data=data)
+
     def rest(self, url=None, action=None, data=None):
         """
         alyx_client.rest()
@@ -323,7 +338,6 @@ class AlyxClient:
         elif action == 'partial_update':
             assert(endpoint_scheme[action]['action'] == 'patch')
             return self.patch('/' + url, data)
-        # TODO BELOW: implement and unit-tests
         elif action == 'update':
             assert(endpoint_scheme[action]['action'] == 'put')
-            pass
+            return self.put('/' + url, data)

@@ -36,6 +36,7 @@ source ./venv/bin/activate
 ```
 conda create -n ibllibenv
 conda activate ibllibenv
+conda install -c conda-forge ciso8601
 ```
 
 **Mac OS:**
@@ -43,6 +44,7 @@ conda activate ibllibenv
 cd Documents/GitHub/ibllib
 conda create -n ibllibenv python=3.6 anaconda
 source activate ibllibenv
+ conda install -c conda-forge ciso8601
 ```
 
 

@@ -36,3 +36,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(expected, ibllib.time.date2isostr(day))
         dt = datetime.datetime(2018, 8, 14)
         self.assertEqual(expected, ibllib.time.date2isostr(dt))
+
+
+if __name__ == "__main__":
+    unittest.main(exit=False)
