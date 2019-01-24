@@ -52,3 +52,62 @@ X = dsp.freduce(fft(res));
 X = real(ifft(dsp.fexpand(X,10)));
 assert( all( abs(X(:) - res(:)) < 1e6))
 end
+
+%% Test ffilter
+function test_ffilter(testCase)
+ts = rand(500,1).*200+3400;
+si = 0.001;
+ts_ = dsp.ffilter.lp(ts, si, [150 200]);
+% mean(ts) mean(ts_)
+% dsp.Spectrum([ts ts_], 0.001)
+testCase.assertTrue(abs(mean(ts)-mean(ts_)) < 1e-4)
+ts = rand(500,2).*200+3400;
+ts_ = dsp.ffilter.lp(ts, si, [150 200]);
+testCase.assertTrue(all(abs(mean(ts)-mean(ts_)) < 1e-4))
+end
+
+%% Test Smooth
+function test_smooth(testCase)
+%%
+Depth = [1:500]';
+Vp = rand(500,1).*200+3400;
+Vs = Vp*2/3;
+Rho = ones(500,1)+1.5+rand(500,1).*0.1;
+C = struct('Vp',Vp,'Vs',Vs);
+
+% single serie input
+[vp1] = dsp.smooth.lp(Vp, [0.1 0.2]);
+assert(all(size(vp1)==size(Vp)))
+[vp2] = dsp.smooth.mwa(Vp, 10);
+assert(all(size(vp2)==size(Vp)))
+[vp3] = dsp.smooth.exp_single(Vp, 0.01);
+assert(all(size(vp3)==size(Vp)))
+
+% array input
+[vpvs1] = dsp.smooth.lp([Vp Vs], [0.1 0.2]);
+assert(all(size(vpvs1)==size([Vp Vs])))
+assert(all(vpvs1(:,1)==vp1))
+[vpvs2] = dsp.smooth.mwa([Vp Vs], 10);
+assert(all(size(vpvs2)==size([Vp Vs])))
+assert(all(vpvs2(:,1)==vp2))
+[vpvs3] = dsp.smooth.exp_single([Vp Vs], 0.1);
+assert(all(size(vpvs3)==size([Vp Vs])))
+assert(all(vpvs3(:,1)==vp3))
+
+% structure input
+[c1] = dsp.smooth.lp(C, [0.1 0.2]);
+assert(all(flatten( cell2mat(struct2cell(c1)')==vpvs1 )))
+[c2] = dsp.smooth.mwa(C, 10);
+assert(all(flatten( cell2mat(struct2cell(c2)')==vpvs2 )))
+[c3] = dsp.smooth.exp_single(C, 0.1);
+assert(all(flatten( cell2mat(struct2cell(c3)')==vpvs3 )))
+end
+
+
+
+
+
+
+
+
+
