@@ -36,8 +36,8 @@ Phi = Phi*180/pi;
 % Smooth or not
 if Smoothed
     nf = round(Smoothed/Freq(2)/2)*2+1;
-    Amp = dsp.Smooth.mwa(Amp,nf);
-    Phi = dsp.Smooth.mwa(Phi,nf);
+    Amp = dsp.smooth.mwa(Amp,nf);
+    Phi = dsp.smooth.mwa(Phi,nf);
 end
 
 if ~Display, return, end
