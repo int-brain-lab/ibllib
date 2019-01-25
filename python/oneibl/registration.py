@@ -39,6 +39,9 @@ class RegistrationClient:
     def register_sync(self, root_data_folder, dry=False):
         flag_files = Path(root_data_folder).glob('**/register_me.flag')
         for flag_file in flag_files:
+            if dry:
+                print(flag_file)
+                continue
             file_list = flags.read_flag_file(flag_file)
             logger_.info('registering' + str(flag_file.parent))
             status_str = self.register_session(flag_file.parent, file_list=file_list)
