@@ -36,9 +36,12 @@ class RegistrationClient:
         self.file_extensions = [df['file_extension'] for df in
                                 self.one.alyx.rest('data-formats', 'list')]
 
-    def register_sync(self, root_data_folder):
+    def register_sync(self, root_data_folder, dry=False):
         flag_files = Path(root_data_folder).glob('**/register_me.flag')
         for flag_file in flag_files:
+            if dry:
+                print(flag_file)
+                continue
             file_list = flags.read_flag_file(flag_file)
             logger_.info('registering' + str(flag_file.parent))
             status_str = self.register_session(flag_file.parent, file_list=file_list)
@@ -82,8 +85,11 @@ class RegistrationClient:
                                      date_range=md['SESSION_DATE'],
                                      number=md['SESSION_NUMBER'],
                                      details=True)
+        try:
+            user = self.one.alyx.rest('users', 'read', md["PYBPOD_CREATOR"][0])
+        except Exception:
+            return 'Subject: ' + md["PYBPOD_CREATOR"][0] + " doesn't exist in Alyx"
 
-        user = self.one.alyx.rest('users', 'read', md["PYBPOD_CREATOR"][0])
         username = user['username'] if user else subject['responsible_user']
 
         # load the trials data to get information about session duration
@@ -100,6 +106,12 @@ class RegistrationClient:
         # checks that the number of actual trials and labeled number of trials check out
         assert(len(ses_data) == ses_data[-1]['trial_num'])
 
+        # task specific logic
+        if 'habituationChoiceWorld' in md['PYBPOD_PROTOCOL']:
+            n_correct_trials = 0
+        else:
+            n_correct_trials = ses_data[-1]['ntrials_correct']
+
         # if nothing found create a new session in Alyx
         if not session:
             logger_.info('creating session' + str(gen_rel_path))
@@ -114,7 +126,7 @@ class RegistrationClient:
                     'number': md['SESSION_NUMBER'],
                     'start_time': ibllib.time.date2isostr(start_time),
                     'end_time': ibllib.time.date2isostr(end_time),
-                    'n_correct_trials': ses_data[-1]['ntrials_correct'],
+                    'n_correct_trials': n_correct_trials,
                     'n_trials': ses_data[-1]['trial_num'],
                     'json': json.dumps(md, indent=1),
                     }

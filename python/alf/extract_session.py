@@ -71,11 +71,14 @@ def from_path(session_path, force=False, save=True):
         training_wheel.extract_all(session_path, save=save)
 
 
-def bulk(subjects_folder):
+def bulk(subjects_folder, dry=False):
     ses_path = Path(subjects_folder).glob('**/extract_me.flag')
     for p in ses_path:
         # the flag file may contains specific file names for a targeted extraction
         save = flags.read_flag_file(p)
+        if dry:
+            print(p)
+            continue
         try:
             from_path(p.parent, force=True, save=save)
         except Exception as e:
