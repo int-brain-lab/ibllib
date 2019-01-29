@@ -22,6 +22,8 @@ def login():
             self.USR = None
             self.MDP = None
             self.root.bind('<Return>', self.push_enter)
+            # do not reproduce vim behaviour
+            self.root.protocol("WM_DELETE_WINDOW", self.get_value)
 
         def make_entry(self, _, caption, width=None, **options):
             tk.Label(self.parent, text=caption).pack(side=tk.TOP)
