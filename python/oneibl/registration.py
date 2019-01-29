@@ -36,6 +36,20 @@ class RegistrationClient:
         self.file_extensions = [df['file_extension'] for df in
                                 self.one.alyx.rest('data-formats', 'list')]
 
+    def create_sessions(self, root_data_folder, dry=False):
+        # session creation on the create me flags.
+        flag_files = Path(root_data_folder).glob('**/create_me.flag')
+        for flag_file in flag_files:
+            if dry:
+                print(flag_file)
+                continue
+            logger_.info('creating session for ' + str(flag_file.parent))
+            # providing a false flag stops the registration after session creation
+            status_str = self.register_session(flag_file.parent, file_list=False)
+            if status_str:
+                logger_.error(status_str)
+            flag_file.unlink()
+
     def register_sync(self, root_data_folder, dry=False):
         flag_files = Path(root_data_folder).glob('**/register_me.flag')
         for flag_file in flag_files:
@@ -114,7 +128,6 @@ class RegistrationClient:
 
         # if nothing found create a new session in Alyx
         if not session:
-            logger_.info('creating session' + str(gen_rel_path))
             ses_ = {'subject': subject['nickname'],
                     'users': [username],
                     'location': md['PYBPOD_BOARD'],
@@ -152,7 +165,9 @@ class RegistrationClient:
                 'session': session['url'][-36:],
                 'adlib': False}
             self.one.alyx.rest('water-administrations', 'create', wa_)
-
+        # at this point the session has been created. If create only, exit
+        if not file_list:
+            return
         # register all files that match the Alyx patterns, warn user when files are encountered
         rename_files_compatibility(ses_path, md['IBLRIG_VERSION_TAG'])
         F = {}  # empty dict whose keys will be relative paths and content filenames
