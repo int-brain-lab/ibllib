@@ -1,5 +1,6 @@
 import unittest
-from ibllib.misc import version
+import logging
+from ibllib.misc import version, logger_config
 
 
 class TestVersionTags(unittest.TestCase):
@@ -34,5 +35,23 @@ class TestVersionTags(unittest.TestCase):
         self.assertFalse(version.lt(v0, v_))
 
 
-if __name__ == "__main__":
-    unittest.main(exit=False)
+class TestLoggingSystem(unittest.TestCase):
+
+    def test_levels(self):
+        # logger = logger_config('ibllib')
+        logger = logging.getLogger('ibllib')
+        logger.critical('IBLLIB This is a critical message')
+        logger.error('IBLLIB This is an error message')
+        logger.warning('IBLLIB This is a warning message')
+        logger.info('IBLLIB This is an info message')
+        logger.debug('IBLLIB This is a debug message')
+        logger = logging.getLogger()
+        logger.critical('ROOT This is a critical message')
+        logger.error('ROOT This is an error message')
+        logger.warning('ROOT This is a warning message')
+        logger.info('ROOT This is an info message')
+        logger.debug('ROOT This is a debug message')
+
+
+# if __name__ == "__main__":
+#     unittest.main(exit=False)
