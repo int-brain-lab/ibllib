@@ -53,5 +53,5 @@ class TestLoggingSystem(unittest.TestCase):
         logger.debug('ROOT This is a debug message')
 
 
-# if __name__ == "__main__":
-#     unittest.main(exit=False)
+if __name__ == "__main__":
+    unittest.main(exit=False)
