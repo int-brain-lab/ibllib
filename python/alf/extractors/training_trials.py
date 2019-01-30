@@ -302,19 +302,23 @@ def get_stimOn_times(session_path, save=False, data=False):
     bnc_h = np.array(bnc_h)
     bnc_l = np.array(bnc_l)
 
+    count_missing = 0
     stimOn_times = np.zeros_like(stim_on)
     for i in range(len(stim_on)):
         hl = np.sort(np.concatenate([bnc_h[i], bnc_l[i]]))
         stot = hl[hl > stim_on[i]]
         if np.size(stot) == 0:
             stot = np.array([np.nan])
-            logger_.info('Missing BNC stimulus on for trial %i, session %s', i, session_path)
+            count_missing += 1
         stimOn_times[i] = stot[0]
     if raw.save_bool(save, '_ibl_trials.stimOn_times.npy'):
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf', '_ibl_trials.stimOn_times.npy')
         np.save(fpath, np.array(stimOn_times))
 
+    if count_missing > 0:
+        logger_.warning('Missing BNC1 stimulus on %i trials, for session %s',
+                        count_missing, session_path)
     return np.array(stimOn_times)
 
 

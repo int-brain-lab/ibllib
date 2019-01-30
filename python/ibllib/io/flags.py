@@ -95,3 +95,10 @@ def create_flags(root_data_folder: str or Path, flags: list,
             create_extract_flags(root_data_folder, force=force, file_list=file_list)
         if 'register' in flags:
             create_register_flags(root_data_folder, force=force, file_list=file_list)
+
+
+def delete_flags(root_data_folder):
+    for f in Path(root_data_folder).rglob('*.flag'):
+        f.unlink()
+    for f in Path(root_data_folder).rglob('*.error'):
+        f.unlink()
