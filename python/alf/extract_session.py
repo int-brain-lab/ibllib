@@ -41,7 +41,8 @@ def extractors_exist(session_path):
     if any([extractor_type in x for x in globals()]):
         return extractor_type
     else:
-        logger_.warning(f"No extractors were found for {extractor_type}ChoiceWorld")
+        logger_.warning(str(session_path) +
+                        f" No extractors were found for {extractor_type} ChoiceWorld")
         return False
 
 

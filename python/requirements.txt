@@ -1,3 +1,5 @@
+ciso8601
+colorlog
 dataclasses
 globus_sdk
 matplotlib
@@ -6,4 +8,3 @@ pandas
 requests
 scipy
 seaborn
-ciso8601

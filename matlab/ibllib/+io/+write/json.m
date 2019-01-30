@@ -3,11 +3,20 @@ function json(filename, s)
 % from a structure (or other variable at your own risk) writes a
 % human-readable (ie not 1km long one-liner) indented json.
 
-sj = jsonencode(s);
-sj = strrep(sj, '{', ['{' newline ' ']);
-sj = strrep(sj, ',', [',' newline ' ']);
-sj = strrep(sj, '}', [newline '}']);
-sj = strrep(sj, ':', ': ');
+if exist('jsonencode', 'builtin')
+    sj = jsonencode(s);
+    sj = strrep(sj, '{', ['{' newline ' ']);
+    sj = strrep(sj, ',', [',' newline ' ']);
+    sj = strrep(sj, '}', [newline '}']);
+    sj = strrep(sj, ':', ': ');
+else
+    if ~exist('savejson', 'file')
+        error( ['Old version of Matlab (<2018), should install JSONlab', char(10)...
+            'https://github.com/fangq/jsonlab', char(10), ...
+            'https://www.mathworks.com/matlabcentral/fileexchange/33381-jsonlab-a-toolbox-to-encode-decode-json-files'])
+    end
+    sj = savejson('', s);
+end
 
 fid = fopen(filename,'w+');
 fwrite(fid, [sj newline]);

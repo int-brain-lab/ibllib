@@ -4,6 +4,9 @@
 # @Last Modified by: Niccolò Bonacchi
 # @Last Modified time: 22-01-2019 12:32:16.1616
 from pathlib import Path
+import logging
+
+logger_ = logging.getLogger('ibllib')
 
 
 def read_flag_file(fil):
@@ -45,7 +48,7 @@ def create_register_flags(root_data_folder, force=False, file_list=None):
         if force and p.parent.joinpath('flatiron.flag').is_file():
             p.parent.joinpath('flatiron.flag').unlink()
         write_flag_file(flag_file, file_list)
-        print(flag_file)
+        logger_.info('created flag: ' + str(flag_file))
 
 
 def create_extract_flags(root_data_folder, force=False, file_list=None):
@@ -64,7 +67,7 @@ def create_extract_flags(root_data_folder, force=False, file_list=None):
         if force and p.parent.joinpath('register_me.flag').is_file():
             p.parent.joinpath('register_me.flag').unlink()
         write_flag_file(flag_file, file_list)
-        print(flag_file)
+        logger_.info('created flag: ' + str(flag_file))
 
 
 def create_transfer_flags(root_data_folder, force=False, file_list=None):
@@ -72,7 +75,7 @@ def create_transfer_flags(root_data_folder, force=False, file_list=None):
     for p in ses_path:
         flag_file = Path(p).parent.joinpath('extract_me.flag')
         write_flag_file(flag_file)
-        print(flag_file)
+        logger_.info('created flag: ' + str(flag_file))
 
 
 def create_create_flags(root_data_folder, force=False, file_list=None):
@@ -80,7 +83,7 @@ def create_create_flags(root_data_folder, force=False, file_list=None):
     for p in ses_path:
         flag_file = Path(p).parent.joinpath('create_me.flag')
         write_flag_file(flag_file)
-        print(flag_file)
+        logger_.info('created flag: ' + str(flag_file))
 
 
 def create_flags(root_data_folder: str or Path, flags: list,
@@ -95,3 +98,12 @@ def create_flags(root_data_folder: str or Path, flags: list,
             create_extract_flags(root_data_folder, force=force, file_list=file_list)
         if 'register' in flags:
             create_register_flags(root_data_folder, force=force, file_list=file_list)
+
+
+def delete_flags(root_data_folder):
+    for f in Path(root_data_folder).rglob('*.flag'):
+        f.unlink()
+        logger_.info('deleted flag: ' + str(f))
+    for f in Path(root_data_folder).rglob('*.error'):
+        f.unlink()
+        logger_.info('deleted flag: ' + str(f))

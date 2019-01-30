@@ -40,8 +40,8 @@ classdef test_io_read < matlab.unittest.TestCase
             par = struct('a','tata','o','toto', 'i','titi', 'num', 1, 'chem', 'some\text\backslashes');
             json_file = tempname;
             io.write.json(json_file, par);
-            par_ = io.read.json(json_file)
-            testCase.assertEqual(par, par_)
+            par_ = io.read.json(json_file);
+            testCase.assertEqual(par, par_);
             delete(json_file)
         end
     end
