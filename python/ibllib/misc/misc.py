@@ -38,7 +38,7 @@ def logger_config(name=None):
     else:
         log = logging.getLogger(name)
     log.setLevel(logging.INFO)
-    format_str = '%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
+    format_str = '%(asctime)s.%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
     date_format = '%Y-%m-%d %H:%M:%S'
     cformat = '%(log_color)s' + format_str
     colors = {'DEBUG': 'green',
