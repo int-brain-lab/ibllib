@@ -70,6 +70,8 @@ class RegistrationClient:
                     f.write(error_message)
                 continue
             flag_file.rename(flag_file.parent.joinpath('flatiron.flag'))
+            if flag_file.parent.joinpath('create_me.flag').exists():
+                flag_file.parent.joinpath('create_me.flag').unlink()
 
     @log2sessionfile
     def register_session(self, ses_path, file_list=True):
