@@ -13,3 +13,4 @@ ibllibenv/
 dist/
 ibllib.egg-info/
 .DS_Store
+scratch/
