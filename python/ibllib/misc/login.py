@@ -31,7 +31,7 @@ def login(title='Enter Credentials', default_username=None, default_passwd=None,
             self.MDP = None
             self.root.bind('<Return>', self.push_enter)
             # do not reproduce vim behaviour
-            self.root.protocol("WM_DELETE_WINDOW", self.get_value)
+            self.root.protocol("WM_DELETE_WINDOW", self.cancel_login)
 
         def make_entry(self, _, caption, width=None, default='', **options):
             tk.Label(self.parent, text=caption).pack(side=tk.TOP)
@@ -52,6 +52,15 @@ def login(title='Enter Credentials', default_username=None, default_passwd=None,
             self.ADD = []
             for entry in self.add_entries:
                 self.ADD.extend([entry.get()])
+            self.root.destroy()
+            self.root.quit()
+
+        def cancel_login(self):
+            self.USR = None
+            self.MDP = None
+            self.ADD = []
+            for entry in self.add_entries:
+                self.ADD.extend([None])
             self.root.destroy()
             self.root.quit()
 
