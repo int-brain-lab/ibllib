@@ -5,6 +5,7 @@ import tempfile
 
 import ibllib.io.params as params
 import ibllib.io.flags as flags
+import ibllib.io.jsonable as jsonable
 
 
 class TestsParams(unittest.TestCase):
@@ -98,6 +99,21 @@ class TestsRawDataLoaders(unittest.TestCase):
 
     def tearDown(self):
         self.tempfile.close()
+
+
+class TestsJsonable(unittest.TestCase):
+
+    def testReadWrite(self):
+        tfile = tempfile.NamedTemporaryFile()
+        data = [{'a': 'thisisa', 'b': 1, 'c': [1, 2, 3]},
+                {'a': 'thisisb', 'b': 2, 'c': [2, 3, 4]}]
+        jsonable.write(tfile.name, data)
+        data2 = jsonable.read(tfile.name)
+        self.assertEqual(data, data2)
+        jsonable.append(tfile.name, data)
+        data3 = jsonable.read(tfile.name)
+        self.assertEqual(data + data, data3)
+        tfile.close()
 
 
 if __name__ == "__main__":

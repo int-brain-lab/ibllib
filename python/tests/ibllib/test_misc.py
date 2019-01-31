@@ -1,6 +1,6 @@
 import unittest
 import logging
-from ibllib.misc import version, logger_config
+from ibllib.misc import version
 
 
 class TestVersionTags(unittest.TestCase):
@@ -53,5 +53,5 @@ class TestLoggingSystem(unittest.TestCase):
         logger.debug('ROOT This is a debug message')
 
 
-# if __name__ == "__main__":
-#     unittest.main(exit=False)
+if __name__ == "__main__":
+    unittest.main(exit=False)

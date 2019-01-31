@@ -2,6 +2,7 @@ import os
 from pathlib import Path, PurePath
 import requests
 import json
+import logging
 
 import numpy as np
 import pandas as pd
@@ -12,6 +13,10 @@ from ibllib.io.one import OneAbstract
 import oneibl.webclient as wc
 from oneibl.dataclass import SessionDataInfo
 import oneibl.params
+from ibllib.io import jsonable
+
+logger_ = logging.getLogger('ibllib')
+
 
 _ENDPOINTS = {  # keynames are possible input arguments and values are actual endpoints
     'data': 'dataset-types',
@@ -388,9 +393,14 @@ def _load_file_content(fil):
     if fil and os.path.splitext(fil)[1] == '.npy':
         return np.load(file=fil)
     if fil and os.path.splitext(fil)[1] == '.json':
-        return None
-        with open(fil) as _fil:
-            return json.loads(_fil.read())
+        try:
+            with open(fil) as _fil:
+                return json.loads(_fil.read())
+        except Exception as e:
+            logger_.error(e)
+            return None
+    if fil and os.path.splitext(fil)[1] == '.jsonable':
+        return jsonable.read(fil)
     if fil and os.path.splitext(fil)[1] == '.tsv':
         return pd.read_csv(fil, delimiter='\t')
     if fil and os.path.splitext(fil)[1] == '.csv':
