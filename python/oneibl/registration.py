@@ -72,6 +72,7 @@ class RegistrationClient:
             flag_file.rename(flag_file.parent.joinpath('flatiron.flag'))
             if flag_file.parent.joinpath('create_me.flag').exists():
                 flag_file.parent.joinpath('create_me.flag').unlink()
+            logger_.info('registered' + '\n')
 
     @log2sessionfile
     def register_session(self, ses_path, file_list=True):
@@ -91,6 +92,7 @@ class RegistrationClient:
         except IndexError:
             return 'Subject: ' + md['SUBJECT_NAME'] + " doesn't exist in Alyx"
 
+        # Todo: handle project and repository selection
         # find the first ibl matching project for the subject
         pname = [p for p in subject['projects'] if 'ibl' in p.lower()]
         project = self.one.alyx.rest('projects', 'read', pname[0])

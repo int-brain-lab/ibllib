@@ -111,7 +111,7 @@ class TestDownloadHTTP(unittest.TestCase):
                  '/2018-08-24/1/probes.sitePositions.3ddd45be-7d24-4fc7-9dd3-a98717342af6.npy'
                  ]
         file_list = wc.http_download_file_list(links, username=par.HTTP_DATA_SERVER_LOGIN,
-                                                      password=par.HTTP_DATA_SERVER_PWD)
+                                               password=par.HTTP_DATA_SERVER_PWD)
         a = np.load(file_list[0])
         b = np.load(file_list[1])
         self.assertTrue(len(a) > 0)

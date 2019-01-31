@@ -16,6 +16,8 @@ import numpy as np
 import pandas as pd
 import ciso8601
 
+from ibllib.io import jsonable
+
 logger_ = logging.getLogger('ibllib')
 
 
@@ -76,10 +78,7 @@ def load_data(session_path, time='absolute'):
     path = next(path.glob("_iblrig_taskData.raw*.jsonable"), None)
     if not path:
         return None
-    data = []
-    with open(path, 'r') as f:
-        for line in f:
-            data.append(json.loads(line))
+    data = jsonable.read(path)
     if time == 'absolute':
         data = [trial_times_to_times(t) for t in data]
     return data
