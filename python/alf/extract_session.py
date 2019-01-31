@@ -66,10 +66,10 @@ def from_path(session_path, force=False, save=True):
     if is_extracted(session_path) and not force:
         print(f"Session {session_path} already extracted.")
         return
-
     if extractor_type == 'training':
         training_trials.extract_all(session_path, save=save)
         training_wheel.extract_all(session_path, save=save)
+    logger_.info('session extracted \n')  # timing info in log
 
 
 def bulk(subjects_folder, dry=False):
