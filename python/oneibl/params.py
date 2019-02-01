@@ -11,7 +11,7 @@ _PAR_ID_STR = 'one_params'
 def default():
     par = {"ALYX_LOGIN": "test_user",
            "ALYX_PWD": None,
-           "ALYX_URL": "https://test.alyx.internationalbrainlab.org",
+           "ALYX_URL": "https://alyx.internationalbrainlab.org",
            "CACHE_DIR": str(PurePath(Path.home(), "Downloads", "FlatIron")),
            "FTP_DATA_SERVER": "ftp://ibl.flatironinstitute.org",
            "FTP_DATA_SERVER_LOGIN": "iblftp",
