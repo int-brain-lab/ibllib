@@ -158,6 +158,7 @@ class RegistrationClient:
         else:
             session = session[0]
 
+        logger_.info(session['url'])
         # create associated water administration if not found
         if not session['wateradmin_session_related']:
             wa_ = {
@@ -233,6 +234,9 @@ def _read_settings_json_compatibility_enforced(json_file):
         md = json.load(js)
     if 'IBLRIG_VERSION_TAG' not in md.keys():
         md['IBLRIG_VERSION_TAG'] = '3.2.3'
+    if not md['IBLRIG_VERSION_TAG']:
+        logger_.warning("You appear to be on an untagged version...")
+        return
     # 2018-12-05 Version 3.2.3 fixes (permanent fixes in IBL_RIG from 3.2.4 on)
     if version.le(md['IBLRIG_VERSION_TAG'], '3.2.3'):
         if 'LAST_TRIAL_DATA' in md.keys():
