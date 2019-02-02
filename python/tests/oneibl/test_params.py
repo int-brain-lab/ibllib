@@ -25,7 +25,15 @@ class TestONEParams(unittest.TestCase):
     def test_setup_silent(self):
         self.assertIsNone(iopar.read(params._PAR_ID_STR))
         params.setup_silent()
-        self.assertIsNotNone(iopar.read(params._PAR_ID_STR))
+        par = iopar.read(params._PAR_ID_STR)
+        self.assertIsNotNone(par)
+        # now do another test to see if it preserves current values
+        par = par.as_dict()
+        par['ALYX_LOGIN'] = 'oijkcjioifqer'
+        iopar.write(params._PAR_ID_STR, par)
+        params.setup_silent()
+        par2 = iopar.read(params._PAR_ID_STR)
+        self.assertEqual(par, par2.as_dict())
 
     def tearDown(self):
         if self.bk_params.exists():

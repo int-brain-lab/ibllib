@@ -37,11 +37,11 @@ def setup_silent():
     if par_current is None:
         par = par_default
     else:
-        par = iopar.as_dict(par_current)
+        par = iopar.as_dict(par_default)
         for k in par.keys():
             cpar = _get_current_par(k, par_current)
+            par[k] = cpar
         par = iopar.from_dict(par)
-
     iopar.write(_PAR_ID_STR, par)
 
 
@@ -61,7 +61,7 @@ def setup():
     if par_current is None:
         par_current = par_default
 
-    par = iopar.as_dict(par_current)
+    par = iopar.as_dict(par_default)
     for k in par.keys():
         cpar = _get_current_par(k, par_current)
         if "PWD" not in k:
