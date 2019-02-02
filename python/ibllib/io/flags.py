@@ -28,9 +28,19 @@ def write_flag_file(fname, file_list: list = None):
     Flag files are *.flag files within a session folder used to schedule some jobs
     Each line references to a file to extract or register
     """
-    with open(fname, 'w+') as fid:
-        if isinstance(file_list, str):
-            file_list = [file_list]
+    exists = Path(fname).exists()
+    has_files = Path(fname).stat().st_size != 0
+    if isinstance(file_list, str) and file_list:
+        file_list = [file_list]
+    # if file already has a list and a new list is provided, append, otherwise plow in
+    if exists and has_files and file_list:
+        mode = 'a+'
+        file_list = [''] + file_list
+    else:
+        mode = 'w+'
+        if exists and not has_files:
+            file_list = []
+    with open(fname, mode) as fid:
         if file_list:
             fid.write('\n'.join(file_list))
 

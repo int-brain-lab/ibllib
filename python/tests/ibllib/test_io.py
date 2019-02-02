@@ -2,6 +2,7 @@ import unittest
 import os
 import uuid
 import tempfile
+from pathlib import Path
 
 import ibllib.io.params as params
 import ibllib.io.flags as flags
@@ -72,7 +73,7 @@ class TestsRawDataLoaders(unittest.TestCase):
     def setUp(self):
         self.tempfile = tempfile.NamedTemporaryFile()
 
-    def testFlagFile(self):
+    def testFlagFileRead(self):
         # empty file should return True
         self.assertEqual(flags.read_flag_file(self.tempfile.name), True)
         # test with 2 lines and a trailing
@@ -83,19 +84,32 @@ class TestsRawDataLoaders(unittest.TestCase):
         with open(self.tempfile.name, 'w+') as fid:
             fid.write('file1\r\nfile2\r\n')
         self.assertEqual(flags.read_flag_file(self.tempfile.name), ['file1', 'file2'])
-        # test read after write
+
+    def testAppendFlagFile(self):
+        #  DO NOT CHANGE THE ORDER OF TESTS BELOW
+        # prepare a file with 3 dataset types
         file_list = ['_ibl_extraRewards.times', '_ibl_lickPiezo.raw', '_ibl_lickPiezo.timestamps']
-        flags.write_flag_file(self.tempfile.name, file_list)
+        with open(self.tempfile.name, 'w+') as fid:
+            fid.write('\n'.join(file_list))
         self.assertEqual(flags.read_flag_file(self.tempfile.name), file_list)
-        # makes sure that read after write empty list returns True
-        flags.write_flag_file(self.tempfile.name, [])
-        self.assertEqual(flags.read_flag_file(self.tempfile.name), True)
-        # makes sure that read after write None also returns True
+
+        # with an existing file containing files, writing more files append to it
+        file_list_2 = ['turltu']
+        # also makes sure that if a string is provided it works
+        flags.write_flag_file(self.tempfile.name, file_list_2[0])
+        self.assertEqual(flags.read_flag_file(self.tempfile.name), file_list + file_list_2)
+
+        # with an existing file containing files, writing empty filelist returns True for all files
         flags.write_flag_file(self.tempfile.name, None)
         self.assertEqual(flags.read_flag_file(self.tempfile.name), True)
-        # make sure that read after write with a string workds
-        flags.write_flag_file(self.tempfile.name, '_ibl_lickPiezo.raw')
-        self.assertEqual(flags.read_flag_file(self.tempfile.name), ['_ibl_lickPiezo.raw'])
+
+        # with an existing empty file, writing filelist returns True for all files
+        flags.write_flag_file(self.tempfile.name, ['file1', 'file2'])
+        self.assertEqual(flags.read_flag_file(self.tempfile.name), True)
+
+        # makes sure that read after write empty list also returns True
+        flags.write_flag_file(self.tempfile.name, [])
+        self.assertEqual(flags.read_flag_file(self.tempfile.name), True)
 
     def tearDown(self):
         self.tempfile.close()
