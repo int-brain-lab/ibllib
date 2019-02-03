@@ -29,7 +29,10 @@ def write_flag_file(fname, file_list: list = None):
     Each line references to a file to extract or register
     """
     exists = Path(fname).exists()
-    has_files = Path(fname).stat().st_size != 0
+    if exists:
+        has_files = Path(fname).stat().st_size != 0
+    else:
+        has_files = False
     if isinstance(file_list, str) and file_list:
         file_list = [file_list]
     # if file already has a list and a new list is provided, append, otherwise plow in

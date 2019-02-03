@@ -2,7 +2,6 @@ import unittest
 import os
 import uuid
 import tempfile
-from pathlib import Path
 
 import ibllib.io.params as params
 import ibllib.io.flags as flags
