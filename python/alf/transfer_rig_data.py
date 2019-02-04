@@ -54,6 +54,7 @@ def main(local_folder: str, remote_folder: str, force: bool = True) -> None:
                 f"Copied to {remote_folder}: Session {src_flag_file.parent}")
             flags.create_compress_flags(dst)
 
+
 if __name__ == "__main__":
     # main(local_folder, remote_folder)
     if len(sys.argv) < 3:
