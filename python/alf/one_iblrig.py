@@ -102,5 +102,5 @@ if __name__ == "__main__":
     if args.action == 'create':
         create(args.folder, dry=args.dry)
     if args.action == 'compress_video':
-        create(args.folder, dry=args.dry, max_sessions=args.count)
+        compress_video(args.folder, dry=args.dry, max_sessions=args.count)
     print('done')
