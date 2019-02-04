@@ -110,6 +110,14 @@ class TestsRawDataLoaders(unittest.TestCase):
         flags.write_flag_file(self.tempfile.name, [])
         self.assertEqual(flags.read_flag_file(self.tempfile.name), True)
 
+        # with an existing empty file, writing filelist returns the list if clobber
+        flags.write_flag_file(self.tempfile.name, ['file1', 'file2', 'file3'], clobber=True)
+        self.assertEqual(flags.read_flag_file(self.tempfile.name), ['file1', 'file2', 'file3'])
+
+        # test the removal of a file within the list
+        flags.excise_flag_file(self.tempfile.name, removed_files='file1')
+        self.assertEqual(sorted(flags.read_flag_file(self.tempfile.name)), ['file2', 'file3'])
+
     def tearDown(self):
         self.tempfile.close()
 

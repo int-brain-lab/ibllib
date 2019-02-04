@@ -23,7 +23,20 @@ def read_flag_file(fil):
     return save
 
 
-def write_flag_file(fname, file_list: list = None):
+def excise_flag_file(fname, removed_files=None):
+    """
+    Remove one or several specific files if they figure within the file
+    """
+    if not removed_files:
+        return
+    file_names = read_flag_file(fname)
+    if isinstance(removed_files, str):
+        removed_files = [removed_files]
+    new_file_names = list(set(file_names).difference(set(removed_files)))
+    write_flag_file(fname, file_list=new_file_names, clobber=True)
+
+
+def write_flag_file(fname, file_list: list = None, clobber=False):
     """
     Flag files are *.flag files within a session folder used to schedule some jobs
     Each line references to a file to extract or register
@@ -35,8 +48,12 @@ def write_flag_file(fname, file_list: list = None):
         has_files = False
     if isinstance(file_list, str) and file_list:
         file_list = [file_list]
+    # if isinstance(file_list, Path) and file_list:
+    #     file_list = [str(file_list)]
     # if file already has a list and a new list is provided, append, otherwise plow in
-    if exists and has_files and file_list:
+    if clobber:
+        mode = 'w+'
+    elif exists and has_files and file_list:
         mode = 'a+'
         file_list = [''] + file_list
     else:
@@ -97,6 +114,27 @@ def create_create_flags(root_data_folder, force=False, file_list=None):
         flag_file = Path(p).parent.joinpath('create_me.flag')
         write_flag_file(flag_file)
         logger_.info('created flag: ' + str(flag_file))
+
+
+def create_compress_flags(root_data_folder):
+    #  only create flags for raw_video_data folders:
+    video_paths = Path(root_data_folder).glob('**/raw_video_data')
+    for video_path in video_paths:
+        ses_path = video_path.parent
+        flag_file = ses_path.joinpath('compress_video.flag')
+        vfiles = video_path.rglob('*.avi')
+        for vfile in vfiles:
+            logger_.info(str(vfile.relative_to(ses_path)) + ' added to ' + str(flag_file))
+            write_flag_file(flag_file, file_list=str(vfile.relative_to(ses_path)))
+    # add audio flags to the list as well
+    audio_paths = Path(root_data_folder).glob('**/raw_behavior__data')
+    for audio_path in audio_paths:
+        ses_path = audio_path.parent
+        flag_file = ses_path.joinpath('compress_audio.flag')
+        afiles = audio_path.rglob('*.avi')
+        for afile in afiles:
+            logger_.info(str(afile.relative_to(ses_path)) + ' added to ' + str(flag_file))
+            write_flag_file(flag_file, file_list=str(afile.relative_to(ses_path)))
 
 
 def create_flags(root_data_folder: str or Path, flags: list,
