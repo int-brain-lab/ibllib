@@ -76,7 +76,9 @@ SEARCH_TERMS = {  # keynames are possible input arguments and values are actual 
     'date_range': 'date_range',
     'date-range': 'date_range',
     'labs': 'lab',
-    'lab': 'lab'
+    'lab': 'lab',
+    'task': 'task_protocol',
+    'task_protocol': 'task'
 }
 
 
@@ -285,7 +287,7 @@ class ONE(OneAbstract):
         return list_out[0], full_out[0]
 
     def search(self, dataset_types=None, users=None, subjects=None, date_range=None,
-               lab=None, number=None, details=False):
+               lab=None, number=None, task_protocol=None, details=False):
         """
         Applies a filter to the sessions (eid) table and returns a list of json dictionaries
          corresponding to sessions.
@@ -317,6 +319,7 @@ class ONE(OneAbstract):
         users = validate_input(users)
         subjects = validate_input(subjects)
         lab = validate_input(lab)
+        task_protocol = validate_input(task_protocol)
         # start creating the url
         url = '/sessions?'
         if dataset_types:
@@ -332,6 +335,8 @@ class ONE(OneAbstract):
         if date_range:
             date_range = _validate_date_range(date_range)
             url = url + '&date_range=' + ','.join(date_range)
+        if task_protocol:
+            url = url + '&task_protocol=' + ','.join(task_protocol)
         # implements the loading itself
         ses = self._alyxClient.get(url)
         eids = [s['url'] for s in ses]  # flattens session info
