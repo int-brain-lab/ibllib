@@ -48,7 +48,7 @@ def main(local_folder: str, remote_folder: str, force: bool = True) -> None:
         # finally if folder was created delete the src flag_file and create compress_me.flag
         if dst.exists():
             dst_flag_file = dst / 'extract_me.flag'
-            flags.create_extract_flags(dst_flag_file)
+            flags.write_flag_file(dst_flag_file)
             src_flag_file.unlink()
             log.info(
                 f"Copied to {remote_folder}: Session {src_flag_file.parent}")
