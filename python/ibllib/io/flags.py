@@ -136,7 +136,7 @@ def create_compress_flags(root_data_folder):
     for audio_path in audio_paths:
         ses_path = audio_path.parent
         flag_file = ses_path.joinpath('compress_audio.flag')
-        afiles = audio_path.rglob('*.avi')
+        afiles = audio_path.rglob('*.wav')
         for afile in afiles:
             logger_.info(str(afile.relative_to(ses_path)) + ' added to ' + str(flag_file))
             write_flag_file(flag_file, file_list=str(afile.relative_to(ses_path)))
