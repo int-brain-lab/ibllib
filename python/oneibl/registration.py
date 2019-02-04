@@ -236,7 +236,7 @@ def _read_settings_json_compatibility_enforced(json_file):
         md['IBLRIG_VERSION_TAG'] = '3.2.3'
     if not md['IBLRIG_VERSION_TAG']:
         logger_.warning("You appear to be on an untagged version...")
-        return
+        return md
     # 2018-12-05 Version 3.2.3 fixes (permanent fixes in IBL_RIG from 3.2.4 on)
     if version.le(md['IBLRIG_VERSION_TAG'], '3.2.3'):
         if 'LAST_TRIAL_DATA' in md.keys():
