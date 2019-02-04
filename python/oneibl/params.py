@@ -2,7 +2,7 @@ import os
 from ibllib.io import params as iopar
 from getpass import getpass
 from pathlib import Path, PurePath
-from ibllib.misc import login
+from ibllib.graphic import login
 
 
 _PAR_ID_STR = 'one_params'

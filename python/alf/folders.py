@@ -6,6 +6,7 @@
 from pathlib import Path
 from typing import List, Union
 import logging
+import ciso8601
 
 log = logging.getLogger('ibllib')
 
@@ -65,3 +66,21 @@ def find_sessions(folder: Union[str, Path]) -> List[Path]:
     sessions = [str(x) for x in sessions]
 
     return sessions
+
+
+def _isdatetime(s: str) -> bool:
+    try:
+        ciso8601.parse_datetime(s)
+        return True
+    except:
+        return False
+
+
+def session_path(path: Union[str, Path]) -> str:
+    path = Path(path)
+    sess = None
+    for i, p in enumerate(path.parts):
+        if p.isdigit() and _isdatetime(path.parts[i - 1]):
+            sess = str(Path().joinpath(*path.parts[:i + 1]))
+
+    return sess

@@ -18,8 +18,6 @@ logger = logging.getLogger('ibllib')
 # set the logging level to paranoid
 logger.setLevel('INFO')
 
-ALYX_URL = 'https://alyx.internationalbrainlab.org'
-
 
 def extract(root_data_folder, dry=False):
     extract_session.bulk(root_data_folder, dry=dry)
@@ -27,14 +25,14 @@ def extract(root_data_folder, dry=False):
 
 def register(root_data_folder, dry=False):
     # registration part
-    one = ONE(base_url=ALYX_URL)
+    one = ONE()
     rc = RegistrationClient(one=one)
     rc.register_sync(root_data_folder, dry=dry)
 
 
 def create(root_data_folder, dry=False):
     # create the sessions by lookin
-    one = ONE(base_url=ALYX_URL)
+    one = ONE()
     rc = RegistrationClient(one=one)
     rc.create_sessions(root_data_folder, dry=dry)
 
