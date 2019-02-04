@@ -26,14 +26,22 @@ def read_flag_file(fil):
 def excise_flag_file(fname, removed_files=None):
     """
     Remove one or several specific files if they figure within the file
+    If no file is left, deletes the flag.
     """
     if not removed_files:
         return
     file_names = read_flag_file(fname)
+    # if the file is empty, can't remove a specific file and return
+    if len(file_names) == 0:
+        return
     if isinstance(removed_files, str):
         removed_files = [removed_files]
     new_file_names = list(set(file_names).difference(set(removed_files)))
-    write_flag_file(fname, file_list=new_file_names, clobber=True)
+    # if the resulting file has no files in it, delete
+    if len(new_file_names) == 0:
+        Path(fname).unlink()
+    else:
+        write_flag_file(fname, file_list=new_file_names, clobber=True)
 
 
 def write_flag_file(fname, file_list: list = None, clobber=False):
@@ -48,9 +56,6 @@ def write_flag_file(fname, file_list: list = None, clobber=False):
         has_files = False
     if isinstance(file_list, str) and file_list:
         file_list = [file_list]
-    # if isinstance(file_list, Path) and file_list:
-    #     file_list = [str(file_list)]
-    # if file already has a list and a new list is provided, append, otherwise plow in
     if clobber:
         mode = 'w+'
     elif exists and has_files and file_list:

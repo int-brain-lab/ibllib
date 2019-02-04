@@ -72,7 +72,7 @@ def _isdatetime(s: str) -> bool:
     try:
         ciso8601.parse_datetime(s)
         return True
-    except:
+    except Exception:
         return False
 
 
