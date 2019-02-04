@@ -1,11 +1,9 @@
 """
-python one_iblrig.py extract /path/to/my/session/
-python one_iblrig.py register /path/to/my/session/
-python one_iblrig.py create /path/to/my/session/
-python one_iblrig.py compress_video /path/to/my/session/
-python one_iblrig.py compress_audio /path/to/my/session/
-... --dry=True
-... --dry True
+python one_iblrig.py extract /path/to/my/session/ [--dry=True]
+python one_iblrig.py register /path/to/my/session/ [--dry=True]
+python one_iblrig.py create /path/to/my/session/ [--dry=True]
+python one_iblrig.py compress_video /path/to/my/session/ [--dry=True --count=4]
+python one_iblrig.py compress_audio /path/to/my/session/ [--dry=True --count=5]
 """
 
 import logging
@@ -60,21 +58,25 @@ def _compress(root_data_folder, command, flag_pattern, dry=False, max_sessions=N
         files2compress = flags.read_flag_file(flag_file)
         for f2c in files2compress:
             cfile = ses_path.joinpath(f2c)
-            print(cfile)
             c += 1
             if max_sessions and c > max_sessions:
                 return
+            print(cfile)
             if dry:
                 continue
+            if not cfile.exists():
+                logger.error('NON-EXISTING RAW FILE: ' + str(cfile))
             # run the compression command redirecting output
             command2run = command.format(file_name=cfile.parent.joinpath(cfile.stem))
-            run = subprocess.run(command2run, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                 shell=True)
-            pstr = run.stdout.decode('utf-8') + run.stderr.decode('utf-8')
-            if run.returncode == 0:
-                logger.info(pstr)
-            else:
-                logger.error(pstr)
+            process = subprocess.Popen(command2run, shell=True, stdout=subprocess.PIPE,
+                                       stderr=subprocess.PIPE)
+            info, error = process.communicate()
+            if process.returncode != 0:
+                logger.error('COMPRESSION FAILED FOR ' + str(cfile))
+                flags.excise_flag_file(flag_file, removed_files=f2c)
+                with open(cfile.parent.joinpath('extract.error'), 'w+') as fid:
+                    fid.write(command2run)
+                    fid.write(error.decode())
                 continue
             # if the command was successful delete the original file
             cfile.unlink()
@@ -89,6 +91,8 @@ if __name__ == "__main__":
     parser.add_argument('action', help='Action: create/extract/register ')
     parser.add_argument('folder', help='A Folder containing a session')
     parser.add_argument('--dry', help='Dry Run', required=False, default=False, type=bool)
+    parser.add_argument('--count', help='Max number of sessions to run this on',
+                        required=False, default=False, type=int)
     args = parser.parse_args()  # returns data from the options specified (echo)
     assert(Path(args.folder).exists())
     if args.action == 'extract':
@@ -97,4 +101,6 @@ if __name__ == "__main__":
         register(args.folder, dry=args.dry)
     if args.action == 'create':
         create(args.folder, dry=args.dry)
+    if args.action == 'compress_video':
+        create(args.folder, dry=args.dry, max_sessions=args.count)
     print('done')
