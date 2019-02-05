@@ -74,6 +74,8 @@ def load_data(session_path, time='absolute'):
     :return: A list of len ntrials each trial being a dictionary
     :rtype: list of dicts
     """
+    if session_path is None:
+        return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_taskData.raw*.jsonable"), None)
     if not path:
@@ -95,6 +97,8 @@ def load_settings(session_path):
     :return: Settings dictionary
     :rtype: dict
     """
+    if session_path is None:
+        return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_taskSettings.raw*.json"), None)
     if not path:
@@ -133,6 +137,8 @@ def load_encoder_events(session_path):
     :return: dataframe w/ 3 cols and (ntrials * 3) lines
     :rtype: Pandas.DataFrame
     """
+    if session_path is None:
+        return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_encoderEvents.raw*.ssv"), None)
     if not path:
@@ -170,6 +176,8 @@ def load_encoder_positions(session_path):
     :return: dataframe w/ 3 cols and N positions
     :rtype: Pandas.DataFrame
     """
+    if session_path is None:
+        return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_encoderPositions.raw*.ssv"), None)
     if not path:
@@ -211,6 +219,8 @@ def load_encoder_trial_info(session_path):
     :return: dataframe w/ 8 cols and ntrials lines
     :rtype: Pandas.DataFrame
     """
+    if session_path is None:
+        return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_encoderTrialInfo.raw*.ssv"), None)
     if not path:
@@ -238,6 +248,8 @@ def load_ambient_sensor(session_path):
     :return: list of dicts
     :rtype: list
     """
+    if session_path is None:
+        return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_ambientSensorData.raw*.jsonable"), None)
     if not path:
@@ -258,6 +270,8 @@ def load_mic(session_path):
     :return: An array of values of the sound waveform
     :rtype: numpy.array
     """
+    if session_path is None:
+        return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_micData.raw*.wav"), None)
     if not path:
