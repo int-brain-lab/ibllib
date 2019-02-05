@@ -45,7 +45,7 @@ def compress_audio(root_data_folder, dry=False, max_sessions=None):
 
 
 def compress_video(root_data_folder, dry=False, max_sessions=None):
-    command = ('ffmpeg -i {file_name}.avi -codec:v libx264 -preset slow -crf 35'
+    command = ('ffmpeg -i {file_name}.avi -codec:v libx264 -preset slow -crf 29'
                ' -codec:a copy {file_name}.mp4')
     _compress(root_data_folder, command, 'compress_video.flag', dry=dry, max_sessions=max_sessions)
 
