@@ -118,6 +118,10 @@ class TestsRawDataLoaders(unittest.TestCase):
         flags.excise_flag_file(self.tempfile.name, removed_files='file1')
         self.assertEqual(sorted(flags.read_flag_file(self.tempfile.name)), ['file2', 'file3'])
 
+        # if file-list is True it means all files and file_list should be empty after read
+        flags.write_flag_file(self.tempfile.name, file_list=True)
+        self.assertEqual(flags.read_flag_file(self.tempfile.name), True)
+
     def tearDown(self):
         self.tempfile.close()
 

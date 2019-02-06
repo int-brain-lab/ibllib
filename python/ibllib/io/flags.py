@@ -56,6 +56,8 @@ def write_flag_file(fname, file_list: list = None, clobber=False):
         has_files = False
     if isinstance(file_list, str) and file_list:
         file_list = [file_list]
+    if isinstance(file_list, bool):
+        file_list = None
     if clobber:
         mode = 'w+'
     elif exists and has_files and file_list:
