@@ -103,6 +103,9 @@ def time_interpolation(tref, target):
         siz = min(tref.size, target.size)
         tref = tref[:siz]
         target = target[:siz]
+    if tref.size == target.size == 1:
+        logger_.error('Wheel time-stamp arrays have only one value ?!!?. This is a dud. ABORT')
+        raise(ValueError)
     func = interpolate.interp1d(tref, target, fill_value="extrapolate")
     return func
 
@@ -153,7 +156,6 @@ def get_wheel_data(session_path, save=False):
     data['re_ts'] = convtime(data['re_ts'])
     # Now remove the repeted times that are rep_idx + 1
     data = np.delete(data, rep_idx + 1)
-
     check_alf_folder(session_path)
     if raw.save_bool(save, '_ibl_wheel.timestamps.npy'):
         tpath = os.path.join(session_path, 'alf', '_ibl_wheel.timestamps.npy')
@@ -161,7 +163,6 @@ def get_wheel_data(session_path, save=False):
     if raw.save_bool(save, '_ibl_wheel.position.npy'):
         ppath = os.path.join(session_path, 'alf', '_ibl_wheel.position.npy')
         np.save(ppath, data['re_pos'])
-
     return data
 
 

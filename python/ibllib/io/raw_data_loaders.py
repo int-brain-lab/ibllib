@@ -16,6 +16,8 @@ import numpy as np
 import pandas as pd
 import ciso8601
 
+from ibllib.io import jsonable
+
 logger_ = logging.getLogger('ibllib')
 
 
@@ -72,14 +74,13 @@ def load_data(session_path, time='absolute'):
     :return: A list of len ntrials each trial being a dictionary
     :rtype: list of dicts
     """
+    if session_path is None:
+        return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_taskData.raw*.jsonable"), None)
     if not path:
         return None
-    data = []
-    with open(path, 'r') as f:
-        for line in f:
-            data.append(json.loads(line))
+    data = jsonable.read(path)
     if time == 'absolute':
         data = [trial_times_to_times(t) for t in data]
     return data
@@ -96,6 +97,8 @@ def load_settings(session_path):
     :return: Settings dictionary
     :rtype: dict
     """
+    if session_path is None:
+        return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_taskSettings.raw*.json"), None)
     if not path:
@@ -134,6 +137,8 @@ def load_encoder_events(session_path):
     :return: dataframe w/ 3 cols and (ntrials * 3) lines
     :rtype: Pandas.DataFrame
     """
+    if session_path is None:
+        return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_encoderEvents.raw*.ssv"), None)
     if not path:
@@ -171,6 +176,8 @@ def load_encoder_positions(session_path):
     :return: dataframe w/ 3 cols and N positions
     :rtype: Pandas.DataFrame
     """
+    if session_path is None:
+        return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_encoderPositions.raw*.ssv"), None)
     if not path:
@@ -212,6 +219,8 @@ def load_encoder_trial_info(session_path):
     :return: dataframe w/ 8 cols and ntrials lines
     :rtype: Pandas.DataFrame
     """
+    if session_path is None:
+        return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_encoderTrialInfo.raw*.ssv"), None)
     if not path:
@@ -239,6 +248,8 @@ def load_ambient_sensor(session_path):
     :return: list of dicts
     :rtype: list
     """
+    if session_path is None:
+        return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_ambientSensorData.raw*.jsonable"), None)
     if not path:
@@ -259,6 +270,8 @@ def load_mic(session_path):
     :return: An array of values of the sound waveform
     :rtype: numpy.array
     """
+    if session_path is None:
+        return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_micData.raw*.wav"), None)
     if not path:
@@ -288,5 +301,5 @@ def save_bool(save, dataset_type):
     elif isinstance(save, list):
         out = (dataset_type in save) or (Path(dataset_type).stem in save)
     if out:
-        logger.info('extracting' + dataset_type)
+        logger.debug('extracting' + dataset_type)
     return out

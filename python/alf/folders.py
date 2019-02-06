@@ -4,8 +4,9 @@
 # @Last Modified by: Niccolò Bonacchi
 # @Last Modified time: 21-01-2019 06:28:51.5151
 from pathlib import Path
-from typing import List
+from typing import List, Union
 import logging
+import ciso8601
 
 log = logging.getLogger('ibllib')
 
@@ -27,7 +28,7 @@ def subjects_data_folder(folder: Path) -> Path:
     return folder
 
 
-def remove_empty_folders(folder: str or Path) -> None:
+def remove_empty_folders(folder: Union[str, Path]) -> None:
     """Will iteratively remove any children empty folders"""
     all_folders = [x for x in Path(folder).rglob('*') if x.is_dir()]
     for f in all_folders:
@@ -37,7 +38,7 @@ def remove_empty_folders(folder: str or Path) -> None:
             continue
 
 
-def find_sessions(folder: str or Path) -> List[Path]:
+def find_sessions(folder: Union[str, Path]) -> List[Path]:
     # Ensure folder is a Path object
     if not isinstance(folder, Path):
         folder = Path(folder)
@@ -65,3 +66,21 @@ def find_sessions(folder: str or Path) -> List[Path]:
     sessions = [str(x) for x in sessions]
 
     return sessions
+
+
+def _isdatetime(s: str) -> bool:
+    try:
+        ciso8601.parse_datetime(s)
+        return True
+    except Exception:
+        return False
+
+
+def session_path(path: Union[str, Path]) -> str:
+    path = Path(path)
+    sess = None
+    for i, p in enumerate(path.parts):
+        if p.isdigit() and _isdatetime(path.parts[i - 1]):
+            sess = str(Path().joinpath(*path.parts[:i + 1]))
+
+    return sess

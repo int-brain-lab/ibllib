@@ -35,6 +35,9 @@ def log2sessionfile(func):
 
 def extractors_exist(session_path):
     settings = raw.load_settings(session_path)
+    if settings is None:
+        logger_.error(f'ABORT: No data found in "raw_behavior_data" folder {session_path}')
+        return False
     task_name = settings['PYBPOD_PROTOCOL']
     task_name = task_name.split('_')[-1]
     extractor_type = task_name[:task_name.find('ChoiceWorld')]
@@ -64,12 +67,12 @@ def from_path(session_path, force=False, save=True):
     logger_.info('Extracting ' + str(session_path))
     extractor_type = extractors_exist(session_path)
     if is_extracted(session_path) and not force:
-        print(f"Session {session_path} already extracted.")
+        logger_.info(f"Session {session_path} already extracted.")
         return
-
     if extractor_type == 'training':
         training_trials.extract_all(session_path, save=save)
         training_wheel.extract_all(session_path, save=save)
+        logger_.info('session extracted \n')  # timing info in log
 
 
 def bulk(subjects_folder, dry=False):
@@ -85,10 +88,10 @@ def bulk(subjects_folder, dry=False):
         except Exception as e:
             error_message = str(p.parent) + ' failed extraction' + '\n    ' + str(e)
             error_message += traceback.format_exc()
-            logger_.error(error_message)
             err_file = p.parent.joinpath('extract_me.error')
-            p.rename(err_file)
+            p.replace(err_file)
             with open(err_file, 'w+') as f:
                 f.write(error_message)
             continue
-        p.rename(p.parent.joinpath('register_me.flag'))
+        p.unlink()
+        flags.write_flag_file(p.parent.joinpath('register_me.flag'), file_list=save)

@@ -1,4 +1,42 @@
+# -*- coding:utf-8 -*-
+# @Author: Niccolò Bonacchi
+# @Date: Sunday, February 3rd 2019, 11:59:56 am
+# @Last Modified by: Niccolò Bonacchi
+# @Last Modified time: 3-02-2019 11:59:58.5858
 import tkinter as tk
+from tkinter import simpledialog
+
+
+def numinput(title, prompt, default=None, minval=None, maxval=None,
+             nullable=False, askint=False):
+    root = tk.Tk()
+    root.withdraw()
+    ask = simpledialog.askinteger if askint else simpledialog.askfloat
+    ans = ask(
+        title, prompt, initialvalue=default, minvalue=minval, maxvalue=maxval)
+    if ans == 0:
+        return ans
+    elif not ans and not nullable:
+        return numinput(
+            title, prompt, default=default, minval=minval, maxval=maxval,
+            nullable=nullable, askint=askint)
+    return ans
+
+
+def strinput(title, prompt, default='COM', nullable=False):
+        """
+        Example:
+        >>> strinput("RIG CONFIG", "Insert RE com port:", default="COM")
+        """
+        import tkinter as tk
+        from tkinter import simpledialog
+        root = tk.Tk()
+        root.withdraw()
+        ans = simpledialog.askstring(title, prompt, initialvalue=default)
+        if (ans is None or ans == '' or ans == default) and not nullable:
+            return strinput(title, prompt, default=default, nullable=nullable)
+        else:
+            return ans
 
 
 def login(title='Enter Credentials', default_username=None, default_passwd=None, add_fields=None):
@@ -31,7 +69,7 @@ def login(title='Enter Credentials', default_username=None, default_passwd=None,
             self.MDP = None
             self.root.bind('<Return>', self.push_enter)
             # do not reproduce vim behaviour
-            self.root.protocol("WM_DELETE_WINDOW", self.get_value)
+            self.root.protocol("WM_DELETE_WINDOW", self.cancel_login)
 
         def make_entry(self, _, caption, width=None, default='', **options):
             tk.Label(self.parent, text=caption).pack(side=tk.TOP)
@@ -52,6 +90,15 @@ def login(title='Enter Credentials', default_username=None, default_passwd=None,
             self.ADD = []
             for entry in self.add_entries:
                 self.ADD.extend([entry.get()])
+            self.root.destroy()
+            self.root.quit()
+
+        def cancel_login(self):
+            self.USR = None
+            self.MDP = None
+            self.ADD = []
+            for entry in self.add_entries:
+                self.ADD.extend([None])
             self.root.destroy()
             self.root.quit()
 

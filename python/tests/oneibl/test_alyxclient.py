@@ -55,7 +55,7 @@ class TestDownloadHTTP(unittest.TestCase):
             self.ac.rest(url='sessions', action='turlu')
         # test with labs : get
         a = self.ac.rest('labs', 'list')
-        self.assertTrue(len(a) == 3)
+        self.assertTrue(len(a) >= 3)
         b = self.ac.rest('/labs', 'list')
         self.assertTrue(a == b)
         # test with labs: read
@@ -85,13 +85,13 @@ class TestDownloadHTTP(unittest.TestCase):
         url = wc.dataset_record_to_url(dset)
         file_name = wc.http_download_file_list(url, username=par.HTTP_DATA_SERVER_LOGIN,
                                                password=par.HTTP_DATA_SERVER_PWD,
-                                               verbose=True, cache_dir=cache_dir)
+                                               cache_dir=cache_dir)
         # Test 2: empty dir, list mode
         dset = ac.get('/datasets?id=' + test_data_uuid)
         url = wc.dataset_record_to_url(dset)
         file_name = wc.http_download_file_list(url, username=par.HTTP_DATA_SERVER_LOGIN,
                                                password=par.HTTP_DATA_SERVER_PWD,
-                                               verbose=True, cache_dir=cache_dir)
+                                               cache_dir=cache_dir)
         self.assertTrue(os.path.isfile(file_name[0]))
         shutil.rmtree(cache_dir)
 
@@ -99,8 +99,7 @@ class TestDownloadHTTP(unittest.TestCase):
         # test downloading a single file
         full_link_to_file = r'http://ibl.flatironinstitute.org/mainenlab/Subjects/clns0730'\
                             '/2018-08-24/1/licks.times.51852a2f-c76e-4c0c-95cb-9c7ba54be0f9.npy'
-        file_name = wc.http_download_file(full_link_to_file, verbose=True,
-                                          username=par.HTTP_DATA_SERVER_LOGIN,
+        file_name = wc.http_download_file(full_link_to_file, username=par.HTTP_DATA_SERVER_LOGIN,
                                           password=par.HTTP_DATA_SERVER_PWD)
         a = np.load(file_name)
         self.assertTrue(len(a) > 0)
@@ -111,8 +110,7 @@ class TestDownloadHTTP(unittest.TestCase):
                  r'http://ibl.flatironinstitute.org/mainenlab/Subjects/clns0730'
                  '/2018-08-24/1/probes.sitePositions.3ddd45be-7d24-4fc7-9dd3-a98717342af6.npy'
                  ]
-        file_list = wc.http_download_file_list(links, verbose=True,
-                                               username=par.HTTP_DATA_SERVER_LOGIN,
+        file_list = wc.http_download_file_list(links, username=par.HTTP_DATA_SERVER_LOGIN,
                                                password=par.HTTP_DATA_SERVER_PWD)
         a = np.load(file_list[0])
         b = np.load(file_list[1])

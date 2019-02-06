@@ -45,12 +45,14 @@ def main(local_folder: str, remote_folder: str, force: bool = True) -> None:
                 shutil.rmtree(dst, ignore_errors=True)
             log.info(f"Copying {src}...")
             shutil.copytree(src, dst, ignore=ig(str(src_flag_file.name)))
-        # finally if folder was created delete the src flag_file
+        # finally if folder was created delete the src flag_file and create compress_me.flag
         if dst.exists():
             dst_flag_file = dst / 'extract_me.flag'
-            open(dst_flag_file, 'a').close()
+            flags.write_flag_file(dst_flag_file)
             src_flag_file.unlink()
-            log.info(f"Copied to {remote_folder}: Session {src_flag_file.parent}")
+            log.info(
+                f"Copied to {remote_folder}: Session {src_flag_file.parent}")
+            flags.create_compress_flags(dst)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 import unittest
 import logging
-from ibllib.misc import version, logger_config
+from ibllib.misc import version
 
 
 class TestVersionTags(unittest.TestCase):

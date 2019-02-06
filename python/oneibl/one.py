@@ -2,6 +2,7 @@ import os
 from pathlib import Path, PurePath
 import requests
 import json
+import logging
 
 import numpy as np
 import pandas as pd
@@ -12,6 +13,10 @@ from ibllib.io.one import OneAbstract
 import oneibl.webclient as wc
 from oneibl.dataclass import SessionDataInfo
 import oneibl.params
+from ibllib.io import jsonable
+
+logger_ = logging.getLogger('ibllib')
+
 
 _ENDPOINTS = {  # keynames are possible input arguments and values are actual endpoints
     'data': 'dataset-types',
@@ -66,12 +71,19 @@ SEARCH_TERMS = {  # keynames are possible input arguments and values are actual 
     'dataset_types': 'dataset_types',
     'users': 'users',
     'user': 'users',
-    'subject': 'subjects',
-    'subjects': 'subjects',
+    'subject': 'subject',
+    'subjects': 'subject',
     'date_range': 'date_range',
     'date-range': 'date_range',
     'labs': 'lab',
-    'lab': 'lab'
+    'lab': 'lab',
+    'task': 'task_protocol',
+    'task_protocol': 'task_protocol',
+    'number': 'number',
+    'location': 'location',
+    'lab_location': 'location',
+    'performance_lte': 'performance_lte',
+    'performance_gte': 'performance_gte'
 }
 
 
@@ -279,8 +291,9 @@ class ONE(OneAbstract):
             pprint(list_out)
         return list_out[0], full_out[0]
 
-    def search(self, dataset_types=None, users=None, subjects=None, date_range=None,
-               lab=None, number=None, details=False):
+    # def search(self, dataset_types=None, users=None, subjects=None, date_range=None,
+    #            lab=None, number=None, task_protocol=None, details=False):
+    def search(self, details=False, **kwargs):
         """
         Applies a filter to the sessions (eid) table and returns a list of json dictionaries
          corresponding to sessions.
@@ -304,29 +317,30 @@ class ONE(OneAbstract):
          each entry corresponding to a matching session
         :rtype: list, list
         """
-        # make sure string inputs are interpreted as lists
+        # small function to make sure string inputs are interpreted as lists
         def validate_input(inarg):
-            return [inarg] if isinstance(inarg, str) else inarg
-
-        dataset_types = validate_input(dataset_types)
-        users = validate_input(users)
-        subjects = validate_input(subjects)
-        lab = validate_input(lab)
-        # start creating the url
+            if isinstance(inarg, str):
+                return [inarg]
+            elif isinstance(inarg, int):
+                return [str(inarg)]
+            else:
+                return inarg
+        # loop over input arguments and build the url
         url = '/sessions?'
-        if dataset_types:
-            url = url + 'dataset_types=' + ','.join(dataset_types)  # dataset_types query
-        if users:
-            url = url + '&users=' + ','.join(users)
-        if number:
-            url = url + '&number=' + str(number)
-        if subjects:
-            url = url + '&subject=' + ','.join(subjects)
-        if lab:
-            url = url + '&lab=' + ','.join(lab)
-        if date_range:
-            date_range = _validate_date_range(date_range)
-            url = url + '&date_range=' + ','.join(date_range)
+        for k in kwargs.keys():
+            # check that the input matches one of the defined filters
+            if k not in SEARCH_TERMS:
+                logger_.warning(f'"{k}" is not a valid search keyword and will be ignored' + '\n' +
+                                "Valid keywords are: " + str(set(SEARCH_TERMS.values())))
+                continue
+            # then make sure the field is formatted properly
+            field = SEARCH_TERMS[k]
+            if field == 'date_range':
+                query = _validate_date_range(kwargs[k])
+            else:
+                query = validate_input(kwargs[k])
+            # at last append to the URL
+            url = url + f"&{field}=" + ','.join(query)
         # implements the loading itself
         ses = self._alyxClient.get(url)
         eids = [s['url'] for s in ses]  # flattens session info
@@ -388,9 +402,14 @@ def _load_file_content(fil):
     if fil and os.path.splitext(fil)[1] == '.npy':
         return np.load(file=fil)
     if fil and os.path.splitext(fil)[1] == '.json':
-        return None
-        with open(fil) as _fil:
-            return json.loads(_fil.read())
+        try:
+            with open(fil) as _fil:
+                return json.loads(_fil.read())
+        except Exception as e:
+            logger_.error(e)
+            return None
+    if fil and os.path.splitext(fil)[1] == '.jsonable':
+        return jsonable.read(fil)
     if fil and os.path.splitext(fil)[1] == '.tsv':
         return pd.read_csv(fil, delimiter='\t')
     if fil and os.path.splitext(fil)[1] == '.csv':

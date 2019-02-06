@@ -2,6 +2,8 @@ import os
 from ibllib.io import params as iopar
 from getpass import getpass
 from pathlib import Path, PurePath
+from ibllib.graphic import login
+
 
 _PAR_ID_STR = 'one_params'
 
@@ -9,7 +11,7 @@ _PAR_ID_STR = 'one_params'
 def default():
     par = {"ALYX_LOGIN": "test_user",
            "ALYX_PWD": None,
-           "ALYX_URL": "https://test.alyx.internationalbrainlab.org",
+           "ALYX_URL": "https://alyx.internationalbrainlab.org",
            "CACHE_DIR": str(PurePath(Path.home(), "Downloads", "FlatIron")),
            "FTP_DATA_SERVER": "ftp://ibl.flatironinstitute.org",
            "FTP_DATA_SERVER_LOGIN": "iblftp",
@@ -22,6 +24,36 @@ def default():
     return iopar.from_dict(par)
 
 
+def _get_current_par(k, par_current):
+    cpar = getattr(par_current, k, None)
+    if cpar is None:
+        cpar = getattr(default(), k, None)
+    return cpar
+
+
+def setup_silent():
+    par_current = iopar.read(_PAR_ID_STR)
+    par_default = default()
+    if par_current is None:
+        par = par_default
+    else:
+        par = iopar.as_dict(par_default)
+        for k in par.keys():
+            cpar = _get_current_par(k, par_current)
+            par[k] = cpar
+        par = iopar.from_dict(par)
+    iopar.write(_PAR_ID_STR, par)
+
+
+def setup_alyx_params():
+    setup_silent()
+    par = iopar.read(_PAR_ID_STR).as_dict()
+    [usr, pwd] = login.login(title='Alyx credentials')
+    par['ALYX_LOGIN'] = usr
+    par['ALYX_PWD'] = pwd
+    iopar.write(_PAR_ID_STR, par)
+
+
 # first get current and default parameters
 def setup():
     par_current = iopar.read(_PAR_ID_STR)
@@ -29,28 +61,22 @@ def setup():
     if par_current is None:
         par_current = par_default
 
-    def _get_current_par(k):
-        cpar = getattr(par_current, k, None)
-        if cpar is None:
-            cpar = getattr(par_default, k, None)
-        return cpar
-
-    par = iopar.as_dict(par_current)
+    par = iopar.as_dict(par_default)
     for k in par.keys():
-        cpar = _get_current_par(k)
+        cpar = _get_current_par(k, par_current)
         if "PWD" not in k:
             par[k] = input("Param " + k + ",  current value is [" + str(cpar) + "]:") or cpar
 
-    cpar = _get_current_par("ALYX_PWD")
+    cpar = _get_current_par("ALYX_PWD", par_current)
     prompt = "Enter the Alyx password for " + par["ALYX_LOGIN"] + '(leave empty to keep current):'
     par["ALYX_PWD"] = getpass(prompt) or cpar
 
-    cpar = _get_current_par("HTTP_DATA_SERVER_PWD")
+    cpar = _get_current_par("HTTP_DATA_SERVER_PWD", par_current)
     prompt = "Enter the FlatIron HTTP password for " + par["HTTP_DATA_SERVER_LOGIN"] +\
              '(leave empty to keep current): '
     par["HTTP_DATA_SERVER_PWD"] = getpass(prompt) or cpar
 
-    cpar = _get_current_par("FTP_DATA_SERVER_PWD")
+    cpar = _get_current_par("FTP_DATA_SERVER_PWD", par_current)
     prompt = "Enter the FlatIron FTP password for " + par["FTP_DATA_SERVER_LOGIN"] +\
              '(leave empty to keep current): '
     par["FTP_DATA_SERVER_PWD"] = getpass(prompt) or cpar

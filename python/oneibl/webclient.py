@@ -1,3 +1,4 @@
+import logging
 import urllib.request
 import os
 from pathlib import Path
@@ -5,6 +6,8 @@ import requests
 import json
 import re
 from ibllib.misc import pprint
+
+logger_ = logging.getLogger('ibllib')
 
 
 def http_download_file_list(links_to_file_list, **kwargs):
@@ -24,7 +27,7 @@ def http_download_file_list(links_to_file_list, **kwargs):
 
 
 def http_download_file(full_link_to_file, *, clobber=False,
-                       username='', password='', cache_dir='', verbose=True):
+                       username='', password='', cache_dir=''):
     """
     :param full_link_to_file: http link to the file.
     :type full_link_to_file: str
@@ -37,8 +40,6 @@ def http_download_file(full_link_to_file, *, clobber=False,
     :param cache_dir: [''] directory in which files are cached; defaults to user's
      Download directory.
     :type cache_dir: str
-    :param verbose: [True] displays a message for each download.
-    :type verbose: bool
 
     :return: (str) a list of the local full path of the downloaded files.
     """
@@ -75,8 +76,7 @@ def http_download_file(full_link_to_file, *, clobber=False,
     u = urllib.request.urlopen(full_link_to_file)
     file_size = int(u.getheader('Content-length'))
 
-    if verbose:
-        print("Downloading: %s Bytes: %s" % (file_name, file_size))
+    logger_.info("Downloading: %s Bytes: %s" % (file_name, file_size))
     file_size_dl = 0
     block_sz = 8192 * 64 * 8
     f = open(file_name, 'wb')
@@ -87,8 +87,7 @@ def http_download_file(full_link_to_file, *, clobber=False,
         file_size_dl += len(buffer)
         f.write(buffer)
         status = r"%10d  [%3.2f%%]" % (file_size_dl, file_size_dl * 100. / file_size)
-        if verbose:
-            print(status)
+        logger_.info(status)
     f.close()
 
     return file_name
@@ -171,8 +170,8 @@ class AlyxClient:
         elif r and r.status_code == 204:
             return
         else:
-            print(self._base_url + rest_query)
-            print(r.text)
+            logger_.error(self._base_url + rest_query)
+            logger_.error(r.text)
             raise Exception(r)
 
     def authenticate(self, username='', password='', base_url=''):
@@ -192,7 +191,7 @@ class AlyxClient:
                             data=dict(username=username, password=password))
         self._token = rep.json()
         if not (list(self._token.keys()) == ['token']):
-            print(rep)
+            logger_.error(rep)
             raise Exception('Alyx authentication error. Check your credentials')
         self._headers = {
             'Authorization': 'Token {}'.format(list(self._token.values())[0]),
