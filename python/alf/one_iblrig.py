@@ -94,7 +94,7 @@ if __name__ == "__main__":
     parser.add_argument('--count', help='Max number of sessions to run this on',
                         required=False, default=False, type=int)
     args = parser.parse_args()  # returns data from the options specified (echo)
-    if args.dry.lower() == 'false':
+    if args.dry and args.dry.lower() == 'false':
         args.dry = False
     assert(Path(args.folder).exists())
     if args.action == 'extract':
