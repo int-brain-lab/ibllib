@@ -55,7 +55,7 @@ class TestDownloadHTTP(unittest.TestCase):
             self.ac.rest(url='sessions', action='turlu')
         # test with labs : get
         a = self.ac.rest('labs', 'list')
-        self.assertTrue(len(a) == 3)
+        self.assertTrue(len(a) >= 3)
         b = self.ac.rest('/labs', 'list')
         self.assertTrue(a == b)
         # test with labs: read

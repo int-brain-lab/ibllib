@@ -70,6 +70,7 @@ class RegistrationClient:
                     f.write(error_message)
                 continue
             flags.write_flag_file(flag_file.parent.joinpath('flatiron.flag'), file_list=file_list)
+            flag_file.unlink()
             if flag_file.parent.joinpath('create_me.flag').exists():
                 flag_file.parent.joinpath('create_me.flag').unlink()
             logger_.info('registered' + '\n')
