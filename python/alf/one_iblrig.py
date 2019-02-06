@@ -87,8 +87,9 @@ def _compress(root_data_folder, command, flag_pattern, dry=False, max_sessions=N
 
 
 if __name__ == "__main__":
+    ALLOWED_ACTIONS = ['create', 'extract', 'register', 'compress_video']
     parser = argparse.ArgumentParser(description='Description of your program')
-    parser.add_argument('action', help='Action: create/extract/register ')
+    parser.add_argument('action', help='Action: ' + ','.join(ALLOWED_ACTIONS))
     parser.add_argument('folder', help='A Folder containing a session')
     parser.add_argument('--dry', help='Dry Run', required=False, default=False, type=str)
     parser.add_argument('--count', help='Max number of sessions to run this on',
@@ -105,4 +106,5 @@ if __name__ == "__main__":
         create(args.folder, dry=args.dry)
     if args.action == 'compress_video':
         compress_video(args.folder, dry=args.dry, max_sessions=args.count)
-    print('done')
+    else:
+        logger.error('Allowed actions are: ' + ', '.join(ALLOWED_ACTIONS))
