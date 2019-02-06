@@ -48,7 +48,7 @@ def setup_silent():
 def setup_alyx_params():
     setup_silent()
     par = iopar.read(_PAR_ID_STR).as_dict()
-    [usr, pwd] = login.login(title='Alyx credentials')
+    [usr, pwd] = login(title='Alyx credentials')
     par['ALYX_LOGIN'] = usr
     par['ALYX_PWD'] = pwd
     iopar.write(_PAR_ID_STR, par)
