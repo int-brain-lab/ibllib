@@ -87,8 +87,8 @@ def bulk(subjects_folder, dry=False):
             error_message += traceback.format_exc()
             logger_.error(error_message)
             err_file = p.parent.joinpath('extract_me.error')
-            p.rename(err_file)
+            p.replace(err_file)
             with open(err_file, 'w+') as f:
                 f.write(error_message)
             continue
-        p.rename(p.parent.joinpath('register_me.flag'))
+        flags.write_flag_file(p.parent.joinpath('register_me.flag'), file_list=save)

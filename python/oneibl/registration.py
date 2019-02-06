@@ -65,11 +65,11 @@ class RegistrationClient:
                 error_message += traceback.format_exc()
                 logger_.error(error_message)
                 err_file = flag_file.parent.joinpath('register_me.error')
-                flag_file.rename(err_file)
+                flag_file.replace(err_file)
                 with open(err_file, 'w+') as f:
                     f.write(error_message)
                 continue
-            flag_file.rename(flag_file.parent.joinpath('flatiron.flag'))
+            flags.write_flag_file(flag_file.parent.joinpath('flatiron.flag'), file_list=file_list)
             if flag_file.parent.joinpath('create_me.flag').exists():
                 flag_file.parent.joinpath('create_me.flag').unlink()
             logger_.info('registered' + '\n')
@@ -259,7 +259,7 @@ def rename_files_compatibility(ses_path, version_tag):
     if version.le(version_tag, '3.2.3'):
         task_code = ses_path.glob('**/_ibl_trials.iti_duration.npy')
         for fn in task_code:
-            fn.rename(fn.parent.joinpath('_ibl_trials.itiDuration.npy'))
+            fn.replace(fn.parent.joinpath('_ibl_trials.itiDuration.npy'))
     task_code = ses_path.glob('**/_iblrig_taskCodeFiles.raw.zip')
     for fn in task_code:
-        fn.rename(fn.parent.joinpath('_iblrig_codeFiles.raw.zip'))
+        fn.replace(fn.parent.joinpath('_iblrig_codeFiles.raw.zip'))
