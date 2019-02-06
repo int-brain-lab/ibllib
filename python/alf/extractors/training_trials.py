@@ -313,13 +313,11 @@ def get_stimOn_times(session_path, save=False, data=False):
         stimOn_times[i] = stot[0]
 
     if np.all(np.isnan(stimOn_times)):
-        logger_.error('%s: Missing ALL BNC1 stimulus (%i total trials)',
-                      session_path, count_missing)
+        logger_.error(f'{session_path}: Missing ALL BNC1 stimulus ({count_missing}: trials')
         return None
 
     if count_missing > 0:
-        logger_.warning('%s: Missing BNC1 stimulus on %i trials',
-                        count_missing, session_path)
+        logger_.warning(f'{session_path}: Missing BNC1 stimulus on {count_missing} trials')
 
     if raw.save_bool(save, '_ibl_trials.stimOn_times.npy'):
         check_alf_folder(session_path)
