@@ -88,7 +88,6 @@ def bulk(subjects_folder, dry=False):
         except Exception as e:
             error_message = str(p.parent) + ' failed extraction' + '\n    ' + str(e)
             error_message += traceback.format_exc()
-            logger_.error(error_message)
             err_file = p.parent.joinpath('extract_me.error')
             p.replace(err_file)
             with open(err_file, 'w+') as f:

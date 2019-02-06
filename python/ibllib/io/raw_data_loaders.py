@@ -301,5 +301,5 @@ def save_bool(save, dataset_type):
     elif isinstance(save, list):
         out = (dataset_type in save) or (Path(dataset_type).stem in save)
     if out:
-        logger.info('extracting' + dataset_type)
+        logger.debug('extracting' + dataset_type)
     return out
