@@ -93,4 +93,5 @@ def bulk(subjects_folder, dry=False):
             with open(err_file, 'w+') as f:
                 f.write(error_message)
             continue
+        p.unlink()
         flags.write_flag_file(p.parent.joinpath('register_me.flag'), file_list=save)
