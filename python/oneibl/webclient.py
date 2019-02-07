@@ -224,7 +224,10 @@ class AlyxClient:
 
         :return: (dict/list) json interpreted dictionary from response
         """
-        return self._generic_request(requests.get, rest_query)
+        rep = self._generic_request(requests.get, rest_query)
+        if isinstance(rep, dict) and list(rep.keys()) == ['count', 'next', 'previous', 'results']:
+            rep = rep['results']
+        return rep
 
     def patch(self, rest_query, data=None):
         """

@@ -346,7 +346,7 @@ class ONE(OneAbstract):
             # at last append to the URL
             url = url + f"&{field}=" + ','.join(query)
         # implements the loading itself
-        ses = self._alyxClient.get(url)
+        ses = self.alyx.get(url)
         eids = [s['url'] for s in ses]  # flattens session info
         eids = [e.split('/')[-1] for e in eids]  # remove url to make it portable
         if details:
