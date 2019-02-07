@@ -280,7 +280,7 @@ class AlyxClient:
         lab_info = alyx_client.rest('labs', 'read', 'mainenlab')
         OR
         lab_info = alyx_client.rest('labs', 'read',
-                                    'https://test.alyx.internationalbrainlab.org/labs/mainenlab')
+        'https://test.alyx.internationalbrainlab.org/labs/mainenlab')
 
         :param url:
         :param action:

@@ -39,7 +39,7 @@ The following example shows how to find the experiment(s) performed by the user 
 
 ```python
 from ibllib.misc import pprint
-eid, ses = one.search(users='olivier', date_range=['2018-08-24', '2018-08-24'])
+eid = one.search(users='olivier', date_range=['2018-08-24', '2018-08-24'])
 pprint(eid)
 ```
 returns
@@ -48,16 +48,26 @@ returns
     "cf264653-2deb-44cb-aa84-89b82507028a"
 ]
 ```
+For full information dictionary about the session: 
+```python
+eid, ses_info= one.search(users='olivier', date_range=['2018-08-24', '2018-08-24'], details=True)
+```
+
 The searchable fields are listed with the following method:
 ```python
 one.search_terms()
 
 # Example search keywords: 
-	'dataset_types'
-	'date_range'
-	'labs'
-	'subjects'
-	'users'
+['dataset_types',
+ 'date_range',
+ 'lab',
+ 'location',
+ 'number',
+ 'performance_gte',
+ 'performance_lte',
+ 'subject',
+ 'task_protocol',
+ 'users']
 
 ```
 
@@ -136,7 +146,7 @@ The dataclass contains the following keys, each of which contains a list of 3 it
 It is also possible to query all datasets attached to a given session, in which case
 the output has to be a dictionary:
 ```python
-eid, ses_info = one.search(subjects='flowers')
+eid = one.search(subjects='flowers')
 my_data = one.load(eid[0])
 pprint(my_data.dataset_type)
 ```
@@ -145,7 +155,7 @@ pprint(my_data.dataset_type)
 If a dataset type queried doesn't exist or is not on the FlatIron server, an empty list
 is returned. This allows to keep the proper order of output arguments
 ```python
-eid = '86e27228-8708-48d8-96ed-9aa61ab951db'
+eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
 dataset_types = ['clusters.probes', 'thisDataset.IveJustMadeUp', 'clusters.depths']
 t, empty, cl = one.load(eid, dataset_types=dataset_types)
 ```
@@ -165,12 +175,12 @@ This is the simplest case that queries EEIDs (sessions) associated with a subjec
 be one subject per session.
 
 ```python
-from oneibl.one import ONE
-myone = ONE() # need to instantiate the class to have the API.
-eid, ses_info = one.search(subject='flowers')
+eid = one.search(subject='flowers')
 pprint(eid)
-pprint(ses_info)
-
+```
+The list of search terms can be queried through:
+```python
+ONE.search_terms()
 ```
 
 Here is the simple implementation of the filter, where we query for the EEIDs (sessions) co-owned by
