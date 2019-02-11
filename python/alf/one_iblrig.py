@@ -8,7 +8,7 @@ python one_iblrig.py compress_audio /path/to/my/session/ [--dry=True --count=5]
 
 import logging
 import argparse
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import subprocess
 
 from alf import extract_session
@@ -57,7 +57,7 @@ def _compress(root_data_folder, command, flag_pattern, dry=False, max_sessions=N
         ses_path = flag_file.parent
         files2compress = flags.read_flag_file(flag_file)
         for f2c in files2compress:
-            cfile = ses_path.joinpath(f2c)
+            cfile = ses_path.joinpath(PureWindowsPath(f2c))
             c += 1
             if max_sessions and c > max_sessions:
                 return
