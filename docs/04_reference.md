@@ -8,9 +8,9 @@ Substantial efforts have recently been put into developing neurodata file standa
 
 The same thing has happened before in other scientific fields. For example, the open microscopy environment ([OME](https://www.openmicroscopy.org/)) group developed a standard file format for microscopy data, which is hardly ever used. But they also developed a set of loader functions, which allow scientists to analyze data in multiple native formats using a single program. These loader functions successfully standardized microscopy data. In principle, NWB also allows data providers to reimplement a set of API functions -- however the comprehensive nature of NWB again means this API is complex, limiting its adoption.
 
-### How the open neurophysiology environment would work
+### How the open neurophysiology environment works
 
-Here we propose a solution to this problem: a set of three simple loader functions, that would allow users to access and search data from multiple sources. To adopt the standard, data providers can use any format they like - all they need to do is implement these three functions to fetch the data from their server and load it into Python or MATLAB. Users can then analyze this data with the same exact code as data from any other provider. The learning curve will be simple, and the loader functions would be enough for around 90% of common use cases.
+Here we provide a solution to this problem: a set of four simple functions, that allow users to access and search data from multiple sources. To adopt the standard, data providers can use any format they like - all they need to do is implement these functions to fetch the data from their server and load it into Python or MATLAB. Users can then analyze this data with the same exact code as data from any other provider. The learning curve will be simple, and the loader functions would be enough for around 90% of common use cases.
 
 By a *data provider* we mean an organization that hosts a set of neurophysiology data on an internet server (for example, the [International Brain Lab](https://www.internationalbrainlab.com/)). The Open Neurophysiology Environment (ONE) provides a way for scientists to analyze data from multiple data providers using the same analysis code. There is no need for the scientist to explicitly download data files or understand their format - this is all handled seamlessly by the ONE framework. The ONE protocol can also be used to access a scientist's own experiments stored on their personal computer, but we do not describe this use-case here.
 
@@ -30,7 +30,7 @@ st, sc, cbl = ONE.load(eID, dataset_types=['spikes.times', 'spikes.clusters', 'c
 ```
 This command will download three datasets containing the times and cluster assignments of all spikes recorded in that experiment, together with an estimate of the brain location of each cluster. (In practice, the data will be cached on the user's local machine so it can be loaded repeatedly with only one download.)
 
-Many neural data signals are time series, and synchronizing these signals is often challenging. ONE would provide a function to interpolate any required timeseries to an evenly or unevenly-sampled timescale of the user's choice. For example the command:
+Many neural data signals are time series, and synchronizing these signals is often challenging. ONE will provide a function to interpolate any required timeseries to an evenly or unevenly-sampled timescale of the user's choice. For example the command:
 ```
 hxy, hth, t = ONE.loadTS(eID, dataset_types=['headTracking.xyPos', 'lfp.raw'], sample_rate=1000)
 ```
@@ -60,9 +60,9 @@ For providers, a key advantage of this framework is its low barrier to entry. To
 
 ## ALF
 
-ALF stands for "ALyx Files". It not a format but rather a format-neutral file-naming convention.
+ALF stands for "ALyx Files". It not a format but rather a format-neutral file-naming convention. ALF is how IBL organizes files that will be loaded via the ONE protocol.
 
-In ALF, the measurements in an experiment are represented by collections of files in a directory. Each filename has three parts, for example `spikes.times.npy` or `spikes.clusters.npy`. We will refer to these three parts of the filenames as the "object", the "attribute" and the "extension". The extension says what physical format the file is in - we primarily use .npy and .tsv but you could use any format, for example video or json .
+In ALF, the measurements in an experiment are represented by collections of files in a directory. Each filename has three parts, for example `spikes.times.npy` or `spikes.clusters.npy`. The first two correspond to the ONE dataset type, and we refer to them as the "object", the "attribute". The third part of the filename, the "extension", specifies what physical format the file is in - we primarily use .npy and .tsv but you could use any format, for example video or json .
 
 Each file contains information about particular attribute of the object. For example `spikes.times.npy` indicates the times of spikes and `spikes.clusters.npy` indicates their cluster assignments. You could have another file `spikes.amplitudes.npy` to convey their amplitudes. The important thing is that every file describing an object has the same number of rows (i.e. the 1st dimension of an npy file, number of frames in a video file, etc).  You can therefore think of the files for an object as together defining a table, with column headings given by the attribute in the file names, and values given by the file contents.
 
