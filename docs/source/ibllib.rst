@@ -10,15 +10,6 @@ Module contents
     :show-inheritance:
 
 
-ibllib.webclient module
------------------------
-
-.. automodule:: ibllib.webclient
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
 ibllib.time module
 -----------------------
 

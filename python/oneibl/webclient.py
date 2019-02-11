@@ -224,7 +224,10 @@ class AlyxClient:
 
         :return: (dict/list) json interpreted dictionary from response
         """
-        return self._generic_request(requests.get, rest_query)
+        rep = self._generic_request(requests.get, rest_query)
+        if isinstance(rep, dict) and list(rep.keys()) == ['count', 'next', 'previous', 'results']:
+            rep = rep['results']
+        return rep
 
     def patch(self, rest_query, data=None):
         """
@@ -280,7 +283,7 @@ class AlyxClient:
         lab_info = alyx_client.rest('labs', 'read', 'mainenlab')
         OR
         lab_info = alyx_client.rest('labs', 'read',
-                                    'https://test.alyx.internationalbrainlab.org/labs/mainenlab')
+        'https://test.alyx.internationalbrainlab.org/labs/mainenlab')
 
         :param url:
         :param action:

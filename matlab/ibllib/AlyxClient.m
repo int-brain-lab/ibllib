@@ -77,6 +77,11 @@ classdef AlyxClient
              % rep = ac.get('/sessions/86e27228-8708-48d8-96ed-9aa61ab951db')
              % rep = ac.get('https://test.alyx.internationalbrainlab.org/sessions/86e27228-8708-48d8-96ed-9aa61ab951db')
             rep = webread(self.format_url(url), self.weboptions);
+            % if the result is a pagination result, get only the answer
+            if isstruct(rep) && length(fieldnames(rep))==4 && ...
+                    all(strcmp(fieldnames(rep), {'count';'next';'previous';'results'}))
+                rep = rep.results;
+            end
             rep = flatten(rep);
          end
          

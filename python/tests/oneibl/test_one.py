@@ -84,6 +84,12 @@ class TestList(unittest.TestCase):
         one.help(dtypes[0])
         one.help([])
 
+    def test_list_allkeys(self):
+        one = self.One
+        for k in one.keywords():
+            rep = one.list(keyword=k)
+            self.assertTrue(len(rep) > 1)
+
 
 class TestLoad(unittest.TestCase):
 

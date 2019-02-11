@@ -123,7 +123,7 @@ def create_create_flags(root_data_folder, force=False, file_list=None):
         logger_.info('created flag: ' + str(flag_file))
 
 
-def create_compress_flags(root_data_folder):
+def create_compress_flags(root_data_folder, clobber=False):
     #  only create flags for raw_video_data folders:
     video_paths = Path(root_data_folder).glob('**/raw_video_data')
     for video_path in video_paths:
@@ -132,7 +132,8 @@ def create_compress_flags(root_data_folder):
         vfiles = video_path.rglob('*.avi')
         for vfile in vfiles:
             logger_.info(str(vfile.relative_to(ses_path)) + ' added to ' + str(flag_file))
-            write_flag_file(flag_file, file_list=str(vfile.relative_to(ses_path)))
+            write_flag_file(flag_file, file_list=str(vfile.relative_to(ses_path)), clobber=clobber)
+    return
     # add audio flags to the list as well
     audio_paths = Path(root_data_folder).glob('**/raw_behavior__data')
     for audio_path in audio_paths:

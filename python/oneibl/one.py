@@ -142,6 +142,8 @@ class ONE(OneAbstract):
 
         :return: list of strings, plus list of dictionaries if details option selected
         :rtype:  list, list
+
+        for a list of keywords, use the methods `one.search_terms()`
         """
         # check and validate the input keyword
         if keyword.lower() not in set(_LIST_KEYWORDS.keys()):
@@ -316,6 +318,8 @@ class ONE(OneAbstract):
         :return: list of eids, if details is True, also returns a list of json dictionaries,
          each entry corresponding to a matching session
         :rtype: list, list
+
+        for a list of search terms, use the methods `one.search_terms()`
         """
         # small function to make sure string inputs are interpreted as lists
         def validate_input(inarg):
@@ -342,7 +346,7 @@ class ONE(OneAbstract):
             # at last append to the URL
             url = url + f"&{field}=" + ','.join(query)
         # implements the loading itself
-        ses = self._alyxClient.get(url)
+        ses = self.alyx.get(url)
         eids = [s['url'] for s in ses]  # flattens session info
         eids = [e.split('/')[-1] for e in eids]  # remove url to make it portable
         if details:
@@ -369,13 +373,22 @@ class ONE(OneAbstract):
     @staticmethod
     def search_terms():
         """
-        Returns possible search terms to be used as keywords in the one.search method.
+        Returns possible search terms to be used in the one.search method.
 
         :return: a tuple containing possible search terms:
         :rtype: tuple
         """
-        #  Implemented as a method to make sure this stays private
-        return SEARCH_TERMS
+        return sorted(list(set(SEARCH_TERMS.values())))
+
+    @staticmethod
+    def keywords():
+        """
+        Returns possible keywords to be used in the one.list method
+
+        :return: a tuple containing possible search terms:
+        :rtype: tuple
+        """
+        return sorted(list(set(_ENDPOINTS.values())))
 
     @staticmethod
     def setup():
