@@ -154,10 +154,16 @@ def get_choice(session_path, save=False, data=False):
     """
     if not data:
         data = raw.load_data(session_path)
-    sitm_side = np.array([np.sign(t['signed_contrast']) for t in data])
+    sitm_side = np.array([np.sign(t['position']) for t in data])
     trial_correct = np.array([t['trial_correct'] for t in data])
+    trial_nogo = []
+    for t in data:
+        trial_nogo.append(~np.isnan(t['behavior_data']['States timestamps']
+                                    ['no_go'][0][0]))
+    trial_nogo = np.array(trial_nogo)
     choice = sitm_side.copy()
     choice[trial_correct] = -choice[trial_correct]
+    choice[trial_nogo] = 0
     choice = choice.astype(int)
     if raw.save_bool(save, '_ibl_trials.choice.npy'):
         check_alf_folder(session_path)
