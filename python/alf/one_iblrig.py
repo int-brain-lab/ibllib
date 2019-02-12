@@ -25,9 +25,10 @@ def extract(root_data_folder, dry=False):
     extract_session.bulk(root_data_folder, dry=dry)
 
 
-def register(root_data_folder, dry=False):
+def register(root_data_folder, dry=False, one=None):
     # registration part
-    one = ONE()
+    if not one:
+        one = ONE()
     rc = RegistrationClient(one=one)
     rc.register_sync(root_data_folder, dry=dry)
 
