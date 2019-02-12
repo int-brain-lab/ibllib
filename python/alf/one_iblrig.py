@@ -101,11 +101,11 @@ if __name__ == "__main__":
     assert(Path(args.folder).exists())
     if args.action == 'extract':
         extract(args.folder, dry=args.dry)
-    if args.action == 'register':
+    elif args.action == 'register':
         register(args.folder, dry=args.dry)
-    if args.action == 'create':
+    elif args.action == 'create':
         create(args.folder, dry=args.dry)
-    if args.action == 'compress_video':
+    elif args.action == 'compress_video':
         compress_video(args.folder, dry=args.dry, max_sessions=args.count)
     else:
         logger.error('Allowed actions are: ' + ', '.join(ALLOWED_ACTIONS))
