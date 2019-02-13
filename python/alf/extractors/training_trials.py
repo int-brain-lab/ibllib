@@ -22,6 +22,16 @@ from pathlib import Path
 logger_ = logging.getLogger('ibllib.alf')
 
 
+def get_port_events(trial: dict, name: str = '') -> list:
+    out: list = []
+    for k in trial['behavior_data']['Events timestamps']:
+        if name in k:
+            out.extend(trial['behavior_data']['Events timestamps'][k])
+    out = sorted(out)
+
+    return out
+
+
 def check_alf_folder(session_path):
     """
     Check if alf folder exists, creates it if it doesn't.
@@ -105,9 +115,12 @@ def get_contrastLR(session_path, save=False, data=False):
         data = raw.load_data(session_path)
     contrastLeft = np.array([t['signed_contrast'] for t in data])
     contrastRight = contrastLeft.copy()
-    contrastLeft[contrastLeft > 0] = np.nan
-    contrastLeft = np.abs(contrastLeft)
-    contrastRight[contrastRight < 0] = np.nan
+    contrastLeft = np.array(
+        [x if np.sign(t['position']) < 0 else np.nan
+         for x, t in zip(contrastLeft, data)])
+    contrastRight = np.array(
+        [x if np.sign(t['position']) > 0 else np.nan
+         for x, t in zip(contrastRight, data)])
     # save if needed
     check_alf_folder(session_path)
     if raw.save_bool(save, '_ibl_trials.contrastLeft.npy'):
@@ -475,7 +488,7 @@ def get_goCueTrigger_times(session_path, save=False, data=False):
     if raw.save_bool(save, '_ibl_trials.goCue_times.npy'):
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.goCue_times.npy')
+                             '_ibl_trials.goCueTrigger_times.npy')
         np.save(fpath, goCue)
     return goCue
 
@@ -500,13 +513,22 @@ def get_goCueOnset_times(session_path, save=False, data=False):
     """
     if not data:
         data = raw.load_data(session_path)
-    goCue = np.array([tr['behavior_data']['States timestamps']
-                      ['closed_loop'][0][0] for tr in data])
+    go_cue_times = []
+    for tr in data:
+        if get_port_events(tr, 'BNC2'):
+            go_cue_times.append(tr['behavior_data']['Events timestamps']
+                                ['BNC2High'][0])
+        else:
+            go_cue_times.append(np.nan)
+
+    if all(np.isnan(go_cue_times)):
+        return
+
     if raw.save_bool(save, '_ibl_trials.goCue_times.npy'):
         check_alf_folder(session_path)
         fpath = Path(session_path).joinpath('alf', '_ibl_trials.goCue_times.npy')
-        np.save(fpath, goCue)
-    return goCue
+        np.save(fpath, go_cue_times)
+    return go_cue_times
 
 
 def get_included_trials(session_path, save=False, data=False):
@@ -535,11 +557,13 @@ def extract_all(session_path, save=False, data=False):
     response_times = get_response_times(session_path, save=save, data=data)
     iti_dur = get_iti_duration(session_path, save=save, data=data)
     trials_included = get_included_trials(session_path, save=save, data=data)
+    go_cue_trig_times = get_goCueTrigger_times(session_path, save=save, data=data)
+    go_cue_times = get_goCueOnset_times(session_path, save=save, data=data)
     # Missing datasettypes
-    # _ibl_trials.goCue_times
     # _ibl_trials.deadTime
     out = {'feedbackType': feedbackType,
            'contrastLeft': contrastLeft,
+           'contrastRight': contrastRight,
            'probabilityLeft': probabilityLeft,
            'session_path': session_path,
            'choice': choice,
@@ -550,5 +574,13 @@ def extract_all(session_path, save=False, data=False):
            'intervals': intervals,
            'response_times': response_times,
            'iti_dur': iti_dur,
-           'trials_included': trials_included}
+           'trials_included': trials_included,
+           'goCue_times': go_cue_times,
+           'goCueTrigger_times': go_cue_trig_times}
     return out
+
+
+if __name__ == "__main__":
+    sess = '/mnt/s0/IntegrationTests/Subjects_init/ZM_1085/2019-02-12/002'
+    l, r = get_contrastLR(sess, save=False, data=False)
+    print('42')

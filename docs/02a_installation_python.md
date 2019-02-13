@@ -86,8 +86,7 @@ In a Python terminal, type:
 
 ```python
 from oneibl.one import ONE
-one = ONE() # need to instantiate the class to have the API.
-one.setup() # For first time use, need to define connection credentials
+ONE.setup() # For first time use, need to define connection credentials
 ```
 
 **_Note_**:
