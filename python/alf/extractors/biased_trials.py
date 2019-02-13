@@ -3,7 +3,12 @@
 # @Date: Tuesday, February 12th 2019, 11:49:54 am
 # @Last Modified by: Niccolò Bonacchi
 # @Last Modified time: 12-02-2019 11:49:57.5757
-from alf.extractors.training_trials import *
+import ibllib.io.raw_data_loaders as raw
+from alf.extractors.training_trials import (
+    get_feedbackType, get_contrastLR, get_probaLR,
+    get_choice, get_rewardVolume, get_feedback_times, get_stimOn_times,
+    get_intervals, get_response_times, get_iti_duration,
+    get_goCueTrigger_times, get_goCueOnset_times)
 
 
 def extract_all(session_path, save=False, data=False):
