@@ -65,6 +65,7 @@ class TestExtractTrialData(unittest.TestCase):
 
     def test_goCue_times(self):
         gc_times = ex.get_goCueOnset_times(self.session_path)
+        self.assertTrue(not gc_times or gc_times)
 
 
 class TestTransferRigData(unittest.TestCase):
