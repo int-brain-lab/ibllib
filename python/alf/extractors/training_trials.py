@@ -122,6 +122,7 @@ def get_contrastLR(session_path, save=False, data=False):
     contrastRight = np.array(
         [x if np.sign(t['position']) > 0 else np.nan
          for x, t in zip(contrastRight, data)])
+    contrastLeft = np.abs(contrastLeft)
     # save if needed
     check_alf_folder(session_path)
     if raw.save_bool(save, '_ibl_trials.contrastLeft.npy'):
@@ -132,7 +133,6 @@ def get_contrastLR(session_path, save=False, data=False):
         rpath = os.path.join(session_path, 'alf', '_ibl_trials.contrastRight.npy')
         np.save(rpath, contrastRight)
 
-    contrastLeft = np.abs(contrastLeft)
     return (contrastLeft, contrastRight)
 
 
