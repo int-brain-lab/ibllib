@@ -113,6 +113,7 @@ def get_contrastLR(session_path, save=False, data=False):
     """
     if not data:
         data = raw.load_data(session_path)
+
     contrastLeft = np.array([t['signed_contrast'] for t in data])
     contrastRight = contrastLeft.copy()
     contrastLeft = np.array(
@@ -126,9 +127,12 @@ def get_contrastLR(session_path, save=False, data=False):
     if raw.save_bool(save, '_ibl_trials.contrastLeft.npy'):
         lpath = os.path.join(session_path, 'alf', '_ibl_trials.contrastLeft.npy')
         np.save(lpath, contrastLeft)
+
     if raw.save_bool(save, '_ibl_trials.contrastRight.npy'):
         rpath = os.path.join(session_path, 'alf', '_ibl_trials.contrastRight.npy')
         np.save(rpath, contrastRight)
+
+    contrastLeft = np.abs(contrastLeft)
     return (contrastLeft, contrastRight)
 
 
