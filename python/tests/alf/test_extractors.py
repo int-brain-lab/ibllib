@@ -67,6 +67,7 @@ class TestExtractTrialData(unittest.TestCase):
         gc_times = ex.get_goCueOnset_times(self.session_path)
         self.assertTrue(not gc_times or gc_times)
 
+
 class TestTransferRigData(unittest.TestCase):
     def setUp(self):
         self.tmp_dir = tempfile.TemporaryDirectory()

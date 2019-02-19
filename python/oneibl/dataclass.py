@@ -1,5 +1,5 @@
 from functools import singledispatch
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 
 from ibllib.misc import flatten
 
@@ -37,8 +37,17 @@ class SessionDataInfo:
     def __len__(self):
         return len(self.dataset_type)
 
+    def append(self, d):
+        def getattr_list(d, name):
+            out = getattr(d, name, None)
+            if isinstance(out, list) and len(out) == 0:
+                out = None
+            return out if isinstance(out, list) else [out]
+        for f in fields(self):
+            setattr(self, f.name, getattr_list(self, f.name) + getattr_list(d, f.name))
+
     @staticmethod
-    def from_datasets(dsets, dataset_types=None):
+    def from_datasets(dsets, dataset_types=None, eid=None):
         if not dataset_types:
             dataset_types = [d['dataset_type'] for d in dsets if d['data_url']]
         dsets = [d for d in dsets if d['dataset_type'] in dataset_types]
@@ -46,14 +55,14 @@ class SessionDataInfo:
             dataset_type=[d['dataset_type'] for d in dsets],
             dataset_id=[d['id'] for d in dsets],
             local_path=[None for d in dsets],
-            eid=[None for d in dsets],  # [ses_info['url'][-36:] for d in dsets],
+            eid=[eid for d in dsets],  # [ses_info['url'][-36:] for d in dsets],
             url=[d['data_url'] for d in dsets],
             data=[None for d in dsets],
         )
 
     @staticmethod
-    def from_session_details(ses_info, dataset_types=None):
-        return _session_details_to_dataclasses(ses_info, dataset_types=dataset_types)
+    def from_session_details(ses_info, dataset_types=None, eid=None):
+        return _session_details_to_dataclasses(ses_info, dataset_types=dataset_types, eid=eid)
 
 
 @singledispatch
