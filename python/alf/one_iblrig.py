@@ -33,9 +33,10 @@ def register(root_data_folder, dry=False, one=None):
     rc.register_sync(root_data_folder, dry=dry)
 
 
-def create(root_data_folder, dry=False):
+def create(root_data_folder, dry=False, one=None):
     # create the sessions by lookin
-    one = ONE()
+    if not one:
+        one = ONE()
     rc = RegistrationClient(one=one)
     rc.create_sessions(root_data_folder, dry=dry)
 
