@@ -64,7 +64,6 @@ class TestExtractTrialData(unittest.TestCase):
             self.assertTrue(any(choice[signed_contrast == 0] != 0))
 
 
-
 class TestTransferRigData(unittest.TestCase):
     def setUp(self):
         self.tmp_dir = tempfile.TemporaryDirectory()

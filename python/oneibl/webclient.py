@@ -276,7 +276,7 @@ class AlyxClient:
         """
         return self._generic_request(requests.put, rest_query, data=data)
 
-    def rest(self, url=None, action=None, data=None):
+    def rest(self, url=None, action=None, data=None, **kwargs):
         """
         alyx_client.rest()
         alyx_client.rest("sessions")
@@ -325,8 +325,19 @@ class AlyxClient:
             return
         if action == 'list':
             assert(endpoint_scheme[action]['action'] == 'get')
+            # add to url data if it is a string
             if data:
                 url = url + data
+            # otherwise, look for a dictionary of filter terms
+            elif kwargs:
+                for k in kwargs.keys():
+                    if isinstance(kwargs[k], str):
+                        query = kwargs[k]
+                    elif isinstance(kwargs[k], list):
+                        query = ','.join(kwargs[k])
+                    else:
+                        continue
+                    url = url + f"?&{k}=" + query
             return self.get('/' + url)
         if action == 'read':
             assert(endpoint_scheme[action]['action'] == 'get')
