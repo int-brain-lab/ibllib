@@ -12,7 +12,8 @@ import logging
 from pathlib import Path
 import traceback
 
-from alf.extractors import training_trials, training_wheel
+from alf.extractors import (
+    training_trials, training_wheel, biased_trials, biased_wheel)
 from ibllib.io import raw_data_loaders as raw
 import ibllib.io.flags as flags
 
@@ -73,6 +74,10 @@ def from_path(session_path, force=False, save=True):
         training_trials.extract_all(session_path, save=save)
         training_wheel.extract_all(session_path, save=save)
         logger_.info('session extracted \n')  # timing info in log
+    if extractor_type == 'biased':
+        biased_trials.extract_all(session_path, save=save)
+        biased_wheel.extract_all(session_path, save=save)
+        logger_.info('session extracted \n')  # timing info in log
 
 
 def bulk(subjects_folder, dry=False):
@@ -95,3 +100,9 @@ def bulk(subjects_folder, dry=False):
             continue
         p.unlink()
         flags.write_flag_file(p.parent.joinpath('register_me.flag'), file_list=save)
+
+
+if __name__ == "__main__":
+    sess = '/home/nico/Projects/IBL/IBL-github/iblrig/scratch/test_iblrig_data/Subjects/ZM_1085/2019-02-12/002'  # noqa
+    bulk(sess)
+    print('.')

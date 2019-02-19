@@ -63,6 +63,9 @@ class TestExtractTrialData(unittest.TestCase):
             # 0% contrast OR if the choice has been extracted wrong
             self.assertTrue(any(choice[signed_contrast == 0] != 0))
 
+    def test_goCue_times(self):
+        gc_times = ex.get_goCueOnset_times(self.session_path)
+        self.assertTrue(not gc_times or gc_times)
 
 class TestTransferRigData(unittest.TestCase):
     def setUp(self):
