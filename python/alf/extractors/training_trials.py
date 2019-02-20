@@ -85,7 +85,7 @@ def get_feedbackType(session_path, save=False, data=False):
 
     feedbackType[reward] = 1
     feedbackType[error] = -1
-    feedbackType[no_go] = 0
+    feedbackType[no_go] = -1
     feedbackType = feedbackType.astype('int64')
     if raw.save_bool(save, '_ibl_trials.feedbackType.npy'):
         check_alf_folder(session_path)
