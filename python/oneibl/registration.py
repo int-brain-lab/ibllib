@@ -113,8 +113,8 @@ class RegistrationClient:
 
         # load the trials data to get information about session duration
         ses_data = raw.load_data(ses_path)
-        ses_duration_secs = ses_data[-1]['behavior_data']['Trial end timestamp'] - \
-            ses_data[-1]['behavior_data']['Bpod start timestamp']
+        ses_duration_secs = _get_session_duration(ses_path, ses_data)
+
         start_time = ibllib.time.isostr2date(md['SESSION_DATETIME'])
         end_time = start_time + datetime.timedelta(seconds=ses_duration_secs)
 
@@ -264,3 +264,17 @@ def rename_files_compatibility(ses_path, version_tag):
     task_code = ses_path.glob('**/_iblrig_taskCodeFiles.raw.zip')
     for fn in task_code:
         fn.replace(fn.parent.joinpath('_iblrig_codeFiles.raw.zip'))
+
+
+def _get_session_duration(fn, ses_data):
+    c = 0
+    for sd in reversed(ses_data):
+        ses_duration_secs = (sd['behavior_data']['Trial end timestamp'] -
+                             sd['behavior_data']['Bpod start timestamp'])
+        if ses_duration_secs < (6 * 3600):
+            break
+        c += 1
+    if c:
+        logger_.error((f'Trial end timestamps of last {c} trials above 6 hours '
+                       f'(most likely corrupt): ') + str(fn))
+    return ses_duration_secs
