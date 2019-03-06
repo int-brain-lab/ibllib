@@ -102,6 +102,38 @@ class TestLoad(unittest.TestCase):
         self.eid2 = eids[1]
         self.One = one
 
+    def test_load_multiple_sessions(self):
+        # init stuff to run from cli
+        one = self.One
+        eids = [self.eid, self.eid2]
+
+        # 2 sessions, data exists on both, dclass output
+        out = one.load(eids, dataset_types='channels.site', dclass_output=True)
+        self.assertTrue(len(out.data) == 2)
+        self.assertTrue(all([len(o) == 748 for o in out.data]))
+        # same with a list output
+        out = one.load(eids, dataset_types='channels.site')
+        # we have 2 sessions, thus 2 elements in the list and they're all 748 elements arrays
+        self.assertTrue(len(out) == 2)
+        self.assertTrue(all([len(o) == 748 for o in out]))
+
+        # here the dataset type only exists for the first session
+        out = one.load(eids, dataset_types='licks.times')
+        self.assertTrue(len(out) == 2)
+        self.assertTrue(len(out[0]) == 5126 and out[1] is None)
+        # test the order of output
+        out = one.load([eids[-1], eids[0]], dataset_types='licks.times')
+        self.assertTrue(len(out) == 2)
+        self.assertTrue(len(out[1]) == 5126 and out[0] is None)
+        # same with dataclass output
+        out = one.load(eids, dataset_types='licks.times', dclass_output=True)
+        self.assertTrue(len(out.data) == 2)
+        self.assertTrue(len(out.data[0]) == 5126 and out.data[1] is None)
+        # now with reversed order and dataclass output
+        out = one.load([eids[-1], eids[0]], dataset_types='licks.times', dclass_output=True)
+        self.assertTrue(len(out.data) == 2)
+        self.assertTrue(len(out.data[1]) == 5126 and out.data[0] is None)
+
     def test_load(self):
         # Test with 3 actual datasets predefined
         one = self.One
@@ -133,12 +165,6 @@ class TestLoad(unittest.TestCase):
         dataset_types = ['wheel.velocity', 'wheel.timestamps']
         aa = one.load(eid, dataset_types=dataset_types)
         self.assertTrue(len(aa) == 2)
-
-    def test_load_str(self):
-        one = self.One
-        eid = self.eid
-        a = one.load(eid, 'eye.raw')
-        self.assertTrue(len(a) == 1)
 
     def test_load_all_data_available(self):
         # Test without a dataset list should download everything and output a dictionary

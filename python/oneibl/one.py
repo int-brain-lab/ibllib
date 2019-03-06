@@ -189,8 +189,25 @@ class ONE(OneAbstract):
         else:
             return ses[0][keyword]
 
-    def load(self, eid, dataset_types=None, dclass_output=False, dry_run=False, cache_dir=None,
-             download_only=False, clobber=False):
+    def load(self, eid, **kwargs):
+        if isinstance(eid, str):
+            return self._load(eid, **kwargs)
+        if isinstance(eid, list):
+            # dataclass output requested
+            if kwargs.get('dclass_output', False):
+                for i, e in enumerate(eid):
+                    if i == 0:
+                        out = self._load(e, **kwargs)
+                    else:
+                        out.append(self._load(e, **kwargs))
+            else:  # list output requested
+                out = []
+                for e in eid:
+                    out.append(self._load(e, **kwargs)[0])
+            return out
+
+    def _load(self, eid, dataset_types=None, dclass_output=False, dry_run=False, cache_dir=None,
+              download_only=False, clobber=False):
         """
         From a Session ID and dataset types, queries Alyx database, downloads the data
         from Globus, and loads into numpy array.
@@ -234,7 +251,7 @@ class ONE(OneAbstract):
             dclass_output = True
             dataset_types = [d['dataset_type'] for d in ses['data_dataset_session_related']
                              if d['data_url']]
-        dc = SessionDataInfo.from_session_details(ses, dataset_types=dataset_types)
+        dc = SessionDataInfo.from_session_details(ses, dataset_types=dataset_types, eid=eid_str)
         # loop over each dataset and download if necessary
         for ind in range(len(dc)):
             if dc.url[ind] and not dry_run:
