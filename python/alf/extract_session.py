@@ -103,6 +103,6 @@ def bulk(subjects_folder, dry=False):
 
 
 if __name__ == "__main__":
-    sess = '/home/nico/Projects/IBL/IBL-github/iblrig/scratch/test_iblrig_data/Subjects/ZM_1085/2019-02-12/002'  # noqa
+    sess = '/home/nico/Projects/IBL/scratch/test_iblrig_data/Subjects/IBL-T1/2019-02-19/001'  # noqa
     bulk(sess)
     print('.')
