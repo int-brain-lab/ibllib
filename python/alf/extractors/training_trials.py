@@ -114,15 +114,10 @@ def get_contrastLR(session_path, save=False, data=False):
     if not data:
         data = raw.load_data(session_path)
 
-    contrastLeft = np.array([t['signed_contrast'] for t in data])
-    contrastRight = contrastLeft.copy()
-    contrastLeft = np.array(
-        [x if np.sign(t['position']) < 0 else np.nan
-         for x, t in zip(contrastLeft, data)])
-    contrastRight = np.array(
-        [x if np.sign(t['position']) > 0 else np.nan
-         for x, t in zip(contrastRight, data)])
-    contrastLeft = np.abs(contrastLeft)
+    contrastLeft = np.array([t['contrast']['value'] if np.sign(
+        t['position']) < 0 else np.nan for t in data])
+    contrastRight = np.array([t['contrast']['value'] if np.sign(
+        t['position']) > 0 else np.nan for t in data])
     # save if needed
     check_alf_folder(session_path)
     if raw.save_bool(save, '_ibl_trials.contrastLeft.npy'):
