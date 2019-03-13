@@ -23,6 +23,9 @@ import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
 
 logger_ = logging.getLogger('ibllib.alf')
+WHEEL_RADIUS_CM = 3.1
+THRESHOLD_RAD_PER_SEC = 10
+THRESHOLD_CONSECUTIVE_SAMPLES = 0.001
 
 
 # START of AUXILIARY FUNCS to be refactored out of the extractor files
@@ -51,7 +54,7 @@ def get_trial_start_times(session_path, data=None):
 def get_trial_start_times_re(session_path, evt=None):
     if not evt:
         evt = raw.load_encoder_events(session_path)
-    trial_start_times_re = evt.re_ts[evt.sm_ev[evt.sm_ev == 1].index].values / 1000
+    trial_start_times_re = evt.re_ts[evt.sm_ev[evt.sm_ev == 1].index].values / 1e6
     return trial_start_times_re[:-1]
 
 
@@ -110,7 +113,7 @@ def time_interpolation(tref, target):
     return func
 
 
-def get_wheel_data(session_path, save=False):
+def get_wheel_data(session_path, bp_data=None, save=False):
     """
     Get wheel data from raw files and converts positions into centimeters and
     timestamps into seconds.
@@ -129,33 +132,93 @@ def get_wheel_data(session_path, save=False):
 
     :param session_path: absolute path of session folder
     :type session_path: str
+    :param data: dictionary containing the contents pybppod jsonable file read with raw.load_data
+    :type data: dict, optional
     :param save: wether to save the corresponding alf file
                  to the alf folder, defaults to False
     :type save: bool, optional
     :return: Numpy structured array.
     :rtype: numpy.ndarray
     """
+    if not bp_data:
+        bp_data = raw.load_data(session_path)
     df = raw.load_encoder_positions(session_path)
     names = df.columns.tolist()
     data = structarr(names, shape=(df.index.max() + 1,))
     data['re_ts'] = df.re_ts.values
     data['re_pos'] = df.re_pos.values
     data['bns_ts'] = df.bns_ts.values
-    # ticks to cm factor
-    cmtick = 3.1 * 2 * np.pi / 1024
-    # Convert position and timestamps to cm and seconds respectively
-    data['re_ts'] = data['re_ts'] / 1000.
-    data['re_pos'] = data['re_pos'] * cmtick
-    # Find timestamps that are repeated
-    rep_idx = np.where(np.diff(data['re_ts']) == 0)[0]
-    # Change the value of the repeated position
-    data['re_pos'][rep_idx] = (data['re_pos'][rep_idx] +
-                               data['re_pos'][rep_idx + 1]) / 2
+    data['re_pos'] = data['re_pos'] / 1024 * 2 * np.pi  # convert positions to radians
+    data['re_ts'] = data['re_ts'] / 1e6  # convert ts to seconds
+
     # get the converter function to translate re_ts into behavior times
     convtime = time_converter_session(session_path, kind='re2b')
     data['re_ts'] = convtime(data['re_ts'])
-    # Now remove the repeted times that are rep_idx + 1
+
+    # Find all rotary encoder restart events and add them to a 'DC' trace
+    tr_dc = np.zeros_like(data['re_pos'])  # trial dc component
+    for bp_dat in bp_data:
+        restarts = np.sort(np.array(
+            bp_dat['behavior_data']['States timestamps']['reset_rotary_encoder'] +
+            bp_dat['behavior_data']['States timestamps']['reset2_rotary_encoder'])[:, 0])
+        ind = np.searchsorted(data['re_ts'], restarts, side='left') - 1
+        ind[np.where(data['re_pos'][ind] != 0)] = ind[np.where(data['re_pos'][ind] != 0)] + 1
+        if not np.all(data['re_pos'][ind] == 0):
+            raise ValueError('Rotary Encoder resets do not match the state machine info !')
+        tr_dc[ind] = data['re_pos'][ind - 1]
+
+    # the rotary encoder may not log the whole session. Need to fix manually outside of bounds
+    i0 = np.where(np.bitwise_and(np.bitwise_or(data['re_ts'] >= restarts[-1],
+                                               data['re_ts'] < 0), data['re_pos'] == 0))
+    i0 = np.delete(i0, np.where(np.bitwise_or(i0 == len(data['re_pos']), i0 == 0)))
+    # to not identify as a reset condition 1/2 no inflexion (continuous derivative)
+    c1 = np.sign(data['re_pos'][i0 + 1] - data['re_pos'][i0]) == \
+        np.sign(data['re_pos'][i0] - data['re_pos'][i0 - 1])
+    # to not identify as a reset condition 2/2 needs to be above threshold
+    c2 = np.abs((data['re_pos'][i0] - data['re_pos'][i0 - 1]) /
+                (data['re_ts'][i0] - data['re_ts'][i0 - 1])) < THRESHOLD_RAD_PER_SEC
+    # apply reset to points identified as resets
+    i0 = i0[np.where(np.bitwise_not(np.bitwise_and(c1, c2)))]
+    tr_dc[i0] = data['re_pos'][i0 - 1]
+
+    # unwrap the rotation (in radians !) and then add the DC component from restarts
+    data['re_pos'] = np.unwrap(data['re_pos']) + np.cumsum(tr_dc)
+
+    # Find timestamps that are repeated
+    rep_idx = np.where(np.diff(data['re_ts']) <= THRESHOLD_CONSECUTIVE_SAMPLES)[0]
+    # Change the value of the repeated position
+    data['re_pos'][rep_idx] = (data['re_pos'][rep_idx] +
+                               data['re_pos'][rep_idx + 1]) / 2
+    data['re_ts'][rep_idx] = (data['re_ts'][rep_idx] +
+                              data['re_ts'][rep_idx + 1]) / 2
+    # Now remove the repeat times that are rep_idx + 1
     data = np.delete(data, rep_idx + 1)
+
+    # convert to cm
+    data['re_pos'] = data['re_pos'] * WHEEL_RADIUS_CM
+
+    # # debug plots
+    # import matplotlib.pyplot as plt
+    # fig = plt.figure()
+    # ax = plt.axes()
+    # tstart = get_trial_start_times(session_path)
+    # tts = np.c_[tstart, tstart, tstart + np.nan].flatten()
+    # vts = np.c_[tstart * 0 + 100, tstart * 0 - 100, tstart + np.nan].flatten()
+    # ax.plot(tts, vts, label='Trial starts')
+    # ax.plot(convtime(df.re_ts.values/1e6), df.re_pos.values/ 1024 * 2 * np.pi,
+    #         '.-', label='Raw data')
+    # i0 = np.where(df.re_pos.values ==0)
+    # ax.plot(convtime(df.re_ts.values[i0] / 1e6), df.re_pos.values[i0] / 1024 * 2 * np.pi,
+    #         'r*', label='Raw data zero samples')
+    # ax.plot(data['re_ts'],  np.delete(tr_dc, rep_idx + 1), label='reset compensation')
+    # ax.set_xlabel('Bpod Time')
+    # # restarts = np.array(bp_data[0]['behavior_data']['States timestamps']\
+    # #                         ['reset_rotary_encoder']).flatten()
+    # # ax.plot(restarts, restarts*0, '*y', label='Restarts')
+    # ax.plot(data['re_ts'], data['re_pos'], '.-', label='Unwrapped, trial dc added trace')
+    # ax.legend()
+    # # plt.hist(np.diff(data['re_ts']), 400, range=[0, 0.01])
+
     check_alf_folder(session_path)
     if raw.save_bool(save, '_ibl_wheel.timestamps.npy'):
         tpath = os.path.join(session_path, 'alf', '_ibl_wheel.timestamps.npy')
@@ -163,6 +226,7 @@ def get_wheel_data(session_path, save=False):
     if raw.save_bool(save, '_ibl_wheel.position.npy'):
         ppath = os.path.join(session_path, 'alf', '_ibl_wheel.position.npy')
         np.save(ppath, data['re_pos'])
+
     return data
 
 
@@ -181,7 +245,6 @@ def get_velocity(session_path, save=False, data_wheel=None):
     :return: numpy.ndarray
     :rtype: dtype('float64')
     """
-
     if not isinstance(data_wheel, np.ndarray):
         data_wheel = get_wheel_data(session_path, save=False)
     dp = np.diff(data_wheel['re_pos'])
@@ -203,7 +266,7 @@ def get_velocity(session_path, save=False, data_wheel=None):
     return velocity(data_wheel['re_ts'])
 
 
-def extract_all(session_path, save=False):
-    data = get_wheel_data(session_path, save=save)
+def extract_all(session_path, bp_data=None, save=False):
+    data = get_wheel_data(session_path, bp_data=bp_data, save=save)
     velocity = get_velocity(session_path, save=save, data_wheel=data)
     return data, velocity

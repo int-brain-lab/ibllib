@@ -71,12 +71,14 @@ def from_path(session_path, force=False, save=True):
         logger_.info(f"Session {session_path} already extracted.")
         return
     if extractor_type == 'training':
-        training_trials.extract_all(session_path, save=save)
-        training_wheel.extract_all(session_path, save=save)
+        data = raw.load_data(session_path)
+        training_trials.extract_all(session_path, data=data, save=save)
+        training_wheel.extract_all(session_path, data=data, save=save)
         logger_.info('session extracted \n')  # timing info in log
     if extractor_type == 'biased':
-        biased_trials.extract_all(session_path, save=save)
-        biased_wheel.extract_all(session_path, save=save)
+        data = raw.load_data(session_path)
+        biased_trials.extract_all(session_path, data=data, save=save)
+        biased_wheel.extract_all(session_path, data=data, save=save)
         logger_.info('session extracted \n')  # timing info in log
 
 

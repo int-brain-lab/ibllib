@@ -5,8 +5,6 @@ function fscale = fscale(Ns,Si,option)
 
 if nargin <= 2 , option = 'full'; end
 
-Nf =  ceil(Ns/2) + 1 - mod(Ns,2); % number of positive frequencies after FFT
-
 % sample the frequency scale
 fscale = [0:floor(Ns/2)]/Ns/Si;
 
