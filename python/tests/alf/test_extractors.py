@@ -29,12 +29,25 @@ class TestExtractTrialData(unittest.TestCase):
     def test_encoder_positions_duds(self):
         dy = loaders.load_encoder_positions(self.session_path)
         self.assertEqual(dy.bns_ts.dtype.name, 'datetime64[ns]')
-        self.assertTrue(dy.shape[0] == 2)
+        self.assertTrue(dy.shape[0] == 14)
 
     def test_encoder_events_duds(self):
         dy = loaders.load_encoder_events(self.session_path)
         self.assertEqual(dy.bns_ts.dtype.name, 'datetime64[ns]')
         self.assertTrue(dy.shape[0] == 7)
+
+    def test_encoder_positions_clock_reset(self):
+        dy = loaders.load_encoder_positions(self.session_path)
+        dat = np.array([849736, 1532230, 1822449, 1833514, 1841566, 1848206, 1853979, 1859144])
+        self.assertTrue(np.all(np.diff(dy['re_ts']) > 0))
+        self.assertTrue(all(dy['re_ts'][6:] - 2**32 - dat == 0))
+
+    def test_encoder_positions_clock_errors(self):
+        # here we test for 2 kinds of file corruption that happen
+        # 1/2 the first sample time is corrupt and absurdly high and should be discarded
+        # 2/2 2 samples are swapped and need to be swapped back
+        dy = loaders.load_encoder_positions(self.session_path_biased)
+        self.assertTrue(np.all(np.diff(np.array(dy.re_ts)) > 0))
 
     def test_interpolation(self):
         # straight test that it returns an usable function

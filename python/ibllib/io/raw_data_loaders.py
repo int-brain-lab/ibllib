@@ -286,11 +286,44 @@ def load_mic(session_path):
 
 
 def _groom_wheel_data(data, label='file ', path=''):
+    """
+    The whole purpose of this function is to account for variability and corruption in
+    the wheel position files. There are many possible errors described below, but
+    nothing excludes getting new ones.
+    """
+    # sometimes the text file is cropped
     if np.any(data.isna()):
         logger_.warning(label + 'has missing/incomplete records \n %s', path)
     data.dropna(inplace=True)
     data.drop(data.loc[data.bns_ts.apply(len) != 33].index, inplace=True)
+    # convert the computer timestamps to datetimes
     data.bns_ts = data.bns_ts.apply(ciso8601.parse_datetime_as_naive)
+    # handle the clock resets when microseconds exceed uint32 max value
+    drop_first = False
+    if any(np.diff(data['re_ts']) < 0):
+        ind = np.where(np.diff(data['re_ts']) < 0)[0]
+        for i in ind:
+            # the first sample may be corrupt, in this case throw away
+            if i == 0:
+                drop_first = True
+                logger_.warning(label + ' rotary encoder positions timestamps'
+                                        ' first sample corrupt ' + str(path))
+            # if it's an uint32 wraparound, the diff should be close to 2 ** 32
+            elif 32 - np.log2(data['re_ts'][i] - data['re_ts'][i + 1]) < 0.2:
+                data.loc[i + 1:, 're_ts'] = data.loc[i + 1:, 're_ts'] + 2 ** 32
+            # there is also the case where 2 positions are swapped and need to be swapped back
+            elif data['re_ts'][i] > data['re_ts'][i + 1] > data['re_ts'][i - 1]:
+                logger_.warning(label + ' rotary encoder timestamps swapped at index: ' +
+                                str(i) + '  ' + str(path))
+                a, b = data.iloc[i].copy(), data.iloc[i + 1].copy()
+                data.iloc[i], data.iloc[i + 1] = b, a
+            # if none of those 3 cases apply, raise an error
+            else:
+                logger_.error(label + ' Rotary encoder timestamps are not sorted ' + str(path))
+                raise ValueError('Rotary encoder timestamps not sorted, most likely corrupt')
+    if drop_first:
+        data.drop(0, inplace=True)
+        data = data.reindex()
     return data
 
 
