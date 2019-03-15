@@ -4,6 +4,8 @@ import uuid
 import tempfile
 from pathlib import Path
 
+import numpy as np
+
 from ibllib.io import params, flags, jsonable, spikeglx
 
 
@@ -148,6 +150,14 @@ class TestsSpikeGLX(unittest.TestCase):
         meta_data_file = self.workdir / 'FC034_g0_t0.imec.lf.meta'
         md = spikeglx.read_meta_data(meta_data_file)
         self.assertTrue(len(md.keys()) == 37)
+
+    def testReadChannelGain(self):
+        meta_data_file = self.workdir / 'FC034_g0_t0.imec.lf.meta'
+        md = spikeglx.read_meta_data(meta_data_file)
+        cg = spikeglx._gain_channels(md)
+        self.assertTrue(np.all(cg['lf'][0:-1] == 250))
+        self.assertTrue(np.all(cg['ap'][0:-1] == 500))
+        self.assertTrue(len(cg['ap']) == len(cg['lf']) == int(sum(md.get('snsApLfSy'))))
 
 
 if __name__ == "__main__":
