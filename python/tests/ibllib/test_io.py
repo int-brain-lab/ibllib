@@ -147,7 +147,7 @@ class TestsSpikeGLX(unittest.TestCase):
 
     def testReadMetaData(self):
         meta_data_file = self.workdir / 'FC034_g0_t0.imec.lf.meta'
-        md = spikeglx.read_metadata(meta_data_file)
+        md = spikeglx.read_meta_data(meta_data_file)
         self.assertTrue(len(md.keys()) == 37)
 
 
