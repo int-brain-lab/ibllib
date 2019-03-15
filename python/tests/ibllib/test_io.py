@@ -4,12 +4,8 @@ import uuid
 import tempfile
 from pathlib import Path
 
+from ibllib.io import params, flags, jsonable, spikeglx, alf
 import numpy as np
-
-import ibllib.io.alf as alf
-import ibllib.io.params as params
-import ibllib.io.flags as flags
-import ibllib.io.jsonable as jsonable
 
 
 class TestsParams(unittest.TestCase):
@@ -143,6 +139,16 @@ class TestsJsonable(unittest.TestCase):
         data3 = jsonable.read(tfile.name)
         self.assertEqual(data + data, data3)
         tfile.close()
+
+
+class TestsSpikeGLX(unittest.TestCase):
+    def setUp(self):
+        self.workdir = Path(__file__).parent / 'fixtures' / 'io' / 'spikeglx'
+
+    def testReadMetaData(self):
+        meta_data_file = self.workdir / 'FC034_g0_t0.imec.lf.meta'
+        md = spikeglx.read_metadata(meta_data_file)
+        self.assertTrue(len(md.keys()) == 37)
 
 
 class TestsAlf(unittest.TestCase):
