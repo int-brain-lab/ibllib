@@ -75,7 +75,7 @@ class Reader:
             return
         return self.meta.get('fileTimeSecs') * self.sf
 
-    def read_batch(self, first_sample=0, last_sample=10000, sync_trace=False):
+    def read_samples(self, first_sample=0, last_sample=10000, sync_trace=False):
         """
         reads all channels from first_sample to last_sample
          :return: numpy array of int16

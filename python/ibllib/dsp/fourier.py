@@ -16,42 +16,85 @@ def fscale(ns, si=1, half_sided=False):
         return np.concatenate((fsc, -fsc[slice(-2 + (ns % 2), 0, -1)]), axis=0)
 
 
-def freduce(x):
+def freduce(x, axis=None):
     """
     Reduces a spectrum to positive frequencies only
     Works on the last dimension (contiguous in c-stored array)
     :param x: numpy.ndarray
+    :param axis: axis along which to perform reduction (last axis by default)
     :return: numpy.ndarray
     """
+    if axis is None:
+        axis = x.ndim - 1
     siz = list(x.shape)
-    siz[-1] = int(np.floor(siz[-1] / 2 + 1))
-    return x[..., :siz[-1]]
+    siz[axis] = int(np.floor(siz[axis] / 2 + 1))
+    return np.take(x, np.arange(0, siz[axis]), axis=axis)
 
 
-def fexpand(x, ns=1):
+def fexpand(x, ns=1, axis=None):
     """
     Reconstructs full spectrum from positive frequencies
     Works on the last dimension (contiguous in c-stored array)
     :param x: numpy.ndarray
+    :param axis: axis along which to perform reduction (last axis by default)
     :return: numpy.ndarray
     """
-    dec = int(ns % 2) * 2 - 1
-    xcomp = np.conj(np.flip(x[..., 1:x.shape[-1] + dec], axis=x.ndim - 1))
-    return np.concatenate((x, xcomp), axis=x.ndim - 1)
+    if axis is None:
+        axis = x.ndim - 1
+    # dec = int(ns % 2) * 2 - 1
+    # xcomp = np.conj(np.flip(x[..., 1:x.shape[-1] + dec], axis=axis))
+    ilast = int((ns + (ns % 2)) / 2)
+    xcomp = np.conj(np.flip(np.take(x, np.arange(1, ilast), axis=axis), axis=axis))
+    return np.concatenate((x, xcomp), axis=axis)
 
 
-def lp(ts, si, b):
+def lp(ts, si, b, axis=None):
     """
+    Low-pass filter in frequency domain
     :param ts: time serie
     :param si: sampling interval in seconds
     :param b: cutout frequencies: 2 elements vector or list
+    :param axis: axis along which to perform reduction (last axis by default)
     :return: filtered time serie
     """
-    # TODO: multidimensional support using broadcast when needed
-    ns = ts.shape[-1]
+    return _freq_filter(ts, si, b, axis=axis, typ='lp')
+
+
+def hp(ts, si, b, axis=None):
+    """
+    High-pass filter in frequency domain
+    :param ts: time serie
+    :param si: sampling interval in seconds
+    :param b: cutout frequencies: 2 elements vector or list
+    :param axis: axis along which to perform reduction (last axis by default)
+    :return: filtered time serie
+    """
+    return _freq_filter(ts, si, b, axis=axis, typ='hp')
+
+
+def _freq_filter(ts, si, b, axis=None, typ='lp'):
+    """
+        Wrapper for hp and lp filter
+    """
+    if axis is None:
+        axis = ts.ndim - 1
+    ns = ts.shape[axis]
     f = fscale(ns, si=si, half_sided=True)
+    filc = _freq_vector(f, b, typ=typ)
+    if axis < (ts.ndim - 1):
+        filc = filc[:, np.newaxis]
+    return np.real(np.fft.ifft(np.fft.fft(ts, axis=axis) * fexpand(filc, ns, axis=0), axis=axis))
+
+
+def _freq_vector(f, b, typ='lp'):
+    """
+        Returns a frequency modulated vector for filtering
+        :param f: frequency vector, uniform and monotonic
+        :param b: 2 bounds array
+        :return: amplitude modulated frequency vector
+    """
     filc = ((f <= b[0]).astype(float) +
             np.bitwise_and(f > b[0], f < b[1]).astype(float) *
             (0.5 * (1 + np.sin(np.pi * (f - ((b[0] + b[1]) / 2)) /
              (b[0] - b[1])))))
-    return np.real(np.fft.ifft(np.fft.fft(ts) * fexpand(filc, ns)))
+    return filc
