@@ -1,16 +1,16 @@
 import numpy as np
 
 
-def fscale(ns, si=1, half_sided=False):
+def fscale(ns, si=1, one_sided=False):
     """
     numpy.fft.fftfreq returns Nyquist as a negative frequency so we propose this instead
     :param ns: number of samples
     :param si: sampling interval in seconds
-    :param half_sided: if True, returns only positive frequencies
+    :param one_sided: if True, returns only positive frequencies
     :return: fscale: numpy vector containing frequencies in Hertz
     """
     fsc = np.arange(0, np.floor(ns / 2) + 1) / ns / si  # sample the frequency scale
-    if half_sided:
+    if one_sided:
         return fsc
     else:
         return np.concatenate((fsc, -fsc[slice(-2 + (ns % 2), 0, -1)]), axis=0)
@@ -79,7 +79,7 @@ def _freq_filter(ts, si, b, axis=None, typ='lp'):
     if axis is None:
         axis = ts.ndim - 1
     ns = ts.shape[axis]
-    f = fscale(ns, si=si, half_sided=True)
+    f = fscale(ns, si=si, one_sided=True)
     filc = _freq_vector(f, b, typ=typ)
     if axis < (ts.ndim - 1):
         filc = filc[:, np.newaxis]

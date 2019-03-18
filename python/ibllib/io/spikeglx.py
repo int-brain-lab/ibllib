@@ -52,7 +52,7 @@ class Reader:
             return self.meta.get('imAiRangeMax') / 768
 
     @property
-    def sf(self):
+    def fs(self):
         """ :return: sampling frequency (Hz) """
         if not self.meta:
             return 1
@@ -73,7 +73,7 @@ class Reader:
         """ :return: number of samples """
         if not self.meta:
             return
-        return self.meta.get('fileTimeSecs') * self.sf
+        return self.meta.get('fileTimeSecs') * self.fs
 
     def read_samples(self, first_sample=0, last_sample=10000, sync_trace=False):
         """
