@@ -97,4 +97,7 @@ def _freq_vector(f, b, typ='lp'):
             np.bitwise_and(f > b[0], f < b[1]).astype(float) *
             (0.5 * (1 + np.sin(np.pi * (f - ((b[0] + b[1]) / 2)) /
              (b[0] - b[1])))))
-    return filc
+    if typ == 'hp':
+        return 1 - filc
+    elif typ == 'lp':
+        return filc
