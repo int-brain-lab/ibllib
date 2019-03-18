@@ -7,6 +7,15 @@ import ibllib.dsp.fourier as ft
 
 class TestFFT(unittest.TestCase):
 
+    def test_imports(self):
+        import ibllib.dsp as dsp
+        self.assertTrue(len([dsp.lp,
+                             dsp.fexpand,
+                             dsp.hp,
+                             dsp.fscale,
+                             dsp.freduce,
+                             dsp.rms]) == 6)
+
     def test_freduce(self):
         # test with 1D arrays
         fs = np.fft.fftfreq(5)
@@ -41,7 +50,7 @@ class TestFFT(unittest.TestCase):
         R = np.real(np.fft.ifft(ft.fexpand(X, 12)))
         self.assertTrue(np.all((res - R) < 1e-6))
         # test with 2 dimensional input along first dimension
-        fs = np.transpose(mat.repmat(ft.fscale(500, 0.001, half_sided=True), 4, 1))
+        fs = np.transpose(mat.repmat(ft.fscale(500, 0.001, one_sided=True), 4, 1))
         self.assertTrue(ft.fexpand(fs, 500, axis=0).shape == (500, 4))
 
     def test_fscale(self):
