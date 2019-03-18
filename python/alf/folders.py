@@ -42,30 +42,17 @@ def find_sessions(folder: Union[str, Path]) -> List[Path]:
     # Ensure folder is a Path object
     if not isinstance(folder, Path):
         folder = Path(folder)
+    out = [x.parent.parent for x in folder.rglob('_iblrig_taskSettings.raw*')]
+    return out
 
-    folder = subjects_data_folder(folder)
-    # Glob all mouse fodlers
-    mouse_folders = [x for x in folder.glob('*') if x.is_dir()]
-    if not mouse_folders:
-        log.error(f"No subjects found in '{Path(*folder.parts[-2:])}'")
-        raise(ValueError)
-    flen = len(list(mouse_folders))
-    log.info(f"Found '{flen}' subjects: {[x.name for x in mouse_folders]}")
-    # Glob all dates
-    dates = [x for mouse in mouse_folders for x in mouse.glob(
-        '*') if x.is_dir()]
-    log.info(f"Found '{len(dates)}' dates: {[x.name for x in dates]}")
-    # Glob all sessions
-    sessions = [y for x in dates for y in x.glob('*') if y.is_dir()]
-    # Ensure sessions have files
-    sessions = list(
-        {p.parent for f in sessions for p in f.glob('*') if p.is_file()})
-    snames = [str(Path(*x.parts[-3:])) for x in sessions]
-    log.info(
-        f"Found '{len(sessions)}' sessions: {snames}")
-    sessions = [str(x) for x in sessions]
 
-    return sessions
+def find_subject_names(folder: Union[str, Path]) -> List[Path]:
+    # Ensure folder is a Path object
+    if not isinstance(folder, Path):
+        folder = Path(folder)
+    out = [x.parent.parent.parent.parent.name
+           for x in folder.rglob('_iblrig_taskSettings.raw*')]
+    return out
 
 
 def _isdatetime(s: str) -> bool:
