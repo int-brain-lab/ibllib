@@ -26,7 +26,7 @@ def http_download_file_list(links_to_file_list, **kwargs):
     return file_names_list
 
 
-def http_download_file(full_link_to_file, *, clobber=False,
+def http_download_file(full_link_to_file, *, clobber=False, offline=False,
                        username='', password='', cache_dir=''):
     """
     :param full_link_to_file: http link to the file.
@@ -56,6 +56,8 @@ def http_download_file(full_link_to_file, *, clobber=False,
     # do not overwrite an existing file unless specified
     if not clobber and os.path.exists(file_name):
         return file_name
+    elif offline:
+        return
 
     # This should be the base url you wanted to access.
     baseurl = os.path.split(full_link_to_file)[0]
