@@ -49,10 +49,22 @@ def main(local_folder: str, remote_folder: str, force: bool = True) -> None:
         if dst.exists():
             dst_flag_file = dst / 'extract_me.flag'
             flags.write_flag_file(dst_flag_file)
-            src_flag_file.unlink()
+            flags.create_compress_flags(dst)
             log.info(
                 f"Copied to {remote_folder}: Session {src_flag_file.parent}")
-            flags.create_compress_flags(dst)
+            src_flag_file.unlink()
+
+        # Cleanup
+        src_audio_file = src / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
+        src_video_file = src / 'raw_video_data' / '_iblrig_leftCamera.raw.avi'
+        dst_audio_file = dst / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
+        dst_video_file = dst / 'raw_video_data' / '_iblrig_leftCamera.raw.avi'
+
+        if src_audio_file.stat().st_size == dst_audio_file.stat().st_size:
+            src_audio_file.unlink()
+
+        if src_video_file.stat().st_size == dst_video_file.stat().st_size:
+            src_video_file.unlink()
 
 
 if __name__ == "__main__":
