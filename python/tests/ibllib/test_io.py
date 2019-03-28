@@ -2,7 +2,11 @@ import unittest
 import os
 import uuid
 import tempfile
+from pathlib import Path
 
+import numpy as np
+
+import ibllib.io.alf as alf
 import ibllib.io.params as params
 import ibllib.io.flags as flags
 import ibllib.io.jsonable as jsonable
@@ -139,6 +143,27 @@ class TestsJsonable(unittest.TestCase):
         data3 = jsonable.read(tfile.name)
         self.assertEqual(data + data, data3)
         tfile.close()
+
+
+class TestsAlf(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.gettempdir())
+        self.vfile = self.tmpdir / 'toto.titi.npy'
+        self.tfile = self.tmpdir / 'toto.timestamps.npy'
+
+    def test_read_ts(self):
+        # simplest test possible with one column in each file
+        t = np.arange(0, 10)
+        d = np.random.rand(10)
+        np.save(self.vfile, d)
+        np.save(self.tfile, t)
+        t_, d_ = alf.read_ts(self.vfile)
+        self.assertTrue(np.all(t_ == t))
+        self.assertTrue(np.all(d_ == d))
+
+    def tearDown(self) -> None:
+        self.tfile.unlink()
+        self.vfile.unlink()
 
 
 if __name__ == "__main__":
