@@ -14,7 +14,7 @@ import logging
 from pathlib import Path
 import numpy as np
 import pandas as pd
-import ciso8601
+from datetime import datetime
 
 from ibllib.io import jsonable
 
@@ -296,8 +296,6 @@ def _groom_wheel_data(data, label='file ', path=''):
         logger_.warning(label + 'has missing/incomplete records \n %s', path)
     data.dropna(inplace=True)
     data.drop(data.loc[data.bns_ts.apply(len) != 33].index, inplace=True)
-    # convert the computer timestamps to datetimes
-    data.bns_ts = data.bns_ts.apply(ciso8601.parse_datetime_as_naive)
     # handle the clock resets when microseconds exceed uint32 max value
     drop_first = False
     if any(np.diff(data['re_ts']) < 0):
@@ -324,6 +322,13 @@ def _groom_wheel_data(data, label='file ', path=''):
     if drop_first:
         data.drop(0, inplace=True)
         data = data.reindex()
+    # check if the time scale is in ms
+    sess_len_sec = (datetime.strptime(data['bns_ts'].iloc[-1][:25], '%Y-%m-%dT%H:%M:%S.%f') -
+                    datetime.strptime(data['bns_ts'].iloc[0][:25], '%Y-%m-%dT%H:%M:%S.%f')).seconds
+    if data['re_ts'].iloc[-1] / sess_len_sec < 1e5:  # should be 1e6 normally
+        logger_.warning('Rotary encoder reset logs events in ms instead of us: ' +
+                        'RE firmware needs upgrading and wheel velocity is potentially inaccurate')
+        data['re_ts'] = data['re_ts'] * 1000
     return data
 
 

@@ -6,7 +6,8 @@
 from pathlib import Path
 from typing import List, Union
 import logging
-import ciso8601
+
+import ibllib.time
 
 log = logging.getLogger('ibllib')
 
@@ -57,7 +58,7 @@ def find_subject_names(folder: Union[str, Path]) -> List[Path]:
 
 def _isdatetime(s: str) -> bool:
     try:
-        ciso8601.parse_datetime(s)
+        ibllib.time.isostr2date(s)
         return True
     except Exception:
         return False

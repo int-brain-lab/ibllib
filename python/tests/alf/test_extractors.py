@@ -3,7 +3,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import ciso8601
 import numpy as np
 
 import alf.extractors as ex
@@ -59,10 +58,6 @@ class TestExtractTrialData(unittest.TestCase):
         tc = np.array([0., 1.1, 2.0, 2.9, 4., 5., 6.])
         finterp = ex.training_wheel.time_interpolation(ta, tc)
         self.assertTrue(np.all(finterp(ta) == tb))
-
-    def test_ciso8601(self):
-        dt = ciso8601.parse_datetime('2018-01-16T14:21:32')
-        self.assertFalse(not dt)
 
     def test_choice(self):
         choice = ex.training_trials.get_choice(self.session_path)
