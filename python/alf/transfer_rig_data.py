@@ -1,8 +1,6 @@
 # -*- coding:utf-8 -*-
 # @Author: Niccolò Bonacchi
 # @Date: Wednesday, January 16th 2019, 2:03:59 pm
-# @Last Modified by: Niccolò Bonacchi
-# @Last Modified time: 16-01-2019 02:04:01.011
 import logging
 import shutil
 import sys
