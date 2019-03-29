@@ -60,10 +60,12 @@ def main(local_folder: str, remote_folder: str, force: bool = True) -> None:
         dst_audio_file = dst / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
         dst_video_file = dst / 'raw_video_data' / '_iblrig_leftCamera.raw.avi'
 
-        if src_audio_file.stat().st_size == dst_audio_file.stat().st_size:
+        if src_audio_file.exists() and \
+                src_audio_file.stat().st_size == dst_audio_file.stat().st_size:
             src_audio_file.unlink()
 
-        if src_video_file.stat().st_size == dst_video_file.stat().st_size:
+        if src_video_file.exists() and \
+                src_video_file.stat().st_size == dst_video_file.stat().st_size:
             src_video_file.unlink()
 
 
