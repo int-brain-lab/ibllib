@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ibllib.io import params, flags, jsonable, spikeglx
+from ibllib.io import params, flags, jsonable, spikeglx, alf
 
 
 class TestsParams(unittest.TestCase):
