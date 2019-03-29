@@ -293,7 +293,7 @@ def _groom_wheel_data(data, label='file ', path=''):
     """
     # sometimes the text file is cropped
     if np.any(data.isna()):
-        logger_.warning(label + 'has missing/incomplete records \n %s', path)
+        logger_.warning(label + ' has missing/incomplete records \n %s', path)
     data.dropna(inplace=True)
     data.drop(data.loc[data.bns_ts.apply(len) != 33].index, inplace=True)
     # handle the clock resets when microseconds exceed uint32 max value
@@ -325,7 +325,7 @@ def _groom_wheel_data(data, label='file ', path=''):
     # check if the time scale is in ms
     sess_len_sec = (datetime.strptime(data['bns_ts'].iloc[-1][:25], '%Y-%m-%dT%H:%M:%S.%f') -
                     datetime.strptime(data['bns_ts'].iloc[0][:25], '%Y-%m-%dT%H:%M:%S.%f')).seconds
-    if data['re_ts'].iloc[-1] / sess_len_sec < 1e5:  # should be 1e6 normally
+    if data['re_ts'].iloc[-1] / (sess_len_sec + 1e-6) < 1e5:  # should be 1e6 normally
         logger_.warning('Rotary encoder reset logs events in ms instead of us: ' +
                         'RE firmware needs upgrading and wheel velocity is potentially inaccurate')
         data['re_ts'] = data['re_ts'] * 1000

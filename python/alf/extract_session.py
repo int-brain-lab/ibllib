@@ -29,6 +29,7 @@ def log2sessionfile(func):
         fh.setFormatter(logging.Formatter(str_format))
         logger_.addHandler(fh)
         f = func(sessionpath, *args, **kwargs)
+        fh.close()
         logger_.removeHandler(fh)
         return f
     return func_wrapper
@@ -99,6 +100,7 @@ def bulk(subjects_folder, dry=False):
             p.replace(err_file)
             with open(err_file, 'w+') as f:
                 f.write(error_message)
+            logger_.error(error_message)
             continue
         p.unlink()
         flags.write_flag_file(p.parent.joinpath('register_me.flag'), file_list=save)

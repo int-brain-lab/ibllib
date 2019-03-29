@@ -27,12 +27,12 @@ class TestExtractTrialData(unittest.TestCase):
 
     def test_encoder_positions_duds(self):
         dy = loaders.load_encoder_positions(self.session_path)
-        self.assertEqual(dy.bns_ts.dtype.name, 'datetime64[ns]')
+        self.assertEqual(dy.bns_ts.dtype.name, 'object')
         self.assertTrue(dy.shape[0] == 14)
 
     def test_encoder_events_duds(self):
         dy = loaders.load_encoder_events(self.session_path)
-        self.assertEqual(dy.bns_ts.dtype.name, 'datetime64[ns]')
+        self.assertEqual(dy.bns_ts.dtype.name, 'object')
         self.assertTrue(dy.shape[0] == 7)
 
     def test_encoder_positions_clock_reset(self):

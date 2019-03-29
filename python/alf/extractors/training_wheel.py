@@ -26,9 +26,9 @@ logger_ = logging.getLogger('ibllib.alf')
 WHEEL_RADIUS_CM = 3.1
 THRESHOLD_RAD_PER_SEC = 10
 THRESHOLD_CONSECUTIVE_SAMPLES = 0.001
+EPS = 7. / 3 - 4. / 3 - 1
 
 
-# START of AUXILIARY FUNCS to be refactored out of the extractor files
 def check_alf_folder(session_path):
     """
     Check if alf folder exists, creates it if it doesn't.
@@ -140,65 +140,91 @@ def get_wheel_data(session_path, bp_data=None, save=False):
     :return: Numpy structured array.
     :rtype: numpy.ndarray
     """
+    ##
+    status = 0
     if not bp_data:
         bp_data = raw.load_data(session_path)
     df = raw.load_encoder_positions(session_path)
-    names = df.columns.tolist()
-    data = structarr(names, shape=(df.shape[0],))
+    if df is None:
+        logger_.error('No wheel data for ' + str(session_path))
+        return None
+    data = structarr(['re_ts', 're_pos', 'bns_ts'],
+                     shape=(df.shape[0],), formats=['f8', 'f8', np.object])
     data['re_ts'] = df.re_ts.values
     data['re_pos'] = df.re_pos.values
     data['bns_ts'] = df.bns_ts.values
     data['re_pos'] = data['re_pos'] / 1024 * 2 * np.pi  # convert positions to radians
+    trial_starts = get_trial_start_times(session_path)
+    # need a flag if the data resolution is 1ms due to the old version of rotary encoder firmware
+    if np.all(np.mod(data['re_ts'], 1e3) == 0):
+        status = 1
     data['re_ts'] = data['re_ts'] / 1e6  # convert ts to seconds
-
     # get the converter function to translate re_ts into behavior times
     convtime = time_converter_session(session_path, kind='re2b')
     data['re_ts'] = convtime(data['re_ts'])
 
-    # Find all rotary encoder restart events and add them to a 'DC' trace
-    wflag = False
-    ns = len(data['re_pos'])
-    tr_dc = np.zeros_like(data['re_pos'])  # trial dc component
-    for bp_dat in bp_data:
-        restarts = np.sort(np.array(
-            bp_dat['behavior_data']['States timestamps']['reset_rotary_encoder'] +
-            bp_dat['behavior_data']['States timestamps']['reset2_rotary_encoder'])[:, 0])
-        ind = np.unique(np.searchsorted(data['re_ts'], restarts, side='left') - 1)
+    def get_reset_trace_compensation_with_state_machine_times():
+        # this is the preferred way of getting resets using the state machine time information
+        # it will not always work depending on firmware versions, new bugs
+        iwarn = []
+        ns = len(data['re_pos'])
+        tr_dc = np.zeros_like(data['re_pos'])  # trial dc component
+        for bp_dat in bp_data:
+            restarts = np.sort(np.array(
+                bp_dat['behavior_data']['States timestamps']['reset_rotary_encoder'] +
+                bp_dat['behavior_data']['States timestamps']['reset2_rotary_encoder'])[:, 0])
+            ind = np.unique(np.searchsorted(data['re_ts'], restarts, side='left') - 1)
+            # the rotary encoder doesn't always reset right away, and the reset sample given the
+            # timestamp can be ambiguous: look for zeros
+            for i in np.where(data['re_pos'][ind] != 0)[0]:
+                # it happens quite often that we have to lock in to next sample to find the reset
+                if (ind[i] < ns) and data['re_pos'][ind[i] + 1] == 0:
+                    ind[i] = ind[i] + 1
+                    continue
+                # also case where the rotary doesn't reset to 0, but erratically to -1/+1
+                if data['re_pos'][ind[i]] <= (1 / 1024 * 2 * np.pi):
+                    ind[i] = ind[i] + 1
+                    continue
+                # compounded with the fact that the reset may have happened at next sample.
+                if (ind[i] < ns) and np.abs(data['re_pos'][ind[i] + 1]) <= (1 / 1024 * 2 * np.pi):
+                    ind[i] = ind[i] + 1
+                    continue
+                # sometimes it is also the last trial that has this behaviour
+                if (bp_data[-1] is bp_dat) or (bp_data[0] is bp_dat):
+                    continue
+                iwarn.append(ind[i])
+                # at which point we are running out of possible bugs and calling it
+            tr_dc[ind] = data['re_pos'][ind - 1]
+        if iwarn:  # if a warning flag was caught in the loop throw a single warning
+            logger_.warning('Rotary encoder reset events discrepancy at following indices: ' +
+                            str(iwarn) + ' times: ' + str(data['re_ts'][iwarn]))
+        # exit status 0 is fine, 1 something went wrong
+        return tr_dc, len(iwarn) != 0
 
-        # the rotary encoder doesn't always reset right away, and the reset sample given the
-        # timestamp can be ambiguous: look for zeros
-        for i in np.where(data['re_pos'][ind] != 0)[0]:
-            # it happens quite often that we have to lock in to next sample to find the reset
-            if (ind[i] < ns) and data['re_pos'][ind[i] + 1] == 0:
-                ind[i] = ind[i] + 1
-                continue
-            # there is also the case where the rotary doesn't reset to 0, but erratically to -1/+1
-            wflag = True  # catch the flag within the loop to throw a single warning later
-            if data['re_pos'][ind[i]] <= (1 / 1024 * 2 * np.pi):
-                ind[i] = ind[i] + 1
-                continue
-            # compounded with the fact that the reset may have happened at next sample. Yes, really
-            if (ind[i] < ns) and np.abs(data['re_pos'][ind[i] + 1]) <= (1 / 1024 * 2 * np.pi):
-                ind[i] = ind[i] + 1
-                continue
-            # at which point we are running out of possible bugs and calling it
-            logger_.error('Rotary Encoder resets do not match the state machine info !')
-            raise ValueError('Rotary Encoder resets do not match the state machine info !')
-        tr_dc[ind] = data['re_pos'][ind - 1]
-    if wflag:  # if a warning flag was caught in the loop throw a single warning
-        logger_.warning('Rotary encoder reset events have a small position offset. The rotary '
-                        'encoder card needs to be flashed to the latest version')
+    # attempt to get the resets properly unless the unit is ms which means precision is
+    # not good enough to match SM times to wheel samples time
+    if not status:
+        tr_dc, status = get_reset_trace_compensation_with_state_machine_times()
 
-    # also, rotary encoder may not log the whole session. Need to fix manually outside of bounds
-    i0 = np.where(np.bitwise_and(np.bitwise_or(data['re_ts'] >= restarts[-1],
-                                               data['re_ts'] < 0), data['re_pos'] == 0))
-    i0 = np.delete(i0, np.where(np.bitwise_or(i0 == len(data['re_pos']), i0 == 0)))
-    # to not identify as a reset condition 1/2 no inflexion (continuous derivative)
-    c1 = np.sign(data['re_pos'][i0 + 1] - data['re_pos'][i0]) == \
-        np.sign(data['re_pos'][i0] - data['re_pos'][i0 - 1])
-    # to not identify as a reset condition 2/2 needs to be above threshold
+    # if something was wrong or went wrong agnostic way of getting resets: just get zeros values
+    if status:
+        tr_dc = np.zeros_like(data['re_pos'])  # trial dc component
+        i0 = np.where(data['re_pos'] == 0)[0]
+        tr_dc[i0] = data['re_pos'][i0 - 1]
+    # even if things went ok, rotary encoder may not log the whole session. Need to fix outside
+    else:
+        i0 = np.where(np.bitwise_and(np.bitwise_or(data['re_ts'] >= trial_starts[-1],
+                                                   data['re_ts'] <= trial_starts[0]),
+                                     data['re_pos'] == 0))[0]
+    # make sure the bounds are not included in the current list
+    i0 = np.delete(i0, np.where(np.bitwise_or(i0 >= len(data['re_pos']) - 1, i0 == 0)))
+    # a 0 sample is not a reset if 2 conditions are met:
+    # 1/2 no inflexion (continuous derivative)
+    c1 = np.abs(np.sign(data['re_pos'][i0 + 1] - data['re_pos'][i0]) -
+                np.sign(data['re_pos'][i0] - data['re_pos'][i0 - 1])) == 2
+    # 2/2 needs to be below threshold
     c2 = np.abs((data['re_pos'][i0] - data['re_pos'][i0 - 1]) /
-                (data['re_ts'][i0] - data['re_ts'][i0 - 1])) < THRESHOLD_RAD_PER_SEC
+                (EPS + (data['re_ts'][i0] - data['re_ts'][i0 - 1]))) < THRESHOLD_RAD_PER_SEC
     # apply reset to points identified as resets
     i0 = i0[np.where(np.bitwise_not(np.bitwise_and(c1, c2)))]
     tr_dc[i0] = data['re_pos'][i0 - 1]
@@ -207,7 +233,8 @@ def get_wheel_data(session_path, bp_data=None, save=False):
     data['re_pos'] = np.unwrap(data['re_pos']) + np.cumsum(tr_dc)
 
     # Also forgot to mention that time stamps may be repeated or very close to one another.
-    # Find them as they will induce large jitters on the velocity function
+    # Find them as they will induce large jitters on the velocity function or errors in
+    # attempts of interpolation
     rep_idx = np.where(np.diff(data['re_ts']) <= THRESHOLD_CONSECUTIVE_SAMPLES)[0]
     # Change the value of the repeated position
     data['re_pos'][rep_idx] = (data['re_pos'][rep_idx] +
@@ -221,10 +248,10 @@ def get_wheel_data(session_path, bp_data=None, save=False):
     data['re_pos'] = data['re_pos'] * WHEEL_RADIUS_CM
 
     # #  DEBUG PLOTS START HERE ########################
-    # if you are experiencing a new bug here is some plot tools
-    # do not forget to increment the wasted dev hours counter below
-    # WASTED_HOURS_ON_THIS_WHEEL_FORMAT = 11
-
+    # # if you are experiencing a new bug here is some plot tools
+    # # do not forget to increment the wasted dev hours counter below
+    # WASTED_HOURS_ON_THIS_WHEEL_FORMAT = 16
+    #
     # import matplotlib.pyplot as plt
     # fig = plt.figure()
     # ax = plt.axes()
@@ -237,7 +264,7 @@ def get_wheel_data(session_path, bp_data=None, save=False):
     # i0 = np.where(df.re_pos.values == 0)
     # ax.plot(convtime(df.re_ts.values[i0] / 1e6), df.re_pos.values[i0] / 1024 * 2 * np.pi,
     #         'r*', label='Raw data zero samples')
-    # ax.plot(data['re_ts'],  np.delete(tr_dc, rep_idx + 1), label='reset compensation')
+    # ax.plot(convtime(df.re_ts.values / 1e6) , tr_dc, label='reset compensation')
     # ax.set_xlabel('Bpod Time')
     # ax.set_ylabel('radians')
     # #
@@ -260,7 +287,6 @@ def get_wheel_data(session_path, bp_data=None, save=False):
     if raw.save_bool(save, '_ibl_wheel.position.npy'):
         ppath = os.path.join(session_path, 'alf', '_ibl_wheel.position.npy')
         np.save(ppath, data['re_pos'])
-
     return data
 
 
@@ -281,6 +307,9 @@ def get_velocity(session_path, save=False, data_wheel=None):
     """
     if not isinstance(data_wheel, np.ndarray):
         data_wheel = get_wheel_data(session_path, save=False)
+    if data_wheel is None:
+        logger_.error('No wheel data for ' + str(session_path))
+        return None
     dp = np.diff(data_wheel['re_pos'])
     dt = np.diff(data_wheel['re_ts'])
     # Compute raw velocity

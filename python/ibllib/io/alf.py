@@ -28,4 +28,3 @@ def read_ts(filename):
     d = np.load(filename)
 
     return t, d
-

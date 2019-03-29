@@ -22,6 +22,7 @@ def log2sessionfile(func):
         fh.setFormatter(logging.Formatter(str_format))
         logger_.addHandler(fh)
         f = func(self, sessionpath, *args, **kwargs)
+        fh.close()
         logger_.removeHandler(fh)
         return f
     return func_wrapper
@@ -57,7 +58,7 @@ class RegistrationClient:
                 print(flag_file)
                 continue
             file_list = flags.read_flag_file(flag_file)
-            logger_.info('registering' + str(flag_file.parent))
+            logger_.info('registering ' + str(flag_file.parent))
             status_str = self.register_session(flag_file.parent, file_list=file_list)
             if status_str:
                 error_message = str(flag_file.parent) + ' failed registration'
@@ -159,7 +160,7 @@ class RegistrationClient:
         else:
             session = session[0]
 
-        logger_.info(session['url'])
+        logger_.info(session['url'] + ' ')
         # create associated water administration if not found
         if not session['wateradmin_session_related']:
             wa_ = {
@@ -275,6 +276,6 @@ def _get_session_duration(fn, ses_data):
             break
         c += 1
     if c:
-        logger_.error((f'Trial end timestamps of last {c} trials above 6 hours '
-                       f'(most likely corrupt): ') + str(fn))
+        logger_.warning((f'Trial end timestamps of last {c} trials above 6 hours '
+                        f'(most likely corrupt): ') + str(fn))
     return ses_duration_secs

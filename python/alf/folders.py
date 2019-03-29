@@ -3,11 +3,10 @@
 # @Date: Monday, January 21st 2019, 6:28:49 pm
 # @Last Modified by: Niccolò Bonacchi
 # @Last Modified time: 21-01-2019 06:28:51.5151
+from datetime import datetime
 from pathlib import Path
 from typing import List, Union
 import logging
-
-import ibllib.time
 
 log = logging.getLogger('ibllib')
 
@@ -58,7 +57,7 @@ def find_subject_names(folder: Union[str, Path]) -> List[Path]:
 
 def _isdatetime(s: str) -> bool:
     try:
-        ibllib.time.isostr2date(s)
+        datetime.strptime(s, '%Y-%m-%d')
         return True
     except Exception:
         return False
