@@ -142,7 +142,8 @@ class TestLoad(unittest.TestCase):
                'sessions/' + self.eid)
         t, cr, cl = one.load(eid, dataset_types=dataset_types)
         d = one.load(eid, dataset_types=dataset_types, dclass_output=True)
-        self.assertTrue(np.all(d.data[0] == t))
+        ind = int(np.where(np.array(d.dataset_type) == 'clusters.peakChannel')[0])
+        self.assertTrue(np.all(d.data[ind] == t))
         # Now load with another dset inbetween that doesn't exist
         t_, cr_, cl_ = one.load(eid, dataset_types=['clusters.peakChannel', 'turlu',
                                                     'clusters.probes'])
