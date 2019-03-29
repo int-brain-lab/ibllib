@@ -3,22 +3,29 @@ import datetime
 
 
 def isostr2date(isostr):
-    '''
-    Convert strings representing dates into datetime.datetime objects
+    """
+    Convert strings representing dates into datetime.datetime objects aimed ad Django REST API
     ISO 8601: '2018-05-22T14:35:22.99585' or '2018-05-22T14:35:22'
 
     :param isostr: a string, list of strings or panda Series / numpy arrays containing strings
     :return: a scalar, list of
-    '''
+    """
+    # NB this is intended for scalars or small list. See the ciso8601 pypi module instead for
+    # a performance implementation
     if not isinstance(isostr, str):
         return [isostr2date(el) for el in isostr]
-    if '.' not in isostr:
-        return datetime.datetime.strptime(isostr, '%Y-%m-%dT%H:%M:%S')
-    else:
-        return datetime.datetime.strptime(isostr, '%Y-%m-%dT%H:%M:%S.%f')
+
+    format = '%Y-%m-%dT%H:%M:%S'
+    if '.' in isostr:
+        format += '.%f'
+    if '+' in isostr:
+        format += '.%f'
+    return datetime.datetime.strptime(isostr, format)
 
 
 def date2isostr(adate):
+    # NB this is intended for scalars or small list. See the ciso8601 pypi module instead for
+    # a performance implementation
     if type(adate) is datetime.date:
         adate = datetime.datetime.fromordinal(adate.toordinal())
     return datetime.datetime.isoformat(adate)

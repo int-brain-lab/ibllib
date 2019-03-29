@@ -189,7 +189,43 @@ class ONE(OneAbstract):
         else:
             return ses[0][keyword]
 
-    def load(self, eid, **kwargs):
+    def load(self, eid, dataset_types=None, dclass_output=False, dry_run=False, cache_dir=None,
+             download_only=False, clobber=False, offline=False):
+        """
+        From a Session ID and dataset types, queries Alyx database, downloads the data
+        from Globus, and loads into numpy array.
+
+        :param eid: Experiment ID, for IBL this is the UUID of the Session as per Alyx
+         database. Could be a full Alyx URL:
+         'http://localhost:8000/sessions/698361f6-b7d0-447d-a25d-42afdef7a0da' or only the UUID:
+         '698361f6-b7d0-447d-a25d-42afdef7a0da'. Can also be a list of the above for multiple eids.
+        :type eid: str
+        :param dataset_types: [None]: Alyx dataset types to be returned.
+        :type dataset_types: list
+        :param dclass_output: [False]: forces the output as dataclass to provide context.
+        :type dclass_output: bool
+         If None or an empty dataset_type is specified, the output will be a dictionary by default.
+        :param cache_dir: temporarly overrides the cache_dir from the parameter file
+        :type cache_dir: str
+        :param download_only: do not attempt to load data in memory, just download the files
+        :type download_only: bool
+        :param clobber: force downloading even if files exists locally
+        :type clobber: bool
+
+        :return: List of numpy arrays matching the size of dataset_types parameter, OR
+         a dataclass containing arrays and context data.
+        :rtype: list, dict, dataclass SessionDataInfo
+        """
+        # this is a wrapping function to keep signature and docstring accessible for IDE's
+        return self._load_recursive(eid, dataset_types=dataset_types, dclass_output=dclass_output,
+                                    dry_run=dry_run, cache_dir=cache_dir,
+                                    download_only=download_only, clobber=clobber, offline=offline)
+
+    def _load_recursive(self, eid, **kwargs):
+        """
+        From a Session ID and dataset types, queries Alyx database, downloads the data
+        from Globus, and loads into numpy array. Supports multiple sessions
+        """
         if isinstance(eid, str):
             return self._load(eid, **kwargs)
         if isinstance(eid, list):
@@ -207,31 +243,10 @@ class ONE(OneAbstract):
             return out
 
     def _load(self, eid, dataset_types=None, dclass_output=False, dry_run=False, cache_dir=None,
-              download_only=False, clobber=False):
+              download_only=False, clobber=False, offline=False):
         """
         From a Session ID and dataset types, queries Alyx database, downloads the data
-        from Globus, and loads into numpy array.
-
-        :param eid: Experiment ID, for IBL this is the UUID of the Session as per Alyx
-         database. Could be a full Alyx URL:
-         'http://localhost:8000/sessions/698361f6-b7d0-447d-a25d-42afdef7a0da' or only the UUID:
-         '698361f6-b7d0-447d-a25d-42afdef7a0da'
-        :type eid: str
-        :param dataset_types: [None]: Alyx dataset types to be returned.
-        :type dataset_types: list
-        :param dclass_output: [False]: forces the output as dataclass to provide context.
-        :type dclass_output: bool
-         If None or an empty dataset_type is specified, the output will be a dictionary by default.
-        :param cache_dir: temporarly overrides the cache_dir from the parameter file
-        :type cache_dir: str
-        :param download_only: do not attempt to load data in memory, just download the files
-        :type download_only: bool
-        :param clobber: force downloading even if files exists locally
-        :type clobber: bool
-
-        :return: List of numpy arrays matching the size of dataset_types parameter, OR
-         a dataclass containing arrays and context data.
-        :rtype: list, dict, dataclass SessionDataInfo
+        from Globus, and loads into numpy array. Single session only
         """
         # if the input as an UUID, add the beginning of URL to it
         cache_dir = self._get_cache_dir(cache_dir)
@@ -258,7 +273,8 @@ class ONE(OneAbstract):
                 relpath = PurePath(dc.url[ind].replace(self._par.HTTP_DATA_SERVER, '.')).parents[0]
                 cache_dir_file = PurePath(cache_dir, relpath)
                 Path(cache_dir_file).mkdir(parents=True, exist_ok=True)
-                dc.local_path[ind] = self._download_file(dc.url[ind], str(cache_dir_file), clobber)
+                dc.local_path[ind] = self._download_file(dc.url[ind], str(cache_dir_file),
+                                                         clobber=clobber, offline=offline)
         # load the files content in variables if requested
         if not download_only:
             for ind, fil in enumerate(dc.local_path):
@@ -270,6 +286,7 @@ class ONE(OneAbstract):
         list_out = []
         for dt in dataset_types:
             if dt not in dc.dataset_type:
+                logger_.warning('dataset ' + dt + ' not found for session: ' + eid_str)
                 list_out.append(None)
                 continue
             for i, x, in enumerate(dc.dataset_type):
@@ -379,12 +396,13 @@ class ONE(OneAbstract):
             cache_dir = str(PurePath(Path.home(), "Downloads", "FlatIron"))
         return cache_dir
 
-    def _download_file(self, url, cache_dir, clobber=False):
+    def _download_file(self, url, cache_dir, clobber=False, offline=False):
         local_path = wc.http_download_file(url,
                                            username=self._par.HTTP_DATA_SERVER_LOGIN,
                                            password=self._par.HTTP_DATA_SERVER_PWD,
                                            cache_dir=str(cache_dir),
-                                           clobber=clobber)
+                                           clobber=clobber,
+                                           offline=offline)
         return local_path
 
     @staticmethod

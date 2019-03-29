@@ -3,7 +3,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import ciso8601
 import numpy as np
 
 import alf.extractors as ex
@@ -28,13 +27,26 @@ class TestExtractTrialData(unittest.TestCase):
 
     def test_encoder_positions_duds(self):
         dy = loaders.load_encoder_positions(self.session_path)
-        self.assertEqual(dy.bns_ts.dtype.name, 'datetime64[ns]')
-        self.assertTrue(dy.shape[0] == 2)
+        self.assertEqual(dy.bns_ts.dtype.name, 'object')
+        self.assertTrue(dy.shape[0] == 14)
 
     def test_encoder_events_duds(self):
         dy = loaders.load_encoder_events(self.session_path)
-        self.assertEqual(dy.bns_ts.dtype.name, 'datetime64[ns]')
+        self.assertEqual(dy.bns_ts.dtype.name, 'object')
         self.assertTrue(dy.shape[0] == 7)
+
+    def test_encoder_positions_clock_reset(self):
+        dy = loaders.load_encoder_positions(self.session_path)
+        dat = np.array([849736, 1532230, 1822449, 1833514, 1841566, 1848206, 1853979, 1859144])
+        self.assertTrue(np.all(np.diff(dy['re_ts']) > 0))
+        self.assertTrue(all(dy['re_ts'][6:] - 2**32 - dat == 0))
+
+    def test_encoder_positions_clock_errors(self):
+        # here we test for 2 kinds of file corruption that happen
+        # 1/2 the first sample time is corrupt and absurdly high and should be discarded
+        # 2/2 2 samples are swapped and need to be swapped back
+        dy = loaders.load_encoder_positions(self.session_path_biased)
+        self.assertTrue(np.all(np.diff(np.array(dy.re_ts)) > 0))
 
     def test_interpolation(self):
         # straight test that it returns an usable function
@@ -46,10 +58,6 @@ class TestExtractTrialData(unittest.TestCase):
         tc = np.array([0., 1.1, 2.0, 2.9, 4., 5., 6.])
         finterp = ex.training_wheel.time_interpolation(ta, tc)
         self.assertTrue(np.all(finterp(ta) == tb))
-
-    def test_ciso8601(self):
-        dt = ciso8601.parse_datetime('2018-01-16T14:21:32')
-        self.assertFalse(not dt)
 
     def test_choice(self):
         choice = ex.training_trials.get_choice(self.session_path)
@@ -91,7 +99,8 @@ class TestTransferRigData(unittest.TestCase):
         flags.write_flag_file(self.session_path.joinpath("transfer_me.flag"))
         (self.session_path / "raw_behavior_data").mkdir()
         (self.session_path / "raw_video_data").mkdir()
-        (self.session_path / "raw_behavior_data" / "random.data1.ext").touch()
+        (self.session_path / "raw_behavior_data" / '_iblrig_micData.raw.wav').touch()
+        (self.session_path / "raw_video_data" / '_iblrig_leftCamera.raw.avi').touch()
 
     def test_transfer(self):
         src_subjects_path = self.root_data_folder / "src"
@@ -101,12 +110,25 @@ class TestTransferRigData(unittest.TestCase):
         gdst = [x.name for x in list(dst_subjects_path.rglob('*.*'))]
         self.assertTrue('extract_me.flag' in gdst)
         gdst = [x for x in gdst if x != 'extract_me.flag']
+        self.assertTrue('compress_video.flag' in gdst)
+        gdst = [x for x in gdst if x != 'compress_video.flag']
+        self.assertTrue('_iblrig_micData.raw.wav' in gdst)
+        gdst = [x for x in gdst if x != '_iblrig_micData.raw.wav']
+        self.assertTrue('_iblrig_leftCamera.raw.avi' in gdst)
+        gdst = [x for x in gdst if x != '_iblrig_leftCamera.raw.avi']
+
         self.assertEqual(gsrc, gdst)
         # Test if folder exists not copy because no flag
         transfer_rig_data.main(src_subjects_path, dst_subjects_path)
         transfer_rig_data.main(src_subjects_path, dst_subjects_path)
         # Test if flag exists and folder exists in dst
         flags.write_flag_file(self.session_path.joinpath("transfer_me.flag"))
+        (self.session_path / "raw_behavior_data" / '_iblrig_micData.raw.wav').touch()
+        (self.session_path / "raw_video_data" / '_iblrig_leftCamera.raw.avi').touch()
+        transfer_rig_data.main(src_subjects_path, dst_subjects_path)
+        # Test transfer w/o video and audio
+        flags.write_flag_file(self.session_path.joinpath("transfer_me.flag"))
+        (self.session_path / "raw_behavior_data" / "random.data1.ext").touch()
         transfer_rig_data.main(src_subjects_path, dst_subjects_path)
 
     def tearDown(self):

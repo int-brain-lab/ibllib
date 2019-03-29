@@ -1,12 +1,11 @@
 # -*- coding:utf-8 -*-
 # @Author: Niccolò Bonacchi
 # @Date: Monday, January 21st 2019, 6:28:49 pm
-# @Last Modified by: Niccolò Bonacchi
-# @Last Modified time: 21-01-2019 06:28:51.5151
+import logging
+import os
+from datetime import datetime
 from pathlib import Path
 from typing import List, Union
-import logging
-import ciso8601
 
 log = logging.getLogger('ibllib')
 
@@ -39,44 +38,35 @@ def remove_empty_folders(folder: Union[str, Path]) -> None:
 
 
 def find_sessions(folder: Union[str, Path]) -> List[Path]:
+    """Returns all sessions found in all subfolders of a main data folder"""
     # Ensure folder is a Path object
     if not isinstance(folder, Path):
         folder = Path(folder)
+    out = [x.parent.parent for x in folder.rglob('_iblrig_taskSettings.raw*')]
+    return out
 
-    folder = subjects_data_folder(folder)
-    # Glob all mouse fodlers
-    mouse_folders = [x for x in folder.glob('*') if x.is_dir()]
-    if not mouse_folders:
-        log.error(f"No subjects found in '{Path(*folder.parts[-2:])}'")
-        raise(ValueError)
-    flen = len(list(mouse_folders))
-    log.info(f"Found '{flen}' subjects: {[x.name for x in mouse_folders]}")
-    # Glob all dates
-    dates = [x for mouse in mouse_folders for x in mouse.glob(
-        '*') if x.is_dir()]
-    log.info(f"Found '{len(dates)}' dates: {[x.name for x in dates]}")
-    # Glob all sessions
-    sessions = [y for x in dates for y in x.glob('*') if y.is_dir()]
-    # Ensure sessions have files
-    sessions = list(
-        {p.parent for f in sessions for p in f.glob('*') if p.is_file()})
-    snames = [str(Path(*x.parts[-3:])) for x in sessions]
-    log.info(
-        f"Found '{len(sessions)}' sessions: {snames}")
-    sessions = [str(x) for x in sessions]
 
-    return sessions
+def find_subject_names(folder: Union[str, Path]) -> List[Path]:
+    """Returns all subject names found from a main data folder"""
+    # Ensure folder is a Path object
+    if not isinstance(folder, Path):
+        folder = Path(folder)
+    out = [x.parent.parent.parent.parent.name
+           for x in folder.rglob('_iblrig_taskSettings.raw*')]
+    return out
 
 
 def _isdatetime(s: str) -> bool:
     try:
-        ciso8601.parse_datetime(s)
+        datetime.strptime(s, '%Y-%m-%d')
         return True
     except Exception:
         return False
 
 
 def session_path(path: Union[str, Path]) -> str:
+    """Returns the session path from any filepath if the date/number
+    pattern is found"""
     path = Path(path)
     sess = None
     for i, p in enumerate(path.parts):
@@ -84,3 +74,10 @@ def session_path(path: Union[str, Path]) -> str:
             sess = str(Path().joinpath(*path.parts[:i + 1]))
 
     return sess
+
+
+def session_name(path: Union[str, Path]) -> str:
+    """Returns the session name (subject/date/number) string for any filepath
+    useing session_path"""
+    path = Path(path)
+    return os.path.join(*Path(session_path(path)).parts[-3:])

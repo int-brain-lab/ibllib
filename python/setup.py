@@ -5,15 +5,16 @@ with open("../README.md", 'r') as f:
 
 setup(
     name='ibllib',
-    version='0.4.16',
+    version='0.4.18',
     description='IBL libraries',
     license="MIT",
     long_description=long_description,
     author='IBL Staff',
     url="https://www.internationalbrainlab.com/",
     packages=find_packages(),  # same as name
+    # external packages as dependencies
     install_requires=['dataclasses', 'matplotlib', 'numpy', 'pandas',
-                      'requests', 'scipy', 'seaborn', 'globus_sdk',
-                      'ciso8601', 'colorlog'],  # external packages as dependencies
+                      'requests', 'scipy', 'seaborn', 'globus_sdk', 'colorlog'],
+
     scripts=[]
 )

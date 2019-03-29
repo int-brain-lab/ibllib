@@ -62,7 +62,7 @@ For providers, a key advantage of this framework is its low barrier to entry. To
 
 ALF stands for "ALyx Files". It not a format but rather a format-neutral file-naming convention. ALF is how IBL organizes files that will be loaded via the ONE protocol.
 
-In ALF, the measurements in an experiment are represented by collections of files in a directory. Each filename has three parts, for example `spikes.times.npy` or `spikes.clusters.npy`. The first two correspond to the ONE dataset type, and we refer to them as the "object", the "attribute". The third part of the filename, the "extension", specifies what physical format the file is in - we primarily use .npy and .tsv but you could use any format, for example video or json .
+In ALF, the measurements in an experiment are represented by collections of files in a directory. Each filename has three parts, for example `spikes.times.npy` or `spikes.clusters.npy`. The first two correspond to the ONE dataset type, and we refer to them as the _object_ and the _attribute_. The third part of the filename, the _extension_, specifies what physical format the file is in - we primarily use .npy and .tsv but you could use any format, for example video or json .
 
 Each file contains information about particular attribute of the object. For example `spikes.times.npy` indicates the times of spikes and `spikes.clusters.npy` indicates their cluster assignments. You could have another file `spikes.amplitudes.npy` to convey their amplitudes. The important thing is that every file describing an object has the same number of rows (i.e. the 1st dimension of an npy file, number of frames in a video file, etc).  You can therefore think of the files for an object as together defining a table, with column headings given by the attribute in the file names, and values given by the file contents.
 
@@ -78,7 +78,9 @@ If there is a file with attribute `intervals`, (i.e. filename `tones.intervals.n
 
 ### Continuous timeseries
 
-If there is a file with attribute `timestamps`, it indicates the object is a continuous timeseries. The timestamps file represents information required to synchronize the timeseries to the universal timebase, even if they were unevenly sampled. Each row of the `timestamps` file represents a synchronization point, with the first column giving the sample number (counting from 0), and the second column giving the corresponding time in universal seconds. The times corresponding to all samples are then found by linear interpolation. Note that the `timestamps` file is an exception to the rule that all files representing a continuous timeseries object must have one row per sample, as it will often have substantially less. An evenly-sampled recording, for example, could have just two timestamps, giving the times of the first and last sample.
+If there is a file with attribute `timestamps`, it indicates the object is a continuous timeseries. The timestamps file represents information required to synchronize the timeseries to the universal timebase, even if they were unevenly sampled. There are 2 possibilities:
+-	The `timestamps` file contains a single column containing time of every sample within the timescale.
+-	The `timestamps` file contains two rows. Each row of the `timestamps` file represents a synchronization point, with the first column giving the sample number (counting from 0), and the second column giving the corresponding time in universal seconds. The times corresponding to all samples are then found by linear interpolation. Note that the `timestamps` file is an exception to the rule that all files representing a continuous timeseries object must have one row per sample, as it will often have substantially less. Note that an evenly-sampled recording should have just two timestamps, giving the times of the first and last sample.  
 
 
 ### File types

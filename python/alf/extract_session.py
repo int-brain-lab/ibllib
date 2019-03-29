@@ -29,6 +29,7 @@ def log2sessionfile(func):
         fh.setFormatter(logging.Formatter(str_format))
         logger_.addHandler(fh)
         f = func(sessionpath, *args, **kwargs)
+        fh.close()
         logger_.removeHandler(fh)
         return f
     return func_wrapper
@@ -71,12 +72,14 @@ def from_path(session_path, force=False, save=True):
         logger_.info(f"Session {session_path} already extracted.")
         return
     if extractor_type == 'training':
-        training_trials.extract_all(session_path, save=save)
-        training_wheel.extract_all(session_path, save=save)
+        data = raw.load_data(session_path)
+        training_trials.extract_all(session_path, data=data, save=save)
+        training_wheel.extract_all(session_path, bp_data=data, save=save)
         logger_.info('session extracted \n')  # timing info in log
     if extractor_type == 'biased':
-        biased_trials.extract_all(session_path, save=save)
-        biased_wheel.extract_all(session_path, save=save)
+        data = raw.load_data(session_path)
+        biased_trials.extract_all(session_path, data=data, save=save)
+        biased_wheel.extract_all(session_path, bp_data=data, save=save)
         logger_.info('session extracted \n')  # timing info in log
 
 
@@ -97,6 +100,7 @@ def bulk(subjects_folder, dry=False):
             p.replace(err_file)
             with open(err_file, 'w+') as f:
                 f.write(error_message)
+            logger_.error(error_message)
             continue
         p.unlink()
         flags.write_flag_file(p.parent.joinpath('register_me.flag'), file_list=save)

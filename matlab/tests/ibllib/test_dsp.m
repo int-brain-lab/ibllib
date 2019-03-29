@@ -5,12 +5,12 @@ end
 function test_fscale(testCase)
 %% dsp.fscale
 res = [0;100;200;300;400;500;-400;-300;-200;-100];
-assert(all(abs(dsp.fscale(10,0.001)-res)< 1e4))
-assert(all(abs(dsp.fscale(11,0.001,'real')-res(1:6))< 1e4))
+assert(all(abs(dsp.fscale(10,0.001)-res)< 1e-6))
+assert(all(abs(dsp.fscale(10,0.001,'real')-res(1:6))< 1e-6))
 
 res = [0;90.9090909090909;181.818181818182;272.727272727273;363.636363636364;454.545454545455;-454.545454545455;-363.636363636364;-272.727272727273;-181.818181818182;-90.9090909090909];
-assert(all(abs(dsp.fscale(11,0.001)-res)< 1e4))
-assert(all(abs(dsp.fscale(11,0.001,'real')-res(1:6))< 1e4))
+assert(all(abs(dsp.fscale(11,0.001)-res)< 1e-4))
+assert(all(abs(dsp.fscale(11,0.001,'real')-res(1:6))< 1e-6))
 end
 
 function test_freduce(testCase)

@@ -581,5 +581,8 @@ def extract_all(session_path, save=False, data=False):
 
 if __name__ == "__main__":
     sess = '/mnt/s0/IntegrationTests/Subjects_init/ZM_1085/2019-02-12/002'
-    l, r = get_contrastLR(sess, save=False, data=False)
+    sett = raw.load_settings(sess)
+    if 'training' in sett['PYBPOD_PROTOCOL']:
+        l, r = get_contrastLR(sess, save=False, data=False)
+        choice = get_choice(sess, save=False, data=False)
     print('42')
