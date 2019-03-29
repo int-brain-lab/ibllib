@@ -1,12 +1,11 @@
 # -*- coding:utf-8 -*-
 # @Author: Niccolò Bonacchi
 # @Date: Monday, January 21st 2019, 6:28:49 pm
-# @Last Modified by: Niccolò Bonacchi
-# @Last Modified time: 21-01-2019 06:28:51.5151
+import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import List, Union
-import logging
 
 log = logging.getLogger('ibllib')
 
@@ -39,6 +38,7 @@ def remove_empty_folders(folder: Union[str, Path]) -> None:
 
 
 def find_sessions(folder: Union[str, Path]) -> List[Path]:
+    """Returns all sessions found in all subfolders of a main data folder"""
     # Ensure folder is a Path object
     if not isinstance(folder, Path):
         folder = Path(folder)
@@ -47,6 +47,7 @@ def find_sessions(folder: Union[str, Path]) -> List[Path]:
 
 
 def find_subject_names(folder: Union[str, Path]) -> List[Path]:
+    """Returns all subject names found from a main data folder"""
     # Ensure folder is a Path object
     if not isinstance(folder, Path):
         folder = Path(folder)
@@ -64,6 +65,8 @@ def _isdatetime(s: str) -> bool:
 
 
 def session_path(path: Union[str, Path]) -> str:
+    """Returns the session path from any filepath if the date/number
+    pattern is found"""
     path = Path(path)
     sess = None
     for i, p in enumerate(path.parts):
@@ -71,3 +74,10 @@ def session_path(path: Union[str, Path]) -> str:
             sess = str(Path().joinpath(*path.parts[:i + 1]))
 
     return sess
+
+
+def session_name(path: Union[str, Path]) -> str:
+    """Returns the session name (subject/date/number) string for any filepath
+    useing session_path"""
+    path = Path(path)
+    return os.path.join(*Path(session_path(path)).parts[-3:])
