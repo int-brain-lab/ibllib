@@ -48,6 +48,18 @@ def fexpand(x, ns=1, axis=None):
     return np.concatenate((x, xcomp), axis=axis)
 
 
+def bp(ts, si, b, axis=None):
+    """
+    Band-pass filter in frequency domain
+    :param ts: time serie
+    :param si: sampling interval in seconds
+    :param b: cutout frequencies: 4 elements vector or list
+    :param axis: axis along which to perform reduction (last axis by default)
+    :return: filtered time serie
+    """
+    return _freq_filter(ts, si, b, axis=axis, typ='bp')
+
+
 def lp(ts, si, b, axis=None):
     """
     Low-pass filter in frequency domain
@@ -74,13 +86,16 @@ def hp(ts, si, b, axis=None):
 
 def _freq_filter(ts, si, b, axis=None, typ='lp'):
     """
-        Wrapper for hp and lp filter
+        Wrapper for hp/lp/bp filters
     """
     if axis is None:
         axis = ts.ndim - 1
     ns = ts.shape[axis]
     f = fscale(ns, si=si, one_sided=True)
-    filc = _freq_vector(f, b, typ=typ)
+    if typ == 'bp':
+        filc = _freq_vector(f, b[0:2], typ='hp') * _freq_vector(f, b[2:4], typ='lp')
+    else:
+        filc = _freq_vector(f, b, typ=typ)
     if axis < (ts.ndim - 1):
         filc = filc[:, np.newaxis]
     return np.real(np.fft.ifft(np.fft.fft(ts, axis=axis) * fexpand(filc, ns, axis=0), axis=axis))
