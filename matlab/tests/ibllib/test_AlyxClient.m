@@ -13,7 +13,7 @@ classdef test_AlyxClient < matlab.unittest.TestCase
             testCase.subjects = testCase.ac.get('/subjects');
             testCase.assertTrue(length(testCase.subjects.nickname)>=2)
             testCase.water_types = testCase.ac.get('/water-type');
-            testCase.assertEqual(testCase.water_types.name, {'Water'; 'Hydrogel'})
+            testCase.assertTrue(length(intersect(testCase.water_types.name, {'Water'; 'Hydrogel'})) == 2)
         end
     end
  
