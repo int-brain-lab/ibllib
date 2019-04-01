@@ -80,4 +80,4 @@ def session_name(path: Union[str, Path]) -> str:
     """Returns the session name (subject/date/number) string for any filepath
     useing session_path"""
     path = Path(path)
-    return os.path.join(*Path(session_path(path)).parts[-3:])
+    return '/'.join(Path(session_path(path)).parts[-3:])
