@@ -39,7 +39,12 @@ def purge_local_data(local_folder, file_name, lab=None, dry=False):
     # Remove None answers when session is registered but dstype not htere yet
     urls = [u for u in urls if u is not None]
     print(f'Found files on Flatiron: {len(urls)}')
-    to_remove = [f for f in files for u in urls if session_name(f) in u]
+    to_remove = []
+    for f in files:
+        sess_name = session_name(f)
+        for u in urls:
+            if sess_name in u:
+                to_remove.append(f)
     print(f'Local files to remove: {len(to_remove)}')
     for f in to_remove:
         print(f)
