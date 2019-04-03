@@ -368,9 +368,9 @@ class ONE(OneAbstract):
         for k in kwargs.keys():
             # check that the input matches one of the defined filters
             if k not in SEARCH_TERMS:
-                logger_.warning(f'"{k}" is not a valid search keyword and will be ignored' + '\n' +
-                                "Valid keywords are: " + str(set(SEARCH_TERMS.values())))
-                continue
+                logger_.error(f'"{k}" is not a valid search keyword' + '\n' +
+                              "Valid keywords are: " + str(set(SEARCH_TERMS.values())))
+                return
             # then make sure the field is formatted properly
             field = SEARCH_TERMS[k]
             if field == 'date_range':
