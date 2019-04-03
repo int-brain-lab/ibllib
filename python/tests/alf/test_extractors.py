@@ -14,10 +14,11 @@ from ibllib.io import raw_data_loaders as loaders
 class TestExtractTrialData(unittest.TestCase):
 
     def setUp(self):
-        self.session_path = Path(__file__).parent.joinpath('data')
+        self.session_path = Path(__file__).parent / 'data' / 'session'
         self.data = loaders.load_data(self.session_path)
-        self.session_path_biased = Path(__file__).parent.joinpath('data_biased')
+        self.session_path_biased = Path(__file__).parent / 'data' / 'session_biased'
         self.data_biased = loaders.load_data(self.session_path_biased)
+        self.wheel_path = Path(__file__).parent / 'data' / 'wheel'
         # turn off logging for unit testing as we will purposely go into warning/error cases
         self.logger = logging.getLogger('ibllib').setLevel(50)
 
@@ -47,6 +48,12 @@ class TestExtractTrialData(unittest.TestCase):
         # 2/2 2 samples are swapped and need to be swapped back
         dy = loaders.load_encoder_positions(self.session_path_biased)
         self.assertTrue(np.all(np.diff(np.array(dy.re_ts)) > 0))
+
+    def test_wheel_folder(self):
+        # the wheel folder contains other errors in bpod output that had to be addressed
+        for wf in self.wheel_path.glob('_iblrig_encoderPositions.raw.*.ssv'):
+            dy = loaders.load_encoder_positions(self.session_path_biased)
+            self.assertTrue(np.all(np.diff(np.array(dy.re_ts)) > 0))
 
     def test_interpolation(self):
         # straight test that it returns an usable function

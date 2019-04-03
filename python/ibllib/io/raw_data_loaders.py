@@ -302,8 +302,8 @@ def _groom_wheel_data(data, label='file ', path=''):
         ind = np.where(np.diff(data['re_ts']) < 0)[0]
         for i in ind:
             # the first sample may be corrupt, in this case throw away
-            if i == 0:
-                drop_first = True
+            if i <= 1:
+                drop_first = i
                 logger_.warning(label + ' rotary encoder positions timestamps'
                                         ' first sample corrupt ' + str(path))
             # if it's an uint32 wraparound, the diff should be close to 2 ** 32
@@ -319,8 +319,8 @@ def _groom_wheel_data(data, label='file ', path=''):
             else:
                 logger_.error(label + ' Rotary encoder timestamps are not sorted ' + str(path))
                 raise ValueError('Rotary encoder timestamps not sorted, most likely corrupt')
-    if drop_first:
-        data.drop(0, inplace=True)
+    if drop_first is not False:
+        data.drop(data.loc[:drop_first].index, inplace=True)
         data = data.reindex()
     # check if the time scale is in ms
     sess_len_sec = (datetime.strptime(data['bns_ts'].iloc[-1][:25], '%Y-%m-%dT%H:%M:%S.%f') -
