@@ -51,9 +51,14 @@ class TestExtractTrialData(unittest.TestCase):
 
     def test_wheel_folder(self):
         # the wheel folder contains other errors in bpod output that had to be addressed
-        for wf in self.wheel_path.glob('_iblrig_encoderPositions.raw.*.ssv'):
-            dy = loaders.load_encoder_positions(self.session_path_biased)
-            self.assertTrue(np.all(np.diff(np.array(dy.re_ts)) > 0))
+        # 2 first samples timestamp AWOL instead of only one
+        wf = self.wheel_path / '_iblrig_encoderPositions.raw.2firstsamples.ssv'
+        df = loaders._load_encoder_positions_file(wf)
+        self.assertTrue(np.all(np.diff(np.array(df.re_ts)) > 0))
+        # corruption in the middle of file
+        wf = self.wheel_path / '_iblrig_encoderEvents.raw.CorruptMiddle.ssv'
+        df = loaders._load_encoder_events_file(wf)
+        self.assertTrue(np.all(np.diff(np.array(df.re_ts)) > 0))
 
     def test_interpolation(self):
         # straight test that it returns an usable function
