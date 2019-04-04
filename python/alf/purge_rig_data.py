@@ -15,7 +15,7 @@ from oneibl.one import ONE
 import argparse
 
 
-def purge_local_data(local_folder, file_name, dry=False):
+def purge_local_data(local_folder, file_name, lab=None, dry=False):
     # Figure out datasetType from file_name or file path
     file_name = Path(file_name).name
     alf_parts = file_name.split('.')
@@ -28,13 +28,23 @@ def purge_local_data(local_folder, file_name, dry=False):
     print(f'Checking on Flatiron for datsetType: {dstype}...')
     # Get all sessions and details from Alyx that have the dstype
     one = ONE()
-    eid, det = one.search(dataset_types=[dstype], details=True)
+    if lab is None:
+        eid, det = one.search(dataset_types=[dstype], details=True)
+    else:
+        eid, det = one.search(dataset_types=[dstype], lab=lab, details=True)
     urls = []
     for d in det:
         urls.extend([x['data_url'] for x in d['data_dataset_session_related']
                      if x['dataset_type'] == dstype])
+    # Remove None answers when session is registered but dstype not htere yet
+    urls = [u for u in urls if u is not None]
     print(f'Found files on Flatiron: {len(urls)}')
-    to_remove = [f for f in files for u in urls if session_name(f) in u]
+    to_remove = []
+    for f in files:
+        sess_name = session_name(f)
+        for u in urls:
+            if sess_name in u:
+                to_remove.append(f)
     print(f'Local files to remove: {len(to_remove)}')
     for f in to_remove:
         print(f)
@@ -50,8 +60,10 @@ if __name__ == "__main__":
     parser.add_argument('folder', help='Local iblrig_data folder')
     parser.add_argument(
         'file', help='File name to search and destroy for every session')
+    parser.add_argument('-lab', required=False, default=None,
+                        help='Lab name, search on Alyx faster. default: None')
     parser.add_argument('--dry', required=False, default=False,
                         action='store_true', help='Dry run? default: False')
     args = parser.parse_args()
-    purge_local_data(args.folder, args.file, dry=args.dry)
+    purge_local_data(args.folder, args.file, lab=args.lab, dry=args.dry)
     print('Done\n')

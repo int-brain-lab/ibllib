@@ -108,6 +108,14 @@ def load_settings(session_path):
     return settings
 
 
+def _load_encoder_events_file(file_path):
+    # file loader without the session overhead
+    data = pd.read_csv(file_path, sep=' ', header=None)
+    data = data.drop([0, 2, 5], axis=1)
+    data.columns = ['re_ts', 'sm_ev', 'bns_ts']
+    return _groom_wheel_data(data, label='_iblrig_encoderEvents.raw.ssv', path=file_path)
+
+
 def load_encoder_events(session_path):
     """
     Load Rotary Encoder (RE) events raw data file.
@@ -143,15 +151,23 @@ def load_encoder_events(session_path):
     path = next(path.glob("_iblrig_encoderEvents.raw*.ssv"), None)
     if not path:
         return None
-    data = pd.read_csv(path, sep=' ', header=None)
-    data = data.drop([0, 2, 5], axis=1)
-    data.columns = ['re_ts', 'sm_ev', 'bns_ts']
-    return _groom_wheel_data(data, label='_iblrig_encoderEvents.raw.ssv', path=path)
+    return _load_encoder_events_file(path)
+
+
+def _load_encoder_positions_file(file_path):
+    # file loader without the session overhead
+    if file_path.stat().st_size == 0:
+        logger_.error("_iblrig_encoderPositions.raw.ssv is an empty file. ")
+        raise ValueError("_iblrig_encoderPositions.raw.ssv is an empty file. ABORT EXTRACTION. ")
+    data = pd.read_csv(file_path, sep=' ', header=None)
+    data = data.drop([0, 4], axis=1)
+    data.columns = ['re_ts', 're_pos', 'bns_ts']
+    return _groom_wheel_data(data, label='_iblrig_encoderPositions.raw.ssv', path=file_path)
 
 
 def load_encoder_positions(session_path):
     """
-    Load Rotary Encoder (RE) positions from raw data file.
+    Load Rotary Encoder (RE) positions from raw data file within a session path.
 
     Assumes that a folder called "raw_behavior_data" exists in folder.
     Positions are RE ticks [-512, 512] == [-180º, 180º]
@@ -182,13 +198,7 @@ def load_encoder_positions(session_path):
     path = next(path.glob("_iblrig_encoderPositions.raw*.ssv"), None)
     if not path:
         return None
-    if path.stat().st_size == 0:
-        logger_.error("_iblrig_encoderPositions.raw.ssv is an empty file. ")
-        raise ValueError("_iblrig_encoderPositions.raw.ssv is an empty file. ABORT EXTRACTION. ")
-    data = pd.read_csv(path, sep=' ', header=None)
-    data = data.drop([0, 4], axis=1)
-    data.columns = ['re_ts', 're_pos', 'bns_ts']
-    return _groom_wheel_data(data, label='_iblrig_encoderPositions.raw.ssv', path=path)
+    return _load_encoder_positions_file(path)
 
 
 def load_encoder_trial_info(session_path):
@@ -296,20 +306,23 @@ def _groom_wheel_data(data, label='file ', path=''):
         logger_.warning(label + ' has missing/incomplete records \n %s', path)
     data.dropna(inplace=True)
     data.drop(data.loc[data.bns_ts.apply(len) != 33].index, inplace=True)
+    data.drop_duplicates(keep='first', inplace=True)
+    data.reset_index(inplace=True)
     # handle the clock resets when microseconds exceed uint32 max value
     drop_first = False
     if any(np.diff(data['re_ts']) < 0):
         ind = np.where(np.diff(data['re_ts']) < 0)[0]
         for i in ind:
             # the first sample may be corrupt, in this case throw away
-            if i == 0:
-                drop_first = True
+            if i <= 1:
+                drop_first = i
                 logger_.warning(label + ' rotary encoder positions timestamps'
                                         ' first sample corrupt ' + str(path))
             # if it's an uint32 wraparound, the diff should be close to 2 ** 32
             elif 32 - np.log2(data['re_ts'][i] - data['re_ts'][i + 1]) < 0.2:
                 data.loc[i + 1:, 're_ts'] = data.loc[i + 1:, 're_ts'] + 2 ** 32
             # there is also the case where 2 positions are swapped and need to be swapped back
+
             elif data['re_ts'][i] > data['re_ts'][i + 1] > data['re_ts'][i - 1]:
                 logger_.warning(label + ' rotary encoder timestamps swapped at index: ' +
                                 str(i) + '  ' + str(path))
@@ -317,10 +330,12 @@ def _groom_wheel_data(data, label='file ', path=''):
                 data.iloc[i], data.iloc[i + 1] = b, a
             # if none of those 3 cases apply, raise an error
             else:
-                logger_.error(label + ' Rotary encoder timestamps are not sorted ' + str(path))
-                raise ValueError('Rotary encoder timestamps not sorted, most likely corrupt')
-    if drop_first:
-        data.drop(0, inplace=True)
+                logger_.error(label + ' Rotary encoder timestamps are not sorted.' + str(path))
+                data.sort_values('re_ts', inplace=True)
+                data.reset_index(inplace=True)
+
+    if drop_first is not False:
+        data.drop(data.loc[:drop_first].index, inplace=True)
         data = data.reindex()
     # check if the time scale is in ms
     sess_len_sec = (datetime.strptime(data['bns_ts'].iloc[-1][:25], '%Y-%m-%dT%H:%M:%S.%f') -

@@ -2,7 +2,6 @@
 # @Author: Niccolò Bonacchi
 # @Date: Monday, January 21st 2019, 6:28:49 pm
 import logging
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import List, Union
@@ -80,4 +79,4 @@ def session_name(path: Union[str, Path]) -> str:
     """Returns the session name (subject/date/number) string for any filepath
     useing session_path"""
     path = Path(path)
-    return os.path.join(*Path(session_path(path)).parts[-3:])
+    return '/'.join(Path(session_path(path)).parts[-3:])
