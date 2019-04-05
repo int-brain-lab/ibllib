@@ -1,8 +1,12 @@
+from pathlib import Path
+
 import numpy as np
 from scipy import signal
 from scipy.io import wavfile
 
 from ibllib import dsp
+import ibllib.io.raw_data_loaders as ioraw
+import alf.extractors.training_trials
 
 NS_WIN = 2 ** 18 # 2 ** np.ceil(np.log2(1 * fs))
 OVERLAP = NS_WIN / 2
@@ -45,72 +49,83 @@ def _get_conversion_factor():
     return fac
 
 
-def welchogram(wav_file, save=True):
-    fs, wav = wavfile.read(wav_file, mmap=True)
+def welchogram(fs, wav):
+    """
+    :param fs: sampling frequency (Hz)
+    :param wav: wav signal (vector or memmap)
+    :return: tscale, fscale, downsampled_spectrogram
+    """
     ns = wav.shape[0]
     window_generator = dsp.WindowGenerator(ns=ns, nswin=NS_WIN, overlap=OVERLAP)
     nwin = window_generator.nwin
     fscale = dsp.fscale(NS_WELCH, 1 / fs, one_sided=True)
     W = np.zeros((nwin, len(fscale)))
-
+    tscale = window_generator.tscale(fs=fs)
     detect = []
     for first, last in window_generator.slices:
+        # load the current window into memory
+        w = np.float64(wav[first:last]) * _get_conversion_factor()
+        # detection of ready tones
+        a = [d + first for d in _detect_ready_tone(w, fs)]
+        if len(a):
+            detect += a
         # the last window may not allow a pwelch
         if (last - first) < NS_WELCH:
             continue
         # compute PSD estimate for the current window
-        w = np.float64(wav[first:last]) * _get_conversion_factor()
         iw = window_generator.iw
         _, W[iw, :] = signal.welch(w, fs=fs, window='hanning', nperseg=NS_WELCH, detrend='constant',
                                    return_onesided=True, scaling='density', axis=-1)
-        # detection of ready tones
-        a = [d + first for d in _detect_ready_tone(w, fs)]
-        if len(a):
-            detect +=  a
         if (iw % 100) == 0:
             print(iw, nwin, first, last)
+    # the onset detection may have duplicates with sliding window, average them and remove
+    detect = np.sort(np.array(detect)) / fs
+    ind = np.where(np.diff(detect) < 0.1)[0]
+    detect[ind] = (detect[ind] + detect[ind+1]) / 2
+    detect = np.delete(detect, ind+1)
+    return tscale, fscale, W, detect
 
-    return fscale, W
 
-
-def extract_sound(wav_file, save=True):
+def extract_sound(ses_path, save=True):
     """
     Simple audio features extraction for ambient sound characterization.
     From a wav file, generates several ALF files to be registered on Alyx
-    :param wav_file: sound file
+    :param ses_path: sound file
     :return: None
     """
+
+    wav_file = Path(ses_path) / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
+    if not wav_file.exists():
+        return None
     fs, wav = wavfile.read(wav_file, mmap=True)
-    ns = wav.shape[0]
-    window_generator = dsp.WindowGenerator(ns=ns, nswin=NS_WIN, overlap=OVERLAP)
-    nwin = window_generator.nwin
+    tscale, fscale, W, detect = welchogram(fs, wav)
 
-    RES = {'rms':         np.zeros((nwin,) ),
-           'nsamples':    np.zeros((nwin,) ),
-           'first_last':  np.zeros((nwin, 2) ),
-           'fscale': dsp.fscale(NS_WELCH, 1 / fs, one_sided=True)}
-    W = np.zeros((nwin, len(RES['fscale'])))
+    alf_folder = Path(ses_path) / 'alf'
+    if not alf_folder.exists():
+        alf_folder.mkdir()
 
-    detect = []
-    for first, last in window_generator.slices:
-        # the last window may not allow a pwelch
-        if (last - first) < NS_WELCH:
-            continue
-        # compute PSD estimate for the current window
-        w = np.float64(wav[first:last]) * _get_conversion_factor()
-        iw = window_generator.iw
-        _, W[iw, :] = signal.welch(w, fs=fs, window='hanning', nperseg=NS_WELCH, detrend='constant',
-                                   return_onesided=True, scaling='density', axis=-1)
-        # detection of ready tones
-        a = [d + first for d in _detect_ready_tone(w, fs)]
-        if len(a):
-            detect +=  a
-        if (iw % 100) == 0:
-            print(iw, nwin, first, last)
 
-    # need to save:
-    # - welchogram for the full session
-    # - periodogram per trial
-    # - periodogram full session
+    np.save(Path(ses_path) / 'alf' / '_ibl_audioSpectrogram.power.npy', W)
+    np.save(Path(ses_path) / 'alf' / '_ibl_audioSpectrogram.frequencies.npy', fscale[None, :])
+    np.save(Path(ses_path) / 'alf' / '..npy', tscale[:, None])
+
+
+    def sync_audio():
+        data = ioraw.load_data(ses_path)
+        if data is None:
+            return
+        tgocue = np.array(alf.extractors.training_trials.get_goCueOnset_times(None, save=False, data=data))
+        ilast = min(len(tgocue), len(detect))
+        dt = tgocue[:ilast] - detect[: ilast]
+        assert(np.std(dt) < 0.01)
+        return tscale + np.median(dt)
+
+    tscale_sync = sync_audio()
+
+    if tscale_sync is None:
+        np.save(Path(ses_path) / 'alf' / '_ibl_audioSpectrogram.times.npy', tscale[:, None])
+    else:
+        np.save(Path(ses_path) / 'alf' / '_ibl_audioSpectrogram.times_microphone.npy', tscale[:, None])
+
 
 

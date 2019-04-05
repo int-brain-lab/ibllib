@@ -77,11 +77,13 @@ class Reader:
 
     def read_samples(self, first_sample=0, last_sample=10000, sync_trace=False):
         """
-        reads all channels from first_sample to last_sample
+        reads all channels from first_sample to last_sample, following numpy slicing convention
+        sglx.read_samples(first=0, last=100) would be equivalent to slicing the array D
+        D[:,0:100] where the last axis represent time and the first channels.
          :return: numpy array of int16
         """
         byt_offset = int(self.nc * first_sample * SAMPLE_SIZE)
-        ns_to_read = last_sample - first_sample + 1
+        ns_to_read = last_sample - first_sample
         with open(self.file_bin, 'rb') as fid:
             fid.seek(byt_offset)
             darray = np.fromfile(fid, dtype=np.dtype('int16'), count=ns_to_read * self.nc
