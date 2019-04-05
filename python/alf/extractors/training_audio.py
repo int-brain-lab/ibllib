@@ -8,7 +8,7 @@ from ibllib import dsp
 import ibllib.io.raw_data_loaders as ioraw
 import alf.extractors.training_trials
 
-NS_WIN = 2 ** 18 # 2 ** np.ceil(np.log2(1 * fs))
+NS_WIN = 2 ** 18  # 2 ** np.ceil(np.log2(1 * fs))
 OVERLAP = NS_WIN / 2
 NS_WELCH = 512
 FTONE = 5000
@@ -44,8 +44,8 @@ def _get_conversion_factor():
         return 1.0
     distance_to_the_mic = .155
     peak_value_observed = 60
-    rms_value_observed = np.sqrt(2)/2 * peak_value_observed
-    fac = 10 ** ((55 - 20.*np.log10(rms_value_observed)) / 20) * distance_to_the_mic
+    rms_value_observed = np.sqrt(2) / 2 * peak_value_observed
+    fac = 10 ** ((55 - 20 * np.log10(rms_value_observed)) / 20) * distance_to_the_mic
     return fac
 
 
@@ -74,15 +74,15 @@ def welchogram(fs, wav):
             continue
         # compute PSD estimate for the current window
         iw = window_generator.iw
-        _, W[iw, :] = signal.welch(w, fs=fs, window='hanning', nperseg=NS_WELCH, detrend='constant',
-                                   return_onesided=True, scaling='density', axis=-1)
+        _, W[iw, :] = signal.welch(w, fs=fs, window='hanning', nperseg=NS_WELCH, axis=-1,
+                                   detrend='constant', return_onesided=True, scaling='density')
         if (iw % 100) == 0:
             print(iw, nwin, first, last)
     # the onset detection may have duplicates with sliding window, average them and remove
     detect = np.sort(np.array(detect)) / fs
     ind = np.where(np.diff(detect) < 0.1)[0]
-    detect[ind] = (detect[ind] + detect[ind+1]) / 2
-    detect = np.delete(detect, ind+1)
+    detect[ind] = (detect[ind] + detect[ind + 1]) / 2
+    detect = np.delete(detect, ind + 1)
     return tscale, fscale, W, detect
 
 
@@ -104,28 +104,28 @@ def extract_sound(ses_path, save=True):
     if not alf_folder.exists():
         alf_folder.mkdir()
 
-
-    np.save(Path(ses_path) / 'alf' / '_ibl_audioSpectrogram.power.npy', W)
-    np.save(Path(ses_path) / 'alf' / '_ibl_audioSpectrogram.frequencies.npy', fscale[None, :])
-    np.save(Path(ses_path) / 'alf' / '..npy', tscale[:, None])
-
+    np.save(file=Path(ses_path) / 'alf' / '_ibl_audioSpectrogram.power.npy',
+            arr=W.astype(np.single))
+    np.save(file=Path(ses_path) / 'alf' / '_ibl_audioSpectrogram.frequencies.npy',
+            arr=fscale[None, :].astype(np.single))
+    np.save(file=Path(ses_path) / 'alf' / '..npy',
+            arr=tscale[:, None].astype(np.single))
 
     def sync_audio():
         data = ioraw.load_data(ses_path)
         if data is None:
             return
-        tgocue = np.array(alf.extractors.training_trials.get_goCueOnset_times(None, save=False, data=data))
+        tgocue = np.array(alf.extractors.training_trials.get_goCueOnset_times(
+            None, save=False, data=data))
         ilast = min(len(tgocue), len(detect))
         dt = tgocue[:ilast] - detect[: ilast]
         assert(np.std(dt) < 0.01)
         return tscale + np.median(dt)
 
     tscale_sync = sync_audio()
-
     if tscale_sync is None:
-        np.save(Path(ses_path) / 'alf' / '_ibl_audioSpectrogram.times.npy', tscale[:, None])
+        np.save(file=Path(ses_path) / 'alf' / '_ibl_audioSpectrogram.times.npy',
+                arr=tscale[:, None].astype(np.single))
     else:
-        np.save(Path(ses_path) / 'alf' / '_ibl_audioSpectrogram.times_microphone.npy', tscale[:, None])
-
-
-
+        np.save(file=Path(ses_path) / 'alf' / '_ibl_audioSpectrogram.times_microphone.npy',
+                arr=tscale[:, None].astype(np.single))
