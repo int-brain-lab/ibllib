@@ -50,3 +50,11 @@ class WindowGenerator(object):
         """
         for first, last in self.slices:
             yield np.take(sig, np.arange(first, last), axis=axis)
+
+    def tscale(self, fs):
+        """
+        Returns the time scale associated with Window slicing (middle of window)
+        :param fs: sampling frequency (Hz)
+        :return: time axis scale
+        """
+        return np.array([(first + (last - first - 1) / 2) / fs for first, last in self.slices])

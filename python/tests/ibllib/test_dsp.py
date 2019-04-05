@@ -118,6 +118,12 @@ class TestWindowGenerator(unittest.TestCase):
             my_rms_[wg.iw] = rms(wsig)
         assert(np.all(my_rms_ == my_rms))
 
+    def test_tscale(self):
+        wg = WindowGenerator(ns=500, nswin=100, overlap=50)
+        ts = wg.tscale(fs=1000)
+        self.assertTrue(ts[0] == (100 - 1) / 2 / 1000)
+        self.assertTrue((np.allclose(np.diff(ts), 0.05)))
+
 
 if __name__ == "__main__":
     unittest.main(exit=False)
