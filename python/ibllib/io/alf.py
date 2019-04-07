@@ -68,19 +68,28 @@ def load_file_content(fil):
         return pd.read_csv(fil, delimiter=' ')
 
 
-def load_object(falf):
+def load_object(alfpath, object=None):
     """
     Reads all files (ie. attributes) sharing the same object.
     For example, if the file provided to the function is `spikes.times`, the function will
     load `spikes.time`, `spikes.clusters`, `spikes.depths`, `spike.amps` in a dictionary
     whose keys will be `time`, `clusters`, `depths`, `amps`
-    :param falf: any alf file pertaining to the object
+    :param alfpath: any alf file pertaining to the object OR directory containing files
+    :param object: if a directory is provided, need to specify the name of object to load
     :return: a dictionary of all attributes pertaining to the object
     """
-    alf_object = falf.name.split('.')[0]
-    files_alf = list(falf.parent.glob(alf_object + '.*'))
+    alfpath = Path(alfpath)
+    if alfpath.is_dir():
+        if object is None:
+            raise ValueError('If a path is provided, the object name should be provided too')
+    else:
+        object = alfpath.name.split('.')[0]
+        alfpath = alfpath.parent
+    # look for the files of the object
+    files_alf = list(alfpath.glob(object + '.*'))
     attributes = [f.name.split('.')[1] for f in files_alf]
     OUT = {}
+    # laod content for each file
     for fil, att in zip(files_alf, attributes):
         OUT[att] = load_file_content(fil)
     return OUT
