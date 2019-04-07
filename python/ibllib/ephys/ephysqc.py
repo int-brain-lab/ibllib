@@ -50,27 +50,35 @@ def rmsmap(fbin):
     return win
 
 
-def extract_rmsmap(fbin, folder_alf=None):
+def extract_rmsmap(fbin, folder_alf=None, force=False):
     """
     wrapper for rmsmap that outputs _ibl_ephysRmsMap and _ibl_ephysSpectra ALF files
     :param fbin: binary file in spike glx format (will look for attached metatdata)
+    :param folder_alf: folder in which to store output ALF files. Creates/Uses an ALF folder at
+    the same level as the `fbin` file provided by default
+    :param force: do not re-extract if all ALF files already exist
     :return: None
     """
     print(str(fbin))
     sglx = spikeglx.Reader(fbin)
-    rms = rmsmap(fbin)
-
+    # check if output ALF files exist already:
     if folder_alf is None:
         folder_alf = Path(fbin).parent / 'alf'
+    else:
+        folder_alf = Path(folder_alf)
+    files = {'rms': folder_alf / ('_ibl_ephysRmsMap_' + sglx.type + '.rms.npy'),
+             'times': folder_alf / ('_ibl_ephysRmsMap_' + sglx.type + '.times.npy'),
+             'power': folder_alf / ('_ibl_ephysSpectra_' + sglx.type + '.power.npy'),
+             'frequencies': folder_alf / ('_ibl_ephysSpectra_' + sglx.type + '.frequencies.npy')}
+    # if they do and the option Force is set to false, do not recompute and exit
+    if all([files[f].exists() for f in files]) and not force:
+        return
+    # crunch numbers
+    rms = rmsmap(fbin)
+    # output ALF files, single precision
     if not folder_alf.exists():
         folder_alf.mkdir()
-
-    np.save(file=folder_alf / ('_ibl_ephysRmsMap.' + sglx.type + '.rms.npy'),
-            arr=rms['TRMS'].astype(np.single))
-    np.save(file=folder_alf / ('_ibl_ephysRmsMap.' + sglx.type + '.times.npy'),
-            arr=rms['tscale'].astype(np.single))
-    np.save(file=folder_alf / ('_ibl_ephysSpectra' + sglx.type + '.power.npy'),
-            arr=rms['TRMS'].astype(np.single))
-    np.save(folder_alf / ('_ibl_ephysSpectra' + sglx.type + '.frequencies.npy'),
-            arr=rms['TRMS'].astype(np.single))
-    return
+    np.save(file=files['rms'], arr=rms['TRMS'].astype(np.single))
+    np.save(file=files['times'], arr=rms['tscale'].astype(np.single))
+    np.save(file=files['power'], arr=rms['spectral_density'].astype(np.single))
+    np.save(file=files['frequencies'], arr=rms['fscale'].astype(np.single))

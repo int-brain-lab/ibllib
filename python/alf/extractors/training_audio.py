@@ -33,7 +33,7 @@ def _detect_ready_tone(w, fs):
 
 def _get_conversion_factor():
     # 3 approaches here (not exclusive):
-    # a- get the mic sensitivity, the preamp gain and DAC parameters and do the maths
+    # a- get the mic sensitivity, the preamp gain and DAC parameters and do the math
     # b- treat the whole thing as a black box and do a calibration run (cf. people at Renard's lab)
     # c- use calibrated ready tone
     # The reference of acoustic pressure is 0dBSPL @ 1kHz which is threshold of hearing (20 μPa).
@@ -93,7 +93,6 @@ def extract_sound(ses_path, save=True):
     :param ses_path: sound file
     :return: None
     """
-
     wav_file = Path(ses_path) / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
     if not wav_file.exists():
         return None
