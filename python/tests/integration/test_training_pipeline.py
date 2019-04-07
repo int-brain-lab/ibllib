@@ -15,10 +15,13 @@ from oneibl.one import ONE
 class TestFlagOperations(unittest.TestCase):
 
     def setUp(self):
+        self.init_folder = Path('/mnt/s0/Data/IntegrationTests/Subjects_init')
+        if not self.init_folder.exists():
+            return
         # Set ONE to use the test database
         self.one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
                        username='test_user', password='TapetesBloc18')
-        self.init_folder = Path('/mnt/s0/Data/IntegrationTests/Subjects_init')
+
         self.sessions = [x.parent for x in self.init_folder.rglob(
             'create_me.flag')]
         self.rig_folder = self.init_folder.parent / 'RigSubjects'
@@ -84,6 +87,8 @@ class TestFlagOperations(unittest.TestCase):
         self.assertTrue(len(rflags) == len(self.vidfiles))
 
     def test_all(self):
+        if not self.init_folder.exists():
+            return
         self._create()
         self._transfer()
         self._extraction()
@@ -93,6 +98,8 @@ class TestFlagOperations(unittest.TestCase):
         self._registration()
 
     def tearDown(self):
+        if not self.init_folder.exists():
+            return
         shutil.rmtree(self.rig_folder, ignore_errors=True)
         shutil.rmtree(self.server_folder, ignore_errors=True)
         # os.system("ssh -i ~/.ssh/alyx.internationalbrainlab.org.pem ubuntu@test.alyx.internationalbrainlab.org './02_rebuild_from_cache.sh'")  # noqa
