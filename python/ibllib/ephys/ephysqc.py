@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 
 import numpy as np
 from scipy import signal
@@ -7,6 +8,7 @@ from ibllib.io import spikeglx
 import ibllib.dsp as dsp
 from ibllib.misc import print_progress
 
+logger_ = logging.getLogger('ibllib')
 
 RMS_WIN_LENGTH_SECS = 3
 WELCH_WIN_LENGTH_SAMPLES = 1024
@@ -72,6 +74,7 @@ def extract_rmsmap(fbin, folder_alf=None, force=False):
              'frequencies': folder_alf / ('_ibl_ephysSpectra_' + sglx.type + '.frequencies.npy')}
     # if they do and the option Force is set to false, do not recompute and exit
     if all([files[f].exists() for f in files]) and not force:
+        logger_.warning('Output exists. Skipping ' + str(fbin) + ' Use force option to override')
         return
     # crunch numbers
     rms = rmsmap(fbin)
