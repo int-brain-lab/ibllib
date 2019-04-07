@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 
 import numpy as np
 from scipy import signal
@@ -7,6 +8,8 @@ from scipy.io import wavfile
 from ibllib import dsp
 import ibllib.io.raw_data_loaders as ioraw
 import alf.extractors.training_trials
+
+logger_ = logging.getLogger('ibllib')
 
 NS_WIN = 2 ** 18  # 2 ** np.ceil(np.log2(1 * fs))
 OVERLAP = NS_WIN / 2
@@ -76,8 +79,8 @@ def welchogram(fs, wav):
         iw = window_generator.iw
         _, W[iw, :] = signal.welch(w, fs=fs, window='hanning', nperseg=NS_WELCH, axis=-1,
                                    detrend='constant', return_onesided=True, scaling='density')
-        if (iw % 100) == 0:
-            print(iw, nwin, first, last)
+        if (iw % 50) == 0:
+            window_generator.print_progress()
     # the onset detection may have duplicates with sliding window, average them and remove
     detect = np.sort(np.array(detect)) / fs
     ind = np.where(np.diff(detect) < 0.1)[0]
@@ -86,45 +89,52 @@ def welchogram(fs, wav):
     return tscale, fscale, W, detect
 
 
-def extract_sound(ses_path, save=True):
+def extract_sound(ses_path, save=True, force=False):
     """
     Simple audio features extraction for ambient sound characterization.
     From a wav file, generates several ALF files to be registered on Alyx
-    :param ses_path: sound file
+    :param ses_path: ALF full session path: (/mysubject001/YYYY-MM-DD/001)
     :return: None
     """
-    wav_file = Path(ses_path) / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
+    ses_path = Path(ses_path)
+    wav_file = ses_path / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
     if not wav_file.exists():
         return None
-    fs, wav = wavfile.read(wav_file, mmap=True)
+    files_out = {'power': ses_path / 'alf' / '_ibl_audioSpectrogram.power.npy',
+                 'frequencies': ses_path / 'alf' / '_ibl_audioSpectrogram.frequencies.npy',
+                 'onset_times': ses_path / 'alf' / '_ibl_audioOnsetGoCue.times_microphone.npy',
+                 'times_microphone': Path(ses_path) / 'alf' /
+                                     '_ibl_audioSpectrogram.times_microphone.npy',
+                 'times': Path(ses_path) / 'alf' / '_ibl_audioSpectrogram.times.npy'
+                 }
+    # if they exist and the option Force is set to false, do not recompute and exit
+    if all([files_out[f].exists() for f in files_out]) and not force:
+        logger_.warning('Output exists. Skipping ' + str(wav_file) + ' Use force flag to override')
+        return
+    # crunch the wav file
+    fs, wav = wavfile.read(wav_file, mmap=False)
+    if len(wav) == 0:
+        logger_.error('WAV Header Indicates empty file. Abort.' + str(wav_file))
+        return
     tscale, fscale, W, detect = welchogram(fs, wav)
-
-    alf_folder = Path(ses_path) / 'alf'
+    # save files
+    alf_folder = ses_path / 'alf'
     if not alf_folder.exists():
         alf_folder.mkdir()
+    np.save(file=files_out['power'], arr=W.astype(np.single))
+    np.save(file=files_out['frequencies'], arr=fscale[None, :].astype(np.single))
+    np.save(file=files_out['onset_times'], arr=detect)
+    np.save(file=files_out['times_microphone'], arr=tscale[:, None].astype(np.single))
 
-    np.save(file=Path(ses_path) / 'alf' / '_ibl_audioSpectrogram.power.npy',
-            arr=W.astype(np.single))
-    np.save(file=Path(ses_path) / 'alf' / '_ibl_audioSpectrogram.frequencies.npy',
-            arr=fscale[None, :].astype(np.single))
-    np.save(file=Path(ses_path) / 'alf' / '..npy',
-            arr=tscale[:, None].astype(np.single))
-
-    def sync_audio():
-        data = ioraw.load_data(ses_path)
-        if data is None:
-            return
-        tgocue = np.array(alf.extractors.training_trials.get_goCueOnset_times(
-            None, save=False, data=data))
-        ilast = min(len(tgocue), len(detect))
-        dt = tgocue[:ilast] - detect[: ilast]
-        assert(np.std(dt) < 0.01)
-        return tscale + np.median(dt)
-
-    tscale_sync = sync_audio()
-    if tscale_sync is None:
-        np.save(file=Path(ses_path) / 'alf' / '_ibl_audioSpectrogram.times.npy',
-                arr=tscale[:, None].astype(np.single))
-    else:
-        np.save(file=Path(ses_path) / 'alf' / '_ibl_audioSpectrogram.times_microphone.npy',
-                arr=tscale[:, None].astype(np.single))
+    # for the time scale, attempt to synchronize using onset sound detection and task data
+    data = ioraw.load_data(ses_path)
+    if data is None:  # if no session data, we're done
+        return
+    tgocue = np.array(alf.extractors.training_trials.get_goCueOnset_times(
+        None, save=False, data=data))
+    ilast = min(len(tgocue), len(detect))
+    dt = tgocue[:ilast] - detect[: ilast]
+    # only save if dt is consistent for the whole session
+    if np.std(dt) < 0.2:
+        tscale += np.median(dt)
+        np.save(file=files_out['times'], arr=tscale[:, None].astype(np.single))
