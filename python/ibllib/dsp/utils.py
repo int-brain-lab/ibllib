@@ -1,5 +1,7 @@
 import numpy as np
 
+from ibllib.misc import print_progress
+
 
 def rms(x, axis=None):
     if not axis:
@@ -58,3 +60,9 @@ class WindowGenerator(object):
         :return: time axis scale
         """
         return np.array([(first + (last - first - 1) / 2) / fs for first, last in self.slices])
+
+    def print_progress(self):
+        """
+        Prints progress using a terminal progress bar
+        """
+        print_progress(self.iw, self.nwin)
