@@ -47,12 +47,13 @@ def rmsmap(fbin):
         _, w = signal.welch(D, fs=sglx.fs, window='hanning', nperseg=WELCH_WIN_LENGTH_SAMPLES,
                             detrend='constant', return_onesided=True, scaling='density', axis=-1)
         win['spectral_density'] += w.T
-        if (iw % 20) == 0:
+        # print at least every 20 windows
+        if (iw % min(20, max(int(np.floor(wingen.nwin / 75)), 1))) == 0:
             print_progress(iw, wingen.nwin)
     return win
 
 
-def extract_rmsmap(fbin, folder_alf=None, force=False):
+def extract_rmsmap(fbin, out_folder=None, force=False):
     """
     wrapper for rmsmap that outputs _ibl_ephysRmsMap and _ibl_ephysSpectra ALF files
     :param fbin: binary file in spike glx format (will look for attached metatdata)
@@ -61,17 +62,18 @@ def extract_rmsmap(fbin, folder_alf=None, force=False):
     :param force: do not re-extract if all ALF files already exist
     :return: None
     """
-    print(str(fbin))
+    logger_.info(str(fbin))
     sglx = spikeglx.Reader(fbin)
     # check if output ALF files exist already:
-    if folder_alf is None:
-        folder_alf = Path(fbin).parent / 'alf'
+    if out_folder is None:
+        out_folder = Path(fbin).parent / ('qc_ephys_' + fbin.name.split('.')[0])
     else:
-        folder_alf = Path(folder_alf)
-    files = {'rms': folder_alf / ('_ibl_ephysRmsMap_' + sglx.type + '.rms.npy'),
-             'times': folder_alf / ('_ibl_ephysRmsMap_' + sglx.type + '.times.npy'),
-             'power': folder_alf / ('_ibl_ephysSpectra_' + sglx.type + '.power.npy'),
-             'frequencies': folder_alf / ('_ibl_ephysSpectra_' + sglx.type + '.frequencies.npy')}
+        out_folder = Path(out_folder)
+
+    files = {'rms': out_folder / ('_ibl_ephysRmsMap_' + sglx.type + '.rms..npy'),
+             'times': out_folder / ('_ibl_ephysRmsMap_' + sglx.type + '.times.npy'),
+             'power': out_folder / ('_ibl_ephysSpectra_' + sglx.type + '.power.npy'),
+             'frequencies': out_folder / ('_ibl_ephysSpectra_' + sglx.type + '.frequencies.npy')}
     # if they do and the option Force is set to false, do not recompute and exit
     if all([files[f].exists() for f in files]) and not force:
         logger_.warning('Output exists. Skipping ' + str(fbin) + ' Use force option to override')
@@ -79,8 +81,8 @@ def extract_rmsmap(fbin, folder_alf=None, force=False):
     # crunch numbers
     rms = rmsmap(fbin)
     # output ALF files, single precision
-    if not folder_alf.exists():
-        folder_alf.mkdir()
+    if not out_folder.exists():
+        out_folder.mkdir()
     np.save(file=files['rms'], arr=rms['TRMS'].astype(np.single))
     np.save(file=files['times'], arr=rms['tscale'].astype(np.single))
     np.save(file=files['power'], arr=rms['spectral_density'].astype(np.single))
