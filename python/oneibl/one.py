@@ -1,19 +1,14 @@
-import os
 from pathlib import Path, PurePath
 import requests
-import json
 import logging
-
-import numpy as np
-import pandas as pd
 
 from ibllib.misc import is_uuid_string, pprint
 from ibllib.io.one import OneAbstract
+from ibllib.io.alf import load_file_content
 
 import oneibl.webclient as wc
 from oneibl.dataclass import SessionDataInfo
 import oneibl.params
-from ibllib.io import jsonable
 
 logger_ = logging.getLogger('ibllib')
 
@@ -278,7 +273,7 @@ class ONE(OneAbstract):
         # load the files content in variables if requested
         if not download_only:
             for ind, fil in enumerate(dc.local_path):
-                dc.data[ind] = _load_file_content(fil)
+                dc.data[ind] = load_file_content(fil)
         # parse output arguments
         if dclass_output:
             return dc
@@ -368,9 +363,9 @@ class ONE(OneAbstract):
         for k in kwargs.keys():
             # check that the input matches one of the defined filters
             if k not in SEARCH_TERMS:
-                logger_.warning(f'"{k}" is not a valid search keyword and will be ignored' + '\n' +
-                                "Valid keywords are: " + str(set(SEARCH_TERMS.values())))
-                continue
+                logger_.error(f'"{k}" is not a valid search keyword' + '\n' +
+                              "Valid keywords are: " + str(set(SEARCH_TERMS.values())))
+                return
             # then make sure the field is formatted properly
             field = SEARCH_TERMS[k]
             if field == 'date_range':
@@ -442,25 +437,3 @@ def _validate_date_range(date_range):
     if len(date_range) == 1:
         date_range = [date_range[0], date_range[0]]
     return date_range
-
-
-def _load_file_content(fil):
-    if fil and os.path.getsize(fil) == 0:
-        return
-    if fil and os.path.splitext(fil)[1] == '.npy':
-        return np.load(file=fil)
-    if fil and os.path.splitext(fil)[1] == '.json':
-        try:
-            with open(fil) as _fil:
-                return json.loads(_fil.read())
-        except Exception as e:
-            logger_.error(e)
-            return None
-    if fil and os.path.splitext(fil)[1] == '.jsonable':
-        return jsonable.read(fil)
-    if fil and os.path.splitext(fil)[1] == '.tsv':
-        return pd.read_csv(fil, delimiter='\t')
-    if fil and os.path.splitext(fil)[1] == '.csv':
-        return pd.read_csv(fil)
-    if fil and os.path.splitext(fil)[1] == '.ssv':
-        return pd.read_csv(fil, delimiter=' ')

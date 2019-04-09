@@ -24,19 +24,19 @@ def numinput(title, prompt, default=None, minval=None, maxval=None,
 
 
 def strinput(title, prompt, default='COM', nullable=False):
-        """
-        Example:
-        >>> strinput("RIG CONFIG", "Insert RE com port:", default="COM")
-        """
-        import tkinter as tk
-        from tkinter import simpledialog
-        root = tk.Tk()
-        root.withdraw()
-        ans = simpledialog.askstring(title, prompt, initialvalue=default)
-        if (ans is None or ans == '' or ans == default) and not nullable:
-            return strinput(title, prompt, default=default, nullable=nullable)
-        else:
-            return ans
+    """
+    Example:
+    >>> strinput("RIG CONFIG", "Insert RE com port:", default="COM")
+    """
+    import tkinter as tk
+    from tkinter import simpledialog
+    root = tk.Tk()
+    root.withdraw()
+    ans = simpledialog.askstring(title, prompt, initialvalue=default)
+    if (ans is None or ans == '' or ans == default) and not nullable:
+        return strinput(title, prompt, default=default, nullable=nullable)
+    else:
+        return ans
 
 
 def login(title='Enter Credentials', default_username=None, default_passwd=None, add_fields=None):

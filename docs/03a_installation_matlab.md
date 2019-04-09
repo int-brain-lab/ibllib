@@ -79,6 +79,5 @@ RunTestsIBL('All')
 
 ```
 
-If you see any Failure message, please report on GitHub or contact Olivier.
+If you see any Failure message, please report on GitHub or contact data admins (Olivier / Niccolo).
 If not, you are ready for the tutorial - go to next section !
-

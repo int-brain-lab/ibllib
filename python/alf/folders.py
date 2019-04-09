@@ -2,7 +2,6 @@
 # @Author: Niccolò Bonacchi
 # @Date: Monday, January 21st 2019, 6:28:49 pm
 import logging
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import List, Union

@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def smooth(x, window_len=11, window='blackman'):
+def rolling_window(x, window_len=11, window='blackman'):
     """
     Smooth the data using a window with requested size.
 
@@ -81,7 +81,7 @@ def smooth_demo():
     plt.plot(x)
     plt.plot(xn)
     for w in windows:
-        plt.plot(smooth(xn, 10, w))
+        plt.plot(rolling_window(xn, 10, w))
     lst = ['original signal', 'signal with noise']
     lst.extend(windows)
 

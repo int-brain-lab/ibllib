@@ -177,8 +177,11 @@ def get_wheel_data(session_path, bp_data=None, save=False):
             # the rotary encoder doesn't always reset right away, and the reset sample given the
             # timestamp can be ambiguous: look for zeros
             for i in np.where(data['re_pos'][ind] != 0)[0]:
+                # handle boundary effects
+                if ind[i] > ns - 2:
+                    continue
                 # it happens quite often that we have to lock in to next sample to find the reset
-                if (ind[i] < ns) and data['re_pos'][ind[i] + 1] == 0:
+                if data['re_pos'][ind[i] + 1] == 0:
                     ind[i] = ind[i] + 1
                     continue
                 # also case where the rotary doesn't reset to 0, but erratically to -1/+1
@@ -186,7 +189,7 @@ def get_wheel_data(session_path, bp_data=None, save=False):
                     ind[i] = ind[i] + 1
                     continue
                 # compounded with the fact that the reset may have happened at next sample.
-                if (ind[i] < ns) and np.abs(data['re_pos'][ind[i] + 1]) <= (1 / 1024 * 2 * np.pi):
+                if np.abs(data['re_pos'][ind[i] + 1]) <= (1 / 1024 * 2 * np.pi):
                     ind[i] = ind[i] + 1
                     continue
                 # sometimes it is also the last trial that has this behaviour
