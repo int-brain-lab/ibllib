@@ -66,7 +66,7 @@ def extract_rmsmap(fbin, out_folder=None, force=False):
     sglx = spikeglx.Reader(fbin)
     # check if output ALF files exist already:
     if out_folder is None:
-        out_folder = Path(fbin).parent / ('qc_ephys_' + fbin.name.split('.')[0])
+        out_folder = Path(fbin).parent / ('qc_ephys_' + Path(fbin).name.split('.')[0])
     else:
         out_folder = Path(out_folder)
 
