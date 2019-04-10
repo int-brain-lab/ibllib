@@ -69,6 +69,11 @@ def _compress(root_data_folder, command, flag_pattern, dry=False, max_sessions=N
             if not cfile.exists():
                 logger.error('NON-EXISTING RAW FILE: ' + str(cfile))
             # run the compression command redirecting output
+            cfile.parent.joinpath(cfile.stem)
+            # if the output file already exists, overwrite it
+            outfile = cfile.parent / (cfile.stem + '.mp4')
+            if outfile.exists():
+                outfile.unlink()
             command2run = command.format(file_name=cfile.parent.joinpath(cfile.stem))
             process = subprocess.Popen(command2run, shell=True, stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE)
