@@ -2,14 +2,18 @@
 ALF ephys data files.
 """
 
+import logging
 from pathlib import Path
 import shutil
 
 # import numpy as np
+logger = logging.getLogger(__name__)
 
 
 def _move_if_possible(path, new_path):
-    assert Path(path).exists()
+    if not Path(path).exists():
+        logger.info("File %s does not exist, skip moving.", path)
+        return
     if Path(new_path).exists():
         raise FileExistsError()
     shutil.move(path, new_path)
@@ -79,6 +83,6 @@ def rename_to_alf(dirpath, rawfile=None):
 
     # Rename the raw data file.
     if rawfile:
-        rawfile = Path(rawfile)
+        rawfile = dirpath / rawfile
         assert rawfile.exists()
-        _move_if_possible(dirpath / rawfile, dirpath / 'ephys.raw' + rawfile.suffix)
+        _move_if_possible(rawfile, dirpath / ('ephys.raw' + rawfile.suffix))
