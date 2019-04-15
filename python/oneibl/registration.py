@@ -77,7 +77,7 @@ class RegistrationClient:
             logger_.info('registered' + '\n')
 
     @log2sessionfile
-    def register_session(self, ses_path, file_list=True):
+    def register_session(self, ses_path, file_list=True, repository_name=None):
         if isinstance(ses_path, str):
             ses_path = Path(ses_path)
         # read meta data from the rig for the session from the task settings file
@@ -88,18 +88,12 @@ class RegistrationClient:
         else:
             settings_json_file = settings_json_file[0]
         md = _read_settings_json_compatibility_enforced(settings_json_file)
-        # query alyx endpoints for subject, projects and repository information
+        # query alyx endpoints for subject, error if not found
         try:
             subject = self.one.alyx.rest('subjects?nickname=' + md['SUBJECT_NAME'], 'list')[0]
         except IndexError:
-            return 'Subject: ' + md['SUBJECT_NAME'] + " doesn't exist in Alyx"
+            return 'Subject: ' + md['SUBJECT_NAME'] + " doesn't exist in Alyx. ABORT."
 
-        # Todo: handle project and repository selection
-        # find the first ibl matching project for the subject
-        pname = [p for p in subject['projects'] if 'ibl' in p.lower()]
-        project = self.one.alyx.rest('projects', 'read', pname[0])
-        repository_name = [r for r in project['repositories'] if 'flatiron' not in r.lower()][0]
-        repository = self.one.alyx.rest('data-repository', 'read', repository_name)
         # look for a session from the same subject, same number on the same day
         _, session = self.one.search(subjects=subject['nickname'],
                                      date_range=md['SESSION_DATE'],
@@ -108,7 +102,7 @@ class RegistrationClient:
         try:
             user = self.one.alyx.rest('users', 'read', md["PYBPOD_CREATOR"][0])
         except Exception:
-            return 'Subject: ' + md["PYBPOD_CREATOR"][0] + " doesn't exist in Alyx"
+            return 'User: ' + md["PYBPOD_CREATOR"][0] + " doesn't exist in Alyx. ABORT"
 
         username = user['username'] if user else subject['responsible_user']
 
@@ -139,7 +133,7 @@ class RegistrationClient:
                     'location': md['PYBPOD_BOARD'],
                     'procedures': ['Behavior training/tasks'],
                     'lab': subject['lab'],
-                    'project': project['name'],
+                    # 'project': project['name'],
                     'type': 'Experiment',
                     'task_protocol': md['PYBPOD_PROTOCOL'] + md['IBLRIG_VERSION_TAG'],
                     'number': md['SESSION_NUMBER'],
@@ -207,7 +201,6 @@ class RegistrationClient:
 
         for rpath in F:
             r_ = {'created_by': username,
-                  'name': repository['name'],
                   'path': rpath,
                   'filenames': F[rpath],
                   }
