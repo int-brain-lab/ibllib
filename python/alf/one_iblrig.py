@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """
 python one_iblrig.py extract /path/to/my/session/ [--dry=True]
 python one_iblrig.py register /path/to/my/session/ [--dry=True]
