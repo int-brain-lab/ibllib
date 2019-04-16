@@ -19,7 +19,7 @@ class TestFlagOperations(unittest.TestCase):
         if not self.init_folder.exists():
             return
         # Set ONE to use the test database
-        self.one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
+        self.one = ONE(base_url='https://test.alyx.internationalbrainlab.org',  # testdev
                        username='test_user', password='TapetesBloc18')
 
         self.sessions = [x.parent for x in self.init_folder.rglob(
