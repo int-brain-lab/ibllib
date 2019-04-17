@@ -1,0 +1,13 @@
+language: python
+python:
+  - "3.6"
+# command to install dependencies
+install:
+  - pip install -r python/requirements.txt
+  - pip install -e python/.
+
+before_script: echo "exec('from oneibl.one import ONE; ONE(silent=True)')" | python
+  # command to run tests
+script:
+  - cd python
+  - bash ./run_tests

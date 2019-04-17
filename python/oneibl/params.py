@@ -10,8 +10,8 @@ _PAR_ID_STR = 'one_params'
 
 def default():
     par = {"ALYX_LOGIN": "test_user",
-           "ALYX_PWD": None,
-           "ALYX_URL": "https://alyx.internationalbrainlab.org",
+           "ALYX_PWD": "TapetesBloc18",
+           "ALYX_URL": "https://test.alyx.internationalbrainlab.org",
            "CACHE_DIR": str(PurePath(Path.home(), "Downloads", "FlatIron")),
            "FTP_DATA_SERVER": "ftp://ibl.flatironinstitute.org",
            "FTP_DATA_SERVER_LOGIN": "iblftp",
@@ -42,6 +42,9 @@ def setup_silent():
             cpar = _get_current_par(k, par_current)
             par[k] = cpar
         par = iopar.from_dict(par)
+
+    if par.CACHE_DIR:
+        Path(par.CACHE_DIR).mkdir(parents=True, exist_ok=True)
     iopar.write(_PAR_ID_STR, par)
 
 
@@ -94,8 +97,10 @@ def setup():
     print('ONE Parameter file location: ' + iopar.getfile(_PAR_ID_STR))
 
 
-def get():
+def get(silent=False):
     par = iopar.read(_PAR_ID_STR)
-    if par is None:
+    if par is None and not silent:
         setup()
+    elif par is None and silent:
+        setup_silent()
     return iopar.read(_PAR_ID_STR, default=default())
