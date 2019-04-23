@@ -40,3 +40,20 @@ def format_date_range(date_range):
     # is excluded by default
     date_range = [d.strftime('%Y-%m-%d') for d in date_range]
     return date_range
+
+
+def convert_pgts(time):
+    """Convert PointGray cameras timestamps to seconds.
+    Use convert then uncycle"""
+    #offset = time & 0xFFF
+    cycle1 = (time >> 12) & 0x1FFF
+    cycle2 = (time >> 25) & 0x7F
+    seconds = cycle2 + cycle1 / 8000.
+    return seconds
+
+
+def uncycle_pgts(time):
+    """Unwrap the converted seconds of a PointGray camera timestamp series."""
+    cycles = np.insert(np.diff(time) < 0, 0, False)
+    cycleindex = np.cumsum(cycles)
+    return time + cycleindex * 128
