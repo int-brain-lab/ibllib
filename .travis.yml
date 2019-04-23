@@ -6,7 +6,9 @@ install:
   - pip install -r python/requirements.txt
   - pip install -e python/.
 
-before_script: echo "exec('from oneibl.one import ONE; ONE(silent=True)')" | python
+before_script:
+  - echo "exec('from oneibl.one import ONE; ONE(silent=True)')" | python
+  - sed -i 's|null|"'$IBLFLATIRONPASS'"|g' /home/travis/.one_params
   # command to run tests
 script:
   - cd python
