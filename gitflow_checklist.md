@@ -19,7 +19,7 @@ To use `git flow` install it by: `sudo apt install git-flow`
 Normal push and pull for sharing an unfinished release branch apply
 
 ## Finalize a release branch
-    git flow release finish 1.2.0   |    git checkout master
+    git flow release finish 0.4.35  |    git checkout master
                                     |    git merge --no-ff release/0.4.35
                                     |    git tag -a 0.4.35
                                     |    git checkout develop
