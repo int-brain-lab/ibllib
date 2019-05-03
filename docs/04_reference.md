@@ -1,12 +1,7 @@
 # Reference
 ## Open Neurophysiology Environment
 
-### Neurodata standardization needs a new approach
-Neurophysiology badly needs data standardization. A scientist should be able to analyze data collected from multiple labs using a single analysis program, without spending untold hours figuring out new file formats.
-
-Substantial efforts have recently been put into developing neurodata file standards, with the most successful being the [Neurodata Without Borders](https://www.nwb.org/) (NWB) format. The NWB format has a comprehensive and careful design that allows one to store all data and metadata pertaining to a neurophysiology experiment. Nevertheless, its comprehensive design also means a steep learning curve for potential users, which has limited its adoption.
-
-The same thing has happened before in other scientific fields. For example, the open microscopy environment ([OME](https://www.openmicroscopy.org/)) group developed a standard file format for microscopy data, which is hardly ever used. But they also developed a set of loader functions, which allow scientists to analyze data in multiple native formats using a single program. These loader functions successfully standardized microscopy data. In principle, NWB also allows data providers to reimplement a set of API functions -- however the comprehensive nature of NWB again means this API is complex, limiting its adoption.
+Neurophysiology needs data standardization. A scientist should be able to analyze data collected from multiple labs using a single analysis program, without spending untold hours figuring out new file formats. Substantial efforts have recently been put into developing neurodata file standards, with the most successful being the [Neurodata Without Borders](https://www.nwb.org/) (NWB) format. The NWB format has a comprehensive and careful design that allows one to store all data and metadata pertaining to a neurophysiology experiment. Nevertheless, its comprehensive design also means a steep learning curve for potential users, which has limited its adoption.
 
 ### How the open neurophysiology environment works
 
