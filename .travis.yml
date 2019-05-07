@@ -5,6 +5,8 @@ python:
 install:
   - pip install -r python/requirements.txt
   - pip install -e python/.
+  # phylib will be a proper pip dependency once it's more stable
+  - pip install git+https://github.com/cortex-lab/phylib
 
 before_script:
   - echo "exec('from oneibl.one import ONE; ONE(silent=True)')" | python
