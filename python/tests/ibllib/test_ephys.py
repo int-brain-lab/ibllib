@@ -1,12 +1,14 @@
 import os
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 
 import numpy as np
 import numpy.random as nr
 
-from ibllib.ephys.ephysalf import rename_to_alf, _FILE_RENAMES, _load
+from ibllib.ephys.ephysalf import _rename_to_alf, _FILE_RENAMES, _load, EphysAlfCreator
+from phylib.io.model import TemplateModel
 from phylib.utils._misc import _write_tsv
 
 
@@ -17,16 +19,20 @@ class TestsEphys(unittest.TestCase):
         self.ns = 100
         self.nc = 10
         self.nt = 5
-        np.save(p / 'spike_times.npy', np.cumsum(nr.exponential(size=self.ns)))
-        np.save(p / 'spike_clusters.npy', nr.randint(low=0, high=10, size=self.ns))
+        self.ncd = 1000
+        np.save(p / 'spike_times.npy', .01 * np.cumsum(nr.exponential(size=self.ns)))
+        np.save(p / 'spike_clusters.npy', nr.randint(low=10, high=10 + self.nt, size=self.ns))
+        shutil.copy(p / 'spike_clusters.npy', p / 'spike_templates.npy')
         np.save(p / 'amplitudes.npy', nr.uniform(low=0.5, high=1.5, size=self.ns))
         np.save(p / 'channel_positions.npy', np.c_[np.arange(self.nc), np.zeros(self.nc)])
         np.save(p / 'templates.npy', np.random.normal(size=(self.nt, 50, self.nc)))
+        np.save(p / 'similar_templates.npy', np.tile(np.arange(self.nt), (self.nt, 1)))
         np.save(p / 'channel_map.npy', np.c_[np.arange(self.nc)])
         _write_tsv(p / 'cluster_group.tsv', 'group', {2: 'good', 3: 'mua', 5: 'noise'})
 
         # Raw data
-        np.save(p / 'rawdata.npy', np.random.normal(size=(1000, self.nc)))
+        self.dat_path = p / 'rawdata.npy'
+        np.save(self.dat_path, np.random.normal(size=(self.ncd, self.nc)))
 
         # LFP data.
         lfdata = (100 * np.random.normal(size=(1000, self.nc))).astype(np.int16)
@@ -54,17 +60,26 @@ class TestsEphys(unittest.TestCase):
     def test_ephys_rename(self):
         tn = self.tmp_dir.name
         p = Path(tn)
-        rename_to_alf(tn, rawfile='rawdata.npy')
-
-        # Check that the raw data has been renamed.
-        assert (p / 'ephys.raw.npy').exists()
-        assert (p / 'lfp.raw.bin').exists()
+        _rename_to_alf(tn)
 
         # Check all renames.
         for old, new in _FILE_RENAMES:
             assert not (p / old).exists()
             if old in self.files:
                 assert (p / new).exists()
+
+    def test_creator(self):
+        tn = self.tmp_dir.name
+        p = Path(tn)
+
+        model = TemplateModel(
+            self.dat_path, sample_rate=2000, n_channels_dat=self.ncd)
+        c = EphysAlfCreator(model)
+        c.convert()
+
+        # Check that the raw data has been renamed.
+        assert (p / 'ephys.raw.npy').exists()
+        assert (p / 'lfp.raw.bin').exists()
 
     def tearDown(self):
         self.tmp_dir.cleanup()
