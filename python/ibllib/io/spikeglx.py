@@ -75,7 +75,7 @@ class Reader:
             return
         return self.meta.get('fileTimeSecs') * self.fs
 
-    def read_samples(self, first_sample=0, last_sample=10000, sync_trace=False):
+    def read_samples(self, first_sample=0, last_sample=10000):
         """
         reads all channels from first_sample to last_sample, following numpy slicing convention
         sglx.read_samples(first=0, last=100) would be equivalent to slicing the array D
@@ -88,14 +88,19 @@ class Reader:
             fid.seek(byt_offset)
             darray = np.fromfile(fid, dtype=np.dtype('int16'), count=ns_to_read * self.nc
                                  ).reshape((int(ns_to_read), int(self.nc)))
-        darray = np.float32(darray) / self.gain_channels[self.type] * self.int2volts
-        return darray
+        # we don't want to apply any gain on the sync trace
+        sync_tr_ind = np.where(self.gain_channels[self.type] == 1.)
+        gain = 1 / self.gain_channels[self.type] * self.int2volts
+        gain[sync_tr_ind] = 1.
+        sync = split_sync(darray[:, sync_tr_ind])
+        darray = np.float32(darray) * gain
+        return darray, sync
 
 
 def read(sglx_file, first_sample=0, last_sample=10000):
     sglxr = Reader(sglx_file)
-    D = sglxr.read()
-    return D, sglxr.meta
+    D, sync = sglxr.read_samples(first_sample=first_sample, last_sample=last_sample)
+    return D, sync, sglxr.meta
 
 
 def read_meta_data(md_file):
@@ -133,4 +138,17 @@ def _gain_channels(meta_data):
                'ap': np.hstack((np.array([np.float32(g.split(' ')[-2]) for g in gain]), sy_gain))}
     elif 'niMNGain' in meta_data.keys():
         raise NotImplementedError()
+    return out
+
+
+def split_sync(sync_tr):
+    """
+    The synchronization channelx are stored as single bits, this will split the int16 original
+    channel into 16 single bits channels
+    :param sync_tr: the synchronisation trace
+    :return:
+    """
+    sync_tr = np.int16(sync_tr)
+    out = np.unpackbits(sync_tr.view(np.uint8)).reshape(sync_tr.size, 16)
+    out = np.flip(np.roll(out, 8, axis=1), axis=1)
     return out

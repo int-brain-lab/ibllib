@@ -160,6 +160,13 @@ class TestsSpikeGLX(unittest.TestCase):
         self.assertTrue(np.all(cg['ap'][0:-1] == 500))
         self.assertTrue(len(cg['ap']) == len(cg['lf']) == int(sum(md.get('snsApLfSy'))))
 
+    def testSplitSyncTrace(self):
+        sc = np.uint16(2 ** np.linspace(-1, 15, 17))
+        out = spikeglx.split_sync(sc)
+        for m in range(1, 16):
+            self.assertEqual(np.sum(out[m]), 1)
+            self.assertEqual(out[m, m - 1], 1)
+
 
 class TestsAlf(unittest.TestCase):
     def setUp(self) -> None:

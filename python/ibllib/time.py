@@ -1,5 +1,6 @@
 # library of small functions
 import datetime
+import numpy as np
 
 
 def isostr2date(isostr):
@@ -45,7 +46,7 @@ def format_date_range(date_range):
 def convert_pgts(time):
     """Convert PointGray cameras timestamps to seconds.
     Use convert then uncycle"""
-    #offset = time & 0xFFF
+    # offset = time & 0xFFF
     cycle1 = (time >> 12) & 0x1FFF
     cycle2 = (time >> 25) & 0x7F
     seconds = cycle2 + cycle1 / 8000.
