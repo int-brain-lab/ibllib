@@ -127,6 +127,7 @@ class EphysAlfCreator(object):
 
     def convert(self):
         """Rename the files and generate new ALF files."""
+        logger.info("Converting dataset to ALF.")
         # Renames.
         _rename_to_alf(self.dir_path)
         _rename_raw_file(self.model.dat_path)
@@ -140,6 +141,7 @@ class EphysAlfCreator(object):
 
     def rollback(self):
         """Rollback the renames."""
+        logger.info("Rolling back dataset conversion.")
         inverse_renames = [(new, old) for (old, new) in self.renames]
         _rename_to_alf(self.dir_path, renames=inverse_renames)
 

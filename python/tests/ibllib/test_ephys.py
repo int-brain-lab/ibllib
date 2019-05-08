@@ -81,6 +81,20 @@ class TestsEphys(unittest.TestCase):
         assert (p / 'ephys.raw.npy').exists()
         assert (p / 'lfp.raw.bin').exists()
 
+        # Check all renames.
+        for old, new in _FILE_RENAMES:
+            assert not (p / old).exists()
+            if old in self.files:
+                assert (p / new).exists()
+
+        # Cancel the renames and check we got back the files.
+        c.rollback()
+
+        for old, new in _FILE_RENAMES:
+            assert not (p / new).exists()
+            if old in self.files:
+                assert (p / old).exists()
+
     def tearDown(self):
         self.tmp_dir.cleanup()
 
