@@ -5,6 +5,14 @@
 # @Last Modified time: 3-02-2019 11:59:58.5858
 import tkinter as tk
 from tkinter import simpledialog
+from tkinter import messagebox
+
+
+def popup(title, msg):
+    root = tk.Tk()
+    root.withdraw()
+    messagebox.showinfo(title, msg)
+    root.quit()
 
 
 def numinput(title, prompt, default=None, minval=None, maxval=None,
