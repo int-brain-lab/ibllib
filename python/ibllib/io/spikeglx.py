@@ -30,6 +30,7 @@ class Reader:
             if self.nc * self.ns * 2 != self.nbytes:
                 logger_.warning(str(sglx_file) + " : meta data and filesize do not checkout")
             self.gain_channels = _gain_channels(self.meta)
+            self.memmap = np.memmap(sglx_file, dtype='int16', mode='r', shape=(self.ns, self.nc))
 
     @property
     def type(self):
@@ -73,7 +74,7 @@ class Reader:
         """ :return: number of samples """
         if not self.meta:
             return
-        return self.meta.get('fileTimeSecs') * self.fs
+        return int(self.meta.get('fileTimeSecs') * self.fs)
 
     def read_samples(self, first_sample=0, last_sample=10000):
         """
@@ -148,7 +149,7 @@ def split_sync(sync_tr):
     :param sync_tr: the synchronisation trace
     :return:
     """
-    sync_tr = np.int16(sync_tr)
+    sync_tr = np.int16(np.copy(sync_tr))
     out = np.unpackbits(sync_tr.view(np.uint8)).reshape(sync_tr.size, 16)
     out = np.flip(np.roll(out, 8, axis=1), axis=1)
-    return out
+    return np.int8(out)
