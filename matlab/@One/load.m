@@ -3,6 +3,7 @@ function varargout = load(self, eid, varargin)
 %       For session with UUID eid, Loads the datasets specified in the cell array dataset_types
 % my_data = one.load(eid, 'data', dataset_types, 'dclass_output', true)
 % my_data = one.load(..., 'cache_dir', '~/Documents/tmpanalysis') %
+% my_data = one.load(..., 'download_only', True) % do not attempt to load data and return only structure information
 % temporarly overrides the default cache dir from the parameter file
 
 %% handle input arguments
@@ -28,6 +29,7 @@ addOptional(p,'dry_run',false);
 addOptional(p,'force_replace',false);
 addOptional(p, 'dclass_output', false);
 addOptional(p, 'cache_dir', self.par.CACHE_DIR);
+addOptional(p, 'download_only', false)
 parse(p,varargin{:});
 for fn = fieldnames(p.Results)', eval([fn{1} '= p.Results.' (fn{1}) ';']); end
 if ischar(dataset_types), dataset_types = {dataset_types}; end
@@ -41,6 +43,12 @@ if isempty(dataset_types)
     dataset_types = ses.data_dataset_session_related.dataset_type;
     dclass_output = true;
 end
+% if there is only one dataset type, none of the fields of the structcture will be a cell
+% make sure the output is a cell
+if all(structfun(@(x) ~iscell(x), ses.data_dataset_session_related))
+    ses.data_dataset_session_related = structfun(@(x) {x}, ses.data_dataset_session_related, 'UniformOutput', false);
+end
+
 [~, ises, iargin] = intersect(ses.data_dataset_session_related.dataset_type, dataset_types);
 
 %% Create the data structure
@@ -51,9 +59,16 @@ D = flatten(struct(...
     'url', ses.data_dataset_session_related.data_url(ises),...
     'eid', repmat({eid}, length(ises), 1 )), 'wrap_scalar', true);
 D.data = cell(length(ises), 1);
+% if none of the dataset exist, this will return NaN in an array that has
+% to be converted to cells
+if ~iscell(D.url) && all(isnan(D.url)), D.url = mat2cell(D.url, ones(length(D.url), 1) ); end
 
 %% Loop over each dataset and read if necessary
 for m = 1:length(ises)
+    if isnan(D.url{m}),
+        warning(['Session ' ses.subject ' Dataset is not available on server:' D.dataset_type{m}])
+        continue
+    end
     url_server_side = strrep( D.url{m},  self.par.HTTP_DATA_SERVER, '');
     % create the local path while keeping ALF convention for folder structure
     if isunix
@@ -68,6 +83,7 @@ for m = 1:length(ises)
     end
     % loads the data
     D.local_path{m} = local_path;
+    if download_only, continue, end
     [~, ~, ext] = fileparts(local_path);
     switch ext
         case '.npy'

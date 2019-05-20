@@ -44,16 +44,18 @@ p = inputParser;
 for search_param=setxor(unique(SEARCH_TERMS(:,2)),'date_range')'
     addParameter(p,search_param{1}, {})
 end
-addParameter(p,'date_range', [], @(x) (isnumeric(x) & any(numel(x)==[0 2]) | ischar(x)))
+addParameter(p,'date_range', [], @(x) (isnumeric(x) & any(numel(x)==[0 1 2]) | ischar(x)))
 addParameter(p,'details', false)
 parse(p,varargin{:});
 for fn = fieldnames(p.Results)', eval([fn{1} '= p.Results.' (fn{1}) ';']); end
 %%
 if nargin ==1, eids = unique(SEARCH_TERMS(:,2)); ses=[]; return, end
 % make sure the date is in a proper format
-if ~isempty(date_range) && isa(date_range,'double')
+switch true
+    case ~isempty(date_range) && isa(date_range,'double')
+    if length(date_range) == 1, date_range = repmat(date_range, 1, 2); end     
     date_range = mat2cell(datestr(date_range, 'yyyy-mm-dd'),[1 1],10);
-elseif ~isempty(date_range) && ischar(date_range)
+    case ~isempty(date_range) && ischar(date_range)
     date_range = mat2cell(date_range,[1 1],10);
 end
 % create the url to send to the REST API
