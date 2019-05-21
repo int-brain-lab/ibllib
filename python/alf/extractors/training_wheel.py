@@ -1,8 +1,7 @@
+#!/usr/bin/env python
 # -*- coding:utf-8 -*-
 # @Author: Niccolò Bonacchi
 # @Date: Wednesday, July 18th 2018, 9:53:59 am
-# @Last Modified by: Niccolò Bonacchi
-# @Last Modified time: 18-07-2018 09:54:02.022
 """**ALF extractors** are a collection of functions that extract alf files from
 the PyBpod rig raw data.
 

@@ -1,8 +1,7 @@
+#!/usr/bin/env python
 # -*- coding:utf-8 -*-
 # @Author: Niccolò Bonacchi
 # @Date: Thursday, October 11th 2018, 12:11:13 pm
-# @Last Modified by: Niccolò Bonacchi
-# @Last Modified time: 11-10-2018 12:11:26.2626
 """
 Find task name
 Check if extractors for specific task exist

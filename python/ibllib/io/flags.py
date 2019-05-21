@@ -1,8 +1,7 @@
+#!/usr/bin/env python
 # -*- coding:utf-8 -*-
 # @Author: Niccolò Bonacchi
 # @Date: Tuesday, January 22nd 2019, 12:32:14 pm
-# @Last Modified by: Niccolò Bonacchi
-# @Last Modified time: 22-01-2019 12:32:16.1616
 from pathlib import Path
 import logging
 

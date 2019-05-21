@@ -1,8 +1,7 @@
+#!/usr/bin/env python
 # -*- coding:utf-8 -*-
 # @Author: Niccolò Bonacchi
 # @Date: Monday, July 16th 2018, 1:28:46 pm
-# @Last Modified by: Niccolò Bonacchi
-# @Last Modified time: 16-07-2018 01:30:26.2626
 """**Raw Data Loader functions for PyBpod rig.**
 
 Module contains one loader function per raw datafile

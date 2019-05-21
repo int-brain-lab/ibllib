@@ -1,8 +1,7 @@
+#!/usr/bin/env python
 # -*- coding:utf-8 -*-
 # @Author: Niccolò Bonacchi
 # @Date: Sunday, February 3rd 2019, 11:59:56 am
-# @Last Modified by: Niccolò Bonacchi
-# @Last Modified time: 3-02-2019 11:59:58.5858
 import tkinter as tk
 from tkinter import simpledialog
 from tkinter import messagebox

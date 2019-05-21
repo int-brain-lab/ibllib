@@ -1,8 +1,7 @@
+#!/usr/bin/env python
 # -*- coding:utf-8 -*-
 # @Author: Niccolò Bonacchi
 # @Date: Tuesday, February 12th 2019, 11:49:54 am
-# @Last Modified by: Niccolò Bonacchi
-# @Last Modified time: 12-02-2019 11:49:57.5757
 import numpy as np
 import os
 import ibllib.io.raw_data_loaders as raw

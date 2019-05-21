@@ -1,8 +1,7 @@
+#!/usr/bin/env python
 # -*- coding:utf-8 -*-
 # @Author: Niccolò Bonacchi
 # @Date: Wednesday, July 25th 2018, 3:22:57 pm
-# @Last Modified by: Niccolò Bonacchi
-# @Last Modified time: 25-07-2018 03:54:00.000
 import time
 
 

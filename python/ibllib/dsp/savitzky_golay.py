@@ -1,9 +1,7 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # @Author: nico
 # @Date:   2018-02-13 18:16:02
-# @Last Modified by:   nico
-# @Last Modified time: 2018-02-16 12:13:10
-# -*- coding: utf-8 -*-
 """
 Created on Wed Jan 14 11:30:29 2015
 
