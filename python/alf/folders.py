@@ -82,12 +82,14 @@ def session_name(path: Union[str, Path]) -> str:
     return '/'.join(Path(session_path(path)).parts[-3:])
 
 
-def next_num_folder(session_date_folder) -> str:
+def next_num_folder(session_date_folder: str) -> str:
+    """Return the next number for a session given a session_date_folder"""
     session_date_folder = Path(session_date_folder)
     if not session_date_folder.exists():
         return '001'
     session_nums = [
-        int(x.name) for x in session_date_folder.glob('*') if x.is_dir()
+        int(x.name) for x in session_date_folder.iterdir()
+        if x.is_dir() and not x.name.startswith('.') and x.name.isdigit()
     ]
     if not session_nums:
         out = '00' + str(1)
@@ -97,5 +99,4 @@ def next_num_folder(session_date_folder) -> str:
         out = '0' + str(int(max(session_nums)) + 1)
     elif max(session_nums) > 99:
         out = str(int(max(session_nums)) + 1)
-
     return out
