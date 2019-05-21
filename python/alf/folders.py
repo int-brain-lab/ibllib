@@ -80,3 +80,22 @@ def session_name(path: Union[str, Path]) -> str:
     useing session_path"""
     path = Path(path)
     return '/'.join(Path(session_path(path)).parts[-3:])
+
+
+def next_num_folder(session_date_folder) -> str:
+    session_date_folder = Path(session_date_folder)
+    if not session_date_folder.exists():
+        return '001'
+    session_nums = [
+        int(x.name) for x in session_date_folder.glob('*') if x.is_dir()
+    ]
+    if not session_nums:
+        out = '00' + str(1)
+    elif max(session_nums) < 9:
+        out = '00' + str(int(max(session_nums)) + 1)
+    elif 99 > max(session_nums) >= 9:
+        out = '0' + str(int(max(session_nums)) + 1)
+    elif max(session_nums) > 99:
+        out = str(int(max(session_nums)) + 1)
+
+    return out
