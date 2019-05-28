@@ -11,6 +11,8 @@ def rms(x, axis=None):
 
 class WindowGenerator(object):
     """
+    `wg = WindowGenerator(ns, nswin, overlap)`
+
     Provide sliding windows indices generator for signal processing applications.
     For straightforward spectrogram / periodogram implementation, prefer scipy methods !
     :param ns: number of sample of the signal along the direction to be windowed
