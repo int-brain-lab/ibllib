@@ -86,13 +86,13 @@ class TestWindowGenerator(unittest.TestCase):
 
     def test_window_simple(self):
         wg = WindowGenerator(ns=500, nswin=100, overlap=50)
-        sl = list(wg.slices)
+        sl = list(wg.firstlast)
         self.assertTrue(wg.nwin == len(sl) == 9)
         self.assertTrue(np.all(np.array([s[0] for s in sl]) == np.arange(0, wg.nwin) * 50))
         self.assertTrue(np.all(np.array([s[1] for s in sl]) == np.arange(0, wg.nwin) * 50 + 100))
 
         wg = WindowGenerator(ns=500, nswin=100, overlap=10)
-        sl = list(wg.slices)
+        sl = list(wg.firstlast)
         first = np.array([0, 90, 180, 270, 360, 450])
         last = np.array([100, 190, 280, 370, 460, 500])
         self.assertTrue(wg.nwin == len(sl) == 6)
@@ -102,21 +102,27 @@ class TestWindowGenerator(unittest.TestCase):
     def test_nwindows_computation(self):
         for m in np.arange(0, 100):
             wg = WindowGenerator(ns=500 + m, nswin=87 + m, overlap=11 + m)
-            sl = list(wg.slices)
+            sl = list(wg.firstlast)
             self.assertTrue(wg.nwin == len(sl))
 
-    def test_slicing(self):
+    def test_firstlast_slices(self):
         # test also the indexing versus direct slicing
         my_sig = np.random.rand(500,)
         wg = WindowGenerator(ns=500, nswin=100, overlap=50)
         # 1) get the window by
         my_rms = np.zeros((wg.nwin,))
-        for first, last in wg.slices:
+        for first, last in wg.firstlast:
             my_rms[wg.iw] = rms(my_sig[first:last])
+        # test with slice_array method
         my_rms_ = np.zeros((wg.nwin,))
-        for wsig in wg.slice(my_sig):
+        for wsig in wg.slice_array(my_sig):
             my_rms_[wg.iw] = rms(wsig)
-        assert(np.all(my_rms_ == my_rms))
+        self.assertTrue(np.all(my_rms_ == my_rms))
+        # test with the slice output
+        my_rms_ = np.zeros((wg.nwin,))
+        for sl in wg.slice:
+            my_rms_[wg.iw] = rms(my_sig[sl])
+        self.assertTrue(np.all(my_rms_ == my_rms))
 
     def test_tscale(self):
         wg = WindowGenerator(ns=500, nswin=100, overlap=50)
