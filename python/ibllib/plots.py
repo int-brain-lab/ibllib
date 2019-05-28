@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from ibllib.dsp import rms
 
 
-def wiggle(w, fs=1, gain=1.41 / 2, color='k', ax=None, **kwargs):
+def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, **kwargs):
     """
     Matplotlib display of wiggle traces
 
@@ -47,20 +47,35 @@ def wiggle(w, fs=1, gain=1.41 / 2, color='k', ax=None, **kwargs):
     if not ax:
         ax = plt.gca()
     for ntr in range(ntr):
-        trace, t_trace = insert_zeros(w[:, ntr] * sf)
-        ax.fill_betweenx(t_trace, ntr, trace + ntr,
-                         where=trace >= 0,
-                         facecolor=color,
-                         linewidth=0.5)
-        ax.plot(w[:, ntr] * sf + ntr, tscale, color, linewidth=0.5)
+        if fill:
+            trace, t_trace = insert_zeros(w[:, ntr] * sf)
+            ax.fill_betweenx(t_trace, ntr, trace + ntr,
+                             where=trace >= 0,
+                             facecolor=color,
+                             linewidth=linewidth)
+        ax.plot(w[:, ntr] * sf + ntr, tscale, color, linewidth=linewidth, **kwargs)
 
     ax.set_xlim(-1, ntr + 1)
     ax.set_ylim(tscale[0], tscale[-1])
     ax.set_ylabel('Time (s)')
-    ax.set_ylabel('Trace')
+    ax.set_xlabel('Trace')
     ax.invert_yaxis()
+
+
+def traces(w, **kwargs):
+    """
+    Matplotlib display of traces
+
+    :param w: 2D array (numpy array dimension nsamples, ntraces)
+    :param fs: sampling frequency
+    :param gain: display gain
+    :param ax: matplotlib axes object
+    :return: None
+    """
+    wiggle(w, **kwargs, fill=False)
 
 
 if __name__ == "__main__":
     w = np.random.rand(500, 40) - 0.5
     wiggle(w, fs=30000)
+    traces(w, fs=30000, color='r')
