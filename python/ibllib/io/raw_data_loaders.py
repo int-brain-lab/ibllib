@@ -108,7 +108,14 @@ def load_settings(session_path):
 
 
 def _load_encoder_events_file(file_path):
-    # file loader without the session overhead
+    """
+    File loader without the session overhead
+    :param file_path:
+    :return: dataframe of encoder events
+    """
+    if file_path.stat().st_size == 0:
+        logger_.error("_iblrig_encoderEvents.raw.ssv is an empty file. ")
+        raise ValueError("_iblrig_encoderEvents.raw.ssv is an empty file. ABORT EXTRACTION. ")
     data = pd.read_csv(file_path, sep=' ', header=None)
     data = data.drop([0, 2, 5], axis=1)
     data.columns = ['re_ts', 'sm_ev', 'bns_ts']
