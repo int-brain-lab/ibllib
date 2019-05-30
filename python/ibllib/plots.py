@@ -6,15 +6,17 @@ import matplotlib.pyplot as plt
 from ibllib.dsp import rms
 
 
-def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, **kwargs):
+def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=0, **kwargs):
     """
     Matplotlib display of wiggle traces
 
     :param w: 2D array (numpy array dimension nsamples, ntraces)
     :param fs: sampling frequency
     :param gain: display gain
-    :param color: color of traces
-    :param ax: matplotlib axes object
+    :param color: ('k') color of traces
+    :param ax: (None) matplotlib axes object
+    :param fill: (True) fill variable area above 0
+    :param t0: (0) timestamp of the first sample
     :return: None
     """
     nech, ntr = w.shape
@@ -49,14 +51,14 @@ def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, **k
     for ntr in range(ntr):
         if fill:
             trace, t_trace = insert_zeros(w[:, ntr] * sf)
-            ax.fill_betweenx(t_trace, ntr, trace + ntr,
+            ax.fill_betweenx(t_trace + t0, ntr, trace + ntr,
                              where=trace >= 0,
                              facecolor=color,
                              linewidth=linewidth)
-        ax.plot(w[:, ntr] * sf + ntr, tscale, color, linewidth=linewidth, **kwargs)
+        ax.plot(w[:, ntr] * sf + ntr, tscale + t0, color, linewidth=linewidth, **kwargs)
 
     ax.set_xlim(-1, ntr + 1)
-    ax.set_ylim(tscale[0], tscale[-1])
+    ax.set_ylim(tscale[0] + t0, tscale[-1] + t0)
     ax.set_ylabel('Time (s)')
     ax.set_xlabel('Trace')
     ax.invert_yaxis()
