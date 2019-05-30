@@ -3,7 +3,7 @@ import numpy as np
 import numpy.matlib as mat
 
 import ibllib.dsp.fourier as ft
-from ibllib.dsp import WindowGenerator, rms
+from ibllib.dsp import WindowGenerator, rms, rises, falls, fronts
 
 
 class TestFFT(unittest.TestCase):
@@ -129,6 +129,36 @@ class TestWindowGenerator(unittest.TestCase):
         ts = wg.tscale(fs=1000)
         self.assertTrue(ts[0] == (100 - 1) / 2 / 1000)
         self.assertTrue((np.allclose(np.diff(ts), 0.05)))
+
+    def test_rises_falls(self):
+        # test 1D case with a long pulse and a dirac
+        a = np.zeros(500,)
+        a[80:120] = 1
+        a[200] = 1
+        # rising fronts
+        self.assertTrue(all(rises(a) == np.array([80, 200])))
+        # falling fronts
+        self.assertTrue(all(falls(a) == np.array([120, 201])))
+        # both
+        ind, val = fronts(a)
+        self.assertTrue(all(ind == np.array([80, 120, 200, 201])))
+        self.assertTrue(all(val == np.array([1, -1, 1, -1])))
+
+        # test a 2D case with 2 long pulses and a dirac
+        a = np.zeros((2, 500))
+        a[0, 80:120] = 1
+        a[0, 200] = 1
+        a[1, 280:320] = 1
+        a[1, 400] = 1
+        # rising fronts
+        self.assertTrue(np.all(rises(a) == np.array([[0, 0, 1, 1], [80, 200, 280, 400]])))
+        # falling fronts
+        self.assertTrue(np.all(falls(a) == np.array([[0, 0, 1, 1], [120, 201, 320, 401]])))
+        # both
+        ind, val = fronts(a)
+        self.assertTrue(all(ind[0] == np.array([0, 0, 0, 0, 1, 1, 1, 1])))
+        self.assertTrue(all(ind[1] == np.array([80, 120, 200, 201, 280, 320, 400, 401])))
+        self.assertTrue(all(val == np.array([1, -1, 1, -1, 1, -1, 1, -1])))
 
 
 if __name__ == "__main__":
