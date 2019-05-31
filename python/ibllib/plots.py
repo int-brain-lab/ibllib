@@ -77,6 +77,22 @@ def traces(w, **kwargs):
     wiggle(w, **kwargs, fill=False)
 
 
+def squares(tscale, polarity, ax=None, **kwargs):
+    """
+    Matplotlib display of rising and falling fronts in a square-wave pattern
+
+    :param tscale: time of indices of fronts
+    :param polarity: polarity of front (1: rising, -1:falling)
+    :param ax: matplotlib axes object
+    :return: None
+    """
+    if not ax:
+        ax = plt.gca()
+    f = np.tile(polarity, (2, 1))
+    t = np.concatenate((tscale, np.r_[tscale[1:], tscale[-1]])).reshape(2, f.shape[1])
+    ax.plot(t.transpose().ravel(), f.transpose().ravel(), **kwargs)
+
+
 if __name__ == "__main__":
     w = np.random.rand(500, 40) - 0.5
     wiggle(w, fs=30000)
