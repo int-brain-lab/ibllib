@@ -2,31 +2,7 @@ import numpy as np
 
 import ibllib.dsp as dsp
 
-SYNC_BATCH_SIZE_SAMPLES = 2 ** 18  # number of samples to read at once in bin file for sync
 WHEEL_RADIUS_CM = 3.1
-# this is the mapping of synchronisation pulses coming out of the FPGA
-AUXES = [
-    (0, None),
-    (1, None),
-    (2, 'left_camera'),
-    (3, 'right_camera'),
-    (4, 'body_camera'),
-    (5, None),
-    (6, None),
-    (7, 'bpod'),
-    (8, None),
-    (9, None),
-    (10, None),
-    (11, 'frame_to_ttl'),
-    (12, 'rotary_encoder_0'),
-    (13, 'rotary_encoder_1'),
-    (14, None),
-    (15, 'audio'),
-]
-SYNC_CHANNEL_MAP = {}
-for aux in AUXES:
-    if aux[1]:
-        SYNC_CHANNEL_MAP[aux[1]] = aux[0]
 
 
 def _bpod_events_extraction(bpod_t, bpod_fronts):
@@ -34,8 +10,8 @@ def _bpod_events_extraction(bpod_t, bpod_fronts):
     From detected fronts on the bpod sync traces, outputs the synchronisation events
     related to trial start and valve opening
     :param bpod_t: numpy vector containing times of fronts
-    :param bpod_fronts: numpy vector containing polarity of fronts (1 rise, 0 fall)
-    :return: numpy arrays t_trial_start and t_valve_open
+    :param bpod_fronts: numpy vector containing polarity of fronts (1 rise, -1 fall)
+    :return: numpy arrays of times t_trial_start and t_valve_open
     """
     # make sure that there are no 2 consecutive fall or consecutive rise events
     assert(np.all(np.abs(np.diff(bpod_fronts)) == 2))
@@ -86,3 +62,31 @@ def _rotary_encoder_positions_from_gray_code(channelA, channelB):
     # convert position in cm
     p = np.cumsum(p) / 1024 * np.pi * WHEEL_RADIUS_CM
     return t, p
+
+
+def _frame2ttl_events_extraction(frame2ttl_t, frame2ttl_fronts):
+    """
+    From detected fronts on the _frame2ttl_ sync traces, outputs the synchronisation events
+    related end quiescence, stim freeze and stim off
+    :param frame2ttl_t: numpy vector containing times of fronts
+    :param frame2ttl_fronts: numpy vector containing polarity of fronts (1 rise, -1 fall)
+    :return: numpy arrays
+    """
+    # make sure that there are no 2 consecutive fall or consecutive rise events
+    assert(np.all(np.abs(np.diff(frame2ttl_fronts)) == 2))
+    pass
+
+
+def _audio_events_extraction(audio_t, audio_fronts):
+    """
+    From detected fronts on the audio sync traces, outputs the synchronisation events
+    related to tone in
+    :param audio_t: numpy vector containing times of fronts
+    :param audio_fronts: numpy vector containing polarity of fronts (1 rise, -1 fall)
+    :return: numpy arrays ready_tone_in, error_tone_in
+    """
+    # make sure that there are no 2 consecutive fall or consecutive rise events
+    assert(np.all(np.abs(np.diff(audio_fronts)) == 2))
+    # make sure that the first event is a rise
+    assert(audio_fronts[0] == 1)
+    pass
