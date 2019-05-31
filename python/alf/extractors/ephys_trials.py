@@ -1,34 +1,88 @@
-from pathlib import Path
+import numpy as np
 
-from ibllib.io import spikeglx
 import ibllib.dsp as dsp
-session_path = '/mnt/s0/Data/Subjects/ZM_1150/2019-05-07/001'
 
 SYNC_BATCH_SIZE_SAMPLES = 2 ** 18  # number of samples to read at once in bin file for sync
-OVERLAP = 30000  # number of overlapping samples for sync signal (1 sec at 30 kHz)
+WHEEL_RADIUS_CM = 3.1
+# this is the mapping of synchronisation pulses coming out of the FPGA
+AUXES = [
+    (0, None),
+    (1, None),
+    (2, 'left_camera'),
+    (3, 'right_camera'),
+    (4, 'body_camera'),
+    (5, None),
+    (6, None),
+    (7, 'bpod'),
+    (8, None),
+    (9, None),
+    (10, None),
+    (11, 'frame_to_ttl'),
+    (12, 'rotary_encoder_0'),
+    (13, 'rotary_encoder_1'),
+    (14, None),
+    (15, 'audio'),
+]
+SYNC_CHANNEL_MAP = {}
+for aux in AUXES:
+    if aux[1]:
+        SYNC_CHANNEL_MAP[aux[1]] = aux[0]
 
-#
-session_path = Path(session_path)
-raw_ephys_path = session_path / 'raw_ephys_data'
+
+def _bpod_events_extraction(bpod_t, bpod_fronts):
+    """
+    From detected fronts on the bpod sync traces, outputs the synchronisation events
+    related to trial start and valve opening
+    :param bpod_t: numpy vector containing times of fronts
+    :param bpod_fronts: numpy vector containing polarity of fronts (1 rise, 0 fall)
+    :return: numpy arrays t_trial_start and t_valve_open
+    """
+    # make sure that there are no 2 consecutive fall or consecutive rise events
+    assert(np.all(np.abs(np.diff(bpod_fronts)) == 2))
+    # make sure that the first event is a rise
+    assert(bpod_fronts[0] == 1)
+    # take only even time differences: ie. from rising to falling fronts
+    dt = np.diff(bpod_t)[::2]
+    # detect start trials event assuming length is 0.1 ms except the first trial
+    i_trial_start = np.r_[1, np.where(dt <= 1.66e-4)[0] * 2]
+    # the first trial we detect the first falling edge to which we subtract 0.1ms
+    t_trial_start = bpod_t[i_trial_start]
+    t_trial_start[0] -= 1e-4
+    # valve open events are all events that are not trial starts (first trials excluded)
+    i_valve_open = np.where(np.invert(dt <= 1.66e-4))[0] * 2
+    i_valve_open = np.delete(i_valve_open, np.where(i_valve_open < 2))
+    t_valve_open = bpod_t[i_valve_open]
+    # # some debug plots when needed
+    # import matplotlib.pyplot as plt
+    # import ibllib.plots as plots
+    # plt.figure()
+    # plots.squares(bpod_t, bpod_fronts)
+    # plt.plot(t_valve_open, t_valve_open * 0 + 0.5, 'g.')
+    # plt.plot(t_trial_start, t_trial_start * 0 + 1, 'r.')
+    return t_trial_start, t_valve_open
 
 
-raw_ephys_apfiles = raw_ephys_path.rglob('*.ap.bin')
+def _rotary_encoder_positions_from_gray_code(channelA, channelB):
+    """
+    Extracts the rotary encoder absolute position (cm) as function of time from digital recording
+    of the 2 channels.
 
+    Rotary Encoder implements X1 encoding: http://www.ni.com/tutorial/7109/en/
+    rising A  & B high = +1
+    rising A  & B low = -1
+    falling A & B high = -1
+    falling A & B low = +1
 
-
-#
-for raw_ephys_apfile in raw_ephys_apfiles:
-    sr = spikeglx.Reader(raw_ephys_apfile)
-    wg = dsp.WindowGenerator(sr.ns, SYNC_BATCH_SIZE_SAMPLES, OVERLAP)
-
-    for sl in wg.slice:
-        print(sl)
-        break
-    ss = sr.read_sync(sl)
-
-##
-from ibllib.plots import traces
-traces(ss, fs=sr.fs)
-
-
-# dsp.WindowGenerator
+    :param channelA: Vector of rotary encoder digital recording channel A
+    :type channelA: numpy array
+    :param channelB: Vector of rotary encoder digital recording channel B
+    :type channelB: numpy array
+    :return: indices vector and position vector
+    """
+    # detect rising and falling fronts
+    t, fronts = dsp.fronts(channelA)
+    # apply X1 logic to get positions in ticks
+    p = (channelB[t] * 2 - 1) * fronts
+    # convert position in cm
+    p = np.cumsum(p) / 1024 * np.pi * WHEEL_RADIUS_CM
+    return t, p
