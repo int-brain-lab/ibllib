@@ -88,6 +88,9 @@ def squares(tscale, polarity, ax=None, **kwargs):
     """
     if not ax:
         ax = plt.gca()
+    isort = np.argsort(tscale)
+    tscale = tscale[isort]
+    polarity = polarity[isort]
     f = np.tile(polarity, (2, 1))
     t = np.concatenate((tscale, np.r_[tscale[1:], tscale[-1]])).reshape(2, f.shape[1])
     ax.plot(t.transpose().ravel(), f.transpose().ravel(), **kwargs)
