@@ -33,8 +33,8 @@ def _bpod_events_extraction(bpod_t, bpod_fronts):
     # import ibllib.plots as plots
     # plt.figure()
     # plots.squares(bpod_t, bpod_fronts)
-    # plt.plot(t_valve_open, t_valve_open * 0 + 0.5, 'g.')
-    # plt.plot(t_trial_start, t_trial_start * 0 + 1, 'r.')
+    # plots.vertical_lines(t_valve_open, ymin=-0.2, ymax=1.2, linewidth=0.5, color='g')
+    # plots.vertical_lines(t_trial_start, ymin=-0.2, ymax=1.2, linewidth=0.5, color='r')
     return t_trial_start, t_valve_open
 
 
@@ -64,29 +64,25 @@ def _rotary_encoder_positions_from_gray_code(channelA, channelB):
     return t, p
 
 
-def _frame2ttl_events_extraction(frame2ttl_t, frame2ttl_fronts):
-    """
-    From detected fronts on the _frame2ttl_ sync traces, outputs the synchronisation events
-    related end quiescence, stim freeze and stim off
-    :param frame2ttl_t: numpy vector containing times of fronts
-    :param frame2ttl_fronts: numpy vector containing polarity of fronts (1 rise, -1 fall)
-    :return: numpy arrays
-    """
-    # make sure that there are no 2 consecutive fall or consecutive rise events
-    assert(np.all(np.abs(np.diff(frame2ttl_fronts)) == 2))
-    pass
-
-
 def _audio_events_extraction(audio_t, audio_fronts):
     """
     From detected fronts on the audio sync traces, outputs the synchronisation events
     related to tone in
+
     :param audio_t: numpy vector containing times of fronts
     :param audio_fronts: numpy vector containing polarity of fronts (1 rise, -1 fall)
-    :return: numpy arrays ready_tone_in, error_tone_in
+    :return: numpy arrays t_ready_tone_in, t_error_tone_in
     """
     # make sure that there are no 2 consecutive fall or consecutive rise events
     assert(np.all(np.abs(np.diff(audio_fronts)) == 2))
     # make sure that the first event is a rise
     assert(audio_fronts[0] == 1)
-    pass
+    # take only even time differences: ie. from rising to falling fronts
+    dt = np.diff(audio_t)[::2]
+    # detect ready tone by length below 110 ms
+    i_ready_tone_in = np.r_[1, np.where(dt <= 0.11)[0] * 2]
+    t_ready_tone_in = audio_t[i_ready_tone_in]
+    # error tones are events lasting from 400ms to 600ms
+    i_error_tone_in = np.where(np.logical_and(0.4 < dt, dt < 0.6))[0] * 2
+    t_error_tone_in = audio_t[i_error_tone_in]
+    return t_ready_tone_in, t_error_tone_in
