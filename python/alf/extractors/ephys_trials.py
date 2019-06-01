@@ -86,3 +86,19 @@ def _audio_events_extraction(audio_t, audio_fronts):
     i_error_tone_in = np.where(np.logical_and(0.4 < dt, dt < 0.6))[0] * 2
     t_error_tone_in = audio_t[i_error_tone_in]
     return t_ready_tone_in, t_error_tone_in
+
+
+def _assign_events_to_trial(t_trial_start, t_event):
+    """
+    Assign events to a trial given trial start times and event times. Trials without an event
+    have nan times. The output has the same size of trials to write in alf file.
+
+    :param t_trial_start: numpy vector of trial start times
+    :param t_event: numpy vector of event times to assign to trials
+    :return: numpy array of event times with the same shape of trial start.
+    """
+    ind = np.searchsorted(t_event, t_trial_start)
+    t_event_nans = np.zeros_like(ind) * np.nan
+    iall, iu = np.unique(np.flip(ind), return_index=True)
+    t_event_nans[-(iu - ind.size + 1)] = t_event
+    return t_event_nans
