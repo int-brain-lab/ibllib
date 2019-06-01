@@ -96,6 +96,27 @@ def squares(tscale, polarity, ax=None, **kwargs):
     ax.plot(t.transpose().ravel(), f.transpose().ravel(), **kwargs)
 
 
+def vertical_lines(x, ymin=0, ymax=1, ax=None, **kwargs):
+    """
+    From a x vector, draw separate vertical lines at each x location ranging from ymin to ymax
+
+    :param x: numpy array vector of x values where to display lnes
+    :param ymin: lower end of the lines (scalar)
+    :param ymax: higher end of the lines (scalar)
+    :param ax: (optional) matplotlib axis instance
+    :return: None
+    """
+    x = np.tile(x, (3, 1))
+    x[2, :] = np.nan
+    y = np.zeros_like(x)
+    y[0, :] = ymin
+    y[1, :] = ymax
+    y[2, :] = np.nan
+    if not ax:
+        ax = plt.gca()
+    ax.plot(x.T.flatten(), y.T.flatten(), **kwargs)
+
+
 if __name__ == "__main__":
     w = np.random.rand(500, 40) - 0.5
     wiggle(w, fs=30000)
