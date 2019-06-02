@@ -49,7 +49,7 @@ class TestEphysSyncExtraction(unittest.TestCase):
     def test_align_to_trial(self):
         # simple test with one missing at the end
         t_trial_start = np.arange(0, 5) * 10
-        t_event = np.arange(0, 5) *10 + 2
+        t_event = np.arange(0, 5) * 10 + 2
         t_event_nans = ephys_trials._assign_events_to_trial(t_trial_start, t_event)
         self.assertTrue(np.allclose(t_event_nans, t_event, equal_nan=True, atol=0, rtol=0))
 
