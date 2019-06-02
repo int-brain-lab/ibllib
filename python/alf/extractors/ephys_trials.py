@@ -88,17 +88,38 @@ def _audio_events_extraction(audio_t, audio_fronts):
     return t_ready_tone_in, t_error_tone_in
 
 
-def _assign_events_to_trial(t_trial_start, t_event):
+def _assign_events_to_trial(t_trial_start, t_event, take='last'):
     """
-    Assign events to a trial given trial start times and event times. Trials without an event
-    have nan times. The output has the same size of trials to write in alf file.
+    Assign events to a trial given trial start times and event times.
+
+    Trials without an event
+    result in nan value in output time vector.
+    The output has a consistent size with t_trial_start and ready to output to alf.
 
     :param t_trial_start: numpy vector of trial start times
     :param t_event: numpy vector of event times to assign to trials
+    :param take: 'last' or 'first' (optional, default 'last'): index to take in case of duplicates
     :return: numpy array of event times with the same shape of trial start.
     """
-    ind = np.searchsorted(t_event, t_trial_start)
-    t_event_nans = np.zeros_like(ind) * np.nan
-    iall, iu = np.unique(np.flip(ind), return_index=True)
-    t_event_nans[-(iu - ind.size + 1)] = t_event
+    # make sure the events are sorted
+    try:
+        assert(np.all(np.diff(t_trial_start) >= 0))
+    except AssertionError:
+        raise ValueError('Trial starts vector not sorted')
+    try:
+        assert(np.all(np.diff(t_event) >= 0))
+    except AssertionError:
+        raise ValueError('Events vector is not sorted')
+    # remove events that happened before the first trial start
+    t_event = t_event[t_event >= t_trial_start[0]]
+    ind = np.searchsorted(t_trial_start, t_event) - 1
+    t_event_nans = np.zeros_like(t_trial_start) * np.nan
+    # select first or last element matching each trial start
+    if take == 'last':
+        iall, iu = np.unique(np.flip(ind), return_index=True)
+        t_event_nans[iall] = t_event[- (iu - ind.size + 1)]
+    elif take == 'first':
+        iall, iu = np.unique(ind, return_index=True)
+        t_event_nans[iall] = t_event[iu]
+
     return t_event_nans

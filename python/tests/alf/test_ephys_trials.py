@@ -47,14 +47,36 @@ class TestEphysSyncExtraction(unittest.TestCase):
         self.assertTrue(np.all(np.isclose(t_valve_open, t_valve_open_)))
 
     def test_align_to_trial(self):
-        t_trial_start = np.array([109.7647, 118.51416667, 123.7964, 129.24503333,
-                                  132.97976667, 136.8624, 141.95523333, 144.93636667,
-                                  149.5042, 153.08273333])
-        t_event = np.array([122.13073333, 133.63566667, 140.25, 143.12163333, 146.8216,
-                            150.11556667, 154.98453333])
-
-        t_event_out_ = np.array([np.nan, 122.13073333, np.nan, np.nan,
-                                 133.63566667, 140.25, 143.12163333, 146.8216,
-                                 150.11556667, 154.98453333])
+        # simple test with one missing at the end
+        t_trial_start = np.arange(0, 5) * 10
+        t_event = np.arange(0, 5) *10 + 2
         t_event_nans = ephys_trials._assign_events_to_trial(t_trial_start, t_event)
-        np.all(t_event_out_ == t_event_nans)
+        self.assertTrue(np.allclose(t_event_nans, t_event, equal_nan=True, atol=0, rtol=0))
+
+        # test with missing values
+        t_trial_start = np.array([109, 118, 123, 129, 132, 136, 141, 144, 149, 153])
+        t_event = np.array([122, 133, 140, 143, 146, 150, 154])
+        t_event_out_ = np.array([np.nan, 122, np.nan, np.nan, 133, 140, 143, 146, 150, 154])
+        t_event_nans = ephys_trials._assign_events_to_trial(t_trial_start, t_event)
+        self.assertTrue(np.allclose(t_event_out_, t_event_nans, equal_nan=True, atol=0, rtol=0))
+
+        # test with events before initial start trial
+        t_trial_start = np.arange(0, 5) * 10
+        t_event = np.arange(0, 5) * 10 - 2
+        t_event_nans = ephys_trials._assign_events_to_trial(t_trial_start, t_event)
+        desired_out = np.array([8., 18., 28., 38., np.nan])
+        self.assertTrue(np.allclose(desired_out, t_event_nans, equal_nan=True, atol=0, rtol=0))
+
+        # test with several events per trial, missing events and events before
+        t_trial_start = np.array([0, 10, 20, 30, 40])
+        t_event = np.array([-1, 2, 4, 12, 35, 42])
+        t_event_nans = ephys_trials._assign_events_to_trial(t_trial_start, t_event)
+        desired_out = np.array([4, 12., np.nan, 35, 42])
+        self.assertTrue(np.allclose(desired_out, t_event_nans, equal_nan=True, atol=0, rtol=0))
+
+        # same test above but this time take the first index instead of last
+        t_trial_start = np.array([0, 10, 20, 30, 40])
+        t_event = np.array([-1, 2, 4, 12, 35, 42])
+        t_event_nans = ephys_trials._assign_events_to_trial(t_trial_start, t_event, take='first')
+        desired_out = np.array([2, 12., np.nan, 35, 42])
+        self.assertTrue(np.allclose(desired_out, t_event_nans, equal_nan=True, atol=0, rtol=0))
