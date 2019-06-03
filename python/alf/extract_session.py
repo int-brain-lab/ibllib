@@ -12,7 +12,9 @@ from pathlib import Path
 import traceback
 
 from alf.extractors import (
-    training_trials, training_wheel, biased_trials, biased_wheel)
+    training_trials, training_wheel,
+    biased_trials, biased_wheel,
+    ephys_trials, ephys_fpga)
 from ibllib.io import raw_data_loaders as raw
 import ibllib.io.flags as flags
 
@@ -80,6 +82,10 @@ def from_path(session_path, force=False, save=True):
         biased_trials.extract_all(session_path, data=data, save=save)
         biased_wheel.extract_all(session_path, bp_data=data, save=save)
         logger_.info('session extracted \n')  # timing info in log
+    if extractor_type == 'ephys':
+        data = raw.load_data(session_path)
+        ephys_trials.extract_all(session_path, data=data, save=save)
+        ephys_fpga.extract_all(session_path, save=save)
 
 
 def bulk(subjects_folder, dry=False):

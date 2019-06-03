@@ -67,7 +67,7 @@ def welchogram(fs, wav):
     W = np.zeros((nwin, len(fscale)))
     tscale = window_generator.tscale(fs=fs)
     detect = []
-    for first, last in window_generator.slices:
+    for first, last in window_generator.firstlast:
         # load the current window into memory
         w = np.float64(wav[first:last]) * _get_conversion_factor()
         # detection of ready tones

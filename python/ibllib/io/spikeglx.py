@@ -97,6 +97,16 @@ class Reader:
         darray = np.float32(darray) * gain
         return darray, sync
 
+    def read_sync(self, slice=slice(0, 10000)):
+        """
+        Reads only the sync trace at specified samples
+
+        `sync_samples = sr.read_sync(0:10000)`
+        """
+        if not(self.meta and self.meta['acqApLfSy'][2]):
+            logger_.warning('Sync trace not labeled in metadata. Assuming last trace')
+        return split_sync(self.memmap[slice, -1])
+
 
 def read(sglx_file, first_sample=0, last_sample=10000):
     sglxr = Reader(sglx_file)

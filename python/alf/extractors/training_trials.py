@@ -52,9 +52,8 @@ def get_feedbackType(session_path, save=False, data=False):
     Will raise an error if more than one of the mutually exclusive states have
     been triggered.
 
-    Sets feedbackType to -1 if error state was trigered
+    Sets feedbackType to -1 if error state was trigered (applies to no-go)
     Sets feedbackType to +1 if reward state was triggered
-    Sets feedbackType to 0 if no_go state was triggered
 
     :param session_path: absolute path of session folder
     :type session_path: str

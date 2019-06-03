@@ -33,7 +33,7 @@ def rmsmap(fbin):
            'tscale': wingen.tscale(fs=sglx.fs)}
     win['spectral_density'] = np.zeros((len(win['fscale']), sglx.nc))
     # loop through the whole session
-    for first, last in wingen.slices:
+    for first, last in wingen.firstlast:
         D = sglx.read_samples(first_sample=first, last_sample=last).transpose()
         # remove low frequency noise below 1 Hz
         D = dsp.hp(D, 1 / sglx.fs, [0, 1])

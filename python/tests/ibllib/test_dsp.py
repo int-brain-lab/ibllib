@@ -3,7 +3,7 @@ import numpy as np
 import numpy.matlib as mat
 
 import ibllib.dsp.fourier as ft
-from ibllib.dsp import WindowGenerator, rms
+from ibllib.dsp import WindowGenerator, rms, rises, falls, fronts
 
 
 class TestFFT(unittest.TestCase):
@@ -86,13 +86,13 @@ class TestWindowGenerator(unittest.TestCase):
 
     def test_window_simple(self):
         wg = WindowGenerator(ns=500, nswin=100, overlap=50)
-        sl = list(wg.slices)
+        sl = list(wg.firstlast)
         self.assertTrue(wg.nwin == len(sl) == 9)
         self.assertTrue(np.all(np.array([s[0] for s in sl]) == np.arange(0, wg.nwin) * 50))
         self.assertTrue(np.all(np.array([s[1] for s in sl]) == np.arange(0, wg.nwin) * 50 + 100))
 
         wg = WindowGenerator(ns=500, nswin=100, overlap=10)
-        sl = list(wg.slices)
+        sl = list(wg.firstlast)
         first = np.array([0, 90, 180, 270, 360, 450])
         last = np.array([100, 190, 280, 370, 460, 500])
         self.assertTrue(wg.nwin == len(sl) == 6)
@@ -102,27 +102,63 @@ class TestWindowGenerator(unittest.TestCase):
     def test_nwindows_computation(self):
         for m in np.arange(0, 100):
             wg = WindowGenerator(ns=500 + m, nswin=87 + m, overlap=11 + m)
-            sl = list(wg.slices)
+            sl = list(wg.firstlast)
             self.assertTrue(wg.nwin == len(sl))
 
-    def test_slicing(self):
+    def test_firstlast_slices(self):
         # test also the indexing versus direct slicing
         my_sig = np.random.rand(500,)
         wg = WindowGenerator(ns=500, nswin=100, overlap=50)
         # 1) get the window by
         my_rms = np.zeros((wg.nwin,))
-        for first, last in wg.slices:
+        for first, last in wg.firstlast:
             my_rms[wg.iw] = rms(my_sig[first:last])
+        # test with slice_array method
         my_rms_ = np.zeros((wg.nwin,))
-        for wsig in wg.slice(my_sig):
+        for wsig in wg.slice_array(my_sig):
             my_rms_[wg.iw] = rms(wsig)
-        assert(np.all(my_rms_ == my_rms))
+        self.assertTrue(np.all(my_rms_ == my_rms))
+        # test with the slice output
+        my_rms_ = np.zeros((wg.nwin,))
+        for sl in wg.slice:
+            my_rms_[wg.iw] = rms(my_sig[sl])
+        self.assertTrue(np.all(my_rms_ == my_rms))
 
     def test_tscale(self):
         wg = WindowGenerator(ns=500, nswin=100, overlap=50)
         ts = wg.tscale(fs=1000)
         self.assertTrue(ts[0] == (100 - 1) / 2 / 1000)
         self.assertTrue((np.allclose(np.diff(ts), 0.05)))
+
+    def test_rises_falls(self):
+        # test 1D case with a long pulse and a dirac
+        a = np.zeros(500,)
+        a[80:120] = 1
+        a[200] = 1
+        # rising fronts
+        self.assertTrue(all(rises(a) == np.array([80, 200])))
+        # falling fronts
+        self.assertTrue(all(falls(a) == np.array([120, 201])))
+        # both
+        ind, val = fronts(a)
+        self.assertTrue(all(ind == np.array([80, 120, 200, 201])))
+        self.assertTrue(all(val == np.array([1, -1, 1, -1])))
+
+        # test a 2D case with 2 long pulses and a dirac
+        a = np.zeros((2, 500))
+        a[0, 80:120] = 1
+        a[0, 200] = 1
+        a[1, 280:320] = 1
+        a[1, 400] = 1
+        # rising fronts
+        self.assertTrue(np.all(rises(a) == np.array([[0, 0, 1, 1], [80, 200, 280, 400]])))
+        # falling fronts
+        self.assertTrue(np.all(falls(a) == np.array([[0, 0, 1, 1], [120, 201, 320, 401]])))
+        # both
+        ind, val = fronts(a)
+        self.assertTrue(all(ind[0] == np.array([0, 0, 0, 0, 1, 1, 1, 1])))
+        self.assertTrue(all(ind[1] == np.array([80, 120, 200, 201, 280, 320, 400, 401])))
+        self.assertTrue(all(val == np.array([1, -1, 1, -1, 1, -1, 1, -1])))
 
 
 if __name__ == "__main__":

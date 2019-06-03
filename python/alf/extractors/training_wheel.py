@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
-# @Author: Niccolò Bonacchi
-# @Date: Wednesday, July 18th 2018, 9:53:59 am
 """**ALF extractors** are a collection of functions that extract alf files from
 the PyBpod rig raw data.
 
@@ -20,6 +18,7 @@ from scipy import interpolate
 
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
+import ibllib.behaviour.wheel as wheel
 
 logger_ = logging.getLogger('ibllib.alf')
 WHEEL_RADIUS_CM = 3.1
@@ -312,21 +311,14 @@ def get_velocity(session_path, save=False, data_wheel=None):
     if data_wheel is None:
         logger_.error('No wheel data for ' + str(session_path))
         return None
-    dp = np.diff(data_wheel['re_pos'])
-    dt = np.diff(data_wheel['re_ts'])
-    # Compute raw velocity
-    vel = dp / dt
-    # Compute velocity time scale
-    td = data_wheel['re_ts'][:-1] + dt / 2
 
-    # Get the true velocity function
-    velocity = interpolate.interp1d(td, vel, fill_value="extrapolate")
+    velocity = wheel.velocity(data_wheel['re_ts'], data_wheel['re_pos'])
 
     if raw.save_bool(save, '_ibl_wheel.velocity.npy'):
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf',
                              '_ibl_wheel.velocity.npy')
-        np.save(fpath, velocity(data_wheel['re_ts']))
+        np.save(fpath, velocity)
 
     return velocity(data_wheel['re_ts'])
 
