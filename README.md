@@ -17,8 +17,6 @@ https://ibllib.readthedocs.io/en/latest/_static/one_demo.html
 
 **Python Module**: Python 3.6 or higher.
 
-**Matlab Module**: Matlab R2016b or higher (jsonencode function).
-
 
 ## Development practices
 Gitflow and Semantic Versioning.
@@ -28,5 +26,6 @@ Python
 -   flake8
 -   build documentation
 
-Matlab
--   run tests
+
+## Matlab Library
+The Matlab library has moved to its own repository here: https://github.com/int-brain-lab/ibllib-matlab/
