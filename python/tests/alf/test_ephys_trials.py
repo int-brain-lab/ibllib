@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-import alf.extractors.ephys_trials as ephys_trials
+import alf.extractors.ephys_fpga as ephys_fpga
 
 
 class TestEphysSyncExtraction(unittest.TestCase):
@@ -41,8 +41,8 @@ class TestEphysSyncExtraction(unittest.TestCase):
                                 179.41063333, 179.41073333, 181.70343333, 181.85343333,
                                 183.12896667, 183.12906667])
 
-        t_trial_start, t_valve_open = ephys_trials._bpod_events_extraction(bpod_times_,
-                                                                           bpod_fronts_)
+        t_trial_start, t_valve_open, _ = ephys_fpga._bpod_events_extraction(bpod_times_,
+                                                                            bpod_fronts_)
         self.assertTrue(np.all(np.isclose(t_trial_start, t_trial_start_)))
         self.assertTrue(np.all(np.isclose(t_valve_open, t_valve_open_)))
 
@@ -50,33 +50,33 @@ class TestEphysSyncExtraction(unittest.TestCase):
         # simple test with one missing at the end
         t_trial_start = np.arange(0, 5) * 10
         t_event = np.arange(0, 5) * 10 + 2
-        t_event_nans = ephys_trials._assign_events_to_trial(t_trial_start, t_event)
+        t_event_nans = ephys_fpga._assign_events_to_trial(t_trial_start, t_event)
         self.assertTrue(np.allclose(t_event_nans, t_event, equal_nan=True, atol=0, rtol=0))
 
         # test with missing values
         t_trial_start = np.array([109, 118, 123, 129, 132, 136, 141, 144, 149, 153])
         t_event = np.array([122, 133, 140, 143, 146, 150, 154])
         t_event_out_ = np.array([np.nan, 122, np.nan, np.nan, 133, 140, 143, 146, 150, 154])
-        t_event_nans = ephys_trials._assign_events_to_trial(t_trial_start, t_event)
+        t_event_nans = ephys_fpga._assign_events_to_trial(t_trial_start, t_event)
         self.assertTrue(np.allclose(t_event_out_, t_event_nans, equal_nan=True, atol=0, rtol=0))
 
         # test with events before initial start trial
         t_trial_start = np.arange(0, 5) * 10
         t_event = np.arange(0, 5) * 10 - 2
-        t_event_nans = ephys_trials._assign_events_to_trial(t_trial_start, t_event)
+        t_event_nans = ephys_fpga._assign_events_to_trial(t_trial_start, t_event)
         desired_out = np.array([8., 18., 28., 38., np.nan])
         self.assertTrue(np.allclose(desired_out, t_event_nans, equal_nan=True, atol=0, rtol=0))
 
         # test with several events per trial, missing events and events before
         t_trial_start = np.array([0, 10, 20, 30, 40])
         t_event = np.array([-1, 2, 4, 12, 35, 42])
-        t_event_nans = ephys_trials._assign_events_to_trial(t_trial_start, t_event)
+        t_event_nans = ephys_fpga._assign_events_to_trial(t_trial_start, t_event)
         desired_out = np.array([4, 12., np.nan, 35, 42])
         self.assertTrue(np.allclose(desired_out, t_event_nans, equal_nan=True, atol=0, rtol=0))
 
         # same test above but this time take the first index instead of last
         t_trial_start = np.array([0, 10, 20, 30, 40])
         t_event = np.array([-1, 2, 4, 12, 35, 42])
-        t_event_nans = ephys_trials._assign_events_to_trial(t_trial_start, t_event, take='first')
+        t_event_nans = ephys_fpga._assign_events_to_trial(t_trial_start, t_event, take='first')
         desired_out = np.array([2, 12., np.nan, 35, 42])
         self.assertTrue(np.allclose(desired_out, t_event_nans, equal_nan=True, atol=0, rtol=0))
