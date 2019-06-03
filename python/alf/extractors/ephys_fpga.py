@@ -277,4 +277,4 @@ def extract_all(session_path, save=False, version=None):
     # last phase of the process is to save the alf data-files
     np.save(output_path / '_ibl_wheel.position.npy', wheel['re_pos'])
     np.save(output_path / '_ibl_wheel.times.npy', wheel['re_ts'])
-    np.save(output_path / '_ibl_wheel.velocity.npy', whl.velocity(wheel['re_pos'], wheel['re_ts']))
+    np.save(output_path / '_ibl_wheel.velocity.npy', whl.velocity(wheel['re_ts'], wheel['re_pos']))
