@@ -70,6 +70,7 @@ SEARCH_TERMS = {  # keynames are possible input arguments and values are actual 
     'subjects': 'subject',
     'date_range': 'date_range',
     'date-range': 'date_range',
+    'date': 'date_range',
     'labs': 'lab',
     'lab': 'lab',
     'task': 'task_protocol',
@@ -255,12 +256,12 @@ class ONE(OneAbstract):
         ses = ses[0]
         # if no dataset_type is provided:
         # a) force the output to be a dictionary that provides context to the data
-        # b) download all types that have a data url specified
+        # b) download all types that have a data url specified whithin the alf folder
         dataset_types = [dataset_types] if isinstance(dataset_types, str) else dataset_types
         if not dataset_types:
             dclass_output = True
             dataset_types = [d['dataset_type'] for d in ses['data_dataset_session_related']
-                             if d['data_url']]
+                             if d['data_url'] and 'alf' in Path(d['data_url']).parts]
         dc = SessionDataInfo.from_session_details(ses, dataset_types=dataset_types, eid=eid_str)
         # loop over each dataset and download if necessary
         for ind in range(len(dc)):
