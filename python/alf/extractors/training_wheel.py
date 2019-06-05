@@ -320,7 +320,7 @@ def get_velocity(session_path, save=False, data_wheel=None):
                              '_ibl_wheel.velocity.npy')
         np.save(fpath, velocity)
 
-    return velocity(data_wheel['re_ts'])
+    return velocity
 
 
 def extract_all(session_path, bp_data=None, save=False):

@@ -1,16 +1,20 @@
 import logging
+import tempfile
+from pathlib import Path
 
 import numpy as np
 import matplotlib.pyplot as plt
 
 import ibllib.plots as plots
 import ibllib.behaviour.wheel as whl
-from ibllib.io import spikeglx
+import ibllib.io
 import ibllib.dsp as dsp
 
 _logger = logging.getLogger('ibllib')
+
 SYNC_BATCH_SIZE_SAMPLES = 2 ** 18  # number of samples to read at once in bin file for sync
 WHEEL_RADIUS_CM = 3.1
+WHEEL_TICKS = 1024
 DEBUG_PLOTS = False
 # this is the mapping of synchronisation pulses coming out of the FPGA
 AUXES = [
@@ -35,6 +39,45 @@ SYNC_CHANNEL_MAP = {}
 for aux in AUXES:
     if aux[1]:
         SYNC_CHANNEL_MAP[aux[1]] = aux[0]
+
+
+def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False):
+    """
+    Extracts sync.times, sync.channels and sync.polarities from binary ephys dataset
+
+    :param raw_ephys_apfile: bin file containing ephys data or spike
+    :param out_dir: output directory
+    :return:
+    """
+    if not output_path:
+        file_ftcp = tempfile.TemporaryFile()
+    else:
+        file_ftcp = Path(output_path / 'fronts_times_channel_polarity.bin')
+    if isinstance(raw_ephys_apfile, ibllib.io.spikeglx.Reader):
+        sr = raw_ephys_apfile
+    else:
+        sr = ibllib.io.spikeglx.Reader(raw_ephys_apfile)
+    # loop over chunks of the raw ephys file
+    wg = dsp.WindowGenerator(sr.ns, SYNC_BATCH_SIZE_SAMPLES, overlap=1)
+    fid_ftcp = open(file_ftcp, 'wb')
+    for sl in wg.slice:
+        ss = sr.read_sync(sl)
+        ind, fronts = dsp.fronts(ss, axis=0)
+        sav = np.c_[(ind[0, :] + sl.start) / sr.fs, ind[1, :], fronts.astype(np.double)]
+        sav.tofile(fid_ftcp)
+        # print progress
+        wg.print_progress()
+    # close temp file, read from it and delete
+    fid_ftcp.close()
+    tim_chan_pol = np.fromfile(str(file_ftcp))
+    tim_chan_pol = tim_chan_pol.reshape((int(tim_chan_pol.size / 3), 3))
+    file_ftcp.unlink()
+    sync = {'times': tim_chan_pol[:, 0],
+            'channels': tim_chan_pol[:, 1],
+            'polarities': tim_chan_pol[:, 2]}
+    if save:
+        ibllib.io.alf.save_object_npy(output_path, sync, 'sync')
+    return sync
 
 
 def _bpod_events_extraction(bpod_t, bpod_fronts):
@@ -74,7 +117,23 @@ def _bpod_events_extraction(bpod_t, bpod_fronts):
     return t_trial_start, t_valve_open, i_iti_in
 
 
-def _rotary_encoder_positions_from_gray_code(channelA, channelB):
+def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb):
+    """
+    Extracts the rotary encoder absolute position (cm) as function of time from fronts detected
+    on the 2 channels
+
+    :param ta: time of fronts on channel A
+    :param pa: polarity of fronts on channel A
+    :param tb: time of fronts on channel B
+    :param pb: polarity of fronts on channel B
+    :return: indices vector (ta) and position vector
+    """
+    p = pb[np.searchsorted(tb, ta) - 1] * pa
+    p = np.cumsum(p) / WHEEL_TICKS * np.pi * WHEEL_RADIUS_CM
+    return ta, p
+
+
+def _rotary_encoder_positions_from_gray_code(channela, channelb):
     """
     Extracts the rotary encoder absolute position (cm) as function of time from digital recording
     of the 2 channels.
@@ -92,11 +151,11 @@ def _rotary_encoder_positions_from_gray_code(channelA, channelB):
     :return: indices vector and position vector
     """
     # detect rising and falling fronts
-    t, fronts = dsp.fronts(channelA)
+    t, fronts = dsp.fronts(channela)
     # apply X1 logic to get positions in ticks
-    p = (channelB[t] * 2 - 1) * fronts
+    p = (channelb[t] * 2 - 1) * fronts
     # convert position in cm
-    p = np.cumsum(p) / 1024 * np.pi * WHEEL_RADIUS_CM
+    p = np.cumsum(p) / WHEEL_TICKS * np.pi * WHEEL_RADIUS_CM
     return t, p
 
 
@@ -161,76 +220,73 @@ def _assign_events_to_trial(t_trial_start, t_event, take='last'):
     return t_event_nans
 
 
-def extract_all(session_path, save=False, version=None):
-    output_path = session_path / 'alf'
-    raw_ephys_path = session_path / 'raw_ephys_data'
-    if not output_path.exists():
-        output_path.mkdir()
+def _get_sync_fronts(sync, channel_nb):
+    return {'times': sync['times'][sync['channels'] == channel_nb],
+            'polarities': sync['polarities'][sync['channels'] == channel_nb]}
 
-    # Init before loop
-    wheel = {'re_ts': np.array([0]), 're_pos': np.array([0])}
 
-    ch_sel = np.array([SYNC_CHANNEL_MAP['bpod'],
-                       SYNC_CHANNEL_MAP['frame2ttl'],
-                       SYNC_CHANNEL_MAP['audio']])
-    fronts = np.array([])
-    ind = np.zeros((2, 0))
+def extract_wheel_sync(sync, output_path=None, save=False, chmap=SYNC_CHANNEL_MAP):
+    """
+    Extract wheel positions and times from sync fronts dictionary for all 16 chans
 
-    # TODO handle several files for ephys and merge results, spin off scan sync loop to function
-    ephys_files = list(raw_ephys_path.rglob('*.ap.bin'))
-    if len(ephys_files) > 2:
-        raise NotImplementedError("Multiple probes/files extraction not implemented. Contact us !")
-    for raw_ephys_apfile in ephys_files:
-        sr = spikeglx.Reader(raw_ephys_apfile)
-        wg = dsp.WindowGenerator(sr.ns, SYNC_BATCH_SIZE_SAMPLES, overlap=1)
+    :param sync: dictionary 'times', 'polarities' of fronts detected on sync trace
+    :param output_path: where to save the data
+    :param save: True/False
+    :param chmap: dictionary containing channel indices. Default to constant.
+        chmap = {'rotary_encoder_0': 13, 'rotary_encoder_1': 14}
+    :return: dictionary containing wheel data, 'wheel_ts', 're_ts'
+    """
+    wheel = {}
+    channela = _get_sync_fronts(sync, chmap['rotary_encoder_0'])
+    channelb = _get_sync_fronts(sync, chmap['rotary_encoder_1'])
+    wheel['re_ts'], wheel['re_pos'] = _rotary_encoder_positions_from_fronts(
+        channela['times'], channela['polarities'], channelb['times'], channelb['polarities'])
+    if save and output_path:
+        # last phase of the process is to save the alf data-files
+        np.save(output_path / '_ibl_wheel.position.npy', wheel['re_pos'])
+        np.save(output_path / '_ibl_wheel.times.npy', wheel['re_ts'])
+        np.save(output_path / '_ibl_wheel.velocity.npy',
+                whl.velocity(wheel['re_ts'], wheel['re_pos']))
+    return wheel
 
-        for sl in wg.slice:
-            ss = sr.read_sync(sl)
 
-            # extract rotary encoder information
-            ire, pre = _rotary_encoder_positions_from_gray_code(
-                channelA=ss[:, SYNC_CHANNEL_MAP['rotary_encoder_0']],
-                channelB=ss[:, SYNC_CHANNEL_MAP['rotary_encoder_1']])
-            # append, this is not the best practice but optimization may not be needed
-            wheel['re_ts'] = np.append(wheel['re_ts'], (ire + sl.start) / sr.fs)
-            wheel['re_pos'] = np.append(wheel['re_pos'], pre + wheel['re_pos'][-1])
+def extract_behaviour_sync(sync, output_path=None, save=False, chmap=SYNC_CHANNEL_MAP):
+    """
+    Extract wheel positions and times from sync fronts dictionary
 
-            # extract events from the Bpod trace
-            ind_, fronts_ = dsp.fronts(ss[:, ch_sel], axis=0)
-            ind_[0, :] += sl.start
-            ind = np.append(ind, ind_, axis=1)
-            fronts = np.append(fronts, fronts_)
-
-            # print progress
-            wg.print_progress()
-
-    # make dictionaries of events for each trace
-    bpod = {'time': ind[0, ind[1, :] == 0] / sr.fs,
-            'fronts': fronts[ind[1, :] == 0]}
-    frame2ttl = {'time': ind[0, ind[1, :] == 1] / sr.fs,
-                 'fronts': fronts[ind[1, :] == 1]}
-    audio = {'time': ind[0, ind[1, :] == 2] / sr.fs,
-             'fronts': fronts[ind[1, :] == 2]}
-
+    :param sync: dictionary 'times', 'polarities' of fronts detected on sync trace for all 16 chans
+    :param output_path: where to save the data
+    :param save: True/False
+    :param chmap: dictionary containing channel index. Default to constant.
+        chmap = {'bpod': 7, 'frame2ttl': 12, 'audio': 15}
+    :return: trials dictionary
+    """
+    bpod = _get_sync_fronts(sync, chmap['bpod'])
+    frame2ttl = _get_sync_fronts(sync, chmap['frame2ttl'])
+    audio = _get_sync_fronts(sync, chmap['audio'])
     # extract events from the fronts for each trace
-    t_trial_start, t_valve_open, t_iti_in = _bpod_events_extraction(bpod['time'], bpod['fronts'])
-    t_ready_tone_in, t_error_tone_in = _audio_events_extraction(audio['time'], audio['fronts'])
+    t_trial_start, t_valve_open, t_iti_in = _bpod_events_extraction(bpod['times'],
+                                                                    bpod['polarities'])
+    t_ready_tone_in, t_error_tone_in = _audio_events_extraction(audio['times'],
+                                                                audio['polarities'])
 
     # stim off time is the first frame2ttl rise/fall after the trial start
     # does not apply for 1st trial
-    ind = np.searchsorted(frame2ttl['time'], t_trial_start[1:], side='left')
-    t_stim_off = frame2ttl['time'][ind]
+    ind = np.searchsorted(frame2ttl['times'], t_trial_start[1:], side='left')
+    t_stim_off = frame2ttl['times'][ind]
     # the t_stim_off happens 100ms after trial start
     assert(np.all((t_trial_start[1:] - t_stim_off) > -0.1))
-    t_stim_freeze = frame2ttl['time'][ind - 1]
+    t_stim_freeze = frame2ttl['times'][ind - 1]
 
     if DEBUG_PLOTS:
         plt.figure()
         ax = plt.gca()
-        plots.squares(bpod['time'], bpod['fronts'] * 0.4 + 1, ax=ax, label='bpod=1', color='k')
-        plots.squares(frame2ttl['time'], frame2ttl['fronts'] * 0.4 + 2,
+        plots.squares(bpod['times'], bpod['polarities'] * 0.4 + 1,
+                      ax=ax, label='bpod=1', color='k')
+        plots.squares(frame2ttl['times'], frame2ttl['polarities'] * 0.4 + 2,
                       ax=ax, label='frame2ttl=2', color='k')
-        plots.squares(audio['time'], audio['fronts'] * 0.4 + 3, ax=ax, label='audio=3', color='k')
+        plots.squares(audio['times'], audio['polarities'] * 0.4 + 3,
+                      ax=ax, label='audio=3', color='k')
         plots.vertical_lines(t_ready_tone_in, ymin=0, ymax=4,
                              ax=ax, label='ready tone in', color='b', linewidth=0.5)
         plots.vertical_lines(t_trial_start, ymin=0, ymax=4,
@@ -251,7 +307,7 @@ def extract_all(session_path, save=False, version=None):
         'error_tone_in': _assign_events_to_trial(t_trial_start, t_error_tone_in),
         'valve_open': _assign_events_to_trial(t_trial_start, t_valve_open),
         'stim_freeze': _assign_events_to_trial(t_trial_start, t_stim_freeze),
-        'stimOn_times': _assign_events_to_trial(t_trial_start, frame2ttl['time'], take='first'),
+        'stimOn_times': _assign_events_to_trial(t_trial_start, frame2ttl['times'], take='first'),
         'iti_in': _assign_events_to_trial(t_trial_start, t_iti_in)
     }
     # goCue_times corresponds to the tone_in event
@@ -265,16 +321,37 @@ def extract_all(session_path, save=False, version=None):
     # # # # this is specific to version 4
     trials['iti_in'] = trials['valve_open'] + 1.
     trials['iti_in'][ind_err] = trials['error_tone_in'][ind_err] + 2.
-    trials['intervals'] = trials['iti_in'] - t_trial_start
+    trials['intervals'] = np.c_[t_trial_start, trials['iti_in']]
     # # # # end of specific to version 4
+    if save:
+        np.save(output_path / '_ibl_trials.goCue_times.npy', trials['goCue_times'])
+        np.save(output_path / '_ibl_trials.response_times.npy', trials['response_times'])
+        np.save(output_path / '_ibl_trials.stimOn_times.npy', trials['stimOn_times'])
+        np.save(output_path / '_ibl_trials.intervals.npy', trials['intervals'])
 
-    if not save:
-        return
-    np.save(output_path / '_ibl_trials.goCue_times.npy', trials['goCue_times'])
-    np.save(output_path / '_ibl_trials.response_times.npy', trials['response_times'])
-    np.save(output_path / '_ibl_trials.stimOn_times.npy', trials['stimOn_times'])
-    np.save(output_path / '_ibl_trials.intervals.npy', trials['intervals'])
-    # last phase of the process is to save the alf data-files
-    np.save(output_path / '_ibl_wheel.position.npy', wheel['re_pos'])
-    np.save(output_path / '_ibl_wheel.times.npy', wheel['re_ts'])
-    np.save(output_path / '_ibl_wheel.velocity.npy', whl.velocity(wheel['re_ts'], wheel['re_pos']))
+    return trials
+
+
+def extract_all(session_path, save=False, version=None):
+    """
+    Reads ephys binary file and extract sync, wheel and behaviour ALF files
+
+    :param session_path: '/path/to/subject/yyyy-mm-dd/001'
+    :param save: Bool, defaults to False
+    :param version: bpod version, defaults to None
+    :return: None
+    """
+    output_path = session_path / 'alf'
+    raw_ephys_path = session_path / 'raw_ephys_data'
+    if not output_path.exists():
+        output_path.mkdir()
+
+    ephys_files = list(raw_ephys_path.rglob('*.ap.bin'))
+    if len(ephys_files) > 2:
+        raise NotImplementedError("Multiple probes/files extraction not implemented. Contact us !")
+    raw_ephys_apfile = ephys_files[0]
+    sr = ibllib.io.spikeglx.Reader(raw_ephys_apfile)
+
+    sync = _sync_to_alf(sr, output_path, save=save)
+    extract_wheel_sync(sync, output_path, save=save)
+    extract_behaviour_sync(sync, output_path, save=save)
