@@ -199,8 +199,8 @@ def get_wheel_data(session_path, bp_data=None, save=False):
                 # at which point we are running out of possible bugs and calling it
             tr_dc[ind] = data['re_pos'][ind - 1]
         if iwarn:  # if a warning flag was caught in the loop throw a single warning
-            logger_.warning('Rotary encoder reset events discrepancy at following indices: ' +
-                            str(iwarn) + ' times: ' + str(data['re_ts'][iwarn]))
+            logger_.warning('Rotary encoder reset events discrepancy. Doing my best to merge.')
+            logger_.debug('Offending inds: ' + str(iwarn) + ' times: ' + str(data['re_ts'][iwarn]))
         # exit status 0 is fine, 1 something went wrong
         return tr_dc, len(iwarn) != 0
 
