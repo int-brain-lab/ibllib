@@ -251,6 +251,8 @@ def _read_settings_json_compatibility_enforced(json_file):
 
 
 def rename_files_compatibility(ses_path, version_tag):
+    if not version_tag:
+        return
     if version.le(version_tag, '3.2.3'):
         task_code = ses_path.glob('**/_ibl_trials.iti_duration.npy')
         for fn in task_code:

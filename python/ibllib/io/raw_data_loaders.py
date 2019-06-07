@@ -61,6 +61,16 @@ def trial_times_to_times(raw_trial):
     return raw_trial
 
 
+def load_bpod(session_path):
+    """
+    Load both settings and data from bpod (.json and .jsonable)
+
+    :param session_path: Absolute path of session folder
+    :return: dict settings and list of dicts data
+    """
+    return load_settings(session_path), load_data(session_path)
+
+
 def load_data(session_path, time='absolute'):
     """
     Load PyBpod data files (.jsonable).

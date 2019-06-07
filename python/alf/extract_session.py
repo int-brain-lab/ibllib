@@ -73,12 +73,14 @@ def from_path(session_path, force=False, save=True):
         logger_.info(f"Session {session_path} already extracted.")
         return
     if extractor_type == 'training':
-        data = raw.load_data(session_path)
+        settings, data = raw.load_bpod(session_path)
+        logger_.info('training session on ' + settings['PYBPOD_BOARD'])
         training_trials.extract_all(session_path, data=data, save=save)
         training_wheel.extract_all(session_path, bp_data=data, save=save)
         logger_.info('session extracted \n')  # timing info in log
     if extractor_type == 'biased':
-        data = raw.load_data(session_path)
+        settings, data = raw.load_bpod(session_path)
+        logger_.info('biased session on ' + settings['PYBPOD_BOARD'])
         biased_trials.extract_all(session_path, data=data, save=save)
         biased_wheel.extract_all(session_path, bp_data=data, save=save)
         logger_.info('session extracted \n')  # timing info in log
