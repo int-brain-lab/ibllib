@@ -171,7 +171,7 @@ class TestsSpikeGLX(unittest.TestCase):
 class TestsAlf(unittest.TestCase):
     def setUp(self) -> None:
         self.tmpdir = Path(tempfile.gettempdir()) / 'iotest'
-        self.tmpdir.mkdir()
+        self.tmpdir.mkdir(exist_ok=True)
         self.vfile = self.tmpdir / 'toto.titi.npy'
         self.tfile = self.tmpdir / 'toto.timestamps.npy'
         self.object_files = [self.tmpdir / 'neuveu.riri.npy',
@@ -203,6 +203,32 @@ class TestsAlf(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             obj = alf.load_object(self.tmpdir)
         self.assertTrue('object name should be provided too' in str(context.exception))
+
+    def test_save_npy(self):
+        # test with straight vectors
+        a = {'riri': np.random.rand(100),
+             'fifi': np.random.rand(100)}
+        alf.save_object_npy(self.tmpdir, a, 'neuveux')
+        # read after write
+        b = alf.load_object(self.tmpdir, 'neuveux')
+        for k in a:
+            self.assertTrue(np.all(a[k] == b[k]))
+        # test with more exotic shapes, still valid
+        a = {'riri': np.random.rand(100),
+             'fifi': np.random.rand(100, 2),
+             'loulou': np.random.rand(1, 2)}
+        alf.save_object_npy(self.tmpdir, a, 'neuveux')
+        # read after write
+        b = alf.load_object(self.tmpdir, 'neuveux')
+        for k in a:
+            self.assertTrue(np.all(a[k] == b[k]))
+        # test with non allowed shape
+        a = {'riri': np.random.rand(100),
+             'fifi': np.random.rand(100, 2),
+             'loulou': np.random.rand(5, 2)}
+        with self.assertRaises(Exception) as context:
+            alf.save_object_npy(self.tmpdir, a, 'neuveux')
+        self.assertTrue('Dimensions are not consistent' in str(context.exception))
 
     def tearDown(self) -> None:
         shutil.rmtree(self.tmpdir)

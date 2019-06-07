@@ -16,6 +16,28 @@ from ibllib.io import jsonable
 logger_ = logging.getLogger('ibllib')
 
 
+def _check_dimensions(dico):
+    """
+    Test for consistency of dimensions as per ALF specs in a dictionary. Raises a Value Error.
+
+    Alf broadcasting rules: only accepts consistent dimensions for a given axis
+    a dimension is consistent with another if it's empty, 1, or equal to the other arrays
+    dims [a, 1],  [1, b] and [a, b] are all consistent, [c, 1] is not
+
+    :param dico: dictionary containing data
+    :return: None
+    """
+    shapes = [dico[lab].shape for lab in dico]
+    lmax = max([len(s) for s in shapes])
+    for l in range(lmax):
+        sh = np.array([s[l] if (len(s) - 1 >= l) else 1 for s in shapes])
+        try:
+            assert(np.unique(sh[sh != 1]).size <= 1)
+        except AssertionError:
+            raise ValueError('Dimensions are not consistent to save all arrays in ALF format: ' +
+                             str(shapes))
+
+
 def read_ts(filename):
     """
     Load time-series from ALF format
@@ -74,9 +96,12 @@ def load_object(alfpath, object=None):
     For example, if the file provided to the function is `spikes.times`, the function will
     load `spikes.time`, `spikes.clusters`, `spikes.depths`, `spike.amps` in a dictionary
     whose keys will be `time`, `clusters`, `depths`, `amps`
+
     :param alfpath: any alf file pertaining to the object OR directory containing files
     :param object: if a directory is provided, need to specify the name of object to load
     :return: a dictionary of all attributes pertaining to the object
+
+    example: spikes = ibllib.io.alf.load_object('/path/to/my/alffolder/', 'spikes')
     """
     alfpath = Path(alfpath)
     if alfpath.is_dir():
@@ -93,3 +118,21 @@ def load_object(alfpath, object=None):
     for fil, att in zip(files_alf, attributes):
         OUT[att] = load_file_content(fil)
     return OUT
+
+
+def save_object_npy(alfpath, dico, object):
+    """
+    Saves a dictionary in alf format using object as object name and dictionary keys as attibute
+    names. Dimensions have to be consistent.
+
+    :param alfpath: path of the folder to save data to
+    :param dico: dictionary to save to npy
+    :param object: name of the object to save
+    :return: None
+
+    example: ibllib.io.alf.save_object_npy('/path/to/my/alffolder/', spikes, 'spikes')
+    """
+    alfpath = Path(alfpath)
+    _check_dimensions(dico)
+    for k, v in dico.items():
+        np.save(alfpath / (object + '.' + k + '.npy'), v)
