@@ -16,7 +16,7 @@ install it on Python {}.{}.
 """.format(*(REQUIRED_PYTHON + CURRENT_PYTHON)))
     sys.exit(1)
 
-with open(CURRENT_DIRECTORY.parent / "README.md", 'r') as f:
+with open("README.md", 'r') as f:
     long_description = f.read()
 
 with open('requirements.txt') as f:
@@ -24,7 +24,7 @@ with open('requirements.txt') as f:
 
 setup(
     name='ibllib',
-    version='0.5.4',
+    version='0.6.0',
     python_requires='>={}.{}'.format(*REQUIRED_PYTHON),
     description='IBL libraries',
     license="MIT",
@@ -35,8 +35,6 @@ setup(
     # external packages as dependencies
     install_requires=require,
     scripts={
-        'alf/transfer_rig_data.py',
-        'alf/one_iblrig.py',
-        'alf/purge_rig_data.py',
+
     }
 )
