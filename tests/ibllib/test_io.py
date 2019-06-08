@@ -230,6 +230,14 @@ class TestsAlf(unittest.TestCase):
             alf.save_object_npy(self.tmpdir, a, 'neuveux')
         self.assertTrue('Dimensions are not consistent' in str(context.exception))
 
+    def test_check_dimensions(self):
+        a = {'a': np.ones([10, 10]), 'b': np.ones([10, 2]), 'c': np.ones([10])}
+        status = alf._check_dimensions(a)
+        self.assertTrue(status == 1)
+        a = {'a': np.ones([10, 10]), 'b': np.ones([10, 1]), 'c': np.ones([10])}
+        status = alf._check_dimensions(a)
+        self.assertTrue(status == 0)
+
     def tearDown(self) -> None:
         shutil.rmtree(self.tmpdir)
 

@@ -25,17 +25,15 @@ def _check_dimensions(dico):
     dims [a, 1],  [1, b] and [a, b] are all consistent, [c, 1] is not
 
     :param dico: dictionary containing data
-    :return: None
+    :return: status 0 for consistent dimensions, 1 for inconsistent dimensions
     """
     shapes = [dico[lab].shape for lab in dico]
     lmax = max([len(s) for s in shapes])
     for l in range(lmax):
         sh = np.array([s[l] if (len(s) - 1 >= l) else 1 for s in shapes])
-        try:
-            assert(np.unique(sh[sh != 1]).size <= 1)
-        except AssertionError:
-            raise ValueError('Dimensions are not consistent to save all arrays in ALF format: ' +
-                             str(shapes))
+        if not np.unique(sh[sh != 1]).size <= 1:
+            return int(1)
+    return int(0)
 
 
 def read_ts(filename):
@@ -117,6 +115,10 @@ def load_object(alfpath, object=None):
     # laod content for each file
     for fil, att in zip(files_alf, attributes):
         OUT[att] = load_file_content(fil)
+    status = _check_dimensions(OUT)
+    if status != 0:
+        logger_.warning('Inconsistent dimensions for object:' + object +
+                        str([(k, v.shape) for k, v in OUT.items()]))
     return OUT
 
 
@@ -133,6 +135,10 @@ def save_object_npy(alfpath, dico, object):
     example: ibllib.io.alf.save_object_npy('/path/to/my/alffolder/', spikes, 'spikes')
     """
     alfpath = Path(alfpath)
-    _check_dimensions(dico)
+    status = _check_dimensions(dico)
+    if status != 0:
+        raise ValueError('Dimensions are not consistent to save all arrays in ALF format: ' +
+                         str([(k, v.shape) for k, v in dico.items()]))
+
     for k, v in dico.items():
         np.save(alfpath / (object + '.' + k + '.npy'), v)
