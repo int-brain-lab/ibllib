@@ -242,6 +242,7 @@ def extract_wheel_sync(sync, output_path=None, save=False, chmap=SYNC_CHANNEL_MA
     wheel['re_ts'], wheel['re_pos'] = _rotary_encoder_positions_from_fronts(
         channela['times'], channela['polarities'], channelb['times'], channelb['polarities'])
     if save and output_path:
+        output_path = Path(output_path)
         # last phase of the process is to save the alf data-files
         np.save(output_path / '_ibl_wheel.position.npy', wheel['re_pos'])
         np.save(output_path / '_ibl_wheel.times.npy', wheel['re_ts'])
@@ -323,11 +324,13 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=SYNC_CHANNE
     trials['iti_in'][ind_err] = trials['error_tone_in'][ind_err] + 2.
     trials['intervals'] = np.c_[t_trial_start, trials['iti_in']]
     # # # # end of specific to version 4
-    if save:
+    if save and output_path:
+        output_path = Path(output_path)
         np.save(output_path / '_ibl_trials.goCue_times.npy', trials['goCue_times'])
         np.save(output_path / '_ibl_trials.response_times.npy', trials['response_times'])
         np.save(output_path / '_ibl_trials.stimOn_times.npy', trials['stimOn_times'])
         np.save(output_path / '_ibl_trials.intervals.npy', trials['intervals'])
+        np.save(output_path / '_ibl_trials.feedback_times.npy', trials['feedback_times'])
 
     return trials
 
@@ -341,6 +344,7 @@ def extract_all(session_path, save=False, version=None):
     :param version: bpod version, defaults to None
     :return: None
     """
+    session_path = Path(session_path)
     output_path = session_path / 'alf'
     raw_ephys_path = session_path / 'raw_ephys_data'
     if not output_path.exists():
