@@ -160,6 +160,6 @@ texinfo_documents = [
 #
 # source_suffix = ['.rst', '.md']
 source_parsers = {
-   '.md': 'recommonmark.parser.CommonMarkParser',
+    '.md': 'recommonmark.parser.CommonMarkParser',
 }
 source_suffix = ['.rst', '.md']
