@@ -71,12 +71,9 @@ def get_feedbackType(session_path, save=False, data=False):
     error = []
     no_go = []
     for t in data:
-        reward.append(~np.isnan(t['behavior_data']
-                                ['States timestamps']['reward'][0][0]))
-        error.append(~np.isnan(t['behavior_data']
-                               ['States timestamps']['error'][0][0]))
-        no_go.append(~np.isnan(t['behavior_data']
-                               ['States timestamps']['no_go'][0][0]))
+        reward.append(~np.isnan(t['behavior_data']['States timestamps']['reward'][0][0]))
+        error.append(~np.isnan(t['behavior_data']['States timestamps']['error'][0][0]))
+        no_go.append(~np.isnan(t['behavior_data']['States timestamps']['no_go'][0][0]))
 
     if not all(np.sum([reward, error, no_go], axis=0) == np.ones(len(data))):
         raise ValueError
@@ -87,8 +84,7 @@ def get_feedbackType(session_path, save=False, data=False):
     feedbackType = feedbackType.astype('int64')
     if raw.save_bool(save, '_ibl_trials.feedbackType.npy'):
         check_alf_folder(session_path)
-        fpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.feedbackType.npy')
+        fpath = os.path.join(session_path, 'alf', '_ibl_trials.feedbackType.npy')
         np.save(fpath, feedbackType)
     return feedbackType
 
@@ -168,8 +164,7 @@ def get_choice(session_path, save=False, data=False):
     trial_correct = np.array([t['trial_correct'] for t in data])
     trial_nogo = []
     for t in data:
-        trial_nogo.append(~np.isnan(t['behavior_data']['States timestamps']
-                                    ['no_go'][0][0]))
+        trial_nogo.append(~np.isnan(t['behavior_data']['States timestamps']['no_go'][0][0]))
     trial_nogo = np.array(trial_nogo)
     choice = sitm_side.copy()
     choice[trial_correct] = -choice[trial_correct]
@@ -245,8 +240,7 @@ def get_rewardVolume(session_path, save=False, data=False):
     assert len(rewardVolume) == len(data)
     if raw.save_bool(save, '_ibl_trials.rewardVolume.npy'):
         check_alf_folder(session_path)
-        fpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.rewardVolume.npy')
+        fpath = os.path.join(session_path, 'alf', '_ibl_trials.rewardVolume.npy')
         np.save(fpath, rewardVolume)
     return rewardVolume
 
@@ -282,8 +276,7 @@ def get_feedback_times(session_path, save=False, data=False):
                       zip(rw_times, err_times, nogo_times)]).squeeze()
     if raw.save_bool(save, '_ibl_trials.feedback_times.npy'):
         check_alf_folder(session_path)
-        fpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.feedback_times.npy')
+        fpath = os.path.join(session_path, 'alf', '_ibl_trials.feedback_times.npy')
         np.save(fpath, merge)
     return np.array(merge)
 
@@ -369,8 +362,7 @@ def get_intervals(session_path, save=False, data=False):
     intervals = np.array([starts, ends]).T
     if raw.save_bool(save, '_ibl_trials.intervals.npy'):
         check_alf_folder(session_path)
-        fpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.intervals.npy')
+        fpath = os.path.join(session_path, 'alf', '_ibl_trials.intervals.npy')
         np.save(fpath, intervals)
     return intervals
 
@@ -398,8 +390,7 @@ def get_iti_duration(session_path, save=False, data=False):
     iti_dur = ends - rt
     if raw.save_bool(save, '_ibl_trials.itiDuration.npy'):
         check_alf_folder(session_path)
-        fpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.itiDuration.npy')
+        fpath = os.path.join(session_path, 'alf', '_ibl_trials.itiDuration.npy')
         np.save(fpath, iti_dur)
     return iti_dur
 
@@ -427,8 +418,7 @@ def get_deadTime(session_path, save=False, data=False):
     deadTime = np.append(np.array([0]), deadTime)
     if raw.save_bool(save, '_ibl_trials.deadTime.npy'):
         check_alf_folder(session_path)
-        fpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.deadTime.npy')
+        fpath = os.path.join(session_path, 'alf', '_ibl_trials.deadTime.npy')
         np.save(fpath, deadTime)
     return deadTime
 
@@ -454,8 +444,7 @@ def get_response_times(session_path, save=False, data=False):
                    for tr in data])
     if raw.save_bool(save, '_ibl_trials.response_times.npy'):
         check_alf_folder(session_path)
-        fpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.response_times.npy')
+        fpath = os.path.join(session_path, 'alf', '_ibl_trials.response_times.npy')
         np.save(fpath, rt)
     return rt
 
@@ -484,8 +473,7 @@ def get_goCueTrigger_times(session_path, save=False, data=False):
                       ['closed_loop'][0][0] for tr in data])
     if raw.save_bool(save, '_ibl_trials.goCue_times.npy'):
         check_alf_folder(session_path)
-        fpath = os.path.join(session_path, 'alf',
-                             '_ibl_trials.goCueTrigger_times.npy')
+        fpath = os.path.join(session_path, 'alf', '_ibl_trials.goCueTrigger_times.npy')
         np.save(fpath, goCue)
     return goCue
 
@@ -513,8 +501,7 @@ def get_goCueOnset_times(session_path, save=False, data=False):
     go_cue_times = []
     for tr in data:
         if get_port_events(tr, 'BNC2'):
-            go_cue_times.append(tr['behavior_data']['Events timestamps']
-                                ['BNC2High'][0])
+            go_cue_times.append(tr['behavior_data']['Events timestamps']['BNC2High'][0])
         else:
             go_cue_times.append(np.nan)
 

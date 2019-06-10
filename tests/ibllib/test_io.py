@@ -240,10 +240,10 @@ class TestsAlf(unittest.TestCase):
 
     def test_check_dimensions(self):
         a = {'a': np.ones([10, 10]), 'b': np.ones([10, 2]), 'c': np.ones([10])}
-        status = alf._check_dimensions(a)
+        status = alf.check_dimensions(a)
         self.assertTrue(status == 1)
         a = {'a': np.ones([10, 10]), 'b': np.ones([10, 1]), 'c': np.ones([10])}
-        status = alf._check_dimensions(a)
+        status = alf.check_dimensions(a)
         self.assertTrue(status == 0)
 
     def tearDown(self) -> None:

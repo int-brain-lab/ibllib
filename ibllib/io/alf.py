@@ -16,7 +16,7 @@ from ibllib.io import jsonable
 logger_ = logging.getLogger('ibllib')
 
 
-def _check_dimensions(dico):
+def check_dimensions(dico):
     """
     Test for consistency of dimensions as per ALF specs in a dictionary. Raises a Value Error.
 
@@ -108,14 +108,16 @@ def load_object(alfpath, object=None):
     else:
         object = alfpath.name.split('.')[0]
         alfpath = alfpath.parent
-    # look for the files of the object
+    # look for the files of the object, raise infomative error if none found
     files_alf = list(alfpath.glob(object + '.*'))
+    if not files_alf:
+        raise FileNotFoundError('No object ' + str(object) + ' found in ' + str(alfpath))
     attributes = [f.name.split('.')[1] for f in files_alf]
     OUT = {}
-    # laod content for each file
+    # load content for each file
     for fil, att in zip(files_alf, attributes):
         OUT[att] = load_file_content(fil)
-    status = _check_dimensions(OUT)
+    status = check_dimensions(OUT)
     if status != 0:
         logger_.warning('Inconsistent dimensions for object:' + object +
                         str([(k, v.shape) for k, v in OUT.items()]))
@@ -135,7 +137,7 @@ def save_object_npy(alfpath, dico, object):
     example: ibllib.io.alf.save_object_npy('/path/to/my/alffolder/', spikes, 'spikes')
     """
     alfpath = Path(alfpath)
-    status = _check_dimensions(dico)
+    status = check_dimensions(dico)
     if status != 0:
         raise ValueError('Dimensions are not consistent to save all arrays in ALF format: ' +
                          str([(k, v.shape) for k, v in dico.items()]))

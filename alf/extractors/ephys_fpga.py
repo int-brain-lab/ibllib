@@ -95,10 +95,12 @@ def _bpod_events_extraction(bpod_t, bpod_fronts):
     # take only even time differences: ie. from rising to falling fronts
     dt = np.diff(bpod_t)[::2]
     # detect start trials event assuming length is 0.1 ms except the first trial
-    i_trial_start = np.r_[1, np.where(dt <= 1.66e-4)[0] * 2]
-    # the first trial we detect the first falling edge to which we subtract 0.1ms
+    i_trial_start = np.r_[0, np.where(dt <= 1.66e-4)[0] * 2]
     t_trial_start = bpod_t[i_trial_start]
-    t_trial_start[0] -= 1e-4
+    # # the first trial we detect the first falling edge to which we subtract 0.1ms
+    # t_trial_start[0] -= 1e-4
+    # the last trial is a dud and should be removed
+    t_trial_start = t_trial_start[:-1]
     # valve open events are between 50ms to 300 ms
     i_valve_open = np.where(np.logical_and(dt > 1.66e-4, dt < 0.4))[0] * 2
     i_valve_open = np.delete(i_valve_open, np.where(i_valve_open < 2))
@@ -266,11 +268,10 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=SYNC_CHANNE
     frame2ttl = _get_sync_fronts(sync, chmap['frame2ttl'])
     audio = _get_sync_fronts(sync, chmap['audio'])
     # extract events from the fronts for each trace
-    t_trial_start, t_valve_open, t_iti_in = _bpod_events_extraction(bpod['times'],
-                                                                    bpod['polarities'])
-    t_ready_tone_in, t_error_tone_in = _audio_events_extraction(audio['times'],
-                                                                audio['polarities'])
-
+    t_trial_start, t_valve_open, t_iti_in = _bpod_events_extraction(
+        bpod['times'], bpod['polarities'])
+    t_ready_tone_in, t_error_tone_in = _audio_events_extraction(
+        audio['times'], audio['polarities'])
     # stim off time is the first frame2ttl rise/fall after the trial start
     # does not apply for 1st trial
     ind = np.searchsorted(frame2ttl['times'], t_trial_start[1:], side='left')
@@ -331,7 +332,6 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=SYNC_CHANNE
         np.save(output_path / '_ibl_trials.stimOn_times.npy', trials['stimOn_times'])
         np.save(output_path / '_ibl_trials.intervals.npy', trials['intervals'])
         np.save(output_path / '_ibl_trials.feedback_times.npy', trials['feedback_times'])
-
     return trials
 
 
@@ -353,9 +353,11 @@ def extract_all(session_path, save=False, version=None):
     ephys_files = list(raw_ephys_path.rglob('*.ap.bin'))
     if len(ephys_files) > 2:
         raise NotImplementedError("Multiple probes/files extraction not implemented. Contact us !")
+    # TODO Extract channel maps from meta-data
     raw_ephys_apfile = ephys_files[0]
     sr = ibllib.io.spikeglx.Reader(raw_ephys_apfile)
-
     sync = _sync_to_alf(sr, output_path, save=save)
+    # TODO Extract camera time-stamps
     extract_wheel_sync(sync, output_path, save=save)
     extract_behaviour_sync(sync, output_path, save=save)
+    align_with_bpod(session_path)  # checks consistency and compute dt with bpod
