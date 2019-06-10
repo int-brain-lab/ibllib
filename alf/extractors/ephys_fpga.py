@@ -335,6 +335,26 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=SYNC_CHANNE
     return trials
 
 
+def align_with_bpod(session_path):
+    """
+    Reads in trials.intervals ALF dataset from bpod and fpga.
+    Asserts consistency between datasets and compute the median time difference
+
+    :param session_path:
+    :return: dt: median time difference of trial start times (fpga - bpod)
+    """
+    # check consistency
+    output_path = Path(session_path) / 'alf'
+    trials = ibllib.io.alf.load_object(output_path, '_ibl_trials')
+    assert(ibllib.io.check_dimensions(trials) == 0)
+    dt = (np.diff(trials['intervalsBpod']) - np.diff(trials['intervals']))
+    assert(np.all(np.abs(dt[np.invert(np.isnan(dt))]) < 5 * 1e-3))
+    dt = trials['intervals'][:, 0] - trials['intervalsBpod'][:, 0]
+    # plt.plot(np.diff(trials['intervalsBpod']), '*')
+    # plt.plot(np.diff(trials['intervals']), '.')
+    return np.median(dt)
+
+
 def extract_all(session_path, save=False, version=None):
     """
     Reads ephys binary file and extract sync, wheel and behaviour ALF files
