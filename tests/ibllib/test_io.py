@@ -146,19 +146,27 @@ class TestsJsonable(unittest.TestCase):
 class TestsSpikeGLX(unittest.TestCase):
     def setUp(self):
         self.workdir = Path(__file__).parent / 'fixtures' / 'io' / 'spikeglx'
+        self.meta_files = list(Path.glob(self.workdir, '*.meta'))
 
     def testReadMetaData(self):
-        meta_data_file = self.workdir / 'FC034_g0_t0.imec.lf.meta'
-        md = spikeglx.read_meta_data(meta_data_file)
-        self.assertTrue(len(md.keys()) == 37)
+        for meta_data_file in self.meta_files:
+            md = spikeglx.read_meta_data(meta_data_file)
+            self.assertTrue(len(md.keys()) >= 37)
 
     def testReadChannelGain(self):
-        meta_data_file = self.workdir / 'FC034_g0_t0.imec.lf.meta'
-        md = spikeglx.read_meta_data(meta_data_file)
-        cg = spikeglx._gain_channels(md)
-        self.assertTrue(np.all(cg['lf'][0:-1] == 250))
-        self.assertTrue(np.all(cg['ap'][0:-1] == 500))
-        self.assertTrue(len(cg['ap']) == len(cg['lf']) == int(sum(md.get('snsApLfSy'))))
+        for meta_data_file in self.meta_files:
+            md = spikeglx.read_meta_data(meta_data_file)
+            cg = spikeglx._gain_channels_from_meta(md)
+            self.assertTrue(np.all(cg['lf'][0:-1] == 250))
+            self.assertTrue(np.all(cg['ap'][0:-1] == 500))
+            self.assertTrue(len(cg['ap']) == len(cg['lf']) == int(sum(md.get('snsApLfSy'))))
+
+    def testReadChannelMap(self):
+        for meta_data_file in self.meta_files:
+            md = spikeglx.read_meta_data(meta_data_file)
+            cm = spikeglx._map_channels_from_meta(md)
+            if 'snsShankMap' in md.keys():
+                self.assertEqual(set(cm.keys()), set(['shank', 'col', 'row', 'flag']))
 
     def testSplitSyncTrace(self):
         sc = np.uint16(2 ** np.linspace(-1, 15, 17))
@@ -229,6 +237,14 @@ class TestsAlf(unittest.TestCase):
         with self.assertRaises(Exception) as context:
             alf.save_object_npy(self.tmpdir, a, 'neuveux')
         self.assertTrue('Dimensions are not consistent' in str(context.exception))
+
+    def test_check_dimensions(self):
+        a = {'a': np.ones([10, 10]), 'b': np.ones([10, 2]), 'c': np.ones([10])}
+        status = alf.check_dimensions(a)
+        self.assertTrue(status == 1)
+        a = {'a': np.ones([10, 10]), 'b': np.ones([10, 1]), 'c': np.ones([10])}
+        status = alf.check_dimensions(a)
+        self.assertTrue(status == 0)
 
     def tearDown(self) -> None:
         shutil.rmtree(self.tmpdir)

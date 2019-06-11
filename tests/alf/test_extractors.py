@@ -1,12 +1,10 @@
 import logging
-import tempfile
 import unittest
 from pathlib import Path
 
 import numpy as np
 
 import alf.extractors as ex
-import ibllib.io.flags as flags
 from ibllib.io import raw_data_loaders as loaders
 
 

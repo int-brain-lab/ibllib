@@ -29,7 +29,7 @@ class Reader:
             self.meta = read_meta_data(file_meta_data)
             if self.nc * self.ns * 2 != self.nbytes:
                 logger_.warning(str(sglx_file) + " : meta data and filesize do not checkout")
-            self.gain_channels = _gain_channels(self.meta)
+            self.gain_channels = _gain_channels_from_meta(self.meta)
             self.memmap = np.memmap(sglx_file, dtype='int16', mode='r', shape=(self.ns, self.nc))
 
     @property
@@ -135,8 +135,25 @@ def read_meta_data(md_file):
     return d
 
 
-def _gain_channels(meta_data):
+def _map_channels_from_meta(meta_data):
     """
+    Interpret the meta data string to extract an array of channel positions along the shank
+
+    :param meta_data: dictionary output from  spikeglx.read_meta_data
+    :return: dictionary of arrays 'shank', 'col', 'row', 'flag', one value per active site
+    """
+    if 'snsShankMap' in meta_data.keys():
+        chmap = re.findall(r'([0-9]*:[0-9]*:[0-9]*:[0-9]*)', meta_data['snsShankMap'])
+        # shank#, col#, row#, drawflag
+        # (nb: drawflag is one should be drawn and considered spatial average)
+        chmap = np.array([np.float32(cm.split(':')) for cm in chmap])
+        return {k: chmap[:, v] for (k, v) in {'shank': 0, 'col': 1, 'row': 2, 'flag': 3}.items()}
+
+
+def _gain_channels_from_meta(meta_data):
+    """
+    Interpret the meta data string to extract an array of gain values for each channel
+
     :param meta_data: dictionary output from  spikeglx.read_meta_data
     :return: numpy array with one gain value per channel
     """

@@ -93,6 +93,11 @@ class TestMisc(unittest.TestCase):
         w = np.ones_like(x) * 2
         r, xscale, yscale = bincount2D(x / 2, y / 2, xbin=1, ybin=2, weights=w)
         self.assertTrue(np.all(r_ * 2 == r))
+        # test aggregation instead of binning
+        x = np.array([0, 1, 1, 2, 2, 4, 4, 4])
+        y = np.array([4, 2, 2, 1, 1, 0, 0, 0])
+        r, xscale, yscale = bincount2D(x, y)
+        self.assertTrue(np.all(xscale == yscale) and np.all(xscale == np.array([0, 1, 2, 4])))
 
 
 if __name__ == "__main__":
