@@ -120,7 +120,7 @@ def load_settings(session_path):
 
 def _load_encoder_events_file(file_path):
     # file loader without the session overhead
-    data = pd.read_csv(file_path, sep=' ', header=None)
+    data = pd.read_csv(file_path, sep=' ', header=None, error_bad_lines=False)
     data = data.drop([0, 2, 5], axis=1)
     data.columns = ['re_ts', 'sm_ev', 'bns_ts']
     return _groom_wheel_data(data, label='_iblrig_encoderEvents.raw.ssv', path=file_path)
@@ -169,7 +169,7 @@ def _load_encoder_positions_file(file_path):
     if file_path.stat().st_size == 0:
         logger_.error("_iblrig_encoderPositions.raw.ssv is an empty file. ")
         raise ValueError("_iblrig_encoderPositions.raw.ssv is an empty file. ABORT EXTRACTION. ")
-    data = pd.read_csv(file_path, sep=' ', header=None)
+    data = pd.read_csv(file_path, sep=' ', header=None, error_bad_lines=False)
     data = data.drop([0, 4], axis=1)
     data.columns = ['re_ts', 're_pos', 'bns_ts']
     return _groom_wheel_data(data, label='_iblrig_encoderPositions.raw.ssv', path=file_path)
