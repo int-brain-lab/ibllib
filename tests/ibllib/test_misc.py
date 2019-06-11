@@ -97,7 +97,7 @@ class TestMisc(unittest.TestCase):
         x = np.array([0, 1, 1, 2, 2, 4, 4, 4])
         y = np.array([4, 2, 2, 1, 1, 0, 0, 0])
         r, xscale, yscale = bincount2D(x, y)
-        self.assertTrue(np.all(xscale == yscale) and  np.all( xscale == np.array([0, 1, 2, 4])))
+        self.assertTrue(np.all(xscale == yscale) and np.all(xscale == np.array([0, 1, 2, 4])))
 
 
 if __name__ == "__main__":
