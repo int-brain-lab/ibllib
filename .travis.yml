@@ -13,5 +13,4 @@ before_script:
   - sed -i 's|null|"'$IBLFLATIRONPASS'"|g' /home/travis/.one_params
   # command to run tests
 script:
-  - cd python
   - bash ./run_tests
