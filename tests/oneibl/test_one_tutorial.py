@@ -1,3 +1,3 @@
-import oneibl.examples.tutorial_script
+import examples.oneibl.tutorial_script
 
-print(oneibl.examples.tutorial_script)
+print(examples.oneibl.tutorial_script)
