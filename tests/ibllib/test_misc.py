@@ -85,7 +85,6 @@ class TestMisc(unittest.TestCase):
         # test unequal bins
         r, xscale, yscale = bincount2D(x / 2, y / 2, xbin=1, ybin=2)
         r_ = np.zeros_like(r)
-        # sometimes life would have been simpler in c:
         for ix, iy in zip(np.floor(x / 2), np.floor((y / 2 + 2.5) / 2)):
             r_[int(iy), int(ix)] += 1
         self.assertTrue(np.all(r_ == r))

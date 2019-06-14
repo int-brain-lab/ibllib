@@ -30,5 +30,9 @@ plt.imshow(R, aspect='auto', cmap='binary', vmax=T_BIN / 0.001 / 4,
 # plot trial start and reward time
 reward = trials['feedback_times'][trials['feedbackType'] == 1]
 iblplt.vertical_lines(trials['intervals'][:, 0], ymin=0, ymax=clusters[-1],
-                      color='k', linewidth=0.5)
-iblplt.vertical_lines(reward, ymin=0, ymax=clusters[-1], color='m', linewidth=0.5)
+                      color='k', linewidth=0.5, label='trial starts')
+iblplt.vertical_lines(reward, ymin=0, ymax=clusters[-1], color='m', linewidth=0.5,
+                      label='valve openings')
+plt.xlabel('Time (s)')
+plt.ylabel('Cluster #')
+plt.legend()
