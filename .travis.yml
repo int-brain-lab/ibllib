@@ -14,3 +14,4 @@ before_script:
   # command to run tests
 script:
   - bash ./run_tests
+  - flake8 .
