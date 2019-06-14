@@ -76,7 +76,7 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False):
             'channels': tim_chan_pol[:, 1],
             'polarities': tim_chan_pol[:, 2]}
     if save:
-        ibllib.io.alf.save_object_npy(output_path, sync, 'sync')
+        ibllib.io.alf.save_object_npy(output_path, sync, '_spikeglx_sync')
     return sync
 
 
