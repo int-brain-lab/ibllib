@@ -13,3 +13,4 @@ before_script:
 script:
   - cd python
   - bash ./run_tests
+  - flake8 .
