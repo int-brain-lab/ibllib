@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-import alf.extractors.ephys_fpga as ephys_fpga
+import ibllib.io.extractors.ephys_fpga as ephys_fpga
 
 
 class TestEphysSyncExtraction(unittest.TestCase):

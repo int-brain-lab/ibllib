@@ -4,7 +4,7 @@ import numpy as np
 
 from oneibl.one import ONE
 from ibllib.misc import bincount2D
-import ibllib.io.alf as ioalf
+import alf.io as ioalf
 import ibllib.plots as iblplt
 
 T_BIN = 0.01

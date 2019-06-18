@@ -4,7 +4,7 @@ import logging
 
 from ibllib.misc import is_uuid_string, pprint
 from ibllib.io.one import OneAbstract
-from ibllib.io.alf import load_file_content
+from alf.io import load_file_content
 
 import oneibl.webclient as wc
 from oneibl.dataclass import SessionDataInfo

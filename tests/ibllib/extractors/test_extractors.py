@@ -4,8 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
-import alf.extractors as ex
 from ibllib.io import raw_data_loaders as loaders
+import ibllib.io.extractors
 
 
 class TestExtractTrialData(unittest.TestCase):
@@ -20,7 +20,7 @@ class TestExtractTrialData(unittest.TestCase):
         self.logger = logging.getLogger('ibllib').setLevel(50)
 
     def test_stimOn_times(self):
-        st = ex.training_trials.get_stimOn_times('', save=False, data=self.data)
+        st = ibllib.io.extractors.training_trials.get_stimOn_times('', save=False, data=self.data)
         self.assertTrue(isinstance(st, np.ndarray))
 
     def test_encoder_positions_duds(self):
@@ -61,15 +61,15 @@ class TestExtractTrialData(unittest.TestCase):
         # straight test that it returns an usable function
         ta = np.array([0., 1., 2., 3., 4., 5.])
         tb = np.array([0., 1.1, 2.0, 2.9, 4., 5.])
-        finterp = ex.training_wheel.time_interpolation(ta, tb)
+        finterp = ibllib.io.extractors.training_wheel.time_interpolation(ta, tb)
         self.assertTrue(np.all(finterp(ta) == tb))
         # next test if sizes are not similar
         tc = np.array([0., 1.1, 2.0, 2.9, 4., 5., 6.])
-        finterp = ex.training_wheel.time_interpolation(ta, tc)
+        finterp = ibllib.io.extractors.training_wheel.time_interpolation(ta, tc)
         self.assertTrue(np.all(finterp(ta) == tb))
 
     def test_choice(self):
-        choice = ex.training_trials.get_choice(self.session_path)
+        choice = ibllib.io.extractors.training_trials.get_choice(self.session_path)
         trial_nogo = np.array(
             [~np.isnan(t['behavior_data']['States timestamps']['no_go'][0][0])
              for t in self.data])
@@ -83,16 +83,16 @@ class TestExtractTrialData(unittest.TestCase):
             self.assertTrue(any(choice[signed_contrast == 0] != 0))
 
     def test_goCue_times(self):
-        gc_times = ex.training_trials.get_goCueOnset_times(self.session_path)
+        gc_times = ibllib.io.extractors.training_trials.get_goCueOnset_times(self.session_path)
         self.assertTrue(not gc_times or gc_times)
 
     def test_contrastLR(self):
-        cl, cr = ex.training_trials.get_contrastLR(self.session_path)
+        cl, cr = ibllib.io.extractors.training_trials.get_contrastLR(self.session_path)
         self.assertTrue(all([np.sign(x) >= 0 for x in cl if ~np.isnan(x)]))
         self.assertTrue(all([np.sign(x) >= 0 for x in cr if ~np.isnan(x)]))
         self.assertTrue(sum(np.isnan(cl)) + sum(np.isnan(cr)) == len(cl))
         self.assertTrue(sum(~np.isnan(cl)) + sum(~np.isnan(cr)) == len(cl))
-        cl, cr = ex.biased_trials.get_contrastLR(self.session_path_biased)
+        cl, cr = ibllib.io.extractors.biased_trials.get_contrastLR(self.session_path_biased)
         self.assertTrue(all([np.sign(x) >= 0 for x in cl if ~np.isnan(x)]))
         self.assertTrue(all([np.sign(x) >= 0 for x in cr if ~np.isnan(x)]))
         self.assertTrue(sum(np.isnan(cl)) + sum(np.isnan(cr)) == len(cl))

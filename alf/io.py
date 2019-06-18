@@ -4,9 +4,10 @@ Provides support for time-series reading and interpolation as per the specificat
 For a full overview of the scope of the format, see:
 https://ibllib.readthedocs.io/en/develop/04_reference.html#alf
 """
-from pathlib import Path
+
 import logging
 import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd

@@ -5,7 +5,7 @@
 import numpy as np
 import os
 import ibllib.io.raw_data_loaders as raw
-from alf.extractors.training_trials import (
+from ibllib.io.extractors.training_trials import (
     check_alf_folder, get_feedbackType, get_probaLR,
     get_choice, get_rewardVolume, get_feedback_times, get_stimOn_times,
     get_intervals, get_response_times, get_iti_duration,

@@ -1,7 +1,7 @@
 from ibllib.misc import pprint
 from oneibl.one import ONE
 
-one = ONE(base_url='https://dev.alyx.internationalbrainlab.org')
+one = ONE(base_url='https://test.alyx.internationalbrainlab.org')
 
 # list all water administrations
 wa = one.alyx.rest('water-administrations', 'list')

@@ -9,7 +9,7 @@ from scipy.io import wavfile
 
 from ibllib import dsp
 import ibllib.io.raw_data_loaders as ioraw
-import alf.extractors.training_trials
+import ibllib.io.extractors.training_trials
 
 logger_ = logging.getLogger('ibllib')
 
@@ -132,7 +132,7 @@ def extract_sound(ses_path, save=True, force=False):
     data = ioraw.load_data(ses_path)
     if data is None:  # if no session data, we're done
         return
-    tgocue = np.array(alf.extractors.training_trials.get_goCueOnset_times(
+    tgocue = np.array(ibllib.io.extractors.extractors.training_trials.get_goCueOnset_times(
         None, save=False, data=data))
     ilast = min(len(tgocue), len(detect))
     dt = tgocue[:ilast] - detect[: ilast]

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import ibllib.io.raw_data_loaders as raw
-from alf.extractors.biased_trials import (
+from ibllib.io.extractors.biased_trials import (
     get_feedbackType, get_probaLR,
     get_choice, get_rewardVolume, get_iti_duration, get_contrastLR,
     get_goCueTrigger_times, get_goCueOnset_times, get_intervals)
