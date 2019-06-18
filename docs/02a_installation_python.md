@@ -44,21 +44,20 @@ conda install -c conda-forge ciso8601
 cd Documents/GitHub/ibllib
 conda create -n ibllibenv python=3.6 anaconda
 source activate ibllibenv
- conda install -c conda-forge ciso8601
+conda install -c conda-forge ciso8601
 ```
 
 
 ### Install requirements and packages
 **Linux and Mac OS:**
 ```
-pip install -r ./python/requirements.txt
-cd python
+pip install -r requirements.txt
 pip install -e .
 ```
 
 **Windows:**
 ```
-cd ibllib/python
+cd ibllib
 pip install -r requirements.txt
 pip install -e .
 ```

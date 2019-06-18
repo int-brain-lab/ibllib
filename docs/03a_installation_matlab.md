@@ -12,11 +12,10 @@ Download and install the latest Matlab version from here: [https://www.mathworks
 
 ## Initialisation
 
-Before you begin, make sure you have installed ibllib properly on your system as per the previous instructions.
-Make sure your computer is connected to an IBL accredited network.
+Clone or download the repository here: [https://github.com/int-brain-lab/ibllib-matlab](https://github.com/int-brain-lab/ibllib-matlab)
 
 Launch Matlab.
-Set the Matlab path, add with subfolders the `.\ibllib\matlab` directory.
+Set the Matlab path, add with subfolders the full `.\ibllib-matlab` directory.
 
 ### Instantiate One class: Define connection settings
 

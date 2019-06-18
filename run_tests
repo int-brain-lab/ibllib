@@ -1,2 +1,1 @@
-
-python -m unittest tests/ibllib/test_* && python -m unittest tests/alf/test_* && python -m unittest tests/oneibl/test_*
+python -m unittest discover
