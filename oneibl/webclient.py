@@ -278,19 +278,27 @@ class AlyxClient:
         """
         return self._generic_request(requests.put, rest_query, data=data)
 
-    def rest(self, url=None, action=None, data=None, **kwargs):
+    def rest(self, url=None, action=None, id=None, data=None, **kwargs):
         """
-        alyx_client.rest()
-        alyx_client.rest("sessions")
-        lab_info = alyx_client.rest('labs', 'read', 'mainenlab')
-        OR
-        lab_info = alyx_client.rest('labs', 'read',
-        'https://test.alyx.internationalbrainlab.org/labs/mainenlab')
+        alyx_client.rest(): lists endpoints
+        alyx_client.rest(endpoint): lists actions for endpoint
+        alyx_client.rest(endpoint, action): lists fields and URL
 
-        :param url:
-        :param action:
-        :param data:
-        :return:
+        Example with a rest endpoint with all actions
+        alyx.client.rest('subjects', 'list')
+        alyx.client.rest('subjects', 'list', field_filter1='filterval')
+        alyx.client.rest('subjects', 'create', data=sub_dict)
+        alyx.client.rest('subjects', 'read', id='nickname')
+        alyx.client.rest('subjects', 'update', id='nickname', data=sub_dict)
+        alyx.client.rest('subjects', 'partial_update', id='nickname', data=sub_ict)
+        alyx.client.rest('subjects', 'delete', id='nickname')
+
+        :param url: endpoint name
+        :param action: 'list', 'create', 'read', 'update', 'partial_update', 'delete'
+        :param id: lookup string for actions 'read', 'update', 'partial_update', and 'delete'
+        :param data: data dictionary for actions 'update', 'partial_update' and 'create'
+        :param **kwargs: filter as per the REST documentation
+        :return: list of queried dicts ('list') or dict (other actions)
         """
         # if endpoint is None, list available endpoints
         if not url:
@@ -319,17 +327,25 @@ class AlyxClient:
             raise ValueError('Action "' + action + '" for REST endpoint "' + endpoint + '" does ' +
                              'not exist. Available actions are: ' +
                              '\n       ' + '\n       '.join(endpoint_scheme.keys()))
-        # if there is no data (except for list), show the user a list of fields
-        if action != 'list' and not data:
+        # the actions below require an id in the URL, warn and help the user
+        if action in ['read', 'update', 'partial_update', 'delete'] and not id:
+            logger_.warning('REST action "' + action + '" requires an ID in the URL: ' +
+                            endpoint_scheme[action]['url'])
+            return
+        # the actions below require a data dictionary, warn and help the user with fields list
+        if action in ['create', 'update', 'partial_update'] and not data:
             pprint(endpoint_scheme[action]['fields'])
             for act in endpoint_scheme[action]['fields']:
                 print("'" + act['name'] + "': ...,")
+            logger_.warning('REST action "' + action + '" requires a data dict with above keys')
             return
+
         if action == 'list':
+            # list doesn't require id nor
             assert(endpoint_scheme[action]['action'] == 'get')
             # add to url data if it is a string
-            if data:
-                url = url + data
+            if id:
+                url = url + id
             # otherwise, look for a dictionary of filter terms
             elif kwargs:
                 for k in kwargs.keys():
@@ -343,16 +359,16 @@ class AlyxClient:
             return self.get('/' + url)
         if action == 'read':
             assert(endpoint_scheme[action]['action'] == 'get')
-            return self.get('/' + endpoint + '/' + data.split('/')[-1])
+            return self.get('/' + endpoint + '/' + id.split('/')[-1])
         elif action == 'create':
             assert(endpoint_scheme[action]['action'] == 'post')
-            return self.post('/' + endpoint, data)
+            return self.post('/' + endpoint, data=data)
         elif action == 'delete':
             assert(endpoint_scheme[action]['action'] == 'delete')
-            return self.delete('/' + endpoint + '/' + data.split('/')[-1])
+            return self.delete('/' + endpoint + '/' + id.split('/')[-1])
         elif action == 'partial_update':
             assert(endpoint_scheme[action]['action'] == 'patch')
-            return self.patch('/' + url, data)
+            return self.patch('/' + endpoint + '/' + id.split('/')[-1], data=data)
         elif action == 'update':
             assert(endpoint_scheme[action]['action'] == 'put')
-            return self.put('/' + url, data)
+            return self.put('/' + endpoint + '/' + id.split('/')[-1], data=data)

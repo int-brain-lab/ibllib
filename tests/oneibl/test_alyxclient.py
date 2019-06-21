@@ -30,20 +30,20 @@ class TestDownloadHTTP(unittest.TestCase):
               'weight': 22.2,
               'user': 'olivier'
               }
-        a = self.ac.rest('weighings', 'create', wa)
-        b = self.ac.rest('weighings', 'read', a['url'])
+        a = self.ac.rest('weighings', 'create', data=wa)
+        b = self.ac.rest('weighings', 'read', id=a['url'])
         self.assertEqual(a, b)
-        self.ac.rest('weighings', 'delete', a['url'])
+        self.ac.rest('weighings', 'delete', id=a['url'])
         # test patch object with subjects
-        sub = self.ac.rest('subjects/flowers', 'list')
+        sub = self.ac.rest('subjects', 'list', nickname='flowers')
         data = {'birth_date': '2018-04-01',
                 'death_date': '2018-09-09'}
-        sub = self.ac.rest('subjects/flowers', 'partial_update', data=data)
+        sub = self.ac.rest('subjects', 'partial_update', id='flowers', data=data)
         self.assertEqual(sub['birth_date'], data['birth_date'])
         self.assertEqual(sub['death_date'], data['death_date'])
         data = {'birth_date': '2018-04-02',
                 'death_date': '2018-09-10'}
-        sub = self.ac.rest('subjects/flowers', 'partial_update', data=data)
+        sub = self.ac.rest('subjects', 'partial_update', id='flowers', data=data)
         self.assertEqual(sub['birth_date'], data['birth_date'])
         self.assertEqual(sub['death_date'], data['death_date'])
 
@@ -116,6 +116,37 @@ class TestDownloadHTTP(unittest.TestCase):
         b = np.load(file_list[1])
         self.assertTrue(len(a) > 0)
         self.assertTrue(len(b) > 0)
+
+    def test_rest_all_actions(self):
+        newsub = {
+            'nickname': 'tutu',
+            'responsible_user': 'olivier',
+            'birth_date': '2019-06-15',
+            'death_date': None,
+            'lab': 'cortexlab',
+        }
+        # look for the subject, create it if necessary
+        sub = self.ac.rest('subjects', 'list', nickname='tutu')
+        if sub:
+            self.ac.rest('subjects', 'delete', id='tutu')
+        newsub = self.ac.rest('subjects', 'create', data=newsub)
+        # partial update and full update
+        newsub = self.ac.rest('subjects', 'partial_update', id='tutu', data={'description': 'hey'})
+        self.assertEqual(newsub['description'], 'hey')
+        newsub['description'] = 'hoy'
+        newsub = self.ac.rest('subjects', 'update', id='tutu', data=newsub)
+        self.assertEqual(newsub['description'], 'hoy')
+        # read
+        newsub_ = self.ac.rest('subjects', 'read', id='tutu')
+        self.assertEqual(newsub, newsub_)
+        # list with filter
+        sub = self.ac.rest('subjects', 'list', nickname='tutu')
+        self.assertEqual(sub[0]['nickname'], newsub['nickname'])
+        self.assertTrue(len(sub) == 1)
+        # delete
+        self.ac.rest('subjects', 'delete', id='tutu')
+        sub = self.ac.rest('subjects', 'list', nickname='tutu')
+        self.assertFalse(sub)
 
 
 if __name__ == '__main__':

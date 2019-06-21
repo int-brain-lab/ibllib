@@ -143,7 +143,7 @@ class RegistrationClient:
                     'n_trials': ses_data[-1]['trial_num'],
                     'json': json.dumps(md, indent=1),
                     }
-            session = self.one.alyx.rest('sessions', 'create', data=ses_)
+            session = self.one.alyx.rest('sessions', 'create', id=ses_)
             if md['SUBJECT_WEIGHT']:
                 wei_ = {'subject': subject['nickname'],
                         'date_time': ibllib.time.date2isostr(start_time),
