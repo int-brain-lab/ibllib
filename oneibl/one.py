@@ -325,11 +325,16 @@ class ONE(OneAbstract):
 
     # def search(self, dataset_types=None, users=None, subjects=None, date_range=None,
     #            lab=None, number=None, task_protocol=None, details=False):
-    def search(self, details=False, **kwargs):
+    def search(self, details=False, limit=None, **kwargs):
         """
         Applies a filter to the sessions (eid) table and returns a list of json dictionaries
          corresponding to sessions.
 
+        :param details: default False, returns also the session details as per the REST response
+        :type details: bool
+        :param limit: default None, limits results (if pagination enabled on server)
+        :type int
+        List of possible search terms:
         :param dataset_types: list of dataset_types
         :type dataset_types: list of str
         :param users: a list of users
@@ -342,9 +347,6 @@ class ONE(OneAbstract):
         :type date_range: list
         :param number: session number
         :type number: str or int
-        :param details: default False, returns also the session details as per the REST response
-        :type details: bool
-
         :return: list of eids, if details is True, also returns a list of json dictionaries,
          each entry corresponding to a matching session
         :rtype: list, list
@@ -375,6 +377,9 @@ class ONE(OneAbstract):
                 query = validate_input(kwargs[k])
             # at last append to the URL
             url = url + f"&{field}=" + ','.join(query)
+        # the REST pagination argument has to be the last one
+        if limit:
+            url += f'&limit={limit}'
         # implements the loading itself
         ses = self.alyx.get(url)
         eids = [s['url'] for s in ses]  # flattens session info
