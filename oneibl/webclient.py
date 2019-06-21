@@ -174,7 +174,7 @@ class AlyxClient:
         else:
             logger_.error(self._base_url + rest_query)
             logger_.error(r.text)
-            raise Exception(r)
+            raise(requests.HTTPError(r))
 
     def authenticate(self, username='', password='', base_url=''):
         """

@@ -1,5 +1,7 @@
 import unittest
 import numpy as np
+import requests
+
 from oneibl.one import ONE
 
 
@@ -185,7 +187,7 @@ class TestLoad(unittest.TestCase):
 
     def test_session_does_not_exist(self):
         eid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
-        self.assertRaises(FileNotFoundError, self.One.load, eid)
+        self.assertRaises(requests.HTTPError, self.One.load, eid)
 
     def test_load_offline(self):
         a = self.One.load(self.eid, dataset_types='_ibl_lickPiezo.raw.npy', offline=True)
