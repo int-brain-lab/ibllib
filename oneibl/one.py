@@ -250,10 +250,10 @@ class ONE(OneAbstract):
             eid = '/sessions/' + eid
         eid_str = eid[-36:]
         # get session json information as a dictionary from the alyx API
-        ses = self.alyx.get('/sessions?id=' + eid_str)
+        ses = self.alyx.get('/sessions/' + eid_str)
         if not ses:
             raise FileNotFoundError('Session ' + eid_str + ' does not exist')
-        ses = ses[0]
+        # ses = ses[0]
         # if no dataset_type is provided:
         # a) force the output to be a dictionary that provides context to the data
         # b) download all types that have a data url specified whithin the alf folder
