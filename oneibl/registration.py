@@ -95,10 +95,10 @@ class RegistrationClient:
             return 'Subject: ' + md['SUBJECT_NAME'] + " doesn't exist in Alyx. ABORT."
 
         # look for a session from the same subject, same number on the same day
-        _, session = self.one.search(subjects=subject['nickname'],
-                                     date_range=md['SESSION_DATE'],
-                                     number=md['SESSION_NUMBER'],
-                                     details=True)
+        session_id, session = self.one.search(subjects=subject['nickname'],
+                                              date_range=md['SESSION_DATE'],
+                                              number=md['SESSION_NUMBER'],
+                                              details=True)
         try:
             user = self.one.alyx.rest('users', 'read', md["PYBPOD_CREATOR"][0])
         except Exception:
@@ -143,7 +143,7 @@ class RegistrationClient:
                     'n_trials': ses_data[-1]['trial_num'],
                     'json': json.dumps(md, indent=1),
                     }
-            session = self.one.alyx.rest('sessions', 'create', id=ses_)
+            session = self.one.alyx.rest('sessions', 'create', data=ses_)
             if md['SUBJECT_WEIGHT']:
                 wei_ = {'subject': subject['nickname'],
                         'date_time': ibllib.time.date2isostr(start_time),
@@ -151,8 +151,8 @@ class RegistrationClient:
                         'user': username
                         }
                 self.one.alyx.rest('weighings', 'create', wei_)
-        else:
-            session = session[0]
+        else:  # TODO: if session exists and no json partial_upgrade it
+            session = self.one.alyx.rest('sessions', 'read', id=session_id[0])
 
         logger_.info(session['url'] + ' ')
         # create associated water administration if not found
@@ -165,7 +165,7 @@ class RegistrationClient:
                 'user': username,
                 'session': session['url'][-36:],
                 'adlib': False}
-            self.one.alyx.rest('water-administrations', 'create', wa_)
+            self.one.alyx.rest('water-administrations', 'create', data=wa_)
         # at this point the session has been created. If create only, exit
         if not file_list:
             return
