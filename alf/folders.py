@@ -37,16 +37,15 @@ def remove_empty_folders(folder: Union[str, Path]) -> None:
             continue
 
 
-def find_sessions(folder: Union[str, Path]) -> List[Path]:
+def find_sessions(folder: Union[str, Path]) -> List[str]:
     """Returns all sessions found in all subfolders of a main data folder"""
     # Ensure folder is a Path object
-    if not isinstance(folder, Path):
-        folder = Path(folder)
-    out = [x.parent.parent for x in folder.rglob('_iblrig_taskSettings.raw*')]
+    folder = Path(folder)
+    out = [str(x.parent.parent) for x in folder.rglob('_iblrig_taskSettings.raw*')]
     return out
 
 
-def find_subject_names(folder: Union[str, Path]) -> List[Path]:
+def find_subject_names(folder: Union[str, Path]) -> List[str]:
     """Returns all subject names found from a main data folder"""
     # Ensure folder is a Path object
     if not isinstance(folder, Path):
@@ -101,3 +100,25 @@ def next_num_folder(session_date_folder: str) -> str:
     elif max(session_nums) > 99:
         out = str(int(max(session_nums)) + 1)
     return out
+
+
+def find_subject_folders(folder: Union[str, Path]) -> List[Path]:
+    """Returns all subject folders found from a main data folder"""
+    # Ensure folder is a Path object
+    folder = Path(folder)
+    out = [str(x.parent.parent.parent.parent)
+           for x in folder.rglob('_iblrig_taskSettings.raw*')]
+    return out
+
+
+def find_mouse_sessions(folder, mouse):
+    return [x for x in find_sessions(folder) if mouse in x]
+
+
+def search(**kwargs):
+    from oneibl.one import SEARCH_TERMS
+    print(set(SEARCH_TERMS.values()))
+
+
+if __name__ == "__main__":
+    print(0)
