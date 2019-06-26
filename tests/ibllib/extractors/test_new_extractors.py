@@ -32,7 +32,8 @@ class TestExtractTrialDataNew(unittest.TestCase):
 
     def test_get_contrastLR(self):
         # Training session
-        cl, cr = ibllib.io.extractors.training_trials.get_contrastLR(self.new_session_training_path)
+        cl, cr = ibllib.io.extractors.training_trials.get_contrastLR(
+            self.new_session_training_path)
         self.assertTrue(all([np.sign(x) >= 0 for x in cl if ~np.isnan(x)]))
         self.assertTrue(all([np.sign(x) >= 0 for x in cr if ~np.isnan(x)]))
         self.assertTrue(sum(np.isnan(cl)) + sum(np.isnan(cr)) == len(cl))
@@ -91,10 +92,10 @@ class TestExtractTrialDataNew(unittest.TestCase):
         # Test is monotonic
         self.assertTrue(all([x >= 0 for x in np.diff(rn)]))
 
-
         print('.')
     # def test_stimOn_times(self):
-    #     st = ibllib.io.extractors.training_trials.get_stimOn_times('', save=False, data=self.data)
+    #     st = ibllib.io.extractors.training_trials.get_stimOn_times(
+    # '', save=False, data=self.data)
     #     self.assertTrue(isinstance(st, np.ndarray))
 
     # def test_encoder_positions_duds(self):
@@ -147,7 +148,6 @@ class TestExtractTrialDataNew(unittest.TestCase):
     # def test_goCue_times(self):
     #     gc_times = ibllib.io.extractors.training_trials.get_goCueOnset_times(self.session_path)
     #     self.assertTrue(not gc_times or gc_times)
-
 
 
 if __name__ == "__main__":
