@@ -125,15 +125,14 @@ def get_contrastLR(session_path, save=False, data=False):
     return (contrastLeft, contrastRight)
 
 
-def get_probaLR(session_path, save=False, data=False):
+def get_probabilityLeft(session_path, save=False, data=False):
     if not data:
         data = raw.load_data(session_path)
     pLeft = np.array([t['stim_probability_left'] for t in data])
-    pRight = 1 - pLeft
     if raw.save_bool(save, '_ibl_trials.probabilityLeft.npy'):
         lpath = Path(session_path).joinpath('alf', '_ibl_trials.probabilityLeft.npy')
         np.save(lpath, pLeft)
-    return pLeft, pRight
+    return pLeft
 
 
 def get_choice(session_path, save=False, data=False):
@@ -531,7 +530,7 @@ def extract_all(session_path, save=False, data=False):
     feedbackType = get_feedbackType(session_path, save=save, data=data)
     contrastLeft, contrastRight = get_contrastLR(
         session_path, save=save, data=data)
-    probabilityLeft, _ = get_probaLR(session_path, save=save, data=data)
+    probabilityLeft = get_probabilityLeft(session_path, save=save, data=data)
     choice = get_choice(session_path, save=save, data=data)
     repNum = get_repNum(session_path, save=save, data=data)
     rewardVolume = get_rewardVolume(session_path, save=save, data=data)
