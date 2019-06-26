@@ -61,18 +61,36 @@ class TestExtractTrialDataNew(unittest.TestCase):
     def test_get_choice(self):
         # Training session
         choice = ibllib.io.extractors.training_trials.get_choice(self.new_session_training_path)
+        self.assertTrue(isinstance(choice, np.ndarray))
         data = loaders.load_data(self.new_session_training_path)
         trial_nogo = np.array(
             [~np.isnan(t['behavior_data']['States timestamps']['no_go'][0][0])
              for t in data])
         self.assertTrue(all(choice[trial_nogo]) == 0)
-        signed_contrast = np.array([t['signed_contrast'] for t in data])
-        if not all(signed_contrast == 0):
-            return
-        else:
-            # This will only fail is the mouse always answers with no go on a
-            # 0% contrast OR if the choice has been extracted wrong
-            self.assertTrue(any(choice[signed_contrast == 0] != 0))
+        # Biased session
+        choice = ibllib.io.extractors.biased_trials.get_choice(self.new_session_biased_path)
+        self.assertTrue(isinstance(choice, np.ndarray))
+        data = loaders.load_data(self.new_session_biased_path)
+        trial_nogo = np.array(
+            [~np.isnan(t['behavior_data']['States timestamps']['no_go'][0][0])
+             for t in data])
+        self.assertTrue(all(choice[trial_nogo]) == 0)
+        # # Don't think we need this any more
+        # signed_contrast = np.array([t['signed_contrast'] for t in data])
+
+        # if not all(signed_contrast == 0):
+        #     return
+        # else:
+        #     # This will only fail is the mouse always answers with no go on a
+        #     # 0% contrast OR if the choice has been extracted wrong
+        #     self.assertTrue(any(choice[signed_contrast == 0] != 0))
+
+    def test_get_repNum(self):
+        rn = ibllib.io.extractors.training_trials.get_repNum(self.new_session_training_path)
+        self.assertTrue(isinstance(rn, np.ndarray))
+        # Test is monotonic
+        self.assertTrue(all([x >= 0 for x in np.diff(rn)]))
+
 
         print('.')
     # def test_stimOn_times(self):

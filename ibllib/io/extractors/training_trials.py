@@ -145,9 +145,9 @@ def get_choice(session_path, save=False, data=False):
     +1 is a CW turn (towards the right)
     0 is a no_go trial
     If a trial is correct the choice of the animal was the inverse of the sign
-    of the contrast.
+    of the position.
 
-    >>> choice[t] = -np.sign(signed_contrast[t]) if trial_correct[t]
+    >>> choice[t] = -np.sign(position[t]) if trial_correct[t]
 
     :param session_path: absolute path of session folder
     :type session_path: str
@@ -161,10 +161,9 @@ def get_choice(session_path, save=False, data=False):
         data = raw.load_data(session_path)
     sitm_side = np.array([np.sign(t['position']) for t in data])
     trial_correct = np.array([t['trial_correct'] for t in data])
-    trial_nogo = []
-    for t in data:
-        trial_nogo.append(~np.isnan(t['behavior_data']['States timestamps']['no_go'][0][0]))
-    trial_nogo = np.array(trial_nogo)
+    trial_nogo = np.array(
+        [~np.isnan(t['behavior_data']['States timestamps']['no_go'][0][0])
+         for t in data])
     choice = sitm_side.copy()
     choice[trial_correct] = -choice[trial_correct]
     choice[trial_nogo] = 0
@@ -181,7 +180,7 @@ def get_repNum(session_path, save=False, data=False):
     Count the consecutive repeated trials.
     **Optional:** saves _ibl_trials.repNum.npy to alf folder.
 
-    Creates trial_repeated from trial['contrast']['type'] == 'repeat_contrast'
+    Creates trial_repeated from trial['contrast']['type'] == 'RepeatContrast'
 
     >>> trial_repeated = [0, 1, 1, 0, 1, 0, 1, 1, 1, 0]
     >>> repNum =         [0, 1, 2, 0, 1, 0, 1, 2, 3, 0]
@@ -198,7 +197,7 @@ def get_repNum(session_path, save=False, data=False):
     if not data:
         data = raw.load_data(session_path)
     trial_repeated = np.array(
-        [t['contrast']['type'] == 'repeat_contrast' for t in data])
+        [t['contrast']['type'] == 'RepeatContrast' for t in data])
     trial_repeated = trial_repeated.astype(int)
     repNum = trial_repeated.copy()
     c = 0
