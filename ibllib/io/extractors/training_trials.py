@@ -17,6 +17,7 @@ import numpy as np
 import os
 import logging
 from pathlib import Path
+from ibllib.misc import version
 
 logger_ = logging.getLogger('ibllib.alf')
 
@@ -43,7 +44,7 @@ def check_alf_folder(session_path):
         os.mkdir(alf_folder)
 
 
-def get_feedbackType(session_path, save=False, data=False):
+def get_feedbackType(session_path, save=False, data=False, settings=False):
     """
     Get the feedback that was delivered to subject.
     **Optional:** saves _ibl_trials.feedbackType.npy
@@ -65,6 +66,8 @@ def get_feedbackType(session_path, save=False, data=False):
     """
     if not data:
         data = raw.load_data(session_path)
+    if not settings:
+        settings = raw.load_settings(session_path)
     feedbackType = np.empty(len(data))
     feedbackType.fill(np.nan)
     reward = []
@@ -89,7 +92,7 @@ def get_feedbackType(session_path, save=False, data=False):
     return feedbackType
 
 
-def get_contrastLR(session_path, save=False, data=False):
+def get_contrastLR(session_path, save=False, data=False, settings=False):
     """
     Get left and right contrasts from raw datafile
     **Optional:** save _ibl_trials.contrastLeft.npy and
@@ -107,6 +110,8 @@ def get_contrastLR(session_path, save=False, data=False):
     """
     if not data:
         data = raw.load_data(session_path)
+    if not settings:
+        settings = raw.load_settings(session_path)
 
     contrastLeft = np.array([t['contrast']['value'] if np.sign(
         t['position']) < 0 else np.nan for t in data])
@@ -125,9 +130,11 @@ def get_contrastLR(session_path, save=False, data=False):
     return (contrastLeft, contrastRight)
 
 
-def get_probabilityLeft(session_path, save=False, data=False):
+def get_probabilityLeft(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
+    if not settings:
+        settings = raw.load_settings(session_path)
     pLeft = np.array([t['stim_probability_left'] for t in data])
     if raw.save_bool(save, '_ibl_trials.probabilityLeft.npy'):
         lpath = Path(session_path).joinpath('alf', '_ibl_trials.probabilityLeft.npy')
@@ -135,7 +142,7 @@ def get_probabilityLeft(session_path, save=False, data=False):
     return pLeft
 
 
-def get_choice(session_path, save=False, data=False):
+def get_choice(session_path, save=False, data=False, settings=False):
     """
     Get the subject's choice in every trial.
     **Optional:** saves _ibl_trials.choice.npy to alf folder.
@@ -159,6 +166,8 @@ def get_choice(session_path, save=False, data=False):
     """
     if not data:
         data = raw.load_data(session_path)
+    if not settings:
+        settings = raw.load_settings(session_path)
     sitm_side = np.array([np.sign(t['position']) for t in data])
     trial_correct = np.array([t['trial_correct'] for t in data])
     trial_nogo = np.array(
@@ -175,7 +184,7 @@ def get_choice(session_path, save=False, data=False):
     return choice
 
 
-def get_repNum(session_path, save=False, data=False):
+def get_repNum(session_path, save=False, data=False, settings=False):
     """
     Count the consecutive repeated trials.
     **Optional:** saves _ibl_trials.repNum.npy to alf folder.
@@ -196,6 +205,8 @@ def get_repNum(session_path, save=False, data=False):
 
     if not data:
         data = raw.load_data(session_path)
+    if not settings:
+        settings = raw.load_settings(session_path)
     trial_repeated = np.array(
         [t['contrast']['type'] == 'RepeatContrast' for t in data])
     trial_repeated = trial_repeated.astype(int)
@@ -215,7 +226,7 @@ def get_repNum(session_path, save=False, data=False):
     return repNum
 
 
-def get_rewardVolume(session_path, save=False, data=False):
+def get_rewardVolume(session_path, save=False, data=False, settings=False):
     """
     Load reward volume delivered for each trial.
     **Optional:** saves _ibl_trials.rewardVolume.npy
@@ -232,6 +243,8 @@ def get_rewardVolume(session_path, save=False, data=False):
     """
     if not data:
         data = raw.load_data(session_path)
+    if not settings:
+        settings = raw.load_settings(session_path)
     trial_volume = [x['reward_amount']
                     if x['trial_correct'] else 0 for x in data]
     rewardVolume = np.array(trial_volume).astype(np.float64)
@@ -243,7 +256,7 @@ def get_rewardVolume(session_path, save=False, data=False):
     return rewardVolume
 
 
-def get_feedback_times(session_path, save=False, data=False):
+def get_feedback_times(session_path, save=False, data=False, settings=False):
     """
     Get the times the water or error tone was delivered to the animal.
     **Optional:** saves _ibl_trials.feedback_times.npy
@@ -262,16 +275,26 @@ def get_feedback_times(session_path, save=False, data=False):
     """
     if not data:
         data = raw.load_data(session_path)
-    rw_times = [tr['behavior_data']['States timestamps']['reward'][0][0]
-                for tr in data]
-    err_times = [tr['behavior_data']['States timestamps']['error'][0][0]
-                 for tr in data]
-    nogo_times = [tr['behavior_data']['States timestamps']['no_go'][0][0]
-                  for tr in data]
-    assert sum(np.isnan(rw_times) &
-               np.isnan(err_times) & np.isnan(nogo_times)) == 0
-    merge = np.array([np.array(times)[~np.isnan(times)] for times in
-                      zip(rw_times, err_times, nogo_times)]).squeeze()
+    if not settings:
+        settings = raw.load_settings(session_path)
+    # Version check
+    if version.lt(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+        rw_times = [tr['behavior_data']['States timestamps']['reward'][0][0]
+                    for tr in data]
+        err_times = [tr['behavior_data']['States timestamps']['error'][0][0]
+                    for tr in data]
+        nogo_times = [tr['behavior_data']['States timestamps']['no_go'][0][0]
+                    for tr in data]
+        assert sum(np.isnan(rw_times) &
+                np.isnan(err_times) & np.isnan(nogo_times)) == 0
+        merge = np.array([np.array(times)[~np.isnan(times)] for times in
+                        zip(rw_times, err_times, nogo_times)]).squeeze()
+    else:
+        # ger err and no go trig times -- look for BNC2High of trial -- verify
+        # only 2 onset times go tone and noise, select 2nd/-1 OR select the one
+        # that is grater than the nogo or err trial onset time
+        pass
+
     if raw.save_bool(save, '_ibl_trials.feedback_times.npy'):
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf', '_ibl_trials.feedback_times.npy')
@@ -279,7 +302,7 @@ def get_feedback_times(session_path, save=False, data=False):
     return np.array(merge)
 
 
-def get_stimOn_times(session_path, save=False, data=False):
+def get_stimOn_times(session_path, save=False, data=False, settings=False):
     """
     Find the time of the statemachine command to turn on hte stim
     (state stim_on start or rotary_encoder_event2)
@@ -289,6 +312,8 @@ def get_stimOn_times(session_path, save=False, data=False):
     """
     if not data:
         data = raw.load_data(session_path)
+    if not settings:
+        settings = raw.load_settings(session_path)
     stim_on = []
     bnc_h = []
     bnc_l = []
@@ -334,7 +359,7 @@ def get_stimOn_times(session_path, save=False, data=False):
     return np.array(stimOn_times)
 
 
-def get_intervals(session_path, save=False, data=False):
+def get_intervals(session_path, save=False, data=False, settings=False):
     """
     Trial start to trial end. Trial end includes 1 or 2 seconds of iti depending
     on if the trial was correct or not.
@@ -355,6 +380,8 @@ def get_intervals(session_path, save=False, data=False):
     """
     if not data:
         data = raw.load_data(session_path)
+    if not settings:
+        settings = raw.load_settings(session_path)
     starts = [t['behavior_data']['Trial start timestamp'] for t in data]
     ends = [t['behavior_data']['Trial end timestamp'] for t in data]
     intervals = np.array([starts, ends]).T
@@ -365,7 +392,7 @@ def get_intervals(session_path, save=False, data=False):
     return intervals
 
 
-def get_iti_duration(session_path, save=False, data=False):
+def get_iti_duration(session_path, save=False, data=False, settings=False):
     """
     Calculate duration of iti from state timestamps.
     **Optional:** saves _ibl_trials.iti_duration.npy
@@ -382,7 +409,9 @@ def get_iti_duration(session_path, save=False, data=False):
     """
     if not data:
         data = raw.load_data(session_path)
-    rt = get_response_times(session_path, save=False, data=False)
+    if not settings:
+        settings = raw.load_settings(session_path)
+    rt = get_response_times(session_path, save=False, data=False, settings=False)
     ends = np.array([t['behavior_data']['Trial end timestamp'] for t in data])
 
     iti_dur = ends - rt
@@ -393,7 +422,7 @@ def get_iti_duration(session_path, save=False, data=False):
     return iti_dur
 
 
-def get_deadTime(session_path, save=False, data=False):
+def get_deadTime(session_path, save=False, data=False, settings=False):
     """
     Get the time between state machine exit and restart of next trial.
 
@@ -409,6 +438,8 @@ def get_deadTime(session_path, save=False, data=False):
     """
     if not data:
         data = raw.load_data(session_path)
+    if not settings:
+        settings = raw.load_settings(session_path)
     starts = [t['behavior_data']['Trial start timestamp'] for t in data]
     ends = [t['behavior_data']['Trial end timestamp'] for t in data]
     # trial_len = np.array(ends) - np.array(starts)
@@ -421,7 +452,7 @@ def get_deadTime(session_path, save=False, data=False):
     return deadTime
 
 
-def get_response_times(session_path, save=False, data=False):
+def get_response_times(session_path, save=False, data=False, settings=False):
     """
     Time (in absolute seconds from session start) when a response was recorded.
     **Optional:** saves _ibl_trials.response_times.npy
@@ -438,6 +469,8 @@ def get_response_times(session_path, save=False, data=False):
     """
     if not data:
         data = raw.load_data(session_path)
+    if not settings:
+        settings = raw.load_settings(session_path)
     rt = np.array([tr['behavior_data']['States timestamps']['closed_loop'][0][1]
                    for tr in data])
     if raw.save_bool(save, '_ibl_trials.response_times.npy'):
@@ -447,7 +480,7 @@ def get_response_times(session_path, save=False, data=False):
     return rt
 
 
-def get_goCueTrigger_times(session_path, save=False, data=False):
+def get_goCueTrigger_times(session_path, save=False, data=False, settings=False):
     """
     Get trigger times of goCue from state machine.
 
@@ -467,6 +500,8 @@ def get_goCueTrigger_times(session_path, save=False, data=False):
     """
     if not data:
         data = raw.load_data(session_path)
+    if not settings:
+        settings = raw.load_settings(session_path)
     goCue = np.array([tr['behavior_data']['States timestamps']
                       ['closed_loop'][0][0] for tr in data])
     if raw.save_bool(save, '_ibl_trials.goCue_times.npy'):
@@ -476,7 +511,7 @@ def get_goCueTrigger_times(session_path, save=False, data=False):
     return goCue
 
 
-def get_goCueOnset_times(session_path, save=False, data=False):
+def get_goCueOnset_times(session_path, save=False, data=False, settings=False):
     """
     Get trigger times of goCue from state machine.
 
@@ -496,6 +531,8 @@ def get_goCueOnset_times(session_path, save=False, data=False):
     """
     if not data:
         data = raw.load_data(session_path)
+    if not settings:
+        settings = raw.load_settings(session_path)
     go_cue_times = []
     for tr in data:
         if get_port_events(tr, 'BNC2'):
@@ -513,9 +550,11 @@ def get_goCueOnset_times(session_path, save=False, data=False):
     return go_cue_times
 
 
-def get_included_trials(session_path, save=False, data=False):
+def get_included_trials(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
+    if not settings:
+        settings = raw.load_settings(session_path)
     trials_included = np.array([t['contrast']['type'] != "RepeatContrast" for t in data])
     if raw.save_bool(save, '_ibl_trials.included'):
         fpath = Path(session_path).joinpath('alf', '_ibl_trials.included.npy')
@@ -523,9 +562,11 @@ def get_included_trials(session_path, save=False, data=False):
     return trials_included
 
 
-def extract_all(session_path, save=False, data=False):
+def extract_all(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
+    if not settings:
+        settings = raw.load_settings(session_path)
     feedbackType = get_feedbackType(session_path, save=save, data=data)
     contrastLeft, contrastRight = get_contrastLR(
         session_path, save=save, data=data)
@@ -566,6 +607,6 @@ if __name__ == "__main__":
     sess = '/mnt/s0/IntegrationTests/Subjects_init/ZM_1085/2019-02-12/002'
     sett = raw.load_settings(sess)
     if 'training' in sett['PYBPOD_PROTOCOL']:
-        l, r = get_contrastLR(sess, save=False, data=False)
-        choice = get_choice(sess, save=False, data=False)
+        l, r = get_contrastLR(sess, save=False, data=False, settings=False)
+        choice = get_choice(sess, save=False, data=False, settings=False)
     print('42')
