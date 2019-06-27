@@ -87,10 +87,37 @@ class TestExtractTrialDataNew(unittest.TestCase):
         #     self.assertTrue(any(choice[signed_contrast == 0] != 0))
 
     def test_get_repNum(self):
-        rn = ibllib.io.extractors.training_trials.get_repNum(self.new_session_training_path)
+        # TODO: Test its sawtooth
+        # Training session
+        rn = ibllib.io.extractors.training_trials.get_repNum(
+            self.new_session_training_path)
         self.assertTrue(isinstance(rn, np.ndarray))
-        # Test is monotonic
-        self.assertTrue(all([x >= 0 for x in np.diff(rn)]))
+        # Biased session
+        rn = ibllib.io.extractors.biased_trials.get_repNum(
+            self.new_session_biased_path)
+        self.assertTrue(isinstance(rn, np.ndarray))
+
+    def test_get_rewardVolume(self):
+        # Training session
+        rv = ibllib.io.extractors.training_trials.get_rewardVolume(
+            self.new_session_training_path)
+        self.assertTrue(isinstance(rv, np.ndarray))
+        # Biased session
+        rv = ibllib.io.extractors.biased_trials.get_rewardVolume(
+            self.new_session_biased_path)
+        self.assertTrue(isinstance(rv, np.ndarray))
+        # Test if all non zero rewards are of the same value
+        self.assertTrue(all([x == max(rv) for x in rv if x != 0]))
+
+    def test_get_feedback_times(self):
+        # Training session
+        ft = ibllib.io.extractors.training_trials.get_feedback_times(
+            self.new_session_training_path)
+        self.assertTrue(isinstance(ft, np.ndarray))
+        # Biased session
+        ft = ibllib.io.extractors.biased_trials.get_feedback_times(
+            self.new_session_biased_path)
+        self.assertTrue(isinstance(ft, np.ndarray))
 
         print('.')
     # def test_stimOn_times(self):
