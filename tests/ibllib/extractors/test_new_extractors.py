@@ -92,10 +92,7 @@ class TestExtractTrialDataNew(unittest.TestCase):
         rn = ibllib.io.extractors.training_trials.get_repNum(
             self.new_session_training_path)
         self.assertTrue(isinstance(rn, np.ndarray))
-        # Biased session
-        rn = ibllib.io.extractors.biased_trials.get_repNum(
-            self.new_session_biased_path)
-        self.assertTrue(isinstance(rn, np.ndarray))
+        # Biased session have no repeted trials
 
     def test_get_rewardVolume(self):
         # Training session

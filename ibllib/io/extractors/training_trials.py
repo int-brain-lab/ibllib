@@ -277,23 +277,23 @@ def get_feedback_times(session_path, save=False, data=False, settings=False):
         data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
+    rw_times = [tr['behavior_data']['States timestamps']['reward'][0][0]
+                for tr in data]
     # Version check
     if version.lt(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
-        rw_times = [tr['behavior_data']['States timestamps']['reward'][0][0]
-                    for tr in data]
         err_times = [tr['behavior_data']['States timestamps']['error'][0][0]
-                    for tr in data]
+                     for tr in data]
         nogo_times = [tr['behavior_data']['States timestamps']['no_go'][0][0]
-                    for tr in data]
+                      for tr in data]
         assert sum(np.isnan(rw_times) &
-                np.isnan(err_times) & np.isnan(nogo_times)) == 0
-        merge = np.array([np.array(times)[~np.isnan(times)] for times in
-                        zip(rw_times, err_times, nogo_times)]).squeeze()
+                   np.isnan(err_times) & np.isnan(nogo_times)) == 0
     else:
         # ger err and no go trig times -- look for BNC2High of trial -- verify
         # only 2 onset times go tone and noise, select 2nd/-1 OR select the one
         # that is grater than the nogo or err trial onset time
         pass
+    merge = np.array([np.array(times)[~np.isnan(times)] for times in
+                      zip(rw_times, err_times, nogo_times)]).squeeze()
 
     if raw.save_bool(save, '_ibl_trials.feedback_times.npy'):
         check_alf_folder(session_path)
