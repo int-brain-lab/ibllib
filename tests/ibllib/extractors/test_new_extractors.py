@@ -11,10 +11,10 @@ import ibllib.io.extractors
 class TestExtractTrialDataNew(unittest.TestCase):
 
     def setUp(self):
-        self.training_lt5_path = Path(__file__).parent / 'data' / 'session'
-        self.biased_lt5_path = Path(__file__).parent / 'data' / 'session_biased'
-        self.training_ge5_path = Path(__file__).parent / 'data' / 'new_session_training'
-        self.biased_ge5_path = Path(__file__).parent / 'data' / 'new_session_biased'
+        self.training_lt5_path = Path(__file__).parent / 'data' / 'session_training_lt5'
+        self.biased_lt5_path = Path(__file__).parent / 'data' / 'session_biased_lt5'
+        self.training_ge5_path = Path(__file__).parent / 'data' / 'session_training_ge5'
+        self.biased_ge5_path = Path(__file__).parent / 'data' / 'session_biased_ge5'
         # turn off logging for unit testing as we will purposely go into warning/error cases
         self.logger = logging.getLogger('ibllib').setLevel(50)
 
