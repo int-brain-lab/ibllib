@@ -54,16 +54,21 @@ def _get_conversion_factor():
     return fac
 
 
-def welchogram(fs, wav):
+def welchogram(fs, wav, nswin=NS_WIN, overlap=OVERLAP, nperseg=NS_WELCH):
     """
+    Computes a spectrogram on a very large audio file.
+
     :param fs: sampling frequency (Hz)
     :param wav: wav signal (vector or memmap)
+    :param nswin: n samples of the sliding window
+    :param overlap: n samples of the overlap between windows
+    :param nperseg: n samples for the computation of the spectrogram
     :return: tscale, fscale, downsampled_spectrogram
     """
     ns = wav.shape[0]
-    window_generator = dsp.WindowGenerator(ns=ns, nswin=NS_WIN, overlap=OVERLAP)
+    window_generator = dsp.WindowGenerator(ns=ns, nswin=nswin, overlap=overlap)
     nwin = window_generator.nwin
-    fscale = dsp.fscale(NS_WELCH, 1 / fs, one_sided=True)
+    fscale = dsp.fscale(nperseg, 1 / fs, one_sided=True)
     W = np.zeros((nwin, len(fscale)))
     tscale = window_generator.tscale(fs=fs)
     detect = []
@@ -75,11 +80,11 @@ def welchogram(fs, wav):
         if len(a):
             detect += a
         # the last window may not allow a pwelch
-        if (last - first) < NS_WELCH:
+        if (last - first) < nperseg:
             continue
         # compute PSD estimate for the current window
         iw = window_generator.iw
-        _, W[iw, :] = signal.welch(w, fs=fs, window='hanning', nperseg=NS_WELCH, axis=-1,
+        _, W[iw, :] = signal.welch(w, fs=fs, window='hanning', nperseg=nperseg, axis=-1,
                                    detrend='constant', return_onesided=True, scaling='density')
         if (iw % 50) == 0:
             window_generator.print_progress()
@@ -95,6 +100,7 @@ def extract_sound(ses_path, save=True, force=False):
     """
     Simple audio features extraction for ambient sound characterization.
     From a wav file, generates several ALF files to be registered on Alyx
+
     :param ses_path: ALF full session path: (/mysubject001/YYYY-MM-DD/001)
     :return: None
     """

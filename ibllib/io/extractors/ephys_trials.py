@@ -8,6 +8,18 @@ from ibllib.io.extractors.biased_trials import (
 
 
 def extract_all(session_path, save=False, data=False):
+    """
+    Extract all behaviour data from Bpod whithin the specified folder.
+    The timing information from FPGA is extracted in
+    :func:`~ibllib.io.extractors.ephys_fpga`
+
+
+    :param session_path: folder containing sessions
+    :type session_path: str or pathlib.Path
+    :param save: bool
+    :param data: raw Bpod data dictionary
+    :return: dictionary of trial related vectors (one row per trial)
+    """
     if not data:
         data = raw.load_data(session_path)
     feedbackType = get_feedbackType(session_path, save=save, data=data)

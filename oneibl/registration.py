@@ -29,6 +29,9 @@ def log2sessionfile(func):
 
 
 class RegistrationClient:
+    """
+    Object that keeps the ONE instance and provides method to create sessions and register data.
+    """
     def __init__(self, one=None):
         self.one = one
         if not one:
@@ -38,7 +41,13 @@ class RegistrationClient:
                                 self.one.alyx.rest('data-formats', 'list')]
 
     def create_sessions(self, root_data_folder, dry=False):
-        # session creation on the create me flags.
+        """
+        Create sessions looking recursively for flag files
+
+        :param root_data_folder: folder to look for create_me.flag
+        :param dry: bool. Dry run if True
+        :return: None
+        """
         flag_files = Path(root_data_folder).glob('**/create_me.flag')
         for flag_file in flag_files:
             if dry:
@@ -52,6 +61,13 @@ class RegistrationClient:
             flag_file.unlink()
 
     def register_sync(self, root_data_folder, dry=False):
+        """
+        Register sessions looking recursively for flag files
+
+        :param root_data_folder: folder to look for register_me.flag
+        :param dry: bool. Dry run if True
+        :return:
+        """
         flag_files = Path(root_data_folder).glob('**/register_me.flag')
         for flag_file in flag_files:
             if dry:
@@ -78,6 +94,14 @@ class RegistrationClient:
 
     @log2sessionfile
     def register_session(self, ses_path, file_list=True, repository_name=None):
+        """
+        Register session in Alyx
+
+        :param ses_path: path to the session
+        :param file_list: bool. Set to False will only create the session and skip registration
+        :param repository_name: Optional, repository on which to register the data
+        :return: Status string on error
+        """
         if isinstance(ses_path, str):
             ses_path = Path(ses_path)
         # read meta data from the rig for the session from the task settings file

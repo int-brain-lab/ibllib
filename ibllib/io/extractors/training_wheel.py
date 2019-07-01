@@ -1,14 +1,7 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
-"""**ALF extractors** are a collection of functions that extract alf files from
-the PyBpod rig raw data.
-
-Each DatasetType in the IBL pipeline should have one extractor function.
-
-:raises an: n/a
-:raises ValueError: n/a
-:return: n/a
-:rtype: n/a
+"""
+Training wheel extractor from Pybpod output.
 """
 import os
 import logging

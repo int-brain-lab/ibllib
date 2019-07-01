@@ -285,13 +285,14 @@ class AlyxClient:
         alyx_client.rest(endpoint, action): lists fields and URL
 
         Example with a rest endpoint with all actions
-        alyx.client.rest('subjects', 'list')
-        alyx.client.rest('subjects', 'list', field_filter1='filterval')
-        alyx.client.rest('subjects', 'create', data=sub_dict)
-        alyx.client.rest('subjects', 'read', id='nickname')
-        alyx.client.rest('subjects', 'update', id='nickname', data=sub_dict)
-        alyx.client.rest('subjects', 'partial_update', id='nickname', data=sub_ict)
-        alyx.client.rest('subjects', 'delete', id='nickname')
+
+        >>> alyx.client.rest('subjects', 'list')
+            alyx.client.rest('subjects', 'list', field_filter1='filterval')
+            alyx.client.rest('subjects', 'create', data=sub_dict)
+            alyx.client.rest('subjects', 'read', id='nickname')
+            alyx.client.rest('subjects', 'update', id='nickname', data=sub_dict)
+            alyx.client.rest('subjects', 'partial_update', id='nickname', data=sub_ict)
+            alyx.client.rest('subjects', 'delete', id='nickname')
 
         :param url: endpoint name
         :param action: 'list', 'create', 'read', 'update', 'partial_update', 'delete'

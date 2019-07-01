@@ -2,10 +2,10 @@
 # -*- coding:utf-8 -*-
 # @Author: Niccolò Bonacchi
 # @Date: Monday, July 16th 2018, 1:28:46 pm
-"""**Raw Data Loader functions for PyBpod rig.**
+"""
+Raw Data Loader functions for PyBpod rig
 
 Module contains one loader function per raw datafile
-
 """
 import json
 import wave

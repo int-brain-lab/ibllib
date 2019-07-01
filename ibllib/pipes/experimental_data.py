@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 """
-python one_iblrig.py extract /path/to/my/session/ [--dry=True]
-python one_iblrig.py register /path/to/my/session/ [--dry=True]
-python one_iblrig.py create /path/to/my/session/ [--dry=True]
-python one_iblrig.py compress_video /path/to/my/session/ [--dry=True --count=4]
-python one_iblrig.py compress_audio /path/to/my/session/ [--dry=True --count=5]
+Entry point to system commands for IBL pipeline.
+
+>>> python one_iblrig.py extract /path/to/my/session/ [--dry=True]
+>>> python one_iblrig.py register /path/to/my/session/ [--dry=True]
+>>> python one_iblrig.py create /path/to/my/session/ [--dry=True]
+>>> python one_iblrig.py compress_video /path/to/my/session/ [--dry=True --count=4]
+>>> python one_iblrig.py compress_audio /path/to/my/session/ [--dry=True --count=5]
 """
 
 import logging

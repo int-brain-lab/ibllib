@@ -6,11 +6,6 @@
 the PyBpod rig raw data.
 
 Each DatasetType in the IBL pipeline should have one extractor function.
-
-:raises an: n/a
-:raises ValueError: n/a
-:return: n/a
-:rtype: n/a
 """
 import ibllib.io.raw_data_loaders as raw
 import numpy as np

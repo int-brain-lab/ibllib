@@ -57,14 +57,15 @@ def logger_config(name=None):
 def print_progress(iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█'):
     """
     Call in a loop to create terminal progress bar
-    @params:
-        iteration   - Required  : current iteration (Int)
-        total       - Required  : total iterations (Int)
-        prefix      - Optional  : prefix string (Str)
-        suffix      - Optional  : suffix string (Str)
-        decimals    - Optional  : positive number of decimals in percent complete (Int)
-        length      - Optional  : character length of bar (Int)
-        fill        - Optional  : bar fill character (Str)
+
+    :param iteration: Required  : current iteration (Int)
+    :param total: Required  : total iterations (Int)
+    :param prefix: Optional  : prefix string (Str)
+    :param suffix: Optional: suffix string (Str)
+    :param decimals: Optional: positive number of decimals in percent complete (Int)
+    :param length: Optional: character length of bar (Int)
+    :param fill: Optional: bar fill character (Str)
+    :return: None
     """
     iteration += 1
     percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))

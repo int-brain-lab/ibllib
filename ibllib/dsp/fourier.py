@@ -1,9 +1,14 @@
+"""
+Low-level functions to work in frequency domain for n-dim arrays
+"""
+
 import numpy as np
 
 
 def fscale(ns, si=1, one_sided=False):
     """
     numpy.fft.fftfreq returns Nyquist as a negative frequency so we propose this instead
+
     :param ns: number of samples
     :param si: sampling interval in seconds
     :param one_sided: if True, returns only positive frequencies
@@ -20,6 +25,7 @@ def freduce(x, axis=None):
     """
     Reduces a spectrum to positive frequencies only
     Works on the last dimension (contiguous in c-stored array)
+
     :param x: numpy.ndarray
     :param axis: axis along which to perform reduction (last axis by default)
     :return: numpy.ndarray
@@ -35,6 +41,7 @@ def fexpand(x, ns=1, axis=None):
     """
     Reconstructs full spectrum from positive frequencies
     Works on the last dimension (contiguous in c-stored array)
+
     :param x: numpy.ndarray
     :param axis: axis along which to perform reduction (last axis by default)
     :return: numpy.ndarray
@@ -51,6 +58,7 @@ def fexpand(x, ns=1, axis=None):
 def bp(ts, si, b, axis=None):
     """
     Band-pass filter in frequency domain
+
     :param ts: time serie
     :param si: sampling interval in seconds
     :param b: cutout frequencies: 4 elements vector or list
@@ -63,6 +71,7 @@ def bp(ts, si, b, axis=None):
 def lp(ts, si, b, axis=None):
     """
     Low-pass filter in frequency domain
+
     :param ts: time serie
     :param si: sampling interval in seconds
     :param b: cutout frequencies: 2 elements vector or list
@@ -75,6 +84,7 @@ def lp(ts, si, b, axis=None):
 def hp(ts, si, b, axis=None):
     """
     High-pass filter in frequency domain
+
     :param ts: time serie
     :param si: sampling interval in seconds
     :param b: cutout frequencies: 2 elements vector or list
@@ -104,6 +114,7 @@ def _freq_filter(ts, si, b, axis=None, typ='lp'):
 def _freq_vector(f, b, typ='lp'):
     """
         Returns a frequency modulated vector for filtering
+
         :param f: frequency vector, uniform and monotonic
         :param b: 2 bounds array
         :return: amplitude modulated frequency vector

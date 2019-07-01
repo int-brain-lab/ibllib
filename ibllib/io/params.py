@@ -36,8 +36,8 @@ def from_dict(par_dict):
 def getfile(str_params):
     """
     Returns full path of the param file per system convention:
-     linux/mac : ~/.str_params
-     Windows APPDATA folder
+     linux/mac: ~/.str_params, Windows: APPDATA folder
+
     :param str_params: string that identifies parm file
     :return: string of full path
     """
@@ -51,6 +51,7 @@ def getfile(str_params):
 def read(str_params, default=None):
     """
     Reads in and parse Json parameter file into dictionary
+
     :param str_params: path to text json file
     :param default: default values for missing parameters
     :return: named tuple containing parameters
@@ -79,6 +80,7 @@ def read(str_params, default=None):
 def write(str_params, par):
     """
     Write a parameter file in Json format
+
     :param str_params: path to text json file
     :param par: dictionary containing parameters values
     :return: None

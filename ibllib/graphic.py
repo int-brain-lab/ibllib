@@ -47,6 +47,15 @@ def strinput(title, prompt, default='COM', nullable=False):
 
 
 def login(title='Enter Credentials', default_username=None, default_passwd=None, add_fields=None):
+    """
+    Dialog box prompting for username and password.
+
+    :param title: Window title
+    :param default_username: default field for username
+    :param default_passwd:  default field for password
+    :param add_fields: list of new fields to be added to the dialog
+    :return:
+    """
     class Toto:
         def __init__(self, root, default_username=None, default_passwd=None, title=None,
                      add_fields=None):

@@ -65,8 +65,10 @@ def is_extracted(session_path):
 def from_path(session_path, force=False, save=True):
     """
     Extract a session from full ALF path (ex: '/scratch/witten/ibl_witten_01/2018-12-18/001')
-    force: (False) overwrite existing files
-    save: (True) boolean or list of ALF file names to extract
+
+    :param force: (False) overwrite existing files
+    :param save: (True) boolean or list of ALF file names to extract
+    :return: None
     """
     logger_.info('Extracting ' + str(session_path))
     extractor_type = extractors_exist(session_path)

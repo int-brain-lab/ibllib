@@ -34,7 +34,7 @@ class Reader:
 
     @property
     def type(self):
-        """ :return: ap or lf. Useful to index dictionaries """
+        """:return: ap or lf. Useful to index dictionaries """
         if not self.meta:
             return 0
         if self.meta['snsApLfSy'][0] == 0 and self.meta['snsApLfSy'][1] != 0:
@@ -81,6 +81,9 @@ class Reader:
         reads all channels from first_sample to last_sample, following numpy slicing convention
         sglx.read_samples(first=0, last=100) would be equivalent to slicing the array D
         D[:,0:100] where the last axis represent time and the first channels.
+
+         :param first_sample: first sample to be read, python slice-wise
+         :param last_sample:  last sample to be read, python slice-wise
          :return: numpy array of int16
         """
         byt_offset = int(self.nc * first_sample * SAMPLE_SIZE)
@@ -99,9 +102,9 @@ class Reader:
 
     def read_sync(self, slice=slice(0, 10000)):
         """
-        Reads only the sync trace at specified samples
+        Reads only the sync trace at specified samples using slicing syntax
 
-        `sync_samples = sr.read_sync(0:10000)`
+        >>> sync_samples = sr.read_sync(0:10000)
         """
         if not(self.meta and self.meta['acqApLfSy'][2]):
             logger_.warning('Sync trace not labeled in metadata. Assuming last trace')
@@ -109,6 +112,17 @@ class Reader:
 
 
 def read(sglx_file, first_sample=0, last_sample=10000):
+    """
+    Function to read from a spikeglx binary file without instantiating the class.
+    Gets the meta-data as well.
+
+    >>> ibllib.io.spikeglx.read('/path/to/file.bin', first_sample=0, last_sample=1000)
+
+    :param sglx_file: full path the the binary file to read
+    :param first_sample: first sample to be read, python slice-wise
+    :param last_sample: last sample to be read, python slice-wise
+    :return: Data array, sync trace, meta-data
+    """
     sglxr = Reader(sglx_file)
     D, sync = sglxr.read_samples(first_sample=first_sample, last_sample=last_sample)
     return D, sync, sglxr.meta
@@ -118,6 +132,9 @@ def read_meta_data(md_file):
     """
     Reads the spkike glx metadata file and parse in a dictionary
     Agnostic: does not make any assumption on the keys/content, it just parses key=values
+
+    :param md_file: last sample to be read, python slice-wise
+    :return: Data array, sync trace, meta-data
     """
     with open(md_file) as fid:
         md = fid.read()
@@ -173,8 +190,9 @@ def split_sync(sync_tr):
     """
     The synchronization channelx are stored as single bits, this will split the int16 original
     channel into 16 single bits channels
-    :param sync_tr: the synchronisation trace
-    :return:
+
+    :param sync_tr: numpy vector: samples of synchronisation trace
+    :return: int8 numpy array of 16 channels, 1 column per sync trace
     """
     sync_tr = np.int16(np.copy(sync_tr))
     out = np.unpackbits(sync_tr.view(np.uint8)).reshape(sync_tr.size, 16)

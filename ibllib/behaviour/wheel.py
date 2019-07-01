@@ -1,3 +1,6 @@
+"""
+Set of functions to handle wheel data
+"""
 import numpy as np
 import scipy.interpolate as interpolate
 

@@ -16,6 +16,7 @@ User Manual
    01b_installation_general
    02a_installation_python
    02b_tutorial_python
+   02c_installation_dev_python
    03a_installation_matlab
    03b_tutorial_matlab
 .. one comment here to test
