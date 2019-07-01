@@ -14,9 +14,8 @@ from ibllib.io.extractors.training_trials import (
 
 def get_contrastLR(session_path, save=False, data=False):
     """
-    Get left and right contrasts from raw datafile
-    **Optional:** save _ibl_trials.contrastLeft.npy and
-        _ibl_trials.contrastRight.npy to alf folder.
+    Get left and right contrasts from raw datafile. Optionally, saves
+    _ibl_trials.contrastLeft.npy and _ibl_trials.contrastRight.npy to alf folder.
 
     Uses signed_contrast to create left and right contrast vectors.
 

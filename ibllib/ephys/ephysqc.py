@@ -22,8 +22,9 @@ def rmsmap(fbin):
     Computes RMS map in time domain and spectra for each channel of Neuropixel probe
 
     :param fbin: binary file in spike glx format (will look for attached metatdata)
-    :return: win: a dictionary with a time-RMS per channel map, spectra per channel, time
-    and frequency scales
+    :type fbin: str or pathlib.Path
+    :return: a dictionary with amplitudes in channeltime space, channelfrequency space, time
+     and frequency scales
     """
     if not isinstance(fbin, spikeglx.Reader):
         sglx = spikeglx.Reader(fbin)

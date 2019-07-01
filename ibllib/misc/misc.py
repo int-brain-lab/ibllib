@@ -85,10 +85,10 @@ def bincount2D(x, y, xbin=0, ybin=0, xlim=None, ylim=None, weights=None):
     :param y: values to bin along the 1st dimension
     :param xbin: bin size along 2nd dimension (set to 0 to aggregate according to unique values)
     :param ybin: bin size along 1st dimension (set to 0 to aggregate according to unique values)
-    :param xlim: (optional) 2 values (array or list) that restrict range along 2nd dimension.
-    :param ylim: (optional) 2 values (array or list) that restrict range along 1st dimension.
-    :param weights:(optional) defaults to None: weights to apply to each value for aggregation
-    :return: 3 numpy arrays: MAP [ny,nx] image, xscale [nx], yscale [ny]
+    :param xlim: (optional) 2 values (array or list) that restrict range along 2nd dimension
+    :param ylim: (optional) 2 values (array or list) that restrict range along 1st dimension
+    :param weights: (optional) defaults to None, weights to apply to each value for aggregation
+    :return: 3 numpy arrays MAP [ny,nx] image, xscale [nx], yscale [ny]
     """
     # if no bounds provided, use min/max of vectors
     if not xlim:

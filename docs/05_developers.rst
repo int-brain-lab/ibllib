@@ -1,4 +1,4 @@
-Administrator and developer's guide
+Python Modules
 ===================================
 
 .. toctree::

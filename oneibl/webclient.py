@@ -298,7 +298,7 @@ class AlyxClient:
         :param action: 'list', 'create', 'read', 'update', 'partial_update', 'delete'
         :param id: lookup string for actions 'read', 'update', 'partial_update', and 'delete'
         :param data: data dictionary for actions 'update', 'partial_update' and 'create'
-        :param **kwargs: filter as per the REST documentation
+        :param \*\*kwargs: filter as per the REST documentation
         :return: list of queried dicts ('list') or dict (other actions)
         """
         # if endpoint is None, list available endpoints

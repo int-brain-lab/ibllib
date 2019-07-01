@@ -59,14 +59,18 @@ def time_converter_session(session_path, kind):
     Depends on getter functions that extract from the raw data the timestamps
     of the trial_start sync pulse event for each clock.
 
-    kinds:
-    *2b:        _________   re2b        cam2b,      ephys2b
-    *2re:       b2re        _________   cam2re,     ephys2re
-    *2cam:      b2cam       re2cam      _________   ephys2cam
-    *2ephys:    b2ephys     re2ephys    cam2ephys   _________
+    +---------+----------+-----------+-----------+-----------+
+    | 2b      |   -      |   re2b    | cam2b,    |  ephys2b  |
+    +---------+----------+-----------+-----------+-----------+
+    | 2re     |   b2re   |   -       | cam2re    |  ephys2re |
+    +---------+----------+-----------+-----------+-----------+
+    | 2cam    |   b2cam  |   re2cam  |  -        |  ephys2cam|
+    +---------+----------+-----------+-----------+-----------+
+    | 2ephys  |   b2ephys|   re2ephys| cam2ephys |  -        |
+    +---------+----------+-----------+-----------+-----------+
 
-    Default converters for times are assumed to be of kind *2b unless ephys data
-    is present in that case converters for 'times' will be of kind *2ephys
+    Default converters for times are assumed to be of kind *2b* unless ephys data
+    is present in that case converters for 'times' will be of kind *2ephys*
 
     :param session_path: absolute path of session folder
     :type session_path: str
