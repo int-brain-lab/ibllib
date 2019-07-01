@@ -21,7 +21,7 @@ def get_contrastLR(session_path, save=False, data=False):
 
     :param session_path: absolute path of session folder
     :type session_path: str
-    :param save: wether to save the corresponding alf file
+    :param save: whether to save the corresponding alf file
                  to the alf folder, defaults to False
     :type save: bool, optional
     :return: numpy.ndarray

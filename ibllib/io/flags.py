@@ -10,7 +10,7 @@ logger_ = logging.getLogger('ibllib')
 
 def read_flag_file(fname):
     """
-    Flag files are \*.flag files within a session folder used to schedule some jobs
+    Flag files are ``*.flag`` files within a session folder used to schedule some jobs
     If they are empty, should return True
 
     :param fname: full file path of the flag file
@@ -53,7 +53,7 @@ def excise_flag_file(fname, removed_files=None):
 
 def write_flag_file(fname, file_list: list = None, clobber=False):
     """
-    Flag files are \*.flag files within a session folder used to schedule some jobs
+    Flag files are ``*.flag`` files within a session folder used to schedule some jobs
     Each line references to a file to extract or register
 
     :param fname: full file path of the flag file
