@@ -129,7 +129,7 @@
  "_BOARD": "_iblrig_mainenlab_ephys_0",
  "_PROTOCOL": "_iblrig_tasks_trainingChoiceWorld",
  "IBLRIG_COMMIT_HASH": "9ab340661f0304acd2e496dd3d4f27db7b92c83c",
- "IBLRIG_VERSION_TAG": "",
+ "IBLRIG_VERSION_TAG": "5.0.0",
  "IBLLIB_FOLDER": "c:\\ibllib",
  "IBLLIB_VERSION_TAG": "",
  "IBLLIB_COMMIT_HASH": "73398ff380fcd8221fb25fee38280739ba72f077",

@@ -256,6 +256,42 @@ def get_rewardVolume(session_path, save=False, data=False, settings=False):
     return rewardVolume
 
 
+def get_feedback_times_lt5(session_path, data=False):
+    if not data:
+        data = raw.load_data(session_path)
+    rw_times = [tr['behavior_data']['States timestamps']['reward'][0][0]
+                for tr in data]
+    err_times = [tr['behavior_data']['States timestamps']['error'][0][0]
+                 for tr in data]
+    nogo_times = [tr['behavior_data']['States timestamps']['no_go'][0][0]
+                  for tr in data]
+    assert sum(np.isnan(rw_times) &
+               np.isnan(err_times) & np.isnan(nogo_times)) == 0
+    merge = np.array([np.array(times)[~np.isnan(times)] for times in
+                      zip(rw_times, err_times, nogo_times)]).squeeze()
+
+    return np.array(merge)
+
+
+def get_feedback_times_ge5(session_path, data=False):
+    # ger err and no go trig times -- look for BNC2High of trial -- verify
+    # only 2 onset times go tone and noise, select 2nd/-1 OR select the one
+    # that is grater than the nogo or err trial onset time
+    if not data:
+        data = raw.load_data(session_path)
+    rw_times = [tr['behavior_data']['States timestamps']['reward'][0][0]
+                for tr in data]
+    sound_times = [tr['behavior_data']['Events timestamps']['BNC2High'] for tr in data]
+
+    err_sound_times = [x[-1] if len(x) == 2 else np.nan for x in sound_times]
+
+    assert sum(np.isnan(rw_times) &
+               np.isnan(err_sound_times)) == 0
+    merge = np.array([np.array(times)[~np.isnan(times)] for times in
+                      zip(rw_times, err_sound_times)]).squeeze()
+    return np.array(merge)
+
+
 def get_feedback_times(session_path, save=False, data=False, settings=False):
     """
     Get the times the water or error tone was delivered to the animal.
@@ -273,27 +309,13 @@ def get_feedback_times(session_path, save=False, data=False, settings=False):
     :return: numpy.ndarray
     :rtype: dtype('float64')
     """
-    if not data:
-        data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
-    rw_times = [tr['behavior_data']['States timestamps']['reward'][0][0]
-                for tr in data]
     # Version check
     if version.lt(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
-        err_times = [tr['behavior_data']['States timestamps']['error'][0][0]
-                     for tr in data]
-        nogo_times = [tr['behavior_data']['States timestamps']['no_go'][0][0]
-                      for tr in data]
-        assert sum(np.isnan(rw_times) &
-                   np.isnan(err_times) & np.isnan(nogo_times)) == 0
+        merge = get_feedback_times_lt5(session_path, data=data)
     else:
-        # ger err and no go trig times -- look for BNC2High of trial -- verify
-        # only 2 onset times go tone and noise, select 2nd/-1 OR select the one
-        # that is grater than the nogo or err trial onset time
-        pass
-    merge = np.array([np.array(times)[~np.isnan(times)] for times in
-                      zip(rw_times, err_times, nogo_times)]).squeeze()
+        merge = get_feedback_times_ge5(session_path, data=data)
 
     if raw.save_bool(save, '_ibl_trials.feedback_times.npy'):
         check_alf_folder(session_path)
