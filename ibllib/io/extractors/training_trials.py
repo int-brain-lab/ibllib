@@ -312,10 +312,10 @@ def get_feedback_times(session_path, save=False, data=False, settings=False):
     if not settings:
         settings = raw.load_settings(session_path)
     # Version check
-    if version.lt(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
-        merge = get_feedback_times_lt5(session_path, data=data)
-    else:
+    if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
         merge = get_feedback_times_ge5(session_path, data=data)
+    else:
+        merge = get_feedback_times_lt5(session_path, data=data)
 
     if raw.save_bool(save, '_ibl_trials.feedback_times.npy'):
         check_alf_folder(session_path)
@@ -324,7 +324,65 @@ def get_feedback_times(session_path, save=False, data=False, settings=False):
     return np.array(merge)
 
 
-def get_stimOn_times(session_path, save=False, data=False, settings=False):
+def get_stimOnTrigger_times(session_path, save=False, data=False, settings=False):
+    if not data:
+        data = raw.load_data(session_path)
+    # Get the stim_on_state that triggers the onset of the stim
+    stim_on_state = np.array([tr['behavior_data']['States timestamps']
+                             ['stim_on'][0] for tr in data])
+    stimOnTrigger_times = stim_on_state[:, 0].T
+
+    if raw.save_bool(save, '_ibl_trials.stimOnTrigger_times.npy'):
+        check_alf_folder(session_path)
+        fpath = os.path.join(session_path, 'alf', '_ibl_trials.stimOnTrigger_times.npy')
+        np.save(fpath, np.array(stimOnTrigger_times))
+
+    return stimOnTrigger_times
+
+
+def get_stimOn_times_ge5(session_path, data=False):
+    """
+    Find first and last stim_sync pulse of the trial.
+    stimOn_times should be the first after the stim_on state.
+    (Stim updates are in BNC1High and BNC1Low - frame2TTL device)
+    Check that all trials have frame changes.
+    Find length of stim_on_state [start, stop].
+    If either check fails the HW device failed to detect the stim_sync square change
+    Substitute that trial's missing or incorrect value with a NaN.
+    return stimOn_times
+    """
+    if not data:
+        data = raw.load_data(session_path)
+    # Get all stim_sync events detected
+    stim_sync_all = [raw.get_port_events(
+        tr['behavior_data']['Events timestamps'], 'BNC1') for tr in data]
+    stim_sync_all = [np.array(x) for x in stim_sync_all]
+    # Get the stim_on_state that triggers the onset of the stim
+    stim_on_state = np.array([tr['behavior_data']['States timestamps']
+                             ['stim_on'][0] for tr in data])
+
+    stimOn_times = np.array([])
+    for sync, on, off in zip(
+            stim_sync_all, stim_on_state[:, 0], stim_on_state[:, 1]):
+        pulse = sync[np.where(np.bitwise_and((sync > on), (sync <= off)))]
+        if pulse.size == 0:
+            stimOn_times = np.append(stimOn_times, np.nan)
+        else:
+            stimOn_times = np.append(stimOn_times, pulse)
+
+    nmissing = np.sum(np.isnan(stimOn_times))
+    # Check if all stim_syncs have failed to be detected
+    if np.all(np.isnan(stimOn_times)):
+        logger_.error(f'{session_path}: Missing ALL BNC1 stimulus ({nmissing} trials')
+
+    # Check if any stim_sync has failed be detected for every trial
+    if np.any(np.isnan(stimOn_times)):
+        logger_.warning(f'{session_path}: Missing BNC1 stimulus on {nmissing} trials')
+
+    return stimOn_times
+
+
+def get_stimOn_times_lt5(session_path, data=False):
     """
     Find the time of the statemachine command to turn on hte stim
     (state stim_on start or rotary_encoder_event2)
@@ -334,8 +392,6 @@ def get_stimOn_times(session_path, save=False, data=False, settings=False):
     """
     if not data:
         data = raw.load_data(session_path)
-    if not settings:
-        settings = raw.load_settings(session_path)
     stim_on = []
     bnc_h = []
     bnc_l = []
@@ -343,12 +399,12 @@ def get_stimOn_times(session_path, save=False, data=False, settings=False):
         stim_on.append(tr['behavior_data']['States timestamps']['stim_on'][0][0])
         if 'BNC1High' in tr['behavior_data']['Events timestamps'].keys():
             bnc_h.append(np.array(tr['behavior_data']
-                         ['Events timestamps']['BNC1High']))
+                                  ['Events timestamps']['BNC1High']))
         else:
             bnc_h.append(np.array([np.NINF]))
         if 'BNC1Low' in tr['behavior_data']['Events timestamps'].keys():
             bnc_l.append(np.array(tr['behavior_data']
-                         ['Events timestamps']['BNC1Low']))
+                                  ['Events timestamps']['BNC1Low']))
         else:
             bnc_l.append(np.array([np.NINF]))
 
@@ -367,11 +423,30 @@ def get_stimOn_times(session_path, save=False, data=False, settings=False):
         stimOn_times[i] = stot[0]
 
     if np.all(np.isnan(stimOn_times)):
-        logger_.error(f'{session_path}: Missing ALL BNC1 stimulus ({count_missing}: trials')
-        return None
+        logger_.error(f'{session_path}: Missing ALL BNC1 stimulus ({count_missing} trials')
 
     if count_missing > 0:
         logger_.warning(f'{session_path}: Missing BNC1 stimulus on {count_missing} trials')
+
+    return np.array(stimOn_times)
+
+def get_stimOn_times(session_path, save=False, data=False, settings=False):
+    """
+    Find the time of the statemachine command to turn on hte stim
+    (state stim_on start or rotary_encoder_event2)
+    Find the next frame change from the photodiodeafter that TS.
+    Screen is not displaying anything until then.
+    (Frame changes are in BNC1High and BNC1Low)
+    """
+    if not data:
+        data = raw.load_data(session_path)
+    if not settings:
+        settings = raw.load_settings(session_path)
+    # Version check
+    if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+        stimOn_times = get_stimOn_times_ge5(session_path, data=data)
+    else:
+        stimOn_times = get_stimOn_times_lt5(session_path, data=data)
 
     if raw.save_bool(save, '_ibl_trials.stimOn_times.npy'):
         check_alf_folder(session_path)
@@ -383,11 +458,8 @@ def get_stimOn_times(session_path, save=False, data=False, settings=False):
 
 def get_intervals(session_path, save=False, data=False, settings=False):
     """
-    Trial start to trial end. Trial end includes 1 or 2 seconds of iti depending
-    on if the trial was correct or not.
-    TODO: Nick suggested the that the iti be removed from this. In this case the
-    end of a trial would be the same as the response time.
-    Also consider adding _ibl_trials.iti and _ibl_trials.deadTime
+    Trial start to trial end. Trial end includes 1 or 2 seconds after feedback,
+    (depending on the feedback) and 0.5 seconds of iti.
     **Optional:** saves _ibl_trials.intervals.npy
 
     Uses the corrected Trial start and Trial end timpestamp values form PyBpod.
@@ -433,7 +505,7 @@ def get_iti_duration(session_path, save=False, data=False, settings=False):
         data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
-    rt = get_response_times(session_path, save=False, data=False, settings=False)
+    rt = get_response_times(session_path, save=False, data=False)
     ends = np.array([t['behavior_data']['Trial end timestamp'] for t in data])
 
     iti_dur = ends - rt
@@ -442,36 +514,6 @@ def get_iti_duration(session_path, save=False, data=False, settings=False):
         fpath = os.path.join(session_path, 'alf', '_ibl_trials.itiDuration.npy')
         np.save(fpath, iti_dur)
     return iti_dur
-
-
-def get_deadTime(session_path, save=False, data=False, settings=False):
-    """
-    Get the time between state machine exit and restart of next trial.
-
-    Uses the corrected Trial start and Trial end timpestamp values form PyBpod.
-
-    :param session_path: Absolute path of session folder
-    :type session_path: str
-    :param save: wether to save the corresponding alf file
-                 to the alf folder, defaults to False
-    :param save: bool, optional
-    :return: numpy.ndarray
-    :rtype: dtype('float64')
-    """
-    if not data:
-        data = raw.load_data(session_path)
-    if not settings:
-        settings = raw.load_settings(session_path)
-    starts = [t['behavior_data']['Trial start timestamp'] for t in data]
-    ends = [t['behavior_data']['Trial end timestamp'] for t in data]
-    # trial_len = np.array(ends) - np.array(starts)
-    deadTime = np.array(starts)[1:] - np.array(ends)[:-1]
-    deadTime = np.append(np.array([0]), deadTime)
-    if raw.save_bool(save, '_ibl_trials.deadTime.npy'):
-        check_alf_folder(session_path)
-        fpath = os.path.join(session_path, 'alf', '_ibl_trials.deadTime.npy')
-        np.save(fpath, deadTime)
-    return deadTime
 
 
 def get_response_times(session_path, save=False, data=False, settings=False):
@@ -491,8 +533,6 @@ def get_response_times(session_path, save=False, data=False, settings=False):
     """
     if not data:
         data = raw.load_data(session_path)
-    if not settings:
-        settings = raw.load_settings(session_path)
     rt = np.array([tr['behavior_data']['States timestamps']['closed_loop'][0][1]
                    for tr in data])
     if raw.save_bool(save, '_ibl_trials.response_times.npy'):
@@ -509,8 +549,7 @@ def get_goCueTrigger_times(session_path, save=False, data=False, settings=False)
     Current software solution for triggering sounds uses PyBpod soft codes.
     Delays can be in the order of 10's of ms. This is the time when the command
     to play the sound was executed. To measure accurate time, either getting the
-    sound onset from the future microphone OR the new xonar soundcard and
-    setup developed by Sanworks guarantees a set latency (in testing).
+    sound onset from xonar soundcard sync pulse (latencies may vary).
 
     :param session_path: Absolute path of session folder
     :type session_path: str
@@ -524,8 +563,14 @@ def get_goCueTrigger_times(session_path, save=False, data=False, settings=False)
         data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
-    goCue = np.array([tr['behavior_data']['States timestamps']
-                      ['closed_loop'][0][0] for tr in data])
+    # Version check
+    if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+        goCue = np.array([tr['behavior_data']['States timestamps']
+                          ['play_tone'][0][0] for tr in data])
+    else:
+        goCue = np.array([tr['behavior_data']['States timestamps']
+                         ['closed_loop'][0][0] for tr in data])
+
     if raw.save_bool(save, '_ibl_trials.goCue_times.npy'):
         check_alf_folder(session_path)
         fpath = os.path.join(session_path, 'alf', '_ibl_trials.goCueTrigger_times.npy')
@@ -562,8 +607,16 @@ def get_goCueOnset_times(session_path, save=False, data=False, settings=False):
         else:
             go_cue_times.append(np.nan)
 
-    if all(np.isnan(go_cue_times)):
-        return
+    go_cue_times = np.array(go_cue_times)
+
+    nmissing = np.sum(np.isnan(go_cue_times))
+    # Check if all stim_syncs have failed to be detected
+    if np.all(np.isnan(go_cue_times)):
+        logger_.error(f'{session_path}: Missing ALL BNC1 stimulus ({nmissing} trials')
+
+    # Check if any stim_sync has failed be detected for every trial
+    if np.any(np.isnan(go_cue_times)):
+        logger_.warning(f'{session_path}: Missing BNC1 stimulus on {nmissing} trials')
 
     if raw.save_bool(save, '_ibl_trials.goCue_times.npy'):
         check_alf_folder(session_path)
@@ -572,12 +625,39 @@ def get_goCueOnset_times(session_path, save=False, data=False, settings=False):
     return go_cue_times
 
 
+def get_included_trials_lt5(session_path, data=False):
+    if not data:
+        data = raw.load_data(session_path)
+
+    trials_included = np.array([True for t in data])
+
+    return trials_included
+
+
+def get_included_trials_ge5(session_path, data=False, settings=False):
+    if not data:
+        data = raw.load_data(session_path)
+    if not settings:
+        settings = raw.load_settings(session_path)
+
+    trials_included = np.array([True for t in data])
+    if settings['SUBJECT_DISENGAGED_TRIGGERED']:
+        idx = settings['SUBJECT_DISENGAGED_TRIALNUM'] - 1
+        trials_included[idx:] = False
+    return trials_included
+
+
 def get_included_trials(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
-    trials_included = np.array([t['contrast']['type'] != "RepeatContrast" for t in data])
+
+    if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+        trials_included = get_included_trials_ge5(session_path, data=data, settings=settings)
+    else:
+        trials_included = get_included_trials_lt5(session_path, data=data)
+
     if raw.save_bool(save, '_ibl_trials.included'):
         fpath = Path(session_path).joinpath('alf', '_ibl_trials.included.npy')
         np.save(fpath, trials_included)
@@ -589,39 +669,71 @@ def extract_all(session_path, save=False, data=False, settings=False):
         data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
-    feedbackType = get_feedbackType(session_path, save=save, data=data)
-    contrastLeft, contrastRight = get_contrastLR(
-        session_path, save=save, data=data)
-    probabilityLeft = get_probabilityLeft(session_path, save=save, data=data)
-    choice = get_choice(session_path, save=save, data=data)
-    repNum = get_repNum(session_path, save=save, data=data)
-    rewardVolume = get_rewardVolume(session_path, save=save, data=data)
-    feedback_times = get_feedback_times(session_path, save=save, data=data)
-    stimOn_times = get_stimOn_times(session_path, save=save, data=data)
-    intervals = get_intervals(session_path, save=save, data=data)
-    response_times = get_response_times(session_path, save=save, data=data)
-    iti_dur = get_iti_duration(session_path, save=save, data=data)
-    trials_included = get_included_trials(session_path, save=save, data=data)
-    go_cue_trig_times = get_goCueTrigger_times(session_path, save=save, data=data)
-    go_cue_times = get_goCueOnset_times(session_path, save=save, data=data)
-    # Missing datasettypes
-    # _ibl_trials.deadTime
-    out = {'feedbackType': feedbackType,
-           'contrastLeft': contrastLeft,
-           'contrastRight': contrastRight,
-           'probabilityLeft': probabilityLeft,
-           'session_path': session_path,
-           'choice': choice,
-           'repNum': repNum,
-           'rewardVolume': rewardVolume,
-           'feedback_times': feedback_times,
-           'stimOn_times': stimOn_times,
-           'intervals': intervals,
-           'response_times': response_times,
-           'iti_dur': iti_dur,
-           'trials_included': trials_included,
-           'goCue_times': go_cue_times,
-           'goCueTrigger_times': go_cue_trig_times}
+    # Version check
+    if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+        feedbackType = get_feedbackType(session_path, save=save, data=data, settings=settings)
+        contrastLeft, contrastRight = get_contrastLR(
+            session_path, save=save, data=data, settings=settings)
+        probabilityLeft = get_probabilityLeft(session_path, save=save, data=data, settings=settings)
+        choice = get_choice(session_path, save=save, data=data, settings=settings)
+        repNum = get_repNum(session_path, save=save, data=data, settings=settings)
+        rewardVolume = get_rewardVolume(session_path, save=save, data=data, settings=settings)
+        feedback_times = get_feedback_times(session_path, save=save, data=data, settings=settings)
+        stimOnTrigger_times = get_stimOnTrigger_times(session_path, save=save, data=data, settings=settings)
+        stimOn_times = get_stimOn_times(session_path, save=save, data=data, settings=settings)
+        intervals = get_intervals(session_path, save=save, data=data, settings=settings)
+        response_times = get_response_times(session_path, save=save, data=data, settings=settings)
+        trials_included = get_included_trials(session_path, save=save, data=data, settings=settings)
+        go_cue_trig_times = get_goCueTrigger_times(session_path, save=save, data=data, settings=settings)
+        go_cue_times = get_goCueOnset_times(session_path, save=save, data=data, settings=settings)
+        out = {'feedbackType': feedbackType,
+               'contrastLeft': contrastLeft,
+               'contrastRight': contrastRight,
+               'probabilityLeft': probabilityLeft,
+               'session_path': session_path,
+               'choice': choice,
+               'repNum': repNum,
+               'rewardVolume': rewardVolume,
+               'feedback_times': feedback_times,
+               'stimOnTrigger_times': stimOnTrigger_times,
+               'stimOn_times': stimOn_times,
+               'intervals': intervals,
+               'response_times': response_times,
+               'trials_included': trials_included,
+               'goCue_times': go_cue_times,
+               'goCueTrigger_times': go_cue_trig_times}
+    else:
+        feedbackType = get_feedbackType(session_path, save=save, data=data, settings=settings)
+        contrastLeft, contrastRight = get_contrastLR(
+            session_path, save=save, data=data, settings=settings)
+        probabilityLeft = get_probabilityLeft(session_path, save=save, data=data, settings=settings)
+        choice = get_choice(session_path, save=save, data=data, settings=settings)
+        repNum = get_repNum(session_path, save=save, data=data, settings=settings)
+        rewardVolume = get_rewardVolume(session_path, save=save, data=data, settings=settings)
+        feedback_times = get_feedback_times(session_path, save=save, data=data, settings=settings)
+        stimOn_times = get_stimOn_times(session_path, save=save, data=data, settings=settings)
+        intervals = get_intervals(session_path, save=save, data=data, settings=settings)
+        response_times = get_response_times(session_path, save=save, data=data, settings=settings)
+        iti_dur = get_iti_duration(session_path, save=save, data=data, settings=settings)
+        trials_included = get_included_trials(session_path, save=save, data=data, settings=settings)
+        go_cue_trig_times = get_goCueTrigger_times(session_path, save=save, data=data, settings=settings)
+        go_cue_times = get_goCueOnset_times(session_path, save=save, data=data, settings=settings)
+        out = {'feedbackType': feedbackType,
+            'contrastLeft': contrastLeft,
+            'contrastRight': contrastRight,
+            'probabilityLeft': probabilityLeft,
+            'session_path': session_path,
+            'choice': choice,
+            'repNum': repNum,
+            'rewardVolume': rewardVolume,
+            'feedback_times': feedback_times,
+            'stimOn_times': stimOn_times,
+            'intervals': intervals,
+            'response_times': response_times,
+            'iti_dur': iti_dur,
+            'trials_included': trials_included,
+            'goCue_times': go_cue_times,
+            'goCueTrigger_times': go_cue_trig_times}
     return out
 
 

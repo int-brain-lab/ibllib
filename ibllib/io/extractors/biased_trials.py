@@ -5,15 +5,17 @@
 import numpy as np
 import os
 import ibllib.io.raw_data_loaders as raw
+from ibllib.misc import version
 from ibllib.io.extractors.training_trials import (
     check_alf_folder, get_feedbackType, get_probabilityLeft,
     get_choice, get_rewardVolume, get_feedback_times, get_feedback_times_ge5,
-    get_feedback_times_lt5, get_stimOn_times,
-    get_intervals, get_response_times, get_iti_duration,
-    get_goCueTrigger_times, get_goCueOnset_times)  # noqa
+    get_feedback_times_lt5, get_stimOn_times, get_stimOn_times_lt5,
+    get_stimOn_times_ge5, get_intervals, get_response_times, get_iti_duration,
+    get_goCueTrigger_times, get_goCueOnset_times, get_included_trials_ge5,
+    get_included_trials_lt5, get_included_trials, get_stimOnTrigger_times)  # noqa
 
 
-def get_contrastLR(session_path, save=False, data=False):
+def get_contrastLR(session_path, save=False, data=False, settings=False):
     """
     Get left and right contrasts from raw datafile
     **Optional:** save _ibl_trials.contrastLeft.npy and
@@ -49,38 +51,73 @@ def get_contrastLR(session_path, save=False, data=False):
     return (contrastLeft, contrastRight)
 
 
-def extract_all(session_path, save=False, data=False):
+def extract_all(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
-    feedbackType = get_feedbackType(session_path, save=save, data=data)
-    contrastLeft, contrastRight = get_contrastLR(
-        session_path, save=save, data=data)
-    probabilityLeft = get_probabilityLeft(session_path, save=save, data=data)
-    choice = get_choice(session_path, save=save, data=data)
-    rewardVolume = get_rewardVolume(session_path, save=save, data=data)
-    feedback_times = get_feedback_times(session_path, save=save, data=data)
-    stimOn_times = get_stimOn_times(session_path, save=save, data=data)
-    intervals = get_intervals(session_path, save=save, data=data)
-    response_times = get_response_times(session_path, save=save, data=data)
-    iti_dur = get_iti_duration(session_path, save=save, data=data)
-    go_cue_trig_times = get_goCueTrigger_times(session_path, save=save, data=data)
-    go_cue_times = get_goCueOnset_times(session_path, save=save, data=data)
-    # Missing datasettypes
-    # _ibl_trials.deadTime
-    out = {'feedbackType': feedbackType,
-           'contrastLeft': contrastLeft,
-           'contrastRight': contrastRight,
-           'probabilityLeft': probabilityLeft,
-           'session_path': session_path,
-           'choice': choice,
-           'rewardVolume': rewardVolume,
-           'feedback_times': feedback_times,
-           'stimOn_times': stimOn_times,
-           'intervals': intervals,
-           'response_times': response_times,
-           'iti_dur': iti_dur,
-           'goCue_times': go_cue_times,
-           'goCueTrigger_times': go_cue_trig_times}
+    if not settings:
+        settings = raw.load_settings(session_path)
+    # Version check
+    if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+        feedbackType = get_feedbackType(session_path, save=save, data=data, settings=settings)
+        contrastLeft, contrastRight = get_contrastLR(
+            session_path, save=save, data=data, settings=settings)
+        probabilityLeft = get_probabilityLeft(session_path, save=save, data=data, settings=settings)
+        choice = get_choice(session_path, save=save, data=data, settings=settings)
+        rewardVolume = get_rewardVolume(session_path, save=save, data=data, settings=settings)
+        feedback_times = get_feedback_times(session_path, save=save, data=data, settings=settings)
+        stimOn_times = get_stimOn_times(session_path, save=save, data=data, settings=settings)
+        stimOnTrigger_times = get_stimOnTrigger_times(session_path, save=save, data=data, settings=settings)
+        intervals = get_intervals(session_path, save=save, data=data, settings=settings)
+        response_times = get_response_times(session_path, save=save, data=data, settings=settings)
+        go_cue_trig_times = get_goCueTrigger_times(session_path, save=save, data=data, settings=settings)
+        go_cue_times = get_goCueOnset_times(session_path, save=save, data=data, settings=settings)
+        # Missing datasettypes
+        # _ibl_trials.deadTime
+        out = {'feedbackType': feedbackType,
+               'contrastLeft': contrastLeft,
+               'contrastRight': contrastRight,
+               'probabilityLeft': probabilityLeft,
+               'session_path': session_path,
+               'choice': choice,
+               'rewardVolume': rewardVolume,
+               'feedback_times': feedback_times,
+               'stimOnTrigger_times': stimOnTrigger_times,
+               'stimOn_times': stimOn_times,
+               'intervals': intervals,
+               'response_times': response_times,
+               'goCue_times': go_cue_times,
+               'goCueTrigger_times': go_cue_trig_times}
+
+    else:
+        feedbackType = get_feedbackType(session_path, save=save, data=data, settings=settings)
+        contrastLeft, contrastRight = get_contrastLR(
+            session_path, save=save, data=data, settings=settings)
+        probabilityLeft = get_probabilityLeft(session_path, save=save, data=data, settings=settings)
+        choice = get_choice(session_path, save=save, data=data, settings=settings)
+        rewardVolume = get_rewardVolume(session_path, save=save, data=data, settings=settings)
+        feedback_times = get_feedback_times(session_path, save=save, data=data, settings=settings)
+        stimOn_times = get_stimOn_times(session_path, save=save, data=data, settings=settings)
+        intervals = get_intervals(session_path, save=save, data=data, settings=settings)
+        response_times = get_response_times(session_path, save=save, data=data, settings=settings)
+        iti_dur = get_iti_duration(session_path, save=save, data=data, settings=settings)
+        go_cue_trig_times = get_goCueTrigger_times(session_path, save=save, data=data, settings=settings)
+        go_cue_times = get_goCueOnset_times(session_path, save=save, data=data, settings=settings)
+        # Missing datasettypes
+        # _ibl_trials.deadTime
+        out = {'feedbackType': feedbackType,
+               'contrastLeft': contrastLeft,
+               'contrastRight': contrastRight,
+               'probabilityLeft': probabilityLeft,
+               'session_path': session_path,
+               'choice': choice,
+               'rewardVolume': rewardVolume,
+               'feedback_times': feedback_times,
+               'stimOn_times': stimOn_times,
+               'intervals': intervals,
+               'response_times': response_times,
+               'iti_dur': iti_dur,
+               'goCue_times': go_cue_times,
+               'goCueTrigger_times': go_cue_trig_times}
     return out
 
 

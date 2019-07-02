@@ -17,8 +17,8 @@ import collections
 def iflatten(x):
     result = []
     for el in x:
-        if isinstance(el, collections.Iterable) and not (isinstance(el, str) or
-                                                         isinstance(el, dict)):
+        if isinstance(el, collections.abc.Iterable) and not (
+            isinstance(el, str) or isinstance(el, dict)):
             result.extend(iflatten(el))
         else:
             result.append(el)
@@ -27,7 +27,7 @@ def iflatten(x):
 
 def gflatten(x):
     def iselement(e):
-        return not(isinstance(e, collections.Iterable) and not(
+        return not(isinstance(e, collections.abc.Iterable) and not(
             isinstance(el, str) or isinstance(el, dict)))
     for el in x:
         if iselement(el):
