@@ -18,7 +18,7 @@ def iflatten(x):
     result = []
     for el in x:
         if isinstance(el, collections.abc.Iterable) and not (
-            isinstance(el, str) or isinstance(el, dict)):
+                isinstance(el, str) or isinstance(el, dict)):
             result.extend(iflatten(el))
         else:
             result.append(el)

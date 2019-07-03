@@ -212,6 +212,23 @@ class TestExtractTrialData(unittest.TestCase):
             self.biased_lt5_path)
         self.assertTrue(isinstance(ft, np.ndarray))
 
+    def test_get_feedback_times(self):
+        # TRAINING SESSIONS
+        ft = ibllib.io.extractors.training_trials.get_feedback_times(
+            self.training_ge5_path)
+        self.assertTrue(isinstance(ft, np.ndarray))
+        ft = ibllib.io.extractors.training_trials.get_feedback_times(
+            self.training_lt5_path, settings={'IBLRIG_VERSION_TAG': '4.9.9'})
+        self.assertTrue(isinstance(ft, np.ndarray))
+
+        # BIASED SESSIONS
+        ft = ibllib.io.extractors.biased_trials.get_feedback_times(
+            self.biased_ge5_path)
+        self.assertTrue(isinstance(ft, np.ndarray))
+        ft = ibllib.io.extractors.biased_trials.get_feedback_times(
+            self.biased_lt5_path, settings={'IBLRIG_VERSION_TAG': '4.9.9'})
+        self.assertTrue(isinstance(ft, np.ndarray))
+
     def test_get_stimOnTrigger_times(self):
         # TRAINING SESSIONS
         sott = ibllib.io.extractors.training_trials.get_stimOnTrigger_times(
@@ -249,6 +266,23 @@ class TestExtractTrialData(unittest.TestCase):
 
         # BIASED SESSIONS
         st = ibllib.io.extractors.biased_trials.get_stimOn_times_ge5(
+            self.biased_ge5_path)
+        self.assertTrue(isinstance(st, np.ndarray))
+
+    def test_get_stimOn_times(self):
+        # TRAINING SESSIONS
+        st = ibllib.io.extractors.training_trials.get_stimOn_times(
+            self.training_lt5_path, settings={'IBLRIG_VERSION_TAG': '4.9.9'})
+        self.assertTrue(isinstance(st, np.ndarray))
+        st = ibllib.io.extractors.training_trials.get_stimOn_times(
+            self.training_ge5_path)
+        self.assertTrue(isinstance(st, np.ndarray))
+
+        # BIASED SESSIONS
+        st = ibllib.io.extractors.biased_trials.get_stimOn_times(
+            self.biased_lt5_path, settings={'IBLRIG_VERSION_TAG': '4.9.9'})
+        self.assertTrue(isinstance(st, np.ndarray))
+        st = ibllib.io.extractors.biased_trials.get_stimOn_times(
             self.biased_ge5_path)
         self.assertTrue(isinstance(st, np.ndarray))
 
@@ -355,37 +389,57 @@ class TestExtractTrialData(unittest.TestCase):
         self.assertFalse(np.any(np.isnan(gcot)))
         self.assertTrue(gcot.size != 0 or gcot.size == 8)
 
-    def test_get_included_trials(self):
+    def test_get_included_trials_lt5(self):
         # TRAINING SESSIONS
         it = ibllib.io.extractors.training_trials.get_included_trials_lt5(
             self.training_lt5_path)
         self.assertTrue(isinstance(it, np.ndarray))
-        # -- version >= 5.0.0
-        it = ibllib.io.extractors.training_trials.get_included_trials_ge5(
-            self.training_ge5_path)
-        self.assertTrue(isinstance(it, np.ndarray))
-
         # BIASED SESSIONS
         it = ibllib.io.extractors.biased_trials.get_included_trials_lt5(
             self.biased_lt5_path)
         self.assertTrue(isinstance(it, np.ndarray))
-        # -- version >= 5.0.0
+
+    def test_get_included_trials_ge5(self):
+        # TRAINING SESSIONS
+        it = ibllib.io.extractors.training_trials.get_included_trials_ge5(
+            self.training_ge5_path)
+        self.assertTrue(isinstance(it, np.ndarray))
+        # BIASED SESSIONS
         it = ibllib.io.extractors.biased_trials.get_included_trials_ge5(
+            self.biased_ge5_path)
+        self.assertTrue(isinstance(it, np.ndarray))
+
+    def test_get_included_trials(self):
+        # TRAINING SESSIONS
+        it = ibllib.io.extractors.training_trials.get_included_trials(
+            self.training_lt5_path, settings={'IBLRIG_VERSION_TAG': '4.9.9'})
+        self.assertTrue(isinstance(it, np.ndarray))
+        # -- version >= 5.0.0
+        it = ibllib.io.extractors.training_trials.get_included_trials(
+            self.training_ge5_path)
+        self.assertTrue(isinstance(it, np.ndarray))
+
+        # BIASED SESSIONS
+        it = ibllib.io.extractors.biased_trials.get_included_trials(
+            self.biased_lt5_path, settings={'IBLRIG_VERSION_TAG': '4.9.9'})
+        self.assertTrue(isinstance(it, np.ndarray))
+        # -- version >= 5.0.0
+        it = ibllib.io.extractors.biased_trials.get_included_trials(
             self.biased_ge5_path)
         self.assertTrue(isinstance(it, np.ndarray))
 
     def test_extract_all(self):
         # TRAINING SESSIONS
-        data = ibllib.io.extractors.training_trials.extract_all(
-            self.training_lt5_path, settings={'IBLRIG_VERSION_TAG': '3.3.3'}, save=True)
+        ibllib.io.extractors.training_trials.extract_all(
+            self.training_lt5_path, settings={'IBLRIG_VERSION_TAG': '4.9.9'}, save=True)
         # -- version >= 5.0.0
-        data = ibllib.io.extractors.training_trials.extract_all(
+        ibllib.io.extractors.training_trials.extract_all(
             self.training_ge5_path, save=True)
         # BIASED SESSIONS
-        data = ibllib.io.extractors.biased_trials.extract_all(
-            self.biased_lt5_path, settings={'IBLRIG_VERSION_TAG': '3.3.3'}, save=True)
+        ibllib.io.extractors.biased_trials.extract_all(
+            self.biased_lt5_path, settings={'IBLRIG_VERSION_TAG': '4.9.9'}, save=True)
         # -- version >= 5.0.0
-        data = ibllib.io.extractors.biased_trials.extract_all(
+        ibllib.io.extractors.biased_trials.extract_all(
             self.biased_ge5_path, save=True)
 
     # ENCODER TESTS (Should be moved to a RawDataLoaders test suite)
@@ -486,6 +540,22 @@ class TestExtractTrialData(unittest.TestCase):
         tc = np.array([0., 1.1, 2.0, 2.9, 4., 5., 6.])
         finterp = ibllib.io.extractors.training_wheel.time_interpolation(ta, tc)
         self.assertTrue(np.all(finterp(ta) == tb))
+
+    def test_load_encoder_positions(self):
+        raw.load_encoder_positions(self.training_lt5_path,
+                                   settings={'IBLRIG_VERSION_TAG': '4.9.9'})
+        raw.load_encoder_positions(self.training_ge5_path)
+        raw.load_encoder_positions(self.biased_lt5_path,
+                                   settings={'IBLRIG_VERSION_TAG': '4.9.9'})
+        raw.load_encoder_positions(self.biased_ge5_path)
+
+    def test_load_encoder_events(self):
+        raw.load_encoder_events(self.training_lt5_path,
+                                settings={'IBLRIG_VERSION_TAG': '4.9.9'})
+        raw.load_encoder_events(self.training_ge5_path)
+        raw.load_encoder_events(self.biased_lt5_path,
+                                settings={'IBLRIG_VERSION_TAG': '4.9.9'})
+        raw.load_encoder_events(self.biased_ge5_path)
 
     def tearDown(self):
         [x.unlink() for x in self.training_lt5_path.rglob('alf/*') if x.is_file()]

@@ -149,7 +149,7 @@ def _load_encoder_events_file_ge5(file_path):
     return _groom_wheel_data_ge5(data, label='_iblrig_encoderEvents.raw.ssv', path=file_path)
 
 
-def load_encoder_events(session_path):
+def load_encoder_events(session_path, settings=False):
     """
     Load Rotary Encoder (RE) events raw data file.
 
@@ -182,7 +182,11 @@ def load_encoder_events(session_path):
         return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_encoderEvents.raw*.ssv"), None)
-    settings = next(path.glob("_iblrig_taskSettings.raw*.ssv"), None)
+    if not settings:
+        settings = load_settings(session_path)
+    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
+
     if not path:
         return None
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
@@ -213,7 +217,7 @@ def _load_encoder_positions_file_ge5(file_path):
     return _groom_wheel_data_ge5(data, label='_iblrig_encoderPositions.raw.ssv', path=file_path)
 
 
-def load_encoder_positions(session_path):
+def load_encoder_positions(session_path, settings=False):
     """
     Load Rotary Encoder (RE) positions from raw data file within a session path.
 
@@ -244,7 +248,11 @@ def load_encoder_positions(session_path):
         return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_encoderPositions.raw*.ssv"), None)
-    settings = next(path.glob("_iblrig_taskSettings.raw*.ssv"), None)
+    if not settings:
+        settings = load_settings(session_path)
+    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
+
     if not path:
         return None
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):

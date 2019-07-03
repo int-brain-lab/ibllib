@@ -68,6 +68,9 @@ def get_feedbackType(session_path, save=False, data=False, settings=False):
         data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
+    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
+
     feedbackType = np.empty(len(data))
     feedbackType.fill(np.nan)
     reward = []
@@ -112,6 +115,8 @@ def get_contrastLR(session_path, save=False, data=False, settings=False):
         data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
+    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
 
     contrastLeft = np.array([t['contrast']['value'] if np.sign(
         t['position']) < 0 else np.nan for t in data])
@@ -135,6 +140,9 @@ def get_probabilityLeft(session_path, save=False, data=False, settings=False):
         data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
+    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
+
     pLeft = np.array([t['stim_probability_left'] for t in data])
     if raw.save_bool(save, '_ibl_trials.probabilityLeft.npy'):
         lpath = Path(session_path).joinpath('alf', '_ibl_trials.probabilityLeft.npy')
@@ -168,6 +176,9 @@ def get_choice(session_path, save=False, data=False, settings=False):
         data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
+    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
+
     sitm_side = np.array([np.sign(t['position']) for t in data])
     trial_correct = np.array([t['trial_correct'] for t in data])
     trial_nogo = np.array(
@@ -207,6 +218,9 @@ def get_repNum(session_path, save=False, data=False, settings=False):
         data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
+    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
+
     trial_repeated = np.array(
         [t['contrast']['type'] == 'RepeatContrast' for t in data])
     trial_repeated = trial_repeated.astype(int)
@@ -245,6 +259,9 @@ def get_rewardVolume(session_path, save=False, data=False, settings=False):
         data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
+    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
+
     trial_volume = [x['reward_amount']
                     if x['trial_correct'] else 0 for x in data]
     rewardVolume = np.array(trial_volume).astype(np.float64)
@@ -309,8 +326,13 @@ def get_feedback_times(session_path, save=False, data=False, settings=False):
     :return: numpy.ndarray
     :rtype: dtype('float64')
     """
+    if not data:
+        data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
+    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
+
     # Version check
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
         merge = get_feedback_times_ge5(session_path, data=data)
@@ -327,6 +349,10 @@ def get_feedback_times(session_path, save=False, data=False, settings=False):
 def get_stimOnTrigger_times(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
+    if not settings:
+        settings = raw.load_settings(session_path)
+    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
     # Get the stim_on_state that triggers the onset of the stim
     stim_on_state = np.array([tr['behavior_data']['States timestamps']
                              ['stim_on'][0] for tr in data])
@@ -430,6 +456,7 @@ def get_stimOn_times_lt5(session_path, data=False):
 
     return np.array(stimOn_times)
 
+
 def get_stimOn_times(session_path, save=False, data=False, settings=False):
     """
     Find the time of the statemachine command to turn on hte stim
@@ -442,6 +469,8 @@ def get_stimOn_times(session_path, save=False, data=False, settings=False):
         data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
+    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
     # Version check
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
         stimOn_times = get_stimOn_times_ge5(session_path, data=data)
@@ -476,6 +505,9 @@ def get_intervals(session_path, save=False, data=False, settings=False):
         data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
+    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
+
     starts = [t['behavior_data']['Trial start timestamp'] for t in data]
     ends = [t['behavior_data']['Trial end timestamp'] for t in data]
     intervals = np.array([starts, ends]).T
@@ -505,6 +537,9 @@ def get_iti_duration(session_path, save=False, data=False, settings=False):
         data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
+    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
+
     rt = get_response_times(session_path, save=False, data=False)
     ends = np.array([t['behavior_data']['Trial end timestamp'] for t in data])
 
@@ -533,6 +568,11 @@ def get_response_times(session_path, save=False, data=False, settings=False):
     """
     if not data:
         data = raw.load_data(session_path)
+    if not settings:
+        settings = raw.load_settings(session_path)
+    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
+
     rt = np.array([tr['behavior_data']['States timestamps']['closed_loop'][0][1]
                    for tr in data])
     if raw.save_bool(save, '_ibl_trials.response_times.npy'):
@@ -563,6 +603,9 @@ def get_goCueTrigger_times(session_path, save=False, data=False, settings=False)
         data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
+    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
+
     # Version check
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
         goCue = np.array([tr['behavior_data']['States timestamps']
@@ -600,6 +643,9 @@ def get_goCueOnset_times(session_path, save=False, data=False, settings=False):
         data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
+    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
+
     go_cue_times = []
     for tr in data:
         if get_port_events(tr, 'BNC2'):
@@ -639,9 +685,12 @@ def get_included_trials_ge5(session_path, data=False, settings=False):
         data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
+    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
 
     trials_included = np.array([True for t in data])
-    if settings['SUBJECT_DISENGAGED_TRIGGERED']:
+    if ('SUBJECT_DISENGAGED_TRIGGERED' in settings.keys() and settings[
+            'SUBJECT_DISENGAGED_TRIGGERED'] is not False):
         idx = settings['SUBJECT_DISENGAGED_TRIALNUM'] - 1
         trials_included[idx:] = False
     return trials_included
@@ -652,6 +701,8 @@ def get_included_trials(session_path, save=False, data=False, settings=False):
         data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
+    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
 
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
         trials_included = get_included_trials_ge5(session_path, data=data, settings=settings)
@@ -669,23 +720,39 @@ def extract_all(session_path, save=False, data=False, settings=False):
         data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
+    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
+
     # Version check
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
-        feedbackType = get_feedbackType(session_path, save=save, data=data, settings=settings)
+        feedbackType = get_feedbackType(
+            session_path, save=save, data=data, settings=settings)
         contrastLeft, contrastRight = get_contrastLR(
             session_path, save=save, data=data, settings=settings)
-        probabilityLeft = get_probabilityLeft(session_path, save=save, data=data, settings=settings)
-        choice = get_choice(session_path, save=save, data=data, settings=settings)
-        repNum = get_repNum(session_path, save=save, data=data, settings=settings)
-        rewardVolume = get_rewardVolume(session_path, save=save, data=data, settings=settings)
-        feedback_times = get_feedback_times(session_path, save=save, data=data, settings=settings)
-        stimOnTrigger_times = get_stimOnTrigger_times(session_path, save=save, data=data, settings=settings)
-        stimOn_times = get_stimOn_times(session_path, save=save, data=data, settings=settings)
-        intervals = get_intervals(session_path, save=save, data=data, settings=settings)
-        response_times = get_response_times(session_path, save=save, data=data, settings=settings)
-        trials_included = get_included_trials(session_path, save=save, data=data, settings=settings)
-        go_cue_trig_times = get_goCueTrigger_times(session_path, save=save, data=data, settings=settings)
-        go_cue_times = get_goCueOnset_times(session_path, save=save, data=data, settings=settings)
+        probabilityLeft = get_probabilityLeft(
+            session_path, save=save, data=data, settings=settings)
+        choice = get_choice(
+            session_path, save=save, data=data, settings=settings)
+        repNum = get_repNum(
+            session_path, save=save, data=data, settings=settings)
+        rewardVolume = get_rewardVolume(
+            session_path, save=save, data=data, settings=settings)
+        feedback_times = get_feedback_times(
+            session_path, save=save, data=data, settings=settings)
+        stimOnTrigger_times = get_stimOnTrigger_times(
+            session_path, save=save, data=data, settings=settings)
+        stimOn_times = get_stimOn_times(
+            session_path, save=save, data=data, settings=settings)
+        intervals = get_intervals(
+            session_path, save=save, data=data, settings=settings)
+        response_times = get_response_times(
+            session_path, save=save, data=data, settings=settings)
+        trials_included = get_included_trials(
+            session_path, save=save, data=data, settings=settings)
+        go_cue_trig_times = get_goCueTrigger_times(
+            session_path, save=save, data=data, settings=settings)
+        go_cue_times = get_goCueOnset_times(
+            session_path, save=save, data=data, settings=settings)
         out = {'feedbackType': feedbackType,
                'contrastLeft': contrastLeft,
                'contrastRight': contrastRight,
@@ -703,37 +770,50 @@ def extract_all(session_path, save=False, data=False, settings=False):
                'goCue_times': go_cue_times,
                'goCueTrigger_times': go_cue_trig_times}
     else:
-        feedbackType = get_feedbackType(session_path, save=save, data=data, settings=settings)
+        feedbackType = get_feedbackType(
+            session_path, save=save, data=data, settings=settings)
         contrastLeft, contrastRight = get_contrastLR(
             session_path, save=save, data=data, settings=settings)
-        probabilityLeft = get_probabilityLeft(session_path, save=save, data=data, settings=settings)
-        choice = get_choice(session_path, save=save, data=data, settings=settings)
-        repNum = get_repNum(session_path, save=save, data=data, settings=settings)
-        rewardVolume = get_rewardVolume(session_path, save=save, data=data, settings=settings)
-        feedback_times = get_feedback_times(session_path, save=save, data=data, settings=settings)
-        stimOn_times = get_stimOn_times(session_path, save=save, data=data, settings=settings)
-        intervals = get_intervals(session_path, save=save, data=data, settings=settings)
-        response_times = get_response_times(session_path, save=save, data=data, settings=settings)
-        iti_dur = get_iti_duration(session_path, save=save, data=data, settings=settings)
-        trials_included = get_included_trials(session_path, save=save, data=data, settings=settings)
-        go_cue_trig_times = get_goCueTrigger_times(session_path, save=save, data=data, settings=settings)
-        go_cue_times = get_goCueOnset_times(session_path, save=save, data=data, settings=settings)
+        probabilityLeft = get_probabilityLeft(
+            session_path, save=save, data=data, settings=settings)
+        choice = get_choice(
+            session_path, save=save, data=data, settings=settings)
+        repNum = get_repNum(
+            session_path, save=save, data=data, settings=settings)
+        rewardVolume = get_rewardVolume(
+            session_path, save=save, data=data, settings=settings)
+        feedback_times = get_feedback_times(
+            session_path, save=save, data=data, settings=settings)
+        stimOn_times = get_stimOn_times(
+            session_path, save=save, data=data, settings=settings)
+        intervals = get_intervals(
+            session_path, save=save, data=data, settings=settings)
+        response_times = get_response_times(
+            session_path, save=save, data=data, settings=settings)
+        iti_dur = get_iti_duration(
+            session_path, save=save, data=data, settings=settings)
+        trials_included = get_included_trials(
+            session_path, save=save, data=data, settings=settings)
+        go_cue_trig_times = get_goCueTrigger_times(
+            session_path, save=save, data=data, settings=settings)
+        go_cue_times = get_goCueOnset_times(
+            session_path, save=save, data=data, settings=settings)
         out = {'feedbackType': feedbackType,
-            'contrastLeft': contrastLeft,
-            'contrastRight': contrastRight,
-            'probabilityLeft': probabilityLeft,
-            'session_path': session_path,
-            'choice': choice,
-            'repNum': repNum,
-            'rewardVolume': rewardVolume,
-            'feedback_times': feedback_times,
-            'stimOn_times': stimOn_times,
-            'intervals': intervals,
-            'response_times': response_times,
-            'iti_dur': iti_dur,
-            'trials_included': trials_included,
-            'goCue_times': go_cue_times,
-            'goCueTrigger_times': go_cue_trig_times}
+               'contrastLeft': contrastLeft,
+               'contrastRight': contrastRight,
+               'probabilityLeft': probabilityLeft,
+               'session_path': session_path,
+               'choice': choice,
+               'repNum': repNum,
+               'rewardVolume': rewardVolume,
+               'feedback_times': feedback_times,
+               'stimOn_times': stimOn_times,
+               'intervals': intervals,
+               'response_times': response_times,
+               'iti_dur': iti_dur,
+               'trials_included': trials_included,
+               'goCue_times': go_cue_times,
+               'goCueTrigger_times': go_cue_trig_times}
     return out
 
 
