@@ -101,7 +101,7 @@ class RegistrationClient:
                                               number=md['SESSION_NUMBER'],
                                               details=True)
         try:
-            user = self.one.alyx.rest('users', 'read', md["PYBPOD_CREATOR"][0])
+            user = self.one.alyx.rest('users', 'read', id=md["PYBPOD_CREATOR"][0])
         except Exception:
             return 'User: ' + md["PYBPOD_CREATOR"][0] + " doesn't exist in Alyx. ABORT"
 
@@ -151,7 +151,7 @@ class RegistrationClient:
                         'weight': md['SUBJECT_WEIGHT'],
                         'user': username
                         }
-                self.one.alyx.rest('weighings', 'create', wei_)
+                self.one.alyx.rest('weighings', 'create', data=wei_)
         else:  # TODO: if session exists and no json partial_upgrade it
             session = self.one.alyx.rest('sessions', 'read', id=session_id[0])
 
