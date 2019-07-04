@@ -3,14 +3,15 @@ python:
   - "3.6"
 # command to install dependencies
 install:
-  - pip install -r python/requirements.txt
-  - pip install -e python/.
+  - pip install -r requirements.txt
+  - pip install -e .
+  # phylib will be a proper pip dependency once it's more stable
+  - pip install git+https://github.com/cortex-lab/phylib
 
 before_script:
   - echo "exec('from oneibl.one import ONE; ONE(silent=True)')" | python
   - sed -i 's|null|"'$IBLFLATIRONPASS'"|g' /home/travis/.one_params
   # command to run tests
 script:
-  - cd python
   - bash ./run_tests
   - flake8 .

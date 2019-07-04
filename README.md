@@ -1,7 +1,9 @@
-#Note:
-These libs are still in alpha. Vesion numbers 0.\*.\* are considered unstable and
-not completely documented.
-Syntax may not be preserved among releases.
+## Description
+Library used to implement the International Brain Laboratory data pipeline.
+The library as currently 3 main modules:
+-   **alf**: the ALF
+-   **ibllib**: general purpose library containng I/O, signal processing and IBL data pipelines utilities.
+-   **oneibl**: interface to the Alyx database of experiments to access IBL data.
 
 ## Documentation
 https://ibllib.readthedocs.io/en/latest/
@@ -17,9 +19,6 @@ https://ibllib.readthedocs.io/en/latest/_static/one_demo.html
 
 **Python Module**: Python 3.6 or higher.
 
-**Matlab Module**: Matlab R2016b or higher (jsonencode function).
-
-
 ## Development practices
 Gitflow and Semantic Versioning.
 
@@ -28,5 +27,6 @@ Python
 -   flake8
 -   build documentation
 
-Matlab
--   run tests
+
+## Matlab Library
+The Matlab library has moved to its own repository here: https://github.com/int-brain-lab/ibllib-matlab/
