@@ -147,7 +147,6 @@ def get_wheel_data(session_path, bp_data=None, save=False):
                      shape=(df.shape[0],), formats=['f8', 'f8', np.object])
     data['re_ts'] = df.re_ts.values
     data['re_pos'] = df.re_pos.values
-    data['bns_ts'] = df.bns_ts.values
     data['re_pos'] = data['re_pos'] / 1024 * 2 * np.pi  # convert positions to radians
     trial_starts = get_trial_start_times(session_path)
     # need a flag if the data resolution is 1ms due to the old version of rotary encoder firmware
@@ -157,6 +156,7 @@ def get_wheel_data(session_path, bp_data=None, save=False):
     # get the converter function to translate re_ts into behavior times
     convtime = time_converter_session(session_path, kind='re2b')
     data['re_ts'] = convtime(data['re_ts'])
+    return data
 
     def get_reset_trace_compensation_with_state_machine_times():
         # this is the preferred way of getting resets using the state machine time information

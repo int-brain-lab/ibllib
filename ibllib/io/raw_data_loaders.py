@@ -16,6 +16,8 @@ import pandas as pd
 from datetime import datetime
 
 from ibllib.io import jsonable
+from ibllib.misc import version
+
 
 logger_ = logging.getLogger('ibllib')
 
@@ -114,10 +116,12 @@ def load_settings(session_path):
         return None
     with open(path, 'r') as f:
         settings = json.load(f)
+    if 'IBLRIG_VERSION_TAG' not in settings.keys():
+        settings['IBLRIG_VERSION_TAG'] = ''
     return settings
 
 
-def _load_encoder_events_file(file_path):
+def _load_encoder_events_file_lt5(file_path):
     """
     File loader without the session overhead
     :param file_path:
@@ -129,10 +133,25 @@ def _load_encoder_events_file(file_path):
     data = pd.read_csv(file_path, sep=' ', header=None, error_bad_lines=False)
     data = data.drop([0, 2, 5], axis=1)
     data.columns = ['re_ts', 'sm_ev', 'bns_ts']
-    return _groom_wheel_data(data, label='_iblrig_encoderEvents.raw.ssv', path=file_path)
+    return _groom_wheel_data_lt5(data, label='_iblrig_encoderEvents.raw.ssv', path=file_path)
 
 
-def load_encoder_events(session_path):
+def _load_encoder_events_file_ge5(file_path):
+    """
+    File loader without the session overhead
+    :param file_path:
+    :return: dataframe of encoder events
+    """
+    if file_path.stat().st_size == 0:
+        logger_.error("_iblrig_encoderEvents.raw.ssv is an empty file. ")
+        raise ValueError("_iblrig_encoderEvents.raw.ssv is an empty file. ABORT EXTRACTION. ")
+    data = pd.read_csv(file_path, sep=' ', header=None, error_bad_lines=False)
+    data = data.drop([2], axis=1)
+    data.columns = ['re_ts', 'sm_ev']
+    return _groom_wheel_data_ge5(data, label='_iblrig_encoderEvents.raw.ssv', path=file_path)
+
+
+def load_encoder_events(session_path, settings=False):
     """
     Load Rotary Encoder (RE) events raw data file.
 
@@ -165,12 +184,20 @@ def load_encoder_events(session_path):
         return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_encoderEvents.raw*.ssv"), None)
+    if not settings:
+        settings = load_settings(session_path)
+    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
+
     if not path:
         return None
-    return _load_encoder_events_file(path)
+    if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+        return _load_encoder_events_file_ge5(path)
+    else:
+        return _load_encoder_events_file_lt5(path)
 
 
-def _load_encoder_positions_file(file_path):
+def _load_encoder_positions_file_lt5(file_path):
     # file loader without the session overhead
     if file_path.stat().st_size == 0:
         logger_.error("_iblrig_encoderPositions.raw.ssv is an empty file. ")
@@ -178,10 +205,21 @@ def _load_encoder_positions_file(file_path):
     data = pd.read_csv(file_path, sep=' ', header=None, error_bad_lines=False)
     data = data.drop([0, 4], axis=1)
     data.columns = ['re_ts', 're_pos', 'bns_ts']
-    return _groom_wheel_data(data, label='_iblrig_encoderPositions.raw.ssv', path=file_path)
+    return _groom_wheel_data_lt5(data, label='_iblrig_encoderPositions.raw.ssv', path=file_path)
 
 
-def load_encoder_positions(session_path):
+def _load_encoder_positions_file_ge5(file_path):
+    # file loader without the session overhead
+    if file_path.stat().st_size == 0:
+        logger_.error("_iblrig_encoderPositions.raw.ssv is an empty file. ")
+        raise ValueError("_iblrig_encoderPositions.raw.ssv is an empty file. ABORT EXTRACTION. ")
+    data = pd.read_csv(file_path, sep=' ', header=None, error_bad_lines=False)
+    data = data.drop([2], axis=1)
+    data.columns = ['re_ts', 're_pos']
+    return _groom_wheel_data_ge5(data, label='_iblrig_encoderPositions.raw.ssv', path=file_path)
+
+
+def load_encoder_positions(session_path, settings=False):
     """
     Load Rotary Encoder (RE) positions from raw data file within a session path.
 
@@ -212,9 +250,17 @@ def load_encoder_positions(session_path):
         return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_encoderPositions.raw*.ssv"), None)
+    if not settings:
+        settings = load_settings(session_path)
+    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
+
     if not path:
         return None
-    return _load_encoder_positions_file(path)
+    if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+        return _load_encoder_positions_file_ge5(path)
+    else:
+        return _load_encoder_positions_file_lt5(path)
 
 
 def load_encoder_trial_info(session_path):
@@ -255,7 +301,7 @@ def load_encoder_trial_info(session_path):
     data = data.drop([8], axis=1)
     data.columns = ['trial_num', 'stim_pos_init', 'stim_contrast', 'stim_freq',
                     'stim_angle', 'stim_gain', 'stim_sigma', 'bns_ts']
-    return _groom_wheel_data(data, label='_iblrig_encoderEvents.raw.ssv', path=path)
+    return _groom_wheel_data_lt5(data, label='_iblrig_encoderEvents.raw.ssv', path=path)
 
 
 def load_ambient_sensor(session_path):
@@ -311,7 +357,7 @@ def load_mic(session_path):
     return data
 
 
-def _groom_wheel_data(data, label='file ', path=''):
+def _groom_wheel_data_lt5(data, label='file ', path=''):
     """
     The whole purpose of this function is to account for variability and corruption in
     the wheel position files. There are many possible errors described below, but
@@ -363,6 +409,55 @@ def _groom_wheel_data(data, label='file ', path=''):
     return data
 
 
+def _groom_wheel_data_ge5(data, label='file ', path=''):
+    """
+    The whole purpose of this function is to account for variability and corruption in
+    the wheel position files. There are many possible errors described below, but
+    nothing excludes getting new ones.
+    """
+    # sometimes the text file is cropped
+    if np.any(data.isna()):
+        logger_.warning(label + ' has missing/incomplete records \n %s', path)
+    data.dropna(inplace=True)
+    data.drop_duplicates(keep='first', inplace=True)
+    data.reset_index(inplace=True)
+    # handle the clock resets when microseconds exceed uint32 max value
+    drop_first = False
+    if any(np.diff(data['re_ts']) < 0):
+        ind = np.where(np.diff(data['re_ts']) < 0)[0]
+        for i in ind:
+            # the first sample may be corrupt, in this case throw away
+            if i <= 1:
+                drop_first = i
+                logger_.warning(label + ' rotary encoder positions timestamps'
+                                        ' first sample corrupt ' + str(path))
+            # if it's an uint32 wraparound, the diff should be close to 2 ** 32
+            elif 32 - np.log2(data['re_ts'][i] - data['re_ts'][i + 1]) < 0.2:
+                data.loc[i + 1:, 're_ts'] = data.loc[i + 1:, 're_ts'] + 2 ** 32
+            # there is also the case where 2 positions are swapped and need to be swapped back
+
+            elif data['re_ts'][i] > data['re_ts'][i + 1] > data['re_ts'][i - 1]:
+                logger_.warning(label + ' rotary encoder timestamps swapped at index: ' +
+                                str(i) + '  ' + str(path))
+                a, b = data.iloc[i].copy(), data.iloc[i + 1].copy()
+                data.iloc[i], data.iloc[i + 1] = b, a
+            # if none of those 3 cases apply, raise an error
+            else:
+                logger_.error(label + ' Rotary encoder timestamps are not sorted.' + str(path))
+                data.sort_values('re_ts', inplace=True)
+                data.reset_index(inplace=True)
+
+    if drop_first is not False:
+        data.drop(data.loc[:drop_first].index, inplace=True)
+        data = data.reindex()
+    # check if the time scale is in ms
+    if (data['re_ts'].iloc[-1] - data['re_ts'].iloc[0]) / 1e6 < 0:
+        logger_.warning('Rotary encoder reset logs events in ms instead of us: ' +
+                        'RE firmware needs upgrading and wheel velocity is potentially inaccurate')
+        data['re_ts'] = data['re_ts'] * 1000
+    return data
+
+
 def save_bool(save, dataset_type):
     logger = logging.getLogger('ibllib.alf')
     if isinstance(save, bool):
@@ -371,4 +466,16 @@ def save_bool(save, dataset_type):
         out = (dataset_type in save) or (Path(dataset_type).stem in save)
     if out:
         logger.debug('extracting' + dataset_type)
+    return out
+
+
+def get_port_events(events: dict, name: str = '') -> list:
+    """Return all timestamps from bpod raw data
+    trial['behavior_data']['Events timestamps'] that match name"""
+    out: list = []
+    for k in events:
+        if name in k:
+            out.extend(events[k])
+    out = sorted(out)
+
     return out

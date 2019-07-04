@@ -2,7 +2,7 @@ from pathlib import Path
 
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.biased_trials import (
-    get_feedbackType, get_probaLR,
+    get_feedbackType, get_probabilityLeft,
     get_choice, get_rewardVolume, get_iti_duration, get_contrastLR,
     get_goCueTrigger_times, get_goCueOnset_times, get_intervals)
 
@@ -25,7 +25,7 @@ def extract_all(session_path, save=False, data=False):
     feedbackType = get_feedbackType(session_path, save=save, data=data)
     contrastLeft, contrastRight = get_contrastLR(
         session_path, save=save, data=data)
-    probabilityLeft, _ = get_probaLR(session_path, save=save, data=data)
+    probabilityLeft = get_probabilityLeft(session_path, save=save, data=data)
     choice = get_choice(session_path, save=save, data=data)
     rewardVolume = get_rewardVolume(session_path, save=save, data=data)
     iti_dur = get_iti_duration(session_path, save=save, data=data)
