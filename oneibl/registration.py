@@ -3,6 +3,7 @@ import json
 import datetime
 import logging
 import traceback
+from dateutil import parser as dateparser
 
 import ibllib.time
 from ibllib.misc import version
@@ -242,9 +243,10 @@ def _read_settings_json_compatibility_enforced(json_file):
             md['PYBPOD_SUBJECT_EXTRA'].pop('water_administration')
         if 'IBLRIG_COMMIT_HASH' not in md.keys():
             md['IBLRIG_COMMIT_HASH'] = 'f9d8905647dbafe1f9bdf78f73b286197ae2647b'
-        #  change the date format to proper ISO
-        dt = datetime.datetime.strptime(md['SESSION_DATETIME'], '%Y-%m-%d %H:%M:%S.%f')
+        #  parse the date format to Django supported ISO
+        dt = dateparser.parse(md['SESSION_DATETIME'])
         md['SESSION_DATETIME'] = ibllib.time.date2isostr(dt)
+        # add the weight key if it doesn't already exists
         if 'SUBJECT_WEIGHT' not in md.keys():
             md['SUBJECT_WEIGHT'] = None
     return md

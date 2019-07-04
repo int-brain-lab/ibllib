@@ -116,6 +116,8 @@ def load_settings(session_path):
         return None
     with open(path, 'r') as f:
         settings = json.load(f)
+    if 'IBLRIG_VERSION_TAG' not in settings.keys():
+        settings['IBLRIG_VERSION_TAG'] = ''
     return settings
 
 
