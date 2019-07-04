@@ -1,3 +1,6 @@
+"""
+Quality control of Neuropixel electrophysiology data.
+"""
 from pathlib import Path
 import logging
 
@@ -17,9 +20,11 @@ WELCH_WIN_LENGTH_SAMPLES = 1024
 def rmsmap(fbin):
     """
     Computes RMS map in time domain and spectra for each channel of Neuropixel probe
+
     :param fbin: binary file in spike glx format (will look for attached metatdata)
-    :return: win: a dictionary with a time-RMS per channel map, spectra per channel, time
-    and frequency scales
+    :type fbin: str or pathlib.Path
+    :return: a dictionary with amplitudes in channeltime space, channelfrequency space, time
+     and frequency scales
     """
     if not isinstance(fbin, spikeglx.Reader):
         sglx = spikeglx.Reader(fbin)
@@ -55,10 +60,11 @@ def rmsmap(fbin):
 
 def extract_rmsmap(fbin, out_folder=None, force=False):
     """
-    wrapper for rmsmap that outputs _ibl_ephysRmsMap and _ibl_ephysSpectra ALF files
+    Wrapper for rmsmap that outputs _ibl_ephysRmsMap and _ibl_ephysSpectra ALF files
+
     :param fbin: binary file in spike glx format (will look for attached metatdata)
     :param folder_alf: folder in which to store output ALF files. Creates/Uses an ALF folder at
-    the same level as the `fbin` file provided by default
+     the same level as the `fbin` file provided by default
     :param force: do not re-extract if all ALF files already exist
     :return: None
     """

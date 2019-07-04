@@ -1,14 +1,7 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
-"""**ALF extractors** are a collection of functions that extract alf files from
-the PyBpod rig raw data.
-
-Each DatasetType in the IBL pipeline should have one extractor function.
-
-:raises an: n/a
-:raises ValueError: n/a
-:return: n/a
-:rtype: n/a
+"""
+Training wheel extractor from Pybpod output.
 """
 import os
 import logging
@@ -66,14 +59,18 @@ def time_converter_session(session_path, kind):
     Depends on getter functions that extract from the raw data the timestamps
     of the trial_start sync pulse event for each clock.
 
-    kinds:
-    *2b:        _________   re2b        cam2b,      ephys2b
-    *2re:       b2re        _________   cam2re,     ephys2re
-    *2cam:      b2cam       re2cam      _________   ephys2cam
-    *2ephys:    b2ephys     re2ephys    cam2ephys   _________
+    +---------+----------+-----------+-----------+-----------+
+    | 2b      |   -      |   re2b    | cam2b,    |  ephys2b  |
+    +---------+----------+-----------+-----------+-----------+
+    | 2re     |   b2re   |   -       | cam2re    |  ephys2re |
+    +---------+----------+-----------+-----------+-----------+
+    | 2cam    |   b2cam  |   re2cam  |  -        |  ephys2cam|
+    +---------+----------+-----------+-----------+-----------+
+    | 2ephys  |   b2ephys|   re2ephys| cam2ephys |  -        |
+    +---------+----------+-----------+-----------+-----------+
 
-    Default converters for times are assumed to be of kind *2b unless ephys data
-    is present in that case converters for 'times' will be of kind *2ephys
+    Default converters for times are assumed to be of kind *2b* unless ephys data
+    is present in that case converters for 'times' will be of kind *2ephys*
 
     :param session_path: absolute path of session folder
     :type session_path: str
@@ -150,7 +147,6 @@ def get_wheel_data(session_path, bp_data=None, save=False):
                      shape=(df.shape[0],), formats=['f8', 'f8', np.object])
     data['re_ts'] = df.re_ts.values
     data['re_pos'] = df.re_pos.values
-    data['bns_ts'] = df.bns_ts.values
     data['re_pos'] = data['re_pos'] / 1024 * 2 * np.pi  # convert positions to radians
     trial_starts = get_trial_start_times(session_path)
     # need a flag if the data resolution is 1ms due to the old version of rotary encoder firmware
@@ -160,6 +156,7 @@ def get_wheel_data(session_path, bp_data=None, save=False):
     # get the converter function to translate re_ts into behavior times
     convtime = time_converter_session(session_path, kind='re2b')
     data['re_ts'] = convtime(data['re_ts'])
+    return data
 
     def get_reset_trace_compensation_with_state_machine_times():
         # this is the preferred way of getting resets using the state machine time information

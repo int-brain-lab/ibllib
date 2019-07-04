@@ -3,6 +3,7 @@ import json
 import datetime
 import logging
 import traceback
+from dateutil import parser as dateparser
 
 import ibllib.time
 from ibllib.misc import version
@@ -29,6 +30,9 @@ def log2sessionfile(func):
 
 
 class RegistrationClient:
+    """
+    Object that keeps the ONE instance and provides method to create sessions and register data.
+    """
     def __init__(self, one=None):
         self.one = one
         if not one:
@@ -38,7 +42,13 @@ class RegistrationClient:
                                 self.one.alyx.rest('data-formats', 'list')]
 
     def create_sessions(self, root_data_folder, dry=False):
-        # session creation on the create me flags.
+        """
+        Create sessions looking recursively for flag files
+
+        :param root_data_folder: folder to look for create_me.flag
+        :param dry: bool. Dry run if True
+        :return: None
+        """
         flag_files = Path(root_data_folder).glob('**/create_me.flag')
         for flag_file in flag_files:
             if dry:
@@ -52,6 +62,13 @@ class RegistrationClient:
             flag_file.unlink()
 
     def register_sync(self, root_data_folder, dry=False):
+        """
+        Register sessions looking recursively for flag files
+
+        :param root_data_folder: folder to look for register_me.flag
+        :param dry: bool. Dry run if True
+        :return:
+        """
         flag_files = Path(root_data_folder).glob('**/register_me.flag')
         for flag_file in flag_files:
             if dry:
@@ -78,6 +95,14 @@ class RegistrationClient:
 
     @log2sessionfile
     def register_session(self, ses_path, file_list=True, repository_name=None):
+        """
+        Register session in Alyx
+
+        :param ses_path: path to the session
+        :param file_list: bool. Set to False will only create the session and skip registration
+        :param repository_name: Optional, repository on which to register the data
+        :return: Status string on error
+        """
         if isinstance(ses_path, str):
             ses_path = Path(ses_path)
         # read meta data from the rig for the session from the task settings file
@@ -100,7 +125,7 @@ class RegistrationClient:
                                               number=md['SESSION_NUMBER'],
                                               details=True)
         try:
-            user = self.one.alyx.rest('users', 'read', md["PYBPOD_CREATOR"][0])
+            user = self.one.alyx.rest('users', 'read', id=md["PYBPOD_CREATOR"][0])
         except Exception:
             return 'User: ' + md["PYBPOD_CREATOR"][0] + " doesn't exist in Alyx. ABORT"
 
@@ -150,7 +175,7 @@ class RegistrationClient:
                         'weight': md['SUBJECT_WEIGHT'],
                         'user': username
                         }
-                self.one.alyx.rest('weighings', 'create', wei_)
+                self.one.alyx.rest('weighings', 'create', data=wei_)
         else:  # TODO: if session exists and no json partial_upgrade it
             session = self.one.alyx.rest('sessions', 'read', id=session_id[0])
 
@@ -242,9 +267,10 @@ def _read_settings_json_compatibility_enforced(json_file):
             md['PYBPOD_SUBJECT_EXTRA'].pop('water_administration')
         if 'IBLRIG_COMMIT_HASH' not in md.keys():
             md['IBLRIG_COMMIT_HASH'] = 'f9d8905647dbafe1f9bdf78f73b286197ae2647b'
-        #  change the date format to proper ISO
-        dt = datetime.datetime.strptime(md['SESSION_DATETIME'], '%Y-%m-%d %H:%M:%S.%f')
+        #  parse the date format to Django supported ISO
+        dt = dateparser.parse(md['SESSION_DATETIME'])
         md['SESSION_DATETIME'] = ibllib.time.date2isostr(dt)
+        # add the weight key if it doesn't already exists
         if 'SUBJECT_WEIGHT' not in md.keys():
             md['SUBJECT_WEIGHT'] = None
     return md

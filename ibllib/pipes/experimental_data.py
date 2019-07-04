@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 """
-python one_iblrig.py extract /path/to/my/session/ [--dry=True]
-python one_iblrig.py register /path/to/my/session/ [--dry=True]
-python one_iblrig.py create /path/to/my/session/ [--dry=True]
-python one_iblrig.py compress_video /path/to/my/session/ [--dry=True --count=4]
-python one_iblrig.py compress_audio /path/to/my/session/ [--dry=True --count=5]
+Entry point to system commands for IBL pipeline.
+
+>>> python one_iblrig.py extract /path/to/my/session/ [--dry=True]
+>>> python one_iblrig.py register /path/to/my/session/ [--dry=True]
+>>> python one_iblrig.py create /path/to/my/session/ [--dry=True]
+>>> python one_iblrig.py compress_video /path/to/my/session/ [--dry=True --count=4]
+>>> python one_iblrig.py compress_audio /path/to/my/session/ [--dry=True --count=5]
 """
 
 import logging
@@ -42,7 +44,7 @@ def create(root_data_folder, dry=False, one=None):
 
 
 def compress_audio(root_data_folder, dry=False, max_sessions=None):
-    command = 'ffmpeg -i {file_name}.wav -c:a flac {file_name}.flac'
+    command = 'ffmpeg -i {file_name}.wav -c:a flac -nostats {file_name}.flac'
     _compress(root_data_folder, command, 'compress_audio.flag', dry=dry, max_sessions=max_sessions)
 
 

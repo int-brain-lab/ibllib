@@ -1,3 +1,6 @@
+"""
+Window generator, front detections, rms
+"""
 import numpy as np
 
 from ibllib.misc import print_progress

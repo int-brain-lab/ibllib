@@ -28,39 +28,29 @@ In a shell terminal, type the following commands:
 **Linux:**
 ```
 cd ibllib/
-virtualenv venv --python=python3.6
+virtualenv venv --python=python3.7
 source ./venv/bin/activate
 ```
 
 **Windows:**
 ```
-conda create -n ibllibenv
-conda activate ibllibenv
-conda install -c conda-forge ciso8601
+conda create -n iblenv python=3.7
+conda activate iblenv
 ```
 
 **Mac OS:**
 ```
-cd Documents/GitHub/ibllib
-conda create -n ibllibenv python=3.6 anaconda
-source activate ibllibenv
-conda install -c conda-forge ciso8601
+conda create -n iblenv python=3.7 anaconda
+source activate iblenv
 ```
 
 
 ### Install requirements and packages
-**Linux and Mac OS:**
+**All OS:**
 ```
-pip install -r requirements.txt
-pip install -e .
+pip install ibllib
 ```
-
-**Windows:**
-```
-cd ibllib
-pip install -r requirements.txt
-pip install -e .
-```
+NB: make sure you did activate your environment as shown above before installing !
 
 
 ### Instantiate One class: Define connection settings
@@ -69,10 +59,11 @@ The first step is to instantiate the **One class**: behind the scenes, the const
 
 The connections settings are defined in a JSON parameter file (named *.one_params*).
 -   In Linux, the file is in `~/.one_params`.
--   In Windows, the file is in the Roaming App directory `C:\Users\olivier\AppData\Roaming\.one_params`.
--   In Mac OS, the file is in the user directory `/Users/olivier/.one_params`.
+-   In Windows, the file is in the Roaming App directory `C:\Users\CurrentUser\AppData\Roaming\.one_params`.
+-   In Mac OS, the file is in the user directory `/Users/CurrentUser/.one_params`.
 
-In case of doubt, type the command `io.getappdir` in a Matlab prompt. It will return the directory of the JSON *.one_params* file.
+In case of doubt, type the command `io.getappdir` in a Matlab prompt, `from pathlib import Path; print(Path.home())` in Python.
+It will return the directory of the JSON *.one_params* file.
 
 **_Note_: The JSON _.one_params_ file is uniquely stored, and shared across Matlab and Python.**
 
@@ -106,10 +97,10 @@ FTP_DATA_SERVER_LOGIN:	# Should be automatically set as: iblftp - press ENTER
 FTP_DATA_SERVER_PWD		# Request Password for FTP from Olivier
 HTTP_DATA_SERVER: 		# Should be automatically set as: http://ibl.flatironinstitute.org  - press ENTER
 HTTP_DATA_SERVER_LOGIN: # Should be automatically set as: iblmember  - press ENTER
-HTTP_DATA_SERVER_PWD	# Request Password for HTTP from Olivier
+HTTP_DATA_SERVER_PWD	# Request Password for HTTP from IBL admins
 ```
 
-**Note: using `One.setup` changes the JSON *.one_params* file.** Also note that the file is shared across Python and Matlab platforms.
+**Note: using `one.setup` changes the JSON *.one_params* file.** Again, the file is shared across Python and Matlab platforms.
 
 #### 2. Edit the JSON *.one_params* file manually
 **_Note_**: In Mac OS/Linux, use the command `nano` in a terminal.
@@ -118,16 +109,3 @@ HTTP_DATA_SERVER_PWD	# Request Password for HTTP from Olivier
 Once the connections settings are defined, there is no need to setup the class One again if willing to connect with the credentials saved in the JSON *.one_params* file.
 
 The tutorial in the next section will show you how to change credentials withough changing the JSON file (useful for seldom connection with different credentials).
-
-
-### Run tests
-Exit the python terminal.
-In a shell terminal, in the ibllibenv, `cd python` (as above) and write the following:
--   **Linux and Mac OS**: `source run_tests`
--   **Windows**: `call run_tests.bat`
-
-
-
-If you see any Failure message, please report on GitHub or contact Olivier.
-If not, you are ready for the tutorial - go to next section !
-

@@ -12,16 +12,20 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
+
 import os
 import sys
+from pathlib import Path
 import matplotlib
 matplotlib.use('agg')
-sys.path.insert(0, os.path.abspath('.'))
-sys.path.insert(0, os.path.abspath('../python/alf'))
-sys.path.insert(0, os.path.abspath('../python/oneibl'))
-sys.path.insert(0, os.path.abspath('../python'))
-print('Python %s on %s' % (sys.version, sys.platform))
 
+for f in Path(os.path.abspath('.')).joinpath('ibllib').rglob('__init__.py'):
+    sys.path.insert(0, str(f.parent))
+
+sys.path.append(os.path.join(os.path.dirname(__name__), '..'))
+
+print('Python %s on %s' % (sys.version, sys.platform))
+print(sys.path)
 
 # -- Project information -----------------------------------------------------
 
@@ -44,11 +48,11 @@ release = ''
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ['sphinx.ext.autodoc']
-
+extensions = ['sphinx.ext.autodoc', 'sphinx.ext.autosummary']
+autosummary_generate = True
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
-
+exclude_patterns = ['_build', '_templates']
 # The master toctree document.
 master_doc = 'index'
 

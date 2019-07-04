@@ -8,13 +8,17 @@ import logging
 logger_ = logging.getLogger('ibllib')
 
 
-def read_flag_file(fil):
+def read_flag_file(fname):
     """
-    Flag files are *.flag files within a session folder used to schedule some jobs
+    Flag files are ``*.flag`` files within a session folder used to schedule some jobs
     If they are empty, should return True
+
+    :param fname: full file path of the flag file
+    :type fname: str or pahlib.Path
+    :return: None
     """
     # the flag file may contains specific file names for a targeted extraction
-    with open(fil) as fid:
+    with open(fname) as fid:
         save = list(filter(None, fid.read().splitlines()))
     # if empty, extract everything by default
     if len(save) == 0:
@@ -26,6 +30,10 @@ def excise_flag_file(fname, removed_files=None):
     """
     Remove one or several specific files if they figure within the file
     If no file is left, deletes the flag.
+
+    :param fname: full file path of the flag file
+    :type fname: str or pahlib.Path
+    :return: None
     """
     if not removed_files:
         return
@@ -45,8 +53,16 @@ def excise_flag_file(fname, removed_files=None):
 
 def write_flag_file(fname, file_list: list = None, clobber=False):
     """
-    Flag files are *.flag files within a session folder used to schedule some jobs
+    Flag files are ``*.flag`` files within a session folder used to schedule some jobs
     Each line references to a file to extract or register
+
+    :param fname: full file path of the flag file
+    :type fname: str or pathlib.Path
+    :param file_list: None or list of relative paths to write in the file
+    :type file_list: list
+    :param clobber: (False) overwrites the flag file if any
+    :type clobber: bool, optional
+    :return: None
     """
     exists = Path(fname).exists()
     if exists:

@@ -331,11 +331,14 @@ class ONE(OneAbstract):
         Applies a filter to the sessions (eid) table and returns a list of json dictionaries
          corresponding to sessions.
 
+        For a list of search terms, use the methods
+
+        >>> one.search_terms()
+
         :param details: default False, returns also the session details as per the REST response
         :type details: bool
         :param limit: default None, limits results (if pagination enabled on server)
-        :type int
-        List of possible search terms:
+        :type limit: int List of possible search terms
         :param dataset_types: list of dataset_types
         :type dataset_types: list of str
         :param users: a list of users
@@ -352,7 +355,7 @@ class ONE(OneAbstract):
          each entry corresponding to a matching session
         :rtype: list, list
 
-        for a list of search terms, use the methods `one.search_terms()`
+
         """
         # small function to make sure string inputs are interpreted as lists
         def validate_input(inarg):

@@ -57,14 +57,15 @@ def logger_config(name=None):
 def print_progress(iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█'):
     """
     Call in a loop to create terminal progress bar
-    @params:
-        iteration   - Required  : current iteration (Int)
-        total       - Required  : total iterations (Int)
-        prefix      - Optional  : prefix string (Str)
-        suffix      - Optional  : suffix string (Str)
-        decimals    - Optional  : positive number of decimals in percent complete (Int)
-        length      - Optional  : character length of bar (Int)
-        fill        - Optional  : bar fill character (Str)
+
+    :param iteration: Required  : current iteration (Int)
+    :param total: Required  : total iterations (Int)
+    :param prefix: Optional  : prefix string (Str)
+    :param suffix: Optional: suffix string (Str)
+    :param decimals: Optional: positive number of decimals in percent complete (Int)
+    :param length: Optional: character length of bar (Int)
+    :param fill: Optional: bar fill character (Str)
+    :return: None
     """
     iteration += 1
     percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
@@ -84,10 +85,10 @@ def bincount2D(x, y, xbin=0, ybin=0, xlim=None, ylim=None, weights=None):
     :param y: values to bin along the 1st dimension
     :param xbin: bin size along 2nd dimension (set to 0 to aggregate according to unique values)
     :param ybin: bin size along 1st dimension (set to 0 to aggregate according to unique values)
-    :param xlim: (optional) 2 values (array or list) that restrict range along 2nd dimension.
-    :param ylim: (optional) 2 values (array or list) that restrict range along 1st dimension.
-    :param weights:(optional) defaults to None: weights to apply to each value for aggregation
-    :return: 3 numpy arrays: MAP [ny,nx] image, xscale [nx], yscale [ny]
+    :param xlim: (optional) 2 values (array or list) that restrict range along 2nd dimension
+    :param ylim: (optional) 2 values (array or list) that restrict range along 1st dimension
+    :param weights: (optional) defaults to None, weights to apply to each value for aggregation
+    :return: 3 numpy arrays MAP [ny,nx] image, xscale [nx], yscale [ny]
     """
     # if no bounds provided, use min/max of vectors
     if not xlim:
