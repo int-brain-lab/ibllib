@@ -9,6 +9,7 @@ import ibllib.plots as plots
 import ibllib.behaviour.wheel as whl
 import ibllib.io
 import ibllib.dsp as dsp
+import alf.io
 
 _logger = logging.getLogger('ibllib')
 
@@ -52,7 +53,7 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False):
     if not output_path:
         file_ftcp = tempfile.TemporaryFile()
     else:
-        file_ftcp = Path(output_path / 'fronts_times_channel_polarity.bin')
+        file_ftcp = Path(output_path) / 'fronts_times_channel_polarity.bin'
     if isinstance(raw_ephys_apfile, ibllib.io.spikeglx.Reader):
         sr = raw_ephys_apfile
     else:
@@ -76,7 +77,7 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False):
             'channels': tim_chan_pol[:, 1],
             'polarities': tim_chan_pol[:, 2]}
     if save:
-        ibllib.io.alf.save_object_npy(output_path, sync, '_spikeglx_sync')
+        alf.io.save_object_npy(output_path, sync, '_spikeglx_sync')
     return sync
 
 
@@ -345,7 +346,7 @@ def align_with_bpod(session_path):
     """
     # check consistency
     output_path = Path(session_path) / 'alf'
-    trials = ibllib.io.alf.load_object(output_path, '_ibl_trials')
+    trials = alf.io.load_object(output_path, '_ibl_trials')
     assert(ibllib.io.check_dimensions(trials) == 0)
     dt = (np.diff(trials['intervalsBpod']) - np.diff(trials['intervals']))
     assert(np.all(np.abs(dt[np.invert(np.isnan(dt))]) < 5 * 1e-3))
