@@ -138,7 +138,7 @@ def extract_sound(ses_path, save=True, force=False):
     data = ioraw.load_data(ses_path)
     if data is None:  # if no session data, we're done
         return
-    tgocue = np.array(ibllib.io.extractors.extractors.training_trials.get_goCueOnset_times(
+    tgocue = np.array(ibllib.io.extractors.training_trials.get_goCueOnset_times(
         None, save=False, data=data))
     ilast = min(len(tgocue), len(detect))
     dt = tgocue[:ilast] - detect[: ilast]
