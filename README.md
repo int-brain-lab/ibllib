@@ -23,11 +23,12 @@ https://ibllib.readthedocs.io/en/latest/_static/one_demo.html
 ## Contribution and development practices
 See developper's installation guide here: https://ibllib.readthedocs.io/en/latest/02_installation_python.html
 
-Gitflow and Semantic Versioning.
+We use gitflow and Semantic Versioning.
 
-Python
+Before commiting to your branch:
 -   run tests
 -   flake8
+This is also enforced by continuous integration.
 
 
 ## Matlab Library
