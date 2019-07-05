@@ -5,27 +5,29 @@ The library as currently 3 main modules:
 -   **ibllib**: general purpose library containng I/O, signal processing and IBL data pipelines utilities.
 -   **oneibl**: interface to the Alyx database of experiments to access IBL data.
 
+## Requirements
+**OS**: Deployed on Linux and Windows. Minimally tested for Mac.
+
+**Python Module**: Python 3.6 or higher, we develop on 3.7.
+
 ## Documentation
 https://ibllib.readthedocs.io/en/latest/
 
 ## Installation
-https://ibllib.readthedocs.io/en/latest/01b_installation_general.html#
+https://ibllib.readthedocs.io/en/latest/02_installation_python.html#
 
 ## Demonstration
 https://ibllib.readthedocs.io/en/latest/_static/one_demo.html
 
-## Requirements
-**OS**: Linux and Windows. Untested on Mac.
 
-**Python Module**: Python 3.6 or higher.
+## Contribution and development practices
+See developper's installation guide here: https://ibllib.readthedocs.io/en/latest/02_installation_python.html
 
-## Development practices
 Gitflow and Semantic Versioning.
 
 Python
 -   run tests
 -   flake8
--   build documentation
 
 
 ## Matlab Library

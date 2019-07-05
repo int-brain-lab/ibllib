@@ -6,35 +6,49 @@
 Welcome to IBL code library documentation!
 ==========================================
 
-User Manual
+Overview
 ------------------------------------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    01_overview
-   01b_installation_general
-   02a_installation_python
-   02b_tutorial_python
-   02c_installation_dev_python
-   03a_installation_matlab
-   03b_tutorial_matlab
+
+
+Python Installation and Tutorial
+------------------------------------
+
+.. toctree::
+   :maxdepth: 1
+
+   02_installation_python
+   02_installation_dev_python
+   02_tutorial_python
+
+Matlab Installation and Tutorial
+------------------------------------
+
+.. toctree::
+   :maxdepth: 1
+
+   03_installation_matlab
+   03_tutorial_matlab
 .. one comment here to test
 
 Reference Information on ALF and ONE
 ------------------------------------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    04_reference
 
 
-Contributer/Developer
+Docstrings Reference
 ------------------------------------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    05_developers
 

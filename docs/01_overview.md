@@ -1,4 +1,4 @@
-# Overview
+# IBL data structure
 ![Alyx data structure](./_static/IBL_data.png)
 
 -   **Alyx**: database that stores meta-data in a relational manner. Lives on the cloud.
