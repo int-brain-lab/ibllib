@@ -1,4 +1,4 @@
-# IBLLIB Python user guide
+# IBLLIB Python Installation Guide
 
 ## Python-specific Dependencies
 
@@ -28,7 +28,7 @@ In a shell terminal, type the following commands:
 **Linux:**
 ```
 cd ibllib/
-virtualenv venv --python=python3.7
+virtualenv iblenv --python=python3.7
 source ./venv/bin/activate
 ```
 

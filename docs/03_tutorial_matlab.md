@@ -1,4 +1,4 @@
-# ONE Matlab Tutorial
+# ONE Tutorial Matlab
 
 Before you begin, make sure you have installed ibllib properly on your system as per the previous instructions.
 
