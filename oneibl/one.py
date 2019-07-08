@@ -176,14 +176,14 @@ class ONE(OneAbstract):
                 return dlist
 
         # get the session information
-        ses = self.alyx.get('/sessions?id=' + eid)
+        ses = self.alyx.rest('sessions', 'read', eid)
 
         if keyword.lower() == 'all':
-            return ses
+            return [ses]
         elif details:
-            return ses[0][keyword], ses
+            return ses[keyword], ses
         else:
-            return ses[0][keyword]
+            return ses[keyword]
 
     def load(self, eid, dataset_types=None, dclass_output=False, dry_run=False, cache_dir=None,
              download_only=False, clobber=False, offline=False):
