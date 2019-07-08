@@ -1,3 +1,8 @@
+# IBL Python Libraries
+
+[![Build Status on master](https://travis-ci.org/cortex-lab/alyx.svg?branch=master)](https://travis-ci.org/cortex-lab/alyx)
+[![Build Status on dev](https://travis-ci.org/cortex-lab/alyx.svg?branch=dev)](https://travis-ci.org/cortex-lab/alyx)
+
 ## Description
 Library used to implement the International Brain Laboratory data pipeline.
 The library as currently 3 main modules:
