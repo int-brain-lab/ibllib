@@ -21,7 +21,7 @@ https://ibllib.readthedocs.io/en/latest/_static/one_demo.html
 
 
 ## Contribution and development practices
-See developper's installation guide here: https://ibllib.readthedocs.io/en/latest/02_installation_python.html
+See developper's installation guide here: https://ibllib.readthedocs.io/en/latest/02_installation_dev_python.html
 
 We use gitflow and Semantic Versioning.
 
