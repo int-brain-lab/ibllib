@@ -17,6 +17,14 @@ from ibllib.io import jsonable
 logger_ = logging.getLogger('ibllib')
 
 
+def _meta_data_file_path(alf_file):
+    """
+    :param alf_file: full path to alf file (pathlib)
+    :return: path to corresponding metadata file
+    """
+    return alf_file.parent / (alf_file.stem + '.metadata.json')
+
+
 def check_dimensions(dico):
     """
     Test for consistency of dimensions as per ALF specs in a dictionary. Raises a Value Error.
@@ -28,7 +36,7 @@ def check_dimensions(dico):
     :param dico: dictionary containing data
     :return: status 0 for consistent dimensions, 1 for inconsistent dimensions
     """
-    shapes = [dico[lab].shape for lab in dico]
+    shapes = [dico[lab].shape for lab in dico if isinstance(dico[lab], np.ndarray)]
     lmax = max([len(s) for s in shapes])
     for l in range(lmax):
         sh = np.array([s[l] if (len(s) - 1 >= l) else 1 for s in shapes])
@@ -62,7 +70,8 @@ def load_file_content(fil):
     """
     Returns content of files. Designed for very generic file formats:
     so far supported contents are `json`, `npy`, `csv`, `tsv`, `ssv`, `jsonable`
-    :param fil:
+
+    :param fil: file to read
     :return:array/json/pandas dataframe depending on format
     """
     if not fil:
@@ -109,7 +118,7 @@ def load_object(alfpath, object=None):
     else:
         object = alfpath.name.split('.')[0]
         alfpath = alfpath.parent
-    # look for the files of the object, raise infomative error if none found
+    # look for files corresponding to the object, raise error if none found
     files_alf = list(alfpath.glob(object + '.*'))
     if not files_alf:
         raise FileNotFoundError('No object ' + str(object) + ' found in ' + str(alfpath))
@@ -118,6 +127,17 @@ def load_object(alfpath, object=None):
     # load content for each file
     for fil, att in zip(files_alf, attributes):
         OUT[att] = load_file_content(fil)
+        # if there is a corresponding metadata file, read it:
+        if _meta_data_file_path(fil).exists():
+            meta = load_file_content(_meta_data_file_path(fil))
+            # the columns keyword splits array along the last dimension
+            if 'columns' in meta.keys():
+                OUT.update({v: OUT[att][::, k] for k, v in enumerate(meta['columns'])})
+                OUT.pop(att)
+                meta.pop('columns')
+            # if there is other stuff in the dictionary, save it, otherwise disregard
+            if meta:
+                OUT[att + 'metadata'] = meta
     status = check_dimensions(OUT)
     if status != 0:
         logger_.warning('Inconsistent dimensions for object:' + object +
@@ -125,9 +145,16 @@ def load_object(alfpath, object=None):
     return OUT
 
 
+# # skip meta-data files
+#
+#     continue
+# # if there is a corresponding meta data, read it
+# if
+
+
 def save_object_npy(alfpath, dico, object):
     """
-    Saves a dictionary in alf format using object as object name and dictionary keys as attibute
+    Saves a dictionary in alf format using object as object name and dictionary keys as attribute
     names. Dimensions have to be consistent.
 
     :param alfpath: path of the folder to save data to
@@ -145,3 +172,24 @@ def save_object_npy(alfpath, dico, object):
 
     for k, v in dico.items():
         np.save(alfpath / (object + '.' + k + '.npy'), v)
+
+
+def save_metadata(file_alf, dico):
+    """
+    Writes a meta data file matching a current alf file object.
+    For example given an alf file
+    `clusters.ccf_location.ssv` this will write a dictionary in json format in
+    `clusters.ccf_location.metadata.json`
+    Reserved keywords:
+     - **columns**: column names for binary tables.
+     - **row**: row names for binary tables.
+     - **unit**
+
+    :param file_alf: full path to the alf object
+    :param dico: dictionary containing meta-data.
+    :return: None
+    """
+
+    file_meta_data = _meta_data_file_path(file_alf)
+    with open(file_meta_data, 'w+') as fid:
+        fid.write(json.dumps(dico, indent=1))
