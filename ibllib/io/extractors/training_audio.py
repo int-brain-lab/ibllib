@@ -88,6 +88,7 @@ def welchogram(fs, wav, nswin=NS_WIN, overlap=OVERLAP, nperseg=NS_WELCH):
                                    detrend='constant', return_onesided=True, scaling='density')
         if (iw % 50) == 0:
             window_generator.print_progress()
+    window_generator.print_progress()
     # the onset detection may have duplicates with sliding window, average them and remove
     detect = np.sort(np.array(detect)) / fs
     ind = np.where(np.diff(detect) < 0.1)[0]
