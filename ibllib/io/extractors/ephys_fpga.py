@@ -347,7 +347,7 @@ def align_with_bpod(session_path):
     # check consistency
     output_path = Path(session_path) / 'alf'
     trials = alf.io.load_object(output_path, '_ibl_trials')
-    assert(ibllib.io.check_dimensions(trials) == 0)
+    assert(alf.io.check_dimensions(trials) == 0)
     dt = (np.diff(trials['intervalsBpod']) - np.diff(trials['intervals']))
     assert(np.all(np.abs(dt[np.invert(np.isnan(dt))]) < 5 * 1e-3))
     dt = trials['intervals'][:, 0] - trials['intervalsBpod'][:, 0]
