@@ -3,9 +3,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from oneibl.one import ONE
-from ibllib.misc import bincount2D
 import alf.io as ioalf
 import ibllib.plots as iblplt
+
+from brainbox.misc import bincount2D
 
 T_BIN = 0.01
 D_BIN = 20
