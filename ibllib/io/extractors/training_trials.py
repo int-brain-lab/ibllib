@@ -290,17 +290,18 @@ def get_feedback_times_ge5(session_path, data=False):
     # that is grater than the nogo or err trial onset time
     if not data:
         data = raw.load_data(session_path)
-    rw_times = [tr['behavior_data']['States timestamps']['reward'][0][0]
-                for tr in data]
-    sound_times = [tr['behavior_data']['Events timestamps']['BNC2High'] for tr in data]
 
-    err_sound_times = [x[-1] if len(x) == 2 else np.nan for x in sound_times]
+    rw_times, err_sound_times = [np.zeros([len(data), 1]) for _ in range(2)]
+    for ind, tr in enumerate(data):
+        st = np.array(tr['behavior_data']['Events timestamps']['BNC2High'])
+        # xonar sounccard duplicates events, remove consecutive events too close together
+        st = np.delete(st, np.where(np.diff(st) < 0.020)[0] + 1)
+        err_sound_times[ind] = st[-1] if st.size >= 2 else np.nan
+        rw_times[ind] = tr['behavior_data']['States timestamps']['reward'][0][0]
 
-    assert sum(np.isnan(rw_times) &
-               np.isnan(err_sound_times)) == 0
-    merge = np.array([np.array(times)[~np.isnan(times)] for times in
-                      zip(rw_times, err_sound_times)]).squeeze()
-    return np.array(merge)
+    assert(np.all(np.logical_xor(np.isnan(rw_times), np.isnan(err_sound_times))))
+    merge = np.c_[rw_times, err_sound_times]
+    return merge[~np.isnan(merge)]
 
 
 def get_feedback_times(session_path, save=False, data=False, settings=False):
