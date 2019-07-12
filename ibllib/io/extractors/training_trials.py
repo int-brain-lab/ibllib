@@ -294,12 +294,12 @@ def get_feedback_times_ge5(session_path, data=False):
     rw_times, err_sound_times = [np.zeros([len(data), 1]) for _ in range(2)]
     for ind, tr in enumerate(data):
         st = np.array(tr['behavior_data']['Events timestamps']['BNC2High'])
-        # xonar sounccard duplicates events, remove consecutive events too close together
+        # xonar soundcard duplicates events, remove consecutive events too close together
         st = np.delete(st, np.where(np.diff(st) < 0.020)[0] + 1)
-        err_sound_times[ind] = st[-1] if st.size >= 2 else np.nan
         rw_times[ind] = tr['behavior_data']['States timestamps']['reward'][0][0]
+        # get the error sound only if the reward is nan
+        err_sound_times[ind] = st[-1] if st.size >= 2 and np.isnan(rw_times[ind]) else np.nan
 
-    assert(np.all(np.logical_xor(np.isnan(rw_times), np.isnan(err_sound_times))))
     merge = np.c_[rw_times, err_sound_times]
     return merge[~np.isnan(merge)]
 
