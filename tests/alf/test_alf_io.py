@@ -2,6 +2,7 @@ import unittest
 import tempfile
 from pathlib import Path
 import shutil
+import json
 
 import numpy as np
 
@@ -37,6 +38,19 @@ class TestsAlf(unittest.TestCase):
         self.assertTrue(np.all(dread['titi'] == data[:, 0]))
         self.assertTrue(dread['attributemetadata']['unit'] == 'potato')
         self.assertTrue(np.all(dread['gnagna'] == data[:, -1]))
+
+    def test_metadata_columns_UUID(self):
+        data = np.random.rand(500, 4)
+        # test with UUID extra field
+        file_alf = self.tmpdir / '_ns_obj.attr1.2622b17c-9408-4910-99cb-abf16d9225b9.npy'
+        file_meta = self.tmpdir / '_ns_obj.attr1.metadata.bd66f60e-fefc-4d92-b2c3-daaeee6c83af.npy'
+        np.save(file_alf, data)
+        cols = ['titi', 'tutu', 'toto', 'tata']
+        file_meta = file_alf.parent / (file_alf.stem + '.metadata.json')
+        with open(file_meta, 'w+') as fid:
+            fid.write(json.dumps({'columns': cols}, indent=1))
+        dread = alf.io.load_object(self.tmpdir, '_ns_obj')
+        self.assertTrue(np.all(dread['titi'] == data[:, 0]))
 
     def test_read_ts(self):
         # simplest test possible with one column in each file
