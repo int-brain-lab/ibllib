@@ -132,7 +132,7 @@ plot and evaluate synchronicity
 
 def plot_camera_sync(d,sync):
 
- #using the probe 3b channel map:
+ #using the probe 3a channel map:
  '''
  0: Arduino synchronization signal
  2: 150 Hz camera
