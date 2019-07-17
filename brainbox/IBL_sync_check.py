@@ -9,7 +9,6 @@ from ibllib.io import raw_data_loaders as raw
 import ibllib.plots
 import ibllib.io.extractors.ephys_fpga as ephys_fpga
 import matplotlib.pyplot as plt
-from scipy.interpolate import interp1d
 
 sync_test_folder='/home/mic/Downloads/FlatIron/20190710_sync_test_CCU/20190710_sync_test'
 
@@ -22,26 +21,162 @@ ephys
 def get_ephys_data(sync_test_folder):
  startTime = datetime.now()
  output_path=sync_test_folder
-
- BATCH_SIZE_SAMPLES = 50000
-
  # full path to the raw ephys
- raw_ephys_apfile = ('/home/mic/Downloads/FlatIron/20190710_sync_test_CCU/20190710_sync_test/ephys/20190709_sync_right_g0_t0.imec.ap.bin')
+ raw_ephys_apfile = (sync_test_folder+'/ephys/20190709_sync_right_g0_t0.imec.ap.bin')
 
  # load reader object, and extract sync traces
  sr = ibllib.io.spikeglx.Reader(raw_ephys_apfile)
  sync = ibllib.io.extractors.ephys_fpga._sync_to_alf(sr, output_path, save=False)
-
- # if the data is needed as well, loop over the file
- # raw data contains raw ephys traces, while raw_sync contains the 16 sync traces
- wg = dsp.WindowGenerator(sr.ns, BATCH_SIZE_SAMPLES, overlap=1)
- for first, last in wg.firstlast:
-     rawdata, rawsync = sr.read_samples(first, last)
-     wg.print_progress()
+  #wg.print_progress()
 
  print('sample rate',sr.fs)
  print(datetime.now() - startTime)# took 24 seconds to run
- return sr, sync, rawdata, rawsync
+ return sr, sync
+
+
+def first_occ_index(array, n_at_least):
+    '''
+    Getting index of first occurence in boolean array
+    with at least n consecutive False entries
+    ''' 
+    curr_found_false = 0
+    curr_index = 0
+    for index, elem in enumerate(array):
+        if not elem:
+            if curr_found_false == 0:
+                curr_index = index
+            curr_found_false += 1
+            if curr_found_false == n_at_least:
+                return curr_index
+        else:
+            curr_found_false = 0
+
+def event_extraction_and_comparison(sr,sync_test_folder):
+
+ #it took 6 min to run that for 6 min of data, all 300 ish channels 
+ #weird channels for Guido's set: [36,75,112,151,188,227,264,303,317,340,379,384]
+
+
+ startTime = datetime.now()
+ '''
+ this function first finds the times of square signal fronts in ephys and
+ compares them to corresponding ones in the sync signal.
+ Iteratively for small data chunks
+ '''
+
+ BATCH_SIZE_SAMPLES = 50000
+ output_path=sync_test_folder
+
+ wg = dsp.WindowGenerator(sr.ns, BATCH_SIZE_SAMPLES, overlap=1)
+
+ # if the data is needed as well, loop over the file
+ # raw data contains raw ephys traces, while raw_sync contains the 16 sync traces
+
+ rawdata, _ = sr.read_samples(0,BATCH_SIZE_SAMPLES)
+ _,chans=rawdata.shape
+
+ temporal_errors=[]
+ d_errs={}
+ for j in range(chans):
+   d_errs[j]=[] 
+
+ 
+ k=0
+ for first, last in list(wg.firstlast)[20:-20]: #skip beginning and end of recording
+  print('segment %s of %s' %(k,len(list(wg.firstlast)[20:-20])))
+  k+=1
+
+  rawdata, rawsync = sr.read_samples(first, last)
+
+  #get fronts for sync signal 
+  diffs = np.diff(rawsync.T[0]) 
+  sync_up_fronts=np.where(diffs==1)[0]+first
+  sync_down_fronts=np.where(diffs==-1)[0]+first
+
+  #get fronts for each ephys channel
+  obs,chans=rawdata.shape  
+  for i in range(chans):
+   #i=0
+   Mean=np.mean(rawdata.T[i])
+   Std=np.std(rawdata.T[i])
+
+   ups =np.invert(rawdata.T[i]>Mean + 6*Std)
+   downs = np.invert(rawdata.T[i]<Mean - 6*Std)
+
+   up_fronts=[]
+   down_fronts=[]
+
+   u=first_occ_index(ups, 10)# 3 is empirical, i.e. activity front at least 10 samples long 
+   
+   try:  
+    up_fronts.append(u+first)
+   except:
+    print('no up fronts detected in segment %s, channel %s' %(k,i))
+    continue #jump to next segment without any front times comparison
+
+   while u < len(ups):
+    w=u+15000
+    try:
+     u=first_occ_index(ups[w:], 10)+w+first
+     up_fronts.append(u)
+    except:
+     break
+
+   u=first_occ_index(downs, 10)# 10 is empirical   
+
+   try:  
+     down_fronts.append(u+first)
+   except:
+    print('no down fronts detected in segment %s, channel %s' %(k,i))
+    continue #jump to next segment without any front times comparison
+
+   while u < len(downs):
+    w=u+15000
+    try:
+     u=first_occ_index(downs[w:], 10)+w+first
+     down_fronts.append(u)
+    except:
+     break
+
+   if len(up_fronts)!=len(sync_up_fronts):
+    print('differnt number of fronts detected; segment %s, channel %s, difference %s' %(k,i,len(up_fronts)-len(sync_up_fronts)))
+    continue
+
+   d_errs[i].append(np.mean(abs(np.array(up_fronts)-np.array(sync_up_fronts))))
+   temporal_errors.append(np.mean(abs(np.array(up_fronts)-np.array(sync_up_fronts))))
+   temporal_errors.append(np.mean(abs(np.array(down_fronts)-np.array(sync_down_fronts))))
+
+  #return sync_up_fronts, sync_down_fronts,up_fronts,down_fronts,rawsync.T[0],rawdata.T[i],ups,downs,first, last
+ print('overall temporal error of all wavefronts and channels: %s sec' %str(np.round(np.mean(temporal_errors)/float(sr.fs),10)))  
+ print('time to run this function: ', datetime.now() - startTime)
+ return d_errs,temporal_errors
+
+
+def concat_rawdata(sr):
+
+ #for plotting concatenate some data chunks; just to check
+
+ #sr, sync=get_ephys_data(sync_test_folder)
+ BATCH_SIZE_SAMPLES= 50000
+ n_blocks=20 #can't plot full data, choose some blocks that you chunk together
+
+ duration=n_blocks*BATCH_SIZE_SAMPLES/sr.fs #length in sec of total data chunk
+ wg = dsp.WindowGenerator(sr.ns, BATCH_SIZE_SAMPLES, overlap=1)
+ 
+ rawdata, rawsync= sr.read_samples(0,BATCH_SIZE_SAMPLES)
+ obs,chans=rawdata.shape
+ D_data=np.zeros([n_blocks*BATCH_SIZE_SAMPLES,chans])
+ obs,chans= rawsync.shape                                                    
+ D_sync=np.zeros([n_blocks*BATCH_SIZE_SAMPLES,chans]) 
+
+ for i in range(n_blocks): 
+  first, last=list(wg.firstlast)[i]
+  rawdata, rawsync= sr.read_samples(first, last)
+  D_data[BATCH_SIZE_SAMPLES*i:BATCH_SIZE_SAMPLES*(i+1)]=rawdata 
+  D_sync[BATCH_SIZE_SAMPLES*i:BATCH_SIZE_SAMPLES*(i+1)]=rawsync
+ 
+ return D_data,D_sync 
+
 
 ###########
 '''
@@ -103,34 +238,10 @@ def get_video_stamps_and_brightness(sync_test_folder):
 
  return d
 
-
-##########
-'''
-BPod
-'''
-##########
-
-def get_port1in(sync_test_folder):
- 
- import json
- with open(sync_test_folder+'/bpod/_iblrig_taskData.raw.jsonable') as fid:
-  out = json.load(fid)
-
- return out['Events timestamps']['Port1In']
-
-# patched_file = sync_test_folder+'/bpod/_iblrig_taskData.raw.jsonable'
-# with open(patched_file, 'w+') as fid:
-#  fid.write(json.dumps(out))
-#  ibllib.io.jsonable.read(patched_file)
-
-#########
-'''
-plot and evaluate synchronicity
-'''
-#########
-
-
 def plot_camera_sync(d,sync):
+
+ #d=get_video_stamps_and_brightness(sync_test_folder)
+ #sr, sync, rawdata, rawsync=get_ephys_data(sync_test_folder)
 
  #using the probe 3a channel map:
  '''
@@ -155,6 +266,8 @@ def plot_camera_sync(d,sync):
   drops=len(cam_times)-len(r3)*2 #assuming at the end the frames are dropped
   print('%s frames dropped for %s' %(drops,vid)) 
 
+
+  #### plotting if you like
   plt.figure(vid)
   ibllib.plots.squares(s3['times'], s3['polarities'],label='fpga square signal',marker='o')
   plt.plot(cam_times[:-drops][0::2],r3,alpha=0.5,label='thresholded video brightness',linewidth=2,marker='x')
@@ -162,6 +275,9 @@ def plot_camera_sync(d,sync):
   #ibllib.plots.vertical_lines(s3['times'])
   plt.legend()
   plt.title(vid)
+  ###########################
+
+
   #get fronts of video brightness square signal
   #manually found that len(cam_times_fpga)=2*len(r3)+8
   diffr3=np.diff(r3) #get signal jumps via differentiation
@@ -177,6 +293,24 @@ def plot_camera_sync(d,sync):
   print('Mean and std of difference between wave fronts, %s:' %vid, np.mean(D),np.std(D))
 
 
+##########
+'''
+BPod
+'''
+##########
+
+def get_port1in(sync_test_folder):
  
- 
+ import json
+ with open(sync_test_folder+'/bpod/_iblrig_taskData.raw.jsonable') as fid:
+  out = json.load(fid)
+
+ return out['Events timestamps']['Port1In']
+
+# patched_file = sync_test_folder+'/bpod/_iblrig_taskData.raw.jsonable'
+# with open(patched_file, 'w+') as fid:
+#  fid.write(json.dumps(out))
+#  ibllib.io.jsonable.read(patched_file)
+
+
 
