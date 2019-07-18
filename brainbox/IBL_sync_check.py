@@ -84,8 +84,7 @@ def event_extraction_and_comparison(sr, sync_test_folder):
         d_errs[j] = []
 
     k = 0
-    missmatches_in_signals = [] 
-    max_temporal_differences = []
+    missmatches_in_signals = []
 
     for first, last in list(wg.firstlast)[20:-20]:  # skip beginning and end of recording
         print('segment %s of %s' % (k, len(list(wg.firstlast)[20:-20])))
@@ -150,7 +149,7 @@ def event_extraction_and_comparison(sr, sync_test_folder):
                 missmatches_in_signals.append((k, i, len(up_fronts) - len(sync_up_fronts)))
                 continue
 
-            d_errs[i].append(np.mean(abs(np.array(up_fronts) - np.array(sync_up_fronts))))          
+            d_errs[i].append(np.mean(abs(np.array(up_fronts) - np.array(sync_up_fronts))))
             temporal_errors.append(np.mean(abs(np.array(up_fronts) - np.array(sync_up_fronts))))
             temporal_errors.append(
                 np.mean(abs(np.array(down_fronts) - np.array(sync_down_fronts))))
@@ -172,7 +171,7 @@ def event_extraction_and_comparison(sr, sync_test_folder):
         else:
             if np.max(d_errs[ch]) > 0.01 * sr.fs:
                 print('large temporal error for channel %s at segment %s'
-                      % (ch, np.argmax(d_errs[ch]))   
+                      % (ch, np.argmax(d_errs[ch])))
 
     if all(np.abs(np.asarray(missmatches_in_signals).T[-1])):
         print('all signals detected')
