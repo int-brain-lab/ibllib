@@ -17,12 +17,16 @@ from ibllib.io import jsonable
 logger_ = logging.getLogger('ibllib')
 
 
-def _meta_data_file_path(alf_file):
+def _find_metadata(file_alf):
     """
-    :param alf_file: full path to alf file (pathlib)
-    :return: path to corresponding metadata file
+    Loof for an existing meta-data file for an alf_file
+    :param file_alf: PurePath of existing alf file
+    :return: PurePath of meta-data if exists
     """
-    return alf_file.parent / (alf_file.stem + '.metadata.json')
+    ns, obj = file_alf.name.split('.')[:2]
+    meta_data_file = list(file_alf.parent.glob(f'{ns}.{obj}*.metadata*.json'))
+    if meta_data_file:
+        return meta_data_file[0]
 
 
 def check_dimensions(dico):
@@ -126,10 +130,14 @@ def load_object(alfpath, object=None):
     OUT = {}
     # load content for each file
     for fil, att in zip(files_alf, attributes):
-        OUT[att] = load_file_content(fil)
         # if there is a corresponding metadata file, read it:
-        if _meta_data_file_path(fil).exists():
-            meta = load_file_content(_meta_data_file_path(fil))
+        meta_data_file = _find_metadata(fil)
+        # if this is the actual meta-data file, skip and it will be read later
+        if meta_data_file == fil:
+            continue
+        OUT[att] = load_file_content(fil)
+        if meta_data_file:
+            meta = load_file_content(meta_data_file)
             # the columns keyword splits array along the last dimension
             if 'columns' in meta.keys():
                 OUT.update({v: OUT[att][::, k] for k, v in enumerate(meta['columns'])})
@@ -143,13 +151,6 @@ def load_object(alfpath, object=None):
         logger_.warning('Inconsistent dimensions for object:' + object +
                         str([(k, v.shape) for k, v in OUT.items()]))
     return OUT
-
-
-# # skip meta-data files
-#
-#     continue
-# # if there is a corresponding meta data, read it
-# if
 
 
 def save_object_npy(alfpath, dico, object):
@@ -189,7 +190,6 @@ def save_metadata(file_alf, dico):
     :param dico: dictionary containing meta-data.
     :return: None
     """
-
-    file_meta_data = _meta_data_file_path(file_alf)
+    file_meta_data = file_alf.parent / (file_alf.stem + '.metadata.json')
     with open(file_meta_data, 'w+') as fid:
         fid.write(json.dumps(dico, indent=1))
