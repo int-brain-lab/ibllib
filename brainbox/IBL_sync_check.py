@@ -56,6 +56,8 @@ def event_extraction_and_comparison(sr,sync_test_folder):
  #it took 6 min to run that for 6 min of data, all 300 ish channels 
  #weird channels for Guido's set: [36,75,112,151,188,227,264,303,317,340,379,384]
 
+ # sr,sync=get_ephys_data(sync_test_folder)
+
 
  startTime = datetime.now()
  '''
@@ -147,7 +149,9 @@ def event_extraction_and_comparison(sr,sync_test_folder):
    temporal_errors.append(np.mean(abs(np.array(down_fronts)-np.array(sync_down_fronts))))
 
   #return sync_up_fronts, sync_down_fronts,up_fronts,down_fronts,rawsync.T[0],rawdata.T[i],ups,downs,first, last
- print('overall temporal error of all wavefronts and channels: %s sec' %str(np.round(np.mean(temporal_errors)/float(sr.fs),10)))  
+ max_err=str(np.round(temporal_errors/float(sr.fs),10))
+ av_error=str(np.round(np.mean(temporal_errors)/float(sr.fs),10)
+ print('overall temporal error of all wavefronts and channels: %s sec; maximal error: %s sec' %(av_error,max_err))  
  print('time to run this function: ', datetime.now() - startTime)
  return d_errs,temporal_errors
 
@@ -231,7 +235,7 @@ def get_video_stamps_and_brightness(sync_test_folder):
   ssv_times_sec=[convert_pgts(int(time)) for time in ssv_times[:,0]]
   uncycle_pgts(ssv_times_sec)
 
-  d[vid]=[brightness,uncycle_pgts(ssv_times_sec)]
+  d[vid]=[brightness,uncycle_pgts(ssv_times_sec)] 
  
  cap.release()
  print(datetime.now() - startTime)
@@ -313,4 +317,10 @@ def get_port1in(sync_test_folder):
 #  ibllib.io.jsonable.read(patched_file)
 
 
+
+
+
+
+ 
+ 
 
