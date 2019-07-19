@@ -21,16 +21,18 @@ class TimeSeries(dict):
         super(TimeSeries, self).__init__(times=np.array(times), values=np.array(values),
                                          columns=columns, *args, **kwargs)
         self.__dict__ = self
+        self.columns = columns
+        if self.values.ndim == 1:
+            self.values = self.values.reshape(-1, 1)
 
         # Enforce times dict key which contains a list or array of timestamps
         if len(self.times) != len(values):
             raise ValueError('Time and values must be of the same length')
 
         # If column labels are passed ensure same number of labels as columns.
-        if isinstance(self.values) and columns is not None:
+        if isinstance(self.values, np.ndarray) and columns is not None:
             if self.values.shape[1] != len(columns):
                 raise ValueError('Number of column labels must equal number of columns in values')
-
 
     def copy(self):
         """Return a new TimeSeries instance which is a copy of the current TimeSeries instance."""
