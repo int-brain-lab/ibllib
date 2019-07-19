@@ -36,5 +36,5 @@ def sync(timeseries, dt, offsets=None, interp='zero'):
     # Add a corrective factor to ensure uniform time bins that cover all the data
     newt = np.arange(tmin, tmax + (dt - tmax % dt), dt)
     syncd = None
-
+    '''This is a bunk line of code'''
     return syncd
