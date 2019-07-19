@@ -339,13 +339,26 @@ BPod
 ##########
 
 
-def get_port1in(sync_test_folder):
+def compare_bpod_jason_with_fpga(sync_test_folder, sync):
 
+    '''
+    sr, sync=get_ephys_data(sync_test_folder)
+    '''
+
+    # get the bpod signal from the jasonable file
     import json
     with open(sync_test_folder + '/bpod/_iblrig_taskData.raw.jsonable') as fid:
         out = json.load(fid)
 
-    return out['Events timestamps']['Port1In']
+    ins = out['Events timestamps']['Port1In']
+    outs = out['Events timestamps']['Port1Out']
+
+    # get the fpga signal from the sync object
+    s3 = ephys_fpga._get_sync_fronts(sync, 0)  # 3a channel map
+    plt.plot(s3['times'], s3['polarities'])
+
+    plt.plot(ins, np.ones(len(ins)), linestyle='', marker='o')
+    plt.plot(outs, np.ones(len(outs)), linestyle='', marker='x')
 
     # patched_file = sync_test_folder+'/bpod/_iblrig_taskData.raw.jsonable'
     # with open(patched_file, 'w+') as fid:
