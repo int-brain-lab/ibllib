@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 
-import ibllib.behaviour.wheel as wheel
+import brainbox.behaviour.wheel as wheel
 
 
 class TestWheel(unittest.TestCase):
