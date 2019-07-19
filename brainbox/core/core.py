@@ -3,6 +3,7 @@ Core data types and functions which support all of brainbox.
 '''
 import numpy as np
 
+
 class Bunch(dict):
     """A subclass of dictionary with an additional dot syntax."""
     def __init__(self, *args, **kwargs):
@@ -24,6 +25,12 @@ class TimeSeries(dict):
         # Enforce times dict key which contains a list or array of timestamps
         if len(self.times) != len(values):
             raise ValueError('Time and values must be of the same length')
+
+        # If column labels are passed ensure same number of labels as columns.
+        if isinstance(self.values) and columns is not None:
+            if self.values.shape[1] != len(columns):
+                raise ValueError('Number of column labels must equal number of columns in values')
+
 
     def copy(self):
         """Return a new TimeSeries instance which is a copy of the current TimeSeries instance."""
