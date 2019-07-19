@@ -354,7 +354,7 @@ def compare_bpod_jason_with_fpga(sync_test_folder, sync):
     outs = out['Events timestamps']['Port1Out']
 
     # get the fpga signal from the sync object
-    s3 = ephys_fpga._get_sync_fronts(sync, 0)  # 3b channel map
+    s3 = ephys_fpga._get_sync_fronts(sync, 0)  # 3a channel map
     plt.plot(s3['times'], s3['polarities'])
 
     plt.plot(ins, np.ones(len(ins)), linestyle='', marker='o')
