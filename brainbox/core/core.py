@@ -29,7 +29,8 @@ class TimeSeries(dict):
         if len(self.times) != len(values):
             raise ValueError('Time and values must be of the same length')
 
-        # If column labels are passed ensure same number of labels as columns.
+        # If column labels are passed ensure same number of labels as columns, then expose
+        # each column label using the dot syntax of a Bunch
         if isinstance(self.values, np.ndarray) and columns is not None:
             if self.values.shape[1] != len(columns):
                 raise ValueError('Number of column labels must equal number of columns in values')

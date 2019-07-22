@@ -4,6 +4,7 @@ for example taking spike times and then binning them into non-overlapping
 bins or convolving with a gaussian kernel.
 '''
 import numpy as np
+import pandas as pd
 from scipy import interpolate
 from brainbox import core
 
@@ -49,7 +50,7 @@ def sync(timeseries, dt, offsets=None, interp='zero', fillval=np.nan):
     # Add a corrective factor to ensure uniform time bins that cover all the data
     newt = np.arange(tmin, tmax + (dt - tmax % dt), dt)
     tsinterps = [interpolate.interp1d(ts.times, ts.values, kind=interp,
-                 fill_value=fillval, axis=0) for ts in timeseries]  
+                                      fill_value=fillval, axis=0) for ts in timeseries]
     syncd = core.TimeSeries(newt, np.hstack([tsi(newt) for tsi in tsinterps]), columns=colnames)
     return syncd
 
@@ -90,3 +91,20 @@ def bincount2D(x, y, xbin=0, ybin=0, xlim=None, ylim=None, weights=None):
     ind2d = np.ravel_multi_index(np.c_[yind, xind].transpose(), dims=(ny, nx))
     r = np.bincount(ind2d, minlength=nx * ny, weights=weights).reshape(ny, nx)
     return r, xscale, yscale
+
+
+def bin_spikes(spikes, binsize, interval_indices=False):
+
+    if type(spikes) is not core.TimeSeries:
+        raise TypeError('Input spikes need to be in TimeSeries object format')
+
+    if not hasattr(spikes, 'clusters'):
+        raise AttributeError('Input spikes need to have a clusters attribute. Make sure you set\
+                              columns=(\'clusters\',)) when constructing spikes.')
+
+    rates, tbins, clusters = bincount2D(spikes.times, spikes.clusters, binsize)
+    if interval_indices:
+        intervals = pd.interval_range(tbins[0], tbins[-1], freq=binsize, closed='left')
+        return core.TimeSeries(times=intervals, values=rates.T[:-1], columns=clusters)
+    else:
+        return core.TimeSeries(times=tbins, values=rates.T, columns=clusters)
