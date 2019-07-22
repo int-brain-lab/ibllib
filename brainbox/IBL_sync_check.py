@@ -345,20 +345,37 @@ def compare_bpod_jason_with_fpga(sync_test_folder, sync):
     sr, sync=get_ephys_data(sync_test_folder)
     '''
 
-    # get the bpod signal from the jasonable file
+    #  get the bpod signal from the jasonable file
     import json
     with open(sync_test_folder + '/bpod/_iblrig_taskData.raw.jsonable') as fid:
         out = json.load(fid)
 
-    ins = out['Events timestamps']['Port1In']
-    outs = out['Events timestamps']['Port1Out']
+    ins = out['Events timestamps']['BNC1High']
+    outs = out['Events timestamps']['BNC1Low']
 
     # get the fpga signal from the sync object
-    s3 = ephys_fpga._get_sync_fronts(sync, 0)  # 3a channel map
-    plt.plot(s3['times'], s3['polarities'])
+    s3 = ephys_fpga._get_sync_fronts(sync, 0)  # 3b channel map
 
+    #  plot if you like
+    plt.plot(s3['times'], s3['polarities'], label='fpga')
     plt.plot(ins, np.ones(len(ins)), linestyle='', marker='o')
     plt.plot(outs, np.ones(len(outs)), linestyle='', marker='x')
+
+    offset_on = np.mean(np.array(s3['times'][1::2]) - np.array(outs))  # get delay
+    offset_off = np.mean(np.array(s3['times'][0::2]) - np.array(ins))
+
+    jitter_on = np.std(np.array(s3['times'][1::2]) - np.array(outs))  # get jitter
+    jitter_off = np.std(np.array(s3['times'][0::2]) - np.array(ins))
+
+    inter_pulse_interval_bpod = abs(np.array(ins) - np.array(outs))
+    inter_pulse_interval_fpga = abs(np.array(s3['times'][1::2]) - np.array(s3['times'][0::2]))
+
+    print('maximal bpod jitter: ', max(inter_pulse_interval_bpod) - min(inter_pulse_interval_bpod))
+    print('maximal fpga jitter: ', max(inter_pulse_interval_fpga) - min(inter_pulse_interval_fpga))
+
+    print('The fpga 500 ms square signal and the bpod 500 ms square signal are offset',
+          'by %s sec and the difference between them has std %s sec'
+          % (np.mean([offset_on, offset_off]), np.mean([jitter_on, jitter_off])))
 
     # patched_file = sync_test_folder+'/bpod/_iblrig_taskData.raw.jsonable'
     # with open(patched_file, 'w+') as fid:
