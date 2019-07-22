@@ -33,6 +33,7 @@ class TimeSeries(dict):
         if isinstance(self.values, np.ndarray) and columns is not None:
             if self.values.shape[1] != len(columns):
                 raise ValueError('Number of column labels must equal number of columns in values')
+            self.update({col: self.values[:, i] for i, col in enumerate(columns)})
 
     def copy(self):
         """Return a new TimeSeries instance which is a copy of the current TimeSeries instance."""
