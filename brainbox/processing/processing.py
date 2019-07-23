@@ -48,6 +48,7 @@ def sync(timeseries, dt, offsets=None, interp='zero', fillval=np.nan):
     tbounds = np.array([(np.amin(ts), np.amax(ts)) for ts in tstamps])
     tmin, tmax = np.amin(tbounds[:, 0]), np.amax(tbounds[:, 1])
     # Add a corrective factor to ensure uniform time bins that cover all the data
+    # TODO: Ensure that if the user does not pass 'extrapolate' as the fillval, this still works
     newt = np.arange(tmin, tmax + (dt - tmax % dt), dt)
     tsinterps = [interpolate.interp1d(ts.times, ts.values, kind=interp,
                                       fill_value=fillval, axis=0) for ts in timeseries]

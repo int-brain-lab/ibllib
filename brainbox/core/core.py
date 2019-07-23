@@ -6,6 +6,7 @@ import numpy as np
 
 class Bunch(dict):
     """A subclass of dictionary with an additional dot syntax."""
+
     def __init__(self, *args, **kwargs):
         super(Bunch, self).__init__(*args, **kwargs)
         self.__dict__ = self
@@ -17,7 +18,26 @@ class Bunch(dict):
 
 class TimeSeries(dict):
     """A subclass of dict with dot syntax, enforcement of time stamping"""
+
     def __init__(self, times, values, columns=None, *args, **kwargs):
+        """TimeSeries objects are explicity for storing time series data in which entry (row) has
+        a time stamp associated. TS objects have obligatory \'times\' and \'values\' entries which
+        must be passed at construction, the length of both of which must match. TimeSeries takes an
+        optional \'columns\' argument, which defaults to None, that is a set of labels for the
+        columns in \'values\'.
+
+        :param times: an ordered object containing a list of timestamps for the time series data
+        :param values: an ordered object containing the associated measurements for each time stamp
+        :param columns: a tuple or list of column labels, defaults to none. Each column name will be
+            exposed as ts.colname in the TimeSeries object unless colnames are not strings.
+
+        Also can take any additional kwargs beyond times, values, and columns for additional data
+        storage like session date, experimenter notes, etc.
+
+        Example:
+        timestamps, mousepos = load_my_data()  # in which mouspos is T x 2 array of x,y coordinates
+        positions = TimeSeries(times=timestamps, values=mousepos, columns=('x', 'y'))
+        """
         super(TimeSeries, self).__init__(times=np.array(times), values=np.array(values),
                                          columns=columns, *args, **kwargs)
         self.__dict__ = self
