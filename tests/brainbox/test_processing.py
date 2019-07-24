@@ -13,7 +13,7 @@ class TestProcessing(unittest.TestCase):
         samples = times**3
         # Use cubic interpolation to resample to uniform interval
         cubes = core.TimeSeries(times=times, values=samples, columns=('cubic',))
-        resamp = processing.sync(cubes, 0.1, interp='linear', fillval='extrapolate')
+        resamp = processing.sync(cubes, 0.1, interp='cubic', fillval='extrapolate')
         # Check that the sync function is returning a new time series object
         self.assertTrue(isinstance(resamp, core.TimeSeries))
         # Test that all returned sample times are uniformly spaced
@@ -74,5 +74,7 @@ class TestProcessing(unittest.TestCase):
         r, xscale, yscale = processing.bincount2D(x, y)
         self.assertTrue(np.all(xscale == yscale) and np.all(xscale == np.array([0, 1, 2, 4])))
 
+
 if __name__ == "__main__":
+    np.random.seed(0)
     unittest.main(exit=False)

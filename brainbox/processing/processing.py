@@ -28,11 +28,12 @@ def sync(timeseries, dt, offsets=None, interp='zero', fillval=np.nan):
         values, defaults to np.nan
     :type interp: str
     :param fillval: Fill values to use when interpolating outside of range of data. See interp1d
-        for possible values, defaults to '
+        for possible values, defaults to np.nan
     :return: TimeSeries object with each row representing synchronized values of all
         input TimeSeries. Will carry column names from input time series if all of them have column
         names.
     """
+    # TODO: Allow this function to also take a simple pair of numpy arrays instead of TS objects
     # If a single time series is passed for resampling, wrap it in an iterable
     if isinstance(timeseries, core.TimeSeries):
         timeseries = [timeseries]
@@ -129,8 +130,8 @@ def bin_spikes(spikes, binsize, interval_indices=False):
         raise TypeError('Input spikes need to be in TimeSeries object format')
 
     if not hasattr(spikes, 'clusters'):
-        raise AttributeError('Input spikes need to have a clusters attribute. Make sure you set\
-                              columns=(\'clusters\',)) when constructing spikes.')
+        raise AttributeError('Input spikes need to have a clusters attribute. Make sure you set '
+                             'columns=(\'clusters\',)) when constructing spikes.')
 
     rates, tbins, clusters = bincount2D(spikes.times, spikes.clusters, binsize)
     if interval_indices:

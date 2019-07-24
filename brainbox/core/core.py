@@ -21,10 +21,10 @@ class TimeSeries(dict):
 
     def __init__(self, times, values, columns=None, *args, **kwargs):
         """TimeSeries objects are explicity for storing time series data in which entry (row) has
-        a time stamp associated. TS objects have obligatory \'times\' and \'values\' entries which
+        a time stamp associated. TS objects have obligatory 'times' and 'values' entries which
         must be passed at construction, the length of both of which must match. TimeSeries takes an
-        optional \'columns\' argument, which defaults to None, that is a set of labels for the
-        columns in \'values\'.
+        optional 'columns' argument, which defaults to None, that is a set of labels for the
+        columns in 'values'.
 
         :param times: an ordered object containing a list of timestamps for the time series data
         :param values: an ordered object containing the associated measurements for each time stamp
@@ -36,7 +36,10 @@ class TimeSeries(dict):
 
         Example:
         timestamps, mousepos = load_my_data()  # in which mouspos is T x 2 array of x,y coordinates
-        positions = TimeSeries(times=timestamps, values=mousepos, columns=('x', 'y'))
+        positions = TimeSeries(times=timestamps, values=mousepos, columns=('x', 'y'),
+                               analyst='John Cleese', petshop=True,
+                               notes=("Look, matey, I know a dead mouse when I see one, "
+                                      'and I'm looking at one right now."))
         """
         super(TimeSeries, self).__init__(times=np.array(times), values=np.array(values),
                                          columns=columns, *args, **kwargs)
