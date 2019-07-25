@@ -33,7 +33,7 @@ def sync(dt, timeseries=None, times=None, values=None, offsets=None, interp='zer
     :param values: observations corresponding to the timestamps in 'times'
     :type values: np.ndarray or list of np.ndarrays
     :param offsets: tuple of offsets for time stamps of each time series. Offsets for passed
-        TimeSeries objects should come first, then offsets for passed numpy arrays. defaults to None
+        TimeSeries objects first, then offsets for passed numpy arrays. defaults to None
     :type offsets: tuple of floats, optional
     :param interp: Type of interpolation to use. Refer to scipy.interpolate.interp1d for possible
         values, defaults to np.nan
@@ -65,8 +65,8 @@ def sync(dt, timeseries=None, times=None, values=None, offsets=None, interp='zer
             raise ValueError('\'times\' and \'values\' must have the same number of elements.')
         if type(times[0]) is np.ndarray:
             if not all([t.shape == v.shape for t, v in zip(times, values)]):
-                raise ValueError('All arrays in \'times\' must match the shape of the corresponding'
-                                 ' entry in \'values\'.')
+                raise ValueError('All arrays in \'times\' must match the shape of the'
+                                 ' corresponding entry in \'values\'.')
             # If all checks are passed, convert all times and values args into TimeSeries objects
             timeseries.extend([core.TimeSeries(t, v) for t, v in zip(times, values)])
         else:
@@ -163,8 +163,8 @@ def bin_spikes(spikes, binsize, interval_indices=False):
     :param interval_indices: Whether to use intervals as the time stamps for binned spikes, rather
         than the left edge value of the bins, defaults to False
     :type interval_indices: bool, optional
-    :return: Object with 2D array of shape T x N, for T timesteps and N clusters, and the associated
-        time stamps.
+    :return: Object with 2D array of shape T x N, for T timesteps and N clusters, and the
+        associated time stamps.
     :rtype: TimeSeries object
     """
     if type(spikes) is not core.TimeSeries:
