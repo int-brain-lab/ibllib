@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import ibllib.plots as plots
-import ibllib.behaviour.wheel as whl
+import brainbox.behavior.wheel as whl
 import ibllib.io
 import ibllib.dsp as dsp
 import alf.io

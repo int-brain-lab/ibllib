@@ -11,7 +11,7 @@ from scipy import interpolate
 
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
-import ibllib.behaviour.wheel as wheel
+import brainbox.behavior.wheel as wheel
 
 logger_ = logging.getLogger('ibllib.alf')
 WHEEL_RADIUS_CM = 3.1

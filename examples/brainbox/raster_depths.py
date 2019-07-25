@@ -3,11 +3,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from oneibl.one import ONE
-from ibllib.misc import bincount2D
 import alf.io as ioalf
 import ibllib.plots as iblplt
 
+from brainbox.misc import bincount2D
+
 T_BIN = 0.01
+D_BIN = 20
 
 # get the data from flatiron and the current folder
 one = ONE()
@@ -21,17 +23,18 @@ clusters = ioalf.load_object(session_path, 'clusters')
 channels = ioalf.load_object(session_path, 'channels')
 trials = ioalf.load_object(session_path, '_ibl_trials')
 
-# compute raster map as a function of cluster number
-R, times, clusters = bincount2D(spikes['times'], spikes['clusters'], T_BIN)
+
+# compute raster map as a function of site depth
+R, times, depths = bincount2D(spikes['times'], spikes['depths'], T_BIN, D_BIN)
 
 # plot raster map
 plt.imshow(R, aspect='auto', cmap='binary', vmax=T_BIN / 0.001 / 4,
-           extent=np.r_[times[[0, -1]], clusters[[0, -1]]], origin='lower')
+           extent=np.r_[times[[0, -1]], depths[[0, -1]]], origin='lower')
 # plot trial start and reward time
 reward = trials['feedback_times'][trials['feedbackType'] == 1]
-iblplt.vertical_lines(trials['intervals'][:, 0], ymin=0, ymax=clusters[-1],
+iblplt.vertical_lines(trials['intervals'][:, 0], ymin=0, ymax=depths[-1],
                       color='k', linewidth=0.5, label='trial starts')
-iblplt.vertical_lines(reward, ymin=0, ymax=clusters[-1], color='m', linewidth=0.5,
+iblplt.vertical_lines(reward, ymin=0, ymax=depths[-1], color='m', linewidth=0.5,
                       label='valve openings')
 plt.xlabel('Time (s)')
 plt.ylabel('Cluster #')

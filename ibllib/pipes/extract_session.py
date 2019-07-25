@@ -38,6 +38,13 @@ def log2sessionfile(func):
 
 
 def extractors_exist(session_path):
+    """
+    task names examples:
+    _iblrig_tasks_biasedChoiceWorld3.7.0
+    _iblrig_tasks_trainingChoiceWorld3.6.0
+    :param session_path:
+    :return: bool
+    """
     settings = raw.load_settings(session_path)
     if settings is None:
         logger_.error(f'ABORT: No data found in "raw_behavior_data" folder {session_path}')
