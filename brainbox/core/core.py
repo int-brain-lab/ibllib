@@ -28,8 +28,8 @@ class TimeSeries(dict):
 
         :param times: an ordered object containing a list of timestamps for the time series data
         :param values: an ordered object containing the associated measurements for each time stamp
-        :param columns: a tuple or list of column labels, defaults to none. Each column name will be
-            exposed as ts.colname in the TimeSeries object unless colnames are not strings.
+        :param columns: a tuple or list of column labels, defaults to none. Each column name will
+            be exposed as ts.colname in the TimeSeries object unless colnames are not strings.
 
         Also can take any additional kwargs beyond times, values, and columns for additional data
         storage like session date, experimenter notes, etc.

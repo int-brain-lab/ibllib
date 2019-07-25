@@ -122,8 +122,8 @@ def bin_spikes(spikes, binsize, interval_indices=False):
     :param interval_indices: Whether to use intervals as the time stamps for binned spikes, rather
         than the left edge value of the bins, defaults to False
     :type interval_indices: bool, optional
-    :return: Object with 2D array of shape T x N, for T timesteps and N clusters, and the associated
-        time stamps.
+    :return: Object with 2D array of shape T x N, for T timesteps and N clusters, and the
+        associated time stamps.
     :rtype: TimeSeries object
     """
     if type(spikes) is not core.TimeSeries:
