@@ -9,20 +9,31 @@ from scipy import interpolate
 from brainbox import core
 
 
-def sync(timeseries, dt, offsets=None, interp='zero', fillval=np.nan):
-    """Takes a tuple of timeseries bunches, aligns them to one another given an optional offset,
-    and synchronizes them into samples separated by a given delta t. Can also be used to resample a
-    single time series which may not be evenly sampled using interpolation.
+def sync(dt, timeseries=None, times=None, values=None, offsets=None, interp='zero',
+         fillval=np.nan):
+    """
+    Function for resampling a single or multiple time series to a single, evenly-spaced, delta t
+    between observations. Uses interpolation to find values.
+
+    Can be used on raw numpy arrays of timestamps and values using the 'times' and 'values' kwargs
+    and/or on brainbox.core.TimeSeries objects passed to the 'timeseries' kwarg. If passing both
+    TimeSeries objects and numpy arrays, the offsets passed should be for the TS objects first and
+    then the numpy arrays.
 
     Uses scipy's interpolation library to perform interpolation.
     See scipy.interp1d for more information regarding interp and fillval parameters.
 
-    :param timeseries: A group of time series to perform alignment or a single time series.
-        Must have time stamps.
-    :type timeseries: tuple of TimeSeries objects, or a single TimeSeries object
     :param dt: Separation of points which the output timeseries will be sampled at
     :type dt: float
-    :param offsets: tuple of offsets for time stamps of each TimeSeries object, defaults to None
+    :param timeseries: A group of time series to perform alignment or a single time series.
+        Must have time stamps.
+    :type timeseries: tuple of TimeSeries objects, or a single TimeSeries object.
+    :param times: time stamps for the observations in 'values']
+    :type times: np.ndarray or list of np.ndarrays
+    :param values: observations corresponding to the timestamps in 'times'
+    :type values: np.ndarray or list of np.ndarrays
+    :param offsets: tuple of offsets for time stamps of each time series. Offsets for passed
+        TimeSeries objects should come first, then offsets for passed numpy arrays. defaults to None
     :type offsets: tuple of floats, optional
     :param interp: Type of interpolation to use. Refer to scipy.interpolate.interp1d for possible
         values, defaults to np.nan
@@ -33,10 +44,35 @@ def sync(timeseries, dt, offsets=None, interp='zero', fillval=np.nan):
         input TimeSeries. Will carry column names from input time series if all of them have column
         names.
     """
-    # TODO: Allow this function to also take a simple pair of numpy arrays instead of TS objects
+    #########################################
+    # Checks on inputs and input processing #
+    #########################################
+
+    # Initialize a list to contain times/values pairs if no TS objs are passed
+    if timeseries is None:
+        timeseries = []
     # If a single time series is passed for resampling, wrap it in an iterable
-    if isinstance(timeseries, core.TimeSeries):
+    elif isinstance(timeseries, core.TimeSeries):
         timeseries = [timeseries]
+    # Yell at the user if they try to pass stuff to timeseries that isn't a TimeSeries object
+    elif not all([isinstance(ts, core.TimeSeries) for ts in timeseries]):
+        raise TypeError('All elements of \'timeseries\' argument must be brainbox.core.TimeSeries '
+                        'objects. Please uses \'times\' and \'values\' for np.ndarray args.')
+    # Check that if something is passed to times or values, there is a corresponding equal-length
+    # argument for the other element.
+    if (times is not None) or (values is not None):
+        if len(times) != len(values):
+            raise ValueError('\'times\' and \'values\' must have the same number of elements.')
+        if type(times[0]) is np.ndarray:
+            if not all([t.shape == v.shape for t, v in zip(times, values)]):
+                raise ValueError('All arrays in \'times\' must match the shape of the corresponding'
+                                 ' entry in \'values\'.')
+            # If all checks are passed, convert all times and values args into TimeSeries objects
+            timeseries.extend([core.TimeSeries(t, v) for t, v in zip(times, values)])
+        else:
+            # If times and values are only numpy arrays and lists of arrays, pair them and add
+            timeseries.append(core.TimeSeries(times, values))
+
     # Adjust each timeseries by the associated offset if necessary then load into a list
     if offsets is not None:
         tstamps = [ts.times + os for ts, os in zip(timeseries, offsets)]
@@ -49,6 +85,11 @@ def sync(timeseries, dt, offsets=None, interp='zero', fillval=np.nan):
             colnames.extend(ts.columns)
     else:
         colnames = None
+
+    #################
+    # Main function #
+    #################
+
     # Get the min and max values for all timeseries combined after offsetting
     tbounds = np.array([(np.amin(ts), np.amax(ts)) for ts in tstamps])
     if not np.all(np.isfinite(tbounds)):
@@ -122,8 +163,8 @@ def bin_spikes(spikes, binsize, interval_indices=False):
     :param interval_indices: Whether to use intervals as the time stamps for binned spikes, rather
         than the left edge value of the bins, defaults to False
     :type interval_indices: bool, optional
-    :return: Object with 2D array of shape T x N, for T timesteps and N clusters, and the
-        associated time stamps.
+    :return: Object with 2D array of shape T x N, for T timesteps and N clusters, and the associated
+        time stamps.
     :rtype: TimeSeries object
     """
     if type(spikes) is not core.TimeSeries:
