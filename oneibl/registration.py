@@ -289,6 +289,8 @@ def rename_files_compatibility(ses_path, version_tag):
 
 
 def _get_session_duration(fn, ses_data):
+    if not ses_data:
+        return
     c = 0
     for sd in reversed(ses_data):
         ses_duration_secs = (sd['behavior_data']['Trial end timestamp'] -
