@@ -103,6 +103,52 @@ def load_file_content(fil):
         return pd.read_csv(fil, delimiter=' ')
 
 
+def _ls(alfpath, object, glob='.*'):
+    """
+    Given a path, an object and a filter, returns all files and associated attributes
+    :param alfpath: containing folder
+    :param object: ALF object string
+    :param glob: File filter (optional)
+    :return: lists of pathlib.Path for each file and list of corresponding attributes
+    """
+    alfpath = Path(alfpath)
+    if alfpath.is_dir():
+        if object is None:
+            raise ValueError('If a path is provided, the object name should be provided too')
+    else:
+        object = alfpath.name.split('.')[0]
+        alfpath = alfpath.parent
+    # look for files corresponding to the object, raise error if none found
+    files_alf = list(alfpath.glob(object + glob))
+    if not files_alf:
+        raise FileNotFoundError('No object ' + str(object) + ' found in ' + str(alfpath))
+    # in this case get the attributes and parts for each
+    attributes = ['.'.join(f.name.split('.')[1:-1]) for f in files_alf]
+    return files_alf, attributes
+
+
+def exists(alfpath, object, attributes=None, glob='.*'):
+    """
+    Test if ALF object and optionally specific attributes exist in the given path
+    :param alfpath: str or pathlib.Path of the folder to look into
+    :param object: str ALF object name
+    :param attributes: list or list of strings for wanted attributes
+    :return: Bool. For multiple attributes, returns True only if all attributes are found
+    """
+    # if the object is not found, return False
+    try:
+        _, attributes_found = _ls(alfpath, object, glob=glob)
+    except FileNotFoundError:
+        return False
+    # if object found and no attribute provided, True
+    if not attributes:
+        return True
+    # if attributes provided, test if all are found
+    if isinstance(attributes, str):
+        attributes = [attributes]
+    return set(attributes).issubset(set(attributes_found))
+
+
 def load_object(alfpath, object=None, glob='.*'):
     """
     Reads all files (ie. attributes) sharing the same object.
@@ -119,19 +165,7 @@ def load_object(alfpath, object=None, glob='.*'):
 
     example: spikes = ibllib.io.alf.load_object('/path/to/my/alffolder/', 'spikes')
     """
-    alfpath = Path(alfpath)
-    if alfpath.is_dir():
-        if object is None:
-            raise ValueError('If a path is provided, the object name should be provided too')
-    else:
-        object = alfpath.name.split('.')[0]
-        alfpath = alfpath.parent
-    # look for files corresponding to the object, raise error if none found
-    files_alf = list(alfpath.glob(object + glob))
-    if not files_alf:
-        raise FileNotFoundError('No object ' + str(object) + ' found in ' + str(alfpath))
-    # in this case get the attributes and parts for each
-    attributes = ['.'.join(f.name.split('.')[1:-1]) for f in files_alf]
+    files_alf, attributes = _ls(alfpath, object, glob=glob)
     OUT = Bunch({})
     # load content for each file
     for fil, att in zip(files_alf, attributes):

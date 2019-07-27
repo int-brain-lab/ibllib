@@ -27,6 +27,7 @@ class TestsAlfPartsFilters(unittest.TestCase):
             self.assertTrue(np.all(a[k] == b[k + '.tutu']))
             self.assertTrue(np.all(a[k] == b[k + '.toto']))
         # also test file filters through glob argument
+        self.assertTrue(alf.io.exists(self.tmpdir, 'neuveux', glob='*.toto.*'))
         c = alf.io.load_object(self.tmpdir, 'neuveux', glob='*.toto.*')
         self.assertEqual(set(c.keys()), set([k for k in b.keys() if k.endswith('toto')]))
 
@@ -36,6 +37,7 @@ class TestsAlfPartsFilters(unittest.TestCase):
 
 class TestsAlf(unittest.TestCase):
     def setUp(self) -> None:
+        # riri, fifi and loulou are huey, duey and louie in French (Donald nephews for ignorants)
         self.tmpdir = Path(tempfile.gettempdir()) / 'iotest'
         self.tmpdir.mkdir(exist_ok=True)
         self.vfile = self.tmpdir / 'toto.titi.npy'
@@ -45,6 +47,15 @@ class TestsAlf(unittest.TestCase):
                              self.tmpdir / 'neuveu.loulou.npy']
         for f in self.object_files:
             np.save(file=f, arr=np.random.rand(5,))
+
+    def test_exists(self):
+        self.assertFalse(alf.io.exists(self.tmpdir, 'asodiujfas'))
+        self.assertTrue(alf.io.exists(self.tmpdir, 'neuveu'))
+        # test with attribute string only
+        self.assertTrue(alf.io.exists(self.tmpdir, 'neuveu', attributes='riri'))
+        # test with list of attributes
+        self.assertTrue(alf.io.exists(self.tmpdir, 'neuveu', attributes=['riri', 'fifi']))
+        self.assertFalse(alf.io.exists(self.tmpdir, 'neuveu', attributes=['riri', 'fifiasdf']))
 
     def test_metadata_columns(self):
         # simple test with meta data to label columns
