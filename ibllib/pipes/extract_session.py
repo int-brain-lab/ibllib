@@ -19,7 +19,6 @@ from ibllib.io.extractors import (ephys_trials, ephys_fpga,
 from ibllib.io import raw_data_loaders as raw
 import ibllib.io.flags as flags
 
-
 logger_ = logging.getLogger('ibllib.alf')
 
 
@@ -37,11 +36,31 @@ def log2sessionfile(func):
     return func_wrapper
 
 
-def extractors_exist(session_path):
+def get_task_extractor_type(task_name):
     """
+    Splits the task name according to naming convetion:
+    -   ignores everything
+    _iblrig_tasks_biasedChoiceWorld3.7.0 returns "biased"
+    _iblrig_tasks_trainingChoiceWorld3.6.0 returns "training'
+    :param task_name:
+    :return:
+    """
+    if '_biasedChoiceWorld' in task_name:
+        return 'biased'
+    elif '_trainingChoiceWorld' in task_name:
+        return 'training'
+    elif 'ephysChoiceWorld' in task_name:
+        return 'ephys'
+    elif task_name.startswith('_iblrig_calibration_frame2TTL'):
+        return 'sync_ephys'
+    elif task_name.startswith('_iblrig_tasks_ephys_certification'):
+        return 'sync_ephys'
+
+
+def get_session_extractor_type(session_path):
+    """
+    From a session path, loads the settings file, finds the task and checks if extractors exist
     task names examples:
-    _iblrig_tasks_biasedChoiceWorld3.7.0
-    _iblrig_tasks_trainingChoiceWorld3.6.0
     :param session_path:
     :return: bool
     """
@@ -49,10 +68,8 @@ def extractors_exist(session_path):
     if settings is None:
         logger_.error(f'ABORT: No data found in "raw_behavior_data" folder {session_path}')
         return False
-    task_name = settings['PYBPOD_PROTOCOL']
-    task_name = task_name.split('_')[-1]
-    extractor_type = task_name[:task_name.find('ChoiceWorld')]
-    if any([extractor_type in x for x in globals()]):
+    extractor_type = get_task_extractor_type(settings['PYBPOD_PROTOCOL'])
+    if extractor_type:
         return extractor_type
     else:
         logger_.warning(str(session_path) +
@@ -78,7 +95,7 @@ def from_path(session_path, force=False, save=True):
     :return: None
     """
     logger_.info('Extracting ' + str(session_path))
-    extractor_type = extractors_exist(session_path)
+    extractor_type = get_session_extractor_type(session_path)
     if is_extracted(session_path) and not force:
         logger_.info(f"Session {session_path} already extracted.")
         return
@@ -98,6 +115,8 @@ def from_path(session_path, force=False, save=True):
         data = raw.load_data(session_path)
         ephys_trials.extract_all(session_path, data=data, save=save)
         ephys_fpga.extract_all(session_path, save=save)
+    if extractor_type == 'sync_ephys':
+        ephys_fpga.extract_sync(session_path, save=save)
 
 
 def bulk(subjects_folder, dry=False):
