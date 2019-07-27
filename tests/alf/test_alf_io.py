@@ -9,6 +9,31 @@ import numpy as np
 import alf.io
 
 
+class TestsAlfPartsFilters(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.gettempdir()) / 'iotest'
+        self.tmpdir.mkdir(exist_ok=True)
+
+    def test_npy_parts_and_file_filters(self):
+        a = {'riri': np.random.rand(100),
+             'fifi': np.random.rand(100)}
+        alf.io.save_object_npy(self.tmpdir, a, 'neuveux', parts='tutu')
+        alf.io.save_object_npy(self.tmpdir, a, 'neuveux', parts='toto')
+        alf.io.save_object_npy(self.tmpdir, a, 'neuveux', parts=['tutu', 'titi'])
+        b = alf.io.load_object(self.tmpdir, 'neuveux')
+        for k in a:
+            self.assertTrue(np.all(a[k] == b[k + '.tutu.titi']))
+            self.assertTrue(np.all(a[k] == b[k + '.tutu']))
+            self.assertTrue(np.all(a[k] == b[k + '.toto']))
+        # also test file filters through glob argument
+        c = alf.io.load_object(self.tmpdir, 'neuveux', glob='*.toto.*')
+        self.assertEqual(set(c.keys()), set([k for k in b.keys() if k.endswith('toto')]))
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmpdir)
+
+
 class TestsAlf(unittest.TestCase):
     def setUp(self) -> None:
         self.tmpdir = Path(tempfile.gettempdir()) / 'iotest'
