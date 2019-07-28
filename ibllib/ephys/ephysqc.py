@@ -1,5 +1,5 @@
 """
-Quality control of Neuropixel electrophysiology data.
+Quality control of raw Neuropixel electrophysiology data.
 """
 from pathlib import Path
 import logging
@@ -7,6 +7,8 @@ import logging
 import numpy as np
 from scipy import signal
 
+import alf.io
+from ibllib.io.extractors import ephys_fpga
 from ibllib.io import spikeglx
 import ibllib.dsp as dsp
 from ibllib.misc import print_progress
@@ -58,38 +60,52 @@ def rmsmap(fbin):
     return win
 
 
-def extract_rmsmap(fbin, out_folder=None, force=False):
+def extract_rmsmap(fbin, out_folder=None, force=False, label=''):
     """
     Wrapper for rmsmap that outputs _ibl_ephysRmsMap and _ibl_ephysSpectra ALF files
 
     :param fbin: binary file in spike glx format (will look for attached metatdata)
-    :param folder_alf: folder in which to store output ALF files. Creates/Uses an ALF folder at
-     the same level as the `fbin` file provided by default
+    :param out_folder: folder in which to store output ALF files. Default uses the folder in which
+     the `fbin` file lives.
     :param force: do not re-extract if all ALF files already exist
+    :param label: string or list of strings that will be appended to the filename before extension
     :return: None
     """
     logger_.info(str(fbin))
     sglx = spikeglx.Reader(fbin)
     # check if output ALF files exist already:
     if out_folder is None:
-        out_folder = Path(fbin).parent / ('qc_ephys_' + Path(fbin).name.split('.')[0])
+        out_folder = Path(fbin).parent
     else:
         out_folder = Path(out_folder)
-
-    files = {'rms': out_folder / ('_ibl_ephysRmsMap_' + sglx.type + '.rms..npy'),
-             'times': out_folder / ('_ibl_ephysRmsMap_' + sglx.type + '.times.npy'),
-             'power': out_folder / ('_ibl_ephysSpectra_' + sglx.type + '.power.npy'),
-             'frequencies': out_folder / ('_ibl_ephysSpectra_' + sglx.type + '.frequencies.npy')}
-    # if they do and the option Force is set to false, do not recompute and exit
-    if all([files[f].exists() for f in files]) and not force:
-        logger_.warning('Output exists. Skipping ' + str(fbin) + ' Use force option to override')
+    alf_object_time = f'_spikeglx_ephysQcTime{sglx.type.upper()}'
+    alf_object_freq = f'_spikeglx_ephysQcTime{sglx.type.upper()}'
+    if not force and alf.io.exists(out_folder, alf_object_time) and alf.io.exists(
+            out_folder, alf_object_freq):
+        logger_.warning(f'{fbin.name} QC already exists, skipping. Use force option to override')
         return
     # crunch numbers
     rms = rmsmap(fbin)
-    # output ALF files, single precision
+    # output ALF files, single precision with the optional label as suffix before extension
     if not out_folder.exists():
         out_folder.mkdir()
-    np.save(file=files['rms'], arr=rms['TRMS'].astype(np.single))
-    np.save(file=files['times'], arr=rms['tscale'].astype(np.single))
-    np.save(file=files['power'], arr=rms['spectral_density'].astype(np.single))
-    np.save(file=files['frequencies'], arr=rms['fscale'].astype(np.single))
+    tdict = {'rms': rms['TRMS'].astype(np.single), 'times': rms['tscale'].astype(np.single)}
+    fdict = {'power': rms['spectral_density'].astype(np.single),
+             'freq': rms['fscale'].astype(np.single)}
+    out_time = alf.io.save_object_npy(out_folder, object=alf_object_time, dico=tdict, parts=label)
+    out_freq = alf.io.save_object_npy(out_folder, object=alf_object_freq, dico=fdict, parts=label)
+    return out_time + out_freq
+
+
+def qc_session(session_path, dry=False, force=False):
+    alf_folder = session_path / 'alf'
+    efiles = ephys_fpga._get_ephys_files(session_path)
+    for efile in efiles:
+        if dry:
+            print(efile.ap)
+            print(efile.lf)
+            continue
+        if efile.ap and efile.ap.exists():
+            extract_rmsmap(efile.ap, out_folder=alf_folder, force=force)
+        if efile.lf and efile.lf.exists():
+            extract_rmsmap(efile.ap, out_folder=alf_folder, force=force)

@@ -11,11 +11,9 @@ import logging
 from pathlib import Path
 import traceback
 
-from ibllib.io.extractors import (
-    training_wheel)
 from ibllib.io.extractors import (ephys_trials, ephys_fpga,
                                   biased_wheel, biased_trials,
-                                  training_trials)
+                                  training_trials, training_wheel)
 from ibllib.io import raw_data_loaders as raw
 import ibllib.io.flags as flags
 
@@ -119,8 +117,8 @@ def from_path(session_path, force=False, save=True):
         ephys_fpga.extract_sync(session_path, save=save)
 
 
-def bulk(subjects_folder, dry=False):
-    ses_path = Path(subjects_folder).glob('**/extract_me.flag')
+def bulk(subjects_folder, dry=False, glob_flag='**/extract_me.flag'):
+    ses_path = Path(subjects_folder).glob(glob_flag)
     for p in ses_path:
         # the flag file may contains specific file names for a targeted extraction
         save = flags.read_flag_file(p)

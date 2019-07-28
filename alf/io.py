@@ -203,7 +203,7 @@ def save_object_npy(alfpath, dico, object, parts=''):
     :param dico: dictionary to save to npy
     :param object: name of the object to save
     :param parts: extra parts to the ALF name
-    :return: None
+    :return: List of written files
 
     example: ibllib.io.alf.save_object_npy('/path/to/my/alffolder/', spikes, 'spikes')
     """
@@ -216,8 +216,12 @@ def save_object_npy(alfpath, dico, object, parts=''):
     if status != 0:
         raise ValueError('Dimensions are not consistent to save all arrays in ALF format: ' +
                          str([(k, v.shape) for k, v in dico.items()]))
+    out_files = []
     for k, v in dico.items():
-        np.save(alfpath / (object + '.' + k + parts + '.npy'), v)
+        out_file = alfpath / (object + '.' + k + parts + '.npy')
+        np.save(out_file, v)
+        out_files.append(out_file)
+    return out_files
 
 
 def save_metadata(file_alf, dico):

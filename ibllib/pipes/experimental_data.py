@@ -1,30 +1,37 @@
 #!/usr/bin/env python
 """
-Entry point to system commands for IBL pipeline.
-
->>> python one_iblrig.py extract /path/to/my/session/ [--dry=True]
->>> python one_iblrig.py register /path/to/my/session/ [--dry=True]
->>> python one_iblrig.py create /path/to/my/session/ [--dry=True]
->>> python one_iblrig.py compress_video /path/to/my/session/ [--dry=True --count=4]
->>> python one_iblrig.py compress_audio /path/to/my/session/ [--dry=True --count=5]
+Entry point to system commands for IBL behaviour pipeline.
+Each function below corresponds to a command-line tool.
 """
 
 import logging
 from pathlib import Path, PureWindowsPath
 import subprocess
 
+from ibllib.io import flags
 from ibllib.pipes import extract_session
+from ibllib.ephys import ephysqc
 from oneibl.registration import RegistrationClient
 from oneibl.one import ONE
-from ibllib.io import flags
+
 
 logger = logging.getLogger('ibllib')
 # set the logging level to paranoid
 logger.setLevel('INFO')
 
 
+def extract_ephys(root_data_folder, dry=False, max_sessions=10):
+    """
+    Extracts ephys session only
+    """
+    extract_session.bulk(root_data_folder, dry=dry, glob_flag='**/extract_ephys.flag')
+
+
 def extract(root_data_folder, dry=False):
-    extract_session.bulk(root_data_folder, dry=dry)
+    """
+    Extracts behaviour only
+    """
+    extract_session.bulk(root_data_folder, dry=dry, glob_flag='**/extract_me.flag')
 
 
 def register(root_data_folder, dry=False, one=None):
@@ -93,3 +100,15 @@ def _compress(root_data_folder, command, flag_pattern, dry=False, max_sessions=N
             flags.excise_flag_file(flag_file, removed_files=f2c)
             # and add the file to register_me.flag
             flags.write_flag_file(ses_path.joinpath('register_me.flag'), file_list=cfile.stem)
+
+
+def qc_ephys(root_data_folder, dry=False, max_sessions=10):
+    qcflags = Path(root_data_folder).rglob('qc_ephys.flag')
+    for qcflag in qcflags:
+        session_path = qcflag.parent
+        if dry:
+            print(qcflag.parent)
+            continue
+        qc_files = ephysqc.qc_session(session_path, dry=dry)
+        qcflag.unlink()
+        flags.write_flag_file(session_path.joinpath('register_me.flag'), file_list=qc_files)
