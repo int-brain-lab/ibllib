@@ -80,8 +80,8 @@ def extract_rmsmap(fbin, out_folder=None, force=False, label=''):
         out_folder = Path(out_folder)
     alf_object_time = f'_spikeglx_ephysQcTime{sglx.type.upper()}'
     alf_object_freq = f'_spikeglx_ephysQcTime{sglx.type.upper()}'
-    if not force and alf.io.exists(out_folder, alf_object_time) and alf.io.exists(
-            out_folder, alf_object_freq):
+    if alf.io.exists(out_folder, alf_object_time, glob=[label]) and \
+            alf.io.exists(out_folder, alf_object_freq, glob=[label]) and not force:
         logger_.warning(f'{fbin.name} QC already exists, skipping. Use force option to override')
         return
     # crunch numbers
@@ -115,4 +115,4 @@ def qc_session(session_path, dry=False, force=False):
         if efile.ap and efile.ap.exists():
             extract_rmsmap(efile.ap, out_folder=alf_folder, force=force, label=efile.label)
         if efile.lf and efile.lf.exists():
-            extract_rmsmap(efile.ap, out_folder=alf_folder, force=force, label=efile.label)
+            extract_rmsmap(efile.lf, out_folder=alf_folder, force=force, label=efile.label)

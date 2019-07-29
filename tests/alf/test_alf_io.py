@@ -61,6 +61,8 @@ class TestsAlf(unittest.TestCase):
         # test with globing
         self.assertTrue(alf.io.exists(self.tmpdir, 'object', glob='*part2*'))
         self.assertTrue(alf.io.exists(self.tmpdir, 'object', glob=['part1', 'part2']))
+        # globing with list: an empty part should return true as well
+        self.assertTrue(alf.io.exists(self.tmpdir, 'object', glob=['']))
 
     def test_metadata_columns(self):
         # simple test with meta data to label columns

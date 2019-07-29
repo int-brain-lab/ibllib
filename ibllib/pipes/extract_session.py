@@ -36,7 +36,7 @@ def log2sessionfile(func):
 
 def get_task_extractor_type(task_name):
     """
-    Splits the task name according to naming convetion:
+    Splits the task name according to naming convention:
     -   ignores everything
     _iblrig_tasks_biasedChoiceWorld3.7.0 returns "biased"
     _iblrig_tasks_trainingChoiceWorld3.6.0 returns "training'
@@ -49,8 +49,6 @@ def get_task_extractor_type(task_name):
         return 'training'
     elif 'ephysChoiceWorld' in task_name:
         return 'ephys'
-    elif task_name.startswith('_iblrig_calibration_frame2TTL'):
-        return 'sync_ephys'
     elif task_name.startswith('_iblrig_tasks_ephys_certification'):
         return 'sync_ephys'
 

@@ -13,7 +13,7 @@ class TestExtractors(unittest.TestCase):
             ('_iblrig_tasks_biasedChoiceWorld3.7.0', 'biased'),
             ('_iblrig_tasks_trainingChoiceWorld3.6.0', 'training'),
             ('_iblrig_tasks_ephysChoiceWorld5.1.3', 'ephys'),
-            ('_iblrig_calibration_frame2TTL4.1.3', 'sync_ephys'),
+            ('_iblrig_calibration_frame2TTL4.1.3', None),
             ('_iblrig_tasks_habituationChoiceWorld3.6.0', None),
             ('_iblrig_tasks_scanningOptoChoiceWorld5.0.0', None),
             ('_iblrig_tasks_RewardChoiceWorld4.1.3', None),
