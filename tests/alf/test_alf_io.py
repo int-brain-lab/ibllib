@@ -44,7 +44,9 @@ class TestsAlf(unittest.TestCase):
         self.tfile = self.tmpdir / 'toto.timestamps.npy'
         self.object_files = [self.tmpdir / 'neuveu.riri.npy',
                              self.tmpdir / 'neuveu.fifi.npy',
-                             self.tmpdir / 'neuveu.loulou.npy']
+                             self.tmpdir / 'neuveu.loulou.npy',
+                             self.tmpdir / 'object.attribute.part1.part2.npy',
+                             self.tmpdir / 'object.attribute.part1.npy']
         for f in self.object_files:
             np.save(file=f, arr=np.random.rand(5,))
 
@@ -56,6 +58,9 @@ class TestsAlf(unittest.TestCase):
         # test with list of attributes
         self.assertTrue(alf.io.exists(self.tmpdir, 'neuveu', attributes=['riri', 'fifi']))
         self.assertFalse(alf.io.exists(self.tmpdir, 'neuveu', attributes=['riri', 'fifiasdf']))
+        # test with globing
+        self.assertTrue(alf.io.exists(self.tmpdir, 'object', glob='*part2*'))
+        self.assertTrue(alf.io.exists(self.tmpdir, 'object', glob=['part1', 'part2']))
 
     def test_metadata_columns(self):
         # simple test with meta data to label columns

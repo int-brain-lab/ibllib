@@ -133,8 +133,12 @@ def exists(alfpath, object, attributes=None, glob='.*'):
     :param alfpath: str or pathlib.Path of the folder to look into
     :param object: str ALF object name
     :param attributes: list or list of strings for wanted attributes
+    :param glob: (".*") glob pattern to look for files or list of parts as per ALF specifications
     :return: Bool. For multiple attributes, returns True only if all attributes are found
     """
+    # prepare the glob input argument if it's a list
+    if isinstance(glob, list):
+        glob = '*.' + '.'.join(glob) + '*'
     # if the object is not found, return False
     try:
         _, attributes_found = _ls(alfpath, object, glob=glob)
