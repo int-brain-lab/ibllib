@@ -9,17 +9,65 @@ import numpy as np
 import alf.io
 
 
+class TestsAlfPartsFilters(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.gettempdir()) / 'iotest'
+        self.tmpdir.mkdir(exist_ok=True)
+
+    def test_npy_parts_and_file_filters(self):
+        a = {'riri': np.random.rand(100),
+             'fifi': np.random.rand(100)}
+        alf.io.save_object_npy(self.tmpdir, a, 'neuveux', parts='tutu')
+        alf.io.save_object_npy(self.tmpdir, a, 'neuveux', parts='toto')
+        alf.io.save_object_npy(self.tmpdir, a, 'neuveux', parts=['tutu', 'titi'])
+        b = alf.io.load_object(self.tmpdir, 'neuveux')
+        for k in a:
+            self.assertTrue(np.all(a[k] == b[k + '.tutu.titi']))
+            self.assertTrue(np.all(a[k] == b[k + '.tutu']))
+            self.assertTrue(np.all(a[k] == b[k + '.toto']))
+        # also test file filters through glob argument
+        self.assertTrue(alf.io.exists(self.tmpdir, 'neuveux', glob='*.toto.*'))
+        c = alf.io.load_object(self.tmpdir, 'neuveux', glob='*.toto.*')
+        self.assertEqual(set(c.keys()), set([k for k in b.keys() if k.endswith('toto')]))
+        # test with the short keys
+        a = alf.io.load_object(self.tmpdir, 'neuveux', glob=['titi'])
+        self.assertTrue(set(a.keys()) == set(['riri.tutu.titi', 'fifi.tutu.titi']))
+        a = alf.io.load_object(self.tmpdir, 'neuveux', glob=['titi'], short_keys=True)
+        self.assertTrue(set(a.keys()) == set(['riri', 'fifi']))
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmpdir)
+
+
 class TestsAlf(unittest.TestCase):
     def setUp(self) -> None:
+        # riri, fifi and loulou are huey, duey and louie in French (Donald nephews for ignorants)
         self.tmpdir = Path(tempfile.gettempdir()) / 'iotest'
         self.tmpdir.mkdir(exist_ok=True)
         self.vfile = self.tmpdir / 'toto.titi.npy'
         self.tfile = self.tmpdir / 'toto.timestamps.npy'
         self.object_files = [self.tmpdir / 'neuveu.riri.npy',
                              self.tmpdir / 'neuveu.fifi.npy',
-                             self.tmpdir / 'neuveu.loulou.npy']
+                             self.tmpdir / 'neuveu.loulou.npy',
+                             self.tmpdir / 'object.attribute.part1.part2.npy',
+                             self.tmpdir / 'object.attribute.part1.npy']
         for f in self.object_files:
             np.save(file=f, arr=np.random.rand(5,))
+
+    def test_exists(self):
+        self.assertFalse(alf.io.exists(self.tmpdir, 'asodiujfas'))
+        self.assertTrue(alf.io.exists(self.tmpdir, 'neuveu'))
+        # test with attribute string only
+        self.assertTrue(alf.io.exists(self.tmpdir, 'neuveu', attributes='riri'))
+        # test with list of attributes
+        self.assertTrue(alf.io.exists(self.tmpdir, 'neuveu', attributes=['riri', 'fifi']))
+        self.assertFalse(alf.io.exists(self.tmpdir, 'neuveu', attributes=['riri', 'fifiasdf']))
+        # test with globing
+        self.assertTrue(alf.io.exists(self.tmpdir, 'object', glob='*part2*'))
+        self.assertTrue(alf.io.exists(self.tmpdir, 'object', glob=['part1', 'part2']))
+        # globing with list: an empty part should return true as well
+        self.assertTrue(alf.io.exists(self.tmpdir, 'object', glob=['']))
 
     def test_metadata_columns(self):
         # simple test with meta data to label columns
