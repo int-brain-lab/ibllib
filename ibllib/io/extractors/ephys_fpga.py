@@ -443,7 +443,7 @@ def extract_all(session_path, save=False):
     syncs = extract_sync(session_path, save=False)
     if isinstance(syncs, list) and len(syncs) > 1:
         raise NotImplementedError('Task extraction of multiple probes not ready, contact us !')
-    extract_wheel_sync(syncs, output_path, save=save)
-    extract_behaviour_sync(syncs, output_path, save=save)
+    extract_wheel_sync(syncs[0], output_path, save=save)
+    extract_behaviour_sync(syncs[0], output_path, save=save)
     align_with_bpod(session_path)  # checks consistency and compute dt with bpod
     # TODO Extract camera time-stamps
