@@ -27,7 +27,7 @@ class Reader:
         else:
             self.file_meta_data = file_meta_data
             self.meta = read_meta_data(file_meta_data)
-            if self.nc * self.ns * 2 != self.nbytes:
+            if not np.isclose(self.nc * self.ns * 2, self.nbytes):
                 logger_.warning(str(sglx_file) + " : meta data and filesize do not checkout")
             self.gain_channels = _gain_channels_from_meta(self.meta)
             self.memmap = np.memmap(sglx_file, dtype='int16', mode='r', shape=(self.ns, self.nc))
