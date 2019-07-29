@@ -102,13 +102,17 @@ def _compress(root_data_folder, command, flag_pattern, dry=False, max_sessions=N
             flags.write_flag_file(ses_path.joinpath('register_me.flag'), file_list=cfile.stem)
 
 
-def qc_ephys(root_data_folder, dry=False, max_sessions=10):
+def qc_ephys(root_data_folder, dry=False, max_sessions=10, force=False):
     qcflags = Path(root_data_folder).rglob('qc_ephys.flag')
+    c = 0
     for qcflag in qcflags:
         session_path = qcflag.parent
+        c += 1
+        if c >= max_sessions:
+            return
         if dry:
             print(qcflag.parent)
             continue
-        qc_files = ephysqc.qc_session(session_path, dry=dry)
+        qc_files = ephysqc.qc_session(session_path, dry=dry, force=force)
         qcflag.unlink()
         flags.write_flag_file(session_path.joinpath('register_me.flag'), file_list=qc_files)
