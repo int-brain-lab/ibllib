@@ -1,4 +1,3 @@
-## First perform the computation
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -8,21 +7,17 @@ import seaborn as sns
 from ibllib.ephys import ephysqc
 import alf.io
 
-## Crunch
-fbin = Path('/datadisk/Data/FlatIron/ephys/mainenlab/FC034/FC034_g0_t0.imec.lf.bin')
-ephysqc.extract_rmsmap(fbin)  # make sure you send a path for the time being and not a string
 
-## Then plote
 def _plot_spectra(outpath, typ, savefig=True):
     spec = alf.io.load_object(outpath, '_spikeglx_ephysQcTime' + typ.upper())
 
     sns.set_style("whitegrid")
-    fig = plt.figure(figsize=[9, 4.5]);
+    plt.figure(figsize=[9, 4.5])
     ax = plt.axes()
     ax.plot(spec['freq'], 20 * np.log10(spec['power'] + 1e-14),
             linewidth=0.5, color=[0.5, 0.5, 0.5])
     ax.plot(spec['freq'], 20 * np.log10(np.median(spec['power'] + 1e-14, axis=1)), label='median')
-    ax.set_xlabel(r'Frequency (Hz)');
+    ax.set_xlabel(r'Frequency (Hz)')
     ax.set_ylabel(r'dB rel to $V^2.$Hz$^{-1}$')
     if typ == 'ap':
         ax.set_ylim([-275, -125])
@@ -34,8 +29,8 @@ def _plot_spectra(outpath, typ, savefig=True):
 
 
 def _plot_rmsmap(outfil, typ, savefig=True):
-    rmsmap= alf.io.load_object(outpath, '_spikeglx_ephysQcTime' + typ.upper())
-    fig = plt.figure(figsize=[12, 4.5]);
+    rmsmap = alf.io.load_object(outpath, '_spikeglx_ephysQcTime' + typ.upper())
+    plt.figure(figsize=[12, 4.5])
     axim = plt.axes([0.2, 0.1, 0.7, 0.8])
     axrms = plt.axes([0.05, 0.1, 0.15, 0.8])
     axcb = plt.axes([0.92, 0.1, 0.02, 0.8])
@@ -44,11 +39,12 @@ def _plot_rmsmap(outfil, typ, savefig=True):
     axrms.set_ylim(0, rmsmap['rms'].shape[1])
 
     im = axim.imshow(20 * np.log10(rmsmap['rms'].T + 1e-15), aspect='auto', origin='lower',
-                   extent=[rmsmap['times'][0], rmsmap['times'][-1], 0, rmsmap['rms'].shape[1]])
-    axim.set_xlabel(r'Time (s)'); axim.set_ylabel(r'Channel Number');
+                     extent=[rmsmap['times'][0], rmsmap['times'][-1], 0, rmsmap['rms'].shape[1]])
+    axim.set_xlabel(r'Time (s)')
+    axim.set_ylabel(r'Channel Number')
     plt.colorbar(im, cax=axcb)
     if typ == 'ap':
-        im.set_clim( -110, -90)
+        im.set_clim(-110, -90)
         axrms.set_xlim(100, 0)
     elif typ == 'lf':
         im.set_clim(-100, -60)
@@ -57,7 +53,11 @@ def _plot_rmsmap(outfil, typ, savefig=True):
     if savefig:
         plt.savefig(outpath / (typ + '_rms.png'), dpi=150)
 
-typ = 'lf'
-outpath = fbin.parent
-_plot_spectra(outpath, typ)
-_plot_rmsmap(outpath, typ)
+
+if __name__ == "__main__":
+    fbin = Path('/datadisk/Data/FlatIron/ephys/mainenlab/FC034/FC034_g0_t0.imec.lf.bin')
+    ephysqc.extract_rmsmap(fbin)  # make sure you send a path for the time being and not a string
+    typ = 'lf'
+    outpath = fbin.parent
+    _plot_spectra(outpath, typ)
+    _plot_rmsmap(outpath, typ)
