@@ -30,6 +30,11 @@ class TestsAlfPartsFilters(unittest.TestCase):
         self.assertTrue(alf.io.exists(self.tmpdir, 'neuveux', glob='*.toto.*'))
         c = alf.io.load_object(self.tmpdir, 'neuveux', glob='*.toto.*')
         self.assertEqual(set(c.keys()), set([k for k in b.keys() if k.endswith('toto')]))
+        # test with the short keys
+        a = alf.io.load_object(self.tmpdir, 'neuveux', glob=['titi'])
+        self.assertTrue(set(a.keys()) == set(['riri.tutu.titi', 'fifi.tutu.titi']))
+        a = alf.io.load_object(self.tmpdir, 'neuveux', glob=['titi'], short_keys=True)
+        self.assertTrue(set(a.keys()) == set(['riri', 'fifi']))
 
     def tearDown(self) -> None:
         shutil.rmtree(self.tmpdir)

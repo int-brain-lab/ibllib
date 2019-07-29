@@ -153,7 +153,7 @@ def exists(alfpath, object, attributes=None, glob='.*'):
     return set(attributes).issubset(set(attributes_found))
 
 
-def load_object(alfpath, object=None, glob='.*'):
+def load_object(alfpath, object=None, glob='.*', short_keys=False):
     """
     Reads all files (ie. attributes) sharing the same object.
     For example, if the file provided to the function is `spikes.times`, the function will
@@ -165,10 +165,15 @@ def load_object(alfpath, object=None, glob='.*'):
     :param alfpath: any alf file pertaining to the object OR directory containing files
     :param object: if a directory is provided, need to specify the name of object to load
     :param glob: a file filter string like one used in glob: "*.amps.*" for example
+    :param short_keys: by default, the output dictionary keys will be compounds of attributes and
+     any eventual parts separated by a dot. Use True to shorten the keys to the bare attribute.
     :return: a dictionary of all attributes pertaining to the object
 
     example: spikes = ibllib.io.alf.load_object('/path/to/my/alffolder/', 'spikes')
     """
+    # prepare the glob input argument if it's a list
+    if isinstance(glob, list):
+        glob = '*.' + '.'.join(glob) + '*'
     files_alf, attributes = _ls(alfpath, object, glob=glob)
     OUT = Bunch({})
     # load content for each file
@@ -193,6 +198,10 @@ def load_object(alfpath, object=None, glob='.*'):
     if status != 0:
         logger_.warning('Inconsistent dimensions for object:' + object +
                         str([(k, v.shape) for k, v in OUT.items()]))
+    if short_keys:
+        for k in OUT:
+            if k != k.split('.')[0]:
+                OUT[k.split('.')[0]] = OUT.pop(k)
     return OUT
 
 
