@@ -261,6 +261,7 @@ class ONE(OneAbstract):
         dataset_types = [dataset_types] if isinstance(dataset_types, str) else dataset_types
         if not dataset_types:
             dclass_output = True
+            # a blind download of all dataset types restricts to the alf folder whithin a session
             dataset_types = [d['dataset_type'] for d in ses['data_dataset_session_related']
                              if d['data_url'] and 'alf' in Path(d['data_url']).parts]
         dc = SessionDataInfo.from_session_details(ses, dataset_types=dataset_types, eid=eid_str)
