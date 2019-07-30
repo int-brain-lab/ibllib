@@ -80,9 +80,9 @@ ONE.setup() # For first time use, need to define connection credentials
 ```
 
 **_Note_**:
--   you can access a python terminal from a shell terminal by typing the command `python` in the ibllibenv virtual environment)
+-   you can access a python terminal from a shell terminal by typing the command `python` in the ibllibenv virtual environment) For an `ipython` console, `pip install ipython` in the environment.
 -   To run with _Spyder_, link the Python Interpreter to the virtual environment you created.
--   To run with _Jupyter_, type in the command `jupyter notebook` with your virtual environment activated as above
+-   To run with _Jupyter_, type in the command `jupyter notebook` with your virtual environment activated as above (`pip install jupyter` will install jupyter if it's not already available).
 
 
 You will be asked to enter the following information:
