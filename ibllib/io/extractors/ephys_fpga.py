@@ -1,13 +1,14 @@
 import logging
-import tempfile
 from pathlib import Path
 
 import numpy as np
 import matplotlib.pyplot as plt
 
-import ibllib.plots as plots
 import brainbox.behavior.wheel as whl
-import ibllib.io
+from brainbox.core import Bunch
+
+import ibllib.plots as plots
+import ibllib.io.spikeglx
 import ibllib.dsp as dsp
 import alf.io
 
@@ -42,22 +43,63 @@ for aux in AUXES:
         SYNC_CHANNEL_MAP[aux[1]] = aux[0]
 
 
-def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False):
+def _get_ephys_files(session_path):
+    """
+    From an arbitrary folder (usually session folder) gets the ap and lf files and labels
+    Associated to the subfolders where they are
+    the expected folder tree is:
+    ├── raw_ephys_data
+    │   ├── probe_left
+    │   │   ├── _iblrig_ephysData.raw_g0_t0.imec.ap.bin
+    │   │   ├── _iblrig_ephysData.raw_g0_t0.imec.ap.meta
+    │   │   ├── _iblrig_ephysData.raw_g0_t0.imec.lf.bin
+    │   │   ├── _iblrig_ephysData.raw_g0_t0.imec.lf.meta
+    │   └── probe_right
+    │       ├── cluster_KSLabel.tsv
+    │       ├── _iblrig_ephysData.raw_g0_t0.imec.ap.bin
+    │       ├── _iblrig_ephysData.raw_g0_t0.imec.ap.meta
+    │       ├── _iblrig_ephysData.raw_g0_t0.imec.lf.bin
+    │       ├── _iblrig_ephysData.raw_g0_t0.imec.lf.meta
+
+    :param session_path: folder, string or pathlib.Path
+    :returns: a list of dictionaries with keys 'ap': apfile, 'lf': lffile and 'label'
+    """
+    ephys_files = []
+    for raw_ephys_apfile in Path(session_path).rglob('*.ap.bin'):
+        # first get the ap file
+        ephys_files.extend([Bunch({'label': None, 'ap': None, 'lf': None})])
+        ephys_files[-1].ap = raw_ephys_apfile
+        # then get the corresponding lf file if it exists
+        lf_file = raw_ephys_apfile.parent / raw_ephys_apfile.name.replace('.ap.', '.lf.')
+        if lf_file.exists():
+            ephys_files[-1].lf = lf_file
+        # finally, the label is the current directory except if it is bare in raw_ephys_data
+        if raw_ephys_apfile.parts[-2] != 'raw_ephys_data':
+            ephys_files[-1].label = raw_ephys_apfile.parts[-2]
+    return ephys_files
+
+
+def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
     """
     Extracts sync.times, sync.channels and sync.polarities from binary ephys dataset
 
     :param raw_ephys_apfile: bin file containing ephys data or spike
-    :param out_dir: output directory
+    :param output_path: output directory
+    :param save: bool write to disk only if True
+    :param parts: string or list of strings that will be appended to the filename before extension
     :return:
     """
-    if not output_path:
-        file_ftcp = tempfile.TemporaryFile()
-    else:
-        file_ftcp = Path(output_path) / 'fronts_times_channel_polarity.bin'
+    # handles input argument: support ibllib.io.spikeglx.Reader, str and pathlib.Path
     if isinstance(raw_ephys_apfile, ibllib.io.spikeglx.Reader):
         sr = raw_ephys_apfile
     else:
+        raw_ephys_apfile = Path(raw_ephys_apfile)
         sr = ibllib.io.spikeglx.Reader(raw_ephys_apfile)
+    # if no output, need a temp folder to swap for big files
+    if not output_path:
+        output_path = raw_ephys_apfile.parent
+    file_ftcp = Path(output_path) / 'fronts_times_channel_polarity.bin'
+
     # loop over chunks of the raw ephys file
     wg = dsp.WindowGenerator(sr.ns, SYNC_BATCH_SIZE_SAMPLES, overlap=1)
     fid_ftcp = open(file_ftcp, 'wb')
@@ -77,7 +119,7 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False):
             'channels': tim_chan_pol[:, 1],
             'polarities': tim_chan_pol[:, 2]}
     if save:
-        alf.io.save_object_npy(output_path, sync, '_spikeglx_sync')
+        alf.io.save_object_npy(output_path, sync, '_spikeglx_sync', parts=parts)
     return sync
 
 
@@ -356,29 +398,52 @@ def align_with_bpod(session_path):
     return np.median(dt)
 
 
-def extract_all(session_path, save=False, version=None):
+def extract_sync(session_path, save=False, force=False):
     """
-    Reads ephys binary file and extract sync, wheel and behaviour ALF files
+    Reads ephys binary file (s) and extract sync
 
     :param session_path: '/path/to/subject/yyyy-mm-dd/001'
     :param save: Bool, defaults to False
-    :param version: bpod version, defaults to None
-    :return: None
+    :param force: Bool on re-extraction, forces overwrite instead of loading existing sync files
+    :return: list of sync dictionaries
     """
     session_path = Path(session_path)
     output_path = session_path / 'alf'
     raw_ephys_path = session_path / 'raw_ephys_data'
     if not output_path.exists():
         output_path.mkdir()
+    ephys_files = _get_ephys_files(raw_ephys_path)
+    syncs = []
+    for ephys_file in ephys_files:
+        glob_filter = '*' + ephys_file.label + '*'
+        file_exists = alf.io.exists(output_path, object='_spikeglx_sync', glob=glob_filter)
+        if not force and file_exists:
+            _logger.warning('Skipping: spike GLX sync found for probe: ' + ephys_file.label)
+            sync = alf.io.load_object(output_path, object='_spikeglx_sync', glob=glob_filter)
+        else:
+            sr = ibllib.io.spikeglx.Reader(ephys_file.ap)
+            sync = _sync_to_alf(sr, output_path, save=save, parts=ephys_file.label)
+        syncs.extend([sync])
+    return syncs
 
-    ephys_files = list(raw_ephys_path.rglob('*.ap.bin'))
-    if len(ephys_files) > 2:
-        raise NotImplementedError("Multiple probes/files extraction not implemented. Contact us !")
-    # TODO Extract channel maps from meta-data
-    raw_ephys_apfile = ephys_files[0]
-    sr = ibllib.io.spikeglx.Reader(raw_ephys_apfile)
-    sync = _sync_to_alf(sr, output_path, save=save)
-    # TODO Extract camera time-stamps
-    extract_wheel_sync(sync, output_path, save=save)
-    extract_behaviour_sync(sync, output_path, save=save)
+
+def extract_all(session_path, save=False):
+    """
+    For the IBL ephys task, reads ephys binary file and extract:
+        -   sync
+        -   wheel
+        -   behaviour
+        -   video time stamps
+    :param session_path: '/path/to/subject/yyyy-mm-dd/001'
+    :param save: Bool, defaults to False
+    :param version: bpod version, defaults to None
+    :return: None
+    """
+    output_path = session_path / 'alf'
+    syncs = extract_sync(session_path, save=False)
+    if isinstance(syncs, list) and len(syncs) > 1:
+        raise NotImplementedError('Task extraction of multiple probes not ready, contact us !')
+    extract_wheel_sync(syncs[0], output_path, save=save)
+    extract_behaviour_sync(syncs[0], output_path, save=save)
     align_with_bpod(session_path)  # checks consistency and compute dt with bpod
+    # TODO Extract camera time-stamps
