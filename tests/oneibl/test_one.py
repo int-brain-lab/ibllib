@@ -160,7 +160,7 @@ class TestLoad(unittest.TestCase):
         # Test with a session that doesn't have any dataset on the Flat Iron
         one = self.One
         eid = self.eid
-        dataset_types = ['wheel.velocity', 'wheel.timestamps']
+        dataset_types = ['wheel.velocity', 'passiveTrials.included']
         a, b = one.load(eid, dataset_types=dataset_types)
         self.assertTrue(a is None and b is None)
 
