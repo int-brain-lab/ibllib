@@ -27,7 +27,7 @@ class Reader:
         else:
             self.file_meta_data = file_meta_data
             self.meta = read_meta_data(file_meta_data)
-            if self.nc * self.ns * 2 != self.nbytes:
+            if not np.isclose(self.nc * self.ns * 2, self.nbytes):
                 logger_.warning(str(sglx_file) + " : meta data and filesize do not checkout")
             self.gain_channels = _gain_channels_from_meta(self.meta)
             self.memmap = np.memmap(sglx_file, dtype='int16', mode='r', shape=(self.ns, self.nc))
@@ -67,14 +67,14 @@ class Reader:
         """ :return: number of channels """
         if not self.meta:
             return
-        return int(sum(self.meta.get('snsApLfSy')))
+        return np.int64(sum(self.meta.get('snsApLfSy')))
 
     @property
     def ns(self):
         """ :return: number of samples """
         if not self.meta:
             return
-        return int(self.meta.get('fileTimeSecs') * self.fs)
+        return np.int64(np.round(self.meta.get('fileTimeSecs') * self.fs))
 
     def read_samples(self, first_sample=0, last_sample=10000):
         """
