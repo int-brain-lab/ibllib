@@ -7,10 +7,26 @@
     -   **Windows** : Download and install Git from here: https://github.com/git-for-windows/git/releases/ .
 
 2. Activate/install your target Python 3.6 or greater environment. For example on Linux:
+
+**Linux:**
 ```
+cd ibllib/
 virtualenv iblenv --python=python3.7
-source ./iblenv/bin/activate
+source ./venv/bin/activate
 ```
+
+**Windows:**
+```
+conda create -n iblenv python=3.7
+conda activate iblenv
+```
+
+**Mac OS:**
+```
+conda create -n iblenv python=3.7 anaconda
+source activate iblenv
+```
+
 
 3. Clone the ibllib repository and install ibllib in place:
 ```

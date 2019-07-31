@@ -291,17 +291,20 @@ def get_feedback_times_ge5(session_path, data=False):
     if not data:
         data = raw.load_data(session_path)
 
-    rw_times, err_sound_times = [np.zeros([len(data), 1]) for _ in range(2)]
+    rw_times, err_sound_times, merge = [np.zeros([len(data), ]) for _ in range(3)]
     for ind, tr in enumerate(data):
-        st = np.array(tr['behavior_data']['Events timestamps']['BNC2High'])
+        st = getattr(tr['behavior_data']['Events timestamps'], 'BNC2High',
+                     np.array([np.nan, np.nan]))
         # xonar soundcard duplicates events, remove consecutive events too close together
         st = np.delete(st, np.where(np.diff(st) < 0.020)[0] + 1)
         rw_times[ind] = tr['behavior_data']['States timestamps']['reward'][0][0]
         # get the error sound only if the reward is nan
         err_sound_times[ind] = st[-1] if st.size >= 2 and np.isnan(rw_times[ind]) else np.nan
+    merge *= np.nan
+    merge[~np.isnan(rw_times)] = rw_times[~np.isnan(rw_times)]
+    merge[~np.isnan(err_sound_times)] = err_sound_times[~np.isnan(err_sound_times)]
 
-    merge = np.c_[rw_times, err_sound_times]
-    return merge[~np.isnan(merge)]
+    return merge
 
 
 def get_feedback_times(session_path, save=False, data=False, settings=False):
