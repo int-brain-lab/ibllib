@@ -196,8 +196,8 @@ def load_object(alfpath, object=None, glob='.*', short_keys=False):
                 OUT[att + 'metadata'] = meta
     status = check_dimensions(OUT)
     if status != 0:
-        logger_.warning('Inconsistent dimensions for object:' + object +
-                        str([(k, v.shape) for k, v in OUT.items()]))
+        logger_.warning('Inconsistent dimensions for object:' + object + '\n' +
+                        '\n'.join([f'{v.shape},    {k}' for k, v in OUT.items()]))
     if short_keys:
         for k in OUT:
             if k != k.split('.')[0]:
