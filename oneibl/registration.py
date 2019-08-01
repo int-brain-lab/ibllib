@@ -13,6 +13,12 @@ import ibllib.io.flags as flags
 from oneibl.one import ONE
 
 logger_ = logging.getLogger('ibllib.alf')
+REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
+                              'raw_behavior_data/**/_iblrig_*.*',
+                              'raw_video_data/**/_iblrig_*.*',
+                              'raw_video_data/**/_ibl_*.*',
+                              'raw_ephys_data/**/_iblrig_*.*',
+                              'raw_ephys_data/**/_spikeglx_*.*']
 
 
 # this is a decorator to add a logfile to each extraction and registration on top of the logging
@@ -131,25 +137,14 @@ class RegistrationClient:
 
         username = user['username'] if user else subject['responsible_user']
 
-        # load the trials data to get information about session duration
+        # load the trials data to get information about session duration and performance
         ses_data = raw.load_data(ses_path)
-        ses_duration_secs = _get_session_duration(ses_path, ses_data)
-
-        start_time = ibllib.time.isostr2date(md['SESSION_DATETIME'])
-        end_time = start_time + datetime.timedelta(seconds=ses_duration_secs)
+        start_time, end_time = _get_session_times(ses_path, md, ses_data)
+        n_trials, n_correct_trials = _get_session_performance(md, ses_data)
 
         # this is the generic relative path: subject/yyyy-mm-dd/NNN
         gen_rel_path = Path(subject['nickname'], md['SESSION_DATE'],
                             '{0:03d}'.format(int(md['SESSION_NUMBER'])))
-
-        # checks that the number of actual trials and labeled number of trials check out
-        assert(len(ses_data) == ses_data[-1]['trial_num'])
-
-        # task specific logic
-        if 'habituationChoiceWorld' in md['PYBPOD_PROTOCOL']:
-            n_correct_trials = 0
-        else:
-            n_correct_trials = ses_data[-1]['ntrials_correct']
 
         # if nothing found create a new session in Alyx
         if not session:
@@ -163,9 +158,9 @@ class RegistrationClient:
                     'task_protocol': md['PYBPOD_PROTOCOL'] + md['IBLRIG_VERSION_TAG'],
                     'number': md['SESSION_NUMBER'],
                     'start_time': ibllib.time.date2isostr(start_time),
-                    'end_time': ibllib.time.date2isostr(end_time),
+                    'end_time': ibllib.time.date2isostr(end_time) if end_time else None,
                     'n_correct_trials': n_correct_trials,
-                    'n_trials': ses_data[-1]['trial_num'],
+                    'n_trials': n_trials,
                     'json': json.dumps(md, indent=1),
                     }
             session = self.one.alyx.rest('sessions', 'create', data=ses_)
@@ -181,7 +176,7 @@ class RegistrationClient:
 
         logger_.info(session['url'] + ' ')
         # create associated water administration if not found
-        if not session['wateradmin_session_related']:
+        if not session['wateradmin_session_related'] and ses_data:
             wa_ = {
                 'subject': subject['nickname'],
                 'date_time': ibllib.time.date2isostr(end_time),
@@ -197,7 +192,7 @@ class RegistrationClient:
         # register all files that match the Alyx patterns, warn user when files are encountered
         rename_files_compatibility(ses_path, md['IBLRIG_VERSION_TAG'])
         F = {}  # empty dict whose keys will be relative paths and content filenames
-        for fn in ses_path.glob('**/*.*'):
+        for fn in _glob_session(ses_path):
             if fn.suffix in ['.flag', '.error', '.avi', '.log']:
                 logger_.debug('Excluded: ', str(fn))
                 continue
@@ -288,9 +283,13 @@ def rename_files_compatibility(ses_path, version_tag):
         fn.replace(fn.parent.joinpath('_iblrig_codeFiles.raw.zip'))
 
 
-def _get_session_duration(fn, ses_data):
+def _get_session_times(fn, md, ses_data):
+    """
+    Get session start and end time from the Bpod data
+    """
+    start_time = ibllib.time.isostr2date(md['SESSION_DATETIME'])
     if not ses_data:
-        return
+        return start_time, None
     c = 0
     for sd in reversed(ses_data):
         ses_duration_secs = (sd['behavior_data']['Trial end timestamp'] -
@@ -301,4 +300,32 @@ def _get_session_duration(fn, ses_data):
     if c:
         logger_.warning((f'Trial end timestamps of last {c} trials above 6 hours '
                         f'(most likely corrupt): ') + str(fn))
-    return ses_duration_secs
+    end_time = start_time + datetime.timedelta(seconds=ses_duration_secs)
+    return start_time, end_time
+
+
+def _get_session_performance(md, ses_data):
+    """Get performance about the session from bpod data"""
+    if not ses_data:
+        return None, None
+    n_trials = ses_data[-1]['trial_num']
+    # checks that the number of actual trials and labeled number of trials check out
+    assert (len(ses_data) == n_trials)
+    # task specific logic
+    if 'habituationChoiceWorld' in md['PYBPOD_PROTOCOL']:
+        n_correct_trials = 0
+    else:
+        n_correct_trials = ses_data[-1]['ntrials_correct']
+    return n_trials, n_correct_trials
+
+
+def _glob_session(ses_path):
+    """
+    Glob for files to be registered on an IBL session
+    :param ses_path: pathlib.Path of the session
+    :return: a list of files to potentially be registered
+    """
+    fl = []
+    for gp in REGISTRATION_GLOB_PATTERNS:
+        fl.extend(list(ses_path.glob(gp)))
+    return fl
