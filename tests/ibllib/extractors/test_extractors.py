@@ -22,7 +22,8 @@ class TestExtractTrialData(unittest.TestCase):
         self.training_ge5['ntrials'] = len(raw.load_data(self.training_ge5['path']))
         self.biased_ge5['ntrials'] = len(raw.load_data(self.biased_ge5['path']))
         # turn off logging for unit testing as we will purposedly go into warning/error cases
-        self.wheel_path = self.main_path / 'data' / 'wheel'
+        self.wheel_ge5_path = self.main_path / 'data' / 'wheel_ge5'
+        self.wheel_lt5_path = self.main_path / 'data' / 'wheel_lt5'
         self.logger = logging.getLogger('ibllib').setLevel(50)
 
     def test_get_feedbackType(self):
@@ -521,16 +522,20 @@ class TestExtractTrialData(unittest.TestCase):
         dy = raw._load_encoder_positions_file_ge5(path)
         self.assertTrue(np.all(np.diff(np.array(dy.re_ts)) > 0))
 
-    def test_wheel_folder(self):
+    def test_wheel_folders(self):
         # the wheel folder contains other errors in bpod output that had to be addressed
-        # 2 first samples timestamp AWOL instead of only one
-        wf = self.wheel_path / '_iblrig_encoderPositions.raw.2firstsamples.ssv'
-        df = raw._load_encoder_positions_file_lt5(wf)
-        self.assertTrue(np.all(np.diff(np.array(df.re_ts)) > 0))
-        # corruption in the middle of file
-        wf = self.wheel_path / '_iblrig_encoderEvents.raw.CorruptMiddle.ssv'
-        df = raw._load_encoder_events_file_lt5(wf)
-        self.assertTrue(np.all(np.diff(np.array(df.re_ts)) > 0))
+        for wf in self.wheel_lt5_path.glob('_iblrig_encoderPositions*.raw*.ssv'):
+            df = raw._load_encoder_positions_file_lt5(wf)
+            self.assertTrue(np.all(np.diff(np.array(df.re_ts)) > 0))
+        for wf in self.wheel_lt5_path.glob('_iblrig_encoderEvents*.raw*.ssv'):
+            df = raw._load_encoder_events_file_lt5(wf)
+            self.assertTrue(np.all(np.diff(np.array(df.re_ts)) > 0))
+        for wf in self.wheel_ge5_path.glob('_iblrig_encoderPositions*.raw*.ssv'):
+            df = raw._load_encoder_positions_file_ge5(wf)
+            self.assertTrue(np.all(np.diff(np.array(df.re_ts)) > 0))
+        for wf in self.wheel_ge5_path.glob('_iblrig_encoderEvents*.raw*.ssv'):
+            df = raw._load_encoder_events_file_ge5(wf)
+            self.assertTrue(np.all(np.diff(np.array(df.re_ts)) > 0))
 
     def test_interpolation(self):
         # straight test that it returns an usable function
