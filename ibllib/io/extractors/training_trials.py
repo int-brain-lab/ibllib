@@ -644,23 +644,29 @@ def get_goCueOnset_times(session_path, save=False, data=False, settings=False):
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
 
-    go_cue_times = []
-    for tr in data:
+    go_cue_times = np.zeros([len(data), ])
+    for ind, tr in enumerate(data):
         if get_port_events(tr, 'BNC2'):
-            go_cue_times.append(tr['behavior_data']['Events timestamps']['BNC2High'][0])
+            bnchigh = tr['behavior_data']['Events timestamps'].get('BNC2High', None)
+            if bnchigh:
+                go_cue_times[ind] = bnchigh[0]
+                continue
+            bnclow = tr['behavior_data']['Events timestamps'].get('BNC2Low', None)
+            if bnclow:
+                go_cue_times[ind] = bnclow[0] - 0.1
+                continue
+            go_cue_times[ind] = np.nan
         else:
-            go_cue_times.append(np.nan)
-
-    go_cue_times = np.array(go_cue_times)
+            go_cue_times[ind] = np.nan
 
     nmissing = np.sum(np.isnan(go_cue_times))
     # Check if all stim_syncs have failed to be detected
     if np.all(np.isnan(go_cue_times)):
-        logger_.error(f'{session_path}: Missing ALL BNC1 stimulus ({nmissing} trials')
+        logger_.error(f'{session_path}: Missing ALL BNC2 stimulus ({nmissing} trials')
 
     # Check if any stim_sync has failed be detected for every trial
     if np.any(np.isnan(go_cue_times)):
-        logger_.warning(f'{session_path}: Missing BNC1 stimulus on {nmissing} trials')
+        logger_.warning(f'{session_path}: Missing BNC2 stimulus on {nmissing} trials')
 
     if raw.save_bool(save, '_ibl_trials.goCue_times.npy'):
         check_alf_folder(session_path)
