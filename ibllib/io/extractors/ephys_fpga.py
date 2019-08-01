@@ -400,7 +400,7 @@ def align_with_bpod(session_path):
 
 def extract_sync(session_path, save=False, force=False):
     """
-    Reads ephys binary file (s) and extract sync
+    Reads ephys binary file (s) and extract sync whithin the binary file folder
 
     :param session_path: '/path/to/subject/yyyy-mm-dd/001'
     :param save: Bool, defaults to False
@@ -408,21 +408,18 @@ def extract_sync(session_path, save=False, force=False):
     :return: list of sync dictionaries
     """
     session_path = Path(session_path)
-    output_path = session_path / 'alf'
     raw_ephys_path = session_path / 'raw_ephys_data'
-    if not output_path.exists():
-        output_path.mkdir()
-    ephys_files = _get_ephys_files(raw_ephys_path)
+    ephys_files_info = _get_ephys_files(raw_ephys_path)
     syncs = []
-    for ephys_file in ephys_files:
-        glob_filter = '*' + ephys_file.label + '*'
-        file_exists = alf.io.exists(output_path, object='_spikeglx_sync', glob=glob_filter)
+    for efi in ephys_files_info:
+        glob_filter = '*' + efi.label + '*'
+        file_exists = alf.io.exists(efi.ap.parent, object='_spikeglx_sync', glob=glob_filter)
         if not force and file_exists:
-            _logger.warning('Skipping: spike GLX sync found for probe: ' + ephys_file.label)
-            sync = alf.io.load_object(output_path, object='_spikeglx_sync', glob=glob_filter)
+            _logger.warning('Skipping: spike GLX sync found for probe: ' + efi.label)
+            sync = alf.io.load_object(efi.ap.parent, object='_spikeglx_sync', glob=glob_filter)
         else:
-            sr = ibllib.io.spikeglx.Reader(ephys_file.ap)
-            sync = _sync_to_alf(sr, output_path, save=save, parts=ephys_file.label)
+            sr = ibllib.io.spikeglx.Reader(efi.ap)
+            sync = _sync_to_alf(sr, efi.ap.parent, save=save, parts=efi.label)
         syncs.extend([sync])
     return syncs
 
@@ -439,11 +436,11 @@ def extract_all(session_path, save=False):
     :param version: bpod version, defaults to None
     :return: None
     """
-    output_path = session_path / 'alf'
+    alf_path = session_path / 'alf'
     syncs = extract_sync(session_path, save=False)
     if isinstance(syncs, list) and len(syncs) > 1:
         raise NotImplementedError('Task extraction of multiple probes not ready, contact us !')
-    extract_wheel_sync(syncs[0], output_path, save=save)
-    extract_behaviour_sync(syncs[0], output_path, save=save)
+    extract_wheel_sync(syncs[0], alf_path, save=save)
+    extract_behaviour_sync(syncs[0], alf_path, save=save)
     align_with_bpod(session_path)  # checks consistency and compute dt with bpod
-    # TODO Extract camera time-stamps
+    # TODO get camera time-stamps

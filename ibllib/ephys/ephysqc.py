@@ -99,13 +99,13 @@ def extract_rmsmap(fbin, out_folder=None, force=False, label=''):
 
 def qc_session(session_path, dry=False, force=False):
     """
-    Wrapper that exectutes QC from a session folder and outputs the results in an alf folder
+    Wrapper that exectutes QC from a session folder and outputs the results whithin the same folder
+    as the original raw data.
     :param session_path: path of the session (Subject/yyyy-mm-dd/number
     :param dry: bool (False) Dry run if True
     :param force: bool (False) Force means overwriting an existing QC file
     :return: None
     """
-    alf_folder = session_path / 'alf'
     efiles = ephys_fpga._get_ephys_files(session_path)
     for efile in efiles:
         if dry:
@@ -113,6 +113,6 @@ def qc_session(session_path, dry=False, force=False):
             print(efile.lf)
             continue
         if efile.ap and efile.ap.exists():
-            extract_rmsmap(efile.ap, out_folder=alf_folder, force=force, label=efile.label)
+            extract_rmsmap(efile.ap, out_folder=None, force=force, label=efile.label)
         if efile.lf and efile.lf.exists():
-            extract_rmsmap(efile.lf, out_folder=alf_folder, force=force, label=efile.label)
+            extract_rmsmap(efile.lf, out_folder=None, force=force, label=efile.label)
