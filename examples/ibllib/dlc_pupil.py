@@ -22,16 +22,14 @@ def fit_circle(x,y):
     R_1       = np.mean(Ri_1)
     return xc_1, yc_1, R_1
 
-def pupil_features(segments):
-    x = np.zeros(len(segments['pupil_top_r_x']))
-    y = np.zeros(len(segments['pupil_top_r_x']))
-    diameter = np.zeros(len(segments['pupil_top_r_x']))
-    for i in range(len(segments['pupil_top_r_x'])):
+def pupil_features(vec_x, vec_y):
+    x = np.zeros(len(vec_x[0]))
+    y = np.zeros(len(vec_x[0]))
+    diameter = np.zeros(len(vec_x[0]))
+    for i in range(len(vec_x[0])):
         try:
-            x[i], y[i], R = fit_circle([segments['pupil_left_r_x'], segments['pupil_top_r_x'], \
-                                               segments['pupil_right_r_x'], segments['pupil_bottom_r_x']], \
-                                                [segments['pupil_left_r_y'], segments['pupil_top_r_y'], \
-                                               segments['pupil_right_r_y'], segments['pupil_bottom_r_y']])
+            x[i], y[i], R = fit_circle([vec_x[0][i], vec_x[1][i], vec_x[2][i], vec_x[3][i]], \
+                                     [vec_y[0][i], vec_y[1][i], vec_y[2][i], vec_y[3][i]])                    
             diameter[i] = R*2
         except:
             x[i] = np.nan
