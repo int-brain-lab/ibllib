@@ -6,7 +6,7 @@ from oneibl.one import ONE
 import alf.io as ioalf
 import ibllib.plots as iblplt
 
-from brainbox.misc import bincount2D
+from brainbox.processing import bincount2D
 
 T_BIN = 0.01
 
