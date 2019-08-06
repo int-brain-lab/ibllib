@@ -13,7 +13,7 @@ class TestProcessing(unittest.TestCase):
         samples = times**3
         # Use cubic interpolation to resample to uniform interval
         cubes = core.TimeSeries(times=times, values=samples, columns=('cubic',))
-        resamp = processing.sync(0.1, cubes, interp='cubic', fillval='extrapolate')
+        resamp = processing.sync(0.1, timeseries=cubes, interp='cubic', fillval='extrapolate')
         # Check that the sync function is returning a new time series object
         self.assertTrue(isinstance(resamp, core.TimeSeries))
         # Test that all returned sample times are uniformly spaced
@@ -29,7 +29,8 @@ class TestProcessing(unittest.TestCase):
         samples2 = times2**2
         squares = core.TimeSeries(times=times2, values=samples2, columns=('square',))
         # Use cubic interpolation again, this time on both timeseries
-        resamp2 = processing.sync(0.1, [squares, cubes], interp='cubic', fillval='extrapolate')
+        resamp2 = processing.sync(0.1, timeseries=[squares, cubes], interp='cubic',
+                                  fillval='extrapolate')
         # Check that the new TS has both squares and cubes as keys and attribs
         self.assertTrue(hasattr(resamp2, 'cubic'))
         self.assertTrue(hasattr(resamp2, 'square'))
