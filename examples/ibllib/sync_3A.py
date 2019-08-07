@@ -1,9 +1,13 @@
 from pathlib import Path
+
+import matplotlib.pyplot as plt
 import numpy as np
 
-from brainbox.core import Bunch
 import alf.io
-from ibllib.io.extractors.ephys_fpga import SYNC_CHANNEL_MAP, _get_ephys_files, _get_sync_fronts
+from brainbox.core import Bunch
+from ibllib.io.extractors.ephys_fpga import (SYNC_CHANNEL_MAP,
+                                             _get_ephys_files,
+                                             _get_sync_fronts)
 
 FS = 30000
 
@@ -22,7 +26,7 @@ for ind, ephys_file in enumerate(ephys_files):
     lc = _get_sync_fronts(sync, SYNC_CHANNEL_MAP['left_camera'])['times']
     rc = _get_sync_fronts(sync, SYNC_CHANNEL_MAP['right_camera'])['times']
     bc = _get_sync_fronts(sync, SYNC_CHANNEL_MAP['body_camera'])['times']
-    if ind==0:
+    if ind == 0:
         d['left_camera'] = np.zeros((lc.size, nprobes))
         d['right_camera'] = np.zeros((rc.size, nprobes))
         d['body_camera'] = np.zeros((bc.size, nprobes))
@@ -37,8 +41,6 @@ dlc = np.diff(d['left_camera'], axis=1)
 drc = np.diff(d['right_camera'], axis=1)
 dbc = np.diff(d['body_camera'], axis=1)
 
-import matplotlib.pyplot as plt
 plt.plot(d.left_camera[:, iref], dlc)
-
 
 slope = np.polyfit(d.left_camera[:, iref], dlc, 1)[0]
