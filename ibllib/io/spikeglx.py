@@ -27,7 +27,7 @@ class Reader:
         else:
             self.file_meta_data = file_meta_data
             self.meta = read_meta_data(file_meta_data)
-            if not np.isclose(self.nc * self.ns * 2, self.nbytes):
+            if self.nc * self.ns * 2 != self.nbytes:
                 logger_.warning(str(sglx_file) + " : meta data and filesize do not checkout")
             self.gain_channels = _gain_channels_from_meta(self.meta)
             self.memmap = np.memmap(sglx_file, dtype='int16', mode='r', shape=(self.ns, self.nc))
@@ -67,14 +67,14 @@ class Reader:
         """ :return: number of channels """
         if not self.meta:
             return
-        return np.int64(sum(self.meta.get('snsApLfSy')))
+        return int(sum(self.meta.get('snsApLfSy')))
 
     @property
     def ns(self):
         """ :return: number of samples """
         if not self.meta:
             return
-        return np.int64(np.round(self.meta.get('fileTimeSecs') * self.fs))
+        return int(self.meta.get('fileTimeSecs') * self.fs)
 
     def read_samples(self, first_sample=0, last_sample=10000):
         """
@@ -142,13 +142,16 @@ def read_meta_data(md_file):
     for a in md.splitlines():
         k, v = a.split('=')
         # if all numbers, try to interpret the string
-        if v and re.fullmatch('[0-9,.]*', v):
-            v = [float(val) for val in v.split(',')]
-            # scalars should not be nested
-            if len(v) == 1:
-                v = v[0]
-        # tildes in keynames removed
-        d[k.replace('~', '')] = v
+        try:
+            if v and re.fullmatch('[0-9,.]*', v):
+                v = [float(val) for val in v.split(',')]
+                # scalars should not be nested
+                if len(v) == 1:
+                    v = v[0]
+            # tildes in keynames removed
+            d[k.replace('~', '')] = v
+        except BaseException:
+            pass
     return d
 
 
