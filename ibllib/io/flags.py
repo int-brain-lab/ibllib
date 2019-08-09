@@ -7,7 +7,7 @@ import logging
 
 logger_ = logging.getLogger('ibllib')
 
-FLAGS = [
+FLAG_FILE_NAMES = [
     'transfer_me.flag', 'extract_me.flag', 'register_me.flag', 'flatiron.flag',
     'extract_me.error', 'register_me.error', 'create_me.flag', 'compress_video.flag',
     'compress_audio.flag', 'extract_ephys.flag',
