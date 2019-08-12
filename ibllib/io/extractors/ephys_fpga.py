@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+import json
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -7,6 +8,7 @@ import matplotlib.pyplot as plt
 import brainbox.behavior.wheel as whl
 from brainbox.core import Bunch
 
+import ibllib.ephys.neuropixel as neuropixel
 import ibllib.plots as plots
 import ibllib.io.spikeglx
 import ibllib.dsp as dsp
@@ -19,6 +21,7 @@ WHEEL_RADIUS_CM = 3.1
 WHEEL_TICKS = 1024
 DEBUG_PLOTS = False
 # this is the mapping of synchronisation pulses coming out of the FPGA
+
 AUXES = [
     (0, None),
     (1, None),
@@ -41,6 +44,42 @@ SYNC_CHANNEL_MAP = {}
 for aux in AUXES:
     if aux[1]:
         SYNC_CHANNEL_MAP[aux[1]] = aux[0]
+
+
+def get_hardware_config(config_file):
+    """
+    Reads the neuropixel_settings.json file containing sync mapping and parameters
+    :param config_file: folder or json file
+    :return: dictionary or None
+    """
+    config_file = Path(config_file)
+    if config_file.is_dir():
+        config_file = config_file / 'neuropixel_settings.json'
+    if not config_file.exists():
+        _logger.warning(f"No neuropixel_settings.json file found in {str(config_file)}")
+        return
+    with open(config_file) as fid:
+        par = json.loads(fid.read())
+    return par
+
+
+def _sync_map_from_hardware_config(hardware_config):
+    """
+    :param hardware_config: dictonary fro json read of neuropixel_settings.json
+    :return: dictionary where key names refer to object and values to sync channel index
+    """
+    sync_map = {hardware_config['SYNC_WIRING'][pin]: neuropixel.SYNC_PIN_OUT[pin] for pin in
+                hardware_config['SYNC_WIRING'] if neuropixel.SYNC_PIN_OUT[pin]}
+    return sync_map
+
+
+def get_sync_map(folder_ephys):
+    hc = get_hardware_config(folder_ephys)
+    if not hc:
+        _logger.warning(f"Uses defaults sync map for {str(folder_ephys)}")
+        return SYNC_CHANNEL_MAP
+    else:
+        return _sync_map_from_hardware_config(hc)
 
 
 def _get_ephys_files(session_path):

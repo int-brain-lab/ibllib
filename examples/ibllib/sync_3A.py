@@ -41,6 +41,8 @@ dlc = np.diff(d['left_camera'], axis=1)
 drc = np.diff(d['right_camera'], axis=1)
 dbc = np.diff(d['body_camera'], axis=1)
 
-plt.plot(d.left_camera[:, iref], dlc)
-
-slope = np.polyfit(d.left_camera[:, iref], dlc, 1)[0]
+# import matplotlib.pyplot as plt
+# plt.plot(d.left_camera[:, iref], dlc)
+#
+#
+# slope = np.polyfit(d.left_camera[:, iref], dlc, 1)[0]
