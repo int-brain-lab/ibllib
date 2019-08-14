@@ -6,20 +6,30 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import List, Union
+# TODO: tests for this module!
 
 log = logging.getLogger('ibllib')
 
 
-def subjects_data_folder(folder: Path) -> Path:
+def subjects_data_folder(folder: Path, rglob: bool = False) -> Path:
     """Given a root_data_folder will try to find a 'Subjects' data folder.
     If Subjects folder is passed will return it directly."""
+    if not isinstance(folder, Path):
+        folder = Path(folder)
+    if rglob:
+        func = folder.rglob
+    else:
+        func = folder.glob
+
     # Try to find Subjects folder one level
     if folder.name.lower() != 'subjects':
         # Try to find Subjects folder if folder.glob
-        spath = [x for x in folder.glob('*') if x.name.lower() == 'subjects']
+        spath = [x for x in func('*') if x.name.lower() == 'subjects']
         if not spath:
+            log.error('No "Subjects" folder in children folders')
             raise(ValueError)
         elif len(spath) > 1:
+            log.error(f'Multiple "Subjects" folder in children folders: {spath}')
             raise(ValueError)
         else:
             folder = folder / spath[0]
