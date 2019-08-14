@@ -67,7 +67,7 @@ class TestsHardwareParameters(unittest.TestCase):
                     'rotary_encoder_0': 13,
                     'rotary_encoder_1': 14,
                     'audio': 15}
-        self.file_json = Path(self.dir) / 'neuropixel_settings.json'
+        self.file_json = Path(self.dir) / 'neuropixel_wirings.json'
         with open(self.file_json, 'w+') as fid:
             fid.write(json.dumps(self.par, indent=1))
 

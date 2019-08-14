@@ -48,15 +48,15 @@ for aux in AUXES:
 
 def get_hardware_config(config_file):
     """
-    Reads the neuropixel_settings.json file containing sync mapping and parameters
+    Reads the neuropixel_wirings.json file containing sync mapping and parameters
     :param config_file: folder or json file
     :return: dictionary or None
     """
     config_file = Path(config_file)
     if config_file.is_dir():
-        config_file = config_file / 'neuropixel_settings.json'
+        config_file = config_file / 'neuropixel_wirings.json'
     if not config_file.exists():
-        _logger.warning(f"No neuropixel_settings.json file found in {str(config_file)}")
+        _logger.warning(f"No neuropixel_wirings.json file found in {str(config_file)}")
         return
     with open(config_file) as fid:
         par = json.loads(fid.read())
@@ -65,7 +65,7 @@ def get_hardware_config(config_file):
 
 def _sync_map_from_hardware_config(hardware_config):
     """
-    :param hardware_config: dictonary fro json read of neuropixel_settings.json
+    :param hardware_config: dictonary from json read of neuropixel_wirings.json
     :return: dictionary where key names refer to object and values to sync channel index
     """
     sync_map = {hardware_config['SYNC_WIRING'][pin]: neuropixel.SYNC_PIN_OUT[pin] for pin in
