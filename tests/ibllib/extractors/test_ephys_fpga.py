@@ -4,6 +4,7 @@ import shutil
 import json
 from pathlib import Path
 
+import ibllib.io.spikeglx
 from ibllib.io.extractors import ephys_fpga
 
 
@@ -22,12 +23,12 @@ class TestsFolderStructure(unittest.TestCase):
 
     def test_get_ephys_files(self):
         # first test at the root directory level, with a string input
-        ephys_files = ephys_fpga._get_ephys_files(self.dir)
+        ephys_files = ibllib.io.spikeglx.glob_ephys_files(self.dir)
         for ef in ephys_files:
             self.assertTrue(ef.label in ['probe_right', 'probe_left'])
             self.assertTrue(ef.ap.exists() and ef.lf.exists())
         # second test at the ephys directory level, with a pathlib.Path input
-        ephys_files = ephys_fpga._get_ephys_files(Path(self.dir) / 'raw_ephys_data')
+        ephys_files = ibllib.io.spikeglx.glob_ephys_files(Path(self.dir) / 'raw_ephys_data')
         for ef in ephys_files:
             self.assertTrue(ef.label in ['probe_right', 'probe_left'])
             self.assertTrue(ef.ap.exists() and ef.lf.exists())

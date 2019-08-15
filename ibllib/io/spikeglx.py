@@ -4,6 +4,8 @@ import re
 
 import numpy as np
 
+from brainbox.core import Bunch
+
 SAMPLE_SIZE = 2  # int16
 DEFAULT_BATCH_SIZE = 1e6
 logger_ = logging.getLogger('ibllib')
@@ -201,3 +203,39 @@ def split_sync(sync_tr):
     out = np.unpackbits(sync_tr.view(np.uint8)).reshape(sync_tr.size, 16)
     out = np.flip(np.roll(out, 8, axis=1), axis=1)
     return np.int8(out)
+
+
+def glob_ephys_files(session_path):
+    """
+    From an arbitrary folder (usually session folder) gets the ap and lf files and labels
+    Associated to the subfolders where they are
+    the expected folder tree is:
+    ├── raw_ephys_data
+    │   ├── probe_left
+    │   │   ├── _iblrig_ephysData.raw_g0_t0.imec.ap.bin
+    │   │   ├── _iblrig_ephysData.raw_g0_t0.imec.ap.meta
+    │   │   ├── _iblrig_ephysData.raw_g0_t0.imec.lf.bin
+    │   │   ├── _iblrig_ephysData.raw_g0_t0.imec.lf.meta
+    │   └── probe_right
+    │       ├── cluster_KSLabel.tsv
+    │       ├── _iblrig_ephysData.raw_g0_t0.imec.ap.bin
+    │       ├── _iblrig_ephysData.raw_g0_t0.imec.ap.meta
+    │       ├── _iblrig_ephysData.raw_g0_t0.imec.lf.bin
+    │       ├── _iblrig_ephysData.raw_g0_t0.imec.lf.meta
+
+    :param session_path: folder, string or pathlib.Path
+    :returns: a list of dictionaries with keys 'ap': apfile, 'lf': lffile and 'label'
+    """
+    ephys_files = []
+    for raw_ephys_apfile in Path(session_path).rglob('*.ap.bin'):
+        # first get the ap file
+        ephys_files.extend([Bunch({'label': None, 'ap': None, 'lf': None})])
+        ephys_files[-1].ap = raw_ephys_apfile
+        # then get the corresponding lf file if it exists
+        lf_file = raw_ephys_apfile.parent / raw_ephys_apfile.name.replace('.ap.', '.lf.')
+        if lf_file.exists():
+            ephys_files[-1].lf = lf_file
+        # finally, the label is the current directory except if it is bare in raw_ephys_data
+        if raw_ephys_apfile.parts[-2] != 'raw_ephys_data':
+            ephys_files[-1].label = raw_ephys_apfile.parts[-2]
+    return ephys_files

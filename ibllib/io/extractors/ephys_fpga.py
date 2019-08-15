@@ -6,13 +6,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import brainbox.behavior.wheel as whl
-from brainbox.core import Bunch
 
 import ibllib.ephys.neuropixel as neuropixel
 import ibllib.plots as plots
 import ibllib.io.spikeglx
 import ibllib.dsp as dsp
 import alf.io
+from ibllib.io.spikeglx import glob_ephys_files
 
 _logger = logging.getLogger('ibllib')
 
@@ -80,42 +80,6 @@ def get_sync_map(folder_ephys):
         return SYNC_CHANNEL_MAP
     else:
         return _sync_map_from_hardware_config(hc)
-
-
-def _get_ephys_files(session_path):
-    """
-    From an arbitrary folder (usually session folder) gets the ap and lf files and labels
-    Associated to the subfolders where they are
-    the expected folder tree is:
-    ├── raw_ephys_data
-    │   ├── probe_left
-    │   │   ├── _iblrig_ephysData.raw_g0_t0.imec.ap.bin
-    │   │   ├── _iblrig_ephysData.raw_g0_t0.imec.ap.meta
-    │   │   ├── _iblrig_ephysData.raw_g0_t0.imec.lf.bin
-    │   │   ├── _iblrig_ephysData.raw_g0_t0.imec.lf.meta
-    │   └── probe_right
-    │       ├── cluster_KSLabel.tsv
-    │       ├── _iblrig_ephysData.raw_g0_t0.imec.ap.bin
-    │       ├── _iblrig_ephysData.raw_g0_t0.imec.ap.meta
-    │       ├── _iblrig_ephysData.raw_g0_t0.imec.lf.bin
-    │       ├── _iblrig_ephysData.raw_g0_t0.imec.lf.meta
-
-    :param session_path: folder, string or pathlib.Path
-    :returns: a list of dictionaries with keys 'ap': apfile, 'lf': lffile and 'label'
-    """
-    ephys_files = []
-    for raw_ephys_apfile in Path(session_path).rglob('*.ap.bin'):
-        # first get the ap file
-        ephys_files.extend([Bunch({'label': None, 'ap': None, 'lf': None})])
-        ephys_files[-1].ap = raw_ephys_apfile
-        # then get the corresponding lf file if it exists
-        lf_file = raw_ephys_apfile.parent / raw_ephys_apfile.name.replace('.ap.', '.lf.')
-        if lf_file.exists():
-            ephys_files[-1].lf = lf_file
-        # finally, the label is the current directory except if it is bare in raw_ephys_data
-        if raw_ephys_apfile.parts[-2] != 'raw_ephys_data':
-            ephys_files[-1].label = raw_ephys_apfile.parts[-2]
-    return ephys_files
 
 
 def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
@@ -448,7 +412,7 @@ def extract_sync(session_path, save=False, force=False):
     """
     session_path = Path(session_path)
     raw_ephys_path = session_path / 'raw_ephys_data'
-    ephys_files_info = _get_ephys_files(raw_ephys_path)
+    ephys_files_info = glob_ephys_files(raw_ephys_path)
     syncs = []
     for efi in ephys_files_info:
         glob_filter = '*' + efi.label + '*'

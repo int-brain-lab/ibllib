@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import alf.io
+import ibllib.io.spikeglx
 from brainbox.core import Bunch
 import ibllib.io.extractors.ephys_fpga as ephys_fpga
 import ibllib.io.spikeglx as spikeglx
@@ -17,7 +18,7 @@ def sync_probe_folders_3A(ses_path):
     :param ses_path:
     :return: None
     """
-    ephys_files = ephys_fpga._get_ephys_files(ses_path)
+    ephys_files = ibllib.io.spikeglx.glob_ephys_files(ses_path)
     nprobes = len(ephys_files)
     assert (nprobes >= 2)
 
