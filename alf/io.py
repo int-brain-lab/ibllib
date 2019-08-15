@@ -41,7 +41,9 @@ def check_dimensions(dico):
     :param dico: dictionary containing data
     :return: status 0 for consistent dimensions, 1 for inconsistent dimensions
     """
-    shapes = [dico[lab].shape for lab in dico if isinstance(dico[lab], np.ndarray)]
+    excluded_attributes = ['timestamps']
+    shapes = [dico[lab].shape for lab in dico if isinstance(dico[lab], np.ndarray) and
+              lab not in excluded_attributes]
     lmax = max([len(s) for s in shapes])
     for l in range(lmax):
         sh = np.array([s[l] if (len(s) - 1 >= l) else 1 for s in shapes])
