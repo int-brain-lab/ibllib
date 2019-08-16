@@ -154,7 +154,18 @@ def read_meta_data(md_file):
             d[k.replace('~', '')] = v
         except BaseException:
             pass
-    return d
+    d['neuropixelVersion'] = _get_neuropixel_version(d)
+    return Bunch(d)
+
+
+def _get_neuropixel_version(md):
+    if 'typeEnabled' in md.keys():
+        return '3A'
+    elif 'typeImEnabled' in md.keys() and 'typeNiEnabled' in md.keys():
+        if 'imDatPrb_port' in md.keys() and 'imDatPrb_slot' in md.keys():
+            return '3B2'
+        else:
+            return '3B1'
 
 
 def _map_channels_from_meta(meta_data):

@@ -210,10 +210,13 @@ class TestsSpikeGLX(unittest.TestCase):
         self.workdir = Path(__file__).parent / 'fixtures' / 'io' / 'spikeglx'
         self.meta_files = list(Path.glob(self.workdir, '*.meta'))
 
-    def testReadMetaData(self):
+    def testGetRevision(self):
         for meta_data_file in self.meta_files:
             md = spikeglx.read_meta_data(meta_data_file)
             self.assertTrue(len(md.keys()) >= 37)
+            # also test getting revision
+            revision = meta_data_file.name[6:8]
+            self.assertEqual(md['neuropixelVersion'][0:2], revision)
 
     def testReadChannelGain(self):
         for meta_data_file in self.meta_files:
