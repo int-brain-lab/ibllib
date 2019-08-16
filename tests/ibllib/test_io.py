@@ -3,6 +3,7 @@ import os
 import uuid
 import tempfile
 from pathlib import Path
+import shutil
 
 import numpy as np
 
@@ -140,6 +141,68 @@ class TestsJsonable(unittest.TestCase):
         data3 = jsonable.read(tfile.name)
         self.assertEqual(data + data, data3)
         tfile.close()
+
+
+class TestSpikeGLX_glob_ephys(unittest.TestCase):
+    """
+    Creates mock acquisition folders architecture (omitting metadata files):
+    ├── 3A
+    │   ├── imec0
+    │   │   ├── sync_testing_g0_t0.imec0.ap.bin
+    │   │   └── sync_testing_g0_t0.imec0.lf.bin
+    │   └── imec1
+    │       ├── sync_testing_g0_t0.imec1.ap.bin
+    │       └── sync_testing_g0_t0.imec1.lf.bin
+    └── 3B
+        ├── sync_testing_g0_t0.nidq.bin
+        ├── imec0
+        │   ├── sync_testing_g0_t0.imec0.ap.bin
+        │   └── sync_testing_g0_t0.imec0.lf.bin
+        └── imec1
+            ├── sync_testing_g0_t0.imec1.ap.bin
+            └── sync_testing_g0_t0.imec1.lf.bin
+    """
+    def setUp(self):
+        def touchfile(p):
+            if isinstance(p, Path):
+                p.parent.mkdir(exist_ok=True)
+                p.touch(exist_ok=True)
+
+        def create_tree(root_dir, dico):
+            root_dir.mkdir(exist_ok=True)
+            for l in dico:
+                for k in l:
+                    touchfile(l[k])
+
+        self.tmpdir = Path(tempfile.gettempdir()) / 'test_glob_ephys'
+        self.tmpdir.mkdir(exist_ok=True)
+        self.dir3a = self.tmpdir.joinpath('3A')
+        self.dir3b = self.tmpdir.joinpath('3B')
+        self.dict3a = [{'label': 'imec0',
+                        'ap': self.dir3a / 'imec0' / 'sync_testing_g0_t0.imec0.ap.bin',
+                        'lf': self.dir3a / 'imec0' / 'sync_testing_g0_t0.imec0.lf.bin'},
+                       {'label': 'imec1',
+                        'ap': self.dir3a / 'imec1' / 'sync_testing_g0_t0.imec1.ap.bin',
+                        'lf': self.dir3a / 'imec1' / 'sync_testing_g0_t0.imec1.lf.bin'}]
+        self.dict3b = [{'label': 'imec0',
+                        'ap': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.ap.bin',
+                        'lf': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.lf.bin'},
+                       {'label': 'imec1',
+                        'ap': self.dir3b / 'imec1' / 'sync_testing_g0_t0.imec1.ap.bin',
+                        'lf': self.dir3b / 'imec1' / 'sync_testing_g0_t0.imec1.lf.bin'},
+                       {'label': 'breakout',
+                        'nidq': self.dir3b / 'sync_testing_g0_t0.nidq.bin'}]
+        create_tree(self.dir3a, self.dict3a)
+        create_tree(self.dir3b, self.dict3b)
+
+    def test_glob_ephys(self):
+        def dict_equals(d1, d2):
+            return all([l in d1 for l in d2]) and all([l in d2 for l in d1])
+        self.assertTrue(dict_equals(self.dict3a, spikeglx.glob_ephys_files(self.dir3a)))
+        self.assertTrue(dict_equals(self.dict3b, spikeglx.glob_ephys_files(self.dir3b)))
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdir)
 
 
 class TestsSpikeGLX(unittest.TestCase):

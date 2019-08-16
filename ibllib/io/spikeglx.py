@@ -210,18 +210,21 @@ def glob_ephys_files(session_path):
     From an arbitrary folder (usually session folder) gets the ap and lf files and labels
     Associated to the subfolders where they are
     the expected folder tree is:
-    ├── raw_ephys_data
-    │   ├── probe_left
-    │   │   ├── _iblrig_ephysData.raw_g0_t0.imec.ap.bin
-    │   │   ├── _iblrig_ephysData.raw_g0_t0.imec.ap.meta
-    │   │   ├── _iblrig_ephysData.raw_g0_t0.imec.lf.bin
-    │   │   ├── _iblrig_ephysData.raw_g0_t0.imec.lf.meta
-    │   └── probe_right
-    │       ├── cluster_KSLabel.tsv
-    │       ├── _iblrig_ephysData.raw_g0_t0.imec.ap.bin
-    │       ├── _iblrig_ephysData.raw_g0_t0.imec.ap.meta
-    │       ├── _iblrig_ephysData.raw_g0_t0.imec.lf.bin
-    │       ├── _iblrig_ephysData.raw_g0_t0.imec.lf.meta
+    ├── 3A
+    │   ├── imec0
+    │   │   ├── sync_testing_g0_t0.imec0.ap.bin
+    │   │   └── sync_testing_g0_t0.imec0.lf.bin
+    │   └── imec1
+    │       ├── sync_testing_g0_t0.imec1.ap.bin
+    │       └── sync_testing_g0_t0.imec1.lf.bin
+    └── 3B
+        ├── sync_testing_g0_t0.nidq.bin
+        ├── imec0
+        │   ├── sync_testing_g0_t0.imec0.ap.bin
+        │   └── sync_testing_g0_t0.imec0.lf.bin
+        └── imec1
+            ├── sync_testing_g0_t0.imec1.ap.bin
+            └── sync_testing_g0_t0.imec1.lf.bin
 
     :param session_path: folder, string or pathlib.Path
     :returns: a list of dictionaries with keys 'ap': apfile, 'lf': lffile and 'label'
@@ -238,4 +241,7 @@ def glob_ephys_files(session_path):
         # finally, the label is the current directory except if it is bare in raw_ephys_data
         if raw_ephys_apfile.parts[-2] != 'raw_ephys_data':
             ephys_files[-1].label = raw_ephys_apfile.parts[-2]
+    # for 3b probes, need also to get the nidq dataset type
+    for raw_ephys_nidqfile in Path(session_path).rglob('*.nidq.bin'):
+        ephys_files.extend([Bunch({'label': 'breakout', 'nidq': raw_ephys_nidqfile})])
     return ephys_files
