@@ -226,9 +226,10 @@ class TestsSpikeGLX(unittest.TestCase):
             if meta_data_file.name.split('.')[-2] not in ['lf', 'ap']:
                 continue
             md = spikeglx.read_meta_data(meta_data_file)
-            cg = spikeglx._gain_channels_from_meta(md)
-            self.assertTrue(np.all(cg['lf'][0:-1] == 250))
-            self.assertTrue(np.all(cg['ap'][0:-1] == 500))
+            cg = spikeglx._conversion_sample2mv_from_meta(md)
+            i2v = md.get('imAiRangeMax') / 512
+            self.assertTrue(np.all(cg['lf'][0:-1] == i2v / 250))
+            self.assertTrue(np.all(cg['ap'][0:-1] == i2v / 500))
             # also test consistent dimension with nchannels
             nc = spikeglx._get_nchannels_from_meta(md)
             self.assertTrue(len(cg['ap']) == len(cg['lf']) == nc)
@@ -239,7 +240,9 @@ class TestsSpikeGLX(unittest.TestCase):
                 continue
             md = spikeglx.read_meta_data(meta_data_file)
             nc = spikeglx._get_nchannels_from_meta(md)
-            cg = spikeglx._gain_channels_from_meta(md)
+            cg = spikeglx._conversion_sample2mv_from_meta(md)
+            i2v = md.get('niAiRangeMax') / 32768
+            self.assertTrue(np.all(cg['nidq'] == i2v))
             self.assertTrue(len(cg['nidq']) == nc)
 
     def testReadChannelMap(self):

@@ -24,14 +24,14 @@ class Reader:
         if not file_meta_data.exists():
             self.file_meta_data = None
             self.meta = None
-            self.gain_channels = 1
+            self.channel_conversion_sample2mv = 1
             logger_.warning(str(sglx_file) + " : no metadata file found. Very limited support")
         else:
             self.file_meta_data = file_meta_data
             self.meta = read_meta_data(file_meta_data)
             if self.nc * self.ns * 2 != self.nbytes:
                 logger_.warning(str(sglx_file) + " : meta data and filesize do not checkout")
-            self.gain_channels = _gain_channels_from_meta(self.meta)
+            self.channel_conversion_sample2mv = _conversion_sample2mv_from_meta(self.meta)
             self.memmap = np.memmap(sglx_file, dtype='int16', mode='r', shape=(self.ns, self.nc))
 
     @property
@@ -46,16 +46,6 @@ class Reader:
         if not self.meta:
             return 0
         return _get_type_from_meta(self.meta)
-
-    @property
-    def int2volts(self):
-        """ :return: Conversion scalar to Volts. Needs to be combined with channel gains """
-        if not self.meta:
-            return 1
-        if self.meta.get('typeThis', None):
-            return self.meta.get('imAiRangeMax') / 512
-        else:
-            return self.meta.get('imAiRangeMax') / 768
 
     @property
     def fs(self):
@@ -98,8 +88,8 @@ class Reader:
             darray = np.fromfile(fid, dtype=np.dtype('int16'), count=ns_to_read * self.nc
                                  ).reshape((int(ns_to_read), int(self.nc)))
         # we don't want to apply any gain on the sync trace
-        sync_tr_ind = np.where(self.gain_channels[self.type] == 1.)
-        gain = 1 / self.gain_channels[self.type] * self.int2volts
+        sync_tr_ind = np.where(self.channel_conversion_sample2mv[self.type] == 1.)
+        gain = self.channel_conversion_sample2mv[self.type]
         gain[sync_tr_ind] = 1.
         sync = split_sync(darray[:, sync_tr_ind])
         darray = np.float32(darray) * gain
@@ -213,26 +203,37 @@ def _map_channels_from_meta(meta_data):
         return {k: chmap[:, v] for (k, v) in {'shank': 0, 'col': 1, 'row': 2, 'flag': 3}.items()}
 
 
-def _gain_channels_from_meta(meta_data):
+def _conversion_sample2mv_from_meta(meta_data):
     """
-    Interpret the meta data string to extract an array of gain values for each channel
+    Interpret the meta data string to extract an array of conversion factprs for each channel
 
     :param meta_data: dictionary output from  spikeglx.read_meta_data
     :return: numpy array with one gain value per channel
     """
+
+    def int2volts(md):
+        """ :return: Conversion scalar to Volts. Needs to be combined with channel gains """
+        if md.get('typeThis', None) == 'imec':
+            return md.get('imAiRangeMax') / 512
+        else:
+            return md.get('niAiRangeMax') / 32768
+
+    int2volt = int2volts(meta_data)
     # interprets the gain value from the metadata header
     if 'imroTbl' in meta_data.keys():
         sy_gain = np.ones(int(meta_data['snsApLfSy'][-1]), dtype=np.float32)
         # the sync traces are not included in the gain values, so are included for broadcast ops
         gain = re.findall(r'([0-9]* [0-9]* [0-9]* [0-9]* [0-9]*)', meta_data['imroTbl'])
-        out = {'lf': np.hstack((np.array([np.float32(g.split(' ')[-1]) for g in gain]), sy_gain)),
-               'ap': np.hstack((np.array([np.float32(g.split(' ')[-2]) for g in gain]), sy_gain))}
+        out = {'lf': np.hstack((np.array([1 / np.float32(g.split(' ')[-1]) for g in gain]) *
+                                int2volt, sy_gain)),
+               'ap': np.hstack((np.array([1 / np.float32(g.split(' ')[-2]) for g in gain]) *
+                                int2volt, sy_gain))}
     elif 'niMNGain' in meta_data.keys():
         gain = np.r_[
             np.ones(int(meta_data['snsMnMaXaDw'][0],)) * meta_data['niMNGain'],
             np.ones(int(meta_data['snsMnMaXaDw'][1],)) * meta_data['niMAGain'],
             np.ones(int(np.sum(meta_data['snsMnMaXaDw'][2:]),))]
-        out = {'nidq': gain}
+        out = {'nidq': 1 / gain * int2volt}
     return out
 
 
