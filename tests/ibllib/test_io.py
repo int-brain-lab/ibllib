@@ -210,21 +210,37 @@ class TestsSpikeGLX(unittest.TestCase):
         self.workdir = Path(__file__).parent / 'fixtures' / 'io' / 'spikeglx'
         self.meta_files = list(Path.glob(self.workdir, '*.meta'))
 
-    def testGetRevision(self):
+    def testGetRevisionAndType(self):
         for meta_data_file in self.meta_files:
             md = spikeglx.read_meta_data(meta_data_file)
             self.assertTrue(len(md.keys()) >= 37)
-            # also test getting revision
+            # test getting revision
             revision = meta_data_file.name[6:8]
-            self.assertEqual(md['neuropixelVersion'][0:2], revision)
+            self.assertEqual(spikeglx._get_neuropixel_version_from_meta(md)[0:2], revision)
+            # test getting acquisition type
+            type = meta_data_file.name.split('.')[-2]
+            self.assertEqual(spikeglx._get_type_from_meta(md), type)
 
-    def testReadChannelGain(self):
+    def testReadChannelGainAPLF(self):
         for meta_data_file in self.meta_files:
+            if meta_data_file.name.split('.')[-2] not in ['lf', 'ap']:
+                continue
             md = spikeglx.read_meta_data(meta_data_file)
             cg = spikeglx._gain_channels_from_meta(md)
             self.assertTrue(np.all(cg['lf'][0:-1] == 250))
             self.assertTrue(np.all(cg['ap'][0:-1] == 500))
-            self.assertTrue(len(cg['ap']) == len(cg['lf']) == int(sum(md.get('snsApLfSy'))))
+            # also test consistent dimension with nchannels
+            nc = spikeglx._get_nchannels_from_meta(md)
+            self.assertTrue(len(cg['ap']) == len(cg['lf']) == nc)
+
+    def testReadChannelGainNIDQ(self):
+        for meta_data_file in self.meta_files:
+            if meta_data_file.name.split('.')[-2] not in ['nidq']:
+                continue
+            md = spikeglx.read_meta_data(meta_data_file)
+            nc = spikeglx._get_nchannels_from_meta(md)
+            cg = spikeglx._gain_channels_from_meta(md)
+            self.assertTrue(len(cg['nidq']) == nc)
 
     def testReadChannelMap(self):
         for meta_data_file in self.meta_files:

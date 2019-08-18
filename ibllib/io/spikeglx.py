@@ -35,14 +35,17 @@ class Reader:
             self.memmap = np.memmap(sglx_file, dtype='int16', mode='r', shape=(self.ns, self.nc))
 
     @property
+    def version(self):
+        if not self.meta:
+            return None
+        return _get_neuropixel_version_from_meta(self.meta)
+
+    @property
     def type(self):
-        """:return: ap or lf. Useful to index dictionaries """
+        """:return: ap, lf or nidq. Useful to index dictionaries """
         if not self.meta:
             return 0
-        if self.meta['snsApLfSy'][0] == 0 and self.meta['snsApLfSy'][1] != 0:
-            return 'lf'
-        elif self.meta['snsApLfSy'][0] != 0 and self.meta['snsApLfSy'][1] == 0:
-            return 'ap'
+        return _get_type_from_meta(self.meta)
 
     @property
     def int2volts(self):
@@ -69,7 +72,7 @@ class Reader:
         """ :return: number of channels """
         if not self.meta:
             return
-        return int(sum(self.meta.get('snsApLfSy')))
+        return _get_nchannels_from_meta(self.meta)
 
     @property
     def ns(self):
@@ -154,11 +157,14 @@ def read_meta_data(md_file):
             d[k.replace('~', '')] = v
         except BaseException:
             pass
-    d['neuropixelVersion'] = _get_neuropixel_version(d)
+    d['neuropixelVersion'] = _get_neuropixel_version_from_meta(d)
     return Bunch(d)
 
 
-def _get_neuropixel_version(md):
+def _get_neuropixel_version_from_meta(md):
+    """
+    Get neuropixel version tag (3A, 3B1, 3B2) from the metadata dictionary
+    """
     if 'typeEnabled' in md.keys():
         return '3A'
     elif 'typeImEnabled' in md.keys() and 'typeNiEnabled' in md.keys():
@@ -166,6 +172,27 @@ def _get_neuropixel_version(md):
             return '3B2'
         else:
             return '3B1'
+
+
+def _get_nchannels_from_meta(md):
+    typ = _get_type_from_meta(md)
+    if typ == 'nidq':
+        return int(sum(md.get('snsMnMaXaDw')))
+    elif typ in ['lf', 'ap']:
+        return int(sum(md.get('snsApLfSy')))
+
+
+def _get_type_from_meta(md):
+    """
+    Get neuropixel data type (ap, lf or nidq) from metadata
+    """
+    snsApLfSy = md.get('snsApLfSy', [-1, -1, -1])
+    if snsApLfSy[0] == 0 and snsApLfSy[1] != 0:
+        return 'lf'
+    elif snsApLfSy[0] != 0 and snsApLfSy[1] == 0:
+        return 'ap'
+    elif snsApLfSy == [-1, -1, -1] and md.get('typeThis', None) == 'nidq':
+        return 'nidq'
 
 
 def _map_channels_from_meta(meta_data):
@@ -177,6 +204,9 @@ def _map_channels_from_meta(meta_data):
     """
     if 'snsShankMap' in meta_data.keys():
         chmap = re.findall(r'([0-9]*:[0-9]*:[0-9]*:[0-9]*)', meta_data['snsShankMap'])
+        # for digital nidq types, the key exists but does not contain any information
+        if not chmap:
+            return {'shank': None, 'col': None, 'row': None, 'flag': None}
         # shank#, col#, row#, drawflag
         # (nb: drawflag is one should be drawn and considered spatial average)
         chmap = np.array([np.float32(cm.split(':')) for cm in chmap])
@@ -198,7 +228,11 @@ def _gain_channels_from_meta(meta_data):
         out = {'lf': np.hstack((np.array([np.float32(g.split(' ')[-1]) for g in gain]), sy_gain)),
                'ap': np.hstack((np.array([np.float32(g.split(' ')[-2]) for g in gain]), sy_gain))}
     elif 'niMNGain' in meta_data.keys():
-        raise NotImplementedError()
+        gain = np.r_[
+            np.ones(int(meta_data['snsMnMaXaDw'][0],)) * meta_data['niMNGain'],
+            np.ones(int(meta_data['snsMnMaXaDw'][1],)) * meta_data['niMAGain'],
+            np.ones(int(np.sum(meta_data['snsMnMaXaDw'][2:]),))]
+        out = {'nidq': gain}
     return out
 
 
