@@ -230,10 +230,10 @@ def _conversion_sample2mv_from_meta(meta_data):
                                 int2volt, sy_gain))}
     elif 'niMNGain' in meta_data.keys():
         gain = np.r_[
-            np.ones(int(meta_data['snsMnMaXaDw'][0],)) * meta_data['niMNGain'],
-            np.ones(int(meta_data['snsMnMaXaDw'][1],)) * meta_data['niMAGain'],
+            1 / np.ones(int(meta_data['snsMnMaXaDw'][0],)) * meta_data['niMNGain'] * int2volt,
+            1 / np.ones(int(meta_data['snsMnMaXaDw'][1],)) * meta_data['niMAGain'] * int2volt,
             np.ones(int(np.sum(meta_data['snsMnMaXaDw'][2:]),))]
-        out = {'nidq': 1 / gain * int2volt}
+        out = {'nidq': gain}
     return out
 
 

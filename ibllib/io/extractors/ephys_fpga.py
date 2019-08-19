@@ -404,6 +404,7 @@ def align_with_bpod(session_path):
 def extract_sync(session_path, save=False, force=False):
     """
     Reads ephys binary file (s) and extract sync whithin the binary file folder
+    Assumes ephys data is whithin a `raw_ephys_data` folder
 
     :param session_path: '/path/to/subject/yyyy-mm-dd/001'
     :param save: Bool, defaults to False
@@ -416,6 +417,8 @@ def extract_sync(session_path, save=False, force=False):
     syncs = []
     for efi in ephys_files_info:
         glob_filter = '*' + efi.label + '*'
+        if not efi.get('ap', None):
+            continue
         file_exists = alf.io.exists(efi.ap.parent, object='_spikeglx_sync', glob=glob_filter)
         if not force and file_exists:
             _logger.warning('Skipping: spike GLX sync found for probe: ' + efi.label)

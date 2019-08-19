@@ -12,7 +12,7 @@ import ibllib.io.spikeglx as spikeglx
 
 def sync_probe_folders_3A(ses_path):
     """
-    From a session path with _spikeglx_sync arrays extraccted, locate ephys files for 3A and
+    From a session path with _spikeglx_sync arrays extracted, locate ephys files for 3A and
      outputs one sync.timestamps.probeN.npy file per acquired probe. By convention the reference
      probe is the one with the most synchronisation pulses.
     :param ses_path:
@@ -51,6 +51,17 @@ def sync_probe_folders_3A(ses_path):
             timestamps = sync_probe_front_times(d.times[:, iref], d.times[:, ind], sr)
         alf.io.save_object_npy(ephys_file.ap.parent, {'timestamps': timestamps},
                                object='sync', parts=ephys_file.label)
+
+
+def sync_probe_folders_3B(ses_path):
+    """
+    From a session path with _spikeglx_sync arrays extraccted, locate ephys files for 3A and
+     outputs one sync.timestamps.probeN.npy file per acquired probe. By convention the reference
+     probe is the one with the most synchronisation pulses.
+    :param ses_path:
+    :return: None
+    """
+    pass
 
 
 def sync_probe_front_times(t, tref, sr, display=False):
