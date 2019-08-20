@@ -1,6 +1,5 @@
 colorlog>=4.0.2
-dataclasses>=0.6
-globus_sdk>=1.7.1
+globus-sdk>=1.7.1
 matplotlib>=3.0.3
 numpy>=1.16.4
 pandas>=0.24.2
