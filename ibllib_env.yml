@@ -1,4 +1,4 @@
-name: ibldev
+name: ibllib
 channels:
   - defaults
   - conda-forge
@@ -37,7 +37,10 @@ dependencies:
   - openssl=1.1.1c=hfa6e2cd_0
   - pandas=0.25.0=py37he350917_0
   - patsy=0.5.1=py_0
-  - pip=19.2.2=py37_0
+  - pip:
+    - colorlog>=4.0.2
+    - dataclasses>=0.6
+    - globus-sdk>=1.8.0 
   - pycodestyle=2.5.0=py_0
   - pycparser=2.19=py37_1
   - pyflakes=2.1.1=py_0
