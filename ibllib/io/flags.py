@@ -7,6 +7,12 @@ import logging
 
 logger_ = logging.getLogger('ibllib')
 
+FLAG_FILE_NAMES = [
+    'transfer_me.flag', 'extract_me.flag', 'register_me.flag', 'flatiron.flag',
+    'extract_me.error', 'register_me.error', 'create_me.flag', 'compress_video.flag',
+    'compress_audio.flag', 'extract_ephys.flag',
+]
+
 
 def read_flag_file(fname):
     """
@@ -123,17 +129,17 @@ def create_extract_flags(root_data_folder, force=False, file_list=None):
 
 
 def create_transfer_flags(root_data_folder, force=False, file_list=None):
-    ses_path = Path(root_data_folder).glob('**/raw_behavior_data')
-    for p in ses_path:
-        flag_file = Path(p).parent.joinpath('extract_me.flag')
-        write_flag_file(flag_file)
-        logger_.info('created flag: ' + str(flag_file))
+    create_other_flags(root_data_folder, 'extract_me.flag', force=False, file_list=None)
 
 
 def create_create_flags(root_data_folder, force=False, file_list=None):
+    create_other_flags(root_data_folder, 'create_me.flag', force=False, file_list=None)
+
+
+def create_other_flags(root_data_folder, name, force=False, file_list=None):
     ses_path = Path(root_data_folder).glob('**/raw_behavior_data')
     for p in ses_path:
-        flag_file = Path(p).parent.joinpath('create_me.flag')
+        flag_file = Path(p).parent.joinpath(name)
         write_flag_file(flag_file)
         logger_.info('created flag: ' + str(flag_file))
 
@@ -150,7 +156,7 @@ def create_compress_flags(root_data_folder, clobber=False):
             write_flag_file(flag_file, file_list=str(vfile.relative_to(ses_path)), clobber=clobber)
     return
     # add audio flags to the list as well
-    audio_paths = Path(root_data_folder).glob('**/raw_behavior__data')
+    audio_paths = Path(root_data_folder).glob('**/raw_behavior_data')
     for audio_path in audio_paths:
         ses_path = audio_path.parent
         flag_file = ses_path.joinpath('compress_audio.flag')
@@ -166,11 +172,11 @@ def create_flags(root_data_folder: str or Path, flags: list,
     for p in ses_path:
         if 'create' in flags:
             create_create_flags(root_data_folder, force=force, file_list=file_list)
-        if 'transfer' in flags:
+        elif 'transfer' in flags:
             create_transfer_flags(root_data_folder, force=force, file_list=file_list)
-        if 'extract' in flags:
+        elif 'extract' in flags:
             create_extract_flags(root_data_folder, force=force, file_list=file_list)
-        if 'register' in flags:
+        elif 'register' in flags:
             create_register_flags(root_data_folder, force=force, file_list=file_list)
 
 
