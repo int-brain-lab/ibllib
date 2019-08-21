@@ -242,7 +242,8 @@ class TestsSpikeGLX(unittest.TestCase):
             nc = spikeglx._get_nchannels_from_meta(md)
             cg = spikeglx._conversion_sample2mv_from_meta(md)
             i2v = md.get('niAiRangeMax') / 32768
-            self.assertTrue(np.all(cg['nidq'] == i2v))
+            self.assertTrue(np.all(cg['nidq'][slice(0, int(np.sum(md.acqMnMaXaDw[:2])))] == i2v))
+            self.assertTrue(np.all(cg['nidq'][slice(int(np.sum(md.acqMnMaXaDw[:2])),None)] == 1.))
             self.assertTrue(len(cg['nidq']) == nc)
 
     def testReadChannelMap(self):
