@@ -52,10 +52,7 @@ class Reader:
         """ :return: sampling frequency (Hz) """
         if not self.meta:
             return 1
-        keyname = 'niSampRate'
-        if self.meta.get('typeThis') == 'imec':
-            keyname = 'imSampRate'
-        return self.meta.get(keyname)
+        return _get_fs_from_meta(self.meta)
 
     @property
     def nc(self):
@@ -69,7 +66,7 @@ class Reader:
         """ :return: number of samples """
         if not self.meta:
             return
-        return int(self.meta.get('fileTimeSecs') * self.fs)
+        return int(np.round(self.meta.get('fileTimeSecs') * self.fs))
 
     def read_samples(self, first_sample=0, last_sample=10000):
         """
@@ -177,9 +174,16 @@ def _get_sync_trace_indices_from_meta(md):
 def _get_nchannels_from_meta(md):
     typ = _get_type_from_meta(md)
     if typ == 'nidq':
-        return int(np.sum(md.get('snsMnMaXaDw')))
+        return int(np.round(np.sum(md.get('snsMnMaXaDw'))))
     elif typ in ['lf', 'ap']:
-        return int(np.sum(md.get('snsApLfSy')))
+        return int(np.round(sum(md.get('snsApLfSy'))))
+
+
+def _get_fs_from_meta(md):
+    if md.get('typeThis') == 'imec':
+        return md.get('imSampRate')
+    else:
+        return md.get('niSampRate')
 
 
 def _get_type_from_meta(md):
