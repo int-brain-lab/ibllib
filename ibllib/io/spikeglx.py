@@ -88,22 +88,19 @@ class Reader:
             darray = np.fromfile(fid, dtype=np.dtype('int16'), count=ns_to_read * self.nc
                                  ).reshape((int(ns_to_read), int(self.nc)))
         # we don't want to apply any gain on the sync trace
-        sync_tr_ind = np.where(self.channel_conversion_sample2mv[self.type] == 1.)
-        gain = self.channel_conversion_sample2mv[self.type]
-        gain[sync_tr_ind] = 1.
-        sync = split_sync(darray[:, sync_tr_ind])
-        darray = np.float32(darray) * gain
+        darray = np.float32(darray) * self.channel_conversion_sample2mv[self.type]
+        sync = split_sync(darray[:, _get_sync_trace_indices_from_meta(self.meta)])
         return darray, sync
 
-    def read_sync(self, slice=slice(0, 10000)):
+    def read_sync(self, _slice=slice(0, 10000)):
         """
         Reads only the sync trace at specified samples using slicing syntax
 
         >>> sync_samples = sr.read_sync(0:10000)
         """
-        if not(self.meta and self.meta['acqApLfSy'][2]):
+        if not self.meta:
             logger_.warning('Sync trace not labeled in metadata. Assuming last trace')
-        return split_sync(self.memmap[slice, -1])
+        return split_sync(self.memmap[_slice, _get_sync_trace_indices_from_meta(self.meta)])
 
 
 def read(sglx_file, first_sample=0, last_sample=10000):
@@ -164,12 +161,25 @@ def _get_neuropixel_version_from_meta(md):
             return '3B1'
 
 
+def _get_sync_trace_indices_from_meta(md):
+    """
+    Returns a list containing indices of the sync traces in the original array
+    """
+    typ = _get_type_from_meta(md)
+    ntr = int(_get_nchannels_from_meta(md))
+    if typ == 'nidq':
+        nsync = int(md.get('snsMnMaXaDw')[-1])
+    elif typ in ['lf', 'ap']:
+        nsync = int(md.get('snsApLfSy')[2])
+    return list(range(ntr - nsync, ntr))
+
+
 def _get_nchannels_from_meta(md):
     typ = _get_type_from_meta(md)
     if typ == 'nidq':
-        return int(sum(md.get('snsMnMaXaDw')))
+        return int(np.sum(md.get('snsMnMaXaDw')))
     elif typ in ['lf', 'ap']:
-        return int(sum(md.get('snsApLfSy')))
+        return int(np.sum(md.get('snsApLfSy')))
 
 
 def _get_type_from_meta(md):
