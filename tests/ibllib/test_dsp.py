@@ -3,7 +3,17 @@ import numpy as np
 import numpy.matlib as mat
 
 import ibllib.dsp.fourier as ft
-from ibllib.dsp import WindowGenerator, rms, rises, falls, fronts
+from ibllib.dsp import WindowGenerator, rms, rises, falls, fronts, smooth
+
+
+class TestSmooth(unittest.TestCase):
+
+    def test_smooth_lp(self):
+        np.random.seed(458)
+        a = np.random.rand(500,)
+        a_ = smooth.lp(a, [0.1, 0.15])
+        res = ft.hp(np.pad(a_, 100, mode='edge'), 1, [0.1, 0.15])[100:-100]
+        self.assertTrue((rms(a) / rms(res)) > 500)
 
 
 class TestFFT(unittest.TestCase):

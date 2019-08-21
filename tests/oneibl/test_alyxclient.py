@@ -35,14 +35,14 @@ class TestDownloadHTTP(unittest.TestCase):
         self.assertEqual(a, b)
         self.ac.rest('weighings', 'delete', id=a['url'])
         # test patch object with subjects
-        sub = self.ac.rest('subjects', 'list', nickname='flowers')
+        sub = self.ac.rest('subjects', 'read', id='flowers')
         data = {'birth_date': '2018-04-01',
-                'death_date': '2018-09-09'}
+                'death_date': '2018-09-10'}
         sub = self.ac.rest('subjects', 'partial_update', id='flowers', data=data)
         self.assertEqual(sub['birth_date'], data['birth_date'])
         self.assertEqual(sub['death_date'], data['death_date'])
         data = {'birth_date': '2018-04-02',
-                'death_date': '2018-09-10'}
+                'death_date': '2018-09-09'}
         sub = self.ac.rest('subjects', 'partial_update', id='flowers', data=data)
         self.assertEqual(sub['birth_date'], data['birth_date'])
         self.assertEqual(sub['death_date'], data['death_date'])

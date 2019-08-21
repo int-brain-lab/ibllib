@@ -8,7 +8,7 @@ import numpy as np
 from scipy import signal
 
 import alf.io
-from ibllib.io.extractors import ephys_fpga
+import ibllib.io.spikeglx
 from ibllib.io import spikeglx
 import ibllib.dsp as dsp
 from ibllib.misc import print_progress
@@ -106,7 +106,7 @@ def qc_session(session_path, dry=False, force=False):
     :param force: bool (False) Force means overwriting an existing QC file
     :return: None
     """
-    efiles = ephys_fpga._get_ephys_files(session_path)
+    efiles = ibllib.io.spikeglx.glob_ephys_files(session_path)
     for efile in efiles:
         if dry:
             print(efile.ap)
