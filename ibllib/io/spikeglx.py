@@ -131,16 +131,13 @@ def read_meta_data(md_file):
     for a in md.splitlines():
         k, v = a.split('=')
         # if all numbers, try to interpret the string
-        try:
-            if v and re.fullmatch('[0-9,.]*', v):
-                v = [float(val) for val in v.split(',')]
-                # scalars should not be nested
-                if len(v) == 1:
-                    v = v[0]
-            # tildes in keynames removed
-            d[k.replace('~', '')] = v
-        except BaseException:
-            pass
+        if v and re.fullmatch('[0-9,.]*', v) and v.count('.') < 2:
+            v = [float(val) for val in v.split(',')]
+            # scalars should not be nested
+            if len(v) == 1:
+                v = v[0]
+        # tildes in keynames removed
+        d[k.replace('~', '')] = v
     d['neuropixelVersion'] = _get_neuropixel_version_from_meta(d)
     return Bunch(d)
 
