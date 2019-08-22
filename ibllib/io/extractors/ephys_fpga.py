@@ -5,6 +5,7 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 
+from brainbox.core import Bunch
 import brainbox.behavior.wheel as whl
 
 import ibllib.ephys.neuropixel as neuropixel
@@ -123,7 +124,7 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
             'polarities': tim_chan_pol[:, 2]}
     if save:
         alf.io.save_object_npy(output_path, sync, '_spikeglx_sync', parts=parts)
-    return sync
+    return Bunch(sync)
 
 
 def _bpod_events_extraction(bpod_t, bpod_fronts):
@@ -416,16 +417,17 @@ def extract_sync(session_path, save=False, force=False):
     ephys_files_info = glob_ephys_files(raw_ephys_path)
     syncs = []
     for efi in ephys_files_info:
-        glob_filter = '*' + efi.label + '*'
-        if not efi.get('ap', None):
+        glob_filter = f'*{efi.label}*' if efi.label else '*'
+        bin_file = efi.get('ap', efi.get('nidq', None))
+        if not bin_file:
             continue
-        file_exists = alf.io.exists(efi.ap.parent, object='_spikeglx_sync', glob=glob_filter)
+        file_exists = alf.io.exists(bin_file.parent, object='_spikeglx_sync', glob=glob_filter)
         if not force and file_exists:
             _logger.warning('Skipping: spike GLX sync found for probe: ' + efi.label)
-            sync = alf.io.load_object(efi.ap.parent, object='_spikeglx_sync', glob=glob_filter)
+            sync = alf.io.load_object(bin_file.parent, object='_spikeglx_sync', glob=glob_filter)
         else:
-            sr = ibllib.io.spikeglx.Reader(efi.ap)
-            sync = _sync_to_alf(sr, efi.ap.parent, save=save, parts=efi.label)
+            sr = ibllib.io.spikeglx.Reader(bin_file)
+            sync = _sync_to_alf(sr, bin_file.parent, save=save, parts=efi.label)
         syncs.extend([sync])
     return syncs
 

@@ -286,6 +286,12 @@ def glob_ephys_files(session_path):
     :param session_path: folder, string or pathlib.Path
     :returns: a list of dictionaries with keys 'ap': apfile, 'lf': lffile and 'label'
     """
+    def get_label(raw_ephys_apfile):
+        if raw_ephys_apfile.parts[-2] != 'raw_ephys_data':
+            return raw_ephys_apfile.parts[-2]
+        else:
+            return ''
+
     ephys_files = []
     for raw_ephys_apfile in Path(session_path).rglob('*.ap.bin'):
         # first get the ap file
@@ -296,9 +302,40 @@ def glob_ephys_files(session_path):
         if lf_file.exists():
             ephys_files[-1].lf = lf_file
         # finally, the label is the current directory except if it is bare in raw_ephys_data
-        if raw_ephys_apfile.parts[-2] != 'raw_ephys_data':
-            ephys_files[-1].label = raw_ephys_apfile.parts[-2]
+        ephys_files[-1].label = get_label(raw_ephys_apfile)
     # for 3b probes, need also to get the nidq dataset type
     for raw_ephys_nidqfile in Path(session_path).rglob('*.nidq.bin'):
-        ephys_files.extend([Bunch({'label': 'breakout', 'nidq': raw_ephys_nidqfile})])
+        ephys_files.extend([Bunch({'label': get_label(raw_ephys_nidqfile),
+                                   'nidq': raw_ephys_nidqfile})])
     return ephys_files
+
+
+def _mock_spikeglx_file(mock_path, meta_file, ns, nc, sync_depth):
+    """
+    For testing purposes, create a binary file with sync pulses to test reading and extraction
+    """
+    tmp_meta_file = Path(mock_path).joinpath(meta_file.name)
+    tmp_bin_file = Path(mock_path).joinpath(meta_file.name).with_suffix('.bin')
+    md = read_meta_data(meta_file)
+    fs = _get_fs_from_meta(md)
+    fid_source = open(meta_file)
+    fid_target = open(tmp_meta_file, 'w+')
+    line = fid_source.readline()
+    while line:
+        line = fid_source.readline()
+        if line.startswith('fileSizeBytes'):
+            line = f'fileSizeBytes={ns * nc * 2}\n'
+        if line.startswith('fileTimeSecs'):
+            line = f'fileTimeSecs={ns / fs}\n'
+        fid_target.write(line)
+    fid_source.close()
+    fid_target.close()
+    # each channel as an int of chn + 1
+    D = np.tile(np.int16(np.arange(nc) + 1), (ns, 1))
+    # the last channel is the sync that we fill with
+    sync = np.uint16(2 ** np.float32(np.arange(-1, sync_depth)))
+    D[:, -1] = 0
+    D[:sync.size, -1] = sync
+    with open(tmp_bin_file, 'w+') as fid:
+        D.tofile(fid)
+    return {'bin_file': tmp_bin_file, 'ns': ns, 'nc': nc, 'sync_depth': sync_depth, 'D': D}
