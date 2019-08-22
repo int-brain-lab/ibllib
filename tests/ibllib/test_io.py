@@ -165,19 +165,19 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
     def setUp(self):
         def touchfile(p):
             if isinstance(p, Path):
-                p.parent.mkdir(exist_ok=True)
+                p.parent.mkdir(exist_ok=True, parents=True)
                 p.touch(exist_ok=True)
 
         def create_tree(root_dir, dico):
-            root_dir.mkdir(exist_ok=True)
+            root_dir.mkdir(exist_ok=True, parents=True)
             for l in dico:
                 for k in l:
                     touchfile(l[k])
 
         self.tmpdir = Path(tempfile.gettempdir()) / 'test_glob_ephys'
         self.tmpdir.mkdir(exist_ok=True)
-        self.dir3a = self.tmpdir.joinpath('3A')
-        self.dir3b = self.tmpdir.joinpath('3B')
+        self.dir3a = self.tmpdir.joinpath('3A').joinpath('raw_ephys_data')
+        self.dir3b = self.tmpdir.joinpath('3B').joinpath('raw_ephys_data')
         self.dict3a = [{'label': 'imec0',
                         'ap': self.dir3a / 'imec0' / 'sync_testing_g0_t0.imec0.ap.bin',
                         'lf': self.dir3a / 'imec0' / 'sync_testing_g0_t0.imec0.lf.bin'},
@@ -190,7 +190,7 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
                        {'label': 'imec1',
                         'ap': self.dir3b / 'imec1' / 'sync_testing_g0_t0.imec1.ap.bin',
                         'lf': self.dir3b / 'imec1' / 'sync_testing_g0_t0.imec1.lf.bin'},
-                       {'label': 'breakout',
+                       {'label': '',
                         'nidq': self.dir3b / 'sync_testing_g0_t0.nidq.bin'}]
         create_tree(self.dir3a, self.dict3a)
         create_tree(self.dir3b, self.dict3b)
@@ -214,20 +214,23 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
     def test_read_nidq(self):
         # nidq has 1 analog and 1 digital sync channels
         self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
-        nidq = self.mock_spikeglx_file(self.workdir / 'sample3B_g0_t0.nidq.meta',
-                                       ns=32, nc=2, sync_depth=8)
+        nidq = spikeglx._mock_spikeglx_file(self.tdir.name,
+                                            self.workdir / 'sample3B_g0_t0.nidq.meta',
+                                            ns=32, nc=2, sync_depth=8)
         self.assert_read_glx(nidq)
 
     def test_read_3A(self):
         self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
-        bin_3a = self.mock_spikeglx_file(self.workdir / 'sample3A_g0_t0.imec.ap.meta',
-                                         ns=32, nc=385, sync_depth=16)
+        bin_3a = spikeglx._mock_spikeglx_file(self.tdir.name,
+                                              self.workdir / 'sample3A_g0_t0.imec.ap.meta',
+                                              ns=32, nc=385, sync_depth=16)
         self.assert_read_glx(bin_3a)
 
     def test_read_3B(self):
         self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
-        bin_3b = self.mock_spikeglx_file(self.workdir / 'sample3B_g0_t0.imec1.ap.meta',
-                                         ns=32, nc=385, sync_depth=16)
+        bin_3b = spikeglx._mock_spikeglx_file(self.tdir.name,
+                                              self.workdir / 'sample3B_g0_t0.imec1.ap.meta',
+                                              ns=32, nc=385, sync_depth=16)
         self.assert_read_glx(bin_3b)
 
     def assert_read_glx(self, tglx):
@@ -243,33 +246,6 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
         for m in np.arange(tglx['sync_depth']):
             self.assertTrue(sync[m + 1, m] == 1)
         self.tdir.cleanup()
-
-    def mock_spikeglx_file(self, meta_file, ns, nc, sync_depth):
-        tmp_meta_file = Path(self.tdir.name).joinpath(meta_file.name)
-        tmp_bin_file = Path(self.tdir.name).joinpath(meta_file.name).with_suffix('.bin')
-        md = spikeglx.read_meta_data(meta_file)
-        fs = spikeglx._get_fs_from_meta(md)
-        fid_source = open(meta_file)
-        fid_target = open(tmp_meta_file, 'w+')
-        line = fid_source.readline()
-        while line:
-            line = fid_source.readline()
-            if line.startswith('fileSizeBytes'):
-                line = f'fileSizeBytes={ns * nc * 2}\n'
-            if line.startswith('fileTimeSecs'):
-                line = f'fileTimeSecs={ns / fs}\n'
-            fid_target.write(line)
-        fid_source.close()
-        fid_target.close()
-        # each channel as an int of chn + 1
-        D = np.tile(np.int16(np.arange(nc) + 1), (ns, 1))
-        # the last channel is the sync that we fill with
-        sync = np.uint16(2 ** np.float32(np.arange(-1, sync_depth)))
-        D[:, -1] = 0
-        D[:sync.size, -1] = sync
-        with open(tmp_bin_file, 'w+') as fid:
-            D.tofile(fid)
-        return {'bin_file': tmp_bin_file, 'ns': ns, 'nc': nc, 'sync_depth': sync_depth, 'D': D}
 
     def testGetRevisionAndType(self):
         for meta_data_file in self.meta_files:
