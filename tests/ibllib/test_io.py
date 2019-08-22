@@ -3,6 +3,7 @@ import os
 import uuid
 import tempfile
 from pathlib import Path
+import shutil
 
 import numpy as np
 
@@ -142,23 +143,169 @@ class TestsJsonable(unittest.TestCase):
         tfile.close()
 
 
-class TestsSpikeGLX(unittest.TestCase):
+class TestSpikeGLX_glob_ephys(unittest.TestCase):
+    """
+    Creates mock acquisition folders architecture (omitting metadata files):
+    ├── 3A
+    │   ├── imec0
+    │   │   ├── sync_testing_g0_t0.imec0.ap.bin
+    │   │   └── sync_testing_g0_t0.imec0.lf.bin
+    │   └── imec1
+    │       ├── sync_testing_g0_t0.imec1.ap.bin
+    │       └── sync_testing_g0_t0.imec1.lf.bin
+    └── 3B
+        ├── sync_testing_g0_t0.nidq.bin
+        ├── imec0
+        │   ├── sync_testing_g0_t0.imec0.ap.bin
+        │   └── sync_testing_g0_t0.imec0.lf.bin
+        └── imec1
+            ├── sync_testing_g0_t0.imec1.ap.bin
+            └── sync_testing_g0_t0.imec1.lf.bin
+    """
+    def setUp(self):
+        def touchfile(p):
+            if isinstance(p, Path):
+                p.parent.mkdir(exist_ok=True)
+                p.touch(exist_ok=True)
+
+        def create_tree(root_dir, dico):
+            root_dir.mkdir(exist_ok=True)
+            for l in dico:
+                for k in l:
+                    touchfile(l[k])
+
+        self.tmpdir = Path(tempfile.gettempdir()) / 'test_glob_ephys'
+        self.tmpdir.mkdir(exist_ok=True)
+        self.dir3a = self.tmpdir.joinpath('3A')
+        self.dir3b = self.tmpdir.joinpath('3B')
+        self.dict3a = [{'label': 'imec0',
+                        'ap': self.dir3a / 'imec0' / 'sync_testing_g0_t0.imec0.ap.bin',
+                        'lf': self.dir3a / 'imec0' / 'sync_testing_g0_t0.imec0.lf.bin'},
+                       {'label': 'imec1',
+                        'ap': self.dir3a / 'imec1' / 'sync_testing_g0_t0.imec1.ap.bin',
+                        'lf': self.dir3a / 'imec1' / 'sync_testing_g0_t0.imec1.lf.bin'}]
+        self.dict3b = [{'label': 'imec0',
+                        'ap': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.ap.bin',
+                        'lf': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.lf.bin'},
+                       {'label': 'imec1',
+                        'ap': self.dir3b / 'imec1' / 'sync_testing_g0_t0.imec1.ap.bin',
+                        'lf': self.dir3b / 'imec1' / 'sync_testing_g0_t0.imec1.lf.bin'},
+                       {'label': 'breakout',
+                        'nidq': self.dir3b / 'sync_testing_g0_t0.nidq.bin'}]
+        create_tree(self.dir3a, self.dict3a)
+        create_tree(self.dir3b, self.dict3b)
+
+    def test_glob_ephys(self):
+        def dict_equals(d1, d2):
+            return all([l in d1 for l in d2]) and all([l in d2 for l in d1])
+        self.assertTrue(dict_equals(self.dict3a, spikeglx.glob_ephys_files(self.dir3a)))
+        self.assertTrue(dict_equals(self.dict3b, spikeglx.glob_ephys_files(self.dir3b)))
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdir)
+
+
+class TestsSpikeGLX_Meta(unittest.TestCase):
+
     def setUp(self):
         self.workdir = Path(__file__).parent / 'fixtures' / 'io' / 'spikeglx'
         self.meta_files = list(Path.glob(self.workdir, '*.meta'))
 
-    def testReadMetaData(self):
+    def test_read_nidq(self):
+        # nidq has 1 analog and 1 digital sync channels
+        self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
+        nidq = self.mock_spikeglx_file(self.workdir / 'sample3B_g0_t0.nidq.meta',
+                                       ns=32, nc=2, sync_depth=8)
+        self.assert_read_glx(nidq)
+
+    def test_read_3A(self):
+        self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
+        bin_3a = self.mock_spikeglx_file(self.workdir / 'sample3A_g0_t0.imec.ap.meta',
+                                         ns=32, nc=385, sync_depth=16)
+        self.assert_read_glx(bin_3a)
+
+    def test_read_3B(self):
+        self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
+        bin_3b = self.mock_spikeglx_file(self.workdir / 'sample3B_g0_t0.imec1.ap.meta',
+                                         ns=32, nc=385, sync_depth=16)
+        self.assert_read_glx(bin_3b)
+
+    def assert_read_glx(self, tglx):
+        sr = spikeglx.Reader(tglx['bin_file'])
+        d, sync = sr.read_samples(0, tglx['ns'])
+        # could be rounding errors with non-integer sampling rates
+        self.assertTrue(sr.nc == tglx['nc'])
+        self.assertTrue(sr.ns == tglx['ns'])
+        # test the data reading with gain
+        self.assertTrue(np.all(sr.channel_conversion_sample2mv[sr.type] * tglx['D'] == d))
+        # test the sync reading, one front per channel
+        self.assertTrue(np.sum(sync) == tglx['sync_depth'])
+        for m in np.arange(tglx['sync_depth']):
+            self.assertTrue(sync[m + 1, m] == 1)
+        self.tdir.cleanup()
+
+    def mock_spikeglx_file(self, meta_file, ns, nc, sync_depth):
+        tmp_meta_file = Path(self.tdir.name).joinpath(meta_file.name)
+        tmp_bin_file = Path(self.tdir.name).joinpath(meta_file.name).with_suffix('.bin')
+        md = spikeglx.read_meta_data(meta_file)
+        fs = spikeglx._get_fs_from_meta(md)
+        fid_source = open(meta_file)
+        fid_target = open(tmp_meta_file, 'w+')
+        line = fid_source.readline()
+        while line:
+            line = fid_source.readline()
+            if line.startswith('fileSizeBytes'):
+                line = f'fileSizeBytes={ns * nc * 2}\n'
+            if line.startswith('fileTimeSecs'):
+                line = f'fileTimeSecs={ns / fs}\n'
+            fid_target.write(line)
+        fid_source.close()
+        fid_target.close()
+        # each channel as an int of chn + 1
+        D = np.tile(np.int16(np.arange(nc) + 1), (ns, 1))
+        # the last channel is the sync that we fill with
+        sync = np.uint16(2 ** np.float32(np.arange(-1, sync_depth)))
+        D[:, -1] = 0
+        D[:sync.size, -1] = sync
+        with open(tmp_bin_file, 'w+') as fid:
+            D.tofile(fid)
+        return {'bin_file': tmp_bin_file, 'ns': ns, 'nc': nc, 'sync_depth': sync_depth, 'D': D}
+
+    def testGetRevisionAndType(self):
         for meta_data_file in self.meta_files:
             md = spikeglx.read_meta_data(meta_data_file)
             self.assertTrue(len(md.keys()) >= 37)
+            # test getting revision
+            revision = meta_data_file.name[6:8]
+            self.assertEqual(spikeglx._get_neuropixel_version_from_meta(md)[0:2], revision)
+            # test getting acquisition type
+            type = meta_data_file.name.split('.')[-2]
+            self.assertEqual(spikeglx._get_type_from_meta(md), type)
 
-    def testReadChannelGain(self):
+    def testReadChannelGainAPLF(self):
         for meta_data_file in self.meta_files:
+            if meta_data_file.name.split('.')[-2] not in ['lf', 'ap']:
+                continue
             md = spikeglx.read_meta_data(meta_data_file)
-            cg = spikeglx._gain_channels_from_meta(md)
-            self.assertTrue(np.all(cg['lf'][0:-1] == 250))
-            self.assertTrue(np.all(cg['ap'][0:-1] == 500))
-            self.assertTrue(len(cg['ap']) == len(cg['lf']) == int(sum(md.get('snsApLfSy'))))
+            cg = spikeglx._conversion_sample2mv_from_meta(md)
+            i2v = md.get('imAiRangeMax') / 512
+            self.assertTrue(np.all(cg['lf'][0:-1] == i2v / 250))
+            self.assertTrue(np.all(cg['ap'][0:-1] == i2v / 500))
+            # also test consistent dimension with nchannels
+            nc = spikeglx._get_nchannels_from_meta(md)
+            self.assertTrue(len(cg['ap']) == len(cg['lf']) == nc)
+
+    def testReadChannelGainNIDQ(self):
+        for meta_data_file in self.meta_files:
+            if meta_data_file.name.split('.')[-2] not in ['nidq']:
+                continue
+            md = spikeglx.read_meta_data(meta_data_file)
+            nc = spikeglx._get_nchannels_from_meta(md)
+            cg = spikeglx._conversion_sample2mv_from_meta(md)
+            i2v = md.get('niAiRangeMax') / 32768
+            self.assertTrue(np.all(cg['nidq'][slice(0, int(np.sum(md.acqMnMaXaDw[:2])))] == i2v))
+            self.assertTrue(np.all(cg['nidq'][slice(int(np.sum(md.acqMnMaXaDw[:2])), None)] == 1.))
+            self.assertTrue(len(cg['nidq']) == nc)
 
     def testReadChannelMap(self):
         for meta_data_file in self.meta_files:

@@ -1,6 +1,26 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+import ibllib.dsp.fourier as ft
+
+
+def lp(ts, fac, pad=0.2):
+    """
+    Smooth the data in frequency domain (assumes a uniform sampling rate), using edge padding
+
+    ibllib.dsp.smooth.lp(ts, [.1, .15])
+    :param ts: input signal to be smoothed
+    :param fac: 2 element vector of the frequency edges relative to Nyquist: [0.15, 0.2] keeps
+    everything up to 15% of the full band tapering down to 20%
+    :param pad: padding on the edges of the time serie, between 0 and 1 (0.2 means 20% of the size)
+    :return: smoothed time series
+    """
+    # keep at least two periods for the padding
+    lpad = np.int(np.ceil(ts.shape[0] * pad))
+    ts_ = np.pad(ts, lpad, mode='edge')
+    ts_ = ft.lp(ts_, 1, np.array(fac) / 2)
+    return ts_[lpad:-lpad]
+
 
 def rolling_window(x, window_len=11, window='blackman'):
     """
