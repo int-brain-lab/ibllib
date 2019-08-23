@@ -445,6 +445,8 @@ def validate_mock_recording(ses_path):
     MIN_TRIALS_NB = 10
 
     ses_path = Path(ses_path)
+    if not ses_path.exists():
+        return False
     rawsync, sync_map = _get_task_sync(ses_path)
     last_time = rawsync['times'][-1]
 
@@ -464,6 +466,7 @@ def validate_mock_recording(ses_path):
     assert (len(sync.frame2ttl) / last_time > 0.2)  # minimal wheel action
     assert (len(sync.audio) > MIN_TRIALS_NB)  # minimal wheel action
 
+    _logger.info('ALL CHECKS PASSED !')
     return True
 
 
