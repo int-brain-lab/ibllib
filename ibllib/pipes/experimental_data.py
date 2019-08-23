@@ -67,6 +67,9 @@ def _compress(root_data_folder, command, flag_pattern, dry=False, max_sessions=N
     for flag_file in Path(root_data_folder).rglob(flag_pattern):
         ses_path = flag_file.parent
         files2compress = flags.read_flag_file(flag_file)
+        if isinstance(files2compress, bool):
+            Path(flag_file).unlink()
+            continue
         for f2c in files2compress:
             cfile = ses_path.joinpath(PureWindowsPath(f2c))
             c += 1
