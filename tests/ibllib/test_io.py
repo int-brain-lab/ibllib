@@ -311,8 +311,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
 class TestsHardwareParameters3A(unittest.TestCase):
 
     def setUp(self):
-        self.tdir = tempfile.TemporaryDirectory()
-        self.dir = Path(self.tdir.name)
+        self.workdir = Path(__file__).parent / 'fixtures' / 'io' / 'spikeglx'
         self.map3A = {'left_camera': 2,
                       'right_camera': 3,
                       'body_camera': 4,
@@ -324,32 +323,35 @@ class TestsHardwareParameters3A(unittest.TestCase):
         self.map3B = {'left_camera': 0,
                       'right_camera': 1,
                       'body_camera': 2,
-                      'sync': 3,
+                      'imec_sync': 3,
                       'frame2ttl': 4,
                       'rotary_encoder_0': 5,
                       'rotary_encoder_1': 6,
                       'audio': 7}
+        self.file3a = self.workdir / 'sample3A_g0_t0.imec.wiring.json'
+        self.file3b = self.workdir / 'sample3B_g0_t0.nidq.wiring.json'
 
     def test_get_wiring(self):
-        return
         # get params providing full file path
-        par = spikeglx.get_hardware_config(self.file_json)
-        self.assertEqual(par, self.par)
-        # get params providing directory path
-        par = spikeglx.get_hardware_config(self.file_json.parent)
-        self.assertEqual(par, self.par)
+        par = spikeglx.get_hardware_config(self.workdir)
+        self.assertTrue(par)
+        with tempfile.TemporaryDirectory() as tdir:
+            # test from empty directory
+            self.assertIsNone(spikeglx.get_hardware_config(tdir))
+            # test from directory
+            shutil.copy(self.file3a, Path(tdir) / self.file3a.name)
+            par3a = spikeglx.get_hardware_config(tdir)
+            # test from full file path
+            par3a_ = spikeglx.get_hardware_config(Path(tdir) / self.file3a.name)
+            self.assertEqual(par3a, par3a_)
 
     def test_get_channel_map(self):
-        return
-        map = spikeglx.get_sync_map(self.file_json)
-        self.assertEqual(map, self.map)
-        map = spikeglx._sync_map_from_hardware_config(self.par)
-        self.assertEqual(map, self.map)
-        map = spikeglx.get_sync_map(self.dir / 'idontexist.json')
-        self.assertEqual(map, spikeglx.SYNC_CHANNEL_MAP)
-
-    def tearDown(self):
-        self.tdir.cleanup()
+        map = spikeglx.get_sync_map(self.file3a)
+        self.assertEqual(map, self.map3A)
+        map = spikeglx.get_sync_map(self.file3b)
+        self.assertEqual(map, self.map3B)
+        with tempfile.TemporaryDirectory() as tdir:
+            self.assertIsNone(spikeglx.get_sync_map(Path(tdir) / 'idontexist.json'))
 
 
 if __name__ == "__main__":

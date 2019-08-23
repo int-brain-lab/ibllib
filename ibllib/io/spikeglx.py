@@ -354,9 +354,11 @@ def get_hardware_config(config_file):
     """
     config_file = Path(config_file)
     if config_file.is_dir():
-        config_file = config_file / 'neuropixel_wirings.json'
-    if not config_file.exists():
-        _logger.warning(f"No neuropixel_wirings.json file found in {str(config_file)}")
+        config_file = list(config_file.glob('*.wiring.json'))
+        if config_file:
+            config_file = config_file[0]
+    if not config_file or not config_file.exists():
+        _logger.warning(f"No neuropixel *.wiring.json file found in {str(config_file)}")
         return
     with open(config_file) as fid:
         par = json.loads(fid.read())
@@ -368,8 +370,10 @@ def _sync_map_from_hardware_config(hardware_config):
     :param hardware_config: dictonary from json read of neuropixel_wirings.json
     :return: dictionary where key names refer to object and values to sync channel index
     """
-    sync_map = {hardware_config['SYNC_WIRING'][pin]: neuropixel.SYNC_PIN_OUT_3A[pin] for pin in
-                hardware_config['SYNC_WIRING'] if neuropixel.SYNC_PIN_OUT_3A[pin]}
+    pin_out = neuropixel.SYNC_PIN_OUT[hardware_config['SYSTEM']]
+    sync_map = {hardware_config['SYNC_WIRING_DIGITAL'][pin]: pin_out[pin]
+                for pin in hardware_config['SYNC_WIRING_DIGITAL']
+                if pin_out[pin] is not None}
     return sync_map
 
 

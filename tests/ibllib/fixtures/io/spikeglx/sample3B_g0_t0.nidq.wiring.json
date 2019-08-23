@@ -4,7 +4,7 @@
         "P0.0": "left_camera",
         "P0.1": "right_camera",
         "P0.2": "body_camera",
-        "P0.3": "imec_sync_signal",
+        "P0.3": "imec_sync",
         "P0.4": "frame2ttl",
         "P0.5": "rotary_encoder_0",
         "P0.6": "rotary_encoder_1",

@@ -230,6 +230,19 @@ def _get_sync_fronts(sync, channel_nb):
             'polarities': sync['polarities'][sync['channels'] == channel_nb]}
 
 
+def extract_camera_sync(sync, output_path=None, save=False, chmap=None):
+    """
+    Extract camera timestamps from the sync matrix
+
+    :param sync: dictionary 'times', 'polarities' of fronts detected on sync trace
+    :param output_path: where to save the data
+    :param save: True/False
+    :param chmap: dictionary containing channel indices. Default to constant.
+    :return: dictionary containing camera timestamps
+    """
+    pass
+
+
 def extract_wheel_sync(sync, output_path=None, save=False, chmap=None):
     """
     Extract wheel positions and times from sync fronts dictionary for all 16 chans
@@ -414,11 +427,20 @@ def extract_all(session_path, save=False):
     ephys_files = glob_ephys_files(session_path)
     version = _get_probe_version_from_files(ephys_files)
     sync_chmap = CHMAPS[version]
-    syncs = extract_sync(session_path, save=True, ephys_files=ephys_files)
+    extract_sync(session_path, save=True)
+    # attach the sync information to each binary file found
+    for ef in ephys_files:
+        ef['sync'] = alf.io.load_object(ef.path, '_spikeglx_sync', short_keys=True)
 
-    if isinstance(syncs, list) and len(syncs) > 1:
-        raise NotImplementedError('Task extraction of multiple probes not ready, contact us !')
-    extract_wheel_sync(syncs[0], alf_path, save=save)
-    extract_behaviour_sync(syncs[0], alf_path, save=save)
+    if version == '3A':
+        # the sync master is the probe with the most sync pulses
+        sync_box_ind = np.argmax([ef.sync.times.size for ef in ephys_files])
+    elif version == '3B':
+        # the sync master is the nidq breakout box
+        sync_box_ind = np.argmax([1 if ef.get('nidq') else 0 for ef in ephys_files])
+
+    sync = ephys_files[sync_box_ind].sync
+    extract_wheel_sync(sync, alf_path, save=save, chmap=sync_chmap)
+    extract_behaviour_sync(sync, alf_path, save=save, chmap=sync_chmap)
     align_with_bpod(session_path)  # checks consistency and compute dt with bpod
-    # TODO get camera time-stamps
+    extract_camera_sync(sync, alf_path, save=save, chmap=sync_chmap)  # TODO get camera time-stamps
