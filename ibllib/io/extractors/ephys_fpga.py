@@ -180,7 +180,7 @@ def _audio_events_extraction(audio_t, audio_fronts):
     # take only even time differences: ie. from rising to falling fronts
     dt = np.diff(audio_t)[::2]
     # detect ready tone by length below 110 ms
-    i_ready_tone_in = np.r_[1, np.where(dt <= 0.11)[0] * 2]
+    i_ready_tone_in = np.r_[np.where(dt <= 0.11)[0] * 2]
     t_ready_tone_in = audio_t[i_ready_tone_in]
     # error tones are events lasting from 400ms to 600ms
     i_error_tone_in = np.where(np.logical_and(0.4 < dt, dt < 0.6))[0] * 2
@@ -290,10 +290,8 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None):
         audio['times'], audio['polarities'])
     # stim off time is the first frame2ttl rise/fall after the trial start
     # does not apply for 1st trial
-    ind = np.searchsorted(frame2ttl['times'], t_trial_start[1:], side='left')
+    ind = np.searchsorted(frame2ttl['times'], t_iti_in, side='left')
     t_stim_off = frame2ttl['times'][ind]
-    # the t_stim_off happens 100ms after trial start
-    assert(np.all((t_trial_start[1:] - t_stim_off) > -0.1))
     t_stim_freeze = frame2ttl['times'][ind - 1]
 
     if DEBUG_PLOTS:
@@ -359,12 +357,13 @@ def align_with_bpod(session_path):
     :param session_path:
     :return: dt: median time difference of trial start times (fpga - bpod)
     """
+    ITI_DURATION = 0.5
     # check consistency
     output_path = Path(session_path) / 'alf'
     trials = alf.io.load_object(output_path, '_ibl_trials')
     assert(alf.io.check_dimensions(trials) == 0)
-    dt = (np.diff(trials['intervalsBpod']) - np.diff(trials['intervals']))
-    assert(np.all(np.abs(dt[np.invert(np.isnan(dt))]) < 5 * 1e-3))
+    tlen = (np.diff(trials['intervalsBpod']) - np.diff(trials['intervals']))[:-1] - ITI_DURATION
+    assert(np.all(np.abs(tlen[np.invert(np.isnan(tlen))]) < 5 * 1e-3))
     dt = trials['intervals'][:, 0] - trials['intervalsBpod'][:, 0]
     # plt.plot(np.diff(trials['intervalsBpod']), '*')
     # plt.plot(np.diff(trials['intervals']), '.')
