@@ -331,6 +331,11 @@ class TestsHardwareParameters3A(unittest.TestCase):
         self.file3a = self.workdir / 'sample3A_g0_t0.imec.wiring.json'
         self.file3b = self.workdir / 'sample3B_g0_t0.nidq.wiring.json'
 
+    def test_default_values(self):
+        from ibllib.io.extractors import ephys_fpga
+        self.assertEqual(ephys_fpga.CHMAPS['3A'], self.map3A)
+        self.assertEqual(ephys_fpga.CHMAPS['3B'], self.map3B)
+
     def test_get_wiring(self):
         # get params providing full file path
         par = spikeglx.get_hardware_config(self.workdir)
