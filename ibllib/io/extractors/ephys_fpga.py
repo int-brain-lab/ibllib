@@ -31,7 +31,7 @@ CHMAPS = {'3A': {'left_camera': 2,
           '3B': {'left_camera': 0,
                  'right_camera': 1,
                  'body_camera': 2,
-                 'sync': 3,
+                 'imec_sync': 3,
                  'frame2ttl': 4,
                  'rotary_encoder_0': 5,
                  'rotary_encoder_1': 6,
@@ -402,6 +402,71 @@ def extract_sync(session_path, save=False, force=False, ephys_files=None):
     return syncs
 
 
+def _get_task_sync(session_path):
+    """
+    From 3A or 3B multiprobe session, returns the main probe (3A) or nidq sync pulses
+    with the attached channel map (default chmap if none)
+    :param session_path:
+    :return:
+    """
+    def _get_probe_version_from_files(ephys_files):
+        if any([ef.get('nidq') for ef in ephys_files]):
+            return '3B'
+        else:
+            return '3A'
+
+    # round-up of all bin ephys files in the session, infer revision and get sync map
+    ephys_files = glob_ephys_files(session_path)
+    version = _get_probe_version_from_files(ephys_files)
+
+    sync_chmap = CHMAPS[version]
+    extract_sync(session_path, save=True)
+    # attach the sync information to each binary file found
+    for ef in ephys_files:
+        ef['sync'] = alf.io.load_object(ef.path, '_spikeglx_sync', short_keys=True)
+        ef['sync_map'] = ibllib.io.spikeglx.get_sync_map(ef['path'])
+
+    if version == '3A':
+        # the sync master is the probe with the most sync pulses
+        sync_box_ind = np.argmax([ef.sync.times.size for ef in ephys_files])
+    elif version == '3B':
+        # the sync master is the nidq breakout box
+        sync_box_ind = np.argmax([1 if ef.get('nidq') else 0 for ef in ephys_files])
+
+    sync = ephys_files[sync_box_ind].sync
+    return sync, sync_chmap
+
+
+def validate_mock_recording(ses_path):
+    LEFT_CAMERA_FRATE_HZ = 60
+    RIGHT_CAMERA_FRATE_HZ = 150
+    BODY_CAMERA_FRATE_HZ = 30
+    SYNC_RATE_HZ = 1
+    MIN_TRIALS_NB = 10
+
+    ses_path = Path(ses_path)
+    rawsync, sync_map = _get_task_sync(ses_path)
+    last_time = rawsync['times'][-1]
+
+    # get upgoing fronts for each
+    sync = Bunch({})
+    for k in sync_map:
+        fronts = _get_sync_fronts(rawsync, sync_map[k])
+        sync[k] = fronts['times'][fronts['polarities'] == 1]
+    wheel = extract_wheel_sync(rawsync, chmap=sync_map, save=False)
+
+    # implement some task logic
+    assert (np.all(1 - LEFT_CAMERA_FRATE_HZ * np.diff(sync.left_camera) < 0.1))
+    assert (np.all(1 - RIGHT_CAMERA_FRATE_HZ * np.diff(sync.right_camera) < 0.1))
+    assert (np.all(1 - BODY_CAMERA_FRATE_HZ * np.diff(sync.body_camera) < 0.1))
+    assert (np.all(1 - SYNC_RATE_HZ * np.diff(sync.imec_sync) < 0.1))
+    assert (len(wheel['re_pos']) / last_time > 5)  # minimal wheel action
+    assert (len(sync.frame2ttl) / last_time > 0.2)  # minimal wheel action
+    assert (len(sync.audio) > MIN_TRIALS_NB)  # minimal wheel action
+
+    return True
+
+
 def extract_all(session_path, save=False):
     """
     For the IBL ephys task, reads ephys binary file and extract:
@@ -414,32 +479,10 @@ def extract_all(session_path, save=False):
     :param version: bpod version, defaults to None
     :return: None
     """
-
-    def _get_probe_version_from_files(ephys_files):
-        if any([ef.get('nidq') for ef in ephys_files]):
-            return '3B'
-        else:
-            return '3A'
-
     session_path = Path(session_path)
     alf_path = session_path / 'alf'
-    # round-up of all bin ephys files in the session, infer revision and get sync map
-    ephys_files = glob_ephys_files(session_path)
-    version = _get_probe_version_from_files(ephys_files)
-    sync_chmap = CHMAPS[version]
-    extract_sync(session_path, save=True)
-    # attach the sync information to each binary file found
-    for ef in ephys_files:
-        ef['sync'] = alf.io.load_object(ef.path, '_spikeglx_sync', short_keys=True)
 
-    if version == '3A':
-        # the sync master is the probe with the most sync pulses
-        sync_box_ind = np.argmax([ef.sync.times.size for ef in ephys_files])
-    elif version == '3B':
-        # the sync master is the nidq breakout box
-        sync_box_ind = np.argmax([1 if ef.get('nidq') else 0 for ef in ephys_files])
-
-    sync = ephys_files[sync_box_ind].sync
+    sync, sync_chmap = _get_task_sync(session_path)
     extract_wheel_sync(sync, alf_path, save=save, chmap=sync_chmap)
     extract_behaviour_sync(sync, alf_path, save=save, chmap=sync_chmap)
     align_with_bpod(session_path)  # checks consistency and compute dt with bpod
