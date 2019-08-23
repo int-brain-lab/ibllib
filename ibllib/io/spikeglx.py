@@ -298,7 +298,7 @@ def glob_ephys_files(session_path):
     ephys_files = []
     for raw_ephys_apfile in Path(session_path).rglob('*.ap.bin'):
         # first get the ap file
-        ephys_files.extend([Bunch({'label': None, 'ap': None, 'lf': None})])
+        ephys_files.extend([Bunch({'label': None, 'ap': None, 'lf': None, 'path': None})])
         ephys_files[-1].ap = raw_ephys_apfile
         # then get the corresponding lf file if it exists
         lf_file = raw_ephys_apfile.parent / raw_ephys_apfile.name.replace('.ap.', '.lf.')
@@ -306,10 +306,12 @@ def glob_ephys_files(session_path):
             ephys_files[-1].lf = lf_file
         # finally, the label is the current directory except if it is bare in raw_ephys_data
         ephys_files[-1].label = get_label(raw_ephys_apfile)
+        ephys_files[-1].path = raw_ephys_apfile.parent
     # for 3b probes, need also to get the nidq dataset type
     for raw_ephys_nidqfile in Path(session_path).rglob('*.nidq.bin'):
         ephys_files.extend([Bunch({'label': get_label(raw_ephys_nidqfile),
-                                   'nidq': raw_ephys_nidqfile})])
+                                   'nidq': raw_ephys_nidqfile,
+                                   'path': raw_ephys_nidqfile.parent})])
     return ephys_files
 
 

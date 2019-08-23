@@ -165,13 +165,18 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
     def setUp(self):
         def touchfile(p):
             if isinstance(p, Path):
-                p.parent.mkdir(exist_ok=True, parents=True)
-                p.touch(exist_ok=True)
+                try:
+                    p.parent.mkdir(exist_ok=True, parents=True)
+                    p.touch(exist_ok=True)
+                except Exception:
+                    print('tutu')
 
         def create_tree(root_dir, dico):
             root_dir.mkdir(exist_ok=True, parents=True)
             for l in dico:
                 for k in l:
+                    if k == 'path':
+                        continue
                     touchfile(l[k])
 
         self.tmpdir = Path(tempfile.gettempdir()) / 'test_glob_ephys'
@@ -180,18 +185,23 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
         self.dir3b = self.tmpdir.joinpath('3B').joinpath('raw_ephys_data')
         self.dict3a = [{'label': 'imec0',
                         'ap': self.dir3a / 'imec0' / 'sync_testing_g0_t0.imec0.ap.bin',
-                        'lf': self.dir3a / 'imec0' / 'sync_testing_g0_t0.imec0.lf.bin'},
+                        'lf': self.dir3a / 'imec0' / 'sync_testing_g0_t0.imec0.lf.bin',
+                        'path': self.dir3a / 'imec0'},
                        {'label': 'imec1',
                         'ap': self.dir3a / 'imec1' / 'sync_testing_g0_t0.imec1.ap.bin',
-                        'lf': self.dir3a / 'imec1' / 'sync_testing_g0_t0.imec1.lf.bin'}]
+                        'lf': self.dir3a / 'imec1' / 'sync_testing_g0_t0.imec1.lf.bin',
+                        'path': self.dir3a / 'imec1'}]
         self.dict3b = [{'label': 'imec0',
                         'ap': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.ap.bin',
-                        'lf': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.lf.bin'},
+                        'lf': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.lf.bin',
+                        'path': self.dir3b / 'imec0'},
                        {'label': 'imec1',
                         'ap': self.dir3b / 'imec1' / 'sync_testing_g0_t0.imec1.ap.bin',
-                        'lf': self.dir3b / 'imec1' / 'sync_testing_g0_t0.imec1.lf.bin'},
+                        'lf': self.dir3b / 'imec1' / 'sync_testing_g0_t0.imec1.lf.bin',
+                        'path': self.dir3b / 'imec1'},
                        {'label': '',
-                        'nidq': self.dir3b / 'sync_testing_g0_t0.nidq.bin'}]
+                        'nidq': self.dir3b / 'sync_testing_g0_t0.nidq.bin',
+                        'path': self.dir3b}]
         create_tree(self.dir3a, self.dict3a)
         create_tree(self.dir3b, self.dict3b)
 
