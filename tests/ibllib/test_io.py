@@ -165,13 +165,18 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
     def setUp(self):
         def touchfile(p):
             if isinstance(p, Path):
-                p.parent.mkdir(exist_ok=True, parents=True)
-                p.touch(exist_ok=True)
+                try:
+                    p.parent.mkdir(exist_ok=True, parents=True)
+                    p.touch(exist_ok=True)
+                except Exception:
+                    print('tutu')
 
         def create_tree(root_dir, dico):
             root_dir.mkdir(exist_ok=True, parents=True)
             for l in dico:
                 for k in l:
+                    if k == 'path':
+                        continue
                     touchfile(l[k])
 
         self.tmpdir = Path(tempfile.gettempdir()) / 'test_glob_ephys'
@@ -180,18 +185,23 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
         self.dir3b = self.tmpdir.joinpath('3B').joinpath('raw_ephys_data')
         self.dict3a = [{'label': 'imec0',
                         'ap': self.dir3a / 'imec0' / 'sync_testing_g0_t0.imec0.ap.bin',
-                        'lf': self.dir3a / 'imec0' / 'sync_testing_g0_t0.imec0.lf.bin'},
+                        'lf': self.dir3a / 'imec0' / 'sync_testing_g0_t0.imec0.lf.bin',
+                        'path': self.dir3a / 'imec0'},
                        {'label': 'imec1',
                         'ap': self.dir3a / 'imec1' / 'sync_testing_g0_t0.imec1.ap.bin',
-                        'lf': self.dir3a / 'imec1' / 'sync_testing_g0_t0.imec1.lf.bin'}]
+                        'lf': self.dir3a / 'imec1' / 'sync_testing_g0_t0.imec1.lf.bin',
+                        'path': self.dir3a / 'imec1'}]
         self.dict3b = [{'label': 'imec0',
                         'ap': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.ap.bin',
-                        'lf': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.lf.bin'},
+                        'lf': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.lf.bin',
+                        'path': self.dir3b / 'imec0'},
                        {'label': 'imec1',
                         'ap': self.dir3b / 'imec1' / 'sync_testing_g0_t0.imec1.ap.bin',
-                        'lf': self.dir3b / 'imec1' / 'sync_testing_g0_t0.imec1.lf.bin'},
+                        'lf': self.dir3b / 'imec1' / 'sync_testing_g0_t0.imec1.lf.bin',
+                        'path': self.dir3b / 'imec1'},
                        {'label': '',
-                        'nidq': self.dir3b / 'sync_testing_g0_t0.nidq.bin'}]
+                        'nidq': self.dir3b / 'sync_testing_g0_t0.nidq.bin',
+                        'path': self.dir3b}]
         create_tree(self.dir3a, self.dict3a)
         create_tree(self.dir3b, self.dict3b)
 
@@ -296,6 +306,57 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
         for m in range(1, 16):
             self.assertEqual(np.sum(out[m]), 1)
             self.assertEqual(out[m, m - 1], 1)
+
+
+class TestsHardwareParameters3A(unittest.TestCase):
+
+    def setUp(self):
+        self.workdir = Path(__file__).parent / 'fixtures' / 'io' / 'spikeglx'
+        self.map3A = {'left_camera': 2,
+                      'right_camera': 3,
+                      'body_camera': 4,
+                      'bpod': 7,
+                      'frame2ttl': 12,
+                      'rotary_encoder_0': 13,
+                      'rotary_encoder_1': 14,
+                      'audio': 15}
+        self.map3B = {'left_camera': 0,
+                      'right_camera': 1,
+                      'body_camera': 2,
+                      'imec_sync': 3,
+                      'frame2ttl': 4,
+                      'rotary_encoder_0': 5,
+                      'rotary_encoder_1': 6,
+                      'audio': 7}
+        self.file3a = self.workdir / 'sample3A_g0_t0.imec.wiring.json'
+        self.file3b = self.workdir / 'sample3B_g0_t0.nidq.wiring.json'
+
+    def test_default_values(self):
+        from ibllib.io.extractors import ephys_fpga
+        self.assertEqual(ephys_fpga.CHMAPS['3A'], self.map3A)
+        self.assertEqual(ephys_fpga.CHMAPS['3B'], self.map3B)
+
+    def test_get_wiring(self):
+        # get params providing full file path
+        par = spikeglx.get_hardware_config(self.workdir)
+        self.assertTrue(par)
+        with tempfile.TemporaryDirectory() as tdir:
+            # test from empty directory
+            self.assertIsNone(spikeglx.get_hardware_config(tdir))
+            # test from directory
+            shutil.copy(self.file3a, Path(tdir) / self.file3a.name)
+            par3a = spikeglx.get_hardware_config(tdir)
+            # test from full file path
+            par3a_ = spikeglx.get_hardware_config(Path(tdir) / self.file3a.name)
+            self.assertEqual(par3a, par3a_)
+
+    def test_get_channel_map(self):
+        map = spikeglx.get_sync_map(self.file3a)
+        self.assertEqual(map, self.map3A)
+        map = spikeglx.get_sync_map(self.file3b)
+        self.assertEqual(map, self.map3B)
+        with tempfile.TemporaryDirectory() as tdir:
+            self.assertIsNone(spikeglx.get_sync_map(Path(tdir) / 'idontexist.json'))
 
 
 if __name__ == "__main__":

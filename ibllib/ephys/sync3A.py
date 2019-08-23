@@ -6,7 +6,6 @@ import numpy as np
 import alf.io
 import ibllib.io.spikeglx
 from brainbox.core import Bunch
-import ibllib.io.extractors.ephys_fpga as ephys_fpga
 import ibllib.io.spikeglx as spikeglx
 
 
@@ -26,7 +25,7 @@ def sync_probe_folders_3A(ses_path):
 
     for ind, ephys_file in enumerate(ephys_files):
         sync = alf.io.load_object(ephys_file.ap.parent, '_spikeglx_sync', short_keys=True)
-        sync_map = ephys_fpga.get_sync_map(ephys_file.ap.parent)
+        sync_map = ibllib.io.spikeglx.get_sync_map(ephys_file.ap.parent)
         isync = np.in1d(sync['channels'], np.array([sync_map['right_camera'],
                                                     sync_map['left_camera'],
                                                     sync_map['body_camera']]))
