@@ -1,6 +1,5 @@
 import logging
 from pathlib import Path
-import json
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,7 +7,6 @@ import matplotlib.pyplot as plt
 from brainbox.core import Bunch
 import brainbox.behavior.wheel as whl
 
-import ibllib.ephys.neuropixel as neuropixel
 import ibllib.plots as plots
 import ibllib.io.spikeglx
 import ibllib.dsp as dsp
@@ -21,66 +19,24 @@ SYNC_BATCH_SIZE_SAMPLES = 2 ** 18  # number of samples to read at once in bin fi
 WHEEL_RADIUS_CM = 3.1
 WHEEL_TICKS = 1024
 DEBUG_PLOTS = False
-# this is the mapping of synchronisation pulses coming out of the FPGA
 
-AUXES = [
-    (0, None),
-    (1, None),
-    (2, 'left_camera'),
-    (3, 'right_camera'),
-    (4, 'body_camera'),
-    (5, None),
-    (6, None),
-    (7, 'bpod'),
-    (8, None),
-    (9, None),
-    (10, None),
-    (11, None),
-    (12, 'frame2ttl'),
-    (13, 'rotary_encoder_0'),
-    (14, 'rotary_encoder_1'),
-    (15, 'audio'),
-]
-SYNC_CHANNEL_MAP = {}
-for aux in AUXES:
-    if aux[1]:
-        SYNC_CHANNEL_MAP[aux[1]] = aux[0]
-
-
-def get_hardware_config(config_file):
-    """
-    Reads the neuropixel_wirings.json file containing sync mapping and parameters
-    :param config_file: folder or json file
-    :return: dictionary or None
-    """
-    config_file = Path(config_file)
-    if config_file.is_dir():
-        config_file = config_file / 'neuropixel_wirings.json'
-    if not config_file.exists():
-        _logger.warning(f"No neuropixel_wirings.json file found in {str(config_file)}")
-        return
-    with open(config_file) as fid:
-        par = json.loads(fid.read())
-    return par
-
-
-def _sync_map_from_hardware_config(hardware_config):
-    """
-    :param hardware_config: dictonary from json read of neuropixel_wirings.json
-    :return: dictionary where key names refer to object and values to sync channel index
-    """
-    sync_map = {hardware_config['SYNC_WIRING'][pin]: neuropixel.SYNC_PIN_OUT[pin] for pin in
-                hardware_config['SYNC_WIRING'] if neuropixel.SYNC_PIN_OUT[pin]}
-    return sync_map
-
-
-def get_sync_map(folder_ephys):
-    hc = get_hardware_config(folder_ephys)
-    if not hc:
-        _logger.warning(f"Uses defaults sync map for {str(folder_ephys)}")
-        return SYNC_CHANNEL_MAP
-    else:
-        return _sync_map_from_hardware_config(hc)
+CHMAPS = {'3A': {'left_camera': 2,
+                 'right_camera': 3,
+                 'body_camera': 4,
+                 'bpod': 7,
+                 'frame2ttl': 12,
+                 'rotary_encoder_0': 13,
+                 'rotary_encoder_1': 14,
+                 'audio': 15},
+          '3B': {'left_camera': 0,
+                 'right_camera': 1,
+                 'body_camera': 2,
+                 'imec_sync': 3,
+                 'frame2ttl': 4,
+                 'rotary_encoder_0': 5,
+                 'rotary_encoder_1': 6,
+                 'audio': 7},
+          }
 
 
 def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
@@ -224,7 +180,7 @@ def _audio_events_extraction(audio_t, audio_fronts):
     # take only even time differences: ie. from rising to falling fronts
     dt = np.diff(audio_t)[::2]
     # detect ready tone by length below 110 ms
-    i_ready_tone_in = np.r_[1, np.where(dt <= 0.11)[0] * 2]
+    i_ready_tone_in = np.r_[np.where(dt <= 0.11)[0] * 2]
     t_ready_tone_in = audio_t[i_ready_tone_in]
     # error tones are events lasting from 400ms to 600ms
     i_error_tone_in = np.where(np.logical_and(0.4 < dt, dt < 0.6))[0] * 2
@@ -274,7 +230,20 @@ def _get_sync_fronts(sync, channel_nb):
             'polarities': sync['polarities'][sync['channels'] == channel_nb]}
 
 
-def extract_wheel_sync(sync, output_path=None, save=False, chmap=SYNC_CHANNEL_MAP):
+def extract_camera_sync(sync, output_path=None, save=False, chmap=None):
+    """
+    Extract camera timestamps from the sync matrix
+
+    :param sync: dictionary 'times', 'polarities' of fronts detected on sync trace
+    :param output_path: where to save the data
+    :param save: True/False
+    :param chmap: dictionary containing channel indices. Default to constant.
+    :return: dictionary containing camera timestamps
+    """
+    pass
+
+
+def extract_wheel_sync(sync, output_path=None, save=False, chmap=None):
     """
     Extract wheel positions and times from sync fronts dictionary for all 16 chans
 
@@ -300,7 +269,7 @@ def extract_wheel_sync(sync, output_path=None, save=False, chmap=SYNC_CHANNEL_MA
     return wheel
 
 
-def extract_behaviour_sync(sync, output_path=None, save=False, chmap=SYNC_CHANNEL_MAP):
+def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None):
     """
     Extract wheel positions and times from sync fronts dictionary
 
@@ -321,10 +290,8 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=SYNC_CHANNE
         audio['times'], audio['polarities'])
     # stim off time is the first frame2ttl rise/fall after the trial start
     # does not apply for 1st trial
-    ind = np.searchsorted(frame2ttl['times'], t_trial_start[1:], side='left')
+    ind = np.searchsorted(frame2ttl['times'], t_iti_in, side='left')
     t_stim_off = frame2ttl['times'][ind]
-    # the t_stim_off happens 100ms after trial start
-    assert(np.all((t_trial_start[1:] - t_stim_off) > -0.1))
     t_stim_freeze = frame2ttl['times'][ind - 1]
 
     if DEBUG_PLOTS:
@@ -390,19 +357,20 @@ def align_with_bpod(session_path):
     :param session_path:
     :return: dt: median time difference of trial start times (fpga - bpod)
     """
+    ITI_DURATION = 0.5
     # check consistency
     output_path = Path(session_path) / 'alf'
     trials = alf.io.load_object(output_path, '_ibl_trials')
     assert(alf.io.check_dimensions(trials) == 0)
-    dt = (np.diff(trials['intervalsBpod']) - np.diff(trials['intervals']))
-    assert(np.all(np.abs(dt[np.invert(np.isnan(dt))]) < 5 * 1e-3))
+    tlen = (np.diff(trials['intervalsBpod']) - np.diff(trials['intervals']))[:-1] - ITI_DURATION
+    assert(np.all(np.abs(tlen[np.invert(np.isnan(tlen))]) < 5 * 1e-3))
     dt = trials['intervals'][:, 0] - trials['intervalsBpod'][:, 0]
     # plt.plot(np.diff(trials['intervalsBpod']), '*')
     # plt.plot(np.diff(trials['intervals']), '.')
     return np.median(dt)
 
 
-def extract_sync(session_path, save=False, force=False):
+def extract_sync(session_path, save=False, force=False, ephys_files=None):
     """
     Reads ephys binary file (s) and extract sync whithin the binary file folder
     Assumes ephys data is whithin a `raw_ephys_data` folder
@@ -414,9 +382,10 @@ def extract_sync(session_path, save=False, force=False):
     """
     session_path = Path(session_path)
     raw_ephys_path = session_path / 'raw_ephys_data'
-    ephys_files_info = glob_ephys_files(raw_ephys_path)
+    if not ephys_files:
+        ephys_files = glob_ephys_files(raw_ephys_path)
     syncs = []
-    for efi in ephys_files_info:
+    for efi in ephys_files:
         glob_filter = f'*{efi.label}*' if efi.label else '*'
         bin_file = efi.get('ap', efi.get('nidq', None))
         if not bin_file:
@@ -432,6 +401,74 @@ def extract_sync(session_path, save=False, force=False):
     return syncs
 
 
+def _get_task_sync(session_path):
+    """
+    From 3A or 3B multiprobe session, returns the main probe (3A) or nidq sync pulses
+    with the attached channel map (default chmap if none)
+    :param session_path:
+    :return:
+    """
+    def _get_probe_version_from_files(ephys_files):
+        if any([ef.get('nidq') for ef in ephys_files]):
+            return '3B'
+        else:
+            return '3A'
+
+    # round-up of all bin ephys files in the session, infer revision and get sync map
+    ephys_files = glob_ephys_files(session_path)
+    version = _get_probe_version_from_files(ephys_files)
+
+    sync_chmap = CHMAPS[version]
+    extract_sync(session_path, save=True)
+    # attach the sync information to each binary file found
+    for ef in ephys_files:
+        ef['sync'] = alf.io.load_object(ef.path, '_spikeglx_sync', short_keys=True)
+        ef['sync_map'] = ibllib.io.spikeglx.get_sync_map(ef['path'])
+
+    if version == '3A':
+        # the sync master is the probe with the most sync pulses
+        sync_box_ind = np.argmax([ef.sync.times.size for ef in ephys_files])
+    elif version == '3B':
+        # the sync master is the nidq breakout box
+        sync_box_ind = np.argmax([1 if ef.get('nidq') else 0 for ef in ephys_files])
+
+    sync = ephys_files[sync_box_ind].sync
+    return sync, sync_chmap
+
+
+def validate_mock_recording(ses_path):
+    LEFT_CAMERA_FRATE_HZ = 60
+    RIGHT_CAMERA_FRATE_HZ = 150
+    BODY_CAMERA_FRATE_HZ = 30
+    SYNC_RATE_HZ = 1
+    MIN_TRIALS_NB = 10
+
+    ses_path = Path(ses_path)
+    if not ses_path.exists():
+        return False
+    rawsync, sync_map = _get_task_sync(ses_path)
+    last_time = rawsync['times'][-1]
+
+    # get upgoing fronts for each
+    sync = Bunch({})
+    for k in sync_map:
+        fronts = _get_sync_fronts(rawsync, sync_map[k])
+        sync[k] = fronts['times'][fronts['polarities'] == 1]
+    wheel = extract_wheel_sync(rawsync, chmap=sync_map, save=False)
+
+    # implement some task logic
+    assert (np.all(1 - LEFT_CAMERA_FRATE_HZ * np.diff(sync.left_camera) < 0.1))
+    assert (np.all(1 - RIGHT_CAMERA_FRATE_HZ * np.diff(sync.right_camera) < 0.1))
+    assert (np.all(1 - BODY_CAMERA_FRATE_HZ * np.diff(sync.body_camera) < 0.1))
+    assert (np.all(1 - SYNC_RATE_HZ * np.diff(sync.imec_sync) < 0.1))
+    assert (len(wheel['re_pos']) / last_time > 5)  # minimal wheel action
+    assert (len(sync.frame2ttl) / last_time > 0.2)  # minimal wheel action
+    assert (len(sync.audio) > MIN_TRIALS_NB)  # minimal wheel action
+
+    _logger.info('ALL CHECKS PASSED !')
+    return True
+
+
 def extract_all(session_path, save=False):
     """
     For the IBL ephys task, reads ephys binary file and extract:
@@ -444,11 +481,11 @@ def extract_all(session_path, save=False):
     :param version: bpod version, defaults to None
     :return: None
     """
+    session_path = Path(session_path)
     alf_path = session_path / 'alf'
-    syncs = extract_sync(session_path, save=False)
-    if isinstance(syncs, list) and len(syncs) > 1:
-        raise NotImplementedError('Task extraction of multiple probes not ready, contact us !')
-    extract_wheel_sync(syncs[0], alf_path, save=save)
-    extract_behaviour_sync(syncs[0], alf_path, save=save)
+
+    sync, sync_chmap = _get_task_sync(session_path)
+    extract_wheel_sync(sync, alf_path, save=save, chmap=sync_chmap)
+    extract_behaviour_sync(sync, alf_path, save=save, chmap=sync_chmap)
     align_with_bpod(session_path)  # checks consistency and compute dt with bpod
-    # TODO get camera time-stamps
+    extract_camera_sync(sync, alf_path, save=save, chmap=sync_chmap)  # TODO get camera time-stamps
