@@ -298,5 +298,49 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             self.assertEqual(out[m, m - 1], 1)
 
 
+class TestsHardwareParameters3A(unittest.TestCase):
+
+    def setUp(self):
+        self.tdir = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tdir.name)
+        self.map3A = {'left_camera': 2,
+                      'right_camera': 3,
+                      'body_camera': 4,
+                      'bpod': 7,
+                      'frame2ttl': 12,
+                      'rotary_encoder_0': 13,
+                      'rotary_encoder_1': 14,
+                      'audio': 15}
+        self.map3B = {'left_camera': 0,
+                      'right_camera': 1,
+                      'body_camera': 2,
+                      'sync': 3,
+                      'frame2ttl': 4,
+                      'rotary_encoder_0': 5,
+                      'rotary_encoder_1': 6,
+                      'audio': 7}
+
+    def test_get_wiring(self):
+        return
+        # get params providing full file path
+        par = spikeglx.get_hardware_config(self.file_json)
+        self.assertEqual(par, self.par)
+        # get params providing directory path
+        par = spikeglx.get_hardware_config(self.file_json.parent)
+        self.assertEqual(par, self.par)
+
+    def test_get_channel_map(self):
+        return
+        map = spikeglx.get_sync_map(self.file_json)
+        self.assertEqual(map, self.map)
+        map = spikeglx._sync_map_from_hardware_config(self.par)
+        self.assertEqual(map, self.map)
+        map = spikeglx.get_sync_map(self.dir / 'idontexist.json')
+        self.assertEqual(map, spikeglx.SYNC_CHANNEL_MAP)
+
+    def tearDown(self):
+        self.tdir.cleanup()
+
+
 if __name__ == "__main__":
     unittest.main(exit=False)

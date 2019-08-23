@@ -1,3 +1,4 @@
+import json
 import logging
 from pathlib import Path
 import re
@@ -5,10 +6,12 @@ import re
 import numpy as np
 
 from brainbox.core import Bunch
+from ibllib.ephys import neuropixel as neuropixel
+
 
 SAMPLE_SIZE = 2  # int16
 DEFAULT_BATCH_SIZE = 1e6
-logger_ = logging.getLogger('ibllib')
+_logger = logging.getLogger('ibllib')
 
 
 class Reader:
@@ -25,12 +28,12 @@ class Reader:
             self.file_meta_data = None
             self.meta = None
             self.channel_conversion_sample2mv = 1
-            logger_.warning(str(sglx_file) + " : no metadata file found. Very limited support")
+            _logger.warning(str(sglx_file) + " : no metadata file found. Very limited support")
         else:
             self.file_meta_data = file_meta_data
             self.meta = read_meta_data(file_meta_data)
             if self.nc * self.ns * 2 != self.nbytes:
-                logger_.warning(str(sglx_file) + " : meta data and filesize do not checkout")
+                _logger.warning(str(sglx_file) + " : meta data and filesize do not checkout")
             self.channel_conversion_sample2mv = _conversion_sample2mv_from_meta(self.meta)
             self.memmap = np.memmap(sglx_file, dtype='int16', mode='r', shape=(self.ns, self.nc))
 
@@ -96,7 +99,7 @@ class Reader:
         >>> sync_samples = sr.read_sync(0:10000)
         """
         if not self.meta:
-            logger_.warning('Sync trace not labeled in metadata. Assuming last trace')
+            _logger.warning('Sync trace not labeled in metadata. Assuming last trace')
         return split_sync(self.memmap[_slice, _get_sync_trace_indices_from_meta(self.meta)])
 
 
@@ -339,3 +342,39 @@ def _mock_spikeglx_file(mock_path, meta_file, ns, nc, sync_depth):
     with open(tmp_bin_file, 'w+') as fid:
         D.tofile(fid)
     return {'bin_file': tmp_bin_file, 'ns': ns, 'nc': nc, 'sync_depth': sync_depth, 'D': D}
+
+
+def get_hardware_config(config_file):
+    """
+    Reads the neuropixel_wirings.json file containing sync mapping and parameters
+    :param config_file: folder or json file
+    :return: dictionary or None
+    """
+    config_file = Path(config_file)
+    if config_file.is_dir():
+        config_file = config_file / 'neuropixel_wirings.json'
+    if not config_file.exists():
+        _logger.warning(f"No neuropixel_wirings.json file found in {str(config_file)}")
+        return
+    with open(config_file) as fid:
+        par = json.loads(fid.read())
+    return par
+
+
+def _sync_map_from_hardware_config(hardware_config):
+    """
+    :param hardware_config: dictonary from json read of neuropixel_wirings.json
+    :return: dictionary where key names refer to object and values to sync channel index
+    """
+    sync_map = {hardware_config['SYNC_WIRING'][pin]: neuropixel.SYNC_PIN_OUT_3A[pin] for pin in
+                hardware_config['SYNC_WIRING'] if neuropixel.SYNC_PIN_OUT_3A[pin]}
+    return sync_map
+
+
+def get_sync_map(folder_ephys):
+    hc = get_hardware_config(folder_ephys)
+    if not hc:
+        _logger.warning(f"No channel map for {str(folder_ephys)}")
+        return None
+    else:
+        return _sync_map_from_hardware_config(hc)

@@ -109,8 +109,8 @@ def from_path(session_path, force=False, save=True):
         logger_.info('session extracted \n')  # timing info in log
     if extractor_type == 'ephys':
         data = raw.load_data(session_path)
-        ephys_trials.extract_all(session_path, data=data, save=save)
         ephys_fpga.extract_all(session_path, save=save)
+        ephys_trials.extract_all(session_path, data=data, save=save)
     if extractor_type == 'sync_ephys':
         ephys_fpga.extract_sync(session_path, save=save)
 

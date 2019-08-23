@@ -1,6 +1,5 @@
 import logging
 from pathlib import Path
-import json
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,7 +7,6 @@ import matplotlib.pyplot as plt
 from brainbox.core import Bunch
 import brainbox.behavior.wheel as whl
 
-import ibllib.ephys.neuropixel as neuropixel
 import ibllib.plots as plots
 import ibllib.io.spikeglx
 import ibllib.dsp as dsp
@@ -21,66 +19,24 @@ SYNC_BATCH_SIZE_SAMPLES = 2 ** 18  # number of samples to read at once in bin fi
 WHEEL_RADIUS_CM = 3.1
 WHEEL_TICKS = 1024
 DEBUG_PLOTS = False
-# this is the mapping of synchronisation pulses coming out of the FPGA
 
-AUXES = [
-    (0, None),
-    (1, None),
-    (2, 'left_camera'),
-    (3, 'right_camera'),
-    (4, 'body_camera'),
-    (5, None),
-    (6, None),
-    (7, 'bpod'),
-    (8, None),
-    (9, None),
-    (10, None),
-    (11, None),
-    (12, 'frame2ttl'),
-    (13, 'rotary_encoder_0'),
-    (14, 'rotary_encoder_1'),
-    (15, 'audio'),
-]
-SYNC_CHANNEL_MAP = {}
-for aux in AUXES:
-    if aux[1]:
-        SYNC_CHANNEL_MAP[aux[1]] = aux[0]
-
-
-def get_hardware_config(config_file):
-    """
-    Reads the neuropixel_wirings.json file containing sync mapping and parameters
-    :param config_file: folder or json file
-    :return: dictionary or None
-    """
-    config_file = Path(config_file)
-    if config_file.is_dir():
-        config_file = config_file / 'neuropixel_wirings.json'
-    if not config_file.exists():
-        _logger.warning(f"No neuropixel_wirings.json file found in {str(config_file)}")
-        return
-    with open(config_file) as fid:
-        par = json.loads(fid.read())
-    return par
-
-
-def _sync_map_from_hardware_config(hardware_config):
-    """
-    :param hardware_config: dictonary from json read of neuropixel_wirings.json
-    :return: dictionary where key names refer to object and values to sync channel index
-    """
-    sync_map = {hardware_config['SYNC_WIRING'][pin]: neuropixel.SYNC_PIN_OUT[pin] for pin in
-                hardware_config['SYNC_WIRING'] if neuropixel.SYNC_PIN_OUT[pin]}
-    return sync_map
-
-
-def get_sync_map(folder_ephys):
-    hc = get_hardware_config(folder_ephys)
-    if not hc:
-        _logger.warning(f"Uses defaults sync map for {str(folder_ephys)}")
-        return SYNC_CHANNEL_MAP
-    else:
-        return _sync_map_from_hardware_config(hc)
+CHMAPS = {'3A': {'left_camera': 2,
+                 'right_camera': 3,
+                 'body_camera': 4,
+                 'bpod': 7,
+                 'frame2ttl': 12,
+                 'rotary_encoder_0': 13,
+                 'rotary_encoder_1': 14,
+                 'audio': 15},
+          '3B': {'left_camera': 0,
+                 'right_camera': 1,
+                 'body_camera': 2,
+                 'sync': 3,
+                 'frame2ttl': 4,
+                 'rotary_encoder_0': 5,
+                 'rotary_encoder_1': 6,
+                 'audio': 7},
+          }
 
 
 def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
@@ -274,7 +230,7 @@ def _get_sync_fronts(sync, channel_nb):
             'polarities': sync['polarities'][sync['channels'] == channel_nb]}
 
 
-def extract_wheel_sync(sync, output_path=None, save=False, chmap=SYNC_CHANNEL_MAP):
+def extract_wheel_sync(sync, output_path=None, save=False, chmap=None):
     """
     Extract wheel positions and times from sync fronts dictionary for all 16 chans
 
@@ -300,7 +256,7 @@ def extract_wheel_sync(sync, output_path=None, save=False, chmap=SYNC_CHANNEL_MA
     return wheel
 
 
-def extract_behaviour_sync(sync, output_path=None, save=False, chmap=SYNC_CHANNEL_MAP):
+def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None):
     """
     Extract wheel positions and times from sync fronts dictionary
 
@@ -402,7 +358,7 @@ def align_with_bpod(session_path):
     return np.median(dt)
 
 
-def extract_sync(session_path, save=False, force=False):
+def extract_sync(session_path, save=False, force=False, ephys_files=None):
     """
     Reads ephys binary file (s) and extract sync whithin the binary file folder
     Assumes ephys data is whithin a `raw_ephys_data` folder
@@ -414,9 +370,10 @@ def extract_sync(session_path, save=False, force=False):
     """
     session_path = Path(session_path)
     raw_ephys_path = session_path / 'raw_ephys_data'
-    ephys_files_info = glob_ephys_files(raw_ephys_path)
+    if not ephys_files:
+        ephys_files = glob_ephys_files(raw_ephys_path)
     syncs = []
-    for efi in ephys_files_info:
+    for efi in ephys_files:
         glob_filter = f'*{efi.label}*' if efi.label else '*'
         bin_file = efi.get('ap', efi.get('nidq', None))
         if not bin_file:
@@ -444,8 +401,21 @@ def extract_all(session_path, save=False):
     :param version: bpod version, defaults to None
     :return: None
     """
+
+    def _get_probe_version_from_files(ephys_files):
+        if any([ef.get('nidq') for ef in ephys_files]):
+            return '3B'
+        else:
+            return '3A'
+
+    session_path = Path(session_path)
     alf_path = session_path / 'alf'
-    syncs = extract_sync(session_path, save=False)
+    # round-up of all bin ephys files in the session, infer revision and get sync map
+    ephys_files = glob_ephys_files(session_path)
+    version = _get_probe_version_from_files(ephys_files)
+    sync_chmap = CHMAPS[version]
+    syncs = extract_sync(session_path, save=True, ephys_files=ephys_files)
+
     if isinstance(syncs, list) and len(syncs) > 1:
         raise NotImplementedError('Task extraction of multiple probes not ready, contact us !')
     extract_wheel_sync(syncs[0], alf_path, save=save)
