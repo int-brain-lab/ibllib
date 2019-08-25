@@ -7,9 +7,10 @@ import alf.io
 import ibllib.io.spikeglx
 from brainbox.core import Bunch
 import ibllib.io.spikeglx as spikeglx
+from ibllib.io.extractors.ephys_fpga import CHMAPS
 
 
-def sync_probe_folders_3A(ses_path):
+def sync_probe_folders_3A(ses_path, display=False):
     """
     From a session path with _spikeglx_sync arrays extracted, locate ephys files for 3A and
      outputs one sync.timestamps.probeN.npy file per acquired probe. By convention the reference
@@ -25,7 +26,7 @@ def sync_probe_folders_3A(ses_path):
 
     for ind, ephys_file in enumerate(ephys_files):
         sync = alf.io.load_object(ephys_file.ap.parent, '_spikeglx_sync', short_keys=True)
-        sync_map = ibllib.io.spikeglx.get_sync_map(ephys_file.ap.parent)
+        sync_map = ibllib.io.spikeglx.get_sync_map(ephys_file.ap.parent) or CHMAPS['3A']
         isync = np.in1d(sync['channels'], np.array([sync_map['right_camera'],
                                                     sync_map['left_camera'],
                                                     sync_map['body_camera']]))
@@ -45,11 +46,13 @@ def sync_probe_folders_3A(ses_path):
     # output timestamps files as per ALF convention
     for ind, ephys_file in enumerate(ephys_files):
         if ind == iref:
-            timestamps = np.array([[0, 0], [sr, 1]])
+            timestamps = np.array([[0, 0], [1, 1]])
         else:
-            timestamps = sync_probe_front_times(d.times[:, iref], d.times[:, ind], sr)
-        alf.io.save_object_npy(ephys_file.ap.parent, {'timestamps': timestamps},
-                               object='sync', parts=ephys_file.label)
+            timestamps = sync_probe_front_times(d.times[:, iref], d.times[:, ind], sr,
+                                                display=display)
+        assert(ephys_file.ap.name.endswith('.ap.bin'))
+        file_out = ephys_file.ap.parent / ephys_file.ap.name.replace('.ap.bin', '.sync.npy')
+        np.save(file_out, timestamps)
 
 
 def sync_probe_folders_3B(ses_path):
@@ -90,13 +93,17 @@ def sync_probe_front_times(t, tref, sr, display=False):
         SYNC_SAMPLING_RATE_SECS = 20
         t_upsamp = np.arange(tref[0], tref[-1], 1 / CAMERA_UPSAMPLING_RATE_HZ)
         res_upsamp = np.interp(t_upsamp, tref, residual)
-        # padding needs extra care as the function oscillates
-        lpad = int(sr * PAD_LENGTH_SECS)
+        # padding needs extra care as the function oscillates and numpy fft performance is
+        # abysmal for non prime sample sizes
+        nech = res_upsamp.size + (CAMERA_UPSAMPLING_RATE_HZ * PAD_LENGTH_SECS)
+        lpad = 2 ** np.ceil(np.log2(nech)) - res_upsamp.size
+        lpad = [int(np.floor(lpad / 2) + lpad % 2), int(np.floor(lpad / 2))]
         res_filt = np.pad(res_upsamp, lpad, mode='median', stat_length=sr * STAT_LENGTH_SECS)
+        print(nech, lpad, res_filt.size)
         fbounds = 1 / SYNC_SAMPLING_RATE_SECS * np.array([2, 4])
-        res_filt = dsp.lp(res_filt, 1 / sr, fbounds)[lpad:-lpad]
+        res_filt = dsp.lp(res_filt, 1 / sr, fbounds)[lpad[0]:-lpad[1]]
         tout = np.arange(0, np.max(tref) + SYNC_SAMPLING_RATE_SECS, 20)
-        sync_points = np.c_[tout * sr, np.polyval(pol, tout) - np.interp(tout, t_upsamp, res_filt)]
+        sync_points = np.c_[tout, np.polyval(pol, tout) - np.interp(tout, t_upsamp, res_filt)]
         if display:
             plt.plot(tref, residual * sr)
             plt.plot(t_upsamp, res_filt * sr)
@@ -104,7 +111,7 @@ def sync_probe_front_times(t, tref, sr, display=False):
             plt.ylabel('Residual drift (samples @ 30kHz)')
             plt.xlabel('time (sec)')
     else:
-        sync_points = np.c_[np.array([0, sr]), np.polyval(pol, np.array([0, 1]))]
+        sync_points = np.c_[np.array([0, 1]), np.polyval(pol, np.array([0, 1]))]
         if display:
             plt.plot(tref, residual * sr)
             plt.ylabel('Residual drift (samples @ 30kHz)')
