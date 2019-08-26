@@ -116,6 +116,8 @@ def sync_probe_front_times(t, tref, sr, display=False):
             plt.plot(tref, residual * sr)
             plt.ylabel('Residual drift (samples @ 30kHz)')
             plt.xlabel('time (sec)')
+    # test that the interp is within 1.5 sample
+    assert(np.all(tref - np.interp(t, sync_points[:, 0], sync_points[:, 1]) < 1.5 / sr))
     return sync_points
 
 
