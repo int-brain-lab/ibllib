@@ -64,8 +64,9 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
     wg = dsp.WindowGenerator(sr.ns, SYNC_BATCH_SIZE_SAMPLES, overlap=1)
     fid_ftcp = open(file_ftcp, 'wb')
     for sl in wg.slice:
-        ss = sr.read_sync(sl)
+        ss = sr.read_sync_digital(sl)
         ind, fronts = dsp.fronts(ss, axis=0)
+        # a = sr.read_sync_analog(sl)
         sav = np.c_[(ind[0, :] + sl.start) / sr.fs, ind[1, :], fronts.astype(np.double)]
         sav.tofile(fid_ftcp)
         # print progress

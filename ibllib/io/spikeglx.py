@@ -92,15 +92,26 @@ class Reader:
         sync = split_sync(darray[:, _get_sync_trace_indices_from_meta(self.meta)])
         return darray, sync
 
-    def read_sync(self, _slice=slice(0, 10000)):
+    def read_sync_digital(self, _slice=slice(0, 10000)):
         """
-        Reads only the sync trace at specified samples using slicing syntax
+        Reads only the digital sync trace at specified samples using slicing syntax
 
-        >>> sync_samples = sr.read_sync(0:10000)
+        >>> sync_samples = sr.read_sync_digital(0:10000)
         """
         if not self.meta:
             _logger.warning('Sync trace not labeled in metadata. Assuming last trace')
         return split_sync(self.memmap[_slice, _get_sync_trace_indices_from_meta(self.meta)])
+
+    def read_sync_analog(self, _slice=slice(0, 10000)):
+        """
+        Reads only the analog sync traces at specified samples using slicing syntax
+
+        >>> sync_samples = sr.read_sync_analog(0:10000)
+        """
+        if not self.meta:
+            return
+        inda = _get_analog_sync_trace_indices_from_meta(self.meta)
+        return self.memmap[_slice, inda]
 
 
 def read(sglx_file, first_sample=0, last_sample=10000):
@@ -169,6 +180,18 @@ def _get_sync_trace_indices_from_meta(md):
     elif typ in ['lf', 'ap']:
         nsync = int(md.get('snsApLfSy')[2])
     return list(range(ntr - nsync, ntr))
+
+
+def _get_analog_sync_trace_indices_from_meta(md):
+    """
+    Returns a list containing indices of the sync traces in the original array
+    """
+    typ = _get_type_from_meta(md)
+    if typ != 'nidq':
+        return
+    tr = md.get('snsMnMaXaDw')
+    nsa = int(tr[-2])
+    return list(range(int(sum(tr[0:2])), int(sum(tr[0:2])) + nsa))
 
 
 def _get_nchannels_from_meta(md):

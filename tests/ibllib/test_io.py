@@ -281,6 +281,14 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             nc = spikeglx._get_nchannels_from_meta(md)
             self.assertTrue(len(cg['ap']) == len(cg['lf']) == nc)
 
+    def testGetAnalogSyncIndex(self):
+        for meta_data_file in self.meta_files:
+            md = spikeglx.read_meta_data(meta_data_file)
+            if spikeglx._get_type_from_meta(md) in ['ap', 'lf']:
+                self.assertIsNone(spikeglx._get_analog_sync_trace_indices_from_meta(md))
+            else:
+                self.assertEqual(spikeglx._get_analog_sync_trace_indices_from_meta(md), [0])
+
     def testReadChannelGainNIDQ(self):
         for meta_data_file in self.meta_files:
             if meta_data_file.name.split('.')[-2] not in ['nidq']:
