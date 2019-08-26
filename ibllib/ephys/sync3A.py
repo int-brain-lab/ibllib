@@ -98,10 +98,10 @@ def sync_probe_front_times(t, tref, sr, display=False):
         nech = res_upsamp.size + (CAMERA_UPSAMPLING_RATE_HZ * PAD_LENGTH_SECS)
         lpad = 2 ** np.ceil(np.log2(nech)) - res_upsamp.size
         lpad = [int(np.floor(lpad / 2) + lpad % 2), int(np.floor(lpad / 2))]
-        res_filt = np.pad(res_upsamp, lpad, mode='median', stat_length=sr * STAT_LENGTH_SECS)
-        print(nech, lpad, res_filt.size)
-        fbounds = 1 / SYNC_SAMPLING_RATE_SECS * np.array([2, 4])
-        res_filt = dsp.lp(res_filt, 1 / sr, fbounds)[lpad[0]:-lpad[1]]
+        res_filt = np.pad(res_upsamp, lpad, mode='median',
+                          stat_length=CAMERA_UPSAMPLING_RATE_HZ * STAT_LENGTH_SECS)
+        fbounds = [0.001, 0.002]
+        res_filt = dsp.lp(res_filt, 1 / CAMERA_UPSAMPLING_RATE_HZ, fbounds)[lpad[0]:-lpad[1]]
         tout = np.arange(0, np.max(tref) + SYNC_SAMPLING_RATE_SECS, 20)
         sync_points = np.c_[tout, np.polyval(pol, tout) - np.interp(tout, t_upsamp, res_filt)]
         if display:
