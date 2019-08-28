@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import interp1d
@@ -93,7 +91,7 @@ def version3B(ses_path, display=True, linear=False, tol=2.0):
         sr = _get_sr(ef)
         assert(sync_nidq.times.size == sync_probe.times.size)
         timestamps = sync_probe_front_times(sync_probe.times, sync_nidq.times, sr,
-                                             display=display, linear=linear, tol=tol)
+                                            display=display, linear=linear, tol=tol)
         _save_timestamps_npy(ef, timestamps)
 
 

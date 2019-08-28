@@ -229,7 +229,7 @@ def _assign_events_to_trial(t_trial_start, t_event, take='last'):
 
 def _get_sync_fronts(sync, channel_nb):
     return Bunch({'times': sync['times'][sync['channels'] == channel_nb],
-            'polarities': sync['polarities'][sync['channels'] == channel_nb]})
+                  'polarities': sync['polarities'][sync['channels'] == channel_nb]})
 
 
 def extract_camera_sync(sync, output_path=None, save=False, chmap=None):
