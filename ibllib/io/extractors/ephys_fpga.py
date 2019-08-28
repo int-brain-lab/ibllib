@@ -474,8 +474,8 @@ def validate_ttl_test(ses_path):
         assert (np.all(1 - SYNC_RATE_HZ * np.diff(sync.imec_sync) < 0.1))
     assert (len(wheel['re_pos']) / last_time > 5)  # minimal wheel action
     assert (len(sync.frame2ttl) / last_time > 0.2)  # minimal wheel action
-    assert (len(sync.audio) > MIN_TRIALS_NB)  # minimal wheel action
-
+    assert (len(sync.bpod) > len(sync.audio) > MIN_TRIALS_NB)  # minimal wheel action
+    assert (len(sync.bpod) > MIN_TRIALS_NB * 2)
     _logger.info('ALL CHECKS PASSED !')
     return True
 
