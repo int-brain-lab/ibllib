@@ -71,7 +71,7 @@ class Reader:
             return
         return int(np.round(self.meta.get('fileTimeSecs') * self.fs))
 
-    def read(self, nsel=slice(0, 10000), csel=slice(None)):
+    def read(self, nsel=slice(0, 10000), csel=slice(None), sync=True):
         """
         Read from slices or indexes
         :param slice_n: slice or sample indices
@@ -80,7 +80,10 @@ class Reader:
         """
         darray = np.float32(self.memmap[nsel, csel])
         darray *= self.channel_conversion_sample2mv[self.type][csel]
-        return darray, self.read_sync_digital(nsel)
+        if sync:
+            return darray, self.read_sync(nsel)
+        else:
+            return darray
 
     def read_samples(self, first_sample=0, last_sample=10000, channels=None):
         """
@@ -112,8 +115,26 @@ class Reader:
         """
         if not self.meta:
             return
-        sa, _ = self.read(nsel=_slice, csel=_get_analog_sync_trace_indices_from_meta(self.meta))
-        return sa
+        csel = _get_analog_sync_trace_indices_from_meta(self.meta)
+        if not csel:
+            return
+        else:
+            return self.read(nsel=_slice, csel=csel, sync=False)
+
+    def read_sync(self, _slice=slice(0, 10000), threshold=1.2):
+        """
+        Reads all sync trace. Convert analog to digital with selected threshold and append to array
+        :param _slice: samples slice
+        :param threshold: (V) threshold for front detection, defaults to 1.2 V
+        :return: int8 array
+        """
+        digital = self.read_sync_digital(_slice)
+        analog = self.read_sync_analog(_slice)
+        if analog is None:
+            return digital
+        analog[np.where(analog < threshold)] = 0
+        analog[np.where(analog >= threshold)] = 1
+        return np.concatenate((digital, np.int8(analog)), axis=1)
 
 
 def read(sglx_file, first_sample=0, last_sample=10000):
@@ -190,7 +211,7 @@ def _get_analog_sync_trace_indices_from_meta(md):
     """
     typ = _get_type_from_meta(md)
     if typ != 'nidq':
-        return
+        return []
     tr = md.get('snsMnMaXaDw')
     nsa = int(tr[-2])
     return list(range(int(sum(tr[0:2])), int(sum(tr[0:2])) + nsa))
@@ -345,7 +366,7 @@ def glob_ephys_files(session_path):
     return ephys_files
 
 
-def _mock_spikeglx_file(mock_path, meta_file, ns, nc, sync_depth):
+def _mock_spikeglx_file(mock_path, meta_file, ns, nc, sync_depth, int2volts=0.6 / 32768):
     """
     For testing purposes, create a binary file with sync pulses to test reading and extraction
     """
@@ -366,9 +387,10 @@ def _mock_spikeglx_file(mock_path, meta_file, ns, nc, sync_depth):
     fid_source.close()
     fid_target.close()
     # each channel as an int of chn + 1
-    D = np.tile(np.int16(np.arange(nc) + 1), (ns, 1))
+    D = np.tile(np.int16((np.arange(nc) + 1) / int2volts), (ns, 1))
+    D[0:16, :] = 0
     # the last channel is the sync that we fill with
-    sync = np.uint16(2 ** np.float32(np.arange(-1, sync_depth)))
+    sync = np.int16(2 ** np.float32(np.arange(-1, sync_depth)))
     D[:, -1] = 0
     D[:sync.size, -1] = sync
     with open(tmp_bin_file, 'w+') as fid:

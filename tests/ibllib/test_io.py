@@ -224,9 +224,10 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
     def test_read_nidq(self):
         # nidq has 1 analog and 1 digital sync channels
         self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
+        int2volts = 5 / 32768
         nidq = spikeglx._mock_spikeglx_file(self.tdir.name,
                                             self.workdir / 'sample3B_g0_t0.nidq.meta',
-                                            ns=32, nc=2, sync_depth=8)
+                                            ns=32, nc=2, sync_depth=8, int2volts=int2volts)
         self.assert_read_glx(nidq)
 
     def test_read_3A(self):
@@ -256,7 +257,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
         self.assertTrue(np.sum(sync) == tglx['sync_depth'])
         for m in np.arange(tglx['sync_depth']):
             self.assertTrue(sync[m + 1, m] == 1)
-        if sr.nc > 50:  # exclude nidq from the slicing circus
+        if sr.type in ['ap', 'lf']:  # exclude nidq from the slicing circus
             # teast reading only one channel
             d, _ = sr.read(slice(None), 10)
             self.assertTrue(np.all(np.isclose(d, dexpected[:, 10])))
@@ -274,6 +275,18 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             # test double slicing
             d, _ = sr.read(slice(5, 10), slice(300, 310))
             self.assertTrue(np.all(np.isclose(d, dexpected[5:10, 300:310])))
+            # test empty slices
+            d, _ = sr.read(slice(5, 10), [])
+            self.assertTrue(d.size == 0)
+            d, _ = sr.read([], [])
+            self.assertTrue(d.size == 0)
+            d, _ = sr.read([], slice(300, 310))
+            self.assertTrue(d.size == 0)
+            a = sr.read_sync_analog()
+            self.assertIsNone(a)
+        else:
+            s = sr.read_sync()
+            self.assertTrue(s.shape[1] == 17)
         self.tdir.cleanup()
 
     def testGetRevisionAndType(self):
@@ -304,7 +317,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
         for meta_data_file in self.meta_files:
             md = spikeglx.read_meta_data(meta_data_file)
             if spikeglx._get_type_from_meta(md) in ['ap', 'lf']:
-                self.assertIsNone(spikeglx._get_analog_sync_trace_indices_from_meta(md))
+                self.assertTrue(spikeglx._get_analog_sync_trace_indices_from_meta(md) == [])
             else:
                 self.assertEqual(spikeglx._get_analog_sync_trace_indices_from_meta(md), [0])
 
