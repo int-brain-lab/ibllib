@@ -71,7 +71,18 @@ class Reader:
             return
         return int(np.round(self.meta.get('fileTimeSecs') * self.fs))
 
-    def read_samples(self, first_sample=0, last_sample=10000):
+    def read(self, nsel=slice(0, 10000), csel=slice(None)):
+        """
+        Read from slices or indexes
+        :param slice_n: slice or sample indices
+        :param slice_c: slice or channel indices
+        :return: float32 array
+        """
+        darray = np.float32(self.memmap[nsel, csel])
+        darray *= self.channel_conversion_sample2mv[self.type][csel]
+        return darray, self.read_sync_digital(nsel)
+
+    def read_samples(self, first_sample=0, last_sample=10000, channels=None):
         """
         reads all channels from first_sample to last_sample, following numpy slicing convention
         sglx.read_samples(first=0, last=100) would be equivalent to slicing the array D
@@ -81,22 +92,14 @@ class Reader:
          :param last_sample:  last sample to be read, python slice-wise
          :return: numpy array of int16
         """
-        byt_offset = int(self.nc * first_sample * SAMPLE_SIZE)
-        ns_to_read = last_sample - first_sample
-        with open(self.file_bin, 'rb') as fid:
-            fid.seek(byt_offset)
-            darray = np.fromfile(fid, dtype=np.dtype('int16'), count=ns_to_read * self.nc
-                                 ).reshape((int(ns_to_read), int(self.nc)))
-        # we don't want to apply any gain on the sync trace
-        darray = np.float32(darray) * self.channel_conversion_sample2mv[self.type]
-        sync = split_sync(darray[:, _get_sync_trace_indices_from_meta(self.meta)])
-        return darray, sync
+        if not channels:
+            channels = slice(None)
+        return self.read(slice(first_sample, last_sample), channels)
 
     def read_sync_digital(self, _slice=slice(0, 10000)):
         """
         Reads only the digital sync trace at specified samples using slicing syntax
-
-        >>> sync_samples = sr.read_sync_digital(0:10000)
+        >>> sync_samples = sr.read_sync_digital(slice(0,10000))
         """
         if not self.meta:
             _logger.warning('Sync trace not labeled in metadata. Assuming last trace')
@@ -105,13 +108,12 @@ class Reader:
     def read_sync_analog(self, _slice=slice(0, 10000)):
         """
         Reads only the analog sync traces at specified samples using slicing syntax
-
-        >>> sync_samples = sr.read_sync_analog(0:10000)
+        >>> sync_samples = sr.read_sync_analog(slice(0,10000))
         """
         if not self.meta:
             return
-        inda = _get_analog_sync_trace_indices_from_meta(self.meta)
-        return self.memmap[_slice, inda]
+        sa, _ = self.read(nsel=_slice, csel=_get_analog_sync_trace_indices_from_meta(self.meta))
+        return sa
 
 
 def read(sglx_file, first_sample=0, last_sample=10000):
@@ -242,7 +244,11 @@ def _map_channels_from_meta(meta_data):
 
 def _conversion_sample2mv_from_meta(meta_data):
     """
-    Interpret the meta data string to extract an array of conversion factprs for each channel
+    Interpret the meta data to extract an array of conversion factors for each channel
+    so the output data is in Volts
+    Conversion factor is: int2volt / channelGain
+    For Lf/Ap interpret the gain string from metadata
+    For Nidq, repmat the gains from the trace counts in `snsMnMaXaDw`
 
     :param meta_data: dictionary output from  spikeglx.read_meta_data
     :return: numpy array with one gain value per channel
@@ -256,8 +262,8 @@ def _conversion_sample2mv_from_meta(meta_data):
             return md.get('niAiRangeMax') / 32768
 
     int2volt = int2volts(meta_data)
-    # interprets the gain value from the metadata header
-    if 'imroTbl' in meta_data.keys():
+    # interprets the gain value from the metadata header:
+    if 'imroTbl' in meta_data.keys():  # binary from the probes: ap or lf
         sy_gain = np.ones(int(meta_data['snsApLfSy'][-1]), dtype=np.float32)
         # the sync traces are not included in the gain values, so are included for broadcast ops
         gain = re.findall(r'([0-9]* [0-9]* [0-9]* [0-9]* [0-9]*)', meta_data['imroTbl'])
@@ -265,11 +271,12 @@ def _conversion_sample2mv_from_meta(meta_data):
                                 int2volt, sy_gain)),
                'ap': np.hstack((np.array([1 / np.float32(g.split(' ')[-2]) for g in gain]) *
                                 int2volt, sy_gain))}
-    elif 'niMNGain' in meta_data.keys():
+    elif 'niMNGain' in meta_data.keys():  # binary from nidq
         gain = np.r_[
-            1 / np.ones(int(meta_data['snsMnMaXaDw'][0],)) * meta_data['niMNGain'] * int2volt,
-            1 / np.ones(int(meta_data['snsMnMaXaDw'][1],)) * meta_data['niMAGain'] * int2volt,
-            np.ones(int(np.sum(meta_data['snsMnMaXaDw'][2:]),))]
+            np.ones(int(meta_data['snsMnMaXaDw'][0],)) / meta_data['niMNGain'] * int2volt,
+            np.ones(int(meta_data['snsMnMaXaDw'][1],)) / meta_data['niMAGain'] * int2volt,
+            np.ones(int(meta_data['snsMnMaXaDw'][2], )) * int2volt,  # no gain for analog sync
+            np.ones(int(np.sum(meta_data['snsMnMaXaDw'][3]),))]  # no unit for digital sync
         out = {'nidq': gain}
     return out
 

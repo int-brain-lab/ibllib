@@ -402,7 +402,7 @@ def extract_sync(session_path, save=False, force=False, ephys_files=None):
     return syncs
 
 
-def _get_task_sync(session_path):
+def _get_experiment_sync(session_path):
     """
     From 3A or 3B multiprobe session, returns the main probe (3A) or nidq sync pulses
     with the attached channel map (default chmap if none)
@@ -448,7 +448,7 @@ def validate_ttl_test(ses_path):
     ses_path = Path(ses_path)
     if not ses_path.exists():
         return False
-    rawsync, sync_map = _get_task_sync(ses_path)
+    rawsync, sync_map = _get_experiment_sync(ses_path)
     last_time = rawsync['times'][-1]
 
     # get upgoing fronts for each
@@ -494,7 +494,7 @@ def extract_all(session_path, save=False):
     session_path = Path(session_path)
     alf_path = session_path / 'alf'
 
-    sync, sync_chmap = _get_task_sync(session_path)
+    sync, sync_chmap = _get_experiment_sync(session_path)
     extract_wheel_sync(sync, alf_path, save=save, chmap=sync_chmap)
     extract_behaviour_sync(sync, alf_path, save=save, chmap=sync_chmap)
     align_with_bpod(session_path)  # checks consistency and compute dt with bpod

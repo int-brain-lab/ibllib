@@ -245,16 +245,35 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
 
     def assert_read_glx(self, tglx):
         sr = spikeglx.Reader(tglx['bin_file'])
+        dexpected = sr.channel_conversion_sample2mv[sr.type] * tglx['D']
         d, sync = sr.read_samples(0, tglx['ns'])
         # could be rounding errors with non-integer sampling rates
         self.assertTrue(sr.nc == tglx['nc'])
         self.assertTrue(sr.ns == tglx['ns'])
         # test the data reading with gain
-        self.assertTrue(np.all(sr.channel_conversion_sample2mv[sr.type] * tglx['D'] == d))
+        self.assertTrue(np.all(np.isclose(dexpected, d)))
         # test the sync reading, one front per channel
         self.assertTrue(np.sum(sync) == tglx['sync_depth'])
         for m in np.arange(tglx['sync_depth']):
             self.assertTrue(sync[m + 1, m] == 1)
+        if sr.nc > 50:  # exclude nidq from the slicing circus
+            # teast reading only one channel
+            d, _ = sr.read(slice(None), 10)
+            self.assertTrue(np.all(np.isclose(d, dexpected[:, 10])))
+            # test reading only one time
+            d, _ = sr.read(5, slice(None))
+            self.assertTrue(np.all(np.isclose(d, dexpected[5, :])))
+            # test reading a few times
+            d, _ = sr.read(slice(5, 7), slice(None))
+            self.assertTrue(np.all(np.isclose(d, dexpected[5:7, :])))
+            d, _ = sr.read([5, 6], slice(None))
+            self.assertTrue(np.all(np.isclose(d, dexpected[5:7, :])))
+            # test reading a few channels
+            d, _ = sr.read(slice(None), slice(300, 310))
+            self.assertTrue(np.all(np.isclose(d, dexpected[:, 300:310])))
+            # test double slicing
+            d, _ = sr.read(slice(5, 10), slice(300, 310))
+            self.assertTrue(np.all(np.isclose(d, dexpected[5:10, 300:310])))
         self.tdir.cleanup()
 
     def testGetRevisionAndType(self):
@@ -297,8 +316,8 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             nc = spikeglx._get_nchannels_from_meta(md)
             cg = spikeglx._conversion_sample2mv_from_meta(md)
             i2v = md.get('niAiRangeMax') / 32768
-            self.assertTrue(np.all(cg['nidq'][slice(0, int(np.sum(md.acqMnMaXaDw[:2])))] == i2v))
-            self.assertTrue(np.all(cg['nidq'][slice(int(np.sum(md.acqMnMaXaDw[:2])), None)] == 1.))
+            self.assertTrue(np.all(cg['nidq'][slice(0, int(np.sum(md.acqMnMaXaDw[:3])))] == i2v))
+            self.assertTrue(np.all(cg['nidq'][slice(int(np.sum(md.acqMnMaXaDw[-1])), None)] == 1.))
             self.assertTrue(len(cg['nidq']) == nc)
 
     def testReadChannelMap(self):
