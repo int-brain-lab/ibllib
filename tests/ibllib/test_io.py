@@ -367,7 +367,8 @@ class TestsHardwareParameters3A(unittest.TestCase):
                       'frame2ttl': 4,
                       'rotary_encoder_0': 5,
                       'rotary_encoder_1': 6,
-                      'audio': 7}
+                      'audio': 7,
+                      'bpod': 16}
         self.file3a = self.workdir / 'sample3A_g0_t0.imec.wiring.json'
         self.file3b = self.workdir / 'sample3B_g0_t0.nidq.wiring.json'
 

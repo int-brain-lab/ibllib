@@ -426,6 +426,9 @@ def _sync_map_from_hardware_config(hardware_config):
     sync_map = {hardware_config['SYNC_WIRING_DIGITAL'][pin]: pin_out[pin]
                 for pin in hardware_config['SYNC_WIRING_DIGITAL']
                 if pin_out[pin] is not None}
+    analog = hardware_config.get('SYNC_WIRING_ANALOG')
+    if analog:
+        sync_map.update({analog[pin]: int(pin[2:]) + 16 for pin in analog})
     return sync_map
 
 
