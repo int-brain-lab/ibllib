@@ -151,8 +151,3 @@ def sync_probe_front_times(t, tref, sr, display=False, linear=False, tol=2.0):
     assert(np.all(np.abs((tref - fcn(t)) * sr) < (tol)))
     # plt.plot((tref - fcn(t)) * sr)
     return sync_points
-
-
-if __name__ == '__main__':
-    ses_path = Path('/mnt/s0/Data/Subjects/ZM_1887/2019-07-19/001')
-    version3A(ses_path)
