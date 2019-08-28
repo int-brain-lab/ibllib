@@ -424,7 +424,7 @@ def _get_task_sync(session_path):
     # attach the sync information to each binary file found
     for ef in ephys_files:
         ef['sync'] = alf.io.load_object(ef.path, '_spikeglx_sync', short_keys=True)
-        ef['sync_map'] = ibllib.io.spikeglx.get_sync_map(ef['path'])
+        ef['sync_map'] = ibllib.io.spikeglx.get_sync_map(ef['path']) or sync_chmap
 
     if version == '3A':
         # the sync master is the probe with the most sync pulses
@@ -434,10 +434,11 @@ def _get_task_sync(session_path):
         sync_box_ind = np.argmax([1 if ef.get('nidq') else 0 for ef in ephys_files])
 
     sync = ephys_files[sync_box_ind].sync
+    sync_chmap = ephys_files[sync_box_ind].sync_map
     return sync, sync_chmap
 
 
-def validate_mock_recording(ses_path):
+def validate_ttl_test(ses_path):
     LEFT_CAMERA_FRATE_HZ = 60
     RIGHT_CAMERA_FRATE_HZ = 150
     BODY_CAMERA_FRATE_HZ = 30
@@ -457,11 +458,19 @@ def validate_mock_recording(ses_path):
         sync[k] = fronts['times'][fronts['polarities'] == 1]
     wheel = extract_wheel_sync(rawsync, chmap=sync_map, save=False)
 
+    right_fr = np.round(1 / np.median(np.diff(sync.right_camera)))
+    left_fr = np.round(1 / np.median(np.diff(sync.left_camera)))
+    body_fr = np.round(1 / np.median(np.diff(sync.body_camera)))
+    _logger.info(f'Right camera frame rate: {right_fr} Hz')
+    _logger.info(f'Left camera frame rate: {left_fr} Hz')
+    _logger.info(f'Body camera frame rate: {body_fr} Hz')
     # implement some task logic
-    assert (np.all(1 - LEFT_CAMERA_FRATE_HZ * np.diff(sync.left_camera) < 0.1))
-    assert (np.all(1 - RIGHT_CAMERA_FRATE_HZ * np.diff(sync.right_camera) < 0.1))
-    assert (np.all(1 - BODY_CAMERA_FRATE_HZ * np.diff(sync.body_camera) < 0.1))
-    assert (np.all(1 - SYNC_RATE_HZ * np.diff(sync.imec_sync) < 0.1))
+    assert abs((1 - left_fr / LEFT_CAMERA_FRATE_HZ)) < 0.1
+    assert abs((1 - right_fr / RIGHT_CAMERA_FRATE_HZ)) < 0.1
+    assert abs((1 - body_fr / BODY_CAMERA_FRATE_HZ)) < 0.1
+    # the imec sync is for 3B Probes only
+    if sync.get('imec_sync') is not None:
+        assert (np.all(1 - SYNC_RATE_HZ * np.diff(sync.imec_sync) < 0.1))
     assert (len(wheel['re_pos']) / last_time > 5)  # minimal wheel action
     assert (len(sync.frame2ttl) / last_time > 0.2)  # minimal wheel action
     assert (len(sync.audio) > MIN_TRIALS_NB)  # minimal wheel action
