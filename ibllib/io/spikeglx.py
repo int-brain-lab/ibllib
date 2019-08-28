@@ -410,7 +410,6 @@ def get_hardware_config(config_file):
         if config_file:
             config_file = config_file[0]
     if not config_file or not config_file.exists():
-        _logger.warning(f"No neuropixel *.wiring.json file found in {str(config_file)}")
         return
     with open(config_file) as fid:
         par = json.loads(fid.read())

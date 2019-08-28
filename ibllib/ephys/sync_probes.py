@@ -2,25 +2,39 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.interpolate import interp1d
 
 import alf.io
 import ibllib.io.spikeglx
 from brainbox.core import Bunch
 import ibllib.io.spikeglx as spikeglx
-from ibllib.io.extractors.ephys_fpga import CHMAPS
+from ibllib.io.extractors.ephys_fpga import CHMAPS, _get_sync_fronts
 
 
-def sync_probe_folders_3A(ses_path, display=False):
+def _get_sr(ephys_file):
+    meta = spikeglx.read_meta_data(ephys_file.ap.with_suffix('.meta'))
+    return spikeglx._get_fs_from_meta(meta)
+
+
+def _save_timestamps_npy(ephys_file, timestamps):
+    assert (ephys_file.ap.name.endswith('.ap.bin'))
+    file_out = ephys_file.ap.parent / ephys_file.ap.name.replace('.ap.bin', '.sync.npy')
+    np.save(file_out, timestamps)
+
+
+def version3A(ses_path, display=True, linear=False, tol=1.5):
     """
     From a session path with _spikeglx_sync arrays extracted, locate ephys files for 3A and
      outputs one sync.timestamps.probeN.npy file per acquired probe. By convention the reference
      probe is the one with the most synchronisation pulses.
+     Assumes the _spikeglx_sync datasets are already extracted from binary data
     :param ses_path:
     :return: None
     """
     ephys_files = ibllib.io.spikeglx.glob_ephys_files(ses_path)
     nprobes = len(ephys_files)
-    assert (nprobes >= 2)
+    if nprobes <= 1:
+        return
 
     d = Bunch({'times': None, 'nsync': np.zeros(nprobes, )})
 
@@ -40,33 +54,50 @@ def sync_probe_folders_3A(ses_path, display=False):
     iref = np.argmax(d.nsync)
     # islave = np.setdiff1d(np.arange(nprobes), iref)
     # get the sampling rate from the reference probe using metadata file
-    meta = spikeglx.read_meta_data(Path(ephys_files[iref].ap).with_suffix('.meta'))
-    sr = meta['imSampRate']
-
+    sr = _get_sr(ephys_files[iref])
     # output timestamps files as per ALF convention
     for ind, ephys_file in enumerate(ephys_files):
         if ind == iref:
             timestamps = np.array([[0, 0], [1, 1]])
         else:
             timestamps = sync_probe_front_times(d.times[:, iref], d.times[:, ind], sr,
-                                                display=display)
-        assert(ephys_file.ap.name.endswith('.ap.bin'))
-        file_out = ephys_file.ap.parent / ephys_file.ap.name.replace('.ap.bin', '.sync.npy')
-        np.save(file_out, timestamps)
+                                                display=display, linear=linear, tol=tol)
+        _save_timestamps_npy(ephys_file, timestamps)
 
 
-def sync_probe_folders_3B(ses_path):
+def version3B(ses_path, display=True, linear=False, tol=2.0):
     """
     From a session path with _spikeglx_sync arrays extraccted, locate ephys files for 3A and
      outputs one sync.timestamps.probeN.npy file per acquired probe. By convention the reference
      probe is the one with the most synchronisation pulses.
+     Assumes the _spikeglx_sync datasets are already extracted from binary data
     :param ses_path:
     :return: None
     """
-    pass
+    ephys_files = ibllib.io.spikeglx.glob_ephys_files(ses_path)
+    for ef in ephys_files:
+        ef['sync'] = alf.io.load_object(ef.path, '_spikeglx_sync', short_keys=True)
+        ef['sync_map'] = ibllib.io.spikeglx.get_sync_map(ef['path']) or CHMAPS['3B']
+    nidq_file = [ef for ef in ephys_files if ef.get('nidq')]
+    ephys_files = [ef for ef in ephys_files if not ef.get('nidq')]
+    nprobes = len(ephys_files)
+    # should have at least 2 probes and only one nidq
+    if nprobes <= 1:
+        return
+    assert(len(nidq_file) == 1)
+    nidq_file = nidq_file[0]
+    sync_nidq = _get_sync_fronts(nidq_file.sync, nidq_file.sync_map['imec_sync'])
+
+    for ef in ephys_files:
+        sync_probe = _get_sync_fronts(ef.sync, ef.sync_map['imec_sync'])
+        sr = _get_sr(ef)
+        assert(sync_nidq.times.size == sync_probe.times.size)
+        timestamps = sync_probe_front_times(sync_probe.times, sync_nidq.times, sr,
+                                             display=display, linear=linear, tol=tol)
+        _save_timestamps_npy(ef, timestamps)
 
 
-def sync_probe_front_times(t, tref, sr, display=False):
+def sync_probe_front_times(t, tref, sr, display=False, linear=False, tol=2.0):
     """
     From 2 timestamps vectors of equivalent length, output timestamps array to be used for
     linear interpolation
@@ -76,13 +107,12 @@ def sync_probe_front_times(t, tref, sr, display=False):
     :return: a 2 columns by n-sync points array where each row corresponds
     to a sync point: sample_index (0 based), tref
     """
-    COMPUTE_RESIDUAL = True
     # the main drift is computed through linear regression. A further step compute a smoothed
     # version of the residual to add to the linear drift. The precision is enforced
     # by ensuring that each point lies less than one sampling rate away from the predicted.
     pol = np.polyfit(t, tref, 1)  # higher order terms first: slope / int for linear
     residual = (tref - np.polyval(pol, t))
-    if COMPUTE_RESIDUAL:
+    if not linear:
         # the interp function from camera fronts is not smooth due to the locking of detections
         # to the sampling rate of digital channels. The residual is fit using frequency domain
         # smoothing
@@ -116,11 +146,13 @@ def sync_probe_front_times(t, tref, sr, display=False):
             plt.plot(tref, residual * sr)
             plt.ylabel('Residual drift (samples @ 30kHz)')
             plt.xlabel('time (sec)')
-    # test that the interp is within 1.5 sample
-    assert(np.all(tref - np.interp(t, sync_points[:, 0], sync_points[:, 1]) < 1.5 / sr))
+    # test that the interp is within tol sample
+    fcn = interp1d(sync_points[:, 0], sync_points[:, 1], fill_value='extrapolate')
+    assert(np.all(np.abs((tref - fcn(t)) * sr) < (tol)))
+    # plt.plot((tref - fcn(t)) * sr)
     return sync_points
 
 
 if __name__ == '__main__':
     ses_path = Path('/mnt/s0/Data/Subjects/ZM_1887/2019-07-19/001')
-    sync_probe_folders_3A(ses_path)
+    version3A(ses_path)
