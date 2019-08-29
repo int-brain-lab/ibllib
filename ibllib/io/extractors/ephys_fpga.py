@@ -397,23 +397,17 @@ def extract_sync(session_path, save=False, force=False, ephys_files=None):
     return syncs
 
 
-def _get_experiment_sync(session_path):
-    """
-    From 3A or 3B multiprobe session, returns the main probe (3A) or nidq sync pulses
-    with the attached channel map (default chmap if none)
-    :param session_path:
-    :return:
-    """
-    def _get_probe_version_from_files(ephys_files):
-        if any([ef.get('nidq') for ef in ephys_files]):
-            return '3B'
-        else:
-            return '3A'
+def _get_probe_version_from_files(ephys_files):
+    if any([ef.get('nidq') for ef in ephys_files]):
+        return '3B'
+    else:
+        return '3A'
 
+
+def _get_all_probes_sync(session_path):
     # round-up of all bin ephys files in the session, infer revision and get sync map
     ephys_files = glob_ephys_files(session_path)
     version = _get_probe_version_from_files(ephys_files)
-
     sync_chmap = CHMAPS[version]
     extract_sync(session_path, save=True)
     # attach the sync information to each binary file found
@@ -421,6 +415,18 @@ def _get_experiment_sync(session_path):
         ef['sync'] = alf.io.load_object(ef.path, '_spikeglx_sync', short_keys=True)
         ef['sync_map'] = ibllib.io.spikeglx.get_sync_map(ef['path']) or sync_chmap
 
+    return ephys_files
+
+
+def _get_main_probe_sync(session_path):
+    """
+    From 3A or 3B multiprobe session, returns the main probe (3A) or nidq sync pulses
+    with the attached channel map (default chmap if none)
+    :param session_path:
+    :return:
+    """
+    ephys_files = _get_all_probes_sync(session_path)
+    version = _get_probe_version_from_files(ephys_files)
     if version == '3A':
         # the sync master is the probe with the most sync pulses
         sync_box_ind = np.argmax([ef.sync.times.size for ef in ephys_files])
@@ -431,47 +437,6 @@ def _get_experiment_sync(session_path):
     sync = ephys_files[sync_box_ind].sync
     sync_chmap = ephys_files[sync_box_ind].sync_map
     return sync, sync_chmap
-
-
-def validate_ttl_test(ses_path):
-    LEFT_CAMERA_FRATE_HZ = 60
-    RIGHT_CAMERA_FRATE_HZ = 150
-    BODY_CAMERA_FRATE_HZ = 30
-    SYNC_RATE_HZ = 1
-    MIN_TRIALS_NB = 10
-
-    ses_path = Path(ses_path)
-    if not ses_path.exists():
-        return False
-    rawsync, sync_map = _get_experiment_sync(ses_path)
-    last_time = rawsync['times'][-1]
-
-    # get upgoing fronts for each
-    sync = Bunch({})
-    for k in sync_map:
-        fronts = _get_sync_fronts(rawsync, sync_map[k])
-        sync[k] = fronts['times'][fronts['polarities'] == 1]
-    wheel = extract_wheel_sync(rawsync, chmap=sync_map, save=False)
-
-    right_fr = np.round(1 / np.median(np.diff(sync.right_camera)))
-    left_fr = np.round(1 / np.median(np.diff(sync.left_camera)))
-    body_fr = np.round(1 / np.median(np.diff(sync.body_camera)))
-    _logger.info(f'Right camera frame rate: {right_fr} Hz')
-    _logger.info(f'Left camera frame rate: {left_fr} Hz')
-    _logger.info(f'Body camera frame rate: {body_fr} Hz')
-    # implement some task logic
-    assert abs((1 - left_fr / LEFT_CAMERA_FRATE_HZ)) < 0.1
-    assert abs((1 - right_fr / RIGHT_CAMERA_FRATE_HZ)) < 0.1
-    assert abs((1 - body_fr / BODY_CAMERA_FRATE_HZ)) < 0.1
-    # the imec sync is for 3B Probes only
-    if sync.get('imec_sync') is not None:
-        assert (np.all(1 - SYNC_RATE_HZ * np.diff(sync.imec_sync) < 0.1))
-    assert (len(wheel['re_pos']) / last_time > 5)  # minimal wheel action
-    assert (len(sync.frame2ttl) / last_time > 0.2)  # minimal wheel action
-    assert (len(sync.bpod) > len(sync.audio) > MIN_TRIALS_NB)  # minimal wheel action
-    assert (len(sync.bpod) > MIN_TRIALS_NB * 2)
-    _logger.info('ALL CHECKS PASSED !')
-    return True
 
 
 def extract_all(session_path, save=False):
@@ -489,7 +454,7 @@ def extract_all(session_path, save=False):
     session_path = Path(session_path)
     alf_path = session_path / 'alf'
 
-    sync, sync_chmap = _get_experiment_sync(session_path)
+    sync, sync_chmap = _get_main_probe_sync(session_path)
     extract_wheel_sync(sync, alf_path, save=save, chmap=sync_chmap)
     extract_behaviour_sync(sync, alf_path, save=save, chmap=sync_chmap)
     align_with_bpod(session_path)  # checks consistency and compute dt with bpod

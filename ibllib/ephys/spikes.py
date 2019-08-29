@@ -1,4 +1,5 @@
 import logging
+import shutil
 
 import numpy as np
 from scipy.interpolate import interp1d
@@ -24,7 +25,7 @@ def merge_probes(ses_path):
                                                        for ep in ephys_files if ep.get('ap')]))
 
     # if there is only one file, just convert the output to IBL format et basta
-    if len(subdirs) == 2:
+    if len(subdirs) == 1:
         ks2_to_alf(subdirs[0], ses_path / 'alf')
         return
 
@@ -55,6 +56,9 @@ def merge_probes(ses_path):
     # And convert to ALF
     ac = alf.EphysAlfCreator(mt)
     ac.convert(ses_path / 'alf')
+
+    # remove the temporary directory
+    shutil.rmtree(out_dir)
 
 
 def ks2_to_alf(ks_path, out_path):

@@ -7,13 +7,16 @@ import logging
 import numpy as np
 from scipy import signal
 
+from brainbox.core import Bunch
 import alf.io
 import ibllib.io.spikeglx
+from ibllib.ephys import sync_probes
 from ibllib.io import spikeglx
 import ibllib.dsp as dsp
+import ibllib.io.extractors.ephys_fpga as fpga
 from ibllib.misc import print_progress
 
-logger_ = logging.getLogger('ibllib')
+_logger = logging.getLogger('ibllib')
 
 RMS_WIN_LENGTH_SECS = 3
 WELCH_WIN_LENGTH_SAMPLES = 1024
@@ -71,7 +74,7 @@ def extract_rmsmap(fbin, out_folder=None, force=False, label=''):
     :param label: string or list of strings that will be appended to the filename before extension
     :return: None
     """
-    logger_.info(str(fbin))
+    _logger.info(str(fbin))
     sglx = spikeglx.Reader(fbin)
     # check if output ALF files exist already:
     if out_folder is None:
@@ -82,7 +85,7 @@ def extract_rmsmap(fbin, out_folder=None, force=False, label=''):
     alf_object_freq = f'_spikeglx_ephysQcFreq{sglx.type.upper()}'
     if alf.io.exists(out_folder, alf_object_time, glob=[label]) and \
             alf.io.exists(out_folder, alf_object_freq, glob=[label]) and not force:
-        logger_.warning(f'{fbin.name} QC already exists, skipping. Use force option to override')
+        _logger.warning(f'{fbin.name} QC already exists, skipping. Use force option to override')
         return
     # crunch numbers
     rms = rmsmap(fbin)
@@ -116,3 +119,51 @@ def qc_session(session_path, dry=False, force=False):
             extract_rmsmap(efile.ap, out_folder=None, force=force, label=efile.label)
         if efile.lf and efile.lf.exists():
             extract_rmsmap(efile.lf, out_folder=None, force=force, label=efile.label)
+
+
+def validate_ttl_test(ses_path):
+    LEFT_CAMERA_FRATE_HZ = 60
+    RIGHT_CAMERA_FRATE_HZ = 150
+    BODY_CAMERA_FRATE_HZ = 30
+    SYNC_RATE_HZ = 1
+    MIN_TRIALS_NB = 10
+
+    ses_path = Path(ses_path)
+    if not ses_path.exists():
+        return False
+    rawsync, sync_map = fpga._get_main_probe_sync(ses_path)
+    last_time = rawsync['times'][-1]
+
+    # get upgoing fronts for each
+    sync = Bunch({})
+    for k in sync_map:
+        fronts = fpga._get_sync_fronts(rawsync, sync_map[k])
+        sync[k] = fronts['times'][fronts['polarities'] == 1]
+    wheel = fpga.extract_wheel_sync(rawsync, chmap=sync_map, save=False)
+
+    right_fr = np.round(1 / np.median(np.diff(sync.right_camera)))
+    left_fr = np.round(1 / np.median(np.diff(sync.left_camera)))
+    body_fr = np.round(1 / np.median(np.diff(sync.body_camera)))
+    _logger.info(f'Right camera frame rate: {right_fr} Hz')
+    _logger.info(f'Left camera frame rate: {left_fr} Hz')
+    _logger.info(f'Body camera frame rate: {body_fr} Hz')
+    # implement some task logic
+    assert abs((1 - left_fr / LEFT_CAMERA_FRATE_HZ)) < 0.1
+    assert abs((1 - right_fr / RIGHT_CAMERA_FRATE_HZ)) < 0.1
+    assert abs((1 - body_fr / BODY_CAMERA_FRATE_HZ)) < 0.1
+    # the imec sync is for 3B Probes only
+    if sync.get('imec_sync') is not None:
+        assert (np.all(1 - SYNC_RATE_HZ * np.diff(sync.imec_sync) < 0.1))
+    assert (len(wheel['re_pos']) / last_time > 5)  # minimal wheel action
+    assert (len(sync.frame2ttl) / last_time > 0.2)  # minimal wheel action
+    assert (len(sync.bpod) > len(sync.audio) > MIN_TRIALS_NB)  # minimal wheel action
+    assert (len(sync.bpod) > MIN_TRIALS_NB * 2)
+    _logger.info('ALL CHECKS PASSED !')
+
+    # second step is to test that we can make the sync. Assertions are whitin the synch code
+    if sync.get('imec_sync') is not None:
+        sync_probes.version3B(ses_path, display=False)
+    else:
+        sync_probes.version3A(ses_path, display=False)
+
+    return True
