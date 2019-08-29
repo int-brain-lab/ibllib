@@ -122,6 +122,13 @@ def qc_session(session_path, dry=False, force=False):
 
 
 def validate_ttl_test(ses_path):
+    """
+    For a mock session on the Ephys Choice world task, check the sync channels for all
+    device properly connected and perform a synchronization if dual probes to check that
+    all channels are recorded properly
+    :param ses_path: session path
+    :return: True if tests pass, errors otherwise
+    """
     LEFT_CAMERA_FRATE_HZ = 60
     RIGHT_CAMERA_FRATE_HZ = 150
     BODY_CAMERA_FRATE_HZ = 30
