@@ -320,31 +320,25 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None):
         ax.legend()
 
     # stimOn_times: first fram2ttl change after trial start
-    trials = {
-        'ready_tone_in': _assign_events_to_trial(t_trial_start, t_ready_tone_in),
+    trials = Bunch({
+        'ready_tone_in': _assign_events_to_trial(t_trial_start, t_ready_tone_in, take='first'),
         'error_tone_in': _assign_events_to_trial(t_trial_start, t_error_tone_in),
         'valve_open': _assign_events_to_trial(t_trial_start, t_valve_open),
         'stim_freeze': _assign_events_to_trial(t_trial_start, t_stim_freeze),
         'stimOn_times': _assign_events_to_trial(t_trial_start, frame2ttl['times'], take='first'),
         'iti_in': _assign_events_to_trial(t_trial_start, t_iti_in)
-    }
+    })
     # goCue_times corresponds to the tone_in event
     trials['goCue_times'] = trials['ready_tone_in']
-    # response_times is TONE_IN to STIM freeze
-    trials['response_times'] = trials['stim_freeze'] - trials['ready_tone_in']
     # feedback times are valve open on good trials and error tone in on error trials
     trials['feedback_times'] = trials['valve_open']
     ind_err = np.isnan(trials['valve_open'])
     trials['feedback_times'][ind_err] = trials['error_tone_in'][ind_err]
-    # # # # this is specific to version 4
-    trials['iti_in'] = trials['valve_open'] + 1.
-    trials['iti_in'][ind_err] = trials['error_tone_in'][ind_err] + 2.
     trials['intervals'] = np.c_[t_trial_start, trials['iti_in']]
-    # # # # end of specific to version 4
+
     if save and output_path:
         output_path = Path(output_path)
         np.save(output_path / '_ibl_trials.goCue_times.npy', trials['goCue_times'])
-        np.save(output_path / '_ibl_trials.response_times.npy', trials['response_times'])
         np.save(output_path / '_ibl_trials.stimOn_times.npy', trials['stimOn_times'])
         np.save(output_path / '_ibl_trials.intervals.npy', trials['intervals'])
         np.save(output_path / '_ibl_trials.feedback_times.npy', trials['feedback_times'])
