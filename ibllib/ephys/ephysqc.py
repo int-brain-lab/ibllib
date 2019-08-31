@@ -129,12 +129,20 @@ def validate_ttl_test(ses_path):
     :param ses_path: session path
     :return: True if tests pass, errors otherwise
     """
-    LEFT_CAMERA_FRATE_HZ = 60
-    RIGHT_CAMERA_FRATE_HZ = 150
-    BODY_CAMERA_FRATE_HZ = 30
+
+    def _single_test(assertion, str_ok, str_ko):
+        if assertion:
+            _logger.info(str_ok)
+            return True
+        else:
+            _logger.error(str_ko)
+            return False
+
+    EXPECTED_RATES_HZ = {'left_camera': 60, 'right_camera': 150, 'body_camera': 30}
     SYNC_RATE_HZ = 1
     MIN_TRIALS_NB = 10
 
+    ok = True
     ses_path = Path(ses_path)
     if not ses_path.exists():
         return False
@@ -148,29 +156,47 @@ def validate_ttl_test(ses_path):
         sync[k] = fronts['times'][fronts['polarities'] == 1]
     wheel = fpga.extract_wheel_sync(rawsync, chmap=sync_map, save=False)
 
-    right_fr = np.round(1 / np.median(np.diff(sync.right_camera)))
-    left_fr = np.round(1 / np.median(np.diff(sync.left_camera)))
-    body_fr = np.round(1 / np.median(np.diff(sync.body_camera)))
-    _logger.info(f'Right camera frame rate: {right_fr} Hz')
-    _logger.info(f'Left camera frame rate: {left_fr} Hz')
-    _logger.info(f'Body camera frame rate: {body_fr} Hz')
-    # implement some task logic
-    assert abs((1 - left_fr / LEFT_CAMERA_FRATE_HZ)) < 0.1
-    assert abs((1 - right_fr / RIGHT_CAMERA_FRATE_HZ)) < 0.1
-    assert abs((1 - body_fr / BODY_CAMERA_FRATE_HZ)) < 0.1
-    # the imec sync is for 3B Probes only
-    if sync.get('imec_sync') is not None:
-        assert (np.all(1 - SYNC_RATE_HZ * np.diff(sync.imec_sync) < 0.1))
-    assert (len(wheel['re_pos']) / last_time > 5)  # minimal wheel action
-    assert (len(sync.frame2ttl) / last_time > 0.2)  # minimal wheel action
-    assert (len(sync.bpod) > len(sync.audio) > MIN_TRIALS_NB)  # minimal wheel action
-    assert (len(sync.bpod) > MIN_TRIALS_NB * 2)
+    frame_rates = {'right_camera': np.round(1 / np.median(np.diff(sync.right_camera))),
+                   'left_camera': np.round(1 / np.median(np.diff(sync.left_camera))),
+                   'body_camera': np.round(1 / np.median(np.diff(sync.body_camera)))}
+
+    # check the camera frame rates
+    for lab in frame_rates:
+        ok &= _single_test(assertion=abs((1 - frame_rates[lab] / EXPECTED_RATES_HZ[lab])) < 0.1,
+                           str_ok=f'PASS: {lab} frame rate: {frame_rates[lab]} Hz',
+                           str_ko=f'PASS: {lab} frame rate: {frame_rates[lab]} Hz')
+
+    # check that the wheel has a minimum rate of activity
+    ok &= _single_test(assertion=len(wheel['re_pos']) / last_time > 5,
+                       str_ok="PASS: Rotary encoder", str_ko="FAILED: Rotary encoder")
+    # check that the frame 2 ttls has a minimum rate of activity
+    ok &= _single_test(assertion=len(sync.frame2ttl) / last_time > 0.2,
+                       str_ok="PASS: Frame2TTL", str_ko="FAILED: Frame2TTL")
+    # the bpod has to have at least twice the amount of min trial pulses
+    ok &= _single_test(assertion=len(sync.bpod) > len(sync.audio) > MIN_TRIALS_NB,
+                       str_ok="PASS: Bpod", str_ko="FAILED: Bpod")
+    # the bpod has to have at least twice the amount of min trial pulses
+    ok &= _single_test(assertion=len(sync.bpod) > MIN_TRIALS_NB * 2,
+                       str_ok="PASS: Bpod", str_ko="FAILED: Bpod")
+
     _logger.info('ALL CHECKS PASSED !')
 
-    # second step is to test that we can make the sync. Assertions are whitin the synch code
+    # the imec sync is for 3B Probes only
     if sync.get('imec_sync') is not None:
-        sync_probes.version3B(ses_path, display=False)
-    else:
-        sync_probes.version3A(ses_path, display=False)
+        ok &= _single_test(assertion=np.all(1 - SYNC_RATE_HZ * np.diff(sync.imec_sync) < 0.1),
+                           str_ok="PASS: imec sync", str_ko="FAILED: imec sync")
 
-    return True
+    # second step is to test that we can make the sync. Assertions are whitin the synch code
+    try:
+        if sync.get('imec_sync') is not None:
+            sync_probes.version3B(ses_path, display=False)
+        else:
+            sync_probes.version3A(ses_path, display=False)
+    except Exception as e:
+        _logger.error("FAILED: probe synchronizations")
+        _logger.error(str(e))
+        ok &= False
+
+    if not ok:
+        raise ValueError('FAILED TTL test')
+    return ok
