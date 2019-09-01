@@ -188,16 +188,14 @@ def validate_ttl_test(ses_path, display=False):
         ok &= _single_test(assertion=np.all(1 - SYNC_RATE_HZ * np.diff(sync.imec_sync) < 0.1),
                            str_ok="PASS: imec sync", str_ko="FAILED: imec sync")
 
-    # second step is to test that we can make the sync. Assertions are whitin the synch code
-    try:
-        if sync.get('imec_sync') is not None:
-            sync_probes.version3B(ses_path, display=display)
-        else:
-            sync_probes.version3A(ses_path, display=display)
-    except Exception as e:
-        _logger.error("FAILED: probe synchronizations errored")
-        _logger.error(str(e))
-        ok &= False
+    # second step is to test that we can make the sync. Assertions are whithin the synch code
+    if sync.get('imec_sync') is not None:
+        sync_result = sync_probes.version3B(ses_path, display=display)
+    else:
+        sync_result = sync_probes.version3A(ses_path, display=display)
+
+    ok &= _single_test(assertion=sync_result, str_ok="PASS: synchronisation",
+                       str_ko="FAILED: probe synchronizations threshold exceeded")
 
     if not ok:
         raise ValueError('FAILED TTL test')

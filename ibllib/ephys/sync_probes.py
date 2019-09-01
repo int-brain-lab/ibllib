@@ -1,3 +1,4 @@
+import logging
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import interp1d
@@ -7,6 +8,8 @@ import ibllib.io.spikeglx
 from brainbox.core import Bunch
 import ibllib.io.spikeglx as spikeglx
 from ibllib.io.extractors.ephys_fpga import CHMAPS, _get_sync_fronts
+
+_logger = logging.getLogger('ibllib')
 
 
 def _get_sr(ephys_file):
@@ -32,35 +35,38 @@ def version3A(ses_path, display=True, linear=False, tol=1.5):
     ephys_files = ibllib.io.spikeglx.glob_ephys_files(ses_path)
     nprobes = len(ephys_files)
     if nprobes <= 1:
-        return
+        return True
 
-    d = Bunch({'times': None, 'nsync': np.zeros(nprobes, )})
+    d = Bunch({'times': [], 'nsync': np.zeros(nprobes, )})
 
     for ind, ephys_file in enumerate(ephys_files):
         sync = alf.io.load_object(ephys_file.ap.parent, '_spikeglx_sync', short_keys=True)
         sync_map = ibllib.io.spikeglx.get_sync_map(ephys_file.ap.parent) or CHMAPS['3A']
-        isync = np.in1d(sync['channels'], np.array([sync_map['right_camera'],
-                                                    sync_map['left_camera'],
-                                                    sync_map['body_camera']]))
+        isync = np.in1d(sync['channels'], np.array([sync_map['right_camera']]))
         d.nsync[ind] = len(sync.channels)
-        # this is designed to break if the number of fronts per probe are not equal
-        if ind == 0:
-            d['times'] = np.zeros((np.sum(isync), nprobes))
-        d['times'][:, ind] = sync['times'][isync]
+        d['times'].append(sync['times'][isync])
+    # chop off to the lowest number of sync points
+    nsyncs = [t.size for t in d['times']]
+    if len(set(nsyncs)) > 1:
+        _logger.warning("Probes don't have the same number of synchronizations pulses")
+    d['times'] = np.r_[[t[:min(nsyncs)] for t in d['times']]].transpose()
 
     # the reference probe is the one with the most sync pulses detected
     iref = np.argmax(d.nsync)
     # islave = np.setdiff1d(np.arange(nprobes), iref)
     # get the sampling rate from the reference probe using metadata file
     sr = _get_sr(ephys_files[iref])
+    qc_all = True
     # output timestamps files as per ALF convention
     for ind, ephys_file in enumerate(ephys_files):
         if ind == iref:
             timestamps = np.array([[0, 0], [1, 1]])
         else:
-            timestamps = sync_probe_front_times(d.times[:, iref], d.times[:, ind], sr,
-                                                display=display, linear=linear, tol=tol)
+            timestamps, qc = sync_probe_front_times(d.times[:, iref], d.times[:, ind], sr,
+                                                    display=display, linear=linear, tol=tol)
+            qc_all &= qc
         _save_timestamps_npy(ephys_file, timestamps)
+    return qc_all
 
 
 def version3B(ses_path, display=True, linear=False, tol=2.5):
@@ -81,18 +87,21 @@ def version3B(ses_path, display=True, linear=False, tol=2.5):
     nprobes = len(ephys_files)
     # should have at least 2 probes and only one nidq
     if nprobes <= 1:
-        return
+        return True
     assert(len(nidq_file) == 1)
     nidq_file = nidq_file[0]
     sync_nidq = _get_sync_fronts(nidq_file.sync, nidq_file.sync_map['imec_sync'])
 
+    qc_all = True
     for ef in ephys_files:
         sync_probe = _get_sync_fronts(ef.sync, ef.sync_map['imec_sync'])
         sr = _get_sr(ef)
         assert(sync_nidq.times.size == sync_probe.times.size)
-        timestamps = sync_probe_front_times(sync_probe.times, sync_nidq.times, sr,
-                                            display=display, linear=linear, tol=tol)
+        timestamps, qc = sync_probe_front_times(sync_probe.times, sync_nidq.times, sr,
+                                                display=display, linear=linear, tol=tol)
+        qc_all &= qc
         _save_timestamps_npy(ef, timestamps)
+    return qc_all
 
 
 def sync_probe_front_times(t, tref, sr, display=False, linear=False, tol=2.0):
@@ -104,7 +113,9 @@ def sync_probe_front_times(t, tref, sr, display=False, linear=False, tol=2.0):
     :param sr: sampling rate of the slave probe
     :return: a 2 columns by n-sync points array where each row corresponds
     to a sync point: sample_index (0 based), tref
+    :return: quality Bool. False if tolerance is exceeded
     """
+    qc = True
     # the main drift is computed through linear regression. A further step compute a smoothed
     # version of the residual to add to the linear drift. The precision is enforced
     # by ensuring that each point lies less than one sampling rate away from the predicted.
@@ -146,6 +157,8 @@ def sync_probe_front_times(t, tref, sr, display=False, linear=False, tol=2.0):
             plt.xlabel('time (sec)')
     # test that the interp is within tol sample
     fcn = interp1d(sync_points[:, 0], sync_points[:, 1], fill_value='extrapolate')
-    assert(np.all(np.abs((tref - fcn(t)) * sr) < (tol)))
-    # plt.plot((tref - fcn(t)) * sr)
-    return sync_points
+    if np.any(np.abs((tref - fcn(t)) * sr) > (tol)):
+        _logger.error(f'Synchronization check exceeds tolerance of {tol} samples. Check !!')
+        qc = False
+        # plt.plot((tref - fcn(t)) * sr)
+    return sync_points, qc
