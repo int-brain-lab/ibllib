@@ -63,7 +63,7 @@ def version3A(ses_path, display=True, linear=False, tol=1.5):
         _save_timestamps_npy(ephys_file, timestamps)
 
 
-def version3B(ses_path, display=True, linear=False, tol=2.0):
+def version3B(ses_path, display=True, linear=False, tol=2.5):
     """
     From a session path with _spikeglx_sync arrays extraccted, locate ephys files for 3A and
      outputs one sync.timestamps.probeN.npy file per acquired probe. By convention the reference

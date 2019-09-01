@@ -1,3 +1,4 @@
+from pathlib import Path
 import logging
 import shutil
 
@@ -19,6 +20,7 @@ def merge_probes(ses_path):
     :param ses_path: session containig probes to be merged
     :return: None
     """
+    ses_path = Path(ses_path)
     out_dir = ses_path.joinpath('alf').joinpath('tmp_merge')
     ephys_files = glob_ephys_files(ses_path)
     subdirs, labels, ephys_files_sorted = zip(*sorted([(ep.ap.parent, ep.label, ep)

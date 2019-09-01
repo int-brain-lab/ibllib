@@ -121,12 +121,13 @@ def qc_session(session_path, dry=False, force=False):
             extract_rmsmap(efile.lf, out_folder=None, force=force, label=efile.label)
 
 
-def validate_ttl_test(ses_path):
+def validate_ttl_test(ses_path, display=False):
     """
     For a mock session on the Ephys Choice world task, check the sync channels for all
     device properly connected and perform a synchronization if dual probes to check that
     all channels are recorded properly
     :param ses_path: session path
+    :param display: show the probe synchronization plot if several probes
     :return: True if tests pass, errors otherwise
     """
 
@@ -162,9 +163,10 @@ def validate_ttl_test(ses_path):
 
     # check the camera frame rates
     for lab in frame_rates:
-        ok &= _single_test(assertion=abs((1 - frame_rates[lab] / EXPECTED_RATES_HZ[lab])) < 0.1,
-                           str_ok=f'PASS: {lab} frame rate: {frame_rates[lab]} Hz',
-                           str_ko=f'PASS: {lab} frame rate: {frame_rates[lab]} Hz')
+        expect = EXPECTED_RATES_HZ[lab]
+        ok &= _single_test(assertion=abs((1 - frame_rates[lab] / expect)) < 0.1,
+                           str_ok=f'PASS: {lab} frame rate: {frame_rates[lab]} = {expect} Hz',
+                           str_ko=f'FAILED: {lab} frame rate: {frame_rates[lab]} != {expect} Hz')
 
     # check that the wheel has a minimum rate of activity
     ok &= _single_test(assertion=len(wheel['re_pos']) / last_time > 5,
@@ -189,11 +191,11 @@ def validate_ttl_test(ses_path):
     # second step is to test that we can make the sync. Assertions are whitin the synch code
     try:
         if sync.get('imec_sync') is not None:
-            sync_probes.version3B(ses_path, display=False)
+            sync_probes.version3B(ses_path, display=display)
         else:
-            sync_probes.version3A(ses_path, display=False)
+            sync_probes.version3A(ses_path, display=display)
     except Exception as e:
-        _logger.error("FAILED: probe synchronizations")
+        _logger.error("FAILED: probe synchronizations errored")
         _logger.error(str(e))
         ok &= False
 
