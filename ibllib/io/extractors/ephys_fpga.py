@@ -242,7 +242,16 @@ def extract_camera_sync(sync, output_path=None, save=False, chmap=None):
     :param chmap: dictionary containing channel indices. Default to constant.
     :return: dictionary containing camera timestamps
     """
-    pass
+    # NB: should we check we opencv the expected number of frames ?
+    output_path = Path(output_path)
+    if not output_path.exists():
+        output_path.mkdir()
+    s = _get_sync_fronts(sync, chmap['right_camera'])
+    np.save(output_path / '_iblrig_rightCamera.times.npy', s.times[::2])
+    s = _get_sync_fronts(sync, chmap['left_camera'])
+    np.save(output_path / '_iblrig_leftCamera.times.npy', s.times[::2])
+    s = _get_sync_fronts(sync, chmap['body_camera'])
+    np.save(output_path / '_iblrig_bodyCamera.times.npy', s.times[::2])
 
 
 def extract_wheel_sync(sync, output_path=None, save=False, chmap=None):
@@ -388,7 +397,7 @@ def extract_sync(session_path, save=False, force=False, ephys_files=None):
             continue
         file_exists = alf.io.exists(bin_file.parent, object='_spikeglx_sync', glob=glob_filter)
         if not force and file_exists:
-            _logger.warning('Skipping: spike GLX sync found for probe: ' + efi.label)
+            _logger.warning(f'Skipping raw sync: SGLX sync found for probe {efi.label} !')
             sync = alf.io.load_object(bin_file.parent, object='_spikeglx_sync', glob=glob_filter)
         else:
             sr = ibllib.io.spikeglx.Reader(bin_file)
@@ -453,9 +462,10 @@ def extract_all(session_path, save=False):
     """
     session_path = Path(session_path)
     alf_path = session_path / 'alf'
+    cam_path = session_path / 'raw_video_data'
 
     sync, sync_chmap = _get_main_probe_sync(session_path)
     extract_wheel_sync(sync, alf_path, save=save, chmap=sync_chmap)
+    extract_camera_sync(sync, cam_path, save=save, chmap=sync_chmap)
     extract_behaviour_sync(sync, alf_path, save=save, chmap=sync_chmap)
     align_with_bpod(session_path)  # checks consistency and compute dt with bpod
-    extract_camera_sync(sync, alf_path, save=save, chmap=sync_chmap)  # TODO get camera time-stamps
