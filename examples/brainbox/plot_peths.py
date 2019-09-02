@@ -80,8 +80,7 @@ def calculate_peths(
 
         # filter spikes
         idxs = (spike_times > ts[0]) & \
-               (spike_times <= ts[-1]) & \
-               np.isin(spike_clusters, cluster_ids)
+               (spike_times <= ts[-1]) & np.isin(spike_clusters, cluster_ids)
         i_spikes = spike_times[idxs]
         i_clusters = spike_clusters[idxs]
 
@@ -205,5 +204,5 @@ if __name__ == '__main__':
     # plot peths along with standard error
     fig = plot_peths(
         peth_means, peth_stds / np.sqrt(len(trial_ids)),
-        marker_idx=int(PRE_TIME/BIN_SIZE), bin_size=BIN_SIZE,
+        marker_idx=int(PRE_TIME / BIN_SIZE), bin_size=BIN_SIZE,
         onset_label='go cue')
