@@ -96,14 +96,18 @@ def time_interpolation(tref, target):
     from one to the other.
     If sizes are different, only work with the first elements.
     """
+    if tref.size < 1:
+        logger_.error('Wheel time-stamp for trial starts have one or less detected values. ABORT')
+        raise(ValueError)
+    if tref.size < 1:
+        logger_.error('Bpod time-stamp for trial starts have one or less detected values. ABORT')
+        raise(ValueError)
     if tref.size != target.size:
         logger_.warning('Time-stamp arrays have inconsistent size. Trimming to the smallest size')
         siz = min(tref.size, target.size)
         tref = tref[:siz]
         target = target[:siz]
-    if tref.size == target.size == 1:
-        logger_.error('Wheel time-stamp arrays have only one value ?!!?. This is a dud. ABORT')
-        raise(ValueError)
+
     func = interpolate.interp1d(tref, target, fill_value="extrapolate")
     return func
 

@@ -41,7 +41,12 @@ def check_dimensions(dico):
     :param dico: dictionary containing data
     :return: status 0 for consistent dimensions, 1 for inconsistent dimensions
     """
-    shapes = [dico[lab].shape for lab in dico if isinstance(dico[lab], np.ndarray)]
+    excluded_attributes = ['timestamps']
+    shapes = [dico[lab].shape for lab in dico if isinstance(dico[lab], np.ndarray) and
+              lab.split('.')[0] not in excluded_attributes]
+    # the dictionary may contain only excluded attributes, in this case return success
+    if not shapes:
+        return int(0)
     lmax = max([len(s) for s in shapes])
     for l in range(lmax):
         sh = np.array([s[l] if (len(s) - 1 >= l) else 1 for s in shapes])
@@ -199,7 +204,8 @@ def load_object(alfpath, object=None, glob='.*', short_keys=False):
         logger_.warning('Inconsistent dimensions for object:' + object + '\n' +
                         '\n'.join([f'{v.shape},    {k}' for k, v in OUT.items()]))
     if short_keys:
-        for k in OUT:
+        keys = [k for k in OUT]
+        for k in keys:
             if k != k.split('.')[0]:
                 OUT[k.split('.')[0]] = OUT.pop(k)
     return OUT

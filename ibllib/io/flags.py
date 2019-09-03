@@ -7,6 +7,12 @@ import logging
 
 logger_ = logging.getLogger('ibllib')
 
+FLAG_FILE_NAMES = [
+    'transfer_me.flag', 'extract_me.flag', 'register_me.flag', 'flatiron.flag',
+    'extract_me.error', 'register_me.error', 'create_me.flag', 'compress_video.flag',
+    'compress_audio.flag', 'extract_ephys.flag',
+]
+
 
 def read_flag_file(fname):
     """
@@ -150,7 +156,7 @@ def create_compress_flags(root_data_folder, clobber=False):
             write_flag_file(flag_file, file_list=str(vfile.relative_to(ses_path)), clobber=clobber)
     return
     # add audio flags to the list as well
-    audio_paths = Path(root_data_folder).glob('**/raw_behavior__data')
+    audio_paths = Path(root_data_folder).glob('**/raw_behavior_data')
     for audio_path in audio_paths:
         ses_path = audio_path.parent
         flag_file = ses_path.joinpath('compress_audio.flag')
