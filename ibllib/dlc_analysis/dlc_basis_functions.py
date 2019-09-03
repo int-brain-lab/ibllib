@@ -40,3 +40,5 @@ def load_dlc(folder_path, camera='left'):
     elif len(timestamps) < len(dlc_data[list(dlc_data.keys())[0]]):
         for key in list(dlc_data.keys()):
             dlc_data[key] = dlc_data[key][0:len(timestamps)]
+
+    return dlc_data, timestamps
