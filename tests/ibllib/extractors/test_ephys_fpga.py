@@ -65,4 +65,4 @@ class TestSyncExtraction(unittest.TestCase):
             with self.assertLogs(level='INFO') as log:
                 syncs = ephys_fpga.extract_sync(tdir)
                 self.assertEqual(len(log.output), 1)
-                self.assertIn('spike GLX sync found', log.output[0])
+                self.assertIn('SGLX sync found', log.output[0])
