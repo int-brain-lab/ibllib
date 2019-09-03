@@ -1,0 +1,24 @@
+Goals:
+
+Regress neural data onto behavior.
+	Regress neural data onto choice.
+		Regress spike words for units onto choice.
+
+Word = if there is a spike in a bin.
+See if a word codes for a choice (look at words pre choice)
+
+Functions:
+
+	def spike_word(spk_train, win_length)
+		"""
+		Returns a binary value for if a spike occurred within a specific window.
+
+		Parameters:
+		-----------
+			spk_train
+			win_length
+
+		Returns:
+		--------
+			word
+
