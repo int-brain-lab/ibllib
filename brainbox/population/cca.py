@@ -82,7 +82,9 @@ def plot_correlations(corrs, errors=None, ax=None, **plot_kwargs):
     :return: axis if specified, or plot if axis = None
     """
     # evaluate if np.arrays are passed
-    # TODO
+    assert type(corrs) is np.ndarray, "'corrs' is not a numpy array."
+    if errors is not None:
+        assert type(errors) is np.ndarray, "'errors' is not a numpy array."
     # create axis if no axis is passed
     if ax is None:
         ax = plt.gca()
@@ -147,19 +149,3 @@ if __name__ == '__main__':
     # plot cca correlations
     corrs = get_correlations(cca, data[0][idxs_time['test'], :], data[0][idxs_time['test'], :])
     plot_correlations(corrs)
-
-    # Shuffle data
-    # ...
-    # fig, ax1 = plt.subplots(1,1,figsize(10,10))
-    # plot_correlations(corrs, ... , ax=ax1, color='blue')
-    # plot_correlations(shuffled_coors, ..., ax=ax1, color='red')
-    # plt.show()
-
-
-    ## test plotting
-    corrs = np.array([.6, .2, .1, .001])
-    errs = np.array([.1, .05, .04, .0005])
-    fig, ax1 = plt.subplots(1,1,figsize=(5,5))
-    plot_correlations(corrs, errs , ax=ax1, color='blue')
-    plot_correlations(corrs*.1, errs , ax=ax1, color='orange')
-    plt.show()
