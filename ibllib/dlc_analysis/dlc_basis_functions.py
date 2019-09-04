@@ -42,3 +42,10 @@ def load_dlc(folder_path, camera='left'):
             dlc_data[key] = dlc_data[key][0:len(timestamps)]
 
     return dlc_data, timestamps
+
+
+def load_event_times(folder_path):
+    stim_on_times = np.load(join(folder_path, 'alf', '_ibl_trials.stimOn_times.npy'))
+    feedback_type = np.load(join(folder_path, 'alf', '_ibl_trials.feedbackType.npy'))
+    feedback_times = np.load(join(folder_path, 'alf', '_ibl_trials.feedback_times.npy'))
+    return stim_on_times, feedback_type, feedback_times
