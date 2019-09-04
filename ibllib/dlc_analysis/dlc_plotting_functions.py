@@ -31,7 +31,7 @@ def peri_plot(trace, timestamps, events, ax, time_win=[-1, 3], norm='none'):
     sampling_rate = 1/np.mean(np.diff(timestamps))
     sample_win = [np.int(np.round(time_win[0] * sampling_rate)),
                   np.int(np.round(time_win[1] * sampling_rate))]
-    time_trace = np.arange(time_win[0], time_win[1], 1/np.round(sampling_rate))
+    time_trace = np.linspace(time_win[0], time_win[1], np.sum(np.abs(sample_win)))
 
     # Z-score entire trace
     if norm == 'zscore':
@@ -40,14 +40,16 @@ def peri_plot(trace, timestamps, events, ax, time_win=[-1, 3], norm='none'):
     # Create dataframe for line plot
     peri_df = pd.DataFrame(columns=['event_nr', 'timepoint', 'trace'])
     for i in np.arange(np.size(events)):
-        if np.argmin(np.abs(timestamps-events[i]))+sample_win[0] > 0:
+        if (np.argmin(np.abs(timestamps-events[i]))+sample_win[0] > 0 and
+                np.argmin(np.abs(timestamps-events[i]))+sample_win[1] < np.size(trace)):
+
             # Get trace for this trial
             this_trace = trace[np.argmin(np.abs(timestamps-events[i]))+sample_win[0]:
                                np.argmin(np.abs(timestamps-events[i]))+sample_win[1]]
 
             # Perform baseline correction
             if norm == 'baseline':
-                this_trace = this_trace - np.median(this_trace[time_trace < 0])
+                this_trace = this_trace - np.median(this_trace[time_trace < time_win[0]/2])
 
             # Add to dataframe
             this_df = pd.DataFrame(data={'event_nr': np.ones(np.size(this_trace),
