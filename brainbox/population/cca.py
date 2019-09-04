@@ -8,8 +8,8 @@ def _smooth(data, sd):
     n_bins = data.shape[0]
     w = n_bins - 1 if n_bins % 2 == 0 else n_bins
     window = gaussian(w, std=sd)
-    for j in range(data.shape[0]):
-        data[:, j] = convolve(data[:, j], window, mode='same', method='auto')[:-1]
+    for j in range(data.shape[1]):
+        data[:, j] = convolve(data[:, j], window, mode='same', method='auto')
     return data
 
 
@@ -88,7 +88,7 @@ def fit_cca(data_0, data_1, n_cca_dims=10):
     :type n_cca_dims: int
     :return: sklearn cca object
     """
-    from sklearn.decomposition import CCA
+    from sklearn.cross_decomposition import CCA
     cca = CCA(n_components=n_cca_dims, max_iter=1000)
     cca.fit(data_0, data_1)
     return cca
@@ -157,13 +157,14 @@ def plot_correlations(corrs, errors=None, ax=None, **plot_kwargs):
     y_data = corrs
     x_data = range(1, (len(corrs) + 1))
     # create the plot object
-    cplot = ax.plot(x_data, y_data, **plot_kwargs)
-    ax.fill_between(x_data, y_data-errors, y_data+errors, **plot_kwargs, alpha=0.2)
+    ax.plot(x_data, y_data, **plot_kwargs)
+    if errors is not None:
+        ax.fill_between(x_data, y_data-errors, y_data+errors, **plot_kwargs, alpha=0.2)
     # change y and x labels and ticks
     ax.set_xticks(x_data)
     ax.set_ylabel("Correlation")
     ax.set_xlabel("CCA dimension")
-    return cplot
+    return ax
 
 
 def bin_spikes_trials(spikes, trials, T_BIN=0.01):
@@ -177,7 +178,7 @@ def bin_spikes_trials(spikes, trials, T_BIN=0.01):
     :type T_BIN: float
     :return: a matrix (SpikeCounts, bins), and a vector of bins size with trial ID
     """
-
+    from brainbox.processing import bincount2D
     binned_spikes, bin_times, _ = bincount2D(spikes['times'], spikes['clusters'], T_BIN)
     trial_start_times = trials['intervals'][:, 0]
     binned_trialIDs = np.digitize(bin_times, trial_start_times)
@@ -233,8 +234,8 @@ if __name__ == '__main__':
 
     # fit cca
     cca = fit_cca(
-        data[0][idxs_time['train'], :], data[0][idxs_time['train'], :], n_cca_dims=CCA_DIMS)
+        data[0][idxs_time['train'], :], data[1][idxs_time['train'], :], n_cca_dims=CCA_DIMS)
 
     # plot cca correlations
-    corrs = get_correlations(cca, data[0][idxs_time['test'], :], data[0][idxs_time['test'], :])
+    corrs = get_correlations(cca, data[0][idxs_time['test'], :], data[1][idxs_time['test'], :])
     plot_correlations(corrs)
