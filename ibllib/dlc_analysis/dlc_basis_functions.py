@@ -4,7 +4,7 @@ Created on Tue Sep  3 15:48:15 2019
 
 List of basis functions for DLC
 
-@author: guido
+@author: Guido, Miles, Zoe, Kelly
 """
 
 import numpy as np
@@ -63,7 +63,7 @@ def load_event_times(folder_path):
     return stim_on_times, feedback_type, feedback_times
 
 
-def transform_px_to_mm(dlc_dict, width_mm=66, height_mm=54):
+def px_to_mm(dlc_dict, width_mm=66, height_mm=54):
     """
     Transform pixel values to millimeter
 

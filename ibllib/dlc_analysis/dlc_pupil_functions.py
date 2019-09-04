@@ -23,11 +23,11 @@ def fit_circle(x, y):
     return xc_1, yc_1, R_1
 
 
-def pupil_features(dlc_data):
-    vec_x = [dlc_data['pupil_left_r_x'], dlc_data['pupil_right_r_x'],
-             dlc_data['pupil_top_r_x'], dlc_data['pupil_bottom_r_x']]
-    vec_y = [dlc_data['pupil_left_r_y'], dlc_data['pupil_right_r_y'],
-             dlc_data['pupil_top_r_y'], dlc_data['pupil_bottom_r_y']]
+def pupil_features(dlc_dict):
+    vec_x = [dlc_dict['pupil_left_r_x'], dlc_dict['pupil_right_r_x'],
+             dlc_dict['pupil_top_r_x'], dlc_dict['pupil_bottom_r_x']]
+    vec_y = [dlc_dict['pupil_left_r_y'], dlc_dict['pupil_right_r_y'],
+             dlc_dict['pupil_top_r_y'], dlc_dict['pupil_bottom_r_y']]
     x = np.zeros(len(vec_x[0]))
     y = np.zeros(len(vec_x[0]))
     diameter = np.zeros(len(vec_x[0]))
