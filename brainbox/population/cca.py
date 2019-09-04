@@ -101,6 +101,27 @@ def plot_correlations(corrs, errors=None, ax=None, **plot_kwargs):
     return cplot
 
 
+def bin_spikes_trials(spikes, trials, T_BIN=0.01):
+    """
+    Binarizes the spike times into a raster and assigns a trial number to each bin
+    :param spikes: spikes object
+    :type spikes: Bunch
+    :param trials: trials object
+    :type trials: Bunch
+    :param T_BIN: size, in s, of the bins
+    :type T_BIN: float
+    :return: a matrix (SpikeCounts, bins), and a vector of bins size with trial ID
+    """
+
+    binned_spikes, bin_times, _ = bincount2D(spikes['times'], spikes['clusters'], T_BIN)
+    trial_start_times = trials['intervals'][:, 0]
+    binned_trialIDs = np.digitize(bin_times, trial_start_times)
+    # correct, as index 0 is whatever happens before the first trial
+    binned_trialIDs_corrected = binned_trialIDs - 1
+
+    return binned_spikes, binned_trialIDs_corrected
+
+
 if __name__ == '__main__':
 
     from pathlib import Path
@@ -114,21 +135,23 @@ if __name__ == '__main__':
     CCA_DIMS = PCA_DIMS
 
     # get the data from flatiron
-    subject = 'KS005'
-    date = '2019-08-30'
-    number = 1
+    # subject = 'ZM_1735'
+    # date = '2019-08-01'
+    # number = 1
 
-    one = ONE()
-    eid = one.search(subject=subject, date=date, number=number)
-    D = one.load(eid[0], download_only=True)
-    session_path = Path(D.local_path[0]).parent
+    # one = ONE()
+    # eid = one.search(subject=subject, date=date, number=number)
+    # D = one.load(eid[0], download_only=True)
+    # session_path = Path(D.local_path[0]).parent
+    session_path = session_path = "/home/hmvergara/Downloads/FlatIron/mnt/s0/Data/Subjects/ZM_1735/2019-08-01/001/alf/"
     spikes = ioalf.load_object(session_path, 'spikes')
     # clusters = ioalf.load_object(session_path, 'clusters')
     # channels = ioalf.load_object(session_path, 'channels')
-    # trials = ioalf.load_object(session_path, '_ibl_trials')
+    trials = ioalf.load_object(session_path, '_ibl_trials')
 
     # bin spikes
-    binned_spikes, _, _ = bincount2D(spikes['times'], spikes['clusters'], BIN_SIZE)
+    binned_spikes, binned_trialIDs = bin_spikes_trials(spikes, trials, T_BIN=0.01)
+
     # extract 2 populations
     data = [binned_spikes[:100, :].T, binned_spikes[100:200, :].T]
 
