@@ -10,7 +10,7 @@ def times2frames(times, frame_length, initial_offset=0):
     :return: integer frames where signals occur
     """
     if initial_offset > times[0]:
-        raise ValueError("initial_offset is too high")
+        raise ValueError("Initial_offset is too high")
     if type(times) != np.ndarray:
         times = np.array(times)
     return ((times - initial_offset) / frame_length).astype(int)
@@ -18,13 +18,13 @@ def times2frames(times, frame_length, initial_offset=0):
 def gaussian_window(window_length, sigma=1):
     """
     Function to generate a Gaussian window for smoothing
-    :param window_length: length of the window
+    :param window_length: length of the window, must be odd for symmetric window
     :param sigma: standard deviation of the gaussian curve
     :return: Gaussian window as a numpy array for convolution
     """
-    return norm.pdf(np.arange(-1 * window_length // 2, (window_length + 1) // 2), scale = sigma)
+    return norm.pdf(np.arange(-1 * (window_length - 1) // 2, (window_length + 1) // 2), scale = sigma)
 
-def frame_smoothing(frames, window, window_length, window_type, sigma=1):
+def frame_smoothing(frames, window=None, window_length=None, window_type=None, sigma=1):
     """
     Takes discrete frames and outputs the smoothed signal
     :param frames: Frames where signals occurred
@@ -34,14 +34,22 @@ def frame_smoothing(frames, window, window_length, window_type, sigma=1):
     :param sigma: Standard deviation of Gaussian window
     :return:
     """
-    if window_type.lower() == 'gaussian':
-        window = gaussian_window(window_length = window_length, sigma = sigma)
+    if window is None:
+        if window_type is None:
+            raise ValueError('Must input either a custom window or a specified type')
+        elif window_type.lower() == 'gaussian':
+            window = gaussian_window(window_length = window_length, sigma = sigma)
+        else:
+            raise ValueError('Window type not recognised')
+    else:
+        window_length = len(window)
     smoothed_signal = np.zeros(frames[-1] + (window_length + 1) // 2)
     for frame in frames:
         smoothed_signal[frame - window_length // 2: frame + (window_length+1) // 2] += window
     return smoothed_signal
 
-def smoothing_times(times, frame_length, window, window_type, window_length, sigma=1, initial_offset=0):
+
+def smoothing_times(times, frame_length, window=None, window_type=None, window_length=None, sigma=1, initial_offset=0):
     """
     Takes spike times and returns smoothed signal
     :param times: Times of spike events
