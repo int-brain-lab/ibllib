@@ -1,14 +1,16 @@
 import pytest
-from brainbox.singlecell.regression.smoothing import *
+import brainbox.singlecell.regression.smoothing as bsrs
+import numpy as np
 
 
 def test_times2frames():
-    assert times2frames(np.array([2.3, 2.45, 2.46, 2.7]), 0.1, 2) == np.array([2, 4, 4, 7])
+    assert bsrs.times2frames(np.array([2.3, 2.45, 2.46, 2.7]), 0.1, 2) == np.array([2, 4, 4, 7])
 
 
 def test_gaussian_window():
-    assert gaussian_window(9, sigma=2) == np.array([0.02699548, 0.0647588 , 0.12098536, 0.17603266, 0.19947114,
-           0.17603266, 0.12098536, 0.0647588 , 0.02699548])
+    assert bsrs.gaussian_window(9, sigma=2) == \
+        np.array([0.02699548, 0.0647588, 0.12098536, 0.17603266, 0.19947114, 0.17603266, 0.12098536, 0.0647588,
+                                                        0.02699548])
 
 
 def test_frame_smoothing_1():
