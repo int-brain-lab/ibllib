@@ -2,70 +2,135 @@ import numpy as np
 import matplotlib.pylab as plt
 
 
+def _smooth(data, sd):
+    from scipy.signal import gaussian
+    from scipy.signal import convolve
+    n_bins = data.shape[0]
+    w = n_bins - 1 if n_bins % 2 == 0 else n_bins
+    window = gaussian(w, std=sd)
+    for j in range(data.shape[0]):
+        data[:, j] = convolve(data[:, j], window, mode='same', method='auto')[:-1]
+    return data
 
-def preprocess(array, smoothing_sd=25, n_pca_dims=20):
+
+def _pca(data, n_pcs):
+    from sklearn.decomposition import PCA
+    pca = PCA(n_components=n_pcs)
+    pca.fit(data)
+    data_pc = pca.transform(data)
+    return data_pc
+
+
+def preprocess(data, smoothing_sd=25, n_pcs=20):
     """
     Preprocess neural data for cca analysis with smoothing and pca
 
-    :param array: array of shape (T, n_features)
-    :type array: array-like
+    :param data: array of shape (n_samples, n_features)
+    :type data: array-like
     :param smoothing_sd: gaussian smoothing kernel standard deviation (ms)
     :type smoothing_sd: float
-    :param pca_dims:
-    :type pca_dims: int
+    :param n_pcs: number of pca dimensions to retain
+    :type n_pcs: int
     :return: preprocessed neural data
-    :rtype: array-like, shape (T, pca_dims)
+    :rtype: array-like, shape (n_samples, pca_dims)
     """
-    # smooth data
-    # pca
-    pass
+    if smoothing_sd > 0:
+        data = _smooth(data, sd=smoothing_sd)
+    if n_pcs > 0:
+        data = _pca(data, n_pcs=n_pcs)
+    return data
 
 
-def fit_cca(array_0, array_1, n_cca_dims=10):
+def split_trials(trial_ids, n_splits=5, rng_seed=0):
     """
+    Assign each trial to testing or training fold
+    
+    :param trial_ids:
+    :type trial_ids: array-like
+    :param n_splits: one split used for testing; remaining splits used for training
+    :type n_splits: int
+    :param rng_seed: set random state for shuffling trials
+    :type rng_seed: int
+    :return: dict of indices with keys `train` and `test`
+    """
+    from sklearn.model_selection import KFold
+    shuffle = True if rng_seed is not None else False
+    kf = KFold(n_splits=n_splits, random_state=rng_seed, shuffle=shuffle)
+    kf.get_n_splits(trial_ids)
+    t0 = next(kf.split(trial_ids))
+    idxs = {'train': t0[0], 'test': t0[1]}
+    return idxs
 
-    :param array_0:
-    :param array_1:
-    :param n_cca_dims:
+
+def split_timepoints(trial_ids, idxs_trial):
+    """
+    Assign each time point to testing or training fold
+    
+    :param trial_ids: trial id for each timepoint
+    :type trial_ids: array-like
+    :param idxs_trial: dictionary that defines which trials are in `train` or `test` fold
+    :type idxs_trial: dict
+    :return: dictionary that defines which time points are in `train` and `test` folds
+    """
+    idxs_time = {dtype: np.isin(trial_ids, idxs_trial[dtype]) for dtype in idxs_trial.keys()}
+    return idxs_time
+
+
+def fit_cca(data_0, data_1, n_cca_dims=10):
+    """
+    Initialize and fit CCA sklearn object
+    
+    :param data_0: shape (n_samples, n_features_0)
+    :type data_0: array-like
+    :param data_1: shape (n_samples, n_features_1)
+    :type data_1: array-like
+    :param n_cca_dims: number of CCA dimensions to fit
+    :type n_cca_dims: int
     :return: sklearn cca object
     """
-    # initialize sklearn cca object
-    # fit cca
-    pass
+    from sklearn.decomposition import CCA
+    cca = CCA(n_components=n_cca_dims, max_iter=1000)
+    cca.fit(data_0, data_1)
+    return cca
 
 
-def get_cca_projection(cca, array_0, array_1):
+def get_cca_projection(cca, data_0, data_1):
     """
     Project data into CCA dimensions
 
     :param cca:
-    :param array_0:
-    :param array_1:
-    :return:
+    :param data_0:
+    :param data_1:
+    :return: tuple; (data_0 projection, data_1 projection)
     """
-    pass
+    x_scores, y_scores = cca.transform(data_0, data_1)
+    return x_scores, y_scores
 
 
-def get_correlations(cca, array_0, array_1):
+def get_correlations(cca, data_0, data_1):
     """
 
     :param cca:
-    :param array_0:
-    :param array_1:
+    :param data_0:
+    :param data_1:
     :return:
     """
-    pass
+    x_scores, y_scores = get_cca_projection(cca, data_0, data_1)
+    corrs_tmp = np.corrcoef(x_scores.T, y_scores.T)
+    corrs = np.diagonal(corrs_tmp, offset=data_0.shape[1])
+    return corrs
 
 
-def shuffle_analysis(array_0, array_1, n_shuffles=100, **cca_kwargs):
+def shuffle_analysis(data_0, data_1, n_shuffles=100, **cca_kwargs):
     """
     Perform CCA on shuffled data
 
-    :param array_0:
-    :param array_1:
+    :param data_0:
+    :param data_1:
     :param n_shuffles:
     :return:
     """
+    # TODO
     pass
 
 
@@ -127,12 +192,14 @@ if __name__ == '__main__':
     from pathlib import Path
     from oneibl.one import ONE
     import alf.io as ioalf
-    from brainbox.processing import bincount2D
+    # from brainbox.processing import bincount2D
 
     BIN_SIZE = 0.025  # seconds
     SMOOTH_SIZE = 0.025  # seconds; standard deviation of gaussian kernel
     PCA_DIMS = 20
     CCA_DIMS = PCA_DIMS
+    N_SPLITS = 5
+    RNG_SEED = 0
 
     # get the data from flatiron
     # subject = 'ZM_1735'
@@ -143,7 +210,7 @@ if __name__ == '__main__':
     # eid = one.search(subject=subject, date=date, number=number)
     # D = one.load(eid[0], download_only=True)
     # session_path = Path(D.local_path[0]).parent
-    session_path = session_path = "/home/hmvergara/Downloads/FlatIron/mnt/s0/Data/Subjects/ZM_1735/2019-08-01/001/alf/"
+    session_path = "/home/hmvergara/Downloads/FlatIron/mnt/s0/Data/Subjects/ZM_1735/2019-08-01/001/alf/"
     spikes = ioalf.load_object(session_path, 'spikes')
     # clusters = ioalf.load_object(session_path, 'clusters')
     # channels = ioalf.load_object(session_path, 'channels')
@@ -156,14 +223,13 @@ if __name__ == '__main__':
     data = [binned_spikes[:100, :].T, binned_spikes[100:200, :].T]
 
     # preprocess data
-    for pop in data:
-        # TODO: DOES THIS WORK???
-        pop = preprocess(pop, n_pca_dims=PCA_DIMS, smoothing_sd=SMOOTH_SIZE)
+    for i, pop in enumerate(data):
+        data[i] = preprocess(pop, n_pcs=PCA_DIMS, smoothing_sd=SMOOTH_SIZE)
 
     # split trials
-    idxs_trial = {'train': None, 'test': None}
+    idxs_trial = split_trials(np.unique(binned_trialIDs), n_splits=N_SPLITS, rng_seed=RNG_SEED)
     # get train/test indices into spike arrays
-    idxs_time = {'train': None, 'test': None}
+    idxs_time = split_timepoints(binned_trialIDs, idxs_trial)
 
     # fit cca
     cca = fit_cca(
