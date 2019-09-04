@@ -47,6 +47,7 @@ def frame_smoothing(frames, window=None, window_length=None, window_type=None, s
             raise ValueError('Window type not recognised')
     else:
         window_length = len(window)
+
     smoothed_signal = np.zeros(frames[-1] + (window_length + 1) // 2)
     for frame in frames:
         smoothed_signal[frame - window_length // 2: frame + (window_length + 1) // 2] += window
