@@ -42,7 +42,7 @@ def load_dlc(folder_path, camera='left'):
         for key in list(dlc_dict.keys()):
             dlc_dict[key] = dlc_dict[key][0:len(timestamps)]
     dlc_dict['timestamps'] = timestamps
-    dlc_dict['sampling_rate'] = 1/np.mean(np.diff(timestamps))
+    dlc_dict['sampling_rate'] = 1 / np.mean(np.diff(timestamps))
 
     return dlc_dict
 
@@ -87,9 +87,9 @@ def px_to_mm(dlc_dict, width_mm=66, height_mm=54):
     # Transform pixels into mm
     for key in list(dlc_dict.keys()):
         if key[-1] == 'x':
-            dlc_dict[key] = dlc_dict[key] * (width_mm/px_dim[0])
+            dlc_dict[key] = dlc_dict[key] * (width_mm / px_dim[0])
         if key[-1] == 'y':
-            dlc_dict[key] = dlc_dict[key] * (height_mm/px_dim[1])
+            dlc_dict[key] = dlc_dict[key] * (height_mm / px_dim[1])
     dlc_dict['units'] = 'mm'
 
     return dlc_dict
