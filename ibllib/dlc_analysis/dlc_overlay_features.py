@@ -1,12 +1,13 @@
-# Overlay DLC features on top of a few video frames as a sanity check. Written by ZCA, August 2019 with code segments
-# taken from script by Michael Schartner (https://github.com/int-brain-lab/iblvideo/blob/master/IBL_video_tile_plot.py)
+# Overlay DLC features on top of a few video frames as a sanity check. Written by ZCA, August 2019
+# with code segments taken from script by Michael Schartner
+# (https://github.com/int-brain-lab/iblvideo/blob/master/IBL_video_tile_plot.py)
 
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-import alf.io
 from pathlib import Path
 import json
+from dlc_basis_functions import load_dlc
 
 
 def get_video_frame(video_path, frame_number):
@@ -23,61 +24,20 @@ def get_video_frame(video_path, frame_number):
     return frame_image
 
 
-def create_pupil_array(dlc_frame_dict, frame_number):
+def create_frame_array(dlc_data, frame_number):
     """
-    Create x_vec, y_vec with pupil coordinates from dlc dictionary.  x_vec and y_vec will each have four components and
-    will be ordered top, right, left, bottom
-    :param dlc_frame_dict: dictionary of DLC features
+    Create x_vec, y_vec with paw coordinates from dlc dictionary.  x_vec and y_vec will each have
+    four components and will be ordered pinky, ring, middle, pointer
+    :param dlc_data: dictionary of DLC features
     :param frame_number: frame number
     :return: vec_x and vec_y
     """
-    vec_x = [dlc_frame_dict['pupil_top_r_x'][frame_number],
-             dlc_frame_dict['pupil_right_r_x'][frame_number],
-             dlc_frame_dict['pupil_left_r_x'][frame_number],
-             dlc_frame_dict['pupil_bottom_r_x'][frame_number]]
-    vec_y = [dlc_frame_dict['pupil_top_r_y'][frame_number],
-             dlc_frame_dict['pupil_right_r_y'][frame_number],
-             dlc_frame_dict['pupil_left_r_y'][frame_number],
-             dlc_frame_dict['pupil_bottom_r_y'][frame_number]]
-    return vec_x, vec_y
-
-
-def create_paw_array(dlc_frame_dict, frame_number):
-    """
-    Create x_vec, y_vec with paw coordinates from dlc dictionary.  x_vec and y_vec will each have four components and
-    will be ordered pinky, ring, middle, pointer
-    :param dlc_frame_dict: dictionary of DLC features
-    :param frame_number: frame number
-    :return: vec_x and vec_y
-    """
-    vec_x = [dlc_frame_dict['pinky_r_x'][frame_number],
-             dlc_frame_dict['ring_finger_r_x'][frame_number],
-             dlc_frame_dict['middle_finger_r_x'][frame_number],
-             dlc_frame_dict['pointer_finger_r_x'][frame_number]]
-    vec_y = [dlc_frame_dict['pinky_r_y'][frame_number],
-             dlc_frame_dict['ring_finger_r_y'][frame_number],
-             dlc_frame_dict['middle_finger_r_y'][frame_number],
-             dlc_frame_dict['pointer_finger_r_y'][frame_number]]
-    return vec_x, vec_y
-
-
-def create_nostril_array(dlc_frame_dict, frame_number):
-    """
-    Create x_vec, y_vec with paw coordinates from dlc dictionary.  x_vec and y_vec will each have four components and
-    will be ordered pinky, ring, middle, pointer
-    :param dlc_frame_dict: dictionary of DLC features
-    :param frame_number: frame number
-    :return: vec_x and vec_y
-    """
-    vec_x = [dlc_frame_dict['pinky_r_x'][frame_number],
-             dlc_frame_dict['ring_finger_r_x'][frame_number],
-             dlc_frame_dict['middle_finger_r_x'][frame_number],
-             dlc_frame_dict['pointer_finger_r_x'][frame_number]]
-    vec_y = [dlc_frame_dict['pinky_r_y'][frame_number],
-             dlc_frame_dict['ring_finger_r_y'][frame_number],
-             dlc_frame_dict['middle_finger_r_y'][frame_number],
-             dlc_frame_dict['pointer_finger_r_y'][frame_number]]
-    return vec_x, vec_y
+    # Filter out non-position keys
+    filtered_dict = {k: dlc_data[k] for k in dlc_data.keys() if k.endswith(('x', 'y'))}
+    keys = set(map(lambda k: k[0:-2], filtered_dict.keys()))
+    xy = [(filtered_dict[k + '_x'][frame_number], filtered_dict[k + '_y'][frame_number])
+          for k in keys]
+    return xy, filtered_dict.keys()
 
 
 main_path = Path(r'C:\Users\User\Documents\Work\usb1\Subjects')
@@ -92,33 +52,27 @@ SES = {
 
 # select a session from the bunch
 sid = 'B'
-ses_path = Path(SES[sid])
+ses_path = main_path / Path(SES[sid])
 
 # read in the alf objects
-alf_path = ses_path / 'alf'
-left_camera = alf.io.load_object(alf_path / '_ibl_leftCamera')
-
-meta_path = alf_path / '_ibl_leftCamera.dlc.metadata.json'
+left_camera = load_dlc(ses_path, camera='left')
+meta_path = ses_path / 'alf' / '_ibl_leftCamera.dlc.metadata.json'
 with open(meta_path) as json_data:
     dlc_meta = json.load(json_data)
 
-timestamps = np.load(ses_path / 'raw_video_data' / '_iblrig_bodyCamera.times.npy')  # FPGA labels switched
 raw_vid_meta = ses_path / 'raw_video_data' / '_iblrig_leftCamera.raw.mp4'
 dlc_columns = dlc_meta['columns']
 
 # Loop through frames and produce png:
 # Randomly sample frames:
 n_samps = 5
-frames_to_plot = np.random.choice(range(left_camera.shape[0]), n_samps, replace=False)
+frames_to_plot = np.random.choice(range(left_camera.timestamps.size), n_samps, replace=False)
 for frame in frames_to_plot:
     # Extract a single video frame and overlay location of top of pupil onto it
     video_frame = get_video_frame(str(raw_vid_meta), frame)
 
     # Overlay a circle corresponding to top of pupil onto image:
-    pupil_vec_x, pupil_vec_y = create_pupil_array(left_camera, frame)
-
-    # Add points at fingers
-    paw_vec_x, paw_vec_y = create_paw_array(left_camera, frame)
+    xy = create_frame_array(left_camera, frame)[0]
 
     # Show the image
     fig, ax = plt.subplots(1)
@@ -129,13 +83,11 @@ for frame in frames_to_plot:
     # circ = plt.Circle((top_pupil_x, top_pupil_y), 10, color="r", alpha=0.5)
     # ax.add_patch(circ)
 
-    for j in range(len(pupil_vec_y)):
-        ax.scatter(pupil_vec_x[j], pupil_vec_y[j], marker='+', s=5, alpha=0.9)
+    for j in range(len(xy)):
+        ax.scatter(xy[j][0], xy[j][1], marker='+', s=100, alpha=0.9)
 
-    for k in range(len(paw_vec_y)):
-        ax.scatter(paw_vec_x[k], paw_vec_y[k], marker='+', s=5, alpha=0.9)
-
-    plt.show()
-    plt.title("Overlay DLC on video frame - pupil_top_r \n Session: " + str(SES[sid]) + "; Frame " + str(frame))
+    plt.title("Overlay DLC on video frame - pupil_top_r \n Session: "
+              + str(SES[sid]) + "; Frame " + str(frame))
+    #  plt.show()
     # Save image:
     fig.savefig(SES[sid] / ('frame_' + str(frame) + '.png'))
