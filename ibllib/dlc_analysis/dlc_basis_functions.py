@@ -24,9 +24,9 @@ def load_dlc(folder_path, camera='left'):
     """
 
     # Load in DLC data
-    dlc_data = alf.io.load_object(join(folder_path, 'alf'), '_ibl_%sCamera' % camera)
-    dlc_data['camera'] = camera
-    dlc_data['units'] = 'px'
+    dlc_dict = alf.io.load_object(join(folder_path, 'alf'), '_ibl_%sCamera' % camera)
+    dlc_dict['camera'] = camera
+    dlc_dict['units'] = 'px'
 
     # Hard-coded hack because extraction of timestamps was wrong
     if camera == 'left':
@@ -37,14 +37,14 @@ def load_dlc(folder_path, camera='left'):
                               '_iblrig_%sCamera.times.npy' % camera))
 
     # Align FPGA and DLC timestamps
-    if len(timestamps) > len(dlc_data[list(dlc_data.keys())[0]]):
-        timestamps = timestamps[0:len(dlc_data[list(dlc_data.keys())[0]])]
-    elif len(timestamps) < len(dlc_data[list(dlc_data.keys())[0]]):
-        for key in list(dlc_data.keys()):
-            dlc_data[key] = dlc_data[key][0:len(timestamps)]
-    dlc_data['timestamps'] = timestamps
+    if len(timestamps) > len(dlc_dict[list(dlc_dict.keys())[0]]):
+        timestamps = timestamps[0:len(dlc_dict[list(dlc_dict.keys())[0]])]
+    elif len(timestamps) < len(dlc_dict[list(dlc_dict.keys())[0]]):
+        for key in list(dlc_dict.keys()):
+            dlc_dict[key] = dlc_dict[key][0:len(timestamps)]
+    dlc_dict['timestamps'] = timestamps
 
-    return dlc_data
+    return dlc_dict
 
 
 def load_event_times(folder_path):
@@ -63,7 +63,7 @@ def load_event_times(folder_path):
     return stim_on_times, feedback_type, feedback_times
 
 
-def transform_px_to_mm(dlc_data, width_mm=66, height_mm=54):
+def transform_px_to_mm(dlc_dict, width_mm=66, height_mm=54):
     """
     Transform pixel values to millimeter
 
@@ -74,20 +74,20 @@ def transform_px_to_mm(dlc_data, width_mm=66, height_mm=54):
     """
 
     # Set pixel dimensions for different cameras
-    if dlc_data['camera'] == 'left':
+    if dlc_dict['camera'] == 'left':
         px_dim = [1280, 1024]
-    elif dlc_data['camera'] == 'right' or dlc_data['camera'] == 'body':
+    elif dlc_dict['camera'] == 'right' or dlc_dict['camera'] == 'body':
         px_dim = [640, 512]
 
     # Transform pixels into mm
-    for key in list(dlc_data.keys()):
+    for key in list(dlc_dict.keys()):
         if key[-1] == 'x':
-            dlc_data[key] = dlc_data[key] * (width_mm/px_dim[0])
+            dlc_dict[key] = dlc_dict[key] * (width_mm/px_dim[0])
         if key[-1] == 'y':
-            dlc_data[key] = dlc_data[key] * (height_mm/px_dim[1])
-    dlc_data['units'] = 'mm'
+            dlc_dict[key] = dlc_dict[key] * (height_mm/px_dim[1])
+    dlc_dict['units'] = 'mm'
 
-    return dlc_data
+    return dlc_dict
 
 
 
