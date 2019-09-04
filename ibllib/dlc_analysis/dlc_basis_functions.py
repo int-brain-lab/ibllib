@@ -42,8 +42,9 @@ def load_dlc(folder_path, camera='left'):
     elif len(timestamps) < len(dlc_data[list(dlc_data.keys())[0]]):
         for key in list(dlc_data.keys()):
             dlc_data[key] = dlc_data[key][0:len(timestamps)]
+    dlc_data['timestamps'] = timestamps
 
-    return dlc_data, timestamps
+    return dlc_data
 
 
 def load_event_times(folder_path):
@@ -87,6 +88,7 @@ def transform_px_to_mm(dlc_data, width_mm=66, height_mm=54):
     dlc_data['units'] = 'mm'
 
     return dlc_data
+
 
 
 
