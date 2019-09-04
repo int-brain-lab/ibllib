@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pylab as plt
+from brainbox.processing import bincount2D
 
 
 def _smooth(data, sd):
@@ -44,7 +45,7 @@ def preprocess(data, smoothing_sd=25, n_pcs=20):
 def split_trials(trial_ids, n_splits=5, rng_seed=0):
     """
     Assign each trial to testing or training fold
-    
+
     :param trial_ids:
     :type trial_ids: array-like
     :param n_splits: one split used for testing; remaining splits used for training
@@ -65,7 +66,7 @@ def split_trials(trial_ids, n_splits=5, rng_seed=0):
 def split_timepoints(trial_ids, idxs_trial):
     """
     Assign each time point to testing or training fold
-    
+
     :param trial_ids: trial id for each timepoint
     :type trial_ids: array-like
     :param idxs_trial: dictionary that defines which trials are in `train` or `test` fold
@@ -79,7 +80,7 @@ def split_timepoints(trial_ids, idxs_trial):
 def fit_cca(data_0, data_1, n_cca_dims=10):
     """
     Initialize and fit CCA sklearn object
-    
+
     :param data_0: shape (n_samples, n_features_0)
     :type data_0: array-like
     :param data_1: shape (n_samples, n_features_1)
@@ -178,7 +179,6 @@ def bin_spikes_trials(spikes, trials, T_BIN=0.01):
     :type T_BIN: float
     :return: a matrix (SpikeCounts, bins), and a vector of bins size with trial ID
     """
-    from brainbox.processing import bincount2D
     binned_spikes, bin_times, _ = bincount2D(spikes['times'], spikes['clusters'], T_BIN)
     trial_start_times = trials['intervals'][:, 0]
     binned_trialIDs = np.digitize(bin_times, trial_start_times)
@@ -193,7 +193,6 @@ if __name__ == '__main__':
     from pathlib import Path
     from oneibl.one import ONE
     import alf.io as ioalf
-    # from brainbox.processing import bincount2D
 
     BIN_SIZE = 0.025  # seconds
     SMOOTH_SIZE = 0.025  # seconds; standard deviation of gaussian kernel
@@ -217,7 +216,7 @@ if __name__ == '__main__':
     # channels = ioalf.load_object(session_path, 'channels')
     trials = ioalf.load_object(session_path, '_ibl_trials')
 
-    # bin spikes
+    # bin spikes and get trial IDs associated with them
     binned_spikes, binned_trialIDs = bin_spikes_trials(spikes, trials, T_BIN=0.01)
 
     # extract 2 populations

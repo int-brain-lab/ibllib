@@ -16,5 +16,3 @@ plt.show()
 # plot_correlations(shuffled_coors, ..., ax=ax1, color='red')
 # plt.show()
 
-
-
