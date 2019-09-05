@@ -232,7 +232,7 @@ def bin_spikes_trials(spikes, trials, T_BIN=0.01):
     :type trials: Bunch
     :param T_BIN: size, in s, of the bins
     :type T_BIN: float
-    :return: a matrix (SpikeCounts, bins), and a vector of bins size with trial ID
+    :return: a matrix (bins, SpikeCounts), and a vector of bins size with trial ID
     """
     binned_spikes, bin_times, _ = bincount2D(spikes['times'], spikes['clusters'], T_BIN)
     trial_start_times = trials['intervals'][:, 0]
@@ -240,7 +240,7 @@ def bin_spikes_trials(spikes, trials, T_BIN=0.01):
     # correct, as index 0 is whatever happens before the first trial
     binned_trialIDs_corrected = binned_trialIDs - 1
 
-    return binned_spikes, binned_trialIDs_corrected
+    return binned_spikes.T, binned_trialIDs_corrected
 
 
 def split_by_area(binned_spikes, cl_brainAcronyms, active_clusters, brain_areas):
