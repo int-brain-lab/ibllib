@@ -54,30 +54,27 @@ def merge_probes(ses_path):
             _logger.error(error_msg)
             raise FileNotFoundError(error_msg)
         sync_points = np.load(sync_file)
-        fcn = interp1d(sync_points[:, 0] * sampling_rate,
-                       sync_points[:, 1], fill_value='extrapolate')
+        fcn = interp1d(sync_points[:, 0], sync_points[:, 1], fill_value='extrapolate')
         mt.spike_times[spike_probes == ind] = fcn(mt.spike_times[spike_probes == ind])
 
     # And convert to ALF
     ac = alf.EphysAlfCreator(mt)
-    ac.convert(ses_path / 'alf')
-
+    ac.convert(ses_path / 'alf', force=True)
     # remove the temporary directory
     shutil.rmtree(out_dir)
 
 
-def ks2_to_alf(ks_path, out_path):
+def ks2_to_alf(ks_path, out_path, sampling_rate=30000):
     """
     Convert Kilosort 2 output to ALF dataset for single probe data
     :param ks_path:
     :param out_path:
     :return:
     """
-    # Todo get sampling rate properly from meta data file
     # efiles = glob_ephys_files(ks_path)
     m = model.TemplateModel(dir_path=ks_path,
                             dat_path=[],
-                            sample_rate=30000,
+                            sample_rate=sampling_rate,
                             n_channels_dat=385)
     ac = alf.EphysAlfCreator(m)
     ac.convert(out_path)
