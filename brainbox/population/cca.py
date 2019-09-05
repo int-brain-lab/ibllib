@@ -172,6 +172,57 @@ def plot_correlations(corrs, errors=None, ax=None, **plot_kwargs):
     return ax
 
 
+def plot_pairwise_correlations(means, stderrs=None, n_dims=None, region_strs=None, **kwargs):
+    """
+    Plot CCA correlations for multiple pairs of regions
+    
+    :param means: list of lists; means[i][j] contains the mean corrs between regions i, j
+    :param stderrs: list of lists; stderrs[i][j] contains std errors of corrs between regions i, j
+    :param n_dims: number of CCA dimensions to plot
+    :param region_strs: list of strings identifying each region
+    :param kwargs: keyword arguments for plot
+    :return: matplotlib figure handle
+    """
+    n_regions = len(means)
+
+    fig, axes = plt.subplots(n_regions - 1, n_regions - 1, figsize=(12, 12))
+    for r in range(n_regions - 1):
+        for c in range(n_regions - 1):
+            axes[r, c].axis('off')
+
+    # get max correlation to standardize y axes
+    max_val = 0
+    for r in range(1, n_regions):
+        for c in range(r):
+            tmp = means[i][j]
+            if tmp is not None:
+                max_val = np.max([max_val, np.max(tmp)])
+
+    for r in range(1, n_regions):
+        for c in range(r):
+            ax = axes[r - 1, c]
+            ax.axis('on')
+            ax = plot_correlations(means[i][j][:n_dims], stderrs[i][j][:n_dims], ax=ax, **kwargs)
+            ax.axhline(y=0, xmin=0.05, xmax=0.95, linestyle='--', color='k')
+            if region_strs is not None:
+                ax.text(
+                    x=0.95, y=0.95, s=str('%s-%s' % (region_strs[c], region_strs[r])),
+                    horizontalalignment='right',
+                    verticalalignment='top',
+                    transform=ax.transAxes)
+            ax.set_ylim([-0.05, max_val + 0.05])
+            if not ax.is_first_col():
+                ax.set_ylabel('')
+                ax.set_yticks([])
+            if not ax.is_last_row():
+                ax.set_xlabel('')
+                ax.set_xticks([])
+    plt.tight_layout()
+    plt.show()
+
+    return fig
+
+
 def bin_spikes_trials(spikes, trials, T_BIN=0.01):
     """
     Binarizes the spike times into a raster and assigns a trial number to each bin
