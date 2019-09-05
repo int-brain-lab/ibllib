@@ -52,14 +52,15 @@ def split_trials(trial_ids, n_splits=5, rng_seed=0):
     :type n_splits: int
     :param rng_seed: set random state for shuffling trials
     :type rng_seed: int
-    :return: dict of indices with keys `train` and `test`
+    :return: list of dicts of indices with keys `train` and `test`
     """
     from sklearn.model_selection import KFold
     shuffle = True if rng_seed is not None else False
     kf = KFold(n_splits=n_splits, random_state=rng_seed, shuffle=shuffle)
     kf.get_n_splits(trial_ids)
-    t0 = next(kf.split(trial_ids))
-    idxs = {'train': t0[0], 'test': t0[1]}
+    idxs = [None for _ in range(n_splits)]
+    for i, t0 in enumerate(kf.split(trial_ids)):
+        idxs[i] = {'train': t0[0], 'test': t0[1]}
     return idxs
 
 
@@ -69,11 +70,14 @@ def split_timepoints(trial_ids, idxs_trial):
 
     :param trial_ids: trial id for each timepoint
     :type trial_ids: array-like
-    :param idxs_trial: dictionary that defines which trials are in `train` or `test` fold
-    :type idxs_trial: dict
-    :return: dictionary that defines which time points are in `train` and `test` folds
+    :param idxs_trial: list of dicts that define which trials are in `train` or `test` folds
+    :type idxs_trial: list
+    :return: list of dicts that define which time points are in `train` and `test` folds
     """
-    idxs_time = {dtype: np.isin(trial_ids, idxs_trial[dtype]) for dtype in idxs_trial.keys()}
+    idxs_time = [None for _ in range(len(idxs_trial))]
+    for i, idxs in enumerate(idxs_trial):
+        idxs_time[i] = {
+            dtype: np.where(np.isin(trial_ids, idxs[dtype]))[0] for dtype in idxs.keys()}
     return idxs_time
 
 
