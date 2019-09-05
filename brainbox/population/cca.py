@@ -247,7 +247,7 @@ def split_by_area(binned_spikes, cl_brainAcronyms, active_clusters, brain_areas)
     """
     This function converts a matrix of binned spikes into a list of matrices,
     with the clusters grouped by brain areas
-    :param binned_spikes: binned spike data of shape (Clusters, timebins)
+    :param binned_spikes: binned spike data of shape (timebins, Clusters)
     :type binned_spikes: numpy.ndarray
     :param cl_brainAcronyms: brain region for each cluster
     :type cl_brainAcronyms: pandas.core.frame.DataFrame
@@ -268,7 +268,7 @@ def split_by_area(binned_spikes, cl_brainAcronyms, active_clusters, brain_areas)
         cl_in_area = cl_brainAcronyms.loc[cl_brainAcronyms['brainAcronyms'] == b_area].index
         # get the indexes of the clusters that are in that area
         cl_idx_in_area = np.isin(active_clusters, cl_in_area)
-        bs_in_area = binned_spikes[cl_idx_in_area, :]
+        bs_in_area = binned_spikes[:, cl_idx_in_area]
         listof_bs.append(bs_in_area)
  
     return listof_bs
