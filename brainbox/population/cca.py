@@ -164,7 +164,7 @@ def plot_correlations(corrs, errors=None, ax=None, **plot_kwargs):
     # create the plot object
     ax.plot(x_data, y_data, **plot_kwargs)
     if errors is not None:
-        ax.fill_between(x_data, y_data-errors, y_data+errors, **plot_kwargs, alpha=0.2)
+        ax.fill_between(x_data, y_data - errors, y_data + errors, **plot_kwargs, alpha=0.2)
     # change y and x labels and ticks
     ax.set_xticks(x_data)
     ax.set_ylabel("Correlation")
@@ -192,6 +192,37 @@ def bin_spikes_trials(spikes, trials, T_BIN=0.01):
     return binned_spikes, binned_trialIDs_corrected
 
 
+def split_by_area(binned_spikes, cl_brainAcronyms, active_clusters, brain_areas):
+    """
+    This function converts a matrix of binned spikes into a list of matrices,
+    with the clusters grouped by brain areas
+    :param binned_spikes: binned spike data of shape (Clusters, timebins)
+    :type binned_spikes: numpy.ndarray
+    :param cl_brainAcronyms: brain region for each cluster
+    :type cl_brainAcronyms: pandas.core.frame.DataFrame
+    :param brain_areas: list of brain areas to select
+    :type brain_areas: numpy.ndarray
+    :param active_clusters: list of clusterIDs
+    :type active_clusters: numpy.ndarray
+    :return: list of numpy.ndarrays of size brain_areas
+    """
+    # TODO: check that this is doing what it is suppossed to!!!
+
+    # TODO: check that input is as expected
+    #   
+    # initialize list
+    listof_bs = []
+    for b_area in brain_areas:
+        # get the ids of clusters in the area
+        cl_in_area = cl_brainAcronyms.loc[cl_brainAcronyms['brainAcronyms'] == b_area].index
+        # get the indexes of the clusters that are in that area
+        cl_idx_in_area = np.isin(active_clusters, cl_in_area)
+        bs_in_area = binned_spikes[cl_idx_in_area, :]
+        listof_bs.append(bs_in_area)
+ 
+    return listof_bs
+
+
 if __name__ == '__main__':
 
     from pathlib import Path
@@ -214,31 +245,69 @@ if __name__ == '__main__':
     # eid = one.search(subject=subject, date=date, number=number)
     # D = one.load(eid[0], download_only=True)
     # session_path = Path(D.local_path[0]).parent
-    session_path = "/home/hmvergara/Downloads/FlatIron/mnt/s0/Data/Subjects/ZM_1735/2019-08-01/001/alf/"
+    # session_path = "/home/hmvergara/Downloads/FlatIron/mnt/s0/Data/Subjects/ZM_1735/2019-08-01/001/alf/"
+    session_path = "/home/hmvergara/Downloads/FlatIron/KS005/2019-08-29/001/alf/"
     spikes = ioalf.load_object(session_path, 'spikes')
-    # clusters = ioalf.load_object(session_path, 'clusters')
+    clusters = ioalf.load_object(session_path, 'clusters')
     # channels = ioalf.load_object(session_path, 'channels')
     trials = ioalf.load_object(session_path, '_ibl_trials')
 
+    # # bin spikes and get trial IDs associated with them
+    # binned_spikes, binned_trialIDs = bin_spikes_trials(spikes, trials, T_BIN=0.01)
+
+    # # extract 2 populations
+    # data = [binned_spikes[:100, :].T, binned_spikes[100:200, :].T]
+
+    # # preprocess data
+    # for i, pop in enumerate(data):
+    #     data[i] = preprocess(pop, n_pcs=PCA_DIMS, smoothing_sd=SMOOTH_SIZE)
+
+    # # split trials
+    # idxs_trial = split_trials(np.unique(binned_trialIDs), n_splits=N_SPLITS, rng_seed=RNG_SEED)
+    # # get train/test indices into spike arrays
+    # idxs_time = split_timepoints(binned_trialIDs, idxs_trial)
+
+    # # fit cca
+    # cca = fit_cca(
+    #     data[0][idxs_time['train'], :], data[1][idxs_time['train'], :], n_cca_dims=CCA_DIMS)
+
+    # # plot cca correlations
+    # corrs = get_correlations(cca, data[0][idxs_time['test'], :], data[1][idxs_time['test'], :])
+    # plot_correlations(corrs)
+
+    ## Generate a matrix of correlations (biggest correlation found) between all pairwise areas
     # bin spikes and get trial IDs associated with them
     binned_spikes, binned_trialIDs = bin_spikes_trials(spikes, trials, T_BIN=0.01)
-
-    # extract 2 populations
-    data = [binned_spikes[:100, :].T, binned_spikes[100:200, :].T]
-
-    # preprocess data
-    for i, pop in enumerate(data):
-        data[i] = preprocess(pop, n_pcs=PCA_DIMS, smoothing_sd=SMOOTH_SIZE)
-
     # split trials
     idxs_trial = split_trials(np.unique(binned_trialIDs), n_splits=N_SPLITS, rng_seed=RNG_SEED)
     # get train/test indices into spike arrays
     idxs_time = split_timepoints(binned_trialIDs, idxs_trial)
+    # Define areas
+    brain_areas = np.unique(clusters.brainAcronyms)
+    # [subset for testing] DELETE
+    brain_areas = brain_areas[1:4]
 
-    # fit cca
-    cca = fit_cca(
-        data[0][idxs_time['train'], :], data[1][idxs_time['train'], :], n_cca_dims=CCA_DIMS)
+    # Split/create populations
+    # bin_spikes_trials does not return info for innactive clusters
+    active_clusters = np.unique(spikes['clusters'])
+    split_binned_spikes = split_by_area(binned_spikes, clusters.brainAcronyms,
+                                        active_clusters, brain_areas)
 
-    # plot cca correlations
-    corrs = get_correlations(cca, data[0][idxs_time['test'], :], data[1][idxs_time['test'], :])
-    plot_correlations(corrs)
+    # Create empty "matrix" to store cca objects
+    cca_mat = [[None for _ in range(len(brain_areas))] for _ in range(len(brain_areas))]
+
+    # For each pair of populations:
+    for i in range(len(brain_areas)):
+        pop1 = split_binned_spikes[i].T
+        for j in range(len(brain_areas)):
+            if j > i:
+                pop2 = split_binned_spikes[j].T
+                # fit cca
+                cca = fit_cca(
+                    pop1[idxs_time['train'], :], pop2[idxs_time['train'], :], n_cca_dims=CCA_DIMS)
+                # populate matrix
+                cca_mat[i][j] = cca
+                # print progress
+                print("{} / {}".format(i, j))
+
+    # Plot matrix
