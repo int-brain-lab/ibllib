@@ -52,14 +52,15 @@ def split_trials(trial_ids, n_splits=5, rng_seed=0):
     :type n_splits: int
     :param rng_seed: set random state for shuffling trials
     :type rng_seed: int
-    :return: dict of indices with keys `train` and `test`
+    :return: list of dicts of indices with keys `train` and `test`
     """
     from sklearn.model_selection import KFold
     shuffle = True if rng_seed is not None else False
     kf = KFold(n_splits=n_splits, random_state=rng_seed, shuffle=shuffle)
     kf.get_n_splits(trial_ids)
-    t0 = next(kf.split(trial_ids))
-    idxs = {'train': t0[0], 'test': t0[1]}
+    idxs = [None for _ in range(n_splits)]
+    for i, t0 in enumerate(kf.split(trial_ids)):
+        idxs[i] = {'train': t0[0], 'test': t0[1]}
     return idxs
 
 
@@ -69,11 +70,14 @@ def split_timepoints(trial_ids, idxs_trial):
 
     :param trial_ids: trial id for each timepoint
     :type trial_ids: array-like
-    :param idxs_trial: dictionary that defines which trials are in `train` or `test` fold
-    :type idxs_trial: dict
-    :return: dictionary that defines which time points are in `train` and `test` folds
+    :param idxs_trial: list of dicts that define which trials are in `train` or `test` folds
+    :type idxs_trial: list
+    :return: list of dicts that define which time points are in `train` and `test` folds
     """
-    idxs_time = {dtype: np.isin(trial_ids, idxs_trial[dtype]) for dtype in idxs_trial.keys()}
+    idxs_time = [None for _ in range(len(idxs_trial))]
+    for i, idxs in enumerate(idxs_trial):
+        idxs_time[i] = {
+            dtype: np.where(np.isin(trial_ids, idxs[dtype]))[0] for dtype in idxs.keys()}
     return idxs_time
 
 
@@ -166,6 +170,57 @@ def plot_correlations(corrs, errors=None, ax=None, **plot_kwargs):
     ax.set_ylabel("Correlation")
     ax.set_xlabel("CCA dimension")
     return ax
+
+
+def plot_pairwise_correlations(means, stderrs=None, n_dims=None, region_strs=None, **kwargs):
+    """
+    Plot CCA correlations for multiple pairs of regions
+    
+    :param means: list of lists; means[i][j] contains the mean corrs between regions i, j
+    :param stderrs: list of lists; stderrs[i][j] contains std errors of corrs between regions i, j
+    :param n_dims: number of CCA dimensions to plot
+    :param region_strs: list of strings identifying each region
+    :param kwargs: keyword arguments for plot
+    :return: matplotlib figure handle
+    """
+    n_regions = len(means)
+
+    fig, axes = plt.subplots(n_regions - 1, n_regions - 1, figsize=(12, 12))
+    for r in range(n_regions - 1):
+        for c in range(n_regions - 1):
+            axes[r, c].axis('off')
+
+    # get max correlation to standardize y axes
+    max_val = 0
+    for r in range(1, n_regions):
+        for c in range(r):
+            tmp = means[i][j]
+            if tmp is not None:
+                max_val = np.max([max_val, np.max(tmp)])
+
+    for r in range(1, n_regions):
+        for c in range(r):
+            ax = axes[r - 1, c]
+            ax.axis('on')
+            ax = plot_correlations(means[i][j][:n_dims], stderrs[i][j][:n_dims], ax=ax, **kwargs)
+            ax.axhline(y=0, xmin=0.05, xmax=0.95, linestyle='--', color='k')
+            if region_strs is not None:
+                ax.text(
+                    x=0.95, y=0.95, s=str('%s-%s' % (region_strs[c], region_strs[r])),
+                    horizontalalignment='right',
+                    verticalalignment='top',
+                    transform=ax.transAxes)
+            ax.set_ylim([-0.05, max_val + 0.05])
+            if not ax.is_first_col():
+                ax.set_ylabel('')
+                ax.set_yticks([])
+            if not ax.is_last_row():
+                ax.set_xlabel('')
+                ax.set_xticks([])
+    plt.tight_layout()
+    plt.show()
+
+    return fig
 
 
 def bin_spikes_trials(spikes, trials, T_BIN=0.01):
