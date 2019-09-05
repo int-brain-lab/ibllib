@@ -194,7 +194,7 @@ def plot_pairwise_correlations(means, stderrs=None, n_dims=None, region_strs=Non
     max_val = 0
     for r in range(1, n_regions):
         for c in range(r):
-            tmp = means[i][j]
+            tmp = means[r][c]
             if tmp is not None:
                 max_val = np.max([max_val, np.max(tmp)])
 
@@ -202,7 +202,7 @@ def plot_pairwise_correlations(means, stderrs=None, n_dims=None, region_strs=Non
         for c in range(r):
             ax = axes[r - 1, c]
             ax.axis('on')
-            ax = plot_correlations(means[i][j][:n_dims], stderrs[i][j][:n_dims], ax=ax, **kwargs)
+            ax = plot_correlations(means[r][c][:n_dims], stderrs[r][c][:n_dims], ax=ax, **kwargs)
             ax.axhline(y=0, xmin=0.05, xmax=0.95, linestyle='--', color='k')
             if region_strs is not None:
                 ax.text(
