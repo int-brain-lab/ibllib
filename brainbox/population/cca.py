@@ -232,7 +232,8 @@ def bin_spikes_trials(spikes, trials, T_BIN=0.01):
     :type trials: Bunch
     :param T_BIN: size, in s, of the bins
     :type T_BIN: float
-    :return: a matrix (bins, SpikeCounts), and a vector of bins size with trial ID
+    :return: a matrix (bins, SpikeCounts), and a vector of bins size with trial ID,
+    and a vector bins size with the time that the bins start
     """
     binned_spikes, bin_times, _ = bincount2D(spikes['times'], spikes['clusters'], T_BIN)
     trial_start_times = trials['intervals'][:, 0]
@@ -240,7 +241,7 @@ def bin_spikes_trials(spikes, trials, T_BIN=0.01):
     # correct, as index 0 is whatever happens before the first trial
     binned_trialIDs_corrected = binned_trialIDs - 1
 
-    return binned_spikes.T, binned_trialIDs_corrected
+    return binned_spikes.T, binned_trialIDs_corrected, bin_times
 
 
 def split_by_area(binned_spikes, cl_brainAcronyms, active_clusters, brain_areas):
@@ -272,6 +273,14 @@ def split_by_area(binned_spikes, cl_brainAcronyms, active_clusters, brain_areas)
         listof_bs.append(bs_in_area)
  
     return listof_bs
+
+
+def get_event_bin_indexes(event_times, ):
+    """
+    Select the indexes of the bins corresponding to a specific behavioral event
+
+    """
+    pass
 
 
 if __name__ == '__main__':
