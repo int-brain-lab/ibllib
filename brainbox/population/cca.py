@@ -286,7 +286,23 @@ def get_event_bin_indexes(event_times, bin_times, window):
     :type window: numpy.array
     :return: array of indexes
     """
-    pass
+    # TODO: check that this is doing what it is supposed to (coded during codecamp in a rush)
+    # find bin size
+    bin_size = bin_times[1] - bin_times[0]
+    # find window size in bin units
+    bin_window = int(np.ceil((window[1] - window[0]) / bin_size))
+    # correct event_times to the start of the window
+    event_times_corrected = event_times - window[0]
+
+    # get the indexes of the bins that are containing each event and add the window after
+    idx_array = np.empty(shape=0)
+    for etc in event_times_corrected:
+        start_idx = (np.abs(bin_times - etc)).argmin()
+        # add the window
+        arr_to_append = np.array(range(start_idx, start_idx + bin_window))
+        idx_array = np.concatenate((idx_array, arr_to_append), axis=None)
+    return idx_array
+
 
 
 if __name__ == '__main__':
