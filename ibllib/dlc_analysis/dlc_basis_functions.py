@@ -9,7 +9,9 @@ List of basis functions for DLC
 
 import numpy as np
 from os.path import join
+from glob import glob
 import alf.io
+from ibllib.io import raw_data_loaders
 
 
 def load_dlc(folder_path, camera='left'):
@@ -57,14 +59,14 @@ def load_event_times(folder_path):
     camera:      which camera to use
 
     """
-    stim_on_times = np.load(join(folder_path, 'alf', '_ibl_trials.stimOn_times.npy'))
-    feedback_times = np.load(join(folder_path, 'alf', '_ibl_trials.feedback_times.npy'))
+    stim_on_times = np.load(glob(join(folder_path, 'alf', '_ibl_trials.stimOn_times*.npy'))[0])
+    feedback_times = np.load(glob(join(folder_path, 'alf', '_ibl_trials.feedback_times*.npy'))[0])
     return stim_on_times, feedback_times
 
 
 def load_events(folder_path):
-    feedback_type = np.load(join(folder_path, 'alf', '_ibl_trials.feedbackType.npy'))
-    choice = np.load(join(folder_path, 'alf', '_ibl_trials.choice.npy'))
+    feedback_type = np.load(glob(join(folder_path, 'alf', '_ibl_trials.feedbackType*.npy'))[0])
+    choice = np.load(glob(join(folder_path, 'alf', '_ibl_trials.choice*.npy'))[0])
     return choice, feedback_type
 
 
@@ -93,3 +95,65 @@ def px_to_mm(dlc_dict, width_mm=66, height_mm=54):
     dlc_dict['units'] = 'mm'
 
     return dlc_dict
+
+
+def load_dlc_training(folder_path):
+    """
+    Function definition
+    """
+
+    # Load in dlc dictionary
+    dlc_dict = alf.io.load_object(glob(join(folder_path, 'alf', '_ibl_leftCamera.dlc.*.npy'))[0])
+
+    # Load in timestamps from BPod and interpolate in between trials
+    bpod_data = raw_data_loaders.load_data(folder_path)
+    timestamps = np.array(bpod_data[1]['behavior_data']['Events timestamps']['Port1In'])
+    frame_diff = np.mean(np.diff(timestamps))
+    for i in range(2, len(bpod_data)):
+        this_trial = np.array(bpod_data[i]['behavior_data']['Events timestamps']['Port1In'])
+
+        # Interpolate timestamps in between trials
+        interp = np.arange(timestamps[-1] + frame_diff,
+                           this_trial[0] - frame_diff,
+                           frame_diff)
+        timestamps = np.concatenate((timestamps, interp, this_trial))
+
+    # Assume fist timestamp was correct so remove others
+    for key in list(dlc_dict.keys()):
+        dlc_dict[key] = dlc_dict[key][0:np.size(timestamps)]
+
+    dlc_dict['timestamps'] = timestamps
+    dlc_dict['camera'] = 'left'
+    dlc_dict['units'] = 'px'
+    return dlc_dict
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
