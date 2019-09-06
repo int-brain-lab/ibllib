@@ -82,6 +82,7 @@ def smoothing_times(times, frame_length, trial_duration, window=None, window_typ
     :return:
     """
     frames = times2frames(times, frame_length, initial_offset)
-    trial_length = ((trial_duration - intial_offset) / frame_length).astype(int)
-    smoothed_signal = frame_smoothing(frames, window, window_length, window_type, sigma)
+    trial_length = ((trial_duration - initial_offset) / frame_length).astype(int)
+    smoothed_signal = frame_smoothing(frames, trial_length,window, window_length,
+                                      window_type, sigma)
     return smoothed_signal
