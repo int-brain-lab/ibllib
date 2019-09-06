@@ -7,19 +7,22 @@ Created on Tue Sep  3 15:48:15 2019
 
 import matplotlib.pyplot as plt
 import seaborn as sns
-from dlc_basis_functions import load_dlc, load_event_times, load_events, px_to_mm
-from dlc_pupil_functions import pupil_features
+from dlc_basis_functions import load_dlc, load_dlc_training, load_event_times, load_events, px_to_mm
+from dlc_analysis_functions import pupil_features
 from dlc_plotting_functions import peri_plot
 
 #folder_path = 'C:\\Users\\guido\\Data\\Flatiron\\Subjects\\KS005\\2019-08-29\\001'
 #folder_path = 'C:\\Users\\guido\\Data\\Flatiron\\Subjects\\KS005\\2019-08-30\\001'
 #folder_path = 'C:\\Users\\guido\\Data\\Flatiron\\Subjects\\ibl_witten_04\\2019-08-04\\002'
 #folder_path = 'C:\\Users\\guido\\Data\\Flatiron\\Subjects\\ibl_witten_04\\2018-08-11\\001'
-folder_path = 'C:\\Users\\guido\\Data\\Flatiron\\Subjects\\ZM_1735\\2019-08-01\\001'
+#folder_path = 'C:\\Users\\guido\\Data\\Flatiron\\Subjects\\ZM_1735\\2019-08-01\\001'
 #folder_path = 'C:\\Users\\guido\\Data\\Flatiron\\Subjects\\ZM_1736\\2019-08-09\\004'
 
+folder_path = 'C:\\Users\\guido\\Data\\Flatiron\\Subjects\\ZM_1748\\2019-07-10\\001'
+
 # Load in data
-dlc_dict = load_dlc(folder_path)
+#dlc_dict = load_dlc(folder_path)
+dlc_dict = load_dlc_training(folder_path)
 dlc_dict = px_to_mm(dlc_dict)
 stim_on_times, feedback_times = load_event_times(folder_path)
 choice, feedback_type = load_events(folder_path)
@@ -57,3 +60,21 @@ ax2.set(ylabel='Baseline subtracted paw position (mm)', xlabel='Time (s)',
         title='Rightward choices')
 ax2.legend(frameon=False)
 plt.tight_layout(pad=2)
+
+# Plot tongue
+f, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 8))
+peri_plot(dlc_dict['tongue_end_l_x'], dlc_dict['timestamps'],
+          feedback_times[feedback_type == -1], ax1, [-1, 4], 'baseline')
+ax1.plot([0, 0], ax1.get_ylim(), 'r', label='Reward delivery')
+ax1.set(ylabel='Baseline subtracted paw position (mm)', xlabel='Time (s)',
+        title='Leftward choices')
+ax1.legend(frameon=False)
+
+peri_plot(dlc_dict['tongue_end_r_x'], dlc_dict['timestamps'],
+          feedback_times[feedback_type == -1], ax2, [-1, 4], 'baseline')
+ax2.plot([0, 0], ax2.get_ylim(), 'r', label='Reward delivery')
+ax2.set(ylabel='Baseline subtracted paw position (mm)', xlabel='Time (s)',
+        title='Leftward choices')
+ax2.legend(frameon=False)
+
+

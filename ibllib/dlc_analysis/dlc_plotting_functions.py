@@ -28,7 +28,7 @@ def peri_plot(trace, timestamps, events, ax, time_win=[-1, 3], norm='none'):
     """
 
     # Transform time window into samples
-    sampling_rate = 1/np.mean(np.diff(timestamps))
+    sampling_rate = 1 / np.mean(np.diff(timestamps))
     sample_win = [np.int(np.round(time_win[0] * sampling_rate)),
                   np.int(np.round(time_win[1] * sampling_rate))]
     time_trace = np.linspace(time_win[0], time_win[1], np.sum(np.abs(sample_win)))
@@ -44,8 +44,8 @@ def peri_plot(trace, timestamps, events, ax, time_win=[-1, 3], norm='none'):
                 np.argmin(np.abs(timestamps-events[i]))+sample_win[1] < np.size(trace)):
 
             # Get trace for this trial
-            this_trace = trace[np.argmin(np.abs(timestamps-events[i]))+sample_win[0]:
-                               np.argmin(np.abs(timestamps-events[i]))+sample_win[1]]
+            this_trace = trace[np.argmin(np.abs(timestamps-events[i])) + sample_win[0]:
+                               np.argmin(np.abs(timestamps-events[i])) + sample_win[1]]
 
             # Perform baseline correction
             if norm == 'baseline':

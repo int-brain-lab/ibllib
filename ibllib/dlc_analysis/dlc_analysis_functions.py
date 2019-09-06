@@ -48,9 +48,15 @@ def sniff_times(dlc_dict):
     '''
 
     dis = np.sqrt(((dlc_dict['nostril_top_x'] - dlc_dict['nostril_bottom_x'])**2)
-                  + ((dlc_dict['nostril_top_y'] - dlc_dict['nostril_top_y'])**2))
-    win = 4*dlc_dict['sampling_rate']
-    freqs, psd = signal.welch(dis, dlc_dict['sampling_rate'], nperseg=win)
+                  + ((dlc_dict['nostril_top_y'] - dlc_dict['nostril_bottom_y'])**2))
+    win = 4 * dlc_dict['sampling_rate']
+
+    freqs, time, spec = signal.spectrogram(dis, fs=dlc_dict['sampling_rate'],
+                                           nperseg=int(win))
+
+    freqs_w, psd = signal.welch(dis, dlc_dict['sampling_rate'], nperseg=win)
+
+    power = np.mean(spec[(freqs > 28) & (freqs < 30)], axis=0)
 
 
 def fit_circle(x, y):
