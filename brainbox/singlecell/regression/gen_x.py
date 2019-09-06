@@ -10,11 +10,11 @@ def gen_x(intervals, signals, clusters=None):
     """
     if clusters is not None:
         signals = signals[clusters, :]
-    window_length = intervals[0][1] - intervals[0][0]
+    window_length = intervals[1][0] - intervals[0][0]
 
-    X = np.zeros(intervals.shape[0], signals.shape[0] * window_length)
+    X = np.zeros(intervals.shape[1], signals.shape[0] * window_length)
 
-    for i in intervals.shape[0]:
+    for i in intervals.shape[1]:
         for j in signals.shape[0]:
             X[i, j * window_length: (j+1) * window_length] \
-                += signals[j, intervals[i][0]: intervals[i][1]]
+                += signals[j, intervals[0][i]: intervals[1][i]]
