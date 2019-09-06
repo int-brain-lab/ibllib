@@ -247,11 +247,11 @@ def extract_camera_sync(sync, output_path=None, save=False, chmap=None):
     if not output_path.exists():
         output_path.mkdir()
     s = _get_sync_fronts(sync, chmap['right_camera'])
-    np.save(output_path / '_iblrig_rightCamera.times.npy', s.times[::2])
+    np.save(output_path / '_ibl_rightCamera.times.npy', s.times[::2])
     s = _get_sync_fronts(sync, chmap['left_camera'])
-    np.save(output_path / '_iblrig_leftCamera.times.npy', s.times[::2])
+    np.save(output_path / '_ibl_leftCamera.times.npy', s.times[::2])
     s = _get_sync_fronts(sync, chmap['body_camera'])
-    np.save(output_path / '_iblrig_bodyCamera.times.npy', s.times[::2])
+    np.save(output_path / '_ibl_bodyCamera.times.npy', s.times[::2])
 
 
 def extract_wheel_sync(sync, output_path=None, save=False, chmap=None):
@@ -465,10 +465,9 @@ def extract_all(session_path, save=False):
     """
     session_path = Path(session_path)
     alf_path = session_path / 'alf'
-    cam_path = session_path / 'raw_video_data'
 
     sync, sync_chmap = _get_main_probe_sync(session_path)
     extract_wheel_sync(sync, alf_path, save=save, chmap=sync_chmap)
-    extract_camera_sync(sync, cam_path, save=save, chmap=sync_chmap)
+    extract_camera_sync(sync, alf_path, save=save, chmap=sync_chmap)
     extract_behaviour_sync(sync, alf_path, save=save, chmap=sync_chmap)
     align_with_bpod(session_path)  # checks consistency and compute dt with bpod
