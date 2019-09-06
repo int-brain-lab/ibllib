@@ -32,7 +32,6 @@ def extract_all(session_path, save=False, data=False):
     go_cue_trig_times = get_goCueTrigger_times(session_path, save=save, data=data)
     go_cue_times = get_goCueOnset_times(session_path, save=save, data=data)
     intervals = get_intervals(session_path, save=save, data=data)
-    response_times = get_response_times(session_path, save=save, data=data)
     out = {'feedbackType': feedbackType,
            'contrastLeft': contrastLeft,
            'contrastRight': contrastRight,
@@ -43,8 +42,7 @@ def extract_all(session_path, save=False, data=False):
            'iti_dur': iti_dur,
            'goCue_times': go_cue_times,
            'goCueTrigger_times': go_cue_trig_times,
-           'intervals': intervals,
-           'response_times': response_times}
+           'intervals': intervals}
     if save:
         file_intervals = Path(session_path) / 'alf' / '_ibl_trials.intervals.npy'
         file_intervals.rename(Path(session_path) / 'alf' / '_ibl_trials.intervalsBpod.npy')

@@ -344,6 +344,7 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None):
     ind_err = np.isnan(trials['valve_open'])
     trials['feedback_times'][ind_err] = trials['error_tone_in'][ind_err]
     trials['intervals'] = np.c_[t_trial_start, trials['iti_in']]
+    trials['response_times'] = trials['stimOn_times']
 
     if save and output_path:
         output_path = Path(output_path)
@@ -351,6 +352,7 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None):
         np.save(output_path / '_ibl_trials.stimOn_times.npy', trials['stimOn_times'])
         np.save(output_path / '_ibl_trials.intervals.npy', trials['intervals'])
         np.save(output_path / '_ibl_trials.feedback_times.npy', trials['feedback_times'])
+        np.save(output_path / '_ibl_trials.response_times.npy', trials['response_times'])
     return trials
 
 
@@ -372,6 +374,7 @@ def align_with_bpod(session_path):
     dt = trials['intervals'][:, 0] - trials['intervalsBpod'][:, 0]
     # plt.plot(np.diff(trials['intervalsBpod']), '*')
     # plt.plot(np.diff(trials['intervals']), '.')
+    # TODO: apply this to all timings extracted from Bpod
     return np.median(dt)
 
 
