@@ -275,10 +275,16 @@ def split_by_area(binned_spikes, cl_brainAcronyms, active_clusters, brain_areas)
     return listof_bs
 
 
-def get_event_bin_indexes(event_times, ):
+def get_event_bin_indexes(event_times, bin_times, window):
     """
-    Select the indexes of the bins corresponding to a specific behavioral event
-
+    Get the indexes of the bins corresponding to a specific behavioral event within a window
+    :param event_times: time series of an event
+    :type event_times: numpy.array
+    :param bin_times: time series pf starting point of bins
+    :type bin_times: numpy.array
+    :param window: list of size 2 specifying the window in seconds
+    :type window: numpy.array
+    :return: array of indexes
     """
     pass
 
