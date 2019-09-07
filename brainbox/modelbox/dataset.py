@@ -8,7 +8,7 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 from IPython import embed as shell
-sns.set_palette("gist_gray")  # palette for water types
+sns.set_palette("gist_gray")
 
 
 class DataSet:
@@ -38,15 +38,7 @@ class TrialData:
         self.meta_data = meta_data
         self.trials_df = self.fill_dataframe(data)
 
-        # make dataframe with columns signed_stimulus, total_trial_number, fraction_right
-        # TODO: should this be part of the DataSet or the Model classdef?
-        self.preproc_df = self.trials_df.groupby('signed_stimulus').agg(
-            {'choice': 'count', 'choice_right': 'mean'}).reset_index()
-        self.preproc_df.rename(columns={'choice': 'total_trial_number',
-                               'choice_right': 'fraction_right'}, inplace=True)
-
     def fill_dataframe(self, data):
         data['signed_stimulus'] = data['stimulus_strength'] * data['stimulus_side']
         data['choice_right'] = data['choice'].replace([-1, 0, 1], [0, np.nan, 1])
         return data
-

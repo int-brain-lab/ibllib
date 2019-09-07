@@ -11,15 +11,14 @@ import matplotlib.pyplot as plt
 
 
 # import modelbox stuff manually for now
-from classdef_DataSet import TrialData
-from classdef_Model import PsychometricFunction
-from classdef_FittingMethod import MaximumLikelihoodEstimation
+from dataset import TrialData
+from model import PsychometricFunction
+from fittingmethod import MaximumLikelihoodEstimation
 
 
 # IMPORT SOME DATA FROM DATAJOINT
 b = behavior.TrialSet.Trial * (acquisition.Session & 'task_protocol LIKE "%biased%"') \
     * (subject.Subject & 'subject_nickname="CSHL_015"') * subject.SubjectLab()
-
 
 bdat = b.fetch(order_by='subject_nickname, session_start_time, trial_id',
                format='frame').reset_index()
@@ -37,10 +36,12 @@ bdat = bdat[['stimulus_side', 'stimulus_strength', 'choice', 'rewarded']]  # wha
 
 # create an instance of the DataSet class
 df = TrialData(data=bdat)
-# df.plot()  # now plot the psychometric function
 
-# now create an instance of the PsychometricFunction class, grab the standard one
-psychfunc = PsychometricFunction(model_name='erf_2lapses')
+# now create an instance of the PsychometricFunction class,
+# let some parameters depend on the data
+psychfunc = PsychometricFunction(model_name='erf_2lapses', data=df)
+# preprocess the data for psychometric function fitting
+df = psychfunc.preprocess(df)
 
 # # define the method that we want to use for fitting
 mle_fit = MaximumLikelihoodEstimation(data=df, model=psychfunc)
