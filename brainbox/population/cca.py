@@ -175,7 +175,7 @@ def plot_correlations(corrs, errors=None, ax=None, **plot_kwargs):
 def plot_pairwise_correlations(means, stderrs=None, n_dims=None, region_strs=None, **kwargs):
     """
     Plot CCA correlations for multiple pairs of regions
-    
+
     :param means: list of lists; means[i][j] contains the mean corrs between regions i, j
     :param stderrs: list of lists; stderrs[i][j] contains std errors of corrs between regions i, j
     :param n_dims: number of CCA dimensions to plot
@@ -203,6 +203,63 @@ def plot_pairwise_correlations(means, stderrs=None, n_dims=None, region_strs=Non
             ax = axes[r - 1, c]
             ax.axis('on')
             ax = plot_correlations(means[r][c][:n_dims], stderrs[r][c][:n_dims], ax=ax, **kwargs)
+            ax.axhline(y=0, xmin=0.05, xmax=0.95, linestyle='--', color='k')
+            if region_strs is not None:
+                ax.text(
+                    x=0.95, y=0.95, s=str('%s-%s' % (region_strs[c], region_strs[r])),
+                    horizontalalignment='right',
+                    verticalalignment='top',
+                    transform=ax.transAxes)
+            ax.set_ylim([-0.05, max_val + 0.05])
+            if not ax.is_first_col():
+                ax.set_ylabel('')
+                ax.set_yticks([])
+            if not ax.is_last_row():
+                ax.set_xlabel('')
+                ax.set_xticks([])
+    plt.tight_layout()
+    plt.show()
+
+    return fig
+
+
+def plot_pairwise_correlations_mult(means, stderrs, colvec, n_dims=None, region_strs=None, **kwargs):
+    """
+    Plot CCA correlations for multiple pairs of regions, for multiple behavioural events
+
+    :param means: list of lists; means[k][i][j] contains the mean corrs between regions i, j for
+    behavioral event k
+    :param stderrs: list of lists; stderrs[k][i][j] contains std errors of corrs between
+    regions i, j for behavioral event k
+    :param colvec: color vector [must be a better way for this]
+    :param n_dims: number of CCA dimensions to plot
+    :param region_strs: list of strings identifying each region
+    :param kwargs: keyword arguments for plot
+    :return: matplotlib figure handle
+    """
+    n_regions = len(means[0])
+
+    fig, axes = plt.subplots(n_regions - 1, n_regions - 1, figsize=(12, 12))
+    for r in range(n_regions - 1):
+        for c in range(n_regions - 1):
+            axes[r, c].axis('off')
+
+    # get max correlation to standardize y axes
+    max_val = 0
+    for b in range(len(means)):
+        for r in range(1, n_regions):
+            for c in range(r):
+                tmp = means[b][r][c]
+                if tmp is not None:
+                    max_val = np.max([max_val, np.max(tmp)])
+
+    for r in range(1, n_regions):
+        for c in range(r):
+            ax = axes[r - 1, c]
+            ax.axis('on')
+            for b in range(len(means)):
+                plot_correlations(means[b][r][c][:n_dims], stderrs[b][r][c][:n_dims],
+                                  ax=ax, color=colvec[b], **kwargs)
             ax.axhline(y=0, xmin=0.05, xmax=0.95, linestyle='--', color='k')
             if region_strs is not None:
                 ax.text(
@@ -282,7 +339,7 @@ def get_event_bin_indexes(event_times, bin_times, window):
     :type event_times: numpy.array
     :param bin_times: time series pf starting point of bins
     :type bin_times: numpy.array
-    :param window: list of size 2 specifying the window in seconds
+    :param window: list of size 2 specifying the window in seconds [-time before, time after]
     :type window: numpy.array
     :return: array of indexes
     """
@@ -301,7 +358,10 @@ def get_event_bin_indexes(event_times, bin_times, window):
         # add the window
         arr_to_append = np.array(range(start_idx, start_idx + bin_window))
         idx_array = np.concatenate((idx_array, arr_to_append), axis=None)
-    return idx_array
+    
+    # remove the non-existing bins if any
+
+    return idx_array.astype(int)
 
 
 
