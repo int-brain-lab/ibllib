@@ -30,12 +30,9 @@ class MaximumLikelihoodEstimation(FittingMethod):
         self.model = model
         self.result = {}
 
-        # check that all columns we expect are in the data
-        for v in model.variable_names:
-            assert(v in data.preproc_df.columns)
-
     def fit(self):
 
+        print('Maximum Likelihood fitting')
         # get the bounds and typical value
         x0 = [p.typical_value for p in self.model.parameter_list]
         bounds = [[p.bounds_hard[0], p.bounds_hard[1]] for p in self.model.parameter_list]
@@ -54,15 +51,11 @@ class MaximumLikelihoodEstimation(FittingMethod):
         self.result['output'] = res
         self.result['algorithm'] = 'scipy_optimize_minimize'
 
-    def plot(self, **kwargs):
+    def plot(self, plot_data=True, plot_fit=True, **kwargs):
 
-        # first, plot the fitted curve
+        # THIS JUST POINTS TO THE PLOTTING CODE IN MODEL
         assert hasattr(self, 'result'), 'Call .fit() before .plot() on a model'
-        self.model.plot(self.data, self.result, **kwargs)
-
-        # data on top
-        self.data.plot(**kwargs)
-        plt.show()
+        self.model.plot(self, plot_fit=True, **kwargs)
 
 # class PosteriorEstimation(FittingMethod):
 #     """ Maximum Likelihood Estimation

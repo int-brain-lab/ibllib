@@ -3,10 +3,13 @@ International Brain Laboratory, 2019
 """
 
 import numpy as np
-from classdef_Parameter import Parameter
+from parameter import Parameter
 from scipy.special import erf
 from IPython import embed as shell
 import seaborn as sns
+import matplotlib.pyplot as plt
+import statsmodels.stats.proportion as sm
+
 
 class Model:
     """Abstract class for defining models.
@@ -28,15 +31,18 @@ class PsychometricFunction(Model):
         Grab different functions from psignifit, etc
     """
 
-    def __init__(self, model_name='choice_erf_2lapses'):
+    def __init__(self, model_name='choice_erf_2lapses', data=[]):
 
         self.model_name = model_name
-
+        # ================================================== #
         # STANDARD PSYCHOMETRIC FUNCTION FOR IBL ROOT TASK
+        # ================================================== #
+
         if model_name == 'choice_erf_2lapses':
             self.description = 'Psychometric function (erf, 2 lapses) for "right" (+1) responses'
             self.variable_names = ['signed_stimulus', 'total_trial_number', 'fraction_right']
 
+            # TODO: take parameter bounds and starting points from the data range
             self.parameter_list = [
                 Parameter(name='bias',
                           description=r'Bias $(\mu)$',
@@ -64,6 +70,10 @@ class PsychometricFunction(Model):
         elif model_name == 'correct_weibull':
             pass
 
+    # ================================================== #
+    # LOGLIKELIHOOD FUNCTION
+    # ================================================== #
+
     def loglikelihood_function(self, params, _model, _data):
 
         # evaluation of the model with these parameters
@@ -80,14 +90,15 @@ class PsychometricFunction(Model):
                   (1 - _data.preproc_df.fraction_right) * np.log(1 - probs)))
         return ll
 
+    # ================================================== #
+    # MODEL-DEPENDENT PREPROCESSING
+    # ================================================== #
+
     def preprocess_data(self, data):
 
-        # CHECK IF ALL VARIABLE NAMES WE NEED ARE PRESENT
-        for v in self.variable_names:
-            assert(v in data.preproc_df.columns)
-
-        if 'choice' in self.name:
+        if 'choice' in self.model_name:
             # make dataframe with columns signed_stimulus, total_trial_number, fraction_right
+            print("Summarizing TrialData")
             data.preproc_df = data.trials_df.groupby('signed_stimulus').agg(
                 {'choice': 'count', 'choice_right': 'mean'}).reset_index()
             data.preproc_df.rename(columns={'choice': 'total_trial_number',
@@ -96,26 +107,45 @@ class PsychometricFunction(Model):
             print('not implemented yet')
             pass
 
+        # CHECK IF ALL VARIABLE NAMES WE NEED ARE PRESENT
+        for v in self.variable_names:
+            assert v in data.preproc_df.columns, ('preproc_df needs column %s' %v)
+
         return data
 
-    def plot(self, data, result, **kwargs, plot_data=True, plot_fit=True):
+    # ================================================== #
+    # PLOT (DEPENDS ON MODEL)
+    # ================================================== #
 
+    def plot(self, fittedoutput, plot_data=True, plot_fit=True, **kwargs):
 
+        if 'choice' in fittedoutput.model.model_name:
 
-    def plot(self, **kwargs):
+            fig, ax = plt.subplots()
 
-        # only plot preprocessed data
-        assert hasattr(self, 'preproc_df'), 'Call .fit() before .plot() on a model'
+            # only plot preprocessed data
+            if plot_data:
+                assert hasattr(fittedoutput.data, 'preproc_df'), 'Call .preprocess() before .plot()'
 
-        g = sns.lineplot(self.preproc_df['signed_contrast'], self.preproc_df['choice'], 
-                         err_style="bars",
-                         linewidth=0, linestyle='None', mew=0.5,
-                         marker='o', ci=68, **kwargs)
-        g.set_yticks([0, 0.25, 0.5, 0.75, 1])
+                df = fittedoutput.data.preproc_df
 
+                # TODO: BINOMIAL CONFIDENCE INTERVALS
+                eb = sm.proportion_confint(df['fraction_right'] * df['total_trial_number'],
+                                           df['total_trial_number'],
+                                           alpha=0.05,
+                                           method='wilson')
 
+                ax.errorbar(df['signed_stimulus'], df['fraction_right'],
+                            yerr=[- eb[0] + df['fraction_right'], eb[1] - df['fraction_right']],
+                            linestyle='None', mew=0.5, marker='o')
 
-        if 'choice' in self.name:
-            x_vec = np.arange(min(data.preproc_df.signed_stimulus),
-                              max(data.preproc_df.signed_stimulus))
-            sns.lineplot(x_vec, self.function(result['parameters'], x_vec), **kwargs)
+            if plot_fit:
+                x_vec = np.arange(min(fittedoutput.data.preproc_df.signed_stimulus),
+                                  max(fittedoutput.data.preproc_df.signed_stimulus))
+                sns.lineplot(x_vec, fittedoutput.model.function(x_vec,
+                             fittedoutput.result['parameters']), ax=ax, **kwargs)
+
+            # layout
+            ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
+            ax.set_xlabel('Signed stimulus')
+            ax.set_ylabel('P(right)')

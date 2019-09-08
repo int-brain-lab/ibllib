@@ -13,17 +13,17 @@ import matplotlib.pyplot as plt
 # import modelbox stuff manually for now
 from dataset import TrialData
 from model import PsychometricFunction
-from fittingmethod import MaximumLikelihoodEstimation
+from fitting_method import MaximumLikelihoodEstimation
 
 
 # IMPORT SOME DATA FROM DATAJOINT
-b = behavior.TrialSet.Trial * (acquisition.Session & 'task_protocol LIKE "%biased%"') \
+b = behavior.TrialSet.Trial \
+    * (acquisition.Session & 'task_protocol LIKE "%biased%"' & 'session_start_time > "2019-08-29"') \
     * (subject.Subject & 'subject_nickname="CSHL_015"') * subject.SubjectLab()
-
 bdat = b.fetch(order_by='subject_nickname, session_start_time, trial_id',
                format='frame').reset_index()
 
-# TODO: put this wrangle in a DJ table
+# TODO: put this wrangle inside the table definition
 bdat['signed_contrast'] = (bdat['trial_stim_contrast_right'] -
                            bdat['trial_stim_contrast_left']) * 100
 bdat['signed_contrast'] = bdat.signed_contrast.astype(int)
@@ -39,9 +39,11 @@ df = TrialData(data=bdat)
 
 # now create an instance of the PsychometricFunction class,
 # let some parameters depend on the data
-psychfunc = PsychometricFunction(model_name='erf_2lapses', data=df)
+psychfunc = PsychometricFunction(model_name='choice_erf_2lapses', data=df)
+
 # preprocess the data for psychometric function fitting
-df = psychfunc.preprocess(df)
+# this depends on the model definition
+df = psychfunc.preprocess_data(df)
 
 # # define the method that we want to use for fitting
 mle_fit = MaximumLikelihoodEstimation(data=df, model=psychfunc)
