@@ -20,7 +20,7 @@ with open("README.md", 'r') as f:
     long_description = f.read()
 
 with open('requirements.txt') as f:
-    require = [x.strip() for x in f.readlines()]
+    require = [x.strip() for x in f.readlines() if not x.startswith('git+')]
 
 setup(
     name='ibllib',
