@@ -2,7 +2,7 @@ from pathlib import Path
 
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.biased_trials import (
-    get_feedbackType, get_probabilityLeft, get_response_times,
+    get_feedbackType, get_probabilityLeft,
     get_choice, get_rewardVolume, get_iti_duration, get_contrastLR,
     get_goCueTrigger_times, get_goCueOnset_times, get_intervals)
 
