@@ -114,13 +114,9 @@ def load_dlc_training(folder_path):
 
         # Interpolate timestamps in between trials
         interp = np.arange(timestamps[-1] + frame_diff,
-                           this_trial[0] - frame_diff,
+                           this_trial[0] - (frame_diff / 2),
                            frame_diff)
         timestamps = np.concatenate((timestamps, interp, this_trial))
-
-    # Assume fist timestamp was correct so remove others
-    for key in list(dlc_dict.keys()):
-        dlc_dict[key] = dlc_dict[key][0:np.size(timestamps)]
 
     dlc_dict['timestamps'] = timestamps
     dlc_dict['camera'] = 'left'
