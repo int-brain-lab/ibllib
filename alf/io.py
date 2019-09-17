@@ -106,6 +106,7 @@ def load_file_content(fil):
         return pd.read_csv(fil)
     if fil.suffix == '.ssv':
         return pd.read_csv(fil, delimiter=' ')
+    return Path(fil)
 
 
 def _ls(alfpath, object, glob='.*'):

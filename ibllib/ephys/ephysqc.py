@@ -141,7 +141,7 @@ def validate_ttl_test(ses_path, display=False):
 
     EXPECTED_RATES_HZ = {'left_camera': 60, 'right_camera': 150, 'body_camera': 30}
     SYNC_RATE_HZ = 1
-    MIN_TRIALS_NB = 10
+    MIN_TRIALS_NB = 6
 
     ok = True
     ses_path = Path(ses_path)
@@ -168,19 +168,25 @@ def validate_ttl_test(ses_path, display=False):
                            str_ok=f'PASS: {lab} frame rate: {frame_rates[lab]} = {expect} Hz',
                            str_ko=f'FAILED: {lab} frame rate: {frame_rates[lab]} != {expect} Hz')
 
-    # check that the wheel has a minimum rate of activity
-    ok &= _single_test(assertion=len(wheel['re_pos']) / last_time > 5,
+    # check that the wheel has a minimum rate of activity on both channels
+    re_test = abs(1 - sync.rotary_encoder_1.size / sync.rotary_encoder_0.size) < 0.1
+    re_test &= len(wheel['re_pos']) / last_time > 5
+    ok &= _single_test(assertion=re_test,
                        str_ok="PASS: Rotary encoder", str_ko="FAILED: Rotary encoder")
     # check that the frame 2 ttls has a minimum rate of activity
     ok &= _single_test(assertion=len(sync.frame2ttl) / last_time > 0.2,
                        str_ok="PASS: Frame2TTL", str_ko="FAILED: Frame2TTL")
-    # the bpod has to have at least twice the amount of min trial pulses
+    # the audio has to have at least one event per trial
     ok &= _single_test(assertion=len(sync.bpod) > len(sync.audio) > MIN_TRIALS_NB,
-                       str_ok="PASS: Bpod", str_ko="FAILED: Bpod")
+                       str_ok="PASS: audio", str_ko="FAILED: audio")
     # the bpod has to have at least twice the amount of min trial pulses
     ok &= _single_test(assertion=len(sync.bpod) > MIN_TRIALS_NB * 2,
                        str_ok="PASS: Bpod", str_ko="FAILED: Bpod")
-
+    # note: tried to depend as little as possible on the extraction code but for the valve...
+    behaviour = fpga.extract_behaviour_sync(rawsync, save=False, chmap=sync_map)
+    # check that the reward valve is actionned at least once
+    ok &= _single_test(assertion=behaviour.valve_open.size > 1,
+                       str_ok="PASS: Valve open", str_ko="FAILED: Valve open not detected")
     _logger.info('ALL CHECKS PASSED !')
 
     # the imec sync is for 3B Probes only
