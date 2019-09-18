@@ -721,6 +721,7 @@ def get_camera_timestamps(session_path, data=False, save=False, settings=False):
 
     cam_times = []
     n_frames = 0
+    n_out_of_sync = 0
     for ind in np.arange(ntrials):
         # get upgoing and downgoing fronts
         pin = np.array(data[ind]['behavior_data']['Events timestamps'].get('Port1In'))
@@ -739,11 +740,17 @@ def get_camera_timestamps(session_path, data=False, save=False, settings=False):
             assert that the pulses have the same length and that we don't miss frames during
             the trial, the refresh rate of bpod is 100us
             """
-            assert (np.all(np.abs(1 - (pin - pout) / np.median(pin - pout)) < 0.1))
-            assert(np.all(np.abs(np.diff(pin) - frate) <= 0.00011))
+            test1 = np.all(np.abs(1 - (pin - pout) / np.median(pin - pout)) < 0.1)
+            test2 = np.all(np.abs(np.diff(pin) - frate) <= 0.00011)
+            if not all([test1, test2]):
+                n_out_of_sync += 1
         # grow a list of cam times for ech trial
         cam_times.append(pin)
         n_frames += pin.size
+
+    if n_out_of_sync > 0:
+        logger_.warning(f"{n_out_of_sync} trials with frame times not within 10% of the"
+                        f" expected sampling rate")
 
     t_first_frame = np.array([c[0] for c in cam_times])
     t_last_frame = np.array([c[-1] for c in cam_times])
@@ -772,15 +779,13 @@ def get_camera_timestamps(session_path, data=False, save=False, settings=False):
     if we find a video file, get the number of frames and extrapolate the times using the median
     frame rate as the video stops after the bpod
     """
-    video_file = list(session_path.joinpath('raw_video_data').glob('_iblrig_leftCamera.*.mp4'))
+    video_file = list(session_path.joinpath('raw_video_data').glob('_iblrig_leftCamera*.mp4'))
     if video_file:
         cap = cv2.VideoCapture(str(video_file[0]))
         nframes = cap.get(cv2.CAP_PROP_FRAME_COUNT)
         if nframes > len(frame_times):
             to_app = (np.arange(int(nframes - frame_times.size),) + 1) / frate + frame_times[-1]
             frame_times = np.r_[frame_times, to_app]
-        else:
-            frame_times = frame_times[:nframes]
     assert(np.all(np.diff(frame_times) > 0))  # negative diffs implies a big problem
     if save:
         fpath = Path(session_path).joinpath('alf', '_ibl_leftCamera.times.npy')
