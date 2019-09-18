@@ -289,7 +289,10 @@ class ONE(OneAbstract):
                 continue
             for i, x, in enumerate(dc.dataset_type):
                 if dt == x:
-                    list_out.append(dc.data[i])
+                    if dc.data[i] is not None:
+                        list_out.append(dc.data[i])
+                    else:
+                        list_out.append(dc.local_path[i])
         return list_out
 
     def _ls(self, table=None, verbose=False):
