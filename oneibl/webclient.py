@@ -5,7 +5,7 @@ from pathlib import Path
 import requests
 import json
 import re
-from ibllib.misc import pprint
+from ibllib.misc import pprint, print_progress
 
 logger_ = logging.getLogger('ibllib')
 
@@ -88,8 +88,7 @@ def http_download_file(full_link_to_file, *, clobber=False, offline=False,
             break
         file_size_dl += len(buffer)
         f.write(buffer)
-        status = r"%10d  [%3.2f%%]" % (file_size_dl, file_size_dl * 100. / file_size)
-        logger_.info(status)
+        print_progress(file_size_dl, file_size, prefix='', suffix='')
     f.close()
 
     return file_name

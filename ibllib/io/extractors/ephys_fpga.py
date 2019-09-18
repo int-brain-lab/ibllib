@@ -389,9 +389,8 @@ def extract_sync(session_path, save=False, force=False, ephys_files=None):
     :return: list of sync dictionaries
     """
     session_path = Path(session_path)
-    raw_ephys_path = session_path / 'raw_ephys_data'
     if not ephys_files:
-        ephys_files = glob_ephys_files(raw_ephys_path)
+        ephys_files = glob_ephys_files(session_path)
     syncs = []
     for efi in ephys_files:
         glob_filter = f'*{efi.label}*' if efi.label else '*'
@@ -438,6 +437,8 @@ def _get_main_probe_sync(session_path):
     :return:
     """
     ephys_files = _get_all_probes_sync(session_path)
+    if not ephys_files:
+        raise FileNotFoundError(f"No ephys files found in {session_path}")
     version = _get_probe_version_from_files(ephys_files)
     if version == '3A':
         # the sync master is the probe with the most sync pulses
