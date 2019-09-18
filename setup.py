@@ -20,11 +20,11 @@ with open("README.md", 'r') as f:
     long_description = f.read()
 
 """
-3 reasons not to read from the requirements.txt file here:
+reasons not to read from the requirements.txt file here:
 a) attempting to read from the requirements.txt file here is incompatible with installing from
 the built tarball as in  `pip install ibllib-x.x.x.tar.gz`
-b) list some github repositories  without having to build an egg for each of them.
-c) requirements.txt may have a broaded environment scope than the hard requirements listed here
+b) requirements.txt may have a broader environment scope than the hard requirements listed here
+c) git http dependencies are not allowed on a PyPi package
 """
 
 install_requires = [
@@ -39,7 +39,6 @@ install_requires = [
     'seaborn>=0.9.0',
     'flake8>=3.7.8',
     'opencv-python>=4.1.1.26',
-    'phylib @ git+https://github.com/cortex-lab/phylib.git'
 ]
 
 setup(
