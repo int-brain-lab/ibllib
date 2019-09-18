@@ -43,7 +43,7 @@ install_requires = [
 
 setup(
     name='ibllib',
-    version='1.1.5',
+    version='1.1.6',
     python_requires='>={}.{}'.format(*REQUIRED_PYTHON),
     description='IBL libraries',
     license="MIT",
