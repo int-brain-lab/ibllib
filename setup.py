@@ -19,12 +19,31 @@ install it on Python {}.{}.
 with open("README.md", 'r') as f:
     long_description = f.read()
 
-with open('requirements.txt') as f:
-    require = [x.strip() for x in f.readlines() if not x.startswith('git+')]
+"""
+reasons not to read from the requirements.txt file here:
+a) attempting to read from the requirements.txt file here is incompatible with installing from
+the built tarball as in  `pip install ibllib-x.x.x.tar.gz`
+b) requirements.txt may have a broader environment scope than the hard requirements listed here
+c) git http dependencies are not allowed on a PyPi package
+"""
+
+install_requires = [
+    'colorlog>=4.0.2',
+    'dataclasses>=0.6',
+    'globus-sdk>=1.7.1',
+    'matplotlib>=3.0.3',
+    'numpy>=1.16.4',
+    'pandas>=0.24.2',
+    'requests>=2.22.0',
+    'scipy>=1.3.0',
+    'seaborn>=0.9.0',
+    'flake8>=3.7.8',
+    'opencv-python>=4.1.1.26',
+]
 
 setup(
     name='ibllib',
-    version='1.1.4',
+    version='1.1.5',
     python_requires='>={}.{}'.format(*REQUIRED_PYTHON),
     description='IBL libraries',
     license="MIT",
@@ -33,8 +52,6 @@ setup(
     url="https://www.internationalbrainlab.com/",
     packages=find_packages(exclude=['scratch']),  # same as name
     # external packages as dependencies
-    install_requires=require,
-    scripts={
-
-    }
+    install_requires=install_requires,
+    scripts={}
 )
