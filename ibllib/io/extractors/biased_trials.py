@@ -7,7 +7,7 @@ import os
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import version
 from ibllib.io.extractors.training_trials import (  # noqa
-    check_alf_folder, get_feedbackType, get_probabilityLeft,
+    check_alf_folder, get_feedbackType, get_probabilityLeft, get_camera_timestamps,
     get_choice, get_rewardVolume, get_feedback_times, get_feedback_times_ge5,
     get_feedback_times_lt5, get_stimOn_times, get_stimOn_times_lt5,
     get_stimOn_times_ge5, get_intervals, get_response_times, get_iti_duration,
@@ -61,82 +61,47 @@ def extract_all(session_path, save=False, data=False, settings=False):
         settings = raw.load_settings(session_path)
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
-    # Version check
-    if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
-        feedbackType = get_feedbackType(
-            session_path, save=save, data=data, settings=settings)
-        contrastLeft, contrastRight = get_contrastLR(
-            session_path, save=save, data=data, settings=settings)
-        probabilityLeft = get_probabilityLeft(
-            session_path, save=save, data=data, settings=settings)
-        choice = get_choice(
-            session_path, save=save, data=data, settings=settings)
-        rewardVolume = get_rewardVolume(
-            session_path, save=save, data=data, settings=settings)
-        feedback_times = get_feedback_times(
-            session_path, save=save, data=data, settings=settings)
-        stimOn_times = get_stimOn_times(
-            session_path, save=save, data=data, settings=settings)
-        stimOnTrigger_times = get_stimOnTrigger_times(
-            session_path, save=save, data=data, settings=settings)
-        intervals = get_intervals(
-            session_path, save=save, data=data, settings=settings)
-        response_times = get_response_times(
-            session_path, save=save, data=data, settings=settings)
-        go_cue_trig_times = get_goCueTrigger_times(
-            session_path, save=save, data=data, settings=settings)
-        go_cue_times = get_goCueOnset_times(
-            session_path, save=save, data=data, settings=settings)
-        included = get_included_trials(
-            session_path, save=save, data=data, settings=settings)
-        out = {'feedbackType': feedbackType,
-               'contrastLeft': contrastLeft,
-               'contrastRight': contrastRight,
-               'probabilityLeft': probabilityLeft,
-               'session_path': session_path,
-               'choice': choice,
-               'rewardVolume': rewardVolume,
-               'feedback_times': feedback_times,
-               'stimOnTrigger_times': stimOnTrigger_times,
-               'stimOn_times': stimOn_times,
-               'intervals': intervals,
-               'response_times': response_times,
-               'goCue_times': go_cue_times,
-               'goCueTrigger_times': go_cue_trig_times,
-               'included': included}
 
+    # Common to all versions
+    feedbackType = get_feedbackType(session_path, save=save, data=data, settings=settings)
+    contrastLeft, contrastRight = get_contrastLR(
+        session_path, save=save, data=data, settings=settings)
+    probabilityLeft = get_probabilityLeft(
+        session_path, save=save, data=data, settings=settings)
+    choice = get_choice(session_path, save=save, data=data, settings=settings)
+    rewardVolume = get_rewardVolume(session_path, save=save, data=data, settings=settings)
+    feedback_times = get_feedback_times(session_path, save=save, data=data, settings=settings)
+    stimOn_times = get_stimOn_times(session_path, save=save, data=data, settings=settings)
+    intervals = get_intervals(session_path, save=save, data=data, settings=settings)
+    response_times = get_response_times(session_path, save=save, data=data, settings=settings)
+    go_cue_trig_times = get_goCueTrigger_times(
+        session_path, save=save, data=data, settings=settings)
+    go_cue_times = get_goCueOnset_times(session_path, save=save, data=data, settings=settings)
+    camera_timestamps = get_camera_timestamps(
+        session_path, save=save, data=data, settings=settings)
+    out = {'feedbackType': feedbackType,
+           'contrastLeft': contrastLeft,
+           'contrastRight': contrastRight,
+           'probabilityLeft': probabilityLeft,
+           'session_path': session_path,
+           'choice': choice,
+           'rewardVolume': rewardVolume,
+           'feedback_times': feedback_times,
+           'stimOn_times': stimOn_times,
+           'intervals': intervals,
+           'response_times': response_times,
+           'camera_timestamps': camera_timestamps,
+           'goCue_times': go_cue_times,
+           'goCueTrigger_times': go_cue_trig_times}
+
+    # Version specific extractions
+    if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+        out['stimOnTrigger_times'] = get_stimOnTrigger_times(
+            session_path, save=save, data=data, settings=settings)
+        out['included'] = get_included_trials(
+            session_path, save=save, data=data, settings=settings)
     else:
-        feedbackType = get_feedbackType(session_path, save=save, data=data, settings=settings)
-        contrastLeft, contrastRight = get_contrastLR(
-            session_path, save=save, data=data, settings=settings)
-        probabilityLeft = get_probabilityLeft(
-            session_path, save=save, data=data, settings=settings)
-        choice = get_choice(session_path, save=save, data=data, settings=settings)
-        rewardVolume = get_rewardVolume(session_path, save=save, data=data, settings=settings)
-        feedback_times = get_feedback_times(session_path, save=save, data=data, settings=settings)
-        stimOn_times = get_stimOn_times(session_path, save=save, data=data, settings=settings)
-        intervals = get_intervals(session_path, save=save, data=data, settings=settings)
-        response_times = get_response_times(session_path, save=save, data=data, settings=settings)
-        iti_dur = get_iti_duration(session_path, save=save, data=data, settings=settings)
-        go_cue_trig_times = get_goCueTrigger_times(
-            session_path, save=save, data=data, settings=settings)
-        go_cue_times = get_goCueOnset_times(session_path, save=save, data=data, settings=settings)
-        # Missing datasettypes
-        # _ibl_trials.deadTime
-        out = {'feedbackType': feedbackType,
-               'contrastLeft': contrastLeft,
-               'contrastRight': contrastRight,
-               'probabilityLeft': probabilityLeft,
-               'session_path': session_path,
-               'choice': choice,
-               'rewardVolume': rewardVolume,
-               'feedback_times': feedback_times,
-               'stimOn_times': stimOn_times,
-               'intervals': intervals,
-               'response_times': response_times,
-               'iti_dur': iti_dur,
-               'goCue_times': go_cue_times,
-               'goCueTrigger_times': go_cue_trig_times}
+        out['iti_dur'] = get_iti_duration(session_path, save=save, data=data, settings=settings)
     return out
 
 

@@ -34,4 +34,4 @@ for dat in dates:
             'adlib': True}
         # do not use the example on anything else than alyx-dev
         if one.alyx._base_url == 'https://dev.alyx.internationalbrainlab.org':
-            rep = one.alyx.rest('water-administrations', 'create', wa_)
+            rep = one.alyx.rest('water-administrations', 'create', data=wa_)

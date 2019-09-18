@@ -224,9 +224,10 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
     def test_read_nidq(self):
         # nidq has 1 analog and 1 digital sync channels
         self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
+        int2volts = 5 / 32768
         nidq = spikeglx._mock_spikeglx_file(self.tdir.name,
                                             self.workdir / 'sample3B_g0_t0.nidq.meta',
-                                            ns=32, nc=2, sync_depth=8)
+                                            ns=32, nc=2, sync_depth=8, int2volts=int2volts)
         self.assert_read_glx(nidq)
 
     def test_read_3A(self):
@@ -245,16 +246,47 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
 
     def assert_read_glx(self, tglx):
         sr = spikeglx.Reader(tglx['bin_file'])
+        dexpected = sr.channel_conversion_sample2mv[sr.type] * tglx['D']
         d, sync = sr.read_samples(0, tglx['ns'])
         # could be rounding errors with non-integer sampling rates
         self.assertTrue(sr.nc == tglx['nc'])
         self.assertTrue(sr.ns == tglx['ns'])
         # test the data reading with gain
-        self.assertTrue(np.all(sr.channel_conversion_sample2mv[sr.type] * tglx['D'] == d))
+        self.assertTrue(np.all(np.isclose(dexpected, d)))
         # test the sync reading, one front per channel
         self.assertTrue(np.sum(sync) == tglx['sync_depth'])
         for m in np.arange(tglx['sync_depth']):
             self.assertTrue(sync[m + 1, m] == 1)
+        if sr.type in ['ap', 'lf']:  # exclude nidq from the slicing circus
+            # teast reading only one channel
+            d, _ = sr.read(slice(None), 10)
+            self.assertTrue(np.all(np.isclose(d, dexpected[:, 10])))
+            # test reading only one time
+            d, _ = sr.read(5, slice(None))
+            self.assertTrue(np.all(np.isclose(d, dexpected[5, :])))
+            # test reading a few times
+            d, _ = sr.read(slice(5, 7), slice(None))
+            self.assertTrue(np.all(np.isclose(d, dexpected[5:7, :])))
+            d, _ = sr.read([5, 6], slice(None))
+            self.assertTrue(np.all(np.isclose(d, dexpected[5:7, :])))
+            # test reading a few channels
+            d, _ = sr.read(slice(None), slice(300, 310))
+            self.assertTrue(np.all(np.isclose(d, dexpected[:, 300:310])))
+            # test double slicing
+            d, _ = sr.read(slice(5, 10), slice(300, 310))
+            self.assertTrue(np.all(np.isclose(d, dexpected[5:10, 300:310])))
+            # test empty slices
+            d, _ = sr.read(slice(5, 10), [])
+            self.assertTrue(d.size == 0)
+            d, _ = sr.read([], [])
+            self.assertTrue(d.size == 0)
+            d, _ = sr.read([], slice(300, 310))
+            self.assertTrue(d.size == 0)
+            a = sr.read_sync_analog()
+            self.assertIsNone(a)
+        else:
+            s = sr.read_sync()
+            self.assertTrue(s.shape[1] == 17)
         self.tdir.cleanup()
 
     def testGetRevisionAndType(self):
@@ -281,6 +313,14 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             nc = spikeglx._get_nchannels_from_meta(md)
             self.assertTrue(len(cg['ap']) == len(cg['lf']) == nc)
 
+    def testGetAnalogSyncIndex(self):
+        for meta_data_file in self.meta_files:
+            md = spikeglx.read_meta_data(meta_data_file)
+            if spikeglx._get_type_from_meta(md) in ['ap', 'lf']:
+                self.assertTrue(spikeglx._get_analog_sync_trace_indices_from_meta(md) == [])
+            else:
+                self.assertEqual(spikeglx._get_analog_sync_trace_indices_from_meta(md), [0])
+
     def testReadChannelGainNIDQ(self):
         for meta_data_file in self.meta_files:
             if meta_data_file.name.split('.')[-2] not in ['nidq']:
@@ -289,8 +329,8 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             nc = spikeglx._get_nchannels_from_meta(md)
             cg = spikeglx._conversion_sample2mv_from_meta(md)
             i2v = md.get('niAiRangeMax') / 32768
-            self.assertTrue(np.all(cg['nidq'][slice(0, int(np.sum(md.acqMnMaXaDw[:2])))] == i2v))
-            self.assertTrue(np.all(cg['nidq'][slice(int(np.sum(md.acqMnMaXaDw[:2])), None)] == 1.))
+            self.assertTrue(np.all(cg['nidq'][slice(0, int(np.sum(md.acqMnMaXaDw[:3])))] == i2v))
+            self.assertTrue(np.all(cg['nidq'][slice(int(np.sum(md.acqMnMaXaDw[-1])), None)] == 1.))
             self.assertTrue(len(cg['nidq']) == nc)
 
     def testReadChannelMap(self):
@@ -327,7 +367,8 @@ class TestsHardwareParameters3A(unittest.TestCase):
                       'frame2ttl': 4,
                       'rotary_encoder_0': 5,
                       'rotary_encoder_1': 6,
-                      'audio': 7}
+                      'audio': 7,
+                      'bpod': 16}
         self.file3a = self.workdir / 'sample3A_g0_t0.imec.wiring.json'
         self.file3b = self.workdir / 'sample3B_g0_t0.nidq.wiring.json'
 
