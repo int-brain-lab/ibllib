@@ -1,4 +1,5 @@
 import logging
+import matplotlib.axes
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import interp1d
@@ -144,11 +145,15 @@ def sync_probe_front_times(t, tref, sr, display=False, linear=False, tol=2.0):
         tout = np.arange(0, np.max(tref) + SYNC_SAMPLING_RATE_SECS, 20)
         sync_points = np.c_[tout, np.polyval(pol, tout) + np.interp(tout, t_upsamp, res_filt)]
         if display:
-            plt.plot(tref, residual * sr)
-            plt.plot(t_upsamp, res_filt * sr)
-            plt.plot(tout, np.interp(tout, t_upsamp, res_filt) * sr, '*')
-            plt.ylabel('Residual drift (samples @ 30kHz)')
-            plt.xlabel('time (sec)')
+            if isinstance(display, matplotlib.axes.Axes):
+                ax = display
+            else:
+                ax = plt.axes()
+            ax.plot(tref, residual * sr)
+            ax.plot(t_upsamp, res_filt * sr)
+            ax.plot(tout, np.interp(tout, t_upsamp, res_filt) * sr, '*')
+            ax.set_xlabel('time (sec)')
+            ax.set_ylabel('Residual drift (samples @ 30kHz)')
     else:
         sync_points = np.c_[np.array([0, 1]), np.polyval(pol, np.array([0, 1]))]
         if display:

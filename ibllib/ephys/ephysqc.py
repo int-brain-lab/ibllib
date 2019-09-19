@@ -182,10 +182,14 @@ def validate_ttl_test(ses_path, display=False):
     # the bpod has to have at least twice the amount of min trial pulses
     ok &= _single_test(assertion=len(sync.bpod) > MIN_TRIALS_NB * 2,
                        str_ok="PASS: Bpod", str_ko="FAILED: Bpod")
-    # note: tried to depend as little as possible on the extraction code but for the valve...
-    behaviour = fpga.extract_behaviour_sync(rawsync, save=False, chmap=sync_map)
+    try:
+        # note: tried to depend as little as possible on the extraction code but for the valve...
+        behaviour = fpga.extract_behaviour_sync(rawsync, save=False, chmap=sync_map)
+        res = behaviour.valve_open.size > 1
+    except AssertionError:
+        res = False
     # check that the reward valve is actionned at least once
-    ok &= _single_test(assertion=behaviour.valve_open.size > 1,
+    ok &= _single_test(assertion=res,
                        str_ok="PASS: Valve open", str_ko="FAILED: Valve open not detected")
     _logger.info('ALL CHECKS PASSED !')
 
