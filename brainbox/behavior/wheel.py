@@ -21,5 +21,6 @@ def velocity(re_ts, re_pos):
     # Compute velocity time scale
     tv = re_ts[:-1] + dt / 2
     # interpolate over original time scale
-    ifcn = interpolate.interp1d(tv, vel, fill_value="extrapolate")
-    return ifcn(re_ts)
+    if tv.size > 1:
+        ifcn = interpolate.interp1d(tv, vel, fill_value="extrapolate")
+        return ifcn(re_ts)
