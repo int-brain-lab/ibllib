@@ -294,8 +294,9 @@ def get_feedback_times_ge5(session_path, data=False):
         data = raw.load_data(session_path)
     missed_bnc2 = 0
     rw_times, err_sound_times, merge = [np.zeros([len(data), ]) for _ in range(3)]
+
     for ind, tr in enumerate(data):
-        st = getattr(tr['behavior_data']['Events timestamps'], 'BNC2High', None)
+        st = tr['behavior_data']['Events timestamps'].get('BNC2High', None)
         if not st:
             st = np.array([np.nan, np.nan])
             missed_bnc2 += 1
