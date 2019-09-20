@@ -160,7 +160,6 @@ def get_wheel_data(session_path, bp_data=None, save=False):
     # get the converter function to translate re_ts into behavior times
     convtime = time_converter_session(session_path, kind='re2b')
     data['re_ts'] = convtime(data['re_ts'])
-    return data
 
     def get_reset_trace_compensation_with_state_machine_times():
         # this is the preferred way of getting resets using the state machine time information
