@@ -755,7 +755,7 @@ def get_camera_timestamps(session_path, data=False, save=False, settings=False):
 
     t_first_frame = np.array([c[0] for c in cam_times])
     t_last_frame = np.array([c[-1] for c in cam_times])
-    frate = 1 / np.median(np.array([np.median(np.diff(c)) for c in cam_times]))
+    frate = 1 / np.nanmedian(np.array([np.median(np.diff(c)) for c in cam_times]))
     intertrial_duration = t_first_frame[1:] - t_last_frame[:-1]
     intertrial_missed_frames = np.int32(np.round(intertrial_duration * frate)) - 1
 
