@@ -357,21 +357,15 @@ def load_mic(session_path):
     return data
 
 
-def _groom_wheel_data_lt5(data, label='file ', path=''):
-    """
-    The whole purpose of this function is to account for variability and corruption in
-    the wheel position files. There are many possible errors described below, but
-    nothing excludes getting new ones.
-    """
-    # sometimes the text file is cropped
+def _clean_wheel_dataframe(data, label, path):
     if np.any(data.isna()):
         logger_.warning(label + ' has missing/incomplete records \n %s', path)
     data.dropna(inplace=True)
-    data.drop(data.loc[data.bns_ts.apply(len) != 33].index, inplace=True)
     data.drop_duplicates(keep='first', inplace=True)
     data.reset_index(inplace=True)
     # handle the clock resets when microseconds exceed uint32 max value
     drop_first = False
+    data['re_ts'] = data['re_ts'].astype(np.double, copy=False)
     if any(np.diff(data['re_ts']) < 0):
         ind = np.where(np.diff(data['re_ts']) < 0)[0]
         for i in ind:
@@ -395,10 +389,20 @@ def _groom_wheel_data_lt5(data, label='file ', path=''):
                 logger_.error(label + ' Rotary encoder timestamps are not sorted.' + str(path))
                 data.sort_values('re_ts', inplace=True)
                 data.reset_index(inplace=True)
-
     if drop_first is not False:
         data.drop(data.loc[:drop_first].index, inplace=True)
         data = data.reindex()
+    return data
+
+
+def _groom_wheel_data_lt5(data, label='file ', path=''):
+    """
+    The whole purpose of this function is to account for variability and corruption in
+    the wheel position files. There are many possible errors described below, but
+    nothing excludes getting new ones.
+    """
+    data = _clean_wheel_dataframe(data, label, path)
+    data.drop(data.loc[data.bns_ts.apply(len) != 33].index, inplace=True)
     # check if the time scale is in ms
     sess_len_sec = (datetime.strptime(data['bns_ts'].iloc[-1][:25], '%Y-%m-%dT%H:%M:%S.%f') -
                     datetime.strptime(data['bns_ts'].iloc[0][:25], '%Y-%m-%dT%H:%M:%S.%f')).seconds
@@ -415,41 +419,7 @@ def _groom_wheel_data_ge5(data, label='file ', path=''):
     the wheel position files. There are many possible errors described below, but
     nothing excludes getting new ones.
     """
-    # sometimes the text file is cropped
-    if np.any(data.isna()):
-        logger_.warning(label + ' has missing/incomplete records \n %s', path)
-    data.dropna(inplace=True)
-    data.drop_duplicates(keep='first', inplace=True)
-    data.reset_index(inplace=True)
-    # handle the clock resets when microseconds exceed uint32 max value
-    drop_first = False
-    if any(np.diff(data['re_ts']) < 0):
-        ind = np.where(np.diff(data['re_ts']) < 0)[0]
-        for i in ind:
-            # the first sample may be corrupt, in this case throw away
-            if i <= 1:
-                drop_first = i
-                logger_.warning(label + ' rotary encoder positions timestamps'
-                                        ' first sample corrupt ' + str(path))
-            # if it's an uint32 wraparound, the diff should be close to 2 ** 32
-            elif 32 - np.log2(data['re_ts'][i] - data['re_ts'][i + 1]) < 0.2:
-                data.loc[i + 1:, 're_ts'] = data.loc[i + 1:, 're_ts'] + 2 ** 32
-            # there is also the case where 2 positions are swapped and need to be swapped back
-
-            elif data['re_ts'][i] > data['re_ts'][i + 1] > data['re_ts'][i - 1]:
-                logger_.warning(label + ' rotary encoder timestamps swapped at index: ' +
-                                str(i) + '  ' + str(path))
-                a, b = data.iloc[i].copy(), data.iloc[i + 1].copy()
-                data.iloc[i], data.iloc[i + 1] = b, a
-            # if none of those 3 cases apply, raise an error
-            else:
-                logger_.error(label + ' Rotary encoder timestamps are not sorted.' + str(path))
-                data.sort_values('re_ts', inplace=True)
-                data.reset_index(inplace=True)
-
-    if drop_first is not False:
-        data.drop(data.loc[:drop_first].index, inplace=True)
-        data = data.reindex()
+    data = _clean_wheel_dataframe(data, label, path)
     # check if the time scale is in ms
     if (data['re_ts'].iloc[-1] - data['re_ts'].iloc[0]) / 1e6 < 0:
         logger_.warning('Rotary encoder reset logs events in ms instead of us: ' +

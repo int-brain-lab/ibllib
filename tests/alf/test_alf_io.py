@@ -157,6 +157,14 @@ class TestsAlf(unittest.TestCase):
         a = {'a': np.ones([10, 10]), 'b': np.ones([10, 1]), 'c': np.ones([10])}
         status = alf.io.check_dimensions(a)
         self.assertTrue(status == 0)
+        # test for timestamps which is an exception to the rule
+        a['timestamps'] = np.ones([3, 1])
+        a['timestamps.titi'] = np.ones([3, 1])
+        status = alf.io.check_dimensions(a)
+        self.assertTrue(status == 0)
+        # gracefully exit if the dictionary only contains excepted attributes
+        status = alf.io.check_dimensions({'timestamps': None})
+        self.assertTrue(status == 0)
 
     def tearDown(self) -> None:
         shutil.rmtree(self.tmpdir)

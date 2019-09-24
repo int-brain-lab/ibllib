@@ -1,16 +1,18 @@
 import logging
 from pathlib import Path
+import json
 
 import numpy as np
 import matplotlib.pyplot as plt
 
 import brainbox.behavior.wheel as whl
-from brainbox.core import Bunch
 
+import ibllib.ephys.neuropixel as neuropixel
 import ibllib.plots as plots
 import ibllib.io.spikeglx
 import ibllib.dsp as dsp
 import alf.io
+from ibllib.io.spikeglx import glob_ephys_files
 
 _logger = logging.getLogger('ibllib')
 
@@ -19,6 +21,7 @@ WHEEL_RADIUS_CM = 3.1
 WHEEL_TICKS = 1024
 DEBUG_PLOTS = False
 # this is the mapping of synchronisation pulses coming out of the FPGA
+
 AUXES = [
     (0, None),
     (1, None),
@@ -43,40 +46,40 @@ for aux in AUXES:
         SYNC_CHANNEL_MAP[aux[1]] = aux[0]
 
 
-def _get_ephys_files(session_path):
+def get_hardware_config(config_file):
     """
-    From an arbitrary folder (usually session folder) gets the ap and lf files and labels
-    Associated to the subfolders where they are
-    the expected folder tree is:
-    ├── raw_ephys_data
-    │   ├── probe_left
-    │   │   ├── _iblrig_ephysData.raw_g0_t0.imec.ap.bin
-    │   │   ├── _iblrig_ephysData.raw_g0_t0.imec.ap.meta
-    │   │   ├── _iblrig_ephysData.raw_g0_t0.imec.lf.bin
-    │   │   ├── _iblrig_ephysData.raw_g0_t0.imec.lf.meta
-    │   └── probe_right
-    │       ├── cluster_KSLabel.tsv
-    │       ├── _iblrig_ephysData.raw_g0_t0.imec.ap.bin
-    │       ├── _iblrig_ephysData.raw_g0_t0.imec.ap.meta
-    │       ├── _iblrig_ephysData.raw_g0_t0.imec.lf.bin
-    │       ├── _iblrig_ephysData.raw_g0_t0.imec.lf.meta
+    Reads the neuropixel_wirings.json file containing sync mapping and parameters
+    :param config_file: folder or json file
+    :return: dictionary or None
+    """
+    config_file = Path(config_file)
+    if config_file.is_dir():
+        config_file = config_file / 'neuropixel_wirings.json'
+    if not config_file.exists():
+        _logger.warning(f"No neuropixel_wirings.json file found in {str(config_file)}")
+        return
+    with open(config_file) as fid:
+        par = json.loads(fid.read())
+    return par
 
-    :param session_path: folder, string or pathlib.Path
-    :returns: a list of dictionaries with keys 'ap': apfile, 'lf': lffile and 'label'
+
+def _sync_map_from_hardware_config(hardware_config):
     """
-    ephys_files = []
-    for raw_ephys_apfile in Path(session_path).rglob('*.ap.bin'):
-        # first get the ap file
-        ephys_files.extend([Bunch({'label': None, 'ap': None, 'lf': None})])
-        ephys_files[-1].ap = raw_ephys_apfile
-        # then get the corresponding lf file if it exists
-        lf_file = raw_ephys_apfile.parent / raw_ephys_apfile.name.replace('.ap.', '.lf.')
-        if lf_file.exists():
-            ephys_files[-1].lf = lf_file
-        # finally, the label is the current directory except if it is bare in raw_ephys_data
-        if raw_ephys_apfile.parts[-2] != 'raw_ephys_data':
-            ephys_files[-1].label = raw_ephys_apfile.parts[-2]
-    return ephys_files
+    :param hardware_config: dictonary from json read of neuropixel_wirings.json
+    :return: dictionary where key names refer to object and values to sync channel index
+    """
+    sync_map = {hardware_config['SYNC_WIRING'][pin]: neuropixel.SYNC_PIN_OUT[pin] for pin in
+                hardware_config['SYNC_WIRING'] if neuropixel.SYNC_PIN_OUT[pin]}
+    return sync_map
+
+
+def get_sync_map(folder_ephys):
+    hc = get_hardware_config(folder_ephys)
+    if not hc:
+        _logger.warning(f"Uses defaults sync map for {str(folder_ephys)}")
+        return SYNC_CHANNEL_MAP
+    else:
+        return _sync_map_from_hardware_config(hc)
 
 
 def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
@@ -400,7 +403,8 @@ def align_with_bpod(session_path):
 
 def extract_sync(session_path, save=False, force=False):
     """
-    Reads ephys binary file (s) and extract sync
+    Reads ephys binary file (s) and extract sync whithin the binary file folder
+    Assumes ephys data is whithin a `raw_ephys_data` folder
 
     :param session_path: '/path/to/subject/yyyy-mm-dd/001'
     :param save: Bool, defaults to False
@@ -408,21 +412,20 @@ def extract_sync(session_path, save=False, force=False):
     :return: list of sync dictionaries
     """
     session_path = Path(session_path)
-    output_path = session_path / 'alf'
     raw_ephys_path = session_path / 'raw_ephys_data'
-    if not output_path.exists():
-        output_path.mkdir()
-    ephys_files = _get_ephys_files(raw_ephys_path)
+    ephys_files_info = glob_ephys_files(raw_ephys_path)
     syncs = []
-    for ephys_file in ephys_files:
-        glob_filter = '*' + ephys_file.label + '*'
-        file_exists = alf.io.exists(output_path, object='_spikeglx_sync', glob=glob_filter)
+    for efi in ephys_files_info:
+        glob_filter = '*' + efi.label + '*'
+        if not efi.get('ap', None):
+            continue
+        file_exists = alf.io.exists(efi.ap.parent, object='_spikeglx_sync', glob=glob_filter)
         if not force and file_exists:
-            _logger.warning('Skipping: spike GLX sync found for probe: ' + ephys_file.label)
-            sync = alf.io.load_object(output_path, object='_spikeglx_sync', glob=glob_filter)
+            _logger.warning('Skipping: spike GLX sync found for probe: ' + efi.label)
+            sync = alf.io.load_object(efi.ap.parent, object='_spikeglx_sync', glob=glob_filter)
         else:
-            sr = ibllib.io.spikeglx.Reader(ephys_file.ap)
-            sync = _sync_to_alf(sr, output_path, save=save, parts=ephys_file.label)
+            sr = ibllib.io.spikeglx.Reader(efi.ap)
+            sync = _sync_to_alf(sr, efi.ap.parent, save=save, parts=efi.label)
         syncs.extend([sync])
     return syncs
 
@@ -439,11 +442,11 @@ def extract_all(session_path, save=False):
     :param version: bpod version, defaults to None
     :return: None
     """
-    output_path = session_path / 'alf'
+    alf_path = session_path / 'alf'
     syncs = extract_sync(session_path, save=False)
     if isinstance(syncs, list) and len(syncs) > 1:
         raise NotImplementedError('Task extraction of multiple probes not ready, contact us !')
-    extract_wheel_sync(syncs[0], output_path, save=save)
-    extract_behaviour_sync(syncs[0], output_path, save=save)
+    extract_wheel_sync(syncs[0], alf_path, save=save)
+    extract_behaviour_sync(syncs[0], alf_path, save=save)
     align_with_bpod(session_path)  # checks consistency and compute dt with bpod
-    # TODO Extract camera time-stamps
+    # TODO get camera time-stamps

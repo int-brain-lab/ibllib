@@ -291,17 +291,20 @@ def get_feedback_times_ge5(session_path, data=False):
     if not data:
         data = raw.load_data(session_path)
 
-    rw_times, err_sound_times = [np.zeros([len(data), 1]) for _ in range(2)]
+    rw_times, err_sound_times, merge = [np.zeros([len(data), ]) for _ in range(3)]
     for ind, tr in enumerate(data):
-        st = np.array(tr['behavior_data']['Events timestamps']['BNC2High'])
+        st = getattr(tr['behavior_data']['Events timestamps'], 'BNC2High',
+                     np.array([np.nan, np.nan]))
         # xonar soundcard duplicates events, remove consecutive events too close together
         st = np.delete(st, np.where(np.diff(st) < 0.020)[0] + 1)
         rw_times[ind] = tr['behavior_data']['States timestamps']['reward'][0][0]
         # get the error sound only if the reward is nan
         err_sound_times[ind] = st[-1] if st.size >= 2 and np.isnan(rw_times[ind]) else np.nan
+    merge *= np.nan
+    merge[~np.isnan(rw_times)] = rw_times[~np.isnan(rw_times)]
+    merge[~np.isnan(err_sound_times)] = err_sound_times[~np.isnan(err_sound_times)]
 
-    merge = np.c_[rw_times, err_sound_times]
-    return merge[~np.isnan(merge)]
+    return merge
 
 
 def get_feedback_times(session_path, save=False, data=False, settings=False):
@@ -641,23 +644,29 @@ def get_goCueOnset_times(session_path, save=False, data=False, settings=False):
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
 
-    go_cue_times = []
-    for tr in data:
+    go_cue_times = np.zeros([len(data), ])
+    for ind, tr in enumerate(data):
         if get_port_events(tr, 'BNC2'):
-            go_cue_times.append(tr['behavior_data']['Events timestamps']['BNC2High'][0])
+            bnchigh = tr['behavior_data']['Events timestamps'].get('BNC2High', None)
+            if bnchigh:
+                go_cue_times[ind] = bnchigh[0]
+                continue
+            bnclow = tr['behavior_data']['Events timestamps'].get('BNC2Low', None)
+            if bnclow:
+                go_cue_times[ind] = bnclow[0] - 0.1
+                continue
+            go_cue_times[ind] = np.nan
         else:
-            go_cue_times.append(np.nan)
-
-    go_cue_times = np.array(go_cue_times)
+            go_cue_times[ind] = np.nan
 
     nmissing = np.sum(np.isnan(go_cue_times))
     # Check if all stim_syncs have failed to be detected
     if np.all(np.isnan(go_cue_times)):
-        logger_.error(f'{session_path}: Missing ALL BNC1 stimulus ({nmissing} trials')
+        logger_.error(f'{session_path}: Missing ALL BNC2 stimulus ({nmissing} trials')
 
     # Check if any stim_sync has failed be detected for every trial
     if np.any(np.isnan(go_cue_times)):
-        logger_.warning(f'{session_path}: Missing BNC1 stimulus on {nmissing} trials')
+        logger_.warning(f'{session_path}: Missing BNC2 stimulus on {nmissing} trials')
 
     if raw.save_bool(save, '_ibl_trials.goCue_times.npy'):
         check_alf_folder(session_path)
