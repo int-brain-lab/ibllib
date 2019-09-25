@@ -228,9 +228,9 @@ def plot_pairwise_correlations_mult(means, stderrs, colvec, n_dims=None, region_
     Plot CCA correlations for multiple pairs of regions, for multiple behavioural events
 
     :param means: list of lists; means[k][i][j] contains the mean corrs between regions i, j for
-    behavioral event k
+        behavioral event k
     :param stderrs: list of lists; stderrs[k][i][j] contains std errors of corrs between
-    regions i, j for behavioral event k
+        regions i, j for behavioral event k
     :param colvec: color vector [must be a better way for this]
     :param n_dims: number of CCA dimensions to plot
     :param region_strs: list of strings identifying each region
@@ -280,19 +280,20 @@ def plot_pairwise_correlations_mult(means, stderrs, colvec, n_dims=None, region_
     return fig
 
 
-def bin_spikes_trials(spikes, trials, T_BIN=0.01):
+def bin_spikes_trials(spikes, trials, bin_size=0.01):
     """
     Binarizes the spike times into a raster and assigns a trial number to each bin
+
     :param spikes: spikes object
     :type spikes: Bunch
     :param trials: trials object
     :type trials: Bunch
-    :param T_BIN: size, in s, of the bins
-    :type T_BIN: float
+    :param bin_size: size, in s, of the bins
+    :type bin_size: float
     :return: a matrix (bins, SpikeCounts), and a vector of bins size with trial ID,
     and a vector bins size with the time that the bins start
     """
-    binned_spikes, bin_times, _ = bincount2D(spikes['times'], spikes['clusters'], T_BIN)
+    binned_spikes, bin_times, _ = bincount2D(spikes['times'], spikes['clusters'], bin_size)
     trial_start_times = trials['intervals'][:, 0]
     binned_trialIDs = np.digitize(bin_times, trial_start_times)
     # correct, as index 0 is whatever happens before the first trial
@@ -303,9 +304,10 @@ def bin_spikes_trials(spikes, trials, T_BIN=0.01):
 
 def split_by_area(binned_spikes, cl_brainAcronyms, active_clusters, brain_areas):
     """
-    This function converts a matrix of binned spikes into a list of matrices,
-    with the clusters grouped by brain areas
-    :param binned_spikes: binned spike data of shape (timebins, Clusters)
+    This function converts a matrix of binned spikes into a list of matrices, with the clusters
+    grouped by brain areas
+
+    :param binned_spikes: binned spike data of shape (n_bins, n_lusters)
     :type binned_spikes: numpy.ndarray
     :param cl_brainAcronyms: brain region for each cluster
     :type cl_brainAcronyms: pandas.core.frame.DataFrame
@@ -335,6 +337,7 @@ def split_by_area(binned_spikes, cl_brainAcronyms, active_clusters, brain_areas)
 def get_event_bin_indexes(event_times, bin_times, window):
     """
     Get the indexes of the bins corresponding to a specific behavioral event within a window
+
     :param event_times: time series of an event
     :type event_times: numpy.array
     :param bin_times: time series pf starting point of bins
@@ -364,7 +367,6 @@ def get_event_bin_indexes(event_times, bin_times, window):
     return idx_array.astype(int)
 
 
-
 if __name__ == '__main__':
 
     from pathlib import Path
@@ -379,77 +381,67 @@ if __name__ == '__main__':
     RNG_SEED = 0
 
     # get the data from flatiron
-    # subject = 'ZM_1735'
-    # date = '2019-08-01'
-    # number = 1
+    subject = 'KS005'
+    date = '2019-08-30'
+    number = 1
 
-    # one = ONE()
-    # eid = one.search(subject=subject, date=date, number=number)
-    # D = one.load(eid[0], download_only=True)
-    # session_path = Path(D.local_path[0]).parent
-    # session_path = "/home/hmvergara/Downloads/FlatIron/mnt/s0/Data/Subjects/ZM_1735/2019-08-01/001/alf/"
-    session_path = "/home/hmvergara/Downloads/FlatIron/KS005/2019-08-29/001/alf/"
+    one = ONE()
+    eid = one.search(subject=subject, date=date, number=number)
+    D = one.load(eid[0], download_only=True)
+    session_path = Path(D.local_path[0]).parent
+
     spikes = ioalf.load_object(session_path, 'spikes')
     clusters = ioalf.load_object(session_path, 'clusters')
     # channels = ioalf.load_object(session_path, 'channels')
     trials = ioalf.load_object(session_path, '_ibl_trials')
 
-    # # bin spikes and get trial IDs associated with them
-    # binned_spikes, binned_trialIDs = bin_spikes_trials(spikes, trials, T_BIN=0.01)
-
-    # # extract 2 populations
-    # data = [binned_spikes[:100, :].T, binned_spikes[100:200, :].T]
-
-    # # preprocess data
-    # for i, pop in enumerate(data):
-    #     data[i] = preprocess(pop, n_pcs=PCA_DIMS, smoothing_sd=SMOOTH_SIZE)
-
-    # # split trials
-    # idxs_trial = split_trials(np.unique(binned_trialIDs), n_splits=N_SPLITS, rng_seed=RNG_SEED)
-    # # get train/test indices into spike arrays
-    # idxs_time = split_timepoints(binned_trialIDs, idxs_trial)
-
-    # # fit cca
-    # cca = fit_cca(
-    #     data[0][idxs_time['train'], :], data[1][idxs_time['train'], :], n_cca_dims=CCA_DIMS)
-
-    # # plot cca correlations
-    # corrs = get_correlations(cca, data[0][idxs_time['test'], :], data[1][idxs_time['test'], :])
-    # plot_correlations(corrs)
-
-    ## Generate a matrix of correlations (biggest correlation found) between all pairwise areas
     # bin spikes and get trial IDs associated with them
-    binned_spikes, binned_trialIDs = bin_spikes_trials(spikes, trials, T_BIN=0.01)
+    binned_spikes, binned_trialIDs, _ = bin_spikes_trials(spikes, trials, bin_size=0.01)
+
+    # define areas
+    brain_areas = np.unique(clusters.brainAcronyms)
+    brain_areas = brain_areas[1:4]  # [take subset for testing]
+
+    # split data by brain area
+    # (bin_spikes_trials does not return info for innactive clusters)
+    active_clusters = np.unique(spikes['clusters'])
+    split_binned_spikes = split_by_area(
+        binned_spikes, clusters.brainAcronyms, active_clusters, brain_areas)
+
+    # preprocess data
+    for i, pop in enumerate(split_binned_spikes):
+        split_binned_spikes[i] = preprocess(pop, n_pcs=PCA_DIMS, smoothing_sd=SMOOTH_SIZE)
+
     # split trials
     idxs_trial = split_trials(np.unique(binned_trialIDs), n_splits=N_SPLITS, rng_seed=RNG_SEED)
     # get train/test indices into spike arrays
     idxs_time = split_timepoints(binned_trialIDs, idxs_trial)
-    # Define areas
-    brain_areas = np.unique(clusters.brainAcronyms)
-    # [subset for testing] DELETE
-    brain_areas = brain_areas[1:4]
-
-    # Split/create populations
-    # bin_spikes_trials does not return info for innactive clusters
-    active_clusters = np.unique(spikes['clusters'])
-    split_binned_spikes = split_by_area(binned_spikes, clusters.brainAcronyms,
-                                        active_clusters, brain_areas)
 
     # Create empty "matrix" to store cca objects
-    cca_mat = [[None for _ in range(len(brain_areas))] for _ in range(len(brain_areas))]
-
+    n_regions = len(brain_areas)
+    cca_mat = [[None for _ in range(n_regions)] for _ in range(n_regions)]
+    means_list = [[None for _ in range(n_regions)] for _ in range(n_regions)]
+    serrs_list = [[None for _ in range(n_regions)] for _ in range(n_regions)]
     # For each pair of populations:
     for i in range(len(brain_areas)):
-        pop1 = split_binned_spikes[i].T
+        pop_0 = split_binned_spikes[i]
         for j in range(len(brain_areas)):
-            if j > i:
-                pop2 = split_binned_spikes[j].T
-                # fit cca
-                cca = fit_cca(
-                    pop1[idxs_time['train'], :], pop2[idxs_time['train'], :], n_cca_dims=CCA_DIMS)
-                # populate matrix
-                cca_mat[i][j] = cca
+            if j < i:
                 # print progress
-                print("{} / {}".format(i, j))
+                print('Fitting CCA on regions {} / {}'.format(i, j))
+                pop_1 = split_binned_spikes[j]
+                ccas = [None for _ in range(N_SPLITS)]
+                corrs = [None for _ in range(N_SPLITS)]
+                # for each xv fold
+                for k, idxs in enumerate(idxs_time):
+                    ccas[k] = fit_cca(
+                        pop_0[idxs['train'], :], pop_1[idxs['train'], :], n_cca_dims=CCA_DIMS)
+                    corrs[k] = get_correlations(
+                        ccas[k], pop_0[idxs['test'], :], pop_1[idxs['test'], :])
+                cca_mat[i][j] = ccas[k]
+                vals = np.stack(corrs, axis=1)
+                means_list[i][j] = np.mean(vals, axis=1)
+                serrs_list[i][j] = np.std(vals, axis=1) / np.sqrt(N_SPLITS)
 
-    # Plot matrix
+    # plot matrix of correlations
+    fig = plot_pairwise_correlations(means_list, serrs_list, n_dims=10, region_strs=brain_areas)
