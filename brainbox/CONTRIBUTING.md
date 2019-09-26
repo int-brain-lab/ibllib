@@ -24,7 +24,9 @@ We suggest using [Anaconda](https://www.anaconda.com/distribution/), which is de
 Once you have installed Anaconda, the next step is to create an environment for working with brainbox. This requires you to have the `environment.yml` file which lives in the top directory of this repository. We will just clone the whole repository now though, since you will need it later, using the following command on *nix systems:
 
 ```bash
-git clone https://github.com/int-brain-lab/brainbox
+git clone https://github.com/int-brain-lab/ibllib/
+cd ./ibllib
+git checkout brainbox
 ```
 
 Note: please navigate to the folder where you want to run this command beforehand, e.g. `/home/username/Documents` if you want the `brainbox` repository to live in your Documents folder
@@ -47,7 +49,7 @@ if you are developing from the terminal, in order to activate the environment yo
 
 # Git, GitFlow, and you (15 minutes)
 
-**TL;DR: We use [Git](https://rogerdudler.github.io/git-guide/) with a [GitFlow](https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow) workflow to develop Brainbox. Please create new feature branches of `develop` for writing code and then make a pull request to have it added to `develop`.**
+**TL;DR: We use [Git](https://rogerdudler.github.io/git-guide/) with a [GitFlow](https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow) workflow to develop Brainbox. Please create new feature branches of `brainbox` for writing code and then make a pull request to have it added to `brainbox`.**
 
 For those unfamiliar with it, Git is a system for *version control*, which allows you to make changes to whatever you put into it (Git isn't limited to just code!) that are:
 
@@ -64,17 +66,11 @@ This way you can keep a version of your code that you know works (called `master
 
 For an explanation of the basics of Git, [this guide by Roger Dudler](http://git.huit.harvard.edu/guide/) is a necessary five-minute read on the basics of manipulating a repository.
 
-Brainbox uses [GitFlow](https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow) as a model for how to organize our repository. This means that there are two main branches that always exist, `master` and `develop`, the latter of which is the basis for all development of the toolbox. If you want to incorporate a new feature into the repository, e.g. a raster plot, you can run the following git command in your repository:
-
-```bash
-git flow feature start rasterplot
-```
-
-and Git will automatically create a new branch for you to work on and make it active. Once you've created a few commits and feel confident that your code is working well, you can create a pull request on GitHub so we can incorporate your code into the `develop` branch for future release.
+Brainbox uses [GitFlow](https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow) as a model for how to organize our repository. This means that there are two main branches that always exist, `master` and `develop`, the latter of which we have renamed `brainbox`, as brainbox is a part of `ibllib`. `brainbox` is the basis for all development of the toolbox.
 
 
 # Writing code for Brainbox
 
-We require all code in Brainbox to conform to [PEP8](https://www.python.org/dev/peps/pep-0008/) guidelines, with [Numpy-style](https://numpydoc.readthedocs.io/en/latest/format.html) docstrings. We require all contributors to use `flake8` as a linter to check their code before a pull request.
+We require all code in Brainbox to conform to [PEP8](https://www.python.org/dev/peps/pep-0008/) guidelines, with [Numpy-style](https://numpydoc.readthedocs.io/en/latest/format.html) docstrings. We require all contributors to use `flake8` as a linter to check their code before a pull request. Please check the `.flake8` file in the top level of `ibllib` for an exact specification for how to set up your particular instance of flake8.
 
 [MORE GUIDELINES HERE PLEASE]
