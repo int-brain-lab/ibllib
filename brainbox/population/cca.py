@@ -223,7 +223,8 @@ def plot_pairwise_correlations(means, stderrs=None, n_dims=None, region_strs=Non
     return fig
 
 
-def plot_pairwise_correlations_mult(means, stderrs, colvec, n_dims=None, region_strs=None, **kwargs):
+def plot_pairwise_correlations_mult(
+        means, stderrs, colvec, n_dims=None, region_strs=None, **kwargs):
     """
     Plot CCA correlations for multiple pairs of regions, for multiple behavioural events
 
@@ -320,7 +321,7 @@ def split_by_area(binned_spikes, cl_brainAcronyms, active_clusters, brain_areas)
     # TODO: check that this is doing what it is suppossed to!!!
 
     # TODO: check that input is as expected
-    #   
+    #
     # initialize list
     listof_bs = []
     for b_area in brain_areas:
@@ -330,7 +331,6 @@ def split_by_area(binned_spikes, cl_brainAcronyms, active_clusters, brain_areas)
         cl_idx_in_area = np.isin(active_clusters, cl_in_area)
         bs_in_area = binned_spikes[:, cl_idx_in_area]
         listof_bs.append(bs_in_area)
- 
     return listof_bs
 
 
@@ -361,7 +361,7 @@ def get_event_bin_indexes(event_times, bin_times, window):
         # add the window
         arr_to_append = np.array(range(start_idx, start_idx + bin_window))
         idx_array = np.concatenate((idx_array, arr_to_append), axis=None)
-    
+
     # remove the non-existing bins if any
 
     return idx_array.astype(int)
