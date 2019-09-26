@@ -31,9 +31,16 @@ def merge_probes(ses_path):
     if len(subdirs) == 1:
         ks2_to_alf(subdirs[0], ses_path / 'alf')
         return
+    else:
+        _logger.info('converting individual spike-sorting outputs to ALF')
+        for subdir in subdirs:
+            ks2_to_alf(subdir, subdir / 'ks2_alf')
+
     md = spikeglx.read_meta_data(ephys_files[0].get('ap').with_suffix('.meta'))
     sampling_rate = spikeglx._get_fs_from_meta(md)
-    mt = merge.probes(subdirs=subdirs, out_dir=out_dir, labels=labels, sampling_rate=sampling_rate)
+    probe_info = [{'label': lab} for lab in labels]
+
+    mt = merge.Merger(subdirs=subdirs, out_dir=out_dir, probe_info=probe_info).merge()
     # Create the cluster channels file, this should go in the model template as 2 methods
     tmp = mt.sparse_templates.data
     n_templates, n_samples, n_channels = tmp.shape
@@ -43,7 +50,7 @@ def merge_probes(ses_path):
     spike_probes = cluster_probes[spike_clusters_rel]
 
     # sync spikes according to the probes
-    # how do you make sure they match the files: todo add probe description in the template
+    # how do you make sure they match the files:
     for ind, probe in enumerate(ephys_files_sorted):
         assert(labels[ind] == probe.label)  # paranoid, make sure they are sorted
         if not probe.get('ap'):
@@ -61,7 +68,6 @@ def merge_probes(ses_path):
     # And convert to ALF
     ac = alf.EphysAlfCreator(mt)
     ac.convert(ses_path / 'alf')
-
     # remove the temporary directory
     shutil.rmtree(out_dir)
 

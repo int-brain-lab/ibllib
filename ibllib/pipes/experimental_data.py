@@ -10,10 +10,9 @@ import subprocess
 
 from ibllib.io import flags
 from ibllib.pipes import extract_session
-from ibllib.ephys import ephysqc
+from ibllib.ephys import ephysqc, spikes, sync_probes
 from oneibl.registration import RegistrationClient
 from oneibl.one import ONE
-
 
 logger = logging.getLogger('ibllib')
 # set the logging level to paranoid
@@ -106,6 +105,9 @@ def _compress(root_data_folder, command, flag_pattern, dry=False, max_sessions=N
 
 
 def qc_ephys(root_data_folder, dry=False, max_sessions=10, force=False):
+    """
+    Computes raw electrophysiology QC
+    """
     qcflags = Path(root_data_folder).rglob('qc_ephys.flag')
     c = 0
     for qcflag in qcflags:
@@ -119,3 +121,14 @@ def qc_ephys(root_data_folder, dry=False, max_sessions=10, force=False):
         qc_files = ephysqc.qc_session(session_path, dry=dry, force=force)
         qcflag.unlink()
         flags.write_flag_file(session_path.joinpath('register_me.flag'), file_list=qc_files)
+
+
+def sync_merge_ephys(root_data_folder, dry=False, force=False):
+    """
+    Sync probes and merge spike sorting output.
+    For single probe dataset, output ks2 as ALF dataset
+    """
+    root_data_folder = Path(root_data_folder)
+    sync_probes.sync(root_data_folder)
+    spikes.merge_probes(root_data_folder)
+    flags.write_flag_file(root_data_folder.joinpath('register_me.flag'))

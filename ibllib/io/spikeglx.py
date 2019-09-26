@@ -316,6 +316,18 @@ def split_sync(sync_tr):
     return np.int8(out)
 
 
+def get_neuropixel_version_from_folder(session_path):
+    ephys_files = glob_ephys_files(session_path)
+    return get_neuropixel_version_from_files(ephys_files)
+
+
+def get_neuropixel_version_from_files(ephys_files):
+    if any([ef.get('nidq') for ef in ephys_files]):
+        return '3B'
+    else:
+        return '3A'
+
+
 def glob_ephys_files(session_path):
     """
     From an arbitrary folder (usually session folder) gets the ap and lf files and labels

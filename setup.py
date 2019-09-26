@@ -39,6 +39,7 @@ install_requires = [
     'seaborn>=0.9.0',
     'flake8>=3.7.8',
     'opencv-python>=4.1.1.26',
+    'tqdm',
     'phylib',
 ]
 

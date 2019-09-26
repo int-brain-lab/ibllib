@@ -24,6 +24,20 @@ def _save_timestamps_npy(ephys_file, timestamps):
     np.save(file_out, timestamps)
 
 
+def sync(ses_path, **kwargs):
+    """
+    Wrapper for sync_probes.version3A and sync_probes.version3B that automatically determines
+    the version
+    :param ses_path:
+    :return: bool True on a a successful sync
+    """
+    version = spikeglx.get_neuropixel_version_from_folder(ses_path)
+    if version == '3A':
+        version3A(ses_path, **kwargs)
+    elif version == '3B':
+        version3B(ses_path, **kwargs)
+
+
 def version3A(ses_path, display=True, linear=False, tol=1.5):
     """
     From a session path with _spikeglx_sync arrays extracted, locate ephys files for 3A and
@@ -31,15 +45,14 @@ def version3A(ses_path, display=True, linear=False, tol=1.5):
      probe is the one with the most synchronisation pulses.
      Assumes the _spikeglx_sync datasets are already extracted from binary data
     :param ses_path:
-    :return: None
+    :return: bool True on a a successful sync
     """
     ephys_files = ibllib.io.spikeglx.glob_ephys_files(ses_path)
     nprobes = len(ephys_files)
     if nprobes <= 1:
+        _logger.warning(f"Skipping single probe session: {ses_path}")
         return True
-
     d = Bunch({'times': [], 'nsync': np.zeros(nprobes, )})
-
     for ind, ephys_file in enumerate(ephys_files):
         sync = alf.io.load_object(ephys_file.ap.parent, '_spikeglx_sync', short_keys=True)
         sync_map = ibllib.io.spikeglx.get_sync_map(ephys_file.ap.parent) or CHMAPS['3A']
