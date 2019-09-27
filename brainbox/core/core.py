@@ -24,7 +24,8 @@ class TimeSeries(dict):
         a time stamp associated. TS objects have obligatory 'times' and 'values' entries which
         must be passed at construction, the length of both of which must match. TimeSeries takes an
         optional 'columns' argument, which defaults to None, that is a set of labels for the
-        columns in 'values'.
+        columns in 'values'. These are also exposed via the dot syntax as pointers to the specific
+        columns which they reference.
 
         :param times: an ordered object containing a list of timestamps for the time series data
         :param values: an ordered object containing the associated measurements for each time stamp

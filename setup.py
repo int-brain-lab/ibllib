@@ -39,12 +39,13 @@ install_requires = [
     'seaborn>=0.9.0',
     'flake8>=3.7.8',
     'opencv-python>=4.1.1.26',
+    'tqdm',
     'phylib',
 ]
 
 setup(
     name='ibllib',
-    version='1.1.10',
+    version='1.1.11',
     python_requires='>={}.{}'.format(*REQUIRED_PYTHON),
     description='IBL libraries',
     license="MIT",

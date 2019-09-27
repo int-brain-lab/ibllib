@@ -208,8 +208,17 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
     def test_glob_ephys(self):
         def dict_equals(d1, d2):
             return all([l in d1 for l in d2]) and all([l in d2 for l in d1])
-        self.assertTrue(dict_equals(self.dict3a, spikeglx.glob_ephys_files(self.dir3a)))
-        self.assertTrue(dict_equals(self.dict3b, spikeglx.glob_ephys_files(self.dir3b)))
+        ef3b = spikeglx.glob_ephys_files(self.dir3b)
+        ef3a = spikeglx.glob_ephys_files(self.dir3a)
+        # test glob
+        self.assertTrue(dict_equals(self.dict3a, ef3a))
+        self.assertTrue(dict_equals(self.dict3b, ef3b))
+        # test the version from glob
+        self.assertTrue(spikeglx.get_neuropixel_version_from_files(ef3a) == '3A')
+        self.assertTrue(spikeglx.get_neuropixel_version_from_files(ef3b) == '3B')
+        # test the version from paths
+        self.assertTrue(spikeglx.get_neuropixel_version_from_folder(self.dir3a) == '3A')
+        self.assertTrue(spikeglx.get_neuropixel_version_from_folder(self.dir3b) == '3B')
 
     def tearDown(self):
         shutil.rmtree(self.tmpdir)

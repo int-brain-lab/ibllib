@@ -11,7 +11,7 @@ import ibllib.plots as plots
 import ibllib.io.spikeglx
 import ibllib.dsp as dsp
 import alf.io
-from ibllib.io.spikeglx import glob_ephys_files
+from ibllib.io.spikeglx import glob_ephys_files, get_neuropixel_version_from_files
 
 _logger = logging.getLogger('ibllib')
 
@@ -408,17 +408,10 @@ def extract_sync(session_path, save=False, force=False, ephys_files=None):
     return syncs
 
 
-def _get_probe_version_from_files(ephys_files):
-    if any([ef.get('nidq') for ef in ephys_files]):
-        return '3B'
-    else:
-        return '3A'
-
-
 def _get_all_probes_sync(session_path):
     # round-up of all bin ephys files in the session, infer revision and get sync map
     ephys_files = glob_ephys_files(session_path)
-    version = _get_probe_version_from_files(ephys_files)
+    version = get_neuropixel_version_from_files(ephys_files)
     sync_chmap = CHMAPS[version]
     extract_sync(session_path, save=True)
     # attach the sync information to each binary file found
@@ -439,7 +432,7 @@ def _get_main_probe_sync(session_path):
     ephys_files = _get_all_probes_sync(session_path)
     if not ephys_files:
         raise FileNotFoundError(f"No ephys files found in {session_path}")
-    version = _get_probe_version_from_files(ephys_files)
+    version = get_neuropixel_version_from_files(ephys_files)
     if version == '3A':
         # the sync master is the probe with the most sync pulses
         sync_box_ind = np.argmax([ef.sync.times.size for ef in ephys_files])

@@ -9,7 +9,7 @@ from scipy import interpolate
 from brainbox import core
 
 
-def sync(dt, timeseries=None, times=None, values=None, offsets=None, interp='zero',
+def sync(dt, times=None, values=None, timeseries=None, offsets=None, interp='zero',
          fillval=np.nan):
     """
     Function for resampling a single or multiple time series to a single, evenly-spaced, delta t
