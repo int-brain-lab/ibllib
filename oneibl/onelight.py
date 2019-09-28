@@ -12,7 +12,7 @@ from collections import defaultdict
 import hashlib
 import json
 import logging
-from operator import itemgetter
+# from operator import itemgetter
 import os.path as op
 from pathlib import Path
 import re
@@ -87,12 +87,80 @@ def is_documented_by(original):
 
 
 # -------------------------------------------------------------------------------------------------
+# Config
+# -------------------------------------------------------------------------------------------------
+
+def config_dir():
+    """Path to the config directory."""
+    return Path.home() / '.one/'
+
+
+def repo_dir():
+    """Path to the local directory of the repository."""
+    return config_dir() / 'data' / repository().name
+
+
+def config_file():
+    """Path to the config file."""
+    return config_dir() / 'config.json'
+
+
+def default_config():
+    """Return an empty configuration dictionary."""
+    return {
+        "download_dir": "~/.one/data/{repository}/{lab}/Subjects/{subject}/{date}/{number}/alf/",
+        "repositories": [
+            {
+                "type": "http",
+                "name": "myhttpwebsite",
+                "login": "",
+                "password": "",
+                "base_url": "http://myhttpwebsite.com/"
+            },
+            {
+                "type": "figshare",
+                "name": "myfigsharearticle",
+                "token": "",  # get a figshare personal token
+                "article_id": 0,  # figshare article id
+            }
+        ],
+        "current_repository": None,
+    }
+
+
+def get_config():
+    """Return the config file dictionary."""
+    # Create a default config file if there is none.
+    path = config_file()
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        set_config(default_config())
+    # Open the config file.
+    with open(path, 'r') as f:
+        return json.load(f)
+
+
+def set_config(config):
+    """Set the config file."""
+    with open(config_file(), 'w') as f:
+        json.dump(config, f, indent=2, sort_keys=True)
+
+
+# -------------------------------------------------------------------------------------------------
 # File scanning and root file creation
 # -------------------------------------------------------------------------------------------------
 
 def read_root_file(path):
     with open(path) as f:
         for line in csv.reader(f, delimiter='\t'):
+            # If single column, prepend the base URL.
+            if len(line) == 1:
+                rel_path = line[0]
+                base_url = repository().get('base_url', None) or ''
+                line = [rel_path, urllib.parse.urljoin(base_url, line[0])]
+            assert len(line) == 2
+            assert isinstance(line[0], str)
+            assert isinstance(line[1], str)
             yield line[0], line[1]
 
 
@@ -148,6 +216,10 @@ def make_http_root_file(root, base_url, output):
     write_root_file(output, ((rp, urllib.parse.urljoin(base_url, rp)) for rp in relative_paths))
 
 
+# -------------------------------------------------------------------------------------------------
+# Download and load
+# -------------------------------------------------------------------------------------------------
+
 def download_file(url, save_to, auth=None):
     """Download a file from HTTP and save it to a file.
     If Basic HTTP authentication is needed, pass `auth=(username, password)`.
@@ -169,13 +241,19 @@ def download_file(url, save_to, auth=None):
 
 def default_download_dir():
     """Default download directory on the client computer, with {...} placeholders fields."""
-    return '~/.one/data/{lab}/Subjects/{subject}/{date}/{number}/alf/'
+    return '~/.one/data/{repository}/{lab}/Subjects/{subject}/{date}/{number}/alf/'
+
+
+def download_dir():
+    """Return the download directory."""
+    return get_config().get('download_dir', None)
 
 
 def format_download_dir(session, download_dir):
     """Replace the placeholder fields in the download directory by the appropriate values for
     a given session."""
     session_info = _parse_session_path(session)
+    session_info['repository'] = repository.name
     download_dir = download_dir.format(**session_info)
     return Path(download_dir).expanduser()
 
@@ -301,51 +379,14 @@ def _search(root_file_iterator, regex):
 
 
 # -------------------------------------------------------------------------------------------------
-# Config
-# -------------------------------------------------------------------------------------------------
-
-def config_dir():
-    """Path to the config directory."""
-    return Path.home() / '.one/'
-
-
-def config_file():
-    """Path to the config file."""
-    return config_dir() / 'config.json'
-
-
-def get_config():
-    """Return the config file dictionary."""
-    # Create a default config file if there is none.
-    path = config_file()
-    if not path.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        write_config(**default_config())
-    # Open the config file.
-    with open(path, 'r') as f:
-        return json.load(f)
-
-
-def write_config(**kwargs):
-    """Write some key-value pairs in the config file."""
-    if config_file().exists():
-        config = get_config()
-    else:
-        config = {}
-    config.update(kwargs)
-    with open(config_file(), 'w') as f:
-        json.dump(config, f, indent=2, sort_keys=True)
-
-
-# -------------------------------------------------------------------------------------------------
-# HTTP ONE class
+# HTTP ONE
 # -------------------------------------------------------------------------------------------------
 
 class HttpOne:
     def __init__(self, root_file=None, download_dir=None, auth=None):
         self.root_file = root_file
         self.download_dir = download_dir or default_download_dir()
-        self.auth = auth or None
+        self.auth = auth
 
     def _download_dataset(self, session, filename, url, dry_run=False):
         save_to_dir = Path(format_download_dir(session, self.download_dir))
@@ -357,8 +398,12 @@ class HttpOne:
             logger.debug("Skip %s.", save_to)
         return save_to
 
-    def search(self, dataset_types, **kwargs):
+    def search(self, dataset_types=(), **kwargs):
         """Search all sessions that have all requested dataset types."""
+        if not dataset_types:
+            # All sessions.
+            return sorted(
+                set('/'.join(_[0].split('/')[:5]) for _ in read_root_file(self.root_file)))
         dataset_types = [(dst + '*' if '*' not in dst else dst) for dst in dataset_types]
         filter_kwargs = {
             'lab': kwargs.get('lab', None),
@@ -420,14 +465,14 @@ class HttpOne:
 
 
 # -------------------------------------------------------------------------------------------------
-# figshare
+# figshare ONE
 # -------------------------------------------------------------------------------------------------
 
 _FIGSHARE_BASE_URL = 'https://api.figshare.com/v2/{endpoint}'
 
 
 def figshare_request(endpoint=None, data=None, method='GET', url=None, binary=False):
-    headers = {'Authorization': 'token ' + get_config().get('figshare_token', None)}
+    headers = {'Authorization': 'token ' + repository().get('token', None)}
     if data is not None and not binary:
         data = json.dumps(data)
     response = requests.request(
@@ -520,7 +565,7 @@ def figshare_upload_dir(root_dir, article_id, dry_run=False):
 
 def find_figshare_root_file(article_id):
     """Download and return the local path to the ONE root file of a figshare article."""
-    root_file = config_dir() / ('figshare/%s/.one_root' % article_id)
+    root_file = repo_dir() / '.one_root'
     if root_file.exists():
         return root_file
     # If the root file does not exist, find it on figshare.
@@ -542,54 +587,67 @@ class FigshareOne(HttpOne):
 # ONE singleton
 # -------------------------------------------------------------------------------------------------
 
-_ONE_SINGLETON = None
+
+_CURRENT_REPOSITORY = None
+_CURRENT_ONE = None
 
 
-def _make_http_one():
+def set_repository(name=None):
+    """Set the current repository."""
+    config = get_config()
+    name = name or config.get('current_repository', None)
+    repos = config.get('repositories', [])
+    if not repos:
+        raise RuntimeError("No repository has been configured.")
+    for repo in repos:
+        repo = Bunch(repo)
+        if repo.name == name:
+            globals()['_CURRENT_REPOSITORY'] = repo
+            break
+    config['current_repository'] = repo.name
+    set_config(config)
+    logger.debug("Current repository is %s.", repo.name)
+    return repo
+
+
+def repository():
+    """Get the current repository."""
+    if not globals()['_CURRENT_REPOSITORY']:
+        globals()['_CURRENT_REPOSITORY'] = set_repository()
+    return Bunch(globals()['_CURRENT_REPOSITORY'])
+
+
+def _make_http_one(repo):
     """Create a new HttpOne instance based on the config file."""
-    # Full config dict.
-    config = get_config()
-    # Get the config key-value pairs where the key starts with http_config_.
-    # Config keys are [http_config_<x>] where <x> is: root_file, base_url, download_dir, auth
-    kwargs = {
-        k.replace('http_config_', ''): v
-        for k, v in config.items() if k.startswith('http_config_')}
-    auth = kwargs.get('auth') or None
-    kwargs['auth'] = tuple(auth) if auth else None
-    # This is then passed to the HttpOne() constructor.
-    return HttpOne(**kwargs)
+    # Optional authentication.
+    auth = (repo.login, repo.get('password', None)) if 'login' in repo else None
+    # Download the root file from the HTTP server.
+    root_file = repo_dir() / '.one_root'
+    if not root_file.exists():
+        root_url = urllib.parse.urljoin(repo.base_url, '.one_root')
+        download_file(root_url, root_file, auth=auth)
+    assert root_file.exists()
+    return HttpOne(root_file=root_file, download_dir=download_dir(), auth=auth)
 
 
-def _make_figshare_one():
+def _make_figshare_one(repo):
     """Create a new FigshareOne instance based on the config file."""
-    # Full config dict.
-    # TODO: support for multiple ONE repositories
-    config = get_config()
-    token = config.get('figshare_token', None)
-    if not token:
-        return
-    article_id = config.get('figshare_article_id', None)
-    return FigshareOne(article_id=article_id, download_dir=config.get('download_dir', None))
+    return FigshareOne(article_id=repo.article_id, download_dir=download_dir())
 
 
 def get_one():
     """Get the singleton One instance, loading it from the config file, or using the singleton
     instance if it has already been instantiated."""
-    if globals()['_ONE_SINGLETON'] is None:
-        globals()['_ONE_SINGLETON'] = _make_figshare_one() or _make_http_one()
-    one = globals()['_ONE_SINGLETON']
-    assert one
-    return one
-
-
-def default_config():
-    return {
-        'http_config_root_file': '',
-        'http_config_base_url': '',
-        'download_dir': default_download_dir(),
-        'http_config_auth': None,
-        'figshare_token': '',
-    }
+    if globals()['_CURRENT_ONE'] is not None:
+        return globals()['_CURRENT_ONE']
+    repo = repository()
+    if repo.type == 'http':
+        globals()['_CURRENT_ONE'] = _make_http_one(repo)
+    elif repo.type == 'figshare':
+        globals()['_CURRENT_ONE'] = _make_figshare_one(repo)
+    else:
+        raise NotImplementedError(repo.type)
+    return globals()['_CURRENT_ONE']
 
 
 # -------------------------------------------------------------------------------------------------
@@ -602,10 +660,13 @@ def search_terms():
 
 def set_download_dir(path):
     """Set the download directory. May contain fields like {lab}, {subject}, etc."""
-    # Update the config file.
-    write_config(http_config_download_dir=path)
-    # Reload the HttpOne instance.
-    _make_http_one()
+    # Update the config dictionary.
+    config = get_config()
+    config['download_dir'] = path
+    set_config(config)
+    # Update the current ONE instance.
+    if globals()['_CURRENT_ONE']:
+        globals()['_CURRENT_ONE'].download_dir = path
 
 
 @is_documented_by(HttpOne.search)
@@ -632,10 +693,28 @@ def one():
     pass
 
 
+@one.command()
+@click.argument('name')
+def repo(name):
+    """Set the current repository."""
+    set_repository(name)
+
+
+@one.command()
+@click.argument('name', required=False)
+def show(name=None):
+    """Show the configured repositories."""
+    repos = get_config().get('repositories', [])
+    for repo in repos:
+        repo = Bunch(repo)
+        is_current = '*' if repo.name == repository().name else ''
+        click.echo(f'{is_current}{repo.name} ({repo.type})')
+
+
 @one.command('search')
 @click.argument('dataset_types', nargs=-1)
+@is_documented_by(search)
 def search_(dataset_types):
-    """Search for all sessions that have all requested dataset types."""
     # NOTE: underscore to avoid shadowing of public search() function.
     # TODO: other search options
     for session in search(dataset_types):
@@ -647,8 +726,7 @@ def search_(dataset_types):
 @click.argument('obj', required=False)
 @click.option('--dry-run', is_flag=True)
 def download(session, obj=None, dry_run=False):
-    """Download files in a given session by specifying a filename pattern (object,
-    object.attribute, possibly with wildcards)."""
+    """Download files in a given session."""
     for file_path in load_object(
             session, obj or '*', download_only=True, dry_run=dry_run).values():
         click.echo(file_path)
@@ -658,26 +736,28 @@ def download(session, obj=None, dry_run=False):
 @click.argument('root_dir')
 @click.option('--sessions-only', default=False, is_flag=True)
 def scan(root_dir, sessions_only=False):
-    """Scan all session files locally."""
+    """Scan all files locally."""
     for p in (find_session_files(root_dir) if not sessions_only else find_session_dirs(root_dir)):
         click.echo(str(p))
 
 
-@one.command()
-@click.argument('article_id')
-def figscan(article_id):
-    """Scan all session files on figshare."""
-    for rel_path, url in sorted(figshare_files(article_id), key=itemgetter(0)):
-        click.echo(rel_path)
+# @one.command()
+# def scan_remote():
+#     """Scan all session files on the current repository."""
+#     for rel_path, url in sorted(figshare_files(article_id), key=itemgetter(0)):
+#         click.echo(rel_path)
 
 
 @one.command()
 @click.argument('root_dir')
-@click.argument('article_id')
 @click.option('--dry-run', is_flag=True)
-def upload(root_dir, article_id, dry_run=False):
+def upload(root_dir, dry_run=False):
     """Upload a root directory to a figshare article."""
-    figshare_upload_dir(root_dir, article_id, dry_run=dry_run)
+    repo = repository()
+    if repo.type == 'http':
+        raise NotImplementedError("Upload not possible for HTTP repository.")
+    assert repo.type == 'figshare'
+    figshare_upload_dir(root_dir, repo.article_id, dry_run=dry_run)
 
 
 if __name__ == '__main__':
