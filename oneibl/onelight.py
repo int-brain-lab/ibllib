@@ -9,8 +9,10 @@
 
 import csv
 from collections import defaultdict
+import hashlib
 import json
 import logging
+from operator import itemgetter
 import os.path as op
 from pathlib import Path
 import re
@@ -18,6 +20,7 @@ import urllib.parse
 
 import click
 import requests
+from requests.exceptions import HTTPError
 # from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -102,7 +105,7 @@ def write_root_file(path, iterator):
 
 def walk(root):
     """Iterate over all files found within a root directory."""
-    for p in Path(root).rglob('*'):
+    for p in sorted(Path(root).rglob('*')):
         yield p
 
 
@@ -127,7 +130,7 @@ def find_session_dirs(root):
             yield p
 
 
-def search_session_files(root):
+def find_session_files(root):
     """Iterate over all files within session directories found within a root directory."""
     for p in walk(root):
         if is_file_in_session_dir(p):
@@ -141,7 +144,7 @@ def make_http_root_file(root, base_url, output):
     the <lab> subdirectories, so that the relative file paths are correctly obtained.
 
     """
-    relative_paths = (str(p.relative_to(root)) for p in search_session_files(root))
+    relative_paths = (str(p.relative_to(root)) for p in find_session_files(root))
     write_root_file(output, ((rp, urllib.parse.urljoin(base_url, rp)) for rp in relative_paths))
 
 
@@ -150,13 +153,18 @@ def download_file(url, save_to, auth=None):
     If Basic HTTP authentication is needed, pass `auth=(username, password)`.
     """
     save_to = Path(save_to)
-    logger.info("Downloading %s to %s.", url, str(save_to.parent))
-    response = requests.get(url, stream=True, auth=auth or None)
-    response.raise_for_status()
     save_to.parent.mkdir(parents=True, exist_ok=True)
-    with open(save_to, "wb") as f:
-        for data in response.iter_content():
+    logger.info("Downloading %s to %s.", url, str(save_to.parent))
+    if 'figshare.com/' in url:
+        data = figshare_request(url=url, binary=False)
+        with open(save_to, "wb") as f:
             f.write(data)
+    else:
+        response = requests.get(url, stream=True, auth=auth or None)
+        response.raise_for_status()
+        with open(save_to, "wb") as f:
+            for data in response.iter_content():
+                f.write(data)
 
 
 def default_download_dir():
@@ -271,8 +279,17 @@ def _parse_file_path(file_path):
     """Parse a file path."""
     m = FILE_REGEX.match(file_path)
     if not m:
-        raise ValueError("The file path `%s` is invalid.", file_path)
+        raise ValueError("The file path `%s` is invalid." % file_path)
     return {n: m.group(n) for n in ('lab', 'subject', 'date', 'number', 'filename')}
+
+
+def _get_file_rel_path(file_path):
+    """Get the lab/Subjects/subject/... part of a file path."""
+    file_path = str(file_path)
+    # Find the relative part of the file path.
+    i = file_path.index('/Subjects')
+    i = file_path[:i].rindex('/') + 1
+    return file_path[i:]
 
 
 def _search(root_file_iterator, regex):
@@ -325,20 +342,19 @@ def write_config(**kwargs):
 # -------------------------------------------------------------------------------------------------
 
 class HttpOne:
-    def __init__(self, root_file=None, base_url=None, download_dir=None, auth=None):
+    def __init__(self, root_file=None, download_dir=None, auth=None):
         self.root_file = root_file
-        self.base_url = base_url
         self.download_dir = download_dir or default_download_dir()
         self.auth = auth or None
 
-    def _download_dataset(self, session, filename, url):
+    def _download_dataset(self, session, filename, url, dry_run=False):
         save_to_dir = Path(format_download_dir(session, self.download_dir))
         save_to = save_to_dir / filename
-        if not save_to.exists():
+        if not save_to.exists() and not dry_run:
             download_file(url, save_to, auth=self.auth)
+            assert save_to.exists()
         else:
-            logger.debug("Skip existing %s.", save_to)
-        assert save_to.exists()
+            logger.debug("Skip %s.", save_to)
         return save_to
 
     def search(self, dataset_types, **kwargs):
@@ -384,7 +400,7 @@ class HttpOne:
             out = load_array(out)
         return out
 
-    def load_object(self, session, obj, download_only=False):
+    def load_object(self, session, obj, download_only=False, dry_run=False):
         """Load all attributes of a given object."""
         # Ensure session has a trailing slash.
         if not session.endswith('/'):
@@ -397,11 +413,134 @@ class HttpOne:
             filename = rel_path.split('/')[-1]
             fs = filename.split('.')
             attr = fs[1]
-            out[attr] = self._download_dataset(session, filename, url)
+            out[attr] = self._download_dataset(session, filename, url, dry_run=dry_run)
             if not download_only:
                 out[attr] = load_array(out[attr])
         return out
 
+
+# -------------------------------------------------------------------------------------------------
+# figshare
+# -------------------------------------------------------------------------------------------------
+
+_FIGSHARE_BASE_URL = 'https://api.figshare.com/v2/{endpoint}'
+
+
+def figshare_request(endpoint=None, data=None, method='GET', url=None, binary=False):
+    headers = {'Authorization': 'token ' + get_config().get('figshare_token', None)}
+    if data is not None and not binary:
+        data = json.dumps(data)
+    response = requests.request(
+        method, url or _FIGSHARE_BASE_URL.format(endpoint=endpoint), headers=headers, data=data)
+    try:
+        response.raise_for_status()
+        try:
+            data = json.loads(response.content)
+        except ValueError:
+            data = response.content
+    except HTTPError as error:
+        raise error
+    return data
+
+
+def figshare_files(article_id):
+    """Iterate over all ALF files of a given figshare article."""
+    files = figshare_request('account/articles/%s/files' % str(article_id))
+    for file in files:
+        path = file['name'].replace('~', '/')
+        if FILE_REGEX.match(path):
+            yield path, file['download_url']
+
+
+def make_figshare_root_file(article_id, output):
+    """Create a root file for a figshare article."""
+    write_root_file(output, figshare_files(article_id))
+
+
+def _get_file_check_data(file_name):
+    chunk_size = 1048576
+    with open(file_name, 'rb') as fin:
+        md5 = hashlib.md5()
+        size = 0
+        data = fin.read(chunk_size)
+        while data:
+            size += len(data)
+            md5.update(data)
+            data = fin.read(chunk_size)
+        return md5.hexdigest(), size
+
+
+def figshare_upload_file(path, name, article_id, dry_run=False):
+    """Upload a single file to figshare."""
+    # see https://docs.figshare.com/#upload_files_example_upload_on_figshare
+    assert Path(path).exists()
+    logger.info("Uploading %s.%s", path, '' if not dry_run else ' --dry-run')
+    if dry_run:
+        return
+    md5, size = _get_file_check_data(path)
+    data = {'name': name, 'md5': md5, 'size': size}
+    file_info = figshare_request(
+        'account/articles/%s/files' % article_id, method='POST', data=data)
+    file_info = figshare_request(url=file_info['location'])
+    result = figshare_request(url=file_info.get('upload_url'))
+    with open(path, 'rb') as stream:
+        for part in result['parts']:
+            udata = file_info.copy()
+            udata.update(part)
+            url = '{upload_url}/{partNo}'.format(**udata)
+            stream.seek(part['startOffset'])
+            data = stream.read(part['endOffset'] - part['startOffset'] + 1)
+            figshare_request(url=url, method='PUT', data=data, binary=True)
+    endpoint = 'account/articles/{}/files/{}'.format(article_id, file_info['id'])
+    figshare_request(endpoint, method='POST')
+
+
+def figshare_upload_dir(root_dir, article_id, dry_run=False):
+    """Upload to figshare all session files found in a root directory."""
+    root_dir = Path(root_dir)
+
+    # Get existing files on figshare to avoid uploading them twice.
+    existing_files = set(_[0] for _ in figshare_files(article_id))
+
+    for p in find_session_files(root_dir):
+        # Upload all found files.
+        name = _get_file_rel_path(str(p))
+        if name not in existing_files:
+            figshare_upload_file(p, name.replace('/', '~'), article_id, dry_run=dry_run)
+
+    if dry_run:
+        return
+
+    # At the end, create the root file.
+    make_figshare_root_file(article_id, root_dir / '.one_root')
+
+    # Upload the root file to figshare.
+    figshare_upload_file(root_dir / '.one_root', '.one_root', article_id)
+
+
+def find_figshare_root_file(article_id):
+    """Download and return the local path to the ONE root file of a figshare article."""
+    root_file = config_dir() / ('figshare/%s/.one_root' % article_id)
+    if root_file.exists():
+        return root_file
+    # If the root file does not exist, find it on figshare.
+    files = figshare_request('account/articles/%s/files' % article_id)
+    for file in files:
+        if file['name'] == '.one_root':
+            download_file(file['download_url'], root_file)
+            assert root_file.exists()
+            return root_file
+
+
+class FigshareOne(HttpOne):
+    def __init__(self, article_id=None, download_dir=None):
+        root_file = find_figshare_root_file(article_id)
+        super(FigshareOne, self).__init__(root_file=root_file, download_dir=download_dir)
+
+
+# -------------------------------------------------------------------------------------------------
+# ONE singleton
+# -------------------------------------------------------------------------------------------------
 
 _ONE_SINGLETON = None
 
@@ -421,11 +560,23 @@ def _make_http_one():
     return HttpOne(**kwargs)
 
 
+def _make_figshare_one():
+    """Create a new FigshareOne instance based on the config file."""
+    # Full config dict.
+    # TODO: support for multiple ONE repositories
+    config = get_config()
+    token = config.get('figshare_token', None)
+    if not token:
+        return
+    article_id = config.get('figshare_article_id', None)
+    return FigshareOne(article_id=article_id, download_dir=config.get('download_dir', None))
+
+
 def get_one():
     """Get the singleton One instance, loading it from the config file, or using the singleton
     instance if it has already been instantiated."""
     if globals()['_ONE_SINGLETON'] is None:
-        globals()['_ONE_SINGLETON'] = _make_http_one()
+        globals()['_ONE_SINGLETON'] = _make_figshare_one() or _make_http_one()
     one = globals()['_ONE_SINGLETON']
     assert one
     return one
@@ -435,8 +586,9 @@ def default_config():
     return {
         'http_config_root_file': '',
         'http_config_base_url': '',
-        'http_config_download_dir': default_download_dir(),
+        'download_dir': default_download_dir(),
         'http_config_auth': None,
+        'figshare_token': '',
     }
 
 
@@ -483,6 +635,7 @@ def one():
 @one.command('search')
 @click.argument('dataset_types', nargs=-1)
 def search_(dataset_types):
+    """Search for all sessions that have all requested dataset types."""
     # NOTE: underscore to avoid shadowing of public search() function.
     # TODO: other search options
     for session in search(dataset_types):
@@ -492,20 +645,39 @@ def search_(dataset_types):
 @one.command()
 @click.argument('session')
 @click.argument('obj', required=False)
-def download(session, obj=None):
-    for file_path in load_object(session, obj or '*', download_only=True).values():
+@click.option('--dry-run', is_flag=True)
+def download(session, obj=None, dry_run=False):
+    """Download files in a given session by specifying a filename pattern (object,
+    object.attribute, possibly with wildcards)."""
+    for file_path in load_object(
+            session, obj or '*', download_only=True, dry_run=dry_run).values():
         click.echo(file_path)
 
 
 @one.command()
 @click.argument('root_dir')
-def scan(root_dir):
-    pass
+@click.option('--sessions-only', default=False, is_flag=True)
+def scan(root_dir, sessions_only=False):
+    """Scan all session files locally."""
+    for p in (find_session_files(root_dir) if not sessions_only else find_session_dirs(root_dir)):
+        click.echo(str(p))
 
 
 @one.command()
-def upload():
-    pass
+@click.argument('article_id')
+def figscan(article_id):
+    """Scan all session files on figshare."""
+    for rel_path, url in sorted(figshare_files(article_id), key=itemgetter(0)):
+        click.echo(rel_path)
+
+
+@one.command()
+@click.argument('root_dir')
+@click.argument('article_id')
+@click.option('--dry-run', is_flag=True)
+def upload(root_dir, article_id, dry_run=False):
+    """Upload a root directory to a figshare article."""
+    figshare_upload_dir(root_dir, article_id, dry_run=dry_run)
 
 
 if __name__ == '__main__':
