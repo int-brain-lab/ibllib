@@ -3,9 +3,9 @@
 ## Installation
 
 ```
-git clone git@github.com:int-brain-lab/ibllib.git
+git clone -b onelight git@github.com:int-brain-lab/ibllib.git
 cd ibllib/oneibl/
-python onelight.py
+python onelight.py  # will create a default config file in ~/.one/
 ```
 
 
