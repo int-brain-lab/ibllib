@@ -90,8 +90,8 @@ def from_path(session_path, force=False, save=True):
     :param save: (True) boolean or list of ALF file names to extract
     :return: None
     """
-    logger_.info('Extracting ' + str(session_path))
     extractor_type = get_session_extractor_type(session_path)
+    logger_.info(f"Extracting {session_path} as {extractor_type}")
     if is_extracted(session_path) and not force:
         logger_.info(f"Session {session_path} already extracted.")
         return
@@ -109,11 +109,10 @@ def from_path(session_path, force=False, save=True):
         logger_.info('session extracted \n')  # timing info in log
     if extractor_type == 'ephys':
         data = raw.load_data(session_path)
-        logger_.info('extract bpod for ephys session')
+        logger_.info('extract BPOD for ephys session')
         ephys_trials.extract_all(session_path, data=data, save=save)
         logger_.info('extract FPGA information for ephys session')
         ephys_fpga.extract_all(session_path, save=save)
-
     if extractor_type == 'sync_ephys':
         ephys_fpga.extract_sync(session_path, save=save)
 
@@ -139,9 +138,3 @@ def bulk(subjects_folder, dry=False, glob_flag='**/extract_me.flag'):
             continue
         p.unlink()
         flags.write_flag_file(p.parent.joinpath('register_me.flag'), file_list=save)
-
-
-if __name__ == "__main__":
-    sess = '/home/nico/Projects/IBL/scratch/test_iblrig_data/Subjects/IBL-T1/2019-02-19/001'  # noqa
-    bulk(sess)
-    print('.')
