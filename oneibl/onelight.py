@@ -9,12 +9,11 @@
 
 import csv
 from collections import defaultdict
+import json
 import logging
-# from operator import itemgetter
-# import os
+import os.path as op
 from pathlib import Path
 import re
-# import sys
 import urllib.parse
 
 import click
@@ -22,7 +21,43 @@ import requests
 # from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+
+
+# -------------------------------------------------------------------------------------------------
+# Logging
+# -------------------------------------------------------------------------------------------------
+
+# Set a null handler on the root logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+# logger.addHandler(logging.NullHandler())
+
+
+_logger_fmt = '%(asctime)s.%(msecs)03d [%(levelname)s] %(caller)s %(message)s'
+_logger_date_fmt = '%H:%M:%S'
+
+
+class _Formatter(logging.Formatter):
+    def format(self, record):
+        # Only keep the first character in the level name.
+        record.levelname = record.levelname[0]
+        filename = op.splitext(op.basename(record.pathname))[0]
+        record.caller = '{:s}:{:d}'.format(filename, record.lineno).ljust(20)
+        message = super(_Formatter, self).format(record)
+        color_code = {'D': '90', 'I': '0', 'W': '33', 'E': '31'}.get(record.levelname, '7')
+        message = '\33[%sm%s\33[0m' % (color_code, message)
+        return message
+
+
+def add_default_handler(level='INFO', logger=logger):
+    handler = logging.StreamHandler()
+    handler.setLevel(level)
+    formatter = _Formatter(fmt=_logger_fmt, datefmt=_logger_date_fmt)
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
+
+add_default_handler('DEBUG')
 
 
 # -------------------------------------------------------------------------------------------------
@@ -39,6 +74,13 @@ class Bunch(dict):
     def copy(self):
         """Return a new Bunch instance which is a copy of the current Bunch instance."""
         return Bunch(super(Bunch, self).copy())
+
+
+def is_documented_by(original):
+    def wrapper(target):
+        target.__doc__ = original.__doc__
+        return target
+    return wrapper
 
 
 # -------------------------------------------------------------------------------------------------
@@ -109,7 +151,7 @@ def download_file(url, save_to, auth=None):
     """
     save_to = Path(save_to)
     logger.info("Downloading %s to %s.", url, str(save_to.parent))
-    response = requests.get(url, stream=True, auth=auth)
+    response = requests.get(url, stream=True, auth=auth or None)
     response.raise_for_status()
     save_to.parent.mkdir(parents=True, exist_ok=True)
     with open(save_to, "wb") as f:
@@ -242,23 +284,62 @@ def _search(root_file_iterator, regex):
 
 
 # -------------------------------------------------------------------------------------------------
-# Base ONE provider
+# Config
+# -------------------------------------------------------------------------------------------------
+
+def config_dir():
+    """Path to the config directory."""
+    return Path.home() / '.one/'
+
+
+def config_file():
+    """Path to the config file."""
+    return config_dir() / 'config.json'
+
+
+def get_config():
+    """Return the config file dictionary."""
+    # Create a default config file if there is none.
+    path = config_file()
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        write_config(**default_config())
+    # Open the config file.
+    with open(path, 'r') as f:
+        return json.load(f)
+
+
+def write_config(**kwargs):
+    """Write some key-value pairs in the config file."""
+    if config_file().exists():
+        config = get_config()
+    else:
+        config = {}
+    config.update(kwargs)
+    with open(config_file(), 'w') as f:
+        json.dump(config, f, indent=2, sort_keys=True)
+
+
+# -------------------------------------------------------------------------------------------------
+# HTTP ONE class
 # -------------------------------------------------------------------------------------------------
 
 class HttpOne:
-    def __init__(self, root_file, base_url, download_dir=None, auth=None):
+    def __init__(self, root_file=None, base_url=None, download_dir=None, auth=None):
         self.root_file = root_file
         self.base_url = base_url
         self.download_dir = download_dir or default_download_dir()
-        self.auth = auth
+        self.auth = auth or None
 
     def _download_dataset(self, session, filename, url):
         save_to_dir = Path(format_download_dir(session, self.download_dir))
         save_to = save_to_dir / filename
         if not save_to.exists():
             download_file(url, save_to, auth=self.auth)
+        else:
+            logger.debug("Skip existing %s.", save_to)
         assert save_to.exists()
-        return load_array(save_to)
+        return save_to
 
     def search(self, dataset_types, **kwargs):
         """Search all sessions that have all requested dataset types."""
@@ -287,7 +368,7 @@ class HttpOne:
         return sorted(
             session for (session, dset_set) in sessions.items() if len(dset_set) >= n_types)
 
-    def load_dataset(self, session, dataset_type):
+    def load_dataset(self, session, dataset_type, download_only=False):
         """Download and load a single dataset in a given session and with a given dataset type."""
         # Ensure session has a trailing slash.
         if not session.endswith('/'):
@@ -298,47 +379,96 @@ class HttpOne:
             raise ValueError("No `%s` file found in this session.", dataset_type)
         filename = tup[0].split('/')[-1]
         url = tup[1]
-        return self._download_dataset(session, filename, url)
+        out = self._download_dataset(session, filename, url)
+        if not download_only:
+            out = load_array(out)
+        return out
 
-    def load_object(self, session, obj):
+    def load_object(self, session, obj, download_only=False):
         """Load all attributes of a given object."""
         # Ensure session has a trailing slash.
         if not session.endswith('/'):
             session += '/'
-        # TODO: for now, load all existing dataset types.
+        # TODO: for now, load all existing dataset types. A set of default dataset types
+        # could be specified for each object.
         pattern = _make_dataset_regex(session, obj)
         out = Bunch()
         for rel_path, url, m in _search(read_root_file(self.root_file), pattern):
             filename = rel_path.split('/')[-1]
             fs = filename.split('.')
-            # assert fs[0] == obj
             attr = fs[1]
             out[attr] = self._download_dataset(session, filename, url)
+            if not download_only:
+                out[attr] = load_array(out[attr])
         return out
+
+
+_ONE_SINGLETON = None
+
+
+def _make_http_one():
+    """Create a new HttpOne instance based on the config file."""
+    # Full config dict.
+    config = get_config()
+    # Get the config key-value pairs where the key starts with http_config_.
+    # Config keys are [http_config_<x>] where <x> is: root_file, base_url, download_dir, auth
+    kwargs = {
+        k.replace('http_config_', ''): v
+        for k, v in config.items() if k.startswith('http_config_')}
+    auth = kwargs.get('auth') or None
+    kwargs['auth'] = tuple(auth) if auth else None
+    # This is then passed to the HttpOne() constructor.
+    return HttpOne(**kwargs)
+
+
+def get_one():
+    """Get the singleton One instance, loading it from the config file, or using the singleton
+    instance if it has already been instantiated."""
+    if globals()['_ONE_SINGLETON'] is None:
+        globals()['_ONE_SINGLETON'] = _make_http_one()
+    one = globals()['_ONE_SINGLETON']
+    assert one
+    return one
+
+
+def default_config():
+    return {
+        'http_config_root_file': '',
+        'http_config_base_url': '',
+        'http_config_download_dir': default_download_dir(),
+        'http_config_auth': None,
+    }
 
 
 # -------------------------------------------------------------------------------------------------
 # Public API
 # -------------------------------------------------------------------------------------------------
 
-def set_download_dir(path):
-    pass
-
-
 def search_terms():
-    pass
+    return ('lab', 'subject', 'date', 'number', 'dataset_types')
 
 
+def set_download_dir(path):
+    """Set the download directory. May contain fields like {lab}, {subject}, etc."""
+    # Update the config file.
+    write_config(http_config_download_dir=path)
+    # Reload the HttpOne instance.
+    _make_http_one()
+
+
+@is_documented_by(HttpOne.search)
 def search(dataset_types, **kwargs):
-    pass
+    return get_one().search(dataset_types, **kwargs)
 
 
-def load_object(session, *dataset_types):
-    pass
+@is_documented_by(HttpOne.load_object)
+def load_object(session, obj, **kwargs):
+    return get_one().load_object(session, obj, **kwargs)
 
 
-def load_dataset(session, dataset_type):
-    pass
+@is_documented_by(HttpOne.load_dataset)
+def load_dataset(session, dataset_type, **kwargs):
+    return get_one().load_dataset(session, dataset_type, **kwargs)
 
 
 # -------------------------------------------------------------------------------------------------
@@ -350,29 +480,31 @@ def one():
     pass
 
 
+@one.command('search')
+@click.argument('dataset_types', nargs=-1)
+def search_(dataset_types):
+    # NOTE: underscore to avoid shadowing of public search() function.
+    # TODO: other search options
+    for session in search(dataset_types):
+        click.echo(session)
+
+
+@one.command()
+@click.argument('session')
+@click.argument('obj', required=False)
+def download(session, obj=None):
+    for file_path in load_object(session, obj or '*', download_only=True).values():
+        click.echo(file_path)
+
+
 @one.command()
 @click.argument('root_dir')
-def cli_scan(root_dir):
+def scan(root_dir):
     pass
 
 
 @one.command()
-def cli_search():
-    pass
-
-
-@one.command()
-def cli_config():
-    pass
-
-
-@one.command()
-def cli_download():
-    pass
-
-
-@one.command()
-def cli_upload():
+def upload():
     pass
 
 
