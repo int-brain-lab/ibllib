@@ -253,7 +253,7 @@ def format_download_dir(session, download_dir):
     """Replace the placeholder fields in the download directory by the appropriate values for
     a given session."""
     session_info = _parse_session_path(session)
-    session_info['repository'] = repository.name
+    session_info['repository'] = repository().name
     download_dir = download_dir.format(**session_info)
     return Path(download_dir).expanduser()
 
@@ -326,11 +326,12 @@ def _make_search_regex(**kwargs):
     return _compile(pattern)
 
 
-def _make_dataset_regex(session, dataset_type):
+def _make_dataset_regex(session, dataset_type=None):
     """Make a regex for finding datasets of a given type in a session."""
     pattern = r'^{session}.+{dataset_type}$'
 
     # Dataset type.
+    dataset_type = dataset_type or ''
     if '*' not in dataset_type:
         dataset_type += '*'
     if '*' in dataset_type:
@@ -391,11 +392,12 @@ class HttpOne:
     def _download_dataset(self, session, filename, url, dry_run=False):
         save_to_dir = Path(format_download_dir(session, self.download_dir))
         save_to = save_to_dir / filename
-        if not save_to.exists() and not dry_run:
-            download_file(url, save_to, auth=self.auth)
-            assert save_to.exists()
+        if not save_to.exists():
+            if not dry_run:
+                download_file(url, save_to, auth=self.auth)
+                assert save_to.exists()
         else:
-            logger.debug("Skip %s.", save_to)
+            logger.debug("Skip existing %s.", save_to)
         return save_to
 
     def search(self, dataset_types=(), **kwargs):
@@ -445,7 +447,7 @@ class HttpOne:
             out = load_array(out)
         return out
 
-    def load_object(self, session, obj, download_only=False, dry_run=False):
+    def load_object(self, session, obj=None, download_only=False, dry_run=False):
         """Load all attributes of a given object."""
         # Ensure session has a trailing slash.
         if not session.endswith('/'):
@@ -459,7 +461,7 @@ class HttpOne:
             fs = filename.split('.')
             attr = fs[1]
             out[attr] = self._download_dataset(session, filename, url, dry_run=dry_run)
-            if not download_only:
+            if not download_only and not dry_run:
                 out[attr] = load_array(out[attr])
         return out
 
@@ -675,7 +677,7 @@ def search(dataset_types, **kwargs):
 
 
 @is_documented_by(HttpOne.load_object)
-def load_object(session, obj, **kwargs):
+def load_object(session, obj=None, **kwargs):
     return get_one().load_object(session, obj, **kwargs)
 
 
