@@ -33,7 +33,6 @@ logger = logging.getLogger(__name__)
 # Set a null handler on the root logger
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-# logger.addHandler(logging.NullHandler())
 
 
 _logger_fmt = '%(asctime)s.%(msecs)03d [%(levelname)s] %(caller)s %(message)s'
@@ -61,6 +60,43 @@ def add_default_handler(level='INFO', logger=logger):
 
 
 add_default_handler('DEBUG')
+
+
+# -------------------------------------------------------------------------------------------------
+# Global variables
+# -------------------------------------------------------------------------------------------------
+
+# SESSION_PATTERN = r'^{lab}/Subjects/{subject}/{date}/{number}/$'
+# SESSION_REGEX = _pattern_to_regex(SESSION_PATTERN)
+
+# FILE_PATTERN = r'^{lab}/Subjects/{subject}/{date}/{number}/alf/{filename}$'
+# FILE_REGEX = _pattern_to_regex(FILE_PATTERN)
+
+_FIGSHARE_BASE_URL = 'https://api.figshare.com/v2/{endpoint}'
+_CURRENT_REPOSITORY = None
+_CURRENT_ONE = None
+
+DEFAULT_CONFIG = {
+    "download_dir": "~/.one/data/{repository}/{lab}/Subjects/{subject}/{date}/{number}/alf/",
+    "session_pattern": "^{lab}/Subjects/{subject}/{date}/{number}/$",
+    "file_pattern": "^{lab}/Subjects/{subject}/{date}/{number}/alf/{filename}$",
+    "repositories": [
+        # {
+        #     "type": "http",
+        #     "name": "myhttpwebsite",
+        #     "login": "",
+        #     "password": "",
+        #     "base_url": "http://myhttpwebsite.com/"
+        # },
+        # {
+        #     "type": "figshare",
+        #     "name": "myfigsharearticle",
+        #     "token": "",  # get a figshare personal token
+        #     "article_id": 0,  # figshare article id
+        # }
+    ],
+    "current_repository": None,
+}
 
 
 # -------------------------------------------------------------------------------------------------
@@ -107,25 +143,7 @@ def config_file():
 
 def default_config():
     """Return an empty configuration dictionary."""
-    return {
-        "download_dir": "~/.one/data/{repository}/{lab}/Subjects/{subject}/{date}/{number}/alf/",
-        "repositories": [
-            {
-                "type": "http",
-                "name": "myhttpwebsite",
-                "login": "",
-                "password": "",
-                "base_url": "http://myhttpwebsite.com/"
-            },
-            {
-                "type": "figshare",
-                "name": "myfigsharearticle",
-                "token": "",  # get a figshare personal token
-                "article_id": 0,  # figshare article id
-            }
-        ],
-        "current_repository": None,
-    }
+    return DEFAULT_CONFIG
 
 
 def get_config():
@@ -146,11 +164,41 @@ def set_config(config):
         json.dump(config, f, indent=2, sort_keys=True)
 
 
+def _parse_article_id(url):
+    if url.endswith('/'):
+        url = url[:-1]
+    return int(url.split('/')[-1])
+
+
+def add_repository(name):
+    """Interactive prompt to add a repository."""
+    print("Launching interactive configuration tool to add a new repository.")
+    config = get_config()
+    repo = Bunch(name=name, type=input("`http` or `figshare`? "))
+    if repo.type == 'http':
+        repo.update(
+            base_url=input("Root URL? "),
+            login=input("Basic HTTP auth login? (leave empty if public) "),
+            pwd=input("Basic HTTP auth password? (leave empty if public) "),
+        )
+    elif repo.type == 'figshare':
+        repo.update(
+            article_id=_parse_article_id(input("figshare article public URL? ")),
+            token=input(
+                "Go to https://figshare.com/account/applications, generate a token, "
+                "and copy-paste it here: "),
+        )
+    config['repositories'].append(repo)
+    set_config(config)
+    return repo
+
+
 # -------------------------------------------------------------------------------------------------
 # File scanning and root file creation
 # -------------------------------------------------------------------------------------------------
 
 def read_root_file(path):
+    assert path
     with open(path) as f:
         for line in csv.reader(f, delimiter='\t'):
             # If single column, prepend the base URL.
@@ -165,6 +213,7 @@ def read_root_file(path):
 
 
 def write_root_file(path, iterator):
+    assert path
     with open(path, 'w') as f:
         writer = csv.writer(f, delimiter='\t')
         for items in iterator:
@@ -286,6 +335,14 @@ def load_array(path):
 # File path parsing
 # -------------------------------------------------------------------------------------------------
 
+def _session_regex():
+    return _pattern_to_regex(get_config()['session_pattern'])
+
+
+def _file_regex():
+    return _pattern_to_regex(get_config()['file_pattern'])
+
+
 def _pattern_to_regex(pattern):
     """Convert a path pattern with {...} into a regex."""
     return _compile(re.sub(r'\{(\w+)\}', r'(?P<\1>[a-zA-Z0-9\_\-\.]+)', pattern))
@@ -303,16 +360,9 @@ def _compile(r):
     return re.compile(r)
 
 
-SESSION_PATTERN = r'^{lab}/Subjects/{subject}/{date}/{number}/$'
-SESSION_REGEX = _pattern_to_regex(SESSION_PATTERN)
-
-FILE_PATTERN = r'^{lab}/Subjects/{subject}/{date}/{number}/alf/{filename}$'
-FILE_REGEX = _pattern_to_regex(FILE_PATTERN)
-
-
 def _make_search_regex(**kwargs):
     """Make a regex for the search() function."""
-    pattern = FILE_PATTERN
+    pattern = get_config()['file_pattern']
 
     for term in ('lab', 'subject', 'date', 'number', 'filename'):
         value = kwargs.get(term, None)
@@ -348,7 +398,7 @@ def _make_dataset_regex(session, dataset_type=None):
 
 def _parse_session_path(session):
     """Parse a session path."""
-    m = SESSION_REGEX.match(session)
+    m = _session_regex().match(session)
     if not m:
         raise ValueError("The session path `%s` is invalid." % session)
     return {n: m.group(n) for n in ('lab', 'subject', 'date', 'number')}
@@ -356,7 +406,7 @@ def _parse_session_path(session):
 
 def _parse_file_path(file_path):
     """Parse a file path."""
-    m = FILE_REGEX.match(file_path)
+    m = _file_regex().match(file_path)
     if not m:
         raise ValueError("The file path `%s` is invalid." % file_path)
     return {n: m.group(n) for n in ('lab', 'subject', 'date', 'number', 'filename')}
@@ -385,6 +435,9 @@ def _search(root_file_iterator, regex):
 
 class HttpOne:
     def __init__(self, root_file=None, download_dir=None, auth=None):
+        assert root_file
+        if not Path(root_file).exists():
+            raise ValueError("Root file %s could not be found.", root_file)
         self.root_file = root_file
         self.download_dir = download_dir or default_download_dir()
         self.auth = auth
@@ -480,9 +533,6 @@ class HttpOne:
 # figshare ONE
 # -------------------------------------------------------------------------------------------------
 
-_FIGSHARE_BASE_URL = 'https://api.figshare.com/v2/{endpoint}'
-
-
 def figshare_request(endpoint=None, data=None, method='GET', url=None, binary=False):
     headers = {'Authorization': 'token ' + repository().get('token', None)}
     if data is not None and not binary:
@@ -502,10 +552,11 @@ def figshare_request(endpoint=None, data=None, method='GET', url=None, binary=Fa
 
 def figshare_files(article_id):
     """Iterate over all ALF files of a given figshare article."""
-    files = figshare_request('account/articles/%s/files' % str(article_id))
+    files = figshare_request('articles/%s/files' % str(article_id))
+    r = _file_regex()
     for file in files:
         path = file['name'].replace('~', '/')
-        if FILE_REGEX.match(path):
+        if r.match(path):
             yield path, file['download_url']
 
 
@@ -537,7 +588,7 @@ def figshare_upload_file(path, name, article_id, dry_run=False):
     md5, size = _get_file_check_data(path)
     data = {'name': name, 'md5': md5, 'size': size}
     file_info = figshare_request(
-        'account/articles/%s/files' % article_id, method='POST', data=data)
+        'articles/%s/files' % article_id, method='POST', data=data)
     file_info = figshare_request(url=file_info['location'])
     result = figshare_request(url=file_info.get('upload_url'))
     with open(path, 'rb') as stream:
@@ -548,7 +599,7 @@ def figshare_upload_file(path, name, article_id, dry_run=False):
             stream.seek(part['startOffset'])
             data = stream.read(part['endOffset'] - part['startOffset'] + 1)
             figshare_request(url=url, method='PUT', data=data, binary=True)
-    endpoint = 'account/articles/{}/files/{}'.format(article_id, file_info['id'])
+    endpoint = 'articles/{}/files/{}'.format(article_id, file_info['id'])
     figshare_request(endpoint, method='POST')
 
 
@@ -581,7 +632,7 @@ def find_figshare_root_file(article_id):
     if root_file.exists():
         return root_file
     # If the root file does not exist, find it on figshare.
-    files = figshare_request('account/articles/%s/files' % article_id)
+    files = figshare_request('articles/%s/files' % article_id)
     for file in files:
         if file['name'] == '.one_root':
             download_file(file['download_url'], root_file)
@@ -592,6 +643,9 @@ def find_figshare_root_file(article_id):
 class FigshareOne(HttpOne):
     def __init__(self, article_id=None, download_dir=None):
         root_file = find_figshare_root_file(article_id)
+        if not root_file:
+            raise ValueError(
+                "No ONE root file could be found in figshare article %d." % article_id)
         super(FigshareOne, self).__init__(root_file=root_file, download_dir=download_dir)
 
 
@@ -599,18 +653,15 @@ class FigshareOne(HttpOne):
 # ONE singleton
 # -------------------------------------------------------------------------------------------------
 
-
-_CURRENT_REPOSITORY = None
-_CURRENT_ONE = None
-
-
 def set_repository(name=None):
     """Set the current repository."""
     config = get_config()
-    name = name or config.get('current_repository', None)
+    name = name or config.get('current_repository', None) or 'default'
     repos = config.get('repositories', [])
     if not repos:
-        raise RuntimeError("No repository has been configured.")
+        logger.error("No repository configured!")
+        add_repository(name)
+        return set_repository(name)
     for repo in repos:
         repo = Bunch(repo)
         if repo.name == name:
@@ -618,7 +669,7 @@ def set_repository(name=None):
             break
     config['current_repository'] = repo.name
     set_config(config)
-    logger.debug("Current repository is %s.", repo.name)
+    logger.debug("Current repository is: `%s`.", repo.name)
     return repo
 
 
@@ -718,6 +769,14 @@ def repo(name):
 
 
 @one.command()
+@click.argument('name')
+def add_repo(name):
+    """Add a new repository and prompt for its configuration info."""
+    add_repository(name)
+    set_repository(name)
+
+
+@one.command()
 @click.argument('name', required=False)
 def show(name=None):
     """Show the configured repositories."""
@@ -766,13 +825,6 @@ def scan(root_dir, sessions_only=False):
         click.echo(str(p))
 
 
-# @one.command()
-# def scan_remote():
-#     """Scan all session files on the current repository."""
-#     for rel_path, url in sorted(figshare_files(article_id), key=itemgetter(0)):
-#         click.echo(rel_path)
-
-
 @one.command()
 @click.argument('root_dir')
 @click.option('--dry-run', is_flag=True)
@@ -786,4 +838,7 @@ def upload(root_dir, dry_run=False):
 
 
 if __name__ == '__main__':
-    one()
+    try:
+        one()
+    except Exception as e:
+        logger.error(e)
