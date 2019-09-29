@@ -400,6 +400,16 @@ class HttpOne:
             logger.debug("Skip existing %s.", save_to)
         return save_to
 
+    def list(self, session):
+        """List all dataset types found in the session."""
+        if not session.endswith('/'):
+            session += '/'
+        out = []
+        for rel_path, _ in read_root_file(self.root_file):
+            if rel_path.startswith(session):
+                out.append('.'.join(op.basename(rel_path).split('.')[:2]))
+        return sorted(out)
+
     def search(self, dataset_types=(), **kwargs):
         """Search all sessions that have all requested dataset types."""
         if not dataset_types:
@@ -676,6 +686,11 @@ def search(dataset_types, **kwargs):
     return get_one().search(dataset_types, **kwargs)
 
 
+@is_documented_by(HttpOne.list)
+def list(session):
+    return get_one().list(session)
+
+
 @is_documented_by(HttpOne.load_object)
 def load_object(session, obj=None, **kwargs):
     return get_one().load_object(session, obj, **kwargs)
@@ -721,6 +736,14 @@ def search_(dataset_types):
     # TODO: other search options
     for session in search(dataset_types):
         click.echo(session)
+
+
+@one.command('list')
+@click.argument('session')
+@is_documented_by(list)
+def list_(session):
+    for dataset_type in list(session):
+        click.echo(dataset_type)
 
 
 @one.command()
