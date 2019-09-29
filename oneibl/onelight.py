@@ -66,12 +66,7 @@ add_default_handler('DEBUG')
 # Global variables
 # -------------------------------------------------------------------------------------------------
 
-# SESSION_PATTERN = r'^{lab}/Subjects/{subject}/{date}/{number}/$'
-# SESSION_REGEX = _pattern_to_regex(SESSION_PATTERN)
-
-# FILE_PATTERN = r'^{lab}/Subjects/{subject}/{date}/{number}/alf/{filename}$'
-# FILE_REGEX = _pattern_to_regex(FILE_PATTERN)
-
+EXCLUDED_FILENAMES = ('.DS_Store',)
 _FIGSHARE_BASE_URL = 'https://api.figshare.com/v2/{endpoint}'
 _CURRENT_REPOSITORY = None
 _CURRENT_ONE = None
@@ -80,21 +75,7 @@ DEFAULT_CONFIG = {
     "download_dir": "~/.one/data/{repository}/{lab}/Subjects/{subject}/{date}/{number}/alf/",
     "session_pattern": "^{lab}/Subjects/{subject}/{date}/{number}/$",
     "file_pattern": "^{lab}/Subjects/{subject}/{date}/{number}/alf/{filename}$",
-    "repositories": [
-        # {
-        #     "type": "http",
-        #     "name": "myhttpwebsite",
-        #     "login": "",
-        #     "password": "",
-        #     "base_url": "http://myhttpwebsite.com/"
-        # },
-        # {
-        #     "type": "figshare",
-        #     "name": "myfigsharearticle",
-        #     "token": "",  # get a figshare personal token
-        #     "article_id": 0,  # figshare article id
-        # }
-    ],
+    "repositories": [],
     "current_repository": None,
 }
 
@@ -103,19 +84,20 @@ DOWNLOAD_INSTRUCTIONS = '''
 <h3>[experimental] ONE interface</h3>
 
 <p>The data is available via the ONE interface.
-<a href="https://github.com/int-brain-lab/ibllib/tree/onelight/oneibl#one-light">Installation instructions here.</a>
+<a href="https://github.com/int-brain-lab/ibllib/tree/onelight/oneibl#one-light">
+Installation instructions here.</a>
 </p>
 
 <p>To search and download this dataset:</p>
 
-<cite>
+<blockquote>
 import onelight as one
-sessions = one.search(['trials'])  # search for all sessions that have a trials object
+sessions = one.search(['trials'])  # search for all sessions that have a `trials` object
 session = sessions[0]  # take the first session
 trials = one.load_object(session, 'trials')  # load the trials object
 print(trials.intervals)  # trials is a Bunch, values are NumPy arrays or pandas DataFrames
 print(trials.goCue_times)
-</cite>
+</blockquote>
 
 '''
 
@@ -185,14 +167,23 @@ def set_config(config):
         json.dump(config, f, indent=2, sort_keys=True)
 
 
+def update_repo_config(**kwargs):
+    config = get_config()
+    for repo in config['repositories']:
+        if repo['name'] == repo['name']:
+            repo.update(kwargs)
+    set_config(config)
+
+
 def _parse_article_id(url):
     if url.endswith('/'):
         url = url[:-1]
     return int(url.split('/')[-1])
 
 
-def add_repository(name):
+def add_repository(name=None):
     """Interactive prompt to add a repository."""
+    name = name or 'default'
     print("Launching interactive configuration tool to add a new repository.")
     config = get_config()
     repo = Bunch(name=name, type=input("`http` or `figshare`? "))
@@ -258,6 +249,8 @@ def is_session_dir(path):
 
 def is_file_in_session_dir(path):
     """Return whether a file path is within a session directory."""
+    if path.name in EXCLUDED_FILENAMES:
+        return False
     return not path.is_dir() and '/Subjects/' in str(path.parent.parent.parent)
 
 
@@ -554,7 +547,10 @@ class HttpOne:
 # figshare ONE
 # -------------------------------------------------------------------------------------------------
 
-def figshare_request(endpoint=None, data=None, method='GET', url=None, binary=False):
+def figshare_request(
+        endpoint=None, data=None, method='GET', url=None,
+        binary=False, error_level='ERROR'):
+    """Perform a REST request against the figshare API."""
     headers = {'Authorization': 'token ' + repository().get('token', None)}
     if data is not None and not binary:
         data = json.dumps(data)
@@ -567,7 +563,8 @@ def figshare_request(endpoint=None, data=None, method='GET', url=None, binary=Fa
         except ValueError:
             data = response.content
     except HTTPError as error:
-        raise error
+        logger.log(error_level, error)
+        # raise error
     return data
 
 
@@ -622,6 +619,22 @@ def figshare_upload_file(path, name, article_id, dry_run=False):
             figshare_request(url=url, method='PUT', data=data, binary=True)
     endpoint = 'account/articles/{}/files/{}'.format(article_id, file_info['id'])
     figshare_request(endpoint, method='POST')
+    return file_info['id']
+
+
+def figshare_publish(article_id):
+    logger.debug("Publishing new version for article %d." % article_id)
+    figshare_request('account/articles/%s/publish' % article_id, method='POST')
+
+
+def figshare_update_description(article_id):
+    """Append the ONE interface doc at the end of the article's description."""
+    description = figshare_request('articles/%s' % article_id).get('description', '')
+    if 'ONE interface' not in description:
+        description += DOWNLOAD_INSTRUCTIONS.replace('\n', '<br>')
+        logger.debug("Updating description of article %d." % article_id)
+        figshare_request(
+            'account/articles/%s' % article_id, method='PUT', data={'description': description})
 
 
 def figshare_upload_dir(root_dir, article_id, dry_run=False):
@@ -631,27 +644,36 @@ def figshare_upload_dir(root_dir, article_id, dry_run=False):
     # Get existing files on figshare to avoid uploading them twice.
     existing_files = set(_[0] for _ in figshare_files(article_id))
 
+    n = 0
     for p in find_session_files(root_dir):
         # Upload all found files.
         name = _get_file_rel_path(str(p))
         if name not in existing_files:
             figshare_upload_file(p, name.replace('/', '~'), article_id, dry_run=dry_run)
-
-    if dry_run:
+            n += 1
+    if dry_run or n == 0:
+        logger.debug("Skip uploading.")
         return
+    logger.info("Uploaded %d new files.", n)
 
     # At the end, create the root file.
     make_figshare_root_file(article_id, root_dir / '.one_root')
 
-    # Upload the root file to figshare.
-    figshare_upload_file(root_dir / '.one_root', '.one_root', article_id)
+    # Upload the new root file to figshare, even if an old one exists.
+    to_delete = repository().get('root_file_id', None)
+    root_file_id = figshare_upload_file(root_dir / '.one_root', '.one_root', article_id)
+    # Delete the old .one_root
+    if to_delete:
+        logger.debug("Deleting old version of .one_root.")
+        figshare_request(
+            'account/articles/%s/files/%s' % (article_id, to_delete),
+            method='DELETE', error_level='DEBUG')
+    update_repo_config(root_file_id=root_file_id)
 
     # Add the download instructions in the description.
-    description = figshare_request('articles/%s' % article_id).get('description', '')
-    if 'ONE interface' not in description:
-        description += DOWNLOAD_INSTRUCTIONS.replace('\n', '<br>')
-        figshare_request(
-            'account/articles/%s' % article_id, method='PUT', data={'description': description})
+    figshare_update_description(article_id)
+
+    figshare_publish(article_id)
 
 
 def find_figshare_root_file(article_id):
@@ -790,29 +812,27 @@ def one():
 
 
 @one.command()
-@click.argument('name')
-def repo(name):
-    """Set the current repository."""
-    set_repository(name)
-
-
-@one.command()
-@click.argument('name')
-def add_repo(name):
-    """Add a new repository and prompt for its configuration info."""
-    add_repository(name)
-    set_repository(name)
+@click.argument('name', required=False)
+def repo(name=None):
+    """Show the existing repos, or set the current repo."""
+    if not name:
+        repos = get_config().get('repositories', [])
+        for repo in repos:
+            repo = Bunch(repo)
+            is_current = '*' if repo.name == repository().name else ''
+            click.echo(
+                f'{is_current}{repo.name} ({repo.type} '
+                f'{repo.get("base_url", repo.get("article_id", ""))})')
+    else:
+        set_repository(name)
 
 
 @one.command()
 @click.argument('name', required=False)
-def show(name=None):
-    """Show the configured repositories."""
-    repos = get_config().get('repositories', [])
-    for repo in repos:
-        repo = Bunch(repo)
-        is_current = '*' if repo.name == repository().name else ''
-        click.echo(f'{is_current}{repo.name} ({repo.type})')
+def add_repo(name=None):
+    """Add a new repository and prompt for its configuration info."""
+    add_repository(name)
+    set_repository(name)
 
 
 @one.command('search')
@@ -869,4 +889,4 @@ if __name__ == '__main__':
     try:
         one()
     except Exception as e:
-        logger.error(e)
+        raise e
