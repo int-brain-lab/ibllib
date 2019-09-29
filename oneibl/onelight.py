@@ -98,6 +98,27 @@ DEFAULT_CONFIG = {
     "current_repository": None,
 }
 
+DOWNLOAD_INSTRUCTIONS = '''
+
+<h3>[experimental] ONE interface</h3>
+
+<p>The data is available via the ONE interface.
+<a href="https://github.com/int-brain-lab/ibllib/tree/onelight/oneibl#one-light">Installation instructions here.</a>
+</p>
+
+<p>To search and download this dataset:</p>
+
+<cite>
+import onelight as one
+sessions = one.search(['trials'])  # search for all sessions that have a trials object
+session = sessions[0]  # take the first session
+trials = one.load_object(session, 'trials')  # load the trials object
+print(trials.intervals)  # trials is a Bunch, values are NumPy arrays or pandas DataFrames
+print(trials.goCue_times)
+</cite>
+
+'''
+
 
 # -------------------------------------------------------------------------------------------------
 # Utils
@@ -588,7 +609,7 @@ def figshare_upload_file(path, name, article_id, dry_run=False):
     md5, size = _get_file_check_data(path)
     data = {'name': name, 'md5': md5, 'size': size}
     file_info = figshare_request(
-        'articles/%s/files' % article_id, method='POST', data=data)
+        'account/articles/%s/files' % article_id, method='POST', data=data)
     file_info = figshare_request(url=file_info['location'])
     result = figshare_request(url=file_info.get('upload_url'))
     with open(path, 'rb') as stream:
@@ -599,7 +620,7 @@ def figshare_upload_file(path, name, article_id, dry_run=False):
             stream.seek(part['startOffset'])
             data = stream.read(part['endOffset'] - part['startOffset'] + 1)
             figshare_request(url=url, method='PUT', data=data, binary=True)
-    endpoint = 'articles/{}/files/{}'.format(article_id, file_info['id'])
+    endpoint = 'account/articles/{}/files/{}'.format(article_id, file_info['id'])
     figshare_request(endpoint, method='POST')
 
 
@@ -624,6 +645,13 @@ def figshare_upload_dir(root_dir, article_id, dry_run=False):
 
     # Upload the root file to figshare.
     figshare_upload_file(root_dir / '.one_root', '.one_root', article_id)
+
+    # Add the download instructions in the description.
+    description = figshare_request('articles/%s' % article_id).get('description', '')
+    if 'ONE interface' not in description:
+        description += DOWNLOAD_INSTRUCTIONS.replace('\n', '<br>')
+        figshare_request(
+            'account/articles/%s' % article_id, method='PUT', data={'description': description})
 
 
 def find_figshare_root_file(article_id):
