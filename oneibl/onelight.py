@@ -12,10 +12,10 @@ from collections import defaultdict
 import hashlib
 import json
 import logging
-# from operator import itemgetter
 import os.path as op
 from pathlib import Path
 import re
+import tempfile
 import urllib.parse
 
 import click
@@ -173,12 +173,6 @@ def update_repo_config(**kwargs):
         if repo['name'] == repo['name']:
             repo.update(kwargs)
     set_config(config)
-
-
-def _parse_article_id(url):
-    if url.endswith('/'):
-        url = url[:-1]
-    return int(url.split('/')[-1])
 
 
 def add_repository(name=None):
@@ -456,6 +450,11 @@ class HttpOne:
         self.download_dir = download_dir or default_download_dir()
         self.auth = auth
 
+    def _iter_files(self):
+        """Iterator over tuples (relative_path, full_path). It is up to the base class
+        to implement the method for downloading the data."""
+        yield from read_root_file(self.root_file)
+
     def _download_dataset(self, session, filename, url, dry_run=False):
         save_to_dir = Path(format_download_dir(session, self.download_dir))
         save_to = save_to_dir / filename
@@ -472,7 +471,7 @@ class HttpOne:
         if not session.endswith('/'):
             session += '/'
         out = []
-        for rel_path, _ in read_root_file(self.root_file):
+        for rel_path, _ in self._iter_files():
             if rel_path.startswith(session):
                 out.append('.'.join(op.basename(rel_path).split('.')[:2]))
         return sorted(out)
@@ -482,7 +481,7 @@ class HttpOne:
         if not dataset_types:
             # All sessions.
             return sorted(
-                set('/'.join(_[0].split('/')[:5]) for _ in read_root_file(self.root_file)))
+                set('/'.join(_[0].split('/')[:5]) for _ in self._iter_files()))
         dataset_types = [(dst + '*' if '*' not in dst else dst) for dst in dataset_types]
         filter_kwargs = {
             'lab': kwargs.get('lab', None),
@@ -497,7 +496,7 @@ class HttpOne:
         sessions = defaultdict(set)
         n_types = len(dataset_types)
         dtypes_substr = [dst.replace('*', '') for dst in dataset_types]
-        for rel_path, url, m in _search(read_root_file(self.root_file), pattern):
+        for rel_path, url, m in _search(self._iter_files(), pattern):
             session = '/'.join(rel_path.split('/')[:5])
             # For each session candidate, we check which dataset types it has.
             for dt in dtypes_substr:
@@ -514,7 +513,7 @@ class HttpOne:
         if not session.endswith('/'):
             session += '/'
         pattern = _make_dataset_regex(session, dataset_type)
-        tup = next(_search(read_root_file(self.root_file), pattern))
+        tup = next(_search(self._iter_files(), pattern))
         if not tup:
             raise ValueError("No `%s` file found in this session.", dataset_type)
         filename = tup[0].split('/')[-1]
@@ -533,7 +532,7 @@ class HttpOne:
         # could be specified for each object.
         pattern = _make_dataset_regex(session, obj)
         out = Bunch()
-        for rel_path, url, m in _search(read_root_file(self.root_file), pattern):
+        for rel_path, url, m in _search(self._iter_files(), pattern):
             filename = rel_path.split('/')[-1]
             fs = filename.split('.')
             attr = fs[1]
@@ -546,6 +545,12 @@ class HttpOne:
 # -------------------------------------------------------------------------------------------------
 # figshare uploader
 # -------------------------------------------------------------------------------------------------
+
+def _parse_article_id(url):
+    if url.endswith('/'):
+        url = url[:-1]
+    return int(url.split('/')[-1])
+
 
 def _get_file_check_data(file_name):
     chunk_size = 1048576
@@ -598,10 +603,10 @@ class FigshareUploader:
     def _post(self, endpoint=None, private=True, **kwargs):
         return self._req(endpoint, private=private, method='POST', **kwargs)
 
-    def iter_files(self):
+    def iter_files(self, private=True):
         """Iterate over all ALF files of a given figshare article."""
         r = _file_regex()
-        for file in self._get('files'):
+        for file in self._get('files', private=private):
             path = file['name'].replace('~', '/')
             if r.match(path):
                 yield path, file['download_url']
@@ -655,20 +660,38 @@ class FigshareUploader:
                     file_ids.append(f['id'])
         # Delete all specified files.
         for file_id in file_ids:
-            logger.debug("Delete file %s.", file_id['name'])
+            logger.debug("Delete file %s.", file_id)
             self._req('files/%s' % file_id, method='DELETE', error_level=logging.DEBUG)
 
-    def _find_root_file(self, use_cache=True):
+    def _find_root_file(self, private=True, use_cache=True):
         """Download and return the local path to the ONE root file of a figshare article."""
         root_file = repo_dir() / '.one_root'
         if use_cache and root_file.exists():
             return root_file
         # If the root file does not exist, find it on figshare.
-        for file in self._get('files'):
+        for file in self._get('files', private=private):
             if file['name'] == '.one_root':
                 download_file(file['download_url'], root_file)
                 assert root_file.exists()
                 return root_file
+
+    def _update_root_file(self, root_dir):
+        """Create and upload the root file, replacing any existing one."""
+        # At the end, create the root file.
+        root_file_path = root_dir / '.one_root'
+        self._make_root_file(root_file_path)
+        assert root_file_path.exists()
+
+        # to_delete = repository().get('root_file_id', None)
+        # if to_delete:
+
+        # Delete the old .one_root files
+        logger.debug("Deleting old versions of .one_root.")
+        self._delete(pattern=r'.+\.one_root')
+
+        # Upload the new root file to figshare.
+        root_file_id = self._upload(root_file_path, '.one_root')[0]
+        update_repo_config(root_file_id=root_file_id)
 
     def upload_dir(self, root_dir, dry_run=False, limit=None):
         """Upload to figshare all session files found in a root directory."""
@@ -690,25 +713,32 @@ class FigshareUploader:
             return
         logger.info("Uploaded %d new files.", len(uploaded))
 
-        # At the end, create the root file.
-        root_file_path = root_dir / '.one_root'
-        self._make_root_file(root_file_path)
-        assert root_file_path.exists()
-
-        # Upload the new root file to figshare, even if an old one exists.
-        to_delete = repository().get('root_file_id', None)
-        root_file_id = self._upload(root_file_path, '.one_root')[0]
-        # Delete the old .one_root
-        if to_delete:
-            logger.debug("Deleting old version of .one_root.")
-            self._delete(to_delete)
-        update_repo_config(root_file_id=root_file_id)
+        # Create and upload the root file.
+        self._update_root_file(root_dir)
 
         # Add the download instructions in the description.
         self._update_description()
 
         # Validate all changes.
         self._publish()
+
+    def _remove_duplicates(self):
+        """Remove duplicate files."""
+        existing = set()
+        for rel_path, _ in self.iter_files(private=True):
+            if rel_path in existing:
+                self._delete(pattern=_escape_for_regex(rel_path.replace('/', '~')))
+                existing.add(rel_path)
+
+    def clean_publish(self):
+        """Clean up and publish the figshare article."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Remove duplicates.
+            self._remove_duplicates()
+            # Update the ONE root.
+            self._update_root_file(Path(tmpdir))
+            # Publish.
+            self._publish()
 
 
 # -------------------------------------------------------------------------------------------------
@@ -718,7 +748,9 @@ class FigshareUploader:
 class FigshareOne(HttpOne):
     def __init__(self, article_id=None, download_dir=None):
         # NOTE: we don't use the cache if ever the data changes remotely.
-        root_file = FigshareUploader(article_id)._find_root_file(use_cache=False)
+        # NOTE: we use the public version here as the client may not have access to the private
+        # version of the figshare article.
+        root_file = FigshareUploader(article_id)._find_root_file(private=False, use_cache=False)
         if not root_file:
             raise ValueError(
                 "No ONE root file could be found in figshare article %d." % article_id)
@@ -873,7 +905,7 @@ def search_(dataset_types):
 
 @one.command('list')
 @click.argument('session')
-@is_documented_by(list)
+@is_documented_by(list_)
 def list_cli(session):
     for dataset_type in list_(session):
         click.echo(dataset_type)
@@ -910,6 +942,15 @@ def upload(root_dir, limit=0, dry_run=False):
         raise NotImplementedError("Upload not possible for HTTP repository.")
     assert repo.type == 'figshare'
     FigshareUploader(repo.article_id).upload_dir(root_dir, limit=limit, dry_run=dry_run)
+
+
+@one.command('clean_publish')
+@is_documented_by(FigshareUploader.clean_publish)
+def clean_publish():
+    repo = repository()
+    if repo.type == 'http':
+        raise NotImplementedError("Upload not possible for HTTP repository.")
+    FigshareUploader(repo.article_id).clean_publish()
 
 
 if __name__ == '__main__':
