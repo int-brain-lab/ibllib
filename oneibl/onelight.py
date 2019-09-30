@@ -284,13 +284,13 @@ def make_http_root_file(root, base_url, output):
 # Download and load
 # -------------------------------------------------------------------------------------------------
 
-def download_file(url, save_to, auth=None):
+def download_file(url, save_to, auth=None, log_level=logging.DEBUG):
     """Download a file from HTTP and save it to a file.
     If Basic HTTP authentication is needed, pass `auth=(username, password)`.
     """
     save_to = Path(save_to)
     save_to.parent.mkdir(parents=True, exist_ok=True)
-    logger.info("Downloading %s to %s.", url, str(save_to))
+    logger.log(log_level, "Downloading %s to %s.", url, str(save_to))
     if 'figshare.com/' in url:
         data = figshare_request(url=url, binary=False)
         with open(save_to, "wb") as f:
@@ -467,7 +467,7 @@ class HttpOne:
         save_to = save_to_dir / filename
         if not save_to.exists():
             if not dry_run:
-                download_file(url, save_to, auth=self.auth)
+                download_file(url, save_to, auth=self.auth, log_level=logging.INFO)
                 assert save_to.exists()
         else:
             logger.debug("Skip existing %s.", save_to)
@@ -709,15 +709,14 @@ class FigshareUploader:
         self._make_root_file(root_file_path)
         assert root_file_path.exists()
 
-        # to_delete = repository().get('root_file_id', None)
-        # if to_delete:
-
         # Delete the old .one_root files
         logger.debug("Deleting old versions of .one_root.")
         self._delete(pattern=r'.+\.one_root')
 
         # Upload the new root file to figshare.
         root_file_id = self._upload(root_file_path, '.one_root')[0]
+
+        # Update the root file id in the config file.
         update_repo_config(root_file_id=root_file_id)
 
     def upload_dir(self, root_dir, dry_run=False, limit=None):
@@ -734,8 +733,12 @@ class FigshareUploader:
             # Upload all found files.
             name = _get_file_rel_path(str(p))
             if name not in existing_files:
-                uploaded.append(self._upload(p, name.replace('/', '~'), dry_run=dry_run))
-        if dry_run or not uploaded:
+                try:
+                    up = self._upload(p, name.replace('/', '~'), dry_run=dry_run)
+                except Exception:
+                    break
+                uploaded.append(up)
+        if dry_run:
             logger.debug("Skip uploading.")
             return
         logger.info("Uploaded %d new files.", len(uploaded))
