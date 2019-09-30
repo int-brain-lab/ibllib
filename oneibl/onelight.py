@@ -178,9 +178,12 @@ def update_repo_config(**kwargs):
 def add_repository(name=None):
     """Interactive prompt to add a repository."""
     name = name or 'default'
-    print("Launching interactive configuration tool to add a new repository.")
     config = get_config()
-    repo = Bunch(name=name, type=input("`http` or `figshare`? "))
+    if name in (repo['name'] for repo in config['repositories']):
+        raise ValueError(
+            "The repository name `%s` already exists, please provide another one." % name)
+    print("Launching interactive configuration tool to add a new repository.")
+    repo = Bunch(name=name, type=input("`local`, `http`, or `figshare`? "))
     if repo.type == 'http':
         repo.update(
             base_url=input("Root URL? "),
@@ -193,6 +196,10 @@ def add_repository(name=None):
             token=input(
                 "Go to https://figshare.com/account/applications, generate a token, "
                 "and copy-paste it here: "),
+        )
+    elif repo.type == 'local':
+        repo.update(
+            root_dir=input('root path? '),
         )
     config['repositories'].append(repo)
     set_config(config)
@@ -542,6 +549,26 @@ class HttpOne:
         return out
 
 
+class LocalOne(HttpOne):
+    def __init__(self, root_dir):
+        assert root_dir
+        root_dir = Path(root_dir).expanduser()
+        if not root_dir.exists():
+            raise ValueError("Root dir %s could not be found." % root_dir)
+        if not root_dir.is_dir():
+            raise ValueError("Root dir %s is not a directory." % root_dir)
+        self.root_dir = root_dir
+
+    def _iter_files(self):
+        """Iterator over tuples (relative_path, full_path)."""
+        for p in find_session_files(self.root_dir):
+            rel_path = _get_file_rel_path(p)
+            yield rel_path, str(p)
+
+    def _download_dataset(self, session, filename, url, dry_run=False):
+        return url
+
+
 # -------------------------------------------------------------------------------------------------
 # figshare uploader
 # -------------------------------------------------------------------------------------------------
@@ -806,6 +833,11 @@ def _make_figshare_one(repo):
     return FigshareOne(article_id=repo.article_id, download_dir=download_dir())
 
 
+def _make_local_one(repo):
+    """Create a new LocalOne instance based on the config file."""
+    return LocalOne(repo.root_dir)
+
+
 def get_one():
     """Get the singleton One instance, loading it from the config file, or using the singleton
     instance if it has already been instantiated."""
@@ -816,6 +848,8 @@ def get_one():
         globals()['_CURRENT_ONE'] = _make_http_one(repo)
     elif repo.type == 'figshare':
         globals()['_CURRENT_ONE'] = _make_figshare_one(repo)
+    elif repo.type == 'local':
+        globals()['_CURRENT_ONE'] = _make_local_one(repo)
     else:
         raise NotImplementedError(repo.type)
     return globals()['_CURRENT_ONE']
@@ -879,8 +913,8 @@ def repo(name=None):
             repo = Bunch(repo)
             is_current = '*' if repo.name == repository().name else ''
             click.echo(
-                f'{is_current}{repo.name} ({repo.type} '
-                f'{repo.get("base_url", repo.get("article_id", ""))})')
+                f'{is_current}{repo.name}: {repo.type} '
+                f'{repo.get("base_url", repo.get("article_id", ""))}')
     else:
         set_repository(name)
 
@@ -938,9 +972,8 @@ def scan(root_dir, sessions_only=False):
 def upload(root_dir, limit=0, dry_run=False):
     """Upload a root directory to a figshare article."""
     repo = repository()
-    if repo.type == 'http':
-        raise NotImplementedError("Upload not possible for HTTP repository.")
-    assert repo.type == 'figshare'
+    if repo.type != 'figshare':
+        raise NotImplementedError("Upload only possible for figshare repositories.")
     FigshareUploader(repo.article_id).upload_dir(root_dir, limit=limit, dry_run=dry_run)
 
 
@@ -948,8 +981,8 @@ def upload(root_dir, limit=0, dry_run=False):
 @is_documented_by(FigshareUploader.clean_publish)
 def clean_publish():
     repo = repository()
-    if repo.type == 'http':
-        raise NotImplementedError("Upload not possible for HTTP repository.")
+    if repo.type != 'figshare':
+        raise NotImplementedError("Upload only possible for figshare repositories.")
     FigshareUploader(repo.article_id).clean_publish()
 
 
@@ -957,4 +990,5 @@ if __name__ == '__main__':
     try:
         one()
     except Exception as e:
-        raise e
+        click.echo(e, err=True)
+        # raise e
