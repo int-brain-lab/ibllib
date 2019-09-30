@@ -289,7 +289,7 @@ def download_file(url, save_to, auth=None):
     """
     save_to = Path(save_to)
     save_to.parent.mkdir(parents=True, exist_ok=True)
-    logger.info("Downloading %s to %s.", url, str(save_to.parent))
+    logger.info("Downloading %s to %s.", url, str(save_to))
     if 'figshare.com/' in url:
         data = figshare_request(url=url, binary=False)
         with open(save_to, "wb") as f:
@@ -467,7 +467,7 @@ class HttpOne:
             logger.debug("Skip existing %s.", save_to)
         return save_to
 
-    def list(self, session):
+    def list_(self, session):
         """List all dataset types found in the session."""
         if not session.endswith('/'):
             session += '/'
@@ -544,44 +544,8 @@ class HttpOne:
 
 
 # -------------------------------------------------------------------------------------------------
-# figshare ONE
+# figshare uploader
 # -------------------------------------------------------------------------------------------------
-
-def figshare_request(
-        endpoint=None, data=None, method='GET', url=None,
-        binary=False, error_level='ERROR'):
-    """Perform a REST request against the figshare API."""
-    headers = {'Authorization': 'token ' + repository().get('token', None)}
-    if data is not None and not binary:
-        data = json.dumps(data)
-    response = requests.request(
-        method, url or _FIGSHARE_BASE_URL.format(endpoint=endpoint), headers=headers, data=data)
-    try:
-        response.raise_for_status()
-        try:
-            data = json.loads(response.content)
-        except ValueError:
-            data = response.content
-    except HTTPError as error:
-        logger.log(error_level, error)
-        # raise error
-    return data
-
-
-def figshare_files(article_id):
-    """Iterate over all ALF files of a given figshare article."""
-    files = figshare_request('articles/%s/files' % str(article_id))
-    r = _file_regex()
-    for file in files:
-        path = file['name'].replace('~', '/')
-        if r.match(path):
-            yield path, file['download_url']
-
-
-def make_figshare_root_file(article_id, output):
-    """Create a root file for a figshare article."""
-    write_root_file(output, figshare_files(article_id))
-
 
 def _get_file_check_data(file_name):
     chunk_size = 1048576
@@ -596,103 +560,165 @@ def _get_file_check_data(file_name):
         return md5.hexdigest(), size
 
 
-def figshare_upload_file(path, name, article_id, dry_run=False):
-    """Upload a single file to figshare."""
-    # see https://docs.figshare.com/#upload_files_example_upload_on_figshare
-    assert Path(path).exists()
-    logger.info("Uploading %s.%s", path, '' if not dry_run else ' --dry-run')
-    if dry_run:
-        return
-    md5, size = _get_file_check_data(path)
-    data = {'name': name, 'md5': md5, 'size': size}
-    file_info = figshare_request(
-        'account/articles/%s/files' % article_id, method='POST', data=data)
-    file_info = figshare_request(url=file_info['location'])
-    result = figshare_request(url=file_info.get('upload_url'))
-    with open(path, 'rb') as stream:
-        for part in result['parts']:
-            udata = file_info.copy()
-            udata.update(part)
-            url = '{upload_url}/{partNo}'.format(**udata)
-            stream.seek(part['startOffset'])
-            data = stream.read(part['endOffset'] - part['startOffset'] + 1)
-            figshare_request(url=url, method='PUT', data=data, binary=True)
-    endpoint = 'account/articles/{}/files/{}'.format(article_id, file_info['id'])
-    figshare_request(endpoint, method='POST')
-    return file_info['id']
+def figshare_request(
+        endpoint=None, data=None, method='GET', url=None,
+        binary=False, error_level=logging.ERROR):
+    """Perform a REST request against the figshare API."""
+    headers = {'Authorization': 'token ' + repository().get('token', None)}
+    if data is not None and not binary:
+        data = json.dumps(data)
+    response = requests.request(
+        method, url or _FIGSHARE_BASE_URL.format(endpoint=endpoint), headers=headers, data=data)
+    try:
+        response.raise_for_status()
+        try:
+            data = json.loads(response.content)
+        except ValueError:
+            data = response.content
+    except HTTPError as error:
+        logger.log(error_level, error)
+        raise error
+    return data
 
 
-def figshare_publish(article_id):
-    logger.debug("Publishing new version for article %d." % article_id)
-    figshare_request('account/articles/%s/publish' % article_id, method='POST')
+class FigshareUploader:
+    def __init__(self, article_id):
+        assert article_id
+        self.article_id = int(article_id)
 
+    def _req(self, endpoint=None, private=True, **kwargs):
+        return figshare_request('%sarticles/%d%s' % (
+            'account/' if private else '',
+            self.article_id,
+            '/' + endpoint if endpoint else ''), **kwargs)
 
-def figshare_update_description(article_id):
-    """Append the ONE interface doc at the end of the article's description."""
-    description = figshare_request('articles/%s' % article_id).get('description', '')
-    if 'ONE interface' not in description:
-        description += DOWNLOAD_INSTRUCTIONS.replace('\n', '<br>')
-        logger.debug("Updating description of article %d." % article_id)
-        figshare_request(
-            'account/articles/%s' % article_id, method='PUT', data={'description': description})
+    def _get(self, endpoint=None, private=True, **kwargs):
+        return self._req(endpoint, private=private, **kwargs)
 
+    def _post(self, endpoint=None, private=True, **kwargs):
+        return self._req(endpoint, private=private, method='POST', **kwargs)
 
-def figshare_upload_dir(root_dir, article_id, dry_run=False):
-    """Upload to figshare all session files found in a root directory."""
-    root_dir = Path(root_dir)
+    def iter_files(self):
+        """Iterate over all ALF files of a given figshare article."""
+        r = _file_regex()
+        for file in self._get('files'):
+            path = file['name'].replace('~', '/')
+            if r.match(path):
+                yield path, file['download_url']
 
-    # Get existing files on figshare to avoid uploading them twice.
-    existing_files = set(_[0] for _ in figshare_files(article_id))
+    def _make_root_file(self, output):
+        """Create a root file for a figshare article."""
+        write_root_file(output, self.iter_files())
 
-    n = 0
-    for p in find_session_files(root_dir):
-        # Upload all found files.
-        name = _get_file_rel_path(str(p))
-        if name not in existing_files:
-            figshare_upload_file(p, name.replace('/', '~'), article_id, dry_run=dry_run)
-            n += 1
-    if dry_run or n == 0:
-        logger.debug("Skip uploading.")
-        return
-    logger.info("Uploaded %d new files.", n)
+    def _upload(self, path, name, dry_run=False):
+        """Upload a single file to figshare."""
+        # see https://docs.figshare.com/#upload_files_example_upload_on_figshare
+        assert Path(path).exists()
+        logger.info("Uploading %s%s", path, '' if not dry_run else ' --dry-run')
+        if dry_run:
+            return
+        md5, size = _get_file_check_data(path)
+        data = {'name': name, 'md5': md5, 'size': size}
+        file_info = self._post('files', data=data)
+        file_info = self._get(url=file_info['location'])
+        result = self._get(url=file_info.get('upload_url'))
+        with open(path, 'rb') as stream:
+            for part in result['parts']:
+                udata = file_info.copy()
+                udata.update(part)
+                url = '{upload_url}/{partNo}'.format(**udata)
+                stream.seek(part['startOffset'])
+                data = stream.read(part['endOffset'] - part['startOffset'] + 1)
+                self._req(url=url, method='PUT', data=data, binary=True)
+        self._post('files/%s' % file_info['id'])
+        return file_info['id'], file_info['download_url']
 
-    # At the end, create the root file.
-    make_figshare_root_file(article_id, root_dir / '.one_root')
+    def _publish(self):
+        logger.debug("Publishing new version for article %d." % self.article_id)
+        self._post('publish')
 
-    # Upload the new root file to figshare, even if an old one exists.
-    to_delete = repository().get('root_file_id', None)
-    root_file_id = figshare_upload_file(root_dir / '.one_root', '.one_root', article_id)
-    # Delete the old .one_root
-    if to_delete:
-        logger.debug("Deleting old version of .one_root.")
-        figshare_request(
-            'account/articles/%s/files/%s' % (article_id, to_delete),
-            method='DELETE', error_level='DEBUG')
-    update_repo_config(root_file_id=root_file_id)
+    def _update_description(self):
+        """Append the ONE interface doc at the end of the article's description."""
+        description = self._get('').get('description', '')
+        if 'ONE interface' not in description:
+            description += DOWNLOAD_INSTRUCTIONS.replace('\n', '<br>')
+            logger.debug("Updating description of article %d." % self.article_id)
+            self._req('', method='PUT', data={'description': description})
 
-    # Add the download instructions in the description.
-    figshare_update_description(article_id)
+    def _delete(self, *file_ids, pattern=None):
+        file_ids = list(file_ids)
+        # Find the files to delete based on a regex pattern.
+        if not file_ids:
+            r = re.compile(pattern)
+            for f in self._get('files'):
+                if r.match(f['name']):
+                    file_ids.append(f['id'])
+        # Delete all specified files.
+        for file_id in file_ids:
+            logger.debug("Delete file %s.", file_id['name'])
+            self._req('files/%s' % file_id, method='DELETE', error_level=logging.DEBUG)
 
-    figshare_publish(article_id)
-
-
-def find_figshare_root_file(article_id):
-    """Download and return the local path to the ONE root file of a figshare article."""
-    root_file = repo_dir() / '.one_root'
-    if root_file.exists():
-        return root_file
-    # If the root file does not exist, find it on figshare.
-    files = figshare_request('articles/%s/files' % article_id)
-    for file in files:
-        if file['name'] == '.one_root':
-            download_file(file['download_url'], root_file)
-            assert root_file.exists()
+    def _find_root_file(self, use_cache=True):
+        """Download and return the local path to the ONE root file of a figshare article."""
+        root_file = repo_dir() / '.one_root'
+        if use_cache and root_file.exists():
             return root_file
+        # If the root file does not exist, find it on figshare.
+        for file in self._get('files'):
+            if file['name'] == '.one_root':
+                download_file(file['download_url'], root_file)
+                assert root_file.exists()
+                return root_file
 
+    def upload_dir(self, root_dir, dry_run=False, limit=None):
+        """Upload to figshare all session files found in a root directory."""
+        root_dir = Path(root_dir)
+
+        # Get existing files on figshare to avoid uploading them twice.
+        existing_files = set(_[0] for _ in self.iter_files())
+
+        uploaded = []
+        for p in find_session_files(root_dir):
+            if limit and len(uploaded) >= limit:
+                break
+            # Upload all found files.
+            name = _get_file_rel_path(str(p))
+            if name not in existing_files:
+                uploaded.append(self._upload(p, name.replace('/', '~'), dry_run=dry_run))
+        if dry_run or not uploaded:
+            logger.debug("Skip uploading.")
+            return
+        logger.info("Uploaded %d new files.", len(uploaded))
+
+        # At the end, create the root file.
+        root_file_path = root_dir / '.one_root'
+        self._make_root_file(root_file_path)
+        assert root_file_path.exists()
+
+        # Upload the new root file to figshare, even if an old one exists.
+        to_delete = repository().get('root_file_id', None)
+        root_file_id = self._upload(root_file_path, '.one_root')[0]
+        # Delete the old .one_root
+        if to_delete:
+            logger.debug("Deleting old version of .one_root.")
+            self._delete(to_delete)
+        update_repo_config(root_file_id=root_file_id)
+
+        # Add the download instructions in the description.
+        self._update_description()
+
+        # Validate all changes.
+        self._publish()
+
+
+# -------------------------------------------------------------------------------------------------
+# figshare client
+# -------------------------------------------------------------------------------------------------
 
 class FigshareOne(HttpOne):
     def __init__(self, article_id=None, download_dir=None):
-        root_file = find_figshare_root_file(article_id)
+        # NOTE: we don't use the cache if ever the data changes remotely.
+        root_file = FigshareUploader(article_id)._find_root_file(use_cache=False)
         if not root_file:
             raise ValueError(
                 "No ONE root file could be found in figshare article %d." % article_id)
@@ -787,9 +813,9 @@ def search(dataset_types, **kwargs):
     return get_one().search(dataset_types, **kwargs)
 
 
-@is_documented_by(HttpOne.list)
-def list(session):
-    return get_one().list(session)
+@is_documented_by(HttpOne.list_)
+def list_(session):
+    return get_one().list_(session)
 
 
 @is_documented_by(HttpOne.load_object)
@@ -827,7 +853,7 @@ def repo(name=None):
         set_repository(name)
 
 
-@one.command()
+@one.command('add_repo')
 @click.argument('name', required=False)
 def add_repo(name=None):
     """Add a new repository and prompt for its configuration info."""
@@ -848,8 +874,8 @@ def search_(dataset_types):
 @one.command('list')
 @click.argument('session')
 @is_documented_by(list)
-def list_(session):
-    for dataset_type in list(session):
+def list_cli(session):
+    for dataset_type in list_(session):
         click.echo(dataset_type)
 
 
@@ -875,14 +901,15 @@ def scan(root_dir, sessions_only=False):
 
 @one.command()
 @click.argument('root_dir')
+@click.option('--limit', type=int, default=0, help="maximum number of files to upload")
 @click.option('--dry-run', is_flag=True)
-def upload(root_dir, dry_run=False):
+def upload(root_dir, limit=0, dry_run=False):
     """Upload a root directory to a figshare article."""
     repo = repository()
     if repo.type == 'http':
         raise NotImplementedError("Upload not possible for HTTP repository.")
     assert repo.type == 'figshare'
-    figshare_upload_dir(root_dir, repo.article_id, dry_run=dry_run)
+    FigshareUploader(repo.article_id).upload_dir(root_dir, limit=limit, dry_run=dry_run)
 
 
 if __name__ == '__main__':
