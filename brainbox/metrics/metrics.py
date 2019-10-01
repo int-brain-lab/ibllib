@@ -10,9 +10,9 @@ import numpy as np
 import scipy.stats as stats
 import scipy.ndimage.filters as filters
 import matplotlib.pyplot as plt
-# install via `pip install spikemetrics` or 
-# `git clone https://github.com/SpikeInterface/spikemetrics`
-import spikemetrics as sm
+## install via `pip install spikemetrics` or 
+## `git clone https://github.com/SpikeInterface/spikemetrics`
+#import spikemetrics as sm
 
 def unit_stability(spks, features=['amps'], dist='norm', test='ks'):
     '''
