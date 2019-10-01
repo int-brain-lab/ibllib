@@ -3,11 +3,11 @@ Set of functions for processing data from one form into another,
 for example taking spike times and then binning them into non-overlapping
 bins or convolving with a gaussian kernel.
 '''
+import brainbox as bb
+from brainbox import core
 import numpy as np
 import pandas as pd
 from scipy import interpolate
-from brainbox import core
-
 
 def sync(dt, times=None, values=None, timeseries=None, offsets=None, interp='zero',
          fillval=np.nan):
@@ -180,3 +180,66 @@ def bin_spikes(spikes, binsize, interval_indices=False):
         return core.TimeSeries(times=intervals, values=rates.T[:-1], columns=clusters)
     else:
         return core.TimeSeries(times=tbins, values=rates.T, columns=clusters)
+
+
+def get_units_bunch(spks, *args):
+    '''
+    Returns a bunch, where the bunch keys are keys from `spks` of labels of spike information (e.g.
+    unit IDs, times, features, etc.), and the values for each key are arrays with values for each 
+    unit. The arrays for each key are ordered by unit ID.
+
+
+    Parameters
+    ----------
+    spks : bunch
+        A spikes bunch containing fields with spike information (e.g. unit IDs, times, features,
+        etc.) for all spikes.
+    features : list of strings (optional)
+        A list of names of labels of spike information (which must be keys in `spks`) that specify
+        which labels to return as keys in `units`. If not provided, all keys in `spks` are returned
+        as keys in `units`.
+
+    Returns
+    -------
+    units : bunch
+        A bunch with keys of labels of spike information (e.g. cluster IDs, times, features, etc.) 
+        whose values are arrays that hold values for each unit. The arrays for each key are ordered 
+        by unit ID.
+
+    Examples
+    --------
+    1) Create a units bunch given a spikes bunch, and get the amps from unit #4 from the units 
+    bunch.
+        >>> import brainbox as bb
+        >>> import alf.io as aio
+        # Get a spikes bunch.
+        >>> spks = aio.load_object('path\\to\\ks_output', 'spikes')
+        # Get a units bunch.
+        >>> units = bb.processing.get_units_bunch(spks)
+        # Get amplitudes for unit #4.
+        >>> amps = units['amps'][4] 
+    '''
+
+    # Initialize `units`
+    units = bb.core.Bunch()
+    # Get the keys to return for `units`:
+    if not args:
+        keys = list(spks.keys())
+    else:
+        keys = args[0]
+    # Get spikes for each unit and total number of units: *Note: `num_units` might not equal 
+    # `len(unique_ids)`, because some ids may be missing.
+    spks_unit_id = spks['clusters']
+    num_units = np.max(spks_unit_id) + 1
+    # For each key in `units`, iteratively get each unit's values, append units together in a
+    # list, and after appending together all units, add the list (as a key) to `units`:
+    for key in keys:
+        feat_list = []
+        for unit in range(num_units):
+            # Append current unit's values to list of unit's values for current key:
+            unit_idxs = np.where(spks_unit_id==unit)[0]
+            feat_list.append(spks[key][unit_idxs])
+            # When we have gone through all units, add `feat_list` to `units` as `key`:
+            if unit == num_units - 1:
+                units[key] = feat_list
+    return units
