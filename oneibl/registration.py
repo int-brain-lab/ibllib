@@ -18,7 +18,8 @@ REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
                               'raw_video_data/**/_iblrig_*.*',
                               'raw_video_data/**/_ibl_*.*',
                               'raw_ephys_data/**/_iblrig_*.*',
-                              'raw_ephys_data/**/_spikeglx_*.*']
+                              'raw_ephys_data/**/_spikeglx_*.*',
+                              'raw_ephys_data/**/ks2_alf/*.*']
 
 
 # this is a decorator to add a logfile to each extraction and registration on top of the logging
