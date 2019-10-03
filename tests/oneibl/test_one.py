@@ -139,21 +139,21 @@ class TestLoad(unittest.TestCase):
     def test_load(self):
         # Test with 3 actual datasets predefined
         one = self.One
-        dataset_types = ['clusters.peakChannel', 'clusters._phy_annotation', 'clusters.probes']
+        dataset_types = ['clusters.channels', 'clusters._phy_annotation', 'clusters.probes']
         eid = ('https://test.alyx.internationalbrainlab.org/'
                'sessions/' + self.eid)
         t, cr, cl = one.load(eid, dataset_types=dataset_types)
         d = one.load(eid, dataset_types=dataset_types, dclass_output=True)
-        ind = int(np.where(np.array(d.dataset_type) == 'clusters.peakChannel')[0])
+        ind = int(np.where(np.array(d.dataset_type) == 'clusters.channels')[0])
         self.assertTrue(np.all(d.data[ind] == t))
         # Now load with another dset inbetween that doesn't exist
-        t_, cr_, cl_ = one.load(eid, dataset_types=['clusters.peakChannel', 'turlu',
+        t_, cr_, cl_ = one.load(eid, dataset_types=['clusters.channels', 'turlu',
                                                     'clusters.probes'])
         self.assertTrue(np.all(t == t_))
         self.assertTrue(np.all(cl == cl_))
         self.assertTrue(cr_ is None)
         # Now try in offline mode where the file already exists
-        t_ = one.load(eid, dataset_types=['clusters.peakChannel'], offline=True)
+        t_ = one.load(eid, dataset_types=['clusters.channels'], offline=True)
         self.assertTrue(np.all(t == t_))
 
     def test_load_empty(self):
