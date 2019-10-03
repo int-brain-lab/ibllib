@@ -49,9 +49,7 @@ class RegistrationClient:
                 continue
             logger_.info('creating session for ' + str(flag_file.parent))
             # providing a false flag stops the registration after session creation
-            status_str = self.register_session(flag_file.parent, file_list=False)
-            if status_str:
-                logger_.error(status_str)
+            self.register_session(flag_file.parent, file_list=False)
             flag_file.unlink()
 
     def register_sync(self, root_data_folder, dry=False):
@@ -69,17 +67,7 @@ class RegistrationClient:
                 continue
             file_list = flags.read_flag_file(flag_file)
             logger_.info('registering ' + str(flag_file.parent))
-            status_str = self.register_session(flag_file.parent, file_list=file_list)
-            if status_str:
-                error_message = str(flag_file.parent) + ' failed registration'
-                error_message += '\n' + ' ' * 8 + status_str
-                error_message += traceback.format_exc()
-                logger_.error(error_message)
-                err_file = flag_file.parent.joinpath('register_me.error')
-                flag_file.replace(err_file)
-                with open(err_file, 'w+') as f:
-                    f.write(error_message)
-                continue
+            self.register_session(flag_file.parent, file_list=file_list)
             flags.write_flag_file(flag_file.parent.joinpath('flatiron.flag'), file_list=file_list)
             flag_file.unlink()
             if flag_file.parent.joinpath('create_me.flag').exists():
@@ -87,7 +75,7 @@ class RegistrationClient:
             logger_.info('registered' + '\n')
 
 
-    @log2session('register.log')
+    @log2session('register')
     def register_session(self, ses_path, file_list=True, repository_name=None):
         """
         Register session in Alyx
@@ -110,8 +98,9 @@ class RegistrationClient:
         # query alyx endpoints for subject, error if not found
         try:
             subject = self.one.alyx.rest('subjects?nickname=' + md['SUBJECT_NAME'], 'list')[0]
-        except IndexError:
-            return 'Subject: ' + md['SUBJECT_NAME'] + " doesn't exist in Alyx. ABORT."
+        except IndexError as e:
+            logger_.error(f"Subject: {md['SUBJECT_NAME']} doesn't exist in Alyx. ABORT.")
+            raise e
 
         # look for a session from the same subject, same number on the same day
         session_id, session = self.one.search(subjects=subject['nickname'],
@@ -120,8 +109,9 @@ class RegistrationClient:
                                               details=True)
         try:
             user = self.one.alyx.rest('users', 'read', id=md["PYBPOD_CREATOR"][0])
-        except Exception:
-            return 'User: ' + md["PYBPOD_CREATOR"][0] + " doesn't exist in Alyx. ABORT"
+        except Exception as e:
+            logger_.error(f"User: {md['PYBPOD_CREATOR'][0]} doesn't exist in Alyx. ABORT")
+            raise e
 
         username = user['username'] if user else subject['responsible_user']
 
@@ -195,10 +185,11 @@ class RegistrationClient:
                 continue
             try:
                 assert (str(gen_rel_path) in str(fn))
-            except AssertionError:
+            except AssertionError as e:
                 strerr = 'ALF folder mismatch: data is in wrong subject/date/number folder. \n'
                 strerr += ' Expected ' + str(gen_rel_path) + ' actual was ' + str(fn)
-                return strerr
+                logger_.error(strerr)
+                raise e
             # extract the relative path of the file
             rel_path = Path(str(fn)[str(fn).find(str(gen_rel_path)):]).parent
             if str(rel_path) not in F.keys():

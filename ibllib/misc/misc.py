@@ -3,8 +3,8 @@ import numpy as np
 import json
 import re
 import logging
+import traceback
 from pathlib import Path
-from datetime import date
 
 from ibllib.misc import version
 _logger = logging.getLogger('ibllib')
@@ -40,13 +40,26 @@ def log2session(func, log_file_name):
     first argument to a {session_path}/logs/yyyy-mm-dd_{log_filename}_ibllib_v1.2.3.log"""
     def func_wrapper(sessionpath, *args, **kwargs):
         log_file = Path(sessionpath).joinpath(
-            'logs', f'{date.today()}_{log_file_name}_ibllib_v{version.ibllib()}.log')
+            'logs', f'_ibl_log.info.{log_file_name}_v{version.ibllib()}.log')
         log_file.parent.mkdir(exist_ok=True)
         fh = logging.FileHandler(log_file)
         str_format = '%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
         fh.setFormatter(logging.Formatter(str_format))
         _logger.addHandler(fh)
-        f = func(sessionpath, *args, **kwargs)
+        # run the function with a broad error Exception that will go in the error log if caught
+        # the goal here is to continue to next step without raising an error but registering
+        # the error log on the server to have it available
+        try:
+            f = func(sessionpath, *args, **kwargs)
+        except Exception as e:
+            error_message = f'{sessionpath} failed extraction \n  {str(e)} \n' \
+                            f'{traceback.format_exc()}'
+            err_file = Path(sessionpath).joinpath(
+                'logs', f'_ibl_log.error.{log_file_name}_v{version.ibllib()}.log')
+            with open(err_file, 'w+') as f:
+                f.write(error_message)
+            _logger.error(error_message)
+        # reset the info logger
         fh.close()
         _logger.removeHandler(fh)
         return f

@@ -9,7 +9,6 @@ Extract data OR return error to user saying that the task has no extractors
 """
 import logging
 from pathlib import Path
-import traceback
 
 from ibllib.misc import log2session
 from ibllib.io.extractors import (ephys_trials, ephys_fpga,
@@ -68,7 +67,7 @@ def is_extracted(session_path):
         return False
 
 
-@log2session('extraction.log')
+@log2session('extraction')
 def from_path(session_path, force=False, save=True):
     """
     Extract a session from full ALF path (ex: '/scratch/witten/ibl_witten_01/2018-12-18/001')
@@ -112,16 +111,6 @@ def bulk(subjects_folder, dry=False, glob_flag='**/extract_me.flag'):
         if dry:
             print(p)
             continue
-        try:
-            from_path(p.parent, force=True, save=save)
-        except Exception as e:
-            error_message = str(p.parent) + ' failed extraction' + '\n    ' + str(e)
-            error_message += traceback.format_exc()
-            err_file = p.parent.joinpath('extract_me.error')
-            p.replace(err_file)
-            with open(err_file, 'w+') as f:
-                f.write(error_message)
-            logger_.error(error_message)
-            continue
+        from_path(p.parent, force=True, save=save)
         p.unlink()
         flags.write_flag_file(p.parent.joinpath('register_me.flag'), file_list=save)

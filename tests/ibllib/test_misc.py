@@ -16,20 +16,30 @@ class TestLog2Session(unittest.TestCase):
         logger.setLevel('INFO')
 
         @log2session('tutu')
-        def tutu(session_path, mystr):
+        def tutu(session_path, mystr, check=True):
             logger.info('info')
             logger.warning(mystr)
+            assert check
 
         with tempfile.TemporaryDirectory() as session_path:
             session_path = Path(session_path)
             tutu(session_path, 'tutu')
             tutu(session_path, 'tata')
-            logfn = f'{date.today()}_tutu_ibllib_v{version.ibllib()}.log'
+            logfn = f'_ibl_log.info.tutu_v{version.ibllib()}.log'
             outlog = session_path.joinpath('logs', logfn)
             self.assertTrue(outlog.exists())
             with open(outlog) as f:
                 l = f.read()
             self.assertTrue('WARNING' in l and 'tutu' in l and 'info' in l and 'tata' in l)
+
+            # now check the catching of the assertion error
+            tutu(session_path, 'titi', False)
+            errfn = f'_ibl_log.error.tutu_v{version.ibllib()}.log'
+            outerr = session_path.joinpath('logs', errfn)
+            self.assertTrue(outerr.exists())
+            with open(outerr) as f:
+                ll = f.read()
+            self.assertTrue('AssertionError' in ll and 'assert check' in ll and 'in tutu' in ll)
         logger.setLevel(level)
 
 
