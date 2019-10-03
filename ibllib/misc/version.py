@@ -1,3 +1,5 @@
+import pkg_resources
+
 def _compare_version_tag(v1, v2, fcn):
     v1_ = ''.join(['{:03d}'.format(int(v)) for v in v1.split('.')])
     v2_ = ''.join(['{:03d}'.format(int(v)) for v in v2.split('.')])
@@ -67,3 +69,11 @@ def eq(v1, v2):
     :return: bool
     """
     return _compare_version_tag(v1, v2, str.__eq__)
+
+
+def ibllib():
+    try:
+        version = pkg_resources.get_distribution("ibllib").version
+    except pkg_resources.DistributionNotFound as err:
+        version = 'unversioned'
+    return version

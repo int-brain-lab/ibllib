@@ -1,8 +1,36 @@
 import unittest
 import logging
 import time
+import tempfile
+from pathlib import Path
+from datetime import date
 
-from ibllib.misc import version, print_progress
+from ibllib.misc import version, print_progress, log2session
+
+
+class TestLog2Session(unittest.TestCase):
+
+    def test_log2session(self):
+        logger = logging.getLogger('ibllib')
+        level = logger.level
+        logger.setLevel('INFO')
+
+        @log2session('tutu')
+        def tutu(session_path, mystr):
+            logger.info('info')
+            logger.warning(mystr)
+
+        with tempfile.TemporaryDirectory() as session_path:
+            session_path = Path(session_path)
+            tutu(session_path, 'tutu')
+            tutu(session_path, 'tata')
+            logfn = f'{date.today()}_tutu_ibllib_v{version.ibllib()}.log'
+            outlog = session_path.joinpath('logs', logfn)
+            self.assertTrue(outlog.exists())
+            with open(outlog) as f:
+                l = f.read()
+            self.assertTrue('WARNING' in l and 'tutu' in l and 'info' in l and 'tata' in l)
+        logger.setLevel(level)
 
 
 class TestPrintProgress(unittest.TestCase):

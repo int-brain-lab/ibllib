@@ -11,6 +11,7 @@ import logging
 from pathlib import Path
 import traceback
 
+from ibllib.misc import log2session
 from ibllib.io.extractors import (ephys_trials, ephys_fpga,
                                   biased_wheel, biased_trials,
                                   training_trials, training_wheel)
@@ -18,20 +19,6 @@ from ibllib.io import raw_data_loaders as raw
 import ibllib.io.flags as flags
 
 logger_ = logging.getLogger('ibllib.alf')
-
-
-# this is a decorator to add a logfile to each extraction and registration on top of the logging
-def log2sessionfile(func):
-    def func_wrapper(sessionpath, *args, **kwargs):
-        fh = logging.FileHandler(Path(sessionpath).joinpath('extract_register.log'))
-        str_format = '%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
-        fh.setFormatter(logging.Formatter(str_format))
-        logger_.addHandler(fh)
-        f = func(sessionpath, *args, **kwargs)
-        fh.close()
-        logger_.removeHandler(fh)
-        return f
-    return func_wrapper
 
 
 def get_task_extractor_type(task_name):
@@ -81,7 +68,7 @@ def is_extracted(session_path):
         return False
 
 
-@log2sessionfile
+@log2session('extraction.log')
 def from_path(session_path, force=False, save=True):
     """
     Extract a session from full ALF path (ex: '/scratch/witten/ibl_witten_01/2018-12-18/001')

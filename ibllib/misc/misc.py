@@ -2,6 +2,12 @@
 import numpy as np
 import json
 import re
+import logging
+from pathlib import Path
+from datetime import date
+
+from ibllib.misc import version
+_logger = logging.getLogger('ibllib')
 
 
 def pprint(my_dict):
@@ -18,6 +24,33 @@ def is_uuid_string(string):
         return True
     else:
         return False
+
+
+def _parametrized(dec):
+    def layer(*args, **kwargs):
+        def repl(f):
+            return dec(f, *args, **kwargs)
+        return repl
+    return layer
+
+
+@_parametrized
+def log2session(func, log_file_name):
+    """ Decorator that will fork the log output of any function that takes a session path as
+    first argument to a {session_path}/logs/yyyy-mm-dd_{log_filename}_ibllib_v1.2.3.log"""
+    def func_wrapper(sessionpath, *args, **kwargs):
+        log_file = Path(sessionpath).joinpath(
+            'logs', f'{date.today()}_{log_file_name}_ibllib_v{version.ibllib()}.log')
+        log_file.parent.mkdir(exist_ok=True)
+        fh = logging.FileHandler(log_file)
+        str_format = '%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
+        fh.setFormatter(logging.Formatter(str_format))
+        _logger.addHandler(fh)
+        f = func(sessionpath, *args, **kwargs)
+        fh.close()
+        _logger.removeHandler(fh)
+        return f
+    return func_wrapper
 
 
 def structarr(names, shape=None, formats=None):

@@ -6,7 +6,7 @@ import traceback
 from dateutil import parser as dateparser
 
 import ibllib.time
-from ibllib.misc import version
+from ibllib.misc import version, log2session
 import ibllib.io.raw_data_loaders as raw
 import ibllib.io.flags as flags
 
@@ -20,20 +20,6 @@ REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
                               'raw_ephys_data/**/_iblrig_*.*',
                               'raw_ephys_data/**/_spikeglx_*.*',
                               'raw_ephys_data/**/ks2_alf/*.*']
-
-
-# this is a decorator to add a logfile to each extraction and registration on top of the logging
-def log2sessionfile(func):
-    def func_wrapper(self, sessionpath, *args, **kwargs):
-        fh = logging.FileHandler(Path(sessionpath).joinpath('extract_register.log'))
-        str_format = '%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
-        fh.setFormatter(logging.Formatter(str_format))
-        logger_.addHandler(fh)
-        f = func(self, sessionpath, *args, **kwargs)
-        fh.close()
-        logger_.removeHandler(fh)
-        return f
-    return func_wrapper
 
 
 class RegistrationClient:
@@ -100,7 +86,8 @@ class RegistrationClient:
                 flag_file.parent.joinpath('create_me.flag').unlink()
             logger_.info('registered' + '\n')
 
-    @log2sessionfile
+
+    @log2session('register.log')
     def register_session(self, ses_path, file_list=True, repository_name=None):
         """
         Register session in Alyx
