@@ -231,7 +231,7 @@ class RegistrationClient:
         import re
         patterns = [dt['filename_pattern'] for dt in self.dtypes if dt['filename_pattern']]
         for pat in patterns:
-            reg = pat.replace('.', r'\.').replace('_', r'\_').replace('*', r'.+')
+            reg = pat.replace('.', r'\.').replace('_', r'\_').replace('*', r'.*')
             if re.match(reg, Path(full_file).name, re.IGNORECASE):
                 return True
         return False
