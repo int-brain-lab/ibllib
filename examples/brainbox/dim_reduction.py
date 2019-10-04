@@ -149,6 +149,15 @@ if __name__ == "__main__":
     trials = alf.io.load_object(alf_path, '_ibl_trials')
     
     # Print number of clusters for each brain region
+    locDict_bothProbes = clusters['brainAcronyms']['brainAcronyms'].to_dict()
+    cluster_idx_probe1 = np.unique(spikes['clusters']) 
+    locDict = {}
+    for i in locDict_bothProbes:
+        if i in cluster_idx_probe1:
+            locDict[i] = locDict_bothProbes[i] 
+    print([(k, len(list(v))) for k, v in itertools.groupby(sorted(locDict.values()))])
+    
+    # Print number of clusters for each brain region
     locDict = clusters['brainAcronyms']['brainAcronyms'].to_dict()
     print([(k, len(list(v))) for k, v in itertools.groupby(sorted(locDict.values()))])
 
