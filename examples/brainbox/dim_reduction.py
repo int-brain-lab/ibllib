@@ -6,6 +6,7 @@ from sklearn.manifold import Isomap, MDS, TSNE, LocallyLinearEmbedding
 from sklearn.decomposition import PCA, FactorAnalysis, FastICA
 import alf.io
 from brainbox.processing import bincount2D
+import itertools
 
 
 def find_nearest(array, value):
@@ -146,7 +147,12 @@ if __name__ == "__main__":
     clusters = alf.io.load_object(alf_path, 'clusters')
     channels = alf.io.load_object(alf_path, 'channels')
     trials = alf.io.load_object(alf_path, '_ibl_trials')
+    
+    # Print number of clusters for each brain region
+    locDict = clusters['brainAcronyms']['brainAcronyms'].to_dict()
+    print([(k, len(list(v))) for k, v in itertools.groupby(sorted(locDict.values()))])
 
+    # set key parameters
     T_BIN = 0.1
     TRIALS_TO_PLOT = np.arange(20, 23)  # use the real trial numbers
     PROJECTED_DIMENSIONS = 3
