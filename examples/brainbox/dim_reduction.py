@@ -156,10 +156,6 @@ if __name__ == "__main__":
         if i in cluster_idx_probe1:
             locDict[i] = locDict_bothProbes[i] 
     print([(k, len(list(v))) for k, v in itertools.groupby(sorted(locDict.values()))])
-    
-    # Print number of clusters for each brain region
-    locDict = clusters['brainAcronyms']['brainAcronyms'].to_dict()
-    print([(k, len(list(v))) for k, v in itertools.groupby(sorted(locDict.values()))])
 
     # set key parameters
     T_BIN = 0.1
