@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 from datetime import date
 
-from ibllib.misc import version, print_progress, log2session
+from ibllib.misc import version, print_progress, log2session, log2session_static
 
 
 class TestLog2Session(unittest.TestCase):
@@ -15,7 +15,13 @@ class TestLog2Session(unittest.TestCase):
         level = logger.level
         logger.setLevel('INFO')
 
-        @log2session('tutu')
+        @log2session('tata')
+        def tata(self, session_path, mystr, check=True):
+            logger.info('info')
+            logger.warning(mystr)
+            assert check
+
+        @log2session_static('tutu')
         def tutu(session_path, mystr, check=True):
             logger.info('info')
             logger.warning(mystr)
@@ -31,6 +37,11 @@ class TestLog2Session(unittest.TestCase):
             with open(outlog) as f:
                 l = f.read()
             self.assertTrue('WARNING' in l and 'tutu' in l and 'info' in l and 'tata' in l)
+
+            # check the method version
+            tata(None, session_path, 'tata')
+            outlog2 = session_path.joinpath('logs', f'_ibl_log.info.tata_v{version.ibllib()}.log')
+            self.assertTrue(outlog2.exists())
 
             # now check the catching of the assertion error
             tutu(session_path, 'titi', False)

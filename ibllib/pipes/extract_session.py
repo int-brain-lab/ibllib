@@ -10,7 +10,7 @@ Extract data OR return error to user saying that the task has no extractors
 import logging
 from pathlib import Path
 
-from ibllib.misc import log2session
+from ibllib.misc import log2session_static
 from ibllib.io.extractors import (ephys_trials, ephys_fpga,
                                   biased_wheel, biased_trials,
                                   training_trials, training_wheel)
@@ -67,7 +67,7 @@ def is_extracted(session_path):
         return False
 
 
-@log2session('extraction')
+@log2session_static('extraction')
 def from_path(session_path, force=False, save=True):
     """
     Extract a session from full ALF path (ex: '/scratch/witten/ibl_witten_01/2018-12-18/001')
