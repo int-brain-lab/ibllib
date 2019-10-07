@@ -47,8 +47,8 @@ def http_download_file(full_link_to_file, *, clobber=False, offline=False,
         return ''
 
     # default cache directory is the home dir
-    if len(cache_dir) == 0:
-        cache_dir = str(Path.home()) + os.sep + "Downloads"
+    if not cache_dir:
+        cache_dir = str(Path.home().joinpath("Downloads"))
 
     # This is the local file name
     file_name = cache_dir + os.sep + os.path.basename(full_link_to_file)
@@ -57,10 +57,10 @@ def http_download_file(full_link_to_file, *, clobber=False, offline=False,
     if not clobber and os.path.exists(file_name):
         return file_name
     elif offline:
-        return
+        return file_name
 
     # This should be the base url you wanted to access.
-    baseurl = os.path.split(full_link_to_file)[0]
+    baseurl = os.path.split(str(full_link_to_file))[0]
 
     # Create a password manager
     manager = urllib.request.HTTPPasswordMgrWithDefaultRealm()

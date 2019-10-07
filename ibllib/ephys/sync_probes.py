@@ -1,4 +1,6 @@
 import logging
+from pathlib import Path
+
 import matplotlib.axes
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,20 +10,22 @@ import alf.io
 import ibllib.io.spikeglx
 from brainbox.core import Bunch
 import ibllib.io.spikeglx as spikeglx
+from ibllib.ephys import spikes
+from ibllib.io import flags
 from ibllib.io.extractors.ephys_fpga import CHMAPS, _get_sync_fronts
 
 _logger = logging.getLogger('ibllib')
 
 
-def _get_sr(ephys_file):
-    meta = spikeglx.read_meta_data(ephys_file.ap.with_suffix('.meta'))
-    return spikeglx._get_fs_from_meta(meta)
-
-
-def _save_timestamps_npy(ephys_file, timestamps):
-    assert (ephys_file.ap.name.endswith('.ap.bin'))
-    file_out = ephys_file.ap.parent / ephys_file.ap.name.replace('.ap.bin', '.sync.npy')
-    np.save(file_out, timestamps)
+def sync_merge(session_path, dry=False, force=False):
+    """
+    Sync probes and merge spike sorting output.
+    For single probe dataset, output ks2 as ALF dataset
+    """
+    session_path = Path(session_path)
+    sync(session_path, display=False)
+    spikes.merge_probes(session_path)
+    flags.write_flag_file(session_path.joinpath('register_me.flag'))
 
 
 def sync(ses_path, **kwargs):
@@ -180,3 +184,14 @@ def sync_probe_front_times(t, tref, sr, display=False, linear=False, tol=2.0):
         qc = False
         # plt.plot((tref - fcn(t)) * sr)
     return sync_points, qc
+
+
+def _get_sr(ephys_file):
+    meta = spikeglx.read_meta_data(ephys_file.ap.with_suffix('.meta'))
+    return spikeglx._get_fs_from_meta(meta)
+
+
+def _save_timestamps_npy(ephys_file, timestamps):
+    assert (ephys_file.ap.name.endswith('.ap.bin'))
+    file_out = ephys_file.ap.parent / ephys_file.ap.name.replace('.ap.bin', '.sync.npy')
+    np.save(file_out, timestamps)

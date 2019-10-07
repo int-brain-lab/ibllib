@@ -24,7 +24,7 @@ class TestExtractTrialData(unittest.TestCase):
         # turn off logging for unit testing as we will purposedly go into warning/error cases
         self.wheel_ge5_path = self.main_path / 'data' / 'wheel_ge5'
         self.wheel_lt5_path = self.main_path / 'data' / 'wheel_lt5'
-        self.logger = logging.getLogger('ibllib').setLevel(50)
+        self.logger = logging.getLogger('ibllib')
 
     def test_get_feedbackType(self):
         # TRAINING SESSIONS
@@ -579,9 +579,12 @@ class TestExtractTrialData(unittest.TestCase):
         extract_session.from_path(self.biased_lt5['path'], force=True)
         trials = alf.io.load_object(self.biased_lt5['path'] / 'alf', object='_ibl_trials')
         self.assertTrue(alf.io.check_dimensions(trials) == 0)
+        # Make sure we get the log files
+        log_files = list(self.main_path.rglob('_ibl_log.info*.log'))
+        self.assertTrue(len(log_files) == 4)
 
     def tearDown(self):
-        for f in self.main_path.rglob('extract_register.log'):
+        for f in self.main_path.rglob('_ibl_log.*.log'):
             f.unlink()
         [x.unlink() for x in self.training_lt5['path'].rglob('alf/*') if x.is_file()]
         [x.unlink() for x in self.biased_lt5['path'].rglob('alf/*') if x.is_file()]

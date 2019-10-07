@@ -1,8 +1,73 @@
 import unittest
 import logging
 import time
+import tempfile
+from pathlib import Path
 
-from ibllib.misc import version, print_progress
+from ibllib.misc import (version, print_progress, log2session, log2session_static,
+                         rename_witout_uuid)
+
+
+class TestRemoveUUID(unittest.TestCase):
+
+    def test_remove_uuid(self):
+        with tempfile.TemporaryDirectory() as dir:
+            f1 = Path(dir).joinpath('tutu.part1.part1.30c09473-4d3d-4f51-9910-c89a6840096e.json')
+            f2 = Path(dir).joinpath('tata.part1.part1.json')
+            f3 = Path(dir).joinpath('toto.json')
+            f1.touch()
+            f2.touch()
+            f2.touch()
+            self.assertTrue(rename_witout_uuid(f1) == Path(dir).joinpath('tutu.part1.part1.json'))
+            self.assertTrue(rename_witout_uuid(f2) == Path(dir).joinpath('tata.part1.part1.json'))
+            self.assertTrue(rename_witout_uuid(f3) == Path(dir).joinpath('toto.json'))
+            self.assertTrue(rename_witout_uuid(str(f3)) == Path(dir).joinpath('toto.json'))
+
+
+class TestLog2Session(unittest.TestCase):
+
+    def test_log2session(self):
+        logger = logging.getLogger('ibllib')
+        level = logger.level
+        logger.setLevel('INFO')
+
+        @log2session('tata')
+        def tata(self, session_path, mystr, check=True):
+            logger.info('info')
+            logger.warning(mystr)
+            assert check
+
+        @log2session_static('tutu')
+        def tutu(session_path, mystr, check=True):
+            logger.info('info')
+            logger.warning(mystr)
+            assert check
+
+        with tempfile.TemporaryDirectory() as session_path:
+            session_path = Path(session_path)
+            tutu(session_path, 'tutu')
+            tutu(session_path, 'tata')
+            logfn = f'_ibl_log.info.tutu_v{version.ibllib()}.log'
+            outlog = session_path.joinpath('logs', logfn)
+            self.assertTrue(outlog.exists())
+            with open(outlog) as f:
+                lin = f.read()
+            self.assertTrue('WARNING' in lin and 'tutu' in lin and 'info' in lin and 'tata' in lin)
+
+            # check the method version
+            tata(None, session_path, 'tata')
+            outlog2 = session_path.joinpath('logs', f'_ibl_log.info.tata_v{version.ibllib()}.log')
+            self.assertTrue(outlog2.exists())
+
+            # now check the catching of the assertion error
+            tutu(session_path, 'titi', False)
+            errfn = f'_ibl_log.error.tutu_v{version.ibllib()}.log'
+            outerr = session_path.joinpath('logs', errfn)
+            self.assertTrue(outerr.exists())
+            with open(outerr) as f:
+                ll = f.read()
+            self.assertTrue('AssertionError' in ll and 'assert check' in ll and 'in tutu' in ll)
+        logger.setLevel(level)
 
 
 class TestPrintProgress(unittest.TestCase):

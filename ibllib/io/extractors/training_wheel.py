@@ -283,7 +283,7 @@ def get_wheel_data(session_path, bp_data=None, save=False):
 
     check_alf_folder(session_path)
     if raw.save_bool(save, '_ibl_wheel.timestamps.npy'):
-        tpath = os.path.join(session_path, 'alf', '_ibl_wheel.timestamps.npy')
+        tpath = os.path.join(session_path, 'alf', '_ibl_wheel.times.npy')
         np.save(tpath, data['re_ts'])
     if raw.save_bool(save, '_ibl_wheel.position.npy'):
         ppath = os.path.join(session_path, 'alf', '_ibl_wheel.position.npy')

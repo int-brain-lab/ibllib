@@ -10,7 +10,7 @@ import subprocess
 
 from ibllib.io import flags
 from ibllib.pipes import extract_session
-from ibllib.ephys import ephysqc, spikes, sync_probes
+from ibllib.ephys import ephysqc, sync_probes
 from oneibl.registration import RegistrationClient
 from oneibl.one import ONE
 
@@ -123,12 +123,19 @@ def qc_ephys(root_data_folder, dry=False, max_sessions=10, force=False):
         flags.write_flag_file(session_path.joinpath('register_me.flag'), file_list=qc_files)
 
 
-def sync_merge_ephys(root_data_folder, dry=False, force=False):
+def sync_merge_ephys(root_data_folder, dry=False):
     """
-    Sync probes and merge spike sorting output.
-    For single probe dataset, output ks2 as ALF dataset
+    After spike sorting, if single probe output ks2 to ALF, if several probes merge spike sorting
+     output to ALF folder
+    To start the job for a session, all electrophysiology ap files from session need to be
+    associated with a `sync_merge_ephys.flag` file
+    Outputs individual probes
     """
-    root_data_folder = Path(root_data_folder)
-    sync_probes.sync(root_data_folder)
-    spikes.merge_probes(root_data_folder)
-    flags.write_flag_file(root_data_folder.joinpath('register_me.flag'))
+    qcflags = list(Path(root_data_folder).rglob('sync_merge_ephys.flag'))
+    session_paths = list(set([f.parents[2] for f in qcflags]))
+    for session_path in session_paths:
+        print(session_path)
+        if dry:
+            continue
+        sync_probes.sync_merge(session_path)
+        [f.unlink() for f in qcflags if f.parents[2] == session_path]
