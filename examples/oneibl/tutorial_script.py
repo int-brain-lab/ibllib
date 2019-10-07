@@ -33,7 +33,7 @@ wf, pr, d = one.load(eid, dataset_types=dataset_types)
 ## Load #2
 my_data = one.load(eid, dataset_types=dataset_types, dclass_output=True)
 from ibllib.misc import pprint
-pprint(my_data.local_path)
+pprint(str(my_data.local_path))
 pprint(my_data.dataset_type)
 
 ## Load everything

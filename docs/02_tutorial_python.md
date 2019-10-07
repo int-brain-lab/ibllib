@@ -119,7 +119,7 @@ Depending on the use case, it may be handier to wrap the arrays in a dataclass
 ```python
 my_data = one.load(eid, dataset_types=dataset_types, dclass_output=True)
 from ibllib.misc import pprint
-pprint(my_data.local_path)
+print(my_data.local_path)
 pprint(my_data.dataset_type)
 ```
 ```python

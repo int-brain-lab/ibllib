@@ -48,7 +48,7 @@ def http_download_file(full_link_to_file, *, clobber=False, offline=False,
 
     # default cache directory is the home dir
     if not cache_dir:
-        cache_dir = Path.home().joinpath("Downloads")
+        cache_dir = str(Path.home().joinpath("Downloads"))
 
     # This is the local file name
     file_name = cache_dir + os.sep + os.path.basename(full_link_to_file)
