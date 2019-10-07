@@ -2,7 +2,6 @@ from pathlib import Path
 import json
 import datetime
 import logging
-import traceback
 from dateutil import parser as dateparser
 
 import ibllib.time
@@ -73,7 +72,6 @@ class RegistrationClient:
             if flag_file.parent.joinpath('create_me.flag').exists():
                 flag_file.parent.joinpath('create_me.flag').unlink()
             logger_.info('registered' + '\n')
-
 
     @log2session('register')
     def register_session(self, ses_path, file_list=True, repository_name=None):

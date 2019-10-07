@@ -3,9 +3,25 @@ import logging
 import time
 import tempfile
 from pathlib import Path
-from datetime import date
 
-from ibllib.misc import version, print_progress, log2session, log2session_static
+from ibllib.misc import (version, print_progress, log2session, log2session_static,
+                         rename_witout_uuid)
+
+
+class TestRemoveUUID(unittest.TestCase):
+
+    def test_remove_uuid(self):
+        with tempfile.TemporaryDirectory() as dir:
+            f1 = Path(dir).joinpath('tutu.part1.part1.30c09473-4d3d-4f51-9910-c89a6840096e.json')
+            f2 = Path(dir).joinpath('tata.part1.part1.json')
+            f3 = Path(dir).joinpath('toto.json')
+            f1.touch()
+            f2.touch()
+            f2.touch()
+            self.assertTrue(rename_witout_uuid(f1) == Path(dir).joinpath('tutu.part1.part1.json'))
+            self.assertTrue(rename_witout_uuid(f2) == Path(dir).joinpath('tata.part1.part1.json'))
+            self.assertTrue(rename_witout_uuid(f3) == Path(dir).joinpath('toto.json'))
+            self.assertTrue(rename_witout_uuid(str(f3)) == Path(dir).joinpath('toto.json'))
 
 
 class TestLog2Session(unittest.TestCase):
@@ -35,8 +51,8 @@ class TestLog2Session(unittest.TestCase):
             outlog = session_path.joinpath('logs', logfn)
             self.assertTrue(outlog.exists())
             with open(outlog) as f:
-                l = f.read()
-            self.assertTrue('WARNING' in l and 'tutu' in l and 'info' in l and 'tata' in l)
+                lin = f.read()
+            self.assertTrue('WARNING' in lin and 'tutu' in lin and 'info' in lin and 'tata' in lin)
 
             # check the method version
             tata(None, session_path, 'tata')

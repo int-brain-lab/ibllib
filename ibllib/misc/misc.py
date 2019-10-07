@@ -1,10 +1,11 @@
 # library of small functions
-import numpy as np
 import json
 import re
 import logging
 import traceback
 from pathlib import Path
+
+import numpy as np
 
 from ibllib.misc import version
 _logger = logging.getLogger('ibllib')
@@ -14,7 +15,25 @@ def pprint(my_dict):
     print(json.dumps(my_dict, indent=4))
 
 
+def rename_witout_uuid(file_path):
+    """
+     Renames a file without the UUID and returns the new pathlib.Path object
+    """
+    file_path = Path(file_path)
+    name_parts = file_path.name.split('.')
+    if not is_uuid_string(name_parts[-2]):
+        return file_path
+    name_parts.pop(-2)
+    new_path = file_path.parent.joinpath('.'.join(name_parts))
+    if file_path.exists():
+        file_path.rename(new_path)
+    return new_path
+
+
 def is_uuid_string(string):
+    """
+    Bool test to c
+    """
     if string is None:
         return False
     if len(string) != 36:
@@ -93,7 +112,6 @@ def log2sessions_catch(e, sessionpath, log_type):
     with open(err_file, 'w+') as fid:
         fid.write(error_message)
     _logger.error(error_message)
-
 
 
 def structarr(names, shape=None, formats=None):

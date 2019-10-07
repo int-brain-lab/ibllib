@@ -2,7 +2,7 @@ from pathlib import Path, PurePath
 import requests
 import logging
 
-from ibllib.misc import is_uuid_string, pprint
+from ibllib.misc import is_uuid_string, pprint, rename_witout_uuid
 from ibllib.io.one import OneAbstract
 from alf.io import load_file_content
 
@@ -186,7 +186,7 @@ class ONE(OneAbstract):
             return ses[keyword]
 
     def load(self, eid, dataset_types=None, dclass_output=False, dry_run=False, cache_dir=None,
-             download_only=False, clobber=False, offline=False):
+             download_only=False, clobber=False, offline=False, keep_uuid=False):
         """
         From a Session ID and dataset types, queries Alyx database, downloads the data
         from Globus, and loads into numpy array.
@@ -207,6 +207,8 @@ class ONE(OneAbstract):
         :type download_only: bool
         :param clobber: force downloading even if files exists locally
         :type clobber: bool
+        :param keep_uuid: keeps the UUID at the end of the filename (defaults to False)
+        :type keep_uuid: bool
 
         :return: List of numpy arrays matching the size of dataset_types parameter, OR
          a dataclass containing arrays and context data.
@@ -214,7 +216,7 @@ class ONE(OneAbstract):
         """
         # this is a wrapping function to keep signature and docstring accessible for IDE's
         return self._load_recursive(eid, dataset_types=dataset_types, dclass_output=dclass_output,
-                                    dry_run=dry_run, cache_dir=cache_dir,
+                                    dry_run=dry_run, cache_dir=cache_dir, keep_uuid=keep_uuid,
                                     download_only=download_only, clobber=clobber, offline=offline)
 
     def _load_recursive(self, eid, **kwargs):
@@ -239,7 +241,7 @@ class ONE(OneAbstract):
             return out
 
     def _load(self, eid, dataset_types=None, dclass_output=False, dry_run=False, cache_dir=None,
-              download_only=False, clobber=False, offline=False):
+              download_only=False, clobber=False, offline=False, keep_uuid=False):
         """
         From a Session ID and dataset types, queries Alyx database, downloads the data
         from Globus, and loads into numpy array. Single session only
@@ -272,7 +274,8 @@ class ONE(OneAbstract):
                 cache_dir_file = PurePath(cache_dir, relpath)
                 Path(cache_dir_file).mkdir(parents=True, exist_ok=True)
                 dc.local_path[ind] = self._download_file(dc.url[ind], str(cache_dir_file),
-                                                         clobber=clobber, offline=offline)
+                                                         clobber=clobber, offline=offline,
+                                                         keep_uuid=keep_uuid)
         # load the files content in variables if requested
         if not download_only:
             for ind, fil in enumerate(dc.local_path):
@@ -405,14 +408,17 @@ class ONE(OneAbstract):
             cache_dir = str(PurePath(Path.home(), "Downloads", "FlatIron"))
         return cache_dir
 
-    def _download_file(self, url, cache_dir, clobber=False, offline=False):
+    def _download_file(self, url, cache_dir, clobber=False, offline=False, keep_uuid=False):
         local_path = wc.http_download_file(url,
                                            username=self._par.HTTP_DATA_SERVER_LOGIN,
                                            password=self._par.HTTP_DATA_SERVER_PWD,
                                            cache_dir=str(cache_dir),
                                            clobber=clobber,
                                            offline=offline)
-        return local_path
+        if keep_uuid:
+            return local_path
+        else:
+            return rename_witout_uuid(local_path)
 
     @staticmethod
     def search_terms():
