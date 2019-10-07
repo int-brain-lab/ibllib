@@ -203,4 +203,3 @@ It is also possible to filter sessions using a date-range:
 ```python
 eid = one.search(users='olivier', date_range=['2018-08-24', '2018-08-24'])
 ```
-
