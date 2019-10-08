@@ -1,0 +1,40 @@
+import unittest
+
+import numpy as np
+
+from brainbox.atlas import BrainCoordinates, sph2cart, cart2sph
+
+
+class TestsCoordinatesSimples(unittest.TestCase):
+
+    def test_brain_coordinates(self):
+        vshape = (6, 7, 8)
+        bc = BrainCoordinates(vshape)
+        self.assertTrue(bc.i2x(0) == 0)
+        self.assertTrue(bc.i2x(6) == 6)
+        self.assertTrue(bc.nx == 7)
+        self.assertTrue(bc.ny == 6)
+        self.assertTrue(bc.nz == 8)
+
+    def test_sph2cart_and_back(self):
+        dv = np.array([0, -1, 1, 0, 0, 0, 0, 0, 0])  # z
+        ml = np.array([0, 0, 0, 0, -1, 1, 0, 0, 0])  # x
+        ap = np.array([0, 0, 0, 0, 0, 0, 0, -1, 1])  # y
+
+        theta = np.array([0., 0., 0., 0., 180., 0., 0., -90., 90.])
+        phi = np.array([0., 180., 0., 0., 90., 90., 0., 90., 90.])
+        r = np.array([0., 1, 1, 0., 1, 1, 0., 1, 1])
+
+        r_, t_, p_ = cart2sph(ml, ap, dv)
+        assert np.all(np.isclose(r, r_))
+        assert np.all(np.isclose(phi, p_))
+        assert np.all(np.isclose(theta, t_))
+
+        x_, y_, z_ = sph2cart(r, theta, phi)
+        assert np.all(np.isclose(ml, x_))
+        assert np.all(np.isclose(ap, y_))
+        assert np.all(np.isclose(dv, z_))
+
+
+if __name__ == "__main__":
+    unittest.main(exit=False)
