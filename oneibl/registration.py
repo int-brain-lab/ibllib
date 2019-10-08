@@ -170,7 +170,7 @@ class RegistrationClient:
         rename_files_compatibility(ses_path, md['IBLRIG_VERSION_TAG'])
         F = {}  # empty dict whose keys will be relative paths and content filenames
         for fn in _glob_session(ses_path):
-            if fn.suffix in ['.flag', '.error', '.avi', '.log']:
+            if fn.suffix in ['.flag', '.error', '.avi']:
                 logger_.debug('Excluded: ', str(fn))
                 continue
             if not self._match_filename_dtypes(fn):
