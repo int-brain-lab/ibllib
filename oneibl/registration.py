@@ -13,7 +13,7 @@ from oneibl.one import ONE
 
 logger_ = logging.getLogger('ibllib.alf')
 REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
-                              'logs/_ibl_log.*.log',
+                              'logs/**/_ibl_log.*.log',
                               'raw_behavior_data/**/_iblrig_*.*',
                               'raw_video_data/**/_iblrig_*.*',
                               'raw_video_data/**/_ibl_*.*',
