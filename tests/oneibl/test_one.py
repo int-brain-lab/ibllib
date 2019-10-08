@@ -1,7 +1,9 @@
 import unittest
 import numpy as np
 import requests
+from pathlib import Path
 
+from ibllib.misc import rename_witout_uuid
 from oneibl.one import ONE
 
 
@@ -135,6 +137,19 @@ class TestLoad(unittest.TestCase):
         out = one.load([eids[-1], eids[0]], dataset_types='licks.times', dclass_output=True)
         self.assertTrue(len(out.data) == 2)
         self.assertTrue(len(out.data[1]) == 5126 and out.data[0] is None)
+
+    def test_load_uuid(self):
+        one = self.One
+        dataset_types = ['eye.blink']
+        eid = ('https://test.alyx.internationalbrainlab.org/'
+               'sessions/' + self.eid)
+        filename = one.load(eid, dataset_types=dataset_types, download_only=True, keep_uuid=True)
+        uuid_fn = filename[0]
+        filename = one.load(eid, dataset_types=dataset_types, download_only=True)
+        self.assertTrue(filename[0] == rename_witout_uuid(uuid_fn))
+        self.assertFalse(Path(uuid_fn).exists())
+        filename = one.load(eid, dataset_types=dataset_types, download_only=True, keep_uuid=True)
+        self.assertTrue(Path(uuid_fn).exists())
 
     def test_load(self):
         # Test with 3 actual datasets predefined

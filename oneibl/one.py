@@ -1,6 +1,7 @@
 from pathlib import Path, PurePath
 import requests
 import logging
+import os
 
 from ibllib.misc import is_uuid_string, pprint, rename_witout_uuid
 from ibllib.io.one import OneAbstract
@@ -409,12 +410,16 @@ class ONE(OneAbstract):
         return cache_dir
 
     def _download_file(self, url, cache_dir, clobber=False, offline=False, keep_uuid=False):
-        local_path = wc.http_download_file(url,
-                                           username=self._par.HTTP_DATA_SERVER_LOGIN,
-                                           password=self._par.HTTP_DATA_SERVER_PWD,
-                                           cache_dir=str(cache_dir),
-                                           clobber=clobber,
-                                           offline=offline)
+        local_path = cache_dir + os.sep + os.path.basename(url)
+        if not keep_uuid:
+            local_path = rename_witout_uuid(local_path, dry=True)
+        if not Path(local_path).exists():
+            local_path = wc.http_download_file(url,
+                                               username=self._par.HTTP_DATA_SERVER_LOGIN,
+                                               password=self._par.HTTP_DATA_SERVER_PWD,
+                                               cache_dir=str(cache_dir),
+                                               clobber=clobber,
+                                               offline=offline)
         if keep_uuid:
             return local_path
         else:
