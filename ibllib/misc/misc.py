@@ -15,7 +15,7 @@ def pprint(my_dict):
     print(json.dumps(my_dict, indent=4))
 
 
-def rename_witout_uuid(file_path):
+def rename_witout_uuid(file_path, dry=False):
     """
      Renames a file without the UUID and returns the new pathlib.Path object
     """
@@ -25,7 +25,7 @@ def rename_witout_uuid(file_path):
         return file_path
     name_parts.pop(-2)
     new_path = file_path.parent.joinpath('.'.join(name_parts))
-    if file_path.exists():
+    if not dry and file_path.exists():
         file_path.rename(new_path)
     return new_path
 
