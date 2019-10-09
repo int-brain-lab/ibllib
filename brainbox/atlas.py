@@ -26,19 +26,17 @@ class BrainCoordinates:
     z = dv, dorsal positive
 
     The layout of the Atlas dimension is done according to the most used sections so they lay
-    contiguous on disk
+    contiguous on disk assuming C-ordering: V[iap, iml, idv]
 
-    vshape: shape of 3D volume
+    nxyz: number of elements along each cartesian axis (nx, ny, nz) = (nml, nap, ndv)
     xyz0: coordinates of the element volume[0, 0, 0]] in the coordinate space
     dxyz: spatial interval of the volume along the 3 dimensions
     """
 
-    def __init__(self, vshape, xyz0=[0, 0, 0], dxyz=[1, 1, 1]):
+    def __init__(self, nxyz, xyz0=[0, 0, 0], dxyz=[1, 1, 1]):
         self.x0, self.y0, self.z0 = xyz0
         self.dx, self.dy, self.dz = dxyz
-        self.nx = vshape[1]
-        self.ny = vshape[0]
-        self.nz = vshape[2]
+        self.nx, self.ny, self.nz = nxyz
 
     """Methods distance to indice"""
     def x2i(self, x):
