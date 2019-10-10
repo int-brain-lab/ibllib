@@ -3,7 +3,7 @@ import numpy as np
 import requests
 from pathlib import Path
 
-from ibllib.misc import rename_witout_uuid
+from alf.io import remove_uuid_file
 from oneibl.one import ONE
 
 
@@ -146,7 +146,7 @@ class TestLoad(unittest.TestCase):
         filename = one.load(eid, dataset_types=dataset_types, download_only=True, keep_uuid=True)
         uuid_fn = filename[0]
         filename = one.load(eid, dataset_types=dataset_types, download_only=True)
-        self.assertTrue(filename[0] == rename_witout_uuid(uuid_fn))
+        self.assertTrue(filename[0] == remove_uuid_file(uuid_fn))
         self.assertFalse(Path(uuid_fn).exists())
         filename = one.load(eid, dataset_types=dataset_types, download_only=True, keep_uuid=True)
         self.assertTrue(Path(uuid_fn).exists())
