@@ -19,47 +19,6 @@ logger = logging.getLogger('ibllib')
 logger.setLevel('INFO')
 
 
-def extract_ephys(root_data_folder, dry=False, max_sessions=10):
-    """
-    Extracts ephys session only
-    """
-    extract_session.bulk(root_data_folder, dry=dry, glob_flag='**/extract_ephys.flag')
-
-
-def extract(root_data_folder, dry=False):
-    """
-    Extracts behaviour only
-    """
-    extract_session.bulk(root_data_folder, dry=dry, glob_flag='**/extract_me.flag')
-
-
-def register(root_data_folder, dry=False, one=None):
-    # registration part
-    if not one:
-        one = ONE()
-    rc = RegistrationClient(one=one)
-    rc.register_sync(root_data_folder, dry=dry)
-
-
-def create(root_data_folder, dry=False, one=None):
-    # create the sessions by lookin
-    if not one:
-        one = ONE()
-    rc = RegistrationClient(one=one)
-    rc.create_sessions(root_data_folder, dry=dry)
-
-
-def compress_audio(root_data_folder, dry=False, max_sessions=None):
-    command = 'ffmpeg -i {file_name}.wav -c:a flac -nostats {file_name}.flac'
-    _compress(root_data_folder, command, 'compress_audio.flag', dry=dry, max_sessions=max_sessions)
-
-
-def compress_video(root_data_folder, dry=False, max_sessions=None):
-    command = ('ffmpeg -i {file_name}.avi -codec:v libx264 -preset slow -crf 29 '
-               '-nostats -loglevel 0 -codec:a copy {file_name}.mp4')
-    _compress(root_data_folder, command, 'compress_video.flag', dry=dry, max_sessions=max_sessions)
-
-
 def _compress(root_data_folder, command, flag_pattern, dry=False, max_sessions=None):
     #  runs a command of the form command = "ls -1 {file_name}.avi"
     c = 0
@@ -104,11 +63,60 @@ def _compress(root_data_folder, command, flag_pattern, dry=False, max_sessions=N
             flags.write_flag_file(ses_path.joinpath('register_me.flag'), file_list=cfile.stem)
 
 
-def qc_ephys(root_data_folder, dry=False, max_sessions=10, force=False):
+def create(root_data_folder, dry=False, one=None):
+    # create the sessions by lookin
+    if not one:
+        one = ONE()
+    rc = RegistrationClient(one=one)
+    rc.create_sessions(root_data_folder, dry=dry)
+
+
+def extract(root_data_folder, dry=False):
+    """
+    Extracts behaviour only
+    """
+    extract_session.bulk(root_data_folder, dry=dry, glob_flag='**/extract_me.flag')
+
+
+def register(root_data_folder, dry=False, one=None):
+    # registration part
+    if not one:
+        one = ONE()
+    rc = RegistrationClient(one=one)
+    rc.register_sync(root_data_folder, dry=dry)
+
+
+def compress_video(root_data_folder, dry=False, max_sessions=None):
+    command = ('ffmpeg -i {file_name}.avi -codec:v libx264 -preset slow -crf 29 '
+               '-nostats -loglevel 0 -codec:a copy {file_name}.mp4')
+    _compress(root_data_folder, command, 'compress_video.flag', dry=dry, max_sessions=max_sessions)
+
+
+def audio_training(root_data_folder, dry=False, max_sessions=10):
+    from ibllib.io.extractors import training_audio as audio
+    audio_flags = Path(root_data_folder).rglob('audio_training.flag')
+    for flag in audio_flags:
+        print(flag)
+        if dry:
+            continue
+        session_path = flag.parent
+        audio.extract_sound(session_path, save=True)
+        flag.unlink()
+        session_path.joinpath('register_me.flag').touch()
+
+
+def extract_ephys(root_data_folder, dry=False, max_sessions=10):
+    """
+    Extracts ephys session only
+    """
+    extract_session.bulk(root_data_folder, dry=dry, glob_flag='**/extract_ephys.flag')
+
+
+def raw_ephys_qc(root_data_folder, dry=False, max_sessions=10, force=False):
     """
     Computes raw electrophysiology QC
     """
-    qcflags = Path(root_data_folder).rglob('qc_ephys.flag')
+    qcflags = Path(root_data_folder).rglob('raw_ephys_qc.flag')
     c = 0
     for qcflag in qcflags:
         session_path = qcflag.parent
@@ -121,6 +129,11 @@ def qc_ephys(root_data_folder, dry=False, max_sessions=10, force=False):
         qc_files = ephysqc.qc_session(session_path, dry=dry, force=force)
         qcflag.unlink()
         flags.write_flag_file(session_path.joinpath('register_me.flag'), file_list=qc_files)
+
+
+def compress_audio(root_data_folder, dry=False, max_sessions=None):
+    command = 'ffmpeg -i {file_name}.wav -c:a flac -nostats {file_name}.flac'
+    _compress(root_data_folder, command, 'compress_audio.flag', dry=dry, max_sessions=max_sessions)
 
 
 def sync_merge_ephys(root_data_folder, dry=False):
