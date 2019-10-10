@@ -158,7 +158,7 @@ class RegistrationClient:
                 'subject': subject['nickname'],
                 'date_time': ibllib.time.date2isostr(end_time),
                 'water_administered': ses_data[-1]['water_delivered'] / 1000,
-                'water_type': md.get('REWARD_TYPE'),
+                'water_type': md.get('REWARD_TYPE') or 'Water',
                 'user': username,
                 'session': session['url'][-36:],
                 'adlib': False}
