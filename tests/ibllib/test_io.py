@@ -175,9 +175,10 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
             root_dir.mkdir(exist_ok=True, parents=True)
             for l in dico:
                 for k in l:
-                    if k == 'path':
+                    if k == 'path' or k == 'label':
                         continue
                     touchfile(l[k])
+                    Path(l[k]).with_suffix('.meta').touch()
 
         self.tmpdir = Path(tempfile.gettempdir()) / 'test_glob_ephys'
         self.tmpdir.mkdir(exist_ok=True)
@@ -191,8 +192,9 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
                         'ap': self.dir3a / 'imec1' / 'sync_testing_g0_t0.imec1.ap.bin',
                         'lf': self.dir3a / 'imec1' / 'sync_testing_g0_t0.imec1.lf.bin',
                         'path': self.dir3a / 'imec1'}]
+        # surprise ! one of them happens to be compressed
         self.dict3b = [{'label': 'imec0',
-                        'ap': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.ap.bin',
+                        'ap': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.ap.cbin',
                         'lf': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.lf.bin',
                         'path': self.dir3b / 'imec0'},
                        {'label': 'imec1',
@@ -224,6 +226,59 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
         shutil.rmtree(self.tmpdir)
 
 
+class TestsSpikeGLX_compress(unittest.TestCase):
+
+    def setUp(self):
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.workdir = Path(self._tempdir.name)
+        file_meta = Path(__file__).parent.joinpath('fixtures', 'io', 'spikeglx',
+                                                   'sample3A_short_g0_t0.imec.ap.meta')
+        self.file_bin = spikeglx._mock_spikeglx_file(
+            self.workdir.joinpath('sample3A_short_g0_t0.imec.ap.bin'), file_meta, ns=76104,
+            nc=385, sync_depth=16, random=True)['bin_file']
+        self.sr = spikeglx.Reader(self.file_bin)
+
+    def test_compress(self):
+
+        def compare_data(sr0, sr1):
+            # test direct reading through memmap / mtscompreader
+            self.assertTrue(np.all(sr0.data[1200:1210, 12] == sr1.data[1200:1210, 12]))
+            # test reading through methods
+            d0, s0 = sr0.read_samples(1200, 54245)
+            d1, s1 = sr1.read_samples(1200, 54245)
+            self.assertTrue(np.all(d0 == d1))
+            self.assertTrue(np.all(s0 == s1))
+
+        # create a reference file that will serve to compare for inplace operations
+        ref_file = self.file_bin.parent.joinpath('REF_' + self.file_bin.name)
+        ref_meta = self.file_bin.parent.joinpath('REF_' + self.file_bin.with_suffix('.meta').name)
+        shutil.copy(self.file_bin, ref_file)
+        shutil.copy(self.file_bin.with_suffix('.meta'), ref_meta)
+        sr_ref = spikeglx.Reader(ref_file)
+
+        # test file compression copy
+        self.assertFalse(self.sr.is_mtscomp)
+        self.file_cbin = self.sr.compress_file()
+        self.sc = spikeglx.Reader(self.file_cbin)
+        self.assertTrue(self.sc.is_mtscomp)
+        compare_data(sr_ref, self.sc)
+
+        # test decompression in-place
+        self.sc.decompress_file(keep_original=False)
+        compare_data(sr_ref, self.sc)
+        self.assertFalse(self.sr.is_mtscomp)
+        self.assertFalse(self.file_cbin.exists())
+        compare_data(sr_ref, self.sc)
+
+        # test compression in-place
+        self.sc.compress_file(keep_original=False)
+        compare_data(sr_ref, self.sc)
+        self.assertTrue(self.sc.is_mtscomp)
+        self.assertTrue(self.file_cbin.exists())
+        self.assertFalse(self.file_bin.exists())
+        compare_data(sr_ref, self.sc)
+
+
 class TestsSpikeGLX_Meta(unittest.TestCase):
 
     def setUp(self):
@@ -234,23 +289,26 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
         # nidq has 1 analog and 1 digital sync channels
         self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
         int2volts = 5 / 32768
-        nidq = spikeglx._mock_spikeglx_file(self.tdir.name,
-                                            self.workdir / 'sample3B_g0_t0.nidq.meta',
-                                            ns=32, nc=2, sync_depth=8, int2volts=int2volts)
+        nidq = spikeglx._mock_spikeglx_file(
+            Path(self.tdir.name).joinpath('sample3B_g0_t0.nidq.bin'),
+            self.workdir / 'sample3B_g0_t0.nidq.meta',
+            ns=32, nc=2, sync_depth=8, int2volts=int2volts)
         self.assert_read_glx(nidq)
 
     def test_read_3A(self):
         self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
-        bin_3a = spikeglx._mock_spikeglx_file(self.tdir.name,
-                                              self.workdir / 'sample3A_g0_t0.imec.ap.meta',
-                                              ns=32, nc=385, sync_depth=16)
+        bin_3a = spikeglx._mock_spikeglx_file(
+            Path(self.tdir.name).joinpath('sample3A_g0_t0.imec.ap.bin'),
+            self.workdir / 'sample3A_g0_t0.imec.ap.meta',
+            ns=32, nc=385, sync_depth=16)
         self.assert_read_glx(bin_3a)
 
     def test_read_3B(self):
         self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
-        bin_3b = spikeglx._mock_spikeglx_file(self.tdir.name,
-                                              self.workdir / 'sample3B_g0_t0.imec1.ap.meta',
-                                              ns=32, nc=385, sync_depth=16)
+        bin_3b = spikeglx._mock_spikeglx_file(
+            Path(self.tdir.name).joinpath('sample3B_g0_t0.imec1.ap.bin'),
+            self.workdir / 'sample3B_g0_t0.imec1.ap.meta',
+            ns=32, nc=385, sync_depth=16)
         self.assert_read_glx(bin_3b)
 
     def assert_read_glx(self, tglx):
@@ -357,7 +415,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             self.assertEqual(out[m, m - 1], 1)
 
 
-class TestsHardwareParameters3A(unittest.TestCase):
+class TestsHardwareParameters(unittest.TestCase):
 
     def setUp(self):
         self.workdir = Path(__file__).parent / 'fixtures' / 'io' / 'spikeglx'
@@ -383,8 +441,8 @@ class TestsHardwareParameters3A(unittest.TestCase):
 
     def test_default_values(self):
         from ibllib.io.extractors import ephys_fpga
-        self.assertEqual(ephys_fpga.CHMAPS['3A'], self.map3A)
-        self.assertEqual(ephys_fpga.CHMAPS['3B'], self.map3B)
+        self.assertEqual(ephys_fpga.CHMAPS['3A']['ap'], self.map3A)
+        self.assertEqual(ephys_fpga.CHMAPS['3B']['nidq'], self.map3B)
 
     def test_get_wiring(self):
         # get params providing full file path

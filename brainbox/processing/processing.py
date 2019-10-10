@@ -2,6 +2,10 @@
 Processes data from one form into another, e.g. taking spike times and binning them into
 non-overlapping bins and convolving spike times with a gaussian kernel.
 '''
+<<<<<<< HEAD
+=======
+
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
 from brainbox import core
 import numpy as np
 import pandas as pd
@@ -116,35 +120,57 @@ def bincount2D(x, y, xbin=0, ybin=0, xlim=None, ylim=None, weights=None):
 
     :param x: values to bin along the 2nd dimension (c-contiguous)
     :param y: values to bin along the 1st dimension
-    :param xbin: bin size along 2nd dimension (set to 0 to aggregate according to unique values)
-    :param ybin: bin size along 1st dimension (set to 0 to aggregate according to unique values)
+    :param xbin:
+        scalar: bin size along 2nd dimension
+        0: aggregate according to unique values
+        array: aggregate according to exact values (count reduce operation)
+    :param ybin:
+        scalar: bin size along 1st dimension
+        0: aggregate according to unique values
+        array: aggregate according to exact values (count reduce operation)
     :param xlim: (optional) 2 values (array or list) that restrict range along 2nd dimension
     :param ylim: (optional) 2 values (array or list) that restrict range along 1st dimension
     :param weights: (optional) defaults to None, weights to apply to each value for aggregation
     :return: 3 numpy arrays MAP [ny,nx] image, xscale [nx], yscale [ny]
     """
     # if no bounds provided, use min/max of vectors
-    if not xlim:
+    if xlim is None:
         xlim = [np.min(x), np.max(x)]
-    if not ylim:
+    if ylim is None:
         ylim = [np.min(y), np.max(y)]
 
-    # create the indices on which to aggregate: binning is different that aggregating
-    if xbin:
-        xscale = np.arange(xlim[0], xlim[1] + xbin / 2, xbin)
-        xind = (np.floor((x - xlim[0]) / xbin)).astype(np.int64)
-    else:  # if bin size = 0 , aggregate over unique values
-        xscale, xind = np.unique(x, return_inverse=True)
-    if ybin:
-        yscale = np.arange(ylim[0], ylim[1] + ybin / 2, ybin)
-        yind = (np.floor((y - ylim[0]) / ybin)).astype(np.int64)
-    else:  # if bin size = 0 , aggregate over unique values
-        yscale, yind = np.unique(y, return_inverse=True)
+    def _get_scale_and_indices(v, bin, lim):
+        # if bin is a nonzero scalar, this is a bin size: create scale and indices
+        if np.isscalar(bin) and bin != 0:
+            scale = np.arange(lim[0], lim[1] + bin / 2, bin)
+            ind = (np.floor((v - lim[0]) / bin)).astype(np.int64)
+        # if bin == 0, aggregate over unique values
+        else:
+            scale, ind = np.unique(v, return_inverse=True)
+        return scale, ind
 
+    xscale, xind = _get_scale_and_indices(x, xbin, xlim)
+    yscale, yind = _get_scale_and_indices(y, ybin, ylim)
     # aggregate by using bincount on absolute indices for a 2d array
     nx, ny = [xscale.size, yscale.size]
     ind2d = np.ravel_multi_index(np.c_[yind, xind].transpose(), dims=(ny, nx))
     r = np.bincount(ind2d, minlength=nx * ny, weights=weights).reshape(ny, nx)
+
+    # if a set of specific values is requested output an array matching the scale dimensions
+    if not np.isscalar(xbin) and xbin.size > 1:
+        _, iout, ir = np.intersect1d(xbin, xscale, return_indices=True)
+        _r = r.copy()
+        r = np.zeros((ny, xbin.size))
+        r[:, iout] = _r[:, ir]
+        xscale = xbin
+
+    if not np.isscalar(ybin) and ybin.size > 1:
+        _, iout, ir = np.intersect1d(ybin, yscale, return_indices=True)
+        _r = r.copy()
+        r = np.zeros((ybin.size, r.shape[1]))
+        r[iout, :] = _r[ir, :]
+        yscale = ybin
+
     return r, xscale, yscale
 
 
@@ -183,16 +209,27 @@ def bin_spikes(spikes, binsize, interval_indices=False):
 
 def get_units_bunch(spks, *args):
     '''
+<<<<<<< HEAD
     Returns a bunch, where the bunch keys are keys from `spks` with labels of spike information
     (e.g. unit IDs, times, features, etc.), and the values for each key are arrays with values for
     each unit: these arrays are ordered and can be indexed by unit id.
+=======
+    Returns a bunch, where the bunch keys are keys from `spks` of labels of spike information (e.g.
+    unit IDs, times, features, etc.), and the values for each key are arrays with values for each
+    unit. The arrays for each key are ordered by unit ID.
+
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
 
     Parameters
     ----------
     spks : bunch
         A spikes bunch containing fields with spike information (e.g. unit IDs, times, features,
         etc.) for all spikes.
+<<<<<<< HEAD
     features : list of strings (optional positional arg)
+=======
+    features : list of strings (optional)
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
         A list of names of labels of spike information (which must be keys in `spks`) that specify
         which labels to return as keys in `units`. If not provided, all keys in `spks` are returned
         as keys in `units`.
@@ -210,11 +247,19 @@ def get_units_bunch(spks, *args):
     bunch.
         >>> import brainbox as bb
         >>> import alf.io as aio
+<<<<<<< HEAD
         # Get a units bunch from a spikes bunch from an alf directory.
         >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
         >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
         >>> units = bb.processing.get_units_bunch(spks)
         # Get amplitudes for unit 4.
+=======
+        # Get a spikes bunch.
+        >>> spks = aio.load_object('path\\to\\ks_output', 'spikes')
+        # Get a units bunch.
+        >>> units = bb.processing.get_units_bunch(spks)
+        # Get amplitudes for unit #4.
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
         >>> amps = units['amps']['4']
     '''
 
@@ -230,7 +275,11 @@ def get_units_bunch(spks, *args):
     spks_unit_id = spks['clusters']
     num_units = np.max(spks_unit_id) + 1
     # For each key in `units`, iteratively get each unit's values and add as a key to a bunch,
+<<<<<<< HEAD
     # `feat_bunch`. After iterating through all units, add `feat_bunch` as a key to `units`:
+=======
+    # `feat_bunch`. After iterating through all units, and add `feat_bunch` as a key to `units`:
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
     for key in keys:
         # Initialize `feat_bunch` with a key for each unit.
         feat_bunch = core.Bunch((str(unit), 0) for unit in np.arange(0, num_units))
@@ -239,5 +288,9 @@ def get_units_bunch(spks, *args):
             unit_idxs = np.where(spks_unit_id == unit)[0]
             feat_bunch[str(unit)] = spks[key][unit_idxs]
             unit += 1
+<<<<<<< HEAD
+=======
+
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
         units[key] = feat_bunch
     return units

@@ -38,7 +38,10 @@ def merge_probes(ses_path):
     else:
         _logger.info('converting individual spike-sorting outputs to ALF')
         for subdir, label, ef, sr in zip(subdirs, labels, efiles_sorted, srates):
-            ks2_to_alf(subdir, subdir / 'ks2_alf', label=label, sr=sr)
+            ks2alf_path = subdir / 'ks2_alf'
+            if ks2alf_path.exists():
+                shutil.rmtree(ks2alf_path, ignore_errors=True)
+            ks2_to_alf(subdir, ks2alf_path, label=label, sr=sr, force=True)
 
     probe_info = [{'label': lab} for lab in labels]
     mt = merge.Merger(subdirs=subdirs, out_dir=out_dir, probe_info=probe_info).merge()
@@ -56,7 +59,8 @@ def merge_probes(ses_path):
         assert(labels[ind] == probe.label)  # paranoid, make sure they are sorted
         if not probe.get('ap'):
             continue
-        sync_file = probe.ap.parent / probe.ap.name.replace('ap.bin', 'sync.npy')
+        sync_file = probe.ap.parent.joinpath(probe.ap.name.replace('.ap.', '.sync.')
+                                             ).with_suffix('.npy')
         if not sync_file.exists():
             error_msg = f'No synchronisation file for {sync_file}'
             _logger.error(error_msg)
@@ -64,16 +68,16 @@ def merge_probes(ses_path):
         sync_points = np.load(sync_file)
         fcn = interp1d(sync_points[:, 0] * srates[ind],
                        sync_points[:, 1], fill_value='extrapolate')
-        mt.spike_times[spike_probes == ind] = fcn(mt.spike_times[spike_probes == ind])
+        mt.spike_times[spike_probes == ind] = fcn(mt.spike_samples[spike_probes == ind])
 
     # And convert to ALF
     ac = alf.EphysAlfCreator(mt)
-    ac.convert(ses_path / 'alf')
+    ac.convert(ses_path / 'alf', force=True)
     # remove the temporary directory
     shutil.rmtree(out_dir)
 
 
-def ks2_to_alf(ks_path, out_path, sr=30000, nchannels=385, label=None):
+def ks2_to_alf(ks_path, out_path, sr=30000, nchannels=385, label=None, force=True):
     """
     Convert Kilosort 2 output to ALF dataset for single probe data
     :param ks_path:
@@ -85,4 +89,4 @@ def ks2_to_alf(ks_path, out_path, sr=30000, nchannels=385, label=None):
                             sample_rate=sr,
                             n_channels_dat=nchannels)
     ac = alf.EphysAlfCreator(m)
-    ac.convert(out_path, label=label)
+    ac.convert(out_path, label=label, force=force)

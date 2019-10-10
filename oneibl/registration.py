@@ -15,6 +15,7 @@ logger_ = logging.getLogger('ibllib.alf')
 REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
                               'logs/**/_ibl_log.*.log',
                               'raw_behavior_data/**/_iblrig_*.*',
+                              'raw_behavior_data/**/_iblmic_*.*',
                               'raw_video_data/**/_iblrig_*.*',
                               'raw_video_data/**/_ibl_*.*',
                               'raw_ephys_data/**/_iblrig_*.*',
@@ -87,10 +88,14 @@ class RegistrationClient:
         if isinstance(ses_path, str):
             ses_path = Path(ses_path)
         # read meta data from the rig for the session from the task settings file
-        settings_json_file = [f for f in ses_path.glob('**/_iblrig_taskSettings.raw*.json')]
+        settings_json_file = list(ses_path.glob(
+            '**/raw_behavior_data/_iblrig_taskSettings.raw*.json'))
         if not settings_json_file:
-            logger_.error(['could not find _iblrig_taskSettings.raw.json. Abort.'])
-            return
+            settings_json_file = list(ses_path.glob('**/_iblrig_taskSettings.raw*.json'))
+            if not settings_json_file:
+                logger_.error(['could not find _iblrig_taskSettings.raw.json. Abort.'])
+                return
+            logger_.warning([f'Settings found in a strange place: {settings_json_file}'])
         else:
             settings_json_file = settings_json_file[0]
         md = _read_settings_json_compatibility_enforced(settings_json_file)
@@ -158,7 +163,7 @@ class RegistrationClient:
                 'subject': subject['nickname'],
                 'date_time': ibllib.time.date2isostr(end_time),
                 'water_administered': ses_data[-1]['water_delivered'] / 1000,
-                'water_type': md.get('REWARD_TYPE'),
+                'water_type': md.get('REWARD_TYPE') or 'Water',
                 'user': username,
                 'session': session['url'][-36:],
                 'adlib': False}

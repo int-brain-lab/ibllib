@@ -20,24 +20,49 @@ WHEEL_RADIUS_CM = 3.1
 WHEEL_TICKS = 1024
 DEBUG_PLOTS = False
 
-CHMAPS = {'3A': {'left_camera': 2,
-                 'right_camera': 3,
-                 'body_camera': 4,
-                 'bpod': 7,
-                 'frame2ttl': 12,
-                 'rotary_encoder_0': 13,
-                 'rotary_encoder_1': 14,
-                 'audio': 15},
-          '3B': {'left_camera': 0,
-                 'right_camera': 1,
-                 'body_camera': 2,
-                 'imec_sync': 3,
-                 'frame2ttl': 4,
-                 'rotary_encoder_0': 5,
-                 'rotary_encoder_1': 6,
-                 'audio': 7,
-                 'bpod': 16},
+CHMAPS = {'3A':
+          {'ap':
+           {'left_camera': 2,
+            'right_camera': 3,
+            'body_camera': 4,
+            'bpod': 7,
+            'frame2ttl': 12,
+            'rotary_encoder_0': 13,
+            'rotary_encoder_1': 14,
+            'audio': 15
+            }
+           },
+          '3B':
+          {'nidq':
+           {'left_camera': 0,
+            'right_camera': 1,
+            'body_camera': 2,
+            'imec_sync': 3,
+            'frame2ttl': 4,
+            'rotary_encoder_0': 5,
+            'rotary_encoder_1': 6,
+            'audio': 7,
+            'bpod': 16},
+           'ap':
+           {'imec_sync': 6}
+           },
           }
+
+
+def get_ibl_sync_map(ef, version):
+    """
+    Gets default channel map for the version/binary file type combination
+    :param ef: ibllib.io.spikeglx.glob_ephys_file dictionary with field 'ap' or 'nidq'
+    :return: channel map dictionary
+    """
+    if version == '3A':
+        default_chmap = CHMAPS['3A']['ap']
+    elif version == '3B':
+        if ef.get('nidq', None):
+            default_chmap = CHMAPS['3B']['nidq']
+        elif ef.get('ap', None):
+            default_chmap = CHMAPS['3B']['ap']
+    return ibllib.io.spikeglx.get_sync_map(ef['path']) or default_chmap
 
 
 def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
@@ -412,12 +437,11 @@ def _get_all_probes_sync(session_path):
     # round-up of all bin ephys files in the session, infer revision and get sync map
     ephys_files = glob_ephys_files(session_path)
     version = get_neuropixel_version_from_files(ephys_files)
-    sync_chmap = CHMAPS[version]
     extract_sync(session_path, save=True)
     # attach the sync information to each binary file found
     for ef in ephys_files:
         ef['sync'] = alf.io.load_object(ef.path, '_spikeglx_sync', short_keys=True)
-        ef['sync_map'] = ibllib.io.spikeglx.get_sync_map(ef['path']) or sync_chmap
+        ef['sync_map'] = get_ibl_sync_map(ef, version)
 
     return ephys_files
 

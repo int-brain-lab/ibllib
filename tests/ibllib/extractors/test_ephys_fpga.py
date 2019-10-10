@@ -57,7 +57,8 @@ class TestSyncExtraction(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tdir:
             ses_path = Path(tdir).joinpath('raw_ephys_data')
             ses_path.mkdir(parents=True, exist_ok=True)
-            nidq = spikeglx._mock_spikeglx_file(ses_path, self.workdir / fn,
+            bin_file = ses_path.joinpath(fn).with_suffix('.bin')
+            nidq = spikeglx._mock_spikeglx_file(bin_file, self.workdir / fn,
                                                 ns=ns, nc=nc, sync_depth=sync_depth)
             syncs = ephys_fpga.extract_sync(tdir, save=True)
             self.assertTrue(np.all(syncs[0].channels[slice(0, None, 2)] ==
@@ -66,3 +67,17 @@ class TestSyncExtraction(unittest.TestCase):
                 syncs = ephys_fpga.extract_sync(tdir)
                 self.assertEqual(len(log.output), 1)
                 self.assertIn('SGLX sync found', log.output[0])
+
+
+class TestIblChannelMaps(unittest.TestCase):
+
+    def setUp(self):
+        self.workdir = Path(__file__).parents[1] / 'fixtures'
+
+    def test_ibl_sync_maps(self):
+        s = ephys_fpga.get_ibl_sync_map({'ap': 'toto', 'path': self.workdir}, '3A')
+        self.assertEqual(s, ephys_fpga.CHMAPS['3A']['ap'])
+        s = ephys_fpga.get_ibl_sync_map({'nidq': 'toto', 'path': self.workdir}, '3B')
+        self.assertEqual(s, ephys_fpga.CHMAPS['3B']['nidq'])
+        s = ephys_fpga.get_ibl_sync_map({'ap': 'toto', 'path': self.workdir}, '3B')
+        self.assertEqual(s, ephys_fpga.CHMAPS['3B']['ap'])

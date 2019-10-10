@@ -2,6 +2,7 @@
 Creates core data types and functions which support all of brainbox.
 '''
 import numpy as np
+import pandas as pd
 
 
 class Bunch(dict):
@@ -14,6 +15,14 @@ class Bunch(dict):
     def copy(self):
         """Return a new Bunch instance which is a copy of the current Bunch instance."""
         return Bunch(super(Bunch, self).copy())
+
+    def to_df(self):
+        """Attempts to returns a pandas.DataFrame if all elements are arrays of the same length
+        Returns the original bunch if it can't"""
+        try:
+            return pd.DataFrame.from_dict(self)
+        except ValueError:
+            return self
 
 
 class TimeSeries(dict):

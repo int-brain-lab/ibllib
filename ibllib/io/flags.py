@@ -169,7 +169,7 @@ def create_compress_flags(root_data_folder, clobber=False):
 def create_dlc_flags(root_path, dry=False, clobber=False, force=False):
     # look for all mp4 raw video files
     root_path = Path(root_path)
-    for file_mp4 in root_path.rglob('_iblrig_leftCamera.raw.*.mp4'):
+    for file_mp4 in root_path.rglob('_iblrig_leftCamera.raw*.mp4'):
         ses_path = file_mp4.parents[1]
         file_label = file_mp4.stem.split('.')[0].split('_')[-1]
         # skip flag creation if there is a file named _ibl_*Camera.dlc.npy

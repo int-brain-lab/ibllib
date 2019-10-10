@@ -170,5 +170,25 @@ class TestsAlf(unittest.TestCase):
         shutil.rmtree(self.tmpdir)
 
 
+class TestRemoveUUID(unittest.TestCase):
+
+    def test_remove_uuid(self):
+        with tempfile.TemporaryDirectory() as dir:
+            f1 = Path(dir).joinpath('tutu.part1.part1.30c09473-4d3d-4f51-9910-c89a6840096e.json')
+            f2 = Path(dir).joinpath('tata.part1.part1.json')
+            f3 = Path(dir).joinpath('toto.json')
+            f1.touch()
+            f2.touch()
+            f2.touch()
+            self.assertTrue(alf.io.remove_uuid_file(f1) ==
+                            Path(dir).joinpath('tutu.part1.part1.json'))
+            self.assertTrue(alf.io.remove_uuid_file(f2) ==
+                            Path(dir).joinpath('tata.part1.part1.json'))
+            self.assertTrue(alf.io.remove_uuid_file(f3) ==
+                            Path(dir).joinpath('toto.json'))
+            self.assertTrue(alf.io.remove_uuid_file(str(f3)) ==
+                            Path(dir).joinpath('toto.json'))
+
+
 if __name__ == "__main__":
     unittest.main(exit=False)

@@ -18,7 +18,11 @@ def feat_vars(spks, feat_name='amps', dist='norm', test='ks', cmap_name='coolwar
     ----------
     spks : bunch
         A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
+<<<<<<< HEAD
         etc.) for all spikes.
+=======
+        etc.) for each unit.
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
     feat_name : string (optional)
         The spike feature to plot.
     dist : string (optional)
@@ -52,13 +56,21 @@ def feat_vars(spks, feat_name='amps', dist='norm', test='ks', cmap_name='coolwar
         >>> import ibllib.ephys.spikes as e_spks
         >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
         >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
+<<<<<<< HEAD
         >>> fig, var_vals, p_vals = bb.plot.feat_vars(spks)
+=======
+        >>> bb.plot.feat_vars(spks)
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
     '''
 
     # Get units bunch and calculate variances.
     units = bb.processing.get_units_bunch(spks)
+<<<<<<< HEAD
     p_vals, variances = bb.metrics.unit_stability(spks, feat_names=[feat_name],
                                                   dist=dist, test=test)
+=======
+    p_vals, variances = bb.metrics.unit_stability(spks, features=[feat_name], dist=dist, test=test)
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
     var_vals = np.array(tuple(variances[feat_name].values()))
     p_vals = np.array(tuple(p_vals[feat_name].values()))
     # Specify bad units (i.e. missing unit numbers from spike sorter output).
@@ -86,7 +98,11 @@ def feat_vars(spks, feat_name='amps', dist='norm', test='ks', cmap_name='coolwar
     return fig, var_vals, p_vals
 
 
+<<<<<<< HEAD
 def feat_cutoff(spks, unit, feat_name='amps', spks_per_bin=20, sigma=5):
+=======
+def feat_cutoff(spks, unit, feat_name='amps', **kwargs):
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
     '''
     Plots the pdf of an estimated symmetric spike feature distribution, with a vertical cutoff line
     that indicates the approximate fraction of spikes missing from the distribution, assuming the
@@ -96,14 +112,24 @@ def feat_cutoff(spks, unit, feat_name='amps', spks_per_bin=20, sigma=5):
     ----------
     spks : bunch
         A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
+<<<<<<< HEAD
         etc.) for all spikes.
+=======
+        etc.) for each unit.
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
     unit : int
         The unit number for the feature to plot.
     feat_name : string (optional)
         The spike feature to plot.
+<<<<<<< HEAD
     spks_per_bin : int (optional)
         The number of spikes per bin from which to compute the spike feature histogram.
     sigma : int (optional)
+=======
+    spks_per_bin : int (optional keyword arg)
+        The number of spikes per bin from which to compute the spike feature histogram.
+    sigma : int (optional keyword arg)
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
         The standard deviation for the gaussian kernel used to compute the pdf from the spike
         feature histogram.
 
@@ -129,6 +155,7 @@ def feat_cutoff(spks, unit, feat_name='amps', spks_per_bin=20, sigma=5):
         # Get a spikes bunch, a units bunch, and plot feature cutoff for spike amplitudes for unit1
         >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
         >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
+<<<<<<< HEAD
         >>> fig, fraction_missing = bb.plot.feat_cutoff(spks, 1)
     '''
 
@@ -136,6 +163,23 @@ def feat_cutoff(spks, unit, feat_name='amps', spks_per_bin=20, sigma=5):
     fraction_missing, pdf, cutoff_idx = \
         bb.metrics.feat_cutoff(spks, unit, feat_name=feat_name,
                                spks_per_bin=spks_per_bin, sigma=sigma)
+=======
+        >>> bb.plot.feat_cutoff(spks, 1)
+    '''
+
+    # Set keyword input args if given:
+    default_args = \
+        {
+            'spks_per_bin': 20,
+            'sigma': 5
+        }
+    new_args = {**default_args, **kwargs}
+    spks_per_bin = new_args['spks_per_bin']
+    sigma = new_args['sigma']
+    # Calculate and plot the feature distribution histogram and pdf with symmetric cutoff:
+    fraction_missing, pdf, cutoff_idx = \
+        bb.metrics.feat_cutoff(spks, feat_name, unit, spks_per_bin=spks_per_bin, sigma=sigma)
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
     fig, ax = plt.subplots(nrows=1, ncols=2)
     units = bb.processing.get_units_bunch(spks, [feat_name])
     feature = units[feat_name][str(unit)]
@@ -167,13 +211,21 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
         The file path to the binary ephys data.
     spks : bunch
         A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
+<<<<<<< HEAD
         etc.) for all spikes.
+=======
+        etc.) for each unit.
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
     clstrs : bunch
         A clusters bunch containing fields with unit information (e.g. mean amps, channel of max
         amplitude, etc...), used here to extract the channel of max amplitude for the given unit.
     unit : int
         The unit number for the waveforms to plot.
+<<<<<<< HEAD
     n_ch : int (optional)
+=======
+    n_ch : int
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
         The number of channels around the channel of max amplitude to plot.
     ts1 : array_like (optional)
         A set of timestamps for which to compare waveforms with `ts2`.
@@ -209,8 +261,12 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
     Examples
     --------
     1) Compare first and last 100 spike waveforms for unit1, across 20 channels around the channel
+<<<<<<< HEAD
     of max amplitude, and compare the first and last 50 spike waveforms for unit2, across 15
     channels around the mean.
+=======
+    of max amplitude.
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
         >>> import brainbox as bb
         >>> import alf.io as aio
         >>> import ibllib.ephys.spikes as e_spks
@@ -218,6 +274,7 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
         >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
         >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
         >>> clstrs = aio.load_object('path\\to\\alf_output', 'clusters')
+<<<<<<< HEAD
         >>> fig, wf1, wf2 = bb.plot.single_unit_wf_comp('path\\to\\ephys_file', spks, clstrs, \
                                                         unit=1)
         # Get a units bunch, and plot waveforms for unit2 across 15 channels.
@@ -226,6 +283,9 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
         >>> ts2 = units['times']['2'][-50:]
         >>> fig2, wf1_2, wf2_2 = bb.plot.single_unit_wf_comp('path\\to\\ephys_file', \
                                                              spks, clstrs, unit=1)
+=======
+        >>> bb.plot.single_unit_wf_comp('path\\to\\ephys_file', spks, clstrs, unit=1)
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
     '''
 
     # Take the first and last 200 timestamps by default.
@@ -242,10 +302,15 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
     else:  # take `n_c_ch` around `max_ch`.
         ch = np.arange(max_ch - n_c_ch, max_ch + n_c_ch)
     # Extract the waveforms for these timestamps.
+<<<<<<< HEAD
     wf1 = bb.io.extract_waveforms(ephys_file, ts1, ch, sr=sr, n_ch_probe=n_ch_probe, dtype=dtype,
                                   car=True)
     wf2 = bb.io.extract_waveforms(ephys_file, ts2, ch, sr=sr, n_ch_probe=n_ch_probe, dtype=dtype,
                                   car=True)
+=======
+    wf1 = bb.io.extract_waveforms(ephys_file, ts1, ch, sr=sr, n_ch=n_ch_probe, dtype=dtype)
+    wf2 = bb.io.extract_waveforms(ephys_file, ts2, ch, sr=sr, n_ch=n_ch_probe, dtype=dtype)
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
     # Plot these waveforms against each other.
     fig, ax = plt.subplots(nrows=n_ch, ncols=2)  # on left is all waveforms, on right is mean
     for cur_ax, cur_ch in enumerate(ch):
@@ -254,7 +319,11 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
         ax[cur_ax][1].plot(np.mean(wf1[:, :, cur_ax], axis=0), c=col[0])
         ax[cur_ax][1].plot(np.mean(wf2[:, :, cur_ax], axis=0), c=col[1])
         ax[cur_ax][0].set_ylabel('Ch {0}'.format(cur_ch))
+<<<<<<< HEAD
     plt.legend(['1st spike set', '2nd spike set'])
+=======
+    ax[0][1].legend(['1st spike set', '2nd spike set'])
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
     fig.suptitle('comparison of waveforms from two sets of spikes for unit{0}'.format(unit))
     return fig, wf1, wf2
 
@@ -272,13 +341,21 @@ def amp_heatmap(ephys_file, spks, clstrs, unit, t='all', n_ch=20, sr=30000, n_ch
         The file path to the binary ephys data.
     spks : bunch
         A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
+<<<<<<< HEAD
         etc.) for all spikes.
+=======
+        etc.) for each unit.
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
     clstrs : bunch
         A clusters bunch containing fields with unit information (e.g. mean amps, channel of max
         amplitude, etc...), used here to extract the channel of max amplitude for the given unit.
     unit : int
         The unit number for which to plot the amp heatmap.
+<<<<<<< HEAD
     t : str or pair of floats (optional)
+=======
+    t : str or pair of floats
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
         The time period from which to get the spike amplitudes. Default: all spike amplitudes.
     n_ch: int (optional)
         The number of channels for which to plot the amp heatmap.
@@ -365,6 +442,7 @@ def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins=10, show_
     ----------
     spks : bunch
         A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
+<<<<<<< HEAD
         etc.) for all spikes.
     unit : int
         The unit number for which to calculate the firing rate.
@@ -378,6 +456,21 @@ def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins=10, show_
     n_bins : int (optional)
         The number of bins in which to compute coefficients of variation of the firing rate.
     show_fr_cv : bool (optional)
+=======
+        etc.) for each unit.
+    unit : int
+        The unit number for which to calculate the firing rate.
+    t : str or pair of floats
+        The total time period for which the instantaneous firing rate is returned. Default: the
+        time period from `unit`'s first to last spike.
+    hist_win : float
+        The time window (in s) to use for computing spike counts.
+    fr_win : float
+        The time window (in s) to use as a moving slider to compute the instantaneous firing rate.
+    n_bins : int
+        The number of bins in which to compute coefficients of variation of the firing rate.
+    show_fr_cv : bool
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
         A flag for whether or not to compute and show the coefficients of variation of the firing
         rate for `n_bins`.
 
@@ -401,17 +494,25 @@ def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins=10, show_
 
     Examples
     --------
+<<<<<<< HEAD
     1) Plot the firing rate for unit1 from the time of its first to last spike, showing the cv
     of the firing rate for 10 evenly spaced bins, and plot the firing rate for unit2 from the first
     to second minute, without showing the cv.
+=======
+    1) Plot the firing rate for unit1 from the time of its first to last spike.
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
         >>> import brainbox as bb
         >>> import alf.io as aio
         >>> import ibllib.ephys.spikes as e_spks
         # Get a spikes bunch and calculate the firing rate.
         >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
         >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
+<<<<<<< HEAD
         >>> fig, fr_1, cv_1, cvs_1 = bb.plot.firing_rate(spks, unit=1)
         >>> fig2, fr_2 = bb.plot.firing_rate(spks, unit=2, t=[60,120], show_fr_cv=False)
+=======
+        >>> plot.firing_rate(spks, 1)
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
     '''
     fig, ax = plt.subplots()
     if not(show_fr_cv):  # compute just the firing rate
@@ -436,4 +537,7 @@ def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins=10, show_
         # Plot text with cv of firing rate for each bin.
         [ax.text(x_l * (i + 1), y_max, 'cv={0:.2f}'.format(cvs[i]), fontsize=9, ha='right')
          for i in range(n_bins)]
+<<<<<<< HEAD
         return fig, fr, cv, cvs
+=======
+>>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'

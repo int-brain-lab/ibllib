@@ -63,7 +63,6 @@ class TestProcessing(unittest.TestCase):
         self.assertTrue(times2.max() <= resamp2.times.max())
 
     def test_bincount_2d(self):
-        '''By Olivier to test Bincount2D, moved to test_processing.py by Berk'''
         # first test simple with indices
         x = np.array([0, 1, 1, 2, 2, 3, 3, 3])
         y = np.array([3, 2, 2, 1, 1, 0, 0, 0])
@@ -92,6 +91,12 @@ class TestProcessing(unittest.TestCase):
         y = np.array([4, 2, 2, 1, 1, 0, 0, 0])
         r, xscale, yscale = processing.bincount2D(x, y)
         self.assertTrue(np.all(xscale == yscale) and np.all(xscale == np.array([0, 1, 2, 4])))
+        # test aggregation on a fixed scale
+        r, xscale, yscale = processing.bincount2D(x + 10, y + 10, xbin=np.arange(5) + 10,
+                                                  ybin=np.arange(3) + 10)
+        self.assertTrue(np.all(xscale == np.arange(5) + 10))
+        self.assertTrue(np.all(yscale == np.arange(3) + 10))
+        self.assertTrue(np.all(r.shape == (3, 5)))
 
 
 def test_get_unit_bunches():
