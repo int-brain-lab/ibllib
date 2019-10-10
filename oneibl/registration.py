@@ -87,10 +87,14 @@ class RegistrationClient:
         if isinstance(ses_path, str):
             ses_path = Path(ses_path)
         # read meta data from the rig for the session from the task settings file
-        settings_json_file = [f for f in ses_path.glob('**/_iblrig_taskSettings.raw*.json')]
+        settings_json_file = list(ses_path.glob(
+            '**/raw_behavior_data/_iblrig_taskSettings.raw*.json'))
         if not settings_json_file:
-            logger_.error(['could not find _iblrig_taskSettings.raw.json. Abort.'])
-            return
+            settings_json_file = list(ses_path.glob('**/_iblrig_taskSettings.raw*.json'))
+            if not settings_json_file:
+                logger_.error(['could not find _iblrig_taskSettings.raw.json. Abort.'])
+                return
+            logger_.warning([f'Settings found in a strange place: {settings_json_file}'])
         else:
             settings_json_file = settings_json_file[0]
         md = _read_settings_json_compatibility_enforced(settings_json_file)
