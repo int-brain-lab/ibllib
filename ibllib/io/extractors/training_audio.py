@@ -8,6 +8,7 @@ from scipy import signal
 from scipy.io import wavfile
 
 from ibllib import dsp
+from ibllib.misc import log2session_static
 import ibllib.io.raw_data_loaders as ioraw
 import ibllib.io.extractors.training_trials
 
@@ -97,6 +98,7 @@ def welchogram(fs, wav, nswin=NS_WIN, overlap=OVERLAP, nperseg=NS_WELCH):
     return tscale, fscale, W, detect
 
 
+@log2session_static('extraction')
 def extract_sound(ses_path, save=True, force=False):
     """
     Simple audio features extraction for ambient sound characterization.

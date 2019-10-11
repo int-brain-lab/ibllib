@@ -7,6 +7,7 @@ https://ibllib.readthedocs.io/en/develop/04_reference.html#alf
 
 import logging
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -262,3 +263,41 @@ def save_metadata(file_alf, dico):
     file_meta_data = file_alf.parent / (file_alf.stem + '.metadata.json')
     with open(file_meta_data, 'w+') as fid:
         fid.write(json.dumps(dico, indent=1))
+
+
+def remove_uuid_file(file_path, dry=False):
+    """
+     Renames a file without the UUID and returns the new pathlib.Path object
+    """
+    file_path = Path(file_path)
+    name_parts = file_path.name.split('.')
+    if not is_uuid_string(name_parts[-2]):
+        return file_path
+    name_parts.pop(-2)
+    new_path = file_path.parent.joinpath('.'.join(name_parts))
+    if not dry and file_path.exists():
+        file_path.rename(new_path)
+    return new_path
+
+
+def remove_uuid_recursive(folder, dry=False):
+    """
+    Within a folder, recursive renaming of all files to remove UUID
+    """
+    for fn in Path(folder).rglob('*.*'):
+        print(remove_uuid_file(fn, dry=False))
+
+
+def is_uuid_string(string):
+    """
+    Bool test to c
+    """
+    if string is None:
+        return False
+    if len(string) != 36:
+        return False
+    UUID_PATTERN = re.compile(r'^[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}$', re.IGNORECASE)
+    if UUID_PATTERN.match(string):
+        return True
+    else:
+        return False
