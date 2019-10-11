@@ -776,11 +776,11 @@ class FigshareUploader:
 # -------------------------------------------------------------------------------------------------
 
 class FigshareOne(HttpOne):
-    def __init__(self, article_id=None, download_dir=None):
+    def __init__(self, article_id=None, download_dir=None, private=False):
         # NOTE: we don't use the cache if ever the data changes remotely.
         # NOTE: we use the public version here as the client may not have access to the private
         # version of the figshare article.
-        root_file = FigshareUploader(article_id)._find_root_file(private=False, use_cache=False)
+        root_file = FigshareUploader(article_id)._find_root_file(private=private, use_cache=False)
         if not root_file:
             raise ValueError(
                 "No ONE root file could be found in figshare article %d." % article_id)
@@ -831,9 +831,9 @@ def _make_http_one(repo):
     return HttpOne(root_file=root_file, download_dir=download_dir(), auth=auth)
 
 
-def _make_figshare_one(repo):
+def _make_figshare_one(repo, private=False):
     """Create a new FigshareOne instance based on the config file."""
-    return FigshareOne(article_id=repo.article_id, download_dir=download_dir())
+    return FigshareOne(article_id=repo.article_id, download_dir=download_dir(), private=private)
 
 
 def _make_local_one(repo):
@@ -841,7 +841,7 @@ def _make_local_one(repo):
     return LocalOne(repo.root_dir)
 
 
-def get_one():
+def get_one(private=False):
     """Get the singleton One instance, loading it from the config file, or using the singleton
     instance if it has already been instantiated."""
     if globals()['_CURRENT_ONE'] is not None:
@@ -850,7 +850,7 @@ def get_one():
     if repo.type == 'http':
         globals()['_CURRENT_ONE'] = _make_http_one(repo)
     elif repo.type == 'figshare':
-        globals()['_CURRENT_ONE'] = _make_figshare_one(repo)
+        globals()['_CURRENT_ONE'] = _make_figshare_one(repo, private=private)
     elif repo.type == 'local':
         globals()['_CURRENT_ONE'] = _make_local_one(repo)
     else:
@@ -878,8 +878,8 @@ def set_download_dir(path):
 
 
 @is_documented_by(HttpOne.search)
-def search(dataset_types, **kwargs):
-    return get_one().search(dataset_types, **kwargs)
+def search(dataset_types, private=False, **kwargs):
+    return get_one(private=private).search(dataset_types, **kwargs)
 
 
 @is_documented_by(HttpOne.list_)
@@ -932,11 +932,12 @@ def add_repo(name=None):
 
 @one.command('search')
 @click.argument('dataset_types', nargs=-1)
+@click.option('--private', is_flag=True)
 @is_documented_by(search)
-def search_(dataset_types):
+def search_(dataset_types, private=False):
     # NOTE: underscore to avoid shadowing of public search() function.
     # TODO: other search options
-    for session in search(dataset_types):
+    for session in search(dataset_types, private=private):
         click.echo(session)
 
 
