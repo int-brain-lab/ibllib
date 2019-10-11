@@ -1,6 +1,5 @@
 # library of small functions
 import json
-import re
 import logging
 import traceback
 from pathlib import Path
@@ -13,36 +12,6 @@ _logger = logging.getLogger('ibllib')
 
 def pprint(my_dict):
     print(json.dumps(my_dict, indent=4))
-
-
-def rename_witout_uuid(file_path, dry=False):
-    """
-     Renames a file without the UUID and returns the new pathlib.Path object
-    """
-    file_path = Path(file_path)
-    name_parts = file_path.name.split('.')
-    if not is_uuid_string(name_parts[-2]):
-        return file_path
-    name_parts.pop(-2)
-    new_path = file_path.parent.joinpath('.'.join(name_parts))
-    if not dry and file_path.exists():
-        file_path.rename(new_path)
-    return new_path
-
-
-def is_uuid_string(string):
-    """
-    Bool test to c
-    """
-    if string is None:
-        return False
-    if len(string) != 36:
-        return False
-    UUID_PATTERN = re.compile(r'^[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}$', re.IGNORECASE)
-    if UUID_PATTERN.match(string):
-        return True
-    else:
-        return False
 
 
 def _parametrized(dec):

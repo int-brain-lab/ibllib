@@ -4,24 +4,7 @@ import time
 import tempfile
 from pathlib import Path
 
-from ibllib.misc import (version, print_progress, log2session, log2session_static,
-                         rename_witout_uuid)
-
-
-class TestRemoveUUID(unittest.TestCase):
-
-    def test_remove_uuid(self):
-        with tempfile.TemporaryDirectory() as dir:
-            f1 = Path(dir).joinpath('tutu.part1.part1.30c09473-4d3d-4f51-9910-c89a6840096e.json')
-            f2 = Path(dir).joinpath('tata.part1.part1.json')
-            f3 = Path(dir).joinpath('toto.json')
-            f1.touch()
-            f2.touch()
-            f2.touch()
-            self.assertTrue(rename_witout_uuid(f1) == Path(dir).joinpath('tutu.part1.part1.json'))
-            self.assertTrue(rename_witout_uuid(f2) == Path(dir).joinpath('tata.part1.part1.json'))
-            self.assertTrue(rename_witout_uuid(f3) == Path(dir).joinpath('toto.json'))
-            self.assertTrue(rename_witout_uuid(str(f3)) == Path(dir).joinpath('toto.json'))
+from ibllib.misc import (version, print_progress, log2session, log2session_static)
 
 
 class TestLog2Session(unittest.TestCase):
