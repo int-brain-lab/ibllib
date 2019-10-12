@@ -78,7 +78,7 @@ def http_download_file(full_link_to_file, *, clobber=False, offline=False,
     u = urllib.request.urlopen(full_link_to_file)
     file_size = int(u.getheader('Content-length'))
 
-    logger_.info("Downloading: %s Bytes: %s" % (file_name, file_size))
+    print(f"Downloading: {file_name} Bytes: {file_size}")
     file_size_dl = 0
     block_sz = 8192 * 64 * 8
     f = open(file_name, 'wb')
