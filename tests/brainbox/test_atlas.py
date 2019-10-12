@@ -15,12 +15,15 @@ class TestsCoordinatesSimples(unittest.TestCase):
         self.assertTrue(bc.nx == 6)
         self.assertTrue(bc.ny == 7)
         self.assertTrue(bc.nz == 8)
+        self.assertTrue(np.all(bc.xyz2i([6, 7, 8]) == np.array([6., 7., 8.])))
 
     def test_reverse_directions(self):
         bc = BrainCoordinates(nxyz=(6, 7, 8), xyz0=[50, 60, 70], dxyz=[-10, -10, -10])
         self.assertTrue(bc.i2x(0) == 50 and bc.i2x(bc.nx - 1) == 0)
         self.assertTrue(bc.i2y(0) == 60 and bc.i2y(bc.ny - 1) == 0)
         self.assertTrue(np.all(bc.i2z(np.array([0, 1])) == np.array([70, 60])))
+        bc = BrainCoordinates(nxyz=(6, 7, 8), xyz0=[50, 60, 70], dxyz=-10)
+        self.assertTrue(bc.dx == bc.dy == bc.dz == -10)
 
     def test_sph2cart_and_back(self):
         dv = np.array([0, -1, 1, 0, 0, 0, 0, 0, 0])  # z

@@ -34,6 +34,8 @@ class BrainCoordinates:
     """
 
     def __init__(self, nxyz, xyz0=[0, 0, 0], dxyz=[1, 1, 1]):
+        if np.isscalar(dxyz):
+            dxyz = [dxyz for i in range(3)]
         self.x0, self.y0, self.z0 = xyz0
         self.dx, self.dy, self.dz = dxyz
         self.nx, self.ny, self.nz = nxyz
@@ -48,6 +50,9 @@ class BrainCoordinates:
     def z2i(self, z):
         return (z - self.z0) / self.dz
 
+    def xyz2i(self, xyz):
+        return np.array([self.x2i(xyz[0]), self.y2i(xyz[1]), self.z2i(xyz[2])])
+
     """Methods indices to distance"""
     def i2x(self, ind):
         return ind * self.dx + self.x0
@@ -57,3 +62,16 @@ class BrainCoordinates:
 
     def i2z(self, ind):
         return ind * self.dz + self.z0
+
+    """Methods bounds"""
+    @property
+    def xlim(self):
+        return self.i2x(np.array([0, self.nx - 1]))
+
+    @property
+    def ylim(self):
+        return self.i2y(np.array([0, self.ny - 1]))
+
+    @property
+    def zlim(self):
+        return self.i2z(np.array([0, self.nz - 1]))
