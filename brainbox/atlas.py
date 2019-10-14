@@ -40,15 +40,32 @@ class BrainCoordinates:
         self.dx, self.dy, self.dz = dxyz
         self.nx, self.ny, self.nz = nxyz
 
+    """Methods ratios to indice"""
+    def r2ix(self, r):
+        return int((self.nx - 1) * r)
+
+    def r2iy(self, r):
+        return int((self.nz - 1) * r)
+
+    def r2iz(self, r):
+        return int((self.nz - 1) * r)
+
     """Methods distance to indice"""
-    def x2i(self, x):
-        return (x - self.x0) / self.dx
+    @staticmethod
+    def _round(i, round=True):
+        if round:
+            return int(np.round(i))
+        else:
+            return i
 
-    def y2i(self, y):
-        return (y - self.y0) / self.dy
+    def x2i(self, x, round=True):
+        return self._round((x - self.x0) / self.dx, round=round)
 
-    def z2i(self, z):
-        return (z - self.z0) / self.dz
+    def y2i(self, y, round=True):
+        return self._round((y - self.y0) / self.dy, round=round)
+
+    def z2i(self, z, round=True):
+        return self._round((z - self.z0) / self.dz, round=round)
 
     def xyz2i(self, xyz):
         return np.array([self.x2i(xyz[0]), self.y2i(xyz[1]), self.z2i(xyz[2])])
@@ -62,6 +79,9 @@ class BrainCoordinates:
 
     def i2z(self, ind):
         return ind * self.dz + self.z0
+
+    def i2xyz(self, iii):
+        return np.array([self.i2x(iii[0]), self.i2y(iii[1]), self.i2z(iii[2])])
 
     """Methods bounds"""
     @property

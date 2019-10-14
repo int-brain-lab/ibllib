@@ -16,6 +16,7 @@ class TestsCoordinatesSimples(unittest.TestCase):
         self.assertTrue(bc.ny == 7)
         self.assertTrue(bc.nz == 8)
         self.assertTrue(np.all(bc.xyz2i([6, 7, 8]) == np.array([6., 7., 8.])))
+        self.assertTrue(np.all(bc.i2xyz([6, 7, 8]) == np.array([6., 7., 8.])))
 
     def test_reverse_directions(self):
         bc = BrainCoordinates(nxyz=(6, 7, 8), xyz0=[50, 60, 70], dxyz=[-10, -10, -10])
