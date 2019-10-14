@@ -9,9 +9,11 @@
 
 import csv
 from collections import defaultdict
+from ftplib import FTP, error_perm
 import hashlib
 import json
 import logging
+import os
 import os.path as op
 from pathlib import Path
 import re
@@ -66,7 +68,7 @@ add_default_handler('DEBUG')
 # Global variables
 # -------------------------------------------------------------------------------------------------
 
-EXCLUDED_FILENAMES = ('.DS_Store',)
+EXCLUDED_FILENAMES = ('.DS_Store', '.one_root')
 _FIGSHARE_BASE_URL = 'https://api.figshare.com/v2/{endpoint}'
 _CURRENT_REPOSITORY = None
 _CURRENT_ONE = None
@@ -177,18 +179,28 @@ def update_repo_config(**kwargs):
 
 def add_repository(name=None):
     """Interactive prompt to add a repository."""
-    name = name or 'default'
+    if not name:
+        name = input('Repository name? ') or 'default'
     config = get_config()
     if name in (repo['name'] for repo in config['repositories']):
         raise ValueError(
             "The repository name `%s` already exists, please provide another one." % name)
     print("Launching interactive configuration tool to add a new repository.")
-    repo = Bunch(name=name, type=input("`local`, `http`, or `figshare`? "))
+    repo = Bunch(name=name, type=input("`local`, `ftp`, `http`, or `figshare`? "))
     if repo.type == 'http':
         repo.update(
             base_url=input("Root URL? "),
             login=input("Basic HTTP auth login? (leave empty if public) "),
             pwd=input("Basic HTTP auth password? (leave empty if public) "),
+        )
+    elif repo.type == 'ftp':
+        repo.update(
+            host=input("Host? "),
+            port=input("Port? (21 by default)") or 21,
+            ftp_login=input("Login? "),
+            ftp_password=input("Password? "),
+            remote_root=input("Remote path to the root directory? (`/` by default) ") or '/',
+            base_url=input("Public URL? "),
         )
     elif repo.type == 'figshare':
         repo.update(
@@ -442,6 +454,65 @@ def _search(root_file_iterator, regex):
         m = regex.match(rel_path)
         if m:
             yield rel_path, url, m
+
+
+# -------------------------------------------------------------------------------------------------
+# FTP Uploader
+# -------------------------------------------------------------------------------------------------
+
+class FtpUploader:
+    def __init__(self, host, login=None, password=None, port=21, remote_root=None):
+        self.host = host
+        self.login = login
+        self.password = password
+        self.port = port
+        self.remote_root = remote_root or '/'
+        self._ftp = FTP()
+        self._fr = None
+        self._writer = None
+        self.connect()
+
+    def connect(self):
+        # FTP connect.
+        self._ftp.connect(self.host, self.port)
+        self._ftp.login(self.login, self.password)
+        logger.debug(self._ftp.getwelcome())
+        # Go to the root directory.
+        for n in self.remote_root.split('/'):
+            n = n.strip()
+            if n:
+                logger.debug("Enter %s.", n)
+                self._ftp.cwd(n)
+
+    def upload(self, root_dir, base_dir=None):
+        root_dir = Path(root_dir)
+        base_dir = base_dir or root_dir
+        # Write the .one_root file iteratively.
+        if self._writer is None:
+            self._fr = open(root_dir / '.one_root', 'w')
+            self._writer = csv.writer(self._fr, delimiter='\t')
+        for name in os.listdir(root_dir):
+            path = Path(op.join(root_dir, name))
+            rel_path = path.relative_to(base_dir)
+            if op.isfile(path) and is_file_in_session_dir(path):
+                logger.debug("Upload %s.", path)
+                self._writer.writerow([rel_path])
+                with open(path, 'rb') as f:
+                    self._ftp.storbinary('STOR ' + name, f)
+            elif op.isdir(path):
+                try:
+                    logger.debug("Create FTP dir %s.", name)
+                    self._ftp.mkd(name)
+                except error_perm as e:
+                    if not e.args[0].startswith('550'):
+                        raise
+                self._ftp.cwd(name)
+                self.upload(path, base_dir=base_dir)
+                self._ftp.cwd("..")
+        # End: close the file and the FTP connection.
+        if base_dir == root_dir:
+            self._fr.close()
+            self._ftp.quit()
 
 
 # -------------------------------------------------------------------------------------------------
@@ -750,7 +821,7 @@ class FigshareUploader:
         self._update_description()
 
         # Validate all changes.
-        self._publish()
+        # self._publish()
 
     def _remove_duplicates(self):
         """Remove duplicate files."""
@@ -847,7 +918,7 @@ def get_one(private=False):
     if globals()['_CURRENT_ONE'] is not None:
         return globals()['_CURRENT_ONE']
     repo = repository()
-    if repo.type == 'http':
+    if repo.type in ('http', 'ftp'):
         globals()['_CURRENT_ONE'] = _make_http_one(repo)
     elif repo.type == 'figshare':
         globals()['_CURRENT_ONE'] = _make_figshare_one(repo, private=private)
@@ -926,8 +997,8 @@ def repo(name=None):
 @click.argument('name', required=False)
 def add_repo(name=None):
     """Add a new repository and prompt for its configuration info."""
-    add_repository(name)
-    set_repository(name)
+    repo = add_repository(name)
+    set_repository(repo.name)
 
 
 @one.command('search')
@@ -976,9 +1047,15 @@ def scan(root_dir, sessions_only=False):
 def upload(root_dir, limit=0, dry_run=False):
     """Upload a root directory to a figshare article."""
     repo = repository()
-    if repo.type != 'figshare':
+    if repo.type == 'figshare':
+        FigshareUploader(repo.article_id).upload_dir(root_dir, limit=limit, dry_run=dry_run)
+    elif repo.type == 'ftp':
+        fu = FtpUploader(
+            repo.host, login=repo.ftp_login, password=repo.ftp_password, port=repo.port or 21,
+            remote_root=repo.remote_root)
+        fu.upload(root_dir)
+    else:
         raise NotImplementedError("Upload only possible for figshare repositories.")
-    FigshareUploader(repo.article_id).upload_dir(root_dir, limit=limit, dry_run=dry_run)
 
 
 @one.command('clean_publish')
@@ -995,4 +1072,4 @@ if __name__ == '__main__':
         one()
     except Exception as e:
         click.echo(e, err=True)
-        # raise e
+        raise e
