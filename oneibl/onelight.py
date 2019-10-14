@@ -491,7 +491,7 @@ class FtpUploader:
         if self._writer is None:
             self._fr = open(root_dir / '.one_root', 'w')
             self._writer = csv.writer(self._fr, delimiter='\t')
-        for name in os.listdir(root_dir):
+        for name in sorted(os.listdir(root_dir)):
             path = Path(op.join(root_dir, name))
             rel_path = path.relative_to(base_dir)
             if op.isfile(path) and is_file_in_session_dir(path):
@@ -511,6 +511,8 @@ class FtpUploader:
                 self._ftp.cwd("..")
         # End: close the file and the FTP connection.
         if base_dir == root_dir:
+            with open(root_dir / '.one_root', 'rb') as f:
+                self._ftp.storbinary('STOR .one_root', f)
             self._fr.close()
             self._ftp.quit()
 
