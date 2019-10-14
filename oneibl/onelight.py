@@ -180,7 +180,7 @@ def update_repo_config(**kwargs):
 def add_repository(name=None):
     """Interactive prompt to add a repository."""
     if not name:
-        name = input('Repository name? ') or 'default'
+        name = input('Choose a repository name? (leave empty for default) ') or 'default'
     config = get_config()
     if name in (repo['name'] for repo in config['repositories']):
         raise ValueError(
@@ -206,6 +206,7 @@ def add_repository(name=None):
         repo.update(
             article_id=_parse_article_id(input("figshare article public URL? ")),
             token=input(
+                "[data uploaders only] "
                 "Go to https://figshare.com/account/applications, generate a token, "
                 "and copy-paste it here: "),
         )
