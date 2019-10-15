@@ -10,7 +10,8 @@ ONE light is currently part of the `ibllib` Python library.
 You need Python 3 and NumPy. You can install the development version of the code as follows:
 
 ```
-git clone -b onelight git@github.com:int-brain-lab/ibllib.git
+git clone -b onelight https://github.com/int-brain-lab/ibllib.git
+cd ibllib
 pip install click requests
 pip install -e .
 ```
@@ -20,10 +21,107 @@ pip install -e .
 
 [To download and visualize data with ONE light, see the Jupyter notebook demo.](../examples/oneibl/test_onelight.ipynb)
 
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+%matplotlib inline
+```
+
+```python
+from oneibl import onelight as one
+```
+
+We set the current repository to a figshare article, that was specially created with ONE light:
+
+```python
+one.set_figshare_url("https://figshare.com/articles/steinmetz/9974357")
+```
+
+We search all sessions that have files with a given dataset type. We could pass multiple dataset types. Here, we get all sessions that have spikes:
+
+```python
+sessions = one.search(['spikes'])
+```
+
+Within a repository, every session is uniquely identified by its full name, which has the following structure: `labname/Subjects/subjectname/date/session`.
+
+```python
+sessions
+```
+
+    ['nicklab/Subjects/Cori/2016-12-14/001',
+     'nicklab/Subjects/Cori/2016-12-17/001',
+     'nicklab/Subjects/Cori/2016-12-18/001',
+     'nicklab/Subjects/Forssmann/2017-11-01/001',
+     'nicklab/Subjects/Forssmann/2017-11-02/001',
+     'nicklab/Subjects/Forssmann/2017-11-04/001',
+     ...
+     'nicklab/Subjects/Tatum/2017-12-08/001',
+     'nicklab/Subjects/Tatum/2017-12-09/001',
+     'nicklab/Subjects/Theiler/2017-10-11/001']
+
+We take the first session.
+
+```python
+session = sessions[0]
+```
+
+What are the dataset types contained in this session?
+
+```python
+one.list_(session)
+```
+
+    ['Cori_2016-12-14_M2_g0_t0.imec',
+     'Cori_2016-12-14_V1_g0_t0.imec',
+     'channels.brainLocation',
+     'channels.probe',
+     ...
+     'sparseNoise.positions',
+     'sparseNoise.times',
+     'spikes.amps',
+     'spikes.clusters',
+     'spikes.depths',
+     'spikes.times',
+     'spontaneous.intervals',
+     'trials.feedbackType',
+     'trials.feedback_times',
+     ...
+     'trials.visualStim_contrastRight',
+     'trials.visualStim_times',
+     'wheel.position',
+     'wheel.timestamps',
+     'wheelMoves.intervals',
+     'wheelMoves.type']
+
+We can load either single files, or full objects.
+First, let's load the spike times:
+
+```python
+one.load_dataset(session, 'spikes.times')
+```
+    array([[3.36666667e-03],
+           [4.73333333e-03],
+           ...,
+           [2.70264313e+03],
+           [2.70264316e+03]])
+
+Now, we load all `spikes.*` files:
+
+```python
+spikes = one.load_object(session, 'spikes')
+```
+
+The `spikes` object is an instance of a dictionary, that also allows for the more convenient syntax interface `spikes.times` in addition to `spikes['times']`. Here, we display a raster plot of the first 100,000 spikes:
+
+```python
+plt.plot(spikes.times[:100000], spikes.clusters[:100000], ',')
+```
+
 
 ## For data sharers
 
-It is most convenient to use the command-line interface to upload data with ONE light. Several repository types are currently supported, notably FTP and figshare. We only give the instructions for figshare here.
+It is most convenient to use the command-line interface when uploading data with ONE light. Several repository types are currently supported, notably FTP and figshare. We only give the instructions for figshare here.
 
 
 ### Configuration
