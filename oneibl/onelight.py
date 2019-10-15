@@ -17,13 +17,13 @@ import os
 import os.path as op
 from pathlib import Path
 import re
+import sys
 import tempfile
 import urllib.parse
 
 import click
 import requests
 from requests.exceptions import HTTPError
-# from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ def add_default_handler(level='INFO', logger=logger):
     logger.addHandler(handler)
 
 
-add_default_handler('DEBUG')
+add_default_handler(level='DEBUG' if '--debug' in sys.argv else 'INFO')
 
 
 # -------------------------------------------------------------------------------------------------
@@ -169,24 +169,32 @@ def set_config(config):
         json.dump(config, f, indent=2, sort_keys=True)
 
 
-def update_repo_config(**kwargs):
+def get_repo(name, config=None):
+    """Get a repository by its name."""
+    config = config or get_config()
+    for r in config['repositories']:
+        if r['name'] == name:
+            return r
+
+
+def update_repo(name, **kwargs):
+    """Update a repository."""
     config = get_config()
-    for repo in config['repositories']:
-        if repo['name'] == repo['name']:
-            repo.update(kwargs)
+    repo = get_repo(config=config)
+    if repo:
+        repo.update(kwargs)
     set_config(config)
 
 
-def add_repository(name=None):
+def add_repo(name=None):
     """Interactive prompt to add a repository."""
     if not name:
         name = input('Choose a repository name? (leave empty for default) ') or 'default'
     config = get_config()
-    if name in (repo['name'] for repo in config['repositories']):
-        raise ValueError(
-            "The repository name `%s` already exists, please provide another one." % name)
-    print("Launching interactive configuration tool to add a new repository.")
-    repo = Bunch(name=name, type=input("`local`, `ftp`, `http`, or `figshare`? "))
+    repo = get_repo(name, config=config)
+    if not repo:
+        repo = Bunch(name=name, type=input("`local`, `ftp`, `http`, or `figshare`? "))
+        config['repositories'].append(repo)
     if repo.type == 'http':
         repo.update(
             base_url=input("Root URL? "),
@@ -214,9 +222,31 @@ def add_repository(name=None):
         repo.update(
             root_dir=input('root path? '),
         )
-    config['repositories'].append(repo)
     set_config(config)
     return repo
+
+
+def set_figshare_url(url):
+    """Get or create a figshare repo with a given figshare URL."""
+    config = get_config()
+    article_id = _parse_article_id(url)
+    for repo in config['repositories']:
+        if repo['type'] == 'figshare' and repo['article_id'] == article_id:
+            return set_repo(repo['name'])
+    # Need to add a new repo.
+    # Find a new unique name figshare_XXX.
+    names = set(r['name'] for r in config['repositories'])
+    name = None
+    for i in range(100):
+        n = 'figshare_%02d' % i
+        if n not in names:
+            name = n
+            break
+    assert name
+    repo = Bunch(name=name, type='figshare', article_id=article_id)
+    config['repositories'].append(repo)
+    set_config(config)
+    set_repo(name)
 
 
 # -------------------------------------------------------------------------------------------------
@@ -337,20 +367,22 @@ def format_download_dir(session, download_dir):
 
 def load_array(path):
     """Load a single file."""
-    if str(path).endswith('.npy'):
+    path = str(path)
+    if path.endswith('.npy'):
         try:
             import numpy as np
-            return np.load(path, mmap_mode='r')
+            mmap_mode = 'r' if op.getsize(path) > 1e8 else None
+            return np.load(path, mmap_mode=mmap_mode)
         except ImportError:
             logger.warning("NumPy is not available.")
             return
         except ValueError as e:
             logger.error("Impossible to read %s.", path)
             raise e
-    elif str(path).endswith('.tsv'):
+    elif path.endswith('.tsv'):
         try:
             import pandas as pd
-            return pd.read_csv(str(path), sep='\t')
+            return pd.read_csv(path, sep='\t')
         except ImportError:
             logger.warning("Pandas is not available.")
         except ValueError as e:
@@ -670,7 +702,7 @@ def figshare_request(
         endpoint=None, data=None, method='GET', url=None,
         binary=False, error_level=logging.ERROR):
     """Perform a REST request against the figshare API."""
-    headers = {'Authorization': 'token ' + repository().get('token', None)}
+    headers = {'Authorization': 'token ' + repository().get('token', '')}
     if data is not None and not binary:
         data = json.dumps(data)
     response = requests.request(
@@ -791,7 +823,7 @@ class FigshareUploader:
         root_file_id = self._upload(root_file_path, '.one_root')[0]
 
         # Update the root file id in the config file.
-        update_repo_config(root_file_id=root_file_id)
+        update_repo(root_file_id=root_file_id)
 
     def upload_dir(self, root_dir, dry_run=False, limit=None):
         """Upload to figshare all session files found in a root directory."""
@@ -865,15 +897,15 @@ class FigshareOne(HttpOne):
 # ONE singleton
 # -------------------------------------------------------------------------------------------------
 
-def set_repository(name=None):
+def set_repo(name=None):
     """Set the current repository."""
     config = get_config()
     name = name or config.get('current_repository', None) or 'default'
     repos = config.get('repositories', [])
     if not repos:
         logger.error("No repository configured!")
-        add_repository(name)
-        return set_repository(name)
+        add_repo(name)
+        return set_repo(name)
     for repo in repos:
         repo = Bunch(repo)
         if repo.name == name:
@@ -888,7 +920,7 @@ def set_repository(name=None):
 def repository():
     """Get the current repository."""
     if not globals()['_CURRENT_REPOSITORY']:
-        globals()['_CURRENT_REPOSITORY'] = set_repository()
+        globals()['_CURRENT_REPOSITORY'] = set_repo()
     return Bunch(globals()['_CURRENT_REPOSITORY'])
 
 
@@ -980,7 +1012,7 @@ def one():
     pass
 
 
-@one.command()
+@one.command('repo')
 @click.argument('name', required=False)
 def repo(name=None):
     """Show the existing repos, or set the current repo."""
@@ -993,15 +1025,15 @@ def repo(name=None):
                 f'{is_current}{repo.name}: {repo.type} '
                 f'{repo.get("base_url", repo.get("article_id", ""))}')
     else:
-        set_repository(name)
+        set_repo(name)
 
 
 @one.command('add_repo')
 @click.argument('name', required=False)
-def add_repo(name=None):
+def add_repo_(name=None):
     """Add a new repository and prompt for its configuration info."""
-    repo = add_repository(name)
-    set_repository(repo.name)
+    repo = add_repo(name)
+    set_repo(repo.name)
 
 
 @one.command('search')
@@ -1071,6 +1103,8 @@ def clean_publish():
 
 
 if __name__ == '__main__':
+    if '--debug' in sys.argv:
+        sys.argv.remove('--debug')
     try:
         one()
     except Exception as e:
