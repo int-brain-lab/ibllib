@@ -13,7 +13,7 @@ You need Python 3 and NumPy. You can install the development version of the code
 git clone -b onelight https://github.com/int-brain-lab/ibllib.git
 cd ibllib
 pip install click requests
-pip install -e .
+python setup.py develop
 ```
 
 ## For data users
