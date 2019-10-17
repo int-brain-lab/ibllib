@@ -7,6 +7,9 @@ import logging
 import numpy as np
 from scipy import signal
 
+import spikemetrics.metrics as metrics
+from phylib.io import model as phymod
+
 from brainbox.core import Bunch
 import alf.io
 import ibllib.io.spikeglx
@@ -14,7 +17,7 @@ from ibllib.ephys import sync_probes
 from ibllib.io import spikeglx
 import ibllib.dsp as dsp
 import ibllib.io.extractors.ephys_fpga as fpga
-from ibllib.misc import print_progress
+from ibllib.misc import print_progress, log2session_static
 
 _logger = logging.getLogger('ibllib')
 
@@ -100,7 +103,8 @@ def extract_rmsmap(fbin, out_folder=None, force=False, label=''):
     return out_time + out_freq
 
 
-def qc_session(session_path, dry=False, force=False):
+@log2session_static('ephys')
+def raw_qc_session(session_path, dry=False, force=False):
     """
     Wrapper that exectutes QC from a session folder and outputs the results whithin the same folder
     as the original raw data.
@@ -210,3 +214,39 @@ def validate_ttl_test(ses_path, display=False):
     if not ok:
         raise ValueError('FAILED TTL test')
     return ok
+
+
+def _spike_sorting_metrics(ks2_path, save=True):
+    """
+    Given a path containing kilosort 2 output, compute quality metrics and optionally save them
+    to a clusters_metric.csv file
+    :param ks2_path:
+    :param save
+    :return:
+    """
+    METRICS_PARAMS = {
+        "isi_threshold": 0.0015,
+        "min_isi": 0.000166,
+        "num_channels_to_compare": 13,
+        "max_spikes_for_unit": 500,
+        "max_spikes_for_nn": 10000,
+        "n_neighbors": 4,
+        'n_silhouette': 10000,
+        "quality_metrics_output_file": "metrics.csv",
+        "drift_metrics_interval_s": 51,
+        "drift_metrics_min_spikes_per_interval": 10
+    }
+
+    m = phymod.TemplateModel(dir_path=ks2_path,
+                             dat_path=[],
+                             sample_rate=30000,
+                             n_channels_dat=384)
+
+    r = metrics.calculate_metrics(m.spike_times, m.spike_clusters, m.amplitudes,
+                                  np.swapaxes(m.sparse_features.data, 1, 2),
+                                  m.sparse_features.cols, METRICS_PARAMS, cluster_ids=None,
+                                  epochs=None, seed=0, verbose=True)
+    if save:
+        r.to_csv(ks2_path.joinpath('clusters_metrics.csv'))
+
+    return r
