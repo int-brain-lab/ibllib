@@ -64,7 +64,7 @@ def merge_probes(ses_path):
         sync_points = np.load(sync_file)
         fcn = interp1d(sync_points[:, 0] * srates[ind],
                        sync_points[:, 1], fill_value='extrapolate')
-        mt.spike_times[spike_probes == ind] = fcn(mt.spike_times[spike_probes == ind])
+        mt.spike_times[spike_probes == ind] = fcn(mt.spike_samples[spike_probes == ind])
 
     # And convert to ALF
     ac = alf.EphysAlfCreator(mt)
