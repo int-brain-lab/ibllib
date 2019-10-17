@@ -29,6 +29,7 @@ setup(
     description='IBL libraries',
     license="MIT",
     long_description=long_description,
+    long_description_content_type='text/markdown',
     author='IBL Staff',
     url="https://www.internationalbrainlab.com/",
     packages=find_packages(exclude=['scratch']),  # same as name
