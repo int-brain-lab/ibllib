@@ -233,16 +233,16 @@ def AllenAtlas(res_um=25):
     """
     # Bregma indices for the 10um Allen Brain Atlas, mlapdv
     INDICES_BREGMA = np.array([1140 - (570 + 3.9), 540, 0 + 33.2])
-    path_atlas = '/datadisk/BrainAtlas/ATLASES/Allen/'
-    file_regions = '/home/olivier/Documents/MATLAB/ibllib-matlab/needles/@BrainAtlas/allen_structure_tree.csv'
+    PATH_ATLAS = '/datadisk/BrainAtlas/ATLASES/Allen/'
+    FILE_REGIONS = Path(__file__).parent.joinpath('allen_structure_tree.csv')
     # file_image = Path(path_atlas).joinpath(f'ara_nissl_{res_um}.nrrd')
-    file_image = Path(path_atlas).joinpath(f'average_template_{res_um}.nrrd')
-    file_label = Path(path_atlas).joinpath(f'annotation_{res_um}.nrrd')
+    file_image = Path(PATH_ATLAS).joinpath(f'average_template_{res_um}.nrrd')
+    file_label = Path(PATH_ATLAS).joinpath(f'annotation_{res_um}.nrrd')
     image, header = nrrd.read(file_image, index_order='C')  # dv, ml, ap
     image = np.swapaxes(np.swapaxes(image, 2, 0), 1, 2)  # image[iap, iml, idv]
     label, header = nrrd.read(file_label, index_order='C')  # dv, ml, ap
     label = np.swapaxes(np.swapaxes(label, 2, 0), 1, 2)  # label[iap, iml, idv]
-    df_regions = pd.read_csv(file_regions)
+    df_regions = pd.read_csv(FILE_REGIONS)
     regions = BrainRegions(id=df_regions.id.values,
                            name=df_regions.name.values,
                            acronym=df_regions.acronym.values)
