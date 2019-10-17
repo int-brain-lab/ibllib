@@ -191,7 +191,7 @@ class TestLoad(unittest.TestCase):
         # Test without a dataset list should download everything and output a dictionary
         one = self.One
         eid = self.eid2
-        a = one.load(eid)
+        a = one.load(eid, dataset_types='__all__')
         self.assertTrue(len(a.data) == 5)
 
     def test_load_fileformats(self):

@@ -1,5 +1,6 @@
 from functools import singledispatch
 from dataclasses import dataclass, field, fields
+from pathlib import Path
 
 from ibllib.misc import flatten
 
@@ -48,9 +49,15 @@ class SessionDataInfo:
 
     @staticmethod
     def from_datasets(dsets, dataset_types=None, eid=None):
+        # if no dataset is specified download only the root alf folder
         if not dataset_types:
-            dataset_types = [d['dataset_type'] for d in dsets if d['data_url']]
-        dsets = [d for d in dsets if d['dataset_type'] in dataset_types]
+            dsets = [d for d in dsets if d['data_url'] and
+                     'alf' in Path(d['data_url']).parts and
+                     'raw_ephys_data' not in Path(d['data_url']).parts]
+        elif dataset_types == ['__all__']:
+            dsets = [d for d in dsets if d['data_url']]
+        else:
+            dsets = [d for d in dsets if d['dataset_type'] in dataset_types]
         return SessionDataInfo(
             dataset_type=[d['dataset_type'] for d in dsets],
             dataset_id=[d['id'] for d in dsets],
@@ -61,8 +68,8 @@ class SessionDataInfo:
         )
 
     @staticmethod
-    def from_session_details(ses_info, dataset_types=None, eid=None):
-        return _session_details_to_dataclasses(ses_info, dataset_types=dataset_types, eid=eid)
+    def from_session_details(ses_info, **kwargs):
+        return _session_details_to_dataclasses(ses_info, **kwargs)
 
 
 @singledispatch

@@ -136,7 +136,6 @@ class ONE(OneAbstract):
         :param details: returns a second argument with a full dictionary to provide context
         :type details: bool
 
-
         :return: list of strings, plus list of dictionaries if details option selected
         :rtype:  list, list
 
@@ -169,7 +168,7 @@ class ONE(OneAbstract):
 
         # this is a query about datasets: need to unnest session info through the load function
         if keyword == 'dataset-type':
-            dses = self.load(eid, dry_run=True)
+            dses = self.load(eid, dataset_types='__all__', dry_run=True)
             dlist = list(sorted(set(dses.dataset_type)))
             if details:
                 return dses
@@ -262,11 +261,8 @@ class ONE(OneAbstract):
         # a) force the output to be a dictionary that provides context to the data
         # b) download all types that have a data url specified whithin the alf folder
         dataset_types = [dataset_types] if isinstance(dataset_types, str) else dataset_types
-        if not dataset_types:
+        if not dataset_types or dataset_types == ['__all__']:
             dclass_output = True
-            # a blind download of all dataset types restricts to the alf folder whithin a session
-            dataset_types = [d['dataset_type'] for d in ses['data_dataset_session_related']
-                             if d['data_url'] and 'alf' in Path(d['data_url']).parts]
         dc = SessionDataInfo.from_session_details(ses, dataset_types=dataset_types, eid=eid_str)
         # loop over each dataset and download if necessary
         for ind in range(len(dc)):

@@ -4,11 +4,12 @@
 [![Build Status on dev](https://travis-ci.org/cortex-lab/alyx.svg?branch=dev)](https://travis-ci.org/cortex-lab/alyx)
 
 ## Description
-Library used to implement the International Brain Laboratory data pipeline.
-The library as currently 3 main modules:
--   **alf**: the ALF
+Library used to implement the International Brain Laboratory data pipeline. Currently in active development.
+The library as currently 4 main modules:
+-   **brainbox**: neuroscience analysis oriented library
 -   **ibllib**: general purpose library containng I/O, signal processing and IBL data pipelines utilities.
 -   **oneibl**: interface to the Alyx database of experiments to access IBL data.
+-   **alf**: implementation of ALF file naming convention
 
 ## Requirements
 **OS**: Deployed on Linux and Windows. Minimally tested for Mac.
