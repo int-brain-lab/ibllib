@@ -126,7 +126,7 @@ def raw_ephys_qc(root_data_folder, dry=False, max_sessions=10, force=False):
         if dry:
             print(qcflag.parent)
             continue
-        qc_files = ephysqc.qc_session(session_path, dry=dry, force=force)
+        qc_files = ephysqc.raw_qc_session(session_path, dry=dry, force=force)
         qcflag.unlink()
         flags.write_flag_file(session_path.joinpath('register_me.flag'), file_list=qc_files)
 
