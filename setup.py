@@ -45,7 +45,7 @@ install_requires = [
 
 setup(
     name='ibllib',
-    version='1.2.3',
+    version='1.2.4',
     python_requires='>={}.{}'.format(*REQUIRED_PYTHON),
     description='IBL libraries',
     license="MIT",
