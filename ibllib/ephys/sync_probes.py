@@ -7,9 +7,9 @@ import numpy as np
 from scipy.interpolate import interp1d
 
 import alf.io
-import ibllib.io.spikeglx
 from brainbox.core import Bunch
 import ibllib.io.spikeglx as spikeglx
+from ibllib.misc import log2session_static
 from ibllib.ephys import spikes
 from ibllib.io import flags
 from ibllib.io.extractors.ephys_fpga import CHMAPS, _get_sync_fronts
@@ -17,6 +17,7 @@ from ibllib.io.extractors.ephys_fpga import CHMAPS, _get_sync_fronts
 _logger = logging.getLogger('ibllib')
 
 
+@log2session_static('ephys')
 def sync_merge(session_path, dry=False, force=False):
     """
     Sync probes and merge spike sorting output.
@@ -28,6 +29,7 @@ def sync_merge(session_path, dry=False, force=False):
     flags.write_flag_file(session_path.joinpath('register_me.flag'))
 
 
+@log2session_static('ephys')
 def sync(ses_path, **kwargs):
     """
     Wrapper for sync_probes.version3A and sync_probes.version3B that automatically determines
@@ -51,7 +53,7 @@ def version3A(ses_path, display=True, linear=False, tol=1.5):
     :param ses_path:
     :return: bool True on a a successful sync
     """
-    ephys_files = ibllib.io.spikeglx.glob_ephys_files(ses_path)
+    ephys_files = spikeglx.glob_ephys_files(ses_path)
     nprobes = len(ephys_files)
     if nprobes <= 1:
         _logger.warning(f"Skipping single probe session: {ses_path}")
@@ -59,7 +61,7 @@ def version3A(ses_path, display=True, linear=False, tol=1.5):
     d = Bunch({'times': [], 'nsync': np.zeros(nprobes, )})
     for ind, ephys_file in enumerate(ephys_files):
         sync = alf.io.load_object(ephys_file.ap.parent, '_spikeglx_sync', short_keys=True)
-        sync_map = ibllib.io.spikeglx.get_sync_map(ephys_file.ap.parent) or CHMAPS['3A']
+        sync_map = spikeglx.get_sync_map(ephys_file.ap.parent) or CHMAPS['3A']
         isync = np.in1d(sync['channels'], np.array([sync_map['right_camera']]))
         d.nsync[ind] = len(sync.channels)
         d['times'].append(sync['times'][isync])
@@ -96,10 +98,10 @@ def version3B(ses_path, display=True, linear=False, tol=2.5):
     :param ses_path:
     :return: None
     """
-    ephys_files = ibllib.io.spikeglx.glob_ephys_files(ses_path)
+    ephys_files = spikeglx.glob_ephys_files(ses_path)
     for ef in ephys_files:
         ef['sync'] = alf.io.load_object(ef.path, '_spikeglx_sync', short_keys=True)
-        ef['sync_map'] = ibllib.io.spikeglx.get_sync_map(ef['path']) or CHMAPS['3B']
+        ef['sync_map'] = spikeglx.get_sync_map(ef['path']) or CHMAPS['3B']
     nidq_file = [ef for ef in ephys_files if ef.get('nidq')]
     ephys_files = [ef for ef in ephys_files if not ef.get('nidq')]
     nprobes = len(ephys_files)
