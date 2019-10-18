@@ -5,6 +5,7 @@ from pathlib import Path
 import logging
 
 import numpy as np
+import pandas as pd
 from scipy import signal
 
 import spikemetrics.metrics as metrics
@@ -12,7 +13,6 @@ from phylib.io import model as phymod
 
 from brainbox.core import Bunch
 import alf.io
-import ibllib.io.spikeglx
 from ibllib.ephys import sync_probes
 from ibllib.io import spikeglx
 import ibllib.dsp as dsp
@@ -113,7 +113,7 @@ def raw_qc_session(session_path, dry=False, force=False):
     :param force: bool (False) Force means overwriting an existing QC file
     :return: None
     """
-    efiles = ibllib.io.spikeglx.glob_ephys_files(session_path)
+    efiles = spikeglx.glob_ephys_files(session_path)
     for efile in efiles:
         if dry:
             print(efile.ap)
@@ -237,16 +237,48 @@ def _spike_sorting_metrics(ks2_path, save=True):
         "drift_metrics_min_spikes_per_interval": 10
     }
 
-    m = phymod.TemplateModel(dir_path=ks2_path,
-                             dat_path=[],
-                             sample_rate=30000,
-                             n_channels_dat=384)
+    def _phy_model_from_ks2_path(ks2_path):
+        params_file = ks2_path.joinpath('params.py')
+        if params_file.exists():
+            m = phymod.load_model(params_file)
+        else:
+            meta_file = next(ks2_path.rglob('*.ap.meta'), None)
+            if meta_file and meta_file.exists():
+                meta = spikeglx.read_meta_data(meta_file)
+                fs = spikeglx._get_fs_from_meta(meta)
+                nch = spikeglx._get_nchannels_from_meta(meta) - \
+                      len(spikeglx._get_sync_trace_indices_from_meta(meta))
+            else:
+                fs = 30000
+                nch = 384
+            m = phymod.TemplateModel(dir_path=ks2_path,
+                                     dat_path=[],
+                                     sample_rate=fs,
+                                     n_channels_dat=nch)
+        return m
 
+    m = _phy_model_from_ks2_path(ks2_path)
     r = metrics.calculate_metrics(m.spike_times, m.spike_clusters, m.amplitudes,
                                   np.swapaxes(m.sparse_features.data, 1, 2),
-                                  m.sparse_features.cols, METRICS_PARAMS, cluster_ids=None,
-                                  epochs=None, seed=0, verbose=True)
+                                  m.sparse_features.cols, METRICS_PARAMS,
+                                  cluster_ids=m.spike_clusters, epochs=None, seed=0, verbose=True)
+
+    #  includes the ks2 contamination
+    file_contamination = ks2_path.joinpath('cluster_ContamPct.tsv')
+    if file_contamination.exists():
+        contam = pd.read_csv(file_contamination, sep='\t')
+        contam.rename(columns={'ContamPct': 'ks2_contamination_pct'}, inplace=True)
+        r = r.set_index('cluster_id').join(contam.set_index('cluster_id'))
+
+    #  includes the ks2 labeling
+    file_labels = ks2_path.joinpath('cluster_KSLabel.tsv')
+    if file_labels.exists():
+        ks2_labels = pd.read_csv(file_labels, sep='\t')
+        ks2_labels.rename(columns={'KSLabel': 'ks2_label'}, inplace=True)
+        r = r.set_index('cluster_id').join(ks2_labels.set_index('cluster_id'))
+
     if save:
-        r.to_csv(ks2_path.joinpath('clusters_metrics.csv'))
+        #  the file name contains the label of the probe (directory name in this case)
+        r.to_csv(ks2_path.joinpath(f'clusters_metrics.{ks2_path.parts[-1]}.csv'))
 
     return r
