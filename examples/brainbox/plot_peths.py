@@ -113,9 +113,8 @@ def calculate_peths(
         ts = np.concatenate([ts_pre, ts_post])
 
         # filter spikes
-        idxs = (spike_times > ts[0]) & \
-               (spike_times <= ts[-1]) & \
-               np.isin(spike_clusters, cluster_ids)
+        idxs = ((spike_times > ts[0]) & (spike_times <= ts[-1]) &
+                np.isin(spike_clusters, cluster_ids))
         i_spikes = spike_times[idxs]
         i_clusters = spike_clusters[idxs]
 
@@ -190,9 +189,8 @@ def clear_axis(ax, axis='xy'):
         ax.set_ylabel('')
 
 
-def plot_peths(
-        means, stds=None, marker_idx=0, bin_size=1.0, linewidth=1,
-        onset_label='event', ax=None, **kwargs):
+def plot_peths(means, stds=None, marker_idx=0, bin_size=1.0, linewidth=1,
+               onset_label='event', ax=None, **kwargs):
     """
     Plot peths with optional errorbars
 
@@ -214,12 +212,12 @@ def plot_peths(
     :rtype: matplotlib figure handle
     """
 
-    scale = 1.0 #/ rms(means.flatten())
+    scale = 1.0  # / rms(means.flatten())
     n_clusts, n_bins = means.shape
     ts = (np.arange(n_bins) - marker_idx) * bin_size
 
     ax.spines['top'].set_visible(False)
-    #ax.spines['left'].set_visible(False)
+    # ax.spines['left'].set_visible(False)
     ax.spines['right'].set_visible(False)
 
     # plot individual traces
@@ -348,11 +346,11 @@ if __name__ == '__main__':
     SMOOTH_SIZE = 0.025  # seconds; standard deviation of gaussian kernel
     PRE_TIME = 0.25  # seconds to plot before event onset
     POST_TIME = 1.0  # seconds to plot after event onset
-    RESULTS_DIR = '/home/mattw/results/ibl/2019-sfn-figures/'
+    RESULTS_DIR = '/datadisk/scratch'
 
     # get the data from flatiron
     subject = 'KS004'
-    date = '2019-09-27'
+    date = '2019-09-25'
     number = 1
     one = ONE()
     eid = one.search(subject=subject, date=date, number=number, task_protocol='ephysChoiceWorld')
@@ -361,9 +359,9 @@ if __name__ == '__main__':
     alf_path = os.path.join(session_path, 'alf')
 
     # load objects
-    spikes = ioalf.load_object(session_path, 'spikes')
+    spikes = ioalf.load_object(alf_path, 'spikes')
     clusters = ioalf.load_object(alf_path, 'clusters')
-    trials = ioalf.load_object(session_path, '_ibl_trials')
+    trials = ioalf.load_object(alf_path, '_ibl_trials')
 
     # containers to store results
     align_events = ['stimOn', 'stimOff', 'feedback']
