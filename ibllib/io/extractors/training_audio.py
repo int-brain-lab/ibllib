@@ -19,6 +19,7 @@ OVERLAP = NS_WIN / 2
 NS_WELCH = 512
 FTONE = 5000
 UNIT = 'dBFS'  # dBFS or dbSPL
+READY_TONE_SPL = 85
 
 
 def _running_mean(x, N):
@@ -37,7 +38,7 @@ def _detect_ready_tone(w, fs):
     # xc = np.abs(signal.hilbert(signal.correlate(w - np.mean(w), tone)))
 
 
-def _get_conversion_factor():
+def _get_conversion_factor(unit=UNIT, ready_tone_spl=READY_TONE_SPL):
     # 3 approaches here (not exclusive):
     # a- get the mic sensitivity, the preamp gain and DAC parameters and do the math
     # b- treat the whole thing as a black box and do a calibration run (cf. people at Renard's lab)
@@ -46,12 +47,12 @@ def _get_conversion_factor():
     # Usual calibration is 1 Pa (94 dBSPL) at 1 kHz
     # c) here we know that the ready tone is 55dB SPL at 5kHz, assuming a flat spectrum between
     # 1 and 5 kHz, and observing the peak value on the 5k at the microphone.
-    if UNIT == 'dBFS':
+    if unit == 'dBFS':
         return 1.0
     distance_to_the_mic = .155
     peak_value_observed = 60
     rms_value_observed = np.sqrt(2) / 2 * peak_value_observed
-    fac = 10 ** ((55 - 20 * np.log10(rms_value_observed)) / 20) * distance_to_the_mic
+    fac = 10 ** ((ready_tone_spl - 20 * np.log10(rms_value_observed)) / 20) * distance_to_the_mic
     return fac
 
 
