@@ -95,7 +95,11 @@ def compress_video(root_data_folder, dry=False, max_sessions=None):
 def audio_training(root_data_folder, dry=False, max_sessions=10):
     from ibllib.io.extractors import training_audio as audio
     audio_flags = Path(root_data_folder).rglob('audio_training.flag')
+    c = 0
     for flag in audio_flags:
+        c += 1
+        if c > max_sessions:
+            break
         print(flag)
         if dry:
             continue

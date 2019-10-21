@@ -114,10 +114,10 @@ def extract_sound(ses_path, save=True, force=False, delete=False):
     out_folder = ses_path / 'raw_behavior_data'
     if not wav_file.exists():
         return None
-    files_out = {'power': out_folder / '_ibl_audioSpectrogram.power.npy',
-                 'frequencies': out_folder / '_ibl_audioSpectrogram.frequencies.npy',
-                 'onset_times': out_folder / '_ibl_audioOnsetGoCue.times_microphone.npy',
-                 'times_microphone': out_folder / '_ibl_audioSpectrogram.times_microphone.npy',
+    files_out = {'power': out_folder / '_iblmic_audioSpectrogram.power.npy',
+                 'frequencies': out_folder / '_iblmic_audioSpectrogram.frequencies.npy',
+                 'onset_times': out_folder / '_iblmic_audioOnsetGoCue.times_mic.npy',
+                 'times_microphone': out_folder / '_iblmic_audioSpectrogram.times_mic.npy',
                  'times': out_folder / '_ibl_audioSpectrogram.times.npy'
                  }
     # if they exist and the option Force is set to false, do not recompute and exit
