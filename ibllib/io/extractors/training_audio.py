@@ -118,7 +118,7 @@ def extract_sound(ses_path, save=True, force=False, delete=False):
                  'frequencies': out_folder / '_iblmic_audioSpectrogram.frequencies.npy',
                  'onset_times': out_folder / '_iblmic_audioOnsetGoCue.times_mic.npy',
                  'times_microphone': out_folder / '_iblmic_audioSpectrogram.times_mic.npy',
-                 'times': out_folder / '_ibl_audioSpectrogram.times.npy'
+                 'times': out_folder / '_iblmic_audioSpectrogram.times.npy'
                  }
     # if they exist and the option Force is set to false, do not recompute and exit
     if all([files_out[f].exists() for f in files_out]) and not force:
