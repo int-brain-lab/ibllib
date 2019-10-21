@@ -8,7 +8,7 @@ import logging
 from pathlib import Path, PureWindowsPath
 import subprocess
 
-from ibllib.io import flags
+from ibllib.io import flags, raw_data_loaders
 from ibllib.pipes import extract_session
 from ibllib.ephys import ephysqc, sync_probes
 from oneibl.registration import RegistrationClient
@@ -100,7 +100,13 @@ def audio_training(root_data_folder, dry=False, max_sessions=10):
         if dry:
             continue
         session_path = flag.parent
-        audio.extract_sound(session_path, save=True)
+        settings = raw_data_loaders.load_settings(session_path)
+        typ = extract_session.get_task_extractor_type(settings.get('PYBPOD_PROTOCOL'))
+        # this extractor is only for biased and training sessions
+        if typ not in ['biased', 'training']:
+            flag.unlink()
+            continue
+        audio.extract_sound(session_path, save=True, delete=True)
         flag.unlink()
         session_path.joinpath('register_me.flag').touch()
 

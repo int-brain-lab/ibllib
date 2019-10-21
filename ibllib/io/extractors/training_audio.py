@@ -99,24 +99,25 @@ def welchogram(fs, wav, nswin=NS_WIN, overlap=OVERLAP, nperseg=NS_WELCH):
 
 
 @log2session_static('extraction')
-def extract_sound(ses_path, save=True, force=False):
+def extract_sound(ses_path, save=True, force=False, delete=False):
     """
     Simple audio features extraction for ambient sound characterization.
     From a wav file, generates several ALF files to be registered on Alyx
 
     :param ses_path: ALF full session path: (/mysubject001/YYYY-MM-DD/001)
+    :param delete: if True, removes the wav file after processing
     :return: None
     """
     ses_path = Path(ses_path)
     wav_file = ses_path / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
+    out_folder = ses_path / 'raw_behavior_data'
     if not wav_file.exists():
         return None
-    files_out = {'power': ses_path / 'alf' / '_ibl_audioSpectrogram.power.npy',
-                 'frequencies': ses_path / 'alf' / '_ibl_audioSpectrogram.frequencies.npy',
-                 'onset_times': ses_path / 'alf' / '_ibl_audioOnsetGoCue.times_microphone.npy',
-                 'times_microphone': Path(ses_path) / 'alf' /
-                                     '_ibl_audioSpectrogram.times_microphone.npy',
-                 'times': Path(ses_path) / 'alf' / '_ibl_audioSpectrogram.times.npy'
+    files_out = {'power': out_folder / '_ibl_audioSpectrogram.power.npy',
+                 'frequencies': out_folder / '_ibl_audioSpectrogram.frequencies.npy',
+                 'onset_times': out_folder / '_ibl_audioOnsetGoCue.times_microphone.npy',
+                 'times_microphone': out_folder / '_ibl_audioSpectrogram.times_microphone.npy',
+                 'times': out_folder / '_ibl_audioSpectrogram.times.npy'
                  }
     # if they exist and the option Force is set to false, do not recompute and exit
     if all([files_out[f].exists() for f in files_out]) and not force:
@@ -129,13 +130,13 @@ def extract_sound(ses_path, save=True, force=False):
         return
     tscale, fscale, W, detect = welchogram(fs, wav)
     # save files
-    alf_folder = ses_path / 'alf'
-    if not alf_folder.exists():
-        alf_folder.mkdir()
-    np.save(file=files_out['power'], arr=W.astype(np.single))
-    np.save(file=files_out['frequencies'], arr=fscale[None, :].astype(np.single))
-    np.save(file=files_out['onset_times'], arr=detect)
-    np.save(file=files_out['times_microphone'], arr=tscale[:, None].astype(np.single))
+
+    if save:
+        out_folder.mkdir(exist_ok=True)
+        np.save(file=files_out['power'], arr=W.astype(np.single))
+        np.save(file=files_out['frequencies'], arr=fscale[None, :].astype(np.single))
+        np.save(file=files_out['onset_times'], arr=detect)
+        np.save(file=files_out['times_microphone'], arr=tscale[:, None].astype(np.single))
 
     # for the time scale, attempt to synchronize using onset sound detection and task data
     data = ioraw.load_data(ses_path)
@@ -149,3 +150,5 @@ def extract_sound(ses_path, save=True, force=False):
     if np.std(dt) < 0.2 and save:
         tscale += np.median(dt)
         np.save(file=files_out['times'], arr=tscale[:, None].astype(np.single))
+    if delete:
+        wav_file.unlink()
