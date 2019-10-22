@@ -224,6 +224,58 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
         shutil.rmtree(self.tmpdir)
 
 
+class TestsSpikeGLX_compress(unittest.TestCase):
+
+    def setUp(self):
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.workdir = Path(self._tempdir.name)
+        file_meta = Path(__file__).parent.joinpath('fixtures', 'io', 'spikeglx',
+                                                   'sample3A_short_g0_t0.imec.ap.meta')
+        self.file_bin = spikeglx._mock_spikeglx_file(
+            self.workdir, file_meta, ns=76104, nc=385, sync_depth=16, random=True)['bin_file']
+        self.sr = spikeglx.Reader(self.file_bin)
+
+    def test_compress(self):
+
+        def compare_data(sr0, sr1):
+            # test direct reading through memmap / mtscompreader
+            self.assertTrue(np.all(sr0.data[1200:1210, 12] == sr1.data[1200:1210, 12]))
+            # test reading through methods
+            d0, s0 = sr0.read_samples(1200, 54245)
+            d1, s1 = sr1.read_samples(1200, 54245)
+            self.assertTrue(np.all(d0 == d1))
+            self.assertTrue(np.all(s0 == s1))
+
+        # create a reference file that will serve to compare for inplace operations
+        ref_file = self.file_bin.parent.joinpath('REF_' + self.file_bin.name)
+        ref_meta = self.file_bin.parent.joinpath('REF_' + self.file_bin.with_suffix('.meta').name)
+        shutil.copy(self.file_bin, ref_file)
+        shutil.copy(self.file_bin.with_suffix('.meta'), ref_meta)
+        sr_ref = spikeglx.Reader(ref_file)
+
+        # test file compression copy
+        self.assertFalse(self.sr.is_mtscomp)
+        self.file_cbin = self.sr.compress_file()
+        self.sc = spikeglx.Reader(self.file_cbin)
+        self.assertTrue(self.sc.is_mtscomp)
+        compare_data(sr_ref, self.sc)
+
+        # test decompression in-place
+        self.sc.decompress_file(keep_original=False)
+        compare_data(sr_ref, self.sc)
+        self.assertFalse(self.sr.is_mtscomp)
+        self.assertFalse(self.file_cbin.exists())
+        compare_data(sr_ref, self.sc)
+
+        # test compression in-place
+        self.sc.compress_file(keep_original=False)
+        compare_data(sr_ref, self.sc)
+        self.assertTrue(self.sc.is_mtscomp)
+        self.assertTrue(self.file_cbin.exists())
+        self.assertFalse(self.file_bin.exists())
+        compare_data(sr_ref, self.sc)
+
+
 class TestsSpikeGLX_Meta(unittest.TestCase):
 
     def setUp(self):

@@ -5,6 +5,7 @@ import re
 
 import numpy as np
 
+from mtscomp import mtscomp
 from brainbox.core import Bunch
 from ibllib.ephys import neuropixel as neuropixel
 
@@ -29,13 +30,23 @@ class Reader:
             self.meta = None
             self.channel_conversion_sample2mv = 1
             _logger.warning(str(sglx_file) + " : no metadata file found. Very limited support")
+            return
+        # normal case we continue reading and interpreting the metadata file
+        self.file_meta_data = file_meta_data
+        self.meta = read_meta_data(file_meta_data)
+        self.channel_conversion_sample2mv = _conversion_sample2mv_from_meta(self.meta)
+        # if we are not looking at a compressed file, use a memmap, otherwise instantiate mtscomp
+        if self.is_mtscomp:
+            self.data = mtscomp.Reader()
+            self.data.open(self.file_bin, self.file_bin.with_suffix('.ch'))
         else:
-            self.file_meta_data = file_meta_data
-            self.meta = read_meta_data(file_meta_data)
             if self.nc * self.ns * 2 != self.nbytes:
                 _logger.warning(str(sglx_file) + " : meta data and filesize do not checkout")
-            self.channel_conversion_sample2mv = _conversion_sample2mv_from_meta(self.meta)
-            self.memmap = np.memmap(sglx_file, dtype='int16', mode='r', shape=(self.ns, self.nc))
+            self.data = np.memmap(sglx_file, dtype='int16', mode='r', shape=(self.ns, self.nc))
+
+    @property
+    def is_mtscomp(self):
+        return 'cbin' in self.file_bin.suffix and self.file_bin.with_suffix('.ch').exists()
 
     @property
     def version(self):
@@ -78,7 +89,7 @@ class Reader:
         :param slice_c: slice or channel indices
         :return: float32 array
         """
-        darray = np.float32(self.memmap[nsel, csel])
+        darray = np.float32(self.data[nsel, csel])
         darray *= self.channel_conversion_sample2mv[self.type][csel]
         if sync:
             return darray, self.read_sync(nsel)
@@ -106,7 +117,7 @@ class Reader:
         """
         if not self.meta:
             _logger.warning('Sync trace not labeled in metadata. Assuming last trace')
-        return split_sync(self.memmap[_slice, _get_sync_trace_indices_from_meta(self.meta)])
+        return split_sync(self.data[_slice, _get_sync_trace_indices_from_meta(self.meta)])
 
     def read_sync_analog(self, _slice=slice(0, 10000)):
         """
@@ -135,6 +146,44 @@ class Reader:
         analog[np.where(analog < threshold)] = 0
         analog[np.where(analog >= threshold)] = 1
         return np.concatenate((digital, np.int8(analog)), axis=1)
+
+    def compress_file(self, keep_original=True, **kwargs):
+        """
+        Compresses
+        :param keep_original: defaults True. If False, the original uncompressed file is deleted
+         and the current spikeglx.Reader object is modified in place
+        :param kwargs:
+        :return: pathlib.Path of the compressed *.cbin file
+        """
+        file_out = self.file_bin.with_suffix('.cbin')
+        assert not self.is_mtscomp
+        mtscomp.compress(self.file_bin,
+                         out=file_out,
+                         outmeta=self.file_bin.with_suffix('.ch'),
+                         sample_rate=self.fs,
+                         n_channels=self.nc,
+                         dtype=np.int16,
+                         **kwargs)
+        if not keep_original:
+            self.file_bin.unlink()
+            self.file_bin = file_out
+        return file_out
+
+    def decompress_file(self, keep_original=True, **kwargs):
+        """
+        Decompresses a mtscomp file
+        :param keep_original: defaults True. If False, the original compressed file is deleted
+         and the current spikeglx.Reader object is modified in place
+        :return: pathlib.Path of the decompressed *.bin file
+        """
+        file_out = self.file_bin.with_suffix('.bin')
+        assert self.is_mtscomp
+        mtscomp.decompress(self.file_bin, self.file_bin.with_suffix('.ch'), out=file_out, **kwargs)
+        if not keep_original:
+            self.file_bin.unlink()
+            self.file_bin.with_suffix('.ch').unlink()
+            self.file_bin = file_out
+        return file_out
 
 
 def read(sglx_file, first_sample=0, last_sample=10000):
@@ -379,7 +428,8 @@ def glob_ephys_files(session_path, glob_pattern='*.ap.*bin'):
     return ephys_files
 
 
-def _mock_spikeglx_file(mock_path, meta_file, ns, nc, sync_depth, int2volts=0.6 / 32768):
+def _mock_spikeglx_file(mock_path, meta_file, ns, nc, sync_depth,
+                        random=False, int2volts=0.6 / 32768):
     """
     For testing purposes, create a binary file with sync pulses to test reading and extraction
     """
@@ -399,9 +449,11 @@ def _mock_spikeglx_file(mock_path, meta_file, ns, nc, sync_depth, int2volts=0.6 
         fid_target.write(line)
     fid_source.close()
     fid_target.close()
-    # each channel as an int of chn + 1
-    D = np.tile(np.int16((np.arange(nc) + 1) / int2volts), (ns, 1))
-    D[0:16, :] = 0
+    if random:
+        D = np.random.randint(-32767, 32767, size=(ns, nc), dtype=np.int16)
+    else:  # each channel as an int of chn + 1
+        D = np.tile(np.int16((np.arange(nc) + 1) / int2volts), (ns, 1))
+        D[0:16, :] = 0
     # the last channel is the sync that we fill with
     sync = np.int16(2 ** np.float32(np.arange(-1, sync_depth)))
     D[:, -1] = 0
