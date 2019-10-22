@@ -1,8 +1,35 @@
 import numpy as np
-
+import os
+import matplotlib.pyplot as plt
 from pathlib import Path
 from oneibl.one import ONE
 import alf.io as ioalf
+
+
+def get_session_path(sess_data_info):
+    """
+    Return local session path given output of one.search
+
+    Example usage:
+        one = ONE()
+        eid = one.search(subject=subject, date=date, number=number)
+        files_paths = one.load(eid[0], download_only=True)
+        session_path = get_session_path(files_paths)
+    """
+    alf_file = None
+    fid = 0
+    while alf_file is None:
+        tmp = np.where(
+            [part == 'alf' for part in Path(sess_data_info.local_path[fid]).parts])[0]
+        if len(tmp) != 0:
+            alf_file = tmp
+        else:
+            fid += 1
+    if alf_file is None:
+        raise FileNotFoundError('Did not find alf directory')
+    else:
+        session_path = os.path.join(*Path(sess_data_info.local_path[0]).parts[:alf_file[0]])
+    return session_path
 
 
 def filter_trials(trials, choice, stim_side, stim_contrast):
@@ -28,7 +55,7 @@ def filter_trials(trials, choice, stim_side, stim_contrast):
 
 def calculate_peths(
         spike_times, spike_clusters, cluster_ids, align_times, pre_time=0.2,
-        post_time=0.5, bin_size=0.025, smoothing=0.025):
+        post_time=0.5, bin_size=0.025, smoothing=0.025, return_fr=True):
     """
     Calcluate peri-event time histograms; return means and standard deviations
     for each time point across specified clusters
@@ -50,6 +77,8 @@ def calculate_peths(
     :param smoothing: standard deviation (in seconds) of Gaussian kernel for
         smoothing peths; use `smoothing=0` to skip smoothing
     :type smoothing: float
+    :param return_fr: `True` to return (estimated) firing rate, `False` to return spike counts
+    :type return_fr: bool
     :return: (psth_means, psth_stds)
     :rtype: tuple with two elements, each of shape `(n_trials, n_clusters, n_bins)`
     """
@@ -58,8 +87,9 @@ def calculate_peths(
     from scipy.signal import convolve
 
     # initialize containers
-    n_bins_pre = int(np.ceil(pre_time / bin_size))
-    n_bins_post = int(np.ceil(post_time / bin_size))
+    n_offset = 5 * int(np.ceil(smoothing / bin_size))  # get rid of boundary effects for smoothing
+    n_bins_pre = int(np.ceil(pre_time / bin_size)) + n_offset
+    n_bins_post = int(np.ceil(post_time / bin_size)) + n_offset
     n_bins = n_bins_pre + n_bins_post
     binned_spikes = np.zeros(shape=(len(align_times), len(cluster_ids), n_bins))
 
@@ -67,6 +97,10 @@ def calculate_peths(
     if smoothing > 0:
         w = n_bins - 1 if n_bins % 2 == 0 else n_bins
         window = gaussian(w, std=smoothing / bin_size)
+        # half (causal) gaussian filter
+        # window[int(np.ceil(w/2)):] = 0
+        window /= np.sum(window)
+        binned_spikes_conv = np.copy(binned_spikes)
 
     ids = np.unique(cluster_ids)
 
@@ -79,38 +113,84 @@ def calculate_peths(
         ts = np.concatenate([ts_pre, ts_post])
 
         # filter spikes
-        idxs = (spike_times > ts[0]) & \
-               (spike_times <= ts[-1]) & np.isin(spike_clusters, cluster_ids)
+        idxs = ((spike_times > ts[0]) & (spike_times <= ts[-1]) &
+                np.isin(spike_clusters, cluster_ids))
         i_spikes = spike_times[idxs]
         i_clusters = spike_clusters[idxs]
 
         # bin spikes similar to bincount2D: x = spike times, y = spike clusters
         xscale = ts
-        xind = (np.floor((i_spikes - ts[0]) / bin_size)).astype(np.int64)
+        xind = (np.floor((i_spikes - np.min(ts)) / bin_size)).astype(np.int64)
         yscale, yind = np.unique(i_clusters, return_inverse=True)
         nx, ny = [xscale.size, yscale.size]
         ind2d = np.ravel_multi_index(np.c_[yind, xind].transpose(), dims=(ny, nx))
         r = np.bincount(ind2d, minlength=nx * ny, weights=None).reshape(ny, nx)
 
-        # smooth
-        if smoothing > 0:
-            for j in range(r.shape[0]):
-                r[j, :] = convolve(r[j, :], window, mode='same', method='auto')
-
         # store (ts represent bin edges, so there are one fewer bins)
         bs_idxs = np.isin(ids, yscale)
         binned_spikes[i, bs_idxs, :] = r[:, :-1]
 
+        # smooth
+        if smoothing > 0:
+            idxs = np.where(bs_idxs)[0]
+            for j in range(r.shape[0]):
+                binned_spikes_conv[i, idxs[j], :] = convolve(
+                    r[j, :], window, mode='same', method='auto')[:-1]
+
     # average
-    peth_means = np.mean(binned_spikes, axis=0)
-    peth_stds = np.std(binned_spikes, axis=0)
+    if smoothing > 0:
+        binned_spikes_ = np.copy(binned_spikes_conv)
+    else:
+        binned_spikes_ = np.copy(binned_spikes)
+    if return_fr:
+        binned_spikes_ /= bin_size
 
-    return peth_means, peth_stds
+    peth_means = np.mean(binned_spikes_, axis=0)
+    peth_stds = np.std(binned_spikes_, axis=0)
+
+    if smoothing > 0:
+        peth_means = peth_means[:, n_offset:-n_offset]
+        peth_stds = peth_stds[:, n_offset:-n_offset]
+        binned_spikes = binned_spikes[:, :, n_offset:-n_offset]
+        # binned_spikes_conv = binned_spikes_conv[:, :, n_offset:-n_offset]
+
+    return peth_means, peth_stds, binned_spikes
 
 
-def plot_peths(
-        means, stds=None, marker_idx=0, bin_size=1.0, linewidth=1,
-        onset_label='event', **kwargs):
+def get_onset_label(event, feedback_type=None):
+    action = 'onset'
+    if event == 'goCue':
+        onset_label = 'go cue'
+    elif event == 'feedback':
+        if feedback_type is None:
+            onset_label = 'feedback'
+        else:
+            onset_label = feedback_type
+    elif event == 'response':
+        onset_label = 'response'
+    elif event == 'stimOn':
+        onset_label = 'stimulus'
+    elif event == 'stimOff':
+        onset_label = 'stimulus'
+        action = 'offset'
+    else:
+        raise ValueError('"%s" is an invalid alignment event' % event)
+    return onset_label, action
+
+
+def clear_axis(ax, axis='xy'):
+    if axis == 'x' or axis == 'xy':
+        ax.set_xticks([])
+        ax.set_xticklabels([])
+        ax.set_xlabel('')
+    elif axis == 'y' or axis == 'xy':
+        ax.set_yticks([])
+        ax.set_yticklabels([])
+        ax.set_ylabel('')
+
+
+def plot_peths(means, stds=None, marker_idx=0, bin_size=1.0, linewidth=1,
+               onset_label='event', ax=None, **kwargs):
     """
     Plot peths with optional errorbars
 
@@ -132,17 +212,12 @@ def plot_peths(
     :rtype: matplotlib figure handle
     """
 
-    import matplotlib.pyplot as plt
-    from ibllib.dsp import rms
-
-    scale = 1.0 / rms(means.flatten())
+    scale = 1.0  # / rms(means.flatten())
     n_clusts, n_bins = means.shape
     ts = (np.arange(n_bins) - marker_idx) * bin_size
 
-    fig = plt.figure(figsize=(3, 0.5 * n_clusts))
-    ax = plt.gca()
     ax.spines['top'].set_visible(False)
-    ax.spines['left'].set_visible(False)
+    # ax.spines['left'].set_visible(False)
     ax.spines['right'].set_visible(False)
 
     # plot individual traces
@@ -156,16 +231,112 @@ def plot_peths(
             ax.fill_between(
                 ts, ys - stds[i, :] * scale, ys + stds[i, :] * scale,
                 linewidth=linewidth, alpha=0.5)
+
     # plot vertical line at marker_idx (time = 0 seconds)
-    ax.axvline(x=0, ymin=0.02, ymax=0.98, linestyle='--', color='k')
+    # ax.axvline(x=0, ymin=0.02, ymax=0.98, linestyle='--', color='k')
     # add labels
     ax.set_xlabel('Time from %s onset (s)' % onset_label, fontsize=12)
-    ax.set_ylim([-0.5, n_clusts - 0.5])
-    ax.set_yticks([])
-    ax.set_yticklabels([])
+    if n_clusts > 1:
+        ax.set_ylim([-0.5, n_clusts - 0.5])
+    # ax.set_yticks([])
+    # ax.set_yticklabels([])
 
-    plt.show()
+    return ax
 
+
+def plot_multi_peths(
+        binned_spikes, peth_means, peth_stds, idxs_to_plot, clusters, cluster_ids, marker_idx=0,
+        bin_size=1.0, tick_freq=None, feedback_type=None):
+    """
+
+    :param binned_spikes:
+    :param peth_means:
+    :param peth_stds:
+    :param idxs_to_plot:
+    :param clusters: clusters Bunch
+    :param cluster_ids: array-like
+    :param marker_idx:
+    :param bin_size:
+    :param tick_freq:
+    :param feedback_type:
+    :return:
+    """
+    from matplotlib import gridspec
+    from matplotlib.ticker import FuncFormatter, FixedLocator
+
+    align_events = list(binned_spikes.keys())
+
+    n_trials, n_clusters, n_bins = binned_spikes[align_events[0]].shape
+    n_rows = len(idxs_to_plot)
+    n_cols = len(align_events)
+    fig = plt.figure(figsize=(3 * n_cols, 2 * n_rows))
+    gs0 = gridspec.GridSpec(n_rows, 1, width_ratios=[1], height_ratios=[1] * n_rows)
+
+    # ticks
+    if tick_freq is None:
+        tick_freq = 0.25  # seconds (10 * bin_size)
+    tick_locs = [marker_idx]
+    bins_per_tick = int(tick_freq / bin_size)
+    pre_time = marker_idx * bin_size
+    post_time = (n_bins - marker_idx) * bin_size
+    for i in range(1, int(np.floor(pre_time / tick_freq)) + 1):
+        tick_locs.append(marker_idx - i * bins_per_tick)
+    for i in range(1, int(np.floor(post_time / tick_freq)) + 1):
+        tick_locs.append(marker_idx + i * bins_per_tick)
+    xtick_locs = FixedLocator(tick_locs)
+    xtick_labs = FuncFormatter(lambda x, p: '%1.2f' % ((x - marker_idx) * bin_size))
+
+    gs = [None for _ in range(n_rows)]
+    for r in range(n_rows):
+        gs[r] = gridspec.GridSpecFromSubplotSpec(
+            2, n_cols, subplot_spec=gs0[r], hspace=0.0, height_ratios=[1, 2])
+        for c in range(n_cols):
+            align_event = align_events[c]
+            onset_label, action = get_onset_label(align_event, feedback_type)
+
+            # plot psths
+            ax = fig.add_subplot(gs[r][0, c])
+            ax = plot_peths(
+                peth_means[align_event][None, idxs_to_plot[r], :],
+                peth_stds[align_event][None, idxs_to_plot[r], :] / np.sqrt(n_trials),
+                marker_idx=int(pre_time / bin_size), bin_size=bin_size,
+                onset_label=onset_label, ax=ax)
+            ax.set_xlim([-pre_time - bin_size / 2, post_time - bin_size / 2])
+            ax.axvline(x=0, ymin=0.02, ymax=0.98, linestyle='-', color='r')
+            clear_axis(ax, 'x')
+            # clear_axis(ax, 'y')
+            if ax.is_first_col():
+                ax.set_ylabel('Firing rate\n(Hz)')
+            c_idx = cluster_ids[idxs_to_plot[r]]
+            if 'brainAcronyms' in clusters:
+                ax.set_title(
+                    'cluster=%03i; probe=%i\ndepth=%04imm; region=%s' %
+                    (c_idx, clusters.probes[c_idx], clusters.depths[c_idx],
+                     clusters.brainAcronyms.iloc[c_idx][0]), fontsize=8)
+            else:
+                ax.set_title(
+                    'cluster=%03i; probe=%i; depth=%04imm' %
+                    (c_idx, clusters.probes[c_idx], clusters.depths[c_idx]), fontsize=8)
+
+            # plot rasters
+            ax = fig.add_subplot(gs[r][1, c])
+            ax.imshow(
+                binned_spikes[align_event][:, idxs_to_plot[r], :],
+                cmap='Greys', origin='lower', aspect='auto')
+            ax.spines['right'].set_visible(False)
+            ax.axvline(x=marker_idx, ymin=0, ymax=n_trials, color='r')
+            ax.get_xaxis().set_major_locator(xtick_locs)
+            ax.get_xaxis().set_major_formatter(xtick_labs)
+            if r == n_rows - 1:
+                ax.set_xlabel('Time from\n%s %s (s)' % (onset_label, action))
+            else:
+                ax.set_xticklabels([])
+                ax.set_xlabel('')
+            if ax.is_first_col():
+                ax.set_ylabel('Trial')
+            else:
+                ax.set_yticks([])
+    plt.tight_layout()
     return fig
 
 
@@ -173,36 +344,93 @@ if __name__ == '__main__':
 
     BIN_SIZE = 0.025  # seconds
     SMOOTH_SIZE = 0.025  # seconds; standard deviation of gaussian kernel
-    PRE_TIME = 0.2  # seconds to plot before event onset
-    POST_TIME = 0.5  # seconds to plot after event onset
+    PRE_TIME = 0.25  # seconds to plot before event onset
+    POST_TIME = 1.0  # seconds to plot after event onset
+    RESULTS_DIR = '/datadisk/scratch'
 
     # get the data from flatiron
+    subject = 'KS004'
+    date = '2019-09-25'
+    number = 1
     one = ONE()
-    eid = one.search(subject='ZM_1735', date='2019-08-01', number=1)
-    D = one.load(eid[0], clobber=False, download_only=True)
-    session_path = Path(D.local_path[0]).parent
+    eid = one.search(subject=subject, date=date, number=number, task_protocol='ephysChoiceWorld')
+    session_info = one.load(eid[0], clobber=False, download_only=True)
+    session_path = get_session_path(session_info)
+    alf_path = os.path.join(session_path, 'alf')
 
     # load objects
-    spikes = ioalf.load_object(session_path, 'spikes')
-    trials = ioalf.load_object(session_path, '_ibl_trials')
+    spikes = ioalf.load_object(alf_path, 'spikes')
+    clusters = ioalf.load_object(alf_path, 'clusters')
+    trials = ioalf.load_object(alf_path, '_ibl_trials')
 
-    # filter trials by choice and contrast/side
-    trial_ids = filter_trials(trials, choice=1, stim_contrast=1.0, stim_side=1)
+    # containers to store results
+    align_events = ['stimOn', 'stimOff', 'feedback']
+    cluster_ids = np.unique(spikes['clusters'])  # define subset of clusters to plot
+    peth_means = {
+        'l': {event: None for event in align_events},
+        'r': {event: None for event in align_events}}
+    peth_stds = {
+        'l': {event: None for event in align_events},
+        'r': {event: None for event in align_events}}
+    binned = {
+        'l': {event: None for event in align_events},
+        'r': {event: None for event in align_events}}
+    trial_ids = {'l': None, 'r': None}
 
-    # align to go cue
-    align_times = trials['goCue_times'][trial_ids]
+    # calculate peths; filter trials by choice and contrast/side
+    for d in ['l', 'r']:  # left/right choices
+        stim_contrast = 1.0
+        if d == 'r':
+            choice = -1
+            stim_side = -1
+        else:
+            choice = 1
+            stim_side = 1
+        trial_ids[d] = filter_trials(
+            trials, choice=choice, stim_contrast=stim_contrast, stim_side=stim_side)
+        print('Found %i trials matching filter' % len(trial_ids[d]))
+        # calculate peths of specified trials/clusters, aligned to desired trial event
+        for i, align_event in enumerate(align_events):
+            if align_event == 'stimOff':
+                if choice == stim_side:
+                    offset = 1.0
+                else:
+                    offset = 2.0
+                align_times = trials['feedback_times'][trial_ids[d]] + offset
+            elif align_event == 'movement':
+                raise NotImplementedError
+            else:
+                align_times = trials[align_event + '_times'][trial_ids[d]]
 
-    # define subset of clusters to plot
-    cluster_ids = np.unique(spikes['clusters'])[np.arange(10)]
+            peth_means[d][align_event], peth_stds[d][align_event], binned[d][align_event] = \
+                calculate_peths(
+                    spikes['times'], spikes['clusters'], cluster_ids, align_times,
+                    pre_time=PRE_TIME, post_time=POST_TIME, bin_size=BIN_SIZE,
+                    smoothing=SMOOTH_SIZE)
 
-    # calculate peths of specified trials/clusters, aligned to desired event
-    peth_means, peth_stds = calculate_peths(
-        spikes['times'], spikes['clusters'], cluster_ids, align_times,
-        pre_time=PRE_TIME, post_time=POST_TIME, bin_size=BIN_SIZE,
-        smoothing=SMOOTH_SIZE)
+    # plot peths for each cluster
+    n_trials, n_clusters, _ = binned[d][align_event].shape
+    n_rows = 4  # clusters per page
 
-    # plot peths along with standard error
-    fig = plot_peths(
-        peth_means, peth_stds / np.sqrt(len(trial_ids)),
-        marker_idx=int(PRE_TIME / BIN_SIZE), bin_size=BIN_SIZE,
-        onset_label='go cue')
+    n_plots = int(np.ceil(n_clusters / n_rows))
+    # n_plots = 3  # for testing
+    for d in ['l', 'r']:
+        for p in range(n_plots):
+            idxs_to_plot = np.arange(p * n_rows, np.min([(p + 1) * n_rows, n_clusters]))
+
+            # plot page of peths
+            fig = plot_multi_peths(
+                binned[d], peth_means[d], peth_stds[d], idxs_to_plot, clusters, cluster_ids,
+                marker_idx=int(PRE_TIME / BIN_SIZE), bin_size=BIN_SIZE)
+
+            # save out
+            sess_dir = str('%s_%s_%03i' % (subject, date, number))
+            results_dir = os.path.join(RESULTS_DIR, sess_dir)
+            if not os.path.exists(results_dir):
+                os.makedirs(results_dir)
+            filename = str(
+                'psth_%s-correct-%s_%03i-%03i.pdf' %
+                (str(stim_contrast), d, cluster_ids[idxs_to_plot[0]],
+                 cluster_ids[idxs_to_plot[-1]]))
+            plt.savefig(os.path.join(results_dir, filename))
+            plt.close(fig)
