@@ -111,8 +111,8 @@ def audio_training(root_data_folder, dry=False, max_sessions=10):
         if dry:
             continue
         session_path = flag.parent
-        settings = raw_data_loaders.load_settings(session_path)
         try:
+            settings = raw_data_loaders.load_settings(session_path)
             typ = extract_session.get_task_extractor_type(settings.get('PYBPOD_PROTOCOL'))
         except json.decoder.JSONDecodeError:
             typ = 'unknown'
