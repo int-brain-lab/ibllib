@@ -246,8 +246,8 @@ def _spike_sorting_metrics(ks2_path, save=True):
             if meta_file and meta_file.exists():
                 meta = spikeglx.read_meta_data(meta_file)
                 fs = spikeglx._get_fs_from_meta(meta)
-                nch = spikeglx._get_nchannels_from_meta(meta) - \
-                      len(spikeglx._get_sync_trace_indices_from_meta(meta))
+                nch = (spikeglx._get_nchannels_from_meta(meta) -
+                       len(spikeglx._get_sync_trace_indices_from_meta(meta)))
             else:
                 fs = 30000
                 nch = 384
@@ -258,9 +258,10 @@ def _spike_sorting_metrics(ks2_path, save=True):
         return m
 
     m = _phy_model_from_ks2_path(ks2_path)
-    r = metrics.calculate_metrics(m.spike_times, m.spike_clusters, m.amplitudes,
-                                  np.swapaxes(m.sparse_features.data, 1, 2),
-                                  m.sparse_features.cols, METRICS_PARAMS,
+    pc_features = np.swapaxes(np.copy(m.sparse_features.data), 1, 2)
+
+    r = metrics.calculate_metrics(m.spike_samples, m.spike_clusters, m.amplitudes,
+                                  pc_features, m.sparse_features.cols, METRICS_PARAMS,
                                   cluster_ids=m.spike_clusters, epochs=None, seed=0, verbose=True)
 
     #  includes the ks2 contamination
