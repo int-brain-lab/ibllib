@@ -377,7 +377,7 @@ def get_neuropixel_version_from_files(ephys_files):
         return '3A'
 
 
-def glob_ephys_files(session_path, suffix='.meta'):
+def glob_ephys_files(session_path, suffix='.meta', recursive=True):
     """
     From an arbitrary folder (usually session folder) gets the ap and lf files and labels
     Associated to the subfolders where they are
@@ -402,6 +402,7 @@ def glob_ephys_files(session_path, suffix='.meta'):
     :param glob_pattern: pattern to look recursively for (defaults to '*.ap.*bin)
     :returns: a list of dictionaries with keys 'ap': apfile, 'lf': lffile and 'label'
     """
+    recurse = '**/' if recursive else ''
     def get_label(raw_ephys_apfile):
         if raw_ephys_apfile.parts[-2] != 'raw_ephys_data':
             return raw_ephys_apfile.parts[-2]
@@ -409,7 +410,7 @@ def glob_ephys_files(session_path, suffix='.meta'):
             return ''
 
     ephys_files = []
-    for raw_ephys_file in Path(session_path).rglob(f'*.ap{suffix}'):
+    for raw_ephys_file in Path(session_path).glob(f'{recurse}*.ap{suffix}'):
         # first get the ap file
         ephys_files.extend([Bunch({'label': None, 'ap': None, 'lf': None, 'path': None})])
         raw_ephys_apfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + '.*bin'), None)
@@ -421,7 +422,7 @@ def glob_ephys_files(session_path, suffix='.meta'):
         ephys_files[-1].label = get_label(raw_ephys_apfile)
         ephys_files[-1].path = raw_ephys_apfile.parent
     # for 3b probes, need also to get the nidq dataset type
-    for raw_ephys_file in Path(session_path).rglob(f'*.nidq{suffix}'):
+    for raw_ephys_file in Path(session_path).rglob(f'{recurse}*.nidq{suffix}'):
         raw_ephys_nidqfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + '.*bin'), None)
         ephys_files.extend([Bunch({'label': get_label(raw_ephys_nidqfile),
                                    'nidq': raw_ephys_nidqfile,

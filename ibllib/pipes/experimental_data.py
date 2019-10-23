@@ -176,7 +176,8 @@ def compress_ephys(root_data_folder, dry=False, max_sessions=5):
         if dry:
             print(qcflag.parent)
             continue
-        ephys_files = spikeglx.glob_ephys_files(probe_path)
+        # no rglob: only the folder in which the flag is located gets searched
+        ephys_files = spikeglx.glob_ephys_files(probe_path, recursive=False)
         out_files = []
         for ef in ephys_files:
             for typ in ['ap', 'lf', 'nidq']:
