@@ -402,13 +402,13 @@ def glob_ephys_files(session_path, suffix='.meta', recursive=True):
     :param glob_pattern: pattern to look recursively for (defaults to '*.ap.*bin)
     :returns: a list of dictionaries with keys 'ap': apfile, 'lf': lffile and 'label'
     """
-    recurse = '**/' if recursive else ''
     def get_label(raw_ephys_apfile):
         if raw_ephys_apfile.parts[-2] != 'raw_ephys_data':
             return raw_ephys_apfile.parts[-2]
         else:
             return ''
 
+    recurse = '**/' if recursive else ''
     ephys_files = []
     for raw_ephys_file in Path(session_path).glob(f'{recurse}*.ap{suffix}'):
         # first get the ap file
