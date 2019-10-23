@@ -429,17 +429,19 @@ def glob_ephys_files(session_path, suffix='.meta'):
     return ephys_files
 
 
-def _mock_spikeglx_file(mock_path, meta_file, ns, nc, sync_depth,
+def _mock_spikeglx_file(mock_bin_file, meta_file, ns, nc, sync_depth,
                         random=False, int2volts=0.6 / 32768):
     """
     For testing purposes, create a binary file with sync pulses to test reading and extraction
     """
-    tmp_meta_file = Path(mock_path).joinpath(meta_file.name)
-    tmp_bin_file = Path(mock_path).joinpath(meta_file.name).with_suffix('.bin')
+    meta_file = Path(meta_file)
+    mock_path_bin = Path(mock_bin_file)
+    mock_path_meta = mock_path_bin.with_suffix('.meta')
     md = read_meta_data(meta_file)
+    assert meta_file != mock_path_meta
     fs = _get_fs_from_meta(md)
     fid_source = open(meta_file)
-    fid_target = open(tmp_meta_file, 'w+')
+    fid_target = open(mock_path_meta, 'w+')
     line = fid_source.readline()
     while line:
         line = fid_source.readline()
@@ -459,9 +461,9 @@ def _mock_spikeglx_file(mock_path, meta_file, ns, nc, sync_depth,
     sync = np.int16(2 ** np.float32(np.arange(-1, sync_depth)))
     D[:, -1] = 0
     D[:sync.size, -1] = sync
-    with open(tmp_bin_file, 'w+') as fid:
+    with open(mock_path_bin, 'w+') as fid:
         D.tofile(fid)
-    return {'bin_file': tmp_bin_file, 'ns': ns, 'nc': nc, 'sync_depth': sync_depth, 'D': D}
+    return {'bin_file': mock_path_bin, 'ns': ns, 'nc': nc, 'sync_depth': sync_depth, 'D': D}
 
 
 def get_hardware_config(config_file):

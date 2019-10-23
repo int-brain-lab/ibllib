@@ -234,7 +234,8 @@ class TestsSpikeGLX_compress(unittest.TestCase):
         file_meta = Path(__file__).parent.joinpath('fixtures', 'io', 'spikeglx',
                                                    'sample3A_short_g0_t0.imec.ap.meta')
         self.file_bin = spikeglx._mock_spikeglx_file(
-            self.workdir, file_meta, ns=76104, nc=385, sync_depth=16, random=True)['bin_file']
+            self.workdir.joinpath('sample3A_short_g0_t0.imec.ap.bin'), file_meta, ns=76104,
+            nc=385, sync_depth=16, random=True)['bin_file']
         self.sr = spikeglx.Reader(self.file_bin)
 
     def test_compress(self):
@@ -288,23 +289,26 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
         # nidq has 1 analog and 1 digital sync channels
         self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
         int2volts = 5 / 32768
-        nidq = spikeglx._mock_spikeglx_file(self.tdir.name,
-                                            self.workdir / 'sample3B_g0_t0.nidq.meta',
-                                            ns=32, nc=2, sync_depth=8, int2volts=int2volts)
+        nidq = spikeglx._mock_spikeglx_file(
+            Path(self.tdir.name).joinpath('sample3B_g0_t0.nidq.bin'),
+            self.workdir / 'sample3B_g0_t0.nidq.meta',
+            ns=32, nc=2, sync_depth=8, int2volts=int2volts)
         self.assert_read_glx(nidq)
 
     def test_read_3A(self):
         self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
-        bin_3a = spikeglx._mock_spikeglx_file(self.tdir.name,
-                                              self.workdir / 'sample3A_g0_t0.imec.ap.meta',
-                                              ns=32, nc=385, sync_depth=16)
+        bin_3a = spikeglx._mock_spikeglx_file(
+            Path(self.tdir.name).joinpath('sample3A_g0_t0.imec.ap.bin'),
+            self.workdir / 'sample3A_g0_t0.imec.ap.meta',
+            ns=32, nc=385, sync_depth=16)
         self.assert_read_glx(bin_3a)
 
     def test_read_3B(self):
         self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
-        bin_3b = spikeglx._mock_spikeglx_file(self.tdir.name,
-                                              self.workdir / 'sample3B_g0_t0.imec1.ap.meta',
-                                              ns=32, nc=385, sync_depth=16)
+        bin_3b = spikeglx._mock_spikeglx_file(
+            Path(self.tdir.name).joinpath('sample3B_g0_t0.imec1.ap.bin'),
+            self.workdir / 'sample3B_g0_t0.imec1.ap.meta',
+            ns=32, nc=385, sync_depth=16)
         self.assert_read_glx(bin_3b)
 
     def assert_read_glx(self, tglx):
