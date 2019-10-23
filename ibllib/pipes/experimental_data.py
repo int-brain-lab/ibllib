@@ -11,7 +11,7 @@ import json
 
 # from mtscomp import mtscomp
 
-from ibllib.io import flags, raw_data_loaders
+from ibllib.io import flags, raw_data_loaders, spikeglx
 from ibllib.pipes import extract_session
 from ibllib.ephys import ephysqc, sync_probes
 from oneibl.registration import RegistrationClient
@@ -154,14 +154,43 @@ def raw_ephys_qc(root_data_folder, dry=False, max_sessions=10, force=False):
 
 
 # 22_audio_ephys
-def compress_audio(root_data_folder, dry=False, max_sessions=None):
+def compress_audio(root_data_folder, dry=False, max_sessions=20):
     command = 'ffmpeg -i {file_name}.wav -c:a flac -nostats {file_name}.flac'
     _compress(root_data_folder, command, 'compress_audio.flag', dry=dry, max_sessions=max_sessions)
 
 
 # 23_compress ephys
-def compress_ephys(root_data_folder, dry=False, max_sessions=None):
-    pass
+def compress_ephys(root_data_folder, dry=False, max_sessions=5):
+    """
+    Compress ephys files looking for `compress_ephys.flag` whithin the probes folder
+    Original bin file will be removed
+    The registration flag created contains targeted file names at the root of the session
+    """
+    qcflags = Path(root_data_folder).rglob('compress_ephys.flag')
+    c = 0
+    for qcflag in qcflags:
+        probe_path = qcflag.parent
+        c += 1
+        if c > max_sessions:
+            return
+        if dry:
+            print(qcflag.parent)
+            continue
+        ephys_files = spikeglx.glob_ephys_files(probe_path)
+        out_files = []
+        for ef in ephys_files:
+            for typ in ['ap', 'lf', 'nidq']:
+                bin_file = ef.get(typ)
+                if not bin_file:
+                    continue
+                sr = spikeglx.Reader(bin_file)
+                if not sr.is_mtscomp:
+                    out_files.append(sr.compress_file(keep_original=False))
+        qcflag.unlink()
+        if out_files:
+            session_path = probe_path.parents[1]
+            file_list = [str(f.relative_to(session_path)) for f in out_files]
+            flags.write_flag_file(probe_path.joinpath('register_me.flag'), file_list=file_list)
 
 
 # 26_sync_merge_ephys
