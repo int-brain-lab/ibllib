@@ -377,7 +377,7 @@ def get_neuropixel_version_from_files(ephys_files):
         return '3A'
 
 
-def glob_ephys_files(session_path, glob_pattern='*.ap.*bin'):
+def glob_ephys_files(session_path, suffix='.meta'):
     """
     From an arbitrary folder (usually session folder) gets the ap and lf files and labels
     Associated to the subfolders where they are
@@ -409,19 +409,20 @@ def glob_ephys_files(session_path, glob_pattern='*.ap.*bin'):
             return ''
 
     ephys_files = []
-    for raw_ephys_apfile in Path(session_path).rglob(glob_pattern):
+    for raw_ephys_file in Path(session_path).rglob(f'*.ap{suffix}'):
         # first get the ap file
         ephys_files.extend([Bunch({'label': None, 'ap': None, 'lf': None, 'path': None})])
+        raw_ephys_apfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + '.*bin'), None)
         ephys_files[-1].ap = raw_ephys_apfile
         # then get the corresponding lf file if it exists
         lf_file = raw_ephys_apfile.parent / raw_ephys_apfile.name.replace('.ap.', '.lf.')
-        if lf_file.exists():
-            ephys_files[-1].lf = lf_file
+        ephys_files[-1].lf = next(lf_file.parent.glob(lf_file.stem + '.*bin'), None)
         # finally, the label is the current directory except if it is bare in raw_ephys_data
         ephys_files[-1].label = get_label(raw_ephys_apfile)
         ephys_files[-1].path = raw_ephys_apfile.parent
     # for 3b probes, need also to get the nidq dataset type
-    for raw_ephys_nidqfile in Path(session_path).rglob('*.nidq.*bin'):
+    for raw_ephys_file in Path(session_path).rglob(f'*.nidq{suffix}'):
+        raw_ephys_nidqfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + '.*bin'), None)
         ephys_files.extend([Bunch({'label': get_label(raw_ephys_nidqfile),
                                    'nidq': raw_ephys_nidqfile,
                                    'path': raw_ephys_nidqfile.parent})])

@@ -175,9 +175,10 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
             root_dir.mkdir(exist_ok=True, parents=True)
             for l in dico:
                 for k in l:
-                    if k == 'path':
+                    if k == 'path' or k == 'label':
                         continue
                     touchfile(l[k])
+                    Path(l[k]).with_suffix('.meta').touch()
 
         self.tmpdir = Path(tempfile.gettempdir()) / 'test_glob_ephys'
         self.tmpdir.mkdir(exist_ok=True)
@@ -191,8 +192,9 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
                         'ap': self.dir3a / 'imec1' / 'sync_testing_g0_t0.imec1.ap.bin',
                         'lf': self.dir3a / 'imec1' / 'sync_testing_g0_t0.imec1.lf.bin',
                         'path': self.dir3a / 'imec1'}]
+        # surprise ! one of them happens to be compressed
         self.dict3b = [{'label': 'imec0',
-                        'ap': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.ap.bin',
+                        'ap': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.ap.cbin',
                         'lf': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.lf.bin',
                         'path': self.dir3b / 'imec0'},
                        {'label': 'imec1',
