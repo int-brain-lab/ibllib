@@ -5,7 +5,7 @@ import re
 
 import numpy as np
 
-from mtscomp import mtscomp
+import mtscomp
 from brainbox.core import Bunch
 from ibllib.ephys import neuropixel as neuropixel
 

@@ -9,8 +9,6 @@ from pathlib import Path, PureWindowsPath
 import subprocess
 import json
 
-# from mtscomp import mtscomp
-
 from ibllib.io import flags, raw_data_loaders, spikeglx
 from ibllib.pipes import extract_session
 from ibllib.ephys import ephysqc, sync_probes
