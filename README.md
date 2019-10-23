@@ -10,6 +10,7 @@ The library as currently 4 main modules:
 -   **ibllib**: general purpose library containng I/O, signal processing and IBL data pipelines utilities.
 -   **oneibl**: interface to the Alyx database of experiments to access IBL data.
 -   **alf**: implementation of ALF file naming convention
+[Release Notes here](release_notes.md)
 
 ## Requirements
 **OS**: Deployed on Linux and Windows. Minimally tested for Mac.
