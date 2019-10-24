@@ -300,12 +300,14 @@ if __name__ == '__main__':
             else:
                 align_times = trials[align_event + '_times'][trial_ids[d]]
 
-            peth_means[d][align_event], peth_stds[d][align_event], binned[d][align_event] = \
-                peths(spikes['times'], spikes['clusters'], cluster_ids, align_times,
-                      pre_time=PRE_TIME, post_time=POST_TIME, bin_size=BIN_SIZE,
-                      smoothing=SMOOTH_SIZE)
+            peth_, bs = peths(spikes['times'], spikes['clusters'], cluster_ids, align_times,
+                              pre_time=PRE_TIME, post_time=POST_TIME, bin_size=BIN_SIZE,
+                              smoothing=SMOOTH_SIZE)
+            peth_means[d][align_event] = peth_.means
+            peth_stds[d][align_event] = peth_.stds
+            binned[d][align_event] = bs
 
-    # plot peths for each cluster
+                # plot peths for each cluster
     n_trials, n_clusters, _ = binned[d][align_event].shape
     n_rows = 4  # clusters per page
 

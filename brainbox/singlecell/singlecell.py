@@ -5,6 +5,7 @@ Single-cell functions.
 import numpy as np
 from scipy.signal import convolve, gaussian
 
+from brainbox.core import Bunch
 from brainbox.population import xcorr
 
 
@@ -53,8 +54,9 @@ def peths(spike_times, spike_clusters, cluster_ids, align_times, pre_time=0.2,
     :type smoothing: float
     :param return_fr: `True` to return (estimated) firing rate, `False` to return spike counts
     :type return_fr: bool
-    :return: (psth_means, psth_stds)
-    :rtype: tuple with two elements, each of shape `(n_trials, n_clusters, n_bins)`
+    :return: peths, binned_spikes
+    :rtype: peths: Bunch({'mean': peth_means, 'std': peth_stds, 'tscale': ts, 'cscale': ids})
+    :rtype: binned_spikes: np.array (n_align_times, n_clusters, n_bins)
     """
 
     # initialize containers
@@ -82,16 +84,14 @@ def peths(spike_times, spike_clusters, cluster_ids, align_times, pre_time=0.2,
     spike_times = spike_times[idxs]
     spike_clusters = spike_clusters[idxs]
 
+    # compute floating tscale
+    tscale = np.arange(-n_bins_pre, n_bins_post + 1) * bin_size
     # bin spikes
     for i, t_0 in enumerate(align_times):
-
         # define bin edges
-        ts_pre = t_0 - np.arange(n_bins_pre, 0, -1) * bin_size
-        ts_post = t_0 + np.arange(n_bins_post + 1) * bin_size
-        ts = np.concatenate([ts_pre, ts_post])
-
+        ts = tscale + t_0
         # filter spikes
-        idxs = np.bitwise_and(spike_times > ts[0], spike_times <= ts[-1])
+        idxs = np.bitwise_and(spike_times >= ts[0], spike_times <= ts[-1])
         i_spikes = spike_times[idxs]
         i_clusters = spike_clusters[idxs]
 
@@ -129,6 +129,9 @@ def peths(spike_times, spike_clusters, cluster_ids, align_times, pre_time=0.2,
         peth_means = peth_means[:, n_offset:-n_offset]
         peth_stds = peth_stds[:, n_offset:-n_offset]
         binned_spikes = binned_spikes[:, :, n_offset:-n_offset]
-        # binned_spikes_conv = binned_spikes_conv[:, :, n_offset:-n_offset]
+        tscale = tscale[n_offset:-n_offset]
 
-    return peth_means, peth_stds, binned_spikes
+    # package output
+    tscale = (tscale[:-1] + tscale[1:]) / 2
+    peths = Bunch({'means': peth_means, 'stds': peth_stds, 'tscale': tscale, 'cscale': ids})
+    return peths, binned_spikes

@@ -29,11 +29,12 @@ class TestPeths(unittest.TestCase):
         spike_clusters = np.random.randint(0, n_clusters, n_spikes)
         event_times = np.sort(np.random.rand(n_events, ) * record_length)
 
-        m, s, fr = peths(spike_times, spike_clusters, cluster_ids=cluster_sel,
+        peth, fr = peths(spike_times, spike_clusters, cluster_ids=cluster_sel,
                          align_times=event_times)
-        self.assertTrue(m.shape[0] == len(cluster_sel))
-        self.assertTrue(np.all(s.shape == m.shape))
+        self.assertTrue(peth.means.shape[0] == len(cluster_sel))
+        self.assertTrue(np.all(peth.means.shape == peth.stds.shape))
         self.assertTrue(np.all(fr.shape == (n_events, len(cluster_sel), 28)))
+        self.assertTrue(peth.tscale.size == 28)
 
 
 if __name__ == "__main__":
