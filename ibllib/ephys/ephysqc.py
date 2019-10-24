@@ -8,21 +8,37 @@ import numpy as np
 import pandas as pd
 from scipy import signal
 
-import spikemetrics.metrics as metrics
 from phylib.io import model as phymod
 
-from brainbox.core import Bunch
+
 import alf.io
+from brainbox.core import Bunch
+from brainbox.processing import bincount2D
+import brainbox.quality.ephys as metrics
 from ibllib.ephys import sync_probes
 from ibllib.io import spikeglx
 import ibllib.dsp as dsp
 import ibllib.io.extractors.ephys_fpga as fpga
 from ibllib.misc import print_progress, log2session_static
 
+
 _logger = logging.getLogger('ibllib')
 
 RMS_WIN_LENGTH_SECS = 3
 WELCH_WIN_LENGTH_SAMPLES = 1024
+
+METRICS_PARAMS = {
+    "isi_threshold": 0.0015,
+    "min_isi": 0.000166,
+    "num_channels_to_compare": 13,
+    "max_spikes_for_unit": 500,
+    "max_spikes_for_nn": 10000,
+    "n_neighbors": 4,
+    'n_silhouette': 10000,
+    "quality_metrics_output_file": "metrics.csv",
+    "drift_metrics_interval_s": 51,
+    "drift_metrics_min_spikes_per_interval": 10
+}
 
 
 def rmsmap(fbin):
@@ -216,7 +232,7 @@ def validate_ttl_test(ses_path, display=False):
     return ok
 
 
-def _spike_sorting_metrics(ks2_path, save=True):
+def _spike_sorting_metrics_ks2(ks2_path, save=True):
     """
     Given a path containing kilosort 2 output, compute quality metrics and optionally save them
     to a clusters_metric.csv file
@@ -224,18 +240,6 @@ def _spike_sorting_metrics(ks2_path, save=True):
     :param save
     :return:
     """
-    METRICS_PARAMS = {
-        "isi_threshold": 0.0015,
-        "min_isi": 0.000166,
-        "num_channels_to_compare": 13,
-        "max_spikes_for_unit": 500,
-        "max_spikes_for_nn": 10000,
-        "n_neighbors": 4,
-        'n_silhouette': 10000,
-        "quality_metrics_output_file": "metrics.csv",
-        "drift_metrics_interval_s": 51,
-        "drift_metrics_min_spikes_per_interval": 10
-    }
 
     def _phy_model_from_ks2_path(ks2_path):
         params_file = ks2_path.joinpath('params.py')
@@ -258,12 +262,7 @@ def _spike_sorting_metrics(ks2_path, save=True):
         return m
 
     m = _phy_model_from_ks2_path(ks2_path)
-    pc_features = np.swapaxes(np.copy(m.sparse_features.data), 1, 2)
-
-    r = metrics.calculate_metrics(m.spike_samples, m.spike_clusters, m.amplitudes,
-                                  pc_features, m.sparse_features.cols, METRICS_PARAMS,
-                                  cluster_ids=m.spike_clusters, epochs=None, seed=0, verbose=True)
-
+    r = spike_sorting_metrics(m.spike_times, m.spike_clusters, m.amplitudes, params=METRICS_PARAMS)
     #  includes the ks2 contamination
     file_contamination = ks2_path.joinpath('cluster_ContamPct.tsv')
     if file_contamination.exists():
@@ -281,5 +280,56 @@ def _spike_sorting_metrics(ks2_path, save=True):
     if save:
         #  the file name contains the label of the probe (directory name in this case)
         r.to_csv(ks2_path.joinpath(f'clusters_metrics.{ks2_path.parts[-1]}.csv'))
+
+    return r
+
+
+def spike_sorting_metrics(spike_times, spike_clusters, spike_amplitudes,
+                          params=METRICS_PARAMS, epochs=None):
+    """
+        Spike sorting QC metrics
+    """
+    cluster_ids = np.unique(spike_clusters)
+    nclust = cluster_ids.size
+    r = Bunch({
+        'cluster_id': cluster_ids,
+        'num_spikes': np.zeros(nclust, ) + np.nan,
+        'firing_rate': np.zeros(nclust, ) + np.nan,
+        'presence_ratio': np.zeros(nclust, ) + np.nan,
+        'isi_viol': np.zeros(nclust, ) + np.nan,
+        'amplitude_cutoff': np.zeros(nclust, ) + np.nan,
+        # 'isolation_distance': np.zeros(nclust, ) + np.nan,
+        # 'l_ratio': np.zeros(nclust, ) + np.nan,
+        # 'd_prime': np.zeros(nclust, ) + np.nan,
+        # 'nn_hit_rate': np.zeros(nclust, ) + np.nan,
+        # 'nn_miss_rate': np.zeros(nclust, ) + np.nan,
+        # 'silhouette_score': np.zeros(nclust, ) + np.nan,
+        # 'max_drift': np.zeros(nclust, ) + np.nan,
+        # 'cumulative_drift': np.zeros(nclust, ) + np.nan,
+        'epoch_name': np.zeros(nclust, dtype='object'),
+    })
+
+    par = Bunch(METRICS_PARAMS)
+    tmin = 0
+    tmax = spike_times[-1]
+
+    """computes basic metrics such as spike rate and presence ratio"""
+    presence_ratio = bincount2D(spike_times, spike_clusters, xbin=par['presence_bin_length_secs'],
+                                ybin=cluster_ids, xlim=[tmin, tmax])[0]
+    r.num_spikes = np.sum(presence_ratio > 0, axis=1)
+    r.firing_rate = r.num_spikes / (tmax - tmin)
+    r.presence_ratio = np.sum(presence_ratio > 0, axis=1) / presence_ratio.shape[1]
+
+    # loop over each cluster and extracct corresponding spikes
+    for ic in np.arange(nclust):
+        # slice the spike_times array
+        ispikes = spike_clusters == cluster_ids[ic]
+        st = spike_times[ispikes]
+        sa = spike_amplitudes[ispikes]
+        # compute metrics
+        r.isi_viol[ic], _ = metrics.isi_violations(st, tmin, tmax,
+                                                   isi_threshold=par.isi_threshold,
+                                                   min_isi=par.min_isi)
+        r.amplitude_cutoff[ic], _ = metrics.amplitude_cutoff(amplitudes=sa)
 
     return r
