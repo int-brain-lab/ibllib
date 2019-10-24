@@ -1,4 +1,4 @@
-from brainbox.singlecell import acorr
+from brainbox.singlecell import acorr, peths
 import unittest
 import numpy as np
 
@@ -15,6 +15,25 @@ class TestPopulation(unittest.TestCase):
         c = acorr(spike_times, bin_size=bin_size, window_size=winsize_bins)
 
         self.assertTrue(np.allclose(c, c_expected))
+
+
+class TestPeths(unittest.TestCase):
+    def test_peths_synthetic(self):
+        n_spikes = 20000
+        n_clusters = 20
+        n_events = 200
+        record_length = 1654
+        cluster_sel = [1, 2, 3, 6, 15, 16]
+        np.random.seed(seed=42)
+        spike_times = np.sort(np.random.rand(n_spikes, ) * record_length)
+        spike_clusters = np.random.randint(0, n_clusters, n_spikes)
+        event_times = np.sort(np.random.rand(n_events, ) * record_length)
+
+        m, s, fr = peths(spike_times, spike_clusters, cluster_ids=cluster_sel,
+                         align_times=event_times)
+        self.assertTrue(m.shape[0] == len(cluster_sel))
+        self.assertTrue(np.all(s.shape == m.shape))
+        self.assertTrue(np.all(fr.shape == (n_events, len(cluster_sel), 28)))
 
 
 if __name__ == "__main__":
