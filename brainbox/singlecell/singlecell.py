@@ -28,9 +28,8 @@ def acorr(spike_times, bin_size=None, window_size=None):
     return xc[0, 0, :]
 
 
-def calculate_peths(
-        spike_times, spike_clusters, cluster_ids, align_times, pre_time=0.2,
-        post_time=0.5, bin_size=0.025, smoothing=0.025, return_fr=True):
+def peths(spike_times, spike_clusters, cluster_ids, align_times, pre_time=0.2,
+          post_time=0.5, bin_size=0.025, smoothing=0.025, return_fr=True):
     """
     Calcluate peri-event time histograms; return means and standard deviations
     for each time point across specified clusters
@@ -76,6 +75,13 @@ def calculate_peths(
 
     ids = np.unique(cluster_ids)
 
+    # filter spikes outside of the loop
+    idxs = np.bitwise_and(spike_times >= np.min(align_times) - (n_bins_pre + 1) * bin_size,
+                          spike_times <= np.max(align_times) + (n_bins_post + 1) * bin_size)
+    idxs = np.bitwise_and(idxs, np.isin(spike_clusters, cluster_ids))
+    spike_times = spike_times[idxs]
+    spike_clusters = spike_clusters[idxs]
+
     # bin spikes
     for i, t_0 in enumerate(align_times):
 
@@ -85,8 +91,7 @@ def calculate_peths(
         ts = np.concatenate([ts_pre, ts_post])
 
         # filter spikes
-        idxs = ((spike_times > ts[0]) & (spike_times <= ts[-1]) &
-                np.isin(spike_clusters, cluster_ids))
+        idxs = np.bitwise_and(spike_times > ts[0], spike_times <= ts[-1])
         i_spikes = spike_times[idxs]
         i_clusters = spike_clusters[idxs]
 

@@ -3,7 +3,7 @@ import os
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from brainbox.singlecell import calculate_peths
+from brainbox.singlecell import peths
 from oneibl.one import ONE
 import alf.io as ioalf
 
@@ -301,10 +301,9 @@ if __name__ == '__main__':
                 align_times = trials[align_event + '_times'][trial_ids[d]]
 
             peth_means[d][align_event], peth_stds[d][align_event], binned[d][align_event] = \
-                calculate_peths(
-                    spikes['times'], spikes['clusters'], cluster_ids, align_times,
-                    pre_time=PRE_TIME, post_time=POST_TIME, bin_size=BIN_SIZE,
-                    smoothing=SMOOTH_SIZE)
+                peths(spikes['times'], spikes['clusters'], cluster_ids, align_times,
+                      pre_time=PRE_TIME, post_time=POST_TIME, bin_size=BIN_SIZE,
+                      smoothing=SMOOTH_SIZE)
 
     # plot peths for each cluster
     n_trials, n_clusters, _ = binned[d][align_event].shape
