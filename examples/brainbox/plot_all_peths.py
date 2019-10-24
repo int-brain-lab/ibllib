@@ -2,6 +2,8 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 from pathlib import Path
+
+from brainbox.singlecell import peths
 from oneibl.one import ONE
 import alf.io as ioalf
 
@@ -51,110 +53,6 @@ def filter_trials(trials, choice, stim_side, stim_contrast):
     trial_ids = np.where(
         (trials['choice'] == choice) & (trials[contrast] == stim_contrast))[0]
     return trial_ids
-
-
-def calculate_peths(
-        spike_times, spike_clusters, cluster_ids, align_times, pre_time=0.2,
-        post_time=0.5, bin_size=0.025, smoothing=0.025, return_fr=True):
-    """
-    Calcluate peri-event time histograms; return means and standard deviations
-    for each time point across specified clusters
-
-    :param spike_times: spike times (in seconds)
-    :type spike_times: array-like
-    :param spike_clusters: cluster ids corresponding to each event in `spikes`
-    :type spike_clusters: array-like
-    :param cluster_ids: subset of cluster ids for calculating peths
-    :type cluster_ids: array-like
-    :param align_times: times (in seconds) to align peths to
-    :type align_times: array-like
-    :param pre_time: time (in seconds) to precede align times in peth
-    :type pre_time: float
-    :param post_time: time (in seconds) to follow align times in peth
-    :type post_time: float
-    :param bin_size: width of time windows (in seconds) to bin spikes
-    :type bin_size: float
-    :param smoothing: standard deviation (in seconds) of Gaussian kernel for
-        smoothing peths; use `smoothing=0` to skip smoothing
-    :type smoothing: float
-    :param return_fr: `True` to return (estimated) firing rate, `False` to return spike counts
-    :type return_fr: bool
-    :return: (psth_means, psth_stds)
-    :rtype: tuple with two elements, each of shape `(n_trials, n_clusters, n_bins)`
-    """
-
-    from scipy.signal import gaussian
-    from scipy.signal import convolve
-
-    # initialize containers
-    n_offset = 5 * int(np.ceil(smoothing / bin_size))  # get rid of boundary effects for smoothing
-    n_bins_pre = int(np.ceil(pre_time / bin_size)) + n_offset
-    n_bins_post = int(np.ceil(post_time / bin_size)) + n_offset
-    n_bins = n_bins_pre + n_bins_post
-    binned_spikes = np.zeros(shape=(len(align_times), len(cluster_ids), n_bins))
-
-    # build gaussian kernel if requested
-    if smoothing > 0:
-        w = n_bins - 1 if n_bins % 2 == 0 else n_bins
-        window = gaussian(w, std=smoothing / bin_size)
-        # half (causal) gaussian filter
-        # window[int(np.ceil(w/2)):] = 0
-        window /= np.sum(window)
-        binned_spikes_conv = np.copy(binned_spikes)
-
-    ids = np.unique(cluster_ids)
-
-    # bin spikes
-    for i, t_0 in enumerate(align_times):
-
-        # define bin edges
-        ts_pre = t_0 - np.arange(n_bins_pre, 0, -1) * bin_size
-        ts_post = t_0 + np.arange(n_bins_post + 1) * bin_size
-        ts = np.concatenate([ts_pre, ts_post])
-
-        # filter spikes
-        idxs = ((spike_times > ts[0]) & (spike_times <= ts[-1]) &
-                np.isin(spike_clusters, cluster_ids))
-        i_spikes = spike_times[idxs]
-        i_clusters = spike_clusters[idxs]
-
-        # bin spikes similar to bincount2D: x = spike times, y = spike clusters
-        xscale = ts
-        xind = (np.floor((i_spikes - np.min(ts)) / bin_size)).astype(np.int64)
-        yscale, yind = np.unique(i_clusters, return_inverse=True)
-        nx, ny = [xscale.size, yscale.size]
-        ind2d = np.ravel_multi_index(np.c_[yind, xind].transpose(), dims=(ny, nx))
-        r = np.bincount(ind2d, minlength=nx * ny, weights=None).reshape(ny, nx)
-
-        # store (ts represent bin edges, so there are one fewer bins)
-        bs_idxs = np.isin(ids, yscale)
-        binned_spikes[i, bs_idxs, :] = r[:, :-1]
-
-        # smooth
-        if smoothing > 0:
-            idxs = np.where(bs_idxs)[0]
-            for j in range(r.shape[0]):
-                binned_spikes_conv[i, idxs[j], :] = convolve(
-                    r[j, :], window, mode='same', method='auto')[:-1]
-
-    # average
-    if smoothing > 0:
-        binned_spikes_ = np.copy(binned_spikes_conv)
-    else:
-        binned_spikes_ = np.copy(binned_spikes)
-    if return_fr:
-        binned_spikes_ /= bin_size
-
-    peth_means = np.mean(binned_spikes_, axis=0)
-    peth_stds = np.std(binned_spikes_, axis=0)
-
-    if smoothing > 0:
-        peth_means = peth_means[:, n_offset:-n_offset]
-        peth_stds = peth_stds[:, n_offset:-n_offset]
-        binned_spikes = binned_spikes[:, :, n_offset:-n_offset]
-        # binned_spikes_conv = binned_spikes_conv[:, :, n_offset:-n_offset]
-
-    return peth_means, peth_stds, binned_spikes
 
 
 def get_onset_label(event, feedback_type=None):
@@ -402,11 +300,12 @@ if __name__ == '__main__':
             else:
                 align_times = trials[align_event + '_times'][trial_ids[d]]
 
-            peth_means[d][align_event], peth_stds[d][align_event], binned[d][align_event] = \
-                calculate_peths(
-                    spikes['times'], spikes['clusters'], cluster_ids, align_times,
-                    pre_time=PRE_TIME, post_time=POST_TIME, bin_size=BIN_SIZE,
-                    smoothing=SMOOTH_SIZE)
+            peth_, bs = peths(spikes['times'], spikes['clusters'], cluster_ids, align_times,
+                              pre_time=PRE_TIME, post_time=POST_TIME, bin_size=BIN_SIZE,
+                              smoothing=SMOOTH_SIZE)
+            peth_means[d][align_event] = peth_.means
+            peth_stds[d][align_event] = peth_.stds
+            binned[d][align_event] = bs
 
     # plot peths for each cluster
     n_trials, n_clusters, _ = binned[d][align_event].shape
