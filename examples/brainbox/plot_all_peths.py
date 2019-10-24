@@ -307,7 +307,7 @@ if __name__ == '__main__':
             peth_stds[d][align_event] = peth_.stds
             binned[d][align_event] = bs
 
-                # plot peths for each cluster
+    # plot peths for each cluster
     n_trials, n_clusters, _ = binned[d][align_event].shape
     n_rows = 4  # clusters per page
 
