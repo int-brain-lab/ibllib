@@ -28,6 +28,7 @@ RMS_WIN_LENGTH_SECS = 3
 WELCH_WIN_LENGTH_SAMPLES = 1024
 
 METRICS_PARAMS = {
+    'presence_bin_length_secs': 20,
     "isi_threshold": 0.0015,
     "min_isi": 0.000166,
     "num_channels_to_compare": 13,
@@ -268,14 +269,14 @@ def _spike_sorting_metrics_ks2(ks2_path, save=True):
     if file_contamination.exists():
         contam = pd.read_csv(file_contamination, sep='\t')
         contam.rename(columns={'ContamPct': 'ks2_contamination_pct'}, inplace=True)
-        r = r.set_index('cluster_id').join(contam.set_index('cluster_id'))
+        r = r.set_index('cluster_id', drop=False).join(contam.set_index('cluster_id'))
 
     #  includes the ks2 labeling
     file_labels = ks2_path.joinpath('cluster_KSLabel.tsv')
     if file_labels.exists():
         ks2_labels = pd.read_csv(file_labels, sep='\t')
         ks2_labels.rename(columns={'KSLabel': 'ks2_label'}, inplace=True)
-        r = r.set_index('cluster_id').join(ks2_labels.set_index('cluster_id'))
+        r = r.set_index('cluster_id', drop=False).join(ks2_labels.set_index('cluster_id'))
 
     if save:
         #  the file name contains the label of the probe (directory name in this case)
@@ -286,9 +287,7 @@ def _spike_sorting_metrics_ks2(ks2_path, save=True):
 
 def spike_sorting_metrics(spike_times, spike_clusters, spike_amplitudes,
                           params=METRICS_PARAMS, epochs=None):
-    """
-        Spike sorting QC metrics
-    """
+    """ Spike sorting QC metrics """
     cluster_ids = np.unique(spike_clusters)
     nclust = cluster_ids.size
     r = Bunch({
@@ -298,6 +297,7 @@ def spike_sorting_metrics(spike_times, spike_clusters, spike_amplitudes,
         'presence_ratio': np.zeros(nclust, ) + np.nan,
         'isi_viol': np.zeros(nclust, ) + np.nan,
         'amplitude_cutoff': np.zeros(nclust, ) + np.nan,
+        'amplitude_std': np.zeros(nclust, ) + np.nan,
         # 'isolation_distance': np.zeros(nclust, ) + np.nan,
         # 'l_ratio': np.zeros(nclust, ) + np.nan,
         # 'd_prime': np.zeros(nclust, ) + np.nan,
@@ -309,18 +309,18 @@ def spike_sorting_metrics(spike_times, spike_clusters, spike_amplitudes,
         'epoch_name': np.zeros(nclust, dtype='object'),
     })
 
-    par = Bunch(METRICS_PARAMS)
     tmin = 0
     tmax = spike_times[-1]
 
     """computes basic metrics such as spike rate and presence ratio"""
-    presence_ratio = bincount2D(spike_times, spike_clusters, xbin=par['presence_bin_length_secs'],
+    presence_ratio = bincount2D(spike_times, spike_clusters,
+                                xbin=params['presence_bin_length_secs'],
                                 ybin=cluster_ids, xlim=[tmin, tmax])[0]
     r.num_spikes = np.sum(presence_ratio > 0, axis=1)
     r.firing_rate = r.num_spikes / (tmax - tmin)
     r.presence_ratio = np.sum(presence_ratio > 0, axis=1) / presence_ratio.shape[1]
 
-    # loop over each cluster and extracct corresponding spikes
+    # loop over each cluster
     for ic in np.arange(nclust):
         # slice the spike_times array
         ispikes = spike_clusters == cluster_ids[ic]
@@ -328,8 +328,9 @@ def spike_sorting_metrics(spike_times, spike_clusters, spike_amplitudes,
         sa = spike_amplitudes[ispikes]
         # compute metrics
         r.isi_viol[ic], _ = metrics.isi_violations(st, tmin, tmax,
-                                                   isi_threshold=par.isi_threshold,
-                                                   min_isi=par.min_isi)
-        r.amplitude_cutoff[ic], _ = metrics.amplitude_cutoff(amplitudes=sa)
+                                                   isi_threshold=params['isi_threshold'],
+                                                   min_isi=params['min_isi'])
+        r.amplitude_cutoff[ic] = metrics.amplitude_cutoff(amplitudes=sa)
+        r.amplitude_std[ic] = np.std(sa)
 
-    return r
+    return pd.DataFrame(r)
