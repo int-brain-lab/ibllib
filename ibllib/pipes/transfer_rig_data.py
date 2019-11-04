@@ -14,12 +14,11 @@ log = logging.getLogger('ibllib')
 log.setLevel(logging.INFO)
 
 
-def main(local_folder: str, remote_folder: str, force: bool = True) -> None:
+def main(local_folder: str, remote_folder: str, force: bool = False) -> None:
     local_folder = Path(local_folder)
     remote_folder = Path(remote_folder)
 
-    src_session_paths = [x.parent for x in local_folder.rglob(
-        "transfer_me.flag")]
+    src_session_paths = [x.parent for x in local_folder.rglob("transfer_me.flag")]
 
     if not src_session_paths:
         log.info("Nothing to transfer, exiting...")
