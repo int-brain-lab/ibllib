@@ -4,6 +4,7 @@ from pathlib import Path
 
 import ibllib.pipes.extract_session
 from ibllib.pipes import experimental_data
+from ibllib.pipes import misc
 
 
 class TestCompression(unittest.TestCase):
@@ -49,6 +50,35 @@ class TestExtractors(unittest.TestCase):
                Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),)
         for i, o in zip(inp, out):
             self.assertEqual(o, ibllib.pipes.extract_session.get_session_path(i))
+
+
+class TestPipesMisc(unittest.TestCase):
+    """
+    """
+
+    def setUp(self):
+        # Define folders
+        self.test_local_folder = Path(tempfile.gettempdir()) / 'test_local_folder'
+        self.test_remote_folder = Path(tempfile.gettempdir()) / 'test_remote_folder'
+        self.test_local_session = self.test_local_folder / 'Subjects' / \
+            'test_subject' / '1900-01-01' / '001'
+        self.rbdata = self.test_local_session / 'raw_behavior_data'
+        self.rvdata = self.test_local_session / 'raw_video_data'
+        self.redata = self.test_local_session / 'raw_ephys_data'
+        # Make folders
+        self.test_local_folder.mkdir(exist_ok=True)
+        self.test_remote_folder.mkdir(exist_ok=True)
+        self.test_local_session.mkdir(exist_ok=True, parents=True)
+        self.rbdata.mkdir(exist_ok=True, parents=True)
+        self.rvdata.mkdir(exist_ok=True, parents=True)
+        self.redata.mkdir(exist_ok=True, parents=True)
+
+    def test_behavior_exists(self):
+        assert(misc.behavior_exists('.') is False)
+        assert(misc.behavior_exists(self.test_local_session) is True)
+
+    def tearDown(self):
+        pass
 
 
 if __name__ == "__main__":
