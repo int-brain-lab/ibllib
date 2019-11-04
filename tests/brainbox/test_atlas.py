@@ -2,7 +2,65 @@ import unittest
 
 import numpy as np
 
-from brainbox.atlas import BrainCoordinates, sph2cart, cart2sph
+from brainbox.atlas import BrainCoordinates, sph2cart, cart2sph, Trajectory
+
+
+class TestInsertion(unittest.TestCase):
+
+    def test_eval_trajectory(self):
+        line = Trajectory.fit(np.array([[0.3, 0.3, 0.4], [0, 0, 1]]))
+        # test integer
+        self.assertTrue(np.all(np.isclose(line.eval_y(0), np.array([0, 0, 1]))))
+        # test float
+        self.assertTrue(np.all(np.isclose(line.eval_y(0.0), np.array([0, 0, 1]))))
+        # test list
+        self.assertTrue(np.all(np.isclose(line.eval_y([0.0, 0.0]), np.array([0, 0, 1]))))
+        # test array
+        arr = np.array([0.0, 0.0])[..., np.newaxis]
+        self.assertTrue(np.all(np.isclose(line.eval_y(arr), np.array([0, 0, 1]))))
+        # test void direction
+        vertical = Trajectory.fit(np.array([[0, 0, 0], [0, 0, 1]]))
+        self.assertTrue(np.all(np.isnan(vertical.eval_x(5))))
+
+    def test_trajectory(self):
+        np.random.seed(42)
+        xyz = np.zeros([120, 3])
+        xyz[:, 0] = np.linspace(1, 9, 120)
+        xyz[:, 1] = np.linspace(2, 4, 120)
+        xyz[:, 2] = np.linspace(-2, 3, 120)
+        xyz += np.random.normal(size=xyz.shape) * 0.4
+        traj = Trajectory.fit(xyz)
+        # import matplotlib.pyplot as plt
+        # import mpl_toolkits.mplot3d as m3d
+        # ax = m3d.Axes3D(plt.figure())
+        # ax.scatter3D(*xyz.T)
+        # ax.plot3D(*insertion.eval_x(np.array([0, 10])).T)
+        # ax.plot3D(*insertion.eval_y(xyz[:, 1]).T, 'r')
+        d = xyz[:, 0] - traj.eval_y(xyz[:, 1])[:, 0]
+        self.assertTrue(np.abs(np.mean(d)) < 0.001)
+        d = xyz[:, 0] - traj.eval_y(xyz[:, 1])[:, 0]
+        self.assertTrue(np.abs(np.mean(d)) < 0.001)
+        d = xyz[:, 1] - traj.eval_z(xyz[:, 2])[:, 1]
+        self.assertTrue(np.abs(np.mean(d)) < 0.001)
+
+    def test_exit_volume(self):
+        bc = BrainCoordinates((11, 13, 15), xyz0=(-5, -6, -7))
+        # test arbitrary line
+        line = Trajectory.fit(np.array([[0.1, 0.1, 0], [0, 0, 1]]))
+        epoints = Trajectory.exit_points(line, bc)
+        self.assertTrue(np.all(np.isclose(epoints, np.array([[0.8, 0.8, -7.], [-0.6, -0.6, 7.]]))))
+        # test apline
+        hline = Trajectory.fit(np.array([[0, 0, 0], [0, 1, 0]]))
+        epoints = Trajectory.exit_points(hline, bc)
+        self.assertTrue(np.all(np.isclose(epoints, np.array([[0, -6, 0], [0, 6, 0]]))))
+        # test mlline
+        hline = Trajectory.fit(np.array([[0, 0, 0], [1, 0, 0]]))
+        epoints = Trajectory.exit_points(hline, bc)
+        self.assertTrue(np.all(np.isclose(epoints, np.array([[-5, 0, 0], [5, 0, 0]]))))
+        # test vertical line
+        vline = Trajectory.fit(np.array([[0, 0, 0], [0, 0, 1]]))
+        epoints = Trajectory.exit_points(vline, bc)
+        self.assertTrue(np.all(np.isclose(epoints, np.array([[0, 0, -7.], [0, 0, 7.]]))))
 
 
 class TestsCoordinatesSimples(unittest.TestCase):
