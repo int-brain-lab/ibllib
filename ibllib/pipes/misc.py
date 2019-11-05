@@ -221,6 +221,7 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False):
         return
 
     for session_path in src_session_paths:
+        # TODO:Add here rename ephys files and move ephys files
         print(f"\nFound session: {session_path}")
         flag_file = session_path / 'transfer_me.flag'
         msg = f"Transfer to {remote_folder} with the same name?"
@@ -262,3 +263,112 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False):
             continue
         elif resp == 'e' or resp == 'exit':
             return
+
+
+def rename_ephys_files(session_folder: str) -> None:
+    """rename_ephys_files is system agnostic (3A, 3B1, 3B2).
+    Renames all ephys files to Alyx compatible filenames. Uses get_new_filename.
+
+    :param session_folder: Session folder path
+    :type session_folder: str
+    :return: None - Changes names of files on filesystem
+    :rtype: None
+    """
+    session_path = Path(session_folder)
+    ap_files = session_path.rglob('*.ap.*')
+    lf_files = session_path.rglob('*.lf.*')
+    nidq_files = session_path.rglob('*.nidaq.*')
+
+    for apf in ap_files:
+        new_filename = get_new_filename(apf.name)
+        shutil.move(str(apf), str(apf.parent / new_filename))
+
+    for lff in lf_files:
+        new_filename = get_new_filename(lff.name)
+        shutil.move(str(lff), str(lff.parent / new_filename))
+
+    for nidqf in nidq_files:
+        new_filename = get_new_filename(nidqf.name)
+        shutil.move(str(nidqf), str(nidqf.parent / new_filename))
+
+
+def get_new_filename(filename: str) -> str:
+    """get_new_filename is system agnostic (3A, 3B1, 3B2).
+    Gets an alyx compatible filename from any spikeglx ephys file.
+
+    :param filename: Name of an ephys file
+    :type filename: str
+    :return: New name for ephys file
+    :rtype: str
+    """
+    root = '_spikeglx_ephysData'
+    # gt = '_g0_t0' or 'error
+    if '_g0_t0' in filename:
+        gt = '_g0_t0'
+    elif '_g0_t0' not in filename:
+        raise(NotImplementedError)
+
+    # ext = 'bin' or 'meta'
+    if '.bin' in filename:
+        ext = 'bin'
+    elif '.meta' in filename:
+        ext = 'meta'
+
+    if '.nidq.' in filename:
+        return '.'.join([root, gt, 'nidq', ext])
+
+    # probe = 'imec0' or 'imec1'
+    if '.imec0.' in filename:
+        probe = 'imec0'
+    elif '.imec1.' in filename:
+        probe = 'imec1'
+    elif '.imec.' in filename:
+        probe = 'imec'
+
+    # freq = 'ap' or 'lf'
+    if '.ap.' in filename:
+        freq = 'ap'
+    elif '.lf.' in filename:
+        freq = 'lf'
+
+    return '.'.join([root, gt, probe, freq, ext])
+
+
+def move_ephys_files(session_folder: str) -> None:
+    """move_ephys_files is system agnostic (3A, 3B1, 3B2).
+    Moves all properly named ephys files to appropriate locations for transfer.
+    Use rename_ephys_files function before this one.
+
+    :param session_folder: Session folder path
+    :type session_folder: str
+    :return: None - Moves files on filesystem
+    :rtype: None
+    """
+    session_path = Path(session_folder)
+    raw_ephys_data_path = session_path / 'raw_ephys_data'
+    nidq_files = session_path.rglob('*.nidaq.*')
+    # All nidq files go in the raw_eohys_data folder
+    for nidqf in nidq_files:
+        shutil.move(str(nidqf), str(raw_ephys_data_path / nidqf.name))
+    probe00_path = raw_ephys_data_path / 'probe00'
+    probe01_path = raw_ephys_data_path / 'probe01'
+    # 3A system imec only
+    imec_files = session_path.rglob('*.imec.*')
+    for imf in imec_files:
+        if 'probe00' in imf.name:
+            shutil.move(str(imf), str(probe00_path / imf.name))
+        elif 'probe01' in imf.name:
+            shutil.move(str(imf), str(probe01_path / imf.name))
+
+    # 3B system
+    imec0_files = session_path.rglob('*.imec0.*')
+    imec1_files = session_path.rglob('*.imec1.*')
+    # All imec 0 in probe00 folder
+    for i0f in imec0_files:
+        shutil.move(str(i0f), str(probe00_path / i0f.name))
+    # All imec 1 in probe01 folder
+    for i1f in imec1_files:
+        shutil.move(str(i1f), str(probe01_path / i1f.name))
+
+# TODO: ADD wiring files from params folder that is not there yet.
+# TODO: params_folder for ephyspc implementation
