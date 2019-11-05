@@ -415,7 +415,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             self.assertEqual(out[m, m - 1], 1)
 
 
-class TestsHardwareParameters3A(unittest.TestCase):
+class TestsHardwareParameters(unittest.TestCase):
 
     def setUp(self):
         self.workdir = Path(__file__).parent / 'fixtures' / 'io' / 'spikeglx'
@@ -441,8 +441,8 @@ class TestsHardwareParameters3A(unittest.TestCase):
 
     def test_default_values(self):
         from ibllib.io.extractors import ephys_fpga
-        self.assertEqual(ephys_fpga.CHMAPS['3A'], self.map3A)
-        self.assertEqual(ephys_fpga.CHMAPS['3B'], self.map3B)
+        self.assertEqual(ephys_fpga.CHMAPS['3A']['ap'], self.map3A)
+        self.assertEqual(ephys_fpga.CHMAPS['3B']['nidq'], self.map3B)
 
     def test_get_wiring(self):
         # get params providing full file path
