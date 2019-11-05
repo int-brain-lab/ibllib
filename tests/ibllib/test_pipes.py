@@ -77,6 +77,10 @@ class TestPipesMisc(unittest.TestCase):
         assert(misc.behavior_exists('.') is False)
         assert(misc.behavior_exists(self.test_local_session) is True)
 
+    def test_rename_ephys_files(self):
+        # Make a bunch of fake files 3A
+        misc.rename_ephys_files(self.test_local_session)
+        # Make a bunch of fake files 3B
     def tearDown(self):
         pass
 
