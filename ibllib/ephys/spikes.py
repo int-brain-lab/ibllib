@@ -38,7 +38,10 @@ def merge_probes(ses_path):
     else:
         _logger.info('converting individual spike-sorting outputs to ALF')
         for subdir, label, ef, sr in zip(subdirs, labels, efiles_sorted, srates):
-            ks2_to_alf(subdir, subdir / 'ks2_alf', label=label, sr=sr, force=True)
+            ks2alf_path = subdir / 'ks2_alf'
+            if ks2alf_path.exists():
+                shutil.rmtree(ks2alf_path, ignore_errors=True)
+            ks2_to_alf(subdir, ks2alf_path, label=label, sr=sr, force=True)
 
     probe_info = [{'label': lab} for lab in labels]
     mt = merge.Merger(subdirs=subdirs, out_dir=out_dir, probe_info=probe_info).merge()

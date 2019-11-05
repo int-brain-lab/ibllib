@@ -85,8 +85,8 @@ class BrainCoordinates:
         dt = np.int if round else np.float
         out = np.zeros_like(xyz, dtype=dt)
         out[..., 0] = self.x2i(xyz[..., 0], round=round)
-        out[..., 1] = self.x2i(xyz[..., 1], round=round)
-        out[..., 2] = self.x2i(xyz[..., 2], round=round)
+        out[..., 1] = self.y2i(xyz[..., 1], round=round)
+        out[..., 2] = self.z2i(xyz[..., 2], round=round)
         return out
 
     """Methods indices to distance"""
@@ -124,8 +124,8 @@ class BrainCoordinates:
 class BrainAtlas:
     """
     Objects that holds image, labels and coordinate transforms for a brain Atlas.
-    Currently this is the AllenCCF only at several resolutions, this class could be extended
-    subclassed in the future if the need for other atlases arises.
+    Currently this is the designted for the AllenCCF at several resolutions,
+    yet this class could be extended/subclassed in the future if the need for other atlases arises.
     """
     def __init__(self, image, label, regions, dxyz, iorigin=[0, 0, 0],
                  dims2xyz=[0, 1, 2], xyz2dims=[0, 1, 2]):
@@ -134,6 +134,8 @@ class BrainAtlas:
         self.label: label volume (ap, ml, dv)
         self.bc: atlas.BrainCoordinate object
         self.regions: atlas.BrainRegions object
+        self.top: 2d np array (ap, ml) containing the z-coordinate (m) of the surface of the brain
+        self.dims2xyz and self.zyz2dims: map image axis order to xyz coordinates order
         """
         self.image = image
         self.label = label
@@ -146,6 +148,21 @@ class BrainAtlas:
         nxyz = np.array(self.image.shape)[self.dims2xyz]
         bc = BrainCoordinates(nxyz=nxyz, xyz0=(0, 0, 0), dxyz=dxyz)
         self.bc = BrainCoordinates(nxyz=nxyz, xyz0=- bc.i2xyz(iorigin), dxyz=dxyz)
+        """
+        Get the volume top surface
+        """
+        l0 = self.label == 0
+        s = np.zeros(self.label.shape[:2])
+        s[np.all(l0, axis=2)] = np.nan
+        iz = 0
+        # not very elegant, but fast enough for our purposes
+        while True:
+            if iz >= l0.shape[2]:
+                break
+            inds = np.bitwise_and(s == 0, ~l0[:, :, iz])
+            s[inds] = iz
+            iz += 1
+        self.top = self.bc.i2z(s)
 
     def _lookup(self, xyz):
         """
@@ -166,41 +183,148 @@ class BrainAtlas:
         """
         return self.label.flat[self._lookup(xyz)]
 
-    def plot_cslice(self, ap_coordinate, ax=None):
+    def _tilted_slice(self, linepts, sxdim=0, sydim=1, ssdim=1):
+        """
+        Get a slice from the volume, tilted around 1 rotation axis
+        :param linepts: 2 points defining a probe trajectory. This trajectory is projected onto the
+        sxdim=0. The extracted slice corresponds to the plane orthogonal to the sxdim=0 plane
+        passing by the projected trajectory.
+        :param sxdim: = 0  coordinate system dimension corresponding to slice abscissa
+         (this direction is the rotation axis for tilt)
+        :param sydim: = 2  coordinate system dimension corresponding to slice ordinate
+        :param: ssdim: = 1  squeezed dimension
+
+        For a tilted coronal slice (default), sxdim=0, sydim=2, ssdim=1
+        For a tilted sagittal slice, sxdim=1, sydim=2, ssdim=0
+        """
+        tilt_line = linepts.copy()
+        tilt_line[:, sxdim] = 0
+        tilt_line_i = self.bc.xyz2i(tilt_line)
+        tilt_line_i[:, ssdim]
+        tile_shape = np.array([np.diff(tilt_line_i[:, 2])[0] + 1, self.bc.nxyz[sxdim]])
+        indx = np.arange(tile_shape[1])
+        indy = np.arange(tile_shape[0])
+        inds = np.linspace(*tilt_line_i[:, ssdim], tile_shape[0])
+        _, INDS = np.meshgrid(indx, np.int64(np.around(inds)))
+        INDX, INDY = np.meshgrid(indx, indy)
+        inds = [[INDX, INDY, INDS][i] for i in np.argsort([sxdim, sydim, ssdim])[self.xyz2dims]]
+        return self.image[inds[0], inds[1], inds[2]]
+
+    @staticmethod
+    def _plot_slice(im, extent, ax=None, cmap=None, **kwargs):
+        if not ax:
+            ax = plt.gca()
+            ax.axis('equal')
+        if not cmap:
+            cmap = plt.get_cmap('bone')
+        ax.imshow(im, extent=extent, cmap=cmap, **kwargs)
+        return ax
+
+    def plot_cslice(self, ap_coordinate, volume='image', **kwargs):
         """
         Imshow a coronal slice
         :param: ap_coordinate (mm)
+        :param: ax
         """
-        if not ax:
-            ax = plt.gca()
-        plt.imshow(self.image[self.bc.y2i(ap_coordinate / 1e3), :, :].transpose(),
-                   extent=np.r_[self.bc.xlim * 1e3, np.flip(self.bc.zlim) * 1e3],
-                   cmap=plt.get_cmap('seismic'))
-        return ax
+        vol = self.label if volume == 'annotation' else self.image
+        return self._plot_slice(vol[self.bc.y2i(ap_coordinate / 1e3), :, :].transpose(),
+                                extent=np.r_[self.bc.xlim * 1e3, np.flip(self.bc.zlim) * 1e3],
+                                **kwargs)
 
-    def plot_hslice(self, dv_coordinate, ax=None):
+    def plot_hslice(self, dv_coordinate, volume='image', **kwargs):
         """
         Imshow a horizontal slice
         :param: dv_coordinate (mm)
+        :param: ax
         """
-        if not ax:
-            ax = plt.gca()
-        plt.imshow(self.image[:, :, self.bc.z2i(dv_coordinate / 1e3)].transpose(),
-                   extent=np.r_[self.bc.ylim * 1e3, self.bc.xlim * 1e3],
-                   cmap=plt.get_cmap('seismic'))
-        return ax
+        vol = self.label if volume == 'annotation' else self.image
+        return self._plot_slice(vol[:, :, self.bc.z2i(dv_coordinate / 1e3)].transpose(),
+                                extent=np.r_[self.bc.ylim * 1e3, self.bc.xlim * 1e3],
+                                **kwargs)
 
-    def plot_sslice(self, ml_coordinate, ax=None):
+    def plot_sslice(self, ml_coordinate, volume='image', **kwargs):
         """
         Imshow a sagittal slice
         :param: ml_coordinate (mm)
+        :param: ax
         """
-        if not ax:
-            ax = plt.gca()
-        plt.imshow(self.image[:, self.bc.x2i(ml_coordinate / 1e3), :].transpose(),
-                   extent=np.r_[self.bc.ylim * 1e3, np.flip(self.bc.zlim) * 1e3],
-                   cmap=plt.get_cmap('seismic'))
-        return ax
+        vol = self.label if volume == 'annotation' else self.image
+        return self._plot_slice(vol[:, self.bc.x2i(ml_coordinate / 1e3), :].transpose(),
+                                extent=np.r_[self.bc.ylim * 1e3, np.flip(self.bc.zlim) * 1e3],
+                                **kwargs)
+
+
+@dataclass
+class Trajectory:
+    """
+    3D Trajectory (usually for a linear probe)
+    Minimally defined by a vector and a point
+    """
+    vector: np.ndarray
+    point: np.ndarray
+
+    @staticmethod
+    def fit(xyz):
+        """
+        fits a line to a 3D cloud of points, returns a Trajectory object
+        :param xyz: n by 3 numpy array containing cloud of points
+        :returns: a Trajectory object
+        """
+        xyz_mean = np.mean(xyz, axis=0)
+        return Trajectory(vector=np.linalg.svd(xyz - xyz_mean)[2][0], point=xyz_mean)
+
+    def eval_x(self, x):
+        """
+        given an array of x coordinates, returns the xyz array of coordinates along the insertion
+        :param x: n by 1 or numpy array containing x-coordinates
+        :return: n by 3 numpy array containing xyz-coordinates
+        """
+        return self._eval(x, dim=0)
+
+    def eval_y(self, y):
+        """
+        given an array of y coordinates, returns the xyz array of coordinates along the insertion
+        :param y: n by 1 or numpy array containing y-coordinates
+        :return: n by 3 numpy array containing xyz-coordinates
+        """
+        return self._eval(y, dim=1)
+
+    def eval_z(self, z):
+        """
+        given an array of z coordinates, returns the xyz array of coordinates along the insertion
+        :param z: n by 1 or numpy array containing z-coordinates
+        :return: n by 3 numpy array containing xyz-coordinates
+        """
+        return self._eval(z, dim=2)
+
+    def _eval(self, c, dim):
+        # uses symmetric form of 3d line equation to get xyz coordinates given one coordinate
+        if not isinstance(c, np.ndarray):
+            c = np.array(c)
+        while c.ndim < 2:
+            c = c[..., np.newaxis]
+        # there are cases where it's impossible to project if a line is // to the axis
+        if self.vector[dim] == 0:
+            return np.nan * np.zeros((c.shape[0], 3))
+        else:
+            return (c - self.point[dim]) * self.vector / self.vector[dim] + self.point
+
+    def exit_points(self, bc):
+        """
+        Given a Trajectory and a BrainCoordinates object, computes the intersection of the
+        trajectory with the brain coordinates bounding box
+        :param bc: BrainCoordinate objects
+        :return: np.ndarray 2 y 3 corresponding to exit points xyz coordinates
+        """
+        bounds = np.c_[bc.xlim, bc.ylim, bc.zlim]
+        epoints = np.r_[self.eval_x(bc.xlim), self.eval_y(bc.ylim), self.eval_z(bc.zlim)]
+        epoints = epoints[~np.all(np.isnan(epoints), axis=1)]
+        ind = np.all(np.bitwise_and(bounds[0, :] <= epoints, epoints <= bounds[1, :]), axis=1)
+        return epoints[ind, :]
+
+
+class Insertion(Trajectory):
+    pass
 
 
 @dataclass
@@ -219,7 +343,7 @@ class BrainRegions:
         Get a bunch of the name/id
         """
         uid, uind = np.unique(ids, return_inverse=True)
-        _, iself, _ = np.intersect1d(self.id, uid, assume_unique=True, return_indices=True)
+        a, iself, _ = np.intersect1d(self.id, uid, assume_unique=False, return_indices=True)
         return Bunch(id=self.id[iself[uind]], name=self.name[iself[uind]],
                      acronym=self.acronym[iself[uind]])
 
@@ -233,6 +357,7 @@ def AllenAtlas(res_um=25):
     """
     # Bregma indices for the 10um Allen Brain Atlas, mlapdv
     INDICES_BREGMA = np.array([1140 - (570 + 3.9), 540, 0 + 33.2])
+    # TODO: distribute and store the Atlas using parameters
     PATH_ATLAS = '/datadisk/BrainAtlas/ATLASES/Allen/'
     FILE_REGIONS = Path(__file__).parent.joinpath('allen_structure_tree.csv')
     # file_image = Path(path_atlas).joinpath(f'ara_nissl_{res_um}.nrrd')
