@@ -3,7 +3,6 @@ Set of functions for processing data from one form into another,
 for example taking spike times and then binning them into non-overlapping
 bins or convolving with a gaussian kernel.
 '''
-import brainbox as bb
 from brainbox import core
 import numpy as np
 import pandas as pd
@@ -208,7 +207,7 @@ def get_units_bunch(spks, *args):
 
     Examples
     --------
-    1) Create a units bunch given a spikes bunch, and get the amps from unit #4 from the units 
+    1) Create a units bunch given a spikes bunch, and get the amps for unit #4 from the units 
     bunch.
         >>> import brainbox as bb
         >>> import alf.io as aio
@@ -217,11 +216,11 @@ def get_units_bunch(spks, *args):
         # Get a units bunch.
         >>> units = bb.processing.get_units_bunch(spks)
         # Get amplitudes for unit #4.
-        >>> amps = units['amps'][4] 
+        >>> amps = units['amps']['4'] 
     '''
 
     # Initialize `units`
-    units = bb.core.Bunch()
+    units = core.Bunch()
     # Get the keys to return for `units`:
     if not args:
         keys = list(spks.keys())
@@ -232,14 +231,14 @@ def get_units_bunch(spks, *args):
     spks_unit_id = spks['clusters']
     num_units = np.max(spks_unit_id) + 1
     # For each key in `units`, iteratively get each unit's values, append units together in a
-    # list, and after appending together all units, add the list (as a key) to `units`:
+    # bunch, `feat_bunch`, and add the bunch (as a key) to `units`:
     for key in keys:
-        feat_list = []
-        for unit in range(num_units):
-            # Append current unit's values to list of unit's values for current key:
+        feat_bunch = core.Bunch((repr(unit),0) for unit in np.arange(0,num_units))
+        unit = -1
+        while unit < num_units:
+            unit+=1
             unit_idxs = np.where(spks_unit_id==unit)[0]
-            feat_list.append(spks[key][unit_idxs])
-            # When we have gone through all units, add `feat_list` to `units` as `key`:
-            if unit == num_units - 1:
-                units[key] = feat_list
+            feat_bunch[repr(unit)] = spks[key][unit_idxs]
+        units[key] = feat_bunch
     return units
+
