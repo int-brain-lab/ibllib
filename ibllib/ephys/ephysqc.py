@@ -295,6 +295,7 @@ def spike_sorting_metrics(spike_times, spike_clusters, spike_amplitudes,
         'num_spikes': np.zeros(nclust, ) + np.nan,
         'firing_rate': np.zeros(nclust, ) + np.nan,
         'presence_ratio': np.zeros(nclust, ) + np.nan,
+        'presence_ratio_std': np.zeros(nclust, ) + np.nan,
         'isi_viol': np.zeros(nclust, ) + np.nan,
         'amplitude_cutoff': np.zeros(nclust, ) + np.nan,
         'amplitude_std': np.zeros(nclust, ) + np.nan,
@@ -319,6 +320,7 @@ def spike_sorting_metrics(spike_times, spike_clusters, spike_amplitudes,
     r.num_spikes = np.sum(presence_ratio > 0, axis=1)
     r.firing_rate = r.num_spikes / (tmax - tmin)
     r.presence_ratio = np.sum(presence_ratio > 0, axis=1) / presence_ratio.shape[1]
+    r.presence_ratio_std = np.std(presence_ratio, axis=1)
 
     # loop over each cluster
     for ic in np.arange(nclust):
