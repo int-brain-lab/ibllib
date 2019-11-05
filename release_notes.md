@@ -1,5 +1,8 @@
+### Release Notes 1.2.9
+-   Ephys extraction: provide full 3B default wirings if files do not exist.
+
 ### Release Notes 1.2.8
--   merge sync ephys in the pipeline overwrites ks2_alf directory if it already exists
+-   Ephys extraction: merge sync ephys in the pipeline overwrites ks2_alf directory if it already exists
 
 ### Release Notes 1.2.7
 -   Added `biasedScanningChoiceWorld` task to biased extractor for Zador lab
