@@ -1,5 +1,9 @@
-### Release Notes 1.2.6
+### Release Notes 1.2.8
+-   merge sync ephys in the pipeline overwrites ks2_alf directory if it already exists
+
+### Release Notes 1.2.7
 -   Added `biasedScanningChoiceWorld` task to biased extractor for Zador lab
+
 ### Release Notes 1.2.6
 #### feature/ephys_compression
 - `spikeglx.Reader` supports mtscomp ephys binaries
