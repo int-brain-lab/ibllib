@@ -7,7 +7,7 @@ import brainbox as bb
 import numpy as np
 import matplotlib.pyplot as plt
 
-def plot_unit_stability(spks, feat_name='amps', cmap_name='coolwarm'):
+def plot_feat_vars(spks, feat_name='amps', cmap_name='coolwarm'):
     '''
     Plots the variances of a particular spike feature for all units as a bar plot, where each bar
     is color-coded corresponding to the depth of the max amplitude channel of the respective unit.
@@ -35,7 +35,7 @@ def plot_unit_stability(spks, feat_name='amps', cmap_name='coolwarm'):
         >>> import numpy as np
         >>> import matplotlib.pyplot as plt
         >>> spks = aio.load_object('path\\to\\ks_output', 'spikes')
-        >>> bb.plot.plot_unit_stability(spks)
+        >>> bb.plot.plot_feat_vars(spks)
     '''
     
     # Get units bunch and calculate variances.
@@ -66,7 +66,7 @@ def plot_unit_stability(spks, feat_name='amps', cmap_name='coolwarm'):
     cbar.set_label('depth', rotation=0)
     return fig
 
-def plot_feature_cutoff(feature, feat_name, **kwargs):
+def plot_feat_cutoff(feature, feat_name, **kwargs):
     '''
     Plots the pdf of an estimated symmetric spike feature distribution, with a vertical cutoff line
     that indicates the approximate fraction of spikes missing from the distribution, assuming the
@@ -102,7 +102,7 @@ def plot_feature_cutoff(feature, feat_name, **kwargs):
         # Get a spikes bunch, a units bunch, and plot feature cutoff for spike amplitudes for unit1
         >>> spks = aio.load_object('path\\to\\ks_output', 'spikes')
         >>> units = bb.processing.get_units_bunch(spks)
-        >>> bb.plot.plot_feature_cutoff(units['amps']['1'])    
+        >>> bb.plot.plot_feat_cutoff(units['amps']['1'])    
     '''
     
     # Set keyword input args if given:
@@ -129,3 +129,42 @@ def plot_feature_cutoff(feature, feat_name, **kwargs):
     ax[1].set_title('cutoff of pdf at end of symmetry around peak\n' \
                     '(estimated {:.2f}% missing spikes)'.format(fraction_missing*100))
     return fig
+
+def plot_feat_heatmap(feature, feat_name):
+    '''
+    Plots the pdf of an estimated symmetric spike feature distribution, with a vertical cutoff line
+    that indicates the approximate fraction of spikes missing from the distribution, assuming the
+    true distribution is symmetric. 
+
+    Parameters
+    ----------
+    feature : ndarray
+        The spike feature distribution from which to calculate the fraction of missing spikes.
+    feat_name : string
+        The name of the spike feature.
+    spks_per_bin : int (optional keyword arg)
+        The number of spikes per bin from which to compute the spike feature histogram.
+    sigma : int (optional keyword arg)
+        The standard deviation for the gaussian kernel used to compute the pdf from the spike
+        feature histogram.
+
+    Returns
+    -------
+    fig : figure
+        A figure object containing the plot.
+    
+    See Also
+    --------
+    metrics.feature_cutoff
+    
+    Examples
+    --------
+    1) Plot cutoff line indicating the fraction of spikes missing from a unit based on the recorded 
+    unit's spike amplitudes, assuming the distribution of the unit's spike amplitudes is symmetric.
+        >>> import brainbox as bb
+        >>> import alf.io as aio
+        # Get a spikes bunch, a units bunch, and plot feature cutoff for spike amplitudes for unit1
+        >>> spks = aio.load_object('path\\to\\ks_output', 'spikes')
+        >>> units = bb.processing.get_units_bunch(spks)
+        >>> bb.plot.plot_feat_cutoff(units['amps']['1'])    
+    '''
