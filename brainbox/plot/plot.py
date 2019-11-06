@@ -66,7 +66,7 @@ def plot_unit_stability(spks, feat_name='amps', cmap_name='coolwarm'):
     cbar.set_label('depth', rotation=0)
     return fig
 
-def plot_feature_cutoff(feature, **kwargs):
+def plot_feature_cutoff(feature, feat_name, **kwargs):
     '''
     Plots the pdf of an estimated symmetric spike feature distribution, with a vertical cutoff line
     that indicates the approximate fraction of spikes missing from the distribution, assuming the
@@ -76,8 +76,10 @@ def plot_feature_cutoff(feature, **kwargs):
     ----------
     feature : ndarray
         The spike feature distribution from which to calculate the fraction of missing spikes.
-    num_bins : int (optional keyword arg)
-        The number of bins from which to compute the spike feature histogram.
+    feat_name : string
+        The name of the spike feature.
+    spks_per_bin : int (optional keyword arg)
+        The number of spikes per bin from which to compute the spike feature histogram.
     sigma : int (optional keyword arg)
         The standard deviation for the gaussian kernel used to compute the pdf from the spike
         feature histogram.
@@ -97,27 +99,33 @@ def plot_feature_cutoff(feature, **kwargs):
     unit's spike amplitudes, assuming the distribution of the unit's spike amplitudes is symmetric.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        # Get a spikes bunch, a units bunch, and plot feature cutoff for spike amplitudes for unit4
+        # Get a spikes bunch, a units bunch, and plot feature cutoff for spike amplitudes for unit1
         >>> spks = aio.load_object('path\\to\\ks_output', 'spikes')
         >>> units = bb.processing.get_units_bunch(spks)
-        >>> bb.plot.plot_feature_cutoff(units['amps']['0'])    
+        >>> bb.plot.plot_feature_cutoff(units['amps']['1'])    
     '''
     
     # Set keyword input args if given:
-    error_str = 'The number of spikes in this unit is {0}, ' \
-                'but it must be at least 100'.format(feature.size)
-    assert (feature.size>100),error_str
     default_args = {
-                    'num_bins': np.int(feature.size / 100),  # ~ 100 spikes/bin
-                    'sigma': 5
-                    }
+                'spks_per_bin': 20,
+                'sigma': 5
+                }
     new_args = {**default_args, **kwargs}
-    num_bins = new_args['num_bins']
+    spks_per_bin = new_args['spks_per_bin']
     sigma = new_args['sigma']
     # Calculate and plot the pdf and the symmetric cutoff:
-    _, cutoff_idx, pdf = bb.metrics.feature_cutoff(feature, num_bins=num_bins, sigma=sigma)
-    fig, ax = plt.subplots()
-    ax.plot(pdf)
-    ax.vlines(cutoff_idx, 0, np.max(pdf), colors='r')
-    
+    fraction_missing, cutoff_idx, pdf = \
+        bb.metrics.feature_cutoff(feature, spks_per_bin=spks_per_bin, sigma=sigma)
+    fig, ax = plt.subplots(nrows=1, ncols=2)
+    num_bins = np.int(feature.size / spks_per_bin)
+    ax[0].hist(feature, bins=num_bins)
+    ax[0].set_xlabel('{0}'.format(feat_name))
+    ax[0].set_ylabel('count')
+    ax[0].set_title('histogram of {0}'.format(feat_name))
+    ax[1].plot(pdf)
+    ax[1].vlines(cutoff_idx, 0, np.max(pdf), colors='r')
+    ax[1].set_xlabel('bin number')
+    ax[1].set_ylabel('density')
+    ax[1].set_title('cutoff of pdf at end of symmetry around peak\n' \
+                    '(estimated {:.2f}% missing spikes)'.format(fraction_missing*100))
     return fig

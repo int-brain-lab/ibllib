@@ -125,8 +125,8 @@ def feature_cutoff(feature, **kwargs): # num_histogram_bins=500, histogram_smoot
     ----------
     feature : ndarray
         The spike feature distribution from which to calculate the fraction of missing spikes.
-    num_bins : int (optional keyword arg)
-        The number of bins from which to compute the spike feature histogram.
+    spks_per_bin : int (optional keyword arg)
+        The number of spikes per bin from which to compute the spike feature histogram.
     sigma : int (optional keyword arg)
         The standard deviation for the gaussian kernel used to compute the pdf from the spike
         feature histogram.
@@ -156,14 +156,19 @@ def feature_cutoff(feature, **kwargs): # num_histogram_bins=500, histogram_smoot
     '''
     # Set keyword input args if given:
     default_args = {
-                    'num_bins': np.int(feature.size / 100),  # ~ 100 spikes/bin
-                    'sigma': 5
-                    }
+                'spks_per_bin': 20,
+                'sigma': 5
+                }
     new_args = {**default_args, **kwargs}
-    num_bins = new_args['num_bins']
+    spks_per_bin = new_args['spks_per_bin']
     sigma = new_args['sigma']
+    min_num_bins = 50
+    error_str = 'The number of spikes in this unit is {0}, ' \
+                'but it must be at least {1}'.format(feature.size, spks_per_bin*min_num_bins)
+    assert (feature.size>spks_per_bin*min_num_bins),error_str
 
     # Calculate the spike feature histogram and pdf:
+    num_bins = np.int(feature.size / spks_per_bin)
     hist, bins = np.histogram(feature, num_bins, density=True)
     pdf = filters.gaussian_filter1d(hist, sigma)
 
