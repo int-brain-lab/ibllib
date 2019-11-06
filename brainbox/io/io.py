@@ -1,29 +1,25 @@
 import scipy.io as sio
 import scipy.signal as sp
 
-def get_ks_waveforms(ks_output_dir, raw_ephys_file, t=2.0, clusters=None, \
-                     f_band=[400, 6000], window='hamming'):
+def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000):
     '''
-    Gets spike waveforms from kilosort output and raw ephys datafile. Gets all
-    spike waveforms unless given specified clusters, in which case only spike
-    waveforms for those clusters will be returned.
+    Extracts spike waveforms from binary ephys data file.
     
     Parameters
     ----------
-    ks_output_dir (string) : The file directory kilosort outputs to, containing
-                             'spikes.' and 'clusters.' .npy files. 
-    raw_ephys_file (string) : The raw ephys binary data file.
-    t (numeric) : The time (in ms) of each returned waveform.
-    clusters (ndarray_like) : The cluster numbers for which to return the spike
-                              waveformms. 
-    f_band (ndarray_like) : The frequency band at which to perform the bandpass 
-                            filtering of the raw data.                        
-    window (string) : The filter window used to perform the bandpass filtering.
-    
-    Returns
+    ephys_file : string
+        The file path to the binary ephys data. 
+    ts : ndarray_like 
+        The timestamps for the waveforms to be returned.
+    ch : ndarray_like
+        The channels on which to extract the waveforms.
+    t : numeric 
+        The time (in ms) of each returned waveform.
+    sr : int
+        The sampling rate (in hz) that the ephys data was acquired at.
     -------
-    waveforms (ndarray) : An array of shape (#spikes, #timestamps, #channels)
-                          containing the waveforms of all detected spikes.
+    waveforms : ndarray 
+        An array of shape (#spikes, #timestamps, #channels) containing the waveforms.
     
     Examples
     --------

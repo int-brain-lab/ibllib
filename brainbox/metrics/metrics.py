@@ -9,17 +9,15 @@ import brainbox as bb
 import numpy as np
 import scipy.stats as stats
 import scipy.ndimage.filters as filters
-import matplotlib.pyplot as plt
 ## install via `pip install spikemetrics` or 
 ## `git clone https://github.com/SpikeInterface/spikemetrics`
 #import spikemetrics as sm
 
 def unit_stability(spks, features=['amps'], dist='norm', test='ks'):
     '''
-    Determines the probability that the empirical spike feature distribution(s) for specified 
-    feature(s), for all the spikes in a unit, for all units, comes from a specific theoretical 
-    distribution, based on a specificed statistical test. Also calculates the variances of this 
-    same spike feature for all units.
+    Determines the probability that the empirical spike feature distribution(s), for specified 
+    feature(s), for all units, comes from a specific theoretical distribution, based on a specified 
+    statistical test. Also calculates the variances of the spike feature(s) for all units.
 
     Parameters
     ----------
@@ -46,36 +44,32 @@ def unit_stability(spks, features=['amps'], dist='norm', test='ks'):
         A bunch with `features` as keys, containing a ndarray with the variances of each unit's 
         empirical spike feature distribution for all features.
 
+    See Also
+    --------
+    plot.plot_feat_vars
+
     Examples
     --------
-    1) Compute the p-values obtained from running a one-sample ks test on the spike
-    amplitudes for each unit, and the variances of the empirical spike amplitudes distribution for
-    each unit. Create a histogram of the variances of the spike amplitudes for each unit. Find the 
-    cluster IDs of those units which have variances greater than 100.
+    1) Compute 1) the p-values obtained from running a one-sample ks test on the spike amplitudes
+    for each unit, and 2) the variances of the empirical spike amplitudes distribution for each
+    unit. Create a histogram of the variances of the spike amplitudes for each unit, color-coded by 
+    depth of channel of max amplitudes. Get cluster IDs of those units which have variances greater 
+    than 50.
         >>> import brainbox as bb
         >>> import alf.io as aio
         >>> import numpy as np
         >>> import matplotlib.pyplot as plt
-        # Load a spikes bunch, get a units bunch, and get the depth of max channel for each unit:
+        # Load a spikes bunch and calculate unit stability:
         >>> spks = aio.load_object('path\\to\\ks_output', 'spikes')
-        >>> units = bb.processing.get_units_bunch(spks)
-        
-        # Compute unit stability based on 'amps'.
         >>> p_vals, variances = bb.metrics.unit_stability(spks)
-        # Plot histograms of variances in 20 evenly spaced bins:
-        >>> var_vals = tuple(variances['amps'].values())
-        >>> bins_variances = np.arange(0, np.nanmax(var_vals), (np.nanmax(var_vals) / 20))      
-        >>> fig, ax = plt.subplots()
-        >>> ax.hist(variances['amps'], bins_variances)
-        >>> ax.set_title('Unit Amplitude Variances')
-        >>> ax.set_ax.set_xlabel('Variances')
-        >>> ax.set_ylabel('Counts')
-        # Get all unit IDs which have amps variance > 100
-        >>> variance_thresh = 100
-        >>> bad_units = np.where(variances['amps'] > variance_thresh)
+        # Plot histograms of variances color-coded by  depth of channel of max amplitudes
+        >>> bb.plot.plot_feat_vars(spks, feat_name='amps')
+        # Get all unit IDs which have amps variance > 50
+        >>> var_vals = np.array(tuple(variances['amps'].values()))
+        >>> bad_units = np.where(var_vals > 50)
     '''
 
-    # Compute units bunch.
+    # Get units bunch and number of units.
     units = bb.processing.get_units_bunch(spks, features)
     num_units = np.max(spks['clusters']) + 1
     # Initialize `p_vals` and `variances`.
@@ -91,40 +85,43 @@ def unit_stability(spks, features=['amps'], dist='norm', test='ks'):
     # `variances_feat`. After iterating through all units, add these bunches as keys to their
     # respective parent bunches, `p_vals` and `variances`.
     for feat in features:
-        p_vals_feat = bb.core.Bunch((repr(unit),0) for unit in np.arange(0,num_units))
-        variances_feat = bb.core.Bunch((repr(unit),0) for unit in np.arange(0,num_units))
+        p_vals_feat = bb.core.Bunch((str(unit),0) for unit in np.arange(0,num_units))
+        variances_feat = bb.core.Bunch((str(unit),0) for unit in np.arange(0,num_units))
         unit = 0
         while unit < num_units:
             # If we're missing units/features, create a NaN placeholder and skip them:
-            if units[feat][repr(unit)].size==0:
+            if units[feat][str(unit)].size==0:
                 p_val = np.nan
                 var = np.nan
-                #continue
             else:
                 # Calculate p_val and var for current feature
-                _, p_val = test_fun(units[feat][repr(unit)], dist)
-                var = np.var(units[feat][repr(unit)])
+                _, p_val = test_fun(units[feat][str(unit)], dist)
+                var = np.var(units[feat][str(unit)])
             # Append current unit's values to list of units' values for current feature:
-            p_vals_feat[repr(unit)] = p_val
-            variances_feat[repr(unit)] = var
+            p_vals_feat[str(unit)] = p_val
+            variances_feat[str(unit)] = var
             unit+=1
-
         p_vals[feat] = p_vals_feat
         variances[feat] = variances_feat
     return p_vals, variances
 
 
-def feature_cutoff(feature, **kwargs): # num_histogram_bins=500, histogram_smoothing_value=3):
+def feat_cutoff(spks, feat_name, unit, **kwargs): # num_histogram_bins=500, histogram_smoothing_value=3):
     ''' 
-    Determines approximate fraction of spikes missing from a spike feature distribution, assuming
-    the distribution is symmetric. 
+    Determines approximate fraction of spikes missing from a spike feature distribution for a 
+    given unit, assuming the distribution is symmetric. 
     
     Inspired by metric described in Hill et al. (2011) J Neurosci 31: 8699-8705.
 
     Parameters
     ----------
-    feature : ndarray
-        The spike feature distribution from which to calculate the fraction of missing spikes.
+    spks : bunch
+        A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
+        etc.) for each unit.
+    feat_name : string (optional)
+        The spike feature to plot.
+    unit : int
+        The unit number for the feature to plot.
     spks_per_bin : int (optional keyword arg)
         The number of spikes per bin from which to compute the spike feature histogram.
     sigma : int (optional keyword arg)
@@ -134,12 +131,12 @@ def feature_cutoff(feature, **kwargs): # num_histogram_bins=500, histogram_smoot
     Returns
     -------
     fraction_missing : float
-        The fraction of missing spikes (0-0.5). If more than 50% of spikes are missing, an accurate 
-        estimate isn't possible.
-    fig : figure
-        A figure showing the pdf of the feature distribution, and the cutoff point (as a red 
-        vertical line) where the distribution is no longer symmetric (the normalized sum of the 
-        pdf beyond this line is what is considered as the fraction of missing spikes from the unit)
+        The fraction of missing spikes (0-0.5). *Note: If more than 50% of spikes are missing, an
+        accurate estimate isn't possible.
+    
+    See Also
+    --------
+    plot.plot_feat_cutoff
     
     Examples
     --------
@@ -147,12 +144,11 @@ def feature_cutoff(feature, **kwargs): # num_histogram_bins=500, histogram_smoot
     amplitudes, assuming the distribution of the unit's spike amplitudes is symmetric.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        # Get a spikes bunch.
+        # Get a spikes bunch and calculate estimated fraction of missing spikes.
         >>> spks = aio.load_object('path\\to\\ks_output', 'spikes')
-        # Get a units bunch
-        >>> units = bb.processing.get_units_bunch(spks)
-        # Compute feature cutoff for spike amplitudes for unit #4
-        >>> fraction_missing, fig = bb.metrics.feature_cutoff(units['amps'][4])    
+        >>> fraction_missing = bb.metrics.feat_cutoff(spks, 'amps', 1)
+        # Plot histogram and pdf of the spike amplitude distribution.
+        >>> bb.plot.plot_feat_cutoff(
     '''
     # Set keyword input args if given:
     default_args = {
@@ -163,6 +159,8 @@ def feature_cutoff(feature, **kwargs): # num_histogram_bins=500, histogram_smoot
     spks_per_bin = new_args['spks_per_bin']
     sigma = new_args['sigma']
     min_num_bins = 50
+    units = bb.processing.get_units_bunch(spks, [feat_name])
+    feature = units[feat_name][str(unit)]
     error_str = 'The number of spikes in this unit is {0}, ' \
                 'but it must be at least {1}'.format(feature.size, spks_per_bin*min_num_bins)
     assert (feature.size>spks_per_bin*min_num_bins),error_str

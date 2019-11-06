@@ -234,11 +234,11 @@ def get_units_bunch(spks, *args):
     # `feat_bunch`. After iterating through all units, and add `feat_bunch` as a key to `units`:
     for key in keys:
         # Initialize `feat_bunch` with a key for each unit.
-        feat_bunch = core.Bunch((repr(unit),0) for unit in np.arange(0,num_units))
+        feat_bunch = core.Bunch((str(unit),0) for unit in np.arange(0,num_units))
         unit = 0
         while unit < num_units:
             unit_idxs = np.where(spks_unit_id==unit)[0]
-            feat_bunch[repr(unit)] = spks[key][unit_idxs]
+            feat_bunch[str(unit)] = spks[key][unit_idxs]
             unit+=1
 
         units[key] = feat_bunch
