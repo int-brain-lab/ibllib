@@ -175,10 +175,5 @@ def feature_cutoff(feature, **kwargs): # num_histogram_bins=500, histogram_smoot
     # Calculate fraction missing from the tail of the pdf (the area where pdf stops being 
     # symmetric around peak)
     fraction_missing = np.sum(pdf[cutoff_idx:]) / np.sum(pdf)
-    
-    # Plot the pdf and the symmetric cutoff:
-    fig, ax = plt.subplots()
-    ax.plot(pdf)
-    ax.vlines(cutoff_idx, 0, np.max(pdf), colors='r')
 
-    return fraction_missing, fig
+    return fraction_missing, cutoff_idx, pdf
