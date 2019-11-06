@@ -32,9 +32,11 @@ def plot_feat_vars(spks, feat_name='amps', cmap_name='coolwarm'):
     1) Create a bar plot of the variances of the spike amplitudes for each unit.
         >>> import brainbox as bb
         >>> import alf.io as aio
+        >>> import ibllib.ephys.spikes as e_spks
         >>> import numpy as np
         >>> import matplotlib.pyplot as plt
-        >>> spks = aio.load_object('path\\to\\ks_output', 'spikes')
+        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
+        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
         >>> bb.plot.plot_feat_vars(spks)
     '''
     
@@ -99,8 +101,10 @@ def plot_feat_cutoff(feature, feat_name, **kwargs):
     unit's spike amplitudes, assuming the distribution of the unit's spike amplitudes is symmetric.
         >>> import brainbox as bb
         >>> import alf.io as aio
+        >>> import ibllib.ephys.spikes as e_spks
         # Get a spikes bunch, a units bunch, and plot feature cutoff for spike amplitudes for unit1
-        >>> spks = aio.load_object('path\\to\\ks_output', 'spikes')
+        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
+        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
         >>> units = bb.processing.get_units_bunch(spks)
         >>> bb.plot.plot_feat_cutoff(units['amps']['1'])    
     '''
@@ -130,7 +134,7 @@ def plot_feat_cutoff(feature, feat_name, **kwargs):
                     '(estimated {:.2f}% missing spikes)'.format(fraction_missing*100))
     return fig
 
-def plot_feat_heatmap(feature, feat_name):
+def plot_feat_heatmap(feature, feat_name, ephys_data_path):
     '''
     Plots the pdf of an estimated symmetric spike feature distribution, with a vertical cutoff line
     that indicates the approximate fraction of spikes missing from the distribution, assuming the
@@ -163,8 +167,11 @@ def plot_feat_heatmap(feature, feat_name):
     unit's spike amplitudes, assuming the distribution of the unit's spike amplitudes is symmetric.
         >>> import brainbox as bb
         >>> import alf.io as aio
+        >>> import ibllib.ephys.spikes as e_spks
         # Get a spikes bunch, a units bunch, and plot feature cutoff for spike amplitudes for unit1
-        >>> spks = aio.load_object('path\\to\\ks_output', 'spikes')
+        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
+        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
         >>> units = bb.processing.get_units_bunch(spks)
         >>> bb.plot.plot_feat_cutoff(units['amps']['1'])    
     '''
+    #
