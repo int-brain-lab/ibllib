@@ -56,13 +56,15 @@ def unit_stability(spks, features=['amps'], dist='norm', test='ks'):
         >>> import alf.io as aio
         >>> import numpy as np
         >>> import matplotlib.pyplot as plt
-        # Get a spikes bunch.
+        # Load a spikes bunch, get a units bunch, and get the depth of max channel for each unit:
         >>> spks = aio.load_object('path\\to\\ks_output', 'spikes')
+        >>> units = bb.processing.get_units_bunch(spks)
+        
         # Compute unit stability based on 'amps'.
         >>> p_vals, variances = bb.metrics.unit_stability(spks)
         # Plot histograms of variances in 20 evenly spaced bins:
-        >>> bins_variances = np.arange(0, np.max(variances['amps']), \
-                                       np.int(np.max(variances['amps']) / 20))        
+        >>> var_vals = tuple(variances['amps'].values())
+        >>> bins_variances = np.arange(0, np.nanmax(var_vals), (np.nanmax(var_vals) / 20))      
         >>> fig, ax = plt.subplots()
         >>> ax.hist(variances['amps'], bins_variances)
         >>> ax.set_title('Unit Amplitude Variances')
@@ -79,38 +81,36 @@ def unit_stability(spks, features=['amps'], dist='norm', test='ks'):
     # Initialize `p_vals` and `variances`.
     p_vals = bb.core.Bunch()
     variances = bb.core.Bunch()  
-    # Get the test as a lambda function (in future, more tests can be added to this dict)
+    # Set the test as a lambda function (in future, more tests can be added to this dict)
     tests = {
              'ks' : lambda x,y: stats.kstest(x,y)
              }
     test_fun = tests.get(test)
-    
-    # Compute the statistical tests and variances. For each feature, iteratively get each unit's 
-    # p-values and variances, append respective units together in separate lists for p-values and
-    # variances, and after appending together all units in the two lists, add each list (as a key) 
-    # to `p_vals` or `variances`, respectively:
-    for feature in features:
-        p_vals_list = []
-        variances_list = []
-        for unit in range(num_units):
-            # If we're missing units/features, create a None placeholder skip them:
-            if units[feature][unit].size==0:
-                p_val = None
-                var = None
-                continue
+    # Compute the statistical tests and variances. For each feature, iteratively get each unit's
+    # p-values and variances, and add them as keys to the respective bunches `p_vals_feat` and
+    # `variances_feat`. After iterating through all units, add these bunches as keys to their
+    # respective parent bunches, `p_vals` and `variances`.
+    for feat in features:
+        p_vals_feat = bb.core.Bunch((repr(unit),0) for unit in np.arange(0,num_units))
+        variances_feat = bb.core.Bunch((repr(unit),0) for unit in np.arange(0,num_units))
+        unit = 0
+        while unit < num_units:
+            # If we're missing units/features, create a NaN placeholder and skip them:
+            if units[feat][repr(unit)].size==0:
+                p_val = np.nan
+                var = np.nan
+                #continue
             else:
                 # Calculate p_val and var for current feature
-                _, p_val = test_fun(units[feature][unit], dist)
-                var = np.var(units[feature][unit])
+                _, p_val = test_fun(units[feat][repr(unit)], dist)
+                var = np.var(units[feat][repr(unit)])
             # Append current unit's values to list of units' values for current feature:
-            p_vals_list.append(p_val)
-            variances_list.append(var)
-                # When we have gone through all units, change lists to ndarrays and add as keys to
-                # `p_vals` & `variances`:
-            if unit == num_units - 1:
-                p_vals[feature] = np.asarray(p_vals_list)
-                variances[feature] = np.asarray(variances_list)
+            p_vals_feat[repr(unit)] = p_val
+            variances_feat[repr(unit)] = var
+            unit+=1
 
+        p_vals[feat] = p_vals_feat
+        variances[feat] = variances_feat
     return p_vals, variances
 
 

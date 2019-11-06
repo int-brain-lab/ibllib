@@ -230,15 +230,17 @@ def get_units_bunch(spks, *args):
     # `len(unique_ids)`, because some ids may be missing.
     spks_unit_id = spks['clusters']
     num_units = np.max(spks_unit_id) + 1
-    # For each key in `units`, iteratively get each unit's values, append units together in a
-    # bunch, `feat_bunch`, and add the bunch (as a key) to `units`:
+    # For each key in `units`, iteratively get each unit's values and add as a key to a bunch,
+    # `feat_bunch`. After iterating through all units, and add `feat_bunch` as a key to `units`:
     for key in keys:
+        # Initialize `feat_bunch` with a key for each unit.
         feat_bunch = core.Bunch((repr(unit),0) for unit in np.arange(0,num_units))
-        unit = -1
+        unit = 0
         while unit < num_units:
-            unit+=1
             unit_idxs = np.where(spks_unit_id==unit)[0]
             feat_bunch[repr(unit)] = spks[key][unit_idxs]
+            unit+=1
+
         units[key] = feat_bunch
     return units
 
