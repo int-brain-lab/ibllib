@@ -1,7 +1,8 @@
 import numpy as np
 import os.path as op
 
-def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch=385, dtype='int16', offset=0):
+def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch=385, dtype='int16', offset=0, \
+                      car=True):
     '''
     Extracts (after common-average-referencing) spike waveforms from binary ephys data file.
     
@@ -13,17 +14,19 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch=385, dtype='int1
         The timestamps (in s) of the spikes.
     ch : ndarray_like
         The channels on which to extract the waveforms.
-    t : numeric 
+    t : numeric (optional)
         The time (in ms) of each returned waveform.
-    sr : int
+    sr : int (optional)
         The sampling rate (in hz) that the ephys data was acquired at.
-    n_ch : int
+    n_ch : int (optional)
         The number of channels of the recording.
-    dtype: str
+    dtype: str (optional)
         The datatype represented by the bytes in `ephys_file`.
-    offset: int
+    offset: int (optional)
         The offset (in bytes) from the start of `ephys_file`.
-    
+    car: bool (optional)
+        A flag for whether or not to perform common-average-referencing before extracting waveforms
+
     Returns
     -------
     waveforms : ndarray 
@@ -40,9 +43,10 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch=385, dtype='int1
     wf_samples = np.int(sr/1000/(t/2))  # number of samples to return on each side of each ts
     ts_samples = np.array(ts*sr).astype(int)  # the samples corresponding to `ts`
     
+    if car:
     # Compute temporal and spatial noise.
-    noise_t = np.median(file_m[np.ix_(np.arange(0, n_samples), ch)], axis=1)
-    noise_s = np.median(file_m[np.ix_(np.arange(0, n_samples), ch)], axis=0)
+        noise_t = np.median(file_m[np.ix_(np.arange(0, n_samples), ch)], axis=1)
+        noise_s = np.median(file_m[np.ix_(np.arange(0, n_samples), ch)], axis=0)
     
     # Initialize `waveforms` and then extract waveforms from `file_m`.
     waveforms = np.zeros((len(ts), 2*wf_samples, len(ch)))
@@ -50,11 +54,12 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch=385, dtype='int1
         spk_ts_sample = ts_samples[spk]
         spk_samples = np.arange(spk_ts_sample - wf_samples, spk_ts_sample + wf_samples)
         waveforms[spk, :, :] = file_m[np.ix_(spk_samples, ch)]
-        # Sutbract temporal noise from waveforms
-        waveforms[spk, :, :]-=noise_t[spk_samples,None]
-        
-    # Subtract spatial noise from waveforms
-    waveforms-=noise_s[None,None,:]
+        if car:
+            # Sutbract temporal noise from waveforms
+            waveforms[spk, :, :]-=noise_t[spk_samples,None]
+    if car:    
+        # Subtract spatial noise from waveforms
+        waveforms-=noise_s[None,None,:]
     
     return waveforms
         

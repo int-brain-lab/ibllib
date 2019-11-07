@@ -106,7 +106,7 @@ def unit_stability(spks, features=['amps'], dist='norm', test='ks'):
     return p_vals, variances
 
 
-def feat_cutoff(spks, feat_name, unit, **kwargs):
+def feat_cutoff(spks, unit, feat_name='amps', **kwargs):
     ''' 
     Determines approximate fraction of spikes missing from a spike feature distribution for a 
     given unit, assuming the distribution is symmetric. 
@@ -118,10 +118,10 @@ def feat_cutoff(spks, feat_name, unit, **kwargs):
     spks : bunch
         A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
         etc.) for each unit.
-    feat_name : string (optional)
-        The spike feature to plot.
     unit : int
         The unit number for the feature to plot.
+    feat_name : string (optional)
+        The spike feature to plot.
     spks_per_bin : int (optional keyword arg)
         The number of spikes per bin from which to compute the spike feature histogram.
     sigma : int (optional keyword arg)
@@ -133,11 +133,11 @@ def feat_cutoff(spks, feat_name, unit, **kwargs):
     fraction_missing : float
         The fraction of missing spikes (0-0.5). *Note: If more than 50% of spikes are missing, an
         accurate estimate isn't possible.
-    
+
     See Also
     --------
     plot.feat_cutoff
-    
+
     Examples
     --------
     1) Determine the fraction of spikes missing from a unit based on the recorded unit's spike 
@@ -148,7 +148,7 @@ def feat_cutoff(spks, feat_name, unit, **kwargs):
         >>> spks = aio.load_object('path\\to\\ks_output', 'spikes')
         >>> fraction_missing = bb.metrics.feat_cutoff(spks, 'amps', 1)
         # Plot histogram and pdf of the spike amplitude distribution.
-        >>> bb.plot.feat_cutoff(spks, 'amps', 1)
+        >>> bb.plot.feat_cutoff(spks, 1)
     '''
     import pdb
     pdb.set_trace()

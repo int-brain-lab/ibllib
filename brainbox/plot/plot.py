@@ -70,7 +70,7 @@ def feat_vars(spks, feat_name='amps', cmap_name='coolwarm'):
     cbar.set_label('depth', rotation=0)
     return fig
 
-def feat_cutoff(spks, feat_name, unit, **kwargs):
+def feat_cutoff(spks, unit, feat_name='amps', **kwargs):
     '''
     Plots the pdf of an estimated symmetric spike feature distribution, with a vertical cutoff line
     that indicates the approximate fraction of spikes missing from the distribution, assuming the
@@ -81,10 +81,10 @@ def feat_cutoff(spks, feat_name, unit, **kwargs):
     spks : bunch
         A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
         etc.) for each unit.
-    feat_name : string (optional)
-        The spike feature to plot.
     unit : int
         The unit number for the feature to plot.
+    feat_name : string (optional)
+        The spike feature to plot.
     spks_per_bin : int (optional keyword arg)
         The number of spikes per bin from which to compute the spike feature histogram.
     sigma : int (optional keyword arg)
@@ -110,7 +110,7 @@ def feat_cutoff(spks, feat_name, unit, **kwargs):
         # Get a spikes bunch, a units bunch, and plot feature cutoff for spike amplitudes for unit1
         >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
         >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
-        >>> bb.plot.feat_cutoff(spks, 'amps', 1)    
+        >>> bb.plot.feat_cutoff(spks, 1)    
     '''
     
     # Set keyword input args if given:
@@ -141,6 +141,7 @@ def feat_cutoff(spks, feat_name, unit, **kwargs):
     return fig
 
 def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts2='end', \
+                        n_spks=100, sr=30000, n_ch_probe=385, dtype='int16', car=True, \
                         col=['b','r']):
     '''
     Plots waveforms from a single unit across a specified number of channels between two separate
@@ -162,11 +163,19 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
     n_ch : int
         The number of channels around the channel of max amplitude to plot.
     ts1 : array_like (optional)
-        A set of timestamps for which to compare waveforms with `ts2`. The default value takes the
-        first 200 timestamps for this unit.
+        A set of timestamps for which to compare waveforms with `ts2`.
     ts2: array_like (optional)
-        A set of timestamps for which to compare waveforms with `ts1`. The default value takes the
-        last 200 timestamps for this unit.
+        A set of timestamps for which to compare waveforms with `ts1`.
+    n_spks: int (optional)
+        The number of spikes to plot for each channel if `ts1` and `ts2` are kept as their defaults
+    sr : int (optional)
+        The sampling rate (in hz) that the ephys data was acquired at.
+    n_ch_probe : int (optional)
+        The number of channels of the recording.
+    dtype: str (optional)
+        The datatype represented by the bytes in `ephys_file`.
+    car: bool (optional)
+        A flag for whether or not to perform common-average-referencing before extracting waveforms
     col: list of strings or float arrays (optional)
         Two elements in the list, where each specifies the color the `ts1` and `ts2` waveforms
         will be plotted in, respectively.
@@ -182,7 +191,7 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
     
     Examples
     --------
-    1) Compare first and last 200 spike waveforms for unit1, across 20 channels around the channel
+    1) Compare first and last 100 spike waveforms for unit1, across 20 channels around the channel
     of max amplitude.
         >>> import brainbox as bb
         >>> import alf.io as aio
@@ -193,12 +202,7 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
         >>> clstrs = aio.load_object('path\\to\\alf_output', 'clusters')
         >>> bb.plot.single_unit_wf_comp('path\\to\\ephys_file', spks, clstrs, unit=1)    
     '''
-    # Set some constants
-    n_ch_probe = 385  # number of channels for recording sessions
-    dtype = 'int16'  # datatype represented by the bytes in `ephys_file`
-    sr = 30000  # sampling rate (in hz) of ephys data
-    n_spks = 100  # number of spikes to plot per channel if `ts1` or `ts2` is not given
-    
+  
     # Take the first and last 200 timestamps by default.
     units = bb.processing.get_units_bunch(spks)
     ts1 = units['times'][str(unit)][0:n_spks] if ts1=='start' else ts1
@@ -227,7 +231,7 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
     fig.suptitle('comparison of waveforms from two sets of spikes for unit{0}'.format(unit))        
     return fig
     
-def feat_heatmap(spks, feat_name, ephys_data_path):
+def amp_heatmap(ephys_file, spks, unit, t, n_ch=20):
     '''
- 
+    Plots a heatmap of the amplitudes over space and time for a particular unit.
     '''
