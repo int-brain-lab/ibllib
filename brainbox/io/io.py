@@ -1,7 +1,13 @@
 import scipy.io as sio
 import scipy.signal as sp
+import numpy as np
+import os.path as op
+import phylib.traces.waveform as phy_wave
+import phylib.io.model as phy_model
+import alf.io as aio
+import brainbox as bb
 
-def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000):
+def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch=385, dtype='int16', offset=0):
     '''
     Extracts spike waveforms from binary ephys data file.
     
@@ -10,86 +16,40 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000):
     ephys_file : string
         The file path to the binary ephys data. 
     ts : ndarray_like 
-        The timestamps for the waveforms to be returned.
+        The timestamps (in s) of the spikes.
     ch : ndarray_like
         The channels on which to extract the waveforms.
     t : numeric 
         The time (in ms) of each returned waveform.
     sr : int
         The sampling rate (in hz) that the ephys data was acquired at.
+    n_ch : int
+        The number of channels of the recording.
+    dtype: str
+        The datatype represented by the bytes in `ephys_file`.
+    offset: int
+        The offset (in bytes) from the start of `ephys_file`.
     -------
     waveforms : ndarray 
-        An array of shape (#spikes, #timestamps, #channels) containing the waveforms.
+        An array of shape (#spikes, #samples, #channels) containing the waveforms.
     
     Examples
     --------
     '''
     
-    # Bandpass filter the raw data according to `f_band` and `window`
+    # Get memmapped array of `ephys_file`
+    item_bytes = np.dtype(dtype).itemsize
+    n_samples = (op.getsize(ephys_file) - offset) // (item_bytes * n_ch)  
+    file_m = np.memmap(str(ephys_file), shape=(n_samples, n_ch), dtype=dtype, mode='r')
+    wf_samples = np.int(sr/1000/(t/2))  # number of samples to return on each side of each ts
+    ts_samples = np.array(ts*sr).astype(int)  # the samples corresponding to `ts`
     
-#function wf = getWaveForms(gwfparams)
-#% function wf = getWaveForms(gwfparams)
-#%
-#% Extracts individual spike waveforms from the raw datafile, for multiple
-#% clusters. Returns the waveforms and their means within clusters.
-#%
-#% Contributed by C. Schoonover and A. Fink
-#%
-#% % EXAMPLE INPUT
-#% gwfparams.dataDir = '/path/to/data/';    % KiloSort/Phy output folder
-#% gwfparams.fileName = 'data.dat';         % .dat file containing the raw 
-#% gwfparams.dataType = 'int16';            % Data type of .dat file (this should be BP filtered)
-#% gwfparams.nCh = 32;                      % Number of channels that were streamed to disk in .dat file
-#% gwfparams.wfWin = [-40 41];              % Number of samples before and after spiketime to include in waveform
-#% gwfparams.nWf = 2000;                    % Number of waveforms per unit to pull out
-#% gwfparams.spikeTimes =    [2,3,5,7,8,9]; % Vector of cluster spike times (in samples) same length as .spikeClusters
-#% gwfparams.spikeClusters = [1,2,1,1,1,2]; % Vector of cluster IDs (Phy nomenclature)   same length as .spikeTimes
-#%
-#% % OUTPUT
-#% wf.unitIDs                               % [nClu,1]            List of cluster IDs; defines order used in all wf.* variables
-#% wf.spikeTimeKeeps                        % [nClu,nWf]          Which spike times were used for the waveforms
-#% wf.waveForms                             % [nClu,nWf,nCh,nSWf] Individual waveforms
-#% wf.waveFormsMean                         % [nClu,nCh,nSWf]     Average of all waveforms (per channel)
-#%                                          % nClu: number of different clusters in .spikeClusters
-#%                                          % nSWf: number of samples per waveform
-#%
-#% % USAGE
-#% wf = getWaveForms(gwfparams);
-#
-#% Load .dat and KiloSort/Phy output
-#fileName = fullfile(gwfparams.dataDir,gwfparams.fileName);             
-#filenamestruct = dir(fileName);
-#dataTypeNBytes = numel(typecast(cast(0, gwfparams.dataType), 'uint8')); % determine number of bytes per sample
-#nSamp = filenamestruct.bytes/(gwfparams.nCh*dataTypeNBytes);  % Number of samples per channel
-#wfNSamples = length(gwfparams.wfWin(1):gwfparams.wfWin(end));
-#mmf = memmapfile(fileName, 'Format', {gwfparams.dataType, [gwfparams.nCh nSamp], 'x'});
-#chMap = readNPY(fullfile(gwfparams.dataDir, 'channel_map.npy'))+1;               % Order in which data was streamed to disk; must be 1-indexed for Matlab
-#nChInMap = numel(chMap);
-#
-#% Read spike time-centered waveforms
-#unitIDs = unique(gwfparams.spikeClusters);
-#numUnits = size(unitIDs,1);
-#spikeTimeKeeps = nan(numUnits,gwfparams.nWf);
-#waveForms = nan(numUnits,gwfparams.nWf,nChInMap,wfNSamples);
-#waveFormsMean = nan(numUnits,nChInMap,wfNSamples);
-#for curUnitInd=1:numUnits
-#    curUnitID = unitIDs(curUnitInd);
-#    curSpikeTimes = gwfparams.spikeTimes(gwfparams.spikeClusters==curUnitID);
-#    curUnitnSpikes = size(curSpikeTimes,1);
-#    spikeTimesRP = curSpikeTimes(randperm(curUnitnSpikes));
-#    spikeTimeKeeps(curUnitInd,1:min([gwfparams.nWf curUnitnSpikes])) = sort(spikeTimesRP(1:min([gwfparams.nWf curUnitnSpikes])));
-#    for curSpikeTime = 1:min([gwfparams.nWf curUnitnSpikes])
-#        tmpWf = mmf.Data.x(1:gwfparams.nCh,spikeTimeKeeps(curUnitInd,curSpikeTime)+gwfparams.wfWin(1):spikeTimeKeeps(curUnitInd,curSpikeTime)+gwfparams.wfWin(end));
-#        waveForms(curUnitInd,curSpikeTime,:,:) = tmpWf(chMap,:);
-#    end
-#    waveFormsMean(curUnitInd,:,:) = squeeze(nanmean(waveForms(curUnitInd,:,:,:),2));
-#    disp(['Completed ' int2str(curUnitInd) ' units of ' int2str(numUnits) '.']);
-#end
-#
-#% Package in wf struct
-#wf.unitIDs = unitIDs;
-#wf.spikeTimeKeeps = spikeTimeKeeps;
-#wf.waveForms = waveForms;
-#wf.waveFormsMean = waveFormsMean;
-#
-#end
+    # Initialize `waveforms` and then extract waveforms from `file_m`
+    waveforms = np.zeros((len(ts), 2*wf_samples, len(ch)))
+    for spk in range(len(ts)):
+        s = ts_samples[spk]
+        s = np.arange(s-wf_samples,s+wf_samples)
+        waveforms[spk, :, :] = file_m[np.ix_(s, ch)]
+    
+    return waveforms
+        

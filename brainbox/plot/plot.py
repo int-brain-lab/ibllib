@@ -121,12 +121,12 @@ def plot_feat_cutoff(spks, feat_name, unit, **kwargs):
     new_args = {**default_args, **kwargs}
     spks_per_bin = new_args['spks_per_bin']
     sigma = new_args['sigma']
-    units = bb.processing.get_units_bunch(spks, [feat_name])
-    feature = units[feat_name][str(unit)]
-    # Calculate and plot the pdf and the symmetric cutoff:
+    # Calculate and plot the feature distribution histogram and pdf with symmetric cutoff:
     fraction_missing, cutoff_idx, pdf = \
         bb.metrics.feat_cutoff(spks, feat_name, unit, spks_per_bin=spks_per_bin, sigma=sigma)
     fig, ax = plt.subplots(nrows=1, ncols=2)
+    units = bb.processing.get_units_bunch(spks, [feat_name])
+    feature = units[feat_name][str(unit)]
     num_bins = np.int(feature.size / spks_per_bin)
     ax[0].hist(feature, bins=num_bins)
     ax[0].set_xlabel('{0}'.format(feat_name))
