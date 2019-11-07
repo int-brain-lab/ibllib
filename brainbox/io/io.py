@@ -3,7 +3,7 @@ import os.path as op
 
 def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch=385, dtype='int16', offset=0):
     '''
-    Extracts common-average-referenced (CAR) spike waveforms from binary ephys data file.
+    Extracts (after common-average-referencing) spike waveforms from binary ephys data file.
     
     Parameters
     ----------
@@ -49,9 +49,9 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch=385, dtype='int1
     for spk in range(len(ts)):
         spk_ts_sample = ts_samples[spk]
         spk_samples = np.arange(spk_ts_sample - wf_samples, spk_ts_sample + wf_samples)
-        # Sutbract temporal noise from waveforms
         waveforms[spk, :, :] = file_m[np.ix_(spk_samples, ch)]
-        waveforms-=noise_t[None,spk_samples,None]
+        # Sutbract temporal noise from waveforms
+        waveforms[spk, :, :]-=noise_t[spk_samples,None]
         
     # Subtract spatial noise from waveforms
     waveforms-=noise_s[None,None,:]

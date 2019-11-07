@@ -7,7 +7,7 @@ import brainbox as bb
 import numpy as np
 import matplotlib.pyplot as plt
 
-def plot_feat_vars(spks, feat_name='amps', cmap_name='coolwarm'):
+def feat_vars(spks, feat_name='amps', cmap_name='coolwarm'):
     '''
     Plots the variances of a particular spike feature for all units as a bar plot, where each bar
     is color-coded corresponding to the depth of the max amplitude channel of the respective unit.
@@ -39,7 +39,7 @@ def plot_feat_vars(spks, feat_name='amps', cmap_name='coolwarm'):
         >>> import ibllib.ephys.spikes as e_spks
         >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
         >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
-        >>> bb.plot.plot_feat_vars(spks)
+        >>> bb.plot.feat_vars(spks)
     '''
     
     # Get units bunch and calculate variances.
@@ -70,7 +70,7 @@ def plot_feat_vars(spks, feat_name='amps', cmap_name='coolwarm'):
     cbar.set_label('depth', rotation=0)
     return fig
 
-def plot_feat_cutoff(spks, feat_name, unit, **kwargs):
+def feat_cutoff(spks, feat_name, unit, **kwargs):
     '''
     Plots the pdf of an estimated symmetric spike feature distribution, with a vertical cutoff line
     that indicates the approximate fraction of spikes missing from the distribution, assuming the
@@ -110,7 +110,7 @@ def plot_feat_cutoff(spks, feat_name, unit, **kwargs):
         # Get a spikes bunch, a units bunch, and plot feature cutoff for spike amplitudes for unit1
         >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
         >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
-        >>> bb.plot.plot_feat_cutoff(spks, 'amps', 1)    
+        >>> bb.plot.feat_cutoff(spks, 'amps', 1)    
     '''
     
     # Set keyword input args if given:
@@ -140,7 +140,94 @@ def plot_feat_cutoff(spks, feat_name, unit, **kwargs):
                     '(estimated {:.2f}% missing spikes)'.format(fraction_missing*100))
     return fig
 
-def plot_feat_heatmap(spks, feat_name, ephys_data_path):
+def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts2='end', \
+                        col=['b','r']):
+    '''
+    Plots waveforms from a single unit across a specified number of channels between two separate
+    time periods. In this way, waveforms can be compared to see if there is, e.g. drift during the
+    recording.
+    
+    Parameters
+    ----------
+    ephys_file : string
+        The file path to the binary ephys data. 
+    spks : bunch
+        A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
+        etc.) for each unit.
+    clstrs : bunch
+        A clusters bunch containing fields with unit information (e.g. mean amps, channel of max
+        amplitude, etc...), used here to extract the channel of max amplitude for the given unit.
+    unit : int
+        The unit number for the waveforms to plot.
+    n_ch : int
+        The number of channels around the channel of max amplitude to plot.
+    ts1 : array_like (optional)
+        A set of timestamps for which to compare waveforms with `ts2`. The default value takes the
+        first 200 timestamps for this unit.
+    ts2: array_like (optional)
+        A set of timestamps for which to compare waveforms with `ts1`. The default value takes the
+        last 200 timestamps for this unit.
+    col: list of strings or float arrays (optional)
+        Two elements in the list, where each specifies the color the `ts1` and `ts2` waveforms
+        will be plotted in, respectively.
+
+    Returns
+    -------
+    fig : figure
+        A figure object containing the plot.
+    
+    See Also
+    --------
+    io.extract_waveforms
+    
+    Examples
+    --------
+    1) Compare first and last 200 spike waveforms for unit1, across 20 channels around the channel
+    of max amplitude.
+        >>> import brainbox as bb
+        >>> import alf.io as aio
+        >>> import ibllib.ephys.spikes as e_spks
+        # Get a spikes bunch, a clusters bunch, and plot waveforms for unit1 across 20 channels.
+        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
+        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
+        >>> clstrs = aio.load_object('path\\to\\alf_output', 'clusters')
+        >>> bb.plot.single_unit_wf_comp('path\\to\\ephys_file', spks, clstrs, unit=1)    
+    '''
+    # Set some constants
+    n_ch_probe = 385  # number of channels for recording sessions
+    dtype = 'int16'  # datatype represented by the bytes in `ephys_file`
+    sr = 30000  # sampling rate (in hz) of ephys data
+    n_spks = 100  # number of spikes to plot per channel if `ts1` or `ts2` is not given
+    
+    # Take the first and last 200 timestamps by default.
+    units = bb.processing.get_units_bunch(spks)
+    ts1 = units['times'][str(unit)][0:n_spks] if ts1=='start' else ts1
+    ts2 = units['times'][str(unit)][-(n_spks+1):-1] if ts2=='end' else ts2
+    # Get the channel of max amplitude and `n_ch` around it.
+    max_ch = clstrs['channels'][unit]
+    n_c_ch = n_ch // 2
+    if max_ch < n_c_ch:  # take only channels greater than `max_ch`.
+        ch = np.arange(max_ch, max_ch + n_ch)
+    elif (max_ch + n_c_ch) > n_ch_probe:  # take only channels less than `max_ch`.
+        ch = np.arange(max_ch - n_ch, max_ch)    
+    else:  # take `n_c_ch` around `max_ch`.
+        ch = np.arange(max_ch - n_c_ch, max_ch + n_c_ch)        
+    # Extract the waveforms for these timestamps.
+    wf1 = bb.io.extract_waveforms(ephys_file, ts1, ch, sr=sr, n_ch=n_ch_probe, dtype=dtype)
+    wf2 = bb.io.extract_waveforms(ephys_file, ts2, ch, sr=sr, n_ch=n_ch_probe, dtype=dtype)
+    # Plot these waveforms against each other.
+    fig, ax = plt.subplots(nrows=n_ch, ncols=2)  # on left is all waveforms, on right is mean
+    for cur_ax, cur_ch in enumerate(ch):
+        ax[cur_ax][0].plot(wf1[:,:,cur_ax].T, c=col[0])
+        ax[cur_ax][0].plot(wf2[:,:,cur_ax].T, c=col[1])
+        ax[cur_ax][1].plot(np.mean(wf1[:,:,cur_ax],axis=0), c=col[0])
+        ax[cur_ax][1].plot(np.mean(wf2[:,:,cur_ax],axis=0), c=col[1])
+        ax[cur_ax][0].set_ylabel('Ch {0}'.format(cur_ch))
+    ax[0][1].legend(['1st spike set', '2nd spike set'])
+    fig.suptitle('comparison of waveforms from two sets of spikes for unit{0}'.format(unit))        
+    return fig
+    
+def feat_heatmap(spks, feat_name, ephys_data_path):
     '''
  
     '''

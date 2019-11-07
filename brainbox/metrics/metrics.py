@@ -46,7 +46,7 @@ def unit_stability(spks, features=['amps'], dist='norm', test='ks'):
 
     See Also
     --------
-    plot.plot_feat_vars
+    plot.feat_vars
 
     Examples
     --------
@@ -63,7 +63,7 @@ def unit_stability(spks, features=['amps'], dist='norm', test='ks'):
         >>> spks = aio.load_object('path\\to\\ks_output', 'spikes')
         >>> p_vals, variances = bb.metrics.unit_stability(spks)
         # Plot histograms of variances color-coded by  depth of channel of max amplitudes
-        >>> bb.plot.plot_feat_vars(spks, feat_name='amps')
+        >>> bb.plot.feat_vars(spks, feat_name='amps')
         # Get all unit IDs which have amps variance > 50
         >>> var_vals = np.array(tuple(variances['amps'].values()))
         >>> bad_units = np.where(var_vals > 50)
@@ -106,7 +106,7 @@ def unit_stability(spks, features=['amps'], dist='norm', test='ks'):
     return p_vals, variances
 
 
-def feat_cutoff(spks, feat_name, unit, **kwargs): # num_histogram_bins=500, histogram_smoothing_value=3):
+def feat_cutoff(spks, feat_name, unit, **kwargs):
     ''' 
     Determines approximate fraction of spikes missing from a spike feature distribution for a 
     given unit, assuming the distribution is symmetric. 
@@ -136,7 +136,7 @@ def feat_cutoff(spks, feat_name, unit, **kwargs): # num_histogram_bins=500, hist
     
     See Also
     --------
-    plot.plot_feat_cutoff
+    plot.feat_cutoff
     
     Examples
     --------
@@ -148,8 +148,10 @@ def feat_cutoff(spks, feat_name, unit, **kwargs): # num_histogram_bins=500, hist
         >>> spks = aio.load_object('path\\to\\ks_output', 'spikes')
         >>> fraction_missing = bb.metrics.feat_cutoff(spks, 'amps', 1)
         # Plot histogram and pdf of the spike amplitude distribution.
-        >>> bb.plot.plot_feat_cutoff(
+        >>> bb.plot.feat_cutoff(spks, 'amps', 1)
     '''
+    import pdb
+    pdb.set_trace()
     # Set keyword input args if given:
     default_args = {
                 'spks_per_bin': 20,
