@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from brainbox.atlas import BrainCoordinates, sph2cart, cart2sph, Trajectory
+from ibllib.atlas import BrainCoordinates, sph2cart, cart2sph, Trajectory
 
 
 class TestInsertion(unittest.TestCase):

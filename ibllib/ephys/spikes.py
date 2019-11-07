@@ -59,7 +59,8 @@ def merge_probes(ses_path):
         assert(labels[ind] == probe.label)  # paranoid, make sure they are sorted
         if not probe.get('ap'):
             continue
-        sync_file = probe.ap.parent / probe.ap.name.replace('ap.bin', 'sync.npy')
+        sync_file = probe.ap.parent.joinpath(probe.ap.name.replace('.ap.', '.sync.')
+                                             ).with_suffix('.npy')
         if not sync_file.exists():
             error_msg = f'No synchronisation file for {sync_file}'
             _logger.error(error_msg)

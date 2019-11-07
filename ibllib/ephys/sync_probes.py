@@ -194,6 +194,6 @@ def _get_sr(ephys_file):
 
 
 def _save_timestamps_npy(ephys_file, timestamps):
-    assert (ephys_file.ap.name.endswith('.ap.bin'))
-    file_out = ephys_file.ap.parent / ephys_file.ap.name.replace('.ap.bin', '.sync.npy')
+    file_out = ephys_file.ap.parent.joinpath(ephys_file.ap.name.replace('.ap.', '.sync.')
+                                             ).with_suffix('.npy')
     np.save(file_out, timestamps)
