@@ -1,4 +1,5 @@
 id,atlas_id,name,acronym,st_level,ontology_id,hemisphere_id,weight,parent_structure_id,depth,graph_id,graph_order,structure_id_path,color_hex_triplet,neuro_name_structure_id,neuro_name_structure_id_path,failed,sphinx_id,structure_name_facet,failed_facet,safe_name
+0,,void,void,,,,,,,,,,,,,,,,,void
 997,-1,root,root,,1,3,8690,,0,1,0,/997/,FFFFFF,,,f,1,385153371,734881840,root
 8,0,Basic cell groups and regions,grey,,1,3,8690,997,1,1,1,/997/8/,BFDAE3,,,f,2,2244697386,734881840,Basic cell groups and regions
 567,70,Cerebrum,CH,,1,3,8690,8,2,1,2,/997/8/567/,B0F0FF,,,f,3,2878815794,734881840,Cerebrum
