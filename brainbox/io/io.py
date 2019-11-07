@@ -23,6 +23,8 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch=385, dtype='int1
         The datatype represented by the bytes in `ephys_file`.
     offset: int
         The offset (in bytes) from the start of `ephys_file`.
+    
+    Returns
     -------
     waveforms : ndarray 
         An array of shape (#spikes, #samples, #channels) containing the waveforms.
