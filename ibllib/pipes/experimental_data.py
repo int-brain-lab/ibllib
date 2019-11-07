@@ -154,7 +154,7 @@ def raw_ephys_qc(root_data_folder, dry=False, max_sessions=10, force=False):
 # 22_audio_ephys
 def compress_audio(root_data_folder, dry=False, max_sessions=20):
     command = 'ffmpeg -i {file_name}.wav -c:a flac -nostats {file_name}.flac'
-    _compress(root_data_folder, command, 'compress_audio.flag', dry=dry, max_sessions=max_sessions)
+    _compress(root_data_folder, command, 'audio_ephys.flag', dry=dry, max_sessions=max_sessions)
 
 
 # 23_compress ephys

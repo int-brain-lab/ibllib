@@ -29,6 +29,8 @@ def get_task_extractor_type(task_name):
     :param task_name:
     :return:
     """
+    if isinstance(task_name, Path):
+        task_name = raw.load_settings(task_name).get('PYBPOD_PROTOCOL', None)
     if '_biasedChoiceWorld' in task_name:
         return 'biased'
     if 'biasedScanningChoiceWorld' in task_name:
