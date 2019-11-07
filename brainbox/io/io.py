@@ -1,15 +1,9 @@
-import scipy.io as sio
-import scipy.signal as sp
 import numpy as np
 import os.path as op
-import phylib.traces.waveform as phy_wave
-import phylib.io.model as phy_model
-import alf.io as aio
-import brainbox as bb
 
 def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch=385, dtype='int16', offset=0):
     '''
-    Extracts spike waveforms from binary ephys data file.
+    Extracts common-average-referenced (CAR) spike waveforms from binary ephys data file.
     
     Parameters
     ----------
@@ -44,12 +38,21 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch=385, dtype='int1
     wf_samples = np.int(sr/1000/(t/2))  # number of samples to return on each side of each ts
     ts_samples = np.array(ts*sr).astype(int)  # the samples corresponding to `ts`
     
-    # Initialize `waveforms` and then extract waveforms from `file_m`
+    # Compute temporal and spatial noise.
+    noise_t = np.median(file_m[np.ix_(np.arange(0, n_samples), ch)], axis=1)
+    noise_s = np.median(file_m[np.ix_(np.arange(0, n_samples), ch)], axis=0)
+    
+    # Initialize `waveforms` and then extract waveforms from `file_m`.
     waveforms = np.zeros((len(ts), 2*wf_samples, len(ch)))
     for spk in range(len(ts)):
-        s = ts_samples[spk]
-        s = np.arange(s-wf_samples,s+wf_samples)
-        waveforms[spk, :, :] = file_m[np.ix_(s, ch)]
+        spk_ts_sample = ts_samples[spk]
+        spk_samples = np.arange(spk_ts_sample - wf_samples, spk_ts_sample + wf_samples)
+        # Sutbract temporal noise from waveforms
+        waveforms[spk, :, :] = file_m[np.ix_(spk_samples, ch)]
+        waveforms-=noise_t[None,spk_samples,None]
+        
+    # Subtract spatial noise from waveforms
+    waveforms-=noise_s[None,None,:]
     
     return waveforms
         
