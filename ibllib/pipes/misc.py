@@ -199,7 +199,8 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
             return
 
 
-def confirm_ephys_remote_folder(local_folder=False, remote_folder=False):
+def confirm_ephys_remote_folder(
+    local_folder=False, remote_folder=False, force=False, iblscripts_folder=False):
     pars = load_ephyspc_params()
 
     if not local_folder:
@@ -221,8 +222,11 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False):
         return
 
     for session_path in src_session_paths:
-        # TODO:Add here rename ephys files and move ephys files
         print(f"\nFound session: {session_path}")
+        # Rename ephys files
+        rename_ephys_files(str(session_path))
+        # Copy wiring files
+        # copy_wiring_files(session_path, iblscripts_folder)
         flag_file = session_path / 'transfer_me.flag'
         msg = f"Transfer to {remote_folder} with the same name?"
         resp = input(msg + "\n[y]es/[r]ename/[s]kip/[e]xit\n ^\n> ") or 'y'
@@ -239,7 +243,7 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False):
             transfer_folder(
                 session_path / 'raw_ephys_data',
                 remote_session_path / 'raw_ephys_data',
-                force=False)
+                force=force)
             flag_file.unlink()
             if (remote_session_path / 'extract_me.flag').exists():
                 (remote_session_path / 'extract_me.flag').unlink()
@@ -303,10 +307,12 @@ def get_new_filename(filename: str) -> str:
     """
     root = '_spikeglx_ephysData'
     # gt = '_g0_t0' or 'error
-    if '_g0_t0' in filename:
-        gt = '_g0_t0'
-    elif '_g0_t0' not in filename:
-        raise(NotImplementedError)
+    for g in range(10):
+        for t in range(10):
+            if f'_g{g}_t{t}' in filename:
+                gt = f'_g{g}_t{t}'
+            else:
+                raise(NotImplementedError)
 
     # ext = 'bin' or 'meta'
     if '.bin' in filename:
@@ -370,5 +376,86 @@ def move_ephys_files(session_folder: str) -> None:
     for i1f in imec1_files:
         shutil.move(str(i1f), str(probe01_path / i1f.name))
 
+
 # TODO: ADD wiring files from params folder that is not there yet.
 # TODO: params_folder for ephyspc implementation
+def create_custom_ephys_wirings(iblscripts_folder: str):
+    iblscripts_path = Path(iblscripts_folder)
+    PARAMS = load_ephyspc_params()
+    if PARAMS['PROBE_TYPE_00'] != PARAMS['PROBE_TYPE_01']:
+        print("Having different probe types not supported")
+        raise(NotImplementedError)
+
+    params_path = iblscripts_path.parent / 'iblscripts_params'
+    params_path.mkdir(parents=True, exist_ok=True)
+    wirings_path = iblscripts_path / 'deploy' / 'ephyspc' / 'wirings'
+    if '3A' in PARAMS['PROBE_TYPE_00']:
+        shutil.copy(str(wirings_path / '3A.wiring.json'),
+                    str(params_path / '3A_probe00.wiring.json'))
+        shutil.copy(str(wirings_path / '3A.wiring.json'),
+                    str(params_path / '3A_probe01.wiring.json'))
+        print(f'Created 3A.wiring.json in {params_path}')
+    if '3B' in PARAMS['PROBE_TYPE_00']:
+        shutil.copy(str(wirings_path / '3B.wiring.json'),
+                    str(params_path / '3B_probe00.wiring.json'))
+        shutil.copy(str(wirings_path / '3B.wiring.json'),
+                    str(params_path / '3B_probe01.wiring.json'))
+        print(f'Created 3B.wiring.json in {params_path}')
+        shutil.copy(str(wirings_path / 'nidq.wiring.json'),
+                    str(params_path / 'nidq.wiring.json'))
+        print(f'Created nidq.wiring.json in {params_path}')
+    print(f'\nYou can now modify your wirings files from folder {params_path}')
+
+
+def get_iblscripts_folder():
+    return str(Path().cwd().parent.parent)
+
+
+def copy_wiring_files(session_path, iblscripts_folder):
+    PARAMS = load_ephyspc_params()
+    iblscripts_path = Path(iblscripts_folder)
+    iblscripts_params_path = iblscripts_path.parent / 'iblscripts_params'
+    wirings_path = iblscripts_path / 'deploy' / 'ephyspc' / 'wirings'
+    probe00_path = session_path / 'raw_ephys_data' / 'probe00'
+    probe01_path = session_path / 'raw_ephys_data' / 'probe01'
+    termination = '.wiring.json'
+    for binf in probe00_path.glob('*.bin'):
+        wiring_name = '.'.join(str(binf.name).split('.')[:-2]) + termination
+        if '.imec.'
+    wiring_files = []
+    if '3A' in PARAMS['PROBE_TYPE_00'] and not iblscripts_params_path.exists():
+        wiring_files.append(str(wirings_path / '3A.wiring.json'))
+    elif '3A' in PARAMS['PROBE_TYPE_00'] and iblscripts_params_path.exists():
+        wiring_files.append(str(iblscripts_path / '3A.wiring.json'))
+    elif '3B' in PARAMS['PROBE_TYPE_00'] and not iblscripts_params_path.exists():
+        wiring_files.append(str(wirings_path / '3B.wiring.json'))
+        wiring_files.append(str(wirings_path / 'nidq.wiring.json'))
+
+
+
+        shutil.copy(
+            str(wirings_path / '3A.wiring.json'),
+            str(session_path / 'raw_ephys_data' / 'probe00' / '3A.wiring.json'))
+        shutil.copy(
+            str(wirings_path / '3A.wiring.json'),
+            str(session_path / 'raw_ephys_data' / 'probe01' / '3A.wiring.json'))
+
+├── raw_ephys_data
+      ├── probe00
+      │   ├── _spikeglx_ephysData_g0_t0.imec0.ap.bin
+      │   ├── _spikeglx_ephysData_g0_t0.imec0.ap.meta
+      │   ├── _spikeglx_ephysData_g0_t0.imec0.lf.bin
+      │   ├── _spikeglx_ephysData_g0_t0.imec0.lf.meta
+      │   ├── _spikeglx_ephysData_g0_t0.imec0.sync.npy
+      │   ├── _spikeglx_ephysData_g0_t0.imec0.wiring.json
+      ├── probe01
+      │   ├── _spikeglx_ephysData_g0_t0.imec1.ap.bin
+      │   ├── _spikeglx_ephysData_g0_t0.imec1.ap.meta
+      │   ├── _spikeglx_ephysData_g0_t0.imec1.lf.bin
+      │   └── _spikeglx_ephysData_g0_t0.imec1.lf.meta
+      │   ├── _spikeglx_ephysData_g0_t0.imec1.sync.npy
+      │   ├── _spikeglx_ephysData_g0_t0.imec1.wiring.json
+      ├── _spikeglx_ephysData_g0_t0.nidq.bin
+      ├── _spikeglx_ephysData_g0_t0.nidq.meta
+      ├── _spikeglx_ephysData_g0_t0.nidq.sync.npy
+      ├── _spikeglx_ephysData_g0_t0.nidq.wiring.json
