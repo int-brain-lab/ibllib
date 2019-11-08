@@ -7,8 +7,11 @@ Find task name
 Check if extractors for specific task exist
 Extract data OR return error to user saying that the task has no extractors
 """
+import os
+import re
 import logging
 from pathlib import Path
+
 
 from ibllib.misc import log2session_static
 from ibllib.io.extractors import (ephys_trials, ephys_fpga,
@@ -18,6 +21,18 @@ from ibllib.io import raw_data_loaders as raw
 import ibllib.io.flags as flags
 
 logger_ = logging.getLogger('ibllib.alf')
+
+
+def get_session_path(path_object):
+    """
+    From a full file path or folder path, gets the session root path
+    :param path_object: pathlib.Path or string
+    :return:
+    """
+    path_object = Path(path_object)
+    s = re.search(rf'{os.sep}\d\d\d\d-\d\d-\d\d{os.sep}\d\d\d', str(path_object), flags=0)
+    if s:
+        return Path(str(path_object)[:s.span()[-1]])
 
 
 def get_task_extractor_type(task_name):
@@ -30,10 +45,12 @@ def get_task_extractor_type(task_name):
     :return:
     """
     if isinstance(task_name, Path):
-        task_name = raw.load_settings(task_name).get('PYBPOD_PROTOCOL', None)
+        settings = raw.load_settings(get_session_path(task_name))
+        if settings:
+            task_name = settings.get('PYBPOD_PROTOCOL', None)
     if '_biasedChoiceWorld' in task_name:
         return 'biased'
-    if 'biasedScanningChoiceWorld' in task_name:
+    elif 'biasedScanningChoiceWorld' in task_name:
         return 'biased'
     elif '_trainingChoiceWorld' in task_name:
         return 'training'

@@ -41,6 +41,15 @@ class TestExtractors(unittest.TestCase):
             out = ibllib.pipes.extract_session.get_task_extractor_type(to[0])
             self.assertEqual(out, to[1])
 
+    def test_get_session_folder(self):
+        inp = (Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001/raw_behavior_data/'
+                    '_iblrig_micData.raw.wav'),
+               Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),)
+        out = (Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),
+               Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),)
+        for i, o in zip(inp, out):
+            self.assertEqual(o, ibllib.pipes.extract_session.get_session_path(i))
+
 
 if __name__ == "__main__":
     unittest.main(exit=False)
