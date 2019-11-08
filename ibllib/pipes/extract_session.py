@@ -10,8 +10,8 @@ Extract data OR return error to user saying that the task has no extractors
 import os
 import re
 import logging
+import json
 from pathlib import Path
-
 
 from ibllib.misc import log2session_static
 from ibllib.io.extractors import (ephys_trials, ephys_fpga,
@@ -45,7 +45,10 @@ def get_task_extractor_type(task_name):
     :return:
     """
     if isinstance(task_name, Path):
-        settings = raw.load_settings(get_session_path(task_name))
+        try:
+            settings = raw.load_settings(get_session_path(task_name))
+        except json.decoder.JSONDecodeError:
+            return
         if settings:
             task_name = settings.get('PYBPOD_PROTOCOL', None)
     if '_biasedChoiceWorld' in task_name:
