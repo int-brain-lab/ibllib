@@ -70,11 +70,12 @@ def main(local_folder: str, remote_folder: str, force: bool = False) -> None:
 def _create_flags_for_task(dst, task_type):
     # create_flags_for_session()
     if task_type in ['training', 'biased']:
-        flags.write_flag_file(dst / 'extract_me.flag')
+        flags.write_flag_file(dst.joinpath('extract_me.flag'))
         flags.create_compress_video_flags(dst, flag_name='compress_video.flag')
         flags.create_compress_audio_flags(dst, 'audio_training.flag')
     elif task_type in ['ephys', 'ephys_sync']:
-        flags.write_flag_file(dst / 'extract_ephys.flag')
+        flags.write_flag_file(dst.joinpath('extract_ephys.flag'))
+        flags.write_flag_file(dst.joinpath('raw_ephys_qc.flag'))
         flags.create_compress_video_flags(dst, flag_name='compress_video_ephys.flag')
         flags.create_compress_audio_flags(dst, 'audio_ephys.flag')
         flags.create_spike_sorting_flags(dst)
