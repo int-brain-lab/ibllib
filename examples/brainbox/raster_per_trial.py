@@ -4,32 +4,7 @@ from brainbox.processing import bincount2D
 import matplotlib.pyplot as plt
 import ibllib.plots as iblplt
 
-alf_path = '.../ZM_1735/2019-08-01/001/alf'
 
-spikes = alf.io.load_object(alf_path, 'spikes')
-clusters = alf.io.load_object(alf_path, 'clusters')
-channels = alf.io.load_object(alf_path, 'channels')
-trials = alf.io.load_object(alf_path, '_ibl_trials')
-
-T_BIN = 0.01  # time bin in sec
-
-# just get channels from probe 0, as there are two probes here
-probe_id = clusters['probes'][spikes['clusters']]
-restrict = np.where(probe_id == 0)[0]
-
-# bin spikes
-R, times, Clusters = bincount2D(
-    spikes['times'][restrict], spikes['clusters'][restrict], T_BIN)
-
-# Order activity by cortical depth of neurons
-d = dict(zip(spikes['clusters'][restrict], spikes['depths'][restrict]))
-y = sorted([[i, d[i]] for i in d])
-isort = np.argsort([x[1] for x in y])
-R = R[isort, :]
-
-# get trial number for each time bin
-trial_numbers = np.digitize(times, trials['goCue_times'])
-print('Range of trials: ', [trial_numbers[0], trial_numbers[-1]])
 
 
 def add_stim_off_times(trials):
@@ -44,7 +19,7 @@ def add_stim_off_times(trials):
     trials[off][error_trials] = v
 
 
-add_stim_off_times(trials)
+
 
 
 def plot_trial(trial_number, R, times):
@@ -91,6 +66,39 @@ def plot_trial(trial_number, R, times):
 
 # Get a raster plot
 if __name__ == "__main__":
+
+    one = ONE()
+    eid = one.search(subject='ZM_2104', date='2019-09-19', number=1)
+    D = one.load(eid[0], clobber=False, download_only=True)
+    alf_path = Path(D.local_path[0]).parent
+    
+
+    spikes = alf.io.load_object(alf_path, 'spikes')
+    clusters = alf.io.load_object(alf_path, 'clusters')
+    channels = alf.io.load_object(alf_path, 'channels')
+    trials = alf.io.load_object(alf_path, '_ibl_trials')
+
+    add_stim_off_times(trials)
+
+    T_BIN = 0.01  # time bin in sec
+
+    # just get channels from probe 0, as there are two probes here
+    probe_id = clusters['probes'][spikes['clusters']]
+    restrict = np.where(probe_id == 0)[0]
+
+    # bin spikes
+    R, times, Clusters = bincount2D(
+        spikes['times'][restrict], spikes['clusters'][restrict], T_BIN)
+
+    # Order activity by cortical depth of neurons
+    d = dict(zip(spikes['clusters'][restrict], spikes['depths'][restrict]))
+    y = sorted([[i, d[i]] for i in d])
+    isort = np.argsort([x[1] for x in y])
+    R = R[isort, :]
+
+    # get trial number for each time bin
+    trial_numbers = np.digitize(times, trials['goCue_times'])
+    print('Range of trials: ', [trial_numbers[0], trial_numbers[-1]])
     # get a raster plot for a particular trial
     plot_trial(235, R, times)
     plt.show()
