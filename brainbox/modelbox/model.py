@@ -122,7 +122,6 @@ class PsychometricFunction(Model):
         if 'choice' in fittedoutput.model.model_name:
 
             fig, ax = plt.subplots()
-
             # only plot preprocessed data
             if plot_data:
                 assert hasattr(fittedoutput.data, 'preproc_df'), 'Call .preprocess() before .plot()'
