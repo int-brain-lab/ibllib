@@ -129,7 +129,7 @@ def create_extract_flags(root_data_folder, force=False, file_list=None):
 
 
 def create_transfer_flags(root_data_folder, force=False, file_list=None):
-    create_other_flags(root_data_folder, 'extract_me.flag', force=False, file_list=None)
+    create_other_flags(root_data_folder, 'transfer_me.flag', force=False, file_list=None)
 
 
 def create_create_flags(root_data_folder, force=False, file_list=None):
