@@ -45,7 +45,13 @@ The key to ONE's standardization is the concept of a "standard dataset type". Wh
 
 Not all data can be standardized, since each project will do unique experiments. Data providers can thereform add their own project-specific dataset types. The list of standard dataset types will be maintained centrally, and will start small but increase over time as the community converges on good ways to standardize more information. It is therefore important to distinguish dataset types agreed as universal standards from types specific to individual projects. To achieve this, names beginning with an underscore are guaranteed never to be standard. It is recommended that nonstandard names identify the group that produces them: for example the dataset types `_ibl_trials.stimulusContrast` and `clusters._ibl_task_modulation` could contain information specific to the IBL project.
 
-### Ease of use
+### Versioning and subcollections
+
+Data are often released in multiple versions. Most users will want always to have the latest version, but sometimes a user working will want to continue working with a historical version even after it has been updated, to maintain consistency with previous work. To enable versioning, the ONE functions will have accept an optional argument of the form `version='v1'`, which will ensure this specific version is loaded. If the argument is not passed, the latest version will be loaded. 
+
+Sometimes the data will contain multiple measurements of the same type, for example if recordings are made with multiple recording probes simultaneously. In these cases, the dataset types for probe 0 will have names like `probe00/spikes.times`, `probe00/spikes.clusters`, and `probe00/clusters.brain_location`; data for probe 1 will be `probe01/spikes.times`, etc. Encoding of references works within a subcollection: i.e. the entries of `probe00/spikes.clusters` point to the rows of `probe00/clusters.brain_location`, starting from 0, and independently of any datasets starting with `probe01/`.
+
+### For data sharers
 
 Data standards are only adopted when they are easy to use, for both providers and users of data. For users, the three ONE functions will be simple to learn, and will cover most common use cases.
 
@@ -99,3 +105,8 @@ Finally, if there are multiple files with the same object, attribute, and extens
 Sometimes you will want to provide metadata on the columns or rows of a data file. For example, clusters.ccf_location.tsv could be a 4-column tab-delimited text file in which the first 3 columns contain xyz coordinates of a cluster and the 4th contains its inferred brain location as text. In this case, an additional JSON file clusters.ccf_location.metadata.json can provide information about the columns and rows. The metadata file can contain anything, but if it has a top-level key "columns", that should be an array of size the number of columns, and if it has a top-level key "rows" that should be an array of size the number of rows. If the entries in the columns and rows arrays have a key "name" that defines a name for the column or row; a key "unit" defines a unit of measurement. You can add anything else you want.
 
 Note that in ALF you should not have generally two data files with the same object and attribute: if you have tones.frequencies.npy, you can't also  have tones.frequencies.tsv. Metadata files are an exception to this: if you have tones.frequencies.npy, you can also have tones.frequencies.metadata.json.
+
+### Versioning and subcollections
+Versioning and subcollections are achieved with subdirectories. If your main ALF directory contains a subfolder `v1`, any files in there are assumed to be version `v1`. The root directory is assumed to contain the most recent files. 
+
+Subcollections are also achieved with subdirectories: a subfolder `probe00` of the main ALF directory contains the files specific to probe 0; you can also have a subcollection within a version such as `v1/probe00`.
