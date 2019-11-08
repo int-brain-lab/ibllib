@@ -215,5 +215,5 @@ def sync_merge_ephys(root_data_folder, dry=False):
 def compress_ephys_video(root_data_folder, dry=False, max_sessions=None):
     command = ('ffmpeg -i {file_name}.avi -codec:v libx264 -preset slow -crf 17 '
                '-nostats -loglevel 0 -codec:a copy {file_name}.mp4')
-    _compress(root_data_folder, command, 'compress_ephys_video.flag',
+    _compress(root_data_folder, command, 'compress_video_ephys.flag',
               dry=dry, max_sessions=max_sessions)
