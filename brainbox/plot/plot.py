@@ -6,6 +6,7 @@ functions in the brainbox `metrics.py` module.
 import brainbox as bb
 import numpy as np
 import matplotlib.pyplot as plt
+import os.path as op
 
 def feat_vars(spks, feat_name='amps', cmap_name='coolwarm'):
     '''
@@ -145,8 +146,8 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
                         col=['b','r']):
     '''
     Plots waveforms from a single unit across a specified number of channels between two separate
-    time periods. In this way, waveforms can be compared to see if there is, e.g. drift during the
-    recording.
+    time periods, after (optionally) common-average-referencing. In this way, waveforms can be 
+    compared to see if there is, e.g. drift during the recording.
     
     Parameters
     ----------
@@ -231,7 +232,95 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
     fig.suptitle('comparison of waveforms from two sets of spikes for unit{0}'.format(unit))        
     return fig
     
-def amp_heatmap(ephys_file, spks, unit, t, n_ch=20):
+def amp_heatmap(ephys_file, spks, clstrs, unit, t='all', n_ch=20, sr=30000, n_ch_probe=385, \
+                dtype='int16', cmap_name='RdBu', car=True):
     '''
-    Plots a heatmap of the amplitudes over space and time for a particular unit.
+    Plots a heatmap of the amplitudes over space and time for a particular unit, after (optionally) 
+    common-average-referencing.
+
+    Parameters
+    ----------
+    ephys_file : string
+        The file path to the binary ephys data. 
+    spks : bunch
+        A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
+        etc.) for each unit.
+    clstrs : bunch
+        A clusters bunch containing fields with unit information (e.g. mean amps, channel of max
+        amplitude, etc...), used here to extract the channel of max amplitude for the given unit.
+    unit : int
+        The unit number for which to plot the amp heatmap.
+    t : str or pair of floats
+        The time period from which to get the spike amplitudes. Default: all spike amplitudes.
+    n_ch: int (optional)
+        The number of channels for which to plot the amp heatmap.
+    sr : int (optional)
+        The sampling rate (in hz) that the ephys data was acquired at.
+    n_ch_probe : int (optional)
+        The number of channels of the recording.
+    dtype: str (optional)
+        The datatype represented by the bytes in `ephys_file`.
+    cmap_name : string (optional)
+        The name of the colormap associated with the plot.
+    car: bool (optional)
+        A flag for whether or not to perform common-average-referencing before extracting waveforms
+    
+    Returns
+    -------
+    fig : figure
+        A figure object containing the plot.
+   
+    Examples
+    --------
+    1) Plot a heatmap of the spike amplitudes across 20 channels around the channel of max
+    amplitude for unit1.
+        >>> import brainbox as bb
+        >>> import alf.io as aio
+        >>> import ibllib.ephys.spikes as e_spks
+        # Get a spikes bunch, a clusters bunch, and plot heatmap for unit1 across 20 channels.
+        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
+        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
+        >>> clstrs = aio.load_object('path\\to\\alf_output', 'clusters')
+        >>> bb.plot.amp_heatmap('path\\to\\ephys_file', spks, clstrs, unit=1)
     '''
+    
+    # Get memmapped array of `ephys_file`
+    item_bytes = np.dtype(dtype).itemsize
+    n_samples = op.getsize(ephys_file) // (item_bytes * n_ch_probe)  
+    file_m = np.memmap(ephys_file, shape=(n_samples, n_ch_probe), dtype=dtype, mode='r')
+    # Get voltage values for each peak amplitude sample for `n_ch` around `max_ch`:
+    # Get the channel of max amplitude and `n_ch` around it.
+    max_ch = clstrs['channels'][unit]
+    n_c_ch = n_ch // 2
+    if max_ch < n_c_ch:  # take only channels greater than `max_ch`.
+        ch = np.arange(max_ch, max_ch + n_ch)
+    elif (max_ch + n_c_ch) > n_ch_probe:  # take only channels less than `max_ch`.
+        ch = np.arange(max_ch - n_ch, max_ch)    
+    else:  # take `n_c_ch` around `max_ch`.
+        ch = np.arange(max_ch - n_c_ch, max_ch + n_c_ch)
+    unit_idxs = np.where(spks['clusters']==unit)
+    max_amp_samples = spks['samples'][unit_idxs]
+    ts = spks['times'][unit_idxs]
+    v_vals = file_m[np.ix_(max_amp_samples, ch)]
+    if car:  # Compute and subtract temporal and spatial noise from `v_vals`.
+        # Get subset of time (from first to last max amp sample)
+        t_subset = np.arange(max_amp_samples[0], max_amp_samples[-1]+1, dtype='int16')
+        # Specify output arrays as `dtype='int16'`
+        out_noise_t = np.zeros((len(t_subset),), dtype='int16')
+        out_noise_s = np.zeros((len(ch),), dtype='int16')
+        noise_t = np.median(file_m[np.ix_(t_subset, ch)], axis=1, out=out_noise_t)
+        noise_s = np.median(file_m[np.ix_(t_subset, ch)], axis=0, out=out_noise_s)
+        v_vals -= noise_t[max_amp_samples - max_amp_samples[0], None]
+        v_vals -= noise_s[None, :]
+    # Plot heatmap.
+    fig, ax = plt.subplots()
+    cbar_map = ax.imshow((v_vals/np.max(abs(v_vals))).T, cmap=cmap_name, aspect='auto', \
+                         extent=[ts[0], ts[-1], ch[0], ch[-1]], origin='lower')
+    ax.set_yticks(np.arange(ch[0], ch[-1], 5))
+    ax.set_ylabel('channel numbers')
+    ax.set_xlabel('time (s)')
+    ax.set_title('heatmap of voltage at unit{0} timestamps'.format(unit))
+    cbar = fig.colorbar(cbar_map, ax=ax)
+    cbar.set_label('V', rotation=90)
+    return fig
+    
