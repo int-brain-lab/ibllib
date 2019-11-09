@@ -156,7 +156,7 @@ def create_compress_video_flags(root_data_folder, flag_name='compress_video.flag
             write_flag_file(flag_file, file_list=str(vfile.relative_to(ses_path)), clobber=clobber)
 
 
-def create_compress_audio_flags(root_data_folder, flag_name):
+def create_audio_flags(root_data_folder, flag_name):
     # audio flags could be audio_ephys.flag, audio_training.flag
     if flag_name not in ['audio_ephys.flag', 'audio_training.flag']:
         raise ValueError('Flag name should be audio_ephys.flag or audio_training.flag')
