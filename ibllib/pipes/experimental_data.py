@@ -55,13 +55,13 @@ def _compress(root_data_folder, command, flag_pattern, dry=False, max_sessions=N
                 with open(cfile.parent.joinpath('extract.error'), 'w+') as fid:
                     fid.write(command2run)
                     fid.write(error.decode())
-                continue
-            # if the command was successful delete the original file
-            cfile.unlink()
-            # then remove the file from the compress flag file
-            flags.excise_flag_file(flag_file, removed_files=f2c)
-            # and add the file to register_me.flag
-            flags.write_flag_file(ses_path.joinpath('register_me.flag'), file_list=cfile.stem)
+            else:
+                # if the command was successful delete the original file
+                cfile.unlink()
+                # then remove the file from the compress flag file
+                flags.excise_flag_file(flag_file, removed_files=f2c)
+                # and add the file to register_me.flag
+                flags.write_flag_file(ses_path.joinpath('register_me.flag'), file_list=cfile.stem)
 
 
 def create(root_data_folder, dry=False, one=None):
