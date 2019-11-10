@@ -150,8 +150,7 @@ def feat_cutoff(spks, unit, feat_name='amps', **kwargs):
         # Plot histogram and pdf of the spike amplitude distribution.
         >>> bb.plot.feat_cutoff(spks, 1)
     '''
-    import pdb
-    pdb.set_trace()
+
     # Set keyword input args if given:
     default_args = {
                 'spks_per_bin': 20,
@@ -182,3 +181,67 @@ def feat_cutoff(spks, unit, feat_name='amps', **kwargs):
     fraction_missing = np.sum(pdf[cutoff_idx:]) / np.sum(pdf)
 
     return fraction_missing, cutoff_idx, pdf
+
+def wf_similarity(wf1, wf2):
+    ''' 
+    Calculates a unit normalized spatiotemporal similarity score between two sets of waveforms. 
+    This score is based on how waveform shape correlates for each pair of spikes between the
+    two sets of waveforms across space and time. The shapes of the arrays of the two sets of 
+    waveforms must be equal.
+
+    Parameters
+    ----------
+    wf1 : ndarray
+        An array of shape (#spikes, #samples, #channels).
+    wf2 : ndarray
+        An array of shape (#spikes, #samples, #channels).
+
+    Returns
+    -------
+    s: float
+        The unit normalized spatiotemporal similarity score.
+
+    See Also
+    --------
+    plot.feat_cutoff
+
+    Examples
+    --------
+    1) Determine the similarity between the first last 100 waveforms for unit1, across the 20
+    channels around the channel of max amplitude.
+        >>> import brainbox as bb
+        >>> import alf.io as aio
+        >>> import ibllib.ephys.spikes as e_spks
+        # Get a spikes bunch, a clusters bunch, compute a units bunch, and get two sets of 
+        # waveforms for unit1.
+        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
+        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
+        >>> clstrs = aio.load_object('path\\to\\alf_output', 'clusters')
+        >>> max_ch = max_ch = clstrs['channels'][1]
+        >>> ch = np.arange(max_ch - 10, max_ch + 10)
+        >>> units = bb.processing.get_units_bunch(spks)
+        >>> ts1 = units['times']['1'][:100]
+        >>> ts2 = units['times']['1'][-100:]
+        >>> wf1 = bb.io.extract_waveforms('path\\to\\ephys_bin_file', ts1, ch)
+        >>> wf2 = bb.io.extract_waveforms('path\\to\\ephys_bin_file', ts1, ch)
+        >>> s = bb.metrics.wf_similarity(wf1, wf2)
+    '''
+    import warnings
+    warnings.filterwarnings('ignore', r'invalid value encountered in true_divide')
+    assert wf1.shape==wf2.shape,'The shapes of the sets of waveforms are inconsistent'
+    n_spks = wf1.shape[0]
+    n_samples = wf1.shape[1]
+    n_ch = wf1.shape[2]
+    # Create a matrix which will hold the similarity values of each spike in `wf1` to `wf2`
+    similarity_matrix = np.zeros((n_spks, n_spks))
+    # Iterate over both sets of spikes, computing `s` for each pair
+    for spk1 in range(n_spks):
+        for spk2 in range(n_spks):
+            s_spk = np.sum( np.nan_to_num( \
+                       wf1[spk1,:,:] * wf2[spk2,:,:] / \
+                       np.sqrt( wf1[spk1,:,:]**2 * wf2[spk2,:,:]**2 ) ) ) / \
+                       (n_samples * n_ch)
+            similarity_matrix[spk1, spk2] = s_spk
+    # Return mean of similarity matrix
+    s = np.mean(similarity_matrix)
+    return s
