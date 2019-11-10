@@ -1,6 +1,7 @@
 import numpy as np
 import os.path as op
 
+
 def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='int16', offset=0, \
                       car=True):
     '''

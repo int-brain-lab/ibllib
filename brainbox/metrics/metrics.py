@@ -1,10 +1,6 @@
 """
-Contains metrics for assessing quality of single units. Currently requires that this single unit
-data comes from kilosort (https://github.com/mouseLand/Kilosort2) output.
-
-Todo: generalize to units that are obtained from any spike sorter.
+Metrics for assessing quality of single units.
 """
-
 import brainbox as bb
 import numpy as np
 import scipy.stats as stats
@@ -13,9 +9,10 @@ import scipy.ndimage.filters as filters
 ## `git clone https://github.com/SpikeInterface/spikemetrics`
 #import spikemetrics as sm
 
-def unit_stability(spks, features=['amps'], dist='norm', test='ks'):
+
+def unit_stability(spks, feat_names=['amps'], dist='norm', test='ks'):
     '''
-    Determines the probability that the empirical spike feature distribution(s), for specified 
+    Computes the probability that the empirical spike feature distribution(s), for specified 
     feature(s), for all units, comes from a specific theoretical distribution, based on a specified 
     statistical test. Also calculates the variances of the spike feature(s) for all units.
 
@@ -24,7 +21,7 @@ def unit_stability(spks, features=['amps'], dist='norm', test='ks'):
     spks : bunch
         A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
         etc.) for each unit.
-    features : list of strings (optional)
+    feat_names : list of strings (optional)
         A list of names of spike features that can be found in `spks` to specify which features to
         use for calculating unit stability.
     dist : string (optional)
@@ -37,11 +34,11 @@ def unit_stability(spks, features=['amps'], dist='norm', test='ks'):
     Returns
     -------
     p_vals : bunch
-        A bunch with `features` as keys, containing a ndarray with p-values (the probabilities that
-        the empirical spike feature distribution for each unit comes from `dist` based on `test`)
-        for each unit for all features.
+        A bunch with `feat_names` as keys, containing a ndarray with p-values (the probabilities
+        that the empirical spike feature distribution for each unit comes from `dist` based on
+        `test`) for each unit for all `feat_names`.
     variances : bunch
-        A bunch with `features` as keys, containing a ndarray with the variances of each unit's 
+        A bunch with `feat_names` as keys, containing a ndarray with the variances of each unit's 
         empirical spike feature distribution for all features.
 
     See Also
@@ -70,7 +67,7 @@ def unit_stability(spks, features=['amps'], dist='norm', test='ks'):
     '''
 
     # Get units bunch and number of units.
-    units = bb.processing.get_units_bunch(spks, features)
+    units = bb.processing.get_units_bunch(spks, feat_names)
     num_units = np.max(spks['clusters']) + 1
     # Initialize `p_vals` and `variances`.
     p_vals = bb.core.Bunch()
@@ -84,7 +81,7 @@ def unit_stability(spks, features=['amps'], dist='norm', test='ks'):
     # p-values and variances, and add them as keys to the respective bunches `p_vals_feat` and
     # `variances_feat`. After iterating through all units, add these bunches as keys to their
     # respective parent bunches, `p_vals` and `variances`.
-    for feat in features:
+    for feat in feat_names:
         p_vals_feat = bb.core.Bunch((str(unit),0) for unit in np.arange(0,num_units))
         variances_feat = bb.core.Bunch((str(unit),0) for unit in np.arange(0,num_units))
         unit = 0
@@ -108,7 +105,7 @@ def unit_stability(spks, features=['amps'], dist='norm', test='ks'):
 
 def feat_cutoff(spks, unit, feat_name='amps', **kwargs):
     ''' 
-    Determines approximate fraction of spikes missing from a spike feature distribution for a 
+    Computes approximate fraction of spikes missing from a spike feature distribution for a 
     given unit, assuming the distribution is symmetric. 
     
     Inspired by metric described in Hill et al. (2011) J Neurosci 31: 8699-8705.
@@ -133,7 +130,12 @@ def feat_cutoff(spks, unit, feat_name='amps', **kwargs):
     fraction_missing : float
         The fraction of missing spikes (0-0.5). *Note: If more than 50% of spikes are missing, an
         accurate estimate isn't possible.
-
+    pdf : ndarray
+        The computed pdf of the spike feature histogram.
+    cutoff_idx : int
+        The index for `pdf` at which point `pdf` is no longer symmetrical around the peak. (This
+        is returned for plotting purposes).
+        
     See Also
     --------
     plot.feat_cutoff
@@ -180,11 +182,11 @@ def feat_cutoff(spks, unit, feat_name='amps', **kwargs):
     # symmetric around peak)
     fraction_missing = np.sum(pdf[cutoff_idx:]) / np.sum(pdf)
 
-    return fraction_missing, cutoff_idx, pdf
+    return fraction_missing, pdf, cutoff_idx
 
 def wf_similarity(wf1, wf2):
     ''' 
-    Calculates a unit normalized spatiotemporal similarity score between two sets of waveforms. 
+    Computes a unit normalized spatiotemporal similarity score between two sets of waveforms. 
     This score is based on how waveform shape correlates for each pair of spikes between the
     two sets of waveforms across space and time. The shapes of the arrays of the two sets of 
     waveforms must be equal.
@@ -203,17 +205,19 @@ def wf_similarity(wf1, wf2):
 
     See Also
     --------
-    plot.feat_cutoff
+    io.extract_waveforms
+    plot.single_unit_wf_comp
 
     Examples
     --------
-    1) Determine the similarity between the first last 100 waveforms for unit1, across the 20
+    1) Compute the similarity between the first and last 100 waveforms for unit1, across the 20
     channels around the channel of max amplitude.
         >>> import brainbox as bb
         >>> import alf.io as aio
         >>> import ibllib.ephys.spikes as e_spks
-        # Get a spikes bunch, a clusters bunch, compute a units bunch, and get two sets of 
-        # waveforms for unit1.
+        # Get a spikes bunch, a clusters bunch, a units bunch, the channels around the max amp
+        # channel for the unit, two sets of timestamps for the units, and the two corresponding
+        # sets of waveforms for those two sets of timestamps. Then compute `s`.
         >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
         >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
         >>> clstrs = aio.load_object('path\\to\\alf_output', 'clusters')
@@ -245,3 +249,62 @@ def wf_similarity(wf1, wf2):
     # Return mean of similarity matrix
     s = np.mean(similarity_matrix)
     return s
+
+
+def firing_rate_coeff_var(spks, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins=10):
+    '''
+    Computes the coefficient of variation of the firing rate: the ratio of the biased standard
+    deviation to the mean.
+    
+    Parameters
+    ----------
+    spks : bunch
+        A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
+        etc.) for each unit.
+    unit : int
+        The unit number for which to calculate the firing rate.
+    t : str or pair of floats
+        The total time period for which the instantaneous firing rate is returned. Default: the 
+        time period from `unit`'s first to last spike.
+    hist_win : float
+        The time window (in s) to use for computing spike counts.
+    fr_win : float
+        The time window (in s) to use as a moving slider to compute the instantaneous firing rate.
+    n_bins : int
+        The number of bins in which to compute a coefficient of variation of the firing rate.
+
+    Returns
+    -------
+    cv: float
+        The mean coefficient of variation of the firing rate of the `n_bins` number of coefficients 
+        computed.
+    cvs: ndarray
+        The coefficients of variation of the firing for each bin of `n_bins`.
+    fr: ndarray
+        The instantaneous firing rate over time (in hz).
+
+    See Also
+    --------
+    singlecell.firing_rate
+    plot.firing_rate
+
+    Examples
+    --------
+    1) Compute the coefficient of variation of the firing rate for unit1 from the time of its 
+    first to last spike.
+        >>> import brainbox as bb
+        >>> import alf.io as aio
+        >>> import ibllib.ephys.spikes as e_spks
+        # Get a spikes bunch and calculate the firing rate.
+        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
+        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
+        >>> cv = metrics.firing_rate_coeff_var(spks, 1)
+    '''
+    fr = bb.singlecell.firing_rate(spks, unit, t=t, hist_win=hist_win, fr_win=fr_win, \
+                                   n_bins=n_bins)
+    bin_sz = np.int(fr.size / n_bins)
+    fr_binned = np.array([fr[(b * bin_sz):(b * bin_sz + bin_sz)] for b in range(n_bins)])
+    cvs = np.std(fr_binned, axis=1) / np.mean(fr_binned, axis=1)
+    cv = np.mean(cvs)
+    return cv, cvs, fr
+    

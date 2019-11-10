@@ -1,6 +1,6 @@
 """
-Plots metrics that assess quality of single units. Contains plotting functions for the output of
-functions in the brainbox `metrics.py` module.
+Plots metrics that assess quality of single units. Some functions here generate plots for the
+output of functions in the brainbox `metrics.py` module.
 """
 
 import brainbox as bb
@@ -8,7 +8,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os.path as op
 
-def feat_vars(spks, feat_name='amps', cmap_name='coolwarm'):
+
+def feat_vars(spks, feat_name='amps', dist='norm', test='ks', cmap_name='coolwarm'):
     '''
     Plots the variances of a particular spike feature for all units as a bar plot, where each bar
     is color-coded corresponding to the depth of the max amplitude channel of the respective unit.
@@ -20,6 +21,12 @@ def feat_vars(spks, feat_name='amps', cmap_name='coolwarm'):
         etc.) for each unit.
     feat_name : string (optional)
         The spike feature to plot.
+    dist : string (optional)
+        The type of hypothetical null distribution from which the empirical spike feature 
+        distributions are presumed to belong to.
+    test : string (optional)
+        The statistical test used to calculate the probability that the empirical spike feature
+        distributions come from `dist`.
     cmap_name : string (optional)
         The name of the colormap associated with the plot.
 
@@ -27,6 +34,11 @@ def feat_vars(spks, feat_name='amps', cmap_name='coolwarm'):
     -------
     fig : figure
         A figure object containing the plot.
+    var_vals : ndarray
+        Contains the variances of `feat_name` for each unit.
+    p_vals : ndarray
+        Contains the probabilites that the distribution for `feat_name` for each unit comes from a
+        `dist` distribution based on the `test` statistical test.
 
     See Also
     --------
@@ -45,8 +57,9 @@ def feat_vars(spks, feat_name='amps', cmap_name='coolwarm'):
     
     # Get units bunch and calculate variances.
     units = bb.processing.get_units_bunch(spks)
-    p_vals, variances = bb.metrics.unit_stability(spks, features=[feat_name])
-    var_vals = tuple(variances['amps'].values())
+    p_vals, variances = bb.metrics.unit_stability(spks, features=[feat_name], dist=dist, test=test)
+    var_vals = np.array(tuple(variances[feat_name].values()))
+    p_vals = np.array(tuple(p_vals[feat_name].values()))
     # Specify bad units (i.e. missing unit numbers from spike sorter output).
     num_units = np.max(spks['clusters']) + 1
     bad_units = np.where(np.isnan(var_vals))
@@ -69,7 +82,8 @@ def feat_vars(spks, feat_name='amps', cmap_name='coolwarm'):
     ax.set_xlabel('unit number')
     ax.set_ylabel('variance')
     cbar.set_label('depth', rotation=0)
-    return fig
+    return fig, var_vals, p_vals
+
 
 def feat_cutoff(spks, unit, feat_name='amps', **kwargs):
     '''
@@ -96,6 +110,9 @@ def feat_cutoff(spks, unit, feat_name='amps', **kwargs):
     -------
     fig : figure
         A figure object containing the plot.
+    fraction_missing : float
+        The fraction of missing spikes (0-0.5). *Note: If more than 50% of spikes are missing, an
+        accurate estimate isn't possible.
     
     See Also
     --------
@@ -123,7 +140,7 @@ def feat_cutoff(spks, unit, feat_name='amps', **kwargs):
     spks_per_bin = new_args['spks_per_bin']
     sigma = new_args['sigma']
     # Calculate and plot the feature distribution histogram and pdf with symmetric cutoff:
-    fraction_missing, cutoff_idx, pdf = \
+    fraction_missing, pdf, cutoff_idx = \
         bb.metrics.feat_cutoff(spks, feat_name, unit, spks_per_bin=spks_per_bin, sigma=sigma)
     fig, ax = plt.subplots(nrows=1, ncols=2)
     units = bb.processing.get_units_bunch(spks, [feat_name])
@@ -139,7 +156,8 @@ def feat_cutoff(spks, unit, feat_name='amps', **kwargs):
     ax[1].set_ylabel('density')
     ax[1].set_title('cutoff of pdf at end of symmetry around peak\n' \
                     '(estimated {:.2f}% missing spikes)'.format(fraction_missing*100))
-    return fig
+    return fig, fraction_missing
+
 
 def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts2='end', \
                         n_spks=100, sr=30000, n_ch_probe=385, dtype='int16', car=True, \
@@ -185,6 +203,10 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
     -------
     fig : figure
         A figure object containing the plot.
+    wf1 : ndarray
+        The waveforms for the spikes in `ts1`: an array of shape (#spikes, #samples, #channels).
+    wf2 : ndarray
+        The waveforms for the spikes in `ts2`: an array of shape (#spikes, #samples, #channels).
     
     See Also
     --------
@@ -230,12 +252,14 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
         ax[cur_ax][0].set_ylabel('Ch {0}'.format(cur_ch))
     ax[0][1].legend(['1st spike set', '2nd spike set'])
     fig.suptitle('comparison of waveforms from two sets of spikes for unit{0}'.format(unit))        
-    return fig
-    
+    return fig, wf1, wf2
+
+ 
 def amp_heatmap(ephys_file, spks, clstrs, unit, t='all', n_ch=20, sr=30000, n_ch_probe=385, \
                 dtype='int16', cmap_name='RdBu', car=True):
     '''
-    Plots a heatmap of the amplitudes over space and time for a particular unit, after (optionally) 
+    Plots a heatmap of the normalized voltage values over space and time at the timestamps of a 
+    particular unit over a specified number of channels, after (optionally) 
     common-average-referencing.
 
     Parameters
@@ -269,6 +293,8 @@ def amp_heatmap(ephys_file, spks, clstrs, unit, t='all', n_ch=20, sr=30000, n_ch
     -------
     fig : figure
         A figure object containing the plot.
+    v_vals_norm : ndarray
+        The unit-normalized voltage values displayed in `fig`.
    
     Examples
     --------
@@ -313,8 +339,9 @@ def amp_heatmap(ephys_file, spks, clstrs, unit, t='all', n_ch=20, sr=30000, n_ch
         v_vals -= noise_t[max_amp_samples - max_amp_samples[0], None]
         v_vals -= noise_s[None, :]
     # Plot heatmap.
+    v_vals_norm = (v_vals / np.max(abs(v_vals))).T
     fig, ax = plt.subplots()
-    cbar_map = ax.imshow((v_vals/np.max(abs(v_vals))).T, cmap=cmap_name, aspect='auto', \
+    cbar_map = ax.imshow(v_vals_norm, cmap=cmap_name, aspect='auto', \
                          extent=[ts[0], ts[-1], ch[0], ch[-1]], origin='lower')
     ax.set_yticks(np.arange(ch[0], ch[-1], 5))
     ax.set_ylabel('channel numbers')
@@ -322,5 +349,84 @@ def amp_heatmap(ephys_file, spks, clstrs, unit, t='all', n_ch=20, sr=30000, n_ch
     ax.set_title('heatmap of voltage at unit{0} timestamps'.format(unit))
     cbar = fig.colorbar(cbar_map, ax=ax)
     cbar.set_label('V', rotation=90)
-    return fig
+    return fig, v_vals_norm
+
+
+def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins=10, show_fr_cv=True):
+    '''
+    Plots the instantaneous firing rate of a unit over time, and optionally overlays the value of
+    the coefficient of variation of the firing rate for a specified number of bins.
+
+    Parameters
+    ----------
+    spks : bunch
+        A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
+        etc.) for each unit.
+    unit : int
+        The unit number for which to calculate the firing rate.
+    t : str or pair of floats
+        The total time period for which the instantaneous firing rate is returned. Default: the 
+        time period from `unit`'s first to last spike.
+    hist_win : float
+        The time window (in s) to use for computing spike counts.
+    fr_win : float
+        The time window (in s) to use as a moving slider to compute the instantaneous firing rate.
+    n_bins : int
+        The number of bins in which to compute coefficients of variation of the firing rate.
+    show_fr_cv : bool
+        A flag for whether or not to compute and show the coefficients of variation of the firing
+        rate for `n_bins`.
+
+    Returns
+    -------
+    fig : figure
+        A figure object containing the plot.
+    fr: ndarray
+        The instantaneous firing rate over time (in hz).
+    cv: float
+        The mean coefficient of variation of the firing rate of the `n_bins` number of coefficients 
+        computed. Can only be returned if `show_fr_cv` is True.
+    cvs: ndarray
+        The coefficients of variation of the firing for each bin of `n_bins`. Can only be returned 
+        if `show_fr_cv` is True.
+
+    See Also
+    --------
+    metrics.firing_rate_coeff_var
+    singecell.firing_rate
+
+    Examples
+    --------
+    1) Plot the firing rate for unit1 from the time of its first to last spike.
+        >>> import brainbox as bb
+        >>> import alf.io as aio
+        >>> import ibllib.ephys.spikes as e_spks
+        # Get a spikes bunch and calculate the firing rate.
+        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
+        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
+        >>> plot.firing_rate(spks, 1)
+    '''
+    fig, ax = plt.subplots()
+    if not(show_fr_cv):  # compute just the firing rate
+        fr = bb.singlecell.firing_rate(spks, unit, t=t, hist_win=hist_win, fr_win=fr_win)
+    else :  # compute firing rate and coefficients of variation
+        cv, cvs, fr = bb.metrics.firing_rate_coeff_var(spks, unit, t=t, hist_win=hist_win, \
+                                                        fr_win=fr_win, n_bins=n_bins)
+    x = np.arange(fr.size)*hist_win
+    ax.plot(x, fr)
+    ax.set_title('Firing Rate for Unit {0}'.format(unit))
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Rate (s$^-1$)')
     
+    if not(show_fr_cv):
+        return fig, fr
+    else:  # show coefficients of variation
+        y_max = np.max(fr)*1.05
+        x_l = x[np.int(x.size/n_bins)]
+        # Plot vertical lines separating plots into `n_bins`.
+        [ax.vlines((x_l * i), 0, y_max, linestyles='dashed', linewidth=2) \
+         for i in range(1, n_bins)]
+        # Plot text with cv of firing rate for each bin.
+        [ax.text(x_l * (i + 1), y_max, 'cv={0:.2f}'.format(cvs[i]), fontsize=9, ha='right') \
+         for i in range(n_bins)]
+        

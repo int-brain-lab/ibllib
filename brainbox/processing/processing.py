@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from scipy import interpolate
 
+
 def sync(dt, times=None, values=None, timeseries=None, offsets=None, interp='zero',
          fillval=np.nan):
     """
