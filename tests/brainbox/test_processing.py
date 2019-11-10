@@ -92,10 +92,10 @@ class TestProcessing(unittest.TestCase):
         y = np.array([4, 2, 2, 1, 1, 0, 0, 0])
         r, xscale, yscale = processing.bincount2D(x, y)
         self.assertTrue(np.all(xscale == yscale) and np.all(xscale == np.array([0, 1, 2, 4])))
-        
-        
-    def test_get_unit_bunches(self):
-        pass
+
+
+def test_get_unit_bunches():
+    pass
 
 
 if __name__ == "__main__":

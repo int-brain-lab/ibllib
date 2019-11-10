@@ -29,7 +29,7 @@ def acorr(spike_times, bin_size=None, window_size=None):
 def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5):
     '''
     Computes the instantaneous firing rate of a unit over time by computing a histogram of spike
-    counts over a specified window of time, and summing this histogram over a sliding window of 
+    counts over a specified window of time, and summing this histogram over a sliding window of
     specified time over a specified period of total time.
 
     Parameters
@@ -40,7 +40,7 @@ def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5):
     unit : int
         The unit number for which to calculate the firing rate.
     t : str or pair of floats
-        The total time period for which the instantaneous firing rate is returned. Default: the 
+        The total time period for which the instantaneous firing rate is returned. Default: the
         time period from `unit`'s first to last spike.
     hist_win : float
         The time window (in s) to use for computing spike counts.
@@ -51,7 +51,7 @@ def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5):
     -------
     fr : ndarray
         The instantaneous firing rate over time (in hz).
-    
+
     See Also
     --------
     metrics.firing_rate_coeff_var
@@ -68,9 +68,9 @@ def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5):
         >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
         >>> fr = singlecell.firing_rate(spks, 1)
     '''
-    
+
     # Get unit timestamps.
-    unit_idxs = np.where(spks['clusters']==unit)
+    unit_idxs = np.where(spks['clusters'] == unit)
     ts = ts = spks['times'][unit_idxs]
     if t != 'all':
         t_first = np.where(ts > t[0])[0][0]
@@ -83,8 +83,6 @@ def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5):
     # Compute moving average of spike counts to get instantaneous firing rate in s.
     n_bins_fr = np.int(t_tot / fr_win)
     step_sz = np.int(len(counts) / n_bins_fr)
-    fr = np.array( [np.sum(counts[step:(step + step_sz)]) \
-                    for step in range(len(counts)-step_sz)] ) / fr_win
+    fr = np.array([np.sum(counts[step:(step + step_sz)])
+                   for step in range(len(counts) - step_sz)]) / fr_win
     return fr
-    
-    

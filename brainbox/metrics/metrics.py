@@ -5,15 +5,14 @@ import brainbox as bb
 import numpy as np
 import scipy.stats as stats
 import scipy.ndimage.filters as filters
-## install via `pip install spikemetrics` or 
-## `git clone https://github.com/SpikeInterface/spikemetrics`
-#import spikemetrics as sm
+# add spikemetrics as dependency?
+# import spikemetrics as sm
 
 
 def unit_stability(spks, feat_names=['amps'], dist='norm', test='ks'):
     '''
-    Computes the probability that the empirical spike feature distribution(s), for specified 
-    feature(s), for all units, comes from a specific theoretical distribution, based on a specified 
+    Computes the probability that the empirical spike feature distribution(s), for specified
+    feature(s), for all units, comes from a specific theoretical distribution, based on a specified
     statistical test. Also calculates the variances of the spike feature(s) for all units.
 
     Parameters
@@ -25,7 +24,7 @@ def unit_stability(spks, feat_names=['amps'], dist='norm', test='ks'):
         A list of names of spike features that can be found in `spks` to specify which features to
         use for calculating unit stability.
     dist : string (optional)
-        The type of hypothetical null distribution from which the empirical spike feature 
+        The type of hypothetical null distribution from which the empirical spike feature
         distributions are presumed to belong to.
     test : string (optional)
         The statistical test used to calculate the probability that the empirical spike feature
@@ -38,7 +37,7 @@ def unit_stability(spks, feat_names=['amps'], dist='norm', test='ks'):
         that the empirical spike feature distribution for each unit comes from `dist` based on
         `test`) for each unit for all `feat_names`.
     variances : bunch
-        A bunch with `feat_names` as keys, containing a ndarray with the variances of each unit's 
+        A bunch with `feat_names` as keys, containing a ndarray with the variances of each unit's
         empirical spike feature distribution for all features.
 
     See Also
@@ -49,8 +48,8 @@ def unit_stability(spks, feat_names=['amps'], dist='norm', test='ks'):
     --------
     1) Compute 1) the p-values obtained from running a one-sample ks test on the spike amplitudes
     for each unit, and 2) the variances of the empirical spike amplitudes distribution for each
-    unit. Create a histogram of the variances of the spike amplitudes for each unit, color-coded by 
-    depth of channel of max amplitudes. Get cluster IDs of those units which have variances greater 
+    unit. Create a histogram of the variances of the spike amplitudes for each unit, color-coded by
+    depth of channel of max amplitudes. Get cluster IDs of those units which have variances greater
     than 50.
         >>> import brainbox as bb
         >>> import alf.io as aio
@@ -71,23 +70,24 @@ def unit_stability(spks, feat_names=['amps'], dist='norm', test='ks'):
     num_units = np.max(spks['clusters']) + 1
     # Initialize `p_vals` and `variances`.
     p_vals = bb.core.Bunch()
-    variances = bb.core.Bunch()  
+    variances = bb.core.Bunch()
     # Set the test as a lambda function (in future, more tests can be added to this dict)
-    tests = {
-             'ks' : lambda x,y: stats.kstest(x,y)
-             }
+    tests = \
+        {
+            'ks': lambda x, y: stats.kstest(x, y)
+        }
     test_fun = tests.get(test)
     # Compute the statistical tests and variances. For each feature, iteratively get each unit's
     # p-values and variances, and add them as keys to the respective bunches `p_vals_feat` and
     # `variances_feat`. After iterating through all units, add these bunches as keys to their
     # respective parent bunches, `p_vals` and `variances`.
     for feat in feat_names:
-        p_vals_feat = bb.core.Bunch((str(unit),0) for unit in np.arange(0,num_units))
-        variances_feat = bb.core.Bunch((str(unit),0) for unit in np.arange(0,num_units))
+        p_vals_feat = bb.core.Bunch((str(unit), 0) for unit in np.arange(0, num_units))
+        variances_feat = bb.core.Bunch((str(unit), 0) for unit in np.arange(0, num_units))
         unit = 0
         while unit < num_units:
             # If we're missing units/features, create a NaN placeholder and skip them:
-            if units[feat][str(unit)].size==0:
+            if units[feat][str(unit)].size == 0:
                 p_val = np.nan
                 var = np.nan
             else:
@@ -97,17 +97,17 @@ def unit_stability(spks, feat_names=['amps'], dist='norm', test='ks'):
             # Append current unit's values to list of units' values for current feature:
             p_vals_feat[str(unit)] = p_val
             variances_feat[str(unit)] = var
-            unit+=1
+            unit += 1
         p_vals[feat] = p_vals_feat
         variances[feat] = variances_feat
     return p_vals, variances
 
 
 def feat_cutoff(spks, unit, feat_name='amps', **kwargs):
-    ''' 
-    Computes approximate fraction of spikes missing from a spike feature distribution for a 
-    given unit, assuming the distribution is symmetric. 
-    
+    '''
+    Computes approximate fraction of spikes missing from a spike feature distribution for a
+    given unit, assuming the distribution is symmetric.
+
     Inspired by metric described in Hill et al. (2011) J Neurosci 31: 8699-8705.
 
     Parameters
@@ -135,14 +135,14 @@ def feat_cutoff(spks, unit, feat_name='amps', **kwargs):
     cutoff_idx : int
         The index for `pdf` at which point `pdf` is no longer symmetrical around the peak. (This
         is returned for plotting purposes).
-        
+
     See Also
     --------
     plot.feat_cutoff
 
     Examples
     --------
-    1) Determine the fraction of spikes missing from a unit based on the recorded unit's spike 
+    1) Determine the fraction of spikes missing from a unit based on the recorded unit's spike
     amplitudes, assuming the distribution of the unit's spike amplitudes is symmetric.
         >>> import brainbox as bb
         >>> import alf.io as aio
@@ -154,10 +154,11 @@ def feat_cutoff(spks, unit, feat_name='amps', **kwargs):
     '''
 
     # Set keyword input args if given:
-    default_args = {
-                'spks_per_bin': 20,
-                'sigma': 5
-                }
+    default_args = \
+        {
+            'spks_per_bin': 20,
+            'sigma': 5
+        }
     new_args = {**default_args, **kwargs}
     spks_per_bin = new_args['spks_per_bin']
     sigma = new_args['sigma']
@@ -165,8 +166,8 @@ def feat_cutoff(spks, unit, feat_name='amps', **kwargs):
     units = bb.processing.get_units_bunch(spks, [feat_name])
     feature = units[feat_name][str(unit)]
     error_str = 'The number of spikes in this unit is {0}, ' \
-                'but it must be at least {1}'.format(feature.size, spks_per_bin*min_num_bins)
-    assert (feature.size>spks_per_bin*min_num_bins),error_str
+                'but it must be at least {1}'.format(feature.size, spks_per_bin * min_num_bins)
+    assert (feature.size > (spks_per_bin * min_num_bins)), error_str
 
     # Calculate the spike feature histogram and pdf:
     num_bins = np.int(feature.size / spks_per_bin)
@@ -175,20 +176,21 @@ def feat_cutoff(spks, unit, feat_name='amps', **kwargs):
 
     # Find where the distribution stops being symmetric around the peak:
     peak_idx = np.argmax(pdf)
-    max_idx_sym_around_peak =  np.argmin(np.abs(pdf[peak_idx:] - pdf[0]))
+    max_idx_sym_around_peak = np.argmin(np.abs(pdf[peak_idx:] - pdf[0]))
     cutoff_idx = peak_idx + max_idx_sym_around_peak
-    
-    # Calculate fraction missing from the tail of the pdf (the area where pdf stops being 
+
+    # Calculate fraction missing from the tail of the pdf (the area where pdf stops being
     # symmetric around peak)
     fraction_missing = np.sum(pdf[cutoff_idx:]) / np.sum(pdf)
 
     return fraction_missing, pdf, cutoff_idx
 
+
 def wf_similarity(wf1, wf2):
-    ''' 
-    Computes a unit normalized spatiotemporal similarity score between two sets of waveforms. 
+    '''
+    Computes a unit normalized spatiotemporal similarity score between two sets of waveforms.
     This score is based on how waveform shape correlates for each pair of spikes between the
-    two sets of waveforms across space and time. The shapes of the arrays of the two sets of 
+    two sets of waveforms across space and time. The shapes of the arrays of the two sets of
     waveforms must be equal.
 
     Parameters
@@ -230,9 +232,10 @@ def wf_similarity(wf1, wf2):
         >>> wf2 = bb.io.extract_waveforms('path\\to\\ephys_bin_file', ts1, ch)
         >>> s = bb.metrics.wf_similarity(wf1, wf2)
     '''
+
     import warnings
     warnings.filterwarnings('ignore', r'invalid value encountered in true_divide')
-    assert wf1.shape==wf2.shape,'The shapes of the sets of waveforms are inconsistent'
+    assert wf1.shape == wf2.shape, 'The shapes of the sets of waveforms are inconsistent'
     n_spks = wf1.shape[0]
     n_samples = wf1.shape[1]
     n_ch = wf1.shape[2]
@@ -241,10 +244,10 @@ def wf_similarity(wf1, wf2):
     # Iterate over both sets of spikes, computing `s` for each pair
     for spk1 in range(n_spks):
         for spk2 in range(n_spks):
-            s_spk = np.sum( np.nan_to_num( \
-                       wf1[spk1,:,:] * wf2[spk2,:,:] / \
-                       np.sqrt( wf1[spk1,:,:]**2 * wf2[spk2,:,:]**2 ) ) ) / \
-                       (n_samples * n_ch)
+            s_spk = \
+                np.sum(np.nan_to_num(
+                    wf1[spk1, :, :] * wf2[spk2, :, :] /
+                    np.sqrt(wf1[spk1, :, :]**2 * wf2[spk2, :, :]**2))) / (n_samples * n_ch)
             similarity_matrix[spk1, spk2] = s_spk
     # Return mean of similarity matrix
     s = np.mean(similarity_matrix)
@@ -255,7 +258,7 @@ def firing_rate_coeff_var(spks, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins
     '''
     Computes the coefficient of variation of the firing rate: the ratio of the biased standard
     deviation to the mean.
-    
+
     Parameters
     ----------
     spks : bunch
@@ -264,7 +267,7 @@ def firing_rate_coeff_var(spks, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins
     unit : int
         The unit number for which to calculate the firing rate.
     t : str or pair of floats
-        The total time period for which the instantaneous firing rate is returned. Default: the 
+        The total time period for which the instantaneous firing rate is returned. Default: the
         time period from `unit`'s first to last spike.
     hist_win : float
         The time window (in s) to use for computing spike counts.
@@ -276,7 +279,7 @@ def firing_rate_coeff_var(spks, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins
     Returns
     -------
     cv: float
-        The mean coefficient of variation of the firing rate of the `n_bins` number of coefficients 
+        The mean coefficient of variation of the firing rate of the `n_bins` number of coefficients
         computed.
     cvs: ndarray
         The coefficients of variation of the firing for each bin of `n_bins`.
@@ -290,7 +293,7 @@ def firing_rate_coeff_var(spks, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins
 
     Examples
     --------
-    1) Compute the coefficient of variation of the firing rate for unit1 from the time of its 
+    1) Compute the coefficient of variation of the firing rate for unit1 from the time of its
     first to last spike.
         >>> import brainbox as bb
         >>> import alf.io as aio
@@ -300,11 +303,11 @@ def firing_rate_coeff_var(spks, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins
         >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
         >>> cv = metrics.firing_rate_coeff_var(spks, 1)
     '''
-    fr = bb.singlecell.firing_rate(spks, unit, t=t, hist_win=hist_win, fr_win=fr_win, \
+
+    fr = bb.singlecell.firing_rate(spks, unit, t=t, hist_win=hist_win, fr_win=fr_win,
                                    n_bins=n_bins)
     bin_sz = np.int(fr.size / n_bins)
     fr_binned = np.array([fr[(b * bin_sz):(b * bin_sz + bin_sz)] for b in range(n_bins)])
     cvs = np.std(fr_binned, axis=1) / np.mean(fr_binned, axis=1)
     cv = np.mean(cvs)
     return cv, cvs, fr
-    

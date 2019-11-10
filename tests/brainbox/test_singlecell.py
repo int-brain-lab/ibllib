@@ -17,6 +17,10 @@ class TestPopulation(unittest.TestCase):
         self.assertTrue(np.allclose(c, c_expected))
 
 
+def test_firing_rate():
+    pass
+
+
 if __name__ == "__main__":
     np.random.seed(0)
     unittest.main(exit=False)

@@ -185,7 +185,7 @@ def bin_spikes(spikes, binsize, interval_indices=False):
 def get_units_bunch(spks, *args):
     '''
     Returns a bunch, where the bunch keys are keys from `spks` of labels of spike information (e.g.
-    unit IDs, times, features, etc.), and the values for each key are arrays with values for each 
+    unit IDs, times, features, etc.), and the values for each key are arrays with values for each
     unit. The arrays for each key are ordered by unit ID.
 
 
@@ -202,13 +202,13 @@ def get_units_bunch(spks, *args):
     Returns
     -------
     units : bunch
-        A bunch with keys of labels of spike information (e.g. cluster IDs, times, features, etc.) 
-        whose values are arrays that hold values for each unit. The arrays for each key are ordered 
+        A bunch with keys of labels of spike information (e.g. cluster IDs, times, features, etc.)
+        whose values are arrays that hold values for each unit. The arrays for each key are ordered
         by unit ID.
 
     Examples
     --------
-    1) Create a units bunch given a spikes bunch, and get the amps for unit #4 from the units 
+    1) Create a units bunch given a spikes bunch, and get the amps for unit #4 from the units
     bunch.
         >>> import brainbox as bb
         >>> import alf.io as aio
@@ -217,7 +217,7 @@ def get_units_bunch(spks, *args):
         # Get a units bunch.
         >>> units = bb.processing.get_units_bunch(spks)
         # Get amplitudes for unit #4.
-        >>> amps = units['amps']['4'] 
+        >>> amps = units['amps']['4']
     '''
 
     # Initialize `units`
@@ -227,7 +227,7 @@ def get_units_bunch(spks, *args):
         keys = list(spks.keys())
     else:
         keys = args[0]
-    # Get spikes for each unit and total number of units: *Note: `num_units` might not equal 
+    # Get spikes for each unit and total number of units: *Note: `num_units` might not equal
     # `len(unique_ids)`, because some ids may be missing.
     spks_unit_id = spks['clusters']
     num_units = np.max(spks_unit_id) + 1
@@ -235,13 +235,12 @@ def get_units_bunch(spks, *args):
     # `feat_bunch`. After iterating through all units, and add `feat_bunch` as a key to `units`:
     for key in keys:
         # Initialize `feat_bunch` with a key for each unit.
-        feat_bunch = core.Bunch((str(unit),0) for unit in np.arange(0,num_units))
+        feat_bunch = core.Bunch((str(unit), 0) for unit in np.arange(0, num_units))
         unit = 0
         while unit < num_units:
-            unit_idxs = np.where(spks_unit_id==unit)[0]
+            unit_idxs = np.where(spks_unit_id == unit)[0]
             feat_bunch[str(unit)] = spks[key][unit_idxs]
-            unit+=1
+            unit += 1
 
         units[key] = feat_bunch
     return units
-

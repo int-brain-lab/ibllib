@@ -1,3 +1,3 @@
 '''
-Contains functions for calculating spike features from spike waveforms.
+Functions that compute spike features from spike waveforms.
 '''

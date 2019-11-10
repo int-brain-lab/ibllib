@@ -1,11 +1,15 @@
-import brainbox as bb
-import pytest
 
-class TestMetrics(unittest.TestCase):
-    
-    def test_unit_stability(self):
-        pass
-    
-    
-    def test_feature_cutoff(self):
-        pass
+def test_unit_stability():
+    pass
+
+
+def test_feat_cutoff():
+    pass
+
+
+def test_wf_similarity():
+    pass
+
+
+def test_firing_rate_coeff_var():
+    pass
