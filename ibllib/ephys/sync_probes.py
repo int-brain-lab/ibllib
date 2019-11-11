@@ -25,7 +25,7 @@ def sync_merge(session_path, dry=False, force=False):
     """
     session_path = Path(session_path)
     sync(session_path, display=False)
-    spikes.merge_probes(session_path)
+    spikes.sync_spike_sortings(session_path)
     flags.write_flag_file(session_path.joinpath('register_me.flag'))
 
 
