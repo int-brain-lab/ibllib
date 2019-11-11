@@ -134,8 +134,8 @@ def create_ephyspc_params(force=False):
     remote_data_folder_path = cli_ask_default(
         r"Where's your REMOTE 'Subjects' data folder?",
         r"\\iblserver.champalimaud.pt\ibldata\Subjects")
-    probe_type_00 = cli_ask_options("What's the type of PROBE 00?", ['3A' '3B1' '3B2'])
-    probe_type_01 = cli_ask_options("What's the type of PROBE 01?", ['3A' '3B1' '3B2'])
+    probe_type_00 = cli_ask_options("What's the type of PROBE 00?", ['3A' '3B'])
+    probe_type_01 = cli_ask_options("What's the type of PROBE 01?", ['3A' '3B'])
     param_dict = {
         'DATA_FOLDER_PATH': data_folder_path,
         'REMOTE_DATA_FOLDER_PATH': remote_data_folder_path,
@@ -352,10 +352,7 @@ def move_ephys_files(session_folder: str) -> None:
     """
     session_path = Path(session_folder)
     raw_ephys_data_path = session_path / 'raw_ephys_data'
-    nidq_files = session_path.rglob('*.nidaq.*')
-    # All nidq files go in the raw_eohys_data folder
-    for nidqf in nidq_files:
-        shutil.move(str(nidqf), str(raw_ephys_data_path / nidqf.name))
+
     probe00_path = raw_ephys_data_path / 'probe00'
     probe01_path = raw_ephys_data_path / 'probe01'
     # 3A system imec only
@@ -369,13 +366,17 @@ def move_ephys_files(session_folder: str) -> None:
     # 3B system
     imec0_files = session_path.rglob('*.imec0.*')
     imec1_files = session_path.rglob('*.imec1.*')
+    nidq_files = session_path.rglob('*.nidq.*')
     # All imec 0 in probe00 folder
     for i0f in imec0_files:
         shutil.move(str(i0f), str(probe00_path / i0f.name))
     # All imec 1 in probe01 folder
     for i1f in imec1_files:
         shutil.move(str(i1f), str(probe01_path / i1f.name))
-
+    # NIDAq files
+    nidq_files = session_path.rglob('*.nidaq.*')
+    for nidqf in nidq_files:
+        shutil.move(str(nidqf), str(raw_ephys_data_path / nidqf.name))
 
 # TODO: ADD wiring files from params folder that is not there yet.
 # TODO: params_folder for ephyspc implementation
@@ -412,50 +413,44 @@ def get_iblscripts_folder():
 
 
 def copy_wiring_files(session_path, iblscripts_folder):
+    """Run after moving files to probe folders"""
     PARAMS = load_ephyspc_params()
+    if PARAMS['PROBE_TYPE_00'] != PARAMS['PROBE_TYPE_01']:
+        print("Having different probe types is not supported")
+        raise(NotImplementedError)
     iblscripts_path = Path(iblscripts_folder)
     iblscripts_params_path = iblscripts_path.parent / 'iblscripts_params'
     wirings_path = iblscripts_path / 'deploy' / 'ephyspc' / 'wirings'
     probe00_path = session_path / 'raw_ephys_data' / 'probe00'
     probe01_path = session_path / 'raw_ephys_data' / 'probe01'
     termination = '.wiring.json'
-    for binf in probe00_path.glob('*.bin'):
+    # Determine if custom wiring applies
+    custom = True if iblscripts_params_path.exists() else False
+    # Determine system
+    ephys_system = PARAMS['PROBE_TYPE_00']
+    # Define where to get the files from
+    if custom:
+        src_wiring_path = iblscripts_params_path
+        probe00_wiring_file_path = src_wiring_path / f'{ephys_system}_probe00.wiring.json'
+        probe01_wiring_file_path = src_wiring_path / f'{ephys_system}_probe01.wiring.json'
+    else:
+        src_wiring_path = wirings_path
+        probe00_wiring_file_path = src_wiring_path / f'{ephys_system}.wiring.json'
+        probe01_wiring_file_path = src_wiring_path / f'{ephys_system}.wiring.json'
+
+    if ephys_system == '3B':
+        # Copy nidq file
+        nidq_files = session_path.rglob('*.nidaq.bin')
+        for nidqf in nidq_files:
+            nidq_wiring_name = '.'.join(str(nidqf.name).split('.')[:-1]) + termination
+            shutil.copy(str(src_wiring_path / 'nidq.wiring.json'),
+                        str(session_path / 'raw_ephys_data' / nidq_wiring_name))
+    # If system is either (3A OR 3B) copy a wiring file for each ap.bin file
+    for binf in session_path.glob('*.ap.bin'):
         wiring_name = '.'.join(str(binf.name).split('.')[:-2]) + termination
-        if '.imec.'
-    wiring_files = []
-    if '3A' in PARAMS['PROBE_TYPE_00'] and not iblscripts_params_path.exists():
-        wiring_files.append(str(wirings_path / '3A.wiring.json'))
-    elif '3A' in PARAMS['PROBE_TYPE_00'] and iblscripts_params_path.exists():
-        wiring_files.append(str(iblscripts_path / '3A.wiring.json'))
-    elif '3B' in PARAMS['PROBE_TYPE_00'] and not iblscripts_params_path.exists():
-        wiring_files.append(str(wirings_path / '3B.wiring.json'))
-        wiring_files.append(str(wirings_path / 'nidq.wiring.json'))
-
-
-
-        shutil.copy(
-            str(wirings_path / '3A.wiring.json'),
-            str(session_path / 'raw_ephys_data' / 'probe00' / '3A.wiring.json'))
-        shutil.copy(
-            str(wirings_path / '3A.wiring.json'),
-            str(session_path / 'raw_ephys_data' / 'probe01' / '3A.wiring.json'))
-
-├── raw_ephys_data
-      ├── probe00
-      │   ├── _spikeglx_ephysData_g0_t0.imec0.ap.bin
-      │   ├── _spikeglx_ephysData_g0_t0.imec0.ap.meta
-      │   ├── _spikeglx_ephysData_g0_t0.imec0.lf.bin
-      │   ├── _spikeglx_ephysData_g0_t0.imec0.lf.meta
-      │   ├── _spikeglx_ephysData_g0_t0.imec0.sync.npy
-      │   ├── _spikeglx_ephysData_g0_t0.imec0.wiring.json
-      ├── probe01
-      │   ├── _spikeglx_ephysData_g0_t0.imec1.ap.bin
-      │   ├── _spikeglx_ephysData_g0_t0.imec1.ap.meta
-      │   ├── _spikeglx_ephysData_g0_t0.imec1.lf.bin
-      │   └── _spikeglx_ephysData_g0_t0.imec1.lf.meta
-      │   ├── _spikeglx_ephysData_g0_t0.imec1.sync.npy
-      │   ├── _spikeglx_ephysData_g0_t0.imec1.wiring.json
-      ├── _spikeglx_ephysData_g0_t0.nidq.bin
-      ├── _spikeglx_ephysData_g0_t0.nidq.meta
-      ├── _spikeglx_ephysData_g0_t0.nidq.sync.npy
-      ├── _spikeglx_ephysData_g0_t0.nidq.wiring.json
+        if 'probe00' in str(binf):
+            shutil.copy(str(probe00_wiring_file_path),
+                        str(probe00_path / wiring_name))
+        if 'probe01' in str(binf):
+            shutil.copy(str(probe01_wiring_file_path),
+                        str(probe01_path / wiring_name))
