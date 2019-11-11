@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from brainbox.core import Bunch
-import brainbox.behavior.wheel as whl
+from brainbox.behavior import wheel as whl
 
 import ibllib.plots as plots
 import ibllib.io.spikeglx
