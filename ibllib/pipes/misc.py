@@ -199,8 +199,8 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
             return
 
 
-def confirm_ephys_remote_folder(
-    local_folder=False, remote_folder=False, force=False, iblscripts_folder=False):
+def confirm_ephys_remote_folder(local_folder=False, remote_folder=False,
+                                force=False, iblscripts_folder=False):
     pars = load_ephyspc_params()
 
     if not local_folder:
@@ -378,8 +378,7 @@ def move_ephys_files(session_folder: str) -> None:
     for nidqf in nidq_files:
         shutil.move(str(nidqf), str(raw_ephys_data_path / nidqf.name))
 
-# TODO: ADD wiring files from params folder that is not there yet.
-# TODO: params_folder for ephyspc implementation
+
 def create_custom_ephys_wirings(iblscripts_folder: str):
     iblscripts_path = Path(iblscripts_folder)
     PARAMS = load_ephyspc_params()

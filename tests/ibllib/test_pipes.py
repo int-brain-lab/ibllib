@@ -81,6 +81,7 @@ class TestPipesMisc(unittest.TestCase):
         # Make a bunch of fake files 3A
         misc.rename_ephys_files(self.test_local_session)
         # Make a bunch of fake files 3B
+
     def tearDown(self):
         pass
 
