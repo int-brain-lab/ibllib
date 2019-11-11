@@ -307,12 +307,14 @@ def get_new_filename(filename: str) -> str:
     """
     root = '_spikeglx_ephysData'
     # gt = '_g0_t0' or 'error
+    gt = None
     for g in range(10):
         for t in range(10):
             if f'_g{g}_t{t}' in filename:
                 gt = f'_g{g}_t{t}'
-            else:
-                raise(NotImplementedError)
+    else:
+        if gt is None:
+            raise(NotImplementedError)
 
     # ext = 'bin' or 'meta'
     if '.bin' in filename:
@@ -337,7 +339,8 @@ def get_new_filename(filename: str) -> str:
     elif '.lf.' in filename:
         freq = 'lf'
 
-    return '.'.join([root, gt, probe, freq, ext])
+    root_gt = root + gt
+    return '.'.join([root_gt, probe, freq, ext])
 
 
 def move_ephys_files(session_folder: str) -> None:
