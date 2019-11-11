@@ -39,6 +39,8 @@ def _compress(root_data_folder, command, flag_pattern, dry=False, max_sessions=N
                 continue
             if not cfile.exists():
                 logger.error('NON-EXISTING RAW FILE: ' + str(cfile))
+            if flag_file.exists():
+                flag_file.unlink()
             # run the compression command redirecting output
             cfile.parent.joinpath(cfile.stem)
             # if the output file already exists, overwrite it
@@ -51,15 +53,12 @@ def _compress(root_data_folder, command, flag_pattern, dry=False, max_sessions=N
             info, error = process.communicate()
             if process.returncode != 0:
                 logger.error('COMPRESSION FAILED FOR ' + str(cfile))
-                flags.excise_flag_file(flag_file, removed_files=f2c)
                 with open(cfile.parent.joinpath('extract.error'), 'w+') as fid:
                     fid.write(command2run)
                     fid.write(error.decode())
             else:
                 # if the command was successful delete the original file
                 cfile.unlink()
-                # then remove the file from the compress flag file
-                flags.excise_flag_file(flag_file, removed_files=f2c)
                 # and add the file to register_me.flag
                 flags.write_flag_file(ses_path.joinpath('register_me.flag'), file_list=cfile.stem)
 
