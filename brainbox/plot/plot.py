@@ -201,6 +201,9 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
         The waveforms for the spikes in `ts1`: an array of shape (#spikes, #samples, #channels).
     wf2 : ndarray
         The waveforms for the spikes in `ts2`: an array of shape (#spikes, #samples, #channels).
+    s : float
+        The similarity score between the two sets of waveforms, calculated by
+        `metrics.wf_similarity`
 
     See Also
     --------
@@ -220,12 +223,13 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
         >>> clstrs = aio.load_object('path\\to\\alf_output', 'clusters')
         >>> fig, wf1, wf2 = bb.plot.single_unit_wf_comp('path\\to\\ephys_file', spks, clstrs, \
                                                         unit=1)
-        # Get a units bunch, and plot waveforms for unit2 across 15 channels.
+        # Get a units bunch, and plot waveforms for unit2 from the first to second minute
+        # across 15 channels.
         >>> units = bb.processing.get_units_bunch(spks, ['times'])
         >>> ts1 = units['times']['2'][:50]
         >>> ts2 = units['times']['2'][-50:]
-        >>> fig2, wf1_2, wf2_2 = bb.plot.single_unit_wf_comp('path\\to\\ephys_file', \
-                                                             spks, clstrs, unit=1)
+        >>> fig2, wf1_2, wf2_2 = bb.plot.single_unit_wf_comp('path\\to\\ephys_file', spks, \
+                                                             clstrs, unit=1, ts1=ts1, ts2=ts2)
     '''
 
     # Take the first and last 200 timestamps by default.
@@ -241,11 +245,12 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
         ch = np.arange(max_ch - n_ch, max_ch)
     else:  # take `n_c_ch` around `max_ch`.
         ch = np.arange(max_ch - n_c_ch, max_ch + n_c_ch)
-    # Extract the waveforms for these timestamps.
+    # Extract the waveforms for these timestamps and compute similarity score.
     wf1 = bb.io.extract_waveforms(ephys_file, ts1, ch, sr=sr, n_ch_probe=n_ch_probe, dtype=dtype,
                                   car=True)
     wf2 = bb.io.extract_waveforms(ephys_file, ts2, ch, sr=sr, n_ch_probe=n_ch_probe, dtype=dtype,
                                   car=True)
+    s = bb.metrics.wf_similarity(wf1, wf2)
     # Plot these waveforms against each other.
     fig, ax = plt.subplots(nrows=n_ch, ncols=2)  # on left is all waveforms, on right is mean
     for cur_ax, cur_ch in enumerate(ch):
@@ -255,8 +260,9 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
         ax[cur_ax][1].plot(np.mean(wf2[:, :, cur_ax], axis=0), c=col[1])
         ax[cur_ax][0].set_ylabel('Ch {0}'.format(cur_ch))
     plt.legend(['1st spike set', '2nd spike set'])
-    fig.suptitle('comparison of waveforms from two sets of spikes for unit{0}'.format(unit))
-    return fig, wf1, wf2
+    fig.suptitle('comparison of waveforms from two sets of spikes for unit {0} \
+                 \n s = {1:.2f}'.format(unit, s))
+    return fig, wf1, wf2, s
 
 
 def amp_heatmap(ephys_file, spks, clstrs, unit, t='all', n_ch=20, sr=30000, n_ch_probe=385,
