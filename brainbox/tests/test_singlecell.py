@@ -1,4 +1,4 @@
-from brainbox.singlecell import acorr, peths
+from brainbox.singlecell import acorr, calculate_peths
 import unittest
 import numpy as np
 
@@ -29,7 +29,7 @@ class TestPeths(unittest.TestCase):
         spike_clusters = np.random.randint(0, n_clusters, n_spikes)
         event_times = np.sort(np.random.rand(n_events, ) * record_length)
 
-        peth, fr = peths(spike_times, spike_clusters, cluster_ids=cluster_sel,
+        peth, fr = calculate_peths(spike_times, spike_clusters, cluster_ids=cluster_sel,
                          align_times=event_times)
         self.assertTrue(peth.means.shape[0] == len(cluster_sel))
         self.assertTrue(np.all(peth.means.shape == peth.stds.shape))
