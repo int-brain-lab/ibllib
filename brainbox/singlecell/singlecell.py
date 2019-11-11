@@ -1,5 +1,5 @@
 '''
-Single-cell functions.
+Computes properties of single-cells, e.g. the autocorrelation and firing rate.
 '''
 
 import numpy as np
@@ -29,22 +29,22 @@ def acorr(spike_times, bin_size=None, window_size=None):
 def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5):
     '''
     Computes the instantaneous firing rate of a unit over time by computing a histogram of spike
-    counts over a specified window of time, and summing this histogram over a sliding window of
-    specified time over a specified period of total time.
+    counts over a specified window of time `hist_win`, and summing this histogram over a sliding
+    window of specified time `fr_win`, over a specified period of total time `t`.
 
     Parameters
     ----------
     spks : bunch
         A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
-        etc.) for each unit.
+        etc.) for all spikes.
     unit : int
         The unit number for which to calculate the firing rate.
-    t : str or pair of floats
+    t : str or pair of floats (optional)
         The total time period for which the instantaneous firing rate is returned. Default: the
-        time period from `unit`'s first to last spike.
-    hist_win : float
+        time period from `unit`'s first to last spike (in s).
+    hist_win : float (optional)
         The time window (in s) to use for computing spike counts.
-    fr_win : float
+    fr_win : float (optional)
         The time window (in s) to use as a moving slider to compute the instantaneous firing rate.
 
     Returns
@@ -59,14 +59,16 @@ def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5):
 
     Examples
     --------
-    1) Compute the firing rate for unit1 from the time of its first to last spike.
+    1) Compute the instantaneous firing rate for unit1 from the time of its first to last spike,
+    and compute the instantaneous firing rate for unit2 from the first to second minute.
         >>> import brainbox as bb
         >>> import alf.io as aio
         >>> import ibllib.ephys.spikes as e_spks
-        # Get a spikes bunch and calculate the firing rate.
+        # Get a spikes bunch and calculate the firing rates.
         >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
         >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
-        >>> fr = singlecell.firing_rate(spks, 1)
+        >>> fr = bb.singlecell.firing_rate(spks, 1)
+        >>> fr_2 = bb.singlecell.firing_rate(spks, 2, t=[60, 120])
     '''
 
     # Get unit timestamps.

@@ -1,5 +1,5 @@
 """
-Metrics for assessing quality of single units.
+Computes metrics for assessing quality of single units.
 """
 import brainbox as bb
 import numpy as np
@@ -19,7 +19,7 @@ def unit_stability(spks, feat_names=['amps'], dist='norm', test='ks'):
     ----------
     spks : bunch
         A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
-        etc.) for each unit.
+        etc.) for all spikes.
     feat_names : list of strings (optional)
         A list of names of spike features that can be found in `spks` to specify which features to
         use for calculating unit stability.
@@ -103,9 +103,9 @@ def unit_stability(spks, feat_names=['amps'], dist='norm', test='ks'):
     return p_vals, variances
 
 
-def feat_cutoff(spks, unit, feat_name='amps', **kwargs):
+def feat_cutoff(spks, unit, feat_name='amps', spks_per_bin=20, sigma=5):
     '''
-    Computes approximate fraction of spikes missing from a spike feature distribution for a
+    Computes the approximate fraction of spikes missing from a spike feature distribution for a
     given unit, assuming the distribution is symmetric.
 
     Inspired by metric described in Hill et al. (2011) J Neurosci 31: 8699-8705.
@@ -114,14 +114,14 @@ def feat_cutoff(spks, unit, feat_name='amps', **kwargs):
     ----------
     spks : bunch
         A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
-        etc.) for each unit.
+        etc.) for all spikes.
     unit : int
         The unit number for the feature to plot.
     feat_name : string (optional)
         The spike feature to plot.
-    spks_per_bin : int (optional keyword arg)
+    spks_per_bin : int (optional)
         The number of spikes per bin from which to compute the spike feature histogram.
-    sigma : int (optional keyword arg)
+    sigma : int (optional)
         The standard deviation for the gaussian kernel used to compute the pdf from the spike
         feature histogram.
 
@@ -153,15 +153,6 @@ def feat_cutoff(spks, unit, feat_name='amps', **kwargs):
         >>> bb.plot.feat_cutoff(spks, 1)
     '''
 
-    # Set keyword input args if given:
-    default_args = \
-        {
-            'spks_per_bin': 20,
-            'sigma': 5
-        }
-    new_args = {**default_args, **kwargs}
-    spks_per_bin = new_args['spks_per_bin']
-    sigma = new_args['sigma']
     min_num_bins = 50
     units = bb.processing.get_units_bunch(spks, [feat_name])
     feature = units[feat_name][str(unit)]
@@ -229,10 +220,12 @@ def wf_similarity(wf1, wf2):
         >>> ts1 = units['times']['1'][:100]
         >>> ts2 = units['times']['1'][-100:]
         >>> wf1 = bb.io.extract_waveforms('path\\to\\ephys_bin_file', ts1, ch)
-        >>> wf2 = bb.io.extract_waveforms('path\\to\\ephys_bin_file', ts1, ch)
+        >>> wf2 = bb.io.extract_waveforms('path\\to\\ephys_bin_file', ts2, ch)
         >>> s = bb.metrics.wf_similarity(wf1, wf2)
     '''
 
+    # Remove warning for dividing by 0 when calculating `s` (this is resolved by using
+    # `np.nan_to_num`)
     import warnings
     warnings.filterwarnings('ignore', r'invalid value encountered in true_divide')
     assert wf1.shape == wf2.shape, 'The shapes of the sets of waveforms are inconsistent'
@@ -256,24 +249,24 @@ def wf_similarity(wf1, wf2):
 
 def firing_rate_coeff_var(spks, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins=10):
     '''
-    Computes the coefficient of variation of the firing rate: the ratio of the biased standard
+    Computes the coefficient of variation of the firing rate: the ratio of the standard
     deviation to the mean.
 
     Parameters
     ----------
     spks : bunch
         A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
-        etc.) for each unit.
+        etc.) for all spikes.
     unit : int
         The unit number for which to calculate the firing rate.
-    t : str or pair of floats
+    t : str or pair of floats (optional)
         The total time period for which the instantaneous firing rate is returned. Default: the
         time period from `unit`'s first to last spike.
-    hist_win : float
+    hist_win : float (optional)
         The time window (in s) to use for computing spike counts.
-    fr_win : float
+    fr_win : float (optional)
         The time window (in s) to use as a moving slider to compute the instantaneous firing rate.
-    n_bins : int
+    n_bins : int (optional)
         The number of bins in which to compute a coefficient of variation of the firing rate.
 
     Returns
@@ -294,18 +287,19 @@ def firing_rate_coeff_var(spks, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins
     Examples
     --------
     1) Compute the coefficient of variation of the firing rate for unit1 from the time of its
-    first to last spike.
+    first to last spike, and compute the coefficient of variation of the firing rate for unit2 from
+    the first to second minute.
         >>> import brainbox as bb
         >>> import alf.io as aio
         >>> import ibllib.ephys.spikes as e_spks
         # Get a spikes bunch and calculate the firing rate.
         >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
         >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
-        >>> cv = metrics.firing_rate_coeff_var(spks, 1)
+        >>> cv, cvs, fr = metrics.firing_rate_coeff_var(spks, 1)
+        >>> cv_2, cvs_2, fr_2 = metrics.firing_rate_coeff_var(spks, 2)
     '''
 
-    fr = bb.singlecell.firing_rate(spks, unit, t=t, hist_win=hist_win, fr_win=fr_win,
-                                   n_bins=n_bins)
+    fr = bb.singlecell.firing_rate(spks, unit, t=t, hist_win=hist_win, fr_win=fr_win)
     bin_sz = np.int(fr.size / n_bins)
     fr_binned = np.array([fr[(b * bin_sz):(b * bin_sz + bin_sz)] for b in range(n_bins)])
     cvs = np.std(fr_binned, axis=1) / np.mean(fr_binned, axis=1)

@@ -36,6 +36,20 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
 
     Examples
     --------
+    1) Extract all the waveforms for unit1 with and without CAR.
+        >>> import brainbox as bb
+        >>> import alf.io as aio
+        # Get a clusters bunch and a units bunch from a spikes bunch from an alf directory.
+        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
+        >>> clstrs = aio.load_obect('path\\to\\alf_output', 'clusters')
+        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
+        # Get the timestamps and 20 channels around the max amp channel for unit1, and extract the
+        two sets of waveforms.
+        >>> ts = units['times']['1']
+        >>> max_ch = max_ch = clstrs['channels'][1]
+        >>> ch = np.arange(max_ch - 10, max_ch + 10)
+        >>> wf = bb.io.extract_waveforms('path\\to\\ephys_file', ts, ch, car=False)
+        >>> wf_car = bb.io.extract_waveforms('path\\to\\ephys_file', ts, ch, car=True)
     '''
 
     # Get memmapped array of `ephys_file`

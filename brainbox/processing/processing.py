@@ -1,7 +1,6 @@
 '''
-Set of functions for processing data from one form into another,
-for example taking spike times and then binning them into non-overlapping
-bins or convolving with a gaussian kernel.
+Processes data from one form into another, e.g. taking spike times and binning them into
+non-overlapping bins and convolving spike times with a gaussian kernel.
 '''
 from brainbox import core
 import numpy as np
@@ -184,17 +183,16 @@ def bin_spikes(spikes, binsize, interval_indices=False):
 
 def get_units_bunch(spks, *args):
     '''
-    Returns a bunch, where the bunch keys are keys from `spks` of labels of spike information (e.g.
-    unit IDs, times, features, etc.), and the values for each key are arrays with values for each
-    unit. The arrays for each key are ordered by unit ID.
-
+    Returns a bunch, where the bunch keys are keys from `spks` with labels of spike information
+    (e.g. unit IDs, times, features, etc.), and the values for each key are arrays with values for
+    each unit: these arrays are ordered and can be indexed by unit id.
 
     Parameters
     ----------
     spks : bunch
         A spikes bunch containing fields with spike information (e.g. unit IDs, times, features,
         etc.) for all spikes.
-    features : list of strings (optional)
+    features : list of strings (optional positional arg)
         A list of names of labels of spike information (which must be keys in `spks`) that specify
         which labels to return as keys in `units`. If not provided, all keys in `spks` are returned
         as keys in `units`.
@@ -212,11 +210,11 @@ def get_units_bunch(spks, *args):
     bunch.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        # Get a spikes bunch.
-        >>> spks = aio.load_object('path\\to\\ks_output', 'spikes')
-        # Get a units bunch.
+        # Get a units bunch from a spikes bunch from an alf directory.
+        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
+        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
         >>> units = bb.processing.get_units_bunch(spks)
-        # Get amplitudes for unit #4.
+        # Get amplitudes for unit 4.
         >>> amps = units['amps']['4']
     '''
 
@@ -232,7 +230,7 @@ def get_units_bunch(spks, *args):
     spks_unit_id = spks['clusters']
     num_units = np.max(spks_unit_id) + 1
     # For each key in `units`, iteratively get each unit's values and add as a key to a bunch,
-    # `feat_bunch`. After iterating through all units, and add `feat_bunch` as a key to `units`:
+    # `feat_bunch`. After iterating through all units, add `feat_bunch` as a key to `units`:
     for key in keys:
         # Initialize `feat_bunch` with a key for each unit.
         feat_bunch = core.Bunch((str(unit), 0) for unit in np.arange(0, num_units))
@@ -241,6 +239,5 @@ def get_units_bunch(spks, *args):
             unit_idxs = np.where(spks_unit_id == unit)[0]
             feat_bunch[str(unit)] = spks[key][unit_idxs]
             unit += 1
-
         units[key] = feat_bunch
     return units
