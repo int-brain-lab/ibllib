@@ -40,10 +40,7 @@ class TestPeths(unittest.TestCase):
 def test_firing_rate():
     pass
 
-<<<<<<< HEAD
-=======
 
->>>>>>> 7be9758... rebased 'metricsPlus' onto 'brainbox'
 if __name__ == "__main__":
     np.random.seed(0)
     unittest.main(exit=False)
