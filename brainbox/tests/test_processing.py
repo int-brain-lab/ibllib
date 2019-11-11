@@ -97,13 +97,10 @@ class TestProcessing(unittest.TestCase):
         self.assertTrue(np.all(xscale == np.arange(5) + 10))
         self.assertTrue(np.all(yscale == np.arange(3) + 10))
         self.assertTrue(np.all(r.shape == (3, 5)))
-<<<<<<< HEAD:brainbox/tests/test_processing.py
-=======
 
 
 def test_get_unit_bunches():
     pass
->>>>>>> metricsPlus2:tests/brainbox/test_processing.py
 
 
 if __name__ == "__main__":

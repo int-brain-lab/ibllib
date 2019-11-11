@@ -37,13 +37,10 @@ class TestPeths(unittest.TestCase):
         self.assertTrue(peth.tscale.size == 28)
 
 
-<<<<<<< HEAD
-=======
 def test_firing_rate():
     pass
 
 
->>>>>>> metricsPlus2
 if __name__ == "__main__":
     np.random.seed(0)
     unittest.main(exit=False)
