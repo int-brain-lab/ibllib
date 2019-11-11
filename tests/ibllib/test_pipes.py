@@ -58,17 +58,17 @@ class TestPipesMisc(unittest.TestCase):
 
     def setUp(self):
         # Define folders
-        self.test_local_folder = Path(tempfile.gettempdir()) / 'test_local_folder'
-        self.test_remote_folder = Path(tempfile.gettempdir()) / 'test_remote_folder'
-        self.test_local_session = self.test_local_folder / 'Subjects' / \
+        self.local_data_path = Path(tempfile.gettempdir()) / 'iblrig_data' / 'Subjects'
+        self.remote_data_path = Path(tempfile.gettempdir()) / 'iblrig_data' / 'Subjects'
+        self.local_session_path = self.local_data_path / 'Subjects' / \
             'test_subject' / '1900-01-01' / '001'
-        self.rbdata = self.test_local_session / 'raw_behavior_data'
-        self.rvdata = self.test_local_session / 'raw_video_data'
-        self.redata = self.test_local_session / 'raw_ephys_data'
+        self.rbdata = self.local_session_path / 'raw_behavior_data'
+        self.rvdata = self.local_session_path / 'raw_video_data'
+        self.redata = self.local_session_path / 'raw_ephys_data'
         # Make folders
-        self.test_local_folder.mkdir(exist_ok=True)
-        self.test_remote_folder.mkdir(exist_ok=True)
-        self.test_local_session.mkdir(exist_ok=True, parents=True)
+        self.local_data_path.mkdir(exist_ok=True, parents=True)
+        self.remote_data_path.mkdir(exist_ok=True, parents=True)
+        self.local_session_path.mkdir(exist_ok=True, parents=True)
         self.rbdata.mkdir(exist_ok=True, parents=True)
         self.rvdata.mkdir(exist_ok=True, parents=True)
         self.redata.mkdir(exist_ok=True, parents=True)
@@ -76,6 +76,27 @@ class TestPipesMisc(unittest.TestCase):
     def test_behavior_exists(self):
         assert(misc.behavior_exists('.') is False)
         assert(misc.behavior_exists(self.test_local_session) is True)
+
+    def test_get_new_filename(self):
+        binFname3A = 'ignoreThisPart_g0_t0.imec.ap.bin'
+        binFname3B = 'ignoreThisPart_g0_t0.imec0.ap.bin'
+        metaFname3A = 'ignoreThisPart_g0_t0.imec.ap.meta'
+        metaFname3B = 'ignoreThisPart_g0_t0.imec0.ap.meta'
+        probe1_3B_Meta = 'ignoreThisPart_g0_t0.imec1.ap.meta'
+        different_gt = 'ignoreThisPart_g1_t2.imec0.ap.meta'
+
+        newfname = misc.get_new_filename(binFname3A)
+        self.assertTrue(newfname == '_spikeglx_ephysData_g0_t0.imec.ap.bin')
+        newfname = misc.get_new_filename(binFname3B)
+        self.assertTrue(newfname == '_spikeglx_ephysData_g0_t0.imec0.ap.bin')
+        newfname = misc.get_new_filename(metaFname3A)
+        self.assertTrue(newfname == '_spikeglx_ephysData_g0_t0.imec.ap.meta')
+        newfname = misc.get_new_filename(metaFname3B)
+        self.assertTrue(newfname == '_spikeglx_ephysData_g0_t0.imec0.ap.meta')
+        newfname = misc.get_new_filename(probe1_3B_Meta)
+        self.assertTrue(newfname == '_spikeglx_ephysData_g0_t0.imec1.ap.meta')
+        newfname = misc.get_new_filename(different_gt)
+        self.assertTrue(newfname == '_spikeglx_ephysData_g1_t2.imec0.ap.meta')
 
     def test_rename_ephys_files(self):
         # Make a bunch of fake files 3A
