@@ -25,7 +25,7 @@ def cli_ask_options(prompt: str, options: list, default_idx: int = 0) -> str:
     return ans
 
 
-def behavior_exists(session_path: str) -> bool:
+def behavior_exists(session_path: str) -> bool:  # testOK
     session_path = Path(session_path)
     behavior_path = session_path / 'raw_behavior_data'
     if behavior_path.exists():
@@ -33,7 +33,7 @@ def behavior_exists(session_path: str) -> bool:
     return False
 
 
-def check_transfer(src_session_path: str or Path, dst_session_path: str or Path):
+def check_transfer(src_session_path: str or Path, dst_session_path: str or Path):  # missing fail test
     src_files = sorted([x for x in Path(src_session_path).rglob('*') if x.is_file()])
     dst_files = sorted([x for x in Path(dst_session_path).rglob('*') if x.is_file()])
     for s, d in zip(src_files, dst_files):
@@ -296,7 +296,7 @@ def rename_ephys_files(session_folder: str) -> None:
         shutil.move(str(nidqf), str(nidqf.parent / new_filename))
 
 
-def get_new_filename(filename: str) -> str:
+def get_new_filename(filename: str) -> str:  #testOK
     """get_new_filename is system agnostic (3A, 3B1, 3B2).
     Gets an alyx compatible filename from any spikeglx ephys file.
 

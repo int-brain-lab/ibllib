@@ -62,20 +62,30 @@ class TestPipesMisc(unittest.TestCase):
         self.remote_data_path = Path(tempfile.gettempdir()) / 'iblrig_data' / 'Subjects'
         self.local_session_path = self.local_data_path / 'Subjects' / \
             'test_subject' / '1900-01-01' / '001'
-        self.rbdata = self.local_session_path / 'raw_behavior_data'
-        self.rvdata = self.local_session_path / 'raw_video_data'
-        self.redata = self.local_session_path / 'raw_ephys_data'
+        self.raw_ephys_data_path = self.local_session_path / 'raw_ephys_data'
+        self.probe00_path = raw_ephys_data_path / 'probe00'
+        self.probe01_path = raw_ephys_data_path / 'probe01'
+        self.bad_ephys_folder_3A = raw_ephys_data_path / 'bad_ephys_folder'
+        self.bad_ephys_folder_3B = raw_ephys_data_path / 'bad_folder_g0_t0'
         # Make folders
-        self.local_data_path.mkdir(exist_ok=True, parents=True)
-        self.remote_data_path.mkdir(exist_ok=True, parents=True)
-        self.local_session_path.mkdir(exist_ok=True, parents=True)
-        self.rbdata.mkdir(exist_ok=True, parents=True)
-        self.rvdata.mkdir(exist_ok=True, parents=True)
-        self.redata.mkdir(exist_ok=True, parents=True)
+        self.probe00_path.mkdir(exist_ok=True, parents=True)
+        self.probe01_path.mkdir(exist_ok=True, parents=True)
+        self.bad_ephys_folder_3A.mkdir(exist_ok=True, parents=True)
+        self.bad_ephys_folder_3B.mkdir(exist_ok=True, parents=True)
+        # Make some files
+        # TODO finish this!
 
     def test_behavior_exists(self):
         assert(misc.behavior_exists('.') is False)
-        assert(misc.behavior_exists(self.test_local_session) is True)
+        assert(misc.behavior_exists(self.local_session_path) is True)
+
+    def test_check_transfer(self):
+        folder = Path(tempfile.gettempdir())
+        (folder / 'some_file.bla').touch()
+        misc.check_transfer(folder, folder)
+        misc.check_transfer(str(folder), folder)
+        # TODO: put context handler for sasserts that fail
+        different_folder = Path(tempfile.gettempdir())
 
     def test_get_new_filename(self):
         binFname3A = 'ignoreThisPart_g0_t0.imec.ap.bin'
