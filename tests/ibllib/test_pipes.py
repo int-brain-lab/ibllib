@@ -31,7 +31,7 @@ class TestExtractors(unittest.TestCase):
             ('_iblrig_tasks_trainingChoiceWorld3.6.0', 'training'),
             ('_iblrig_tasks_ephysChoiceWorld5.1.3', 'ephys'),
             ('_iblrig_calibration_frame2TTL4.1.3', None),
-            ('_iblrig_tasks_habituationChoiceWorld3.6.0', None),
+            ('_iblrig_tasks_habituationChoiceWorld3.6.0', 'habituation'),
             ('_iblrig_tasks_scanningOptoChoiceWorld5.0.0', None),
             ('_iblrig_tasks_RewardChoiceWorld4.1.3', None),
             ('_iblrig_calibration_screen4.1.3', None),
@@ -40,6 +40,15 @@ class TestExtractors(unittest.TestCase):
         for to in task_out:
             out = ibllib.pipes.extract_session.get_task_extractor_type(to[0])
             self.assertEqual(out, to[1])
+
+    def test_get_session_folder(self):
+        inp = (Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001/raw_behavior_data/'
+                    '_iblrig_micData.raw.wav'),
+               Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),)
+        out = (Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),
+               Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),)
+        for i, o in zip(inp, out):
+            self.assertEqual(o, ibllib.pipes.extract_session.get_session_path(i))
 
 
 if __name__ == "__main__":

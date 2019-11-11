@@ -144,22 +144,26 @@ def create_other_flags(root_data_folder, name, force=False, file_list=None):
         logger_.info('created flag: ' + str(flag_file))
 
 
-def create_compress_flags(root_data_folder, clobber=False):
+def create_compress_video_flags(root_data_folder, flag_name='compress_video.flag', clobber=False):
     #  only create flags for raw_video_data folders:
     video_paths = Path(root_data_folder).glob('**/raw_video_data')
     for video_path in video_paths:
         ses_path = video_path.parent
-        flag_file = ses_path.joinpath('compress_video.flag')
+        flag_file = ses_path.joinpath(flag_name)
         vfiles = video_path.rglob('*.avi')
         for vfile in vfiles:
             logger_.info(str(vfile.relative_to(ses_path)) + ' added to ' + str(flag_file))
             write_flag_file(flag_file, file_list=str(vfile.relative_to(ses_path)), clobber=clobber)
-    return
-    # add audio flags to the list as well
+
+
+def create_audio_flags(root_data_folder, flag_name):
+    # audio flags could be audio_ephys.flag, audio_training.flag
+    if flag_name not in ['audio_ephys.flag', 'audio_training.flag']:
+        raise ValueError('Flag name should be audio_ephys.flag or audio_training.flag')
     audio_paths = Path(root_data_folder).glob('**/raw_behavior_data')
     for audio_path in audio_paths:
         ses_path = audio_path.parent
-        flag_file = ses_path.joinpath('compress_audio.flag')
+        flag_file = ses_path.joinpath(flag_name)
         afiles = audio_path.rglob('*.wav')
         for afile in afiles:
             logger_.info(str(afile.relative_to(ses_path)) + ' added to ' + str(flag_file))

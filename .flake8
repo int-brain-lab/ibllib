@@ -11,3 +11,4 @@ exclude =
     test_imports.py,
     build,
     dist
+    brainbox/
