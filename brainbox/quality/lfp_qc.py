@@ -16,11 +16,20 @@ import sys, glob, os
 
 from ibllib.ephys import ephysqc
 import alf.io
-
+from IPython import embed as shell
 
 def _plot_spectra(outpath, typ, savefig=True):
-    spec = alf.io.load_object(outpath, '_spikeglx_ephysQcTime' + typ.upper())
+    spec = alf.io.load_object(outpath, '_spikeglx_ephysQcFreq' + typ.upper())
 
+    # hack to ensure a single key name
+    if 'power.probe_00' in spec.keys():
+        spec['power'] = spec.pop('power.probe_00')  
+        spec['freq'] = spec.pop('freq.probe_00')
+    elif 'power.probe_01' in spec.keys():
+        spec['power'] = spec.pop('power.probe_01')  
+        spec['freq'] = spec.pop('freq.probe_01')    
+
+    # plot
     sns.set_style("whitegrid")
     plt.figure(figsize=[9, 4.5])
     ax = plt.axes()
@@ -34,13 +43,24 @@ def _plot_spectra(outpath, typ, savefig=True):
     elif typ == 'lf':
         ax.set_ylim([-260, -60])
     ax.legend()
+    ax.set_title(outpath)
     if savefig:
         plt.savefig(outpath / (typ + '_spec.png'), dpi=150)
+        print('saved figure to %s'%(outpath / (typ + '_spec.png')))
 
 
 def _plot_rmsmap(outpath, typ, savefig=True):
 
     rmsmap = alf.io.load_object(outpath, '_spikeglx_ephysQcTime' + typ.upper())
+
+    # hack to ensure a single key name
+    if 'times.probe_00' in rmsmap.keys():
+        rmsmap['times'] = rmsmap.pop('times.probe_00')  
+        rmsmap['rms'] = rmsmap.pop('rms.probe_00')
+    elif 'times.probe_01' in rmsmap.keys():
+        rmsmap['times'] = rmsmap.pop('times.probe_01')  
+        rmsmap['rms'] = rmsmap.pop('rms.probe_01')    
+
     plt.figure(figsize=[12, 4.5])
     axim = plt.axes([0.2, 0.1, 0.7, 0.8])
     axrms = plt.axes([0.05, 0.1, 0.15, 0.8])
@@ -52,7 +72,7 @@ def _plot_rmsmap(outpath, typ, savefig=True):
     im = axim.imshow(20 * np.log10(rmsmap['rms'].T + 1e-15), aspect='auto', origin='lower',
                      extent=[rmsmap['times'][0], rmsmap['times'][-1], 0, rmsmap['rms'].shape[1]])
     axim.set_xlabel(r'Time (s)')
-    axim.set_ylabel(r'Channel Number')
+    axrms.set_ylabel(r'Channel Number')
     plt.colorbar(im, cax=axcb)
     if typ == 'ap':
         im.set_clim(-110, -90)
@@ -61,6 +81,7 @@ def _plot_rmsmap(outpath, typ, savefig=True):
         im.set_clim(-100, -60)
         axrms.set_xlim(500, 0)
     axim.set_xlim(0, 4000)
+    axim.set_title(outpath)
     if savefig:
         plt.savefig(outpath / (typ + '_rms.png'), dpi=150)
 
@@ -73,7 +94,8 @@ if len(sys.argv) != 2:
 else:
     outpath = Path(sys.argv[1])  # grab from command line input
     fbin = glob.glob(os.path.join(outpath, '*.lf.bin'))
-    print(fbin)
-    ephysqc.extract_rmsmap(fbin)  # make sure you send a path for the time being and not a string
+    assert(len(fbin)>0)
+    print('fbin: %s'%fbin)
+    ephysqc.extract_rmsmap(Path(fbin[0]))  # make sure you send a path for the time being and not a string
     _plot_spectra(outpath, 'lf')
     _plot_rmsmap(outpath, 'lf')
