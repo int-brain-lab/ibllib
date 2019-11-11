@@ -221,6 +221,8 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
         # test the version from paths
         self.assertTrue(spikeglx.get_neuropixel_version_from_folder(self.dir3a) == '3A')
         self.assertTrue(spikeglx.get_neuropixel_version_from_folder(self.dir3b) == '3B')
+        self.dir3b.joinpath('imec1', 'sync_testing_g0_t0.imec1.ap.bin').unlink()
+        self.assertEqual(spikeglx.glob_ephys_files(self.dir3b.joinpath('imec1')), [])
 
     def tearDown(self):
         shutil.rmtree(self.tmpdir)
@@ -264,14 +266,14 @@ class TestsSpikeGLX_compress(unittest.TestCase):
         compare_data(sr_ref, self.sc)
 
         # test decompression in-place
-        self.sc.decompress_file(keep_original=False)
+        self.sc.decompress_file(keep_original=False, overwrite=True)
         compare_data(sr_ref, self.sc)
         self.assertFalse(self.sr.is_mtscomp)
         self.assertFalse(self.file_cbin.exists())
         compare_data(sr_ref, self.sc)
 
         # test compression in-place
-        self.sc.compress_file(keep_original=False)
+        self.sc.compress_file(keep_original=False, overwrite=True)
         compare_data(sr_ref, self.sc)
         self.assertTrue(self.sc.is_mtscomp)
         self.assertTrue(self.file_cbin.exists())

@@ -411,9 +411,11 @@ def glob_ephys_files(session_path, suffix='.meta', recursive=True):
     recurse = '**/' if recursive else ''
     ephys_files = []
     for raw_ephys_file in Path(session_path).glob(f'{recurse}*.ap{suffix}'):
+        raw_ephys_apfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + '.*bin'), None)
+        if not raw_ephys_apfile:
+            continue
         # first get the ap file
         ephys_files.extend([Bunch({'label': None, 'ap': None, 'lf': None, 'path': None})])
-        raw_ephys_apfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + '.*bin'), None)
         ephys_files[-1].ap = raw_ephys_apfile
         # then get the corresponding lf file if it exists
         lf_file = raw_ephys_apfile.parent / raw_ephys_apfile.name.replace('.ap.', '.lf.')
