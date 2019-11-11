@@ -15,3 +15,8 @@ before_script:
 script:
   - bash ./run_tests
   - flake8 .
+# only build master and develop (PRs are built for all branches)
+branches:
+  only:
+  - master
+  - develop

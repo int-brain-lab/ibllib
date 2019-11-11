@@ -1,3 +1,8 @@
+### Release Notes 1.3.00
+-   Transfer rig data takes into account session type (ephys/training) to create flags
+-   Ephys video compression in pipeline
+-   Ephys audio compression in pipeline
+
 ### Release Notes 1.2.9
 -   Ephys extraction: provide full 3B default wirings if files do not exist.
 
