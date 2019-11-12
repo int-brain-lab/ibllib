@@ -58,22 +58,54 @@ class TestPipesMisc(unittest.TestCase):
 
     def setUp(self):
         # Define folders
-        self.local_data_path = Path(tempfile.gettempdir()) / 'iblrig_data' / 'Subjects'
-        self.remote_data_path = Path(tempfile.gettempdir()) / 'iblrig_data' / 'Subjects'
+        self.local_data_path = Path(tempfile.gettempdir()) / 'local' / 'iblrig_data' / 'Subjects'
+        self.remote_data_path = Path(tempfile.gettempdir()) / 'remote' / 'iblrig_data' / 'Subjects'
         self.local_session_path = self.local_data_path / 'Subjects' / \
             'test_subject' / '1900-01-01' / '001'
         self.raw_ephys_data_path = self.local_session_path / 'raw_ephys_data'
-        self.probe00_path = raw_ephys_data_path / 'probe00'
-        self.probe01_path = raw_ephys_data_path / 'probe01'
-        self.bad_ephys_folder_3A = raw_ephys_data_path / 'bad_ephys_folder'
-        self.bad_ephys_folder_3B = raw_ephys_data_path / 'bad_folder_g0_t0'
+        self.probe00_path = self.raw_ephys_data_path / 'probe00'
+        self.probe01_path = self.raw_ephys_data_path / 'probe01'
+
+        self.bad_ephys_folder_3A = self.raw_ephys_data_path / 'bad_ephys_folder'
+        self.bad_probe00_folder_3A = self.bad_ephys_folder_3A / 'some_probe00_folder'
+        self.bad_probe01_folder_3A = self.bad_ephys_folder_3A / 'some_probe01_folder'
+        self.bad_ephys_folder_3B = self.raw_ephys_data_path / 'bad_folder_g0_t0'
+        self.bad_probe00_folder_3B = self.bad_ephys_folder_3B / 'bad_folder_g0_t0.imec0'
+        self.bad_probe01_folder_3B = self.bad_ephys_folder_3A / 'bad_folder_g0_t0.imec1'
         # Make folders
         self.probe00_path.mkdir(exist_ok=True, parents=True)
         self.probe01_path.mkdir(exist_ok=True, parents=True)
-        self.bad_ephys_folder_3A.mkdir(exist_ok=True, parents=True)
-        self.bad_ephys_folder_3B.mkdir(exist_ok=True, parents=True)
+        self.bad_probe00_folder_3A.mkdir(exist_ok=True, parents=True)
+        self.bad_probe01_folder_3A.mkdir(exist_ok=True, parents=True)
+        self.bad_probe00_folder_3B.mkdir(exist_ok=True, parents=True)
+        self.bad_probe01_folder_3B.mkdir(exist_ok=True, parents=True)
         # Make some files
-        # TODO finish this!
+        self.populate_bad_folders()
+
+    def populate_bad_folders(self):
+        # 3A
+        (self.bad_probe00_folder_3A / 'blabla_g0_t0.imec.ap.bin').touch()
+        (self.bad_probe00_folder_3A / 'blabla_g0_t0.imec.lf.meta').touch()
+        (self.bad_probe00_folder_3A / 'blabla_g0_t0.imec.ap.bin').touch()
+        (self.bad_probe00_folder_3A / 'blabla_g0_t0.imec.lf.meta').touch()
+
+        (self.bad_probe01_folder_3A / 'blabla_g0_t0.imec.ap.bin').touch()
+        (self.bad_probe01_folder_3A / 'blabla_g0_t0.imec.lf.meta').touch()
+        (self.bad_probe01_folder_3A / 'blabla_g0_t0.imec.ap.bin').touch()
+        (self.bad_probe01_folder_3A / 'blabla_g0_t0.imec.lf.meta').touch()
+        # 3B
+        (self.bad_probe00_folder_3B / 'blabla_g0_t0.imec0.ap.bin').touch()
+        (self.bad_probe00_folder_3B / 'blabla_g0_t0.imec0.lf.meta').touch()
+        (self.bad_probe00_folder_3B / 'blabla_g0_t0.imec0.ap.bin').touch()
+        (self.bad_probe00_folder_3B / 'blabla_g0_t0.imec0.lf.meta').touch()
+
+        (self.bad_probe01_folder_3B / 'blabla_g0_t0.imec1.ap.bin').touch()
+        (self.bad_probe01_folder_3B / 'blabla_g0_t0.imec1.lf.meta').touch()
+        (self.bad_probe01_folder_3B / 'blabla_g0_t0.imec1.ap.bin').touch()
+        (self.bad_probe01_folder_3B / 'blabla_g0_t0.imec1.lf.meta').touch()
+
+        (self.bad_ephys_folder_3B / 'blabla_g0_t0.nidq.bin').touch()
+        (self.bad_ephys_folder_3B / 'blabla_g0_t0.nidq.meta').touch()
 
     def test_behavior_exists(self):
         assert(misc.behavior_exists('.') is False)
