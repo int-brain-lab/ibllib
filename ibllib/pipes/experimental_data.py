@@ -38,7 +38,8 @@ def _compress(root_data_folder, command, flag_pattern, dry=False, max_sessions=N
             if dry:
                 continue
             if not cfile.exists():
-                logger.error('NON-EXISTING RAW FILE: ' + str(cfile))
+                logger.error(f'NON-EXISTING RAW FILE: {cfile}. Skipping...')
+                continue
             if flag_file.exists():
                 flag_file.unlink()
             # run the compression command redirecting output
