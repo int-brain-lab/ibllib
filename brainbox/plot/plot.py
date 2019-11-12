@@ -7,6 +7,7 @@ import brainbox as bb
 import numpy as np
 import matplotlib.pyplot as plt
 import os.path as op
+from warnings import warn
 
 
 def feat_vars(spks, feat_name='amps', dist='norm', test='ks', cmap_name='coolwarm'):
@@ -443,3 +444,122 @@ def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins=10, show_
         [ax.text(x_l * (i + 1), y_max, 'cv={0:.2f}'.format(cvs[i]), fontsize=9, ha='right')
          for i in range(n_bins)]
         return fig, fr, cv, cvs
+
+
+def peri_event_time_histogram(
+        spike_times, spike_clusters, events, cluster_id,  # Everything you need for a basic plot
+        t_before=0.2, t_after=0.5, bin_size=0.025, smoothing=0.025, as_rate=True,
+        include_raster=False, n_rasters=None, error_bars='std', ax=None,
+        pethline_kwargs={'color': 'blue', 'lw': 2},
+        errbar_kwargs={'color': 'blue', 'alpha': 0.5},
+        eventline_kwargs={'color': 'black', 'alpha': 0.5},
+        raster_kwargs={'color': 'black', 'lw': 0.5}, **kwargs):
+    """
+    Plot peri-event time histograms, with the meaning firing rate of units centered on a given
+    series of events. Can optionally add a raster underneath the PETH plot of individual spike
+    trains about the events.
+
+    Arguments:
+        spike_times {array-like} -- Spike times (in seconds)
+        spike_clusters {array-like} -- Cluster identities for each element of spikes
+        events {array-like} -- Times to align the histogram(s) to
+        cluster_id {int} -- Identity of the cluster for which to plot a PETH
+
+    Keyword Arguments:
+        t_before {float} -- Time before event to plot (default: {0.2})
+        t_after {float} -- Time after event to plot (default: {0.5})
+        bin_size {float} -- Width of bin for histograms (default: {0.025})
+        smoothing {float} -- sigma of gaussian smoothing to use in histograms. (default: {0.025})
+        as_rate {bool} -- Whether to use spike counts or rates in the plot (default: {False})
+        include_raster {bool} -- Whether to put a raster below the PETH of individual spike trains
+            (default: {False})
+        n_rasters {int} -- If include_raster is True, the number of rasters to include. If None
+            will default to plotting rasters around all provided events. (default: {None})
+        error_bars {str} -- Defines which type of error bars to plot. Options are:
+            -- 'std' for 1 standard deviation
+            -- 'sem' for standard error of the mean
+            -- 'none' for only plotting the mean value
+            (default: {'std'})
+        ax {matplotlib axes} -- If passed, the function will plot on the passed axes. Note: current
+            behavior causes whatever was on the axes to be cleared before plotting!
+            (default: {None})
+        pethline_kwargs {dict} -- Dict containing line properties to define PETH plot line. Default
+            is a blue line with weight of 2. Needs to have color. See matplotlib plot documentation
+            for more options.
+            (default: {'color': 'blue', 'lw': 2})
+        errbar_kwargs {dict} -- Dict containing fill-between properties to define PETH error bars.
+            Default is a blue fill with 50 percent opacity.. Needs to have color. See matplotlib
+            fill_between documentation for more options.
+            (default: {'color': 'blue', 'alpha': 0.5})
+        eventline)kwargs {dict} -- Dict containing fill-between properties to define line at event.
+            Default is a black line with 50 percent opacity.. Needs to have color. See matplotlib
+            vlines documentation for more options.
+            (default: {'color': 'black', 'alpha': 0.5})
+        raster_kwargs {dict} -- Dict containing properties defining lines in the raster plot.
+            Default is black lines with line width of 0.5. See matplotlib vlines for more options.
+            (default: {'color': 'black', 'lw': 0.5})
+    """
+
+    # Check to make sure if we fail, we fail in an informative way
+    if not len(spike_times) == len(spike_clusters):
+        raise ValueError('Spike times and clusters are not of the same shape')
+    if cluster_id not in np.unique(spike_clusters):
+        raise ValueError('Cluster to plot was not found in spike clusters')
+    if len(events) == 1:
+        raise ValueError('Cannot make a PETH with only one event.')
+    if error_bars not in ('std', 'sem', 'none'):
+        raise ValueError('Invalid error bar type was passed.')
+
+    # Compute peths
+    peths, binned_spikes = bb.singlecell.calculate_peths(spike_times, spike_clusters, [cluster_id],
+                                                         events, t_before, t_after, bin_size,
+                                                         smoothing, as_rate)
+    # Construct an axis object if none passed
+    if ax is None:
+        plt.figure()
+        ax = plt.gca()
+    # Plot the curve and add error bars
+    mean = peths.means[0, :]
+    ax.plot(peths.tscale, mean, **pethline_kwargs)
+    if error_bars == 'std':
+        bars = peths.stds[0, :]
+    elif error_bars == 'sem':
+        bars = peths.stds[0, :] / np.sqrt(len(events))
+    else:
+        bars = np.zeros_like(mean)
+    if error_bars != 'none':
+        ax.fill_between(peths.tscale, mean - bars, mean + bars, **errbar_kwargs)
+
+    # Plot the event marker line. Extends to 5% higher than max value of means plus any error bar.
+    plot_edge = (mean.max() + bars[mean.argmax()]) * 1.05
+    ax.vlines(0., 0., plot_edge, **eventline_kwargs)
+    # Set the limits on the axes to t_before and t_after. Either set the ylim to the 0 and max
+    # values of the PETH, or if we want to plot a spike raster below, create an equal amount of
+    # blank space below the zero where the raster will go.
+    ax.set_xlim([-t_before, t_after])
+    ax.set_ylim([-plot_edge if include_raster else 0., plot_edge])
+    # Put y ticks only at min, max, and zero
+    if mean.min() != 0:
+        ax.set_yticks([0, mean.min(), mean.max()])
+    else:
+        ax.set_yticks([0., mean.max()])
+    # Move the x axis line from the bottom of the plotting space to zero if including a raster,
+    # Then plot the raster
+    if include_raster:
+        if n_rasters is None:
+            n_rasters = len(events)
+        if n_rasters > 60:
+            warn("Number of raster traces is greater than 60. This might look bad on the plot.")
+        ax.axhline(0., color='black')
+        tickheight = plot_edge / len(events[:n_rasters])  # How much space per trace
+        tickedges = np.arange(0., -plot_edge - 1e-5, -tickheight)
+        clu_spks = spike_times[spike_clusters == cluster_id]
+        for i, t in enumerate(events[:n_rasters]):
+            idx = np.bitwise_and(clu_spks >= t - t_before, clu_spks <= t + t_after)
+            event_spks = clu_spks[idx]
+            ax.vlines(event_spks - t, tickedges[i + 1], tickedges[i], **raster_kwargs)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.set_xlabel('Time (s) after event')
+    ax.set_ylabel('Firing Rate' if as_rate else 'Number of spikes')
+    return ax
