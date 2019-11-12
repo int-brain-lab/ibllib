@@ -33,7 +33,8 @@ def behavior_exists(session_path: str) -> bool:  # testOK
     return False
 
 
-def check_transfer(src_session_path: str or Path, dst_session_path: str or Path):  # missing fail test
+def check_transfer(src_session_path: str or Path, dst_session_path: str or Path):
+    # missing fail test
     src_files = sorted([x for x in Path(src_session_path).rglob('*') if x.is_file()])
     dst_files = sorted([x for x in Path(dst_session_path).rglob('*') if x.is_file()])
     assert_msg = 'src_files != dst_files'
@@ -298,7 +299,7 @@ def rename_ephys_files(session_folder: str) -> None:
         shutil.move(str(nidqf), str(nidqf.parent / new_filename))
 
 
-def get_new_filename(filename: str) -> str:  #testOK
+def get_new_filename(filename: str) -> str:  # testOK
     """get_new_filename is system agnostic (3A, 3B1, 3B2).
     Gets an alyx compatible filename from any spikeglx ephys file.
 

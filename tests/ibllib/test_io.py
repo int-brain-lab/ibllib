@@ -80,11 +80,11 @@ class TestsRawDataLoaders(unittest.TestCase):
         # test with 2 lines and a trailing
         with open(self.tempfile.name, 'w+') as fid:
             fid.write('file1\nfile2\n')
-        self.assertEqual(flags.read_flag_file(self.tempfile.name), ['file1', 'file2'])
+        self.assertEqual(set(flags.read_flag_file(self.tempfile.name)), set(['file1', 'file2']))
         # test with 2 lines and a trailing, Windows convention
         with open(self.tempfile.name, 'w+') as fid:
             fid.write('file1\r\nfile2\r\n')
-        self.assertEqual(flags.read_flag_file(self.tempfile.name), ['file1', 'file2'])
+        self.assertEqual(set(flags.read_flag_file(self.tempfile.name)), set(['file1', 'file2']))
 
     def testAppendFlagFile(self):
         #  DO NOT CHANGE THE ORDER OF TESTS BELOW
@@ -120,7 +120,8 @@ class TestsRawDataLoaders(unittest.TestCase):
 
         # with an existing empty file, writing filelist returns the list if clobber
         flags.write_flag_file(self.tempfile.name, ['file1', 'file2', 'file3'], clobber=True)
-        self.assertEqual(flags.read_flag_file(self.tempfile.name), ['file1', 'file2', 'file3'])
+        self.assertEqual(set(flags.read_flag_file(self.tempfile.name)),
+                         set(['file1', 'file2', 'file3']))
 
         # test the removal of a file within the list
         flags.excise_flag_file(self.tempfile.name, removed_files='file1')
