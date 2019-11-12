@@ -36,9 +36,11 @@ def behavior_exists(session_path: str) -> bool:  # testOK
 def check_transfer(src_session_path: str or Path, dst_session_path: str or Path):  # missing fail test
     src_files = sorted([x for x in Path(src_session_path).rglob('*') if x.is_file()])
     dst_files = sorted([x for x in Path(dst_session_path).rglob('*') if x.is_file()])
+    assert_msg = 'src_files != dst_files'
+    assert len(src_files) == len(dst_files), assert_msg
     for s, d in zip(src_files, dst_files):
-        assert(s.name == d.name)
-        assert(s.stat().st_size == d.stat().st_size)
+        assert s.name == d.name, assert_msg
+        assert s.stat().st_size == d.stat().st_size, assert_msg
     return
 
 
@@ -226,7 +228,7 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False,
         # Rename ephys files
         rename_ephys_files(str(session_path))
         # Copy wiring files
-        # copy_wiring_files(session_path, iblscripts_folder)
+        copy_wiring_files(session_path, iblscripts_folder)
         flag_file = session_path / 'transfer_me.flag'
         msg = f"Transfer to {remote_folder} with the same name?"
         resp = input(msg + "\n[y]es/[r]ename/[s]kip/[e]xit\n ^\n> ") or 'y'
@@ -281,7 +283,7 @@ def rename_ephys_files(session_folder: str) -> None:
     session_path = Path(session_folder)
     ap_files = session_path.rglob('*.ap.*')
     lf_files = session_path.rglob('*.lf.*')
-    nidq_files = session_path.rglob('*.nidaq.*')
+    nidq_files = session_path.rglob('*.nidq.*')
 
     for apf in ap_files:
         new_filename = get_new_filename(apf.name)
@@ -323,7 +325,7 @@ def get_new_filename(filename: str) -> str:  #testOK
         ext = 'meta'
 
     if '.nidq.' in filename:
-        return '.'.join([root, gt, 'nidq', ext])
+        return '.'.join([root + gt, 'nidq', ext])
 
     # probe = 'imec0' or 'imec1'
     if '.imec0.' in filename:
@@ -339,8 +341,7 @@ def get_new_filename(filename: str) -> str:  #testOK
     elif '.lf.' in filename:
         freq = 'lf'
 
-    root_gt = root + gt
-    return '.'.join([root_gt, probe, freq, ext])
+    return '.'.join([root + gt, probe, freq, ext])
 
 
 def move_ephys_files(session_folder: str) -> None:
@@ -361,11 +362,11 @@ def move_ephys_files(session_folder: str) -> None:
     # 3A system imec only
     imec_files = session_path.rglob('*.imec.*')
     for imf in imec_files:
-        if 'probe00' in imf.name:
+        if 'probe00' in str(imf):
             shutil.move(str(imf), str(probe00_path / imf.name))
-        elif 'probe01' in imf.name:
+        elif 'probe01' in str(imf):
             shutil.move(str(imf), str(probe01_path / imf.name))
-
+    # TODO: add remove old folder by getting it from imfa nd storing it into a var
     # 3B system
     imec0_files = session_path.rglob('*.imec0.*')
     imec1_files = session_path.rglob('*.imec1.*')
@@ -377,7 +378,7 @@ def move_ephys_files(session_folder: str) -> None:
     for i1f in imec1_files:
         shutil.move(str(i1f), str(probe01_path / i1f.name))
     # NIDAq files
-    nidq_files = session_path.rglob('*.nidaq.*')
+    nidq_files = session_path.rglob('*.nidq.*')
     for nidqf in nidq_files:
         shutil.move(str(nidqf), str(raw_ephys_data_path / nidqf.name))
 
@@ -442,7 +443,7 @@ def copy_wiring_files(session_path, iblscripts_folder):
 
     if ephys_system == '3B':
         # Copy nidq file
-        nidq_files = session_path.rglob('*.nidaq.bin')
+        nidq_files = session_path.rglob('*.nidq.bin')
         for nidqf in nidq_files:
             nidq_wiring_name = '.'.join(str(nidqf.name).split('.')[:-1]) + termination
             shutil.copy(str(src_wiring_path / 'nidq.wiring.json'),
