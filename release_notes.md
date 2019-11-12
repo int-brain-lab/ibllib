@@ -1,4 +1,8 @@
-### Release Notes 1.3.00
+### Release Notes 1.3.01 - 12-NOV-2019
+-   transfer scripts from ephys/video/rig computers to local servers
+-   bugfix spigeglx.glob_ephys_files when metadata file without ap.bin file
+
+### Release Notes 1.3.00 - 11-NOV-2019
 -   Transfer rig data takes into account session type (ephys/training) to create flags
 -   Ephys video compression in pipeline
 -   Ephys audio compression in pipeline
