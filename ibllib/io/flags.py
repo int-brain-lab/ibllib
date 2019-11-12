@@ -25,7 +25,7 @@ def read_flag_file(fname):
     """
     # the flag file may contains specific file names for a targeted extraction
     with open(fname) as fid:
-        save = list(filter(None, fid.read().splitlines()))
+        save = list(set(list(filter(None, fid.read().splitlines()))))
     # if empty, extract everything by default
     if len(save) == 0:
         save = True
@@ -82,8 +82,13 @@ def write_flag_file(fname, file_list: list = None, clobber=False):
     if clobber:
         mode = 'w+'
     elif exists and has_files and file_list:
-        mode = 'a+'
-        file_list = [''] + file_list
+        mode = 'w+'
+        file_list_flag = read_flag_file(fname)
+        # if the file is empty, can't remove a specific file and return
+        if len(file_list_flag) == 0:
+            file_list = [''] + file_list
+        else:
+            file_list = list(set(file_list + file_list_flag))
     else:
         mode = 'w+'
         if exists and not has_files:
@@ -129,7 +134,7 @@ def create_extract_flags(root_data_folder, force=False, file_list=None):
 
 
 def create_transfer_flags(root_data_folder, force=False, file_list=None):
-    create_other_flags(root_data_folder, 'extract_me.flag', force=False, file_list=None)
+    create_other_flags(root_data_folder, 'transfer_me.flag', force=False, file_list=None)
 
 
 def create_create_flags(root_data_folder, force=False, file_list=None):

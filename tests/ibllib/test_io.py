@@ -80,11 +80,11 @@ class TestsRawDataLoaders(unittest.TestCase):
         # test with 2 lines and a trailing
         with open(self.tempfile.name, 'w+') as fid:
             fid.write('file1\nfile2\n')
-        self.assertEqual(flags.read_flag_file(self.tempfile.name), ['file1', 'file2'])
+        self.assertEqual(set(flags.read_flag_file(self.tempfile.name)), set(['file1', 'file2']))
         # test with 2 lines and a trailing, Windows convention
         with open(self.tempfile.name, 'w+') as fid:
             fid.write('file1\r\nfile2\r\n')
-        self.assertEqual(flags.read_flag_file(self.tempfile.name), ['file1', 'file2'])
+        self.assertEqual(set(flags.read_flag_file(self.tempfile.name)), set(['file1', 'file2']))
 
     def testAppendFlagFile(self):
         #  DO NOT CHANGE THE ORDER OF TESTS BELOW
@@ -92,13 +92,19 @@ class TestsRawDataLoaders(unittest.TestCase):
         file_list = ['_ibl_extraRewards.times', '_ibl_lickPiezo.raw', '_ibl_lickPiezo.timestamps']
         with open(self.tempfile.name, 'w+') as fid:
             fid.write('\n'.join(file_list))
-        self.assertEqual(flags.read_flag_file(self.tempfile.name), file_list)
+        self.assertEqual(set(flags.read_flag_file(self.tempfile.name)), set(file_list))
 
         # with an existing file containing files, writing more files append to it
         file_list_2 = ['turltu']
         # also makes sure that if a string is provided it works
         flags.write_flag_file(self.tempfile.name, file_list_2[0])
-        self.assertEqual(flags.read_flag_file(self.tempfile.name), file_list + file_list_2)
+        self.assertEqual(set(flags.read_flag_file(self.tempfile.name)),
+                         set(file_list + file_list_2))
+
+        # writing again keeps unique file values
+        flags.write_flag_file(self.tempfile.name, file_list_2[0])
+        n = sum([1 for f in flags.read_flag_file(self.tempfile.name) if f == file_list_2[0]])
+        self.assertEqual(n, 1)
 
         # with an existing file containing files, writing empty filelist returns True for all files
         flags.write_flag_file(self.tempfile.name, None)
@@ -114,7 +120,8 @@ class TestsRawDataLoaders(unittest.TestCase):
 
         # with an existing empty file, writing filelist returns the list if clobber
         flags.write_flag_file(self.tempfile.name, ['file1', 'file2', 'file3'], clobber=True)
-        self.assertEqual(flags.read_flag_file(self.tempfile.name), ['file1', 'file2', 'file3'])
+        self.assertEqual(set(flags.read_flag_file(self.tempfile.name)),
+                         set(['file1', 'file2', 'file3']))
 
         # test the removal of a file within the list
         flags.excise_flag_file(self.tempfile.name, removed_files='file1')
@@ -221,6 +228,8 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
         # test the version from paths
         self.assertTrue(spikeglx.get_neuropixel_version_from_folder(self.dir3a) == '3A')
         self.assertTrue(spikeglx.get_neuropixel_version_from_folder(self.dir3b) == '3B')
+        self.dir3b.joinpath('imec1', 'sync_testing_g0_t0.imec1.ap.bin').unlink()
+        self.assertEqual(spikeglx.glob_ephys_files(self.dir3b.joinpath('imec1')), [])
 
     def tearDown(self):
         shutil.rmtree(self.tmpdir)
@@ -264,14 +273,14 @@ class TestsSpikeGLX_compress(unittest.TestCase):
         compare_data(sr_ref, self.sc)
 
         # test decompression in-place
-        self.sc.decompress_file(keep_original=False)
+        self.sc.decompress_file(keep_original=False, overwrite=True)
         compare_data(sr_ref, self.sc)
         self.assertFalse(self.sr.is_mtscomp)
         self.assertFalse(self.file_cbin.exists())
         compare_data(sr_ref, self.sc)
 
         # test compression in-place
-        self.sc.compress_file(keep_original=False)
+        self.sc.compress_file(keep_original=False, overwrite=True)
         compare_data(sr_ref, self.sc)
         self.assertTrue(self.sc.is_mtscomp)
         self.assertTrue(self.file_cbin.exists())
