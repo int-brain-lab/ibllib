@@ -491,7 +491,7 @@ def peri_event_time_histogram(
             Default is a blue fill with 50 percent opacity.. Needs to have color. See matplotlib
             fill_between documentation for more options.
             (default: {'color': 'blue', 'alpha': 0.5})
-        eventline)kwargs {dict} -- Dict containing fill-between properties to define line at event.
+        eventline_kwargs {dict} -- Dict containing fill-between properties to define line at event.
             Default is a black line with 50 percent opacity.. Needs to have color. See matplotlib
             vlines documentation for more options.
             (default: {'color': 'black', 'alpha': 0.5})
@@ -558,8 +558,10 @@ def peri_event_time_histogram(
             idx = np.bitwise_and(clu_spks >= t - t_before, clu_spks <= t + t_after)
             event_spks = clu_spks[idx]
             ax.vlines(event_spks - t, tickedges[i + 1], tickedges[i], **raster_kwargs)
+        ax.set_ylabel('Firing Rate' if as_rate else 'Number of spikes', y=0.75)
+    else:
+        ax.set_ylabel('Firing Rate' if as_rate else 'Number of spikes')
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.set_xlabel('Time (s) after event')
-    ax.set_ylabel('Firing Rate' if as_rate else 'Number of spikes')
     return ax
