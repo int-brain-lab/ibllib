@@ -92,13 +92,19 @@ class TestsRawDataLoaders(unittest.TestCase):
         file_list = ['_ibl_extraRewards.times', '_ibl_lickPiezo.raw', '_ibl_lickPiezo.timestamps']
         with open(self.tempfile.name, 'w+') as fid:
             fid.write('\n'.join(file_list))
-        self.assertEqual(flags.read_flag_file(self.tempfile.name), file_list)
+        self.assertEqual(set(flags.read_flag_file(self.tempfile.name)), set(file_list))
 
         # with an existing file containing files, writing more files append to it
         file_list_2 = ['turltu']
         # also makes sure that if a string is provided it works
         flags.write_flag_file(self.tempfile.name, file_list_2[0])
-        self.assertEqual(flags.read_flag_file(self.tempfile.name), file_list + file_list_2)
+        self.assertEqual(set(flags.read_flag_file(self.tempfile.name)),
+                         set(file_list + file_list_2))
+
+        # writing again keeps unique file values
+        flags.write_flag_file(self.tempfile.name, file_list_2[0])
+        n = sum([1 for f in flags.read_flag_file(self.tempfile.name) if f == file_list_2[0]])
+        self.assertEqual(n, 1)
 
         # with an existing file containing files, writing empty filelist returns True for all files
         flags.write_flag_file(self.tempfile.name, None)
