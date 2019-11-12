@@ -5,7 +5,7 @@ from pathlib import Path
 import requests
 import json
 import re
-from ibllib.misc import pprint
+from ibllib.misc import pprint, print_progress
 
 logger_ = logging.getLogger('ibllib')
 
@@ -47,8 +47,8 @@ def http_download_file(full_link_to_file, *, clobber=False, offline=False,
         return ''
 
     # default cache directory is the home dir
-    if len(cache_dir) == 0:
-        cache_dir = str(Path.home()) + os.sep + "Downloads"
+    if not cache_dir:
+        cache_dir = str(Path.home().joinpath("Downloads"))
 
     # This is the local file name
     file_name = cache_dir + os.sep + os.path.basename(full_link_to_file)
@@ -57,10 +57,10 @@ def http_download_file(full_link_to_file, *, clobber=False, offline=False,
     if not clobber and os.path.exists(file_name):
         return file_name
     elif offline:
-        return
+        return file_name
 
     # This should be the base url you wanted to access.
-    baseurl = os.path.split(full_link_to_file)[0]
+    baseurl = os.path.split(str(full_link_to_file))[0]
 
     # Create a password manager
     manager = urllib.request.HTTPPasswordMgrWithDefaultRealm()
@@ -78,7 +78,7 @@ def http_download_file(full_link_to_file, *, clobber=False, offline=False,
     u = urllib.request.urlopen(full_link_to_file)
     file_size = int(u.getheader('Content-length'))
 
-    logger_.info("Downloading: %s Bytes: %s" % (file_name, file_size))
+    print(f"Downloading: {file_name} Bytes: {file_size}")
     file_size_dl = 0
     block_sz = 8192 * 64 * 8
     f = open(file_name, 'wb')
@@ -88,8 +88,7 @@ def http_download_file(full_link_to_file, *, clobber=False, offline=False,
             break
         file_size_dl += len(buffer)
         f.write(buffer)
-        status = r"%10d  [%3.2f%%]" % (file_size_dl, file_size_dl * 100. / file_size)
-        logger_.info(status)
+        print_progress(file_size_dl, file_size, prefix='', suffix='')
     f.close()
 
     return file_name

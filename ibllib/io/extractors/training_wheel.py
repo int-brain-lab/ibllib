@@ -11,7 +11,7 @@ from scipy import interpolate
 
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
-import brainbox.behavior.wheel as wheel
+from brainbox.behavior import wheel
 
 logger_ = logging.getLogger('ibllib.alf')
 WHEEL_RADIUS_CM = 3.1
@@ -160,7 +160,6 @@ def get_wheel_data(session_path, bp_data=None, save=False):
     # get the converter function to translate re_ts into behavior times
     convtime = time_converter_session(session_path, kind='re2b')
     data['re_ts'] = convtime(data['re_ts'])
-    return data
 
     def get_reset_trace_compensation_with_state_machine_times():
         # this is the preferred way of getting resets using the state machine time information
@@ -284,7 +283,7 @@ def get_wheel_data(session_path, bp_data=None, save=False):
 
     check_alf_folder(session_path)
     if raw.save_bool(save, '_ibl_wheel.timestamps.npy'):
-        tpath = os.path.join(session_path, 'alf', '_ibl_wheel.timestamps.npy')
+        tpath = os.path.join(session_path, 'alf', '_ibl_wheel.times.npy')
         np.save(tpath, data['re_ts'])
     if raw.save_bool(save, '_ibl_wheel.position.npy'):
         ppath = os.path.join(session_path, 'alf', '_ibl_wheel.position.npy')

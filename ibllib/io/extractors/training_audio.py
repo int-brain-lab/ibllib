@@ -8,6 +8,7 @@ from scipy import signal
 from scipy.io import wavfile
 
 from ibllib import dsp
+from ibllib.misc import log2session_static
 import ibllib.io.raw_data_loaders as ioraw
 import ibllib.io.extractors.training_trials
 
@@ -18,6 +19,7 @@ OVERLAP = NS_WIN / 2
 NS_WELCH = 512
 FTONE = 5000
 UNIT = 'dBFS'  # dBFS or dbSPL
+READY_TONE_SPL = 85
 
 
 def _running_mean(x, N):
@@ -36,7 +38,7 @@ def _detect_ready_tone(w, fs):
     # xc = np.abs(signal.hilbert(signal.correlate(w - np.mean(w), tone)))
 
 
-def _get_conversion_factor():
+def _get_conversion_factor(unit=UNIT, ready_tone_spl=READY_TONE_SPL):
     # 3 approaches here (not exclusive):
     # a- get the mic sensitivity, the preamp gain and DAC parameters and do the math
     # b- treat the whole thing as a black box and do a calibration run (cf. people at Renard's lab)
@@ -45,12 +47,12 @@ def _get_conversion_factor():
     # Usual calibration is 1 Pa (94 dBSPL) at 1 kHz
     # c) here we know that the ready tone is 55dB SPL at 5kHz, assuming a flat spectrum between
     # 1 and 5 kHz, and observing the peak value on the 5k at the microphone.
-    if UNIT == 'dBFS':
+    if unit == 'dBFS':
         return 1.0
     distance_to_the_mic = .155
     peak_value_observed = 60
     rms_value_observed = np.sqrt(2) / 2 * peak_value_observed
-    fac = 10 ** ((55 - 20 * np.log10(rms_value_observed)) / 20) * distance_to_the_mic
+    fac = 10 ** ((ready_tone_spl - 20 * np.log10(rms_value_observed)) / 20) * distance_to_the_mic
     return fac
 
 
@@ -97,24 +99,26 @@ def welchogram(fs, wav, nswin=NS_WIN, overlap=OVERLAP, nperseg=NS_WELCH):
     return tscale, fscale, W, detect
 
 
-def extract_sound(ses_path, save=True, force=False):
+@log2session_static('extraction')
+def extract_sound(ses_path, save=True, force=False, delete=False):
     """
     Simple audio features extraction for ambient sound characterization.
     From a wav file, generates several ALF files to be registered on Alyx
 
     :param ses_path: ALF full session path: (/mysubject001/YYYY-MM-DD/001)
+    :param delete: if True, removes the wav file after processing
     :return: None
     """
     ses_path = Path(ses_path)
     wav_file = ses_path / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
+    out_folder = ses_path / 'raw_behavior_data'
     if not wav_file.exists():
         return None
-    files_out = {'power': ses_path / 'alf' / '_ibl_audioSpectrogram.power.npy',
-                 'frequencies': ses_path / 'alf' / '_ibl_audioSpectrogram.frequencies.npy',
-                 'onset_times': ses_path / 'alf' / '_ibl_audioOnsetGoCue.times_microphone.npy',
-                 'times_microphone': Path(ses_path) / 'alf' /
-                                     '_ibl_audioSpectrogram.times_microphone.npy',
-                 'times': Path(ses_path) / 'alf' / '_ibl_audioSpectrogram.times.npy'
+    files_out = {'power': out_folder / '_iblmic_audioSpectrogram.power.npy',
+                 'frequencies': out_folder / '_iblmic_audioSpectrogram.frequencies.npy',
+                 'onset_times': out_folder / '_iblmic_audioOnsetGoCue.times_mic.npy',
+                 'times_microphone': out_folder / '_iblmic_audioSpectrogram.times_mic.npy',
+                 'times': out_folder / '_iblmic_audioSpectrogram.times.npy'
                  }
     # if they exist and the option Force is set to false, do not recompute and exit
     if all([files_out[f].exists() for f in files_out]) and not force:
@@ -127,13 +131,13 @@ def extract_sound(ses_path, save=True, force=False):
         return
     tscale, fscale, W, detect = welchogram(fs, wav)
     # save files
-    alf_folder = ses_path / 'alf'
-    if not alf_folder.exists():
-        alf_folder.mkdir()
-    np.save(file=files_out['power'], arr=W.astype(np.single))
-    np.save(file=files_out['frequencies'], arr=fscale[None, :].astype(np.single))
-    np.save(file=files_out['onset_times'], arr=detect)
-    np.save(file=files_out['times_microphone'], arr=tscale[:, None].astype(np.single))
+
+    if save:
+        out_folder.mkdir(exist_ok=True)
+        np.save(file=files_out['power'], arr=W.astype(np.single))
+        np.save(file=files_out['frequencies'], arr=fscale[None, :].astype(np.single))
+        np.save(file=files_out['onset_times'], arr=detect)
+        np.save(file=files_out['times_microphone'], arr=tscale[:, None].astype(np.single))
 
     # for the time scale, attempt to synchronize using onset sound detection and task data
     data = ioraw.load_data(ses_path)
@@ -144,6 +148,8 @@ def extract_sound(ses_path, save=True, force=False):
     ilast = min(len(tgocue), len(detect))
     dt = tgocue[:ilast] - detect[: ilast]
     # only save if dt is consistent for the whole session
-    if np.std(dt) < 0.2:
+    if np.std(dt) < 0.2 and save:
         tscale += np.median(dt)
         np.save(file=files_out['times'], arr=tscale[:, None].astype(np.single))
+    if delete:
+        wav_file.unlink()

@@ -2,11 +2,10 @@ from pathlib import Path
 import json
 import datetime
 import logging
-import traceback
 from dateutil import parser as dateparser
 
 import ibllib.time
-from ibllib.misc import version
+from ibllib.misc import version, log2session
 import ibllib.io.raw_data_loaders as raw
 import ibllib.io.flags as flags
 
@@ -14,25 +13,14 @@ from oneibl.one import ONE
 
 logger_ = logging.getLogger('ibllib.alf')
 REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
+                              'logs/**/_ibl_log.*.log',
                               'raw_behavior_data/**/_iblrig_*.*',
+                              'raw_behavior_data/**/_iblmic_*.*',
                               'raw_video_data/**/_iblrig_*.*',
                               'raw_video_data/**/_ibl_*.*',
                               'raw_ephys_data/**/_iblrig_*.*',
-                              'raw_ephys_data/**/_spikeglx_*.*']
-
-
-# this is a decorator to add a logfile to each extraction and registration on top of the logging
-def log2sessionfile(func):
-    def func_wrapper(self, sessionpath, *args, **kwargs):
-        fh = logging.FileHandler(Path(sessionpath).joinpath('extract_register.log'))
-        str_format = '%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
-        fh.setFormatter(logging.Formatter(str_format))
-        logger_.addHandler(fh)
-        f = func(self, sessionpath, *args, **kwargs)
-        fh.close()
-        logger_.removeHandler(fh)
-        return f
-    return func_wrapper
+                              'raw_ephys_data/**/_spikeglx_*.*',
+                              'raw_ephys_data/**/ks2_alf/*.*']
 
 
 class RegistrationClient:
@@ -62,9 +50,7 @@ class RegistrationClient:
                 continue
             logger_.info('creating session for ' + str(flag_file.parent))
             # providing a false flag stops the registration after session creation
-            status_str = self.register_session(flag_file.parent, file_list=False)
-            if status_str:
-                logger_.error(status_str)
+            self.register_session(flag_file.parent, file_list=False)
             flag_file.unlink()
 
     def register_sync(self, root_data_folder, dry=False):
@@ -82,24 +68,14 @@ class RegistrationClient:
                 continue
             file_list = flags.read_flag_file(flag_file)
             logger_.info('registering ' + str(flag_file.parent))
-            status_str = self.register_session(flag_file.parent, file_list=file_list)
-            if status_str:
-                error_message = str(flag_file.parent) + ' failed registration'
-                error_message += '\n' + ' ' * 8 + status_str
-                error_message += traceback.format_exc()
-                logger_.error(error_message)
-                err_file = flag_file.parent.joinpath('register_me.error')
-                flag_file.replace(err_file)
-                with open(err_file, 'w+') as f:
-                    f.write(error_message)
-                continue
+            self.register_session(flag_file.parent, file_list=file_list)
             flags.write_flag_file(flag_file.parent.joinpath('flatiron.flag'), file_list=file_list)
             flag_file.unlink()
             if flag_file.parent.joinpath('create_me.flag').exists():
                 flag_file.parent.joinpath('create_me.flag').unlink()
             logger_.info('registered' + '\n')
 
-    @log2sessionfile
+    @log2session('register')
     def register_session(self, ses_path, file_list=True, repository_name=None):
         """
         Register session in Alyx
@@ -112,18 +88,23 @@ class RegistrationClient:
         if isinstance(ses_path, str):
             ses_path = Path(ses_path)
         # read meta data from the rig for the session from the task settings file
-        settings_json_file = [f for f in ses_path.glob('**/_iblrig_taskSettings.raw*.json')]
+        settings_json_file = list(ses_path.glob(
+            '**/raw_behavior_data/_iblrig_taskSettings.raw*.json'))
         if not settings_json_file:
-            logger_.error(['could not find _iblrig_taskSettings.raw.json. Abort.'])
-            return
+            settings_json_file = list(ses_path.glob('**/_iblrig_taskSettings.raw*.json'))
+            if not settings_json_file:
+                logger_.error(['could not find _iblrig_taskSettings.raw.json. Abort.'])
+                return
+            logger_.warning([f'Settings found in a strange place: {settings_json_file}'])
         else:
             settings_json_file = settings_json_file[0]
         md = _read_settings_json_compatibility_enforced(settings_json_file)
         # query alyx endpoints for subject, error if not found
         try:
             subject = self.one.alyx.rest('subjects?nickname=' + md['SUBJECT_NAME'], 'list')[0]
-        except IndexError:
-            return 'Subject: ' + md['SUBJECT_NAME'] + " doesn't exist in Alyx. ABORT."
+        except IndexError as e:
+            logger_.error(f"Subject: {md['SUBJECT_NAME']} doesn't exist in Alyx. ABORT.")
+            raise e
 
         # look for a session from the same subject, same number on the same day
         session_id, session = self.one.search(subjects=subject['nickname'],
@@ -132,8 +113,9 @@ class RegistrationClient:
                                               details=True)
         try:
             user = self.one.alyx.rest('users', 'read', id=md["PYBPOD_CREATOR"][0])
-        except Exception:
-            return 'User: ' + md["PYBPOD_CREATOR"][0] + " doesn't exist in Alyx. ABORT"
+        except Exception as e:
+            logger_.error(f"User: {md['PYBPOD_CREATOR'][0]} doesn't exist in Alyx. ABORT")
+            raise e
 
         username = user['username'] if user else subject['responsible_user']
 
@@ -181,7 +163,7 @@ class RegistrationClient:
                 'subject': subject['nickname'],
                 'date_time': ibllib.time.date2isostr(end_time),
                 'water_administered': ses_data[-1]['water_delivered'] / 1000,
-                'water_type': md['REWARD_TYPE'],
+                'water_type': md.get('REWARD_TYPE') or 'Water',
                 'user': username,
                 'session': session['url'][-36:],
                 'adlib': False}
@@ -193,7 +175,7 @@ class RegistrationClient:
         rename_files_compatibility(ses_path, md['IBLRIG_VERSION_TAG'])
         F = {}  # empty dict whose keys will be relative paths and content filenames
         for fn in _glob_session(ses_path):
-            if fn.suffix in ['.flag', '.error', '.avi', '.log']:
+            if fn.suffix in ['.flag', '.error', '.avi']:
                 logger_.debug('Excluded: ', str(fn))
                 continue
             if not self._match_filename_dtypes(fn):
@@ -207,10 +189,11 @@ class RegistrationClient:
                 continue
             try:
                 assert (str(gen_rel_path) in str(fn))
-            except AssertionError:
+            except AssertionError as e:
                 strerr = 'ALF folder mismatch: data is in wrong subject/date/number folder. \n'
                 strerr += ' Expected ' + str(gen_rel_path) + ' actual was ' + str(fn)
-                return strerr
+                logger_.error(strerr)
+                raise e
             # extract the relative path of the file
             rel_path = Path(str(fn)[str(fn).find(str(gen_rel_path)):]).parent
             if str(rel_path) not in F.keys():
@@ -230,7 +213,7 @@ class RegistrationClient:
         import re
         patterns = [dt['filename_pattern'] for dt in self.dtypes if dt['filename_pattern']]
         for pat in patterns:
-            reg = pat.replace('.', r'\.').replace('_', r'\_').replace('*', r'.+')
+            reg = pat.replace('.', r'\.').replace('_', r'\_').replace('*', r'.*')
             if re.match(reg, Path(full_file).name, re.IGNORECASE):
                 return True
         return False

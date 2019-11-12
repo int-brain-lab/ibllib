@@ -1,14 +1,18 @@
+import json
 import logging
 from pathlib import Path
 import re
 
 import numpy as np
 
+import mtscomp
 from brainbox.core import Bunch
+from ibllib.ephys import neuropixel as neuropixel
+
 
 SAMPLE_SIZE = 2  # int16
 DEFAULT_BATCH_SIZE = 1e6
-logger_ = logging.getLogger('ibllib')
+_logger = logging.getLogger('ibllib')
 
 
 class Reader:
@@ -25,14 +29,24 @@ class Reader:
             self.file_meta_data = None
             self.meta = None
             self.channel_conversion_sample2mv = 1
-            logger_.warning(str(sglx_file) + " : no metadata file found. Very limited support")
+            _logger.warning(str(sglx_file) + " : no metadata file found. Very limited support")
+            return
+        # normal case we continue reading and interpreting the metadata file
+        self.file_meta_data = file_meta_data
+        self.meta = read_meta_data(file_meta_data)
+        self.channel_conversion_sample2mv = _conversion_sample2mv_from_meta(self.meta)
+        # if we are not looking at a compressed file, use a memmap, otherwise instantiate mtscomp
+        if self.is_mtscomp:
+            self.data = mtscomp.Reader()
+            self.data.open(self.file_bin, self.file_bin.with_suffix('.ch'))
         else:
-            self.file_meta_data = file_meta_data
-            self.meta = read_meta_data(file_meta_data)
             if self.nc * self.ns * 2 != self.nbytes:
-                logger_.warning(str(sglx_file) + " : meta data and filesize do not checkout")
-            self.channel_conversion_sample2mv = _conversion_sample2mv_from_meta(self.meta)
-            self.memmap = np.memmap(sglx_file, dtype='int16', mode='r', shape=(self.ns, self.nc))
+                _logger.warning(str(sglx_file) + " : meta data and filesize do not checkout")
+            self.data = np.memmap(sglx_file, dtype='int16', mode='r', shape=(self.ns, self.nc))
+
+    @property
+    def is_mtscomp(self):
+        return 'cbin' in self.file_bin.suffix and self.file_bin.with_suffix('.ch').exists()
 
     @property
     def version(self):
@@ -68,7 +82,21 @@ class Reader:
             return
         return int(np.round(self.meta.get('fileTimeSecs') * self.fs))
 
-    def read_samples(self, first_sample=0, last_sample=10000):
+    def read(self, nsel=slice(0, 10000), csel=slice(None), sync=True):
+        """
+        Read from slices or indexes
+        :param slice_n: slice or sample indices
+        :param slice_c: slice or channel indices
+        :return: float32 array
+        """
+        darray = np.float32(self.data[nsel, csel])
+        darray *= self.channel_conversion_sample2mv[self.type][csel]
+        if sync:
+            return darray, self.read_sync(nsel)
+        else:
+            return darray
+
+    def read_samples(self, first_sample=0, last_sample=10000, channels=None):
         """
         reads all channels from first_sample to last_sample, following numpy slicing convention
         sglx.read_samples(first=0, last=100) would be equivalent to slicing the array D
@@ -78,26 +106,84 @@ class Reader:
          :param last_sample:  last sample to be read, python slice-wise
          :return: numpy array of int16
         """
-        byt_offset = int(self.nc * first_sample * SAMPLE_SIZE)
-        ns_to_read = last_sample - first_sample
-        with open(self.file_bin, 'rb') as fid:
-            fid.seek(byt_offset)
-            darray = np.fromfile(fid, dtype=np.dtype('int16'), count=ns_to_read * self.nc
-                                 ).reshape((int(ns_to_read), int(self.nc)))
-        # we don't want to apply any gain on the sync trace
-        darray = np.float32(darray) * self.channel_conversion_sample2mv[self.type]
-        sync = split_sync(darray[:, _get_sync_trace_indices_from_meta(self.meta)])
-        return darray, sync
+        if not channels:
+            channels = slice(None)
+        return self.read(slice(first_sample, last_sample), channels)
 
-    def read_sync(self, _slice=slice(0, 10000)):
+    def read_sync_digital(self, _slice=slice(0, 10000)):
         """
-        Reads only the sync trace at specified samples using slicing syntax
-
-        >>> sync_samples = sr.read_sync(0:10000)
+        Reads only the digital sync trace at specified samples using slicing syntax
+        >>> sync_samples = sr.read_sync_digital(slice(0,10000))
         """
         if not self.meta:
-            logger_.warning('Sync trace not labeled in metadata. Assuming last trace')
-        return split_sync(self.memmap[_slice, _get_sync_trace_indices_from_meta(self.meta)])
+            _logger.warning('Sync trace not labeled in metadata. Assuming last trace')
+        return split_sync(self.data[_slice, _get_sync_trace_indices_from_meta(self.meta)])
+
+    def read_sync_analog(self, _slice=slice(0, 10000)):
+        """
+        Reads only the analog sync traces at specified samples using slicing syntax
+        >>> sync_samples = sr.read_sync_analog(slice(0,10000))
+        """
+        if not self.meta:
+            return
+        csel = _get_analog_sync_trace_indices_from_meta(self.meta)
+        if not csel:
+            return
+        else:
+            return self.read(nsel=_slice, csel=csel, sync=False)
+
+    def read_sync(self, _slice=slice(0, 10000), threshold=1.2):
+        """
+        Reads all sync trace. Convert analog to digital with selected threshold and append to array
+        :param _slice: samples slice
+        :param threshold: (V) threshold for front detection, defaults to 1.2 V
+        :return: int8 array
+        """
+        digital = self.read_sync_digital(_slice)
+        analog = self.read_sync_analog(_slice)
+        if analog is None:
+            return digital
+        analog[np.where(analog < threshold)] = 0
+        analog[np.where(analog >= threshold)] = 1
+        return np.concatenate((digital, np.int8(analog)), axis=1)
+
+    def compress_file(self, keep_original=True, **kwargs):
+        """
+        Compresses
+        :param keep_original: defaults True. If False, the original uncompressed file is deleted
+         and the current spikeglx.Reader object is modified in place
+        :param kwargs:
+        :return: pathlib.Path of the compressed *.cbin file
+        """
+        file_out = self.file_bin.with_suffix('.cbin')
+        assert not self.is_mtscomp
+        mtscomp.compress(self.file_bin,
+                         out=file_out,
+                         outmeta=self.file_bin.with_suffix('.ch'),
+                         sample_rate=self.fs,
+                         n_channels=self.nc,
+                         dtype=np.int16,
+                         **kwargs)
+        if not keep_original:
+            self.file_bin.unlink()
+            self.file_bin = file_out
+        return file_out
+
+    def decompress_file(self, keep_original=True, **kwargs):
+        """
+        Decompresses a mtscomp file
+        :param keep_original: defaults True. If False, the original compressed file is deleted
+         and the current spikeglx.Reader object is modified in place
+        :return: pathlib.Path of the decompressed *.bin file
+        """
+        file_out = self.file_bin.with_suffix('.bin')
+        assert self.is_mtscomp
+        mtscomp.decompress(self.file_bin, self.file_bin.with_suffix('.ch'), out=file_out, **kwargs)
+        if not keep_original:
+            self.file_bin.unlink()
+            self.file_bin.with_suffix('.ch').unlink()
+            self.file_bin = file_out
+        return file_out
 
 
 def read(sglx_file, first_sample=0, last_sample=10000):
@@ -168,6 +254,18 @@ def _get_sync_trace_indices_from_meta(md):
     return list(range(ntr - nsync, ntr))
 
 
+def _get_analog_sync_trace_indices_from_meta(md):
+    """
+    Returns a list containing indices of the sync traces in the original array
+    """
+    typ = _get_type_from_meta(md)
+    if typ != 'nidq':
+        return []
+    tr = md.get('snsMnMaXaDw')
+    nsa = int(tr[-2])
+    return list(range(int(sum(tr[0:2])), int(sum(tr[0:2])) + nsa))
+
+
 def _get_nchannels_from_meta(md):
     typ = _get_type_from_meta(md)
     if typ == 'nidq':
@@ -216,7 +314,11 @@ def _map_channels_from_meta(meta_data):
 
 def _conversion_sample2mv_from_meta(meta_data):
     """
-    Interpret the meta data string to extract an array of conversion factprs for each channel
+    Interpret the meta data to extract an array of conversion factors for each channel
+    so the output data is in Volts
+    Conversion factor is: int2volt / channelGain
+    For Lf/Ap interpret the gain string from metadata
+    For Nidq, repmat the gains from the trace counts in `snsMnMaXaDw`
 
     :param meta_data: dictionary output from  spikeglx.read_meta_data
     :return: numpy array with one gain value per channel
@@ -230,8 +332,8 @@ def _conversion_sample2mv_from_meta(meta_data):
             return md.get('niAiRangeMax') / 32768
 
     int2volt = int2volts(meta_data)
-    # interprets the gain value from the metadata header
-    if 'imroTbl' in meta_data.keys():
+    # interprets the gain value from the metadata header:
+    if 'imroTbl' in meta_data.keys():  # binary from the probes: ap or lf
         sy_gain = np.ones(int(meta_data['snsApLfSy'][-1]), dtype=np.float32)
         # the sync traces are not included in the gain values, so are included for broadcast ops
         gain = re.findall(r'([0-9]* [0-9]* [0-9]* [0-9]* [0-9]*)', meta_data['imroTbl'])
@@ -239,11 +341,12 @@ def _conversion_sample2mv_from_meta(meta_data):
                                 int2volt, sy_gain)),
                'ap': np.hstack((np.array([1 / np.float32(g.split(' ')[-2]) for g in gain]) *
                                 int2volt, sy_gain))}
-    elif 'niMNGain' in meta_data.keys():
+    elif 'niMNGain' in meta_data.keys():  # binary from nidq
         gain = np.r_[
-            1 / np.ones(int(meta_data['snsMnMaXaDw'][0],)) * meta_data['niMNGain'] * int2volt,
-            1 / np.ones(int(meta_data['snsMnMaXaDw'][1],)) * meta_data['niMAGain'] * int2volt,
-            np.ones(int(np.sum(meta_data['snsMnMaXaDw'][2:]),))]
+            np.ones(int(meta_data['snsMnMaXaDw'][0],)) / meta_data['niMNGain'] * int2volt,
+            np.ones(int(meta_data['snsMnMaXaDw'][1],)) / meta_data['niMAGain'] * int2volt,
+            np.ones(int(meta_data['snsMnMaXaDw'][2], )) * int2volt,  # no gain for analog sync
+            np.ones(int(np.sum(meta_data['snsMnMaXaDw'][3]),))]  # no unit for digital sync
         out = {'nidq': gain}
     return out
 
@@ -262,7 +365,19 @@ def split_sync(sync_tr):
     return np.int8(out)
 
 
-def glob_ephys_files(session_path):
+def get_neuropixel_version_from_folder(session_path):
+    ephys_files = glob_ephys_files(session_path)
+    return get_neuropixel_version_from_files(ephys_files)
+
+
+def get_neuropixel_version_from_files(ephys_files):
+    if any([ef.get('nidq') for ef in ephys_files]):
+        return '3B'
+    else:
+        return '3A'
+
+
+def glob_ephys_files(session_path, suffix='.meta', recursive=True):
     """
     From an arbitrary folder (usually session folder) gets the ap and lf files and labels
     Associated to the subfolders where they are
@@ -284,21 +399,111 @@ def glob_ephys_files(session_path):
             └── sync_testing_g0_t0.imec1.lf.bin
 
     :param session_path: folder, string or pathlib.Path
+    :param glob_pattern: pattern to look recursively for (defaults to '*.ap.*bin)
     :returns: a list of dictionaries with keys 'ap': apfile, 'lf': lffile and 'label'
     """
+    def get_label(raw_ephys_apfile):
+        if raw_ephys_apfile.parts[-2] != 'raw_ephys_data':
+            return raw_ephys_apfile.parts[-2]
+        else:
+            return ''
+
+    recurse = '**/' if recursive else ''
     ephys_files = []
-    for raw_ephys_apfile in Path(session_path).rglob('*.ap.bin'):
+    for raw_ephys_file in Path(session_path).glob(f'{recurse}*.ap{suffix}'):
         # first get the ap file
-        ephys_files.extend([Bunch({'label': None, 'ap': None, 'lf': None})])
+        ephys_files.extend([Bunch({'label': None, 'ap': None, 'lf': None, 'path': None})])
+        raw_ephys_apfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + '.*bin'), None)
         ephys_files[-1].ap = raw_ephys_apfile
         # then get the corresponding lf file if it exists
         lf_file = raw_ephys_apfile.parent / raw_ephys_apfile.name.replace('.ap.', '.lf.')
-        if lf_file.exists():
-            ephys_files[-1].lf = lf_file
+        ephys_files[-1].lf = next(lf_file.parent.glob(lf_file.stem + '.*bin'), None)
         # finally, the label is the current directory except if it is bare in raw_ephys_data
-        if raw_ephys_apfile.parts[-2] != 'raw_ephys_data':
-            ephys_files[-1].label = raw_ephys_apfile.parts[-2]
+        ephys_files[-1].label = get_label(raw_ephys_apfile)
+        ephys_files[-1].path = raw_ephys_apfile.parent
     # for 3b probes, need also to get the nidq dataset type
-    for raw_ephys_nidqfile in Path(session_path).rglob('*.nidq.bin'):
-        ephys_files.extend([Bunch({'label': 'breakout', 'nidq': raw_ephys_nidqfile})])
+    for raw_ephys_file in Path(session_path).rglob(f'{recurse}*.nidq{suffix}'):
+        raw_ephys_nidqfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + '.*bin'), None)
+        ephys_files.extend([Bunch({'label': get_label(raw_ephys_nidqfile),
+                                   'nidq': raw_ephys_nidqfile,
+                                   'path': raw_ephys_nidqfile.parent})])
     return ephys_files
+
+
+def _mock_spikeglx_file(mock_bin_file, meta_file, ns, nc, sync_depth,
+                        random=False, int2volts=0.6 / 32768):
+    """
+    For testing purposes, create a binary file with sync pulses to test reading and extraction
+    """
+    meta_file = Path(meta_file)
+    mock_path_bin = Path(mock_bin_file)
+    mock_path_meta = mock_path_bin.with_suffix('.meta')
+    md = read_meta_data(meta_file)
+    assert meta_file != mock_path_meta
+    fs = _get_fs_from_meta(md)
+    fid_source = open(meta_file)
+    fid_target = open(mock_path_meta, 'w+')
+    line = fid_source.readline()
+    while line:
+        line = fid_source.readline()
+        if line.startswith('fileSizeBytes'):
+            line = f'fileSizeBytes={ns * nc * 2}\n'
+        if line.startswith('fileTimeSecs'):
+            line = f'fileTimeSecs={ns / fs}\n'
+        fid_target.write(line)
+    fid_source.close()
+    fid_target.close()
+    if random:
+        D = np.random.randint(-32767, 32767, size=(ns, nc), dtype=np.int16)
+    else:  # each channel as an int of chn + 1
+        D = np.tile(np.int16((np.arange(nc) + 1) / int2volts), (ns, 1))
+        D[0:16, :] = 0
+    # the last channel is the sync that we fill with
+    sync = np.int16(2 ** np.float32(np.arange(-1, sync_depth)))
+    D[:, -1] = 0
+    D[:sync.size, -1] = sync
+    with open(mock_path_bin, 'w+') as fid:
+        D.tofile(fid)
+    return {'bin_file': mock_path_bin, 'ns': ns, 'nc': nc, 'sync_depth': sync_depth, 'D': D}
+
+
+def get_hardware_config(config_file):
+    """
+    Reads the neuropixel_wirings.json file containing sync mapping and parameters
+    :param config_file: folder or json file
+    :return: dictionary or None
+    """
+    config_file = Path(config_file)
+    if config_file.is_dir():
+        config_file = list(config_file.glob('*.wiring.json'))
+        if config_file:
+            config_file = config_file[0]
+    if not config_file or not config_file.exists():
+        return
+    with open(config_file) as fid:
+        par = json.loads(fid.read())
+    return par
+
+
+def _sync_map_from_hardware_config(hardware_config):
+    """
+    :param hardware_config: dictonary from json read of neuropixel_wirings.json
+    :return: dictionary where key names refer to object and values to sync channel index
+    """
+    pin_out = neuropixel.SYNC_PIN_OUT[hardware_config['SYSTEM']]
+    sync_map = {hardware_config['SYNC_WIRING_DIGITAL'][pin]: pin_out[pin]
+                for pin in hardware_config['SYNC_WIRING_DIGITAL']
+                if pin_out[pin] is not None}
+    analog = hardware_config.get('SYNC_WIRING_ANALOG')
+    if analog:
+        sync_map.update({analog[pin]: int(pin[2:]) + 16 for pin in analog})
+    return sync_map
+
+
+def get_sync_map(folder_ephys):
+    hc = get_hardware_config(folder_ephys)
+    if not hc:
+        _logger.warning(f"No channel map for {str(folder_ephys)}")
+        return None
+    else:
+        return _sync_map_from_hardware_config(hc)

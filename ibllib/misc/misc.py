@@ -1,23 +1,86 @@
 # library of small functions
-import numpy as np
 import json
-import re
+import logging
+import traceback
+from pathlib import Path
+
+import numpy as np
+
+from ibllib.misc import version
+_logger = logging.getLogger('ibllib')
 
 
 def pprint(my_dict):
     print(json.dumps(my_dict, indent=4))
 
 
-def is_uuid_string(string):
-    if string is None:
-        return False
-    if len(string) != 36:
-        return False
-    UUID_PATTERN = re.compile(r'^[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}$', re.IGNORECASE)
-    if UUID_PATTERN.match(string):
-        return True
-    else:
-        return False
+def _parametrized(dec):
+    def layer(*args, **kwargs):
+        def repl(f):
+            return dec(f, *args, **kwargs)
+        return repl
+    return layer
+
+
+@_parametrized
+def log2session_static(func, log_file_name):
+    """ Decorator that will fork the log output of any function that takes a session path as
+    first argument to a {session_path}/logs/yyyy-mm-dd_{log_filename}_ibllib_v1.2.3.log"""
+    def func_wrapper(session_path, *args, **kwargs):
+        fh = log2sessions_set(session_path, log_file_name)
+        try:
+            f = func(session_path, *args, **kwargs)
+        except Exception as e:
+            log2sessions_catch(e, session_path, log_file_name)
+            f = None
+        log2sessions_unset(log_file_name, fh)
+        return f
+    return func_wrapper
+
+
+@_parametrized
+def log2session(func, log_file_name):
+    """ Decorator that will fork the log output of any method that takes a session path as
+    first argument to a {session_path}/logs/yyyy-mm-dd_{log_filename}_ibllib_v1.2.3.log"""
+    def func_wrapper(self, session_path, *args, **kwargs):
+        fh = log2sessions_set(session_path, log_file_name)
+        try:
+            f = func(self, session_path, *args, **kwargs)
+        except Exception as e:
+            log2sessions_catch(e, session_path, log_file_name)
+            f = None
+        log2sessions_unset(log_file_name, fh)
+        return f
+    return func_wrapper
+
+
+def log2sessions_set(session_path, log_type):
+    log_file = Path(session_path).joinpath(
+        'logs', f'_ibl_log.info.{log_type}_v{version.ibllib()}.log')
+    log_file.parent.mkdir(exist_ok=True)
+    fh = logging.FileHandler(log_file)
+    str_format = '%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
+    fh.setFormatter(logging.Formatter(str_format))
+    _logger.addHandler(fh)
+    return fh
+
+
+def log2sessions_unset(log_type, fh=None):
+    for hdlr in _logger.handlers:
+        if '_ibl_log.' in str(hdlr):
+            _logger.removeHandler(hdlr)
+    if fh:
+        fh.close()
+
+
+def log2sessions_catch(e, sessionpath, log_type):
+    error_message = f'{sessionpath} failed extraction \n  {str(e)} \n' \
+                    f'{traceback.format_exc()}'
+    err_file = Path(sessionpath).joinpath(
+        'logs', f'_ibl_log.error.{log_type}_v{version.ibllib()}.log')
+    with open(err_file, 'w+') as fid:
+        fid.write(error_message)
+    _logger.error(error_message)
 
 
 def structarr(names, shape=None, formats=None):

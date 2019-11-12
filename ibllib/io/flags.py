@@ -166,6 +166,22 @@ def create_compress_flags(root_data_folder, clobber=False):
             write_flag_file(flag_file, file_list=str(afile.relative_to(ses_path)))
 
 
+def create_dlc_flags(root_path, dry=False, clobber=False, force=False):
+    # look for all mp4 raw video files
+    root_path = Path(root_path)
+    for file_mp4 in root_path.rglob('_iblrig_leftCamera.raw*.mp4'):
+        ses_path = file_mp4.parents[1]
+        file_label = file_mp4.stem.split('.')[0].split('_')[-1]
+        # skip flag creation if there is a file named _ibl_*Camera.dlc.npy
+        if (ses_path / 'alf' / f'_ibl_{file_label}.dlc.npy').exists() and not force:
+            continue
+        if not dry:
+            write_flag_file(ses_path / 'dlc_training.flag',
+                            file_list=[str(file_mp4.relative_to(ses_path))],
+                            clobber=clobber)
+        logger_.info(str(ses_path / 'dlc_training.flag'))
+
+
 def create_flags(root_data_folder: str or Path, flags: list,
                  force: bool = False, file_list: list = None) -> None:
     ses_path = Path(root_data_folder).glob('**/raw_behavior_data')

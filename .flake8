@@ -9,3 +9,6 @@ exclude =
     tutorial_script.py,
     venv,
     test_imports.py,
+    build,
+    dist
+    brainbox/

@@ -1,1 +1,2 @@
-from .misc import pprint, is_uuid_string, structarr, logger_config, print_progress
+from .misc import (pprint, structarr, logger_config, print_progress, log2session,
+                   log2session_static)

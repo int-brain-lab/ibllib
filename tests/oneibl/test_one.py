@@ -1,7 +1,9 @@
 import unittest
 import numpy as np
 import requests
+from pathlib import Path
 
+from alf.io import remove_uuid_file
 from oneibl.one import ONE
 
 
@@ -136,24 +138,37 @@ class TestLoad(unittest.TestCase):
         self.assertTrue(len(out.data) == 2)
         self.assertTrue(len(out.data[1]) == 5126 and out.data[0] is None)
 
+    def test_load_uuid(self):
+        one = self.One
+        dataset_types = ['eye.blink']
+        eid = ('https://test.alyx.internationalbrainlab.org/'
+               'sessions/' + self.eid)
+        filename = one.load(eid, dataset_types=dataset_types, download_only=True, keep_uuid=True)
+        uuid_fn = filename[0]
+        filename = one.load(eid, dataset_types=dataset_types, download_only=True)
+        self.assertTrue(filename[0] == remove_uuid_file(uuid_fn))
+        self.assertFalse(Path(uuid_fn).exists())
+        filename = one.load(eid, dataset_types=dataset_types, download_only=True, keep_uuid=True)
+        self.assertTrue(Path(uuid_fn).exists())
+
     def test_load(self):
         # Test with 3 actual datasets predefined
         one = self.One
-        dataset_types = ['clusters.peakChannel', 'clusters._phy_annotation', 'clusters.probes']
+        dataset_types = ['clusters.channels', 'clusters._phy_annotation', 'clusters.probes']
         eid = ('https://test.alyx.internationalbrainlab.org/'
                'sessions/' + self.eid)
         t, cr, cl = one.load(eid, dataset_types=dataset_types)
         d = one.load(eid, dataset_types=dataset_types, dclass_output=True)
-        ind = int(np.where(np.array(d.dataset_type) == 'clusters.peakChannel')[0])
+        ind = int(np.where(np.array(d.dataset_type) == 'clusters.channels')[0])
         self.assertTrue(np.all(d.data[ind] == t))
         # Now load with another dset inbetween that doesn't exist
-        t_, cr_, cl_ = one.load(eid, dataset_types=['clusters.peakChannel', 'turlu',
+        t_, cr_, cl_ = one.load(eid, dataset_types=['clusters.channels', 'turlu',
                                                     'clusters.probes'])
         self.assertTrue(np.all(t == t_))
         self.assertTrue(np.all(cl == cl_))
         self.assertTrue(cr_ is None)
         # Now try in offline mode where the file already exists
-        t_ = one.load(eid, dataset_types=['clusters.peakChannel'], offline=True)
+        t_ = one.load(eid, dataset_types=['clusters.channels'], offline=True)
         self.assertTrue(np.all(t == t_))
 
     def test_load_empty(self):
@@ -176,7 +191,7 @@ class TestLoad(unittest.TestCase):
         # Test without a dataset list should download everything and output a dictionary
         one = self.One
         eid = self.eid2
-        a = one.load(eid)
+        a = one.load(eid, dataset_types='__all__')
         self.assertTrue(len(a.data) == 5)
 
     def test_load_fileformats(self):

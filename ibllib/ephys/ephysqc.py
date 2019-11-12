@@ -5,18 +5,41 @@ from pathlib import Path
 import logging
 
 import numpy as np
+import pandas as pd
 from scipy import signal
+from scipy.ndimage import gaussian_filter1d
+
+from phylib.io import model as phymod
+
 
 import alf.io
-import ibllib.io.spikeglx
+from brainbox.core import Bunch
+from brainbox.processing import bincount2D
+from ibllib.ephys import sync_probes
 from ibllib.io import spikeglx
 import ibllib.dsp as dsp
-from ibllib.misc import print_progress
+import ibllib.io.extractors.ephys_fpga as fpga
+from ibllib.misc import print_progress, log2session_static
 
-logger_ = logging.getLogger('ibllib')
+
+_logger = logging.getLogger('ibllib')
 
 RMS_WIN_LENGTH_SECS = 3
 WELCH_WIN_LENGTH_SAMPLES = 1024
+
+METRICS_PARAMS = {
+    'presence_bin_length_secs': 20,
+    "isi_threshold": 0.0015,
+    "min_isi": 0.000166,
+    "num_channels_to_compare": 13,
+    "max_spikes_for_unit": 500,
+    "max_spikes_for_nn": 10000,
+    "n_neighbors": 4,
+    'n_silhouette': 10000,
+    "quality_metrics_output_file": "metrics.csv",
+    "drift_metrics_interval_s": 51,
+    "drift_metrics_min_spikes_per_interval": 10
+}
 
 
 def rmsmap(fbin):
@@ -71,7 +94,7 @@ def extract_rmsmap(fbin, out_folder=None, force=False, label=''):
     :param label: string or list of strings that will be appended to the filename before extension
     :return: None
     """
-    logger_.info(str(fbin))
+    _logger.info(str(fbin))
     sglx = spikeglx.Reader(fbin)
     # check if output ALF files exist already:
     if out_folder is None:
@@ -82,7 +105,7 @@ def extract_rmsmap(fbin, out_folder=None, force=False, label=''):
     alf_object_freq = f'_spikeglx_ephysQcFreq{sglx.type.upper()}'
     if alf.io.exists(out_folder, alf_object_time, glob=[label]) and \
             alf.io.exists(out_folder, alf_object_freq, glob=[label]) and not force:
-        logger_.warning(f'{fbin.name} QC already exists, skipping. Use force option to override')
+        _logger.warning(f'{fbin.name} QC already exists, skipping. Use force option to override')
         return
     # crunch numbers
     rms = rmsmap(fbin)
@@ -97,7 +120,8 @@ def extract_rmsmap(fbin, out_folder=None, force=False, label=''):
     return out_time + out_freq
 
 
-def qc_session(session_path, dry=False, force=False):
+@log2session_static('ephys')
+def raw_qc_session(session_path, dry=False, force=False):
     """
     Wrapper that exectutes QC from a session folder and outputs the results whithin the same folder
     as the original raw data.
@@ -106,7 +130,7 @@ def qc_session(session_path, dry=False, force=False):
     :param force: bool (False) Force means overwriting an existing QC file
     :return: None
     """
-    efiles = ibllib.io.spikeglx.glob_ephys_files(session_path)
+    efiles = spikeglx.glob_ephys_files(session_path)
     for efile in efiles:
         if dry:
             print(efile.ap)
@@ -116,3 +140,275 @@ def qc_session(session_path, dry=False, force=False):
             extract_rmsmap(efile.ap, out_folder=None, force=force, label=efile.label)
         if efile.lf and efile.lf.exists():
             extract_rmsmap(efile.lf, out_folder=None, force=force, label=efile.label)
+
+
+def validate_ttl_test(ses_path, display=False):
+    """
+    For a mock session on the Ephys Choice world task, check the sync channels for all
+    device properly connected and perform a synchronization if dual probes to check that
+    all channels are recorded properly
+    :param ses_path: session path
+    :param display: show the probe synchronization plot if several probes
+    :return: True if tests pass, errors otherwise
+    """
+
+    def _single_test(assertion, str_ok, str_ko):
+        if assertion:
+            _logger.info(str_ok)
+            return True
+        else:
+            _logger.error(str_ko)
+            return False
+
+    EXPECTED_RATES_HZ = {'left_camera': 60, 'right_camera': 150, 'body_camera': 30}
+    SYNC_RATE_HZ = 1
+    MIN_TRIALS_NB = 6
+
+    ok = True
+    ses_path = Path(ses_path)
+    if not ses_path.exists():
+        return False
+    rawsync, sync_map = fpga._get_main_probe_sync(ses_path)
+    last_time = rawsync['times'][-1]
+
+    # get upgoing fronts for each
+    sync = Bunch({})
+    for k in sync_map:
+        fronts = fpga._get_sync_fronts(rawsync, sync_map[k])
+        sync[k] = fronts['times'][fronts['polarities'] == 1]
+    wheel = fpga.extract_wheel_sync(rawsync, chmap=sync_map, save=False)
+
+    frame_rates = {'right_camera': np.round(1 / np.median(np.diff(sync.right_camera))),
+                   'left_camera': np.round(1 / np.median(np.diff(sync.left_camera))),
+                   'body_camera': np.round(1 / np.median(np.diff(sync.body_camera)))}
+
+    # check the camera frame rates
+    for lab in frame_rates:
+        expect = EXPECTED_RATES_HZ[lab]
+        ok &= _single_test(assertion=abs((1 - frame_rates[lab] / expect)) < 0.1,
+                           str_ok=f'PASS: {lab} frame rate: {frame_rates[lab]} = {expect} Hz',
+                           str_ko=f'FAILED: {lab} frame rate: {frame_rates[lab]} != {expect} Hz')
+
+    # check that the wheel has a minimum rate of activity on both channels
+    re_test = abs(1 - sync.rotary_encoder_1.size / sync.rotary_encoder_0.size) < 0.1
+    re_test &= len(wheel['re_pos']) / last_time > 5
+    ok &= _single_test(assertion=re_test,
+                       str_ok="PASS: Rotary encoder", str_ko="FAILED: Rotary encoder")
+    # check that the frame 2 ttls has a minimum rate of activity
+    ok &= _single_test(assertion=len(sync.frame2ttl) / last_time > 0.2,
+                       str_ok="PASS: Frame2TTL", str_ko="FAILED: Frame2TTL")
+    # the audio has to have at least one event per trial
+    ok &= _single_test(assertion=len(sync.bpod) > len(sync.audio) > MIN_TRIALS_NB,
+                       str_ok="PASS: audio", str_ko="FAILED: audio")
+    # the bpod has to have at least twice the amount of min trial pulses
+    ok &= _single_test(assertion=len(sync.bpod) > MIN_TRIALS_NB * 2,
+                       str_ok="PASS: Bpod", str_ko="FAILED: Bpod")
+    try:
+        # note: tried to depend as little as possible on the extraction code but for the valve...
+        behaviour = fpga.extract_behaviour_sync(rawsync, save=False, chmap=sync_map)
+        res = behaviour.valve_open.size > 1
+    except AssertionError:
+        res = False
+    # check that the reward valve is actionned at least once
+    ok &= _single_test(assertion=res,
+                       str_ok="PASS: Valve open", str_ko="FAILED: Valve open not detected")
+    _logger.info('ALL CHECKS PASSED !')
+
+    # the imec sync is for 3B Probes only
+    if sync.get('imec_sync') is not None:
+        ok &= _single_test(assertion=np.all(1 - SYNC_RATE_HZ * np.diff(sync.imec_sync) < 0.1),
+                           str_ok="PASS: imec sync", str_ko="FAILED: imec sync")
+
+    # second step is to test that we can make the sync. Assertions are whithin the synch code
+    if sync.get('imec_sync') is not None:
+        sync_result = sync_probes.version3B(ses_path, display=display)
+    else:
+        sync_result = sync_probes.version3A(ses_path, display=display)
+
+    ok &= _single_test(assertion=sync_result, str_ok="PASS: synchronisation",
+                       str_ko="FAILED: probe synchronizations threshold exceeded")
+
+    if not ok:
+        raise ValueError('FAILED TTL test')
+    return ok
+
+
+def _spike_sorting_metrics_ks2(ks2_path, save=True):
+    """
+    Given a path containing kilosort 2 output, compute quality metrics and optionally save them
+    to a clusters_metric.csv file
+    :param ks2_path:
+    :param save
+    :return:
+    """
+
+    def _phy_model_from_ks2_path(ks2_path):
+        params_file = ks2_path.joinpath('params.py')
+        if params_file.exists():
+            m = phymod.load_model(params_file)
+        else:
+            meta_file = next(ks2_path.rglob('*.ap.meta'), None)
+            if meta_file and meta_file.exists():
+                meta = spikeglx.read_meta_data(meta_file)
+                fs = spikeglx._get_fs_from_meta(meta)
+                nch = (spikeglx._get_nchannels_from_meta(meta) -
+                       len(spikeglx._get_sync_trace_indices_from_meta(meta)))
+            else:
+                fs = 30000
+                nch = 384
+            m = phymod.TemplateModel(dir_path=ks2_path,
+                                     dat_path=[],
+                                     sample_rate=fs,
+                                     n_channels_dat=nch)
+        return m
+
+    m = _phy_model_from_ks2_path(ks2_path)
+    r = spike_sorting_metrics(m.spike_times, m.spike_clusters, m.amplitudes, params=METRICS_PARAMS)
+    #  includes the ks2 contamination
+    file_contamination = ks2_path.joinpath('cluster_ContamPct.tsv')
+    if file_contamination.exists():
+        contam = pd.read_csv(file_contamination, sep='\t')
+        contam.rename(columns={'ContamPct': 'ks2_contamination_pct'}, inplace=True)
+        r = r.set_index('cluster_id', drop=False).join(contam.set_index('cluster_id'))
+
+    #  includes the ks2 labeling
+    file_labels = ks2_path.joinpath('cluster_KSLabel.tsv')
+    if file_labels.exists():
+        ks2_labels = pd.read_csv(file_labels, sep='\t')
+        ks2_labels.rename(columns={'KSLabel': 'ks2_label'}, inplace=True)
+        r = r.set_index('cluster_id', drop=False).join(ks2_labels.set_index('cluster_id'))
+
+    if save:
+        #  the file name contains the label of the probe (directory name in this case)
+        r.to_csv(ks2_path.joinpath(f'clusters_metrics.{ks2_path.parts[-1]}.csv'))
+
+    return r
+
+
+def spike_sorting_metrics(spike_times, spike_clusters, spike_amplitudes,
+                          params=METRICS_PARAMS, epochs=None):
+    """ Spike sorting QC metrics """
+    cluster_ids = np.unique(spike_clusters)
+    nclust = cluster_ids.size
+    r = Bunch({
+        'cluster_id': cluster_ids,
+        'num_spikes': np.zeros(nclust, ) + np.nan,
+        'firing_rate': np.zeros(nclust, ) + np.nan,
+        'presence_ratio': np.zeros(nclust, ) + np.nan,
+        'presence_ratio_std': np.zeros(nclust, ) + np.nan,
+        'isi_viol': np.zeros(nclust, ) + np.nan,
+        'amplitude_cutoff': np.zeros(nclust, ) + np.nan,
+        'amplitude_std': np.zeros(nclust, ) + np.nan,
+        # 'isolation_distance': np.zeros(nclust, ) + np.nan,
+        # 'l_ratio': np.zeros(nclust, ) + np.nan,
+        # 'd_prime': np.zeros(nclust, ) + np.nan,
+        # 'nn_hit_rate': np.zeros(nclust, ) + np.nan,
+        # 'nn_miss_rate': np.zeros(nclust, ) + np.nan,
+        # 'silhouette_score': np.zeros(nclust, ) + np.nan,
+        # 'max_drift': np.zeros(nclust, ) + np.nan,
+        # 'cumulative_drift': np.zeros(nclust, ) + np.nan,
+        'epoch_name': np.zeros(nclust, dtype='object'),
+    })
+
+    tmin = 0
+    tmax = spike_times[-1]
+
+    """computes basic metrics such as spike rate and presence ratio"""
+    presence_ratio = bincount2D(spike_times, spike_clusters,
+                                xbin=params['presence_bin_length_secs'],
+                                ybin=cluster_ids, xlim=[tmin, tmax])[0]
+    r.num_spikes = np.sum(presence_ratio > 0, axis=1)
+    r.firing_rate = r.num_spikes / (tmax - tmin)
+    r.presence_ratio = np.sum(presence_ratio > 0, axis=1) / presence_ratio.shape[1]
+    r.presence_ratio_std = np.std(presence_ratio, axis=1)
+
+    # loop over each cluster
+    for ic in np.arange(nclust):
+        # slice the spike_times array
+        ispikes = spike_clusters == cluster_ids[ic]
+        st = spike_times[ispikes]
+        sa = spike_amplitudes[ispikes]
+        # compute metrics
+        r.isi_viol[ic], _ = isi_violations(st, tmin, tmax,
+                                           isi_threshold=params['isi_threshold'],
+                                           min_isi=params['min_isi'])
+        r.amplitude_cutoff[ic] = amplitude_cutoff(amplitudes=sa)
+        r.amplitude_std[ic] = np.std(sa)
+
+    return pd.DataFrame(r)
+
+
+def isi_violations(spike_train, min_time, max_time, isi_threshold, min_isi=0):
+    """Calculate ISI violations for a spike train.
+
+    Based on metric described in Hill et al. (2011) J Neurosci 31: 8699-8705
+
+    modified by Dan Denman from cortex-lab/sortingQuality GitHub by Nick Steinmetz
+
+    Inputs:
+    -------
+    spike_train : array of spike times
+    min_time : minimum time for potential spikes
+    max_time : maximum time for potential spikes
+    isi_threshold : threshold for isi violation
+    min_isi : threshold for duplicate spikes
+
+    Outputs:
+    --------
+    fpRate : rate of contaminating spikes as a fraction of overall rate
+        A perfect unit has a fpRate = 0
+        A unit with some contamination has a fpRate < 0.5
+        A unit with lots of contamination has a fpRate > 1.0
+    num_violations : total number of violations
+
+    """
+
+    duplicate_spikes = np.where(np.diff(spike_train) <= min_isi)[0]
+
+    spike_train = np.delete(spike_train, duplicate_spikes + 1)
+    isis = np.diff(spike_train)
+
+    num_spikes = spike_train.size
+    num_violations = np.sum(isis < isi_threshold)
+    violation_time = 2 * num_spikes * (isi_threshold - min_isi)
+    total_rate = spike_train.size / (max_time - min_time)
+    violation_rate = num_violations / violation_time
+    fpRate = violation_rate / total_rate
+
+    return fpRate, num_violations
+
+
+def amplitude_cutoff(amplitudes, num_histogram_bins=500, histogram_smoothing_value=3):
+    """ Calculate approximate fraction of spikes missing from a distribution of amplitudes
+
+    Assumes the amplitude histogram is symmetric (not valid in the presence of drift)
+
+    Inspired by metric described in Hill et al. (2011) J Neurosci 31: 8699-8705
+
+    Input:
+    ------
+    amplitudes : numpy.ndarray
+        Array of amplitudes (don't need to be in physical units)
+
+    Output:
+    -------
+    fraction_missing : float
+        Fraction of missing spikes (0-0.5)
+        If more than 50% of spikes are missing, an accurate estimate isn't possible
+
+    """
+
+    h, b = np.histogram(amplitudes, num_histogram_bins, density=True)
+
+    pdf = gaussian_filter1d(h, histogram_smoothing_value)
+    support = b[:-1]
+
+    peak_index = np.argmax(pdf)
+    G = np.argmin(np.abs(pdf[peak_index:] - pdf[0])) + peak_index
+
+    bin_size = np.mean(np.diff(support))
+    fraction_missing = np.sum(pdf[G:]) * bin_size
+
+    fraction_missing = np.min([fraction_missing, 0.5])
+
+    return fraction_missing

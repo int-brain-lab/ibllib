@@ -20,21 +20,20 @@ with open("README.md", 'r') as f:
     long_description = f.read()
 
 with open('requirements.txt') as f:
-    require = [x.strip() for x in f.readlines()]
+    require = [x.strip() for x in f.readlines() if not x.startswith('git+')]
 
 setup(
     name='ibllib',
-    version='1.1.0',
+    version='1.2.9',
     python_requires='>={}.{}'.format(*REQUIRED_PYTHON),
     description='IBL libraries',
     license="MIT",
     long_description=long_description,
+    long_description_content_type='text/markdown',
     author='IBL Staff',
     url="https://www.internationalbrainlab.com/",
     packages=find_packages(exclude=['scratch']),  # same as name
     # external packages as dependencies
     install_requires=require,
-    scripts={
-
-    }
+    scripts={}
 )
