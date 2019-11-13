@@ -9,7 +9,7 @@ import ibllib.io.params as params
 # TODO: Tests!!!!!!
 def cli_ask_default(prompt: str, default: str):
     dflt = " [default: {}]: "
-    dflt.format(default)
+    dflt = dflt.format(default)
     ans = input(prompt + dflt) or default
     return ans
 
@@ -137,8 +137,8 @@ def create_ephyspc_params(force=False):
     remote_data_folder_path = cli_ask_default(
         r"Where's your REMOTE 'Subjects' data folder?",
         r"\\iblserver.champalimaud.pt\ibldata\Subjects")
-    probe_type_00 = cli_ask_options("What's the type of PROBE 00?", ['3A' '3B'])
-    probe_type_01 = cli_ask_options("What's the type of PROBE 01?", ['3A' '3B'])
+    probe_type_00 = cli_ask_options("What's the type of PROBE 00?", ['3A', '3B'])
+    probe_type_01 = cli_ask_options("What's the type of PROBE 01?", ['3A', '3B'])
     param_dict = {
         'DATA_FOLDER_PATH': data_folder_path,
         'REMOTE_DATA_FOLDER_PATH': remote_data_folder_path,
