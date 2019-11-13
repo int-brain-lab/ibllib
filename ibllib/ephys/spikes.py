@@ -1,6 +1,5 @@
 from pathlib import Path
 import logging
-import shutil
 
 import numpy as np
 from scipy.interpolate import interp1d
