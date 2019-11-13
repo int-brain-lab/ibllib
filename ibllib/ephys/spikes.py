@@ -32,10 +32,8 @@ def sync_spike_sortings(ses_path):
     # if there is only one file, just convert the output to IBL format et basta
     _logger.info('converting  spike-sorting outputs to ALF')
     for subdir, label, ef, sr in zip(subdirs, labels, efiles_sorted, srates):
-        ks2alf_path = subdir / 'ks2_alf'
-        if ks2alf_path.exists():
-            shutil.rmtree(ks2alf_path, ignore_errors=True)
-        ks2_to_alf(subdir, ses_path / 'alf', label=label, sr=sr, force=True)
+        probe_out_path = ses_path.joinpath('alf', label)
+        ks2_to_alf(subdir, probe_out_path, label=None, sr=sr, force=True)
         # synchronize the spike sorted times
         sync_file = ef.ap.parent.joinpath(ef.ap.name.replace('.ap.', '.sync.')).with_suffix('.npy')
         if not sync_file.exists():
@@ -43,10 +41,10 @@ def sync_spike_sortings(ses_path):
             _logger.error(error_msg)
             raise FileNotFoundError(error_msg)
         sync_points = np.load(sync_file)
-        fcn = interp1d(sync_points[:, 0] * sr,
+        fcn = interp1d(sync_points[:, 0],
                        sync_points[:, 1], fill_value='extrapolate')
         # patch the files manually
-        st_file = ses_path.joinpath('alf', f'spikes.times.{label}.npy')
+        st_file = ses_path.joinpath(probe_out_path, f'spikes.times.npy')
         interp_times = fcn(np.load(st_file))
         np.save(st_file, interp_times)
 
