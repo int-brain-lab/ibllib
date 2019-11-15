@@ -264,8 +264,7 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False,
                 new_session_path / 'raw_ephys_data',
                 remote_session_path / 'raw_ephys_data')
             flag_file.unlink()
-            (remote_session_path / 'extract_ephys.flag').touch()
-            (remote_session_path / 'ephys_qc.flag').touch()
+            # if behavior extract_me.flag exists remove it, no need because of ephys flag
             if (remote_session_path / 'extract_me.flag').exists():
                 (remote_session_path / 'extract_me.flag').unlink()
         elif resp == 's' or resp == 'skip':
