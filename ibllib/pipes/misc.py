@@ -228,6 +228,8 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False,
         print(f"\nFound session: {session_path}")
         # Rename ephys files
         rename_ephys_files(str(session_path))
+        # Move ephys files
+        move_ephys_files(str(session_path))
         # Copy wiring files
         copy_wiring_files(session_path, iblscripts_folder)
         flag_file = session_path / 'transfer_me.flag'
