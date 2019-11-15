@@ -231,7 +231,7 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False,
         # Move ephys files
         move_ephys_files(str(session_path))
         # Copy wiring files
-        copy_wiring_files(session_path, iblscripts_folder)
+        copy_wiring_files(str(session_path), iblscripts_folder)
         flag_file = session_path / 'transfer_me.flag'
         msg = f"Transfer to {remote_folder} with the same name?"
         resp = input(msg + "\n[y]es/[r]ename/[s]kip/[e]xit\n ^\n> ") or 'y'
@@ -418,12 +418,13 @@ def get_iblscripts_folder():
     return str(Path().cwd().parent.parent)
 
 
-def copy_wiring_files(session_path, iblscripts_folder):
+def copy_wiring_files(session_folder, iblscripts_folder):
     """Run after moving files to probe folders"""
     PARAMS = load_ephyspc_params()
     if PARAMS['PROBE_TYPE_00'] != PARAMS['PROBE_TYPE_01']:
         print("Having different probe types is not supported")
         raise(NotImplementedError)
+    session_path = Path(session_folder)
     iblscripts_path = Path(iblscripts_folder)
     iblscripts_params_path = iblscripts_path.parent / 'iblscripts_params'
     wirings_path = iblscripts_path / 'deploy' / 'ephyspc' / 'wirings'
