@@ -7,7 +7,7 @@ from scipy.interpolate import interp1d
 
 from phylib.io import alf, model
 
-from ibllib.io import spikeglx
+from ibllib.io import spikeglx, raw_data_loaders
 from ibllib.io.extractors.ephys_fpga import glob_ephys_files
 
 _logger = logging.getLogger('ibllib')
@@ -17,6 +17,7 @@ def sync_spike_sortings(ses_path):
     """
     Merge spike sorting output from 2 probes and output in the session ALF folder the combined
     output in IBL format
+    Aggregates probe information into ALF files.
     :param ses_path: session containing probes to be merged
     :return: None
     """
@@ -48,7 +49,7 @@ def sync_spike_sortings(ses_path):
         interp_times = fcn(np.load(st_file))
         np.save(st_file, interp_times)
 
-    """Outputs probe.description.json file"""
+    """Outputs probes.description.json file"""
     probe_description = []
     for label, ef in zip(labels, efiles_sorted):
         md = spikeglx.read_meta_data(ef.ap.with_suffix('.meta'))
@@ -60,6 +61,31 @@ def sync_spike_sortings(ses_path):
     probe_description_file = ses_path.joinpath('alf', 'probes.description.json')
     with open(probe_description_file, 'w+') as fid:
         fid.write(json.dumps(probe_description))
+
+    """Ouputs the probes trajectory file"""
+    bpod_meta = raw_data_loaders.load_settings(ses_path)
+    if not bpod_meta.get('PROBE_DATA'):
+        _logger.error('No probe information in settings JSON. Skipping probes.trajectory')
+        return
+
+    def prb2alf(prb, label):
+        return {'label': label, 'x': prb['X'], 'y': prb['Y'], 'z': prb['Z'], 'phi': prb['A'],
+                'theta': prb['P'], 'depth': prb['D'], 'beta': prb['T']}
+
+    # the labels may not match, in which case throw a warning and work in alphabetical order
+    if labels != ['probe00', 'probe01']:
+        _logger.warning("Probe names do not match the json settings files. Will match coordinates"
+                        " per alphabetical order !")
+        _ = [_logger.warning(f"  probe0{i} ----------  {lab} ") for i, lab in enumerate(labels)]
+    trajs = []
+    keys = sorted(bpod_meta['PROBE_DATA'].keys())
+    for i, k in enumerate(keys):
+        if i >= len(labels):
+            break
+        trajs.append(prb2alf(bpod_meta['PROBE_DATA']['probe00'], labels[i]))
+    probe_trajectory_file = ses_path.joinpath('alf', 'probes.trajectory.json')
+    with open(probe_trajectory_file, 'w+') as fid:
+        fid.write(json.dumps(trajs))
 
 
 def ks2_to_alf(ks_path, out_path, sr=30000, nchannels=385, label=None, force=True):
