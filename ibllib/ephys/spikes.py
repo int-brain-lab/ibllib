@@ -1,5 +1,6 @@
 from pathlib import Path
 import logging
+import json
 
 import numpy as np
 from scipy.interpolate import interp1d
@@ -20,6 +21,7 @@ def sync_spike_sortings(ses_path):
     :return: None
     """
     def _sr(ap_file):
+        # gets sampling rate from data
         md = spikeglx.read_meta_data(ap_file.with_suffix('.meta'))
         return spikeglx._get_fs_from_meta(md)
 
@@ -28,7 +30,6 @@ def sync_spike_sortings(ses_path):
     subdirs, labels, efiles_sorted, srates = zip(
         *sorted([(ep.ap.parent, ep.label, ep, _sr(ep.ap)) for ep in ephys_files if ep.get('ap')]))
 
-    # if there is only one file, just convert the output to IBL format et basta
     _logger.info('converting  spike-sorting outputs to ALF')
     for subdir, label, ef, sr in zip(subdirs, labels, efiles_sorted, srates):
         probe_out_path = ses_path.joinpath('alf', label)
@@ -46,6 +47,19 @@ def sync_spike_sortings(ses_path):
         st_file = ses_path.joinpath(probe_out_path, f'spikes.times.npy')
         interp_times = fcn(np.load(st_file))
         np.save(st_file, interp_times)
+
+    """Outputs probe.description.json file"""
+    probe_description = []
+    for label, ef in zip(labels, efiles_sorted):
+        md = spikeglx.read_meta_data(ef.ap.with_suffix('.meta'))
+        probe_description.append({'label': label,
+                                  'model': md.neuropixelVersion,
+                                  'serial': int(md.serial),
+                                  'raw_file_name': md.fileName,
+                                  })
+    probe_description_file = ses_path.joinpath('alf', 'probes.description.json')
+    with open(probe_description_file, 'w+') as fid:
+        fid.write(json.dumps(probe_description))
 
 
 def ks2_to_alf(ks_path, out_path, sr=30000, nchannels=385, label=None, force=True):
