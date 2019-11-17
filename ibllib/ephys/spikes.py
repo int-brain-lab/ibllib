@@ -5,7 +5,7 @@ import json
 import numpy as np
 from scipy.interpolate import interp1d
 
-from phylib.io import alf, model
+from phylib.io import alf
 
 import ibllib.ephys.ephysqc as ephysqc
 from ibllib.misc import log2session_static
