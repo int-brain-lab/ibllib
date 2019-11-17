@@ -12,11 +12,12 @@ from scipy.ndimage import gaussian_filter1d
 import alf.io
 from brainbox.core import Bunch
 from brainbox.processing import bincount2D
-from ibllib.ephys import sync_probes, spikes
+from ibllib.ephys import sync_probes
 from ibllib.io import spikeglx
 import ibllib.dsp as dsp
 import ibllib.io.extractors.ephys_fpga as fpga
 from ibllib.misc import print_progress, log2session_static
+from phylib.io import model
 
 
 _logger = logging.getLogger('ibllib')
@@ -239,7 +240,7 @@ def _spike_sorting_metrics_ks2(ks2_path, save=True):
     :return:
     """
 
-    m = spikes.phy_model_from_ks2_path(ks2_path)
+    m = phy_model_from_ks2_path(ks2_path)
     r = spike_sorting_metrics(m.spike_times, m.spike_clusters, m.amplitudes, params=METRICS_PARAMS)
     #  includes the ks2 contamination
     file_contamination = ks2_path.joinpath('cluster_ContamPct.tsv')
@@ -389,3 +390,24 @@ def amplitude_cutoff(amplitudes, num_histogram_bins=500, histogram_smoothing_val
     fraction_missing = np.min([fraction_missing, 0.5])
 
     return fraction_missing
+
+
+def phy_model_from_ks2_path(ks2_path):
+    params_file = ks2_path.joinpath('params.py')
+    if params_file.exists():
+        m = model.load_model(params_file)
+    else:
+        meta_file = next(ks2_path.rglob('*.ap.meta'), None)
+        if meta_file and meta_file.exists():
+            meta = spikeglx.read_meta_data(meta_file)
+            fs = spikeglx._get_fs_from_meta(meta)
+            nch = (spikeglx._get_nchannels_from_meta(meta) -
+                   len(spikeglx._get_sync_trace_indices_from_meta(meta)))
+        else:
+            fs = 30000
+            nch = 384
+        m = model.TemplateModel(dir_path=ks2_path,
+                                dat_path=[],
+                                sample_rate=fs,
+                                n_channels_dat=nch)
+    return m

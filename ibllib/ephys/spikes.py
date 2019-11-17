@@ -93,7 +93,7 @@ def sync_spike_sortings(ses_path):
         # computes QC on the ks2 output
         ephysqc._spike_sorting_metrics_ks2(subdir, save=True)
         # converts the folder to ALF
-        ks2_to_alf(subdir, probe_out_path, label=None, sr=sr, force=True)
+        ks2_to_alf(subdir, probe_out_path, label=None, force=True)
         # synchronize the spike sorted times
         sync_file = ef.ap.parent.joinpath(ef.ap.name.replace('.ap.', '.sync.')).with_suffix('.npy')
         if not sync_file.exists():
@@ -116,27 +116,6 @@ def ks2_to_alf(ks_path, out_path, label=None, force=True):
     :param out_path:
     :return:
     """
-    m = phy_model_from_ks2_path(ks_path)
+    m = ephysqc.phy_model_from_ks2_path(ks_path)
     ac = alf.EphysAlfCreator(m)
     ac.convert(out_path, label=label, force=force)
-
-
-def phy_model_from_ks2_path(ks2_path):
-    params_file = ks2_path.joinpath('params.py')
-    if params_file.exists():
-        m = model.load_model(params_file)
-    else:
-        meta_file = next(ks2_path.rglob('*.ap.meta'), None)
-        if meta_file and meta_file.exists():
-            meta = spikeglx.read_meta_data(meta_file)
-            fs = spikeglx._get_fs_from_meta(meta)
-            nch = (spikeglx._get_nchannels_from_meta(meta) -
-                   len(spikeglx._get_sync_trace_indices_from_meta(meta)))
-        else:
-            fs = 30000
-            nch = 384
-        m = model.TemplateModel(dir_path=ks2_path,
-                                dat_path=[],
-                                sample_rate=fs,
-                                n_channels_dat=nch)
-    return m
