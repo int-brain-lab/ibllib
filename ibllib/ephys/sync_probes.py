@@ -26,6 +26,7 @@ def sync_merge(session_path, dry=False, force=False):
     session_path = Path(session_path)
     sync(session_path, display=False)
     spikes.sync_spike_sortings(session_path)
+
     flags.write_flag_file(session_path.joinpath('register_me.flag'))
 
 
@@ -44,7 +45,7 @@ def sync(ses_path, **kwargs):
         version3B(ses_path, **kwargs)
 
 
-def version3A(ses_path, display=True, linear=False, tol=1.5):
+def version3A(ses_path, display=True, linear=False, tol=2.1):
     """
     From a session path with _spikeglx_sync arrays extracted, locate ephys files for 3A and
      outputs one sync.timestamps.probeN.npy file per acquired probe. By convention the reference
