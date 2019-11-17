@@ -1,5 +1,4 @@
 import logging
-from pathlib import Path
 
 import matplotlib.axes
 import matplotlib.pyplot as plt
@@ -10,24 +9,9 @@ import alf.io
 from brainbox.core import Bunch
 import ibllib.io.spikeglx as spikeglx
 from ibllib.misc import log2session_static
-from ibllib.ephys import spikes
-from ibllib.io import flags
 from ibllib.io.extractors.ephys_fpga import _get_sync_fronts, get_ibl_sync_map
 
 _logger = logging.getLogger('ibllib')
-
-
-@log2session_static('ephys')
-def sync_merge(session_path, dry=False, force=False):
-    """
-    Sync probes and merge spike sorting output.
-    For single probe dataset, output ks2 as ALF dataset
-    """
-    session_path = Path(session_path)
-    sync(session_path, display=False)
-    spikes.sync_spike_sortings(session_path)
-
-    flags.write_flag_file(session_path.joinpath('register_me.flag'))
 
 
 @log2session_static('ephys')

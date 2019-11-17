@@ -9,13 +9,10 @@ import pandas as pd
 from scipy import signal
 from scipy.ndimage import gaussian_filter1d
 
-from phylib.io import model as phymod
-
-
 import alf.io
 from brainbox.core import Bunch
 from brainbox.processing import bincount2D
-from ibllib.ephys import sync_probes
+from ibllib.ephys import sync_probes, spikes
 from ibllib.io import spikeglx
 import ibllib.dsp as dsp
 import ibllib.io.extractors.ephys_fpga as fpga
@@ -242,27 +239,7 @@ def _spike_sorting_metrics_ks2(ks2_path, save=True):
     :return:
     """
 
-    def _phy_model_from_ks2_path(ks2_path):
-        params_file = ks2_path.joinpath('params.py')
-        if params_file.exists():
-            m = phymod.load_model(params_file)
-        else:
-            meta_file = next(ks2_path.rglob('*.ap.meta'), None)
-            if meta_file and meta_file.exists():
-                meta = spikeglx.read_meta_data(meta_file)
-                fs = spikeglx._get_fs_from_meta(meta)
-                nch = (spikeglx._get_nchannels_from_meta(meta) -
-                       len(spikeglx._get_sync_trace_indices_from_meta(meta)))
-            else:
-                fs = 30000
-                nch = 384
-            m = phymod.TemplateModel(dir_path=ks2_path,
-                                     dat_path=[],
-                                     sample_rate=fs,
-                                     n_channels_dat=nch)
-        return m
-
-    m = _phy_model_from_ks2_path(ks2_path)
+    m = spikes.phy_model_from_ks2_path(ks2_path)
     r = spike_sorting_metrics(m.spike_times, m.spike_clusters, m.amplitudes, params=METRICS_PARAMS)
     #  includes the ks2 contamination
     file_contamination = ks2_path.joinpath('cluster_ContamPct.tsv')
@@ -280,7 +257,7 @@ def _spike_sorting_metrics_ks2(ks2_path, save=True):
 
     if save:
         #  the file name contains the label of the probe (directory name in this case)
-        r.to_csv(ks2_path.joinpath(f'clusters_metrics.{ks2_path.parts[-1]}.csv'))
+        r.to_csv(ks2_path.joinpath(f'cluster_metrics.csv'))
 
     return r
 
