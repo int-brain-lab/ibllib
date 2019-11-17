@@ -132,14 +132,14 @@ def raw_qc_session(session_path, dry=False, force=False):
     """
     efiles = spikeglx.glob_ephys_files(session_path)
     for efile in efiles:
-        if dry:
-            print(efile.ap)
-            print(efile.lf)
-            continue
-        if efile.ap and efile.ap.exists():
-            extract_rmsmap(efile.ap, out_folder=None, force=force, label=efile.label)
-        if efile.lf and efile.lf.exists():
-            extract_rmsmap(efile.lf, out_folder=None, force=force, label=efile.label)
+        if efile.get('ap') and efile.ap.exists():
+            print(efile.get('ap'))
+            if not dry:
+                extract_rmsmap(efile.ap, out_folder=None, force=force, label=efile.label)
+        if efile.get('lf') and efile.lf.exists():
+            print(efile.get('lf'))
+            if not dry:
+                extract_rmsmap(efile.lf, out_folder=None, force=force, label=efile.label)
 
 
 def validate_ttl_test(ses_path, display=False):
