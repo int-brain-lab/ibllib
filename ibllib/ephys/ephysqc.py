@@ -99,8 +99,8 @@ def extract_rmsmap(fbin, out_folder=None, force=False, label=''):
         out_folder = Path(fbin).parent
     else:
         out_folder = Path(out_folder)
-    alf_object_time = f'_spikeglx_ephysQcTime{sglx.type.upper()}'
-    alf_object_freq = f'_spikeglx_ephysQcFreq{sglx.type.upper()}'
+    alf_object_time = f'_iblqc_ephysTimeRms{sglx.type.upper()}'
+    alf_object_freq = f'_iblqc_ephysSpectralDensity{sglx.type.upper()}'
     if alf.io.exists(out_folder, alf_object_time, glob=[label]) and \
             alf.io.exists(out_folder, alf_object_freq, glob=[label]) and not force:
         _logger.warning(f'{fbin.name} QC already exists, skipping. Use force option to override')
@@ -110,11 +110,11 @@ def extract_rmsmap(fbin, out_folder=None, force=False, label=''):
     # output ALF files, single precision with the optional label as suffix before extension
     if not out_folder.exists():
         out_folder.mkdir()
-    tdict = {'rms': rms['TRMS'].astype(np.single), 'times': rms['tscale'].astype(np.single)}
+    tdict = {'rms': rms['TRMS'].astype(np.single), 'timestamps': rms['tscale'].astype(np.single)}
     fdict = {'power': rms['spectral_density'].astype(np.single),
              'freq': rms['fscale'].astype(np.single)}
-    out_time = alf.io.save_object_npy(out_folder, object=alf_object_time, dico=tdict, parts=label)
-    out_freq = alf.io.save_object_npy(out_folder, object=alf_object_freq, dico=fdict, parts=label)
+    out_time = alf.io.save_object_npy(out_folder, object=alf_object_time, dico=tdict)
+    out_freq = alf.io.save_object_npy(out_folder, object=alf_object_freq, dico=fdict)
     return out_time + out_freq
 
 
