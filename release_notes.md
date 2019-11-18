@@ -1,3 +1,7 @@
+### Release Notes 1.3.5 - 18-NOV-2019
+-   registration ignores ks2alf probes subfolders
+-   fix typo in raw qc dataset types
+
 ### Release Notes 1.3.4 - 18-NOV-2019
 -   Alyx registration adds the relative path to session root as dataset.subcollection
 -   Ephys extraction:

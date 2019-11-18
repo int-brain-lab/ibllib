@@ -112,7 +112,7 @@ def extract_rmsmap(fbin, out_folder=None, force=False, label=''):
         out_folder.mkdir()
     tdict = {'rms': rms['TRMS'].astype(np.single), 'timestamps': rms['tscale'].astype(np.single)}
     fdict = {'power': rms['spectral_density'].astype(np.single),
-             'freq': rms['fscale'].astype(np.single)}
+             'freqs': rms['fscale'].astype(np.single)}
     out_time = alf.io.save_object_npy(out_folder, object=alf_object_time, dico=tdict)
     out_freq = alf.io.save_object_npy(out_folder, object=alf_object_freq, dico=fdict)
     return out_time + out_freq

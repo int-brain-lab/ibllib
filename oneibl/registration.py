@@ -20,7 +20,8 @@ REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
                               'raw_video_data/**/_ibl_*.*',
                               'raw_ephys_data/**/_iblrig_*.*',
                               'raw_ephys_data/**/_spikeglx_*.*',
-                              'raw_ephys_data/**/ks2_alf/*.*']
+                              'raw_ephys_data/**/_iblqc_*.*',
+                              ]
 
 
 class RegistrationClient:
