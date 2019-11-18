@@ -365,6 +365,12 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             self.assertTrue(s.shape[1] == 17)
         self.tdir.cleanup()
 
+    def testGetSerialNumber(self):
+        expected = [18005116811, None, 641251510, 18005116811, 641251510, 641251510]
+        for meta_data_file, res in zip(self.meta_files, expected):
+            md = spikeglx.read_meta_data(meta_data_file)
+            self.assertEqual(md.serial, res)
+
     def testGetRevisionAndType(self):
         for meta_data_file in self.meta_files:
             md = spikeglx.read_meta_data(meta_data_file)
