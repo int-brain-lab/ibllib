@@ -252,8 +252,6 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False,
             flag_file.unlink()
             if (remote_session_path / 'extract_me.flag').exists():
                 (remote_session_path / 'extract_me.flag').unlink()
-            (remote_session_path / 'extract_ephys.flag').touch()
-            (remote_session_path / 'ephys_qc.flag').touch()
         elif resp == 'r' or resp == 'rename':
             new_session_path = rename_session(session_path)
             remote_session_path = remote_folder / Path(*new_session_path.parts[-3:])
