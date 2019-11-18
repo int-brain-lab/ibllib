@@ -9,7 +9,7 @@ import ibllib.io.params as params
 # TODO: Tests!!!!!!
 def cli_ask_default(prompt: str, default: str):
     dflt = " [default: {}]: "
-    dflt.format(default)
+    dflt = dflt.format(default)
     ans = input(prompt + dflt) or default
     return ans
 
@@ -137,8 +137,8 @@ def create_ephyspc_params(force=False):
     remote_data_folder_path = cli_ask_default(
         r"Where's your REMOTE 'Subjects' data folder?",
         r"\\iblserver.champalimaud.pt\ibldata\Subjects")
-    probe_type_00 = cli_ask_options("What's the type of PROBE 00?", ['3A' '3B'])
-    probe_type_01 = cli_ask_options("What's the type of PROBE 01?", ['3A' '3B'])
+    probe_type_00 = cli_ask_options("What's the type of PROBE 00?", ['3A', '3B'])
+    probe_type_01 = cli_ask_options("What's the type of PROBE 01?", ['3A', '3B'])
     param_dict = {
         'DATA_FOLDER_PATH': data_folder_path,
         'REMOTE_DATA_FOLDER_PATH': remote_data_folder_path,
@@ -228,8 +228,10 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False,
         print(f"\nFound session: {session_path}")
         # Rename ephys files
         rename_ephys_files(str(session_path))
+        # Move ephys files
+        move_ephys_files(str(session_path))
         # Copy wiring files
-        copy_wiring_files(session_path, iblscripts_folder)
+        copy_wiring_files(str(session_path), iblscripts_folder)
         flag_file = session_path / 'transfer_me.flag'
         msg = f"Transfer to {remote_folder} with the same name?"
         resp = input(msg + "\n[y]es/[r]ename/[s]kip/[e]xit\n ^\n> ") or 'y'
@@ -262,8 +264,7 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False,
                 new_session_path / 'raw_ephys_data',
                 remote_session_path / 'raw_ephys_data')
             flag_file.unlink()
-            (remote_session_path / 'extract_ephys.flag').touch()
-            (remote_session_path / 'ephys_qc.flag').touch()
+            # if behavior extract_me.flag exists remove it, no need because of ephys flag
             if (remote_session_path / 'extract_me.flag').exists():
                 (remote_session_path / 'extract_me.flag').unlink()
         elif resp == 's' or resp == 'skip':
@@ -416,12 +417,13 @@ def get_iblscripts_folder():
     return str(Path().cwd().parent.parent)
 
 
-def copy_wiring_files(session_path, iblscripts_folder):
+def copy_wiring_files(session_folder, iblscripts_folder):
     """Run after moving files to probe folders"""
     PARAMS = load_ephyspc_params()
     if PARAMS['PROBE_TYPE_00'] != PARAMS['PROBE_TYPE_01']:
         print("Having different probe types is not supported")
         raise(NotImplementedError)
+    session_path = Path(session_folder)
     iblscripts_path = Path(iblscripts_folder)
     iblscripts_params_path = iblscripts_path.parent / 'iblscripts_params'
     wirings_path = iblscripts_path / 'deploy' / 'ephyspc' / 'wirings'
@@ -450,11 +452,16 @@ def copy_wiring_files(session_path, iblscripts_folder):
             shutil.copy(str(src_wiring_path / 'nidq.wiring.json'),
                         str(session_path / 'raw_ephys_data' / nidq_wiring_name))
     # If system is either (3A OR 3B) copy a wiring file for each ap.bin file
+    # Also create a spike_sorting.flag
     for binf in session_path.glob('*.ap.bin'):
         wiring_name = '.'.join(str(binf.name).split('.')[:-2]) + termination
         if 'probe00' in str(binf):
             shutil.copy(str(probe00_wiring_file_path),
                         str(probe00_path / wiring_name))
+            # Create spike sorting flag
+            probe00_path.joinpath('spike_sorting.flag').touch()
         if 'probe01' in str(binf):
             shutil.copy(str(probe01_wiring_file_path),
                         str(probe01_path / wiring_name))
+            # Create spike sorting flag
+            probe01_path.joinpath('spike_sorting.flag').touch()

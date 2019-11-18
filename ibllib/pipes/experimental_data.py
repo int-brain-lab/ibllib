@@ -11,7 +11,7 @@ import json
 
 from ibllib.io import flags, raw_data_loaders, spikeglx
 from ibllib.pipes import extract_session
-from ibllib.ephys import ephysqc, sync_probes
+from ibllib.ephys import ephysqc, sync_probes, spikes
 from oneibl.registration import RegistrationClient
 from oneibl.one import ONE
 
@@ -195,20 +195,31 @@ def compress_ephys(root_data_folder, dry=False, max_sessions=5):
 # 26_sync_merge_ephys
 def sync_merge_ephys(root_data_folder, dry=False):
     """
-    After spike sorting, if single probe output ks2 to ALF, if several probes merge spike sorting
-     output to ALF folder
+    Post spike-sorting processing:
+    - synchronization of probes
+    - ks2 to ALF conversion for each probes in alf/probeXX folder
+    - computes spike sorting QC
+    - creates probes object in alf folder
     To start the job for a session, all electrophysiology ap files from session need to be
     associated with a `sync_merge_ephys.flag` file
     Outputs individual probes
     """
-    qcflags = list(Path(root_data_folder).rglob('sync_merge_ephys.flag'))
-    session_paths = list(set([f.parents[2] for f in qcflags]))
+    syncflags = list(Path(root_data_folder).rglob('sync_merge_ephys.flag'))
+    session_paths = list(set([f.parents[2] for f in syncflags]))
     for session_path in session_paths:
         print(session_path)
         if dry:
             continue
-        sync_probes.sync_merge(session_path)
-        [f.unlink() for f in qcflags if f.parents[2] == session_path]
+        # first remove the flags
+        [f.unlink() for f in syncflags if f.parents[2] == session_path]
+        # first sync the probes
+        sync_probes.sync(session_path)
+        # then convert ks2 to ALF and resync spike sorting data
+        spikes.sync_spike_sortings(session_path)
+        # outputs the probes object in the ALF folder
+        spikes.probes_description(session_path)
+        # wrap up by removing flags and creating register_me flag
+        flags.write_flag_file(session_path.joinpath('register_me.flag'))
 
 
 # 27_compress_ephys_videos

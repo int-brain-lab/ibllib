@@ -225,7 +225,18 @@ def read_meta_data(md_file):
         # tildes in keynames removed
         d[k.replace('~', '')] = v
     d['neuropixelVersion'] = _get_neuropixel_version_from_meta(d)
+    d['serial'] = _get_serial_number_from_meta(d)
     return Bunch(d)
+
+
+def _get_serial_number_from_meta(md):
+    """
+    Get neuropixel serial number from the metadata dictionary
+    """
+    # imProbeSN for 3A, imDatPrb_sn for 3B2, None for nidq 3B2
+    serial = md.get('imProbeSN') or md.get('imDatPrb_sn')
+    if serial:
+        return int(serial)
 
 
 def _get_neuropixel_version_from_meta(md):

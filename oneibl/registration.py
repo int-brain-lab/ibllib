@@ -173,7 +173,7 @@ class RegistrationClient:
             return
         # register all files that match the Alyx patterns, warn user when files are encountered
         rename_files_compatibility(ses_path, md['IBLRIG_VERSION_TAG'])
-        F = {}  # empty dict whose keys will be relative paths and content filenames
+        F = []  # empty list whose keys will be relative paths and content filenames
         for fn in _glob_session(ses_path):
             if fn.suffix in ['.flag', '.error', '.avi']:
                 logger_.debug('Excluded: ', str(fn))
@@ -195,19 +195,15 @@ class RegistrationClient:
                 logger_.error(strerr)
                 raise e
             # extract the relative path of the file
-            rel_path = Path(str(fn)[str(fn).find(str(gen_rel_path)):]).parent
-            if str(rel_path) not in F.keys():
-                F[str(rel_path)] = [fn.name]
-            else:
-                F[str(rel_path)].append(fn.name)
+            rel_path = Path(str(fn)[str(fn).find(str(gen_rel_path)):])
+            F.append(str(rel_path.relative_to(gen_rel_path)))
             logger_.info('Registering ' + str(fn))
 
-        for rpath in F:
-            r_ = {'created_by': username,
-                  'path': rpath,
-                  'filenames': F[rpath],
-                  }
-            self.one.alyx.post('/register-file', data=r_)
+        r_ = {'created_by': username,
+              'path': str(gen_rel_path),
+              'filenames': F,
+              }
+        self.one.alyx.post('/register-file', data=r_)
 
     def _match_filename_dtypes(self, full_file):
         import re
