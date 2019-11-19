@@ -82,6 +82,11 @@ def sync_spike_sortings(ses_path):
         md = spikeglx.read_meta_data(ap_file.with_suffix('.meta'))
         return spikeglx._get_fs_from_meta(md)
 
+    def _sample2v(ap_file):
+        md = spikeglx.read_meta_data(ap_file.with_suffix('.meta'))
+        s2v = spikeglx._conversion_sample2v_from_meta(md)
+        return s2v['ap'][0]
+
     ses_path = Path(ses_path)
     ephys_files = glob_ephys_files(ses_path)
     subdirs, labels, efiles_sorted, srates = zip(
@@ -93,7 +98,7 @@ def sync_spike_sortings(ses_path):
         # computes QC on the ks2 output
         ephysqc._spike_sorting_metrics_ks2(subdir, save=True)
         # converts the folder to ALF
-        ks2_to_alf(subdir, probe_out_path, label=None, force=True)
+        ks2_to_alf(subdir, probe_out_path, ampfactor=_sample2v(ef.ap), label=None, force=True)
         # synchronize the spike sorted times
         sync_file = ef.ap.parent.joinpath(ef.ap.name.replace('.ap.', '.sync.')).with_suffix('.npy')
         if not sync_file.exists():
@@ -106,7 +111,7 @@ def sync_spike_sortings(ses_path):
         np.save(st_file, interp_times)
 
 
-def ks2_to_alf(ks_path, out_path, label=None, force=True):
+def ks2_to_alf(ks_path, out_path, ampfactor=1, label=None, force=True):
     """
     Convert Kilosort 2 output to ALF dataset for single probe data
     :param ks_path:
@@ -115,4 +120,4 @@ def ks2_to_alf(ks_path, out_path, label=None, force=True):
     """
     m = ephysqc.phy_model_from_ks2_path(ks_path)
     ac = alf.EphysAlfCreator(m)
-    ac.convert(out_path, label=label, force=force)
+    ac.convert(out_path, label=label, force=force, ampfactor=ampfactor)

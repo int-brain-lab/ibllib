@@ -28,13 +28,13 @@ class Reader:
         if not file_meta_data.exists():
             self.file_meta_data = None
             self.meta = None
-            self.channel_conversion_sample2mv = 1
+            self.channel_conversion_sample2v = 1
             _logger.warning(str(sglx_file) + " : no metadata file found. Very limited support")
             return
         # normal case we continue reading and interpreting the metadata file
         self.file_meta_data = file_meta_data
         self.meta = read_meta_data(file_meta_data)
-        self.channel_conversion_sample2mv = _conversion_sample2mv_from_meta(self.meta)
+        self.channel_conversion_sample2v = _conversion_sample2v_from_meta(self.meta)
         # if we are not looking at a compressed file, use a memmap, otherwise instantiate mtscomp
         if self.is_mtscomp:
             self.data = mtscomp.Reader()
@@ -90,7 +90,7 @@ class Reader:
         :return: float32 array
         """
         darray = np.float32(self.data[nsel, csel])
-        darray *= self.channel_conversion_sample2mv[self.type][csel]
+        darray *= self.channel_conversion_sample2v[self.type][csel]
         if sync:
             return darray, self.read_sync(nsel)
         else:
@@ -323,7 +323,7 @@ def _map_channels_from_meta(meta_data):
         return {k: chmap[:, v] for (k, v) in {'shank': 0, 'col': 1, 'row': 2, 'flag': 3}.items()}
 
 
-def _conversion_sample2mv_from_meta(meta_data):
+def _conversion_sample2v_from_meta(meta_data):
     """
     Interpret the meta data to extract an array of conversion factors for each channel
     so the output data is in Volts
