@@ -83,12 +83,12 @@ def version3A(ses_path, display=True, linear=False, tol=2.1):
     # output timestamps files as per ALF convention
     for ind, ephys_file in enumerate(ephys_files):
         if ind == iref:
-            timestamps = np.array([[0, 0], [1, 1]])
+            timestamps = np.array([[0., 0.], [1., 1.]])
         else:
             timestamps, qc = sync_probe_front_times(d.times[:, ind], d.times[:, iref], sr,
                                                     display=display, linear=linear, tol=tol)
             qc_all &= qc
-        _save_timestamps_npy(ephys_file, timestamps)
+        _save_timestamps_npy(ephys_file, timestamps, sr)
     return qc_all
 
 
@@ -123,7 +123,7 @@ def version3B(ses_path, display=True, linear=False, tol=2.5):
         timestamps, qc = sync_probe_front_times(sync_probe.times, sync_nidq.times, sr,
                                                 display=display, linear=linear, tol=tol)
         qc_all &= qc
-        _save_timestamps_npy(ef, timestamps)
+        _save_timestamps_npy(ef, timestamps, sr)
     return qc_all
 
 
@@ -177,7 +177,7 @@ def sync_probe_front_times(t, tref, sr, display=False, linear=False, tol=2.0):
             ax.set_xlabel('time (sec)')
             ax.set_ylabel('Residual drift (samples @ 30kHz)')
     else:
-        sync_points = np.c_[np.array([0, 1]), np.polyval(pol, np.array([0, 1]))]
+        sync_points = np.c_[np.array([0., 1.]), np.polyval(pol, np.array([0., 1.]))]
         if display:
             plt.plot(tref, residual * sr)
             plt.ylabel('Residual drift (samples @ 30kHz)')
@@ -196,7 +196,14 @@ def _get_sr(ephys_file):
     return spikeglx._get_fs_from_meta(meta)
 
 
-def _save_timestamps_npy(ephys_file, timestamps):
-    file_out = ephys_file.ap.parent.joinpath(ephys_file.ap.name.replace('.ap.', '.sync.')
-                                             ).with_suffix('.npy')
-    np.save(file_out, timestamps)
+def _save_timestamps_npy(ephys_file, tself_tref, sr):
+    # this is the file with self_time_secs, ref_time_secs output
+    file_sync = ephys_file.ap.parent.joinpath(ephys_file.ap.name.replace('.ap.', '.sync.')
+                                              ).with_suffix('.npy')
+    np.save(file_sync, tself_tref)
+    # this is the timestamps file
+    file_ts = ephys_file.ap.parent.joinpath(ephys_file.ap.name.replace('.ap.', '.timestamps.')
+                                            ).with_suffix('.npy')
+    timestamps = np.copy(tself_tref)
+    timestamps[:, 0] *= np.float64(sr)
+    np.save(file_ts, timestamps)
