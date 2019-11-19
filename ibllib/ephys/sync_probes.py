@@ -14,6 +14,24 @@ from ibllib.io.extractors.ephys_fpga import _get_sync_fronts, get_ibl_sync_map
 _logger = logging.getLogger('ibllib')
 
 
+def apply_sync(sync_file, times, forward=True):
+    """
+    :param sync_file: probe sync file (usually of the form _iblrig_ephysData.raw.imec1.sync.npy)
+    :param times: times in seconds to interpolate
+    :param forward: if True goes from probe time to session time, from session time to probe time
+    otherwise
+    :return: interpolated times
+    """
+    sync_points = np.load(sync_file)
+    if forward:
+        fcn = interp1d(sync_points[:, 0],
+                       sync_points[:, 1], fill_value='extrapolate')
+    else:
+        fcn = interp1d(sync_points[:, 1],
+                       sync_points[:, 0], fill_value='extrapolate')
+    return fcn(times)
+
+
 @log2session_static('ephys')
 def sync(ses_path, **kwargs):
     """
@@ -67,7 +85,7 @@ def version3A(ses_path, display=True, linear=False, tol=2.1):
         if ind == iref:
             timestamps = np.array([[0, 0], [1, 1]])
         else:
-            timestamps, qc = sync_probe_front_times(d.times[:, iref], d.times[:, ind], sr,
+            timestamps, qc = sync_probe_front_times(d.times[:, ind], d.times[:, iref], sr,
                                                     display=display, linear=linear, tol=tol)
             qc_all &= qc
         _save_timestamps_npy(ephys_file, timestamps)
@@ -125,7 +143,7 @@ def sync_probe_front_times(t, tref, sr, display=False, linear=False, tol=2.0):
     # version of the residual to add to the linear drift. The precision is enforced
     # by ensuring that each point lies less than one sampling rate away from the predicted.
     pol = np.polyfit(t, tref, 1)  # higher order terms first: slope / int for linear
-    residual = (tref - np.polyval(pol, t))
+    residual = tref - np.polyval(pol, t)
     if not linear:
         # the interp function from camera fronts is not smooth due to the locking of detections
         # to the sampling rate of digital channels. The residual is fit using frequency domain

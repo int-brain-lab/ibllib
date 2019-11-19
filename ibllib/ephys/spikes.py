@@ -3,10 +3,10 @@ import logging
 import json
 
 import numpy as np
-from scipy.interpolate import interp1d
 
 from phylib.io import alf
 
+from ibllib.ephys.sync_probes import apply_sync
 import ibllib.ephys.ephysqc as ephysqc
 from ibllib.misc import log2session_static
 from ibllib.io import spikeglx, raw_data_loaders
@@ -100,12 +100,9 @@ def sync_spike_sortings(ses_path):
             error_msg = f'No synchronisation file for {sync_file}'
             _logger.error(error_msg)
             raise FileNotFoundError(error_msg)
-        sync_points = np.load(sync_file)
-        fcn = interp1d(sync_points[:, 0],
-                       sync_points[:, 1], fill_value='extrapolate')
         # patch the spikes.times files manually
         st_file = ses_path.joinpath(probe_out_path, 'spikes.times.npy')
-        interp_times = fcn(np.load(st_file))
+        interp_times = apply_sync(sync_file, np.load(st_file), forward=True)
         np.save(st_file, interp_times)
 
 
