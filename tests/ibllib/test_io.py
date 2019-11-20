@@ -322,7 +322,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
 
     def assert_read_glx(self, tglx):
         sr = spikeglx.Reader(tglx['bin_file'])
-        dexpected = sr.channel_conversion_sample2mv[sr.type] * tglx['D']
+        dexpected = sr.channel_conversion_sample2v[sr.type] * tglx['D']
         d, sync = sr.read_samples(0, tglx['ns'])
         # could be rounding errors with non-integer sampling rates
         self.assertTrue(sr.nc == tglx['nc'])
@@ -366,7 +366,8 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
         self.tdir.cleanup()
 
     def testGetSerialNumber(self):
-        expected = [18005116811, None, 641251510, 18005116811, 641251510, 641251510]
+        self.meta_files.sort()
+        expected = [641251510, 641251510, 641251510, 18005116811, 18005116811, None]
         for meta_data_file, res in zip(self.meta_files, expected):
             md = spikeglx.read_meta_data(meta_data_file)
             self.assertEqual(md.serial, res)
@@ -387,7 +388,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             if meta_data_file.name.split('.')[-2] not in ['lf', 'ap']:
                 continue
             md = spikeglx.read_meta_data(meta_data_file)
-            cg = spikeglx._conversion_sample2mv_from_meta(md)
+            cg = spikeglx._conversion_sample2v_from_meta(md)
             i2v = md.get('imAiRangeMax') / 512
             self.assertTrue(np.all(cg['lf'][0:-1] == i2v / 250))
             self.assertTrue(np.all(cg['ap'][0:-1] == i2v / 500))
@@ -409,7 +410,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
                 continue
             md = spikeglx.read_meta_data(meta_data_file)
             nc = spikeglx._get_nchannels_from_meta(md)
-            cg = spikeglx._conversion_sample2mv_from_meta(md)
+            cg = spikeglx._conversion_sample2v_from_meta(md)
             i2v = md.get('niAiRangeMax') / 32768
             self.assertTrue(np.all(cg['nidq'][slice(0, int(np.sum(md.acqMnMaXaDw[:3])))] == i2v))
             self.assertTrue(np.all(cg['nidq'][slice(int(np.sum(md.acqMnMaXaDw[-1])), None)] == 1.))

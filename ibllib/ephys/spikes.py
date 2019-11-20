@@ -3,10 +3,10 @@ import logging
 import json
 
 import numpy as np
-from scipy.interpolate import interp1d
 
 from phylib.io import alf
 
+from ibllib.ephys.sync_probes import apply_sync
 import ibllib.ephys.ephysqc as ephysqc
 from ibllib.misc import log2session_static
 from ibllib.io import spikeglx, raw_data_loaders
@@ -82,6 +82,11 @@ def sync_spike_sortings(ses_path):
         md = spikeglx.read_meta_data(ap_file.with_suffix('.meta'))
         return spikeglx._get_fs_from_meta(md)
 
+    def _sample2v(ap_file):
+        md = spikeglx.read_meta_data(ap_file.with_suffix('.meta'))
+        s2v = spikeglx._conversion_sample2v_from_meta(md)
+        return s2v['ap'][0]
+
     ses_path = Path(ses_path)
     ephys_files = glob_ephys_files(ses_path)
     subdirs, labels, efiles_sorted, srates = zip(
@@ -90,26 +95,27 @@ def sync_spike_sortings(ses_path):
     _logger.info('converting  spike-sorting outputs to ALF')
     for subdir, label, ef, sr in zip(subdirs, labels, efiles_sorted, srates):
         probe_out_path = ses_path.joinpath('alf', label)
+        probe_out_path.mkdir(parents=True, exist_ok=True)
         # computes QC on the ks2 output
         ephysqc._spike_sorting_metrics_ks2(subdir, save=True)
         # converts the folder to ALF
-        ks2_to_alf(subdir, probe_out_path, label=None, force=True)
-        # synchronize the spike sorted times
+        ks2_to_alf(subdir, probe_out_path, ampfactor=_sample2v(ef.ap), label=None, force=True)
+        # single probe we're done !
+        if len(subdirs) == 1:
+            break
+        # synchronize the spike sorted times only if there are several probes
         sync_file = ef.ap.parent.joinpath(ef.ap.name.replace('.ap.', '.sync.')).with_suffix('.npy')
         if not sync_file.exists():
             error_msg = f'No synchronisation file for {sync_file}'
             _logger.error(error_msg)
             raise FileNotFoundError(error_msg)
-        sync_points = np.load(sync_file)
-        fcn = interp1d(sync_points[:, 0],
-                       sync_points[:, 1], fill_value='extrapolate')
         # patch the spikes.times files manually
         st_file = ses_path.joinpath(probe_out_path, 'spikes.times.npy')
-        interp_times = fcn(np.load(st_file))
+        interp_times = apply_sync(sync_file, np.load(st_file), forward=True)
         np.save(st_file, interp_times)
 
 
-def ks2_to_alf(ks_path, out_path, label=None, force=True):
+def ks2_to_alf(ks_path, out_path, ampfactor=1, label=None, force=True):
     """
     Convert Kilosort 2 output to ALF dataset for single probe data
     :param ks_path:
@@ -118,4 +124,4 @@ def ks2_to_alf(ks_path, out_path, label=None, force=True):
     """
     m = ephysqc.phy_model_from_ks2_path(ks_path)
     ac = alf.EphysAlfCreator(m)
-    ac.convert(out_path, label=label, force=force)
+    ac.convert(out_path, label=label, force=force, ampfactor=ampfactor)
