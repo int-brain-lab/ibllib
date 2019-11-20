@@ -61,13 +61,22 @@ def version3A(ses_path, display=True, linear=False, tol=2.1):
     if nprobes <= 1:
         _logger.warning(f"Skipping single probe session: {ses_path}")
         return True
-    d = Bunch({'times': [], 'nsync': np.zeros(nprobes, )})
-    for ind, ephys_file in enumerate(ephys_files):
-        sync = alf.io.load_object(ephys_file.ap.parent, '_spikeglx_sync', short_keys=True)
-        sync_map = get_ibl_sync_map(ephys_file, '3A')
-        isync = np.in1d(sync['channels'], np.array([sync_map['right_camera']]))
-        d.nsync[ind] = len(sync.channels)
-        d['times'].append(sync['times'][isync])
+
+    def get_sync_fronts(auxiliary_name):
+        d = Bunch({'times': [], 'nsync': np.zeros(nprobes, )})
+        # auxiliary_name: frame2ttl or right_camera
+        for ind, ephys_file in enumerate(ephys_files):
+            sync = alf.io.load_object(ephys_file.ap.parent, '_spikeglx_sync', short_keys=True)
+            sync_map = get_ibl_sync_map(ephys_file, '3A')
+            isync = np.in1d(sync['channels'], np.array([sync_map[auxiliary_name]]))
+            # only returns syncs if we get fronts for all probes
+            if np.all(~isync):
+                return
+            d.nsync[ind] = len(sync.channels)
+            d['times'].append(sync['times'][isync])
+        return d
+
+    d = get_sync_fronts('frame2ttl') or get_sync_fronts('right_camera')
     # chop off to the lowest number of sync points
     nsyncs = [t.size for t in d['times']]
     if len(set(nsyncs)) > 1:
