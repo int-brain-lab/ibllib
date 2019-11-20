@@ -81,7 +81,7 @@ def rmsmap(fbin):
     return win
 
 
-def extract_rmsmap(fbin, out_folder=None, force=False, label=''):
+def extract_rmsmap(fbin, out_folder=None, force=False):
     """
     Wrapper for rmsmap that outputs _ibl_ephysRmsMap and _ibl_ephysSpectra ALF files
 
@@ -101,8 +101,8 @@ def extract_rmsmap(fbin, out_folder=None, force=False, label=''):
         out_folder = Path(out_folder)
     alf_object_time = f'_iblqc_ephysTimeRms{sglx.type.upper()}'
     alf_object_freq = f'_iblqc_ephysSpectralDensity{sglx.type.upper()}'
-    if alf.io.exists(out_folder, alf_object_time, glob=[label]) and \
-            alf.io.exists(out_folder, alf_object_freq, glob=[label]) and not force:
+    if alf.io.exists(out_folder, alf_object_time) and \
+            alf.io.exists(out_folder, alf_object_freq) and not force:
         _logger.warning(f'{fbin.name} QC already exists, skipping. Use force option to override')
         return
     # crunch numbers
@@ -133,11 +133,11 @@ def raw_qc_session(session_path, dry=False, force=False):
         if efile.get('ap') and efile.ap.exists():
             print(efile.get('ap'))
             if not dry:
-                extract_rmsmap(efile.ap, out_folder=None, force=force, label=efile.label)
+                extract_rmsmap(efile.ap, out_folder=None, force=force)
         if efile.get('lf') and efile.lf.exists():
             print(efile.get('lf'))
             if not dry:
-                extract_rmsmap(efile.lf, out_folder=None, force=force, label=efile.label)
+                extract_rmsmap(efile.lf, out_folder=None, force=force)
 
 
 def validate_ttl_test(ses_path, display=False):
