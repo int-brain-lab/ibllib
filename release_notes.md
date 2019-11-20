@@ -1,3 +1,12 @@
+### Release Notes 1.3.6 - 20-NOV-2019
+-   Ephys Extraction (phylib)
+    -   convert ks2 amplitudes to volts for spikes.amps, clusters.amps. templates.waveforms, clusters.waveforms to get uV
+    -   generates Cluster UUIDs file
+    -   individual spike depths computed from PC features  
+-   Ephys Synchronization
+    -   use frame2TTL split for 3A by default, if not found look for right_camera
+    -   output individual probe sync in ALF timestamps format
+
 ### Release Notes 1.3.5 - 18-NOV-2019
 -   registration ignores ks2alf probes subfolders
 -   fix typo in raw qc dataset types
