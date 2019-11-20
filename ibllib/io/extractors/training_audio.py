@@ -127,18 +127,20 @@ def extract_sound(ses_path, save=True, force=False, delete=False):
     # crunch the wav file
     fs, wav = wavfile.read(wav_file, mmap=False)
     if len(wav) == 0:
-        logger_.error('WAV Header Indicates empty file. Abort.' + str(wav_file))
-        return
+        status = _fix_wav_file(wav_file)
+        if status != 0:
+            logger_.error(f"WAV Header Indicates empty file. Couldn't fix. Abort. {wav_file}")
+            return
+        else:
+            fs, wav = wavfile.read(wav_file, mmap=False)
     tscale, fscale, W, detect = welchogram(fs, wav)
     # save files
-
     if save:
         out_folder.mkdir(exist_ok=True)
         np.save(file=files_out['power'], arr=W.astype(np.single))
         np.save(file=files_out['frequencies'], arr=fscale[None, :].astype(np.single))
         np.save(file=files_out['onset_times'], arr=detect)
         np.save(file=files_out['times_microphone'], arr=tscale[:, None].astype(np.single))
-
     # for the time scale, attempt to synchronize using onset sound detection and task data
     data = ioraw.load_data(ses_path)
     if data is None:  # if no session data, we're done
@@ -153,3 +155,22 @@ def extract_sound(ses_path, save=True, force=False, delete=False):
         np.save(file=files_out['times'], arr=tscale[:, None].astype(np.single))
     if delete:
         wav_file.unlink()
+
+
+def _fix_wav_file(wav_file):
+    import platform
+    import subprocess
+    status = -1
+    if platform.system() != 'Linux':
+        return status
+    wav_file_tmp = wav_file.with_suffix('.wav_')
+    wav_file.rename(wav_file_tmp)
+    command2run = f'sox --ignore-length {wav_file_tmp} {wav_file}'
+    process = subprocess.Popen(command2run, shell=True, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE)
+    process.communicate()
+    if process.returncode == 0:
+        wav_file_tmp.unlink()
+    else:
+        wav_file_tmp.rename(wav_file)
+    return process.returncode

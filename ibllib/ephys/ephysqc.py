@@ -9,9 +9,6 @@ import pandas as pd
 from scipy import signal
 from scipy.ndimage import gaussian_filter1d
 
-from phylib.io import model as phymod
-
-
 import alf.io
 from brainbox.core import Bunch
 from brainbox.processing import bincount2D
@@ -20,6 +17,7 @@ from ibllib.io import spikeglx
 import ibllib.dsp as dsp
 import ibllib.io.extractors.ephys_fpga as fpga
 from ibllib.misc import print_progress, log2session_static
+from phylib.io import model
 
 
 _logger = logging.getLogger('ibllib')
@@ -83,7 +81,7 @@ def rmsmap(fbin):
     return win
 
 
-def extract_rmsmap(fbin, out_folder=None, force=False, label=''):
+def extract_rmsmap(fbin, out_folder=None, force=False):
     """
     Wrapper for rmsmap that outputs _ibl_ephysRmsMap and _ibl_ephysSpectra ALF files
 
@@ -101,10 +99,10 @@ def extract_rmsmap(fbin, out_folder=None, force=False, label=''):
         out_folder = Path(fbin).parent
     else:
         out_folder = Path(out_folder)
-    alf_object_time = f'_spikeglx_ephysQcTime{sglx.type.upper()}'
-    alf_object_freq = f'_spikeglx_ephysQcFreq{sglx.type.upper()}'
-    if alf.io.exists(out_folder, alf_object_time, glob=[label]) and \
-            alf.io.exists(out_folder, alf_object_freq, glob=[label]) and not force:
+    alf_object_time = f'_iblqc_ephysTimeRms{sglx.type.upper()}'
+    alf_object_freq = f'_iblqc_ephysSpectralDensity{sglx.type.upper()}'
+    if alf.io.exists(out_folder, alf_object_time) and \
+            alf.io.exists(out_folder, alf_object_freq) and not force:
         _logger.warning(f'{fbin.name} QC already exists, skipping. Use force option to override')
         return
     # crunch numbers
@@ -112,11 +110,11 @@ def extract_rmsmap(fbin, out_folder=None, force=False, label=''):
     # output ALF files, single precision with the optional label as suffix before extension
     if not out_folder.exists():
         out_folder.mkdir()
-    tdict = {'rms': rms['TRMS'].astype(np.single), 'times': rms['tscale'].astype(np.single)}
+    tdict = {'rms': rms['TRMS'].astype(np.single), 'timestamps': rms['tscale'].astype(np.single)}
     fdict = {'power': rms['spectral_density'].astype(np.single),
-             'freq': rms['fscale'].astype(np.single)}
-    out_time = alf.io.save_object_npy(out_folder, object=alf_object_time, dico=tdict, parts=label)
-    out_freq = alf.io.save_object_npy(out_folder, object=alf_object_freq, dico=fdict, parts=label)
+             'freqs': rms['fscale'].astype(np.single)}
+    out_time = alf.io.save_object_npy(out_folder, object=alf_object_time, dico=tdict)
+    out_freq = alf.io.save_object_npy(out_folder, object=alf_object_freq, dico=fdict)
     return out_time + out_freq
 
 
@@ -132,14 +130,14 @@ def raw_qc_session(session_path, dry=False, force=False):
     """
     efiles = spikeglx.glob_ephys_files(session_path)
     for efile in efiles:
-        if dry:
-            print(efile.ap)
-            print(efile.lf)
-            continue
-        if efile.ap and efile.ap.exists():
-            extract_rmsmap(efile.ap, out_folder=None, force=force, label=efile.label)
-        if efile.lf and efile.lf.exists():
-            extract_rmsmap(efile.lf, out_folder=None, force=force, label=efile.label)
+        if efile.get('ap') and efile.ap.exists():
+            print(efile.get('ap'))
+            if not dry:
+                extract_rmsmap(efile.ap, out_folder=None, force=force)
+        if efile.get('lf') and efile.lf.exists():
+            print(efile.get('lf'))
+            if not dry:
+                extract_rmsmap(efile.lf, out_folder=None, force=force)
 
 
 def validate_ttl_test(ses_path, display=False):
@@ -242,27 +240,7 @@ def _spike_sorting_metrics_ks2(ks2_path, save=True):
     :return:
     """
 
-    def _phy_model_from_ks2_path(ks2_path):
-        params_file = ks2_path.joinpath('params.py')
-        if params_file.exists():
-            m = phymod.load_model(params_file)
-        else:
-            meta_file = next(ks2_path.rglob('*.ap.meta'), None)
-            if meta_file and meta_file.exists():
-                meta = spikeglx.read_meta_data(meta_file)
-                fs = spikeglx._get_fs_from_meta(meta)
-                nch = (spikeglx._get_nchannels_from_meta(meta) -
-                       len(spikeglx._get_sync_trace_indices_from_meta(meta)))
-            else:
-                fs = 30000
-                nch = 384
-            m = phymod.TemplateModel(dir_path=ks2_path,
-                                     dat_path=[],
-                                     sample_rate=fs,
-                                     n_channels_dat=nch)
-        return m
-
-    m = _phy_model_from_ks2_path(ks2_path)
+    m = phy_model_from_ks2_path(ks2_path)
     r = spike_sorting_metrics(m.spike_times, m.spike_clusters, m.amplitudes, params=METRICS_PARAMS)
     #  includes the ks2 contamination
     file_contamination = ks2_path.joinpath('cluster_ContamPct.tsv')
@@ -280,7 +258,7 @@ def _spike_sorting_metrics_ks2(ks2_path, save=True):
 
     if save:
         #  the file name contains the label of the probe (directory name in this case)
-        r.to_csv(ks2_path.joinpath(f'clusters_metrics.{ks2_path.parts[-1]}.csv'))
+        r.to_csv(ks2_path.joinpath(f'cluster_metrics.csv'))
 
     return r
 
@@ -412,3 +390,24 @@ def amplitude_cutoff(amplitudes, num_histogram_bins=500, histogram_smoothing_val
     fraction_missing = np.min([fraction_missing, 0.5])
 
     return fraction_missing
+
+
+def phy_model_from_ks2_path(ks2_path):
+    params_file = ks2_path.joinpath('params.py')
+    if params_file.exists():
+        m = model.load_model(params_file)
+    else:
+        meta_file = next(ks2_path.rglob('*.ap.meta'), None)
+        if meta_file and meta_file.exists():
+            meta = spikeglx.read_meta_data(meta_file)
+            fs = spikeglx._get_fs_from_meta(meta)
+            nch = (spikeglx._get_nchannels_from_meta(meta) -
+                   len(spikeglx._get_sync_trace_indices_from_meta(meta)))
+        else:
+            fs = 30000
+            nch = 384
+        m = model.TemplateModel(dir_path=ks2_path,
+                                dat_path=[],
+                                sample_rate=fs,
+                                n_channels_dat=nch)
+    return m

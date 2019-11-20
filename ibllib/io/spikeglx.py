@@ -28,13 +28,13 @@ class Reader:
         if not file_meta_data.exists():
             self.file_meta_data = None
             self.meta = None
-            self.channel_conversion_sample2mv = 1
+            self.channel_conversion_sample2v = 1
             _logger.warning(str(sglx_file) + " : no metadata file found. Very limited support")
             return
         # normal case we continue reading and interpreting the metadata file
         self.file_meta_data = file_meta_data
         self.meta = read_meta_data(file_meta_data)
-        self.channel_conversion_sample2mv = _conversion_sample2mv_from_meta(self.meta)
+        self.channel_conversion_sample2v = _conversion_sample2v_from_meta(self.meta)
         # if we are not looking at a compressed file, use a memmap, otherwise instantiate mtscomp
         if self.is_mtscomp:
             self.data = mtscomp.Reader()
@@ -90,7 +90,7 @@ class Reader:
         :return: float32 array
         """
         darray = np.float32(self.data[nsel, csel])
-        darray *= self.channel_conversion_sample2mv[self.type][csel]
+        darray *= self.channel_conversion_sample2v[self.type][csel]
         if sync:
             return darray, self.read_sync(nsel)
         else:
@@ -225,7 +225,18 @@ def read_meta_data(md_file):
         # tildes in keynames removed
         d[k.replace('~', '')] = v
     d['neuropixelVersion'] = _get_neuropixel_version_from_meta(d)
+    d['serial'] = _get_serial_number_from_meta(d)
     return Bunch(d)
+
+
+def _get_serial_number_from_meta(md):
+    """
+    Get neuropixel serial number from the metadata dictionary
+    """
+    # imProbeSN for 3A, imDatPrb_sn for 3B2, None for nidq 3B2
+    serial = md.get('imProbeSN') or md.get('imDatPrb_sn')
+    if serial:
+        return int(serial)
 
 
 def _get_neuropixel_version_from_meta(md):
@@ -312,7 +323,7 @@ def _map_channels_from_meta(meta_data):
         return {k: chmap[:, v] for (k, v) in {'shank': 0, 'col': 1, 'row': 2, 'flag': 3}.items()}
 
 
-def _conversion_sample2mv_from_meta(meta_data):
+def _conversion_sample2v_from_meta(meta_data):
     """
     Interpret the meta data to extract an array of conversion factors for each channel
     so the output data is in Volts
@@ -411,9 +422,11 @@ def glob_ephys_files(session_path, suffix='.meta', recursive=True):
     recurse = '**/' if recursive else ''
     ephys_files = []
     for raw_ephys_file in Path(session_path).glob(f'{recurse}*.ap{suffix}'):
+        raw_ephys_apfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + '.*bin'), None)
+        if not raw_ephys_apfile:
+            continue
         # first get the ap file
         ephys_files.extend([Bunch({'label': None, 'ap': None, 'lf': None, 'path': None})])
-        raw_ephys_apfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + '.*bin'), None)
         ephys_files[-1].ap = raw_ephys_apfile
         # then get the corresponding lf file if it exists
         lf_file = raw_ephys_apfile.parent / raw_ephys_apfile.name.replace('.ap.', '.lf.')
