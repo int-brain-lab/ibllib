@@ -95,6 +95,7 @@ def sync_spike_sortings(ses_path):
     _logger.info('converting  spike-sorting outputs to ALF')
     for subdir, label, ef, sr in zip(subdirs, labels, efiles_sorted, srates):
         probe_out_path = ses_path.joinpath('alf', label)
+        probe_out_path.mkdir(parents=True, exist_ok=True)
         # computes QC on the ks2 output
         ephysqc._spike_sorting_metrics_ks2(subdir, save=True)
         # converts the folder to ALF
