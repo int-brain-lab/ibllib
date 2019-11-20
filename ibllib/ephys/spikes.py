@@ -99,7 +99,10 @@ def sync_spike_sortings(ses_path):
         ephysqc._spike_sorting_metrics_ks2(subdir, save=True)
         # converts the folder to ALF
         ks2_to_alf(subdir, probe_out_path, ampfactor=_sample2v(ef.ap), label=None, force=True)
-        # synchronize the spike sorted times
+        # single probe we're done !
+        if len(subdirs) == 1:
+            break
+        # synchronize the spike sorted times only if there are several probes
         sync_file = ef.ap.parent.joinpath(ef.ap.name.replace('.ap.', '.sync.')).with_suffix('.npy')
         if not sync_file.exists():
             error_msg = f'No synchronisation file for {sync_file}'
