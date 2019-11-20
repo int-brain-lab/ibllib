@@ -68,6 +68,9 @@ def version3A(ses_path, display=True, linear=False, tol=2.1):
         for ind, ephys_file in enumerate(ephys_files):
             sync = alf.io.load_object(ephys_file.ap.parent, '_spikeglx_sync', short_keys=True)
             sync_map = get_ibl_sync_map(ephys_file, '3A')
+            # exits if sync label not found for current probe
+            if auxiliary_name not in sync_map:
+                return
             isync = np.in1d(sync['channels'], np.array([sync_map[auxiliary_name]]))
             # only returns syncs if we get fronts for all probes
             if np.all(~isync):
