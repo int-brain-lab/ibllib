@@ -106,7 +106,7 @@ def sync_spike_sortings(ses_path):
         # synchronize the spike sorted times only if there are several probes
         sync_file = ef.ap.parent.joinpath(ef.ap.name.replace('.ap.', '.sync.')).with_suffix('.npy')
         if not sync_file.exists():
-            error_msg = f'No synchronisation file for {sync_file}'
+            error_msg = f'No synchronisation file: {sync_file}'
             _logger.error(error_msg)
             raise FileNotFoundError(error_msg)
         # patch the spikes.times files manually

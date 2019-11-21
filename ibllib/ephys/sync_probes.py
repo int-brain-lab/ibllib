@@ -78,8 +78,12 @@ def version3A(ses_path, display=True, linear=False, tol=2.1):
             d.nsync[ind] = len(sync.channels)
             d['times'].append(sync['times'][isync])
         return d
-
-    d = get_sync_fronts('frame2ttl') or get_sync_fronts('right_camera')
+    d = get_sync_fronts('frame2ttl')
+    if not d:
+        _logger.warning('Ephys sync: frame2ttl not detected on both probes, using camera sync')
+        d = get_sync_fronts('right_camera')
+        if not min([t[0] for t in d['times']]) > 0.2:
+            raise(ValueError('Cameras started before ephys, no sync possible'))
     # chop off to the lowest number of sync points
     nsyncs = [t.size for t in d['times']]
     if len(set(nsyncs)) > 1:
