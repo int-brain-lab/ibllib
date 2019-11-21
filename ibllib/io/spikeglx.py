@@ -155,15 +155,17 @@ class Reader:
         :param kwargs:
         :return: pathlib.Path of the compressed *.cbin file
         """
-        file_out = self.file_bin.with_suffix('.cbin')
+        file_tmp = self.file_bin.with_suffix('.cbin_tmp')
         assert not self.is_mtscomp
         mtscomp.compress(self.file_bin,
-                         out=file_out,
+                         out=file_tmp,
                          outmeta=self.file_bin.with_suffix('.ch'),
                          sample_rate=self.fs,
                          n_channels=self.nc,
                          dtype=np.int16,
                          **kwargs)
+        file_out = file_tmp.with_suffix('.cbin')
+        file_tmp.rename(file_out)
         if not keep_original:
             self.file_bin.unlink()
             self.file_bin = file_out
