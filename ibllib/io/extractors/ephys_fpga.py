@@ -433,9 +433,9 @@ def extract_sync(session_path, save=False, force=False, ephys_files=None):
     return syncs
 
 
-def _get_all_probes_sync(session_path):
+def _get_all_probes_sync(session_path, bin_exists=True):
     # round-up of all bin ephys files in the session, infer revision and get sync map
-    ephys_files = glob_ephys_files(session_path)
+    ephys_files = glob_ephys_files(session_path, bin_exists=bin_exists)
     version = get_neuropixel_version_from_files(ephys_files)
     extract_sync(session_path, save=True)
     # attach the sync information to each binary file found
@@ -446,14 +446,14 @@ def _get_all_probes_sync(session_path):
     return ephys_files
 
 
-def _get_main_probe_sync(session_path):
+def _get_main_probe_sync(session_path, bin_exists=True):
     """
     From 3A or 3B multiprobe session, returns the main probe (3A) or nidq sync pulses
     with the attached channel map (default chmap if none)
     :param session_path:
     :return:
     """
-    ephys_files = _get_all_probes_sync(session_path)
+    ephys_files = _get_all_probes_sync(session_path, bin_exists=bin_exists)
     if not ephys_files:
         raise FileNotFoundError(f"No ephys files found in {session_path}")
     version = get_neuropixel_version_from_files(ephys_files)
