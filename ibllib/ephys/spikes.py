@@ -113,7 +113,7 @@ def sync_spike_sortings(ses_path):
             error_msg = f'No synchronisation file for {label}: {sync_file}'
             _logger.error(error_msg)
             st_file = ses_path.joinpath(probe_out_path, 'spikes.times.npy')
-            st_file.rename(st_file.parent.joinpath(f'{st_file.stem}{label}.npy'))
+            st_file.rename(st_file.parent.joinpath(f'{st_file.stem}_{label}.npy'))
             continue
         # patch the spikes.times files manually
         st_file = ses_path.joinpath(probe_out_path, 'spikes.times.npy')
