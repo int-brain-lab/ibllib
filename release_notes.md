@@ -1,3 +1,8 @@
+### Release Notes 1.3.7 hotfixes- 21-NOV-2019
+-   Rename spike.times on failed sync to reflect the clock as per ALF convention
+-   sync 3A fails if first cam event whithin 200ms of start
+-   compress ephys goes through a tempfile to not interfere with transfers/globbing
+
 ### Release Notes 1.3.6 - 20-NOV-2019
 -   Ephys Extraction (phylib)
     -   convert ks2 amplitudes to volts for spikes.amps, clusters.amps. templates.waveforms, clusters.waveforms to get uV
