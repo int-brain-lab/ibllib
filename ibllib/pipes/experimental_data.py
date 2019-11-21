@@ -187,7 +187,7 @@ def compress_ephys(root_data_folder, dry=False, max_sessions=5):
                     out_files.append(sr.compress_file(keep_original=False))
         qcflag.unlink()
         if out_files:
-            session_path = extract_session.get_session_path(probe_path)
+            session_path = extract_session.get_session_path(probe_path) or probe_path.parents[1]
             file_list = [str(f.relative_to(session_path)) for f in out_files]
             flags.write_flag_file(session_path.joinpath('register_me.flag'), file_list=file_list)
 
