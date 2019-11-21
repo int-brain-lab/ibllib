@@ -169,7 +169,7 @@ def plot_mean_std_around_event(event, diameter, times, eid):
     plt.title(eid)
     plt.tight_layout()
 
-# Get a raster plot
+
 if __name__ == "__main__":
 
     one = ONE()
