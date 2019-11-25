@@ -23,6 +23,10 @@ eid, sinfo = one.search(
     date_range='2019-11-05',
     details=True)
 assert(len(eid) > 0), 'No EID found with those search terms'
+dtypes_session = one.list(eid)[0]
+if not set(dataset_types).issubset(set(dtypes_session)):
+    missing_dtypes = [dt for dt in dataset_types if dt not in dtypes_session]
+    raise ValueError('Missing datasets: ' + ','.join(missing_dtypes))
 
 # In case the above did not run,
 # you can find all sessions containing raw data by looking into sinfos:
