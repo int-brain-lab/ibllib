@@ -71,7 +71,7 @@ fig, fraction_missing = bb.plot.feat_cutoff(spks, 1)
 # channels around the mean.
 fig1, wf1, wf2 = bb.plot.single_unit_wf_comp(path_ephys, spks, clstrs, unit=1)
 
-# -- Fig 3
+# -- Fig 4 -- SINGLE UNIT
 # Get a units bunch, and plot waveforms for unit2 from the first to second minute
 # across 15 channels.
 units = bb.processing.get_units_bunch(spks, ['times'])
