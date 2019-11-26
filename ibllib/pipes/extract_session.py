@@ -63,6 +63,8 @@ def get_task_extractor_type(task_name):
         return 'training'
     elif 'ephysChoiceWorld' in task_name:
         return 'ephys'
+    elif 'ephysMockChoiceWorld' in task_name:
+        return 'mock_ephys'
     elif task_name and task_name.startswith('_iblrig_tasks_ephys_certification'):
         return 'sync_ephys'
 
