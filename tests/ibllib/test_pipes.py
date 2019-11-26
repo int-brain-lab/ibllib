@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import alf.io
 import ibllib.pipes.extract_session
 from ibllib.pipes import experimental_data, misc
 
@@ -49,7 +50,7 @@ class TestExtractors(unittest.TestCase):
         out = (Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),
                Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),)
         for i, o in zip(inp, out):
-            self.assertEqual(o, ibllib.pipes.extract_session.get_session_path(i))
+            self.assertEqual(o, alf.io.get_session_path(i))
 
 
 class TestPipesMisc(unittest.TestCase):

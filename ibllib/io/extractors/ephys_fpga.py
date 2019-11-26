@@ -405,8 +405,8 @@ def align_with_bpod(session_path):
 
 def extract_sync(session_path, save=False, force=False, ephys_files=None):
     """
-    Reads ephys binary file (s) and extract sync whithin the binary file folder
-    Assumes ephys data is whithin a `raw_ephys_data` folder
+    Reads ephys binary file (s) and extract sync within the binary file folder
+    Assumes ephys data is within a `raw_ephys_data` folder
 
     :param session_path: '/path/to/subject/yyyy-mm-dd/001'
     :param save: Bool, defaults to False
