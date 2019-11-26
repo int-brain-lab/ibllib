@@ -51,4 +51,4 @@ if __name__ == '__main__':
     alf_path = Path(D.local_path[0]).parent
 
     spikes = alf.io.load_object(alf_path, 'spikes')
-
+    scatter_raster(spikes)
