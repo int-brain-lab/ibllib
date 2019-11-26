@@ -94,6 +94,9 @@ def sync_spike_sortings(ses_path):
 
     _logger.info('converting  spike-sorting outputs to ALF')
     for subdir, label, ef, sr in zip(subdirs, labels, efiles_sorted, srates):
+        if not subdir.joinpath('spike_times.npy').exists():
+            _logger.warning(f"No KS2 spike sorting found in {subdir}, skipping probe !")
+            continue
         probe_out_path = ses_path.joinpath('alf', label)
         probe_out_path.mkdir(parents=True, exist_ok=True)
         # computes QC on the ks2 output
