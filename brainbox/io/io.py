@@ -20,14 +20,14 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
         The time (in ms) of each returned waveform.
     sr : int (optional)
         The sampling rate (in hz) that the ephys data was acquired at.
-    n_ch : int (optional)
+    n_ch_probe : int (optional)
         The number of channels of the recording.
     dtype: str (optional)
         The datatype represented by the bytes in `ephys_file`.
     offset: int (optional)
         The offset (in bytes) from the start of `ephys_file`.
     car: bool (optional)
-        A flag for whether or not to perform common-average-referencing before extracting waveforms
+        A flag to perform common-average-referencing before extracting waveforms.
 
     Returns
     -------
@@ -37,12 +37,14 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
     Examples
     --------
     1) Extract all the waveforms for unit1 with and without CAR.
+        >>> import numpy as np
         >>> import brainbox as bb
         >>> import alf.io as aio
         # Get a clusters bunch and a units bunch from a spikes bunch from an alf directory.
         >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
         >>> clstrs = aio.load_obect('path\\to\\alf_output', 'clusters')
         >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
+        >>> units = bb.processing.get_units_bunch(spks)
         # Get the timestamps and 20 channels around the max amp channel for unit1, and extract the
         two sets of waveforms.
         >>> ts = units['times']['1']
@@ -56,7 +58,7 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
     item_bytes = np.dtype(dtype).itemsize
     n_samples = (op.getsize(ephys_file) - offset) // (item_bytes * n_ch_probe)
     file_m = np.memmap(ephys_file, shape=(n_samples, n_ch_probe), dtype=dtype, mode='r')
-    n_wf_samples = np.int(sr / 1000 / (t / 2))  # number of samples to return on each side of a ts
+    n_wf_samples = np.int(sr / 1000 * (t / 2))  # number of samples to return on each side of a ts
     ts_samples = np.array(ts * sr).astype(int)  # the samples corresponding to `ts`
 
     if car:  # compute temporal and spatial noise

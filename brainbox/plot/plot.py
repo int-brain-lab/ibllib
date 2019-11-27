@@ -253,7 +253,7 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
                                   car=True)
     s = bb.metrics.wf_similarity(wf1, wf2)
     # Plot these waveforms against each other.
-    fig, ax = plt.subplots(nrows=n_ch, ncols=2)  # on left is all waveforms, on right is mean
+    fig, ax = plt.subplots(nrows=n_ch, ncols=2)  # left col is all waveforms, right col is mean
     for cur_ax, cur_ch in enumerate(ch):
         ax[cur_ax][0].plot(wf1[:, :, cur_ax].T, c=col[0])
         ax[cur_ax][0].plot(wf2[:, :, cur_ax].T, c=col[1])

@@ -55,8 +55,10 @@ def unit_stability(spks, feat_names=['amps'], dist='norm', test='ks'):
         >>> import alf.io as aio
         >>> import numpy as np
         >>> import matplotlib.pyplot as plt
+        >>> import ibllib.ephys.spikes as e_spks
         # Load a spikes bunch and calculate unit stability:
-        >>> spks = aio.load_object('path\\to\\ks_output', 'spikes')
+        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
+        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
         >>> p_vals, variances = bb.metrics.unit_stability(spks)
         # Plot histograms of variances color-coded by  depth of channel of max amplitudes
         >>> bb.plot.feat_vars(spks, feat_name='amps')
@@ -146,8 +148,10 @@ def feat_cutoff(spks, unit, feat_name='amps', spks_per_bin=20, sigma=5):
     amplitudes, assuming the distribution of the unit's spike amplitudes is symmetric.
         >>> import brainbox as bb
         >>> import alf.io as aio
+        >>> import ibllib.ephys.spikes as e_spks
         # Get a spikes bunch and calculate estimated fraction of missing spikes.
-        >>> spks = aio.load_object('path\\to\\ks_output', 'spikes')
+        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
+        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
         >>> fraction_missing = bb.metrics.feat_cutoff(spks, 'amps', 1)
         # Plot histogram and pdf of the spike amplitude distribution.
         >>> bb.plot.feat_cutoff(spks, 1)
@@ -211,9 +215,9 @@ def wf_similarity(wf1, wf2):
         # Get a spikes bunch, a clusters bunch, a units bunch, the channels around the max amp
         # channel for the unit, two sets of timestamps for the units, and the two corresponding
         # sets of waveforms for those two sets of timestamps. Then compute `s`.
-        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
-        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
-        >>> clstrs = aio.load_object('path\\to\\alf_output', 'clusters')
+        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
+        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
+        >>> clstrs = aio.load_object('path\\to\\alf_out', 'clusters')
         >>> max_ch = max_ch = clstrs['channels'][1]
         >>> ch = np.arange(max_ch - 10, max_ch + 10)
         >>> units = bb.processing.get_units_bunch(spks)
@@ -293,8 +297,8 @@ def firing_rate_coeff_var(spks, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins
         >>> import alf.io as aio
         >>> import ibllib.ephys.spikes as e_spks
         # Get a spikes bunch and calculate the firing rate.
-        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
-        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
+        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
+        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
         >>> cv, cvs, fr = metrics.firing_rate_coeff_var(spks, 1)
         >>> cv_2, cvs_2, fr_2 = metrics.firing_rate_coeff_var(spks, 2)
     '''
