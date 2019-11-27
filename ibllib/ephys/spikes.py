@@ -61,7 +61,7 @@ def probes_description(ses_path):
     for i, k in enumerate(keys):
         if i >= len(labels):
             break
-        trajs.append(prb2alf(bpod_meta['PROBE_DATA']['probe00'], labels[i]))
+        trajs.append(prb2alf(bpod_meta['PROBE_DATA'][f'probe0{i}'], labels[i]))
     probe_trajectory_file = ses_path.joinpath('alf', 'probes.trajectory.json')
     with open(probe_trajectory_file, 'w+') as fid:
         fid.write(json.dumps(trajs))
