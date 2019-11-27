@@ -207,8 +207,7 @@ class BrainAtlas:
         tilt_line = linepts.copy()
         tilt_line[:, sxdim] = 0
         tilt_line_i = self.bc.xyz2i(tilt_line)
-        tilt_line_i[:, ssdim]
-        tile_shape = np.array([np.diff(tilt_line_i[:, 2])[0] + 1, self.bc.nxyz[sxdim]])
+        tile_shape = np.array([np.diff(tilt_line_i[:, sydim])[0] + 1, self.bc.nxyz[sxdim]])
         indx = np.arange(tile_shape[1])
         indy = np.arange(tile_shape[0])
         inds = np.linspace(*tilt_line_i[:, ssdim], tile_shape[0])
