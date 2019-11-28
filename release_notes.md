@@ -1,3 +1,10 @@
+### Release Notes 1.3.8
+-   Ephys Extraction:
+    -   duplicate probe.trajectories bugfix
+    -   extraction works with unoperational fram2ttl at beginning of ephys session
+    -   clusters.metrics.csv has consistent size with npy cluster objects
+    -   ephys transfer: create ephys extraction flags after the transfer is complete
+
 ### Release Notes 1.3.7 hotfixes- 21-NOV-2019
 -   Rename spike.times on failed sync to reflect the clock as per ALF convention
 -   sync 3A fails if first cam event whithin 200ms of start
