@@ -244,6 +244,35 @@ class TestPipesMisc(unittest.TestCase):
             '_spikeglx_ephysData_g0_t0.nidq.meta' in nidq_file_names
         )
 
+    def test_create_ephys_flags(self):
+        extract = self.local_session_path_3A.joinpath('extract_ephys.flag')
+        qc = self.local_session_path_3A.joinpath('raw_ephys_qc.flag')
+        spike_sorting0 = self.local_session_path_3A / 'raw_ephys_data' / 'probe00'
+        spike_sorting1 = self.local_session_path_3A / 'raw_ephys_data' / 'probe01'
+        spike_sorting0 = spike_sorting0.joinpath('spike_sorting.flag')
+        spike_sorting1 = spike_sorting1.joinpath('spike_sorting.flag')
+        misc.create_ephys_flags(self.local_session_path_3A)
+        self.assertTrue(extract.exists())
+        self.assertTrue(qc.exists())
+        self.assertTrue(spike_sorting0.exists())
+        self.assertTrue(spike_sorting1.exists())
+        # Test recreate
+        misc.create_ephys_flags(self.local_session_path_3A)
+        self.assertTrue(extract.exists())
+        self.assertTrue(qc.exists())
+        self.assertTrue(spike_sorting0.exists())
+        self.assertTrue(spike_sorting1.exists())
+        # Remove flags after test
+        extract.unlink()
+        qc.unlink()
+        spike_sorting0.unlink()
+        spike_sorting1.unlink()
+        # test removal
+        self.assertFalse(extract.exists())
+        self.assertFalse(qc.exists())
+        self.assertFalse(spike_sorting0.exists())
+        self.assertFalse(spike_sorting1.exists())
+
     def tearDown(self):
         shutil.rmtree(self.root_test_folder, ignore_errors=True)
 
