@@ -328,7 +328,7 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None):
     # does not apply for 1st trial
     ind = np.searchsorted(frame2ttl['times'], t_iti_in, side='left')
     t_stim_off = frame2ttl['times'][ind]
-    t_stim_freeze = frame2ttl['times'][ind - 1]
+    t_stim_freeze = frame2ttl['times'][np.maximum(ind - 1, 0)]
 
     if DEBUG_PLOTS:
         plt.figure()
