@@ -95,8 +95,8 @@ class TestsCoordinatesSimples(unittest.TestCase):
         ml = np.array([0, 0, 0, 0, -1, 1, 0, 0, 0])  # x
         ap = np.array([0, 0, 0, 0, 0, 0, 0, -1, 1])  # y
 
-        theta = np.array([0., 0., 0., 0., 180., 0., 0., -90., 90.])
-        phi = np.array([0., 180., 0., 0., 90., 90., 0., 90., 90.])
+        phi = np.array([0., 0., 0., 0., 180., 0., 0., -90., 90.])
+        theta = np.array([0., 180., 0., 0., 90., 90., 0., 90., 90.])
         r = np.array([0., 1, 1, 0., 1, 1, 0., 1, 1])
 
         r_, t_, p_ = cart2sph(ml, ap, dv)

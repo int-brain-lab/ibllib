@@ -61,7 +61,7 @@ def probes_description(ses_path):
     for i, k in enumerate(keys):
         if i >= len(labels):
             break
-        trajs.append(prb2alf(bpod_meta['PROBE_DATA']['probe00'], labels[i]))
+        trajs.append(prb2alf(bpod_meta['PROBE_DATA'][f'probe0{i}'], labels[i]))
     probe_trajectory_file = ses_path.joinpath('alf', 'probes.trajectory.json')
     with open(probe_trajectory_file, 'w+') as fid:
         fid.write(json.dumps(trajs))
@@ -94,6 +94,9 @@ def sync_spike_sortings(ses_path):
 
     _logger.info('converting  spike-sorting outputs to ALF')
     for subdir, label, ef, sr in zip(subdirs, labels, efiles_sorted, srates):
+        if not subdir.joinpath('spike_times.npy').exists():
+            _logger.warning(f"No KS2 spike sorting found in {subdir}, skipping probe !")
+            continue
         probe_out_path = ses_path.joinpath('alf', label)
         probe_out_path.mkdir(parents=True, exist_ok=True)
         # computes QC on the ks2 output

@@ -328,7 +328,7 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None):
     # does not apply for 1st trial
     ind = np.searchsorted(frame2ttl['times'], t_iti_in, side='left')
     t_stim_off = frame2ttl['times'][ind]
-    t_stim_freeze = frame2ttl['times'][ind - 1]
+    t_stim_freeze = frame2ttl['times'][np.maximum(ind - 1, 0)]
 
     if DEBUG_PLOTS:
         plt.figure()
@@ -405,8 +405,8 @@ def align_with_bpod(session_path):
 
 def extract_sync(session_path, save=False, force=False, ephys_files=None):
     """
-    Reads ephys binary file (s) and extract sync whithin the binary file folder
-    Assumes ephys data is whithin a `raw_ephys_data` folder
+    Reads ephys binary file (s) and extract sync within the binary file folder
+    Assumes ephys data is within a `raw_ephys_data` folder
 
     :param session_path: '/path/to/subject/yyyy-mm-dd/001'
     :param save: Bool, defaults to False
@@ -433,9 +433,9 @@ def extract_sync(session_path, save=False, force=False, ephys_files=None):
     return syncs
 
 
-def _get_all_probes_sync(session_path):
+def _get_all_probes_sync(session_path, bin_exists=True):
     # round-up of all bin ephys files in the session, infer revision and get sync map
-    ephys_files = glob_ephys_files(session_path)
+    ephys_files = glob_ephys_files(session_path, bin_exists=bin_exists)
     version = get_neuropixel_version_from_files(ephys_files)
     extract_sync(session_path, save=True)
     # attach the sync information to each binary file found
@@ -446,14 +446,14 @@ def _get_all_probes_sync(session_path):
     return ephys_files
 
 
-def _get_main_probe_sync(session_path):
+def _get_main_probe_sync(session_path, bin_exists=True):
     """
     From 3A or 3B multiprobe session, returns the main probe (3A) or nidq sync pulses
     with the attached channel map (default chmap if none)
     :param session_path:
     :return:
     """
-    ephys_files = _get_all_probes_sync(session_path)
+    ephys_files = _get_all_probes_sync(session_path, bin_exists=bin_exists)
     if not ephys_files:
         raise FileNotFoundError(f"No ephys files found in {session_path}")
     version = get_neuropixel_version_from_files(ephys_files)
