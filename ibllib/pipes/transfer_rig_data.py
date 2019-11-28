@@ -76,8 +76,7 @@ def _create_flags_for_task(dst, task_type):
         flags.create_compress_video_flags(dst, flag_name='compress_video.flag')
         flags.create_audio_flags(dst, 'audio_training.flag')
     elif task_type in ['ephys', 'ephys_sync']:
-        flags.write_flag_file(dst.joinpath('extract_ephys.flag'))
-        flags.write_flag_file(dst.joinpath('raw_ephys_qc.flag'))
+        # Ephys flags copied by transfer_ephys_session from ephyspc
         flags.create_compress_video_flags(dst, flag_name='compress_video_ephys.flag')
         flags.create_audio_flags(dst, 'audio_ephys.flag')
 
