@@ -173,10 +173,10 @@ def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5):
     1) Compute the firing rate for unit1 from the time of its first to last spike.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        >>> import ibllib.ephys.spikes as e_spks
+        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
         # Get a spikes bunch and calculate the firing rate.
-        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
-        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
+        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
+        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
         >>> fr = singlecell.firing_rate(spks, 1)
     '''
 

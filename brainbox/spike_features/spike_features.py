@@ -14,7 +14,7 @@ def depth(ephys_file, spks, clstrs, chnls, tmplts, unit, n_ch=12, n_ch_probe=385
     products of waveform by unit template for those channels, and computes center-of-mass of these
     dot products to get spike depth estimates.
 
-      Parameters
+    Parameters
     ----------
     ephys_file : string
         The file path to the binary ephys data.
@@ -48,18 +48,23 @@ def depth(ephys_file, spks, clstrs, chnls, tmplts, unit, n_ch=12, n_ch_probe=385
     d : ndarray
         The estimated spike depths for all spikes in `unit`.
 
+    See Also
+    --------
+    io.extract_waveforms
+
     Examples
     --------
     1) Get the spike depths for unit 1.
         >>> import numpy as np
         >>> import brainbox as bb
         >>> import alf.io as aio
+        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
         # Get the necessary alf objects from an alf directory.
-        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
-        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
-        >>> clstrs = aio.load_obect('path\\to\\alf_output', 'clusters')
-        >>> chnls = aio.load_object('path\\to\\alf_output', 'channels')
-        >>> tmplts = aio.load_object('path\\to\\alf_output', 'templates')
+        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
+        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
+        >>> clstrs = aio.load_obect('path\\to\\alf_out', 'clusters')
+        >>> chnls = aio.load_object('path\\to\\alf_out', 'channels')
+        >>> tmplts = aio.load_object('path\\to\\alf_out', 'templates')
         # Compute spike depths.
         >>> wf = bb.spike_features.depth('path\\to\\ephys_file', spks, clstrs, chnls, tmplts,
                                          unit=1)
@@ -83,7 +88,7 @@ def depth(ephys_file, spks, clstrs, chnls, tmplts, unit, n_ch=12, n_ch_probe=385
     # Get unit template across `ch` and extract waveforms from `ephys_file`.
     tmplt_wfs = tmplts['waveforms']
     unit_tmplt = tmplt_wfs[unit, :, ch].T
-    wf_t  = tmplt_wfs.shape[1] / (sr / 1000)  # duration (ms) of each waveform
+    wf_t = tmplt_wfs.shape[1] / (sr / 1000)  # duration (ms) of each waveform
     wf = bb.io.extract_waveforms(ephys_file=ephys_file, ts=ts, ch=ch, t=wf_t, sr=sr,
                                  n_ch_probe=n_ch_probe, dtype='int16', car=car)
 

@@ -40,6 +40,7 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
         >>> import numpy as np
         >>> import brainbox as bb
         >>> import alf.io as aio
+        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
         # Get a clusters bunch and a units bunch from a spikes bunch from an alf directory.
         >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
         >>> clstrs = aio.load_obect('path\\to\\alf_output', 'clusters')

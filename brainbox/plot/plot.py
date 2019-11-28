@@ -3,12 +3,11 @@ Plots metrics that assess quality of single units. Some functions here generate 
 output of functions in the brainbox `metrics.py` module.
 """
 
-import brainbox as bb
-import numpy as np
-import matplotlib.pyplot as plt
 import os.path as op
 from warnings import warn
-
+import numpy as np
+import matplotlib.pyplot as plt
+import brainbox as bb
 
 def feat_vars(spks, feat_name='amps', dist='norm', test='ks', cmap_name='coolwarm'):
     '''
@@ -50,9 +49,10 @@ def feat_vars(spks, feat_name='amps', dist='norm', test='ks', cmap_name='coolwar
     1) Create a bar plot of the variances of the spike amplitudes for each unit.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        >>> import ibllib.ephys.spikes as e_spks
-        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
-        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
+        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
+        # Get spikes bunch and create the bar plot.
+        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
+        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
         >>> fig, var_vals, p_vals = bb.plot.feat_vars(spks)
     '''
 
@@ -126,10 +126,10 @@ def feat_cutoff(spks, unit, feat_name='amps', spks_per_bin=20, sigma=5):
     unit's spike amplitudes, assuming the distribution of the unit's spike amplitudes is symmetric.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        >>> import ibllib.ephys.spikes as e_spks
+        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
         # Get a spikes bunch, a units bunch, and plot feature cutoff for spike amplitudes for unit1
-        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
-        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
+        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
+        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
         >>> fig, fraction_missing = bb.plot.feat_cutoff(spks, 1)
     '''
 
@@ -217,11 +217,11 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
     channels around the mean.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        >>> import ibllib.ephys.spikes as e_spks
+        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
         # Get a spikes bunch, a clusters bunch, and plot waveforms for unit1 across 20 channels.
-        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
-        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
-        >>> clstrs = aio.load_object('path\\to\\alf_output', 'clusters')
+        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
+        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
+        >>> clstrs = aio.load_object('path\\to\\alf_out', 'clusters')
         >>> fig, wf1, wf2 = bb.plot.single_unit_wf_comp('path\\to\\ephys_file', spks, clstrs, \
                                                         unit=1)
         # Get a units bunch, and plot waveforms for unit2 from the first to second minute
@@ -313,11 +313,11 @@ def amp_heatmap(ephys_file, spks, clstrs, unit, t='all', n_ch=20, sr=30000, n_ch
     amplitude for unit1.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        >>> import ibllib.ephys.spikes as e_spks
+        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
         # Get a spikes bunch, a clusters bunch, and plot heatmap for unit1 across 20 channels.
-        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
-        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
-        >>> clstrs = aio.load_object('path\\to\\alf_output', 'clusters')
+        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
+        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
+        >>> clstrs = aio.load_object('path\\to\\alf_out', 'clusters')
         >>> bb.plot.amp_heatmap('path\\to\\ephys_file', spks, clstrs, unit=1)
     '''
 
@@ -413,10 +413,10 @@ def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins=10, show_
     to second minute, without showing the cv.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        >>> import ibllib.ephys.spikes as e_spks
+        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
         # Get a spikes bunch and calculate the firing rate.
-        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
-        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
+        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
+        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
         >>> fig, fr_1, cv_1, cvs_1 = bb.plot.firing_rate(spks, unit=1)
         >>> fig2, fr_2 = bb.plot.firing_rate(spks, unit=2, t=[60,120], show_fr_cv=False)
     '''

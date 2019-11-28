@@ -55,7 +55,7 @@ def unit_stability(spks, feat_names=['amps'], dist='norm', test='ks'):
         >>> import alf.io as aio
         >>> import numpy as np
         >>> import matplotlib.pyplot as plt
-        >>> import ibllib.ephys.spikes as e_spks
+        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
         # Load a spikes bunch and calculate unit stability:
         >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
         >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
@@ -148,7 +148,7 @@ def feat_cutoff(spks, unit, feat_name='amps', spks_per_bin=20, sigma=5):
     amplitudes, assuming the distribution of the unit's spike amplitudes is symmetric.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        >>> import ibllib.ephys.spikes as e_spks
+        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
         # Get a spikes bunch and calculate estimated fraction of missing spikes.
         >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
         >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
@@ -211,7 +211,7 @@ def wf_similarity(wf1, wf2):
     channels around the channel of max amplitude.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        >>> import ibllib.ephys.spikes as e_spks
+        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
         # Get a spikes bunch, a clusters bunch, a units bunch, the channels around the max amp
         # channel for the unit, two sets of timestamps for the units, and the two corresponding
         # sets of waveforms for those two sets of timestamps. Then compute `s`.
@@ -275,12 +275,12 @@ def firing_rate_coeff_var(spks, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins
 
     Returns
     -------
-    cv: float
+    cv : float
         The mean coefficient of variation of the firing rate of the `n_bins` number of coefficients
         computed.
-    cvs: ndarray
+    cvs : ndarray
         The coefficients of variation of the firing for each bin of `n_bins`.
-    fr: ndarray
+    fr : ndarray
         The instantaneous firing rate over time (in hz).
 
     See Also
@@ -295,7 +295,7 @@ def firing_rate_coeff_var(spks, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins
     the first to second minute.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        >>> import ibllib.ephys.spikes as e_spks
+        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
         # Get a spikes bunch and calculate the firing rate.
         >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
         >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
