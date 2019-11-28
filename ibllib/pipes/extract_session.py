@@ -7,12 +7,11 @@ Find task name
 Check if extractors for specific task exist
 Extract data OR return error to user saying that the task has no extractors
 """
-import os
-import re
 import logging
 import json
 from pathlib import Path
 
+from alf.io import get_session_path
 from ibllib.misc import log2session_static
 from ibllib.io.extractors import (ephys_trials, ephys_fpga,
                                   biased_wheel, biased_trials,
@@ -21,18 +20,6 @@ from ibllib.io import raw_data_loaders as raw
 import ibllib.io.flags as flags
 
 logger_ = logging.getLogger('ibllib.alf')
-
-
-def get_session_path(path_object):
-    """
-    From a full file path or folder path, gets the session root path
-    :param path_object: pathlib.Path or string
-    :return:
-    """
-    path_object = Path(path_object)
-    s = re.search(rf'{os.sep}\d\d\d\d-\d\d-\d\d{os.sep}\d\d\d', str(path_object), flags=0)
-    if s:
-        return Path(str(path_object)[:s.span()[-1]])
 
 
 def get_task_extractor_type(task_name):
@@ -63,6 +50,8 @@ def get_task_extractor_type(task_name):
         return 'training'
     elif 'ephysChoiceWorld' in task_name:
         return 'ephys'
+    elif 'ephysMockChoiceWorld' in task_name:
+        return 'mock_ephys'
     elif task_name and task_name.startswith('_iblrig_tasks_ephys_certification'):
         return 'sync_ephys'
 

@@ -7,6 +7,7 @@ https://ibllib.readthedocs.io/en/develop/04_reference.html#alf
 
 import logging
 import json
+import os
 import re
 from pathlib import Path
 
@@ -301,3 +302,15 @@ def is_uuid_string(string):
         return True
     else:
         return False
+
+
+def get_session_path(path_object):
+    """
+    From a full file path or folder path, gets the session root path
+    :param path_object: pathlib.Path or string
+    :return:
+    """
+    path_object = Path(path_object)
+    s = re.search(rf'{os.sep}\d\d\d\d-\d\d-\d\d{os.sep}\d\d\d', str(path_object), flags=0)
+    if s:
+        return Path(str(path_object)[:s.span()[-1]])

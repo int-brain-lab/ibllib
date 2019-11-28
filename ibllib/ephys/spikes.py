@@ -61,7 +61,7 @@ def probes_description(ses_path):
     for i, k in enumerate(keys):
         if i >= len(labels):
             break
-        trajs.append(prb2alf(bpod_meta['PROBE_DATA']['probe00'], labels[i]))
+        trajs.append(prb2alf(bpod_meta['PROBE_DATA'][f'probe0{i}'], labels[i]))
     probe_trajectory_file = ses_path.joinpath('alf', 'probes.trajectory.json')
     with open(probe_trajectory_file, 'w+') as fid:
         fid.write(json.dumps(trajs))
@@ -94,6 +94,9 @@ def sync_spike_sortings(ses_path):
 
     _logger.info('converting  spike-sorting outputs to ALF')
     for subdir, label, ef, sr in zip(subdirs, labels, efiles_sorted, srates):
+        if not subdir.joinpath('spike_times.npy').exists():
+            _logger.warning(f"No KS2 spike sorting found in {subdir}, skipping probe !")
+            continue
         probe_out_path = ses_path.joinpath('alf', label)
         probe_out_path.mkdir(parents=True, exist_ok=True)
         # computes QC on the ks2 output
@@ -106,9 +109,15 @@ def sync_spike_sortings(ses_path):
         # synchronize the spike sorted times only if there are several probes
         sync_file = ef.ap.parent.joinpath(ef.ap.name.replace('.ap.', '.sync.')).with_suffix('.npy')
         if not sync_file.exists():
-            error_msg = f'No synchronisation file for {sync_file}'
+            """
+            if there is no sync file it means something went wrong. Outputs the spike sorting
+            in time according the the probe by followint ALF convention on the times objects
+            """
+            error_msg = f'No synchronisation file for {label}: {sync_file}'
             _logger.error(error_msg)
-            raise FileNotFoundError(error_msg)
+            st_file = ses_path.joinpath(probe_out_path, 'spikes.times.npy')
+            st_file.rename(st_file.parent.joinpath(f'{st_file.stem}_{label}.npy'))
+            continue
         # patch the spikes.times files manually
         st_file = ses_path.joinpath(probe_out_path, 'spikes.times.npy')
         interp_times = apply_sync(sync_file, np.load(st_file), forward=True)

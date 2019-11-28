@@ -155,15 +155,17 @@ class Reader:
         :param kwargs:
         :return: pathlib.Path of the compressed *.cbin file
         """
-        file_out = self.file_bin.with_suffix('.cbin')
+        file_tmp = self.file_bin.with_suffix('.cbin_tmp')
         assert not self.is_mtscomp
         mtscomp.compress(self.file_bin,
-                         out=file_out,
+                         out=file_tmp,
                          outmeta=self.file_bin.with_suffix('.ch'),
                          sample_rate=self.fs,
                          n_channels=self.nc,
                          dtype=np.int16,
                          **kwargs)
+        file_out = file_tmp.with_suffix('.cbin')
+        file_tmp.rename(file_out)
         if not keep_original:
             self.file_bin.unlink()
             self.file_bin = file_out
@@ -388,7 +390,7 @@ def get_neuropixel_version_from_files(ephys_files):
         return '3A'
 
 
-def glob_ephys_files(session_path, suffix='.meta', recursive=True):
+def glob_ephys_files(session_path, suffix='.meta', recursive=True, bin_exists=True):
     """
     From an arbitrary folder (usually session folder) gets the ap and lf files and labels
     Associated to the subfolders where they are
@@ -409,6 +411,9 @@ def glob_ephys_files(session_path, suffix='.meta', recursive=True):
             ├── sync_testing_g0_t0.imec1.ap.bin
             └── sync_testing_g0_t0.imec1.lf.bin
 
+    :param bin_exists:
+    :param suffix:
+    :param recursive:
     :param session_path: folder, string or pathlib.Path
     :param glob_pattern: pattern to look recursively for (defaults to '*.ap.*bin)
     :returns: a list of dictionaries with keys 'ap': apfile, 'lf': lffile and 'label'
@@ -423,8 +428,10 @@ def glob_ephys_files(session_path, suffix='.meta', recursive=True):
     ephys_files = []
     for raw_ephys_file in Path(session_path).glob(f'{recurse}*.ap{suffix}'):
         raw_ephys_apfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + '.*bin'), None)
-        if not raw_ephys_apfile:
+        if not raw_ephys_apfile and bin_exists:
             continue
+        elif not bin_exists:
+            raw_ephys_apfile = raw_ephys_file.with_suffix('.bin')
         # first get the ap file
         ephys_files.extend([Bunch({'label': None, 'ap': None, 'lf': None, 'path': None})])
         ephys_files[-1].ap = raw_ephys_apfile

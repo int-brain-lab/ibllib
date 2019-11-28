@@ -266,7 +266,7 @@ def _spike_sorting_metrics_ks2(ks2_path, save=True):
 def spike_sorting_metrics(spike_times, spike_clusters, spike_amplitudes,
                           params=METRICS_PARAMS, epochs=None):
     """ Spike sorting QC metrics """
-    cluster_ids = np.unique(spike_clusters)
+    cluster_ids = np.arange(np.max(spike_clusters) + 1)
     nclust = cluster_ids.size
     r = Bunch({
         'cluster_id': cluster_ids,
@@ -304,6 +304,8 @@ def spike_sorting_metrics(spike_times, spike_clusters, spike_amplitudes,
     for ic in np.arange(nclust):
         # slice the spike_times array
         ispikes = spike_clusters == cluster_ids[ic]
+        if np.all(~ispikes):
+            continue
         st = spike_times[ispikes]
         sa = spike_amplitudes[ispikes]
         # compute metrics
