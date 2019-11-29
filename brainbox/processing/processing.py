@@ -303,9 +303,9 @@ def filter_units(spks, params={'min_amp': 100, 'min_fr': 0.5, 'max_fpr': 0.1, 'r
         # Get a spikes bunch and filter the units.
         >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
         >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
-        >>> units = bb.processing.filter_units(spks)
-        # Get a list of the filtered units` ids.
-        filt_units = list(units['clusters'].keys())
+        >>> filtered_units_mask = bb.processing.filter_units(spks)
+        # Get an array of the filtered units` ids.
+        filtered_units = np.where(filtered_units)[0]
     '''
     # Remove warnings dealing with operations on nans, caused by empty clusters
     import warnings
