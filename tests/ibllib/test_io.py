@@ -17,7 +17,8 @@ class TestsParams(unittest.TestCase):
                          'O': 'toto',
                          'I': 'titi',
                          'num': 15,
-                         'liste': [1, 'turlu']}
+                         'liste': [1, 'turlu'],
+                         'apath': Path('/gna/gna/gna')}
         params.write('toto', self.par_dict)
         params.write('toto', params.from_dict(self.par_dict))
 
@@ -43,6 +44,7 @@ class TestsParams(unittest.TestCase):
                            'I': 'titi',
                            'num': 15,
                            'liste': [1, 'turlu'],
+                           'apath': '/gna/gna/gna',
                            'E': 'tete2',
                            }
         par2 = params.read('toto', default=default)

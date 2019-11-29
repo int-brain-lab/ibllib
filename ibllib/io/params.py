@@ -86,5 +86,9 @@ def write(str_params, par):
     :return: None
     """
     pfile = getfile(str_params)
+    dpar = as_dict(par)
+    for k in dpar:
+        if isinstance(dpar[k], pathlib.Path):
+            dpar[k] = str(dpar[k])
     with open(pfile, 'w') as fil:
         json.dump(as_dict(par), fil, sort_keys=False, indent=4)
