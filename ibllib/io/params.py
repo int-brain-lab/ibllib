@@ -57,7 +57,7 @@ def read(str_params, default=None):
     :return: named tuple containing parameters
     """
     pfile = getfile(str_params)
-    if os.path.isfile(pfile):
+    if pathlib.Path(pfile).exists():
         with open(pfile) as fil:
             par_dict = json.loads(fil.read())
     else:
