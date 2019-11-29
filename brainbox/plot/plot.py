@@ -9,6 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import brainbox as bb
 
+
 def feat_vars(spks, feat_name='amps', dist='norm', test='ks', cmap_name='coolwarm'):
     '''
     Plots the variances of a particular spike feature for all units as a bar plot, where each bar
