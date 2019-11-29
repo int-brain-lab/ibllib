@@ -307,6 +307,7 @@ def filter_units(spks, params={'min_amp': 100, 'min_fr': 0.5, 'max_fpr': 0.1, 'r
         # Get an array of the filtered units` ids.
         filtered_units = np.where(filtered_units)[0]
     '''
+
     # Remove warnings dealing with operations on nans, caused by empty clusters
     import warnings
     warnings.filterwarnings('ignore', r'invalid value encountered in greater')
@@ -338,11 +339,12 @@ def filter_units(spks, params={'min_amp': 100, 'min_fr': 0.5, 'max_fpr': 0.1, 'r
             c = (T * n_isi_viol) / (2 * params['rp'] * u_n_spks[i]**2)  # 3rd term in quadratic
             u_fpr[i] = np.min(np.abs(np.roots([-1, 1, c])))
 
-    # Get unit ids that don't meet `params` requirements, and filter them out.
+    # Get units that don't meet `params` requirements, and empty units, and filter them out.
     units_to_rm = np.unique(np.concatenate(
         (np.where(u_amps < params['min_amp'])[0],
          np.where(u_fr < params['min_fr'])[0],
-         np.where(u_fpr > params['max_fpr'])[0])))
+         np.where(u_fpr > params['max_fpr'])[0],
+         np.where(np.isnan(u_amps))[0])))
     filtered_units = np.ones((n_units,))
     filtered_units[units_to_rm] = 0
     return filtered_units
