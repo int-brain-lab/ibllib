@@ -8,7 +8,7 @@ import numpy as np
 import mtscomp
 from brainbox.core import Bunch
 from ibllib.ephys import neuropixel as neuropixel
-
+from ibllib.io import hashfile
 
 SAMPLE_SIZE = 2  # int16
 DEFAULT_BATCH_SIZE = 1e6
@@ -186,6 +186,13 @@ class Reader:
             self.file_bin.with_suffix('.ch').unlink()
             self.file_bin = file_out
         return file_out
+
+    def verify_hash(self):
+        """
+        Computes SHA-1 hash and returns True if it matches metadata, False otherwise
+        :return: boolean
+        """
+        return hashfile.sha1(self.file_bin).upper() == self.meta.fileSHA1
 
 
 def read(sglx_file, first_sample=0, last_sample=10000):

@@ -7,7 +7,7 @@ import shutil
 
 import numpy as np
 
-from ibllib.io import params, flags, jsonable, spikeglx
+from ibllib.io import params, flags, jsonable, spikeglx, hashfile
 
 
 class TestsParams(unittest.TestCase):
@@ -321,6 +321,18 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             self.workdir / 'sample3B_g0_t0.imec1.ap.meta',
             ns=32, nc=385, sync_depth=16)
         self.assert_read_glx(bin_3b)
+
+    def test_check_ephys_file(self):
+        self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
+        bin_3b = spikeglx._mock_spikeglx_file(
+            Path(self.tdir.name).joinpath('sample3B_g0_t0.imec1.ap.bin'),
+            self.workdir / 'sample3B_g0_t0.imec1.ap.meta',
+            ns=32, nc=385, sync_depth=16)
+        self.assertEqual(hashfile.md5(bin_3b['bin_file']), "207ba1666b866a091e5bb8b26d19733f")
+        self.assertEqual(hashfile.sha1(bin_3b['bin_file']),
+                         '1bf3219c35dea15409576f6764dd9152c3f8a89c')
+        sr = spikeglx.Reader(bin_3b['bin_file'])
+        self.assertTrue(sr.verify_hash())
 
     def assert_read_glx(self, tglx):
         sr = spikeglx.Reader(tglx['bin_file'])
