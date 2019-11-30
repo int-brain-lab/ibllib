@@ -362,6 +362,10 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             # test reading a few channels
             d, _ = sr.read(slice(None), slice(300, 310))
             self.assertTrue(np.all(np.isclose(d, dexpected[:, 300:310])))
+            # test reading a few channels with a numpy array of indices
+            ind = np.array([300, 302])
+            d, _ = sr.read(slice(None), ind)
+            self.assertTrue(np.all(np.isclose(d, dexpected[:, ind])))
             # test double slicing
             d, _ = sr.read(slice(5, 10), slice(300, 310))
             self.assertTrue(np.all(np.isclose(d, dexpected[5:10, 300:310])))
@@ -374,6 +378,11 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             self.assertTrue(d.size == 0)
             a = sr.read_sync_analog()
             self.assertIsNone(a)
+            # test the read_samples method (should be deprecated ?)
+            d, _ = sr.read_samples(0, 500, ind)
+            self.assertTrue(np.all(np.isclose(d, dexpected[0:500, ind])))
+            d, _ = sr.read_samples(0, 500)
+            self.assertTrue(np.all(np.isclose(d, dexpected[0:500, :])))
         else:
             s = sr.read_sync()
             self.assertTrue(s.shape[1] == 17)

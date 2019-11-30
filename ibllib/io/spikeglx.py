@@ -104,9 +104,10 @@ class Reader:
 
          :param first_sample: first sample to be read, python slice-wise
          :param last_sample:  last sample to be read, python slice-wise
+         :param channels: slice or numpy array of indices
          :return: numpy array of int16
         """
-        if not channels:
+        if channels is None:
             channels = slice(None)
         return self.read(slice(first_sample, last_sample), channels)
 
