@@ -65,32 +65,37 @@ def feat_vars(spks, units=[], feat_name='amps', dist='norm', test='ks', cmap_nam
         unit_list = list(units_b['depths'].keys())
         # For each unit in `unit_list`, remove unit from `units_b` if not in `units`
         [units_b['depths'].pop(unit) for unit in unit_list if not(int(unit) in units)]
+    unit_list = list(units_b['depths'].keys())  # get new `unit_list` after removing units
     # Calculate variances for all units
     p_vals, variances = bb.metrics.unit_stability(spks, units=units, feat_names=[feat_name],
                                                   dist=dist, test=test)
     var_vals = np.array(tuple(variances[feat_name].values()))
     p_vals = np.array(tuple(p_vals[feat_name].values()))
-    # Specify bad units (i.e. missing unit numbers from spike sorter output).
-    num_units = np.max(spks['clusters']) + 1
-    bad_units = np.where(np.isnan(var_vals))
-    good_units = np.delete(np.arange(0, num_units), bad_units)
-    # Get depth of max amplitude channel for each unit, and use 0 as a placeholder for `bad_units`.
-    depths = [np.mean(units_b['depths'][str(unit)]) for unit in good_units]
-    depths = np.insert(depths, bad_units[0], 0)
-    # Create unit normalized colormap based on `depths`.
+    # Specify and remove bad units (i.e. missing unit numbers from spike sorter output).
+    num_units = len(unit_list)
+    bad_units = np.where(np.isnan(var_vals))[0]
+    if len(bad_units) > 0:
+        good_units = [unit_list.pop(bad_unit) for bad_unit in bad_units]
+    else:
+        good_units = unit_list
+    # Get depth of max amplitude channel for good units
+    depths = np.asarray([np.mean(units_b['depths'][str(unit)]) for unit in good_units])
+    # Create unit normalized colormap based on `depths`, sorted by depth.
     cmap = plt.cm.get_cmap(cmap_name)
     depths_norm = depths / np.max(depths)
-    rgba = [cmap(depth) for depth in depths_norm]
-    # Plot depth-color-coded bar plot of variances for `feature` for each unit.
+    rgba = np.asarray([cmap(depth) for depth in np.sort(np.flip(depths_norm))])
+    # Plot depth-color-coded h bar plot of variances for `feature` for each unit, where units are
+    # sorted descendingly by depth along y-axis.
     fig, ax = plt.subplots()
-    ax.bar(x=np.arange(0, num_units), height=var_vals, color=rgba)
+    ax.barh(y=np.arange(0, num_units), width=var_vals[np.argsort(depths)], color=rgba)
     cbar = fig.colorbar(plt.cm.ScalarMappable(cmap=cmap), ax=ax)
     max_d = np.max(depths)
     cbar.set_ticks(cbar.get_ticks())  # must call `set_ticks` to call `set_ticklabels`
-    cbar.set_ticklabels([0, max_d * 0.2, max_d * 0.4, max_d * 0.6, max_d * 0.8, max_d])
+    tick_labels = [int(max_d) * tick for tick in (0, 0.2, 0.4, 0.6, 0.8, 1.0)]
+    cbar.set_ticklabels(tick_labels)
     ax.set_title('{feat} variance'.format(feat=feat_name))
-    ax.set_xlabel('unit number')
-    ax.set_ylabel('variance')
+    ax.set_ylabel('unit number (sorted by depth)')
+    ax.set_xlabel('variance')
     cbar.set_label('depth', rotation=0)
     return fig, var_vals, p_vals
 
