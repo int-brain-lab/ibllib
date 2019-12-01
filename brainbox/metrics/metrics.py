@@ -9,7 +9,7 @@ import scipy.ndimage.filters as filters
 # import spikemetrics as sm
 
 
-def unit_stability(spks, feat_names=['amps'], dist='norm', test='ks'):
+def unit_stability(spks, units=[], feat_names=['amps'], dist='norm', test='ks'):
     '''
     Computes the probability that the empirical spike feature distribution(s), for specified
     feature(s), for all units, comes from a specific theoretical distribution, based on a specified
@@ -20,6 +20,8 @@ def unit_stability(spks, feat_names=['amps'], dist='norm', test='ks'):
     spks : bunch
         A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
         etc.) for all spikes.
+    units : array-like (optional)
+        A subset of all units for which to create the bar plot. (If `[]`, all units are used)
     feat_names : list of strings (optional)
         A list of names of spike features that can be found in `spks` to specify which features to
         use for calculating unit stability.
@@ -68,8 +70,15 @@ def unit_stability(spks, feat_names=['amps'], dist='norm', test='ks'):
     '''
 
     # Get units bunch and number of units.
-    units = bb.processing.get_units_bunch(spks, feat_names)
-    num_units = np.max(spks['clusters']) + 1
+    units_b = bb.processing.get_units_bunch(spks, feat_names)
+    if len(units) != 0:  # we're using a subset of all units
+        key_list = list(units_b[feat_names[0]].keys())
+        # for each `feat` and each unit in `key_list`, remove unit from `units_b` if not in `units`
+        for feat in feat_names:
+            for unit in key_list:
+                if not(int(unit) in units):  # remove this unit
+                    del units_b[feat][unit]
+    num_units = len(list(units_b[feat_names[0]].keys()))
     # Initialize `p_vals` and `variances`.
     p_vals = bb.core.Bunch()
     variances = bb.core.Bunch()
@@ -89,13 +98,13 @@ def unit_stability(spks, feat_names=['amps'], dist='norm', test='ks'):
         unit = 0
         while unit < num_units:
             # If we're missing units/features, create a NaN placeholder and skip them:
-            if units[feat][str(unit)].size == 0:
+            if units_b[feat][str(unit)].size == 0:
                 p_val = np.nan
                 var = np.nan
             else:
                 # Calculate p_val and var for current feature
-                _, p_val = test_fun(units[feat][str(unit)], dist)
-                var = np.var(units[feat][str(unit)])
+                _, p_val = test_fun(units_b[feat][str(unit)], dist)
+                var = np.var(units_b[feat][str(unit)])
             # Append current unit's values to list of units' values for current feature:
             p_vals_feat[str(unit)] = p_val
             variances_feat[str(unit)] = var

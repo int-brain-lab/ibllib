@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import brainbox as bb
 
 
-def feat_vars(spks, feat_name='amps', dist='norm', test='ks', cmap_name='coolwarm'):
+def feat_vars(spks, units=[], feat_name='amps', dist='norm', test='ks', cmap_name='coolwarm'):
     '''
     Plots the variances of a particular spike feature for all units as a bar plot, where each bar
     is color-coded corresponding to the depth of the max amplitude channel of the respective unit.
@@ -20,6 +20,8 @@ def feat_vars(spks, feat_name='amps', dist='norm', test='ks', cmap_name='coolwar
     spks : bunch
         A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
         etc.) for all spikes.
+    units : array-like (optional)
+        A subset of all units for which to create the bar plot. (If `[]`, all units are used)
     feat_name : string (optional)
         The spike feature to plot.
     dist : string (optional)
@@ -59,7 +61,7 @@ def feat_vars(spks, feat_name='amps', dist='norm', test='ks', cmap_name='coolwar
 
     # Get units bunch and calculate variances.
     units = bb.processing.get_units_bunch(spks)
-    p_vals, variances = bb.metrics.unit_stability(spks, feat_names=[feat_name],
+    p_vals, variances = bb.metrics.unit_stability(spks, units=units, feat_names=[feat_name],
                                                   dist=dist, test=test)
     var_vals = np.array(tuple(variances[feat_name].values()))
     p_vals = np.array(tuple(p_vals[feat_name].values()))
