@@ -60,7 +60,12 @@ def feat_vars(spks, units=[], feat_name='amps', dist='norm', test='ks', cmap_nam
     '''
 
     # Get units bunch and calculate variances.
-    units = bb.processing.get_units_bunch(spks)
+    units_b = bb.processing.get_units_bunch(spks, ['depths'])
+    if len(units) != 0:  # we're using a subset of all units
+        unit_list = list(units_b['depths'].keys())
+        # For each unit in `unit_list`, remove unit from `units_b` if not in `units`
+        [units_b['depths'].pop(unit) for unit in unit_list if not(int(unit) in units)]
+    # Calculate variances for all units
     p_vals, variances = bb.metrics.unit_stability(spks, units=units, feat_names=[feat_name],
                                                   dist=dist, test=test)
     var_vals = np.array(tuple(variances[feat_name].values()))
@@ -70,7 +75,7 @@ def feat_vars(spks, units=[], feat_name='amps', dist='norm', test='ks', cmap_nam
     bad_units = np.where(np.isnan(var_vals))
     good_units = np.delete(np.arange(0, num_units), bad_units)
     # Get depth of max amplitude channel for each unit, and use 0 as a placeholder for `bad_units`.
-    depths = [units['depths'][repr(unit)][0] for unit in good_units]
+    depths = [np.mean(units_b['depths'][str(unit)]) for unit in good_units]
     depths = np.insert(depths, bad_units[0], 0)
     # Create unit normalized colormap based on `depths`.
     cmap = plt.cm.get_cmap(cmap_name)

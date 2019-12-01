@@ -72,13 +72,11 @@ def unit_stability(spks, units=[], feat_names=['amps'], dist='norm', test='ks'):
     # Get units bunch and number of units.
     units_b = bb.processing.get_units_bunch(spks, feat_names)
     if len(units) != 0:  # we're using a subset of all units
-        key_list = list(units_b[feat_names[0]].keys())
-        # for each `feat` and each unit in `key_list`, remove unit from `units_b` if not in `units`
+        unit_list = list(units_b[feat_names[0]].keys())
+        # for each `feat` and unit in `unit_list`, remove unit from `units_b` if not in `units`
         for feat in feat_names:
-            for unit in key_list:
-                if not(int(unit) in units):  # remove this unit
-                    del units_b[feat][unit]
-    num_units = len(list(units_b[feat_names[0]].keys()))
+            [units_b[feat].pop(unit) for unit in unit_list if not(int(unit) in units)]
+    unit_list = list(units_b[feat_names[0]].keys())  # get new `unit_list` after removing units
     # Initialize `p_vals` and `variances`.
     p_vals = bb.core.Bunch()
     variances = bb.core.Bunch()
@@ -93,22 +91,20 @@ def unit_stability(spks, units=[], feat_names=['amps'], dist='norm', test='ks'):
     # `variances_feat`. After iterating through all units, add these bunches as keys to their
     # respective parent bunches, `p_vals` and `variances`.
     for feat in feat_names:
-        p_vals_feat = bb.core.Bunch((str(unit), 0) for unit in np.arange(0, num_units))
-        variances_feat = bb.core.Bunch((str(unit), 0) for unit in np.arange(0, num_units))
-        unit = 0
-        while unit < num_units:
+        p_vals_feat = bb.core.Bunch((unit, 0) for unit in unit_list)
+        variances_feat = bb.core.Bunch((unit, 0) for unit in unit_list)
+        for unit in unit_list:
             # If we're missing units/features, create a NaN placeholder and skip them:
-            if units_b[feat][str(unit)].size == 0:
+            if units_b[feat][unit].size == 0:
                 p_val = np.nan
                 var = np.nan
             else:
                 # Calculate p_val and var for current feature
-                _, p_val = test_fun(units_b[feat][str(unit)], dist)
-                var = np.var(units_b[feat][str(unit)])
+                _, p_val = test_fun(units_b[feat][unit], dist)
+                var = np.var(units_b[feat][unit])
             # Append current unit's values to list of units' values for current feature:
             p_vals_feat[str(unit)] = p_val
             variances_feat[str(unit)] = var
-            unit += 1
         p_vals[feat] = p_vals_feat
         variances[feat] = variances_feat
     return p_vals, variances

@@ -223,7 +223,7 @@ def get_units_bunch(spks, *args):
 
     Returns
     -------
-    units : bunch
+    units_b : bunch
         A bunch with keys of labels of spike information (e.g. cluster IDs, times, features, etc.)
         whose values are arrays that hold values for each unit. The arrays for each key are ordered
         by unit ID.
@@ -244,28 +244,28 @@ def get_units_bunch(spks, *args):
     '''
 
     # Initialize `units`
-    units = core.Bunch()
+    units_b = core.Bunch()
     # Get the keys to return for `units`:
     if not args:
         keys = list(spks.keys())
     else:
         keys = args[0]
     # Get spikes for each unit and total number of units: *Note: `num_units` might not equal
-    # `len(unique_ids)`, because some ids may be missing.
+    # `len(units)`, because some clusters may be empty (due to "wontfix" bug in ks2).
     spks_unit_id = spks['clusters']
     num_units = np.max(spks_unit_id) + 1
+    units = np.unique(spks['clusters'])
     # For each key in `units`, iteratively get each unit's values and add as a key to a bunch,
     # `feat_bunch`. After iterating through all units, add `feat_bunch` as a key to `units`:
     for key in keys:
         # Initialize `feat_bunch` with a key for each unit.
         feat_bunch = core.Bunch((str(unit), 0) for unit in np.arange(0, num_units))
         unit = 0
-        while unit < num_units:
+        for unit in units:
             unit_idxs = np.where(spks_unit_id == unit)[0]
             feat_bunch[str(unit)] = spks[key][unit_idxs]
-            unit += 1
-        units[key] = feat_bunch
-    return units
+        units_b[key] = feat_bunch
+    return units_b
 
 
 def filter_units(spks, params={'min_amp': 100, 'min_fr': 0.5, 'max_fpr': 0.1, 'rp': 0.002}):
