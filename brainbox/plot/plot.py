@@ -247,9 +247,9 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
     '''
 
     # Take the first and last 200 timestamps by default.
-    units = bb.processing.get_units_bunch(spks)
-    ts1 = units['times'][str(unit)][0:n_spks] if ts1 == 'start' else ts1
-    ts2 = units['times'][str(unit)][-(n_spks + 1):-1] if ts2 == 'end' else ts2
+    units_b = bb.processing.get_units_bunch(spks, ['times'])
+    ts1 = units_b['times'][str(unit)][0:n_spks] if ts1 == 'start' else ts1
+    ts2 = units_b['times'][str(unit)][-(n_spks + 1):-1] if ts2 == 'end' else ts2
     # Get the channel of max amplitude and `n_ch` around it.
     max_ch = clstrs['channels'][unit]
     n_c_ch = n_ch // 2

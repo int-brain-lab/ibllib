@@ -61,6 +61,12 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
     file_m = np.memmap(ephys_file, shape=(n_samples, n_ch_probe), dtype=dtype, mode='r')
     n_wf_samples = np.int(sr / 1000 * (t / 2))  # number of samples to return on each side of a ts
     ts_samples = np.array(ts * sr).astype(int)  # the samples corresponding to `ts`
+    
+    # Exception handling for timestamps
+    if np.any(ts_samples > n_samples):
+        raise Exception('Something''s gone wrong: at least one spike timestamp ({:.2f}) has a'
+                        ' value that is greater than the length of the recording ({:.2f})'
+                        .format(np.max(ts_samples) / sr, n_samples / sr))
 
     if car:  # compute temporal and spatial noise
         t_sample_first = ts_samples[0] - n_wf_samples
