@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-import numpy as np
 
 import alf.io
 import brainbox.plot as bbp
@@ -9,7 +8,7 @@ from oneibl.one import ONE
 one = ONE()
 eid = one.search(lab='wittenlab', date='2019-08-04')
 datasets = one.load(eid, download_only=True)
-ses_path = datasets[0].local_path.parent #local path where the data has been downloaded
+ses_path = datasets[0].local_path.parent  # local path where the data has been downloaded
 
 spikes = alf.io.load_object(ses_path, 'spikes')
 trials = alf.io.load_object(ses_path, '_ibl_trials')
