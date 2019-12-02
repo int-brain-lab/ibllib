@@ -137,7 +137,7 @@ def calculate_peths(
     return peths, binned_spikes
 
 
-def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5):
+def firing_rate(spks_b, unit, t='all', hist_win=0.01, fr_win=0.5):
     '''
     Computes the instantaneous firing rate of a unit over time by computing a histogram of spike
     counts over a specified window of time, and summing this histogram over a sliding window of
@@ -173,16 +173,17 @@ def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5):
     1) Compute the firing rate for unit1 from the time of its first to last spike.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
+        >>> import ibllib.ephys.spikes as e_spks
+        (*Note, if there is no 'alf' directory, make 'alf' directory from 'ks2' output directory):
+        >>> e_spks.ks2_to_alf(path_to_ks_out, path_to_alf_out)
         # Get a spikes bunch and calculate the firing rate.
-        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
-        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
-        >>> fr = singlecell.firing_rate(spks, 1)
+        >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
+        >>> fr = bb.singlecell.firing_rate(spks_b, 1)
     '''
 
     # Get unit timestamps.
-    unit_idxs = np.where(spks['clusters'] == unit)
-    ts = ts = spks['times'][unit_idxs]
+    unit_idxs = np.where(spks_b['clusters'] == unit)
+    ts = ts = spks_b['times'][unit_idxs]
     if t != 'all':
         t_first = np.where(ts > t[0])[0][0]
         t_last = np.where(ts < t[1])[0][-1]

@@ -10,14 +10,14 @@ import matplotlib.pyplot as plt
 import brainbox as bb
 
 
-def feat_vars(spks, units=[], feat_name='amps', dist='norm', test='ks', cmap_name='coolwarm'):
+def feat_vars(spks_b, units=[], feat_name='amps', dist='norm', test='ks', cmap_name='coolwarm'):
     '''
     Plots the variances of a particular spike feature for all units as a bar plot, where each bar
     is color-coded corresponding to the depth of the max amplitude channel of the respective unit.
 
     Parameters
     ----------
-    spks : bunch
+    spks_b : bunch
         A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
         etc.) for all spikes.
     units : array-like (optional)
@@ -52,30 +52,31 @@ def feat_vars(spks, units=[], feat_name='amps', dist='norm', test='ks', cmap_nam
     1) Create a bar plot of the variances of the spike amplitudes for each unit.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
+        >>> import ibllib.ephys.spikes as e_spks
+        (*Note, if there is no 'alf' directory, make 'alf' directory from 'ks2' output directory):
+        >>> e_spks.ks2_to_alf(path_to_ks_out, path_to_alf_out)
         # Get spikes bunch and create the bar plot.
-        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
-        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
-        >>> fig, var_vals, p_vals = bb.plot.feat_vars(spks)
+        >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
+        >>> fig, var_vals, p_vals = bb.plot.feat_vars(spks_b)
     '''
 
     # Get units bunch and calculate variances.
-    units_b = bb.processing.get_units_bunch(spks, ['depths'])
+    units_b = bb.processing.get_units_bunch(spks_b, ['depths'])
     if len(units) != 0:  # we're using a subset of all units
         unit_list = list(units_b['depths'].keys())
         # For each unit in `unit_list`, remove unit from `units_b` if not in `units`
         [units_b['depths'].pop(unit) for unit in unit_list if not(int(unit) in units)]
     unit_list = list(units_b['depths'].keys())  # get new `unit_list` after removing units
     # Calculate variances for all units
-    p_vals, variances = bb.metrics.unit_stability(spks, units=units, feat_names=[feat_name],
-                                                  dist=dist, test=test)
-    var_vals = np.array(tuple(variances[feat_name].values()))
-    p_vals = np.array(tuple(p_vals[feat_name].values()))
+    p_vals_b, variances_b = bb.metrics.unit_stability(spks_b, units=units, feat_names=[feat_name],
+                                                      dist=dist, test=test)
+    var_vals = np.array(tuple(variances_b[feat_name].values()))
+    p_vals = np.array(tuple(p_vals_b[feat_name].values()))
     # Specify and remove bad units (i.e. missing unit numbers from spike sorter output).
-    num_units = len(unit_list)
     bad_units = np.where(np.isnan(var_vals))[0]
     if len(bad_units) > 0:
-        good_units = [unit_list.pop(bad_unit) for bad_unit in bad_units]
+        [unit_list.pop(bad_unit) for bad_unit in bad_units]
+        good_units = unit_list
     else:
         good_units = unit_list
     # Get depth of max amplitude channel for good units
@@ -87,7 +88,7 @@ def feat_vars(spks, units=[], feat_name='amps', dist='norm', test='ks', cmap_nam
     # Plot depth-color-coded h bar plot of variances for `feature` for each unit, where units are
     # sorted descendingly by depth along y-axis.
     fig, ax = plt.subplots()
-    ax.barh(y=np.arange(0, num_units), width=var_vals[np.argsort(depths)], color=rgba)
+    ax.barh(y=[int(unit) for unit in good_units], width=var_vals[np.argsort(depths)], color=rgba)
     cbar = fig.colorbar(plt.cm.ScalarMappable(cmap=cmap), ax=ax)
     max_d = np.max(depths)
     cbar.set_ticks(cbar.get_ticks())  # must call `set_ticks` to call `set_ticklabels`
@@ -100,7 +101,7 @@ def feat_vars(spks, units=[], feat_name='amps', dist='norm', test='ks', cmap_nam
     return fig, var_vals, p_vals
 
 
-def feat_cutoff(spks, unit, feat_name='amps', spks_per_bin=20, sigma=5):
+def feat_cutoff(spks_b, unit, feat_name='amps', spks_per_bin=20, sigma=5):
     '''
     Plots the pdf of an estimated symmetric spike feature distribution, with a vertical cutoff line
     that indicates the approximate fraction of spikes missing from the distribution, assuming the
@@ -108,7 +109,7 @@ def feat_cutoff(spks, unit, feat_name='amps', spks_per_bin=20, sigma=5):
 
     Parameters
     ----------
-    spks : bunch
+    spks_b : bunch
         A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
         etc.) for all spikes.
     unit : int
@@ -139,20 +140,21 @@ def feat_cutoff(spks, unit, feat_name='amps', spks_per_bin=20, sigma=5):
     unit's spike amplitudes, assuming the distribution of the unit's spike amplitudes is symmetric.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
+        >>> import ibllib.ephys.spikes as e_spks
+        (*Note, if there is no 'alf' directory, make 'alf' directory from 'ks2' output directory):
+        >>> e_spks.ks2_to_alf(path_to_ks_out, path_to_alf_out)
         # Get a spikes bunch, a units bunch, and plot feature cutoff for spike amplitudes for unit1
-        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
-        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
-        >>> fig, fraction_missing = bb.plot.feat_cutoff(spks, 1)
+        >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
+        >>> fig, fraction_missing = bb.plot.feat_cutoff(spks_b, 1)
     '''
 
     # Calculate and plot the feature distribution histogram and pdf with symmetric cutoff:
     fraction_missing, pdf, cutoff_idx = \
-        bb.metrics.feat_cutoff(spks, unit, feat_name=feat_name,
+        bb.metrics.feat_cutoff(spks_b, unit, feat_name=feat_name,
                                spks_per_bin=spks_per_bin, sigma=sigma)
     fig, ax = plt.subplots(nrows=1, ncols=2)
-    units = bb.processing.get_units_bunch(spks, [feat_name])
-    feature = units[feat_name][str(unit)]
+    units_b = bb.processing.get_units_bunch(spks_b, [feat_name])
+    feature = units_b[feat_name][str(unit)]
     num_bins = np.int(feature.size / spks_per_bin)
     ax[0].hist(feature, bins=num_bins)
     ax[0].set_xlabel('{0}'.format(feat_name))
@@ -167,7 +169,7 @@ def feat_cutoff(spks, unit, feat_name='amps', spks_per_bin=20, sigma=5):
     return fig, fraction_missing
 
 
-def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts2='end',
+def single_unit_wf_comp(ephys_file, spks_b, clstrs_b, unit, n_ch=20, ts1='start', ts2='end',
                         n_spks=100, sr=30000, n_ch_probe=385, dtype='int16', car=True,
                         col=['b', 'r']):
     '''
@@ -179,10 +181,10 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
     ----------
     ephys_file : string
         The file path to the binary ephys data.
-    spks : bunch
+    spks_b : bunch
         A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
         etc.) for all spikes.
-    clstrs : bunch
+    clstrs_b : bunch
         A clusters bunch containing fields with unit information (e.g. mean amps, channel of max
         amplitude, etc...), used here to extract the channel of max amplitude for the given unit.
     unit : int
@@ -226,32 +228,36 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
     Examples
     --------
     1) Compare first and last 100 spike waveforms for unit1, across 20 channels around the channel
-    of max amplitude, and compare the first and last 50 spike waveforms for unit2, across 15
-    channels around the mean.
+    of max amplitude, and compare the waveforms in the first minute to the waveforms in the third
+    minutes for unit2, across 15 channels around the mean.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
-        # Get a spikes bunch, a clusters bunch, and plot waveforms for unit1 across 20 channels.
-        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
-        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
-        >>> clstrs = aio.load_object('path\\to\\alf_out', 'clusters')
-        >>> fig, wf1, wf2 = bb.plot.single_unit_wf_comp('path\\to\\ephys_file', spks, clstrs, \
-                                                        unit=1)
+        >>> import ibllib.ephys.spikes as e_spks
+        (*Note, if there is no 'alf' directory, make 'alf' directory from 'ks2' output directory):
+        >>> e_spks.ks2_to_alf(path_to_ks_out, path_to_alf_out)
+        # Get a spikes bunch, a clusters bunch, and plot the first and last 100 waveforms for
+        # unit1 across 20 channels.
+        >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
+        >>> clstrs_b = aio.load_object(path_to_alf_out, 'clusters')
+        >>> fig, wf1, wf2, _ = bb.plot.single_unit_wf_comp(path_to_ephys_file, spks_b, clstrs_b,
+                                                           unit=1)
         # Get a units bunch, and plot waveforms for unit2 from the first to second minute
         # across 15 channels.
-        >>> units = bb.processing.get_units_bunch(spks, ['times'])
-        >>> ts1 = units['times']['2'][:50]
-        >>> ts2 = units['times']['2'][-50:]
-        >>> fig2, wf1_2, wf2_2 = bb.plot.single_unit_wf_comp('path\\to\\ephys_file', spks, \
-                                                             clstrs, unit=1, ts1=ts1, ts2=ts2)
+        >>> units_b = bb.processing.get_units_bunch(spks_b, ['times'])
+        >>> ts = units_b['times']['2']
+        >>> ts1 = ts[np.where(ts<60)[0]]
+        >>> ts2 = ts[np.where(ts>180)[0][:len(ts1)]]
+        >>> fig2, wf1_2, wf2_2, _ = bb.plot.single_unit_wf_comp(path_to_ephys_file, spks_b,
+                                                                clstrs_b, unit=1, ts1=ts1, ts2=ts2)
     '''
 
-    # Take the first and last 200 timestamps by default.
-    units_b = bb.processing.get_units_bunch(spks, ['times'])
-    ts1 = units_b['times'][str(unit)][0:n_spks] if ts1 == 'start' else ts1
-    ts2 = units_b['times'][str(unit)][-(n_spks + 1):-1] if ts2 == 'end' else ts2
+    # Take the first and last `n_spks` timestamps by default.
+    if ts1 == 'start' or ts2 == 'end':
+        units_b = bb.processing.get_units_bunch(spks_b, ['times'])
+    ts1 = units_b['times'][str(unit)][:n_spks] if ts1 == 'start' else ts1
+    ts2 = units_b['times'][str(unit)][-n_spks:] if ts2 == 'end' else ts2
     # Get the channel of max amplitude and `n_ch` around it.
-    max_ch = clstrs['channels'][unit]
+    max_ch = clstrs_b['channels'][unit]
     n_c_ch = n_ch // 2
     if max_ch < n_c_ch:  # take only channels greater than `max_ch`.
         ch = np.arange(max_ch, max_ch + n_ch)
@@ -261,9 +267,9 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
         ch = np.arange(max_ch - n_c_ch, max_ch + n_c_ch)
     # Extract the waveforms for these timestamps and compute similarity score.
     wf1 = bb.io.extract_waveforms(ephys_file, ts1, ch, sr=sr, n_ch_probe=n_ch_probe, dtype=dtype,
-                                  car=True)
+                                  car=car)
     wf2 = bb.io.extract_waveforms(ephys_file, ts2, ch, sr=sr, n_ch_probe=n_ch_probe, dtype=dtype,
-                                  car=True)
+                                  car=car)
     s = bb.metrics.wf_similarity(wf1, wf2)
     # Plot these waveforms against each other.
     fig, ax = plt.subplots(nrows=n_ch, ncols=2)  # left col is all waveforms, right col is mean
@@ -273,13 +279,15 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
         ax[cur_ax][1].plot(np.mean(wf1[:, :, cur_ax], axis=0), c=col[0])
         ax[cur_ax][1].plot(np.mean(wf2[:, :, cur_ax], axis=0), c=col[1])
         ax[cur_ax][0].set_ylabel('Ch {0}'.format(cur_ch))
+    ax[0][0].set_title('all waveforms')
+    ax[0][1].set_title('mean waveforms')
     plt.legend(['1st spike set', '2nd spike set'])
     fig.suptitle('comparison of waveforms from two sets of spikes for unit {0} \
                  \n s = {1:.2f}'.format(unit, s))
     return fig, wf1, wf2, s
 
 
-def amp_heatmap(ephys_file, spks, clstrs, unit, t='all', n_ch=20, sr=30000, n_ch_probe=385,
+def amp_heatmap(ephys_file, spks_b, clstrs_b, unit, t='all', n_ch=20, sr=30000, n_ch_probe=385,
                 dtype='int16', cmap_name='RdBu', car=True):
     '''
     Plots a heatmap of the normalized voltage values over space and time at the timestamps of a
@@ -290,10 +298,10 @@ def amp_heatmap(ephys_file, spks, clstrs, unit, t='all', n_ch=20, sr=30000, n_ch
     ----------
     ephys_file : string
         The file path to the binary ephys data.
-    spks : bunch
+    spks_b : bunch
         A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
         etc.) for all spikes.
-    clstrs : bunch
+    clstrs_b : bunch
         A clusters bunch containing fields with unit information (e.g. mean amps, channel of max
         amplitude, etc...), used here to extract the channel of max amplitude for the given unit.
     unit : int
@@ -326,12 +334,13 @@ def amp_heatmap(ephys_file, spks, clstrs, unit, t='all', n_ch=20, sr=30000, n_ch
     amplitude for unit1.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
+        >>> import ibllib.ephys.spikes as e_spks
+        (*Note, if there is no 'alf' directory, make 'alf' directory from 'ks2' output directory):
+        >>> e_spks.ks2_to_alf(path_to_ks_out, path_to_alf_out)
         # Get a spikes bunch, a clusters bunch, and plot heatmap for unit1 across 20 channels.
-        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
-        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
-        >>> clstrs = aio.load_object('path\\to\\alf_out', 'clusters')
-        >>> bb.plot.amp_heatmap('path\\to\\ephys_file', spks, clstrs, unit=1)
+        >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
+        >>> clstrs_b = aio.load_object(path_to_alf_out, 'clusters')
+        >>> bb.plot.amp_heatmap(path_to_ephys_file, spks_b, clstrs_b, unit=1)
     '''
 
     # Get memmapped array of `ephys_file`
@@ -340,7 +349,7 @@ def amp_heatmap(ephys_file, spks, clstrs, unit, t='all', n_ch=20, sr=30000, n_ch
     file_m = np.memmap(ephys_file, shape=(n_samples, n_ch_probe), dtype=dtype, mode='r')
     # Get voltage values for each peak amplitude sample for `n_ch` around `max_ch`:
     # Get the channel of max amplitude and `n_ch` around it.
-    max_ch = clstrs['channels'][unit]
+    max_ch = clstrs_b['channels'][unit]
     n_c_ch = n_ch // 2
     if max_ch < n_c_ch:  # take only channels greater than `max_ch`.
         ch = np.arange(max_ch, max_ch + n_ch)
@@ -348,9 +357,11 @@ def amp_heatmap(ephys_file, spks, clstrs, unit, t='all', n_ch=20, sr=30000, n_ch
         ch = np.arange(max_ch - n_ch, max_ch)
     else:  # take `n_c_ch` around `max_ch`.
         ch = np.arange(max_ch - n_c_ch, max_ch + n_c_ch)
-    unit_idxs = np.where(spks['clusters'] == unit)
-    max_amp_samples = spks['samples'][unit_idxs]
-    ts = spks['times'][unit_idxs]
+    import pdb
+    pdb.set_trace()
+    unit_idxs = np.where(spks_b['clusters'] == unit)[0]
+    max_amp_samples = spks_b['samples'][unit_idxs]
+    ts = spks_b['times'][unit_idxs]
     v_vals = file_m[np.ix_(max_amp_samples, ch)]
     if car:  # Compute and subtract temporal and spatial noise from `v_vals`.
         # Get subset of time (from first to last max amp sample)
@@ -376,14 +387,14 @@ def amp_heatmap(ephys_file, spks, clstrs, unit, t='all', n_ch=20, sr=30000, n_ch
     return fig, v_vals_norm
 
 
-def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins=10, show_fr_cv=True):
+def firing_rate(spks_b, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins=10, show_fr_cv=True):
     '''
     Plots the instantaneous firing rate of a unit over time, and optionally overlays the value of
     the coefficient of variation of the firing rate for a specified number of bins.
 
     Parameters
     ----------
-    spks : bunch
+    spks_b : bunch
         A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
         etc.) for all spikes.
     unit : int
@@ -426,18 +437,19 @@ def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins=10, show_
     to second minute, without showing the cv.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
+        >>> import ibllib.ephys.spikes as e_spks
+        (*Note, if there is no 'alf' directory, make 'alf' directory from 'ks2' output directory):
+        >>> e_spks.ks2_to_alf(path_to_ks_out, path_to_alf_out)
         # Get a spikes bunch and calculate the firing rate.
-        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
-        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
-        >>> fig, fr_1, cv_1, cvs_1 = bb.plot.firing_rate(spks, unit=1)
-        >>> fig2, fr_2 = bb.plot.firing_rate(spks, unit=2, t=[60,120], show_fr_cv=False)
+        >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
+        >>> fig, fr_1, cv_1, cvs_1 = bb.plot.firing_rate(spks_b, unit=1)
+        >>> fig2, fr_2 = bb.plot.firing_rate(spks_b, unit=2, t=[60,120], show_fr_cv=False)
     '''
     fig, ax = plt.subplots()
     if not(show_fr_cv):  # compute just the firing rate
-        fr = bb.singlecell.firing_rate(spks, unit, t=t, hist_win=hist_win, fr_win=fr_win)
+        fr = bb.singlecell.firing_rate(spks_b, unit, t=t, hist_win=hist_win, fr_win=fr_win)
     else:  # compute firing rate and coefficients of variation
-        cv, cvs, fr = bb.metrics.firing_rate_coeff_var(spks, unit, t=t, hist_win=hist_win,
+        cv, cvs, fr = bb.metrics.firing_rate_coeff_var(spks_b, unit, t=t, hist_win=hist_win,
                                                        fr_win=fr_win, n_bins=n_bins)
     x = np.arange(fr.size) * hist_win
     ax.plot(x, fr)

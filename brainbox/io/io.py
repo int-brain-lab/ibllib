@@ -40,19 +40,22 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
         >>> import numpy as np
         >>> import brainbox as bb
         >>> import alf.io as aio
-        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
+        >>> import ibllib.ephys.spikes as e_spks
+        (*Note, if there is no 'alf' directory, make 'alf' directory from 'ks2' output directory):
+        >>> e_spks.ks2_to_alf(path_to_ks_out, path_to_alf_out)
         # Get a clusters bunch and a units bunch from a spikes bunch from an alf directory.
-        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
-        >>> clstrs = aio.load_obect('path\\to\\alf_output', 'clusters')
-        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
-        >>> units = bb.processing.get_units_bunch(spks)
+        >>> clstrs_b = aio.load_object(path_to_alf_out, 'clusters')
+        >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
+        >>> units_b = bb.processing.get_units_bunch(spks, ['times'])
         # Get the timestamps and 20 channels around the max amp channel for unit1, and extract the
-        two sets of waveforms.
-        >>> ts = units['times']['1']
-        >>> max_ch = max_ch = clstrs['channels'][1]
+        # two sets of waveforms.
+        >>> ts = units_b['times']['1']
+        >>> max_ch = max_ch = clstrs_b['channels'][1]
         >>> ch = np.arange(max_ch - 10, max_ch + 10)
-        >>> wf = bb.io.extract_waveforms('path\\to\\ephys_file', ts, ch, car=False)
-        >>> wf_car = bb.io.extract_waveforms('path\\to\\ephys_file', ts, ch, car=True)
+        >>> wf = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, car=False)
+        >>> wf_car = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, car=True)
+
+    TODO add support for compressed ephys files
     '''
 
     # Get memmapped array of `ephys_file`
@@ -61,12 +64,19 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
     file_m = np.memmap(ephys_file, shape=(n_samples, n_ch_probe), dtype=dtype, mode='r')
     n_wf_samples = np.int(sr / 1000 * (t / 2))  # number of samples to return on each side of a ts
     ts_samples = np.array(ts * sr).astype(int)  # the samples corresponding to `ts`
-    
+
     # Exception handling for timestamps
     if np.any(ts_samples > n_samples):
         raise Exception('Something''s gone wrong: at least one spike timestamp ({:.2f}) has a'
-                        ' value that is greater than the length of the recording ({:.2f})'
+                        ' value that is greater than the length of the recording ({:.2f}). You may'
+                        ' be trying to read from a compressed file.'
                         .format(np.max(ts_samples) / sr, n_samples / sr))
+
+    # Exception handling for impossible channels
+    if np.any(ch < 0) or np.any(ch > n_ch_probe):
+        raise Exception('At least one specified channel number is impossible. The minimum channel'
+                        ' number was {}, and the maximum channel number was {}. Check specified'
+                        ' channel numbers and try again.'.format(np.min(ch), np.max(ch)))
 
     if car:  # compute temporal and spatial noise
         t_sample_first = ts_samples[0] - n_wf_samples
