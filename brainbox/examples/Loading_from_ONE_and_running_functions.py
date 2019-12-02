@@ -83,19 +83,24 @@ wf = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, t=2.0, car=False)
 wf_car = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, t=2.0, car=True)
 
 # Plot variances of a spike feature for all units and for a subset of units
-fig, var_vals, p_vals = bb.plot.feat_vars(spks_b, units=[], feat_name='amps')
-fig, var_vals, p_vals = bb.plot.feat_vars(spks_b, units=filtered_units, feat_name='amps')
+fig1, var_vals, p_vals = bb.plot.feat_vars(spks_b, units=[], feat_name='amps')
+fig2, var_vals, p_vals = bb.plot.feat_vars(spks_b, units=filtered_units, feat_name='amps')
 
 # Plot distribution cutoff of a spike feature for a single unit
-fig, fraction_missing = bb.plot.feat_cutoff(spks_b, unit=1, feat_name='amps')
+fig3, fraction_missing = bb.plot.feat_cutoff(spks_b, unit=1, feat_name='amps')
 
 # Plot and compare two sets of waveforms from two different time epochs for a single unit
 ts = units_b['times']['1']
 ts1 = ts[np.where(ts<60)[0]]
 ts2 = ts[np.where(ts>180)[0][:len(ts1)]]
-fig, wf_1, wf_2, s = bb.plot.single_unit_wf_comp(path_to_ephys_file, spks_b, clstrs_b, unit=1,
+fig4, wf_1, wf_2, s = bb.plot.single_unit_wf_comp(path_to_ephys_file, spks_b, clstrs_b, unit=1,
                                                  ts1=ts1, ts2=ts2, n_ch=20, car=True)
 
 # Plot the instantaneous firing rate and its coefficient of variation for a single unit
-fig, fr = bb.plot.firing_rate(spks_b, unit=1, t='all', hist_win=0.01, fr_win=0.5, n_bins=10,
-                              show_fr_cv=True)
+fig5, fr, cv, cvs = bb.plot.firing_rate(spks_b, unit=1, t='all', hist_win=0.01, fr_win=0.5,
+                                        n_bins=10, show_fr_cv=True)
+
+# Save figs in a directory
+fig_dir = os.getcwd()  # current working directory
+fig_list = [fig1, fig2, fig3, fig4, fig5]
+[f.savefig(os.path.join('fig'+ str(i + 1))) for i,f in enumerate(fig_list)]
