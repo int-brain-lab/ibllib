@@ -1,92 +1,136 @@
 from pathlib import Path
 import logging
-import shutil
+import json
 
 import numpy as np
-from scipy.interpolate import interp1d
 
-from phylib.io import alf, model, merge
-from phylib.io.array import _index_of, _unique
+from phylib.io import alf
 
-from ibllib.io import spikeglx
+from ibllib.ephys.sync_probes import apply_sync
+import ibllib.ephys.ephysqc as ephysqc
+from ibllib.misc import log2session_static
+from ibllib.io import spikeglx, raw_data_loaders
 from ibllib.io.extractors.ephys_fpga import glob_ephys_files
 
 _logger = logging.getLogger('ibllib')
 
 
-def merge_probes(ses_path):
+@log2session_static('ephys')
+def probes_description(ses_path):
     """
-    Merge spike sorting output from 2 probes and output in the session ALF folder the combined
-    output in IBL format
+    Aggregate probes informatin into ALF files
+        alf/probes.description.npy
+        alf/probes.trajecory.npy
+    """
+
+    ses_path = Path(ses_path)
+    ephys_files = glob_ephys_files(ses_path)
+    subdirs, labels, efiles_sorted = zip(
+        *sorted([(ep.ap.parent, ep.label, ep) for ep in ephys_files if ep.get('ap')]))
+
+    """Ouputs the probes description file"""
+    probe_description = []
+    for label, ef in zip(labels, efiles_sorted):
+        md = spikeglx.read_meta_data(ef.ap.with_suffix('.meta'))
+        probe_description.append({'label': label,
+                                  'model': md.neuropixelVersion,
+                                  'serial': int(md.serial),
+                                  'raw_file_name': md.fileName,
+                                  })
+    probe_description_file = ses_path.joinpath('alf', 'probes.description.json')
+    with open(probe_description_file, 'w+') as fid:
+        fid.write(json.dumps(probe_description))
+
+    """Ouputs the probes trajectory file"""
+    bpod_meta = raw_data_loaders.load_settings(ses_path)
+    if not bpod_meta.get('PROBE_DATA'):
+        _logger.error('No probe information in settings JSON. Skipping probes.trajectory')
+        return
+
+    def prb2alf(prb, label):
+        return {'label': label, 'x': prb['X'], 'y': prb['Y'], 'z': prb['Z'], 'phi': prb['A'],
+                'theta': prb['P'], 'depth': prb['D'], 'beta': prb['T']}
+
+    # the labels may not match, in which case throw a warning and work in alphabetical order
+    if labels != ['probe00', 'probe01']:
+        _logger.warning("Probe names do not match the json settings files. Will match coordinates"
+                        " per alphabetical order !")
+        _ = [_logger.warning(f"  probe0{i} ----------  {lab} ") for i, lab in enumerate(labels)]
+    trajs = []
+    keys = sorted(bpod_meta['PROBE_DATA'].keys())
+    for i, k in enumerate(keys):
+        if i >= len(labels):
+            break
+        trajs.append(prb2alf(bpod_meta['PROBE_DATA'][f'probe0{i}'], labels[i]))
+    probe_trajectory_file = ses_path.joinpath('alf', 'probes.trajectory.json')
+    with open(probe_trajectory_file, 'w+') as fid:
+        fid.write(json.dumps(trajs))
+
+
+@log2session_static('ephys')
+def sync_spike_sortings(ses_path):
+    """
+    Converts the KS2 outputs for each probe in ALF format. Creates:
+    alf/probeXX/spikes.*
+    alf/probeXX/clusters.*
+    alf/probeXX/templates.*
     :param ses_path: session containing probes to be merged
     :return: None
     """
     def _sr(ap_file):
+        # gets sampling rate from data
         md = spikeglx.read_meta_data(ap_file.with_suffix('.meta'))
         return spikeglx._get_fs_from_meta(md)
 
+    def _sample2v(ap_file):
+        md = spikeglx.read_meta_data(ap_file.with_suffix('.meta'))
+        s2v = spikeglx._conversion_sample2v_from_meta(md)
+        return s2v['ap'][0]
+
     ses_path = Path(ses_path)
-    out_dir = ses_path.joinpath('alf').joinpath('tmp_merge')
     ephys_files = glob_ephys_files(ses_path)
     subdirs, labels, efiles_sorted, srates = zip(
         *sorted([(ep.ap.parent, ep.label, ep, _sr(ep.ap)) for ep in ephys_files if ep.get('ap')]))
 
-    # if there is only one file, just convert the output to IBL format et basta
-    if len(subdirs) == 1:
-        ks2_to_alf(subdirs[0], ses_path / 'alf')
-        return
-    else:
-        _logger.info('converting individual spike-sorting outputs to ALF')
-        for subdir, label, ef, sr in zip(subdirs, labels, efiles_sorted, srates):
-            ks2alf_path = subdir / 'ks2_alf'
-            if ks2alf_path.exists():
-                shutil.rmtree(ks2alf_path, ignore_errors=True)
-            ks2_to_alf(subdir, ks2alf_path, label=label, sr=sr, force=True)
-
-    probe_info = [{'label': lab} for lab in labels]
-    mt = merge.Merger(subdirs=subdirs, out_dir=out_dir, probe_info=probe_info).merge()
-    # Create the cluster channels file, this should go in the model template as 2 methods
-    tmp = mt.sparse_templates.data
-    n_templates, n_samples, n_channels = tmp.shape
-    template_peak_channels = np.argmax(tmp.max(axis=1) - tmp.min(axis=1), axis=1)
-    cluster_probes = mt.channel_probes[template_peak_channels]
-    spike_clusters_rel = _index_of(mt.spike_clusters, _unique(mt.spike_clusters))
-    spike_probes = cluster_probes[spike_clusters_rel]
-
-    # sync spikes according to the probes
-    # how do you make sure they match the files:
-    for ind, probe in enumerate(efiles_sorted):
-        assert(labels[ind] == probe.label)  # paranoid, make sure they are sorted
-        if not probe.get('ap'):
+    _logger.info('converting  spike-sorting outputs to ALF')
+    for subdir, label, ef, sr in zip(subdirs, labels, efiles_sorted, srates):
+        if not subdir.joinpath('spike_times.npy').exists():
+            _logger.warning(f"No KS2 spike sorting found in {subdir}, skipping probe !")
             continue
-        sync_file = probe.ap.parent.joinpath(probe.ap.name.replace('.ap.', '.sync.')
-                                             ).with_suffix('.npy')
+        probe_out_path = ses_path.joinpath('alf', label)
+        probe_out_path.mkdir(parents=True, exist_ok=True)
+        # computes QC on the ks2 output
+        ephysqc._spike_sorting_metrics_ks2(subdir, save=True)
+        # converts the folder to ALF
+        ks2_to_alf(subdir, probe_out_path, ampfactor=_sample2v(ef.ap), label=None, force=True)
+        # single probe we're done !
+        if len(subdirs) == 1:
+            break
+        # synchronize the spike sorted times only if there are several probes
+        sync_file = ef.ap.parent.joinpath(ef.ap.name.replace('.ap.', '.sync.')).with_suffix('.npy')
         if not sync_file.exists():
-            error_msg = f'No synchronisation file for {sync_file}'
+            """
+            if there is no sync file it means something went wrong. Outputs the spike sorting
+            in time according the the probe by followint ALF convention on the times objects
+            """
+            error_msg = f'No synchronisation file for {label}: {sync_file}'
             _logger.error(error_msg)
-            raise FileNotFoundError(error_msg)
-        sync_points = np.load(sync_file)
-        fcn = interp1d(sync_points[:, 0] * srates[ind],
-                       sync_points[:, 1], fill_value='extrapolate')
-        mt.spike_times[spike_probes == ind] = fcn(mt.spike_samples[spike_probes == ind])
-
-    # And convert to ALF
-    ac = alf.EphysAlfCreator(mt)
-    ac.convert(ses_path / 'alf', force=True)
-    # remove the temporary directory
-    shutil.rmtree(out_dir)
+            st_file = ses_path.joinpath(probe_out_path, 'spikes.times.npy')
+            st_file.rename(st_file.parent.joinpath(f'{st_file.stem}_{label}.npy'))
+            continue
+        # patch the spikes.times files manually
+        st_file = ses_path.joinpath(probe_out_path, 'spikes.times.npy')
+        interp_times = apply_sync(sync_file, np.load(st_file), forward=True)
+        np.save(st_file, interp_times)
 
 
-def ks2_to_alf(ks_path, out_path, sr=30000, nchannels=385, label=None, force=True):
+def ks2_to_alf(ks_path, out_path, ampfactor=1, label=None, force=True):
     """
     Convert Kilosort 2 output to ALF dataset for single probe data
     :param ks_path:
     :param out_path:
     :return:
     """
-    m = model.TemplateModel(dir_path=ks_path,
-                            dat_path=[],
-                            sample_rate=sr,
-                            n_channels_dat=nchannels)
+    m = ephysqc.phy_model_from_ks2_path(ks_path)
     ac = alf.EphysAlfCreator(m)
-    ac.convert(out_path, label=label, force=force)
+    ac.convert(out_path, label=label, force=force, ampfactor=ampfactor)

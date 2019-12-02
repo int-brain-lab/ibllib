@@ -9,9 +9,10 @@ from pathlib import Path, PureWindowsPath
 import subprocess
 import json
 
+import alf.io
 from ibllib.io import flags, raw_data_loaders, spikeglx
 from ibllib.pipes import extract_session
-from ibllib.ephys import ephysqc, sync_probes
+from ibllib.ephys import ephysqc, sync_probes, spikes
 from oneibl.registration import RegistrationClient
 from oneibl.one import ONE
 
@@ -38,7 +39,10 @@ def _compress(root_data_folder, command, flag_pattern, dry=False, max_sessions=N
             if dry:
                 continue
             if not cfile.exists():
-                logger.error('NON-EXISTING RAW FILE: ' + str(cfile))
+                logger.error(f'NON-EXISTING RAW FILE: {cfile}. Skipping...')
+                continue
+            if flag_file.exists():
+                flag_file.unlink()
             # run the compression command redirecting output
             cfile.parent.joinpath(cfile.stem)
             # if the output file already exists, overwrite it
@@ -51,17 +55,14 @@ def _compress(root_data_folder, command, flag_pattern, dry=False, max_sessions=N
             info, error = process.communicate()
             if process.returncode != 0:
                 logger.error('COMPRESSION FAILED FOR ' + str(cfile))
-                flags.excise_flag_file(flag_file, removed_files=f2c)
                 with open(cfile.parent.joinpath('extract.error'), 'w+') as fid:
                     fid.write(command2run)
                     fid.write(error.decode())
-                continue
-            # if the command was successful delete the original file
-            cfile.unlink()
-            # then remove the file from the compress flag file
-            flags.excise_flag_file(flag_file, removed_files=f2c)
-            # and add the file to register_me.flag
-            flags.write_flag_file(ses_path.joinpath('register_me.flag'), file_list=cfile.stem)
+            else:
+                # if the command was successful delete the original file
+                cfile.unlink()
+                # and add the file to register_me.flag
+                flags.write_flag_file(ses_path.joinpath('register_me.flag'), file_list=cfile.stem)
 
 
 def create(root_data_folder, dry=False, one=None):
@@ -154,7 +155,7 @@ def raw_ephys_qc(root_data_folder, dry=False, max_sessions=10, force=False):
 # 22_audio_ephys
 def compress_audio(root_data_folder, dry=False, max_sessions=20):
     command = 'ffmpeg -i {file_name}.wav -c:a flac -nostats {file_name}.flac'
-    _compress(root_data_folder, command, 'compress_audio.flag', dry=dry, max_sessions=max_sessions)
+    _compress(root_data_folder, command, 'audio_ephys.flag', dry=dry, max_sessions=max_sessions)
 
 
 # 23_compress ephys
@@ -187,25 +188,44 @@ def compress_ephys(root_data_folder, dry=False, max_sessions=5):
                     out_files.append(sr.compress_file(keep_original=False))
         qcflag.unlink()
         if out_files:
-            session_path = probe_path.parents[1]
+            session_path = alf.io.get_session_path(probe_path) or probe_path.parents[1]
             file_list = [str(f.relative_to(session_path)) for f in out_files]
-            flags.write_flag_file(probe_path.joinpath('register_me.flag'), file_list=file_list)
+            flags.write_flag_file(session_path.joinpath('register_me.flag'), file_list=file_list)
 
 
 # 26_sync_merge_ephys
 def sync_merge_ephys(root_data_folder, dry=False):
     """
-    After spike sorting, if single probe output ks2 to ALF, if several probes merge spike sorting
-     output to ALF folder
+    Post spike-sorting processing:
+    - synchronization of probes
+    - ks2 to ALF conversion for each probes in alf/probeXX folder
+    - computes spike sorting QC
+    - creates probes object in alf folder
     To start the job for a session, all electrophysiology ap files from session need to be
     associated with a `sync_merge_ephys.flag` file
     Outputs individual probes
     """
-    qcflags = list(Path(root_data_folder).rglob('sync_merge_ephys.flag'))
-    session_paths = list(set([f.parents[2] for f in qcflags]))
+    syncflags = list(Path(root_data_folder).rglob('sync_merge_ephys.flag'))
+    session_paths = list(set([f.parents[2] for f in syncflags]))
     for session_path in session_paths:
         print(session_path)
         if dry:
             continue
-        sync_probes.sync_merge(session_path)
-        [f.unlink() for f in qcflags if f.parents[2] == session_path]
+        # first remove the flags
+        [f.unlink() for f in syncflags if f.parents[2] == session_path]
+        # first sync the probes
+        sync_probes.sync(session_path)
+        # then convert ks2 to ALF and resync spike sorting data
+        spikes.sync_spike_sortings(session_path)
+        # outputs the probes object in the ALF folder
+        spikes.probes_description(session_path)
+        # wrap up by removing flags and creating register_me flag
+        flags.write_flag_file(session_path.joinpath('register_me.flag'))
+
+
+# 27_compress_ephys_videos
+def compress_ephys_video(root_data_folder, dry=False, max_sessions=None):
+    command = ('ffmpeg -i {file_name}.avi -codec:v libx264 -preset slow -crf 17 '
+               '-nostats -loglevel 0 -codec:a copy {file_name}.mp4')
+    _compress(root_data_folder, command, 'compress_video_ephys.flag',
+              dry=dry, max_sessions=max_sessions)

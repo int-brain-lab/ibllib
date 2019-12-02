@@ -1,5 +1,4 @@
 import logging
-from pathlib import Path
 
 import matplotlib.axes
 import matplotlib.pyplot as plt
@@ -10,23 +9,27 @@ import alf.io
 from brainbox.core import Bunch
 import ibllib.io.spikeglx as spikeglx
 from ibllib.misc import log2session_static
-from ibllib.ephys import spikes
-from ibllib.io import flags
 from ibllib.io.extractors.ephys_fpga import _get_sync_fronts, get_ibl_sync_map
 
 _logger = logging.getLogger('ibllib')
 
 
-@log2session_static('ephys')
-def sync_merge(session_path, dry=False, force=False):
+def apply_sync(sync_file, times, forward=True):
     """
-    Sync probes and merge spike sorting output.
-    For single probe dataset, output ks2 as ALF dataset
+    :param sync_file: probe sync file (usually of the form _iblrig_ephysData.raw.imec1.sync.npy)
+    :param times: times in seconds to interpolate
+    :param forward: if True goes from probe time to session time, from session time to probe time
+    otherwise
+    :return: interpolated times
     """
-    session_path = Path(session_path)
-    sync(session_path, display=False)
-    spikes.merge_probes(session_path)
-    flags.write_flag_file(session_path.joinpath('register_me.flag'))
+    sync_points = np.load(sync_file)
+    if forward:
+        fcn = interp1d(sync_points[:, 0],
+                       sync_points[:, 1], fill_value='extrapolate')
+    else:
+        fcn = interp1d(sync_points[:, 1],
+                       sync_points[:, 0], fill_value='extrapolate')
+    return fcn(times)
 
 
 @log2session_static('ephys')
@@ -44,7 +47,7 @@ def sync(ses_path, **kwargs):
         version3B(ses_path, **kwargs)
 
 
-def version3A(ses_path, display=True, linear=False, tol=1.5):
+def version3A(ses_path, display=True, linear=False, tol=2.1):
     """
     From a session path with _spikeglx_sync arrays extracted, locate ephys files for 3A and
      outputs one sync.timestamps.probeN.npy file per acquired probe. By convention the reference
@@ -58,13 +61,29 @@ def version3A(ses_path, display=True, linear=False, tol=1.5):
     if nprobes <= 1:
         _logger.warning(f"Skipping single probe session: {ses_path}")
         return True
-    d = Bunch({'times': [], 'nsync': np.zeros(nprobes, )})
-    for ind, ephys_file in enumerate(ephys_files):
-        sync = alf.io.load_object(ephys_file.ap.parent, '_spikeglx_sync', short_keys=True)
-        sync_map = get_ibl_sync_map(ephys_file, '3A')
-        isync = np.in1d(sync['channels'], np.array([sync_map['right_camera']]))
-        d.nsync[ind] = len(sync.channels)
-        d['times'].append(sync['times'][isync])
+
+    def get_sync_fronts(auxiliary_name):
+        d = Bunch({'times': [], 'nsync': np.zeros(nprobes, )})
+        # auxiliary_name: frame2ttl or right_camera
+        for ind, ephys_file in enumerate(ephys_files):
+            sync = alf.io.load_object(ephys_file.ap.parent, '_spikeglx_sync', short_keys=True)
+            sync_map = get_ibl_sync_map(ephys_file, '3A')
+            # exits if sync label not found for current probe
+            if auxiliary_name not in sync_map:
+                return
+            isync = np.in1d(sync['channels'], np.array([sync_map[auxiliary_name]]))
+            # only returns syncs if we get fronts for all probes
+            if np.all(~isync):
+                return
+            d.nsync[ind] = len(sync.channels)
+            d['times'].append(sync['times'][isync])
+        return d
+    d = get_sync_fronts('frame2ttl')
+    if not d:
+        _logger.warning('Ephys sync: frame2ttl not detected on both probes, using camera sync')
+        d = get_sync_fronts('right_camera')
+        if not min([t[0] for t in d['times']]) > 0.2:
+            raise(ValueError('Cameras started before ephys, no sync possible'))
     # chop off to the lowest number of sync points
     nsyncs = [t.size for t in d['times']]
     if len(set(nsyncs)) > 1:
@@ -80,12 +99,12 @@ def version3A(ses_path, display=True, linear=False, tol=1.5):
     # output timestamps files as per ALF convention
     for ind, ephys_file in enumerate(ephys_files):
         if ind == iref:
-            timestamps = np.array([[0, 0], [1, 1]])
+            timestamps = np.array([[0., 0.], [1., 1.]])
         else:
-            timestamps, qc = sync_probe_front_times(d.times[:, iref], d.times[:, ind], sr,
+            timestamps, qc = sync_probe_front_times(d.times[:, ind], d.times[:, iref], sr,
                                                     display=display, linear=linear, tol=tol)
             qc_all &= qc
-        _save_timestamps_npy(ephys_file, timestamps)
+        _save_timestamps_npy(ephys_file, timestamps, sr)
     return qc_all
 
 
@@ -120,7 +139,7 @@ def version3B(ses_path, display=True, linear=False, tol=2.5):
         timestamps, qc = sync_probe_front_times(sync_probe.times, sync_nidq.times, sr,
                                                 display=display, linear=linear, tol=tol)
         qc_all &= qc
-        _save_timestamps_npy(ef, timestamps)
+        _save_timestamps_npy(ef, timestamps, sr)
     return qc_all
 
 
@@ -140,7 +159,7 @@ def sync_probe_front_times(t, tref, sr, display=False, linear=False, tol=2.0):
     # version of the residual to add to the linear drift. The precision is enforced
     # by ensuring that each point lies less than one sampling rate away from the predicted.
     pol = np.polyfit(t, tref, 1)  # higher order terms first: slope / int for linear
-    residual = (tref - np.polyval(pol, t))
+    residual = tref - np.polyval(pol, t)
     if not linear:
         # the interp function from camera fronts is not smooth due to the locking of detections
         # to the sampling rate of digital channels. The residual is fit using frequency domain
@@ -174,7 +193,7 @@ def sync_probe_front_times(t, tref, sr, display=False, linear=False, tol=2.0):
             ax.set_xlabel('time (sec)')
             ax.set_ylabel('Residual drift (samples @ 30kHz)')
     else:
-        sync_points = np.c_[np.array([0, 1]), np.polyval(pol, np.array([0, 1]))]
+        sync_points = np.c_[np.array([0., 1.]), np.polyval(pol, np.array([0., 1.]))]
         if display:
             plt.plot(tref, residual * sr)
             plt.ylabel('Residual drift (samples @ 30kHz)')
@@ -193,7 +212,14 @@ def _get_sr(ephys_file):
     return spikeglx._get_fs_from_meta(meta)
 
 
-def _save_timestamps_npy(ephys_file, timestamps):
-    file_out = ephys_file.ap.parent.joinpath(ephys_file.ap.name.replace('.ap.', '.sync.')
-                                             ).with_suffix('.npy')
-    np.save(file_out, timestamps)
+def _save_timestamps_npy(ephys_file, tself_tref, sr):
+    # this is the file with self_time_secs, ref_time_secs output
+    file_sync = ephys_file.ap.parent.joinpath(ephys_file.ap.name.replace('.ap.', '.sync.')
+                                              ).with_suffix('.npy')
+    np.save(file_sync, tself_tref)
+    # this is the timestamps file
+    file_ts = ephys_file.ap.parent.joinpath(ephys_file.ap.name.replace('.ap.', '.timestamps.')
+                                            ).with_suffix('.npy')
+    timestamps = np.copy(tself_tref)
+    timestamps[:, 0] *= np.float64(sr)
+    np.save(file_ts, timestamps)

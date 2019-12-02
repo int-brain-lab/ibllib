@@ -9,25 +9,33 @@ Instructions https://docs.google.com/document/d/1lBNcssodWdBILBN0PrPWi0te4f6I8H_
 
 from pathlib import Path
 
+import sys
+import glob
+import os
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-import sys, glob, os
+
 
 from ibllib.ephys import ephysqc
 import alf.io
-from IPython import embed as shell
+# from IPython import embed as shell
+
 
 def _plot_spectra(outpath, typ, savefig=True):
+    '''
+    TODO document this function
+    '''
+
     spec = alf.io.load_object(outpath, '_spikeglx_ephysQcFreq' + typ.upper())
 
     # hack to ensure a single key name
     if 'power.probe_00' in spec.keys():
-        spec['power'] = spec.pop('power.probe_00')  
+        spec['power'] = spec.pop('power.probe_00')
         spec['freq'] = spec.pop('freq.probe_00')
     elif 'power.probe_01' in spec.keys():
-        spec['power'] = spec.pop('power.probe_01')  
-        spec['freq'] = spec.pop('freq.probe_01')    
+        spec['power'] = spec.pop('power.probe_01')
+        spec['freq'] = spec.pop('freq.probe_01')
 
     # plot
     sns.set_style("whitegrid")
@@ -46,20 +54,23 @@ def _plot_spectra(outpath, typ, savefig=True):
     ax.set_title(outpath)
     if savefig:
         plt.savefig(outpath / (typ + '_spec.png'), dpi=150)
-        print('saved figure to %s'%(outpath / (typ + '_spec.png')))
+        print('saved figure to %s' % (outpath / (typ + '_spec.png')))
 
 
 def _plot_rmsmap(outpath, typ, savefig=True):
+    '''
+    TODO document this function
+    '''
 
     rmsmap = alf.io.load_object(outpath, '_spikeglx_ephysQcTime' + typ.upper())
 
     # hack to ensure a single key name
     if 'times.probe_00' in rmsmap.keys():
-        rmsmap['times'] = rmsmap.pop('times.probe_00')  
+        rmsmap['times'] = rmsmap.pop('times.probe_00')
         rmsmap['rms'] = rmsmap.pop('rms.probe_00')
     elif 'times.probe_01' in rmsmap.keys():
-        rmsmap['times'] = rmsmap.pop('times.probe_01')  
-        rmsmap['rms'] = rmsmap.pop('rms.probe_01')    
+        rmsmap['times'] = rmsmap.pop('times.probe_01')
+        rmsmap['rms'] = rmsmap.pop('rms.probe_01')
 
     plt.figure(figsize=[12, 4.5])
     axim = plt.axes([0.2, 0.1, 0.7, 0.8])
@@ -85,17 +96,20 @@ def _plot_rmsmap(outpath, typ, savefig=True):
     if savefig:
         plt.savefig(outpath / (typ + '_rms.png'), dpi=150)
 
+
 # ============================== ###
-# FIND THE RIGHT FILES
+# FIND THE RIGHT FILES, RUN AS SCRIPT
 # ============================== ###
 
-if len(sys.argv) != 2:
-    print("Please give the folder path as an input argument!")
-else:
-    outpath = Path(sys.argv[1])  # grab from command line input
-    fbin = glob.glob(os.path.join(outpath, '*.lf.bin'))
-    assert(len(fbin)>0)
-    print('fbin: %s'%fbin)
-    ephysqc.extract_rmsmap(Path(fbin[0]))  # make sure you send a path for the time being and not a string
-    _plot_spectra(outpath, 'lf')
-    _plot_rmsmap(outpath, 'lf')
+if __name__ == '__main__':
+    if len(sys.argv) != 2:
+        print("Please give the folder path as an input argument!")
+    else:
+        outpath = Path(sys.argv[1])  # grab from command line input
+        fbin = glob.glob(os.path.join(outpath, '*.lf.bin'))
+        assert(len(fbin) > 0)
+        print('fbin: %s' % fbin)
+        # make sure you send a path for the time being and not a string
+        ephysqc.extract_rmsmap(Path(fbin[0]))
+        _plot_spectra(outpath, 'lf')
+        _plot_rmsmap(outpath, 'lf')

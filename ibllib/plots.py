@@ -77,7 +77,7 @@ def traces(w, **kwargs):
     wiggle(w, **kwargs, fill=False)
 
 
-def squares(tscale, polarity, ax=None, **kwargs):
+def squares(tscale, polarity, ax=None, yrange=[-1, 1], **kwargs):
     """
     Matplotlib display of rising and falling fronts in a square-wave pattern
 
@@ -93,7 +93,9 @@ def squares(tscale, polarity, ax=None, **kwargs):
     polarity = polarity[isort]
     f = np.tile(polarity, (2, 1))
     t = np.concatenate((tscale, np.r_[tscale[1:], tscale[-1]])).reshape(2, f.shape[1])
-    ax.plot(t.transpose().ravel(), f.transpose().ravel(), **kwargs)
+    ydata = f.transpose().ravel()
+    ydata = (ydata + 1) / 2 * (yrange[1] - yrange[0]) + yrange[0]
+    ax.plot(t.transpose().ravel(), ydata, **kwargs)
 
 
 def vertical_lines(x, ymin=0, ymax=1, ax=None, **kwargs):

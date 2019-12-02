@@ -3,14 +3,14 @@ Plots metrics that assess quality of single units. Some functions here generate 
 output of functions in the brainbox `metrics.py` module.
 """
 
-import brainbox as bb
-import numpy as np
-import matplotlib.pyplot as plt
 import os.path as op
 from warnings import warn
+import numpy as np
+import matplotlib.pyplot as plt
+import brainbox as bb
 
 
-def feat_vars(spks, feat_name='amps', dist='norm', test='ks', cmap_name='coolwarm'):
+def feat_vars(spks, units=[], feat_name='amps', dist='norm', test='ks', cmap_name='coolwarm'):
     '''
     Plots the variances of a particular spike feature for all units as a bar plot, where each bar
     is color-coded corresponding to the depth of the max amplitude channel of the respective unit.
@@ -20,6 +20,8 @@ def feat_vars(spks, feat_name='amps', dist='norm', test='ks', cmap_name='coolwar
     spks : bunch
         A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
         etc.) for all spikes.
+    units : array-like (optional)
+        A subset of all units for which to create the bar plot. (If `[]`, all units are used)
     feat_name : string (optional)
         The spike feature to plot.
     dist : string (optional)
@@ -50,39 +52,50 @@ def feat_vars(spks, feat_name='amps', dist='norm', test='ks', cmap_name='coolwar
     1) Create a bar plot of the variances of the spike amplitudes for each unit.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        >>> import ibllib.ephys.spikes as e_spks
-        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
-        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
+        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
+        # Get spikes bunch and create the bar plot.
+        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
+        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
         >>> fig, var_vals, p_vals = bb.plot.feat_vars(spks)
     '''
 
     # Get units bunch and calculate variances.
-    units = bb.processing.get_units_bunch(spks)
-    p_vals, variances = bb.metrics.unit_stability(spks, feat_names=[feat_name],
+    units_b = bb.processing.get_units_bunch(spks, ['depths'])
+    if len(units) != 0:  # we're using a subset of all units
+        unit_list = list(units_b['depths'].keys())
+        # For each unit in `unit_list`, remove unit from `units_b` if not in `units`
+        [units_b['depths'].pop(unit) for unit in unit_list if not(int(unit) in units)]
+    unit_list = list(units_b['depths'].keys())  # get new `unit_list` after removing units
+    # Calculate variances for all units
+    p_vals, variances = bb.metrics.unit_stability(spks, units=units, feat_names=[feat_name],
                                                   dist=dist, test=test)
     var_vals = np.array(tuple(variances[feat_name].values()))
     p_vals = np.array(tuple(p_vals[feat_name].values()))
-    # Specify bad units (i.e. missing unit numbers from spike sorter output).
-    num_units = np.max(spks['clusters']) + 1
-    bad_units = np.where(np.isnan(var_vals))
-    good_units = np.delete(np.arange(0, num_units), bad_units)
-    # Get depth of max amplitude channel for each unit, and use 0 as a placeholder for `bad_units`.
-    depths = [units['depths'][repr(unit)][0] for unit in good_units]
-    depths = np.insert(depths, bad_units[0], 0)
-    # Create unit normalized colormap based on `depths`.
+    # Specify and remove bad units (i.e. missing unit numbers from spike sorter output).
+    num_units = len(unit_list)
+    bad_units = np.where(np.isnan(var_vals))[0]
+    if len(bad_units) > 0:
+        good_units = [unit_list.pop(bad_unit) for bad_unit in bad_units]
+    else:
+        good_units = unit_list
+    # Get depth of max amplitude channel for good units
+    depths = np.asarray([np.mean(units_b['depths'][str(unit)]) for unit in good_units])
+    # Create unit normalized colormap based on `depths`, sorted by depth.
     cmap = plt.cm.get_cmap(cmap_name)
     depths_norm = depths / np.max(depths)
-    rgba = [cmap(depth) for depth in depths_norm]
-    # Plot depth-color-coded bar plot of variances for `feature` for each unit.
+    rgba = np.asarray([cmap(depth) for depth in np.sort(np.flip(depths_norm))])
+    # Plot depth-color-coded h bar plot of variances for `feature` for each unit, where units are
+    # sorted descendingly by depth along y-axis.
     fig, ax = plt.subplots()
-    ax.bar(x=np.arange(0, num_units), height=var_vals, color=rgba)
+    ax.barh(y=np.arange(0, num_units), width=var_vals[np.argsort(depths)], color=rgba)
     cbar = fig.colorbar(plt.cm.ScalarMappable(cmap=cmap), ax=ax)
     max_d = np.max(depths)
     cbar.set_ticks(cbar.get_ticks())  # must call `set_ticks` to call `set_ticklabels`
-    cbar.set_ticklabels([0, max_d * 0.2, max_d * 0.4, max_d * 0.6, max_d * 0.8, max_d])
+    tick_labels = [int(max_d) * tick for tick in (0, 0.2, 0.4, 0.6, 0.8, 1.0)]
+    cbar.set_ticklabels(tick_labels)
     ax.set_title('{feat} variance'.format(feat=feat_name))
-    ax.set_xlabel('unit number')
-    ax.set_ylabel('variance')
+    ax.set_ylabel('unit number (sorted by depth)')
+    ax.set_xlabel('variance')
     cbar.set_label('depth', rotation=0)
     return fig, var_vals, p_vals
 
@@ -126,10 +139,10 @@ def feat_cutoff(spks, unit, feat_name='amps', spks_per_bin=20, sigma=5):
     unit's spike amplitudes, assuming the distribution of the unit's spike amplitudes is symmetric.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        >>> import ibllib.ephys.spikes as e_spks
+        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
         # Get a spikes bunch, a units bunch, and plot feature cutoff for spike amplitudes for unit1
-        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
-        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
+        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
+        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
         >>> fig, fraction_missing = bb.plot.feat_cutoff(spks, 1)
     '''
 
@@ -217,11 +230,11 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
     channels around the mean.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        >>> import ibllib.ephys.spikes as e_spks
+        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
         # Get a spikes bunch, a clusters bunch, and plot waveforms for unit1 across 20 channels.
-        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
-        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
-        >>> clstrs = aio.load_object('path\\to\\alf_output', 'clusters')
+        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
+        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
+        >>> clstrs = aio.load_object('path\\to\\alf_out', 'clusters')
         >>> fig, wf1, wf2 = bb.plot.single_unit_wf_comp('path\\to\\ephys_file', spks, clstrs, \
                                                         unit=1)
         # Get a units bunch, and plot waveforms for unit2 from the first to second minute
@@ -234,9 +247,9 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
     '''
 
     # Take the first and last 200 timestamps by default.
-    units = bb.processing.get_units_bunch(spks)
-    ts1 = units['times'][str(unit)][0:n_spks] if ts1 == 'start' else ts1
-    ts2 = units['times'][str(unit)][-(n_spks + 1):-1] if ts2 == 'end' else ts2
+    units_b = bb.processing.get_units_bunch(spks, ['times'])
+    ts1 = units_b['times'][str(unit)][0:n_spks] if ts1 == 'start' else ts1
+    ts2 = units_b['times'][str(unit)][-(n_spks + 1):-1] if ts2 == 'end' else ts2
     # Get the channel of max amplitude and `n_ch` around it.
     max_ch = clstrs['channels'][unit]
     n_c_ch = n_ch // 2
@@ -253,7 +266,7 @@ def single_unit_wf_comp(ephys_file, spks, clstrs, unit, n_ch=20, ts1='start', ts
                                   car=True)
     s = bb.metrics.wf_similarity(wf1, wf2)
     # Plot these waveforms against each other.
-    fig, ax = plt.subplots(nrows=n_ch, ncols=2)  # on left is all waveforms, on right is mean
+    fig, ax = plt.subplots(nrows=n_ch, ncols=2)  # left col is all waveforms, right col is mean
     for cur_ax, cur_ch in enumerate(ch):
         ax[cur_ax][0].plot(wf1[:, :, cur_ax].T, c=col[0])
         ax[cur_ax][0].plot(wf2[:, :, cur_ax].T, c=col[1])
@@ -313,11 +326,11 @@ def amp_heatmap(ephys_file, spks, clstrs, unit, t='all', n_ch=20, sr=30000, n_ch
     amplitude for unit1.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        >>> import ibllib.ephys.spikes as e_spks
+        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
         # Get a spikes bunch, a clusters bunch, and plot heatmap for unit1 across 20 channels.
-        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
-        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
-        >>> clstrs = aio.load_object('path\\to\\alf_output', 'clusters')
+        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
+        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
+        >>> clstrs = aio.load_object('path\\to\\alf_out', 'clusters')
         >>> bb.plot.amp_heatmap('path\\to\\ephys_file', spks, clstrs, unit=1)
     '''
 
@@ -413,10 +426,10 @@ def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5, n_bins=10, show_
     to second minute, without showing the cv.
         >>> import brainbox as bb
         >>> import alf.io as aio
-        >>> import ibllib.ephys.spikes as e_spks
+        >>> import ibllib.ephys.spikes as e_spks  # only to make 'alf' dir if missing
         # Get a spikes bunch and calculate the firing rate.
-        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
-        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
+        >>> e_spks.ks2_to_alf('path\\to\\ks_out', 'path\\to\\alf_out')  # make 'alf' dir if missing
+        >>> spks = aio.load_object('path\\to\\alf_out', 'spikes')
         >>> fig, fr_1, cv_1, cvs_1 = bb.plot.firing_rate(spks, unit=1)
         >>> fig2, fr_2 = bb.plot.firing_rate(spks, unit=2, t=[60,120], show_fr_cv=False)
     '''

@@ -8,8 +8,10 @@ Check if extractors for specific task exist
 Extract data OR return error to user saying that the task has no extractors
 """
 import logging
+import json
 from pathlib import Path
 
+from alf.io import get_session_path
 from ibllib.misc import log2session_static
 from ibllib.io.extractors import (ephys_trials, ephys_fpga,
                                   biased_wheel, biased_trials,
@@ -29,14 +31,27 @@ def get_task_extractor_type(task_name):
     :param task_name:
     :return:
     """
+    if isinstance(task_name, Path):
+        try:
+            settings = raw.load_settings(get_session_path(task_name))
+        except json.decoder.JSONDecodeError:
+            return
+        if settings:
+            task_name = settings.get('PYBPOD_PROTOCOL', None)
+        else:
+            return
     if '_biasedChoiceWorld' in task_name:
         return 'biased'
-    if 'biasedScanningChoiceWorld' in task_name:
+    elif 'biasedScanningChoiceWorld' in task_name:
         return 'biased'
+    elif '_habituationChoiceWorld' in task_name:
+        return 'habituation'
     elif '_trainingChoiceWorld' in task_name:
         return 'training'
     elif 'ephysChoiceWorld' in task_name:
         return 'ephys'
+    elif 'ephysMockChoiceWorld' in task_name:
+        return 'mock_ephys'
     elif task_name and task_name.startswith('_iblrig_tasks_ephys_certification'):
         return 'sync_ephys'
 
