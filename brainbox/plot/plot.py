@@ -503,8 +503,6 @@ def peri_event_time_histogram(
     # Check to make sure if we fail, we fail in an informative way
     if not len(spike_times) == len(spike_clusters):
         raise ValueError('Spike times and clusters are not of the same shape')
-    if cluster_id not in np.unique(spike_clusters):
-        raise ValueError('Cluster to plot was not found in spike clusters')
     if len(events) == 1:
         raise ValueError('Cannot make a PETH with only one event.')
     if error_bars not in ('std', 'sem', 'none'):
