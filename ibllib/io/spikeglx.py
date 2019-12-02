@@ -193,7 +193,12 @@ class Reader:
         Computes SHA-1 hash and returns True if it matches metadata, False otherwise
         :return: boolean
         """
-        return hashfile.sha1(self.file_bin).upper() == self.meta.fileSHA1
+        if self.is_mtscomp:
+            _logger.warning("SHA1 hash is not implemented for compressed ephys. To check "
+                            "the spikeglx acquisition hash, uncompress the file first !")
+            return True
+        else:
+            return hashfile.sha1(self.file_bin).upper() == self.meta.fileSHA1
 
 
 def read(sglx_file, first_sample=0, last_sample=10000):
