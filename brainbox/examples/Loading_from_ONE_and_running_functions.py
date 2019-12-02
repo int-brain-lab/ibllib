@@ -52,3 +52,50 @@ assert os.path.isdir(ephys_file_dir) and os.path.isdir(alf_probe_dir) \
 # Change variable names to same names used in brainbox docstrings
 path_to_ephys_file = ephys_file_path
 path_to_alf_out = alf_probe_dir
+
+# Load alf objects:
+spks_b = aio.load_object(path_to_alf_out, 'spikes')
+clstrs_b = aio.load_object(path_to_alf_out, 'clusters')
+chnls_b = aio.load_object(path_to_alf_out, 'channels')
+tmplts_b = aio.load_object(path_to_alf_out, 'templates')
+
+# Convert spikes bunch into a units bunch
+units_b = bb.processing.get_units_bunch(spks_b)
+unit4_amps = units_b['amps']['4']  # get amplitudes for unit 4.
+
+# Filter units according to some parameters
+filtered_units_mask = bb.processing.filter_units(spks_b, params={'min_amp': 100, 'min_fr': 0.5,
+                                                                 'max_fpr': 0.1, 'rp': 0.002})
+filtered_units = np.where(filtered_units_mask)[0]  # get an array of the filtered units` ids.
+
+# Extract waveforms from binary ephys file
+# Get the timestamps and 20 channels around the max amp channel for unit1, and extract the
+# two sets of waveforms.
+ts = units_b['times']['1']
+max_ch = max_ch = clstrs_b['channels'][1]
+if max_ch < 10:  # take only channels greater than `max_ch`.
+    ch = np.arange(max_ch, max_ch + 20)
+elif (max_ch + 10) > 385:  # take only channels less than `max_ch`.
+    ch = np.arange(max_ch - 20, max_ch)
+else:  # take `n_c_ch` around `max_ch`.
+    ch = np.arange(max_ch - 10, max_ch + 10)
+wf = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, t=2.0, car=False)
+wf_car = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, t=2.0, car=True)
+
+# Plot variances of a spike feature for all units and for a subset of units
+fig, var_vals, p_vals = bb.plot.feat_vars(spks_b, units=[], feat_name='amps')
+fig, var_vals, p_vals = bb.plot.feat_vars(spks_b, units=filtered_units, feat_name='amps')
+
+# Plot distribution cutoff of a spike feature for a single unit
+fig, fraction_missing = bb.plot.feat_cutoff(spks_b, unit=1, feat_name='amps')
+
+# Plot and compare two sets of waveforms from two different time epochs for a single unit
+ts = units_b['times']['1']
+ts1 = ts[np.where(ts<60)[0]]
+ts2 = ts[np.where(ts>180)[0][:len(ts1)]]
+fig, wf_1, wf_2, s = bb.plot.single_unit_wf_comp(path_to_ephys_file, spks_b, clstrs_b, unit=1,
+                                                 ts1=ts1, ts2=ts2, n_ch=20, car=True)
+
+# Plot the instantaneous firing rate and its coefficient of variation for a single unit
+fig, fr = bb.plot.firing_rate(spks_b, unit=1, t='all', hist_win=0.01, fr_win=0.5, n_bins=10,
+                              show_fr_cv=True)

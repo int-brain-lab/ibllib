@@ -145,7 +145,7 @@ def feat_cutoff(spks_b, unit, feat_name='amps', spks_per_bin=20, sigma=5):
         >>> e_spks.ks2_to_alf(path_to_ks_out, path_to_alf_out)
         # Get a spikes bunch, a units bunch, and plot feature cutoff for spike amplitudes for unit1
         >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
-        >>> fig, fraction_missing = bb.plot.feat_cutoff(spks_b, 1)
+        >>> fig, fraction_missing = bb.plot.feat_cutoff(spks_b, unit=1, feat_name='amps')
     '''
 
     # Calculate and plot the feature distribution histogram and pdf with symmetric cutoff:
@@ -228,7 +228,7 @@ def single_unit_wf_comp(ephys_file, spks_b, clstrs_b, unit, n_ch=20, ts1='start'
     Examples
     --------
     1) Compare first and last 100 spike waveforms for unit1, across 20 channels around the channel
-    of max amplitude, and compare the waveforms in the first minute to the waveforms in the third
+    of max amplitude, and compare the waveforms in the first minute to the waveforms in the fourth
     minutes for unit2, across 15 channels around the mean.
         >>> import brainbox as bb
         >>> import alf.io as aio
@@ -241,14 +241,14 @@ def single_unit_wf_comp(ephys_file, spks_b, clstrs_b, unit, n_ch=20, ts1='start'
         >>> clstrs_b = aio.load_object(path_to_alf_out, 'clusters')
         >>> fig, wf1, wf2, _ = bb.plot.single_unit_wf_comp(path_to_ephys_file, spks_b, clstrs_b,
                                                            unit=1)
-        # Get a units bunch, and plot waveforms for unit2 from the first to second minute
+        # Get a units bunch, and plot waveforms for unit2 from the first and fourth minutes
         # across 15 channels.
         >>> units_b = bb.processing.get_units_bunch(spks_b, ['times'])
         >>> ts = units_b['times']['2']
         >>> ts1 = ts[np.where(ts<60)[0]]
         >>> ts2 = ts[np.where(ts>180)[0][:len(ts1)]]
         >>> fig2, wf1_2, wf2_2, _ = bb.plot.single_unit_wf_comp(path_to_ephys_file, spks_b,
-                                                                clstrs_b, unit=1, ts1=ts1, ts2=ts2)
+                                                                clstrs_b, unit=2, ts1=ts1, ts2=ts2)
     '''
 
     # Take the first and last `n_spks` timestamps by default.

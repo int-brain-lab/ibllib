@@ -51,7 +51,12 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
         # two sets of waveforms.
         >>> ts = units_b['times']['1']
         >>> max_ch = max_ch = clstrs_b['channels'][1]
-        >>> ch = np.arange(max_ch - 10, max_ch + 10)
+        >>> if max_ch < 10:  # take only channels greater than `max_ch`.
+        >>>     ch = np.arange(max_ch, max_ch + 20)
+        >>> elif (max_ch + 10) > 385:  # take only channels less than `max_ch`.
+        >>>     ch = np.arange(max_ch - 20, max_ch)
+        >>> else:  # take `n_c_ch` around `max_ch`.
+        >>>     ch = np.arange(max_ch - 10, max_ch + 10)
         >>> wf = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, car=False)
         >>> wf_car = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, car=True)
 
