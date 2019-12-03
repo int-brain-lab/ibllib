@@ -57,7 +57,7 @@ def read(str_params, default=None):
     :return: named tuple containing parameters
     """
     pfile = getfile(str_params)
-    if os.path.isfile(pfile):
+    if pathlib.Path(pfile).exists():
         with open(pfile) as fil:
             par_dict = json.loads(fil.read())
     else:
@@ -86,5 +86,9 @@ def write(str_params, par):
     :return: None
     """
     pfile = getfile(str_params)
+    dpar = as_dict(par)
+    for k in dpar:
+        if isinstance(dpar[k], pathlib.Path):
+            dpar[k] = str(dpar[k])
     with open(pfile, 'w') as fil:
         json.dump(as_dict(par), fil, sort_keys=False, indent=4)
