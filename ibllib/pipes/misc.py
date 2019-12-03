@@ -7,7 +7,6 @@ import ibllib.io.params as params
 import ibllib.io.flags as flags
 
 
-# TODO: Tests!!!!!!
 def cli_ask_default(prompt: str, default: str):
     dflt = " [default: {}]: "
     dflt = dflt.format(default)
@@ -456,7 +455,7 @@ def copy_wiring_files(session_folder, iblscripts_folder):
             shutil.copy(str(src_wiring_path / 'nidq.wiring.json'),
                         str(session_path / 'raw_ephys_data' / nidq_wiring_name))
     # If system is either (3A OR 3B) copy a wiring file for each ap.bin file
-    for binf in session_path.glob('*.ap.bin'):
+    for binf in session_path.rglob('*.ap.bin'):
         wiring_name = '.'.join(str(binf.name).split('.')[:-2]) + termination
         if 'probe00' in str(binf):
             shutil.copy(str(probe00_wiring_file_path),
