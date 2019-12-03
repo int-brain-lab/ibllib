@@ -1,3 +1,7 @@
+### Release Notes 1.3.9
+-   spikeglx.verify_hash() method to check file integrity after transfers/manipulations
+-   create wirings settings files on ephys computer transfer to server
+
 ### Release Notes 1.3.8
 -   Ephys Extraction:
     -   duplicate probe.trajectories bugfix
