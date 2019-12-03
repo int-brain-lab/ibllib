@@ -409,7 +409,7 @@ class ONE(OneAbstract):
         local_path = cache_dir + os.sep + os.path.basename(url)
         if not keep_uuid:
             local_path = remove_uuid_file(local_path, dry=True)
-        if not Path(local_path).exists():
+        if clobber or not Path(local_path).exists():
             local_path = wc.http_download_file(url,
                                                username=self._par.HTTP_DATA_SERVER_LOGIN,
                                                password=self._par.HTTP_DATA_SERVER_PWD,

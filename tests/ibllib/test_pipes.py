@@ -274,6 +274,7 @@ class TestPipesMisc(unittest.TestCase):
         self.assertFalse(spike_sorting0.exists())
         self.assertFalse(spike_sorting1.exists())
 
+# TODO: test copy wirings
     def tearDown(self):
         shutil.rmtree(self.root_test_folder, ignore_errors=True)
 
