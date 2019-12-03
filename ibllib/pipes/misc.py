@@ -193,6 +193,9 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
             return
 
         remote_session_path = remote_folder / Path(*session_path.parts[-3:])
+        if not behavior_exists(remote_session_path):
+            print(f"No behavior folder found in {remote_session_path}: skipping session...")
+            return
         transfer_folder(
             session_path / 'raw_video_data',
             remote_session_path / 'raw_video_data',
