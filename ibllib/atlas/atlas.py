@@ -364,15 +364,15 @@ def AllenAtlas(res_um=25):
     # Bregma indices for the 10um Allen Brain Atlas, mlapdv
     pdefault = {
         'PATH_ATLAS': '/datadisk/BrainAtlas/ATLASES/Allen/',
-        'FILE_REGIONS': Path(__file__).parent.joinpath('allen_structure_tree.csv'),
-        'INDICES_BREGMA': np.array([1140 - (570 + 3.9), 540, 0 + 33.2])
+        'FILE_REGIONS': str(Path(__file__).parent.joinpath('allen_structure_tree.csv')),
+        'INDICES_BREGMA': list(np.array([1140 - (570 + 3.9), 540, 0 + 33.2]))
     }
-    p = params.read('.ibl_histology', default=pdefault)
-    # TODO: distribute and store the Atlas using parameters
+    p = params.read('ibl_histology', default=pdefault)
     if not Path(p.PATH_ATLAS).exists():
-
+        raise NotImplementedError("Atlas doesn't exist ! Mock option not implemented yet")
+        # TODO: mock atlas to get only the coordinate framework
         pass
-    params.write('.ibl_histology', p)
+    params.write('ibl_histology', p)
     # file_image = Path(path_atlas).joinpath(f'ara_nissl_{res_um}.nrrd')
     file_image = Path(p.PATH_ATLAS).joinpath(f'average_template_{res_um}.nrrd')
     file_label = Path(p.PATH_ATLAS).joinpath(f'annotation_{res_um}.nrrd')
@@ -387,5 +387,5 @@ def AllenAtlas(res_um=25):
     xyz2dims = np.array([1, 0, 2])
     dims2xyz = np.array([1, 0, 2])
     dxyz = res_um * 1e-6 * np.array([1, -1, -1])
-    ibregma = (p.INDICES_BREGMA * 10 / res_um)
+    ibregma = (np.array(p.INDICES_BREGMA) * 10 / res_um)
     return BrainAtlas(image, label, regions, dxyz, ibregma, dims2xyz=dims2xyz, xyz2dims=xyz2dims)

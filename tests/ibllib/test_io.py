@@ -7,7 +7,7 @@ import shutil
 
 import numpy as np
 
-from ibllib.io import params, flags, jsonable, spikeglx
+from ibllib.io import params, flags, jsonable, spikeglx, hashfile
 
 
 class TestsParams(unittest.TestCase):
@@ -17,7 +17,8 @@ class TestsParams(unittest.TestCase):
                          'O': 'toto',
                          'I': 'titi',
                          'num': 15,
-                         'liste': [1, 'turlu']}
+                         'liste': [1, 'turlu'],
+                         'apath': Path('/gna/gna/gna')}
         params.write('toto', self.par_dict)
         params.write('toto', params.from_dict(self.par_dict))
 
@@ -43,6 +44,7 @@ class TestsParams(unittest.TestCase):
                            'I': 'titi',
                            'num': 15,
                            'liste': [1, 'turlu'],
+                           'apath': '/gna/gna/gna',
                            'E': 'tete2',
                            }
         par2 = params.read('toto', default=default)
@@ -320,6 +322,18 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             ns=32, nc=385, sync_depth=16)
         self.assert_read_glx(bin_3b)
 
+    def test_check_ephys_file(self):
+        self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
+        bin_3b = spikeglx._mock_spikeglx_file(
+            Path(self.tdir.name).joinpath('sample3B_g0_t0.imec1.ap.bin'),
+            self.workdir / 'sample3B_g0_t0.imec1.ap.meta',
+            ns=32, nc=385, sync_depth=16)
+        self.assertEqual(hashfile.md5(bin_3b['bin_file']), "207ba1666b866a091e5bb8b26d19733f")
+        self.assertEqual(hashfile.sha1(bin_3b['bin_file']),
+                         '1bf3219c35dea15409576f6764dd9152c3f8a89c')
+        sr = spikeglx.Reader(bin_3b['bin_file'])
+        self.assertTrue(sr.verify_hash())
+
     def assert_read_glx(self, tglx):
         sr = spikeglx.Reader(tglx['bin_file'])
         dexpected = sr.channel_conversion_sample2v[sr.type] * tglx['D']
@@ -348,6 +362,10 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             # test reading a few channels
             d, _ = sr.read(slice(None), slice(300, 310))
             self.assertTrue(np.all(np.isclose(d, dexpected[:, 300:310])))
+            # test reading a few channels with a numpy array of indices
+            ind = np.array([300, 302])
+            d, _ = sr.read(slice(None), ind)
+            self.assertTrue(np.all(np.isclose(d, dexpected[:, ind])))
             # test double slicing
             d, _ = sr.read(slice(5, 10), slice(300, 310))
             self.assertTrue(np.all(np.isclose(d, dexpected[5:10, 300:310])))
@@ -360,6 +378,11 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             self.assertTrue(d.size == 0)
             a = sr.read_sync_analog()
             self.assertIsNone(a)
+            # test the read_samples method (should be deprecated ?)
+            d, _ = sr.read_samples(0, 500, ind)
+            self.assertTrue(np.all(np.isclose(d, dexpected[0:500, ind])))
+            d, _ = sr.read_samples(0, 500)
+            self.assertTrue(np.all(np.isclose(d, dexpected[0:500, :])))
         else:
             s = sr.read_sync()
             self.assertTrue(s.shape[1] == 17)
