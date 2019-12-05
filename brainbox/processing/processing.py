@@ -237,7 +237,6 @@ def get_units_bunch(spks_b, *args):
         >>> import ibllib.ephys.spikes as e_spks
         (*Note, if there is no 'alf' directory, make 'alf' directory from 'ks2' output directory):
         >>> e_spks.ks2_to_alf(path_to_ks_out, path_to_alf_out)
-        # Get a spikes bunch and filter the units.
         >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
         >>> units_b = bb.processing.get_units_bunch(spks_b)
         # Get amplitudes for unit 4.
@@ -268,15 +267,18 @@ def get_units_bunch(spks_b, *args):
     return units_b
 
 
-def filter_units(spks_b, params={'min_amp': 100, 'min_fr': 0.5, 'max_fpr': 0.1, 'rp': 0.002}):
+def filter_units(units_b, t, params={'min_amp': 100, 'min_fr': 0.5, 'max_fpr': 0.1, 'rp': 0.002}):
     '''
     Filters units according to some parameters.
 
     Parameters
     ----------
-    spks_b : bunch
-        A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
-        etc.) for all spikes.
+    units_b : bunch
+        A bunch with keys of labels of spike information (e.g. cluster IDs, times, features, etc.)
+        whose values are arrays that hold values for each unit. The arrays for each key are ordered
+        by unit ID.
+    t : float
+        Duration of the recording session.
     params : dict
         Parameters to use to filter the units:
         'min_amp' : The minimum mean amplitude (in uV) of the spikes in the unit
@@ -302,9 +304,18 @@ def filter_units(spks_b, params={'min_amp': 100, 'min_fr': 0.5, 'max_fpr': 0.1, 
         >>> import ibllib.ephys.spikes as e_spks
         (*Note, if there is no 'alf' directory, make 'alf' directory from 'ks2' output directory):
         >>> e_spks.ks2_to_alf(path_to_ks_out, path_to_alf_out)
-        # Get a spikes bunch and filter the units.
+        # Get a spikes bunch, units bunch, and filter the units.
         >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
-        >>> filtered_units_mask = bb.processing.filter_units(spks_b)
+        >>> units_b = bb.processing.get_units_bunch(spks_b, ['times', 'amps', 'clusters'])
+        >>> T = spks_b['times'][-1] - spks_b['times'][0]
+        >>> filtered_units_mask = bb.processing.filter_units(units_b, T)
+        # Get an array of the filtered units` ids.
+        filtered_units = np.where(filtered_units_mask)[0]
+    
+    2) Filter units with no minimum amplitude, a minimum firing rate of 1 Hz, and a max false
+    positive rate of 0.2, given a refractory period of 2 ms.
+        >>> filtered_units_mask = bb.processing.filter_units(
+                units_b, T, params={'min_amp': 0, 'min_fr': 1, 'max_fpr': 0.2, 'rp': 0.002})
         # Get an array of the filtered units` ids.
         filtered_units = np.where(filtered_units_mask)[0]
     '''
@@ -314,13 +325,9 @@ def filter_units(spks_b, params={'min_amp': 100, 'min_fr': 0.5, 'max_fpr': 0.1, 
     warnings.filterwarnings('ignore', r'invalid value encountered in greater')
     warnings.filterwarnings('ignore', r'invalid value encountered in less')
 
-    # Get units bunch and number of units.
-    units_b = bb.processing.get_units_bunch(spks_b, ['amps', 'times'])
-    n_units = np.max(spks_b['clusters']) + 1
-
-    # Get recording duration, and units' mean spike amps, number of spikes, firing rates,
-    # number of isi violations, and false positive rate.
-    T = spks_b['times'][-1] - spks_b['times'][0]
+    # Get units' mean spike amps, number of spikes, firing rates, number of isi violations,
+    # and false positive rate.
+    n_units = len(units_b['clusters'].keys())
     u_amps = np.zeros((n_units,))  # mean spike amplitude for each unit
     u_n_spks = np.zeros((n_units,))  # number of spikes for each unit
     u_fr = np.zeros((n_units,))  # firing rate over entire session for each unit
@@ -335,10 +342,10 @@ def filter_units(spks_b, params={'min_amp': 100, 'min_fr': 0.5, 'max_fpr': 0.1, 
         else:
             u_amps[i] = units_b['amps'][str(i)][0]
             u_n_spks[i] = len(units_b['amps'][str(i)])
-            u_fr[i] = u_n_spks[i] / T
+            u_fr[i] = u_n_spks[i] / t
             n_isi_viol = len(np.where(np.diff(units_b['times'][str(i)]) < params['rp'])[0])
             # false positive rate is min of roots of solved quadratic equation (Hill, et al. 2011)
-            c = (T * n_isi_viol) / (2 * params['rp'] * u_n_spks[i]**2)  # 3rd term in quadratic
+            c = (t * n_isi_viol) / (2 * params['rp'] * u_n_spks[i]**2)  # 3rd term in quadratic
             u_fpr[i] = np.min(np.abs(np.roots([-1, 1, c])))
 
     # Get units that don't meet `params` requirements, and empty units, and filter them out.
@@ -349,4 +356,5 @@ def filter_units(spks_b, params={'min_amp': 100, 'min_fr': 0.5, 'max_fpr': 0.1, 
          np.where(np.isnan(u_amps))[0])))
     filtered_units_mask = np.ones((n_units,))
     filtered_units_mask[units_to_rm] = 0
+
     return filtered_units_mask

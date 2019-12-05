@@ -18,16 +18,16 @@ def depth(ephys_file, spks_b, clstrs_b, chnls_b, tmplts_b, unit, n_ch=12, n_ch_p
     ----------
     ephys_file : string
         The file path to the binary ephys data.
-    spks : bunch
+    spks_b : bunch
         A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
         etc.) for all spikes.
-    clstrs : bunch
+    clstrs_b : bunch
         A clusters bunch containing fields with cluster information (e.g. amp, ch of max amp, depth
         of ch of max amp, etc.) for all clusters.
-    chnls : bunch
+    chnls_b : bunch
         A channels bunch containing fields with channel information (e.g. coordinates, indices,
         etc.) for all probe channels.
-    tmplts : bunch
+    tmplts_b : bunch
         A unit templates bunch containing fields with unit template information (e.g. template
         waveforms, etc.) for all unit templates.
     unit : numeric
