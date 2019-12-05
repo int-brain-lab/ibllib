@@ -8,7 +8,7 @@ import numpy as np
 import mtscomp
 from brainbox.core import Bunch
 from ibllib.ephys import neuropixel as neuropixel
-
+from ibllib.io import hashfile
 
 SAMPLE_SIZE = 2  # int16
 DEFAULT_BATCH_SIZE = 1e6
@@ -104,9 +104,10 @@ class Reader:
 
          :param first_sample: first sample to be read, python slice-wise
          :param last_sample:  last sample to be read, python slice-wise
+         :param channels: slice or numpy array of indices
          :return: numpy array of int16
         """
-        if not channels:
+        if channels is None:
             channels = slice(None)
         return self.read(slice(first_sample, last_sample), channels)
 
@@ -186,6 +187,18 @@ class Reader:
             self.file_bin.with_suffix('.ch').unlink()
             self.file_bin = file_out
         return file_out
+
+    def verify_hash(self):
+        """
+        Computes SHA-1 hash and returns True if it matches metadata, False otherwise
+        :return: boolean
+        """
+        if self.is_mtscomp:
+            _logger.warning("SHA1 hash is not implemented for compressed ephys. To check "
+                            "the spikeglx acquisition hash, uncompress the file first !")
+            return True
+        else:
+            return hashfile.sha1(self.file_bin).upper() == self.meta.fileSHA1
 
 
 def read(sglx_file, first_sample=0, last_sample=10000):
