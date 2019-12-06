@@ -39,9 +39,9 @@ alf_dir = os.path.join(session_path, 'alf')
 alf_probe_dir = os.path.join(alf_dir, probe)
 ephys_file_dir = os.path.join(session_path, 'raw_ephys_data', probe)
 # Find 'ap' ephys file in `ephys_file_dir`
-for i in os.listdir(ephys_file_dir):
-        if 'ap' in i and 'bin' in i:
-            ephys_file_path = os.path.join(ephys_file_dir, i)
+for file in os.listdir(ephys_file_dir):
+        if 'ap' in file and 'bin' in file:
+            ephys_file_path = os.path.join(ephys_file_dir, file)
 # Ensure directories and paths can be found
 assert os.path.isdir(ephys_file_dir) and os.path.isdir(alf_probe_dir) \
     and os.path.isabs(ephys_file_path), 'Directories set incorrectly'

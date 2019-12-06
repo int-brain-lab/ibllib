@@ -6,7 +6,6 @@ non-overlapping bins and convolving spike times with a gaussian kernel.
 import numpy as np
 import pandas as pd
 from scipy import interpolate
-import brainbox as bb
 from brainbox import core
 
 
@@ -311,7 +310,7 @@ def filter_units(units_b, t, params={'min_amp': 100, 'min_fr': 0.5, 'max_fpr': 0
         >>> filtered_units_mask = bb.processing.filter_units(units_b, T)
         # Get an array of the filtered units` ids.
         filtered_units = np.where(filtered_units_mask)[0]
-    
+
     2) Filter units with no minimum amplitude, a minimum firing rate of 1 Hz, and a max false
     positive rate of 0.2, given a refractory period of 2 ms.
         >>> filtered_units_mask = bb.processing.filter_units(
