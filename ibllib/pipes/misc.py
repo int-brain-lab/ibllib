@@ -4,9 +4,9 @@ from pathlib import Path
 
 import alf.folders as folders
 import ibllib.io.params as params
+import ibllib.io.flags as flags
 
 
-# TODO: Tests!!!!!!
 def cli_ask_default(prompt: str, default: str):
     dflt = " [default: {}]: "
     dflt = dflt.format(default)
@@ -181,25 +181,25 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
         print(resp)
         if resp not in ['y', 'r', 's', 'e', 'yes', 'rename', 'skip', 'exit']:
             return confirm_video_remote_folder(
-                local_folder=local_folder, remote_folder=remote_folder)
+                local_folder=local_folder, remote_folder=remote_folder, force=force)
         elif resp == 'y' or resp == 'yes':
-            remote_session_path = remote_folder / Path(*session_path.parts[-3:])
-            transfer_folder(
-                session_path / 'raw_video_data',
-                remote_session_path / 'raw_video_data',
-                force=force)
-            flag_file.unlink()
+            pass
         elif resp == 'r' or resp == 'rename':
-            new_session_path = rename_session(session_path)
-            remote_session_path = remote_folder / Path(*new_session_path.parts[-3:])
-            transfer_folder(
-                new_session_path / 'raw_video_data',
-                remote_session_path / 'raw_video_data')
-            flag_file.unlink()
+            session_path = rename_session(session_path)
         elif resp == 's' or resp == 'skip':
             continue
         elif resp == 'e' or resp == 'exit':
             return
+
+        remote_session_path = remote_folder / Path(*session_path.parts[-3:])
+        if not behavior_exists(remote_session_path):
+            print(f"No behavior folder found in {remote_session_path}: skipping session...")
+            return
+        transfer_folder(
+            session_path / 'raw_video_data',
+            remote_session_path / 'raw_video_data',
+            force=force)
+        flag_file.unlink()
 
 
 def confirm_ephys_remote_folder(local_folder=False, remote_folder=False,
@@ -232,43 +232,48 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False,
         move_ephys_files(str(session_path))
         # Copy wiring files
         copy_wiring_files(str(session_path), iblscripts_folder)
-        flag_file = session_path / 'transfer_me.flag'
         msg = f"Transfer to {remote_folder} with the same name?"
         resp = input(msg + "\n[y]es/[r]ename/[s]kip/[e]xit\n ^\n> ") or 'y'
         resp = resp.lower()
         print(resp)
         if resp not in ['y', 'r', 's', 'e', 'yes', 'rename', 'skip', 'exit']:
             return confirm_ephys_remote_folder(
-                local_folder=local_folder, remote_folder=remote_folder)
+                local_folder=local_folder, remote_folder=remote_folder,
+                force=force, iblscripts_folder=iblscripts_folder)
         elif resp == 'y' or resp == 'yes':
-            remote_session_path = remote_folder / Path(*session_path.parts[-3:])
-            if not behavior_exists(remote_session_path):
-                print(f"No behavior folder found in {remote_session_path}: skipping session...")
-                continue
-            transfer_folder(
-                session_path / 'raw_ephys_data',
-                remote_session_path / 'raw_ephys_data',
-                force=force)
-            flag_file.unlink()
-            if (remote_session_path / 'extract_me.flag').exists():
-                (remote_session_path / 'extract_me.flag').unlink()
+            pass
         elif resp == 'r' or resp == 'rename':
-            new_session_path = rename_session(session_path)
-            remote_session_path = remote_folder / Path(*new_session_path.parts[-3:])
-            if not behavior_exists(remote_session_path):
-                print(f"No behavior folder found in {remote_session_path}: skipping session...")
-                continue
-            transfer_folder(
-                new_session_path / 'raw_ephys_data',
-                remote_session_path / 'raw_ephys_data')
-            flag_file.unlink()
-            # if behavior extract_me.flag exists remove it, no need because of ephys flag
-            if (remote_session_path / 'extract_me.flag').exists():
-                (remote_session_path / 'extract_me.flag').unlink()
+            session_path = rename_session(session_path)
         elif resp == 's' or resp == 'skip':
             continue
         elif resp == 'e' or resp == 'exit':
             return
+
+        remote_session_path = remote_folder / Path(*session_path.parts[-3:])
+        if not behavior_exists(remote_session_path):
+            print(f"No behavior folder found in {remote_session_path}: skipping session...")
+            return
+        transfer_folder(
+            session_path / 'raw_ephys_data',
+            remote_session_path / 'raw_ephys_data',
+            force=force)
+        # if behavior extract_me.flag exists remove it, because of ephys flag
+        flag_file = session_path / 'transfer_me.flag'
+        flag_file.unlink()
+        if (remote_session_path / 'extract_me.flag').exists():
+            (remote_session_path / 'extract_me.flag').unlink()
+        # Create remote flags
+        create_ephys_flags(remote_session_path)
+
+
+def create_ephys_flags(session_folder: str or Path):
+    session_path = Path(session_folder)
+    flags.write_flag_file(session_path.joinpath('extract_ephys.flag'))
+    flags.write_flag_file(session_path.joinpath('raw_ephys_qc.flag'))
+    probe00_path = session_path / 'raw_ephys_data' / 'probe00'
+    probe01_path = session_path / 'raw_ephys_data' / 'probe01'
+    flags.write_flag_file(probe00_path.joinpath('spike_sorting.flag'))
+    flags.write_flag_file(probe01_path.joinpath('spike_sorting.flag'))
 
 
 def rename_ephys_files(session_folder: str) -> None:
@@ -450,16 +455,11 @@ def copy_wiring_files(session_folder, iblscripts_folder):
             shutil.copy(str(src_wiring_path / 'nidq.wiring.json'),
                         str(session_path / 'raw_ephys_data' / nidq_wiring_name))
     # If system is either (3A OR 3B) copy a wiring file for each ap.bin file
-    # Also create a spike_sorting.flag
-    for binf in session_path.glob('*.ap.bin'):
+    for binf in session_path.rglob('*.ap.bin'):
         wiring_name = '.'.join(str(binf.name).split('.')[:-2]) + termination
         if 'probe00' in str(binf):
             shutil.copy(str(probe00_wiring_file_path),
                         str(probe00_path / wiring_name))
-            # Create spike sorting flag
-            probe00_path.joinpath('spike_sorting.flag').touch()
         if 'probe01' in str(binf):
             shutil.copy(str(probe01_wiring_file_path),
                         str(probe01_path / wiring_name))
-            # Create spike sorting flag
-            probe01_path.joinpath('spike_sorting.flag').touch()

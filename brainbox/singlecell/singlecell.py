@@ -137,7 +137,7 @@ def calculate_peths(
     return peths, binned_spikes
 
 
-def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5):
+def firing_rate(ts, hist_win=0.01, fr_win=0.5):
     '''
     Computes the instantaneous firing rate of a unit over time by computing a histogram of spike
     counts over a specified window of time, and summing this histogram over a sliding window of
@@ -145,14 +145,8 @@ def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5):
 
     Parameters
     ----------
-    spks : bunch
-        A spikes bunch containing fields with spike information (e.g. cluster IDs, times, features,
-        etc.) for each unit.
-    unit : int
-        The unit number for which to calculate the firing rate.
-    t : str or pair of floats
-        The total time period for which the instantaneous firing rate is returned. Default: the
-        time period from `unit`'s first to last spike.
+    ts : ndarray
+        The spike timestamps from which to compute the firing rate..
     hist_win : float
         The time window (in s) to use for computing spike counts.
     fr_win : float
@@ -170,23 +164,20 @@ def firing_rate(spks, unit, t='all', hist_win=0.01, fr_win=0.5):
 
     Examples
     --------
-    1) Compute the firing rate for unit1 from the time of its first to last spike.
+    1) Compute the firing rate for unit 1 from the time of its first to last spike.
         >>> import brainbox as bb
         >>> import alf.io as aio
         >>> import ibllib.ephys.spikes as e_spks
-        # Get a spikes bunch and calculate the firing rate.
-        >>> e_spks.ks2_to_alf('path\\to\\ks_output', 'path\\to\\alf_output')
-        >>> spks = aio.load_object('path\\to\\alf_output', 'spikes')
-        >>> fr = singlecell.firing_rate(spks, 1)
+        (*Note, if there is no 'alf' directory, make 'alf' directory from 'ks2' output directory):
+        >>> e_spks.ks2_to_alf(path_to_ks_out, path_to_alf_out)
+        # Load a spikes bunch and get the timestamps for unit 1, and calculate the instantaneous
+        # firing rate.
+        >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
+        >>> unit_idxs = np.where(spks_b['clusters'] == 1)[0]
+        >>> ts = spks_b['times'][unit_idxs]
+        >>> fr = bb.singlecell.firing_rate(ts)
     '''
 
-    # Get unit timestamps.
-    unit_idxs = np.where(spks['clusters'] == unit)
-    ts = ts = spks['times'][unit_idxs]
-    if t != 'all':
-        t_first = np.where(ts > t[0])[0][0]
-        t_last = np.where(ts < t[1])[0][-1]
-        ts = ts[t_first:t_last]
     # Compute histogram of spike counts.
     t_tot = ts[-1] - ts[0]
     n_bins_hist = np.int(t_tot / hist_win)

@@ -7,23 +7,30 @@ import numpy as np
 import nrrd
 
 from brainbox.core import Bunch
+from ibllib.io import params
 
 
 def cart2sph(x, y, z):
-    """ Converts cartesian to spherical Coordinates"""
+    """
+    Converts cartesian to spherical Coordinates
+    theta: polar angle, phi: azimuth
+    """
     r = np.sqrt(x ** 2 + y ** 2 + z ** 2)
-    theta = np.arctan2(y, x) * 180 / np.pi
-    phi = np.zeros_like(r)
+    phi = np.arctan2(y, x) * 180 / np.pi
+    theta = np.zeros_like(r)
     iok = r != 0
-    phi[iok] = np.arccos(z[iok] / r[iok]) * 180 / np.pi
+    theta[iok] = np.arccos(z[iok] / r[iok]) * 180 / np.pi
     return r, theta, phi
 
 
 def sph2cart(r, theta, phi):
-    """ Converts Spherical to Cartesian coordinates"""
-    x = r * np.cos(theta / 180 * np.pi) * np.sin(phi / 180 * np.pi)
-    y = r * np.sin(theta / 180 * np.pi) * np.sin(phi / 180 * np.pi)
-    z = r * np.cos(phi / 180 * np.pi)
+    """
+    Converts Spherical to Cartesian coordinates
+    theta: polar angle, phi: azimuth
+    """
+    x = r * np.cos(phi / 180 * np.pi) * np.sin(theta / 180 * np.pi)
+    y = r * np.sin(phi / 180 * np.pi) * np.sin(theta / 180 * np.pi)
+    z = r * np.cos(theta / 180 * np.pi)
     return x, y, z
 
 
@@ -200,8 +207,7 @@ class BrainAtlas:
         tilt_line = linepts.copy()
         tilt_line[:, sxdim] = 0
         tilt_line_i = self.bc.xyz2i(tilt_line)
-        tilt_line_i[:, ssdim]
-        tile_shape = np.array([np.diff(tilt_line_i[:, 2])[0] + 1, self.bc.nxyz[sxdim]])
+        tile_shape = np.array([np.diff(tilt_line_i[:, sydim])[0] + 1, self.bc.nxyz[sxdim]])
         indx = np.arange(tile_shape[1])
         indy = np.arange(tile_shape[0])
         inds = np.linspace(*tilt_line_i[:, ssdim], tile_shape[0])
@@ -356,23 +362,30 @@ def AllenAtlas(res_um=25):
     :return: atlas.BrainAtlas
     """
     # Bregma indices for the 10um Allen Brain Atlas, mlapdv
-    INDICES_BREGMA = np.array([1140 - (570 + 3.9), 540, 0 + 33.2])
-    # TODO: distribute and store the Atlas using parameters
-    PATH_ATLAS = '/datadisk/BrainAtlas/ATLASES/Allen/'
-    FILE_REGIONS = Path(__file__).parent.joinpath('allen_structure_tree.csv')
+    pdefault = {
+        'PATH_ATLAS': '/datadisk/BrainAtlas/ATLASES/Allen/',
+        'FILE_REGIONS': str(Path(__file__).parent.joinpath('allen_structure_tree.csv')),
+        'INDICES_BREGMA': list(np.array([1140 - (570 + 3.9), 540, 0 + 33.2]))
+    }
+    p = params.read('ibl_histology', default=pdefault)
+    if not Path(p.PATH_ATLAS).exists():
+        raise NotImplementedError("Atlas doesn't exist ! Mock option not implemented yet")
+        # TODO: mock atlas to get only the coordinate framework
+        pass
+    params.write('ibl_histology', p)
     # file_image = Path(path_atlas).joinpath(f'ara_nissl_{res_um}.nrrd')
-    file_image = Path(PATH_ATLAS).joinpath(f'average_template_{res_um}.nrrd')
-    file_label = Path(PATH_ATLAS).joinpath(f'annotation_{res_um}.nrrd')
+    file_image = Path(p.PATH_ATLAS).joinpath(f'average_template_{res_um}.nrrd')
+    file_label = Path(p.PATH_ATLAS).joinpath(f'annotation_{res_um}.nrrd')
     image, header = nrrd.read(file_image, index_order='C')  # dv, ml, ap
     image = np.swapaxes(np.swapaxes(image, 2, 0), 1, 2)  # image[iap, iml, idv]
     label, header = nrrd.read(file_label, index_order='C')  # dv, ml, ap
     label = np.swapaxes(np.swapaxes(label, 2, 0), 1, 2)  # label[iap, iml, idv]
-    df_regions = pd.read_csv(FILE_REGIONS)
+    df_regions = pd.read_csv(p.FILE_REGIONS)
     regions = BrainRegions(id=df_regions.id.values,
                            name=df_regions.name.values,
                            acronym=df_regions.acronym.values)
     xyz2dims = np.array([1, 0, 2])
     dims2xyz = np.array([1, 0, 2])
     dxyz = res_um * 1e-6 * np.array([1, -1, -1])
-    ibregma = (INDICES_BREGMA * 10 / res_um)
+    ibregma = (np.array(p.INDICES_BREGMA) * 10 / res_um)
     return BrainAtlas(image, label, regions, dxyz, ibregma, dims2xyz=dims2xyz, xyz2dims=xyz2dims)
