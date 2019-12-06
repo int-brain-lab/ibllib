@@ -311,6 +311,14 @@ def get_session_path(path_object):
     :return:
     """
     path_object = Path(path_object)
-    s = re.search(rf'{os.sep}\d\d\d\d-\d\d-\d\d{os.sep}\d\d\d', str(path_object), flags=0)
+    s = _regexp_session_path(path_object, os.sep)
     if s:
         return Path(str(path_object)[:s.span()[-1]])
+
+
+def _regexp_session_path(path_object, separator):
+    """
+    Subfunction to be able to test cross-platform
+    """
+    return re.search(rf'/\d\d\d\d-\d\d-\d\d/\d\d\d',
+                     str(path_object).replace(separator, '/'), flags=0)

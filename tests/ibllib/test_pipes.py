@@ -3,7 +3,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import alf.io
 import ibllib.pipes.extract_session
 from ibllib.pipes import experimental_data, misc
 
@@ -42,15 +41,6 @@ class TestExtractors(unittest.TestCase):
         for to in task_out:
             out = ibllib.pipes.extract_session.get_task_extractor_type(to[0])
             self.assertEqual(out, to[1])
-
-    def test_get_session_folder(self):
-        inp = (Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001/raw_behavior_data/'
-                    '_iblrig_micData.raw.wav'),
-               Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),)
-        out = (Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),
-               Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),)
-        for i, o in zip(inp, out):
-            self.assertEqual(o, alf.io.get_session_path(i))
 
 
 class TestPipesMisc(unittest.TestCase):
@@ -274,7 +264,6 @@ class TestPipesMisc(unittest.TestCase):
         self.assertFalse(spike_sorting0.exists())
         self.assertFalse(spike_sorting1.exists())
 
-# TODO: test copy wirings
     def tearDown(self):
         shutil.rmtree(self.root_test_folder, ignore_errors=True)
 
