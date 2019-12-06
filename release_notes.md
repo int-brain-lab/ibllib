@@ -1,3 +1,6 @@
+### Release Notes 1.3.10 Hotfix
+-   cross-platform get of session folder for rig computer copy to server
+
 ### Release Notes 1.3.9
 -   spikeglx.verify_hash() method to check file integrity after transfers/manipulations
 -   create wirings settings files on ephys computer transfer to server
