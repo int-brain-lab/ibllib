@@ -37,7 +37,7 @@ if need_load:
     # you can find all sessions containing raw data by looking into sinfos:
     # eids, sinfos = one.search(
     #    datasets=['ephysData.raw.ap', 'spikes.times'], task_protocol='certification', details=True)
-    
+
     # -- LOAD ALF DATA
     alf_info = one.load(eid, download_only=True)  # Download the whole alf folder
     alf_info = alf_info[0]
@@ -46,7 +46,7 @@ if need_load:
     # -- LOAD RAW DATA
     file_paths_raw = one.load(eid, dataset_types='ephysData.raw.ap', download_only=True)
     file_paths_raw = file_paths_raw[0]
-    path_ephys = file_paths_raw.local_path 
+    path_ephys = file_paths_raw.local_path
     # TODO get the file
 else:
     path_ephys = '/Users/gaelle/Downloads/FlatIron/mainenlab/Subjects/ZM_2407/2019-11-05/003/raw_ephys_data/probe_00/_spikeglx_ephysData_probe00.raw_g0_t0.imec.ap.cbin'
