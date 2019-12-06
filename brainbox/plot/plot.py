@@ -110,7 +110,7 @@ def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cma
     ax.set_title('{feat} Variance'.format(feat=feat_name))
     ax.set_ylabel('Unit Number (sorted by depth)')
     ax.set_xlabel('Variance')
-    cbar.set_label('Depth', rotation=0)
+    cbar.set_label('Depth', rotation=-90)
 
     return var_vals, p_vals
 
@@ -364,7 +364,7 @@ def amp_heatmap(ephys_file, ts, ch, sr=30000, n_ch_probe=385, dtype='int16', cma
     ax.set_title('Voltage Heatmap')
     fig = ax.figure
     cbar = fig.colorbar(cbar_map, ax=ax)
-    cbar.set_label('V', rotation=90)
+    cbar.set_label('V', rotation=-90)
 
     return v_vals
 
