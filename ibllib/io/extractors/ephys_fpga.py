@@ -19,7 +19,6 @@ _logger = logging.getLogger('ibllib')
 SYNC_BATCH_SIZE_SAMPLES = 2 ** 18  # number of samples to read at once in bin file for sync
 WHEEL_RADIUS_CM = 3.1
 WHEEL_TICKS = 1024
-DEBUG_PLOTS = False
 
 CHMAPS = {'3A':
           {'ap':
@@ -306,7 +305,7 @@ def extract_wheel_sync(sync, output_path=None, save=False, chmap=None):
     return wheel
 
 
-def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None):
+def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, display=False):
     """
     Extract wheel positions and times from sync fronts dictionary
 
@@ -315,6 +314,7 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None):
     :param save: True/False
     :param chmap: dictionary containing channel index. Default to constant.
         chmap = {'bpod': 7, 'frame2ttl': 12, 'audio': 15}
+    :param display: show the full session sync pulses display
     :return: trials dictionary
     """
     bpod = _get_sync_fronts(sync, chmap['bpod'])
@@ -331,27 +331,30 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None):
     t_stim_off = frame2ttl['times'][ind]
     t_stim_freeze = frame2ttl['times'][np.maximum(ind - 1, 0)]
 
-    if DEBUG_PLOTS:
+    if display:
         plt.figure()
         ax = plt.gca()
+        r0 = _get_sync_fronts(sync, chmap['rotary_encoder_0'])
         plots.squares(bpod['times'], bpod['polarities'] * 0.4 + 1,
                       ax=ax, label='bpod=1', color='k')
         plots.squares(frame2ttl['times'], frame2ttl['polarities'] * 0.4 + 2,
                       ax=ax, label='frame2ttl=2', color='k')
         plots.squares(audio['times'], audio['polarities'] * 0.4 + 3,
                       ax=ax, label='audio=3', color='k')
+        plots.squares(r0['times'], r0['polarities'] * 0.4 + 4,
+                      ax=ax, label='r0=4', color='k')
         plots.vertical_lines(t_ready_tone_in, ymin=0, ymax=4,
-                             ax=ax, label='ready tone in', color='b', linewidth=0.5)
+                             ax=ax, label='ready tone in', color='b', linewidth=1)
         plots.vertical_lines(t_trial_start, ymin=0, ymax=4,
-                             ax=ax, label='start_trial', color='m', linewidth=0.5)
+                             ax=ax, label='start_trial', color='m', linewidth=1)
         plots.vertical_lines(t_error_tone_in, ymin=0, ymax=4,
-                             ax=ax, label='error tone', color='r', linewidth=0.5)
+                             ax=ax, label='error tone', color='r', linewidth=1)
         plots.vertical_lines(t_valve_open, ymin=0, ymax=4,
-                             ax=ax, label='valve open', color='g', linewidth=0.5)
+                             ax=ax, label='valve open', color='g', linewidth=1)
         plots.vertical_lines(t_stim_freeze, ymin=0, ymax=4,
-                             ax=ax, label='stim freeze', color='y', linewidth=0.5)
+                             ax=ax, label='stim freeze', color='y', linewidth=1)
         plots.vertical_lines(t_stim_off, ymin=0, ymax=4,
-                             ax=ax, label='stim off', color='c', linewidth=0.5)
+                             ax=ax, label='stim off', color='c', linewidth=1)
         ax.legend()
 
     # stimOn_times: first fram2ttl change after trial start
