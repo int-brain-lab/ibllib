@@ -17,7 +17,7 @@ from ibllib.io.spikeglx import glob_ephys_files, get_neuropixel_version_from_fil
 _logger = logging.getLogger('ibllib')
 
 SYNC_BATCH_SIZE_SAMPLES = 2 ** 18  # number of samples to read at once in bin file for sync
-WHEEL_RADIUS_CM = 3.1
+WHEEL_RADIUS_CM = 1
 WHEEL_TICKS = 1024
 
 CHMAPS = {'3A':
@@ -149,46 +149,48 @@ def _bpod_events_extraction(bpod_t, bpod_fronts):
     return t_trial_start, t_valve_open, i_iti_in
 
 
-def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb):
+def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, radius=1,
+                                          coding='x4'):
     """
-    Extracts the rotary encoder absolute position (cm) as function of time from fronts detected
-    on the 2 channels
+    Extracts the rotary encoder absolute position as function of time from fronts detected
+    on the 2 channels. Outputs in units of radius parameters, by default radians
+    Coding options detailed here: http://www.ni.com/tutorial/7109/pt/
 
     :param ta: time of fronts on channel A
     :param pa: polarity of fronts on channel A
     :param tb: time of fronts on channel B
     :param pb: polarity of fronts on channel B
+    :param ticks: number of ticks corresponding to a full revolution (1024 for IBL rotary encoder)
+    :param radius: radius of the wheel. Defaults to 1 for an output in radians
+    :param coding: x1, x2 or x4 coding (IBL default is x4)
     :return: indices vector (ta) and position vector
     """
-    p = pb[np.searchsorted(tb, ta) - 1] * pa
-    p = np.cumsum(p) / WHEEL_TICKS * np.pi * WHEEL_RADIUS_CM
-    return ta, p
-
-
-def _rotary_encoder_positions_from_gray_code(channela, channelb):
-    """
-    Extracts the rotary encoder absolute position (cm) as function of time from digital recording
-    of the 2 channels.
-
-    Rotary Encoder implements X1 encoding: http://www.ni.com/tutorial/7109/en/
-    rising A  & B high = +1
-    rising A  & B low = -1
-    falling A & B high = -1
-    falling A & B low = +1
-
-    :param channelA: Vector of rotary encoder digital recording channel A
-    :type channelA: numpy array
-    :param channelB: Vector of rotary encoder digital recording channel B
-    :type channelB: numpy array
-    :return: indices vector and position vector
-    """
-    # detect rising and falling fronts
-    t, fronts = dsp.fronts(channela)
-    # apply X1 logic to get positions in ticks
-    p = (channelb[t] * 2 - 1) * fronts
-    # convert position in cm
-    p = np.cumsum(p) / WHEEL_TICKS * np.pi * WHEEL_RADIUS_CM
-    return t, p
+    if coding == 'x1':
+        ia = np.searchsorted(tb, ta[pa == 1])
+        ia = ia[ia < ta.size]
+        ia = ia[pa[ia] == 1]
+        ib = np.searchsorted(ta, tb[pb == 1])
+        ib = ib[ib < tb.size]
+        ib = ib[pb[ib] == 1]
+        t = np.r_[ta[ia], tb[ib]]
+        p = np.r_[ia * 0 + 1, ib * 0 - 1]
+        ordre = np.argsort(t)
+        t = t[ordre]
+        p = p[ordre]
+        p = np.cumsum(p) / ticks * np.pi * 2 * radius
+        return t, p
+    elif coding == 'x2':
+        p = pb[np.searchsorted(tb, ta) - 1] * pa
+        p = - np.cumsum(p) / ticks * np.pi * 2 * radius / 2
+        return ta, p
+    elif coding == 'x4':
+        p = np.r_[pb[np.searchsorted(tb, ta) - 1] * pa, -pa[np.searchsorted(ta, tb) - 1] * pb]
+        t = np.r_[ta, tb]
+        ordre = np.argsort(t)
+        t = t[ordre]
+        p = p[ordre]
+        p = - np.cumsum(p) / ticks * np.pi * 2 * radius / 4
+        return t, p
 
 
 def _audio_events_extraction(audio_t, audio_fronts):
@@ -294,7 +296,8 @@ def extract_wheel_sync(sync, output_path=None, save=False, chmap=None):
     channela = _get_sync_fronts(sync, chmap['rotary_encoder_0'])
     channelb = _get_sync_fronts(sync, chmap['rotary_encoder_1'])
     wheel['re_ts'], wheel['re_pos'] = _rotary_encoder_positions_from_fronts(
-        channela['times'], channela['polarities'], channelb['times'], channelb['polarities'])
+        channela['times'], channela['polarities'], channelb['times'], channelb['polarities'],
+        ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4')
     if save and output_path:
         output_path = Path(output_path)
         # last phase of the process is to save the alf data-files
@@ -331,32 +334,6 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
     t_stim_off = frame2ttl['times'][ind]
     t_stim_freeze = frame2ttl['times'][np.maximum(ind - 1, 0)]
 
-    if display:
-        plt.figure()
-        ax = plt.gca()
-        r0 = _get_sync_fronts(sync, chmap['rotary_encoder_0'])
-        plots.squares(bpod['times'], bpod['polarities'] * 0.4 + 1,
-                      ax=ax, label='bpod=1', color='k')
-        plots.squares(frame2ttl['times'], frame2ttl['polarities'] * 0.4 + 2,
-                      ax=ax, label='frame2ttl=2', color='k')
-        plots.squares(audio['times'], audio['polarities'] * 0.4 + 3,
-                      ax=ax, label='audio=3', color='k')
-        plots.squares(r0['times'], r0['polarities'] * 0.4 + 4,
-                      ax=ax, label='r0=4', color='k')
-        plots.vertical_lines(t_ready_tone_in, ymin=0, ymax=4,
-                             ax=ax, label='ready tone in', color='b', linewidth=1)
-        plots.vertical_lines(t_trial_start, ymin=0, ymax=4,
-                             ax=ax, label='start_trial', color='m', linewidth=1)
-        plots.vertical_lines(t_error_tone_in, ymin=0, ymax=4,
-                             ax=ax, label='error tone', color='r', linewidth=1)
-        plots.vertical_lines(t_valve_open, ymin=0, ymax=4,
-                             ax=ax, label='valve open', color='g', linewidth=1)
-        plots.vertical_lines(t_stim_freeze, ymin=0, ymax=4,
-                             ax=ax, label='stim freeze', color='y', linewidth=1)
-        plots.vertical_lines(t_stim_off, ymin=0, ymax=4,
-                             ax=ax, label='stim off', color='c', linewidth=1)
-        ax.legend()
-
     # stimOn_times: first fram2ttl change after trial start
     trials = Bunch({
         'ready_tone_in': _assign_events_to_trial(t_trial_start, t_ready_tone_in, take='first'),
@@ -374,6 +351,36 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
     trials['feedback_times'][ind_err] = trials['error_tone_in'][ind_err]
     trials['intervals'] = np.c_[t_trial_start, trials['iti_in']]
     trials['response_times'] = trials['stimOn_times']
+
+    if display:
+        width = 1.5
+        ymax = 5
+        plt.figure()
+        ax = plt.gca()
+        r0 = _get_sync_fronts(sync, chmap['rotary_encoder_0'])
+        plots.squares(bpod['times'], bpod['polarities'] * 0.4 + 1,
+                      ax=ax, label='bpod=1', color='k')
+        plots.squares(frame2ttl['times'], frame2ttl['polarities'] * 0.4 + 2,
+                      ax=ax, label='frame2ttl=2', color='k')
+        plots.squares(audio['times'], audio['polarities'] * 0.4 + 3,
+                      ax=ax, label='audio=3', color='k')
+        plots.squares(r0['times'], r0['polarities'] * 0.4 + 4,
+                      ax=ax, label='r0=4', color='k')
+        plots.vertical_lines(t_ready_tone_in, ymin=0, ymax=ymax,
+                             ax=ax, label='ready tone in', color='b', linewidth=width)
+        plots.vertical_lines(t_trial_start, ymin=0, ymax=ymax,
+                             ax=ax, label='start_trial', color='m', linewidth=width)
+        plots.vertical_lines(t_error_tone_in, ymin=0, ymax=ymax,
+                             ax=ax, label='error tone', color='r', linewidth=width)
+        plots.vertical_lines(t_valve_open, ymin=0, ymax=ymax,
+                             ax=ax, label='valve open', color='g', linewidth=width)
+        plots.vertical_lines(t_stim_freeze, ymin=0, ymax=ymax,
+                             ax=ax, label='stim freeze', color='y', linewidth=width)
+        plots.vertical_lines(t_stim_off, ymin=0, ymax=ymax,
+                             ax=ax, label='stim off', color='c', linewidth=width)
+        plots.vertical_lines(trials['stimOn_times'], ymin=0, ymax=ymax,
+                             ax=ax, label='stim on', color='tab:orange', linewidth=width)
+        ax.legend()
 
     if save and output_path:
         output_path = Path(output_path)
