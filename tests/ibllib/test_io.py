@@ -8,7 +8,7 @@ import shutil
 import numpy as np
 
 from ibllib.io import params, flags, jsonable, spikeglx, hashfile
-
+import ibllib.io.raw_data_loaders as raw
 
 class TestsParams(unittest.TestCase):
 
@@ -132,6 +132,11 @@ class TestsRawDataLoaders(unittest.TestCase):
         # if file-list is True it means all files and file_list should be empty after read
         flags.write_flag_file(self.tempfile.name, file_list=True)
         self.assertEqual(flags.read_flag_file(self.tempfile.name), True)
+
+    def test_load_encoder_trial_info(self):
+        self.session = Path('tests/ibllib/extractors/data/session_biased_ge5')
+        data = raw.load_encoder_trial_info(str(self.session))
+        self.assertTrue(data is not None)
 
     def tearDown(self):
         self.tempfile.close()

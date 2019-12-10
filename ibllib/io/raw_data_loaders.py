@@ -283,12 +283,13 @@ def load_encoder_trial_info(session_path):
          'stim_angle',    # Angle of Gabor 0 = Vertical      'numpy.float64'
          'stim_gain',     # Wheel gain (mm/º of stim)        'numpy.float64'
          'stim_sigma',    # Size of patch                    'numpy.float64'
+         'stim_phase',    # Phase of gabor                    'numpy.float64'
          'bns_ts' ]       # Bonsai Timestamp                 'pandas.Timestamp'
         # pd.to_datetime(data.bns_ts) to work in datetimes
 
     :param session_path: Absoulte path of session folder
     :type session_path: str
-    :return: dataframe w/ 8 cols and ntrials lines
+    :return: dataframe w/ 9 cols and ntrials lines
     :rtype: Pandas.DataFrame
     """
     if session_path is None:
@@ -298,10 +299,11 @@ def load_encoder_trial_info(session_path):
     if not path:
         return None
     data = pd.read_csv(path, sep=' ', header=None)
-    data = data.drop([8], axis=1)
+    data = data.drop([9], axis=1)
     data.columns = ['trial_num', 'stim_pos_init', 'stim_contrast', 'stim_freq',
-                    'stim_angle', 'stim_gain', 'stim_sigma', 'bns_ts']
-    return _groom_wheel_data_lt5(data, label='_iblrig_encoderEvents.raw.ssv', path=path)
+                    'stim_angle', 'stim_gain', 'stim_sigma', 'stim_phase', 'bns_ts']
+    # return _groom_wheel_data_lt5(data, label='_iblrig_encoderEvents.raw.ssv', path=path)
+    return data
 
 
 def load_ambient_sensor(session_path):
