@@ -17,7 +17,7 @@ from ibllib.io.spikeglx import glob_ephys_files, get_neuropixel_version_from_fil
 _logger = logging.getLogger('ibllib')
 
 SYNC_BATCH_SIZE_SAMPLES = 2 ** 18  # number of samples to read at once in bin file for sync
-WHEEL_RADIUS_CM = 1
+WHEEL_RADIUS_CM = 3.1
 WHEEL_TICKS = 1024
 
 CHMAPS = {'3A':
@@ -155,6 +155,7 @@ def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, rad
     Extracts the rotary encoder absolute position as function of time from fronts detected
     on the 2 channels. Outputs in units of radius parameters, by default radians
     Coding options detailed here: http://www.ni.com/tutorial/7109/pt/
+    Here output is clockwise from subject perspective
 
     :param ta: time of fronts on channel A
     :param pa: polarity of fronts on channel A
@@ -177,11 +178,11 @@ def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, rad
         ordre = np.argsort(t)
         t = t[ordre]
         p = p[ordre]
-        p = np.cumsum(p) / ticks * np.pi * 2 * radius
+        p = - np.cumsum(p) / ticks * np.pi * 2 * radius
         return t, p
     elif coding == 'x2':
         p = pb[np.searchsorted(tb, ta) - 1] * pa
-        p = - np.cumsum(p) / ticks * np.pi * 2 * radius / 2
+        p = np.cumsum(p) / ticks * np.pi * 2 * radius / 2
         return ta, p
     elif coding == 'x4':
         p = np.r_[pb[np.searchsorted(tb, ta) - 1] * pa, -pa[np.searchsorted(ta, tb) - 1] * pb]
@@ -189,7 +190,7 @@ def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, rad
         ordre = np.argsort(t)
         t = t[ordre]
         p = p[ordre]
-        p = - np.cumsum(p) / ticks * np.pi * 2 * radius / 4
+        p = np.cumsum(p) / ticks * np.pi * 2 * radius / 4
         return t, p
 
 
