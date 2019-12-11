@@ -13,7 +13,7 @@ Run the following to set-up the workspace to run the docstring examples:
 # Load the alf spikes bunch and clusters bunch, and get a units bunch.
 >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
 >>> clstrs_b = aio.load_object(path_to_alf_out, 'clusters')
->>> units_b = bb.processing.get_units_bunch(spks_b)  # may take a few mins to compute 
+>>> units_b = bb.processing.get_units_bunch(spks_b)  # may take a few mins to compute
 """
 
 import os.path as op
@@ -76,7 +76,7 @@ def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cma
 
     # Calculate variances for all units
     p_vals_b, variances_b = bb.metrics.unit_stability(
-            units_b, units=units, feat_names=[feat_name], dist=dist, test=test)
+        units_b, units=units, feat_names=[feat_name], dist=dist, test=test)
     var_vals = np.array(tuple(variances_b[feat_name].values()))
     p_vals = np.array(tuple(p_vals_b[feat_name].values()))
 
@@ -107,15 +107,15 @@ def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cma
     tick_labels = [int(max_d) * tick for tick in (0, 0.2, 0.4, 0.6, 0.8, 1.0)]
     cbar.set_ticks(cbar.get_ticks())  # must call `set_ticks` to call `set_ticklabels`
     cbar.set_ticklabels(tick_labels)
-    ax.set_title('{feat} variance'.format(feat=feat_name))
-    ax.set_ylabel('unit number (sorted by depth)')
-    ax.set_xlabel('variance')
-    cbar.set_label('depth', rotation=0)
+    ax.set_title('{feat} Variance'.format(feat=feat_name))
+    ax.set_ylabel('Unit Number (sorted by depth)')
+    ax.set_xlabel('Variance')
+    cbar.set_label('Depth', rotation=-90)
 
     return var_vals, p_vals
 
 
-def feat_cutoff(feat, feat_name, unit, spks_per_bin=20, sigma=5, min_num_bins=50, ax=None):
+def feat_cutoff(feat, feat_name, spks_per_bin=20, sigma=5, min_num_bins=50, ax=None):
     '''
     Plots the pdf of an estimated symmetric spike feature distribution, with a vertical cutoff line
     that indicates the approximate fraction of spikes missing from the distribution, assuming the
@@ -127,8 +127,6 @@ def feat_cutoff(feat, feat_name, unit, spks_per_bin=20, sigma=5, min_num_bins=50
         The spikes' feature values.
     feat_name : string
         The spike feature to plot.
-    unit : int
-        The unit from which the spike feature distribution comes from.
     spks_per_bin : int (optional)
         The number of spikes per bin from which to compute the spike feature histogram.
     sigma : int (optional)
@@ -160,7 +158,7 @@ def feat_cutoff(feat, feat_name, unit, spks_per_bin=20, sigma=5, min_num_bins=50
     # Calculate the feature distribution histogram and fraction of spikes missing.
     fraction_missing, pdf, cutoff_idx = \
         bb.metrics.feat_cutoff(feat, spks_per_bin, sigma, min_num_bins)
-    
+
     # Plot.
     if ax is None:  # create two axes
         fig, ax = plt.subplots(nrows=1, ncols=2)
@@ -169,7 +167,7 @@ def feat_cutoff(feat, feat_name, unit, spks_per_bin=20, sigma=5, min_num_bins=50
         ax[0].hist(feat, bins=num_bins)
         ax[0].set_xlabel('{0}'.format(feat_name))
         ax[0].set_ylabel('count')
-        ax[0].set_title('histogram of {0} for unit{1}'.format(feat_name, str(unit)))
+        ax[0].set_title('histogram of {0}'.format(feat_name))
         ax[1].plot(pdf)
         ax[1].vlines(cutoff_idx, 0, np.max(pdf), colors='r')
         ax[1].set_xlabel('bin number')
@@ -192,7 +190,7 @@ def wf_comp(ephys_file, ts1, ts2, ch, sr=30000, n_ch_probe=385, dtype='int16', c
             col=['b', 'r'], ax=None):
     '''
     Plots two different sets of waveforms across specified channels after (optionally)
-    common-average-referencing. In this way, waveforms can be compared to see if there is, 
+    common-average-referencing. In this way, waveforms can be compared to see if there is,
     e.g. drift during the recording, or if two units should be merged, or one unit should be split.
 
     Parameters
@@ -200,7 +198,7 @@ def wf_comp(ephys_file, ts1, ts2, ch, sr=30000, n_ch_probe=385, dtype='int16', c
     ephys_file : string
         The file path to the binary ephys data.
     ts1 : array_like
-        A set of timestamps for which to compare waveforms with `ts2`. 
+        A set of timestamps for which to compare waveforms with `ts2`.
     ts2: array_like
         A set of timestamps for which to compare waveforms with `ts1`.
     ch : array-like
@@ -366,7 +364,7 @@ def amp_heatmap(ephys_file, ts, ch, sr=30000, n_ch_probe=385, dtype='int16', cma
     ax.set_title('Voltage Heatmap')
     fig = ax.figure
     cbar = fig.colorbar(cbar_map, ax=ax)
-    cbar.set_label('V', rotation=90)
+    cbar.set_label('V', rotation=-90)
 
     return v_vals
 
@@ -416,7 +414,7 @@ def firing_rate(ts, hist_win=0.01, fr_win=0.5, n_bins=10, show_fr_cv=True, ax=No
         >>> ts = units_b['times']['1']
         >>> fr, cv, cvs = bb.plot.firing_rate(ts)
     '''
-    
+
     if ax is None:
         ax = plt.gca()
     if not(show_fr_cv):  # compute just the firing rate
