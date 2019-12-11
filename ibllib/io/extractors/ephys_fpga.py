@@ -345,13 +345,13 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
         'iti_in': _assign_events_to_trial(t_trial_start, t_iti_in)
     })
     # goCue_times corresponds to the tone_in event
-    trials['goCue_times'] = trials['ready_tone_in']
+    trials['goCue_times'] = np.copy(trials['ready_tone_in'])
     # feedback times are valve open on good trials and error tone in on error trials
-    trials['feedback_times'] = trials['valve_open']
+    trials['feedback_times'] = np.copy(trials['valve_open'])
     ind_err = np.isnan(trials['valve_open'])
     trials['feedback_times'][ind_err] = trials['error_tone_in'][ind_err]
     trials['intervals'] = np.c_[t_trial_start, trials['iti_in']]
-    trials['response_times'] = trials['stimOn_times']
+    trials['response_times'] = np.copy(trials['stimOn_times'])
 
     if display:
         width = 1.5
