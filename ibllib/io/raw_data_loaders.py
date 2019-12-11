@@ -151,6 +151,16 @@ def _load_encoder_events_file_ge5(file_path):
     return _groom_wheel_data_ge5(data, label='_iblrig_encoderEvents.raw.ssv', path=file_path)
 
 
+def load_stim_position_screen(session_path):
+    path = Path(session_path).joinpath("raw_behavior_data")
+    path = next(path.glob("_iblrig_stimPositionScreen.raw*.csv"), None)
+
+    data = pd.read_csv(path, sep=',', header=None, error_bad_lines=False)
+    data.columns = ['contrast', 'position', 'bns_ts']
+    data[2] = pd.to_datetime(data[2])
+    return data
+
+
 def load_encoder_events(session_path, settings=False):
     """
     Load Rotary Encoder (RE) events raw data file.
