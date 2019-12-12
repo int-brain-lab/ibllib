@@ -99,8 +99,7 @@ def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cma
     # Plot depth-color-coded h bar plot of variances for `feature` for each unit, where units are
     # sorted descendingly by depth along y-axis.
     if ax is None:
-        ax = plt.gca()
-    fig = ax.figure
+        fig, ax = plt.subplots()
     ax.barh(y=[int(unit) for unit in good_units], width=var_vals[np.argsort(depths)], color=rgba)
     cbar = fig.colorbar(plt.cm.ScalarMappable(cmap=cmap), ax=ax)
     max_d = np.max(depths)
@@ -416,7 +415,7 @@ def firing_rate(ts, hist_win=0.01, fr_win=0.5, n_bins=10, show_fr_cv=True, ax=No
     '''
 
     if ax is None:
-        ax = plt.gca()
+        fig, ax = plt.subplots()
     if not(show_fr_cv):  # compute just the firing rate
         fr = bb.singlecell.firing_rate(ts, hist_win=hist_win, fr_win=fr_win)
     else:  # compute firing rate and coefficients of variation

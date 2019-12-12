@@ -1,9 +1,10 @@
 '''
 This script gives examples of how to load data from ONE and call brainbox functions.
 
-*Note*: This module assumes that the required data for a particular eid is already saved in the
-CACHE_DIR specified by `.one_params` (the default location to which ONE saves data when running the
-`load` method). It is recommended to download *all* data for a particular eid, e.g.:
+*Note*: This module assumes that your python path has access to 'ibllib', and that the required
+data for a particular eid is already saved in the CACHE_DIR specified by `.one_params` (the default
+location to which ONE saves data when running the `load` method). It is recommended to download
+*all* data for a particular eid, e.g.:
     `from oneibl.one import ONE`
     `one = ONE()`
     # get eid
@@ -60,47 +61,62 @@ chnls_b = aio.load_object(path_to_alf_out, 'channels')
 tmplts_b = aio.load_object(path_to_alf_out, 'templates')
 
 # Convert spikes bunch into a units bunch
-units_b = bb.processing.get_units_bunch(spks_b)
+units_b = bb.processing.get_units_bunch(spks_b)  # this may take a few mins
 unit4_amps = units_b['amps']['4']  # get amplitudes for unit 4.
 
 # Filter units according to some parameters
-filtered_units_mask = bb.processing.filter_units(spks_b, params={'min_amp': 100, 'min_fr': 0.5,
-                                                                 'max_fpr': 0.1, 'rp': 0.002})
+T = spks_b['times'][-1] - spks_b['times'][0]
+filtered_units_mask = bb.processing.filter_units(
+    units_b, T, params={'min_amp': 0, 'min_fr': 0, 'max_fpr': 1, 'rp': 0.002})
 filtered_units = np.where(filtered_units_mask)[0]  # get an array of the filtered units` ids.
 
 # Extract waveforms from binary ephys file
 # Get the timestamps and 20 channels around the max amp channel for unit1, and extract the
 # two sets of waveforms.
+n_ch_wf = 20  # number of channels on which to extract waveforms
+n_ch_probe = 385  # number of channels in recording
 ts = units_b['times']['1']
 max_ch = max_ch = clstrs_b['channels'][1]
-if max_ch < 10:  # take only channels greater than `max_ch`.
-    ch = np.arange(max_ch, max_ch + 20)
-elif (max_ch + 10) > 385:  # take only channels less than `max_ch`.
-    ch = np.arange(max_ch - 20, max_ch)
+if max_ch < (n_ch_wf // 2):  # take only channels greater than `max_ch`.
+    ch = np.arange(max_ch, max_ch + n_ch_wf)
+elif (max_ch + (n_ch_wf // 2)) > n_ch_probe:  # take only channels less than `max_ch`.
+    ch = np.arange(max_ch - n_ch_wf, max_ch)
 else:  # take `n_c_ch` around `max_ch`.
-    ch = np.arange(max_ch - 10, max_ch + 10)
-wf = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, t=2.0, car=False)
+    ch = np.arange(max_ch - (n_ch_wf // 2), max_ch + (n_ch_wf // 2))
+
+# Waveform extraction may take a few mins
+wf = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, t=2.0, car=False)  
 wf_car = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, t=2.0, car=True)
 
+# Plot amplitude heatmap for a unit with and without car
+V_vals = bb.plot.amp_heatmap(path_to_ephys_file, ts, ch, car=False)
+fig1 = plt.gcf()
+V_vals_car = bb.plot.amp_heatmap(path_to_ephys_file, ts, ch, car=True)  # may take a few mins
+fig2 = plt.gcf()
+
 # Plot variances of a spike feature for all units and for a subset of units
-fig1, var_vals, p_vals = bb.plot.feat_vars(units_b, units=[], feat_name='amps')
-fig2, var_vals, p_vals = bb.plot.feat_vars(units_b, units=filtered_units, feat_name='amps')
+var_vals, p_vals = bb.plot.feat_vars(units_b, feat_name='amps')
+fig3 = plt.gcf()
+var_vals_f, p_vals_f = bb.plot.feat_vars(units_b, units=filtered_units, feat_name='amps')
+fig4 = plt.gcf()
 
 # Plot distribution cutoff of a spike feature for a single unit
-fig3, fraction_missing = bb.plot.feat_cutoff(units_b, unit=1, feat_name='amps')
+amps = units_b['amps']['1']
+fraction_missing = bb.plot.feat_cutoff(amps, feat_name='amps')
+fig5 = plt.gcf()
 
 # Plot and compare two sets of waveforms from two different time epochs for a single unit
 ts = units_b['times']['1']
 ts1 = ts[np.where(ts<60)[0]]
 ts2 = ts[np.where(ts>180)[0][:len(ts1)]]
-fig4, wf_1, wf_2, s = bb.plot.single_unit_wf_comp(path_to_ephys_file, units_b, clstrs_b, unit=1,
-                                                 ts1=ts1, ts2=ts2, n_ch=20, car=True)
+wf_1, wf_2, s = bb.plot.wf_comp(path_to_ephys_file, ts1, ts2, ch, car=True)  # may take a few mins
+fig6 = plt.gcf()
 
 # Plot the instantaneous firing rate and its coefficient of variation for a single unit
-fig5, fr, cv, cvs = bb.plot.firing_rate(units_b, unit=1, t='all', hist_win=0.01, fr_win=0.5,
-                                        n_bins=10, show_fr_cv=True)
+fr, cv, cvs = bb.plot.firing_rate(ts, hist_win=0.01, fr_win=0.5, n_bins=10, show_fr_cv=True)
+fig7 = plt.gcf()
 
 # Save figs in a directory
 fig_dir = os.getcwd()  # current working directory
-fig_list = [fig1, fig2, fig3, fig4, fig5]
+fig_list = [fig1, fig2, fig3, fig4, fig5, fig6, fig7]
 [f.savefig(os.path.join('fig'+ str(i + 1))) for i,f in enumerate(fig_list)]
