@@ -342,6 +342,7 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
         'valve_open': _assign_events_to_trial(t_trial_start, t_valve_open),
         'stim_freeze': _assign_events_to_trial(t_trial_start, t_stim_freeze),
         'stimOn_times': _assign_events_to_trial(t_trial_start, frame2ttl['times'], take='first'),
+        'stimOff_times': _assign_events_to_trial(t_trial_start, t_stim_off),
         'iti_in': _assign_events_to_trial(t_trial_start, t_iti_in)
     })
     # goCue_times corresponds to the tone_in event
