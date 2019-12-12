@@ -50,7 +50,7 @@ def check_wheel_angle(eid):
     # get fraction of reward deliveries with silent wheel time_delay before the reward
     time_delay = 0.5
 
-    bad_cases = []
+    bad_cases1 = []
     for rew in reward_success:
         
         left = wheel['times'][find_nearest(wheel['times'], rew - time_delay)]
@@ -58,6 +58,10 @@ def check_wheel_angle(eid):
       
         if left == right:
             if left < rew - time_delay:
-                bad_cases.append(rew) 
-
-    return len(bad_cases)
+                bad_cases1.append(rew) 
+ 
+    if len(bad_cases1) == 0:
+        print('Good news, no impossible case found.')
+    else:
+        print('Bad news, at least one impossible case found.')
+        return len(bad_cases1)
