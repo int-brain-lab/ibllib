@@ -101,6 +101,7 @@ def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cma
     if ax is None:
         fig, ax = plt.subplots()
     ax.barh(y=[int(unit) for unit in good_units], width=var_vals[np.argsort(depths)], color=rgba)
+    fig = ax.figure
     cbar = fig.colorbar(plt.cm.ScalarMappable(cmap=cmap), ax=ax)
     max_d = np.max(depths)
     tick_labels = [int(max_d) * tick for tick in (0, 0.2, 0.4, 0.6, 0.8, 1.0)]
@@ -353,7 +354,7 @@ def amp_heatmap(ephys_file, ts, ch, sr=30000, n_ch_probe=385, dtype='int16', cma
 
     # Plot heatmap.
     if ax is None:
-        ax = plt.gca()
+        fig, ax = plt.subplots()
     v_vals_norm = (v_vals / np.max(abs(v_vals))).T
     cbar_map = ax.imshow(v_vals_norm, cmap=cmap_name, aspect='auto',
                          extent=[ts[0], ts[-1], ch[0], ch[-1]], origin='lower')
