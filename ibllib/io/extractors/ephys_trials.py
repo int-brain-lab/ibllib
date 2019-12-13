@@ -7,7 +7,7 @@ from ibllib.io.extractors.biased_trials import (
     get_goCueTrigger_times, get_goCueOnset_times, get_intervals)
 
 
-def extract_all(session_path, save=False, data=False):
+def extract_all(session_path, save=False, data=False, output_path=None,):
     """
     Extract all behaviour data from Bpod whithin the specified folder.
     The timing information from FPGA is extracted in
@@ -44,7 +44,8 @@ def extract_all(session_path, save=False, data=False):
            'goCueTrigger_times': go_cue_trig_times,
            'intervals': intervals}
     if save:
-        file_intervals = Path(session_path) / 'alf' / '_ibl_trials.intervals.npy'
-        file_intervals.rename(Path(session_path) / 'alf' / '_ibl_trials.intervalsBpod.npy')
+        output_path = Path(output_path or Path(session_path).joinpath('alf'))
+        file_intervals = output_path.joinpath('_ibl_trials.intervals.npy')
+        file_intervals.rename(output_path.joinpath('_ibl_trials.intervalsBpod.npy'))
 
     return out

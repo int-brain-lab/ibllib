@@ -271,15 +271,20 @@ def extract_camera_sync(sync, output_path=None, save=False, chmap=None):
     :return: dictionary containing camera timestamps
     """
     # NB: should we check we opencv the expected number of frames ?
-    output_path = Path(output_path)
-    if not output_path.exists():
-        output_path.mkdir()
-    s = _get_sync_fronts(sync, chmap['right_camera'])
-    np.save(output_path / '_ibl_rightCamera.times.npy', s.times[::2])
-    s = _get_sync_fronts(sync, chmap['left_camera'])
-    np.save(output_path / '_ibl_leftCamera.times.npy', s.times[::2])
-    s = _get_sync_fronts(sync, chmap['body_camera'])
-    np.save(output_path / '_ibl_bodyCamera.times.npy', s.times[::2])
+    assert(chmap)
+    sr = _get_sync_fronts(sync, chmap['right_camera'])
+    sl = _get_sync_fronts(sync, chmap['left_camera'])
+    sb = _get_sync_fronts(sync, chmap['body_camera'])
+    if output_path is not None and save:
+        output_path = Path(output_path)
+        if not output_path.exists():
+            output_path.mkdir()
+        np.save(output_path / '_ibl_rightCamera.times.npy', sr.times[::2])
+        np.save(output_path / '_ibl_leftCamera.times.npy', sl.times[::2])
+        np.save(output_path / '_ibl_bodyCamera.times.npy', sb.times[::2])
+    return {'right_camera': sr.times[::2],
+            'left_camera': sr.times[::2],
+            'body_camera': sb.times[::2]}
 
 
 def extract_wheel_sync(sync, output_path=None, save=False, chmap=None):
