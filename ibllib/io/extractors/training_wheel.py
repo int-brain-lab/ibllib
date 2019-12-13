@@ -42,74 +42,25 @@ def get_trial_start_times(session_path, data=None):
     return np.array(trial_start_times)
 
 
-def get_trial_start_times_re(session_path, evt=None):
-    if not evt:
+def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
+    if not bpod_data:
+        bpod_data = raw.load_data(session_path)
+    if not re_events:
         evt = raw.load_encoder_events(session_path)
-    trial_start_times_re = evt.re_ts[evt.sm_ev[evt.sm_ev == 1].index].values / 1e6
-    return trial_start_times_re[:-1]
 
-
-def time_converter_session(session_path, kind):
-    """
-    Create interp1d functions to convert values from one clock to another given a
-    set of synchronization pulses.
-
-    The task global sync pulse is at trial_start from Bpod to:
-    Rotary Encoder, Cameras and e-phys system.
-    Depends on getter functions that extract from the raw data the timestamps
-    of the trial_start sync pulse event for each clock.
-
-    +---------+----------+-----------+-----------+-----------+
-    | 2b      |   -      |   re2b    | cam2b,    |  ephys2b  |
-    +---------+----------+-----------+-----------+-----------+
-    | 2re     |   b2re   |   -       | cam2re    |  ephys2re |
-    +---------+----------+-----------+-----------+-----------+
-    | 2cam    |   b2cam  |   re2cam  |  -        |  ephys2cam|
-    +---------+----------+-----------+-----------+-----------+
-    | 2ephys  |   b2ephys|   re2ephys| cam2ephys |  -        |
-    +---------+----------+-----------+-----------+-----------+
-
-    Default converters for times are assumed to be of kind *2b* unless ephys data
-    is present in that case converters for 'times' will be of kind *2ephys*
-
-    :param session_path: absolute path of session folder
-    :type session_path: str
-    :param kind: ['re2b', 'b2re'], defaults to 're2b'
-    :type kind: str, optional
-    :return: Function that converts from clock A to clock B defined by kind.
-    :rtype: scipy.interpolate.interpolate.interp1d
-    """
-    # there should be a way to input data if already in memory
-    if kind == 're2b':
-        target = get_trial_start_times(session_path)
-        tref = get_trial_start_times_re(session_path)
-    elif kind == 'b2re':
-        tref = get_trial_start_times(session_path)
-        target = get_trial_start_times_re(session_path)
-
-    return time_interpolation(tref, target)
-
-
-def time_interpolation(tref, target):
-    """
-    From 2 arrays of timestamps, return an interpolation function that allows to go
-    from one to the other.
-    If sizes are different, only work with the first elements.
-    """
-    if tref.size < 1:
-        logger_.error('Wheel time-stamp for trial starts have one or less detected values. ABORT')
-        raise(ValueError)
-    if tref.size < 1:
-        logger_.error('Bpod time-stamp for trial starts have one or less detected values. ABORT')
-        raise(ValueError)
-    if tref.size != target.size:
-        logger_.warning('Time-stamp arrays have inconsistent size. Trimming to the smallest size')
-        siz = min(tref.size, target.size)
-        tref = tref[:siz]
-        target = target[:siz]
-
-    func = interpolate.interp1d(tref, target, fill_value="extrapolate")
-    return func
+    # we work with stim_on (2) and closed_loop (3) states for the synchronization with bpod
+    tre = evt.re_ts.values / 1e6  # convert to seconds
+    # the first trial on the rotary encoder is a dud
+    rote = {'stim_on':  tre[evt.sm_ev == 2][1:],
+            'closed_loop':  tre[evt.sm_ev == 3][1:]}
+    bpod = {
+        'stim_on': np.array([tr['behavior_data']['States timestamps']
+                             ['stim_on'][0][0] for tr in bpod_data]),
+        'closed_loop': np.array([tr['behavior_data']['States timestamps']
+                             ['closed_loop'][0][0] for tr in bpod_data]),
+            }
+    # just use the closed loop for synchronization
+    return interpolate.interp1d(rote['closed_loop'], bpod['closed_loop'], fill_value="extrapolate")
 
 
 def get_wheel_data(session_path, bp_data=None, save=False):
@@ -157,9 +108,9 @@ def get_wheel_data(session_path, bp_data=None, save=False):
     if np.all(np.mod(data['re_ts'], 1e3) == 0):
         status = 1
     data['re_ts'] = data['re_ts'] / 1e6  # convert ts to seconds
-    # get the converter function to translate re_ts into behavior times
-    convtime = time_converter_session(session_path, kind='re2b')
-    data['re_ts'] = convtime(data['re_ts'])
+    # # get the converter function to translate re_ts into behavior times
+    fcn_interp = sync_rotary_encoder(session_path)
+    data['re_ts'] = fcn_interp(data['re_ts'])
 
     def get_reset_trace_compensation_with_state_machine_times():
         # this is the preferred way of getting resets using the state machine time information

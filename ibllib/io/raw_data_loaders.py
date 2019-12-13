@@ -167,11 +167,11 @@ def load_encoder_events(session_path, settings=False):
 
     Assumes that a folder called "raw_behavior_data" exists in folder.
 
-    On each trial the RE sends 3 events to Bonsai 1 - meaning trial start/turn
-    off the stim; 2 - meaning show the current trial stimulus; and 3 - meaning
-    begin the closed loop making the stim move with the RE. These events are
-    triggered by the state machine in the corrensponding states: trial_start,
-    stim_on, closed_loop
+    Events number correspond to following bpod states:
+    1: correct / hide_stim
+    2: stim_on
+    3: closed_loop
+    4: freeze_error / freeze_correct
 
     Raw datafile Columns:
         Event, RE timestamp, Source, data, Bonsai Timestamp
@@ -251,7 +251,7 @@ def load_encoder_positions(session_path, settings=False):
          'bns_ts']  # Bonsai Timestamp                  'pandas.Timestamp'
         # pd.to_datetime(data.bns_ts) to work in datetimes
 
-    :param session_path: Absoulte path of session folder
+    :param session_path: Absolute path of session folder
     :type session_path: str
     :return: dataframe w/ 3 cols and N positions
     :rtype: Pandas.DataFrame
