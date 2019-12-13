@@ -14,9 +14,9 @@ from ibllib.misc import structarr
 import brainbox.behavior.wheel as wheel
 
 logger_ = logging.getLogger('ibllib.alf')
-WHEEL_RADIUS_CM = 3.1
+WHEEL_RADIUS_CM = 1  # we want the output in radians
 THRESHOLD_RAD_PER_SEC = 10
-THRESHOLD_CONSECUTIVE_SAMPLES = 0.001
+THRESHOLD_CONSECUTIVE_SAMPLES = 0
 EPS = 7. / 3 - 4. / 3 - 1
 
 
@@ -51,34 +51,30 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
     # we work with stim_on (2) and closed_loop (3) states for the synchronization with bpod
     tre = evt.re_ts.values / 1e6  # convert to seconds
     # the first trial on the rotary encoder is a dud
-    rote = {'stim_on':  tre[evt.sm_ev == 2][1:],
-            'closed_loop':  tre[evt.sm_ev == 3][1:]}
+    rote = {'stim_on': tre[evt.sm_ev == 2][:-1],
+            'closed_loop': tre[evt.sm_ev == 3][:-1]}
     bpod = {
         'stim_on': np.array([tr['behavior_data']['States timestamps']
                              ['stim_on'][0][0] for tr in bpod_data]),
         'closed_loop': np.array([tr['behavior_data']['States timestamps']
-                             ['closed_loop'][0][0] for tr in bpod_data]),
-            }
+                                 ['closed_loop'][0][0] for tr in bpod_data]),
+    }
     # just use the closed loop for synchronization
     return interpolate.interp1d(rote['closed_loop'], bpod['closed_loop'], fill_value="extrapolate")
 
 
 def get_wheel_data(session_path, bp_data=None, save=False):
     """
-    Get wheel data from raw files and converts positions into centimeters and
-    timestamps into seconds.
+    Get wheel data from raw files and converts positions into radians mathematical convention
+     (anti-clockwise = +) and timestamps into seconds relative to Bpod clock.
     **Optional:** saves _ibl_wheel.times.npy and _ibl_wheel.position.npy
 
     Times:
-    Gets Rotary Encoder timestamps (ms) for each position and converts to times.
-
-    Uses time_converter to extract and convert timstamps (ms) to times (s).
+    Gets Rotary Encoder timestamps (us) for each position and converts to times.
+    Synchronize with Bpod and outputs
 
     Positions:
-    Positions are in (cm) of RE perimeter relative to 0. The 0 resets every trial.
-
-    cmtick = radius (cm) * 2 * pi / n_ticks
-    cmtick = 3.1 * 2 * np.pi / 1024
+    Radians mathematical convention
 
     :param session_path: absolute path of session folder
     :type session_path: str
@@ -90,7 +86,6 @@ def get_wheel_data(session_path, bp_data=None, save=False):
     :return: Numpy structured array.
     :rtype: numpy.ndarray
     """
-    ##
     status = 0
     if not bp_data:
         bp_data = raw.load_data(session_path)
@@ -101,7 +96,7 @@ def get_wheel_data(session_path, bp_data=None, save=False):
     data = structarr(['re_ts', 're_pos', 'bns_ts'],
                      shape=(df.shape[0],), formats=['f8', 'f8', np.object])
     data['re_ts'] = df.re_ts.values
-    data['re_pos'] = df.re_pos.values
+    data['re_pos'] = df.re_pos.values * -1  # anti-clockwise is positive in our output
     data['re_pos'] = data['re_pos'] / 1024 * 2 * np.pi  # convert positions to radians
     trial_starts = get_trial_start_times(session_path)
     # need a flag if the data resolution is 1ms due to the old version of rotary encoder firmware

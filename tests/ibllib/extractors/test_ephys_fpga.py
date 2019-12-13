@@ -92,7 +92,7 @@ class TestWheelExtraction(unittest.TestCase):
         self.pb = np.array([1, -1, 1, -1, 1, -1, 1, -1])
 
     def test_x1_decoding(self):
-        p_ = - np.array([1, 2, 1, 0])
+        p_ = np.array([1, 2, 1, 0])
         t_ = np.array([2, 6, 11, 15])
         t, p = ephys_fpga._rotary_encoder_positions_from_fronts(
             self.ta, self.pa, self.tb, self.pb, ticks=np.pi * 2, coding='x1')
@@ -100,7 +100,7 @@ class TestWheelExtraction(unittest.TestCase):
         self.assertTrue(np.all(p == p_))
 
     def test_x4_decoding(self):
-        p_ = - np.array([1, 2, 3, 4, 5, 6, 7, 8, 7, 6, 5, 4, 3, 2, 1, 0]) / 4
+        p_ = np.array([1, 2, 3, 4, 5, 6, 7, 8, 7, 6, 5, 4, 3, 2, 1, 0]) / 4
         t_ = np.array([2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18])
         t, p = ephys_fpga._rotary_encoder_positions_from_fronts(
             self.ta, self.pa, self.tb, self.pb, ticks=np.pi * 2, coding='x4')
@@ -108,7 +108,7 @@ class TestWheelExtraction(unittest.TestCase):
         self.assertTrue(np.all(np.isclose(p, p_)))
 
     def test_x2_decoding(self):
-        p_ = - np.array([1, 2, 3, 4, 3, 2, 1, 0]) / 2
+        p_ = np.array([1, 2, 3, 4, 3, 2, 1, 0]) / 2
         t_ = np.array([2, 4, 6, 8, 12, 14, 16, 18])
         t, p = ephys_fpga._rotary_encoder_positions_from_fronts(
             self.ta, self.pa, self.tb, self.pb, ticks=np.pi * 2, coding='x2')

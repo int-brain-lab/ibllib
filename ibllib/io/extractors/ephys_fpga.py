@@ -183,11 +183,11 @@ def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, rad
         ordre = np.argsort(t)
         t = t[ordre]
         p = p[ordre]
-        p = - np.cumsum(p) / ticks * np.pi * 2 * radius
+        p = np.cumsum(p) / ticks * np.pi * 2 * radius
         return t, p
     elif coding == 'x2':
         p = pb[np.searchsorted(tb, ta) - 1] * pa
-        p = np.cumsum(p) / ticks * np.pi * 2 * radius / 2
+        p = - np.cumsum(p) / ticks * np.pi * 2 * radius / 2
         return ta, p
     elif coding == 'x4':
         p = np.r_[pb[np.searchsorted(tb, ta) - 1] * pa, -pa[np.searchsorted(ta, tb) - 1] * pb]
@@ -195,7 +195,7 @@ def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, rad
         ordre = np.argsort(t)
         t = t[ordre]
         p = p[ordre]
-        p = np.cumsum(p) / ticks * np.pi * 2 * radius / 4
+        p = - np.cumsum(p) / ticks * np.pi * 2 * radius / 4
         return t, p
 
 
@@ -308,7 +308,7 @@ def extract_wheel_sync(sync, output_path=None, save=False, chmap=None):
     channelb = _get_sync_fronts(sync, chmap['rotary_encoder_1'])
     wheel['re_ts'], wheel['re_pos'] = _rotary_encoder_positions_from_fronts(
         channela['times'], channela['polarities'], channelb['times'], channelb['polarities'],
-        ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4')
+        ticks=WHEEL_TICKS, radius=1, coding='x4')
     if save and output_path:
         output_path = Path(output_path)
         # last phase of the process is to save the alf data-files
