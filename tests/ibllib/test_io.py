@@ -10,6 +10,7 @@ import numpy as np
 from ibllib.io import params, flags, jsonable, spikeglx, hashfile
 import ibllib.io.raw_data_loaders as raw
 
+
 class TestsParams(unittest.TestCase):
 
     def setUp(self):

@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+import uuid
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -84,7 +85,7 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
     # if no output, need a temp folder to swap for big files
     if not output_path:
         output_path = raw_ephys_apfile.parent
-    file_ftcp = Path(output_path) / 'fronts_times_channel_polarity.bin'
+    file_ftcp = Path(output_path).joinpath(f'fronts_times_channel_polarity{str(uuid.uuid4())}.bin')
 
     # loop over chunks of the raw ephys file
     wg = dsp.WindowGenerator(sr.ns, SYNC_BATCH_SIZE_SAMPLES, overlap=1)
