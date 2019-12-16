@@ -20,6 +20,8 @@ SYNC_BATCH_SIZE_SAMPLES = 2 ** 18  # number of samples to read at once in bin fi
 WHEEL_RADIUS_CM = 3.1
 WHEEL_TICKS = 1024
 
+BPOD_FPGA_DRIFT_THRESHOLD_PPM = 150
+
 CHMAPS = {'3A':
           {'ap':
            {'left_camera': 2,
@@ -357,7 +359,6 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
     ind_err = np.isnan(trials['valve_open'])
     trials['feedback_times'][ind_err] = trials['error_tone_in'][ind_err]
     trials['intervals'] = np.c_[t_trial_start, trials['iti_in']]
-    trials['response_times'] = np.copy(trials['stimOn_times'])
 
     if display:
         width = 1.5
@@ -395,7 +396,6 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
         np.save(output_path / '_ibl_trials.stimOn_times.npy', trials['stimOn_times'])
         np.save(output_path / '_ibl_trials.intervals.npy', trials['intervals'])
         np.save(output_path / '_ibl_trials.feedback_times.npy', trials['feedback_times'])
-        np.save(output_path / '_ibl_trials.response_times.npy', trials['response_times'])
     return trials
 
 
@@ -412,12 +412,20 @@ def align_with_bpod(session_path):
     output_path = Path(session_path) / 'alf'
     trials = alf.io.load_object(output_path, '_ibl_trials')
     assert(alf.io.check_dimensions(trials) == 0)
-    tlen = (np.diff(trials['intervalsBpod']) - np.diff(trials['intervals']))[:-1] - ITI_DURATION
+    tlen = (np.diff(trials['intervals_bpod']) - np.diff(trials['intervals']))[:-1] - ITI_DURATION
     assert(np.all(np.abs(tlen[np.invert(np.isnan(tlen))]) < 5 * 1e-3))
-    dt = trials['intervals'][:, 0] - trials['intervalsBpod'][:, 0]
-    # plt.plot(np.diff(trials['intervalsBpod']), '*')
-    # plt.plot(np.diff(trials['intervals']), '.')
-    # TODO: apply this to all timings extracted from Bpod
+    # dt is the delta to apply to bpod times in order to be on the ephys clock
+    dt = trials['intervals'][:, 0] - trials['intervals_bpod'][:, 0]
+    # compute the clock drift bpod versus dt
+    ppm = np.polyfit(trials['intervals'][:, 0], dt, 1)[0] * 1e6
+    if ppm > BPOD_FPGA_DRIFT_THRESHOLD_PPM:
+        _logger.warning('BPOD/FPGA synchronization shows values greater than 150 ppm')
+    plt.plot(trials['intervals'][:, 0], dt, '*')
+    # so far 2 datasets concerned: goCueTrigger_times_bpod  and response_times_bpod
+    for k in trials:
+        if not k.endswith('_times_bpod'):
+            continue
+        np.save(output_path.joinpath(f'_ibl_trials.{k[:-5]}.npy'), trials[k] + dt)
     return np.median(dt)
 
 
