@@ -120,25 +120,28 @@ def _bpod_events_extraction(bpod_t, bpod_fronts):
     :param bpod_fronts: numpy vector containing polarity of fronts (1 rise, -1 fall)
     :return: numpy arrays of times t_trial_start, t_valve_open and t_iti_in
     """
+    TRIAL_START_TTL_LEN = 2.33e-4
+    VALVE_OPEN_TTL_LEN = 0.4
     # make sure that there are no 2 consecutive fall or consecutive rise events
     assert(np.all(np.abs(np.diff(bpod_fronts)) == 2))
     # make sure that the first event is a rise
     assert(bpod_fronts[0] == 1)
     # take only even time differences: ie. from rising to falling fronts
     dt = np.diff(bpod_t)[::2]
-    # detect start trials event assuming length is 0.1 ms except the first trial
-    i_trial_start = np.r_[0, np.where(dt <= 1.66e-4)[0] * 2]
+    # detect start trials event assuming length is 0.23 ms except the first trial
+    i_trial_start = np.r_[0, np.where(dt <= TRIAL_START_TTL_LEN)[0] * 2]
     t_trial_start = bpod_t[i_trial_start]
     # # the first trial we detect the first falling edge to which we subtract 0.1ms
     # t_trial_start[0] -= 1e-4
     # the last trial is a dud and should be removed
     t_trial_start = t_trial_start[:-1]
     # valve open events are between 50ms to 300 ms
-    i_valve_open = np.where(np.logical_and(dt > 1.66e-4, dt < 0.4))[0] * 2
+    i_valve_open = np.where(np.logical_and(dt > TRIAL_START_TTL_LEN,
+                                           dt < VALVE_OPEN_TTL_LEN))[0] * 2
     i_valve_open = np.delete(i_valve_open, np.where(i_valve_open < 2))
     t_valve_open = bpod_t[i_valve_open]
     # ITI events are above 400 ms
-    i_iti_in = np.where(dt > 0.4)[0] * 2
+    i_iti_in = np.where(dt > VALVE_OPEN_TTL_LEN)[0] * 2
     i_iti_in = np.delete(i_iti_in, np.where(i_valve_open < 2))
     i_iti_in = bpod_t[i_iti_in]
     # # some debug plots when needed
@@ -361,7 +364,7 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
     trials['intervals'] = np.c_[t_trial_start, trials['iti_in']]
 
     if display:
-        width = 1.5
+        width = 0.5
         ymax = 5
         plt.figure()
         ax = plt.gca()
