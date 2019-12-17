@@ -423,7 +423,7 @@ def align_with_bpod(session_path):
     ppm = np.polyfit(trials['intervals'][:, 0], dt, 1)[0] * 1e6
     if ppm > BPOD_FPGA_DRIFT_THRESHOLD_PPM:
         _logger.warning('BPOD/FPGA synchronization shows values greater than 150 ppm')
-    plt.plot(trials['intervals'][:, 0], dt, '*')
+        # plt.plot(trials['intervals'][:, 0], dt, '*')
     # so far 2 datasets concerned: goCueTrigger_times_bpod  and response_times_bpod
     for k in trials:
         if not k.endswith('_times_bpod'):
