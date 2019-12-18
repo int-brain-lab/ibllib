@@ -1,11 +1,11 @@
 from pathlib import Path
 import logging
 import json
+import shutil
 
 import numpy as np
 
 from phylib.io import alf
-
 from ibllib.ephys.sync_probes import apply_sync
 import ibllib.ephys.ephysqc as ephysqc
 from ibllib.misc import log2session_static
@@ -113,11 +113,14 @@ def sync_spike_sortings(ses_path):
             if there is no sync file it means something went wrong. Outputs the spike sorting
             in time according the the probe by followint ALF convention on the times objects
             """
-            error_msg = f'No synchronisation file for {label}: {sync_file}'
+            error_msg = f'No synchronisation file for {label}: {sync_file}. The spike-sorting ' \
+                        f'is not synchronized and data not uploaded on Flat-Iron'
             _logger.error(error_msg)
+            # this is useless as of now but keeping it in case we change our minds and keep unsync
             st_file = ses_path.joinpath(probe_out_path, 'spikes.times.npy')
             st_file.rename(st_file.parent.joinpath(f'{st_file.stem}_{label}.npy'))
-            continue
+            # remove the alf folder if the sync failed
+            shutil.rmtree(probe_out_path)
         # patch the spikes.times files manually
         st_file = ses_path.joinpath(probe_out_path, 'spikes.times.npy')
         interp_times = apply_sync(sync_file, np.load(st_file), forward=True)
