@@ -198,7 +198,15 @@ class Reader:
                             "the spikeglx acquisition hash, uncompress the file first !")
             return True
         else:
-            return hashfile.sha1(self.file_bin).upper() == self.meta.fileSHA1
+            sm = self.meta.fileSHA1
+            sc = hashfile.sha1(self.file_bin).upper()
+            if sm == sc:
+                log_func = _logger.info
+            else:
+                log_func = _logger.error
+            log_func(f"SHA1 metadata: {sm}")
+            log_func(f"SHA1 computed: {sc}")
+            return sm == sc
 
 
 def read(sglx_file, first_sample=0, last_sample=10000):
