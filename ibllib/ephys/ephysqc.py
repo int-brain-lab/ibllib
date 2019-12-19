@@ -416,7 +416,7 @@ def phy_model_from_ks2_path(ks2_path):
 
 
 # Make a bunch gathering all trial QC
-def qc_fpga_task(fpga_trials, bpod_trials, alf_trials):
+def qc_fpga_task(fpga_trials, alf_trials):
     """
     :fpga_task is the dictionary output of
     ibllib.io.extractors.ephys_fpga.extract_behaviour_sync
@@ -424,44 +424,73 @@ def qc_fpga_task(fpga_trials, bpod_trials, alf_trials):
     : alf_trials is the ALF _ibl_trials object after extraction (alf.io.load_object)
     :return: qc_session, qc_trials, True means QC passes while False indicates a failure
     """
+
+    GOCUE_STIMON_DELAY = 0.01
+    FEEDBACK_STIMFREEZE_DELAY = 0.01
+    VALVE_STIM_OFF_DELAY = 1
+    VALVE_STIM_OFF_JITTER = 0.1
+    ITI_IN_STIM_OFF_JITTER = 0.1
+    ERROR_STIM_OFF_DELAY = 2
+    ERROR_STIM_OFF_JITTER = 0.1
+    RESPONSE_FEEDBACK_DELAY = 0.0005
+
+    def strictly_after(t0, t1, threshold):
+        """ returns isafter, iswithinthreshold"""
+        return (t1 - t0) > 0, np.abs((t1 - t0)) <= threshold
+
     ntrials = fpga_trials['stimOn_times'].size
     qc_trials = Bunch({})
 
     """
-    First part of the function uses only fpga_trials information
+    First Check consistency of the dataset: whithin each trial, all events happen after trial
+    start should not be NaNs and increasing. This is not a QC but an assertion.
     """
-    # TEST  StimOn and GoCue should all be within a very small tolerance of each other
-    #       1. check for non-Nans
-    qc_trials['stimOn_times_nan'] = ~np.isnan(fpga_trials['stimOn_times'])
-    qc_trials['goCue_times_nan'] = ~np.isnan(fpga_trials['goCue_times'])
-    #   2. check goCue is after stimOn
-    qc_trials['stimOn_times_before_goCue_times'] = \
-        fpga_trials['stimOn_times'] - fpga_trials['goCue_times'] > 0
-    #   3. check if closeby value
-    qc_trials['stimOn_times_goCue_times_diff'] = \
-        fpga_trials['stimOn_times'] - fpga_trials['goCue_times'] < 0.010,
-    # TEST  1. Stim freeze should happen before feedback
-    qc_trials['stim_freeze_before_feedback'] = \
-        fpga_trials['stim_freeze'] - fpga_trials['feedback_times'] > 0,
-    #       2. Delay between stim freeze and feedback <10ms
-    qc_trials['stim_freeze_delay_feedback'] = \
-        np.abs(fpga_trials['stim_freeze'] - fpga_trials['feedback_times']) < 0.010,
-    # STIM_OFF and VALVE:
-    # stim off happens 1 sec after valve, with 0.1 as acceptable jitter
-    qc_trials['stimOff_delay_valve'] = np.less(
-        np.abs(fpga_trials['stimOff_times'] - fpga_trials['valve_open'] - 1), .1,
-        out=np.ones(ntrials, dtype=np.bool), where=~np.isnan(fpga_trials['valve_open']))
-    # TEST  Start of iti_in should be within a very small tolerance of the stim off
-    qc_trials['iti_in_delay_stim_off'] = \
-        np.abs(fpga_trials['stimOff_times'] - fpga_trials['iti_in']) < 0.01,
-    # STIM_OFF and ERROR_NOISE. StimOff open should happen after noise
-    # noise off happens 2 secs after valve, with 0.1 as acceptable jitter
-    qc_trials['stimOff_delay_noise'] = np.less(
-        np.abs(fpga_trials['stimOff_times'] - fpga_trials['error_tone_in'] - 2), .1,
-        out=np.ones(ntrials, dtype=np.bool), where=~np.isnan(fpga_trials['error_tone_in']))
+    status = True
+    for k in ['goCueTrigger_times_bpod', 'response_times', 'stimOn_times', 'response_times_bpod',
+              'goCueTrigger_times', 'goCue_times', 'feedback_times']:
+        if k.endswith('_bpod'):
+            tstart = alf_trials['intervals_bpod'][:, 0]
+        else:
+            tstart = alf_trials['intervals'][:, 0]
+        status &= np.all(alf_trials[k] - tstart > 0)
+        status &= np.all(np.diff(alf_trials[k]) > 0)
+    assert status
 
     """
-    Second part uses only alf_trials information
+    This part of the function uses only fpga_trials information
+    """
+    # check for non-Nans
+    qc_trials['stimOn_times_nan'] = ~np.isnan(fpga_trials['stimOn_times'])
+    qc_trials['goCue_times_nan'] = ~np.isnan(fpga_trials['goCue_times'])
+
+    # stimOn before goCue
+    qc_trials['stimOn_times_before_goCue_times'], qc_trials['stimOn_times_goCue_times_delay'] =\
+        strictly_after(fpga_trials['stimOn_times'], fpga_trials['goCue_times'], GOCUE_STIMON_DELAY)
+
+    # stimFreeze before feedback
+    qc_trials['stim_freeze_before_feedback'], qc_trials['stim_freeze_feedback_delay'] = \
+        strictly_after(fpga_trials['stim_freeze'], fpga_trials['feedback_times'],
+                       FEEDBACK_STIMFREEZE_DELAY)
+
+    # stimOff 1 sec after valve, with 0.1 as acceptable jitter
+    qc_trials['stimOff_delay_valve'] = np.less(
+        np.abs(fpga_trials['stimOff_times'] - fpga_trials['valve_open'] - VALVE_STIM_OFF_DELAY),
+        VALVE_STIM_OFF_JITTER, out=np.ones(ntrials, dtype=np.bool),
+        where=~np.isnan(fpga_trials['valve_open']))
+
+    # iti_in whithin 0.01 sec of stimOff
+    qc_trials['iti_in_delay_stim_off'] = \
+        np.abs(fpga_trials['stimOff_times'] - fpga_trials['iti_in']) < ITI_IN_STIM_OFF_JITTER,
+
+    # stimOff 2 secs after error_tone_in with jitter
+    # noise off happens 2 secs after stimm, with 0.1 as acceptable jitter
+    qc_trials['stimOff_delay_noise'] = np.less(
+        np.abs(fpga_trials['stimOff_times'] - fpga_trials['error_tone_in'] - ERROR_STIM_OFF_DELAY),
+        ERROR_STIM_OFF_JITTER, out=np.ones(ntrials, dtype=np.bool),
+        where=~np.isnan(fpga_trials['error_tone_in']))
+
+    """
+    This part uses only alf_trials information
     """
     # TEST  Response times (from session start) should be increasing continuously
     #       Note: RT are not durations but time stamps from session start
@@ -479,7 +508,7 @@ def qc_fpga_task(fpga_trials, bpod_trials, alf_trials):
     #       2. Delay between wheel reaches threshold (response time) and
     #       feedback is 100us, acceptable jitter 500 us
     qc_trials['response_feedback_delay'] = \
-        alf_trials['feedback_times'] - alf_trials['response_times'] < 0.0005
+        alf_trials['feedback_times'] - alf_trials['response_times'] < RESPONSE_FEEDBACK_DELAY
 
     # Test output at session level
     qc_session = {k: np.all(qc_trials[k]) for k in qc_trials}
