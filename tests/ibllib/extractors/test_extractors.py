@@ -537,16 +537,6 @@ class TestExtractTrialData(unittest.TestCase):
             df = raw._load_encoder_events_file_ge5(wf)
             self.assertTrue(np.all(np.diff(np.array(df.re_ts)) > 0))
 
-    def test_interpolation(self):
-        # straight test that it returns an usable function
-        ta = np.array([0., 1., 2., 3., 4., 5.])
-        tb = np.array([0., 1.1, 2.0, 2.9, 4., 5.])
-        finterp = ibllib.io.extractors.training_wheel.time_interpolation(ta, tb)
-        self.assertTrue(np.all(finterp(ta) == tb))
-        # next test if sizes are not similar
-        tc = np.array([0., 1.1, 2.0, 2.9, 4., 5., 6.])
-        finterp = ibllib.io.extractors.training_wheel.time_interpolation(ta, tc)
-        self.assertTrue(np.all(finterp(ta) == tb))
 
     def test_load_encoder_positions(self):
         raw.load_encoder_positions(self.training_lt5['path'],

@@ -82,18 +82,16 @@ class TestEphysSyncExtraction(unittest.TestCase):
         self.assertTrue(np.allclose(desired_out, t_event_nans, equal_nan=True, atol=0, rtol=0))
 
     def test_wheel_trace_from_sync(self):
-        pos_ = np.array([-1, 0, -1, -2, -1, -2]) * (np.pi * ephys_fpga.WHEEL_RADIUS_CM /
-                                                    ephys_fpga.WHEEL_TICKS)
+        pos_ = - np.array([-1, 0, -1, -2, -1, -2]) * (np.pi / ephys_fpga.WHEEL_TICKS)
         ta = np.array([1, 2, 3, 4, 5, 6])
         tb = np.array([0.5, 3.2, 3.3, 3.4, 5.25, 5.5])
         pa = (np.mod(np.arange(6), 2) - 0.5) * 2
         pb = (np.mod(np.arange(6) + 1, 2) - .5) * 2
-        t, pos = ephys_fpga._rotary_encoder_positions_from_fronts_x1(ta, pa, tb, pb)
+        t, pos = ephys_fpga._rotary_encoder_positions_from_fronts(ta, pa, tb, pb, coding='x2')
         self.assertTrue(np.all(np.isclose(pos_, pos)))
 
-        pos_ = np.array([-1, 0, -1, 0, -1, -2]) * (np.pi * ephys_fpga.WHEEL_RADIUS_CM /
-                                                   ephys_fpga.WHEEL_TICKS)
+        pos_ = - np.array([-1, 0, -1, 0, -1, -2]) * (np.pi / ephys_fpga.WHEEL_TICKS)
         tb = np.array([0.5, 3.2, 3.4, 5.25])
         pb = (np.mod(np.arange(4) + 1, 2) - .5) * 2
-        t, pos = ephys_fpga._rotary_encoder_positions_from_fronts_x1(ta, pa, tb, pb)
+        t, pos = ephys_fpga._rotary_encoder_positions_from_fronts(ta, pa, tb, pb, coding='x2')
         self.assertTrue(np.all(np.isclose(pos_, pos)))
