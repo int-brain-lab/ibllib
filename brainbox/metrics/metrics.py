@@ -91,7 +91,7 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
         {
             'ks': lambda x, y: stats.kstest(x, y)
         }
-    test_fun = tests.get(test)
+    test_fun = tests[test]
     
     # Compute the statistical tests and variances. For each feature, iteratively get each unit's
     # p-values and variances, and add them as keys to the respective bunches `p_vals_feat` and
