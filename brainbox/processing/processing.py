@@ -259,7 +259,7 @@ def get_units_bunch(spks_b, *args):
     # `feat_bunch`. After iterating through all units, add `feat_bunch` as a key to `units`:
     for feat in feat_keys:
         # Initialize `feat_bunch` with a key for each unit.
-        feat_bunch = core.Bunch((str(unit), 0) for unit in np.arange(n_units))
+        feat_bunch = core.Bunch((str(unit), np.array([])) for unit in np.arange(n_units))
         for unit in units:
             unit_idxs = np.where(spks_unit_id == unit)[0]
             feat_bunch[str(unit)] = spks_b[feat][unit_idxs]
@@ -267,9 +267,10 @@ def get_units_bunch(spks_b, *args):
     return units_b
 
 
-def filter_units(units_b, t, params={'min_amp': 100, 'min_fr': 0.5, 'max_fpr': 0.1, 'rp': 0.002}):
+def filter_units(units_b, t, **kwargs):
     '''
-    Filters units according to some parameters.
+    Filters units according to some parameters. **kwargs are the keyword parameters used to filter
+    the units.
 
     Parameters
     ----------
@@ -278,19 +279,25 @@ def filter_units(units_b, t, params={'min_amp': 100, 'min_fr': 0.5, 'max_fpr': 0
         whose values are arrays that hold values for each unit. The arrays for each key are ordered
         by unit ID.
     t : float
-        Duration of the recording session.
-    params : dict
-        Parameters to use to filter the units:
-        'min_amp' : The minimum mean amplitude (in uV) of the spikes in the unit
-        'min_fr' : The minimum firing rate (in Hz) of the unit
-        'max_fpr' : The maximum false positive rate of the unit (using the fp formula in
-                    Hill et al. (2011) J Neurosci 31: 8699-8705)
-        'rp' : The refractory period (in s) of the unit. Used to calculate `max_fp`
+        Duration of time over which to calculate the firing rate and false positive rate.
+    
+    Keyword Parameters
+    ------------------
+    min_amp : float
+        The minimum mean amplitude (in V) of the spikes in the unit. Default value is 50e-6.
+    min_fr : float 
+        The minimum firing rate (in Hz) of the unit. Default value is 0.5.
+    max_fpr : float
+        The maximum false positive rate of the unit (using the fp formula in Hill et al. (2011)
+        J Neurosci 31: 8699-8705). Default value is 0.2.
+    rp : float 
+        The refractory period (in s) of the unit. Used to calculate `max_fp`. Default value is
+        0.002.
 
     Returns
     -------
-    filtered_units_mask : ndarray
-        A boolean array where each element is 0 (for failed filter) or 1 (for passed filter).
+    filt_units : ndarray
+        The ids of the filtered units.
 
     See Also
     --------
@@ -308,53 +315,45 @@ def filter_units(units_b, t, params={'min_amp': 100, 'min_fr': 0.5, 'max_fpr': 0
         >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
         >>> units_b = bb.processing.get_units_bunch(spks_b, ['times', 'amps', 'clusters'])
         >>> T = spks_b['times'][-1] - spks_b['times'][0]
-        >>> filtered_units_mask = bb.processing.filter_units(units_b, T)
-        # Get an array of the filtered units` ids.
-        filtered_units = np.where(filtered_units_mask)[0]
-    
+        >>> filtered_units = bb.processing.filter_units(units_b, T)
+
     2) Filter units with no minimum amplitude, a minimum firing rate of 1 Hz, and a max false
     positive rate of 0.2, given a refractory period of 2 ms.
-        >>> filtered_units_mask = bb.processing.filter_units(
-                units_b, T, params={'min_amp': 0, 'min_fr': 1, 'max_fpr': 0.2, 'rp': 0.002})
-        # Get an array of the filtered units` ids.
-        filtered_units = np.where(filtered_units_mask)[0]
+        >>> filtered_units  = bb.processing.filter_units(units_b, T, min_amp=0, min_fr=1)
+    
+    TODO: `units_b` input arg could eventually be replaced by `clstrs_b` if the required metrics
+          are in `clstrs_b['metrics']`
     '''
 
-    # Remove warnings dealing with operations on nans, caused by empty clusters
-    import warnings
-    warnings.filterwarnings('ignore', r'invalid value encountered in greater')
-    warnings.filterwarnings('ignore', r'invalid value encountered in less')
+    # Set params
+    params={'min_amp': 50e-6, 'min_fr': 0.5, 'max_fpr': 0.2, 'rp': 0.002}  # defaults
+    params.update(kwargs)  # update from **kwargs
 
-    # Get units' mean spike amps, number of spikes, firing rates, number of isi violations,
-    # and false positive rate.
-    n_units = len(units_b['clusters'].keys())
-    u_amps = np.zeros((n_units,))  # mean spike amplitude for each unit
-    u_n_spks = np.zeros((n_units,))  # number of spikes for each unit
-    u_fr = np.zeros((n_units,))  # firing rate over entire session for each unit
-    u_fpr = np.zeros((n_units,))  # false positive rate for each unit
-    for i in range(n_units):
-        # special case for empty clusters returned by ks2
-        if not(str(type(units_b['amps'][str(i)])) == "<class 'numpy.ndarray'>"):
-            u_amps[i] = np.nan
-            u_n_spks[i] = np.nan
-            u_fr[i] = np.nan
-            u_fpr[i] = np.nan
-        else:
-            u_amps[i] = units_b['amps'][str(i)][0]
-            u_n_spks[i] = len(units_b['amps'][str(i)])
-            u_fr[i] = u_n_spks[i] / t
-            n_isi_viol = len(np.where(np.diff(units_b['times'][str(i)]) < params['rp'])[0])
-            # false positive rate is min of roots of solved quadratic equation (Hill, et al. 2011)
-            c = (t * n_isi_viol) / (2 * params['rp'] * u_n_spks[i]**2)  # 3rd term in quadratic
-            u_fpr[i] = np.min(np.abs(np.roots([-1, 1, c])))
-
-    # Get units that don't meet `params` requirements, and empty units, and filter them out.
-    units_to_rm = np.unique(np.concatenate(
-        (np.where(u_amps < params['min_amp'])[0],
-         np.where(u_fr < params['min_fr'])[0],
-         np.where(u_fpr > params['max_fpr'])[0],
-         np.where(np.isnan(u_amps))[0])))
-    filtered_units_mask = np.ones((n_units,))
-    filtered_units_mask[units_to_rm] = 0
-
-    return filtered_units_mask
+    # Iteratively filter the units for each filter param #
+    #----------------------------------------------------#
+    units = np.asarray(list(units_b.amps.keys()))
+    # Remove empty clusters
+    empty_cl = np.where([len(units_b.amps[unit]) == 0 for unit in units])[0]
+    filt_units = np.delete(units, empty_cl)
+    for param in params.keys():
+        if param == 'min_amp':  # return units above with amp > `'min_amp'`
+            mean_amps = np.asarray([np.mean(units_b.amps[unit]) for unit in filt_units])
+            filt_idxs = np.where(mean_amps > params['min_amp'])[0]
+            filt_units = filt_units[filt_idxs]
+        elif param == 'min_fr':  # return units with fr > `'min_fr'`
+            fr = np.asarray([len(units_b.amps[unit])
+                            / (units_b.times[unit][-1] - units_b.times[unit][0])
+                            for unit in filt_units])
+            filt_idxs = np.where(fr > params['min_fr'])[0]
+            filt_units = filt_units[filt_idxs]
+        elif param == 'max_fpr':  # return units with fpr < `'max_fpr'`
+            fpr = np.zeros_like(filt_units, dtype='float')
+            for i, unit in enumerate(filt_units):
+                n_spks = len(units_b.amps[unit])
+                n_isi_viol = len(np.where(np.diff(units_b.times[unit]) < params['rp'])[0])
+                # fpr is min of roots of solved quadratic equation (Hill, et al. 2011).
+                c = (t * n_isi_viol) / (2 * params['rp'] * n_spks**2)  # 3rd term in quadratic
+                fpr[i] = np.min(np.abs(np.roots([-1, 1, c])))  # solve quadratic
+            filt_idxs = np.where(fpr < params['max_fpr'])[0]
+            filt_units = filt_units[filt_idxs]
+    return filt_units.astype(int)
