@@ -24,7 +24,7 @@ class TestDownloadHTTP(unittest.TestCase):
         rep = self.ac.rest('datasets', 'list')
         self.assertTrue(isinstance(rep, oneibl.webclient._PaginatedResponse))
         self.assertTrue(len(rep) > 250)
-        self.assertTrue(rep[-1] == rep[len(rep) - 1])
+        self.assertTrue(len([d['md5'] for d in rep]) == len(rep))
 
     def test_generic_request(self):
         a = self.ac.get('/labs')

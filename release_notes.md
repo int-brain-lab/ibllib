@@ -5,7 +5,8 @@
     -   valve-open times bugfix
 -   Wheel extraction:
     -   units: radians mathematical convention
-    
+-   ONE:
+    -   Alyx client handles pagination
 
 ### Release Notes 1.3.10 Hotfix
 -   cross-platform get of session folder for rig computer copy to server

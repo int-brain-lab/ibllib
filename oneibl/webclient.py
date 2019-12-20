@@ -40,8 +40,7 @@ class _PaginatedResponse(Mapping):
             res = self.alyx._generic_request(requests.get, query)
             for i, r in enumerate(res['results']):
                 self._cache[i + offset] = res['results'][i]
-        else:
-            return self._cache[item]
+        return self._cache[item]
 
     def __iter__(self):
         for i in range(self.count):
