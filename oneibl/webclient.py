@@ -1,13 +1,51 @@
 import logging
-import urllib.request
 import os
 from pathlib import Path
-import requests
 import json
 import re
+import urllib.request
+import requests
+from collections.abc import Mapping
+import math
+
 from ibllib.misc import pprint, print_progress
 
 logger_ = logging.getLogger('ibllib')
+
+
+class _PaginatedResponse(Mapping):
+    """
+    This class allows to emulate a list from a paginated response.
+    Provides cache functionality
+    PaginatedResponse(alyx, response)
+    """
+    def __init__(self, alyx, rep):
+        self.alyx = alyx
+        self.count = rep['count']
+        self.limit = len(rep['results'])
+        self.query = rep['next'][:rep['next'].find('&limit=')]
+        # init the cache, list with None with count size
+        self._cache = [None for _ in range(self.count)]
+        # fill the cache with results of the query
+        for i in range(self.limit):
+            self._cache[i] = rep['results'][i]
+
+    def __len__(self):
+        return self.count
+
+    def __getitem__(self, item):
+        if self._cache[item] is None:
+            offset = self.limit * math.floor(item / self.limit)
+            query = f'{self.query}&limit={self.limit}&offset={offset}'
+            res = self.alyx._generic_request(requests.get, query)
+            for i, r in enumerate(res['results']):
+                self._cache[i + offset] = res['results'][i]
+        else:
+            return self._cache[item]
+
+    def __iter__(self):
+        for i in range(self.count):
+            yield self.__getitem__(i)
 
 
 def http_download_file_list(links_to_file_list, **kwargs):
@@ -227,7 +265,10 @@ class AlyxClient:
         """
         rep = self._generic_request(requests.get, rest_query)
         if isinstance(rep, dict) and list(rep.keys()) == ['count', 'next', 'previous', 'results']:
-            rep = rep['results']
+            if len(rep['results']) < rep['count']:
+                rep = _PaginatedResponse(self, rep)
+            else:
+                rep = rep['results']
         return rep
 
     def patch(self, rest_query, data=None):

@@ -537,7 +537,6 @@ class TestExtractTrialData(unittest.TestCase):
             df = raw._load_encoder_events_file_ge5(wf)
             self.assertTrue(np.all(np.diff(np.array(df.re_ts)) > 0))
 
-
     def test_load_encoder_positions(self):
         raw.load_encoder_positions(self.training_lt5['path'],
                                    settings={'IBLRIG_VERSION_TAG': '4.9.9'})
