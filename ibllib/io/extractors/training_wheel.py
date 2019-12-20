@@ -60,7 +60,11 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
                                  ['closed_loop'][0][0] for tr in bpod_data]),
     }
     # just use the closed loop for synchronization
-    return interpolate.interp1d(rote['closed_loop'], bpod['closed_loop'], fill_value="extrapolate")
+    sz = min(rote['closed_loop'].size, bpod['closed_loop'].size)
+    re = rote['closed_loop'][:sz]
+    bp = bpod['closed_loop'][:sz]
+    assert np.all(np.diff(re) - np.diff(bp) < 0.001)
+    return interpolate.interp1d(re, bp, fill_value="extrapolate")
 
 
 def get_wheel_data(session_path, bp_data=None, save=False):
