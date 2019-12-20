@@ -1,8 +1,11 @@
 ### Release Notes 1.3.11
 -   Ephys extraction:
     -   un-synchronized spike sortings not uploaded on flat-iron
-    -   reaction times exctracted
+    -   reaction times extracted
     -   valve-open times bugfix
+-   Wheel extraction:
+    -   units: radians mathematical convention
+    
 
 ### Release Notes 1.3.10 Hotfix
 -   cross-platform get of session folder for rig computer copy to server

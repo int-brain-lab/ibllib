@@ -52,7 +52,7 @@ def probes_description(ses_path):
                 'theta': prb['P'], 'depth': prb['D'], 'beta': prb['T']}
 
     # the labels may not match, in which case throw a warning and work in alphabetical order
-    if labels != ['probe00', 'probe01']:
+    if labels != ('probe00', 'probe01'):
         _logger.warning("Probe names do not match the json settings files. Will match coordinates"
                         " per alphabetical order !")
         _ = [_logger.warning(f"  probe0{i} ----------  {lab} ") for i, lab in enumerate(labels)]
@@ -115,14 +115,15 @@ def sync_spike_sortings(ses_path):
                 # remove the alf folder if the sync failed
                 shutil.rmtree(probe_out_path)
                 continue
+            # converts the folder to ALF
+            ks2_to_alf(subdir, probe_out_path, ampfactor=_sample2v(ef.ap), label=None, force=True)
             # patch the spikes.times files manually
             st_file = ses_path.joinpath(probe_out_path, 'spikes.times.npy')
             interp_times = apply_sync(sync_file, np.load(st_file), forward=True)
             np.save(st_file, interp_times)
-        # computes QC on the ks2 output
-        ephysqc._spike_sorting_metrics_ks2(subdir, save=True)
-        # converts the folder to ALF
-        ks2_to_alf(subdir, probe_out_path, ampfactor=_sample2v(ef.ap), label=None, force=True)
+        else:
+            # converts the folder to ALF and computes metrics
+            ks2_to_alf(subdir, probe_out_path, ampfactor=_sample2v(ef.ap), label=None, force=True)
 
 
 def ks2_to_alf(ks_path, out_path, ampfactor=1, label=None, force=True):
@@ -132,6 +133,7 @@ def ks2_to_alf(ks_path, out_path, ampfactor=1, label=None, force=True):
     :param out_path:
     :return:
     """
+    ephysqc._spike_sorting_metrics_ks2(ks_path, save=True)
     m = ephysqc.phy_model_from_ks2_path(ks_path)
     ac = alf.EphysAlfCreator(m)
     ac.convert(out_path, label=label, force=force, ampfactor=ampfactor)
