@@ -6,7 +6,6 @@ non-overlapping bins and convolving spike times with a gaussian kernel.
 import numpy as np
 import pandas as pd
 from scipy import interpolate
-import brainbox as bb
 from brainbox import core
 
 
@@ -280,17 +279,17 @@ def filter_units(units_b, t, **kwargs):
         by unit ID.
     t : float
         Duration of time over which to calculate the firing rate and false positive rate.
-    
+
     Keyword Parameters
     ------------------
     min_amp : float
         The minimum mean amplitude (in V) of the spikes in the unit. Default value is 50e-6.
-    min_fr : float 
+    min_fr : float
         The minimum firing rate (in Hz) of the unit. Default value is 0.5.
     max_fpr : float
         The maximum false positive rate of the unit (using the fp formula in Hill et al. (2011)
         J Neurosci 31: 8699-8705). Default value is 0.2.
-    rp : float 
+    rp : float
         The refractory period (in s) of the unit. Used to calculate `max_fp`. Default value is
         0.002.
 
@@ -320,17 +319,17 @@ def filter_units(units_b, t, **kwargs):
     2) Filter units with no minimum amplitude, a minimum firing rate of 1 Hz, and a max false
     positive rate of 0.2, given a refractory period of 2 ms.
         >>> filtered_units  = bb.processing.filter_units(units_b, T, min_amp=0, min_fr=1)
-    
+
     TODO: `units_b` input arg could eventually be replaced by `clstrs_b` if the required metrics
           are in `clstrs_b['metrics']`
     '''
 
     # Set params
-    params={'min_amp': 50e-6, 'min_fr': 0.5, 'max_fpr': 0.2, 'rp': 0.002}  # defaults
+    params = {'min_amp': 50e-6, 'min_fr': 0.5, 'max_fpr': 0.2, 'rp': 0.002}  # defaults
     params.update(kwargs)  # update from **kwargs
 
     # Iteratively filter the units for each filter param #
-    #----------------------------------------------------#
+    # -------------------------------------------------- #
     units = np.asarray(list(units_b.amps.keys()))
     # Remove empty clusters
     empty_cl = np.where([len(units_b.amps[unit]) == 0 for unit in units])[0]
@@ -341,8 +340,8 @@ def filter_units(units_b, t, **kwargs):
             filt_idxs = np.where(mean_amps > params['min_amp'])[0]
             filt_units = filt_units[filt_idxs]
         elif param == 'min_fr':  # return units with fr > `'min_fr'`
-            fr = np.asarray([len(units_b.amps[unit])
-                            / (units_b.times[unit][-1] - units_b.times[unit][0])
+            fr = np.asarray([len(units_b.amps[unit]) /
+                            (units_b.times[unit][-1] - units_b.times[unit][0])
                             for unit in filt_units])
             filt_idxs = np.where(fr > params['min_fr'])[0]
             filt_units = filt_units[filt_idxs]

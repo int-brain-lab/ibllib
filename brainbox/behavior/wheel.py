@@ -11,8 +11,8 @@ from matplotlib.collections import LineCollection
 
 
 # Define some constants
-ENC_RES = 1024*4  # Rotary encoder resolution, assumes X4 encoding
-WHEEL_DIAMETER = 3.1*2  # Wheel diameter in cm
+ENC_RES = 1024 * 4  # Rotary encoder resolution, assumes X4 encoding
+WHEEL_DIAMETER = 3.1 * 2  # Wheel diameter in cm
 
 
 def interpolate_position(re_ts, re_pos, freq=1000, kind='linear', fill_gaps=None):
@@ -33,7 +33,7 @@ def interpolate_position(re_ts, re_pos, freq=1000, kind='linear', fill_gaps=None
         gaps, = np.where(np.diff(re_ts) >= fill_gaps)
 
         for i in gaps:
-            yinterp[(t >= re_ts[i]) & (t < re_ts[i+1])] = re_pos[i]
+            yinterp[(t >= re_ts[i]) & (t < re_ts[i + 1])] = re_pos[i]
 
     return yinterp, t
 
@@ -70,7 +70,7 @@ def velocity_smoothed(pos, freq, smooth_size=0.03):
     # Define our smoothing window with an area of 1 so the units won't be changed
     stdSamps = np.round(smooth_size * freq)  # Standard deviation relative to sampling frequency
     N = stdSamps * 6  # Number of points in the Gaussian
-    gauss_std = (N-1) / 6  # @fixme magic number everywhere!
+    gauss_std = (N - 1) / 6  # @fixme magic number everywhere!
     win = gaussian(N, gauss_std)
     win = win / win.sum()  # Normalize amplitude
 
@@ -147,7 +147,7 @@ def movements(t, pos, freq=1000, pos_thresh=8, t_thresh=.2, min_gap=.1, pos_thre
         # Below is the total change in position for each window
         max_disp[i2proc] = np.nanmax(w2e, axis=1) - np.nanmin(w2e, axis=1)
         c += BATCH_SIZE - t_thresh_samps
-        if i2proc[-1] == t.size-1:
+        if i2proc[-1] == t.size - 1:
             break
 
     moving = max_disp > pos_thresh  # for each window is the change in position greater than
@@ -248,7 +248,7 @@ def cm_to_deg(positions, wheel_diameter=WHEEL_DIAMETER):
     :param wheel_diameter: the diameter of the wheel in cm
     :return: array of wheel positions in degrees turned
     """
-    return positions / (wheel_diameter*pi) * 360
+    return positions / (wheel_diameter * pi) * 360
 
 
 def cm_to_rad(positions, wheel_diameter=WHEEL_DIAMETER):
@@ -258,7 +258,7 @@ def cm_to_rad(positions, wheel_diameter=WHEEL_DIAMETER):
     :param wheel_diameter: the diameter of the wheel in cm
     :return: array of wheel angle in radians
     """
-    return positions * (2/wheel_diameter)
+    return positions * (2 / wheel_diameter)
 
 
 def samples_to_cm(positions, wheel_diameter=WHEEL_DIAMETER, resolution=ENC_RES):
@@ -288,7 +288,9 @@ def traces_by_trial(t, pos, trials, start='stimOn_times', end='feedback_times'):
         start = trials['intervals'][:, 0]
         end = trials['intervals'][:, 1]
     traces = np.vstack((pos, t))
-    def to_mask(a, b): return (t > a) & (t < b)
+
+    def to_mask(a, b):
+        (t > a) & (t < b)
     #  to_dict = lambda a, b, c: position: a
     cuts = [traces[:, to_mask(s, e)] for s, e in zip(trials[start], trials[end])]
     # ans = map(to_mask, zip(trials[start], trials[end]))

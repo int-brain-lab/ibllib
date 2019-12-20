@@ -12,7 +12,7 @@ Run the following to set-up the workspace to run the docstring examples:
 # Load the alf spikes bunch and clusters bunch, and get a units bunch.
 >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
 >>> clstrs_b = aio.load_object(path_to_alf_out, 'clusters')
->>> units_b = bb.processing.get_units_bunch(spks_b)  # may take a few mins to compute 
+>>> units_b = bb.processing.get_units_bunch(spks_b)  # may take a few mins to compute
 """
 import brainbox as bb
 import numpy as np
@@ -81,18 +81,18 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
         for feat in feat_names:
             [units_b[feat].pop(unit) for unit in unit_list if not(int(unit) in units)]
     unit_list = list(units_b[feat_names[0]].keys())  # get new `unit_list` after removing units
-    
+
     # Initialize `p_vals` and `variances`.
     p_vals_b = bb.core.Bunch()
     variances_b = bb.core.Bunch()
-    
+
     # Set the test as a lambda function (in future, more tests can be added to this dict)
     tests = \
         {
             'ks': lambda x, y: stats.kstest(x, y)
         }
     test_fun = tests[test]
-    
+
     # Compute the statistical tests and variances. For each feature, iteratively get each unit's
     # p-values and variances, and add them as keys to the respective bunches `p_vals_feat` and
     # `variances_feat`. After iterating through all units, add these bunches as keys to their
@@ -114,7 +114,7 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
             variances_feat[str(unit)] = var
         p_vals_b[feat] = p_vals_feat
         variances_b[feat] = variances_feat
-    
+
     return p_vals_b, variances_b
 
 
@@ -160,7 +160,7 @@ def feat_cutoff(feat, spks_per_bin=20, sigma=5, min_num_bins=50):
         >>> feat = units_b['amps']['1']
         >>> fraction_missing = bb.plot.feat_cutoff(feat)
     '''
-    
+
     # Ensure minimum number of spikes requirement is met.
     error_str = 'The number of spikes in this unit is {0}, ' \
                 'but it must be at least {1}'.format(feat.size, spks_per_bin * min_num_bins)
@@ -293,7 +293,7 @@ def firing_rate_coeff_var(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
     Examples
     --------
     1) Compute the coefficient of variation of the firing rate for unit 1 from the time of its
-    first to last spike, and compute the coefficient of variation of the firing rate for unit 2 
+    first to last spike, and compute the coefficient of variation of the firing rate for unit 2
     from the first to second minute.
         >>> ts_1 = units_b['times']['1']
         >>> ts_2 = units_b['times']['2']

@@ -34,11 +34,11 @@ class TestWheel(unittest.TestCase):
         self.assertTrue(np.array_equal(off, expected[1]), msg='Unexpected offsets')
         self.assertTrue(np.array_equal(amp, expected[2]), msg='Unexpected move amps')
         # Differences due to convolution algorithm
-        all_close = np.allclose(peak_vel, expected[3], atol=1.e-2)  
+        all_close = np.allclose(peak_vel, expected[3], atol=1.e-2)
         self.assertTrue(all_close, msg='Unexpected peak velocities')
 
     def test_movements_FPGA(self):
-        # These test data are the same as those used in the MATLAB code.  Test data are from 
+        # These test data are the same as those used in the MATLAB code.  Test data are from
         # extracted FPGA wheel data
         pos, t = wheel.interpolate_position(*self.test_data[1][0], freq=1000)
         expected = self.test_data[1][1]
@@ -48,5 +48,5 @@ class TestWheel(unittest.TestCase):
         self.assertTrue(np.allclose(on, expected[0], atol=1.e-5), msg='Unexpected onsets')
         self.assertTrue(np.allclose(off, expected[1], atol=1.e-5), msg='Unexpected offsets')
         self.assertTrue(np.allclose(amp, expected[2], atol=1.e-5), msg='Unexpected move amps')
-        self.assertTrue(np.allclose(peak_vel, expected[3], atol=1.e-2), 
+        self.assertTrue(np.allclose(peak_vel, expected[3], atol=1.e-2),
                         msg='Unexpected peak velocities')
