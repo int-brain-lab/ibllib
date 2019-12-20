@@ -102,7 +102,7 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
         variances_feat = bb.core.Bunch((unit, 0) for unit in unit_list)
         for unit in unit_list:
             # If we're missing units/features, create a NaN placeholder and skip them:
-            if not(str(type(units_b[feat][unit])) == "<class 'numpy.ndarray'>"):
+            if len(units_b['times'][str(unit)] == 0):
                 p_val = np.nan
                 var = np.nan
             else:
