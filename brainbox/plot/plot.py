@@ -88,7 +88,7 @@ def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cma
     else:
         good_units = unit_list
 
-    # Get depth of max amplitude channel for good units
+    # Get mean depths of spikes for good units
     depths = np.asarray([np.mean(units_b['depths'][str(unit)]) for unit in good_units])
 
     # Create unit normalized colormap based on `depths`, sorted by depth.
@@ -104,7 +104,7 @@ def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cma
     fig = ax.figure
     cbar = fig.colorbar(plt.cm.ScalarMappable(cmap=cmap), ax=ax)
     max_d = np.max(depths)
-    tick_labels = [int(max_d) * tick for tick in (0, 0.2, 0.4, 0.6, 0.8, 1.0)]
+    tick_labels = [int(max_d * tick) for tick in (0, 0.2, 0.4, 0.6, 0.8, 1.0)]
     cbar.set_ticks(cbar.get_ticks())  # must call `set_ticks` to call `set_ticklabels`
     cbar.set_ticklabels(tick_labels)
     ax.set_title('{feat} Variance'.format(feat=feat_name))
