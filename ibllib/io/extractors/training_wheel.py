@@ -60,10 +60,20 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
                                  ['closed_loop'][0][0] for tr in bpod_data]),
     }
     # just use the closed loop for synchronization
+    # handle different sizes in synchronization:
     sz = min(rote['closed_loop'].size, bpod['closed_loop'].size)
-    re = rote['closed_loop'][:sz]
-    bp = bpod['closed_loop'][:sz]
-    assert np.all(np.diff(re) - np.diff(bp) < 0.001)
+    # if all the sample are contiguous and first samples match
+    if np.all(np.abs(np.diff(rote['closed_loop'][:sz]) -
+                     np.diff(bpod['closed_loop'][:sz])) < 0.001):
+        re = rote['closed_loop'][:sz]
+        bp = bpod['closed_loop'][:sz]
+    # if all the sample are contiguous and last samples match
+    elif np.all(np.abs(np.diff(rote['closed_loop'][-sz:]) -
+                       np.diff(bpod['closed_loop'][-sz:])) < 0.001):
+        re = rote['closed_loop'][-sz:]
+        bp = bpod['closed_loop'][-sz:]
+    else:
+        NotImplementedError("Can't sync bpod and rotary encoder")
     return interpolate.interp1d(re, bp, fill_value="extrapolate")
 
 
