@@ -601,8 +601,8 @@ def driftmap(feat, ts, ax=None):
         >>> cd, md = bb.plot.driftmap(ts, depths)
     '''
 
-    cd = bb.metrics.cum_drift(feat, ts)
-    md = bb.metrics.max_drift(feat, ts)
+    cd = bb.metrics.cum_drift(feat)
+    md = bb.metrics.max_drift(feat)
 
     if ax is None:
         fig, ax = plt.subplots()
