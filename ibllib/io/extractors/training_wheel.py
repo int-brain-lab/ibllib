@@ -47,7 +47,6 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
         bpod_data = raw.load_data(session_path)
     if not re_events:
         evt = raw.load_encoder_events(session_path)
-
     # we work with stim_on (2) and closed_loop (3) states for the synchronization with bpod
     tre = evt.re_ts.values / 1e6  # convert to seconds
     # the first trial on the rotary encoder is a dud
@@ -59,21 +58,26 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
         'closed_loop': np.array([tr['behavior_data']['States timestamps']
                                  ['closed_loop'][0][0] for tr in bpod_data]),
     }
+    # bpod bug that spits out events in ms instead of us
+    if bpod['closed_loop'][-1] / rote['closed_loop'][-1] > 999:
+        logger_.error("Rotary encoder stores values in ms instead of us. Wheel timing inaccurrate")
+        rote['stim_on'] *= 1e3
+        rote['closed_loop'] *= 1e3
     # just use the closed loop for synchronization
     # handle different sizes in synchronization:
     sz = min(rote['closed_loop'].size, bpod['closed_loop'].size)
     # if all the sample are contiguous and first samples match
     if np.all(np.abs(np.diff(rote['closed_loop'][:sz]) -
-                     np.diff(bpod['closed_loop'][:sz])) < 0.001):
+                     np.diff(bpod['closed_loop'][:sz])) < 0.0011):
         re = rote['closed_loop'][:sz]
         bp = bpod['closed_loop'][:sz]
     # if all the sample are contiguous and last samples match
     elif np.all(np.abs(np.diff(rote['closed_loop'][-sz:]) -
-                       np.diff(bpod['closed_loop'][-sz:])) < 0.001):
+                       np.diff(bpod['closed_loop'][-sz:])) < 0.0011):
         re = rote['closed_loop'][-sz:]
         bp = bpod['closed_loop'][-sz:]
     else:
-        NotImplementedError("Can't sync bpod and rotary encoder")
+        raise ValueError("Can't sync bpod and rotary encoder: non-contiguous sync pulses")
     return interpolate.interp1d(re, bp, fill_value="extrapolate")
 
 
