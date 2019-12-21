@@ -26,7 +26,8 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
     '''
     Computes the probability that the empirical spike feature distribution(s), for specified
     feature(s), for all units, comes from a specific theoretical distribution, based on a specified
-    statistical test. Also calculates the variances of the spike feature(s) for all units.
+    statistical test. Also calculates the coefficients of variation of the spike feature(s) for all
+    units.
 
     Parameters
     ----------
@@ -51,9 +52,9 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
         A bunch with `feat_names` as keys, containing a ndarray with p-values (the probabilities
         that the empirical spike feature distribution for each unit comes from `dist` based on
         `test`) for each unit for all `feat_names`.
-    variances_b : bunch
-        A bunch with `feat_names` as keys, containing a ndarray with the variances of each unit's
-        empirical spike feature distribution for all features.
+    cv_b : bunch
+        A bunch with `feat_names` as keys, containing a ndarray with the coefficients of variation
+        of each unit's empirical spike feature distribution for all features.
 
     See Also
     --------
@@ -84,7 +85,7 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
 
     # Initialize `p_vals` and `variances`.
     p_vals_b = bb.core.Bunch()
-    variances_b = bb.core.Bunch()
+    cv_b = bb.core.Bunch()
 
     # Set the test as a lambda function (in future, more tests can be added to this dict)
     tests = \
@@ -99,23 +100,23 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
     # respective parent bunches, `p_vals` and `variances`.
     for feat in feat_names:
         p_vals_feat = bb.core.Bunch((unit, 0) for unit in unit_list)
-        variances_feat = bb.core.Bunch((unit, 0) for unit in unit_list)
+        cv_feat = bb.core.Bunch((unit, 0) for unit in unit_list)
         for unit in unit_list:
             # If we're missing units/features, create a NaN placeholder and skip them:
             if len(units_b['times'][str(unit)]) == 0:
                 p_val = np.nan
-                var = np.nan
+                cv = np.nan
             else:
                 # Calculate p_val and var for current feature
                 _, p_val = test_fun(units_b[feat][unit], dist)
-                var = np.var(units_b[feat][unit])
+                cv = np.var(units_b[feat][unit]) / np.mean(units_b[feat][unit])
             # Append current unit's values to list of units' values for current feature:
             p_vals_feat[str(unit)] = p_val
-            variances_feat[str(unit)] = var
+            cv_feat[str(unit)] = cv
         p_vals_b[feat] = p_vals_feat
-        variances_b[feat] = variances_feat
+        cv_b[feat] = cv_feat
 
-    return p_vals_b, variances_b
+    return p_vals_b, cv_b
 
 
 def feat_cutoff(feat, spks_per_bin=20, sigma=5, min_num_bins=50):
@@ -408,3 +409,39 @@ def cum_drift(depths):
 
     cd = np.sum(np.abs(np.diff(depths))) / len(depths)
     return cd
+
+
+def pres_ratio(ts, hist_win=10):
+    '''
+    Computes the presence ratio of spike counts: the number of bins where there is at least one
+    spike, over the total number of bins, given a specified bin width.
+
+    Parameters
+    ----------
+    ts : ndarray
+        The spike timestamps from which to compute the presence ratio.
+    hist_win : float
+        The time window (in s) to use for computing the presence ratio.
+
+    Returns
+    -------
+    pr : float
+        The presence ratio.
+    spks_bins : ndarray
+        The number of spks in each bin.
+
+    See Also
+    --------
+    plot.pres_ratio
+
+    Examples
+    --------
+    1) Compute the presence ratio for unit 1, given a window of 10 s.
+        >>> ts = units_b['times']['1']
+        >>> pr, pr_bins = bb.metrics.pres_ratio(ts)
+    '''
+
+    bins = np.arange(0, ts[-1] + hist_win, hist_win)
+    spks_bins, _ = np.histogram(ts, bins)
+    pr = len(np.where(spks_bins)[0]) / len(spks_bins)
+    return pr, spks_bins

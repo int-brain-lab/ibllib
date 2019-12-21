@@ -20,14 +20,16 @@ import os.path as op
 from warnings import warn
 import numpy as np
 import matplotlib.pyplot as plt
+# from matplotlib.ticker import StrMethodFormatter
 import brainbox as bb
 
 
 def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cmap_name='coolwarm',
               ax=None):
     '''
-    Plots the variances of a particular spike feature for all units as a bar plot, where each bar
-    is color-coded corresponding to the depth of the max amplitude channel of the respective unit.
+    Plots the coefficients of variation of a particular spike feature for all units as a bar plot,
+    where each bar is color-coded corresponding to the depth of the max amplitude channel of the
+    respective unit.
 
     Parameters
     ----------
@@ -51,10 +53,10 @@ def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cma
 
     Returns
     -------
-    var_vals : ndarray
-        Contains the variances of `feat_name` for each unit.
+    cv_vals : ndarray
+        The coefficients of variation of `feat_name` for each unit.
     p_vals : ndarray
-        Contains the probabilites that the distribution for `feat_name` for each unit comes from a
+        The probabilites that the distribution for `feat_name` for each unit comes from a
         `dist` distribution based on the `test` statistical test.
 
     See Also
@@ -63,7 +65,7 @@ def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cma
 
     Examples
     --------
-    1) Create a bar plot of the variances of the spike amplitudes for all units.
+    1) Create a bar plot of the coefficients of variation of the spike amplitudes for all units.
         >>> fig, var_vals, p_vals = bb.plot.feat_vars(units_b)
     '''
 
@@ -74,14 +76,15 @@ def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cma
         [units_b['depths'].pop(unit) for unit in unit_list if not(int(unit) in units)]
     unit_list = list(units_b['depths'].keys())  # get new `unit_list` after removing units
 
-    # Calculate variances for all units
-    p_vals_b, variances_b = bb.metrics.unit_stability(
+    # Calculate coefficients of variation for all units
+    p_vals_b, cv_b = bb.metrics.unit_stability(
         units_b, units=units, feat_names=[feat_name], dist=dist, test=test)
-    var_vals = np.array(tuple(variances_b[feat_name].values()))
+    cv_vals = np.array(tuple(cv_b[feat_name].values()))
+    cv_vals = cv_vals * 1e6 if feat_name == 'amps' else cv_vals  # convert to uV if amps
     p_vals = np.array(tuple(p_vals_b[feat_name].values()))
 
     # Specify and remove bad units (i.e. missing unit numbers from spike sorter output).
-    bad_units = np.where(np.isnan(var_vals))[0]
+    bad_units = np.where(np.isnan(cv_vals))[0]
     if len(bad_units) > 0:
         [unit_list.pop(bad_unit) for bad_unit in bad_units]
         good_units = unit_list
@@ -96,23 +99,23 @@ def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cma
     depths_norm = depths / np.max(depths)
     rgba = np.asarray([cmap(depth) for depth in np.sort(np.flip(depths_norm))])
 
-    # Plot depth-color-coded h bar plot of variances for `feature` for each unit, where units are
+    # Plot depth-color-coded h bar plot of CVs for `feature` for each unit, where units are
     # sorted descendingly by depth along y-axis.
     if ax is None:
         fig, ax = plt.subplots()
-    ax.barh(y=[int(unit) for unit in good_units], width=var_vals[np.argsort(depths)], color=rgba)
+    ax.barh(y=[int(unit) for unit in good_units], width=cv_vals[np.argsort(depths)], color=rgba)
     fig = ax.figure
     cbar = fig.colorbar(plt.cm.ScalarMappable(cmap=cmap), ax=ax)
     max_d = np.max(depths)
     tick_labels = [int(max_d * tick) for tick in (0, 0.2, 0.4, 0.6, 0.8, 1.0)]
     cbar.set_ticks(cbar.get_ticks())  # must call `set_ticks` to call `set_ticklabels`
     cbar.set_ticklabels(tick_labels)
-    ax.set_title('{feat} Variance'.format(feat=feat_name))
+    ax.set_title('CV of {feat}'.format(feat=feat_name))
     ax.set_ylabel('Unit Number (sorted by depth)')
-    ax.set_xlabel('Variance')
+    ax.set_xlabel('CV')
     cbar.set_label('Depth', rotation=-90)
 
-    return var_vals, p_vals
+    return cv_vals, p_vals
 
 
 def feat_cutoff(feat, feat_name, spks_per_bin=20, sigma=5, min_num_bins=50, ax=None):
@@ -166,21 +169,21 @@ def feat_cutoff(feat, feat_name, spks_per_bin=20, sigma=5, min_num_bins=50, ax=N
         num_bins = np.int(feat.size / spks_per_bin)
         ax[0].hist(feat, bins=num_bins)
         ax[0].set_xlabel('{0}'.format(feat_name))
-        ax[0].set_ylabel('count')
-        ax[0].set_title('histogram of {0}'.format(feat_name))
+        ax[0].set_ylabel('Count')
+        ax[0].set_title('Histogram of {0}'.format(feat_name))
         ax[1].plot(pdf)
         ax[1].vlines(cutoff_idx, 0, np.max(pdf), colors='r')
-        ax[1].set_xlabel('bin number')
-        ax[1].set_ylabel('density')
-        ax[1].set_title('cutoff of pdf at end of symmetry around peak\n'
+        ax[1].set_xlabel('Bin Number')
+        ax[1].set_ylabel('Density')
+        ax[1].set_title('PDF Symmetry Cutoff\n'
                         '(estimated {:.2f}% missing spikes)'.format(fraction_missing * 100))
     else:  # just plot pdf
         ax = ax[0]
         ax.plot(pdf)
         ax.vlines(cutoff_idx, 0, np.max(pdf), colors='r')
-        ax.set_xlabel('bin number')
-        ax.set_ylabel('density')
-        ax.set_title('cutoff of pdf at end of symmetry around peak\n'
+        ax.set_xlabel('Bin Number')
+        ax.set_ylabel('Density')
+        ax.set_title('PDF Symmetry Cutoff\n'
                      '(estimated {:.2f}% missing spikes)'.format(fraction_missing * 100))
 
     return fraction_missing
@@ -559,3 +562,97 @@ def peri_event_time_histogram(
     ax.spines['right'].set_visible(False)
     ax.set_xlabel('Time (s) after event')
     return ax
+
+
+def driftmap(feat, ts, ax=None):
+    '''
+    Plots the driftmap of a spike feature array over time.
+
+    Parameters
+    ----------
+    feat : ndarray
+        The spikes' feature values.
+    ts : ndarray
+        The spike timestamps from which to compute the firing rate.
+    ax : axessubplot (optional)
+        The axis handle to plot the histogram on. (if `None`, a new figure and axis is created)
+
+    Returns
+    -------
+    cd: float
+        The cumulative drift of `feat`.
+    md: float
+        The maximum drift of `feat`.
+
+    See Also
+    --------
+    metrics.cum_drift
+    metrics.max_drift
+
+    Examples
+    --------
+    1) Plot the amplitude driftmap for unit 1.
+        >>> ts = units_b['times']['1']
+        >>> amps = units_b['amps']['1']
+        >>> cd, md = bb.plot.driftmap(ts, amps)
+    2) Plot the depth driftmap for unit 1.
+        >>> ts = units_b['times']['1']
+        >>> depths = units_b['depths']['1']
+        >>> cd, md = bb.plot.driftmap(ts, depths)
+    '''
+
+    cd = bb.metrics.cum_drift(feat, ts)
+    md = bb.metrics.max_drift(feat, ts)
+
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    ax.plot(ts, feat, '.')
+
+    return cd, md
+
+
+def pres_ratio(ts, hist_win=10, ax=None):
+    '''
+    Plots the presence ratio of spike counts: the number of bins where there is at least one
+    spike, over the total number of bins, given a specified bin width.
+
+    Parameters
+    ----------
+    ts : ndarray
+        The spike timestamps from which to compute the presence ratio.
+    hist_win : float
+        The time window (in s) to use for computing the presence ratio.
+    ax : axessubplot (optional)
+        The axis handle to plot the histogram on. (if `None`, a new figure and axis is created)
+
+    Returns
+    -------
+    pr : float
+        The presence ratio.
+    spks_bins : ndarray
+        The number of spks in each bin.
+
+    See Also
+    --------
+    metrics.pres_ratio
+
+    Examples
+    --------
+    1) Plot the presence ratio for unit 1, given a window of 10 s.
+        >>> ts = units_b['times']['1']
+        >>> pr, pr_bins = bb.plot.pres_ratio(ts)
+    '''
+
+    pr, spks_bins = bb.metrics.pres_ratio(ts, hist_win)
+    pr_bins = np.where(spks_bins > 0, 1, 0)
+
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    ax.plot(pr_bins)
+    ax.set_xlabel('Bin Number (width={:.1f}s)'.format(hist_win))
+    ax.set_ylabel('Presence')
+    ax.set_title('Presence Ratio')
+
+    return pr, spks_bins
