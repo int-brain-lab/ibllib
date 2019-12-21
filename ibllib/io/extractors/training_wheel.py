@@ -67,17 +67,26 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
     # handle different sizes in synchronization:
     sz = min(rote['closed_loop'].size, bpod['closed_loop'].size)
     # if all the sample are contiguous and first samples match
-    if np.all(np.abs(np.diff(rote['closed_loop'][:sz]) -
-                     np.diff(bpod['closed_loop'][:sz])) < 0.0011):
+    diff_first_match = np.diff(rote['closed_loop'][:sz]) - np.diff(bpod['closed_loop'][:sz])
+    # if all the sample are contiguous and last samples match
+    diff_last_match = np.diff(rote['closed_loop'][-sz:]) - np.diff(bpod['closed_loop'][-sz:])
+    # 99% of the pulses match for a first sample lock
+    if np.mean(np.abs(diff_first_match) < 0.0011) > 0.99:
         re = rote['closed_loop'][:sz]
         bp = bpod['closed_loop'][:sz]
-    # if all the sample are contiguous and last samples match
-    elif np.all(np.abs(np.diff(rote['closed_loop'][-sz:]) -
-                       np.diff(bpod['closed_loop'][-sz:])) < 0.0011):
+        indko = np.where(np.abs(diff_first_match) >= 0.0011)[0]
+    # 99% of the pulses match for a last sample lock
+    elif np.mean(np.abs(diff_last_match) < 0.0011) > 0.99:
         re = rote['closed_loop'][-sz:]
         bp = bpod['closed_loop'][-sz:]
+        indko = np.where(np.abs(diff_last_match) >= 0.0011)[0]
     else:
         raise ValueError("Can't sync bpod and rotary encoder: non-contiguous sync pulses")
+    # remove faulty indices due to missing or bad syncs
+    indko = np.unique(np.r_[indko + 1, indko])
+    re = np.delete(re, indko)
+    bp = np.delete(bp, indko)
+    assert np.all(np.abs(np.diff(re) - np.diff(bp)) < 0.0011)
     return interpolate.interp1d(re, bp, fill_value="extrapolate")
 
 
