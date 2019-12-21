@@ -23,7 +23,10 @@ class _PaginatedResponse(Mapping):
         self.alyx = alyx
         self.count = rep['count']
         self.limit = len(rep['results'])
-        self.query = rep['next'][:rep['next'].find('&limit=')]
+        # warning: the offset and limit filters are not necessarily the last ones
+        lquery = [q for q in rep['next'].split('&')
+                  if not (q.startswith('offset=') or q.startswith('limit='))]
+        self.query = '&'.join(lquery)
         # init the cache, list with None with count size
         self._cache = [None for _ in range(self.count)]
         # fill the cache with results of the query
