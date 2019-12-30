@@ -452,8 +452,9 @@ def qc_fpga_task(fpga_trials, alf_trials):
             tstart = alf_trials['intervals_bpod'][:, 0]
         else:
             tstart = alf_trials['intervals'][:, 0]
-        status &= np.all(alf_trials[k] - tstart > 0)
-        status &= np.all(np.diff(alf_trials[k]) > 0)
+        selection = ~np.isnan(alf_trials[k])
+        status &= np.all(alf_trials[k][selection] - tstart[selection] > 0)
+        status &= np.all(np.diff(alf_trials[k][selection]) > 0)
     assert status
 
     """
