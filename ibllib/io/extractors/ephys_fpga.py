@@ -4,6 +4,7 @@ import uuid
 
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy import interpolate
 
 from brainbox.core import Bunch
 import brainbox.behavior.wheel as whl
@@ -431,7 +432,8 @@ def align_with_bpod(session_path):
         if not k.endswith('_times_bpod'):
             continue
         np.save(output_path.joinpath(f'_ibl_trials.{k[:-5]}.npy'), trials[k] + dt)
-    return np.median(dt)
+    return interpolate.interp1d(trials['intervals_bpod'][:, 0],
+                                trials['intervals'][:, 0], fill_value="extrapolate")
 
 
 def extract_sync(session_path, save=False, force=False, ephys_files=None):
