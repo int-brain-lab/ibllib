@@ -92,6 +92,7 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
     re = np.delete(re, indko)
     bp = np.delete(bp, indko)
     # check the linear drift
+    assert bp.size > 1
     poly = np.polyfit(bp, re, 1)
     assert np.all(np.abs(np.polyval(poly, bp) - re) < 0.001)
     return interpolate.interp1d(re, bp, fill_value="extrapolate")
