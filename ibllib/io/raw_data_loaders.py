@@ -207,25 +207,26 @@ def load_encoder_events(session_path, settings=False):
         return _load_encoder_events_file_lt5(path)
 
 
-def _load_encoder_positions_file_lt5(file_path):
-    # file loader without the session overhead
+def _load_encoder_positions_file(file_path, **kwargs):
     if file_path.stat().st_size == 0:
         logger_.error("_iblrig_encoderPositions.raw.ssv is an empty file. ")
         raise ValueError("_iblrig_encoderPositions.raw.ssv is an empty file. ABORT EXTRACTION. ")
-    data = pd.read_csv(file_path, sep=' ', header=None, error_bad_lines=False)
-    data = data.drop([0, 4], axis=1)
-    data.columns = ['re_ts', 're_pos', 'bns_ts']
+    return pd.read_csv(file_path, sep=' ', header=None, error_bad_lines=False, **kwargs)
+
+
+def _load_encoder_positions_file_lt5(file_path):
+    # file loader without the session overhead
+    data = _load_encoder_positions_file(file_path,
+                                        names=['_', 're_ts', 're_pos', 'bns_ts', '__'],
+                                        usecols=['re_ts', 're_pos', 'bns_ts'])
     return _groom_wheel_data_lt5(data, label='_iblrig_encoderPositions.raw.ssv', path=file_path)
 
 
 def _load_encoder_positions_file_ge5(file_path):
     # file loader without the session overhead
-    if file_path.stat().st_size == 0:
-        logger_.error("_iblrig_encoderPositions.raw.ssv is an empty file. ")
-        raise ValueError("_iblrig_encoderPositions.raw.ssv is an empty file. ABORT EXTRACTION. ")
-    data = pd.read_csv(file_path, sep=' ', header=None, error_bad_lines=False)
-    data = data.drop([2], axis=1)
-    data.columns = ['re_ts', 're_pos']
+    data = _load_encoder_positions_file(file_path,
+                                        names=['re_ts', 're_pos', '_'],
+                                        usecols=['re_ts', 're_pos'])
     return _groom_wheel_data_ge5(data, label='_iblrig_encoderPositions.raw.ssv', path=file_path)
 
 
@@ -372,6 +373,11 @@ def load_mic(session_path):
 def _clean_wheel_dataframe(data, label, path):
     if np.any(data.isna()):
         logger_.warning(label + ' has missing/incomplete records \n %s', path)
+    # first step is to re-interpret as numeric objects if not already done
+    for col in data.columns:
+        if data[col].dtype == np.object and col not in ['bns_ts']:
+            data[col] = pd.to_numeric(data[col], errors='coerce')
+    # then drop Nans and duplicates
     data.dropna(inplace=True)
     data.drop_duplicates(keep='first', inplace=True)
     data.reset_index(inplace=True)
