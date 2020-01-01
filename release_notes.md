@@ -1,5 +1,6 @@
 ### Release Notes 1.4.1
 -   wheel extraction outputs a timestamps attribute, not times
+-   make the wheel extraction more robust
 
 ### Release Notes 1.4.0
 -   Ephys extraction:
