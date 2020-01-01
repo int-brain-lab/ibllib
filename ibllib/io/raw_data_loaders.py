@@ -151,17 +151,27 @@ def _load_encoder_events_file_ge5(file_path):
     return _groom_wheel_data_ge5(data, label='_iblrig_encoderEvents.raw.ssv', path=file_path)
 
 
+def load_stim_position_screen(session_path):
+    path = Path(session_path).joinpath("raw_behavior_data")
+    path = next(path.glob("_iblrig_stimPositionScreen.raw*.csv"), None)
+
+    data = pd.read_csv(path, sep=',', header=None, error_bad_lines=False)
+    data.columns = ['contrast', 'position', 'bns_ts']
+    data[2] = pd.to_datetime(data[2])
+    return data
+
+
 def load_encoder_events(session_path, settings=False):
     """
     Load Rotary Encoder (RE) events raw data file.
 
     Assumes that a folder called "raw_behavior_data" exists in folder.
 
-    On each trial the RE sends 3 events to Bonsai 1 - meaning trial start/turn
-    off the stim; 2 - meaning show the current trial stimulus; and 3 - meaning
-    begin the closed loop making the stim move with the RE. These events are
-    triggered by the state machine in the corrensponding states: trial_start,
-    stim_on, closed_loop
+    Events number correspond to following bpod states:
+    1: correct / hide_stim
+    2: stim_on
+    3: closed_loop
+    4: freeze_error / freeze_correct
 
     Raw datafile Columns:
         Event, RE timestamp, Source, data, Bonsai Timestamp
@@ -241,7 +251,7 @@ def load_encoder_positions(session_path, settings=False):
          'bns_ts']  # Bonsai Timestamp                  'pandas.Timestamp'
         # pd.to_datetime(data.bns_ts) to work in datetimes
 
-    :param session_path: Absoulte path of session folder
+    :param session_path: Absolute path of session folder
     :type session_path: str
     :return: dataframe w/ 3 cols and N positions
     :rtype: Pandas.DataFrame
@@ -283,12 +293,13 @@ def load_encoder_trial_info(session_path):
          'stim_angle',    # Angle of Gabor 0 = Vertical      'numpy.float64'
          'stim_gain',     # Wheel gain (mm/º of stim)        'numpy.float64'
          'stim_sigma',    # Size of patch                    'numpy.float64'
+         'stim_phase',    # Phase of gabor                    'numpy.float64'
          'bns_ts' ]       # Bonsai Timestamp                 'pandas.Timestamp'
         # pd.to_datetime(data.bns_ts) to work in datetimes
 
     :param session_path: Absoulte path of session folder
     :type session_path: str
-    :return: dataframe w/ 8 cols and ntrials lines
+    :return: dataframe w/ 9 cols and ntrials lines
     :rtype: Pandas.DataFrame
     """
     if session_path is None:
@@ -298,10 +309,11 @@ def load_encoder_trial_info(session_path):
     if not path:
         return None
     data = pd.read_csv(path, sep=' ', header=None)
-    data = data.drop([8], axis=1)
+    data = data.drop([9], axis=1)
     data.columns = ['trial_num', 'stim_pos_init', 'stim_contrast', 'stim_freq',
-                    'stim_angle', 'stim_gain', 'stim_sigma', 'bns_ts']
-    return _groom_wheel_data_lt5(data, label='_iblrig_encoderEvents.raw.ssv', path=path)
+                    'stim_angle', 'stim_gain', 'stim_sigma', 'stim_phase', 'bns_ts']
+    # return _groom_wheel_data_lt5(data, label='_iblrig_encoderEvents.raw.ssv', path=path)
+    return data
 
 
 def load_ambient_sensor(session_path):

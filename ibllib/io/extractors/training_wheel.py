@@ -14,9 +14,9 @@ from ibllib.misc import structarr
 import brainbox.behavior.wheel as wheel
 
 logger_ = logging.getLogger('ibllib.alf')
-WHEEL_RADIUS_CM = 3.1
+WHEEL_RADIUS_CM = 1  # we want the output in radians
 THRESHOLD_RAD_PER_SEC = 10
-THRESHOLD_CONSECUTIVE_SAMPLES = 0.001
+THRESHOLD_CONSECUTIVE_SAMPLES = 0
 EPS = 7. / 3 - 4. / 3 - 1
 
 
@@ -42,92 +42,106 @@ def get_trial_start_times(session_path, data=None):
     return np.array(trial_start_times)
 
 
-def get_trial_start_times_re(session_path, evt=None):
-    if not evt:
+def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
+    if not bpod_data:
+        bpod_data = raw.load_data(session_path)
+    if not re_events:
         evt = raw.load_encoder_events(session_path)
-    trial_start_times_re = evt.re_ts[evt.sm_ev[evt.sm_ev == 1].index].values / 1e6
-    return trial_start_times_re[:-1]
+    # we work with stim_on (2) and closed_loop (3) states for the synchronization with bpod
+    tre = evt.re_ts.values / 1e6  # convert to seconds
+    # the first trial on the rotary encoder is a dud
+    rote = {'stim_on': tre[evt.sm_ev == 2][:-1],
+            'closed_loop': tre[evt.sm_ev == 3][:-1]}
+    bpod = {
+        'stim_on': np.array([tr['behavior_data']['States timestamps']
+                             ['stim_on'][0][0] for tr in bpod_data]),
+        'closed_loop': np.array([tr['behavior_data']['States timestamps']
+                                 ['closed_loop'][0][0] for tr in bpod_data]),
+    }
+    # bpod bug that spits out events in ms instead of us
+    if bpod['closed_loop'][-1] / rote['closed_loop'][-1] > 900:
+        logger_.error("Rotary encoder stores values in ms instead of us. Wheel timing inaccurrate")
+        rote['stim_on'] *= 1e3
+        rote['closed_loop'] *= 1e3
+    # just use the closed loop for synchronization
+    # handle different sizes in synchronization:
+    sz = min(rote['closed_loop'].size, bpod['closed_loop'].size)
+    # if all the sample are contiguous and first samples match
+    diff_first_match = np.diff(rote['closed_loop'][:sz]) - np.diff(bpod['closed_loop'][:sz])
+    # if all the sample are contiguous and last samples match
+    diff_last_match = np.diff(rote['closed_loop'][-sz:]) - np.diff(bpod['closed_loop'][-sz:])
+    # 99% of the pulses match for a first sample lock
+    DIFF_THRESHOLD = 0.005
+    if np.mean(np.abs(diff_first_match) < DIFF_THRESHOLD) > 0.99:
+        re = rote['closed_loop'][:sz]
+        bp = bpod['closed_loop'][:sz]
+        indko = np.where(np.abs(diff_first_match) >= DIFF_THRESHOLD)[0]
+    # 99% of the pulses match for a last sample lock
+    elif np.mean(np.abs(diff_last_match) < DIFF_THRESHOLD) > 0.99:
+        re = rote['closed_loop'][-sz:]
+        bp = bpod['closed_loop'][-sz:]
+        indko = np.where(np.abs(diff_last_match) >= DIFF_THRESHOLD)[0]
+    # last resort is to use ad-hoc sync function
+    else:
+        bp, re = sync_trials_robust(bpod['closed_loop'], rote['closed_loop'],
+                                    diff_threshold=DIFF_THRESHOLD, max_shift=5)
+        indko = np.array([])
+        # raise ValueError("Can't sync bpod and rotary encoder: non-contiguous sync pulses")
+    # remove faulty indices due to missing or bad syncs
+    indko = np.unique(np.r_[indko + 1, indko])
+    re = np.delete(re, indko)
+    bp = np.delete(bp, indko)
+    # check the linear drift
+    assert bp.size > 1
+    poly = np.polyfit(bp, re, 1)
+    assert np.all(np.abs(np.polyval(poly, bp) - re) < 0.001)
+    return interpolate.interp1d(re, bp, fill_value="extrapolate")
 
 
-def time_converter_session(session_path, kind):
+def sync_trials_robust(t0, t1, diff_threshold=0.001, max_shift=5):
     """
-    Create interp1d functions to convert values from one clock to another given a
-    set of synchronization pulses.
-
-    The task global sync pulse is at trial_start from Bpod to:
-    Rotary Encoder, Cameras and e-phys system.
-    Depends on getter functions that extract from the raw data the timestamps
-    of the trial_start sync pulse event for each clock.
-
-    +---------+----------+-----------+-----------+-----------+
-    | 2b      |   -      |   re2b    | cam2b,    |  ephys2b  |
-    +---------+----------+-----------+-----------+-----------+
-    | 2re     |   b2re   |   -       | cam2re    |  ephys2re |
-    +---------+----------+-----------+-----------+-----------+
-    | 2cam    |   b2cam  |   re2cam  |  -        |  ephys2cam|
-    +---------+----------+-----------+-----------+-----------+
-    | 2ephys  |   b2ephys|   re2ephys| cam2ephys |  -        |
-    +---------+----------+-----------+-----------+-----------+
-
-    Default converters for times are assumed to be of kind *2b* unless ephys data
-    is present in that case converters for 'times' will be of kind *2ephys*
-
-    :param session_path: absolute path of session folder
-    :type session_path: str
-    :param kind: ['re2b', 'b2re'], defaults to 're2b'
-    :type kind: str, optional
-    :return: Function that converts from clock A to clock B defined by kind.
-    :rtype: scipy.interpolate.interpolate.interp1d
+    Attempts to find matching timestamps in 2 time-series that have an offset, are drifting,
+    and are most likely incomplete: sizes don't have to match, some pulses may be missing
+    on one serie but not another.
+    Only works with irregular time series as it relies on the derivative to match sync.
+    :param t0:
+    :param t1:
+    :param diff_threshold:
+    :param max_shift:
+    :return:
     """
-    # there should be a way to input data if already in memory
-    if kind == 're2b':
-        target = get_trial_start_times(session_path)
-        tref = get_trial_start_times_re(session_path)
-    elif kind == 'b2re':
-        tref = get_trial_start_times(session_path)
-        target = get_trial_start_times_re(session_path)
+    nsync = min(t0.size, t1.size)
+    dt0 = np.diff(t0)
+    dt1 = np.diff(t1)
+    ind = np.zeros_like(dt0) * np.nan
+    i0 = 0
+    i1 = 0
+    while i0 < (nsync - 1):
+        # look in the next max_shift events the ones whose derivative match
+        dec = np.abs(dt0[i0] - dt1[np.arange(i1, min(max_shift + i1, dt1.size))]) < diff_threshold
+        # if one is found
+        if np.any(dec):
+            ii1 = np.where(dec)[0][0]
+            ind[i0] = i1 + ii1
+            i1 += ii1 + 1
+        i0 += 1
+    it0 = np.where(~np.isnan(ind))[0]
+    it1 = ind[it0].astype(np.int)
+    return t0[np.unique(np.r_[it0, it0 + 1])], t1[np.unique(np.r_[it1, it1 + 1])]
 
-    return time_interpolation(tref, target)
 
-
-def time_interpolation(tref, target):
+def get_wheel_data(session_path, bp_data=None, save=False, display=False):
     """
-    From 2 arrays of timestamps, return an interpolation function that allows to go
-    from one to the other.
-    If sizes are different, only work with the first elements.
-    """
-    if tref.size < 1:
-        logger_.error('Wheel time-stamp for trial starts have one or less detected values. ABORT')
-        raise(ValueError)
-    if tref.size < 1:
-        logger_.error('Bpod time-stamp for trial starts have one or less detected values. ABORT')
-        raise(ValueError)
-    if tref.size != target.size:
-        logger_.warning('Time-stamp arrays have inconsistent size. Trimming to the smallest size')
-        siz = min(tref.size, target.size)
-        tref = tref[:siz]
-        target = target[:siz]
-
-    func = interpolate.interp1d(tref, target, fill_value="extrapolate")
-    return func
-
-
-def get_wheel_data(session_path, bp_data=None, save=False):
-    """
-    Get wheel data from raw files and converts positions into centimeters and
-    timestamps into seconds.
+    Get wheel data from raw files and converts positions into radians mathematical convention
+     (anti-clockwise = +) and timestamps into seconds relative to Bpod clock.
     **Optional:** saves _ibl_wheel.times.npy and _ibl_wheel.position.npy
 
     Times:
-    Gets Rotary Encoder timestamps (ms) for each position and converts to times.
-
-    Uses time_converter to extract and convert timstamps (ms) to times (s).
+    Gets Rotary Encoder timestamps (us) for each position and converts to times.
+    Synchronize with Bpod and outputs
 
     Positions:
-    Positions are in (cm) of RE perimeter relative to 0. The 0 resets every trial.
-
-    cmtick = radius (cm) * 2 * pi / n_ticks
-    cmtick = 3.1 * 2 * np.pi / 1024
+    Radians mathematical convention
 
     :param session_path: absolute path of session folder
     :type session_path: str
@@ -139,7 +153,6 @@ def get_wheel_data(session_path, bp_data=None, save=False):
     :return: Numpy structured array.
     :rtype: numpy.ndarray
     """
-    ##
     status = 0
     if not bp_data:
         bp_data = raw.load_data(session_path)
@@ -150,16 +163,16 @@ def get_wheel_data(session_path, bp_data=None, save=False):
     data = structarr(['re_ts', 're_pos', 'bns_ts'],
                      shape=(df.shape[0],), formats=['f8', 'f8', np.object])
     data['re_ts'] = df.re_ts.values
-    data['re_pos'] = df.re_pos.values
+    data['re_pos'] = df.re_pos.values * -1  # anti-clockwise is positive in our output
     data['re_pos'] = data['re_pos'] / 1024 * 2 * np.pi  # convert positions to radians
     trial_starts = get_trial_start_times(session_path)
     # need a flag if the data resolution is 1ms due to the old version of rotary encoder firmware
     if np.all(np.mod(data['re_ts'], 1e3) == 0):
         status = 1
     data['re_ts'] = data['re_ts'] / 1e6  # convert ts to seconds
-    # get the converter function to translate re_ts into behavior times
-    convtime = time_converter_session(session_path, kind='re2b')
-    data['re_ts'] = convtime(data['re_ts'])
+    # # get the converter function to translate re_ts into behavior times
+    re2bpod = sync_rotary_encoder(session_path)
+    data['re_ts'] = re2bpod(data['re_ts'])
 
     def get_reset_trace_compensation_with_state_machine_times():
         # this is the preferred way of getting resets using the state machine time information
@@ -248,38 +261,31 @@ def get_wheel_data(session_path, bp_data=None, save=False):
     # convert to cm
     data['re_pos'] = data['re_pos'] * WHEEL_RADIUS_CM
 
-    # #  DEBUG PLOTS START HERE ########################
-    # # if you are experiencing a new bug here is some plot tools
-    # # do not forget to increment the wasted dev hours counter below
-    # WASTED_HOURS_ON_THIS_WHEEL_FORMAT = 16
-    #
-    # import matplotlib.pyplot as plt
-    # fig = plt.figure()
-    # ax = plt.axes()
-    # tstart = get_trial_start_times(session_path)
-    # tts = np.c_[tstart, tstart, tstart + np.nan].flatten()
-    # vts = np.c_[tstart * 0 + 100, tstart * 0 - 100, tstart + np.nan].flatten()
-    # ax.plot(tts, vts, label='Trial starts')
-    # ax.plot(convtime(df.re_ts.values/1e6), df.re_pos.values / 1024 * 2 * np.pi,
-    #         '.-', label='Raw data')
-    # i0 = np.where(df.re_pos.values == 0)
-    # ax.plot(convtime(df.re_ts.values[i0] / 1e6), df.re_pos.values[i0] / 1024 * 2 * np.pi,
-    #         'r*', label='Raw data zero samples')
-    # ax.plot(convtime(df.re_ts.values / 1e6) , tr_dc, label='reset compensation')
-    # ax.set_xlabel('Bpod Time')
-    # ax.set_ylabel('radians')
-    # #
-    # restarts = np.array(bp_data[10]['behavior_data']['States timestamps']\
-    #                         ['reset_rotary_encoder']).flatten()
-    # # x__ = np.c_[restarts, restarts, restarts + np.nan].flatten()
-    # # y__ = np.c_[restarts * 0 + 1, restarts * 0 - 1, restarts+ np.nan].flatten()
-    # #
-    # # ax.plot(x__, y__, 'k', label='Restarts')
-    #
-    # ax.plot(data['re_ts'], data['re_pos'] / WHEEL_RADIUS_CM, '.-', label='Output Trace')
-    # ax.legend()
-    # # plt.hist(np.diff(data['re_ts']), 400, range=[0, 0.01])
-    # #  DEBUG PLOTS STOP HERE ########################
+    #  DEBUG PLOTS START HERE ########################
+    if display:
+        import matplotlib.pyplot as plt
+        plt.figure()
+        ax = plt.axes()
+        tstart = get_trial_start_times(session_path)
+        tts = np.c_[tstart, tstart, tstart + np.nan].flatten()
+        vts = np.c_[tstart * 0 + 100, tstart * 0 - 100, tstart + np.nan].flatten()
+        ax.plot(tts, vts, label='Trial starts')
+        ax.plot(re2bpod(df.re_ts.values / 1e6), df.re_pos.values / 1024 * 2 * np.pi,
+                '.-', label='Raw data')
+        i0 = np.where(df.re_pos.values == 0)
+        ax.plot(re2bpod(df.re_ts.values[i0] / 1e6), df.re_pos.values[i0] / 1024 * 2 * np.pi,
+                'r*', label='Raw data zero samples')
+        ax.plot(re2bpod(df.re_ts.values / 1e6), tr_dc, label='reset compensation')
+        ax.set_xlabel('Bpod Time')
+        ax.set_ylabel('radians')
+        # restarts = np.array(bp_data[10]['behavior_data']['States timestamps']
+        #                             ['reset_rotary_encoder']).flatten()
+        # x__ = np.c_[restarts, restarts, restarts + np.nan].flatten()
+        # y__ = np.c_[restarts * 0 + 1, restarts * 0 - 1, restarts+ np.nan].flatten()
+        # ax.plot(x__, y__, 'k', label='Restarts')
+        ax.plot(data['re_ts'], data['re_pos'] / WHEEL_RADIUS_CM, '.-', label='Output Trace')
+        ax.legend()
+        # plt.hist(np.diff(data['re_ts']), 400, range=[0, 0.01])
 
     check_alf_folder(session_path)
     if raw.save_bool(save, '_ibl_wheel.timestamps.npy'):

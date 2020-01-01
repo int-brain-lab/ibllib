@@ -1,8 +1,10 @@
 import logging
 from pathlib import Path
+import uuid
 
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy import interpolate
 
 from brainbox.core import Bunch
 import brainbox.behavior.wheel as whl
@@ -12,13 +14,15 @@ import ibllib.io.spikeglx
 import ibllib.dsp as dsp
 import alf.io
 from ibllib.io.spikeglx import glob_ephys_files, get_neuropixel_version_from_files
+import ibllib.io.raw_data_loaders as raw
 
 _logger = logging.getLogger('ibllib')
 
 SYNC_BATCH_SIZE_SAMPLES = 2 ** 18  # number of samples to read at once in bin file for sync
 WHEEL_RADIUS_CM = 3.1
 WHEEL_TICKS = 1024
-DEBUG_PLOTS = False
+
+BPOD_FPGA_DRIFT_THRESHOLD_PPM = 150
 
 CHMAPS = {'3A':
           {'ap':
@@ -84,7 +88,7 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
     # if no output, need a temp folder to swap for big files
     if not output_path:
         output_path = raw_ephys_apfile.parent
-    file_ftcp = Path(output_path) / 'fronts_times_channel_polarity.bin'
+    file_ftcp = Path(output_path).joinpath(f'fronts_times_channel_polarity{str(uuid.uuid4())}.bin')
 
     # loop over chunks of the raw ephys file
     wg = dsp.WindowGenerator(sr.ns, SYNC_BATCH_SIZE_SAMPLES, overlap=1)
@@ -118,25 +122,28 @@ def _bpod_events_extraction(bpod_t, bpod_fronts):
     :param bpod_fronts: numpy vector containing polarity of fronts (1 rise, -1 fall)
     :return: numpy arrays of times t_trial_start, t_valve_open and t_iti_in
     """
+    TRIAL_START_TTL_LEN = 2.33e-4
+    VALVE_OPEN_TTL_LEN = 0.4
     # make sure that there are no 2 consecutive fall or consecutive rise events
     assert(np.all(np.abs(np.diff(bpod_fronts)) == 2))
     # make sure that the first event is a rise
     assert(bpod_fronts[0] == 1)
     # take only even time differences: ie. from rising to falling fronts
     dt = np.diff(bpod_t)[::2]
-    # detect start trials event assuming length is 0.1 ms except the first trial
-    i_trial_start = np.r_[0, np.where(dt <= 1.66e-4)[0] * 2]
+    # detect start trials event assuming length is 0.23 ms except the first trial
+    i_trial_start = np.r_[0, np.where(dt <= TRIAL_START_TTL_LEN)[0] * 2]
     t_trial_start = bpod_t[i_trial_start]
     # # the first trial we detect the first falling edge to which we subtract 0.1ms
     # t_trial_start[0] -= 1e-4
     # the last trial is a dud and should be removed
     t_trial_start = t_trial_start[:-1]
     # valve open events are between 50ms to 300 ms
-    i_valve_open = np.where(np.logical_and(dt > 1.66e-4, dt < 0.4))[0] * 2
+    i_valve_open = np.where(np.logical_and(dt > TRIAL_START_TTL_LEN,
+                                           dt < VALVE_OPEN_TTL_LEN))[0] * 2
     i_valve_open = np.delete(i_valve_open, np.where(i_valve_open < 2))
     t_valve_open = bpod_t[i_valve_open]
     # ITI events are above 400 ms
-    i_iti_in = np.where(dt > 0.4)[0] * 2
+    i_iti_in = np.where(dt > VALVE_OPEN_TTL_LEN)[0] * 2
     i_iti_in = np.delete(i_iti_in, np.where(i_valve_open < 2))
     i_iti_in = bpod_t[i_iti_in]
     # # some debug plots when needed
@@ -149,46 +156,49 @@ def _bpod_events_extraction(bpod_t, bpod_fronts):
     return t_trial_start, t_valve_open, i_iti_in
 
 
-def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb):
+def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, radius=1,
+                                          coding='x4'):
     """
-    Extracts the rotary encoder absolute position (cm) as function of time from fronts detected
-    on the 2 channels
+    Extracts the rotary encoder absolute position as function of time from fronts detected
+    on the 2 channels. Outputs in units of radius parameters, by default radians
+    Coding options detailed here: http://www.ni.com/tutorial/7109/pt/
+    Here output is clockwise from subject perspective
 
     :param ta: time of fronts on channel A
     :param pa: polarity of fronts on channel A
     :param tb: time of fronts on channel B
     :param pb: polarity of fronts on channel B
+    :param ticks: number of ticks corresponding to a full revolution (1024 for IBL rotary encoder)
+    :param radius: radius of the wheel. Defaults to 1 for an output in radians
+    :param coding: x1, x2 or x4 coding (IBL default is x4)
     :return: indices vector (ta) and position vector
     """
-    p = pb[np.searchsorted(tb, ta) - 1] * pa
-    p = np.cumsum(p) / WHEEL_TICKS * np.pi * WHEEL_RADIUS_CM
-    return ta, p
-
-
-def _rotary_encoder_positions_from_gray_code(channela, channelb):
-    """
-    Extracts the rotary encoder absolute position (cm) as function of time from digital recording
-    of the 2 channels.
-
-    Rotary Encoder implements X1 encoding: http://www.ni.com/tutorial/7109/en/
-    rising A  & B high = +1
-    rising A  & B low = -1
-    falling A & B high = -1
-    falling A & B low = +1
-
-    :param channelA: Vector of rotary encoder digital recording channel A
-    :type channelA: numpy array
-    :param channelB: Vector of rotary encoder digital recording channel B
-    :type channelB: numpy array
-    :return: indices vector and position vector
-    """
-    # detect rising and falling fronts
-    t, fronts = dsp.fronts(channela)
-    # apply X1 logic to get positions in ticks
-    p = (channelb[t] * 2 - 1) * fronts
-    # convert position in cm
-    p = np.cumsum(p) / WHEEL_TICKS * np.pi * WHEEL_RADIUS_CM
-    return t, p
+    if coding == 'x1':
+        ia = np.searchsorted(tb, ta[pa == 1])
+        ia = ia[ia < ta.size]
+        ia = ia[pa[ia] == 1]
+        ib = np.searchsorted(ta, tb[pb == 1])
+        ib = ib[ib < tb.size]
+        ib = ib[pb[ib] == 1]
+        t = np.r_[ta[ia], tb[ib]]
+        p = np.r_[ia * 0 + 1, ib * 0 - 1]
+        ordre = np.argsort(t)
+        t = t[ordre]
+        p = p[ordre]
+        p = np.cumsum(p) / ticks * np.pi * 2 * radius
+        return t, p
+    elif coding == 'x2':
+        p = pb[np.searchsorted(tb, ta) - 1] * pa
+        p = - np.cumsum(p) / ticks * np.pi * 2 * radius / 2
+        return ta, p
+    elif coding == 'x4':
+        p = np.r_[pb[np.searchsorted(tb, ta) - 1] * pa, -pa[np.searchsorted(ta, tb) - 1] * pb]
+        t = np.r_[ta, tb]
+        ordre = np.argsort(t)
+        t = t[ordre]
+        p = p[ordre]
+        p = - np.cumsum(p) / ticks * np.pi * 2 * radius / 4
+        return t, p
 
 
 def _audio_events_extraction(audio_t, audio_fronts):
@@ -252,9 +262,10 @@ def _assign_events_to_trial(t_trial_start, t_event, take='last'):
     return t_event_nans
 
 
-def _get_sync_fronts(sync, channel_nb):
-    return Bunch({'times': sync['times'][sync['channels'] == channel_nb],
-                  'polarities': sync['polarities'][sync['channels'] == channel_nb]})
+def _get_sync_fronts(sync, channel_nb, tmax=np.inf):
+    selection = np.logical_and(sync['channels'] == channel_nb, sync['times'] <= tmax)
+    return Bunch({'times': sync['times'][selection],
+                  'polarities': sync['polarities'][selection]})
 
 
 def extract_camera_sync(sync, output_path=None, save=False, chmap=None):
@@ -268,15 +279,20 @@ def extract_camera_sync(sync, output_path=None, save=False, chmap=None):
     :return: dictionary containing camera timestamps
     """
     # NB: should we check we opencv the expected number of frames ?
-    output_path = Path(output_path)
-    if not output_path.exists():
-        output_path.mkdir()
-    s = _get_sync_fronts(sync, chmap['right_camera'])
-    np.save(output_path / '_ibl_rightCamera.times.npy', s.times[::2])
-    s = _get_sync_fronts(sync, chmap['left_camera'])
-    np.save(output_path / '_ibl_leftCamera.times.npy', s.times[::2])
-    s = _get_sync_fronts(sync, chmap['body_camera'])
-    np.save(output_path / '_ibl_bodyCamera.times.npy', s.times[::2])
+    assert(chmap)
+    sr = _get_sync_fronts(sync, chmap['right_camera'])
+    sl = _get_sync_fronts(sync, chmap['left_camera'])
+    sb = _get_sync_fronts(sync, chmap['body_camera'])
+    if output_path is not None and save:
+        output_path = Path(output_path)
+        if not output_path.exists():
+            output_path.mkdir()
+        np.save(output_path / '_ibl_rightCamera.times.npy', sr.times[::2])
+        np.save(output_path / '_ibl_leftCamera.times.npy', sl.times[::2])
+        np.save(output_path / '_ibl_bodyCamera.times.npy', sb.times[::2])
+    return {'right_camera': sr.times[::2],
+            'left_camera': sr.times[::2],
+            'body_camera': sb.times[::2]}
 
 
 def extract_wheel_sync(sync, output_path=None, save=False, chmap=None):
@@ -294,7 +310,8 @@ def extract_wheel_sync(sync, output_path=None, save=False, chmap=None):
     channela = _get_sync_fronts(sync, chmap['rotary_encoder_0'])
     channelb = _get_sync_fronts(sync, chmap['rotary_encoder_1'])
     wheel['re_ts'], wheel['re_pos'] = _rotary_encoder_positions_from_fronts(
-        channela['times'], channela['polarities'], channelb['times'], channelb['polarities'])
+        channela['times'], channela['polarities'], channelb['times'], channelb['polarities'],
+        ticks=WHEEL_TICKS, radius=1, coding='x4')
     if save and output_path:
         output_path = Path(output_path)
         # last phase of the process is to save the alf data-files
@@ -305,7 +322,8 @@ def extract_wheel_sync(sync, output_path=None, save=False, chmap=None):
     return wheel
 
 
-def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None):
+def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, display=False,
+                           tmax=np.inf):
     """
     Extract wheel positions and times from sync fronts dictionary
 
@@ -314,11 +332,12 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None):
     :param save: True/False
     :param chmap: dictionary containing channel index. Default to constant.
         chmap = {'bpod': 7, 'frame2ttl': 12, 'audio': 15}
+    :param display: show the full session sync pulses display
     :return: trials dictionary
     """
-    bpod = _get_sync_fronts(sync, chmap['bpod'])
-    frame2ttl = _get_sync_fronts(sync, chmap['frame2ttl'])
-    audio = _get_sync_fronts(sync, chmap['audio'])
+    bpod = _get_sync_fronts(sync, chmap['bpod'], tmax=tmax)
+    frame2ttl = _get_sync_fronts(sync, chmap['frame2ttl'], tmax=tmax)
+    audio = _get_sync_fronts(sync, chmap['audio'], tmax=tmax)
     # extract events from the fronts for each trace
     t_trial_start, t_valve_open, t_iti_in = _bpod_events_extraction(
         bpod['times'], bpod['polarities'])
@@ -329,30 +348,6 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None):
     ind = np.searchsorted(frame2ttl['times'], t_iti_in, side='left')
     t_stim_off = frame2ttl['times'][ind]
     t_stim_freeze = frame2ttl['times'][np.maximum(ind - 1, 0)]
-
-    if DEBUG_PLOTS:
-        plt.figure()
-        ax = plt.gca()
-        plots.squares(bpod['times'], bpod['polarities'] * 0.4 + 1,
-                      ax=ax, label='bpod=1', color='k')
-        plots.squares(frame2ttl['times'], frame2ttl['polarities'] * 0.4 + 2,
-                      ax=ax, label='frame2ttl=2', color='k')
-        plots.squares(audio['times'], audio['polarities'] * 0.4 + 3,
-                      ax=ax, label='audio=3', color='k')
-        plots.vertical_lines(t_ready_tone_in, ymin=0, ymax=4,
-                             ax=ax, label='ready tone in', color='b', linewidth=0.5)
-        plots.vertical_lines(t_trial_start, ymin=0, ymax=4,
-                             ax=ax, label='start_trial', color='m', linewidth=0.5)
-        plots.vertical_lines(t_error_tone_in, ymin=0, ymax=4,
-                             ax=ax, label='error tone', color='r', linewidth=0.5)
-        plots.vertical_lines(t_valve_open, ymin=0, ymax=4,
-                             ax=ax, label='valve open', color='g', linewidth=0.5)
-        plots.vertical_lines(t_stim_freeze, ymin=0, ymax=4,
-                             ax=ax, label='stim freeze', color='y', linewidth=0.5)
-        plots.vertical_lines(t_stim_off, ymin=0, ymax=4,
-                             ax=ax, label='stim off', color='c', linewidth=0.5)
-        ax.legend()
-
     # stimOn_times: first fram2ttl change after trial start
     trials = Bunch({
         'ready_tone_in': _assign_events_to_trial(t_trial_start, t_ready_tone_in, take='first'),
@@ -360,16 +355,46 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None):
         'valve_open': _assign_events_to_trial(t_trial_start, t_valve_open),
         'stim_freeze': _assign_events_to_trial(t_trial_start, t_stim_freeze),
         'stimOn_times': _assign_events_to_trial(t_trial_start, frame2ttl['times'], take='first'),
+        'stimOff_times': _assign_events_to_trial(t_trial_start, t_stim_off),
         'iti_in': _assign_events_to_trial(t_trial_start, t_iti_in)
     })
     # goCue_times corresponds to the tone_in event
-    trials['goCue_times'] = trials['ready_tone_in']
+    trials['goCue_times'] = np.copy(trials['ready_tone_in'])
     # feedback times are valve open on good trials and error tone in on error trials
-    trials['feedback_times'] = trials['valve_open']
+    trials['feedback_times'] = np.copy(trials['valve_open'])
     ind_err = np.isnan(trials['valve_open'])
     trials['feedback_times'][ind_err] = trials['error_tone_in'][ind_err]
     trials['intervals'] = np.c_[t_trial_start, trials['iti_in']]
-    trials['response_times'] = trials['stimOn_times']
+
+    if display:
+        width = 0.5
+        ymax = 5
+        plt.figure()
+        ax = plt.gca()
+        r0 = _get_sync_fronts(sync, chmap['rotary_encoder_0'])
+        plots.squares(bpod['times'], bpod['polarities'] * 0.4 + 1,
+                      ax=ax, label='bpod=1', color='k')
+        plots.squares(frame2ttl['times'], frame2ttl['polarities'] * 0.4 + 2,
+                      ax=ax, label='frame2ttl=2', color='k')
+        plots.squares(audio['times'], audio['polarities'] * 0.4 + 3,
+                      ax=ax, label='audio=3', color='k')
+        plots.squares(r0['times'], r0['polarities'] * 0.4 + 4,
+                      ax=ax, label='r0=4', color='k')
+        plots.vertical_lines(t_ready_tone_in, ymin=0, ymax=ymax,
+                             ax=ax, label='ready tone in', color='b', linewidth=width)
+        plots.vertical_lines(t_trial_start, ymin=0, ymax=ymax,
+                             ax=ax, label='start_trial', color='m', linewidth=width)
+        plots.vertical_lines(t_error_tone_in, ymin=0, ymax=ymax,
+                             ax=ax, label='error tone', color='r', linewidth=width)
+        plots.vertical_lines(t_valve_open, ymin=0, ymax=ymax,
+                             ax=ax, label='valve open', color='g', linewidth=width)
+        plots.vertical_lines(t_stim_freeze, ymin=0, ymax=ymax,
+                             ax=ax, label='stim freeze', color='y', linewidth=width)
+        plots.vertical_lines(t_stim_off, ymin=0, ymax=ymax,
+                             ax=ax, label='stim off', color='c', linewidth=width)
+        plots.vertical_lines(trials['stimOn_times'], ymin=0, ymax=ymax,
+                             ax=ax, label='stim on', color='tab:orange', linewidth=width)
+        ax.legend()
 
     if save and output_path:
         output_path = Path(output_path)
@@ -377,7 +402,6 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None):
         np.save(output_path / '_ibl_trials.stimOn_times.npy', trials['stimOn_times'])
         np.save(output_path / '_ibl_trials.intervals.npy', trials['intervals'])
         np.save(output_path / '_ibl_trials.feedback_times.npy', trials['feedback_times'])
-        np.save(output_path / '_ibl_trials.response_times.npy', trials['response_times'])
     return trials
 
 
@@ -394,13 +418,22 @@ def align_with_bpod(session_path):
     output_path = Path(session_path) / 'alf'
     trials = alf.io.load_object(output_path, '_ibl_trials')
     assert(alf.io.check_dimensions(trials) == 0)
-    tlen = (np.diff(trials['intervalsBpod']) - np.diff(trials['intervals']))[:-1] - ITI_DURATION
+    tlen = (np.diff(trials['intervals_bpod']) - np.diff(trials['intervals']))[:-1] - ITI_DURATION
     assert(np.all(np.abs(tlen[np.invert(np.isnan(tlen))]) < 5 * 1e-3))
-    dt = trials['intervals'][:, 0] - trials['intervalsBpod'][:, 0]
-    # plt.plot(np.diff(trials['intervalsBpod']), '*')
-    # plt.plot(np.diff(trials['intervals']), '.')
-    # TODO: apply this to all timings extracted from Bpod
-    return np.median(dt)
+    # dt is the delta to apply to bpod times in order to be on the ephys clock
+    dt = trials['intervals'][:, 0] - trials['intervals_bpod'][:, 0]
+    # compute the clock drift bpod versus dt
+    ppm = np.polyfit(trials['intervals'][:, 0], dt, 1)[0] * 1e6
+    if ppm > BPOD_FPGA_DRIFT_THRESHOLD_PPM:
+        _logger.warning('BPOD/FPGA synchronization shows values greater than 150 ppm')
+        # plt.plot(trials['intervals'][:, 0], dt, '*')
+    # so far 2 datasets concerned: goCueTrigger_times_bpod  and response_times_bpod
+    for k in trials:
+        if not k.endswith('_times_bpod'):
+            continue
+        np.save(output_path.joinpath(f'_ibl_trials.{k[:-5]}.npy'), trials[k] + dt)
+    return interpolate.interp1d(trials['intervals_bpod'][:, 0],
+                                trials['intervals'][:, 0], fill_value="extrapolate")
 
 
 def extract_sync(session_path, save=False, force=False, ephys_files=None):
@@ -469,7 +502,7 @@ def _get_main_probe_sync(session_path, bin_exists=True):
     return sync, sync_chmap
 
 
-def extract_all(session_path, save=False):
+def extract_all(session_path, save=False, tmax=None):
     """
     For the IBL ephys task, reads ephys binary file and extract:
         -   sync
@@ -484,8 +517,15 @@ def extract_all(session_path, save=False):
     session_path = Path(session_path)
     alf_path = session_path / 'alf'
 
+    if tmax is None:
+        try:
+            raw_trials = raw.load_data(session_path)
+            tmax = raw_trials[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
+        except Exception:
+            tmax = np.inf
+
     sync, sync_chmap = _get_main_probe_sync(session_path)
     extract_wheel_sync(sync, alf_path, save=save, chmap=sync_chmap)
     extract_camera_sync(sync, alf_path, save=save, chmap=sync_chmap)
-    extract_behaviour_sync(sync, alf_path, save=save, chmap=sync_chmap)
+    extract_behaviour_sync(sync, alf_path, save=save, chmap=sync_chmap, tmax=tmax)
     align_with_bpod(session_path)  # checks consistency and compute dt with bpod

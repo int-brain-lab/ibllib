@@ -16,7 +16,7 @@ from ibllib.misc import log2session_static
 from ibllib.io.extractors import (ephys_trials, ephys_fpga,
                                   biased_wheel, biased_trials,
                                   training_trials, training_wheel)
-from ibllib.io import raw_data_loaders as raw
+from ibllib.io import raw_data_loaders as rawio
 import ibllib.io.flags as flags
 
 logger_ = logging.getLogger('ibllib.alf')
@@ -33,7 +33,7 @@ def get_task_extractor_type(task_name):
     """
     if isinstance(task_name, Path):
         try:
-            settings = raw.load_settings(get_session_path(task_name))
+            settings = rawio.load_settings(get_session_path(task_name))
         except json.decoder.JSONDecodeError:
             return
         if settings:
@@ -63,7 +63,7 @@ def get_session_extractor_type(session_path):
     :param session_path:
     :return: bool
     """
-    settings = raw.load_settings(session_path)
+    settings = rawio.load_settings(session_path)
     if settings is None:
         logger_.error(f'ABORT: No data found in "raw_behavior_data" folder {session_path}')
         return False
@@ -99,23 +99,24 @@ def from_path(session_path, force=False, save=True):
         logger_.info(f"Session {session_path} already extracted.")
         return
     if extractor_type == 'training':
-        settings, data = raw.load_bpod(session_path)
+        settings, data = rawio.load_bpod(session_path)
         logger_.info('training session on ' + settings['PYBPOD_BOARD'])
         training_trials.extract_all(session_path, data=data, save=save)
         training_wheel.extract_all(session_path, bp_data=data, save=save)
         logger_.info('session extracted \n')  # timing info in log
     if extractor_type == 'biased':
-        settings, data = raw.load_bpod(session_path)
+        settings, data = rawio.load_bpod(session_path)
         logger_.info('biased session on ' + settings['PYBPOD_BOARD'])
         biased_trials.extract_all(session_path, data=data, save=save)
         biased_wheel.extract_all(session_path, bp_data=data, save=save)
         logger_.info('session extracted \n')  # timing info in log
     if extractor_type == 'ephys':
-        data = raw.load_data(session_path)
+        data = rawio.load_data(session_path)
         logger_.info('extract BPOD for ephys session')
         ephys_trials.extract_all(session_path, data=data, save=save)
         logger_.info('extract FPGA information for ephys session')
-        ephys_fpga.extract_all(session_path, save=save)
+        tmax = data[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
+        ephys_fpga.extract_all(session_path, save=save, tmax=tmax)
     if extractor_type == 'sync_ephys':
         ephys_fpga.extract_sync(session_path, save=save)
 
