@@ -316,7 +316,7 @@ def extract_wheel_sync(sync, output_path=None, save=False, chmap=None):
         output_path = Path(output_path)
         # last phase of the process is to save the alf data-files
         np.save(output_path / '_ibl_wheel.position.npy', wheel['re_pos'])
-        np.save(output_path / '_ibl_wheel.times.npy', wheel['re_ts'])
+        np.save(output_path / '_ibl_wheel.timestamps.npy', wheel['re_ts'])
         np.save(output_path / '_ibl_wheel.velocity.npy',
                 whl.velocity(wheel['re_ts'], wheel['re_pos']))
     return wheel
