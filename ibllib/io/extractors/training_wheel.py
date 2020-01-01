@@ -163,7 +163,7 @@ def get_wheel_data(session_path, bp_data=None, save=False, display=False):
     data = structarr(['re_ts', 're_pos', 'bns_ts'],
                      shape=(df.shape[0],), formats=['f8', 'f8', np.object])
     data['re_ts'] = df.re_ts.values
-    data['re_pos'] = df.re_pos.values * -1  # anti-clockwise is positive in our output
+    data['re_pos'] = np.double(df.re_pos.values) * -1  # anti-clockwise is positive in our output
     data['re_pos'] = data['re_pos'] / 1024 * 2 * np.pi  # convert positions to radians
     trial_starts = get_trial_start_times(session_path)
     # need a flag if the data resolution is 1ms due to the old version of rotary encoder firmware
