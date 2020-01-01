@@ -59,7 +59,7 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
                                  ['closed_loop'][0][0] for tr in bpod_data]),
     }
     # bpod bug that spits out events in ms instead of us
-    if bpod['closed_loop'][-1] / rote['closed_loop'][-1] > 900:
+    if np.diff(bpod['closed_loop'][[-1, 0]])[0] / np.diff(rote['closed_loop'][[-1, 0]])[0] > 900:
         logger_.error("Rotary encoder stores values in ms instead of us. Wheel timing inaccurrate")
         rote['stim_on'] *= 1e3
         rote['closed_loop'] *= 1e3
@@ -94,7 +94,7 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
     # check the linear drift
     assert bp.size > 1
     poly = np.polyfit(bp, re, 1)
-    assert np.all(np.abs(np.polyval(poly, bp) - re) < 0.001)
+    assert np.all(np.abs(np.polyval(poly, bp) - re) < 0.002)
     return interpolate.interp1d(re, bp, fill_value="extrapolate")
 
 
@@ -289,7 +289,7 @@ def get_wheel_data(session_path, bp_data=None, save=False, display=False):
 
     check_alf_folder(session_path)
     if raw.save_bool(save, '_ibl_wheel.timestamps.npy'):
-        tpath = os.path.join(session_path, 'alf', '_ibl_wheel.times.npy')
+        tpath = os.path.join(session_path, 'alf', '_ibl_wheel.timestamps.npy')
         np.save(tpath, data['re_ts'])
     if raw.save_bool(save, '_ibl_wheel.position.npy'):
         ppath = os.path.join(session_path, 'alf', '_ibl_wheel.position.npy')
