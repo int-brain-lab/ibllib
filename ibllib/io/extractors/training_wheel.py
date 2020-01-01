@@ -94,7 +94,7 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
     # check the linear drift
     assert bp.size > 1
     poly = np.polyfit(bp, re, 1)
-    assert np.all(np.abs(np.polyval(poly, bp) - re) < 0.001)
+    assert np.all(np.abs(np.polyval(poly, bp) - re) < 0.002)
     return interpolate.interp1d(re, bp, fill_value="extrapolate")
 
 
