@@ -1,3 +1,4 @@
+from pathlib import Path
 import unittest
 import numpy as np
 import pickle
@@ -10,10 +11,16 @@ class TestWheel(unittest.TestCase):
         # Test data is in the form ((inputs), (outputs)) where inputs is a tuple containing a
         # numpy array of timestamps and one of positions; outputs is a tuple of outputs from
         # teh function under test, e.g. wheel.movements
-        with open('wheel_test.pickle', 'rb') as f:
-            self.test_data = pickle.load(f)
+        pickle_file = Path(__file__).parent.joinpath('wheel_test.pickle')
+        if not pickle_file.exists():
+            self.test_data = None
+        else:
+            with open(pickle_file, 'rb') as f:
+                self.test_data = pickle.load(f)
 
     def test_derivative(self):
+        if self.test_data is None:
+            return
         t = np.array([0, .5, 1., 1.5, 2, 3, 4, 4.5, 5, 5.5])
         p = np.arange(len(t))
         v = wheel.velocity(t, p)
@@ -25,6 +32,8 @@ class TestWheel(unittest.TestCase):
         # plt.plot(t, v, '-*')
 
     def test_movements(self):
+        if self.test_data is None:
+            return
         # These test data are the same as those used in the MATLAB code
         inputs = self.test_data[0][0]
         expected = self.test_data[0][1]
@@ -38,6 +47,8 @@ class TestWheel(unittest.TestCase):
         self.assertTrue(all_close, msg='Unexpected peak velocities')
 
     def test_movements_FPGA(self):
+        if self.test_data is None:
+            return
         # These test data are the same as those used in the MATLAB code.  Test data are from 
         # extracted FPGA wheel data
         pos, t = wheel.interpolate_position(*self.test_data[1][0], freq=1000)

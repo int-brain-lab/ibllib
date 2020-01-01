@@ -92,6 +92,7 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
     re = np.delete(re, indko)
     bp = np.delete(bp, indko)
     # check the linear drift
+    assert bp.size > 1
     poly = np.polyfit(bp, re, 1)
     assert np.all(np.abs(np.polyval(poly, bp) - re) < 0.001)
     return interpolate.interp1d(re, bp, fill_value="extrapolate")
@@ -129,7 +130,7 @@ def sync_trials_robust(t0, t1, diff_threshold=0.001, max_shift=5):
     return t0[np.unique(np.r_[it0, it0 + 1])], t1[np.unique(np.r_[it1, it1 + 1])]
 
 
-def get_wheel_data(session_path, bp_data=None, save=False):
+def get_wheel_data(session_path, bp_data=None, save=False, display=False):
     """
     Get wheel data from raw files and converts positions into radians mathematical convention
      (anti-clockwise = +) and timestamps into seconds relative to Bpod clock.
@@ -170,8 +171,8 @@ def get_wheel_data(session_path, bp_data=None, save=False):
         status = 1
     data['re_ts'] = data['re_ts'] / 1e6  # convert ts to seconds
     # # get the converter function to translate re_ts into behavior times
-    fcn_interp = sync_rotary_encoder(session_path)
-    data['re_ts'] = fcn_interp(data['re_ts'])
+    re2bpod = sync_rotary_encoder(session_path)
+    data['re_ts'] = re2bpod(data['re_ts'])
 
     def get_reset_trace_compensation_with_state_machine_times():
         # this is the preferred way of getting resets using the state machine time information
@@ -260,38 +261,31 @@ def get_wheel_data(session_path, bp_data=None, save=False):
     # convert to cm
     data['re_pos'] = data['re_pos'] * WHEEL_RADIUS_CM
 
-    # #  DEBUG PLOTS START HERE ########################
-    # # if you are experiencing a new bug here is some plot tools
-    # # do not forget to increment the wasted dev hours counter below
-    # WASTED_HOURS_ON_THIS_WHEEL_FORMAT = 16
-    #
-    # import matplotlib.pyplot as plt
-    # fig = plt.figure()
-    # ax = plt.axes()
-    # tstart = get_trial_start_times(session_path)
-    # tts = np.c_[tstart, tstart, tstart + np.nan].flatten()
-    # vts = np.c_[tstart * 0 + 100, tstart * 0 - 100, tstart + np.nan].flatten()
-    # ax.plot(tts, vts, label='Trial starts')
-    # ax.plot(convtime(df.re_ts.values/1e6), df.re_pos.values / 1024 * 2 * np.pi,
-    #         '.-', label='Raw data')
-    # i0 = np.where(df.re_pos.values == 0)
-    # ax.plot(convtime(df.re_ts.values[i0] / 1e6), df.re_pos.values[i0] / 1024 * 2 * np.pi,
-    #         'r*', label='Raw data zero samples')
-    # ax.plot(convtime(df.re_ts.values / 1e6) , tr_dc, label='reset compensation')
-    # ax.set_xlabel('Bpod Time')
-    # ax.set_ylabel('radians')
-    # #
-    # restarts = np.array(bp_data[10]['behavior_data']['States timestamps']\
-    #                         ['reset_rotary_encoder']).flatten()
-    # # x__ = np.c_[restarts, restarts, restarts + np.nan].flatten()
-    # # y__ = np.c_[restarts * 0 + 1, restarts * 0 - 1, restarts+ np.nan].flatten()
-    # #
-    # # ax.plot(x__, y__, 'k', label='Restarts')
-    #
-    # ax.plot(data['re_ts'], data['re_pos'] / WHEEL_RADIUS_CM, '.-', label='Output Trace')
-    # ax.legend()
-    # # plt.hist(np.diff(data['re_ts']), 400, range=[0, 0.01])
-    # #  DEBUG PLOTS STOP HERE ########################
+    #  DEBUG PLOTS START HERE ########################
+    if display:
+        import matplotlib.pyplot as plt
+        plt.figure()
+        ax = plt.axes()
+        tstart = get_trial_start_times(session_path)
+        tts = np.c_[tstart, tstart, tstart + np.nan].flatten()
+        vts = np.c_[tstart * 0 + 100, tstart * 0 - 100, tstart + np.nan].flatten()
+        ax.plot(tts, vts, label='Trial starts')
+        ax.plot(re2bpod(df.re_ts.values / 1e6), df.re_pos.values / 1024 * 2 * np.pi,
+                '.-', label='Raw data')
+        i0 = np.where(df.re_pos.values == 0)
+        ax.plot(re2bpod(df.re_ts.values[i0] / 1e6), df.re_pos.values[i0] / 1024 * 2 * np.pi,
+                'r*', label='Raw data zero samples')
+        ax.plot(re2bpod(df.re_ts.values / 1e6), tr_dc, label='reset compensation')
+        ax.set_xlabel('Bpod Time')
+        ax.set_ylabel('radians')
+        # restarts = np.array(bp_data[10]['behavior_data']['States timestamps']
+        #                             ['reset_rotary_encoder']).flatten()
+        # x__ = np.c_[restarts, restarts, restarts + np.nan].flatten()
+        # y__ = np.c_[restarts * 0 + 1, restarts * 0 - 1, restarts+ np.nan].flatten()
+        # ax.plot(x__, y__, 'k', label='Restarts')
+        ax.plot(data['re_ts'], data['re_pos'] / WHEEL_RADIUS_CM, '.-', label='Output Trace')
+        ax.legend()
+        # plt.hist(np.diff(data['re_ts']), 400, range=[0, 0.01])
 
     check_alf_folder(session_path)
     if raw.save_bool(save, '_ibl_wheel.timestamps.npy'):

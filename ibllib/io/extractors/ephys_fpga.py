@@ -4,6 +4,7 @@ import uuid
 
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy import interpolate
 
 from brainbox.core import Bunch
 import brainbox.behavior.wheel as whl
@@ -13,6 +14,7 @@ import ibllib.io.spikeglx
 import ibllib.dsp as dsp
 import alf.io
 from ibllib.io.spikeglx import glob_ephys_files, get_neuropixel_version_from_files
+import ibllib.io.raw_data_loaders as raw
 
 _logger = logging.getLogger('ibllib')
 
@@ -260,9 +262,10 @@ def _assign_events_to_trial(t_trial_start, t_event, take='last'):
     return t_event_nans
 
 
-def _get_sync_fronts(sync, channel_nb):
-    return Bunch({'times': sync['times'][sync['channels'] == channel_nb],
-                  'polarities': sync['polarities'][sync['channels'] == channel_nb]})
+def _get_sync_fronts(sync, channel_nb, tmax=np.inf):
+    selection = np.logical_and(sync['channels'] == channel_nb, sync['times'] <= tmax)
+    return Bunch({'times': sync['times'][selection],
+                  'polarities': sync['polarities'][selection]})
 
 
 def extract_camera_sync(sync, output_path=None, save=False, chmap=None):
@@ -319,7 +322,8 @@ def extract_wheel_sync(sync, output_path=None, save=False, chmap=None):
     return wheel
 
 
-def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, display=False):
+def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, display=False,
+                           tmax=np.inf):
     """
     Extract wheel positions and times from sync fronts dictionary
 
@@ -331,9 +335,9 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
     :param display: show the full session sync pulses display
     :return: trials dictionary
     """
-    bpod = _get_sync_fronts(sync, chmap['bpod'])
-    frame2ttl = _get_sync_fronts(sync, chmap['frame2ttl'])
-    audio = _get_sync_fronts(sync, chmap['audio'])
+    bpod = _get_sync_fronts(sync, chmap['bpod'], tmax=tmax)
+    frame2ttl = _get_sync_fronts(sync, chmap['frame2ttl'], tmax=tmax)
+    audio = _get_sync_fronts(sync, chmap['audio'], tmax=tmax)
     # extract events from the fronts for each trace
     t_trial_start, t_valve_open, t_iti_in = _bpod_events_extraction(
         bpod['times'], bpod['polarities'])
@@ -344,7 +348,6 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
     ind = np.searchsorted(frame2ttl['times'], t_iti_in, side='left')
     t_stim_off = frame2ttl['times'][ind]
     t_stim_freeze = frame2ttl['times'][np.maximum(ind - 1, 0)]
-
     # stimOn_times: first fram2ttl change after trial start
     trials = Bunch({
         'ready_tone_in': _assign_events_to_trial(t_trial_start, t_ready_tone_in, take='first'),
@@ -429,7 +432,8 @@ def align_with_bpod(session_path):
         if not k.endswith('_times_bpod'):
             continue
         np.save(output_path.joinpath(f'_ibl_trials.{k[:-5]}.npy'), trials[k] + dt)
-    return np.median(dt)
+    return interpolate.interp1d(trials['intervals_bpod'][:, 0],
+                                trials['intervals'][:, 0], fill_value="extrapolate")
 
 
 def extract_sync(session_path, save=False, force=False, ephys_files=None):
@@ -498,7 +502,7 @@ def _get_main_probe_sync(session_path, bin_exists=True):
     return sync, sync_chmap
 
 
-def extract_all(session_path, save=False):
+def extract_all(session_path, save=False, tmax=None):
     """
     For the IBL ephys task, reads ephys binary file and extract:
         -   sync
@@ -513,8 +517,15 @@ def extract_all(session_path, save=False):
     session_path = Path(session_path)
     alf_path = session_path / 'alf'
 
+    if tmax is None:
+        try:
+            raw_trials = raw.load_data(session_path)
+            tmax = raw_trials[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
+        except Exception:
+            tmax = np.inf
+
     sync, sync_chmap = _get_main_probe_sync(session_path)
     extract_wheel_sync(sync, alf_path, save=save, chmap=sync_chmap)
     extract_camera_sync(sync, alf_path, save=save, chmap=sync_chmap)
-    extract_behaviour_sync(sync, alf_path, save=save, chmap=sync_chmap)
+    extract_behaviour_sync(sync, alf_path, save=save, chmap=sync_chmap, tmax=tmax)
     align_with_bpod(session_path)  # checks consistency and compute dt with bpod
