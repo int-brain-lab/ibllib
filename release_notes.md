@@ -1,3 +1,6 @@
+### Release Notes 1.4.1
+-   wheel extraction outputs a timestamps attribute, not times
+
 ### Release Notes 1.4.0
 -   Ephys extraction:
     -   un-synchronized spike sortings not uploaded on flat-iron
