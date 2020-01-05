@@ -88,7 +88,7 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
         indko = np.array([])
         # raise ValueError("Can't sync bpod and rotary encoder: non-contiguous sync pulses")
     # remove faulty indices due to missing or bad syncs
-    indko = np.unique(np.r_[indko + 1, indko])
+    indko = np.int32(np.unique(np.r_[indko + 1, indko]))
     re = np.delete(re, indko)
     bp = np.delete(bp, indko)
     # check the linear drift
@@ -98,15 +98,16 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
     return interpolate.interp1d(re, bp, fill_value="extrapolate")
 
 
-def sync_trials_robust(t0, t1, diff_threshold=0.001, max_shift=5):
+def sync_trials_robust(t0, t1, diff_threshold=0.001, drift_threshold_ppm=200, max_shift=5):
     """
     Attempts to find matching timestamps in 2 time-series that have an offset, are drifting,
     and are most likely incomplete: sizes don't have to match, some pulses may be missing
-    on one serie but not another.
+    in any serie.
     Only works with irregular time series as it relies on the derivative to match sync.
     :param t0:
     :param t1:
     :param diff_threshold:
+    :param drift_threshold_ppm:
     :param max_shift:
     :return:
     """
@@ -116,14 +117,21 @@ def sync_trials_robust(t0, t1, diff_threshold=0.001, max_shift=5):
     ind = np.zeros_like(dt0) * np.nan
     i0 = 0
     i1 = 0
+    cdt = np.nan  # the current time difference between the two series to compute drift
     while i0 < (nsync - 1):
         # look in the next max_shift events the ones whose derivative match
-        dec = np.abs(dt0[i0] - dt1[np.arange(i1, min(max_shift + i1, dt1.size))]) < diff_threshold
+        isearch = np.arange(i1, min(max_shift + i1, dt1.size))
+        dec = np.abs(dt0[i0] - dt1[isearch]) < diff_threshold
+        # another constraint is to check the dt for the maximum drift
+        if ~np.isnan(cdt):
+            drift_ppm = np.abs((cdt - (t0[i0] - t1[isearch])) / dt1[isearch]) * 1e6
+            dec = np.logical_and(dec, drift_ppm <= drift_threshold_ppm)
         # if one is found
         if np.any(dec):
             ii1 = np.where(dec)[0][0]
             ind[i0] = i1 + ii1
             i1 += ii1 + 1
+            cdt = t0[i0 + 1] - t1[i1 + ii1]
         i0 += 1
     it0 = np.where(~np.isnan(ind))[0]
     it1 = ind[it0].astype(np.int)
