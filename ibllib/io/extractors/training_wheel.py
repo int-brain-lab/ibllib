@@ -11,6 +11,7 @@ from scipy import interpolate
 
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
+import ibllib.exceptions as err
 import brainbox.behavior.wheel as wheel
 
 logger_ = logging.getLogger('ibllib.alf')
@@ -58,6 +59,9 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
         'closed_loop': np.array([tr['behavior_data']['States timestamps']
                                  ['closed_loop'][0][0] for tr in bpod_data]),
     }
+    if rote['closed_loop'].size <= 1:
+        raise err.SyncBpodWheelException("Not enough Rotary Encoder events to perform wheel"
+                                         " synchronization. Wheel data not extracted")
     # bpod bug that spits out events in ms instead of us
     if np.diff(bpod['closed_loop'][[-1, 0]])[0] / np.diff(rote['closed_loop'][[-1, 0]])[0] > 900:
         logger_.error("Rotary encoder stores values in ms instead of us. Wheel timing inaccurrate")
