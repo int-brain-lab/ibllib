@@ -165,7 +165,14 @@ def get_task_stimulus(session_path):
     stim_file_zip = glob.glob(os.path.join(
         session_path, 'raw_behavior_data', '_iblrig_codeFiles*.zip'))[0]
     zf = ZipFile(stim_file_zip)
-    stim_file = 'ephys_certification/04_ContrastSelectivityTaskStim/stims.csv'
+    # find task stimulus csv file
+    stim_file = None
+    for file in zf.namelist():
+        if file.endswith('stims.csv'):
+            stim_file = file
+            break
+    if stim_file is None:
+        raise FileNotFoundError('Could not find a stims.csv file in the iblrig code files archive')
     with zf.open(stim_file) as f:
         stim_array = np.loadtxt(f, delimiter=' ')
     return stim_array
