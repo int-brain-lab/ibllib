@@ -646,8 +646,8 @@ def extract_stimulus_info_to_alf(session_path, t_bin=1 / 60, bin_jitter=3, save=
             if stim_ts[i].shape[0] != n_expected_ttl_pulses[i]:
                 incorrect_pulses += 1
                 print(
-                    '\tTTL pulses inconsistent for %s; expected %i, found %i' %
-                    (stim_names[i], n_expected_ttl_pulses[i], stim_ts[i].shape[0]))
+                    '\t\033[1m\033[91mTTL pulses inconsistent for %s; expected %i, found %i\033[0m'
+                    % (stim_names[i], n_expected_ttl_pulses[i], stim_ts[i].shape[0]))
                 if stim_names[i] == 'contrast_reversal':
                     print(
                         '\twarning! no known fix for properly extracting contrast reversal ttl\n' +
