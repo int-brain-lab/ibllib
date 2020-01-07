@@ -8,15 +8,23 @@ import shutil
 
 par = oneibl.params.get()
 
+# Init connection to the database
+ac = wc.AlyxClient(
+    username='test_user', password='TapetesBloc18',
+    base_url='https://test.alyx.internationalbrainlab.org')
+
 
 class TestDownloadHTTP(unittest.TestCase):
 
     def setUp(self):
-        # Init connection to the database
-        self.ac = wc.AlyxClient(
-            username='test_user', password='TapetesBloc18',
-            base_url='https://test.alyx.internationalbrainlab.org')
+        self.ac = ac
         self.test_data_uuid = '3ddd45be-7d24-4fc7-9dd3-a98717342af6'
+
+    def test_paginated_request(self):
+        rep = self.ac.rest('datasets', 'list')
+        self.assertTrue(isinstance(rep, oneibl.webclient._PaginatedResponse))
+        self.assertTrue(len(rep) > 250)
+        self.assertTrue(len([d['md5'] for d in rep]) == len(rep))
 
     def test_generic_request(self):
         a = self.ac.get('/labs')

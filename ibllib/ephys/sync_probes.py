@@ -47,13 +47,14 @@ def sync(ses_path, **kwargs):
         version3B(ses_path, **kwargs)
 
 
-def version3A(ses_path, display=True, linear=False, tol=2.1):
+def version3A(ses_path, display=True, type='smooth', tol=2.1):
     """
     From a session path with _spikeglx_sync arrays extracted, locate ephys files for 3A and
      outputs one sync.timestamps.probeN.npy file per acquired probe. By convention the reference
      probe is the one with the most synchronisation pulses.
      Assumes the _spikeglx_sync datasets are already extracted from binary data
     :param ses_path:
+    :param type: linear, exact or smooth
     :return: bool True on a a successful sync
     """
     ephys_files = spikeglx.glob_ephys_files(ses_path)
@@ -102,22 +103,24 @@ def version3A(ses_path, display=True, linear=False, tol=2.1):
             timestamps = np.array([[0., 0.], [1., 1.]])
         else:
             timestamps, qc = sync_probe_front_times(d.times[:, ind], d.times[:, iref], sr,
-                                                    display=display, linear=linear, tol=tol)
+                                                    display=display, type=type, tol=tol)
             qc_all &= qc
         _save_timestamps_npy(ephys_file, timestamps, sr)
     return qc_all
 
 
-def version3B(ses_path, display=True, linear=False, tol=2.5):
+def version3B(ses_path, display=True, type=None, tol=2.5):
     """
     From a session path with _spikeglx_sync arrays extraccted, locate ephys files for 3A and
      outputs one sync.timestamps.probeN.npy file per acquired probe. By convention the reference
      probe is the one with the most synchronisation pulses.
      Assumes the _spikeglx_sync datasets are already extracted from binary data
     :param ses_path:
+    :param type: linear, exact or smooth
     :return: None
     """
-    ephys_files = spikeglx.glob_ephys_files(ses_path)
+    DEFAULT_TYPE = 'smooth'
+    ephys_files = spikeglx.glob_ephys_files(ses_path, bin_exists=False)
     for ef in ephys_files:
         ef['sync'] = alf.io.load_object(ef.path, '_spikeglx_sync', short_keys=True)
         ef['sync_map'] = get_ibl_sync_map(ef, '3B')
@@ -136,14 +139,21 @@ def version3B(ses_path, display=True, linear=False, tol=2.5):
         sync_probe = _get_sync_fronts(ef.sync, ef.sync_map['imec_sync'])
         sr = _get_sr(ef)
         assert(sync_nidq.times.size == sync_probe.times.size)
+        # if the qc of the diff finds anomalies, do not attempt to smooth the interp function
+        qcdiff = _check_diff_3b(sync_probe)
+        if not qcdiff:
+            qc_all = False
+            type_probe = type or 'exact'
+        else:
+            type_probe = type or DEFAULT_TYPE
         timestamps, qc = sync_probe_front_times(sync_probe.times, sync_nidq.times, sr,
-                                                display=display, linear=linear, tol=tol)
+                                                display=display, type=type_probe, tol=tol)
         qc_all &= qc
         _save_timestamps_npy(ef, timestamps, sr)
     return qc_all
 
 
-def sync_probe_front_times(t, tref, sr, display=False, linear=False, tol=2.0):
+def sync_probe_front_times(t, tref, sr, display=False, type='smooth', tol=2.0):
     """
     From 2 timestamps vectors of equivalent length, output timestamps array to be used for
     linear interpolation
@@ -155,15 +165,19 @@ def sync_probe_front_times(t, tref, sr, display=False, linear=False, tol=2.0):
     :return: quality Bool. False if tolerance is exceeded
     """
     qc = True
-    # the main drift is computed through linear regression. A further step compute a smoothed
-    # version of the residual to add to the linear drift. The precision is enforced
-    # by ensuring that each point lies less than one sampling rate away from the predicted.
+    """
+    the main drift is computed through linear regression. A further step compute a smoothed
+    version of the residual to add to the linear drift. The precision is enforced
+    by ensuring that each point lies less than one sampling rate away from the predicted.
+    """
     pol = np.polyfit(t, tref, 1)  # higher order terms first: slope / int for linear
     residual = tref - np.polyval(pol, t)
-    if not linear:
-        # the interp function from camera fronts is not smooth due to the locking of detections
-        # to the sampling rate of digital channels. The residual is fit using frequency domain
-        # smoothing
+    if type == 'smooth':
+        """
+        the interp function from camera fronts is not smooth due to the locking of detections
+        to the sampling rate of digital channels. The residual is fit using frequency domain
+        smoothing
+        """
         import ibllib.dsp as dsp
         CAMERA_UPSAMPLING_RATE_HZ = 300
         PAD_LENGTH_SECS = 60
@@ -187,12 +201,20 @@ def sync_probe_front_times(t, tref, sr, display=False, linear=False, tol=2.0):
                 ax = display
             else:
                 ax = plt.axes()
-            ax.plot(tref, residual * sr)
-            ax.plot(t_upsamp, res_filt * sr)
-            ax.plot(tout, np.interp(tout, t_upsamp, res_filt) * sr, '*')
+            ax.plot(tref, residual * sr, label='residual')
+            ax.plot(t_upsamp, res_filt * sr, label='smoothed residual')
+            ax.plot(tout, np.interp(tout, t_upsamp, res_filt) * sr, '*', label='interp timestamps')
+            ax.legend()
             ax.set_xlabel('time (sec)')
             ax.set_ylabel('Residual drift (samples @ 30kHz)')
-    else:
+    elif type == 'exact':
+        sync_points = np.c_[t, tref]
+        if display:
+            plt.plot(tref, residual * sr, label='residual')
+            plt.ylabel('Residual drift (samples @ 30kHz)')
+            plt.xlabel('time (sec)')
+            pass
+    elif type == 'linear':
         sync_points = np.c_[np.array([0., 1.]), np.polyval(pol, np.array([0., 1.]))]
         if display:
             plt.plot(tref, residual * sr)
@@ -204,6 +226,7 @@ def sync_probe_front_times(t, tref, sr, display=False, linear=False, tol=2.0):
         _logger.error(f'Synchronization check exceeds tolerance of {tol} samples. Check !!')
         qc = False
         # plt.plot((tref - fcn(t)) * sr)
+        # plt.plot( (sync_points[:, 0] - fcn(sync_points[:, 1])) * sr)
     return sync_points, qc
 
 
@@ -223,3 +246,16 @@ def _save_timestamps_npy(ephys_file, tself_tref, sr):
     timestamps = np.copy(tself_tref)
     timestamps[:, 0] *= np.float64(sr)
     np.save(file_ts, timestamps)
+
+
+def _check_diff_3b(sync):
+    """
+    Checks that the diff between consecutive sync pulses is below 150 PPM
+    Returns True on a pass result (all values below threshold)
+    """
+    THRESH_PPM = 150
+    d = np.diff(sync.times[sync.polarities == 1])
+    dt = np.median(d)
+    _logger.error(f'Synchronizations bursts over {THRESH_PPM} ppm between sync pulses. '
+                  'Sync using "exact" match between pulses.')
+    return np.all(np.abs((d - dt) / dt * 1e6) < THRESH_PPM)

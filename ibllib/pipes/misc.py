@@ -227,6 +227,7 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False,
     for session_path in src_session_paths:
         print(f"\nFound session: {session_path}")
         # Rename ephys files
+        # FIXME: if transfer has failed and wiring file is there renaming will fail!
         rename_ephys_files(str(session_path))
         # Move ephys files
         move_ephys_files(str(session_path))

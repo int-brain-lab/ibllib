@@ -1,3 +1,4 @@
+from pathlib import Path
 import unittest
 import numpy as np
 import pickle
@@ -10,10 +11,16 @@ class TestWheel(unittest.TestCase):
         # Test data is in the form ((inputs), (outputs)) where inputs is a tuple containing a
         # numpy array of timestamps and one of positions; outputs is a tuple of outputs from
         # teh function under test, e.g. wheel.movements
-        with open('wheel_test.pickle', 'rb') as f:
-            self.test_data = pickle.load(f)
+        pickle_file = Path(__file__).parent.joinpath('wheel_test.pickle')
+        if not pickle_file.exists():
+            self.test_data = None
+        else:
+            with open(pickle_file, 'rb') as f:
+                self.test_data = pickle.load(f)
 
     def test_derivative(self):
+        if self.test_data is None:
+            return
         t = np.array([0, .5, 1., 1.5, 2, 3, 4, 4.5, 5, 5.5])
         p = np.arange(len(t))
         v = wheel.velocity(t, p)

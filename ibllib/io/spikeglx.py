@@ -198,7 +198,15 @@ class Reader:
                             "the spikeglx acquisition hash, uncompress the file first !")
             return True
         else:
-            return hashfile.sha1(self.file_bin).upper() == self.meta.fileSHA1
+            sm = self.meta.fileSHA1
+            sc = hashfile.sha1(self.file_bin).upper()
+            if sm == sc:
+                log_func = _logger.info
+            else:
+                log_func = _logger.error
+            log_func(f"SHA1 metadata: {sm}")
+            log_func(f"SHA1 computed: {sc}")
+            return sm == sc
 
 
 def read(sglx_file, first_sample=0, last_sample=10000):
@@ -457,9 +465,11 @@ def glob_ephys_files(session_path, suffix='.meta', recursive=True, bin_exists=Tr
     # for 3b probes, need also to get the nidq dataset type
     for raw_ephys_file in Path(session_path).rglob(f'{recurse}*.nidq{suffix}'):
         raw_ephys_nidqfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + '.*bin'), None)
-        ephys_files.extend([Bunch({'label': get_label(raw_ephys_nidqfile),
+        if not bin_exists:
+            raw_ephys_nidqfile = raw_ephys_file.with_suffix('.bin')
+        ephys_files.extend([Bunch({'label': get_label(raw_ephys_file),
                                    'nidq': raw_ephys_nidqfile,
-                                   'path': raw_ephys_nidqfile.parent})])
+                                   'path': raw_ephys_file.parent})])
     return ephys_files
 
 

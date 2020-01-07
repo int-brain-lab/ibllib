@@ -537,17 +537,6 @@ class TestExtractTrialData(unittest.TestCase):
             df = raw._load_encoder_events_file_ge5(wf)
             self.assertTrue(np.all(np.diff(np.array(df.re_ts)) > 0))
 
-    def test_interpolation(self):
-        # straight test that it returns an usable function
-        ta = np.array([0., 1., 2., 3., 4., 5.])
-        tb = np.array([0., 1.1, 2.0, 2.9, 4., 5.])
-        finterp = ibllib.io.extractors.training_wheel.time_interpolation(ta, tb)
-        self.assertTrue(np.all(finterp(ta) == tb))
-        # next test if sizes are not similar
-        tc = np.array([0., 1.1, 2.0, 2.9, 4., 5., 6.])
-        finterp = ibllib.io.extractors.training_wheel.time_interpolation(ta, tc)
-        self.assertTrue(np.all(finterp(ta) == tb))
-
     def test_load_encoder_positions(self):
         raw.load_encoder_positions(self.training_lt5['path'],
                                    settings={'IBLRIG_VERSION_TAG': '4.9.9'})
@@ -594,6 +583,39 @@ class TestExtractTrialData(unittest.TestCase):
         [x.rmdir() for x in self.biased_lt5['path'].rglob('alf/') if x.is_dir()]
         [x.rmdir() for x in self.training_ge5['path'].rglob('alf/') if x.is_dir()]
         [x.rmdir() for x in self.biased_ge5['path'].rglob('alf/') if x.is_dir()]
+
+
+class TestSyncWheelBpod(unittest.TestCase):
+
+    def test_sync_crappy_signals(self):
+        sync_trials_robust = ibllib.io.extractors.training_wheel.sync_trials_robust
+        drift_pol = np.array([11 * 1e-6, -20])  # bpod starts 20 secs before with 10 ppm drift
+        np.random.seed(seed=784)
+        t0_full = np.cumsum(np.random.rand(50)) + .001
+        t1_full = np.polyval(drift_pol, t0_full) + t0_full
+        t0 = t0_full.copy()
+        t1 = t1_full.copy()
+
+        t0_, t1_ = sync_trials_robust(t0, t1)
+        assert np.allclose(t1_, np.polyval(drift_pol, t0_) + t0_)
+
+        t0_, t1_ = sync_trials_robust(t0, t1[:-1])
+        assert np.allclose(t1_, np.polyval(drift_pol, t0_) + t0_)
+
+        t0_, t1_ = sync_trials_robust(t0, t1[1:])
+        assert np.allclose(t1_, np.polyval(drift_pol, t0_) + t0_)
+
+        t0_, t1_ = sync_trials_robust(t0[1:], t1)
+        assert np.allclose(t1_, np.polyval(drift_pol, t0_) + t0_)
+
+        t0_, t1_ = sync_trials_robust(t0[:-1], t1)
+        assert np.allclose(t1_, np.polyval(drift_pol, t0_) + t0_)
+
+        t0_, t1_ = sync_trials_robust(t0, np.delete(t1, 24))
+        assert np.allclose(t1_, np.polyval(drift_pol, t0_) + t0_)
+
+        t0_, t1_ = sync_trials_robust(np.delete(t0, 12), np.delete(t1, 24))
+        assert np.allclose(t1_, np.polyval(drift_pol, t0_) + t0_)
 
 
 if __name__ == "__main__":
