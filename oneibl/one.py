@@ -2,6 +2,7 @@ from pathlib import Path, PurePath
 import requests
 import logging
 import os
+import tqdm
 
 from ibllib.misc import pprint
 from ibllib.io.one import OneAbstract
@@ -390,7 +391,10 @@ class ONE(OneAbstract):
             url += f'&limit={limit}'
         # implements the loading itself
         ses = self.alyx.get(url)
-        eids = [s['url'] for s in ses]  # flattens session info
+        if len(ses) > 2500:
+            eids = [s['url'] for s in tqdm.tqdm(ses)]  # flattens session info
+        else:
+            eids = [s['url'] for s in ses]
         eids = [e.split('/')[-1] for e in eids]  # remove url to make it portable
         if details:
             return eids, ses

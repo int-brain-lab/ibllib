@@ -6,13 +6,14 @@ from pathlib import Path
 from alf.io import remove_uuid_file
 from oneibl.one import ONE
 
+one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
+          password='TapetesBloc18')
+
 
 class TestSearch(unittest.TestCase):
 
     def setUp(self):
         # Init connection to the database
-        one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
-                  password='TapetesBloc18')
         self.One = one
 
     def test_search_simple(self):

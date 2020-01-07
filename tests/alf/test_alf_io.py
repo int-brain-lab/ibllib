@@ -170,6 +170,26 @@ class TestsAlf(unittest.TestCase):
         shutil.rmtree(self.tmpdir)
 
 
+class TestSessionFolder(unittest.TestCase):
+
+    def test_get_session_folder(self):
+        inp = (Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001/raw_behavior_data/'
+                    '_iblrig_micData.raw.wav'),
+               Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),)
+        out = (Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),
+               Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),)
+        for i, o in zip(inp, out):
+            self.assertEqual(o, alf.io.get_session_path(i))
+
+    def test_get_session_folder_regex(self):
+        o = alf.io._regexp_session_path(r'C:\titi\toto\ZM_1368/2019-04-19/001', '\\')
+        self.assertIsNotNone(o)
+        o = alf.io._regexp_session_path(Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'), '\\')
+        self.assertIsNotNone(o)
+        o = alf.io._regexp_session_path(Path('/mnt/s0/Data/Subjects/ZM_1368/2019/1'), '\\')
+        self.assertIsNone(o)
+
+
 class TestRemoveUUID(unittest.TestCase):
 
     def test_remove_uuid(self):

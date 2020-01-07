@@ -1,11 +1,11 @@
 from pathlib import Path
 import logging
 import json
+import shutil
 
 import numpy as np
 
 from phylib.io import alf
-
 from ibllib.ephys.sync_probes import apply_sync
 import ibllib.ephys.ephysqc as ephysqc
 from ibllib.misc import log2session_static
@@ -52,7 +52,7 @@ def probes_description(ses_path):
                 'theta': prb['P'], 'depth': prb['D'], 'beta': prb['T']}
 
     # the labels may not match, in which case throw a warning and work in alphabetical order
-    if labels != ['probe00', 'probe01']:
+    if labels != ('probe00', 'probe01'):
         _logger.warning("Probe names do not match the json settings files. Will match coordinates"
                         " per alphabetical order !")
         _ = [_logger.warning(f"  probe0{i} ----------  {lab} ") for i, lab in enumerate(labels)]
@@ -99,29 +99,31 @@ def sync_spike_sortings(ses_path):
             continue
         probe_out_path = ses_path.joinpath('alf', label)
         probe_out_path.mkdir(parents=True, exist_ok=True)
-        # computes QC on the ks2 output
-        ephysqc._spike_sorting_metrics_ks2(subdir, save=True)
-        # converts the folder to ALF
-        ks2_to_alf(subdir, probe_out_path, ampfactor=_sample2v(ef.ap), label=None, force=True)
-        # single probe we're done !
-        if len(subdirs) == 1:
-            break
-        # synchronize the spike sorted times only if there are several probes
-        sync_file = ef.ap.parent.joinpath(ef.ap.name.replace('.ap.', '.sync.')).with_suffix('.npy')
-        if not sync_file.exists():
-            """
-            if there is no sync file it means something went wrong. Outputs the spike sorting
-            in time according the the probe by followint ALF convention on the times objects
-            """
-            error_msg = f'No synchronisation file for {label}: {sync_file}'
-            _logger.error(error_msg)
+        # for multiple probes need to handle the synchronization
+        if len(subdirs) > 1:
+            # synchronize the spike sorted times only if there are several probes
+            sync_file = ef.ap.parent.joinpath(ef.ap.name.replace('.ap.', '.sync.')
+                                              ).with_suffix('.npy')
+            if not sync_file.exists():
+                """
+                if there is no sync file it means something went wrong. Outputs the spike sorting
+                in time according the the probe by followint ALF convention on the times objects
+                """
+                error_msg = f'No synchronisation file for {label}: {sync_file}. The spike-' \
+                            f'sorting is not synchronized and data not uploaded on Flat-Iron'
+                _logger.error(error_msg)
+                # remove the alf folder if the sync failed
+                shutil.rmtree(probe_out_path)
+                continue
+            # converts the folder to ALF
+            ks2_to_alf(subdir, probe_out_path, ampfactor=_sample2v(ef.ap), label=None, force=True)
+            # patch the spikes.times files manually
             st_file = ses_path.joinpath(probe_out_path, 'spikes.times.npy')
-            st_file.rename(st_file.parent.joinpath(f'{st_file.stem}_{label}.npy'))
-            continue
-        # patch the spikes.times files manually
-        st_file = ses_path.joinpath(probe_out_path, 'spikes.times.npy')
-        interp_times = apply_sync(sync_file, np.load(st_file), forward=True)
-        np.save(st_file, interp_times)
+            interp_times = apply_sync(sync_file, np.load(st_file), forward=True)
+            np.save(st_file, interp_times)
+        else:
+            # converts the folder to ALF and computes metrics
+            ks2_to_alf(subdir, probe_out_path, ampfactor=_sample2v(ef.ap), label=None, force=True)
 
 
 def ks2_to_alf(ks_path, out_path, ampfactor=1, label=None, force=True):
@@ -131,6 +133,7 @@ def ks2_to_alf(ks_path, out_path, ampfactor=1, label=None, force=True):
     :param out_path:
     :return:
     """
+    ephysqc._spike_sorting_metrics_ks2(ks_path, save=True)
     m = ephysqc.phy_model_from_ks2_path(ks_path)
     ac = alf.EphysAlfCreator(m)
     ac.convert(out_path, label=label, force=force, ampfactor=ampfactor)
