@@ -1,3 +1,7 @@
+### Release Notes 1.4.2
+-  FPGA/bpod events synchronization performed even when their counts do not match
+
+
 ### Release Notes 1.4.1
 -   wheel extraction outputs a timestamps attribute, not times
 -   make the wheel extraction more robust

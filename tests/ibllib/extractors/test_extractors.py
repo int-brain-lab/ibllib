@@ -535,7 +535,7 @@ class TestExtractTrialData(unittest.TestCase):
 class TestSyncWheelBpod(unittest.TestCase):
 
     def test_sync_bpod_bonsai_poor_quality_timestamps(self):
-        sync_trials_robust = ibllib.io.extractors.training_wheel.sync_trials_robust
+        sync_trials_robust = raw.sync_trials_robust
         drift_pol = np.array([11 * 1e-6, -20])  # bpod starts 20 secs before with 10 ppm drift
         np.random.seed(seed=784)
         t0_full = np.cumsum(np.random.rand(50)) + .001

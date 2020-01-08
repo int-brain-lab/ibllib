@@ -417,6 +417,18 @@ def align_with_bpod(session_path):
     # check consistency
     output_path = Path(session_path) / 'alf'
     trials = alf.io.load_object(output_path, '_ibl_trials')
+    if alf.io.check_dimensions(trials) != 0:
+        # patching things up if the bpod and FPGA don't have the same recording span
+        _logger.warning("BPOD/FPGA synchronization: Bpod and FPGA don't have the same amount of"
+                        " trial start events. Patching alf files.")
+        _, _, ibpod, ifpga = raw.sync_trials_robust(
+            trials['intervals_bpod'][:, 0], trials['intervals'][:, 0], return_index=True)
+        for k in trials:
+            if 'bpod' in k:
+                trials[k] = trials[k][ibpod]
+            else:
+                trials[k] = trials[k][ibpod]
+        alf.io.save_object_npy(output_path, trials, '_ibl_trials')
     assert(alf.io.check_dimensions(trials) == 0)
     tlen = (np.diff(trials['intervals_bpod']) - np.diff(trials['intervals']))[:-1] - ITI_DURATION
     assert(np.all(np.abs(tlen[np.invert(np.isnan(tlen))]) < 5 * 1e-3))

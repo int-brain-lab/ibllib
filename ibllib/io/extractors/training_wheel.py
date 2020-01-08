@@ -87,8 +87,8 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
         indko = np.where(np.abs(diff_last_match) >= DIFF_THRESHOLD)[0]
     # last resort is to use ad-hoc sync function
     else:
-        bp, re = sync_trials_robust(bpod['closed_loop'], rote['closed_loop'],
-                                    diff_threshold=DIFF_THRESHOLD, max_shift=5)
+        bp, re = raw.sync_trials_robust(bpod['closed_loop'], rote['closed_loop'],
+                                        diff_threshold=DIFF_THRESHOLD, max_shift=5)
         indko = np.array([])
         # raise ValueError("Can't sync bpod and rotary encoder: non-contiguous sync pulses")
     # remove faulty indices due to missing or bad syncs
@@ -100,46 +100,6 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
     poly = np.polyfit(bp, re, 1)
     assert np.all(np.abs(np.polyval(poly, bp) - re) < 0.002)
     return interpolate.interp1d(re, bp, fill_value="extrapolate")
-
-
-def sync_trials_robust(t0, t1, diff_threshold=0.001, drift_threshold_ppm=200, max_shift=5):
-    """
-    Attempts to find matching timestamps in 2 time-series that have an offset, are drifting,
-    and are most likely incomplete: sizes don't have to match, some pulses may be missing
-    in any serie.
-    Only works with irregular time series as it relies on the derivative to match sync.
-    :param t0:
-    :param t1:
-    :param diff_threshold:
-    :param drift_threshold_ppm:
-    :param max_shift:
-    :return:
-    """
-    nsync = min(t0.size, t1.size)
-    dt0 = np.diff(t0)
-    dt1 = np.diff(t1)
-    ind = np.zeros_like(dt0) * np.nan
-    i0 = 0
-    i1 = 0
-    cdt = np.nan  # the current time difference between the two series to compute drift
-    while i0 < (nsync - 1):
-        # look in the next max_shift events the ones whose derivative match
-        isearch = np.arange(i1, min(max_shift + i1, dt1.size))
-        dec = np.abs(dt0[i0] - dt1[isearch]) < diff_threshold
-        # another constraint is to check the dt for the maximum drift
-        if ~np.isnan(cdt):
-            drift_ppm = np.abs((cdt - (t0[i0] - t1[isearch])) / dt1[isearch]) * 1e6
-            dec = np.logical_and(dec, drift_ppm <= drift_threshold_ppm)
-        # if one is found
-        if np.any(dec):
-            ii1 = np.where(dec)[0][0]
-            ind[i0] = i1 + ii1
-            i1 += ii1 + 1
-            cdt = t0[i0 + 1] - t1[i1 + ii1]
-        i0 += 1
-    it0 = np.where(~np.isnan(ind))[0]
-    it1 = ind[it0].astype(np.int)
-    return t0[np.unique(np.r_[it0, it0 + 1])], t1[np.unique(np.r_[it1, it1 + 1])]
 
 
 def get_wheel_data(session_path, bp_data=None, save=False, display=False):

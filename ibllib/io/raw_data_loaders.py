@@ -472,3 +472,50 @@ def get_port_events(events: dict, name: str = '') -> list:
     out = sorted(out)
 
     return out
+
+
+def sync_trials_robust(t0, t1, diff_threshold=0.001, drift_threshold_ppm=200, max_shift=5,
+                       return_index=False):
+    """
+    Attempts to find matching timestamps in 2 time-series that have an offset, are drifting,
+    and are most likely incomplete: sizes don't have to match, some pulses may be missing
+    in any serie.
+    Only works with irregular time series as it relies on the derivative to match sync.
+    :param t0:
+    :param t1:
+    :param diff_threshold:
+    :param drift_threshold_ppm: (150)
+    :param max_shift: (200)
+    :param return_index (False)
+    :return:
+    """
+    nsync = min(t0.size, t1.size)
+    dt0 = np.diff(t0)
+    dt1 = np.diff(t1)
+    ind = np.zeros_like(dt0) * np.nan
+    i0 = 0
+    i1 = 0
+    cdt = np.nan  # the current time difference between the two series to compute drift
+    while i0 < (nsync - 1):
+        # look in the next max_shift events the ones whose derivative match
+        isearch = np.arange(i1, min(max_shift + i1, dt1.size))
+        dec = np.abs(dt0[i0] - dt1[isearch]) < diff_threshold
+        # another constraint is to check the dt for the maximum drift
+        if ~np.isnan(cdt):
+            drift_ppm = np.abs((cdt - (t0[i0] - t1[isearch])) / dt1[isearch]) * 1e6
+            dec = np.logical_and(dec, drift_ppm <= drift_threshold_ppm)
+        # if one is found
+        if np.any(dec):
+            ii1 = np.where(dec)[0][0]
+            ind[i0] = i1 + ii1
+            i1 += ii1 + 1
+            cdt = t0[i0 + 1] - t1[i1 + ii1]
+        i0 += 1
+    it0 = np.where(~np.isnan(ind))[0]
+    it1 = ind[it0].astype(np.int)
+    ind0 = np.unique(np.r_[it0, it0 + 1])
+    ind1 = np.unique(np.r_[it1, it1 + 1])
+    if return_index:
+        return t0[ind0], t1[ind1], ind0, ind1
+    else:
+        return t0[ind0], t1[ind1]
