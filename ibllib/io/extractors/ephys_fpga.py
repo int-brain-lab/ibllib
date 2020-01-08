@@ -9,6 +9,7 @@ from scipy import interpolate
 from brainbox.core import Bunch
 import brainbox.behavior.wheel as whl
 
+import ibllib.exceptions as err
 import ibllib.plots as plots
 import ibllib.io.spikeglx
 import ibllib.dsp as dsp
@@ -336,6 +337,9 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
     :return: trials dictionary
     """
     bpod = _get_sync_fronts(sync, chmap['bpod'], tmax=tmax)
+    if bpod.times.size == 0:
+        raise err.SyncBpodFpgaException('No Bpod event found in FPGA. No behaviour extraction. '
+                                        'Check channel maps.')
     frame2ttl = _get_sync_fronts(sync, chmap['frame2ttl'], tmax=tmax)
     audio = _get_sync_fronts(sync, chmap['audio'], tmax=tmax)
     # extract events from the fronts for each trace
@@ -423,6 +427,8 @@ def align_with_bpod(session_path):
                         " trial start events. Patching alf files.")
         _, _, ibpod, ifpga = raw.sync_trials_robust(
             trials['intervals_bpod'][:, 0], trials['intervals'][:, 0], return_index=True)
+        if ibpod.size == 0:
+            raise err.SyncBpodFpgaException('Can not sync BPOD and FPGA - no matching sync pulses found.')
         for k in trials:
             if 'bpod' in k:
                 trials[k] = trials[k][ibpod]
