@@ -95,14 +95,15 @@ def load_rf_mapping_stimulus(session_path, stim_metadata):
     :rtype: np.ndarray of shape (y_pix, x_pix, n_frames)
     """
 
-    stim_file = glob.glob(os.path.join(session_path, 'raw_behavior_data', '*RFMapStim.raw*'))[0]
     idx_rfm = get_stim_num_from_name(stim_metadata['VISUAL_STIMULI'], 'receptive_field_mapping')
 
     if idx_rfm is not None:
+        stim_filename = stim_metadata['VISUAL_STIM_%i' % idx_rfm].get(
+            'stim_data_file_name', '*RFMapStim.raw*')
+        stim_file = glob.glob(os.path.join(session_path, 'raw_behavior_data', stim_filename))[0]
         frame_array = np.fromfile(stim_file, dtype='uint8')
         y_pix, x_pix, _ = stim_metadata['VISUAL_STIM_%i' % idx_rfm]['stim_file_shape']
-        frames = np.transpose(
-            np.reshape(frame_array, [y_pix, x_pix, -1], order='F'), [2, 1, 0])
+        frames = np.transpose(np.reshape(frame_array, [y_pix, x_pix, -1], order='F'), [2, 1, 0])
     else:
         frames = np.array([])
     return frames
@@ -567,8 +568,8 @@ def extract_stimulus_info_to_alf(session_path, t_bin=1 / 60, bin_jitter=3, save=
                     print('\t--> 1 TTL pulse removed from end')
                 stim_on_time = 0.2  # TODO: hardcoded for now
                 # we only recorded rise times earlier; sync_times contains rise and fall times
-                if np.diff(stim_ts[i][:2]) < bonsai_jitter * stim_on_time:
-                    # get rid of bonsai artifacts at beginning
+                if np.diff(stim_ts[i][:2]) > stim_on_time / bonsai_jitter:
+                    # get rid of bonsai artifacts at beginning; np.diff() will be too large
                     stim_ts[i] = stim_ts[i][2::2]
                     print('\tremoved bonsai onset artifact')
                 else:
@@ -592,7 +593,7 @@ def extract_stimulus_info_to_alf(session_path, t_bin=1 / 60, bin_jitter=3, save=
                 # print(len(meta['VISUAL_STIM_%i' % stim_id]['stim_sequence']))
                 stim_on_time = meta['VISUAL_STIM_%i' % stim_id]['stim_on_time']
                 if np.diff(stim_ts[i][:2]) < bonsai_jitter * stim_on_time:
-                    # get rid of bonsai artifacts at beginning
+                    # get rid of bonsai artifacts at beginning; np.diff() will be too small
                     stim_ts[i] = np.stack([stim_ts[i][2::2], stim_ts[i][3::2]], axis=1)
                     print('\tremoved bonsai onset artifact')
                 else:
@@ -623,7 +624,7 @@ def extract_stimulus_info_to_alf(session_path, t_bin=1 / 60, bin_jitter=3, save=
                 # separate ttl pulses for stim on and stim off
                 stim_on_time = meta['VISUAL_STIM_%i' % stim_id]['stim_on_time']
                 if np.diff(stim_ts[i][:2]) < bonsai_jitter * stim_on_time:
-                    # get rid of bonsai artifacts at beginning
+                    # get rid of bonsai artifacts at beginning; np.diff() will be too small
                     stim_ts[i] = np.stack([stim_ts[i][2::2], stim_ts[i][3::2]], axis=1)
                     print('\tremoved bonsai onset artifact')
                 else:
