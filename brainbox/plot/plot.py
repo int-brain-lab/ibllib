@@ -72,9 +72,9 @@ def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cma
     # Get units.
     if not(units is None):  # we're using a subset of all units
         unit_list = list(units_b['depths'].keys())
-        # For each unit in `unit_list`, remove unit from `units_b` if not in `units`
+        # For each unit in `unit_list`, remove unit from `units_b` if not in `units`.
         [units_b['depths'].pop(unit) for unit in unit_list if not(int(unit) in units)]
-    unit_list = list(units_b['depths'].keys())  # get new `unit_list` after removing units
+    unit_list = list(units_b['depths'].keys())  # get new `unit_list` after removing unit
 
     # Calculate coefficients of variation for all units
     p_vals_b, cv_b = bb.metrics.unit_stability(
@@ -83,13 +83,10 @@ def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cma
     cv_vals = cv_vals * 1e6 if feat_name == 'amps' else cv_vals  # convert to uV if amps
     p_vals = np.array(tuple(p_vals_b[feat_name].values()))
 
-    # Specify and remove bad units (i.e. missing unit numbers from spike sorter output).
-    bad_units = np.where(np.isnan(cv_vals))[0]
-    if len(bad_units) > 0:
-        [unit_list.pop(bad_unit) for bad_unit in bad_units]
-        good_units = unit_list
-    else:
-        good_units = unit_list
+    # Remove any empty units. This must be done AFTER the above calculations for ALL units so that
+    # we can keep direct indexing.
+    empty_unit_idxs = np.where([len(units_b['times'][unit]) == 0 for unit in unit_list])[0]
+    good_units = [unit for unit in unit_list if unit not in empty_unit_idxs.astype(str)]
 
     # Get mean depths of spikes for good units
     depths = np.asarray([np.mean(units_b['depths'][str(unit)]) for unit in good_units])

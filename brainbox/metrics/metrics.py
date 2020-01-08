@@ -14,10 +14,12 @@ Run the following to set-up the workspace to run the docstring examples:
 >>> clstrs_b = aio.load_object(path_to_alf_out, 'clusters')
 >>> units_b = bb.processing.get_units_bunch(spks_b)  # may take a few mins to compute
 """
-import brainbox as bb
+
+import os.path as op
 import numpy as np
 import scipy.stats as stats
 import scipy.ndimage.filters as filters
+import brainbox as bb
 # add spikemetrics as dependency?
 # import spikemetrics as sm
 
@@ -26,7 +28,7 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
     '''
     Computes the probability that the empirical spike feature distribution(s), for specified
     feature(s), for all units, comes from a specific theoretical distribution, based on a specified
-    statistical test. Also calculates the coefficients of variation of the spike feature(s) for all
+    statistical test. Also computes the coefficients of variation of the spike feature(s) for all
     units.
 
     Parameters
@@ -43,7 +45,7 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
         The type of hypothetical null distribution for which the empirical spike feature
         distributions are presumed to belong to.
     test : string (optional)
-        The statistical test used to calculate the probability that the empirical spike feature
+        The statistical test used to compute the probability that the empirical spike feature
         distributions come from `dist`.
 
     Returns
@@ -107,7 +109,7 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
                 p_val = np.nan
                 cv = np.nan
             else:
-                # Calculate p_val and var for current feature
+                # compute p_val and var for current feature
                 _, p_val = test_fun(units_b[feat][unit], dist)
                 cv = np.var(units_b[feat][unit]) / np.mean(units_b[feat][unit])
             # Append current unit's values to list of units' values for current feature:
@@ -157,7 +159,7 @@ def feat_cutoff(feat, spks_per_bin=20, sigma=5, min_num_bins=50):
     --------
     1) Determine the fraction of spikes missing from unit 1 based on the recorded unit's spike
     amplitudes, assuming the distribution of the unit's spike amplitudes is symmetric.
-        # Get unit 1 amplitudes from a unit bunch, and calculate fraction spikes missing.
+        # Get unit 1 amplitudes from a unit bunch, and compute fraction spikes missing.
         >>> feat = units_b['amps']['1']
         >>> fraction_missing = bb.plot.feat_cutoff(feat)
     '''
@@ -167,7 +169,7 @@ def feat_cutoff(feat, spks_per_bin=20, sigma=5, min_num_bins=50):
                 'but it must be at least {1}'.format(feat.size, spks_per_bin * min_num_bins)
     assert (feat.size > (spks_per_bin * min_num_bins)), error_str
 
-    # Calculate the spike feature histogram and pdf:
+    # compute the spike feature histogram and pdf:
     num_bins = np.int(feat.size / spks_per_bin)
     hist, bins = np.histogram(feat, num_bins, density=True)
     pdf = filters.gaussian_filter1d(hist, sigma)
@@ -177,7 +179,7 @@ def feat_cutoff(feat, spks_per_bin=20, sigma=5, min_num_bins=50):
     max_idx_sym_around_peak = np.argmin(np.abs(pdf[peak_idx:] - pdf[0]))
     cutoff_idx = peak_idx + max_idx_sym_around_peak
 
-    # Calculate fraction missing from the tail of the pdf (the area where pdf stops being
+    # compute fraction missing from the tail of the pdf (the area where pdf stops being
     # symmetric around peak).
     fraction_missing = np.sum(pdf[cutoff_idx:]) / np.sum(pdf)
     fraction_missing = 0.5 if (fraction_missing > 0.5) else fraction_missing
@@ -303,12 +305,12 @@ def firing_rate_coeff_var(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
         >>> cv_2, cvs_2, fr_2 = bb.metrics.firing_rate_coeff_var(ts_2)
     '''
 
-    # Calculate overall instantaneous firing rate and firing rate for each bin.
+    # Compute overall instantaneous firing rate and firing rate for each bin.
     fr = bb.singlecell.firing_rate(ts, hist_win=hist_win, fr_win=fr_win)
     bin_sz = np.int(fr.size / n_bins)
     fr_binned = np.array([fr[(b * bin_sz):(b * bin_sz + bin_sz)] for b in range(n_bins)])
 
-    # Calculate coefficient of variations of firing rate for each bin, and the mean c.v.
+    # Compute coefficient of variations of firing rate for each bin, and the mean c.v.
     cvs = np.std(fr_binned, axis=1) / np.mean(fr_binned, axis=1)
     cv = np.mean(cvs)
 
@@ -353,61 +355,68 @@ def isi_viol(ts, rp=0.002):
     return frac_isi_viol, len(v), isis
 
 
-def max_drift(depths):
+def max_drift(feat):
     '''
-    Computes the maximum drift of spikes in a unit.
+    Computes the maximum drift (max - min) of a spike feature array.
 
     Parameters
     ----------
-    depths : ndarray
-        The spike depths from which to compute the maximum drift.
+    feat : ndarray
+        The spike feature values from which to compute the maximum drift.
 
     Returns
     -------
     md : float
-        The maxmimum drift of the unit (in mm).
+        The maxmimum drift of the unit.
 
     See Also
     --------
+    cum_drift
 
     Examples
     --------
-    1) Get the maximum drift for unit 1.
+    1) Get the maximum depth and amp drift for unit 1.
         >>> unit_idxs = np.where(spks_b['clusters'] == 1)[0]
         >>> depths = spks_b['depths'][unit_idxs]
-        >>> md = bb.metrics.max_drift(depths)
+        >>> amps = spks_b['amps'][unit_idxs]
+        >>> depth_md = bb.metrics.max_drift(depths)
+        >>> amp_md = bb.metrics.max_drift(amps)
     '''
 
-    md = np.max(depths) - np.min(depths)
+    md = np.max(feat) - np.min(feat)
     return md
 
 
-def cum_drift(depths):
+def cum_drift(feat):
     '''
-    Computes the cumulative drift (normalized by the total number of spikes) of spikes in a unit.
+    Computes the cumulative drift (normalized by the total number of spikes) of a spike feature
+    array.
 
     Parameters
     ----------
-    depths : ndarray
-        The spike depths from which to compute the maximum drift.
+    feat : ndarray
+        The spike feature values from which to compute the maximum drift.
 
     Returns
     -------
-    md : float
-        The maxmimum drift of the unit (in mm).
+    cd : float
+        The cumulative drift of the unit.
 
     See Also
     --------
+    max_drift
 
     Examples
     --------
-    1) Get the cumulative drift for unit 1.
+    1) Get the cumulative depth drift for unit 1.
         >>> unit_idxs = np.where(spks_b['clusters'] == 1)[0]
         >>> depths = spks_b['depths'][unit_idxs]
-        >>> md = bb.metrics.cum_drift(depths)
+        >>> amps = spks_b['amps'][unit_idxs]
+        >>> depth_cd = bb.metrics.cum_drift(depths)
+        >>> amp_cd = bb.metrics.cum_drift(amps)
     '''
 
-    cd = np.sum(np.abs(np.diff(depths))) / len(depths)
+    cd = np.sum(np.abs(np.diff(feat))) / len(feat)
     return cd
 
 
@@ -445,3 +454,74 @@ def pres_ratio(ts, hist_win=10):
     spks_bins, _ = np.histogram(ts, bins)
     pr = len(np.where(spks_bins)[0]) / len(spks_bins)
     return pr, spks_bins
+
+
+def ptp_over_noise(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='int16', offset=0,
+                   car=True):
+    '''
+    For specified channels, for specified timestamps, computes the mean (peak-to-peak amplitudes /
+    the MADs of the background noise).
+
+    Parameters
+    ----------
+    ephys_file : string
+        The file path to the binary ephys data.
+    ts : ndarray_like
+        The timestamps (in s) of the spikes.
+    ch : ndarray_like
+        The channels on which to extract the waveforms.
+    t : numeric (optional)
+        The time (in ms) of the waveforms to extract to compute the ptp.
+    sr : int (optional)
+        The sampling rate (in hz) that the ephys data was acquired at.
+    n_ch_probe : int (optional)
+        The number of channels of the recording.
+    dtype: str (optional)
+        The datatype represented by the bytes in `ephys_file`.
+    offset: int (optional)
+        The offset (in bytes) from the start of `ephys_file`.
+    car: bool (optional)
+        A flag to perform common-average-referencing before extracting waveforms.
+
+    Returns
+    -------
+    ptp_sigma : ndarray
+        An array containing the mean ptp_over_noise values for the specified `ts` and `ch`.
+
+    Examples
+    --------
+    1) Compute ptp_over_noise for all spikes on 20 channels around the channel of max amplitude
+    for unit 1.
+        >>> ts = units_b['times']['1']
+        >>> max_ch = max_ch = clstrs_b['channels'][1]
+        >>> if max_ch < 10:  # take only channels greater than `max_ch`.
+        >>>     ch = np.arange(max_ch, max_ch + 20)
+        >>> elif (max_ch + 10) > 385:  # take only channels less than `max_ch`.
+        >>>     ch = np.arange(max_ch - 20, max_ch)
+        >>> else:  # take `n_c_ch` around `max_ch`.
+        >>>     ch = np.arange(max_ch - 10, max_ch + 10)
+        >>> p = bb.metrics.ptp_over_noise(ephys_file, ts, ch)
+    '''
+
+    # Ensure `ch` is ndarray
+    ch = np.asarrray(ch)
+
+    # Get waveforms.
+    wf = bb.io.extract_waveforms(ephys_file, ts, ch, t=t, sr=sr, n_ch_probe=n_ch_probe,
+                                 dtype=dtype, offset=offset, car=car)
+
+    # Initialize `mean_ptp` based on `ch`, and compute mean ptp of all spikes for each ch.
+    mean_ptp = np.zeros((ch.size,))
+    for cur_ch in range(ch.size,):
+        mean_ptp[cur_ch] = np.mean(np.max(wf[:, :, cur_ch], axis=1) -
+                                   np.min(wf[:, :, cur_ch], axis=1))
+
+    # Compute MAD for all channels.
+    item_bytes = np.dtype(dtype).itemsize
+    n_samples = (op.getsize(ephys_file) - offset) // (item_bytes * n_ch_probe)
+    file_m = np.memmap(ephys_file, shape=(n_samples, n_ch_probe), dtype=dtype, mode='r')
+    noise = stats.median_absolute_deviation(file_m[:, ch], axis=0, scale=1)
+
+    # Return `mean_ptp` over `noise`
+    ptp_sigma = mean_ptp / noise
+    return ptp_sigma

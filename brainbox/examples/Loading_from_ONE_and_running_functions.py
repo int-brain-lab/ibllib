@@ -40,9 +40,10 @@ alf_dir = os.path.join(session_path, 'alf')
 alf_probe_dir = os.path.join(alf_dir, probe)
 ephys_file_dir = os.path.join(session_path, 'raw_ephys_data', probe)
 # Find 'ap' ephys file in `ephys_file_dir`
-for i in os.listdir(ephys_file_dir):
-        if 'ap' in i and 'bin' in i:
-            ephys_file_path = os.path.join(ephys_file_dir, i)
+for f in os.listdir(ephys_file_dir):
+        if f.endswith('ap.bin') or f.endswith('ap.cbin'):
+            ephys_file_path = os.path.join(ephys_file_dir, f)
+            break
 # Ensure directories and paths can be found
 assert os.path.isdir(ephys_file_dir) and os.path.isdir(alf_probe_dir) \
     and os.path.isabs(ephys_file_path), 'Directories set incorrectly'
@@ -66,9 +67,7 @@ unit4_amps = units_b['amps']['4']  # get amplitudes for unit 4.
 
 # Filter units according to some parameters
 T = spks_b['times'][-1] - spks_b['times'][0]
-filtered_units_mask = bb.processing.filter_units(
-    units_b, T, params={'min_amp': 0, 'min_fr': 0, 'max_fpr': 1, 'rp': 0.002})
-filtered_units = np.where(filtered_units_mask)[0]  # get an array of the filtered units` ids.
+filtered_units = bb.processing.filter_units(units_b, T, min_amp=0, min_fr=0.5, max_fpr=1, rp=0.002)
 
 # Extract waveforms from binary ephys file
 # Get the timestamps and 20 channels around the max amp channel for unit1, and extract the
@@ -85,7 +84,7 @@ else:  # take `n_c_ch` around `max_ch`.
     ch = np.arange(max_ch - (n_ch_wf // 2), max_ch + (n_ch_wf // 2))
 
 # Waveform extraction may take a few mins
-wf = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, t=2.0, car=False)  
+wf = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, t=2.0, car=False)
 wf_car = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, t=2.0, car=True)
 
 # Plot amplitude heatmap for a unit with and without car

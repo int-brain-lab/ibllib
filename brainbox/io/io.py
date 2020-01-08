@@ -78,6 +78,7 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
                         .format(np.max(ts_samples) / sr, n_samples / sr))
 
     # Exception handling for impossible channels
+    ch = np.asarray(ch)
     if np.any(ch < 0) or np.any(ch > n_ch_probe):
         raise Exception('At least one specified channel number is impossible. The minimum channel'
                         ' number was {}, and the maximum channel number was {}. Check specified'
@@ -86,15 +87,28 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
     if car:  # compute temporal and spatial noise
         t_sample_first = ts_samples[0] - n_wf_samples
         t_sample_last = ts_samples[-1] + n_wf_samples
-        noise_t = np.median(file_m[np.ix_(np.arange(t_sample_first, t_sample_last), ch)], axis=1)
-        noise_s = np.median(file_m[np.ix_(np.arange(t_sample_first, t_sample_last), ch)], axis=0)
+        if ch.size == 1:  # special case
+            # no point in computing temporal noise across only one channel
+            noise_t = np.zeros((t_sample_last - t_sample_first),)
+            noise_s = np.median(file_m[np.arange(t_sample_first, t_sample_last), ch])
+            # reshape `noise_s` into an array so we can later subtract it from `waveforms`
+            noise_s = np.reshape(noise_s, (ch.size,))
+        else:  # use `np.ix_` trick
+            noise_t = np.median(file_m[np.ix_(np.arange(t_sample_first, t_sample_last), ch)],
+                                axis=1)
+            noise_s = np.median(file_m[np.ix_(np.arange(t_sample_first, t_sample_last), ch)],
+                                axis=0)
 
     # Initialize `waveforms` and then extract waveforms from `file_m`.
-    waveforms = np.zeros((len(ts), 2 * n_wf_samples, len(ch)))
+    waveforms = np.zeros((len(ts), 2 * n_wf_samples, ch.size))
     for spk in range(len(ts)):
         spk_ts_sample = ts_samples[spk]
         spk_samples = np.arange(spk_ts_sample - n_wf_samples, spk_ts_sample + n_wf_samples)
-        waveforms[spk, :, :] = file_m[np.ix_(spk_samples, ch)]
+        if ch.size == 1:  # get data using standard inxing
+            # use `reshape` to add an axis so we can broadcast `file_m` data into `waveforms`
+            waveforms[spk, :, :] = file_m[spk_samples, ch].reshape((spk_samples.size, ch.size))
+        else:  # use `np.ix_` trick
+            waveforms[spk, :, :] = file_m[np.ix_(spk_samples, ch)]
         if car:  # subtract temporal noise
             waveforms[spk, :, :] -= noise_t[spk_samples - t_sample_first, None]
     if car:  # subtract spatial noise
