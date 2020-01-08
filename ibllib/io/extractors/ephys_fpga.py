@@ -428,7 +428,8 @@ def align_with_bpod(session_path):
         _, _, ibpod, ifpga = raw.sync_trials_robust(
             trials['intervals_bpod'][:, 0], trials['intervals'][:, 0], return_index=True)
         if ibpod.size == 0:
-            raise err.SyncBpodFpgaException('Can not sync BPOD and FPGA - no matching sync pulses found.')
+            raise err.SyncBpodFpgaException('Can not sync BPOD and FPGA - no matching sync pulses '
+                                            'found.')
         for k in trials:
             if 'bpod' in k:
                 trials[k] = trials[k][ibpod]
