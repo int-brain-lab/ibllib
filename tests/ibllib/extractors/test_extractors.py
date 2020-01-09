@@ -445,61 +445,8 @@ class TestExtractTrialData(unittest.TestCase):
         ibllib.io.extractors.biased_trials.extract_all(
             self.biased_ge5['path'], save=True)
 
-    # ENCODER TESTS (Should be moved to a RawDataLoaders test suite)
-    # ENCODER TESTS (Should be moved to a RawDataLoaders test suite)
-    def test_encoder_positions_duds(self):
-        # TRAINING SESSIONS
-        path = self.training_lt5['path'] / "raw_behavior_data"
-        path = next(path.glob("_iblrig_encoderPositions.raw*.ssv"), None)
-        dy = raw._load_encoder_positions_file_lt5(path)
-        self.assertEqual(dy.bns_ts.dtype.name, 'object')
-        self.assertTrue(dy.shape[0] == 14)
-        # -- version >= 5.0.0
-        path = self.training_ge5['path'] / "raw_behavior_data"
-        path = next(path.glob("_iblrig_encoderPositions.raw*.ssv"), None)
-        dy = raw._load_encoder_positions_file_ge5(path)
-        self.assertTrue(dy.shape[0] == 936)
-
-        # BIASED SESSIONS
-        path = self.biased_lt5['path'] / "raw_behavior_data"
-        path = next(path.glob("_iblrig_encoderPositions.raw*.ssv"), None)
-        dy = raw._load_encoder_positions_file_lt5(path)
-        self.assertEqual(dy.bns_ts.dtype.name, 'object')
-        self.assertTrue(dy.shape[0] == 14)
-        # -- version >= 5.0.0
-        path = self.biased_ge5['path'] / "raw_behavior_data"
-        path = next(path.glob("_iblrig_encoderPositions.raw*.ssv"), None)
-        dy = raw._load_encoder_positions_file_ge5(path)
-        self.assertTrue(dy.shape[0] == 1122)
-
-    def test_encoder_events_duds(self):
-        # TRAINING SESSIONS
-        path = self.training_lt5['path'] / "raw_behavior_data"
-        path = next(path.glob("_iblrig_encoderEvents.raw*.ssv"), None)
-        dy = raw._load_encoder_events_file_lt5(path)
-        self.assertEqual(dy.bns_ts.dtype.name, 'object')
-        self.assertTrue(dy.shape[0] == 7)
-        # -- version >= 5.0.0
-        path = self.training_ge5['path'] / "raw_behavior_data"
-        path = next(path.glob("_iblrig_encoderEvents.raw*.ssv"), None)
-        dy = raw._load_encoder_events_file_ge5(path)
-        self.assertTrue(dy.shape[0] == 38)
-
-        # BIASED SESSIONS
-        path = self.biased_lt5['path'] / "raw_behavior_data"
-        path = next(path.glob("_iblrig_encoderEvents.raw*.ssv"), None)
-        dy = raw._load_encoder_events_file_lt5(path)
-        self.assertEqual(dy.bns_ts.dtype.name, 'object')
-        self.assertTrue(dy.shape[0] == 7)
-        # -- version >= 5.0.0
-        path = self.biased_ge5['path'] / "raw_behavior_data"
-        path = next(path.glob("_iblrig_encoderEvents.raw*.ssv"), None)
-        dy = raw._load_encoder_events_file_ge5(path)
-        self.assertTrue(dy.shape[0] == 26)
-
     def test_encoder_positions_clock_reset(self):
         # TRAINING SESSIONS
-        # TODO: clarify why dat? make general? when should this fail?
         # only for training?
         path = self.training_lt5['path'] / "raw_behavior_data"
         path = next(path.glob("_iblrig_encoderPositions.raw*.ssv"), None)
@@ -559,7 +506,7 @@ class TestExtractTrialData(unittest.TestCase):
         extract_session.from_path(self.training_ge5['path'])
         trials = alf.io.load_object(self.training_ge5['path'] / 'alf', object='_ibl_trials')
         self.assertTrue(alf.io.check_dimensions(trials) == 0)
-        extract_session.from_path(self.training_lt5['path'])
+        extract_session.from_path(self.training_lt5['path'], force=True)
         trials = alf.io.load_object(self.training_lt5['path'] / 'alf', object='_ibl_trials')
         self.assertTrue(alf.io.check_dimensions(trials) == 0)
         extract_session.from_path(self.biased_ge5['path'])
@@ -587,8 +534,8 @@ class TestExtractTrialData(unittest.TestCase):
 
 class TestSyncWheelBpod(unittest.TestCase):
 
-    def test_sync_crappy_signals(self):
-        sync_trials_robust = ibllib.io.extractors.training_wheel.sync_trials_robust
+    def test_sync_bpod_bonsai_poor_quality_timestamps(self):
+        sync_trials_robust = raw.sync_trials_robust
         drift_pol = np.array([11 * 1e-6, -20])  # bpod starts 20 secs before with 10 ppm drift
         np.random.seed(seed=784)
         t0_full = np.cumsum(np.random.rand(50)) + .001
@@ -616,6 +563,32 @@ class TestSyncWheelBpod(unittest.TestCase):
 
         t0_, t1_ = sync_trials_robust(np.delete(t0, 12), np.delete(t1, 24))
         assert np.allclose(t1_, np.polyval(drift_pol, t0_) + t0_)
+
+
+class TestWheelLoaders(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.main_path = Path(__file__).parent
+
+    def test_encoder_events_corrupt(self):
+        path = self.main_path.joinpath('data', 'wheel', 'lt5')
+        for file_events in path.rglob('_iblrig_encoderEvents.raw.*'):
+            dy = raw._load_encoder_events_file_lt5(file_events)
+            self.assertTrue(dy.size > 6)
+        path = self.main_path.joinpath('data', 'wheel', 'ge5')
+        for file_events in path.rglob('_iblrig_encoderEvents.raw.*'):
+            dy = raw._load_encoder_events_file_ge5(file_events)
+            self.assertTrue(dy.size > 6)
+
+    def test_encoder_positions_corrupts(self):
+        path = self.main_path.joinpath('data', 'wheel', 'ge5')
+        for file_position in path.rglob('_iblrig_encoderPositions.raw.*'):
+            dy = raw._load_encoder_positions_file_ge5(file_position)
+            self.assertTrue(dy.size > 18)
+        path = self.main_path.joinpath('data', 'wheel', 'lt5')
+        for file_position in path.rglob('_iblrig_encoderPositions.raw.*'):
+            dy = raw._load_encoder_positions_file_lt5(file_position)
+            self.assertTrue(dy.size > 18)
 
 
 if __name__ == "__main__":

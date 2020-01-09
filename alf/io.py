@@ -17,7 +17,46 @@ import pandas as pd
 from brainbox.core import Bunch
 from ibllib.io import jsonable
 
-logger_ = logging.getLogger('ibllib')
+_logger = logging.getLogger('ibllib')
+
+
+class AlfBunch(Bunch):
+
+    @property
+    def check_dimensions(self):
+        return check_dimensions(self)
+
+    def to_df(self):
+        return dataframe(self)
+
+
+def dataframe(adict):
+    """
+    Converts an Bunch conforming to size conventions into a pandas Dataframe
+    For 2-D arrays, stops at 10 columns per attribute
+    :return: pandas Dataframe
+    """
+    if check_dimensions(adict) != 0:
+        raise ValueError("Can only convert to Dataframe objects with consistent size")
+    # easy case where there are only vectors
+    if all([len(adict[k].shape) == 1 for k in adict]):
+        return pd.DataFrame(adict)
+    # pandas has trouble with 2d data, chop it off with a limit of 10 columns per dataset
+    df = pd.DataFrame()
+    for k in adict.keys():
+        if adict[k].ndim == 1:
+            df[k] = adict[k]
+        elif adict[k].ndim == 2 and adict[k].shape[1] == 1:
+            df[k] = adict[k][:, 0]
+        elif adict[k].ndim == 2:
+            for i in np.arange(adict[k].shape[1]):
+                df[f"{k}_{i}"] = adict[k][:, i]
+                if i == 9:
+                    break
+        else:
+            _logger.warning(f"{k} attribute is 3D or more and won't convert to dataframe")
+            continue
+    return df
 
 
 def _find_metadata(file_alf):
@@ -72,7 +111,7 @@ def read_ts(filename):
     time_file = filename.parent / '.'.join([obj, 'timestamps', ext])
 
     if not time_file.exists():
-        logger_.error(time_file.name + ' not found !, no time-scale for' + str(filename))
+        _logger.error(time_file.name + ' not found !, no time-scale for' + str(filename))
         raise FileNotFoundError(time_file.name + ' not found !, no time-scale for' + str(filename))
 
     return np.load(time_file), np.load(filename)
@@ -98,7 +137,7 @@ def load_file_content(fil):
             with open(fil) as _fil:
                 return json.loads(_fil.read())
         except Exception as e:
-            logger_.error(e)
+            _logger.error(e)
             return None
     if fil.suffix == '.jsonable':
         return jsonable.read(fil)
@@ -183,7 +222,7 @@ def load_object(alfpath, object=None, glob='.*', short_keys=False):
     if isinstance(glob, list):
         glob = '*.' + '.'.join(glob) + '*'
     files_alf, attributes = _ls(alfpath, object, glob=glob)
-    OUT = Bunch({})
+    OUT = AlfBunch({})
     # load content for each file
     for fil, att in zip(files_alf, attributes):
         # if there is a corresponding metadata file, read it:
@@ -204,7 +243,7 @@ def load_object(alfpath, object=None, glob='.*', short_keys=False):
                 OUT[att + 'metadata'] = meta
     status = check_dimensions(OUT)
     if status != 0:
-        logger_.warning('Inconsistent dimensions for object:' + object + '\n' +
+        _logger.warning('Inconsistent dimensions for object:' + object + '\n' +
                         '\n'.join([f'{v.shape},    {k}' for k, v in OUT.items()]))
     if short_keys:
         keys = [k for k in OUT]

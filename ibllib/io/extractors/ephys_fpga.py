@@ -9,6 +9,7 @@ from scipy import interpolate
 from brainbox.core import Bunch
 import brainbox.behavior.wheel as whl
 
+import ibllib.exceptions as err
 import ibllib.plots as plots
 import ibllib.io.spikeglx
 import ibllib.dsp as dsp
@@ -336,6 +337,9 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
     :return: trials dictionary
     """
     bpod = _get_sync_fronts(sync, chmap['bpod'], tmax=tmax)
+    if bpod.times.size == 0:
+        raise err.SyncBpodFpgaException('No Bpod event found in FPGA. No behaviour extraction. '
+                                        'Check channel maps.')
     frame2ttl = _get_sync_fronts(sync, chmap['frame2ttl'], tmax=tmax)
     audio = _get_sync_fronts(sync, chmap['audio'], tmax=tmax)
     # extract events from the fronts for each trace
@@ -417,6 +421,21 @@ def align_with_bpod(session_path):
     # check consistency
     output_path = Path(session_path) / 'alf'
     trials = alf.io.load_object(output_path, '_ibl_trials')
+    if alf.io.check_dimensions(trials) != 0:
+        # patching things up if the bpod and FPGA don't have the same recording span
+        _logger.warning("BPOD/FPGA synchronization: Bpod and FPGA don't have the same amount of"
+                        " trial start events. Patching alf files.")
+        _, _, ibpod, ifpga = raw.sync_trials_robust(
+            trials['intervals_bpod'][:, 0], trials['intervals'][:, 0], return_index=True)
+        if ibpod.size == 0:
+            raise err.SyncBpodFpgaException('Can not sync BPOD and FPGA - no matching sync pulses '
+                                            'found.')
+        for k in trials:
+            if 'bpod' in k:
+                trials[k] = trials[k][ibpod]
+            else:
+                trials[k] = trials[k][ibpod]
+        alf.io.save_object_npy(output_path, trials, '_ibl_trials')
     assert(alf.io.check_dimensions(trials) == 0)
     tlen = (np.diff(trials['intervals_bpod']) - np.diff(trials['intervals']))[:-1] - ITI_DURATION
     assert(np.all(np.abs(tlen[np.invert(np.isnan(tlen))]) < 5 * 1e-3))

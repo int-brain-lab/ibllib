@@ -9,6 +9,28 @@ import numpy as np
 import alf.io
 
 
+class TestAlfBunch(unittest.TestCase):
+
+    def test_to_dataframe_scalars(self):
+        simple = alf.io.AlfBunch({'titi': np.random.rand(500),
+                                  'toto': np.random.rand(500)})
+        df = simple.to_df()
+        self.assertTrue(np.all(df['titi'].values == simple.titi))
+        self.assertTrue(np.all(df['toto'].values == simple.toto))
+        self.assertTrue(len(df.columns) == 2)
+
+    def test_to_dataframe_vectors(self):
+        vectors = alf.io.AlfBunch({'titi': np.random.rand(500, 1),
+                                   'toto': np.random.rand(500),
+                                   'tata': np.random.rand(500, 2)})
+        df = vectors.to_df()
+        self.assertTrue(np.all(df['titi'].values == vectors.titi[:, 0]))
+        self.assertTrue(np.all(df['toto'].values == vectors.toto))
+        self.assertTrue(np.all(df['tata_0'].values == vectors.tata[:, 0]))
+        self.assertTrue(np.all(df['tata_1'].values == vectors.tata[:, 1]))
+        self.assertTrue(len(df.columns) == 4)
+
+
 class TestsAlfPartsFilters(unittest.TestCase):
 
     def setUp(self) -> None:
