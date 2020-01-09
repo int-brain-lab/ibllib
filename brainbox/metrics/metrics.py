@@ -506,7 +506,7 @@ def ptp_over_noise(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='i
 
     # Ensure `ch` is ndarray
     ch = np.asarray(ch)
-    ch = ch.reshape((ch.size, 1))
+    ch = ch.reshape((ch.size, 1)) if ch.size == 1 else ch
 
     # Get waveforms.
     wf = bb.io.extract_waveforms(ephys_file, ts, ch, t=t, sr=sr, n_ch_probe=n_ch_probe,
@@ -534,7 +534,7 @@ def ptp_over_noise(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='i
     print('Performing MAD computation. Estimated time is {:.2f} mins.'
           ' ({})'.format(dt * n_chunks / 60, time.ctime()))
     # Compute MAD for each chunk, then take the median MAD of all chunks.
-    mad_chunks = np.zeros((n_chunks, ch.size))
+    mad_chunks = np.zeros((n_chunks, ch.size), dtype=np.int16)
     for chunk in range(n_chunks):
         mad_chunks[chunk, :] = stats.median_absolute_deviation(
             file_m[chunk_sample[chunk]:chunk_sample[chunk + 1], ch], axis=0, scale=1)

@@ -77,7 +77,7 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
 
     # Exception handling for impossible channels
     ch = np.asarray(ch)
-    ch = ch.reshape((ch.size, 1))
+    ch = ch.reshape((ch.size, 1)) if ch.size == 1 else ch
     if np.any(ch < 0) or np.any(ch > n_ch_probe):
         raise Exception('At least one specified channel number is impossible. The minimum channel'
                         ' number was {}, and the maximum channel number was {}. Check specified'
@@ -94,7 +94,7 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
         # samples that make up the first chunk.
         chunk_sample = np.arange(t_sample_first, t_sample_last, n_chunk_samples, dtype=int)
         chunk_sample = np.append(chunk_sample, t_sample_last)
-        noise_s_chunks = np.zeros((n_chunks, ch.size))  # spatial noise array
+        noise_s_chunks = np.zeros((n_chunks, ch.size), dtype=np.int16)  # spatial noise array
         # Give time estimate for computing `noise_s_chunks`.
         t0 = time.perf_counter()
         np.median(file_m[chunk_sample[0]:chunk_sample[1], ch], axis=0)

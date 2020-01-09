@@ -339,7 +339,7 @@ def amp_heatmap(ephys_file, ts, ch, sr=30000, n_ch_probe=385, dtype='int16', cma
     '''
     # Ensure `ch` is ndarray
     ch = np.asarray(ch)
-    ch = ch.reshape((ch.size, 1))
+    ch = ch.reshape((ch.size, 1)) if ch.size == 1 else ch
 
     # Get memmapped array of `ephys_file`
     s_reader = spikeglx.Reader(ephys_file)
@@ -347,7 +347,11 @@ def amp_heatmap(ephys_file, ts, ch, sr=30000, n_ch_probe=385, dtype='int16', cma
 
     # Get voltage values for each peak amplitude sample for `ch`.
     max_amp_samples = (ts * sr).astype(int)
-    v_vals = file_m[max_amp_samples, ch]
+    # Currently this is an annoying way to calculate `v_vals` b/c indexing with multiple values
+    # is currently unsupported.
+    v_vals = np.zeros((max_amp_samples.size, ch.size))
+    for sample in range(max_amp_samples.size):
+        v_vals[sample] = file_m[max_amp_samples[sample]:max_amp_samples[sample]+1, ch]
     if car:  # compute spatial noise in chunks, and subtract from `v_vals`.
         # Get subset of time (from first to last max amp sample)
         n_chunk_samples = 5e6  # number of samples per chunk
@@ -358,7 +362,7 @@ def amp_heatmap(ephys_file, ts, ch, sr=30000, n_ch_probe=385, dtype='int16', cma
         chunk_sample = np.arange(max_amp_samples[0], max_amp_samples[-1], n_chunk_samples,
                                  dtype=int)
         chunk_sample = np.append(chunk_sample, max_amp_samples[-1])
-        noise_s_chunks = np.zeros((n_chunks, ch.size))  # spatial noise array
+        noise_s_chunks = np.zeros((n_chunks, ch.size), dtype=np.int16)  # spatial noise array
         # Give time estimate for computing `noise_s_chunks`.
         t0 = time.perf_counter()
         np.median(file_m[chunk_sample[0]:chunk_sample[1], ch], axis=0)
@@ -371,6 +375,7 @@ def amp_heatmap(ephys_file, ts, ch, sr=30000, n_ch_probe=385, dtype='int16', cma
                 file_m[chunk_sample[chunk]:chunk_sample[chunk + 1], ch], axis=0)
         noise_s = np.median(noise_s_chunks, axis=0)
         v_vals -= noise_s[None, :]
+        print('Done. ({})'.format(time.ctime()))
 
     # Plot heatmap.
     if ax is None:
