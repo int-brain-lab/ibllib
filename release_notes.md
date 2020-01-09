@@ -1,6 +1,6 @@
 ### Release Notes 1.4.2
 -  FPGA/bpod events synchronization performed even when their counts do not match
-
+-  Updated requirement versions for mtscomp and phylib
 
 ### Release Notes 1.4.1
 -   wheel extraction outputs a timestamps attribute, not times
