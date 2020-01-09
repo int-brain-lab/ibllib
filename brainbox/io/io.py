@@ -1,12 +1,16 @@
+import time
 import numpy as np
-import os.path as op
+# (Previously required `os.path` to get file info before memmapping)
+# import os.path as op
+from ibllib.io import spikeglx
+from scipy.signal import decimate
 
 
 def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='int16',
-                      offset=0, car=True):
+                      offset=0, car=True, q=5):
     '''
     Extracts spike waveforms from binary ephys data file, after (optionally)
-    common-average-referencing.
+    common-average-referencing (CAR) spatial noise.
 
     Parameters
     ----------
@@ -27,7 +31,9 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
     offset: int (optional)
         The offset (in bytes) from the start of `ephys_file`.
     car: bool (optional)
-        A flag to perform common-average-referencing before extracting waveforms.
+        A flag to perform CAR before extracting waveforms.
+    q : int )optional)
+        The downsampling factor to use when performing CAR.
 
     Returns
     -------
@@ -59,23 +65,18 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
         >>>     ch = np.arange(max_ch - 10, max_ch + 10)
         >>> wf = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, car=False)
         >>> wf_car = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, car=True)
-
-    TODO add support for compressed ephys files
     '''
 
+    # (Previously memmaped the file manually, but now use `spikeglx.Reader`)
+    # item_bytes = np.dtype(dtype).itemsize
+    # n_samples = (op.getsize(ephys_file) - offset) // (item_bytes * n_ch_probe)
+    # file_m = np.memmap(ephys_file, shape=(n_samples, n_ch_probe), dtype=dtype, mode='r')
+
     # Get memmapped array of `ephys_file`
-    item_bytes = np.dtype(dtype).itemsize
-    n_samples = (op.getsize(ephys_file) - offset) // (item_bytes * n_ch_probe)
-    file_m = np.memmap(ephys_file, shape=(n_samples, n_ch_probe), dtype=dtype, mode='r')
+    s_reader = spikeglx.Reader(ephys_file)
+    file_m = s_reader.data  # the memmapped array
     n_wf_samples = np.int(sr / 1000 * (t / 2))  # number of samples to return on each side of a ts
     ts_samples = np.array(ts * sr).astype(int)  # the samples corresponding to `ts`
-
-    # Exception handling for timestamps
-    if np.any(ts_samples > n_samples):
-        raise Exception('Something''s gone wrong: at least one spike timestamp ({:.2f}) has a'
-                        ' value that is greater than the length of the recording ({:.2f}). You may'
-                        ' be trying to read from a compressed file.'
-                        .format(np.max(ts_samples) / sr, n_samples / sr))
 
     # Exception handling for impossible channels
     ch = np.asarray(ch)
@@ -84,34 +85,51 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
                         ' number was {}, and the maximum channel number was {}. Check specified'
                         ' channel numbers and try again.'.format(np.min(ch), np.max(ch)))
 
-    if car:  # compute temporal and spatial noise
+    if car:  # compute spatial noise in chunks 
+        # (previously computed temporal noise also, but was too costly)
+        # Get number of chunks.
         t_sample_first = ts_samples[0] - n_wf_samples
         t_sample_last = ts_samples[-1] + n_wf_samples
-        if ch.size == 1:  # special case
-            # no point in computing temporal noise across only one channel
-            noise_t = np.zeros((t_sample_last - t_sample_first),)
-            noise_s = np.median(file_m[np.arange(t_sample_first, t_sample_last), ch])
-            # reshape `noise_s` into an array so we can later subtract it from `waveforms`
-            noise_s = np.reshape(noise_s, (ch.size,))
-        else:  # use `np.ix_` trick
-            noise_t = np.median(file_m[np.ix_(np.arange(t_sample_first, t_sample_last), ch)],
-                                axis=1)
-            noise_s = np.median(file_m[np.ix_(np.arange(t_sample_first, t_sample_last), ch)],
-                                axis=0)
+        n_chunk_samples = 5e6  # number of samples per chunk
+        n_chunks = np.ceil((t_sample_last - t_sample_first) / n_chunk_samples).astype('int')
+        # Get samples that make up each chunk. e.g. `chunk_sample[1] - chunk_sample[0]` are the
+        # samples that make up the first chunk.
+        chunk_sample = np.arange(t_sample_first, t_sample_last, n_chunk_samples, dtype=int)
+        chunk_sample = np.append(chunk_sample, t_sample_last)
+        noise_s_chunks = np.zeros((n_chunks, ch.size))
+        # Give time estimate for calculating `noise_s_chunks`.
+        t0 = time.perf_counter()
+        np.median(file_m[chunk_sample[0]:chunk_sample[1], ch], axis=0)
+        dt = time.perf_counter() - t0
+        print('Performing spatial CAR before waveform extraction. Estimated time is {:.2f} mins.'
+              ' ({})'.format(dt * n_chunks / 60, time.ctime()))
+        # Compute noise for each chunk, then take the median noise of all chunks.
+        for chunk in range(n_chunks):
+            noise_s_chunks[chunk,:] = np.median(
+                file_m[chunk_sample[chunk]:chunk_sample[chunk + 1], ch], axis=0)
+        noise_s = np.median(noise_s_chunks, axis=0)
+        print('Done. ({})'.format(time.ctime()))
 
-    # Initialize `waveforms` and then extract waveforms from `file_m`.
+    # Initialize `waveforms`, extract waveforms from `file_m`, and CAR.
     waveforms = np.zeros((len(ts), 2 * n_wf_samples, ch.size))
-    for spk in range(len(ts)):
+    # Give time estimate for extracting waveforms.
+    t0 = time.perf_counter()
+    for i in range(5):
+        waveforms[i, :, :] = \
+                file_m[i * n_wf_samples * 2 + t_sample_first:
+                       i * n_wf_samples * 2 + t_sample_first + n_wf_samples * 2, ch].reshape(
+                    (n_wf_samples * 2, ch.size))
+        dt = time.perf_counter() - t0
+        print('Performing waveform extraction. Estimated time is {:.2f} mins. ({})'
+              .format(dt * len(ts) / 60 / 5, time.ctime()))
+    for spk, _ in enumerate(ts):  # extract waveforms
         spk_ts_sample = ts_samples[spk]
         spk_samples = np.arange(spk_ts_sample - n_wf_samples, spk_ts_sample + n_wf_samples)
-        if ch.size == 1:  # get data using standard inxing
-            # use `reshape` to add an axis so we can broadcast `file_m` data into `waveforms`
-            waveforms[spk, :, :] = file_m[spk_samples, ch].reshape((spk_samples.size, ch.size))
-        else:  # use `np.ix_` trick
-            waveforms[spk, :, :] = file_m[np.ix_(spk_samples, ch)]
-        if car:  # subtract temporal noise
-            waveforms[spk, :, :] -= noise_t[spk_samples - t_sample_first, None]
-    if car:  # subtract spatial noise
+        # have to reshape to add an axis to broadcast `file_m` into `waveforms`
+        waveforms[spk, :, :] = \
+            file_m[spk_samples[0]:spk_samples[-1]+1, ch].reshape((spk_samples.size, ch.size))
+    print('Done. ({})'.format(time.ctime()))
+    if car:  # perform CAR (subtract spatial noise)
         waveforms -= noise_s[None, None, :]
 
     return waveforms
