@@ -27,32 +27,36 @@ class AlfBunch(Bunch):
         return check_dimensions(self)
 
     def to_df(self):
-        """
-        Converts an Bunch conforming to size conventions into a pandas Dataframe
-        For 2-D arrays, stops at 10 columns per attribute
-        :return: pandas Dataframe
-        """
-        if self.check_dimensions != 0:
-            raise ValueError("Can only convert to Dataframe objects with consistent size")
-        # easy case where there are only vectors
-        if all([len(self[k].shape) == 1 for k in self]):
-            return pd.DataFrame(self)
-        # pandas has trouble with 2d data, chop it off with a limit of 10 columns per dataset
-        df = pd.DataFrame()
-        for k in self.keys():
-            if self[k].ndim == 1:
-                df[k] = self[k]
-            elif self[k].ndim == 2 and self[k].shape[1] == 1:
-                df[k] = self[k][:, 0]
-            elif self[k].ndim == 2:
-                for i in np.arange(self[k].shape[1]):
-                    df[f"{k}_{i}"] = self[k][:, i]
-                    if i == 9:
-                        break
-            else:
-                _logger.warning(f"{k} attribute is 3D or more and won't convert to dataframe")
-                continue
-        return df
+        return dataframe(self)
+
+
+def dataframe(adict):
+    """
+    Converts an Bunch conforming to size conventions into a pandas Dataframe
+    For 2-D arrays, stops at 10 columns per attribute
+    :return: pandas Dataframe
+    """
+    if check_dimensions(adict) != 0:
+        raise ValueError("Can only convert to Dataframe objects with consistent size")
+    # easy case where there are only vectors
+    if all([len(adict[k].shape) == 1 for k in adict]):
+        return pd.DataFrame(adict)
+    # pandas has trouble with 2d data, chop it off with a limit of 10 columns per dataset
+    df = pd.DataFrame()
+    for k in adict.keys():
+        if adict[k].ndim == 1:
+            df[k] = adict[k]
+        elif adict[k].ndim == 2 and adict[k].shape[1] == 1:
+            df[k] = adict[k][:, 0]
+        elif adict[k].ndim == 2:
+            for i in np.arange(adict[k].shape[1]):
+                df[f"{k}_{i}"] = adict[k][:, i]
+                if i == 9:
+                    break
+        else:
+            _logger.warning(f"{k} attribute is 3D or more and won't convert to dataframe")
+            continue
+    return df
 
 
 def _find_metadata(file_alf):
