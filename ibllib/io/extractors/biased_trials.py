@@ -2,17 +2,20 @@
 # -*- coding:utf-8 -*-
 # @Author: Niccolò Bonacchi
 # @Date: Tuesday, February 12th 2019, 11:49:54 am
-import numpy as np
 import os
+
+import numpy as np
+
 import ibllib.io.raw_data_loaders as raw
+from ibllib.io.extractors.training_trials import (  # noqa; noqa
+    check_alf_folder, get_camera_timestamps, get_choice, get_feedback_times,
+    get_feedback_times_ge5, get_feedback_times_lt5, get_feedbackType,
+    get_goCueOnset_times, get_goCueTrigger_times, get_included_trials,
+    get_included_trials_ge5, get_included_trials_lt5, get_intervals,
+    get_iti_duration, get_probabilityLeft, get_response_times,
+    get_rewardVolume, get_stimOn_times, get_stimOn_times_ge5,
+    get_stimOn_times_lt5, get_stimOnTrigger_times)
 from ibllib.misc import version
-from ibllib.io.extractors.training_trials import (  # noqa
-    check_alf_folder, get_feedbackType, get_probabilityLeft, get_camera_timestamps,
-    get_choice, get_rewardVolume, get_feedback_times, get_feedback_times_ge5,
-    get_feedback_times_lt5, get_stimOn_times, get_stimOn_times_lt5,
-    get_stimOn_times_ge5, get_intervals, get_response_times, get_iti_duration,
-    get_goCueTrigger_times, get_goCueOnset_times, get_included_trials_ge5,
-    get_included_trials_lt5, get_included_trials, get_stimOnTrigger_times)  # noqa
 
 
 def get_contrastLR(session_path, save=False, data=False, settings=False):
