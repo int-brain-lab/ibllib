@@ -16,12 +16,13 @@ Run the following to set-up the workspace to run the docstring examples:
 >>> units_b = bb.processing.get_units_bunch(spks_b)  # may take a few mins to compute
 """
 
-import os.path as op
+import time
 from warnings import warn
 import numpy as np
 import matplotlib.pyplot as plt
 # from matplotlib.ticker import StrMethodFormatter
 import brainbox as bb
+from ibllib.io import spikeglx
 
 
 def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cmap_name='coolwarm',
@@ -262,6 +263,10 @@ def wf_comp(ephys_file, ts1, ts2, ch, sr=30000, n_ch_probe=385, dtype='int16', c
         >>> wf1_2, wf2_2, s_2 = bb.plot.wf_comp(path_to_ephys_file, ts1_2, ts2_2, ch)
     '''
 
+    # Ensure `ch` is ndarray
+    ch = np.asarray(ch)
+    ch = ch.reshape((ch.size, 1))
+
     # Extract the waveforms for these timestamps and compute similarity score.
     wf1 = bb.io.extract_waveforms(ephys_file, ts1, ch, sr=sr, n_ch_probe=n_ch_probe, dtype=dtype,
                                   car=car)
@@ -270,7 +275,7 @@ def wf_comp(ephys_file, ts1, ts2, ch, sr=30000, n_ch_probe=385, dtype='int16', c
     s = bb.metrics.wf_similarity(wf1, wf2)
 
     # Plot these waveforms against each other.
-    n_ch = len(ch)
+    n_ch = ch.size
     if ax is None:
         fig, ax = plt.subplots(nrows=n_ch, ncols=2)  # left col is all waveforms, right col is mean
     for cur_ax, cur_ch in enumerate(ch):
@@ -332,24 +337,39 @@ def amp_heatmap(ephys_file, ts, ch, sr=30000, n_ch_probe=385, dtype='int16', cma
         >>>     ch = np.arange(max_ch - 10, max_ch + 10)
         >>> bb.plot.amp_heatmap(path_to_ephys_file, ts, ch)
     '''
+    # Ensure `ch` is ndarray
+    ch = np.asarray(ch)
+    ch = ch.reshape((ch.size, 1))
 
     # Get memmapped array of `ephys_file`
-    item_bytes = np.dtype(dtype).itemsize
-    n_samples = op.getsize(ephys_file) // (item_bytes * n_ch_probe)
-    file_m = np.memmap(ephys_file, shape=(n_samples, n_ch_probe), dtype=dtype, mode='r')
+    s_reader = spikeglx.Reader(ephys_file)
+    file_m = s_reader.data
 
     # Get voltage values for each peak amplitude sample for `ch`.
     max_amp_samples = (ts * sr).astype(int)
-    v_vals = file_m[np.ix_(max_amp_samples, ch)]
-    if car:  # Compute and subtract temporal and spatial noise from `v_vals`.
+    v_vals = file_m[max_amp_samples, ch]
+    if car:  # compute spatial noise in chunks, and subtract from `v_vals`.
         # Get subset of time (from first to last max amp sample)
-        t_subset = np.arange(max_amp_samples[0], max_amp_samples[-1] + 1, dtype='int16')
-        # Specify output arrays as `dtype='int16'`
-        out_noise_t = np.zeros((len(t_subset),), dtype='int16')
-        out_noise_s = np.zeros((len(ch),), dtype='int16')
-        noise_t = np.median(file_m[np.ix_(t_subset, ch)], axis=1, out=out_noise_t)
-        noise_s = np.median(file_m[np.ix_(t_subset, ch)], axis=0, out=out_noise_s)
-        v_vals -= noise_t[max_amp_samples - max_amp_samples[0], None]
+        n_chunk_samples = 5e6  # number of samples per chunk
+        n_chunks = np.ceil((max_amp_samples[-1] - max_amp_samples[0]) /
+                           n_chunk_samples).astype('int')
+        # Get samples that make up each chunk. e.g. `chunk_sample[1] - chunk_sample[0]` are the
+        # samples that make up the first chunk.
+        chunk_sample = np.arange(max_amp_samples[0], max_amp_samples[-1], n_chunk_samples,
+                                 dtype=int)
+        chunk_sample = np.append(chunk_sample, max_amp_samples[-1])
+        noise_s_chunks = np.zeros((n_chunks, ch.size))  # spatial noise array
+        # Give time estimate for computing `noise_s_chunks`.
+        t0 = time.perf_counter()
+        np.median(file_m[chunk_sample[0]:chunk_sample[1], ch], axis=0)
+        dt = time.perf_counter() - t0
+        print('Performing spatial CAR before waveform extraction. Estimated time is {:.2f} mins.'
+              ' ({})'.format(dt * n_chunks / 60, time.ctime()))
+        # Compute noise for each chunk, then take the median noise of all chunks.
+        for chunk in range(n_chunks):
+            noise_s_chunks[chunk, :] = np.median(
+                file_m[chunk_sample[chunk]:chunk_sample[chunk + 1], ch], axis=0)
+        noise_s = np.median(noise_s_chunks, axis=0)
         v_vals -= noise_s[None, :]
 
     # Plot heatmap.

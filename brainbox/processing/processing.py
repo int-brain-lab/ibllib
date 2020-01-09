@@ -240,6 +240,8 @@ def get_units_bunch(spks_b, *args):
         >>> units_b = bb.processing.get_units_bunch(spks_b)
         # Get amplitudes for unit 4.
         >>> amps = units_b['amps']['4']
+
+    TODO add computation time estimate?
     '''
 
     # Initialize `units`

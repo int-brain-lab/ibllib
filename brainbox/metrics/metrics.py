@@ -15,11 +15,12 @@ Run the following to set-up the workspace to run the docstring examples:
 >>> units_b = bb.processing.get_units_bunch(spks_b)  # may take a few mins to compute
 """
 
-import os.path as op
+import time
 import numpy as np
 import scipy.stats as stats
 import scipy.ndimage.filters as filters
 import brainbox as bb
+from ibllib.io import spikeglx
 # add spikemetrics as dependency?
 # import spikemetrics as sm
 
@@ -504,7 +505,8 @@ def ptp_over_noise(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='i
     '''
 
     # Ensure `ch` is ndarray
-    ch = np.asarrray(ch)
+    ch = np.asarray(ch)
+    ch = ch.reshape((ch.size, 1))
 
     # Get waveforms.
     wf = bb.io.extract_waveforms(ephys_file, ts, ch, t=t, sr=sr, n_ch_probe=n_ch_probe,
@@ -516,12 +518,29 @@ def ptp_over_noise(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='i
         mean_ptp[cur_ch] = np.mean(np.max(wf[:, :, cur_ch], axis=1) -
                                    np.min(wf[:, :, cur_ch], axis=1))
 
-    # Compute MAD for all channels.
-    item_bytes = np.dtype(dtype).itemsize
-    n_samples = (op.getsize(ephys_file) - offset) // (item_bytes * n_ch_probe)
-    file_m = np.memmap(ephys_file, shape=(n_samples, n_ch_probe), dtype=dtype, mode='r')
-    noise = stats.median_absolute_deviation(file_m[:, ch], axis=0, scale=1)
+    # Compute MAD for `ch` in chunks.
+    s_reader = spikeglx.Reader(ephys_file)
+    file_m = s_reader.data  # the memmapped array
+    n_chunk_samples = 5e6  # number of samples per chunk
+    n_chunks = np.ceil(file_m.shape[0] / n_chunk_samples).astype('int')
+    # Get samples that make up each chunk. e.g. `chunk_sample[1] - chunk_sample[0]` are the
+    # samples that make up the first chunk.
+    chunk_sample = np.arange(0, file_m.shape[0], n_chunk_samples, dtype=int)
+    chunk_sample = np.append(chunk_sample, file_m.shape[0])
+    # Give time estimate for computing MAD.
+    t0 = time.perf_counter()
+    stats.median_absolute_deviation(file_m[chunk_sample[0]:chunk_sample[1], ch], axis=0)
+    dt = time.perf_counter() - t0
+    print('Performing MAD computation. Estimated time is {:.2f} mins.'
+          ' ({})'.format(dt * n_chunks / 60, time.ctime()))
+    # Compute MAD for each chunk, then take the median MAD of all chunks.
+    mad_chunks = np.zeros((n_chunks, ch.size))
+    for chunk in range(n_chunks):
+        mad_chunks[chunk, :] = stats.median_absolute_deviation(
+            file_m[chunk_sample[chunk]:chunk_sample[chunk + 1], ch], axis=0, scale=1)
+    print('Done. ({})'.format(time.ctime()))
 
-    # Return `mean_ptp` over `noise`
-    ptp_sigma = mean_ptp / noise
+    # Return `mean_ptp` over `mad`
+    mad = np.median(mad_chunks, axis=0)
+    ptp_sigma = mean_ptp / mad
     return ptp_sigma

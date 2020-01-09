@@ -47,7 +47,7 @@ for f in os.listdir(ephys_file_dir):
 # Ensure directories and paths can be found
 assert os.path.isdir(ephys_file_dir) and os.path.isdir(alf_probe_dir) \
     and os.path.isabs(ephys_file_path), 'Directories set incorrectly'
-    
+
 # Call brainbox functions #
 #-------------------------#
 
@@ -55,7 +55,7 @@ assert os.path.isdir(ephys_file_dir) and os.path.isdir(alf_probe_dir) \
 path_to_ephys_file = ephys_file_path
 path_to_alf_out = alf_probe_dir
 
-# Load alf objects:
+# Load alf objects
 spks_b = aio.load_object(path_to_alf_out, 'spikes')
 clstrs_b = aio.load_object(path_to_alf_out, 'clusters')
 chnls_b = aio.load_object(path_to_alf_out, 'channels')
