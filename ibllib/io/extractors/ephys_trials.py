@@ -1,3 +1,5 @@
+import os
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -11,6 +13,7 @@ from ibllib.io.extractors.biased_trials import (
     get_goCueTrigger_times,
     get_intervals,
     get_iti_duration,
+    get_response_times,
     get_rewardVolume,
 )
 
@@ -20,20 +23,45 @@ def get_probabilityLeft(session_path, save=False, data=False, settings=False):
         data = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
-    if settings is None or settings["IBLRIG_VERSION_TAG"] == "":
+    if settings is None:
         settings = {"IBLRIG_VERSION_TAG": "100.0.0"}
-    pLeft = []
+    elif settings["IBLRIG_VERSION_TAG"] == "":
+        settings.update({"IBLRIG_VERSION_TAG": "100.0.0"})
+    # LEN_BLOCKS is None up to v6.3.1 (also POSITIONS, CONTRASTS, et al.)
     if settings["LEN_BLOCKS"] is None:
         # Get from iblrig repo
-        pass
-    else:
-        prev = 0
-        for bl, nt in zip(np.cumsum(settings["LEN_BLOCKS"]), settings["LEN_BLOCKS"]):
-            prob = (np.sum([1 for x in np.sign(settings["POSITIONS"][prev:bl]) if x < 0]) / nt)
-            pLeft.extend([prob] * nt)
-            prev = bl
-        # Trim to actual number of trials
-        pLeft = pLeft[: len(data)]
+        if "PRELOADED_SESSION_NUM" in settings:
+            num = settings["PRELOADED_SESSION_NUM"]
+        elif "PREGENERATED_SESSION_NUM" in settings:
+            num = settings["PREGENERATED_SESSION_NUM"]
+
+        master_branch = "https://raw.githubusercontent.com/int-brain-lab/iblrig/master/"
+        sessions_folder = "tasks/_iblrig_tasks_ephysChoiceWorld/sessions/"
+        fname0 = f"session_{num}_ephys_len_blocks.npy"
+        fname1 = f"session_{num}_ephys_pcqs.npy"
+        tmp = tempfile.mkdtemp()
+        os.system(f"wget {master_branch}{sessions_folder}{fname0} --output-document={tmp}/{fname0}")
+        os.system(f"wget {master_branch}{sessions_folder}{fname1} --output-document={tmp}/{fname1}")
+        # Load the files
+        len_blocks = np.load(f"{tmp}/{fname0}").tolist()
+        pcqs = np.load(f"{tmp}/{fname1}")
+        positions = [x[0] for x in pcqs]
+        # Patch the settings file
+        settings["LEN_BLOCKS"] = len_blocks
+        settings["POSITIONS"] = positions
+        # Cleanup
+        (Path(tmp) / fname0).unlink()
+        (Path(tmp) / fname1).unlink()
+        Path(tmp).rmdir()
+    # Continue
+    pLeft = []
+    prev = 0
+    for bl, nt in zip(np.cumsum(settings["LEN_BLOCKS"]), settings["LEN_BLOCKS"]):
+        prob = np.sum([1 for x in np.sign(settings["POSITIONS"][prev:bl]) if x < 0]) / nt
+        pLeft.extend([prob] * nt)
+        prev = bl
+    # Trim to actual number of trials
+    pLeft = pLeft[: len(data)]
 
     if raw.save_bool(save, "_ibl_trials.probabilityLeft.npy"):
         lpath = Path(session_path).joinpath("alf", "_ibl_trials.probabilityLeft.npy")
@@ -88,13 +116,9 @@ def extract_all(session_path, save=False, data=False):
 
 
 if __name__ == "__main__":
-    session_path = "/home/nico/Projects/IBL/github/iblrig_data/Subjects/_iblrig_fake_subject/2020-01-08/013"
+    session_path = str(Path().cwd() / "../../../tests/ibllib/extractors/data/session_ephys")
     settings = raw.load_settings(session_path)
-    pLeft = []
-    prev = 0
-    for bl, nt in zip(np.cumsum(settings["LEN_BLOCKS"]), settings["LEN_BLOCKS"]):
-        prob = (
-            np.sum([1 for x in np.sign(settings["POSITIONS"][prev:bl]) if x < 0]) / nt
-        )
-        pLeft.extend([prob] * nt)
-        prev = bl
+    settings.update({"LEN_BLOCKS": None})
+    data = raw.load_data(session_path)
+    pLeft = get_probabilityLeft(session_path, data=data, settings=settings)
+    print(".")
