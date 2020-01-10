@@ -265,7 +265,7 @@ def wf_comp(ephys_file, ts1, ts2, ch, sr=30000, n_ch_probe=385, dtype='int16', c
 
     # Ensure `ch` is ndarray
     ch = np.asarray(ch)
-    ch = ch.reshape((ch.size, 1))
+    ch = ch.reshape((ch.size, 1)) if ch.size == 1 else ch
 
     # Extract the waveforms for these timestamps and compute similarity score.
     wf1 = bb.io.extract_waveforms(ephys_file, ts1, ch, sr=sr, n_ch_probe=n_ch_probe, dtype=dtype,
@@ -586,7 +586,7 @@ def peri_event_time_histogram(
     return ax
 
 
-def driftmap(feat, ts, ax=None):
+def driftmap(ts, feat, ax=None):
     '''
     Plots the driftmap of a spike feature array over time.
 

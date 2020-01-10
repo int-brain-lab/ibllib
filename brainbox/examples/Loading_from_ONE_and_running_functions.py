@@ -70,9 +70,9 @@ T = spks_b['times'][-1] - spks_b['times'][0]
 filtered_units = bb.processing.filter_units(units_b, T, min_amp=0, min_fr=0.5, max_fpr=1, rp=0.002)
 
 # Extract waveforms from binary ephys file
-# Get the timestamps and 20 channels around the max amp channel for unit1, and extract the
+# Get the timestamps and 10 channels around the max amp channel for unit1, and extract the
 # two sets of waveforms.
-n_ch_wf = 20  # number of channels on which to extract waveforms
+n_ch_wf = 10  # number of channels on which to extract waveforms
 n_ch_probe = 385  # number of channels in recording
 ts = units_b['times']['1']
 max_ch = max_ch = clstrs_b['channels'][1]
@@ -83,7 +83,8 @@ elif (max_ch + (n_ch_wf // 2)) > n_ch_probe:  # take only channels less than `ma
 else:  # take `n_c_ch` around `max_ch`.
     ch = np.arange(max_ch - (n_ch_wf // 2), max_ch + (n_ch_wf // 2))
 
-# Waveform extraction may take a few mins
+# Waveform extraction may take a few mins (check size of `ts` before hand. If you're extracting
+# e.g. 10000+ spikes across 10 channels, this may take quite some time.)
 wf = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, t=2.0, car=False)
 wf_car = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, t=2.0, car=True)
 
@@ -115,7 +116,26 @@ fig6 = plt.gcf()
 fr, cv, cvs = bb.plot.firing_rate(ts, hist_win=0.01, fr_win=0.5, n_bins=10, show_fr_cv=True)
 fig7 = plt.gcf()
 
+# Plot the presence ratio for a single unit.
+pr, pr_bins = bb.plot.pres_ratio(ts)
+fig8 = plt.gcf()
+
+# Plot the amplitude and depth driftmaps for a single unit.
+cum_drift_amps, max_drift_amps = bb.plot.driftmap(ts, amps)
+fig9 = plt.gcf()
+fig9.axes[0].set_xlabel('Time (s)')
+fig9.axes[0].set_xlabel('Voltage (V)')
+
+depths = units_b.depths['1']
+cum_drift_depth, max_drift_depth = bb.plot.driftmap(ts, depths)
+fig10 = plt.gcf()
+fig10.axes[0].set_xlabel('Time (s)')
+fig10.axes[0].set_ylabel('Depth (mm)')
+
+# Plot the peth for a single unit based on trial events. (For this example, requires '_ibl_trials')
+
+
 # Save figs in a directory
 fig_dir = os.getcwd()  # current working directory
-fig_list = [fig1, fig2, fig3, fig4, fig5, fig6, fig7]
+fig_list = [fig1, fig2, fig3, fig4, fig5, fig6, fig7, fig8, fig9, fig10]
 [f.savefig(os.path.join('fig'+ str(i + 1))) for i,f in enumerate(fig_list)]
