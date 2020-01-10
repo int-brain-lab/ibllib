@@ -350,7 +350,7 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
     # stim off time is the first frame2ttl rise/fall after the trial start
     # does not apply for 1st trial
     ind = np.searchsorted(frame2ttl['times'], t_iti_in, side='left')
-    t_stim_off = frame2ttl['times'][ind]
+    t_stim_off = frame2ttl['times'][np.minimum(ind, frame2ttl.times.size - 1)]
     t_stim_freeze = frame2ttl['times'][np.maximum(ind - 1, 0)]
     # stimOn_times: first fram2ttl change after trial start
     trials = Bunch({
