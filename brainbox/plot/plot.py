@@ -351,7 +351,7 @@ def amp_heatmap(ephys_file, ts, ch, sr=30000, n_ch_probe=385, dtype='int16', cma
     # is currently unsupported.
     v_vals = np.zeros((max_amp_samples.size, ch.size))
     for sample in range(max_amp_samples.size):
-        v_vals[sample] = file_m[max_amp_samples[sample]:max_amp_samples[sample]+1, ch]
+        v_vals[sample] = file_m[max_amp_samples[sample]:max_amp_samples[sample] + 1, ch]
     if car:  # compute spatial noise in chunks, and subtract from `v_vals`.
         # Get subset of time (from first to last max amp sample)
         n_chunk_samples = 5e6  # number of samples per chunk

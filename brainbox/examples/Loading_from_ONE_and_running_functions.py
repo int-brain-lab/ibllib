@@ -132,10 +132,62 @@ fig10 = plt.gcf()
 fig10.axes[0].set_xlabel('Time (s)')
 fig10.axes[0].set_ylabel('Depth (mm)')
 
-# Plot the peth for a single unit based on trial events. (For this example, requires '_ibl_trials')
+# Plot the peth for a single unit based on trial events. (This example requires '_ibl_trials')
+eid = one.search(subject='KS022', date='2019-12-10', number=1)[0]  # have to use a task session
+dtypes = [
+        'clusters.amps',
+        'clusters.channels',
+        'clusters.depths',
+        'clusters.metrics',
+        'clusters.peakToTrough',
+        'clusters.uuids',
+        'clusters.waveforms',
+        'clusters.waveformsChannels',
+        'spikes.amps',
+        'spikes.clusters',
+        'spikes.depths',
+        'spikes.samples',
+        'spikes.templates',
+        'spikes.times',
+        'trials.contrastLeft',
+        'trials.contrastRight',
+        'trials.feedback_times',
+        'trials.feedbackType',
+        'trials.goCue_times',
+        'trials.goCueTrigger_times',
+        'trials.included',
+        'trials.intervals',
+        'trials.itiDuration',
+        'trials.probabilityLeft',
+        'trials.repNum',
+        'trials.response_times',
+        'trials.rewardVolume',
+        'trials.stimOn_times',
+        ]
+# get appropriate paths
+d_paths = one.load(eid, dataset_types=dtypes, clobber=False, download_only=True)
+spikes_path = one.load(eid, dataset_types='spikes.amps', clobber=False, download_only=True)[0]
+alf_dir_part = np.where([part == 'alf' for part in Path(spikes_path).parts])[0][0]
+session_path = os.path.join(*Path(spikes_path).parts[:alf_dir_part])
+alf_dir = os.path.join(session_path, 'alf')
+alf_probe_dir = os.path.join(alf_dir, probe)
+
+# get trials bunch
+trials = aio.load_object(alf_dir, '_ibl_trials')
+
+# plot peth without raster (spike times, all cluster ids, event times, cluster id)
+bb.plot.peri_event_time_histogram(spks_b.times, spks_b.clusters, trials.goCue_times, 1)
+fig11 = plt.gcf()
+
+# plot peth with underlaid raster for each event, showing spikes 0.25 seconds before and after
+# each event
+bb.plot.peri_event_time_histogram(
+    spks_b.times, spks_b.clusters, trials.goCue_times, 1, t_before=0.25, t_after=0.25, 
+    include_raster=True)
+fig12 = plt.gcf()
 
 
 # Save figs in a directory
 fig_dir = os.getcwd()  # current working directory
-fig_list = [fig1, fig2, fig3, fig4, fig5, fig6, fig7, fig8, fig9, fig10]
+fig_list = [fig1, fig2, fig3, fig4, fig5, fig6, fig7, fig8, fig9, fig10, fig11, fig12]
 [f.savefig(os.path.join('fig'+ str(i + 1))) for i,f in enumerate(fig_list)]
