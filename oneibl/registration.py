@@ -15,6 +15,7 @@ logger_ = logging.getLogger('ibllib.alf')
 REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
                               'logs/**/_ibl_log.*.log',
                               'raw_behavior_data/**/_iblrig_*.*',
+                              'raw_passive_data/**/_iblrig_*.*',
                               'raw_behavior_data/**/_iblmic_*.*',
                               'raw_video_data/**/_iblrig_*.*',
                               'raw_video_data/**/_ibl_*.*',
