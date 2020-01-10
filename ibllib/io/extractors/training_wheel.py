@@ -64,7 +64,7 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
                                          " synchronization. Wheel data not extracted")
     # bpod bug that spits out events in ms instead of us
     if np.diff(bpod['closed_loop'][[-1, 0]])[0] / np.diff(rote['closed_loop'][[-1, 0]])[0] > 900:
-        logger_.error("Rotary encoder stores values in ms instead of us. Wheel timing inaccurrate")
+        logger_.error("Rotary encoder stores values in ms instead of us. Wheel timing inaccurate")
         rote['stim_on'] *= 1e3
         rote['closed_loop'] *= 1e3
     # just use the closed loop for synchronization
