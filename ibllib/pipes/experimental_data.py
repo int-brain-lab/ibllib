@@ -16,9 +16,9 @@ from ibllib.ephys import ephysqc, sync_probes, spikes
 from oneibl.registration import RegistrationClient
 from oneibl.one import ONE
 
-logger = logging.getLogger('ibllib')
+_logger = logging.getLogger('ibllib')
 # set the logging level to paranoid
-logger.setLevel('INFO')
+_logger.setLevel('INFO')
 
 
 def _compress(root_data_folder, command, flag_pattern, dry=False, max_sessions=None):
@@ -39,7 +39,7 @@ def _compress(root_data_folder, command, flag_pattern, dry=False, max_sessions=N
             if dry:
                 continue
             if not cfile.exists():
-                logger.error(f'NON-EXISTING RAW FILE: {cfile}. Skipping...')
+                _logger.error(f'NON-EXISTING RAW FILE: {cfile}. Skipping...')
                 continue
             if flag_file.exists():
                 flag_file.unlink()
@@ -54,7 +54,7 @@ def _compress(root_data_folder, command, flag_pattern, dry=False, max_sessions=N
                                        stderr=subprocess.PIPE)
             info, error = process.communicate()
             if process.returncode != 0:
-                logger.error('COMPRESSION FAILED FOR ' + str(cfile))
+                _logger.error('COMPRESSION FAILED FOR ' + str(cfile))
                 with open(cfile.parent.joinpath('extract.error'), 'w+') as fid:
                     fid.write(command2run)
                     fid.write(error.decode())
@@ -98,15 +98,15 @@ def compress_video(root_data_folder, dry=False, max_sessions=None):
 
 
 # 04_audio_training
-def audio_training(root_data_folder, dry=False, max_sessions=10):
+def audio_training(root_data_folder, dry=False, max_sessions=False):
     from ibllib.io.extractors import training_audio as audio
     audio_flags = Path(root_data_folder).rglob('audio_training.flag')
     c = 0
     for flag in audio_flags:
         c += 1
-        if c > max_sessions:
-            break
-        print(flag)
+        if max_sessions and c > max_sessions:
+            return
+        _logger.info(flag)
         if dry:
             continue
         session_path = flag.parent
@@ -116,7 +116,7 @@ def audio_training(root_data_folder, dry=False, max_sessions=10):
         except json.decoder.JSONDecodeError:
             typ = 'unknown'
         # this extractor is only for biased and training sessions
-        if typ not in ['biased', 'training']:
+        if typ not in ['biased', 'training', 'habituation']:
             flag.unlink()
             continue
         audio.extract_sound(session_path, save=True, delete=True)
