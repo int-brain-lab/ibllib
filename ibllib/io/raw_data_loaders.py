@@ -444,7 +444,7 @@ def _groom_wheel_data_ge5(data, label='file ', path=''):
     """
     data = _clean_wheel_dataframe(data, label, path)
     # check if the time scale is in ms
-    if (data['re_ts'].iloc[-1] - data['re_ts'].iloc[0]) / 1e6 < 0:
+    if (data['re_ts'].iloc[-1] - data['re_ts'].iloc[0]) / 1e6 < 20:
         logger_.warning('Rotary encoder reset logs events in ms instead of us: ' +
                         'RE firmware needs upgrading and wheel velocity is potentially inaccurate')
         data['re_ts'] = data['re_ts'] * 1000

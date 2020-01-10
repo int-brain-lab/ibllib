@@ -1,3 +1,7 @@
+### Release Notes 1.4.3 Hotfix
+-   Ephys extraction: handle fringe case where recording is interrupted in the middle
+-   Wheel extraction: if rotary encoder version is outdated and stores data in the wrong unit, auto-detect and output in seconds even for new versions
+
 ### Release Notes 1.4.2
 -  FPGA/bpod events synchronization performed even when their counts do not match
 -  Updated requirement versions for mtscomp and phylib
