@@ -544,3 +544,38 @@ def ptp_over_noise(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='i
     mad = np.median(mad_chunks, axis=0)
     ptp_sigma = mean_ptp / mad
     return ptp_sigma
+
+
+def fp_est(ts, rp=0.002):
+    '''
+    An estimate of the fraction of false positive spikes in a unit
+    (see Hill et al. (2011) J Neurosci 31: 8699-8705).
+
+    Parameters
+    ----------
+    ts : ndarray_like
+        The timestamps (in s) of the spikes.
+    rp : float
+        The refractory period (in s).
+
+    Returns
+    -------
+    fp : float
+        An estimate of the fraction of false positives.
+
+    Examples
+    --------
+    1) Compute false positive estimate for unit 1.
+        >>> ts = units_b['times']['1']
+        >>> fp = bb.metrics.fp_est(ts)
+    '''
+
+    # Get number of spikes, number of isi violations, and time from first to final spike.
+    n_spks = len(ts)
+    n_isi_viol = len(np.where(np.diff(ts < rp)[0]))
+    t = ts[-1] - ts[0]
+
+    # `fp` is min of roots of solved quadratic equation.
+    c = (t * n_isi_viol) / (2 * rp * n_spks**2)  # 3rd term in quadratic
+    fp = np.min(np.abs(np.roots([-1, 1, c])))  # solve quadratic
+    return fp
