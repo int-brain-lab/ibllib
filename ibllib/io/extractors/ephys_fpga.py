@@ -219,7 +219,7 @@ def _audio_events_extraction(audio_t, audio_fronts):
     i_ready_tone_in = np.r_[np.where(dt <= 0.11)[0] * 2]
     t_ready_tone_in = audio_t[i_ready_tone_in]
     # error tones are events lasting from 400ms to 600ms
-    i_error_tone_in = np.where(np.logical_and(0.4 < dt, dt < 0.6))[0] * 2
+    i_error_tone_in = np.where(np.logical_and(0.4 < dt, dt < 1.2))[0] * 2
     t_error_tone_in = audio_t[i_error_tone_in]
     return t_ready_tone_in, t_error_tone_in
 
@@ -371,7 +371,7 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
     if display:
         width = 0.5
         ymax = 5
-        plt.figure()
+        plt.figure("Ephys FPGA Sync")
         ax = plt.gca()
         r0 = _get_sync_fronts(sync, chmap['rotary_encoder_0'])
         plots.squares(bpod['times'], bpod['polarities'] * 0.4 + 1,
