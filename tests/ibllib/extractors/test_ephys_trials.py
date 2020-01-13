@@ -3,6 +3,8 @@ import unittest
 import numpy as np
 
 import ibllib.io.extractors.ephys_fpga as ephys_fpga
+import ibllib.io.extractors.ephys_trials as ephys_trials
+import ibllib.io.raw_data_loaders as raw
 
 
 class TestEphysSyncExtraction(unittest.TestCase):
@@ -95,3 +97,25 @@ class TestEphysSyncExtraction(unittest.TestCase):
         pb = (np.mod(np.arange(4) + 1, 2) - .5) * 2
         t, pos = ephys_fpga._rotary_encoder_positions_from_fronts(ta, pa, tb, pb, coding='x2')
         self.assertTrue(np.all(np.isclose(pos_, pos)))
+
+
+class TestEphysBehaviorExtraction(unittest.TestCase):
+    def setUp(self):
+        self.session_path = "tests/ibllib/extractors/data/session_ephys"
+
+    def test_get_probabilityLeft(self):
+        data = raw.load_data(self.session_path)
+        settings = raw.load_settings(self.session_path)
+        pLeft0 = ephys_trials.get_probabilityLeft(
+            self.session_path, save=False, data=False, settings=False
+        )
+        self.assertTrue(len(pLeft0) == len(data))
+        # Test if settings file has empty LEN_DATA
+        settings.update({"LEN_BLOCKS": None})
+        pLeft1 = ephys_trials.get_probabilityLeft(
+            self.session_path, save=False, data=False, settings=settings
+        )
+        self.assertTrue(pLeft0 == pLeft1)
+
+    def tearDown(self):
+        pass

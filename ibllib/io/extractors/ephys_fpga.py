@@ -213,15 +213,13 @@ def _audio_events_extraction(audio_t, audio_fronts):
     """
     # make sure that there are no 2 consecutive fall or consecutive rise events
     assert(np.all(np.abs(np.diff(audio_fronts)) == 2))
-    # make sure that the first event is a rise
-    assert(audio_fronts[0] == 1)
     # take only even time differences: ie. from rising to falling fronts
     dt = np.diff(audio_t)[::2]
     # detect ready tone by length below 110 ms
     i_ready_tone_in = np.r_[np.where(dt <= 0.11)[0] * 2]
     t_ready_tone_in = audio_t[i_ready_tone_in]
     # error tones are events lasting from 400ms to 600ms
-    i_error_tone_in = np.where(np.logical_and(0.4 < dt, dt < 0.6))[0] * 2
+    i_error_tone_in = np.where(np.logical_and(0.4 < dt, dt < 1.2))[0] * 2
     t_error_tone_in = audio_t[i_error_tone_in]
     return t_ready_tone_in, t_error_tone_in
 
@@ -373,7 +371,7 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
     if display:
         width = 0.5
         ymax = 5
-        plt.figure()
+        plt.figure("Ephys FPGA Sync")
         ax = plt.gca()
         r0 = _get_sync_fronts(sync, chmap['rotary_encoder_0'])
         plots.squares(bpod['times'], bpod['polarities'] * 0.4 + 1,

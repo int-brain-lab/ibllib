@@ -1,3 +1,11 @@
+### Release Notes 1.4.4
+-   Ephys extraction:
+    -   left probability extracted properly
+    -   add robustness to audio fronts extraction in FPGA
+-   Passive stimulus: raw data registered in pipeline
+-   Training extraction: microphone extraction for habituation sessions
+-   ALF: specific to_dataframe method for Bunch
+    
 ### Release Notes 1.4.3 Hotfix
 -   Ephys extraction: handle fringe case where recording is interrupted in the middle
 -   Wheel extraction: if rotary encoder version is outdated and stores data in the wrong unit, auto-detect and output in seconds even for new versions
