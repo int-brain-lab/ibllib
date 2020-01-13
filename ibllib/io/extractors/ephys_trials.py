@@ -1,5 +1,5 @@
 import tempfile
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import shutil
 
 import numpy as np
@@ -30,11 +30,14 @@ def get_probabilityLeft(session_path, save=False, data=False, settings=False):
     # LEN_BLOCKS is None up to v6.3.1 (also POSITIONS, CONTRASTS, et al.)
     if settings["LEN_BLOCKS"] is None:
         # Get from iblrig repo
-        if "PRELOADED_SESSION_NUM" in settings:
-            num = settings["PRELOADED_SESSION_NUM"]
-        elif "PREGENERATED_SESSION_NUM" in settings:
-            num = settings["PREGENERATED_SESSION_NUM"]
-
+        num = (settings.get("PRELOADED_SESSION_NUM", None) or
+               settings.get("PREGENERATED_SESSION_NUM", None))
+        if num is None:
+            fn = settings.get('SESSION_LOADED_FILE_PATH', None)
+            fn = PureWindowsPath(fn).name
+            num = ''.join([d for d in fn if d.isdigit()])
+            if num == '':
+                raise ValueError("Can't extract left probability behaviour.")
         master_branch = "https://raw.githubusercontent.com/int-brain-lab/iblrig/master/"
         sessions_folder = "tasks/_iblrig_tasks_ephysChoiceWorld/sessions/"
         fnames = [f"session_{num}_ephys_len_blocks.npy", f"session_{num}_ephys_pcqs.npy"]
