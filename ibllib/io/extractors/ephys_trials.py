@@ -1,15 +1,15 @@
-import os
 import tempfile
 from pathlib import Path
+import shutil
 
 import numpy as np
 
+import oneibl.webclient
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.biased_trials import (
     get_choice,
     get_contrastLR,
     get_feedbackType,
-    get_goCueOnset_times,
     get_goCueTrigger_times,
     get_intervals,
     get_iti_duration,
@@ -37,22 +37,20 @@ def get_probabilityLeft(session_path, save=False, data=False, settings=False):
 
         master_branch = "https://raw.githubusercontent.com/int-brain-lab/iblrig/master/"
         sessions_folder = "tasks/_iblrig_tasks_ephysChoiceWorld/sessions/"
-        fname0 = f"session_{num}_ephys_len_blocks.npy"
-        fname1 = f"session_{num}_ephys_pcqs.npy"
+        fnames = [f"session_{num}_ephys_len_blocks.npy", f"session_{num}_ephys_pcqs.npy"]
         tmp = tempfile.mkdtemp()
-        os.system(f"wget {master_branch}{sessions_folder}{fname0} --output-document={tmp}/{fname0}")
-        os.system(f"wget {master_branch}{sessions_folder}{fname1} --output-document={tmp}/{fname1}")
+        for fil in fnames:
+            oneibl.webclient.http_download_file(f"{master_branch}{sessions_folder}{fil}",
+                                                cache_dir=tmp)
         # Load the files
-        len_blocks = np.load(f"{tmp}/{fname0}").tolist()
-        pcqs = np.load(f"{tmp}/{fname1}")
+        len_blocks = np.load(f"{tmp}/{fnames[0]}").tolist()
+        pcqs = np.load(f"{tmp}/{fnames[1]}")
         positions = [x[0] for x in pcqs]
         # Patch the settings file
         settings["LEN_BLOCKS"] = len_blocks
         settings["POSITIONS"] = positions
         # Cleanup
-        (Path(tmp) / fname0).unlink()
-        (Path(tmp) / fname1).unlink()
-        Path(tmp).rmdir()
+        shutil.rmtree(tmp)
     # Continue
     pLeft = []
     prev = 0
