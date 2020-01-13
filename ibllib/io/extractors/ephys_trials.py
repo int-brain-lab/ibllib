@@ -69,7 +69,7 @@ def get_probabilityLeft(session_path, save=False, data=False, settings=False):
     return pLeft
 
 
-def extract_all(session_path, save=False, data=False):
+def extract_all(session_path, save=False, data=False, output_path=None):
     """
     Extract all behaviour data from Bpod whithin the specified folder.
     The timing information from FPGA is extracted in

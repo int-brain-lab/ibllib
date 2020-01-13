@@ -213,8 +213,6 @@ def _audio_events_extraction(audio_t, audio_fronts):
     """
     # make sure that there are no 2 consecutive fall or consecutive rise events
     assert(np.all(np.abs(np.diff(audio_fronts)) == 2))
-    # make sure that the first event is a rise
-    assert(audio_fronts[0] == 1)
     # take only even time differences: ie. from rising to falling fronts
     dt = np.diff(audio_t)[::2]
     # detect ready tone by length below 110 ms
