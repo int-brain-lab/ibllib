@@ -211,6 +211,15 @@ class TestSessionFolder(unittest.TestCase):
         o = alf.io._regexp_session_path(Path('/mnt/s0/Data/Subjects/ZM_1368/2019/1'), '\\')
         self.assertIsNone(o)
 
+    def test_is_session_folder(self):
+        inp = [(Path('/mnt/s0/Data/Subjects/ibl_witten_14/2019-12-04'), False),
+               ('/mnt/s0/Data/Subjects/ibl_witten_14/2019-12-04', False),
+               (Path('/mnt/s0/Data/Subjects/ibl_witten_14/2019-12-04/001'), True),
+               (Path('/mnt/s0/Data/Subjects/ibl_witten_14/2019-12-04/001/tutu'), False),
+               ('/mnt/s0/Data/Subjects/ibl_witten_14/2019-12-04/001/', True)]
+        for i in inp:
+            self.assertEqual(alf.io.is_session_path(i[0]), i[1])
+
 
 class TestRemoveUUID(unittest.TestCase):
 

@@ -355,6 +355,16 @@ def get_session_path(path_object):
         return Path(str(path_object)[:s.span()[-1]])
 
 
+def is_session_path(path_object):
+    """
+    Checks if the syntax corresponds to a session path. Note that there is no physical check
+     about existence nor contents
+    :param path_object:
+    :return:
+    """
+    return Path(path_object) == get_session_path(Path(path_object))
+
+
 def _regexp_session_path(path_object, separator):
     """
     Subfunction to be able to test cross-platform
