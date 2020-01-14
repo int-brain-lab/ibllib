@@ -1,3 +1,6 @@
+### Release Notes 1.4.5 Hotfix
+-   Ephys extraction: left probability bug when sequence was 0 - fixed
+
 ### Release Notes 1.4.4
 -   Ephys extraction:
     -   left probability extracted properly
