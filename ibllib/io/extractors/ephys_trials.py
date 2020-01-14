@@ -30,8 +30,9 @@ def get_probabilityLeft(session_path, save=False, data=False, settings=False):
     # LEN_BLOCKS is None up to v6.3.1 (also POSITIONS, CONTRASTS, et al.)
     if settings["LEN_BLOCKS"] is None:
         # Get from iblrig repo
-        num = (settings.get("PRELOADED_SESSION_NUM", None) or
-               settings.get("PREGENERATED_SESSION_NUM", None))
+        num = settings.get("PRELOADED_SESSION_NUM", None)
+        if num is None:
+            num = settings.get("PREGENERATED_SESSION_NUM", None)
         if num is None:
             fn = settings.get('SESSION_LOADED_FILE_PATH', None)
             fn = PureWindowsPath(fn).name
@@ -63,7 +64,6 @@ def get_probabilityLeft(session_path, save=False, data=False, settings=False):
         prev = bl
     # Trim to actual number of trials
     pLeft = pLeft[: len(data)]
-
     if raw.save_bool(save, "_ibl_trials.probabilityLeft.npy"):
         lpath = Path(session_path).joinpath("alf", "_ibl_trials.probabilityLeft.npy")
         np.save(lpath, pLeft)
