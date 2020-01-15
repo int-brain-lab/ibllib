@@ -74,6 +74,8 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
     file_m = s_reader.data  # the memmapped array
     n_wf_samples = np.int(sr / 1000 * (t / 2))  # number of samples to return on each side of a ts
     ts_samples = np.array(ts * sr).astype(int)  # the samples corresponding to `ts`
+    t_sample_first = ts_samples[0] - n_wf_samples
+    t_sample_last = ts_samples[-1] + n_wf_samples
 
     # Exception handling for impossible channels
     ch = np.asarray(ch)
@@ -86,8 +88,6 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
     if car:  # compute spatial noise in chunks
         # (previously computed temporal noise also, but was too costly)
         # Get number of chunks.
-        t_sample_first = ts_samples[0] - n_wf_samples
-        t_sample_last = ts_samples[-1] + n_wf_samples
         n_chunk_samples = 5e6  # number of samples per chunk
         n_chunks = np.ceil((t_sample_last - t_sample_first) / n_chunk_samples).astype('int')
         # Get samples that make up each chunk. e.g. `chunk_sample[1] - chunk_sample[0]` are the
