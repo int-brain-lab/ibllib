@@ -2,6 +2,7 @@ import os.path as op
 from pathlib import Path
 import subprocess
 
+from ibllib.io.hashfile import md5, sha1
 from alf.io import is_uuid_string, get_session_path
 from oneibl.one import ONE
 
@@ -22,22 +23,36 @@ def scp(local_path, remote_path, dry=False):
     cmd = f"scp -P {FLATIRON_PORT} {local_path} {FLATIRON_USER}@{FLATIRON_HOST}:{remote_path}"
     if dry:
         print(cmd)
-        return 0,
+        return 0, '', ''
     p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     info, error = p.communicate()
     return p.returncode, info, error
 
 
 class Patcher:
+    """
+    Requires SSH keys access to the target server
+    """
     def __init__(self, one=None):
         if one:
             self.one = one
         else:
             self.one = ONE()
 
+    def patch_or_create_dataset(self, path):
+        """
+        Creates a new dataset on FlatIron and uploads it from a session path.
+        :param path:
+        :param labname:
+        :return:
+        """
+        ses_path = get_session_path(path)
+        a = 1
+        pass
+
     def patch_dataset(self, path, dset_id=None, dry=False):
         """
-        Uploads a dataset from an arbitrary location to FlatIron. Needs admin permissions
+        Uploads a dataset from an arbitrary location to FlatIron.
         :param path:
         :param dset_id:
         :param dry:
@@ -61,10 +76,13 @@ class Patcher:
         returncode, info, error = scp(path, Path(FLATIRON_MOUNT) / remote_path, dry=dry)
         if returncode != 0:
             raise RuntimeError(error)
+        if not dry:
+            al.rest('datasets', 'partial_update', id=dset_id,
+                    data={'md5': md5(path), 'file_size': path.stat().st_size})
 
     def create_dataset(self, path, labname=None):
         """
-        Creates a new dataset on FlatIron and uploads it from arbitrary location. Needs admin.
+        Creates a new dataset on FlatIron and uploads it from arbitrary location.
         :param path:
         :param labname:
         :return:

@@ -22,10 +22,14 @@ def sha1(file_path):
     return _hash_file(file_path, hashlib.sha1())
 
 
-def _hash_file(file_path, hash_obj):
+def _hash_file(file_path, hash_obj, progress_bar=None):
+    file_size = file_path.stat().st_size
+    # by default prints a progress bar only for files above 512 Mo
+    if progress_bar is None:
+        progress_bar = file_size > (512 * 1024 * 1024)
     b = bytearray(BUF_SIZE)
     mv = memoryview(b)
-    pbar = tqdm(total=np.ceil(file_path.stat().st_size / BUF_SIZE))
+    pbar = tqdm(total=np.ceil(file_size / BUF_SIZE), disable=not progress_bar)
     with open(file_path, 'rb', buffering=0) as f:
         for n in iter(lambda: f.readinto(mv), 0):
             hash_obj.update(mv[:n])
