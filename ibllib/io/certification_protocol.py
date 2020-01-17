@@ -426,7 +426,12 @@ def export_to_alf(session_path, stim_ts, stim_datas, stim_names):
         shape_t = stim_t.shape[0]
         shape_d = stim_data.shape[0]
         if shape_t != 0 and shape_d != 0:
-            assert shape_t == shape_d
+            if stim_name == 'contrast_reversal':
+                # no known bug fix for contrast reversal bonsai bugs; don't save out if problem
+                if shape_t != shape_d:
+                    continue
+            else:
+                assert shape_t == shape_d
         if shape_t != 0:
             np.save(os.path.join(session_path, 'alf', filename_times), stim_t)
         if shape_d != 0:
