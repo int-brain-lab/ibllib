@@ -1,6 +1,7 @@
 import hashlib
-import numpy as np
+from pathlib import Path
 
+import numpy as np
 from tqdm import tqdm
 
 BUF_SIZE = 2 ** 28  # 256 megs
@@ -23,6 +24,7 @@ def sha1(file_path):
 
 
 def _hash_file(file_path, hash_obj, progress_bar=None):
+    file_path = Path(file_path)
     file_size = file_path.stat().st_size
     # by default prints a progress bar only for files above 512 Mo
     if progress_bar is None:
