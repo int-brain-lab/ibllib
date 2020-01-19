@@ -1,43 +1,19 @@
+import abc
 import os.path as op
 from pathlib import Path
 import subprocess
 import logging
 
 from ibllib.io.hashfile import md5
-from alf.io import is_uuid_string, get_session_path, add_uuid_string, is_session_path
+import alf.io
 from oneibl.one import ONE
 
 _logger = logging.getLogger('ibllib')
+
 FLATIRON_HOST = 'ibl.flatironinstitute.org'
 FLATIRON_PORT = 61022
 FLATIRON_USER = 'datauser'
 FLATIRON_MOUNT = '/mnt/ibl'
-
-
-def _add_uuid_to_filename(fn, uuid):
-    if uuid in fn:
-        return fn
-    dpath, ext = op.splitext(fn)
-    return dpath + '.' + str(uuid) + ext
-
-
-def _globus_scp(local_path, remote_path, dry=True):
-    pass
-
-
-def _globus_rm(flatiron_path, dry=True):
-    pass
-
-
-def _ssh_scp(local_path, remote_path, dry=True):
-    cmd = f"ssh -p {FLATIRON_PORT} {FLATIRON_USER}@{FLATIRON_HOST} mkdir -p {remote_path.parent}"
-    cmd += f"; scp -P {FLATIRON_PORT} {local_path} {FLATIRON_USER}@{FLATIRON_HOST}:{remote_path}"
-    return _run_command(cmd, dry=dry)
-
-
-def _ssh_rm(flatiron_path, dry=True):
-    cmd = f"ssh -p {FLATIRON_PORT} {FLATIRON_USER}@{FLATIRON_HOST} rm {flatiron_path}"
-    return _run_command(cmd, dry=dry)
 
 
 def _run_command(cmd, dry=True):
@@ -52,23 +28,13 @@ def _run_command(cmd, dry=True):
     return p.returncode, info, error
 
 
-class Patcher:
-    """
-    Requires SSH keys access to the target server
-    """
-    def __init__(self, one=None, globus_client=None):
+class Patcher(abc.ABC):
+    def __init__(self, one=None):
         # one object
         if one is None:
             self.one = ONE()
         else:
             self.one = one
-        # handles the globus objects
-        self.globus = globus_client
-        if globus_client is None:
-            self.globus_transfer = None
-            self.globus_delete = None
-        else:
-            pass
 
     def patch_dataset(self, path, dset_id=None, dry=False):
         """
@@ -81,17 +47,17 @@ class Patcher:
         path = Path(path)
         if dset_id is None:
             dset_id = path.name.split('.')[-2]
-            if not is_uuid_string(dset_id):
+            if not alf.io.is_uuid_string(dset_id):
                 dset_id = None
         assert dset_id
-        assert is_uuid_string(dset_id)
+        assert alf.io.is_uuid_string(dset_id)
         assert path.exists()
         dset = self.one.alyx.rest('datasets', "read", id=dset_id)
         fr = next(fr for fr in dset['file_records'] if 'flatiron' in fr['data_repository'])
         remote_path = op.join(fr['data_repository_path'], fr['relative_path'])
-        remote_path = _add_uuid_to_filename(remote_path, dset_id)
-        if remote_path.startswith('/'):
-            remote_path = remote_path[1:]
+        remote_path = alf.io.add_uuid_string(remote_path, dset_id)
+        if remote_path.is_absolute():
+            remote_path = remote_path.relative_to(remote_path.root)
         self._scp(path, Path(FLATIRON_MOUNT) / remote_path, dry=dry)
         if not dry:
             self.one.alyx.rest('datasets', 'partial_update', id=dset_id,
@@ -110,8 +76,8 @@ class Patcher:
         """
         path = Path(path)
         assert path.exists()
-        session_path = get_session_path(path)
-        assert is_session_path(session_path)
+        session_path = alf.io.get_session_path(path)
+        assert alf.io.is_session_path(session_path)
         # first register the file
         r = {'created_by': created_by,
              'path': str(session_path.relative_to((session_path.parents[2]))),
@@ -135,7 +101,7 @@ class Patcher:
             if 'flatiron' in fr['data_repository']:
                 flatiron_path = Path(FLATIRON_MOUNT).joinpath(fr['data_repository_path'][1:],
                                                               fr['relative_path'])
-                flatiron_path = add_uuid_string(flatiron_path, dset_id)
+                flatiron_path = alf.io.add_uuid_string(flatiron_path, dset_id)
                 self._rm(flatiron_path, dry=dry)
                 self.one.alyx.rest('datasets', 'delete', id=dset_id)
 
@@ -169,17 +135,49 @@ class Patcher:
         cmd = f"ssh -p {FLATIRON_PORT} {FLATIRON_USER}@{FLATIRON_HOST} rm -fR {flatiron_path}"
         print(cmd)
 
-    def launch_globus_jobs(self):
+    @abc.abstractmethod
+    def _scp(self, *args, **kwargs):
         pass
 
-    def _scp(self, *args, **kwargs):
-        if self.globus is None:
-            return _ssh_scp(*args, **kwargs)
+    @abc.abstractmethod
+    def _rm(self, *args, **kwargs):
+        pass
+
+
+class GlobusPatcher(Patcher):
+    """
+    Requires GLOBUS keys access
+    """
+    def __init__(self, one=None, globus_client=None):
+        # handles the globus objects
+        self.globus = globus_client
+        if globus_client is None:
+            self.globus_transfer = None
+            self.globus_delete = None
         else:
-            return _globus_scp(*args, **kwargs)
+            pass
+        super().__init__(one=one)
+
+    def _scp(self, *args, **kwargs):
+        pass
 
     def _rm(self, *args, **kwargs):
-        if self.globus is None:
-            return _ssh_rm(*args, **kwargs)
-        else:
-            return _globus_rm(*args, **kwargs)
+        pass
+
+
+class SSHPatcher(Patcher):
+    """
+    Requires SSH keys access on the FlatIron
+    """
+    def __init__(self, one=None, globus_client=None):
+        super().__init__(one=one)
+
+    def _scp(self, local_path, remote_path, dry=True):
+        cmd = f"ssh -p {FLATIRON_PORT} {FLATIRON_USER}@{FLATIRON_HOST}" \
+              f" mkdir -p {remote_path.parent}; "
+        cmd += f"scp -P {FLATIRON_PORT} {local_path} {FLATIRON_USER}@{FLATIRON_HOST}:{remote_path}"
+        return _run_command(cmd, dry=dry)
+
+    def _rm(self, flatiron_path, dry=True):
+        cmd = f"ssh -p {FLATIRON_PORT} {FLATIRON_USER}@{FLATIRON_HOST} rm {flatiron_path}"
+        return _run_command(cmd, dry=dry)
