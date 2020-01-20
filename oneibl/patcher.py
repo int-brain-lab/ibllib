@@ -7,6 +7,7 @@ import logging
 from ibllib.io.hashfile import md5
 import alf.io
 from oneibl.one import ONE
+from ibllib.misc import version
 
 _logger = logging.getLogger('ibllib')
 
@@ -61,7 +62,10 @@ class Patcher(abc.ABC):
         self._scp(path, Path(FLATIRON_MOUNT) / remote_path, dry=dry)
         if not dry:
             self.one.alyx.rest('datasets', 'partial_update', id=dset_id,
-                               data={'md5': md5(path), 'file_size': path.stat().st_size})
+                               data={'hash': md5(path),
+                                     'file_size': path.stat().st_size,
+                                     'version': version.ibllib()}
+                               )
 
     def create_dataset(self, path, server_repository=None, created_by='root', dry=False):
         """
@@ -84,8 +88,9 @@ class Patcher(abc.ABC):
              'filenames': [str(path.relative_to(session_path))],
              'name': server_repository,
              'server_only': True,
-             'hash': md5(path),
-             'filesizes': path.stat().st_size}
+             'hashes': [md5(path)],
+             'filesizes': [path.stat().st_size],
+             'versions': [version.ibllib()]}
         if not dry:
             dataset = self.one.alyx.rest('register-file', 'create', data=r)[0]
         else:
