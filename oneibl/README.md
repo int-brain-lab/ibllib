@@ -7,13 +7,10 @@ ONE light is an experimental interface for uploading and downloading data follow
 
 ONE light is currently part of the `ibllib` Python library.
 
-You need Python 3 and NumPy. You can install the development version of the code as follows:
+You need Python 3 and NumPy. You can install ibllib as follows:
 
 ```
-git clone -b onelight https://github.com/int-brain-lab/ibllib.git
-cd ibllib
-pip install click requests
-python setup.py develop
+pip install ibllib
 ```
 
 ## For data users
@@ -118,7 +115,7 @@ The `spikes` object is an instance of a dictionary, that also allows for the mor
 plt.plot(spikes.times[:100000], spikes.clusters[:100000], ',')
 ```
 
-
+<!--
 ## For data sharers
 
 It is most convenient to use the command-line interface when uploading data with ONE light. Several repository types are currently supported, notably FTP and figshare. We only give the instructions for figshare here.
@@ -158,3 +155,4 @@ When uploading a dataset, ONE light creates and uploads a special `/path/to/data
 - the second column has the figshare download URL
 
 The ONE ligh client will use this file for searching and downloading datasets.
+-->
