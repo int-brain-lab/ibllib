@@ -21,7 +21,7 @@ import sys
 import tempfile
 import urllib.parse
 
-import click
+# import click
 import requests
 from requests.exceptions import HTTPError
 
@@ -1017,6 +1017,7 @@ def load_dataset(session, dataset_type, **kwargs):
 # Command-line interface
 # -------------------------------------------------------------------------------------------------
 
+'''
 @click.group()
 def one():
     pass
@@ -1111,7 +1112,6 @@ def clean_publish():
         raise NotImplementedError("Upload only possible for figshare repositories.")
     FigshareUploader(repo.article_id).clean_publish()
 
-
 if __name__ == '__main__':
     if '--debug' in sys.argv:
         sys.argv.remove('--debug')
@@ -1120,3 +1120,4 @@ if __name__ == '__main__':
     except Exception as e:
         click.echo(e, err=True)
         raise e
+'''
