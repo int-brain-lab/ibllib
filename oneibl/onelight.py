@@ -77,7 +77,13 @@ DEFAULT_CONFIG = {
     "download_dir": "~/.one/data/{repository}/{lab}/Subjects/{subject}/{date}/{number}/alf/",
     "session_pattern": "^{lab}/Subjects/{subject}/{date}/{number}/$",
     "file_pattern": "^{lab}/Subjects/{subject}/{date}/{number}/alf/{filename}$",
-    "repositories": [],
+    "repositories": [
+        {
+            "name": "default",
+            "root_dir": ".",
+            "type": "local"
+        }
+    ],
     "current_repository": None,
 }
 
@@ -477,6 +483,8 @@ def _get_file_rel_path(file_path):
     file_path = str(file_path)
     # Find the relative part of the file path.
     i = file_path.index('/Subjects')
+    if '/' not in file_path[:i]:
+        return file_path
     i = file_path[:i].rindex('/') + 1
     return file_path[i:]
 
@@ -595,6 +603,8 @@ class HttpOne:
             # All sessions.
             return sorted(
                 set('/'.join(_[0].split('/')[:5]) for _ in self._iter_files()))
+        if isinstance(dataset_types, str):
+            dataset_types = [dataset_types]
         dataset_types = [(dst + '*' if '*' not in dst else dst) for dst in dataset_types]
         filter_kwargs = {
             'lab': kwargs.get('lab', None),
