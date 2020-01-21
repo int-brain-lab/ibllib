@@ -1,5 +1,5 @@
 import abc
-import os.path as op
+import ftplib
 from pathlib import Path
 import subprocess
 import logging
@@ -15,6 +15,8 @@ FLATIRON_HOST = 'ibl.flatironinstitute.org'
 FLATIRON_PORT = 61022
 FLATIRON_USER = 'datauser'
 FLATIRON_MOUNT = '/mnt/ibl'
+FTP_HOST = 'test.alyx.internationalbrainlab.org'
+FTP_PORT = 21
 
 
 def _run_command(cmd, dry=True):
@@ -55,7 +57,7 @@ class Patcher(abc.ABC):
         assert path.exists()
         dset = self.one.alyx.rest('datasets', "read", id=dset_id)
         fr = next(fr for fr in dset['file_records'] if 'flatiron' in fr['data_repository'])
-        remote_path = op.join(fr['data_repository_path'], fr['relative_path'])
+        remote_path = Path(fr['data_repository_path']).joinpath(fr['relative_path'])
         remote_path = alf.io.add_uuid_string(remote_path, dset_id)
         if remote_path.is_absolute():
             remote_path = remote_path.relative_to(remote_path.root)
@@ -175,6 +177,9 @@ class SSHPatcher(Patcher):
     Requires SSH keys access on the FlatIron
     """
     def __init__(self, one=None, globus_client=None):
+        res = _run_command(f"ssh -p {FLATIRON_PORT} {FLATIRON_USER}@{FLATIRON_HOST} ls")
+        if res[0] != 0:
+            raise PermissionError("Could not connect to the Flatiron via SSH. Check your RSA keys")
         super().__init__(one=one)
 
     def _scp(self, local_path, remote_path, dry=True):
@@ -186,3 +191,47 @@ class SSHPatcher(Patcher):
     def _rm(self, flatiron_path, dry=True):
         cmd = f"ssh -p {FLATIRON_PORT} {FLATIRON_USER}@{FLATIRON_HOST} rm {flatiron_path}"
         return _run_command(cmd, dry=dry)
+
+
+class FTPPatcher(Patcher):
+    """
+    This is used to register from anywhere without write access to FlatIron
+    """
+    def __init__(self, one=None, globus_client=None):
+        super().__init__(one=one)
+        self.ftp = ftplib.FTP_TLS(host=FTP_HOST,
+                                  user=one._par.FTP_DATA_SERVER_LOGIN,
+                                  passwd=one._par.FTP_DATA_SERVER_PWD)
+        # self.ftp.ssl_version = ssl.PROTOCOL_TLSv1
+        # self.ftp.auth()
+        self.ftp.prot_p()
+        self.ftp.login(one._par.FTP_DATA_SERVER_LOGIN, one._par.FTP_DATA_SERVER_PWD)
+
+    def create_dataset(self, path, created_by='root', dry=False):
+        # overrides the superclass just to remove the server repository argument
+        super().create_dataset(path, created_by=created_by, dry=dry)
+
+    def _scp(self, local_path, remote_path, dry=True):
+        # remote_path = '/mnt/ibl/zadorlab/Subjects/flowers/2018-07-13/001
+        remote_path = Path(Path(FLATIRON_MOUNT).root).joinpath(
+            remote_path.relative_to(FLATIRON_MOUNT))
+        # local_path
+        # remote_path.parent
+        self.mktree(remote_path.parent)
+        self.ftp.pwd()
+        with open(local_path, 'rb') as fid:
+            self.ftp.storbinary(f'STOR {local_path.name}', fid)
+
+    def mktree(self, remote_path):
+        """ Browse to the tree on the ftp server, making directories on the way"""
+        if str(remote_path) != '.':
+            try:
+                self.ftp.cwd(str(remote_path))
+            except ftplib.all_errors:
+                self.cdtree(Path(remote_path.parent))
+                self.ftp.mkd(str(remote_path))
+                self.ftp.cwd(str(remote_path))
+
+    def _rm(self, flatiron_path, dry=True):
+        raise PermissionError("This Patcher does not have admin permissions to remove data "
+                              "from the FlatIron server. ")
