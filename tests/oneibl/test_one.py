@@ -38,7 +38,7 @@ class TestSearch(unittest.TestCase):
         self.assertTrue(len(sl) == 2)
         dtyp = ['spikes.times', 'channels.site']
         sl, sd = one.search(dataset_types=dtyp, details=True)
-        self.assertTrue(len(sl) == 1)
+        self.assertTrue(len(sl) >= 1)
         # test empty return for non-existent user
         self.assertTrue(len(one.search(users='asdfa')) == 0)
         # test search with the lab keyword
@@ -193,7 +193,7 @@ class TestLoad(unittest.TestCase):
         one = self.One
         eid = self.eid2
         a = one.load(eid, dataset_types='__all__')
-        self.assertTrue(len(a.data) == 5)
+        self.assertTrue(len(a.data) >= 5)
 
     def test_load_fileformats(self):
         # npy already works for other tests around, tsv and csv implemented so far
