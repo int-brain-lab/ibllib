@@ -4,9 +4,11 @@ from pathlib import Path
 import subprocess
 import logging
 
+import globus_sdk
+
+from brainbox.core import Bunch
 from ibllib.io.hashfile import md5
 import alf.io
-from oneibl.one import ONE
 from ibllib.misc import version
 
 _logger = logging.getLogger('ibllib')
@@ -35,7 +37,7 @@ class Patcher(abc.ABC):
     def __init__(self, one=None):
         # one object
         if one is None:
-            self.one = ONE()
+            self.one = one.ONE()
         else:
             self.one = one
 
@@ -61,8 +63,8 @@ class Patcher(abc.ABC):
         remote_path = alf.io.add_uuid_string(remote_path, dset_id)
         if remote_path.is_absolute():
             remote_path = remote_path.relative_to(remote_path.root)
-        self._scp(path, Path(FLATIRON_MOUNT) / remote_path, dry=dry)
-        if not dry:
+        status = self._scp(path, Path(FLATIRON_MOUNT) / remote_path, dry=dry)[0]
+        if not dry and status == 0:
             self.one.alyx.rest('datasets', 'partial_update', id=dset_id,
                                data={'hash': md5(path),
                                      'file_size': path.stat().st_size,
@@ -76,30 +78,34 @@ class Patcher(abc.ABC):
         as this uses the registration endpoint to get the dataset.
         An existing file (same session and path relative to session) will be patched.
         :param path: full file path. Must be whithin an ALF session folder (subject/date/number)
+        can also be a list of full file pathes belonging to the same session.
         :param server_repository: Alyx server repository name
         :param created_by: alyx username for the dataset (optional, defaults to root)
         :return:
         """
-        path = Path(path)
-        assert path.exists()
-        session_path = alf.io.get_session_path(path)
-        assert alf.io.is_session_path(session_path)
+        if not isinstance(path, list):
+            path = [Path(path)]
+        assert len(set([alf.io.get_session_path(f) for f in path])) == 1
+        assert all([Path(f).exists() for f in path])
+        session_path = alf.io.get_session_path(path[0])
+
         # first register the file
         r = {'created_by': created_by,
              'path': str(session_path.relative_to((session_path.parents[2]))),
-             'filenames': [str(path.relative_to(session_path))],
+             'filenames': [str(p.relative_to(session_path)) for p in path],
              'name': server_repository,
              'server_only': True,
-             'hashes': [md5(path)],
-             'filesizes': [path.stat().st_size],
-             'versions': [version.ibllib()]}
+             'hashes': [md5(p) for p in path],
+             'filesizes': [p.stat().st_size for p in path],
+             'versions': [version.ibllib() for _ in path]}
         if not dry:
-            dataset = self.one.alyx.rest('register-file', 'create', data=r)[0]
+            datasets = self.one.alyx.rest('register-file', 'create', data=r)
         else:
             print(r)
             return
         # from the dataset info, set flatIron flag to exists=True
-        self.patch_dataset(path, dset_id=dataset['id'], dry=dry)
+        for p, d in zip(path, datasets):
+            self.patch_dataset(p, dset_id=d['id'], dry=dry)
 
     def delete_dataset(self, dset_id, dry=False):
         dset = self.one.alyx.rest('datasets', "read", id=dset_id)
@@ -109,8 +115,9 @@ class Patcher(abc.ABC):
                 flatiron_path = Path(FLATIRON_MOUNT).joinpath(fr['data_repository_path'][1:],
                                                               fr['relative_path'])
                 flatiron_path = alf.io.add_uuid_string(flatiron_path, dset_id)
-                self._rm(flatiron_path, dry=dry)
-                self.one.alyx.rest('datasets', 'delete', id=dset_id)
+                status = self._rm(flatiron_path, dry=dry)[0]
+                if status == 0:
+                    self.one.alyx.rest('datasets', 'delete', id=dset_id)
 
     def delete_session_datasets(self, eid, dry=True):
         """
@@ -155,21 +162,70 @@ class GlobusPatcher(Patcher):
     """
     Requires GLOBUS keys access
     """
-    def __init__(self, one=None, globus_client=None):
+
+    def __init__(self, one=None, globus_transfer=None, globus_delete=None):
         # handles the globus objects
-        self.globus = globus_client
-        if globus_client is None:
-            self.globus_transfer = None
-            self.globus_delete = None
-        else:
-            pass
+        self.globus_transfer = globus_transfer
+        self.globus_delete = globus_delete
+        if globus_transfer is None:
+            self.globus_transfer = Bunch({'path_src': [], 'path_dest': []})
+        if globus_delete is None:
+            self.globus_delete = Bunch({'path': []})
         super().__init__(one=one)
 
-    def _scp(self, *args, **kwargs):
-        pass
+    def _scp(self, local_path, remote_path, dry=True):
+        remote_path = Path('/').joinpath(remote_path.relative_to(Path(FLATIRON_MOUNT)))
+        _logger.info(f"Globus copy {local_path} to {remote_path}")
+        if not dry:
+            if isinstance(self.globus_transfer, globus_sdk.transfer.data.TransferData):
+                self.globus_transfer.add_item(local_path, remote_path)
+            else:
+                self.globus_transfer.path_src.append(local_path)
+                self.globus_transfer.path_dest.append(remote_path)
+        return 0, ''
 
-    def _rm(self, *args, **kwargs):
-        pass
+    def _rm(self, flatiron_path, dry=True):
+        flatiron_path = Path('/').joinpath(flatiron_path.relative_to(Path(FLATIRON_MOUNT)))
+        _logger.info(f"Globus del {flatiron_path}")
+        if not dry:
+            if isinstance(self.globus_delete, globus_sdk.transfer.data.DeleteData):
+                self.globus_delete.add_item(flatiron_path)
+            else:
+                self.globus_delete.path.append(flatiron_path)
+        return 0, ''
+
+    def launch_transfers(self, globus_transfer_client, wait=True):
+        gtc = globus_transfer_client
+
+        def _wait_for_task(resp):
+            if wait:
+                status = gtc.task_wait(task_id=resp['task_id'], timeout=1)
+                while gtc.get_task(task_id=resp['task_id'])['nice_status'] == 'OK':
+                    status = gtc.task_wait(task_id=resp['task_id'], timeout=30)
+                if status is False:
+                    tinfo = gtc.get_task(task_id=resp['task_id'])['nice_status']
+                    raise ConnectionError(f"Could not connect to Globus {tinfo['nice_status']}")
+
+        # handles the transfers first
+        if len(self.globus_transfer['DATA']) > 0:
+            # launch the transfer
+            _wait_for_task(gtc.submit_transfer(self.globus_transfer))
+            # re-initialize the globus_transfer property
+            self.globus_transfer = globus_sdk.TransferData(
+                gtc,
+                self.globus_transfer['source_endpoint'],
+                self.globus_transfer['destination_endpoint'],
+                label=self.globus_transfer['label'],
+                verify_checksum=True, sync_level='checksum')
+
+        # do the same for deletes
+        if len(self.globus_delete['DATA']) > 0:
+            _wait_for_task(gtc.submit_delete(self.globus_delete))
+            self.globus_delete = globus_sdk.DeleteData(
+                gtc,
+                endpoint=self.globus_delete['endpoint'],
+                label=self.globus_delete['label'],
+                verify_checksum=True, sync_level='checksum')
 
 
 class SSHPatcher(Patcher):
@@ -207,7 +263,7 @@ class FTPPatcher(Patcher):
         self.ftp.prot_p()
         self.ftp.login(one._par.FTP_DATA_SERVER_LOGIN, one._par.FTP_DATA_SERVER_PWD)
 
-    def create_dataset(self, path, created_by='root', dry=False):
+    def create_dataset(self, path, created_by='root', dry=False, **kwargs):
         # overrides the superclass just to remove the server repository argument
         super().create_dataset(path, created_by=created_by, dry=dry)
 
@@ -221,6 +277,7 @@ class FTPPatcher(Patcher):
         self.ftp.pwd()
         with open(local_path, 'rb') as fid:
             self.ftp.storbinary(f'STOR {local_path.name}', fid)
+        return 0, ''
 
     def mktree(self, remote_path):
         """ Browse to the tree on the ftp server, making directories on the way"""
