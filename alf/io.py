@@ -328,6 +328,18 @@ def remove_uuid_recursive(folder, dry=False):
         print(remove_uuid_file(fn, dry=False))
 
 
+def add_uuid_string(file_path, uuid):
+    if isinstance(uuid, str) and not is_uuid_string(uuid):
+        raise ValueError('Should provide a valid UUID v4')
+    uuid = str(uuid)
+    file_path = Path(file_path)
+    name_parts = file_path.stem.split('.')
+    if uuid == name_parts[-1]:
+        _logger.warning(f'UUID already found in file name: {file_path.name}: IGNORE')
+        return file_path
+    return file_path.parent.joinpath(f"{'.'.join(name_parts)}.{uuid}{file_path.suffix}")
+
+
 def is_uuid_string(string):
     """
     Bool test to c

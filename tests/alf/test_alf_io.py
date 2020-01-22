@@ -3,6 +3,7 @@ import tempfile
 from pathlib import Path
 import shutil
 import json
+import uuid
 
 import numpy as np
 
@@ -221,7 +222,7 @@ class TestSessionFolder(unittest.TestCase):
             self.assertEqual(alf.io.is_session_path(i[0]), i[1])
 
 
-class TestRemoveUUID(unittest.TestCase):
+class TestUUID_Files(unittest.TestCase):
 
     def test_remove_uuid(self):
         with tempfile.TemporaryDirectory() as dir:
@@ -239,6 +240,19 @@ class TestRemoveUUID(unittest.TestCase):
                             Path(dir).joinpath('toto.json'))
             self.assertTrue(alf.io.remove_uuid_file(str(f3)) ==
                             Path(dir).joinpath('toto.json'))
+
+    def test_add_uuid(self):
+        _uuid = uuid.uuid4()
+
+        file_with_uuid = f'/titi/tutu.part1.part1.{_uuid}.json'
+        inout = [
+            (file_with_uuid, Path(file_with_uuid)),
+            ('/tutu/tata.json', Path(f'/tutu/tata.{_uuid}.json')),
+            ('/tutu/tata.part1.json', Path(f'/tutu/tata.part1.{_uuid}.json')),
+        ]
+        for tup in inout:
+            self.assertEqual(tup[1], alf.io.add_uuid_string(tup[0], _uuid))
+            self.assertEqual(tup[1], alf.io.add_uuid_string(tup[0], str(_uuid)))
 
 
 if __name__ == "__main__":

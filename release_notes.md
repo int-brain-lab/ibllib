@@ -1,3 +1,8 @@
+### Release Notes 1.4.6 
+-   Alyx registration: add md5, version and filesize to the pipeline registration
+-   Data Patcher: allows to register data from anywhere through FTP/SSH/GLobus
+-   ONE Light for behaviour paper data release 
+
 ### Release Notes 1.4.5 Hotfix
 -   Ephys extraction: left probability bug when sequence was 0 - fixed
 
