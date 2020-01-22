@@ -175,8 +175,10 @@ class RegistrationClient:
             return
         # register all files that match the Alyx patterns, warn user when files are encountered
         rename_files_compatibility(ses_path, md['IBLRIG_VERSION_TAG'])
+        if isinstance(file_list, bool):
+            file_list = list(_glob_session(ses_path))
         F = []  # empty list whose keys will be relative paths and content filenames
-        for fn in _glob_session(ses_path):
+        for fn in file_list:
             if fn.suffix in ['.flag', '.error', '.avi']:
                 logger_.debug('Excluded: ', str(fn))
                 continue
