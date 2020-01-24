@@ -21,7 +21,7 @@ import sys
 import tempfile
 import urllib.parse
 
-# import click
+import click
 import requests
 from requests.exceptions import HTTPError
 
@@ -89,17 +89,18 @@ DEFAULT_CONFIG = {
 
 DOWNLOAD_INSTRUCTIONS = '''
 
-<h3>[experimental] ONE interface</h3>
+<h3>ONE interface</h3>
 
 <p>The data is available via the ONE interface.
-<a href="https://github.com/int-brain-lab/ibllib/tree/onelight/oneibl#one-light">
+<a href="https://github.com/int-brain-lab/ibllib/tree/master/oneibl#one-light">
 Installation instructions here.</a>
 </p>
 
 <p>To search and download this dataset:</p>
 
 <blockquote>
-import onelight as one
+from oneibl.onelight import ONE
+one = ONE()
 sessions = one.search(['trials'])  # search for all sessions that have a `trials` object
 session = sessions[0]  # take the first session
 trials = one.load_object(session, 'trials')  # load the trials object
@@ -175,18 +176,20 @@ def set_config(config):
         json.dump(config, f, indent=2, sort_keys=True)
 
 
-def get_repo(name, config=None):
+def get_repo(name=None, config=None):
     """Get a repository by its name."""
     config = config or get_config()
     for r in config['repositories']:
-        if r['name'] == name:
+        if name and r['name'] == name:
+            return r
+        if not name and config['current_repository'] == r['name']:
             return r
 
 
-def update_repo(name, **kwargs):
+def update_repo(name=None, **kwargs):
     """Update a repository."""
     config = get_config()
-    repo = get_repo(config=config)
+    repo = get_repo(name=None, config=config)
     if repo:
         repo.update(kwargs)
     set_config(config)
@@ -588,7 +591,7 @@ class HttpOne:
         return save_to
 
     def list(self, session):
-        """List all dataset types found in the session."""
+        """List all dataset types found in a session."""
         if not session.endswith('/'):
             session += '/'
         out = []
@@ -979,6 +982,9 @@ def get_one(private=False):
 # -------------------------------------------------------------------------------------------------
 
 class ONE(object):
+    def set_figshare_url(self, url):
+        set_figshare_url(url)
+
     def search_terms(self, ):
         return ('lab', 'subject', 'date', 'number', 'dataset_types')
 
@@ -1013,9 +1019,10 @@ class ONE(object):
 # Command-line interface
 # -------------------------------------------------------------------------------------------------
 
-'''
 @click.group()
 def one():
+    """ONE light command-line tool for searching, downloading, and uploading data to an FTP server,
+    or to figshare."""
     pass
 
 
@@ -1046,19 +1053,19 @@ def add_repo_(name=None):
 @one.command('search')
 @click.argument('dataset_types', nargs=-1)
 @click.option('--private', is_flag=True)
-@is_documented_by(search)
+@is_documented_by(ONE.search)
 def search_(dataset_types, private=False):
     # NOTE: underscore to avoid shadowing of public search() function.
     # TODO: other search options
-    for session in search(dataset_types, private=private):
+    for session in ONE().search(dataset_types, private=private):
         click.echo(session)
 
 
 @one.command('list')
 @click.argument('session')
-@is_documented_by(list)
+@is_documented_by(ONE.list)
 def list_cli(session):
-    for dataset_type in list(session):
+    for dataset_type in ONE().list(session):
         click.echo(dataset_type)
 
 
@@ -1068,7 +1075,7 @@ def list_cli(session):
 @click.option('--dry-run', is_flag=True)
 def download(session, obj=None, dry_run=False):
     """Download files in a given session."""
-    for file_path in load_object(
+    for file_path in ONE().load_object(
             session, obj or '*', download_only=True, dry_run=dry_run).values():
         click.echo(file_path)
 
@@ -1107,13 +1114,3 @@ def clean_publish():
     if repo.type != 'figshare':
         raise NotImplementedError("Upload only possible for figshare repositories.")
     FigshareUploader(repo.article_id).clean_publish()
-
-if __name__ == '__main__':
-    if '--debug' in sys.argv:
-        sys.argv.remove('--debug')
-    try:
-        one()
-    except Exception as e:
-        click.echo(e, err=True)
-        raise e
-'''

@@ -1,3 +1,4 @@
+click>=7.0.0
 colorlog>=4.0.2
 dataclasses>=0.6; python_version <= '3.6'
 flake8>=3.7.8

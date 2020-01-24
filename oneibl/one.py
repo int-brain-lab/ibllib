@@ -501,3 +501,27 @@ def _validate_date_range(date_range):
     if len(date_range) == 1:
         date_range = [date_range[0], date_range[0]]
     return date_range
+
+
+# TODO: little command-line tool for main ONE
+# def main():
+#     import argparse
+
+#     parser = argparse.ArgumentParser(description='ONE client.')
+#     parser.add_argument('command', help='ONE command name')
+#     parser.add_argument('dataset_types', nargs='*', help='requested dataset types')
+#     parser.add_argument('--limit', type=int, help='maximum number of results to return')
+
+#     args = parser.parse_args()
+#     cmd = args.command
+#     one = ONE()
+
+#     if cmd == 'search':
+#         eids = one.search(dataset_types=args.dataset_types, limit=args.limit)
+#         if not eids:
+#             return
+#         one.load(eids[0], download_only=True)
+
+
+# if __name__ == '__main__':
+#     main()
