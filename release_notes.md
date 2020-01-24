@@ -1,3 +1,7 @@
+### Release Notes 1.4.7 
+-   ONE Light for behaviour paper data release   
+-   ONE() standard syntax matching the one light examples
+
 ### Release Notes 1.4.6 
 -   Alyx registration: add md5, version and filesize to the pipeline registration
 -   Data Patcher: allows to register data from anywhere through FTP/SSH/GLobus

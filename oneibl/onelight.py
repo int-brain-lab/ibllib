@@ -21,9 +21,11 @@ import sys
 import tempfile
 import urllib.parse
 
-# import click
+import click
 import requests
 from requests.exceptions import HTTPError
+
+import alf.io
 
 logger = logging.getLogger(__name__)
 
@@ -89,17 +91,18 @@ DEFAULT_CONFIG = {
 
 DOWNLOAD_INSTRUCTIONS = '''
 
-<h3>[experimental] ONE interface</h3>
+<h3>ONE interface</h3>
 
 <p>The data is available via the ONE interface.
-<a href="https://github.com/int-brain-lab/ibllib/tree/onelight/oneibl#one-light">
+<a href="https://github.com/int-brain-lab/ibllib/tree/master/oneibl#one-light">
 Installation instructions here.</a>
 </p>
 
 <p>To search and download this dataset:</p>
 
 <blockquote>
-import onelight as one
+from oneibl.onelight import ONE
+one = ONE()
 sessions = one.search(['trials'])  # search for all sessions that have a `trials` object
 session = sessions[0]  # take the first session
 trials = one.load_object(session, 'trials')  # load the trials object
@@ -175,18 +178,20 @@ def set_config(config):
         json.dump(config, f, indent=2, sort_keys=True)
 
 
-def get_repo(name, config=None):
+def get_repo(name=None, config=None):
     """Get a repository by its name."""
     config = config or get_config()
     for r in config['repositories']:
-        if r['name'] == name:
+        if name and r['name'] == name:
+            return r
+        if not name and config['current_repository'] == r['name']:
             return r
 
 
-def update_repo(name, **kwargs):
+def update_repo(name=None, **kwargs):
     """Update a repository."""
     config = get_config()
-    repo = get_repo(config=config)
+    repo = get_repo(name=name, config=config)
     if repo:
         repo.update(kwargs)
     set_config(config)
@@ -258,7 +263,6 @@ def set_figshare_url(url):
 # -------------------------------------------------------------------------------------------------
 # File scanning and root file creation
 # -------------------------------------------------------------------------------------------------
-
 def read_root_file(path):
     assert path
     with open(path) as f:
@@ -587,8 +591,8 @@ class HttpOne:
             logger.debug("Skip existing %s.", save_to)
         return save_to
 
-    def list_(self, session):
-        """List all dataset types found in the session."""
+    def list(self, session):
+        """List all dataset types found in a session."""
         if not session.endswith('/'):
             session += '/'
         out = []
@@ -646,7 +650,7 @@ class HttpOne:
             out = load_array(out)
         return out
 
-    def load_object(self, session, obj=None, download_only=False, dry_run=False):
+    def load_object(self, session, obj, download_only=False, dry_run=False):
         """Load all attributes of a given object."""
         # Ensure session has a trailing slash.
         if not session.endswith('/'):
@@ -662,6 +666,7 @@ class HttpOne:
             out[attr] = self._download_dataset(session, filename, url, dry_run=dry_run)
             if not download_only and not dry_run:
                 out[attr] = load_array(out[attr])
+        alf.io.check_dimensions(out)
         return out
 
 
@@ -978,48 +983,51 @@ def get_one(private=False):
 # Public API
 # -------------------------------------------------------------------------------------------------
 
-def search_terms():
-    return ('lab', 'subject', 'date', 'number', 'dataset_types')
+class ONE(object):
+    def set_local_dir(self, name=None, **kwargs):
+        update_repo(name=name, **kwargs)
 
+    def set_figshare_url(self, url):
+        set_figshare_url(url)
 
-def set_download_dir(path):
-    """Set the download directory. May contain fields like {lab}, {subject}, etc."""
-    # Update the config dictionary.
-    config = get_config()
-    config['download_dir'] = path
-    set_config(config)
-    # Update the current ONE instance.
-    if globals()['_CURRENT_ONE']:
-        globals()['_CURRENT_ONE'].download_dir = path
+    def search_terms(self, ):
+        return ('lab', 'subject', 'date', 'number', 'dataset_types')
 
+    def set_download_dir(self, path):
+        """Set the download directory. May contain fields like {lab}, {subject}, etc."""
+        # Update the config dictionary.
+        config = get_config()
+        config['download_dir'] = str(path)
+        set_config(config)
+        # Update the current ONE instance.
+        if globals()['_CURRENT_ONE']:
+            globals()['_CURRENT_ONE'].download_dir = path
 
-@is_documented_by(HttpOne.search)
-def search(dataset_types, private=False, **kwargs):
-    return get_one(private=private).search(dataset_types, **kwargs)
+    @is_documented_by(HttpOne.search)
+    def search(self, dataset_types, private=False, **kwargs):
+        return get_one(private=private).search(dataset_types, **kwargs)
 
+    @is_documented_by(HttpOne.list)
+    def list(self, session):
+        return get_one().list(session)
 
-@is_documented_by(HttpOne.list_)
-def list_(session):
-    return get_one().list_(session)
+    @is_documented_by(HttpOne.load_object)
+    def load_object(self, session, obj=None, **kwargs):
+        return get_one().load_object(session, obj, **kwargs)
 
-
-@is_documented_by(HttpOne.load_object)
-def load_object(session, obj=None, **kwargs):
-    return get_one().load_object(session, obj, **kwargs)
-
-
-@is_documented_by(HttpOne.load_dataset)
-def load_dataset(session, dataset_type, **kwargs):
-    return get_one().load_dataset(session, dataset_type, **kwargs)
+    @is_documented_by(HttpOne.load_dataset)
+    def load_dataset(self, session, dataset_type, **kwargs):
+        return get_one().load_dataset(session, dataset_type, **kwargs)
 
 
 # -------------------------------------------------------------------------------------------------
 # Command-line interface
 # -------------------------------------------------------------------------------------------------
 
-'''
 @click.group()
 def one():
+    """ONE light command-line tool for searching, downloading, and uploading data to an FTP server,
+    or to figshare."""
     pass
 
 
@@ -1050,19 +1058,19 @@ def add_repo_(name=None):
 @one.command('search')
 @click.argument('dataset_types', nargs=-1)
 @click.option('--private', is_flag=True)
-@is_documented_by(search)
+@is_documented_by(ONE.search)
 def search_(dataset_types, private=False):
     # NOTE: underscore to avoid shadowing of public search() function.
     # TODO: other search options
-    for session in search(dataset_types, private=private):
+    for session in ONE().search(dataset_types, private=private):
         click.echo(session)
 
 
 @one.command('list')
 @click.argument('session')
-@is_documented_by(list_)
+@is_documented_by(ONE.list)
 def list_cli(session):
-    for dataset_type in list_(session):
+    for dataset_type in ONE().list(session):
         click.echo(dataset_type)
 
 
@@ -1072,7 +1080,7 @@ def list_cli(session):
 @click.option('--dry-run', is_flag=True)
 def download(session, obj=None, dry_run=False):
     """Download files in a given session."""
-    for file_path in load_object(
+    for file_path in ONE().load_object(
             session, obj or '*', download_only=True, dry_run=dry_run).values():
         click.echo(file_path)
 
@@ -1111,13 +1119,3 @@ def clean_publish():
     if repo.type != 'figshare':
         raise NotImplementedError("Upload only possible for figshare repositories.")
     FigshareUploader(repo.article_id).clean_publish()
-
-if __name__ == '__main__':
-    if '--debug' in sys.argv:
-        sys.argv.remove('--debug')
-    try:
-        one()
-    except Exception as e:
-        click.echo(e, err=True)
-        raise e
-'''
