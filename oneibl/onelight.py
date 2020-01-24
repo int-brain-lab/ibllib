@@ -587,7 +587,7 @@ class HttpOne:
             logger.debug("Skip existing %s.", save_to)
         return save_to
 
-    def list_(self, session):
+    def list(self, session):
         """List all dataset types found in the session."""
         if not session.endswith('/'):
             session += '/'
@@ -978,39 +978,35 @@ def get_one(private=False):
 # Public API
 # -------------------------------------------------------------------------------------------------
 
-def search_terms():
-    return ('lab', 'subject', 'date', 'number', 'dataset_types')
+class ONE(object):
+    def search_terms(self, ):
+        return ('lab', 'subject', 'date', 'number', 'dataset_types')
 
+    def set_download_dir(self, path):
+        """Set the download directory. May contain fields like {lab}, {subject}, etc."""
+        # Update the config dictionary.
+        config = get_config()
+        config['download_dir'] = path
+        set_config(config)
+        # Update the current ONE instance.
+        if globals()['_CURRENT_ONE']:
+            globals()['_CURRENT_ONE'].download_dir = path
 
-def set_download_dir(path):
-    """Set the download directory. May contain fields like {lab}, {subject}, etc."""
-    # Update the config dictionary.
-    config = get_config()
-    config['download_dir'] = path
-    set_config(config)
-    # Update the current ONE instance.
-    if globals()['_CURRENT_ONE']:
-        globals()['_CURRENT_ONE'].download_dir = path
+    @is_documented_by(HttpOne.search)
+    def search(self, dataset_types, private=False, **kwargs):
+        return get_one(private=private).search(dataset_types, **kwargs)
 
+    @is_documented_by(HttpOne.list)
+    def list(self, session):
+        return get_one().list(session)
 
-@is_documented_by(HttpOne.search)
-def search(dataset_types, private=False, **kwargs):
-    return get_one(private=private).search(dataset_types, **kwargs)
+    @is_documented_by(HttpOne.load_object)
+    def load_object(self, session, obj=None, **kwargs):
+        return get_one().load_object(session, obj, **kwargs)
 
-
-@is_documented_by(HttpOne.list_)
-def list_(session):
-    return get_one().list_(session)
-
-
-@is_documented_by(HttpOne.load_object)
-def load_object(session, obj=None, **kwargs):
-    return get_one().load_object(session, obj, **kwargs)
-
-
-@is_documented_by(HttpOne.load_dataset)
-def load_dataset(session, dataset_type, **kwargs):
-    return get_one().load_dataset(session, dataset_type, **kwargs)
+    @is_documented_by(HttpOne.load_dataset)
+    def load_dataset(self, session, dataset_type, **kwargs):
+        return get_one().load_dataset(session, dataset_type, **kwargs)
 
 
 # -------------------------------------------------------------------------------------------------
@@ -1060,9 +1056,9 @@ def search_(dataset_types, private=False):
 
 @one.command('list')
 @click.argument('session')
-@is_documented_by(list_)
+@is_documented_by(list)
 def list_cli(session):
-    for dataset_type in list_(session):
+    for dataset_type in list(session):
         click.echo(dataset_type)
 
 
