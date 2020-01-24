@@ -646,7 +646,7 @@ class HttpOne:
             out = load_array(out)
         return out
 
-    def load_object(self, session, obj=None, download_only=False, dry_run=False):
+    def load_object(self, session, obj, download_only=False, dry_run=False):
         """Load all attributes of a given object."""
         # Ensure session has a trailing slash.
         if not session.endswith('/'):
