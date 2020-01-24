@@ -25,6 +25,8 @@ import click
 import requests
 from requests.exceptions import HTTPError
 
+import alf.io
+
 logger = logging.getLogger(__name__)
 
 
@@ -189,7 +191,7 @@ def get_repo(name=None, config=None):
 def update_repo(name=None, **kwargs):
     """Update a repository."""
     config = get_config()
-    repo = get_repo(name=None, config=config)
+    repo = get_repo(name=name, config=config)
     if repo:
         repo.update(kwargs)
     set_config(config)
@@ -257,11 +259,9 @@ def set_figshare_url(url):
     set_config(config)
     set_repo(name)
 
-
 # -------------------------------------------------------------------------------------------------
 # File scanning and root file creation
 # -------------------------------------------------------------------------------------------------
-
 def read_root_file(path):
     assert path
     with open(path) as f:
@@ -665,6 +665,7 @@ class HttpOne:
             out[attr] = self._download_dataset(session, filename, url, dry_run=dry_run)
             if not download_only and not dry_run:
                 out[attr] = load_array(out[attr])
+        alf.io.check_dimensions(out)
         return out
 
 
@@ -982,6 +983,9 @@ def get_one(private=False):
 # -------------------------------------------------------------------------------------------------
 
 class ONE(object):
+    def set_local_dir(self, name=None, **kwargs):
+        update_repo(name=name, **kwargs)
+
     def set_figshare_url(self, url):
         set_figshare_url(url)
 
@@ -992,7 +996,7 @@ class ONE(object):
         """Set the download directory. May contain fields like {lab}, {subject}, etc."""
         # Update the config dictionary.
         config = get_config()
-        config['download_dir'] = path
+        config['download_dir'] = str(path)
         set_config(config)
         # Update the current ONE instance.
         if globals()['_CURRENT_ONE']:
