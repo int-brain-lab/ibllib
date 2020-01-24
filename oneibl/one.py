@@ -6,7 +6,7 @@ import tqdm
 
 from ibllib.misc import pprint
 from ibllib.io.one import OneAbstract
-from alf.io import load_file_content, remove_uuid_file, is_uuid_string
+from alf.io import load_file_content, remove_uuid_file, is_uuid_string, AlfBunch
 
 import oneibl.webclient as wc
 from oneibl.dataclass import SessionDataInfo
@@ -219,6 +219,45 @@ class ONE(OneAbstract):
         return self._load_recursive(eid, dataset_types=dataset_types, dclass_output=dclass_output,
                                     dry_run=dry_run, cache_dir=cache_dir, keep_uuid=keep_uuid,
                                     download_only=download_only, clobber=clobber, offline=offline)
+
+    def load_dataset(self, eid, dataset_type, **kwargs):
+        """
+        Load a single dataset from a Session ID and a dataset type.
+
+        :param eid: Experiment ID, for IBL this is the UUID of the Session as per Alyx
+         database. Could be a full Alyx URL:
+         'http://localhost:8000/sessions/698361f6-b7d0-447d-a25d-42afdef7a0da' or only the UUID:
+         '698361f6-b7d0-447d-a25d-42afdef7a0da'.
+        :type eid: str
+        :param dataset_type: Alyx dataset type to be returned.
+        :type dataset_types: str
+
+        :return: A numpy array.
+        :rtype: numpy array
+        """
+        return self._load(eid, dataset_types=[dataset_type], **kwargs)[0]
+
+    def load_object(self, eid, obj, **kwargs):
+        """
+        Load all attributes of an ALF object from a Session ID and an object name.
+
+        :param eid: Experiment ID, for IBL this is the UUID of the Session as per Alyx
+         database. Could be a full Alyx URL:
+         'http://localhost:8000/sessions/698361f6-b7d0-447d-a25d-42afdef7a0da' or only the UUID:
+         '698361f6-b7d0-447d-a25d-42afdef7a0da'.
+        :type eid: str
+        :param obj: Alyx object to load.
+        :type obj: str
+
+        :return: A dictionary-like structure with one key per dataset type for the requested
+         object, and a NumPy array per value.
+        :rtype: AlfBunch instance
+        """
+        dataset_types = [dst for dst in self.list(eid) if dst.startswith(obj)]
+        dsets = self._load(eid, dataset_types=dataset_types, **kwargs)
+        return AlfBunch({
+            '.'.join(dataset_types[i].split('.')[1:]): dsets[i]
+            for i in range(len(dataset_types))})
 
     def _load_recursive(self, eid, **kwargs):
         """
@@ -462,3 +501,27 @@ def _validate_date_range(date_range):
     if len(date_range) == 1:
         date_range = [date_range[0], date_range[0]]
     return date_range
+
+
+# TODO: little command-line tool for main ONE
+# def main():
+#     import argparse
+
+#     parser = argparse.ArgumentParser(description='ONE client.')
+#     parser.add_argument('command', help='ONE command name')
+#     parser.add_argument('dataset_types', nargs='*', help='requested dataset types')
+#     parser.add_argument('--limit', type=int, help='maximum number of results to return')
+
+#     args = parser.parse_args()
+#     cmd = args.command
+#     one = ONE()
+
+#     if cmd == 'search':
+#         eids = one.search(dataset_types=args.dataset_types, limit=args.limit)
+#         if not eids:
+#             return
+#         one.load(eids[0], download_only=True)
+
+
+# if __name__ == '__main__':
+#     main()

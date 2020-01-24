@@ -172,6 +172,15 @@ class TestLoad(unittest.TestCase):
         t_ = one.load(eid, dataset_types=['clusters.channels'], offline=True)
         self.assertTrue(np.all(t == t_))
 
+        # load_dataset()
+        t__ = one.load_dataset(eid, 'clusters.channels')
+        self.assertTrue(np.all(t == t__))
+
+        # load_object()
+        obj = one.load_object(eid, 'clusters')
+        t__ = obj['channels']
+        self.assertTrue(np.all(t == t__))
+
     def test_load_empty(self):
         # Test with a session that doesn't have any dataset on the Flat Iron
         one = self.One

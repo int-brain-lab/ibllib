@@ -76,5 +76,5 @@ class TestRegistrationSession(unittest.TestCase):
             for ds in datasets:
                 self.assertTrue(ds['hash'] is not None)
                 self.assertTrue(ds['file_size'] is not None)
-                self.assertTrue(ds['version'] == '1.4.5')
+                self.assertTrue(ds['version'] == version.ibllib())
             one.alyx.rest('sessions', 'delete', id=eid)
