@@ -41,6 +41,7 @@ In a shell terminal, type the following commands:
 ```
 cd ibllib/
 conda env create --name ibllib -f ibllib_conda.yaml
+pip install ibllib
 ```
 
 #### Troubleshooting environment issues
