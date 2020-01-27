@@ -305,7 +305,7 @@ def is_file_in_session_dir(path):
     """Return whether a file path is within a session directory."""
     if path.name in EXCLUDED_FILENAMES:
         return False
-    return not path.is_dir() and '/Subjects/' in str(path.parent.parent.parent)
+    return not path.is_dir() and '/Subjects/' in str(path.parent.parent.parent).replace('\\', '/')
 
 
 def find_session_dirs(root):
@@ -484,7 +484,7 @@ def _parse_file_path(file_path):
 
 def _get_file_rel_path(file_path):
     """Get the lab/Subjects/subject/... part of a file path."""
-    file_path = str(file_path)
+    file_path = str(file_path).replace('\\', '/')
     # Find the relative part of the file path.
     i = file_path.index('/Subjects')
     if '/' not in file_path[:i]:
