@@ -26,9 +26,6 @@ ibllib module
 .. autosummary::
    :toctree: _autosummary
 
-
-   ibllib.behaviour.wheel
-
    ibllib.dsp.fourier
    ibllib.dsp.utils
 

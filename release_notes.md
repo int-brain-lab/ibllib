@@ -1,3 +1,8 @@
+### Release Notes 1.4.8 - 2020-01-27
+-   ONE Light Windows fixes
+-   Installation documentation separates conda and virtualenv options
+-   Conda yaml environement file for ibllib
+
 ### Release Notes 1.4.7 
 -   ONE Light for behaviour paper data release   
 -   ONE() standard syntax matching the one light examples

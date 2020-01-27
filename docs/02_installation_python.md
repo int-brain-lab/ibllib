@@ -21,36 +21,33 @@ The following steps will indicate how to :
 4. test for the installation
 All of that can be done using shell terminal command lines.
 
-### Setup a virtual environment using Anaconda
+### Environment and ibllib setup
+
+#### Using virtualenv
 
 In a shell terminal, type the following commands:
 
-**Linux:**
 ```
 cd ibllib/
 virtualenv iblenv --python=python3.7
 source ./venv/bin/activate
-```
-
-**Windows:**
-```
-conda create -n iblenv python=3.7
-conda activate iblenv
-```
-
-**Mac OS:**
-```
-conda create -n iblenv python=3.7 anaconda
-source activate iblenv
-```
-
-
-### Install requirements and packages
-**All OS:**
-```
 pip install ibllib
 ```
-NB: make sure you did activate your environment as shown above before installing !
+
+#### Using Anaconda (recommended for Windows users)
+
+In a shell terminal, type the following commands:
+
+```
+cd ibllib/
+conda env create --name ibllib -f ibllib_conda.yaml
+```
+
+#### Troubleshooting environment issues
+
+Our recipes have been tested for creating environments from scratch for Mac/Linux and Windows.
+Solving package dependencies can be challenging especially when trying to setup a scientific environment on top of an older environment.
+If you experience any problem it is recommended to start from a blank environment, and or update to the latest conda version.
 
 
 ### Instantiate One class: Define connection settings
