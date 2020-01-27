@@ -7,7 +7,7 @@
 Library used to implement the International Brain Laboratory data pipeline. Currently in active development.
 The library as currently 4 main modules:
 -   **brainbox**: neuroscience analysis oriented library
--   **ibllib**: general purpose library containng I/O, signal processing and IBL data pipelines utilities.
+-   **ibllib**: general purpose library containing I/O, signal processing and IBL data pipelines utilities.
 -   **oneibl**: interface to the Alyx database of experiments to access IBL data.
 -   **alf**: implementation of ALF file naming convention
 [Release Notes here](release_notes.md)

@@ -6,24 +6,24 @@
     -   **Mac OS** : Download and install Git from here: https://git-scm.com/download/mac .
     -   **Windows** : Download and install Git from here: https://github.com/git-for-windows/git/releases/ .
 
-2. Activate/install your target Python 3.6 or greater environment. For example on Linux:
+2. Activate/install your target Python 3.6 or greater environment (latest always recommended). For example on Linux:
 
 **Linux:**
 ```
 cd ibllib/
-virtualenv iblenv --python=python3.7
+virtualenv iblenv --python=python3.8
 source ./venv/bin/activate
 ```
 
 **Windows:**
 ```
-conda create -n iblenv python=3.7
+conda create -n iblenv python=3.8
 conda activate iblenv
 ```
 
 **Mac OS:**
 ```
-conda create -n iblenv python=3.7 anaconda
+conda create -n iblenv python=3.8 anaconda
 source activate iblenv
 ```
 

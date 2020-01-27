@@ -28,15 +28,12 @@ tasks that need to be run.
 from datetime import datetime
 from itertools import chain
 import logging
-from operator import itemgetter
-import os
 from pathlib import Path
-import sys
 import time
 
-from dask import delayed, compute, visualize
+from dask import visualize
 from dask.distributed import Client, LocalCluster
-import numpy as np
+
 
 logger = logging.getLogger(__name__)
 
