@@ -673,18 +673,18 @@ class HttpOne:
 class LocalOne(HttpOne):
     def __init__(self, root_dir):
         assert root_dir
-        root_dir = Path(root_dir).expanduser()
+        root_dir = Path(root_dir).expanduser().resolve()
         if not root_dir.exists():
             raise ValueError("Root dir %s could not be found." % root_dir)
         if not root_dir.is_dir():
             raise ValueError("Root dir %s is not a directory." % root_dir)
         self.root_dir = root_dir
+        self.relative_paths = list(
+            (str(_get_file_rel_path(p)), str(p)) for p in find_session_files(root_dir))
 
     def _iter_files(self):
         """Iterator over tuples (relative_path, full_path)."""
-        for p in find_session_files(self.root_dir):
-            rel_path = _get_file_rel_path(p)
-            yield rel_path, str(p)
+        yield from self.relative_paths
 
     def _download_dataset(self, session, filename, url, dry_run=False):
         return url
