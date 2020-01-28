@@ -6,7 +6,7 @@ globus-sdk>=1.7.1
 matplotlib>=3.0.3
 mtscomp>=1.0.1
 numpy>=1.16.4
-opencv-python>=4.1.1.26
+opencv-python
 pandas>=0.24.2
 phylib>=2.2
 pynrrd>=0.4.0
