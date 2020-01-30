@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8">
+    
+    <title>brainbox.metrics: Functions for assesing spike unit quality &mdash; Brainbox 0.1.0 documentation</title>
+    
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-extend.css">
+    <link rel="stylesheet" href="../_static/scipy.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" >
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '0.1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="../_static/language_data.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../_static/js/copybutton.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" >
+    <link rel="search" title="Search" href="../search.html" >
+    <link rel="top" title="Brainbox 0.1.0 documentation" href="../index.html" >
+    <link rel="next" title="cum_drift" href="../api/brainbox.metrics.metrics.cum_drift.html" >
+    <link rel="prev" title="extract_waveforms" href="../api/brainbox.io.io.extract_waveforms.html" > 
+  </head>
+  <body>
+
+  <div class="container">
+    <div class="header">
+    </div>
+  </div>
+
+
+    <div class="container">
+      <div class="main">
+        
+	<div class="row-fluid">
+	  <div class="span12">
+	    <div class="spc-navbar">
+              
+    <ul class="nav nav-pills pull-left">
+        <li class="active"><a href="["></a></li>
+        <li class="active"><a href="]"></a></li>
+	
+        <li class="active"><a href="../index.html">Brainbox 0.1.0 documentation</a></li>
+	 
+    </ul>
+              
+              
+    <ul class="nav nav-pills pull-right">
+      <li class="active">
+        <a href="../genindex.html" title="General Index"
+           accesskey="I">index</a>
+      </li>
+      <li class="active">
+        <a href="../py-modindex.html" title="Python Module Index"
+           >modules</a>
+      </li>
+      <li class="active">
+        <a href="../api/brainbox.metrics.metrics.cum_drift.html" title="cum_drift"
+           accesskey="N">next</a>
+      </li>
+      <li class="active">
+        <a href="../api/brainbox.io.io.extract_waveforms.html" title="extract_waveforms"
+           accesskey="P">previous</a>
+      </li>
+    </ul>
+              
+	    </div>
+	  </div>
+	</div>
+        
+
+	<div class="row-fluid">
+      <div class="spc-rightsidebar span3">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../index.html">Table of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#"><cite>brainbox.metrics</cite>: Functions for assesing spike unit quality</a><ul>
+<li><a class="reference internal" href="#functions">Functions</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="../api/brainbox.io.io.extract_waveforms.html"
+                        title="previous chapter">extract_waveforms</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="../api/brainbox.metrics.metrics.cum_drift.html"
+                        title="next chapter">cum_drift</a></p>
+  <h3>This Page</h3>
+  <div>
+    <a href="../_sources/modules/metrics.rst.txt"
+       rel="nofollow">Show Source</a>
+  </div>
+<div class="this-page-menu">
+  <a href="/scipy/docs/scipy-docs/modules/metrics.rst.rst">Edit page</a>
+</div>
+
+        </div>
+      </div>
+          <div class="span9">
+            
+        <div class="bodywrapper">
+          <div class="body" id="spc-section-body">
+            
+  <div class="section" id="brainbox-metrics-functions-for-assesing-spike-unit-quality">
+<h1><cite>brainbox.metrics</cite>: Functions for assesing spike unit quality<a class="headerlink" href="#brainbox-metrics-functions-for-assesing-spike-unit-quality" title="Permalink to this headline">¶</a></h1>
+<p>The purpose of the <cite>metrics</cite> submodule is to provide utilities for quantifying how stable a single
+spiking unit, as identified by spike sorting, is over time. It also includes functions for
+assesing level of noise in the unit and drift.</p>
+<div class="section" id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Permalink to this headline">¶</a></h2>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="../api/brainbox.metrics.metrics.cum_drift.html#brainbox.metrics.metrics.cum_drift" title="brainbox.metrics.metrics.cum_drift"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cum_drift</span></code></a>(feat)</p></td>
+<td><p>Computes the cumulative drift (normalized by the total number of spikes) of a spike feature array.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../api/brainbox.metrics.metrics.feat_cutoff.html#brainbox.metrics.metrics.feat_cutoff" title="brainbox.metrics.metrics.feat_cutoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">feat_cutoff</span></code></a>(feat[, spks_per_bin, sigma, …])</p></td>
+<td><p>Computes the approximate fraction of spikes missing from a spike feature distribution for a given unit, assuming the distribution is symmetric.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../api/brainbox.metrics.metrics.firing_rate_coeff_var.html#brainbox.metrics.metrics.firing_rate_coeff_var" title="brainbox.metrics.metrics.firing_rate_coeff_var"><code class="xref py py-obj docutils literal notranslate"><span class="pre">firing_rate_coeff_var</span></code></a>(ts[, hist_win, …])</p></td>
+<td><p>Computes the coefficient of variation of the firing rate: the ratio of the standard deviation to the mean.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../api/brainbox.metrics.metrics.fp_est.html#brainbox.metrics.metrics.fp_est" title="brainbox.metrics.metrics.fp_est"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fp_est</span></code></a>(ts[, rp])</p></td>
+<td><p>An estimate of the fraction of false positive spikes in a unit (see Hill et al.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../api/brainbox.metrics.metrics.isi_viol.html#brainbox.metrics.metrics.isi_viol" title="brainbox.metrics.metrics.isi_viol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">isi_viol</span></code></a>(ts[, rp])</p></td>
+<td><p>Computes the fraction of isi violations for a unit.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../api/brainbox.metrics.metrics.max_drift.html#brainbox.metrics.metrics.max_drift" title="brainbox.metrics.metrics.max_drift"><code class="xref py py-obj docutils literal notranslate"><span class="pre">max_drift</span></code></a>(feat)</p></td>
+<td><p>Computes the maximum drift (max - min) of a spike feature array.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../api/brainbox.metrics.metrics.pres_ratio.html#brainbox.metrics.metrics.pres_ratio" title="brainbox.metrics.metrics.pres_ratio"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pres_ratio</span></code></a>(ts[, hist_win])</p></td>
+<td><p>Computes the presence ratio of spike counts: the number of bins where there is at least one spike, over the total number of bins, given a specified bin width.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../api/brainbox.metrics.metrics.ptp_over_noise.html#brainbox.metrics.metrics.ptp_over_noise" title="brainbox.metrics.metrics.ptp_over_noise"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ptp_over_noise</span></code></a>(ephys_file, ts, ch[, t, sr, …])</p></td>
+<td><p>For specified channels, for specified timestamps, computes the mean (peak-to-peak amplitudes / the MADs of the background noise).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../api/brainbox.metrics.metrics.unit_stability.html#brainbox.metrics.metrics.unit_stability" title="brainbox.metrics.metrics.unit_stability"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unit_stability</span></code></a>(units_b[, units, feat_names, …])</p></td>
+<td><p>Computes the probability that the empirical spike feature distribution(s), for specified feature(s), for all units, comes from a specific theoretical distribution, based on a specified statistical test.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../api/brainbox.metrics.metrics.wf_similarity.html#brainbox.metrics.metrics.wf_similarity" title="brainbox.metrics.metrics.wf_similarity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">wf_similarity</span></code></a>(wf1, wf2)</p></td>
+<td><p>Computes a unit normalized spatiotemporal similarity score between two sets of waveforms.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+
+          </div>
+        </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container container-navbar-bottom">
+      <div class="spc-navbar">
+        
+      </div>
+    </div>
+    <div class="container">
+    <div class="footer">
+    <div class="row-fluid">
+    <ul class="inline pull-left">
+      <li>
+        &copy; Copyright 2020, Berk Gercek, Jai Bhagat, Matthew Whiteway, Olivier Winter,International Brain Laboratory.
+      </li>
+      <li>
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 2.3.1.
+      </li>
+    </ul>
+    </div>
+    </div>
+    </div>
+  </body>
+</html>

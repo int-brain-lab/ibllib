@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8">
+    
+    <title>firing_rate &mdash; Brainbox 0.1.0 documentation</title>
+    
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-extend.css">
+    <link rel="stylesheet" href="../_static/scipy.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" >
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '0.1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="../_static/language_data.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../_static/js/copybutton.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" >
+    <link rel="search" title="Search" href="../search.html" >
+    <link rel="top" title="Brainbox 0.1.0 documentation" href="../index.html" >
+    <link rel="up" title="brainbox.plot: Plotting utilities for single units and populations" href="../modules/plot.html" >
+    <link rel="next" title="peri_event_time_histogram" href="brainbox.plot.plot.peri_event_time_histogram.html" >
+    <link rel="prev" title="feat_vars" href="brainbox.plot.plot.feat_vars.html" > 
+  </head>
+  <body>
+
+  <div class="container">
+    <div class="header">
+    </div>
+  </div>
+
+
+    <div class="container">
+      <div class="main">
+        
+	<div class="row-fluid">
+	  <div class="span12">
+	    <div class="spc-navbar">
+              
+    <ul class="nav nav-pills pull-left">
+        <li class="active"><a href="["></a></li>
+        <li class="active"><a href="]"></a></li>
+	
+        <li class="active"><a href="../index.html">Brainbox 0.1.0 documentation</a></li>
+	
+          <li class="active"><a href="../modules/plot.html" accesskey="U"><cite>brainbox.plot</cite>: Plotting utilities for single units and populations</a></li> 
+    </ul>
+              
+              
+    <ul class="nav nav-pills pull-right">
+      <li class="active">
+        <a href="../genindex.html" title="General Index"
+           accesskey="I">index</a>
+      </li>
+      <li class="active">
+        <a href="../py-modindex.html" title="Python Module Index"
+           >modules</a>
+      </li>
+      <li class="active">
+        <a href="brainbox.plot.plot.peri_event_time_histogram.html" title="peri_event_time_histogram"
+           accesskey="N">next</a>
+      </li>
+      <li class="active">
+        <a href="brainbox.plot.plot.feat_vars.html" title="feat_vars"
+           accesskey="P">previous</a>
+      </li>
+    </ul>
+              
+	    </div>
+	  </div>
+	</div>
+        
+
+	<div class="row-fluid">
+      <div class="spc-rightsidebar span3">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="brainbox.plot.plot.feat_vars.html"
+                        title="previous chapter">feat_vars</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="brainbox.plot.plot.peri_event_time_histogram.html"
+                        title="next chapter">peri_event_time_histogram</a></p>
+  <h3>This Page</h3>
+  <div>
+    <a href="../_sources/api/brainbox.plot.plot.firing_rate.rst.txt"
+       rel="nofollow">Show Source</a>
+  </div>
+<div class="this-page-menu">
+  <a href="/scipy/docs/scipy-docs/api/brainbox.plot.plot.firing_rate.rst.rst">Edit page</a>
+</div>
+
+        </div>
+      </div>
+          <div class="span9">
+            
+        <div class="bodywrapper">
+          <div class="body" id="spc-section-body">
+            
+  <div class="section" id="firing-rate">
+<h1>firing_rate<a class="headerlink" href="#firing-rate" title="Permalink to this headline">¶</a></h1>
+<dl class="function">
+<dt id="brainbox.plot.plot.firing_rate">
+<code class="sig-name descname">firing_rate</code><span class="sig-paren">(</span><em class="sig-param">ts</em>, <em class="sig-param">hist_win=0.01</em>, <em class="sig-param">fr_win=0.5</em>, <em class="sig-param">n_bins=10</em>, <em class="sig-param">show_fr_cv=True</em>, <em class="sig-param">ax=None</em><span class="sig-paren">)</span><a class="headerlink" href="#brainbox.plot.plot.firing_rate" title="Permalink to this definition">¶</a></dt>
+<dd><p>Plots the instantaneous firing rate of for given spike timestamps over time, and optionally
+overlays the value of the coefficient of variation of the firing rate for a specified number
+of bins.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ts</strong> (<em>ndarray</em>) – The spike timestamps from which to compute the firing rate.</p></li>
+<li><p><strong>hist_win</strong> (<em>float</em><em> (</em><em>optional</em><em>)</em>) – The time window (in s) to use for computing spike counts.</p></li>
+<li><p><strong>fr_win</strong> (<em>float</em><em> (</em><em>optional</em><em>)</em>) – The time window (in s) to use as a moving slider to compute the instantaneous firing rate.</p></li>
+<li><p><strong>n_bins</strong> (<em>int</em><em> (</em><em>optional</em><em>)</em>) – The number of bins in which to compute coefficients of variation of the firing rate.</p></li>
+<li><p><strong>show_fr_cv</strong> (<em>bool</em><em> (</em><em>optional</em><em>)</em>) – A flag for whether or not to compute and show the coefficients of variation of the firing
+rate for <cite>n_bins</cite>.</p></li>
+<li><p><strong>ax</strong> (<em>axessubplot</em><em> (</em><em>optional</em><em>)</em>) – The axis handle to plot the histogram on. (if <cite>None</cite>, a new figure and axis is created)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><strong>fr</strong> (<em>ndarray</em>) – The instantaneous firing rate over time (in hz).</p></li>
+<li><p><strong>cv</strong> (<em>float</em>) – The mean coefficient of variation of the firing rate of the <cite>n_bins</cite> number of coefficients
+computed. Can only be returned if <cite>show_fr_cv</cite> is True.</p></li>
+<li><p><strong>cvs</strong> (<em>ndarray</em>) – The coefficients of variation of the firing for each bin of <cite>n_bins</cite>. Can only be returned
+if <cite>show_fr_cv</cite> is True.</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><code class="xref py py-func docutils literal notranslate"><span class="pre">metrics.firing_rate_coeff_var()</span></code>, <code class="xref py py-func docutils literal notranslate"><span class="pre">singecell.firing_rate()</span></code></p>
+</div>
+<p class="rubric">Examples</p>
+<p>1) Plot the firing rate for unit 1 from the time of its first to last spike, showing the cv
+of the firing rate for 10 evenly spaced bins.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">ts</span> <span class="o">=</span> <span class="n">units_b</span><span class="p">[</span><span class="s1">&#39;times&#39;</span><span class="p">][</span><span class="s1">&#39;1&#39;</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">fr</span><span class="p">,</span> <span class="n">cv</span><span class="p">,</span> <span class="n">cvs</span> <span class="o">=</span> <span class="n">bb</span><span class="o">.</span><span class="n">plot</span><span class="o">.</span><span class="n">firing_rate</span><span class="p">(</span><span class="n">ts</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</div>
+
+
+          </div>
+        </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container container-navbar-bottom">
+      <div class="spc-navbar">
+        
+      </div>
+    </div>
+    <div class="container">
+    <div class="footer">
+    <div class="row-fluid">
+    <ul class="inline pull-left">
+      <li>
+        &copy; Copyright 2020, Berk Gercek, Jai Bhagat, Matthew Whiteway, Olivier Winter,International Brain Laboratory.
+      </li>
+      <li>
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 2.3.1.
+      </li>
+    </ul>
+    </div>
+    </div>
+    </div>
+  </body>
+</html>

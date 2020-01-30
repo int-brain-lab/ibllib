@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8">
+    
+    <title>bin_spikes &mdash; Brainbox 0.1.0 documentation</title>
+    
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-extend.css">
+    <link rel="stylesheet" href="../_static/scipy.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" >
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '0.1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="../_static/language_data.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../_static/js/copybutton.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" >
+    <link rel="search" title="Search" href="../search.html" >
+    <link rel="top" title="Brainbox 0.1.0 documentation" href="../index.html" >
+    <link rel="up" title="brainbox.processing: Functions for transforming data" href="../modules/processing.html" >
+    <link rel="next" title="bincount2D" href="brainbox.processing.processing.bincount2D.html" >
+    <link rel="prev" title="brainbox.processing: Functions for transforming data" href="../modules/processing.html" > 
+  </head>
+  <body>
+
+  <div class="container">
+    <div class="header">
+    </div>
+  </div>
+
+
+    <div class="container">
+      <div class="main">
+        
+	<div class="row-fluid">
+	  <div class="span12">
+	    <div class="spc-navbar">
+              
+    <ul class="nav nav-pills pull-left">
+        <li class="active"><a href="["></a></li>
+        <li class="active"><a href="]"></a></li>
+	
+        <li class="active"><a href="../index.html">Brainbox 0.1.0 documentation</a></li>
+	
+          <li class="active"><a href="../modules/processing.html" accesskey="U"><cite>brainbox.processing</cite>: Functions for transforming data</a></li> 
+    </ul>
+              
+              
+    <ul class="nav nav-pills pull-right">
+      <li class="active">
+        <a href="../genindex.html" title="General Index"
+           accesskey="I">index</a>
+      </li>
+      <li class="active">
+        <a href="../py-modindex.html" title="Python Module Index"
+           >modules</a>
+      </li>
+      <li class="active">
+        <a href="brainbox.processing.processing.bincount2D.html" title="bincount2D"
+           accesskey="N">next</a>
+      </li>
+      <li class="active">
+        <a href="../modules/processing.html" title="brainbox.processing: Functions for transforming data"
+           accesskey="P">previous</a>
+      </li>
+    </ul>
+              
+	    </div>
+	  </div>
+	</div>
+        
+
+	<div class="row-fluid">
+      <div class="spc-rightsidebar span3">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="../modules/processing.html"
+                        title="previous chapter"><cite>brainbox.processing</cite>: Functions for transforming data</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="brainbox.processing.processing.bincount2D.html"
+                        title="next chapter">bincount2D</a></p>
+  <h3>This Page</h3>
+  <div>
+    <a href="../_sources/api/brainbox.processing.processing.bin_spikes.rst.txt"
+       rel="nofollow">Show Source</a>
+  </div>
+<div class="this-page-menu">
+  <a href="/scipy/docs/scipy-docs/api/brainbox.processing.processing.bin_spikes.rst.rst">Edit page</a>
+</div>
+
+        </div>
+      </div>
+          <div class="span9">
+            
+        <div class="bodywrapper">
+          <div class="body" id="spc-section-body">
+            
+  <div class="section" id="bin-spikes">
+<h1>bin_spikes<a class="headerlink" href="#bin-spikes" title="Permalink to this headline">¶</a></h1>
+<dl class="function">
+<dt id="brainbox.processing.processing.bin_spikes">
+<code class="sig-name descname">bin_spikes</code><span class="sig-paren">(</span><em class="sig-param">spikes</em>, <em class="sig-param">binsize</em>, <em class="sig-param">interval_indices=False</em><span class="sig-paren">)</span><a class="headerlink" href="#brainbox.processing.processing.bin_spikes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wrapper for bincount2D which is intended to take in a TimeSeries object of spike times
+and cluster identities and spit out spike counts in bins of a specified width binsize, also in
+another TimeSeries object. Can either return a TS object with each row labeled with the
+corresponding interval or the value of the left edge of the bin.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>spikes</strong> (<em>TimeSeries object with 'clusters' column and timestamps</em>) – Spike times and cluster identities of sorted spikes</p></li>
+<li><p><strong>binsize</strong> (<em>float</em>) – Width of the non-overlapping bins in which to bin spikes</p></li>
+<li><p><strong>interval_indices</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to use intervals as the time stamps for binned spikes, rather
+than the left edge value of the bins, defaults to False</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Object with 2D array of shape T x N, for T timesteps and N clusters, and the
+associated time stamps.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>TimeSeries object</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+
+
+          </div>
+        </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container container-navbar-bottom">
+      <div class="spc-navbar">
+        
+      </div>
+    </div>
+    <div class="container">
+    <div class="footer">
+    <div class="row-fluid">
+    <ul class="inline pull-left">
+      <li>
+        &copy; Copyright 2020, Berk Gercek, Jai Bhagat, Matthew Whiteway, Olivier Winter,International Brain Laboratory.
+      </li>
+      <li>
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 2.3.1.
+      </li>
+    </ul>
+    </div>
+    </div>
+    </div>
+  </body>
+</html>

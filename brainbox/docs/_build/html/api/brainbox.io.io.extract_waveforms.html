@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8">
+    
+    <title>extract_waveforms &mdash; Brainbox 0.1.0 documentation</title>
+    
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-extend.css">
+    <link rel="stylesheet" href="../_static/scipy.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" >
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '0.1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="../_static/language_data.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../_static/js/copybutton.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" >
+    <link rel="search" title="Search" href="../search.html" >
+    <link rel="top" title="Brainbox 0.1.0 documentation" href="../index.html" >
+    <link rel="up" title="brainbox.io: Functions for data I/O through Brainbox" href="../modules/io.html" >
+    <link rel="next" title="brainbox.metrics: Functions for assesing spike unit quality" href="../modules/metrics.html" >
+    <link rel="prev" title="brainbox.io: Functions for data I/O through Brainbox" href="../modules/io.html" > 
+  </head>
+  <body>
+
+  <div class="container">
+    <div class="header">
+    </div>
+  </div>
+
+
+    <div class="container">
+      <div class="main">
+        
+	<div class="row-fluid">
+	  <div class="span12">
+	    <div class="spc-navbar">
+              
+    <ul class="nav nav-pills pull-left">
+        <li class="active"><a href="["></a></li>
+        <li class="active"><a href="]"></a></li>
+	
+        <li class="active"><a href="../index.html">Brainbox 0.1.0 documentation</a></li>
+	
+          <li class="active"><a href="../modules/io.html" accesskey="U"><cite>brainbox.io</cite>: Functions for data I/O through Brainbox</a></li> 
+    </ul>
+              
+              
+    <ul class="nav nav-pills pull-right">
+      <li class="active">
+        <a href="../genindex.html" title="General Index"
+           accesskey="I">index</a>
+      </li>
+      <li class="active">
+        <a href="../py-modindex.html" title="Python Module Index"
+           >modules</a>
+      </li>
+      <li class="active">
+        <a href="../modules/metrics.html" title="brainbox.metrics: Functions for assesing spike unit quality"
+           accesskey="N">next</a>
+      </li>
+      <li class="active">
+        <a href="../modules/io.html" title="brainbox.io: Functions for data I/O through Brainbox"
+           accesskey="P">previous</a>
+      </li>
+    </ul>
+              
+	    </div>
+	  </div>
+	</div>
+        
+
+	<div class="row-fluid">
+      <div class="spc-rightsidebar span3">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="../modules/io.html"
+                        title="previous chapter"><cite>brainbox.io</cite>: Functions for data I/O through Brainbox</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="../modules/metrics.html"
+                        title="next chapter"><cite>brainbox.metrics</cite>: Functions for assesing spike unit quality</a></p>
+  <h3>This Page</h3>
+  <div>
+    <a href="../_sources/api/brainbox.io.io.extract_waveforms.rst.txt"
+       rel="nofollow">Show Source</a>
+  </div>
+<div class="this-page-menu">
+  <a href="/scipy/docs/scipy-docs/api/brainbox.io.io.extract_waveforms.rst.rst">Edit page</a>
+</div>
+
+        </div>
+      </div>
+          <div class="span9">
+            
+        <div class="bodywrapper">
+          <div class="body" id="spc-section-body">
+            
+  <div class="section" id="extract-waveforms">
+<h1>extract_waveforms<a class="headerlink" href="#extract-waveforms" title="Permalink to this headline">¶</a></h1>
+<dl class="function">
+<dt id="brainbox.io.io.extract_waveforms">
+<code class="sig-name descname">extract_waveforms</code><span class="sig-paren">(</span><em class="sig-param">ephys_file</em>, <em class="sig-param">ts</em>, <em class="sig-param">ch</em>, <em class="sig-param">t=2.0</em>, <em class="sig-param">sr=30000</em>, <em class="sig-param">n_ch_probe=385</em>, <em class="sig-param">dtype='int16'</em>, <em class="sig-param">offset=0</em>, <em class="sig-param">car=True</em><span class="sig-paren">)</span><a class="headerlink" href="#brainbox.io.io.extract_waveforms" title="Permalink to this definition">¶</a></dt>
+<dd><p>Extracts spike waveforms from binary ephys data file, after (optionally)
+common-average-referencing (CAR) spatial noise.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ephys_file</strong> (<em>string</em>) – The file path to the binary ephys data.</p></li>
+<li><p><strong>ts</strong> (<em>ndarray_like</em>) – The timestamps (in s) of the spikes.</p></li>
+<li><p><strong>ch</strong> (<em>ndarray_like</em>) – The channels on which to extract the waveforms.</p></li>
+<li><p><strong>t</strong> (<em>numeric</em><em> (</em><em>optional</em><em>)</em>) – The time (in ms) of each returned waveform.</p></li>
+<li><p><strong>sr</strong> (<em>int</em><em> (</em><em>optional</em><em>)</em>) – The sampling rate (in hz) that the ephys data was acquired at.</p></li>
+<li><p><strong>n_ch_probe</strong> (<em>int</em><em> (</em><em>optional</em><em>)</em>) – The number of channels of the recording.</p></li>
+<li><p><strong>dtype</strong> (<em>str</em><em> (</em><em>optional</em><em>)</em>) – The datatype represented by the bytes in <cite>ephys_file</cite>.</p></li>
+<li><p><strong>offset</strong> (<em>int</em><em> (</em><em>optional</em><em>)</em>) – The offset (in bytes) from the start of <cite>ephys_file</cite>.</p></li>
+<li><p><strong>car</strong> (<em>bool</em><em> (</em><em>optional</em><em>)</em>) – A flag to perform CAR before extracting waveforms.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><strong>waveforms</strong> – An array of shape (#spikes, #samples, #channels) containing the waveforms.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>ndarray</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<ol class="arabic">
+<li><dl>
+<dt>Extract all the waveforms for unit1 with and without CAR.</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">brainbox</span> <span class="k">as</span> <span class="nn">bb</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">alf.io</span> <span class="k">as</span> <span class="nn">aio</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">ibllib.ephys.spikes</span> <span class="k">as</span> <span class="nn">e_spks</span>
+<span class="go">(*Note, if there is no &#39;alf&#39; directory, make &#39;alf&#39; directory from &#39;ks2&#39; output directory):</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">e_spks</span><span class="o">.</span><span class="n">ks2_to_alf</span><span class="p">(</span><span class="n">path_to_ks_out</span><span class="p">,</span> <span class="n">path_to_alf_out</span><span class="p">)</span>
+<span class="go"># Get a clusters bunch and a units bunch from a spikes bunch from an alf directory.</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">clstrs_b</span> <span class="o">=</span> <span class="n">aio</span><span class="o">.</span><span class="n">load_object</span><span class="p">(</span><span class="n">path_to_alf_out</span><span class="p">,</span> <span class="s1">&#39;clusters&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">spks_b</span> <span class="o">=</span> <span class="n">aio</span><span class="o">.</span><span class="n">load_object</span><span class="p">(</span><span class="n">path_to_alf_out</span><span class="p">,</span> <span class="s1">&#39;spikes&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">units_b</span> <span class="o">=</span> <span class="n">bb</span><span class="o">.</span><span class="n">processing</span><span class="o">.</span><span class="n">get_units_bunch</span><span class="p">(</span><span class="n">spks</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;times&#39;</span><span class="p">])</span>
+<span class="go"># Get the timestamps and 20 channels around the max amp channel for unit1, and extract the</span>
+<span class="go"># two sets of waveforms.</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ts</span> <span class="o">=</span> <span class="n">units_b</span><span class="p">[</span><span class="s1">&#39;times&#39;</span><span class="p">][</span><span class="s1">&#39;1&#39;</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">max_ch</span> <span class="o">=</span> <span class="n">max_ch</span> <span class="o">=</span> <span class="n">clstrs_b</span><span class="p">[</span><span class="s1">&#39;channels&#39;</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">if</span> <span class="n">max_ch</span> <span class="o">&lt;</span> <span class="mi">10</span><span class="p">:</span>  <span class="c1"># take only channels greater than `max_ch`.</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">ch</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">max_ch</span><span class="p">,</span> <span class="n">max_ch</span> <span class="o">+</span> <span class="mi">20</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">elif</span> <span class="p">(</span><span class="n">max_ch</span> <span class="o">+</span> <span class="mi">10</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">385</span><span class="p">:</span>  <span class="c1"># take only channels less than `max_ch`.</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">ch</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">max_ch</span> <span class="o">-</span> <span class="mi">20</span><span class="p">,</span> <span class="n">max_ch</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">else</span><span class="p">:</span>  <span class="c1"># take `n_c_ch` around `max_ch`.</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">ch</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">max_ch</span> <span class="o">-</span> <span class="mi">10</span><span class="p">,</span> <span class="n">max_ch</span> <span class="o">+</span> <span class="mi">10</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">wf</span> <span class="o">=</span> <span class="n">bb</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">extract_waveforms</span><span class="p">(</span><span class="n">path_to_ephys_file</span><span class="p">,</span> <span class="n">ts</span><span class="p">,</span> <span class="n">ch</span><span class="p">,</span> <span class="n">car</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">wf_car</span> <span class="o">=</span> <span class="n">bb</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">extract_waveforms</span><span class="p">(</span><span class="n">path_to_ephys_file</span><span class="p">,</span> <span class="n">ts</span><span class="p">,</span> <span class="n">ch</span><span class="p">,</span> <span class="n">car</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd>
+</dl>
+</li>
+</ol>
+</dd></dl>
+
+</div>
+
+
+          </div>
+        </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container container-navbar-bottom">
+      <div class="spc-navbar">
+        
+      </div>
+    </div>
+    <div class="container">
+    <div class="footer">
+    <div class="row-fluid">
+    <ul class="inline pull-left">
+      <li>
+        &copy; Copyright 2020, Berk Gercek, Jai Bhagat, Matthew Whiteway, Olivier Winter,International Brain Laboratory.
+      </li>
+      <li>
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 2.3.1.
+      </li>
+    </ul>
+    </div>
+    </div>
+    </div>
+  </body>
+</html>

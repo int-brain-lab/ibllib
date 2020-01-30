@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8">
+    
+    <title>brainbox.singlecell: Tools for examining single cell activity &mdash; Brainbox 0.1.0 documentation</title>
+    
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-extend.css">
+    <link rel="stylesheet" href="../_static/scipy.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" >
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '0.1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="../_static/language_data.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../_static/js/copybutton.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" >
+    <link rel="search" title="Search" href="../search.html" >
+    <link rel="top" title="Brainbox 0.1.0 documentation" href="../index.html" >
+    <link rel="next" title="acorr" href="../api/brainbox.singlecell.singlecell.acorr.html" >
+    <link rel="prev" title="brainbox.simulation: Tools for simulating data" href="simulation.html" > 
+  </head>
+  <body>
+
+  <div class="container">
+    <div class="header">
+    </div>
+  </div>
+
+
+    <div class="container">
+      <div class="main">
+        
+	<div class="row-fluid">
+	  <div class="span12">
+	    <div class="spc-navbar">
+              
+    <ul class="nav nav-pills pull-left">
+        <li class="active"><a href="["></a></li>
+        <li class="active"><a href="]"></a></li>
+	
+        <li class="active"><a href="../index.html">Brainbox 0.1.0 documentation</a></li>
+	 
+    </ul>
+              
+              
+    <ul class="nav nav-pills pull-right">
+      <li class="active">
+        <a href="../genindex.html" title="General Index"
+           accesskey="I">index</a>
+      </li>
+      <li class="active">
+        <a href="../py-modindex.html" title="Python Module Index"
+           >modules</a>
+      </li>
+      <li class="active">
+        <a href="../api/brainbox.singlecell.singlecell.acorr.html" title="acorr"
+           accesskey="N">next</a>
+      </li>
+      <li class="active">
+        <a href="simulation.html" title="brainbox.simulation: Tools for simulating data"
+           accesskey="P">previous</a>
+      </li>
+    </ul>
+              
+	    </div>
+	  </div>
+	</div>
+        
+
+	<div class="row-fluid">
+      <div class="spc-rightsidebar span3">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../index.html">Table of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#"><cite>brainbox.singlecell</cite>: Tools for examining single cell activity</a><ul>
+<li><a class="reference internal" href="#functions">Functions</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="simulation.html"
+                        title="previous chapter"><cite>brainbox.simulation</cite>: Tools for simulating data</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="../api/brainbox.singlecell.singlecell.acorr.html"
+                        title="next chapter">acorr</a></p>
+  <h3>This Page</h3>
+  <div>
+    <a href="../_sources/modules/singlecell.rst.txt"
+       rel="nofollow">Show Source</a>
+  </div>
+<div class="this-page-menu">
+  <a href="/scipy/docs/scipy-docs/modules/singlecell.rst.rst">Edit page</a>
+</div>
+
+        </div>
+      </div>
+          <div class="span9">
+            
+        <div class="bodywrapper">
+          <div class="body" id="spc-section-body">
+            
+  <div class="section" id="brainbox-singlecell-tools-for-examining-single-cell-activity">
+<h1><cite>brainbox.singlecell</cite>: Tools for examining single cell activity<a class="headerlink" href="#brainbox-singlecell-tools-for-examining-single-cell-activity" title="Permalink to this headline">¶</a></h1>
+<p>The <cite>singlecell</cite> module is a toolkit for examining the activity of single units within a recording.
+At the moment we are limited to simple analyses such as autocorrelations, but we aim to expand this
+feature set in the future.</p>
+<div class="section" id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Permalink to this headline">¶</a></h2>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="../api/brainbox.singlecell.singlecell.acorr.html#brainbox.singlecell.singlecell.acorr" title="brainbox.singlecell.singlecell.acorr"><code class="xref py py-obj docutils literal notranslate"><span class="pre">acorr</span></code></a>(spike_times[, bin_size, window_size])</p></td>
+<td><p>Compute the auto-correlogram of a neuron.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../api/brainbox.singlecell.singlecell.calculate_peths.html#brainbox.singlecell.singlecell.calculate_peths" title="brainbox.singlecell.singlecell.calculate_peths"><code class="xref py py-obj docutils literal notranslate"><span class="pre">calculate_peths</span></code></a>(spike_times, spike_clusters, …)</p></td>
+<td><p>Calcluate peri-event time histograms; return means and standard deviations for each time point across specified clusters</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">convolve</span></code>(in1, in2[, mode, method])</p></td>
+<td><p>Convolve two N-dimensional arrays.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../api/brainbox.singlecell.singlecell.firing_rate.html#brainbox.singlecell.singlecell.firing_rate" title="brainbox.singlecell.singlecell.firing_rate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">firing_rate</span></code></a>(ts[, hist_win, fr_win])</p></td>
+<td><p>Computes the instantaneous firing rate of a unit over time by computing a histogram of spike counts over a specified window of time, and summing this histogram over a sliding window of specified time over a specified period of total time.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">gaussian</span></code>(*args, **kwargs)</p></td>
+<td><p>Return a Gaussian window.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">xcorr</span></code>(spike_times, spike_clusters[, …])</p></td>
+<td><p>Compute all pairwise cross-correlograms among the clusters appearing in <cite>spike_clusters</cite>.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+
+          </div>
+        </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container container-navbar-bottom">
+      <div class="spc-navbar">
+        
+      </div>
+    </div>
+    <div class="container">
+    <div class="footer">
+    <div class="row-fluid">
+    <ul class="inline pull-left">
+      <li>
+        &copy; Copyright 2020, Berk Gercek, Jai Bhagat, Matthew Whiteway, Olivier Winter,International Brain Laboratory.
+      </li>
+      <li>
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 2.3.1.
+      </li>
+    </ul>
+    </div>
+    </div>
+    </div>
+  </body>
+</html>

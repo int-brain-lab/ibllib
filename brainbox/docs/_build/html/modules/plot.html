@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8">
+    
+    <title>brainbox.plot: Plotting utilities for single units and populations &mdash; Brainbox 0.1.0 documentation</title>
+    
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-extend.css">
+    <link rel="stylesheet" href="../_static/scipy.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" >
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '0.1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="../_static/language_data.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../_static/js/copybutton.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" >
+    <link rel="search" title="Search" href="../search.html" >
+    <link rel="top" title="Brainbox 0.1.0 documentation" href="../index.html" >
+    <link rel="next" title="amp_heatmap" href="../api/brainbox.plot.plot.amp_heatmap.html" >
+    <link rel="prev" title="wf_similarity" href="../api/brainbox.metrics.metrics.wf_similarity.html" > 
+  </head>
+  <body>
+
+  <div class="container">
+    <div class="header">
+    </div>
+  </div>
+
+
+    <div class="container">
+      <div class="main">
+        
+	<div class="row-fluid">
+	  <div class="span12">
+	    <div class="spc-navbar">
+              
+    <ul class="nav nav-pills pull-left">
+        <li class="active"><a href="["></a></li>
+        <li class="active"><a href="]"></a></li>
+	
+        <li class="active"><a href="../index.html">Brainbox 0.1.0 documentation</a></li>
+	 
+    </ul>
+              
+              
+    <ul class="nav nav-pills pull-right">
+      <li class="active">
+        <a href="../genindex.html" title="General Index"
+           accesskey="I">index</a>
+      </li>
+      <li class="active">
+        <a href="../py-modindex.html" title="Python Module Index"
+           >modules</a>
+      </li>
+      <li class="active">
+        <a href="../api/brainbox.plot.plot.amp_heatmap.html" title="amp_heatmap"
+           accesskey="N">next</a>
+      </li>
+      <li class="active">
+        <a href="../api/brainbox.metrics.metrics.wf_similarity.html" title="wf_similarity"
+           accesskey="P">previous</a>
+      </li>
+    </ul>
+              
+	    </div>
+	  </div>
+	</div>
+        
+
+	<div class="row-fluid">
+      <div class="spc-rightsidebar span3">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../index.html">Table of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#"><cite>brainbox.plot</cite>: Plotting utilities for single units and populations</a><ul>
+<li><a class="reference internal" href="#functions">Functions</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="../api/brainbox.metrics.metrics.wf_similarity.html"
+                        title="previous chapter">wf_similarity</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="../api/brainbox.plot.plot.amp_heatmap.html"
+                        title="next chapter">amp_heatmap</a></p>
+  <h3>This Page</h3>
+  <div>
+    <a href="../_sources/modules/plot.rst.txt"
+       rel="nofollow">Show Source</a>
+  </div>
+<div class="this-page-menu">
+  <a href="/scipy/docs/scipy-docs/modules/plot.rst.rst">Edit page</a>
+</div>
+
+        </div>
+      </div>
+          <div class="span9">
+            
+        <div class="bodywrapper">
+          <div class="body" id="spc-section-body">
+            
+  <div class="section" id="brainbox-plot-plotting-utilities-for-single-units-and-populations">
+<h1><cite>brainbox.plot</cite>: Plotting utilities for single units and populations<a class="headerlink" href="#brainbox-plot-plotting-utilities-for-single-units-and-populations" title="Permalink to this headline">¶</a></h1>
+<p>The <cite>plot</cite> module is a catch-all for all types of plots that are useful in characterizing single
+units or populations of neurons.</p>
+<div class="section" id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Permalink to this headline">¶</a></h2>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="../api/brainbox.plot.plot.amp_heatmap.html#brainbox.plot.plot.amp_heatmap" title="brainbox.plot.plot.amp_heatmap"><code class="xref py py-obj docutils literal notranslate"><span class="pre">amp_heatmap</span></code></a>(ephys_file, ts, ch[, sr, …])</p></td>
+<td><p>Plots a heatmap of the normalized voltage values over time and space for given timestamps and channels, after (optionally) common-average-referencing.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../api/brainbox.plot.plot.driftmap.html#brainbox.plot.plot.driftmap" title="brainbox.plot.plot.driftmap"><code class="xref py py-obj docutils literal notranslate"><span class="pre">driftmap</span></code></a>(ts, feat[, ax])</p></td>
+<td><p>Plots the driftmap of a spike feature array over time.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../api/brainbox.plot.plot.feat_cutoff.html#brainbox.plot.plot.feat_cutoff" title="brainbox.plot.plot.feat_cutoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">feat_cutoff</span></code></a>(feat, feat_name[, spks_per_bin, …])</p></td>
+<td><p>Plots the pdf of an estimated symmetric spike feature distribution, with a vertical cutoff line that indicates the approximate fraction of spikes missing from the distribution, assuming the true distribution is symmetric.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../api/brainbox.plot.plot.feat_vars.html#brainbox.plot.plot.feat_vars" title="brainbox.plot.plot.feat_vars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">feat_vars</span></code></a>(units_b[, units, feat_name, dist, …])</p></td>
+<td><p>Plots the coefficients of variation of a particular spike feature for all units as a bar plot, where each bar is color-coded corresponding to the depth of the max amplitude channel of the respective unit.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../api/brainbox.plot.plot.firing_rate.html#brainbox.plot.plot.firing_rate" title="brainbox.plot.plot.firing_rate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">firing_rate</span></code></a>(ts[, hist_win, fr_win, n_bins, …])</p></td>
+<td><p>Plots the instantaneous firing rate of for given spike timestamps over time, and optionally overlays the value of the coefficient of variation of the firing rate for a specified number of bins.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../api/brainbox.plot.plot.peri_event_time_histogram.html#brainbox.plot.plot.peri_event_time_histogram" title="brainbox.plot.plot.peri_event_time_histogram"><code class="xref py py-obj docutils literal notranslate"><span class="pre">peri_event_time_histogram</span></code></a>(spike_times, …)</p></td>
+<td><p>Plot peri-event time histograms, with the meaning firing rate of units centered on a given series of events.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../api/brainbox.plot.plot.pres_ratio.html#brainbox.plot.plot.pres_ratio" title="brainbox.plot.plot.pres_ratio"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pres_ratio</span></code></a>(ts[, hist_win, ax])</p></td>
+<td><p>Plots the presence ratio of spike counts: the number of bins where there is at least one spike, over the total number of bins, given a specified bin width.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">warn</span></code></p></td>
+<td><p>Issue a warning, or maybe ignore it or raise an exception.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../api/brainbox.plot.plot.wf_comp.html#brainbox.plot.plot.wf_comp" title="brainbox.plot.plot.wf_comp"><code class="xref py py-obj docutils literal notranslate"><span class="pre">wf_comp</span></code></a>(ephys_file, ts1, ts2, ch[, sr, …])</p></td>
+<td><p>Plots two different sets of waveforms across specified channels after (optionally) common-average-referencing.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+
+          </div>
+        </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container container-navbar-bottom">
+      <div class="spc-navbar">
+        
+      </div>
+    </div>
+    <div class="container">
+    <div class="footer">
+    <div class="row-fluid">
+    <ul class="inline pull-left">
+      <li>
+        &copy; Copyright 2020, Berk Gercek, Jai Bhagat, Matthew Whiteway, Olivier Winter,International Brain Laboratory.
+      </li>
+      <li>
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 2.3.1.
+      </li>
+    </ul>
+    </div>
+    </div>
+    </div>
+  </body>
+</html>

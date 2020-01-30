@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8">
+    
+    <title>peri_event_time_histogram &mdash; Brainbox 0.1.0 documentation</title>
+    
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-extend.css">
+    <link rel="stylesheet" href="../_static/scipy.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" >
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '0.1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="../_static/language_data.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../_static/js/copybutton.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" >
+    <link rel="search" title="Search" href="../search.html" >
+    <link rel="top" title="Brainbox 0.1.0 documentation" href="../index.html" >
+    <link rel="up" title="brainbox.plot: Plotting utilities for single units and populations" href="../modules/plot.html" >
+    <link rel="next" title="pres_ratio" href="brainbox.plot.plot.pres_ratio.html" >
+    <link rel="prev" title="firing_rate" href="brainbox.plot.plot.firing_rate.html" > 
+  </head>
+  <body>
+
+  <div class="container">
+    <div class="header">
+    </div>
+  </div>
+
+
+    <div class="container">
+      <div class="main">
+        
+	<div class="row-fluid">
+	  <div class="span12">
+	    <div class="spc-navbar">
+              
+    <ul class="nav nav-pills pull-left">
+        <li class="active"><a href="["></a></li>
+        <li class="active"><a href="]"></a></li>
+	
+        <li class="active"><a href="../index.html">Brainbox 0.1.0 documentation</a></li>
+	
+          <li class="active"><a href="../modules/plot.html" accesskey="U"><cite>brainbox.plot</cite>: Plotting utilities for single units and populations</a></li> 
+    </ul>
+              
+              
+    <ul class="nav nav-pills pull-right">
+      <li class="active">
+        <a href="../genindex.html" title="General Index"
+           accesskey="I">index</a>
+      </li>
+      <li class="active">
+        <a href="../py-modindex.html" title="Python Module Index"
+           >modules</a>
+      </li>
+      <li class="active">
+        <a href="brainbox.plot.plot.pres_ratio.html" title="pres_ratio"
+           accesskey="N">next</a>
+      </li>
+      <li class="active">
+        <a href="brainbox.plot.plot.firing_rate.html" title="firing_rate"
+           accesskey="P">previous</a>
+      </li>
+    </ul>
+              
+	    </div>
+	  </div>
+	</div>
+        
+
+	<div class="row-fluid">
+      <div class="spc-rightsidebar span3">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="brainbox.plot.plot.firing_rate.html"
+                        title="previous chapter">firing_rate</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="brainbox.plot.plot.pres_ratio.html"
+                        title="next chapter">pres_ratio</a></p>
+  <h3>This Page</h3>
+  <div>
+    <a href="../_sources/api/brainbox.plot.plot.peri_event_time_histogram.rst.txt"
+       rel="nofollow">Show Source</a>
+  </div>
+<div class="this-page-menu">
+  <a href="/scipy/docs/scipy-docs/api/brainbox.plot.plot.peri_event_time_histogram.rst.rst">Edit page</a>
+</div>
+
+        </div>
+      </div>
+          <div class="span9">
+            
+        <div class="bodywrapper">
+          <div class="body" id="spc-section-body">
+            
+  <div class="section" id="peri-event-time-histogram">
+<h1>peri_event_time_histogram<a class="headerlink" href="#peri-event-time-histogram" title="Permalink to this headline">¶</a></h1>
+<dl class="function">
+<dt id="brainbox.plot.plot.peri_event_time_histogram">
+<code class="sig-name descname">peri_event_time_histogram</code><span class="sig-paren">(</span><em class="sig-param">spike_times</em>, <em class="sig-param">spike_clusters</em>, <em class="sig-param">events</em>, <em class="sig-param">cluster_id</em>, <em class="sig-param">t_before=0.2</em>, <em class="sig-param">t_after=0.5</em>, <em class="sig-param">bin_size=0.025</em>, <em class="sig-param">smoothing=0.025</em>, <em class="sig-param">as_rate=True</em>, <em class="sig-param">include_raster=False</em>, <em class="sig-param">n_rasters=None</em>, <em class="sig-param">error_bars='std'</em>, <em class="sig-param">ax=None</em>, <em class="sig-param">pethline_kwargs={'color': 'blue'</em>, <em class="sig-param">'lw': 2}</em>, <em class="sig-param">errbar_kwargs={'alpha': 0.5</em>, <em class="sig-param">'color': 'blue'}</em>, <em class="sig-param">eventline_kwargs={'alpha': 0.5</em>, <em class="sig-param">'color': 'black'}</em>, <em class="sig-param">raster_kwargs={'color': 'black'</em>, <em class="sig-param">'lw': 0.5}</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#brainbox.plot.plot.peri_event_time_histogram" title="Permalink to this definition">¶</a></dt>
+<dd><p>Plot peri-event time histograms, with the meaning firing rate of units centered on a given
+series of events. Can optionally add a raster underneath the PETH plot of individual spike
+trains about the events.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>{array-like} -- Spike times</strong> (<em>spike_times</em>) – </p></li>
+<li><p><strong>{array-like} -- Cluster identities for each element of spikes</strong> (<em>spike_clusters</em>) – </p></li>
+<li><p><strong>{array-like} -- Times to align the histogram</strong> (<em>events</em>) – </p></li>
+<li><p><strong>{int} -- Identity of the cluster for which to plot a PETH</strong> (<em>cluster_id</em>) – </p></li>
+</ul>
+</dd>
+<dt class="field-even">Keyword Arguments</dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>{float} -- Time before event to plot</strong><strong> (</strong><strong>default</strong> (<em>t_before</em>) – {0.2})</p></li>
+<li><p><strong>{float} -- Time after event to plot</strong><strong> (</strong><strong>default</strong> (<em>t_after</em>) – {0.5})</p></li>
+<li><p><strong>{float} -- Width of bin for histograms</strong><strong> (</strong><strong>default</strong> (<em>bin_size</em>) – {0.025})</p></li>
+<li><p><strong>{float} -- sigma of gaussian smoothing to use in histograms.</strong><strong> (</strong><strong>default</strong> (<em>smoothing</em>) – {0.025})</p></li>
+<li><p><strong>{bool} -- Whether to use spike counts</strong><strong> or </strong><strong>rates in the plot</strong><strong> (</strong><strong>default</strong> (<em>as_rate</em>) – {False})</p></li>
+<li><p><strong>{bool} -- Whether to put a raster below the PETH of individual spike trains</strong> (<em>include_raster</em>) – (default: {False})</p></li>
+<li><p><strong>{int} -- If include_raster is True</strong><strong>, </strong><strong>the number of rasters to include. If None</strong> (<em>n_rasters</em>) – will default to plotting rasters around all provided events. (default: {None})</p></li>
+<li><p><strong>{str} -- Defines which type of error bars to plot. Options are</strong> (<em>error_bars</em>) – – ‘std’ for 1 standard deviation
+– ‘sem’ for standard error of the mean
+– ‘none’ for only plotting the mean value
+(default: {‘std’})</p></li>
+<li><p><strong>{matplotlib axes} -- If passed</strong><strong>, </strong><strong>the function will plot on the passed axes. Note</strong> (<em>ax</em>) – current
+behavior causes whatever was on the axes to be cleared before plotting!
+(default: {None})</p></li>
+<li><p><strong>{dict} -- Dict containing line properties to define PETH plot line. Default</strong> (<em>pethline_kwargs</em>) – is a blue line with weight of 2. Needs to have color. See matplotlib plot documentation
+for more options.
+(default: {‘color’: ‘blue’, ‘lw’: 2})</p></li>
+<li><p><strong>{dict} -- Dict containing fill-between properties to define PETH error bars.</strong> (<em>errbar_kwargs</em>) – Default is a blue fill with 50 percent opacity.. Needs to have color. See matplotlib
+fill_between documentation for more options.
+(default: {‘color’: ‘blue’, ‘alpha’: 0.5})</p></li>
+<li><p><strong>{dict} -- Dict containing fill-between properties to define line at event.</strong> (<em>eventline_kwargs</em>) – Default is a black line with 50 percent opacity.. Needs to have color. See matplotlib
+vlines documentation for more options.
+(default: {‘color’: ‘black’, ‘alpha’: 0.5})</p></li>
+<li><p><strong>{dict} -- Dict containing properties defining lines in the raster plot.</strong> (<em>raster_kwargs</em>) – Default is black lines with line width of 0.5. See matplotlib vlines for more options.
+(default: {‘color’: ‘black’, ‘lw’: 0.5})</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+
+
+          </div>
+        </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container container-navbar-bottom">
+      <div class="spc-navbar">
+        
+      </div>
+    </div>
+    <div class="container">
+    <div class="footer">
+    <div class="row-fluid">
+    <ul class="inline pull-left">
+      <li>
+        &copy; Copyright 2020, Berk Gercek, Jai Bhagat, Matthew Whiteway, Olivier Winter,International Brain Laboratory.
+      </li>
+      <li>
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 2.3.1.
+      </li>
+    </ul>
+    </div>
+    </div>
+    </div>
+  </body>
+</html>

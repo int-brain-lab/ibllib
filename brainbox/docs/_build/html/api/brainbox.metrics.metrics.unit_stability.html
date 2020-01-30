@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8">
+    
+    <title>unit_stability &mdash; Brainbox 0.1.0 documentation</title>
+    
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-extend.css">
+    <link rel="stylesheet" href="../_static/scipy.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" >
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '0.1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="../_static/language_data.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../_static/js/copybutton.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" >
+    <link rel="search" title="Search" href="../search.html" >
+    <link rel="top" title="Brainbox 0.1.0 documentation" href="../index.html" >
+    <link rel="up" title="brainbox.metrics: Functions for assesing spike unit quality" href="../modules/metrics.html" >
+    <link rel="next" title="wf_similarity" href="brainbox.metrics.metrics.wf_similarity.html" >
+    <link rel="prev" title="ptp_over_noise" href="brainbox.metrics.metrics.ptp_over_noise.html" > 
+  </head>
+  <body>
+
+  <div class="container">
+    <div class="header">
+    </div>
+  </div>
+
+
+    <div class="container">
+      <div class="main">
+        
+	<div class="row-fluid">
+	  <div class="span12">
+	    <div class="spc-navbar">
+              
+    <ul class="nav nav-pills pull-left">
+        <li class="active"><a href="["></a></li>
+        <li class="active"><a href="]"></a></li>
+	
+        <li class="active"><a href="../index.html">Brainbox 0.1.0 documentation</a></li>
+	
+          <li class="active"><a href="../modules/metrics.html" accesskey="U"><cite>brainbox.metrics</cite>: Functions for assesing spike unit quality</a></li> 
+    </ul>
+              
+              
+    <ul class="nav nav-pills pull-right">
+      <li class="active">
+        <a href="../genindex.html" title="General Index"
+           accesskey="I">index</a>
+      </li>
+      <li class="active">
+        <a href="../py-modindex.html" title="Python Module Index"
+           >modules</a>
+      </li>
+      <li class="active">
+        <a href="brainbox.metrics.metrics.wf_similarity.html" title="wf_similarity"
+           accesskey="N">next</a>
+      </li>
+      <li class="active">
+        <a href="brainbox.metrics.metrics.ptp_over_noise.html" title="ptp_over_noise"
+           accesskey="P">previous</a>
+      </li>
+    </ul>
+              
+	    </div>
+	  </div>
+	</div>
+        
+
+	<div class="row-fluid">
+      <div class="spc-rightsidebar span3">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="brainbox.metrics.metrics.ptp_over_noise.html"
+                        title="previous chapter">ptp_over_noise</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="brainbox.metrics.metrics.wf_similarity.html"
+                        title="next chapter">wf_similarity</a></p>
+  <h3>This Page</h3>
+  <div>
+    <a href="../_sources/api/brainbox.metrics.metrics.unit_stability.rst.txt"
+       rel="nofollow">Show Source</a>
+  </div>
+<div class="this-page-menu">
+  <a href="/scipy/docs/scipy-docs/api/brainbox.metrics.metrics.unit_stability.rst.rst">Edit page</a>
+</div>
+
+        </div>
+      </div>
+          <div class="span9">
+            
+        <div class="bodywrapper">
+          <div class="body" id="spc-section-body">
+            
+  <div class="section" id="unit-stability">
+<h1>unit_stability<a class="headerlink" href="#unit-stability" title="Permalink to this headline">¶</a></h1>
+<dl class="function">
+<dt id="brainbox.metrics.metrics.unit_stability">
+<code class="sig-name descname">unit_stability</code><span class="sig-paren">(</span><em class="sig-param">units_b, units=None, feat_names=['amps'], dist='norm', test='ks'</em><span class="sig-paren">)</span><a class="headerlink" href="#brainbox.metrics.metrics.unit_stability" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the probability that the empirical spike feature distribution(s), for specified
+feature(s), for all units, comes from a specific theoretical distribution, based on a specified
+statistical test. Also computes the coefficients of variation of the spike feature(s) for all
+units.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>units_b</strong> (<em>bunch</em>) – A units bunch containing fields with spike information (e.g. cluster IDs, times, features,
+etc.) for all units.</p></li>
+<li><p><strong>units</strong> (<em>array-like</em><em> (</em><em>optional</em><em>)</em>) – A subset of all units for which to create the bar plot. (If <cite>None</cite>, all units are used)</p></li>
+<li><p><strong>feat_names</strong> (<em>list of strings</em><em> (</em><em>optional</em><em>)</em>) – A list of names of spike features that can be found in <cite>spks</cite> to specify which features to
+use for calculating unit stability.</p></li>
+<li><p><strong>dist</strong> (<em>string</em><em> (</em><em>optional</em><em>)</em>) – The type of hypothetical null distribution for which the empirical spike feature
+distributions are presumed to belong to.</p></li>
+<li><p><strong>test</strong> (<em>string</em><em> (</em><em>optional</em><em>)</em>) – The statistical test used to compute the probability that the empirical spike feature
+distributions come from <cite>dist</cite>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><strong>p_vals_b</strong> (<em>bunch</em>) – A bunch with <cite>feat_names</cite> as keys, containing a ndarray with p-values (the probabilities
+that the empirical spike feature distribution for each unit comes from <cite>dist</cite> based on
+<cite>test</cite>) for each unit for all <cite>feat_names</cite>.</p></li>
+<li><p><strong>cv_b</strong> (<em>bunch</em>) – A bunch with <cite>feat_names</cite> as keys, containing a ndarray with the coefficients of variation
+of each unit’s empirical spike feature distribution for all features.</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><code class="xref py py-func docutils literal notranslate"><span class="pre">plot.feat_vars()</span></code></p>
+</div>
+<p class="rubric">Examples</p>
+<p>1) Compute 1) the p-values obtained from running a one-sample ks test on the spike amplitudes
+for each unit, and 2) the variances of the empirical spike amplitudes distribution for each
+unit. Create a histogram of the variances of the spike amplitudes for each unit, color-coded by
+depth of channel of max amplitudes. Get cluster IDs of those units which have variances greater
+than 50.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">p_vals_b</span><span class="p">,</span> <span class="n">variances_b</span> <span class="o">=</span> <span class="n">bb</span><span class="o">.</span><span class="n">metrics</span><span class="o">.</span><span class="n">unit_stability</span><span class="p">(</span><span class="n">units_b</span><span class="p">)</span>
+<span class="go"># Plot histograms of variances color-coded by depth of channel of max amplitudes</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">fig</span> <span class="o">=</span> <span class="n">bb</span><span class="o">.</span><span class="n">plot</span><span class="o">.</span><span class="n">feat_vars</span><span class="p">(</span><span class="n">units_b</span><span class="p">,</span> <span class="n">feat_name</span><span class="o">=</span><span class="s1">&#39;amps&#39;</span><span class="p">)</span>
+<span class="go"># Get all unit IDs which have amps variance &gt; 50</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">var_vals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">variances_b</span><span class="p">[</span><span class="s1">&#39;amps&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">bad_units</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">var_vals</span> <span class="o">&gt;</span> <span class="mi">50</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</div>
+
+
+          </div>
+        </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container container-navbar-bottom">
+      <div class="spc-navbar">
+        
+      </div>
+    </div>
+    <div class="container">
+    <div class="footer">
+    <div class="row-fluid">
+    <ul class="inline pull-left">
+      <li>
+        &copy; Copyright 2020, Berk Gercek, Jai Bhagat, Matthew Whiteway, Olivier Winter,International Brain Laboratory.
+      </li>
+      <li>
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 2.3.1.
+      </li>
+    </ul>
+    </div>
+    </div>
+    </div>
+  </body>
+</html>

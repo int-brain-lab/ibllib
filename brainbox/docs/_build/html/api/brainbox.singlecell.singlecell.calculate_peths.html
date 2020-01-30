@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8">
+    
+    <title>calculate_peths &mdash; Brainbox 0.1.0 documentation</title>
+    
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-extend.css">
+    <link rel="stylesheet" href="../_static/scipy.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" >
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '0.1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="../_static/language_data.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../_static/js/copybutton.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" >
+    <link rel="search" title="Search" href="../search.html" >
+    <link rel="top" title="Brainbox 0.1.0 documentation" href="../index.html" >
+    <link rel="up" title="brainbox.singlecell: Tools for examining single cell activity" href="../modules/singlecell.html" >
+    <link rel="next" title="firing_rate" href="brainbox.singlecell.singlecell.firing_rate.html" >
+    <link rel="prev" title="acorr" href="brainbox.singlecell.singlecell.acorr.html" > 
+  </head>
+  <body>
+
+  <div class="container">
+    <div class="header">
+    </div>
+  </div>
+
+
+    <div class="container">
+      <div class="main">
+        
+	<div class="row-fluid">
+	  <div class="span12">
+	    <div class="spc-navbar">
+              
+    <ul class="nav nav-pills pull-left">
+        <li class="active"><a href="["></a></li>
+        <li class="active"><a href="]"></a></li>
+	
+        <li class="active"><a href="../index.html">Brainbox 0.1.0 documentation</a></li>
+	
+          <li class="active"><a href="../modules/singlecell.html" accesskey="U"><cite>brainbox.singlecell</cite>: Tools for examining single cell activity</a></li> 
+    </ul>
+              
+              
+    <ul class="nav nav-pills pull-right">
+      <li class="active">
+        <a href="../genindex.html" title="General Index"
+           accesskey="I">index</a>
+      </li>
+      <li class="active">
+        <a href="../py-modindex.html" title="Python Module Index"
+           >modules</a>
+      </li>
+      <li class="active">
+        <a href="brainbox.singlecell.singlecell.firing_rate.html" title="firing_rate"
+           accesskey="N">next</a>
+      </li>
+      <li class="active">
+        <a href="brainbox.singlecell.singlecell.acorr.html" title="acorr"
+           accesskey="P">previous</a>
+      </li>
+    </ul>
+              
+	    </div>
+	  </div>
+	</div>
+        
+
+	<div class="row-fluid">
+      <div class="spc-rightsidebar span3">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="brainbox.singlecell.singlecell.acorr.html"
+                        title="previous chapter">acorr</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="brainbox.singlecell.singlecell.firing_rate.html"
+                        title="next chapter">firing_rate</a></p>
+  <h3>This Page</h3>
+  <div>
+    <a href="../_sources/api/brainbox.singlecell.singlecell.calculate_peths.rst.txt"
+       rel="nofollow">Show Source</a>
+  </div>
+<div class="this-page-menu">
+  <a href="/scipy/docs/scipy-docs/api/brainbox.singlecell.singlecell.calculate_peths.rst.rst">Edit page</a>
+</div>
+
+        </div>
+      </div>
+          <div class="span9">
+            
+        <div class="bodywrapper">
+          <div class="body" id="spc-section-body">
+            
+  <div class="section" id="calculate-peths">
+<h1>calculate_peths<a class="headerlink" href="#calculate-peths" title="Permalink to this headline">¶</a></h1>
+<dl class="function">
+<dt id="brainbox.singlecell.singlecell.calculate_peths">
+<code class="sig-name descname">calculate_peths</code><span class="sig-paren">(</span><em class="sig-param">spike_times</em>, <em class="sig-param">spike_clusters</em>, <em class="sig-param">cluster_ids</em>, <em class="sig-param">align_times</em>, <em class="sig-param">pre_time=0.2</em>, <em class="sig-param">post_time=0.5</em>, <em class="sig-param">bin_size=0.025</em>, <em class="sig-param">smoothing=0.025</em>, <em class="sig-param">return_fr=True</em><span class="sig-paren">)</span><a class="headerlink" href="#brainbox.singlecell.singlecell.calculate_peths" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calcluate peri-event time histograms; return means and standard deviations
+for each time point across specified clusters</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>spike_times</strong> (<em>array-like</em>) – spike times (in seconds)</p></li>
+<li><p><strong>spike_clusters</strong> (<em>array-like</em>) – cluster ids corresponding to each event in <cite>spikes</cite></p></li>
+<li><p><strong>cluster_ids</strong> (<em>array-like</em>) – subset of cluster ids for calculating peths</p></li>
+<li><p><strong>align_times</strong> (<em>array-like</em>) – times (in seconds) to align peths to</p></li>
+<li><p><strong>pre_time</strong> (<em>float</em>) – time (in seconds) to precede align times in peth</p></li>
+<li><p><strong>post_time</strong> (<em>float</em>) – time (in seconds) to follow align times in peth</p></li>
+<li><p><strong>bin_size</strong> (<em>float</em>) – width of time windows (in seconds) to bin spikes</p></li>
+<li><p><strong>smoothing</strong> (<em>float</em>) – standard deviation (in seconds) of Gaussian kernel for
+smoothing peths; use <cite>smoothing=0</cite> to skip smoothing</p></li>
+<li><p><strong>return_fr</strong> (<em>bool</em>) – <cite>True</cite> to return (estimated) firing rate, <cite>False</cite> to return spike counts</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>peths, binned_spikes</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>peths: Bunch({‘mean’: peth_means, ‘std’: peth_stds, ‘tscale’: ts, ‘cscale’: ids})</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>binned_spikes: np.array (n_align_times, n_clusters, n_bins)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+
+
+          </div>
+        </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container container-navbar-bottom">
+      <div class="spc-navbar">
+        
+      </div>
+    </div>
+    <div class="container">
+    <div class="footer">
+    <div class="row-fluid">
+    <ul class="inline pull-left">
+      <li>
+        &copy; Copyright 2020, Berk Gercek, Jai Bhagat, Matthew Whiteway, Olivier Winter,International Brain Laboratory.
+      </li>
+      <li>
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 2.3.1.
+      </li>
+    </ul>
+    </div>
+    </div>
+    </div>
+  </body>
+</html>

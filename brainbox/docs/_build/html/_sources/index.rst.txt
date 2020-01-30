@@ -22,23 +22,29 @@ Table of Contents
 -----------------
 
 .. toctree::
-    :maxdepth: 2
+    :maxdepth: 1
 
     overview
     usage/installation
     usage/quickstart
     tutorials
-    modules/io
-    modules/processing
+    contributing
+
+Brainbox API reference
+----------------------
+
+.. toctree::
+    :maxdepth: 1
+
     modules/behavior
-    modules/singlecell
-    modules/population
-    modules/experimental
+    modules/io
     modules/metrics
     modules/plot
-    contributing
-    authors
-
+    modules/population
+    modules/processing
+    modules/quality
+    modules/simulation
+    modules/singlecell
 
 Indices and tables
 ==================

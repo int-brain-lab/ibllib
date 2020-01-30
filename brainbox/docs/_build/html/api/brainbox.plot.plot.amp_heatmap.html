@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8">
+    
+    <title>amp_heatmap &mdash; Brainbox 0.1.0 documentation</title>
+    
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-extend.css">
+    <link rel="stylesheet" href="../_static/scipy.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" >
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '0.1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="../_static/language_data.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../_static/js/copybutton.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" >
+    <link rel="search" title="Search" href="../search.html" >
+    <link rel="top" title="Brainbox 0.1.0 documentation" href="../index.html" >
+    <link rel="up" title="brainbox.plot: Plotting utilities for single units and populations" href="../modules/plot.html" >
+    <link rel="next" title="driftmap" href="brainbox.plot.plot.driftmap.html" >
+    <link rel="prev" title="brainbox.plot: Plotting utilities for single units and populations" href="../modules/plot.html" > 
+  </head>
+  <body>
+
+  <div class="container">
+    <div class="header">
+    </div>
+  </div>
+
+
+    <div class="container">
+      <div class="main">
+        
+	<div class="row-fluid">
+	  <div class="span12">
+	    <div class="spc-navbar">
+              
+    <ul class="nav nav-pills pull-left">
+        <li class="active"><a href="["></a></li>
+        <li class="active"><a href="]"></a></li>
+	
+        <li class="active"><a href="../index.html">Brainbox 0.1.0 documentation</a></li>
+	
+          <li class="active"><a href="../modules/plot.html" accesskey="U"><cite>brainbox.plot</cite>: Plotting utilities for single units and populations</a></li> 
+    </ul>
+              
+              
+    <ul class="nav nav-pills pull-right">
+      <li class="active">
+        <a href="../genindex.html" title="General Index"
+           accesskey="I">index</a>
+      </li>
+      <li class="active">
+        <a href="../py-modindex.html" title="Python Module Index"
+           >modules</a>
+      </li>
+      <li class="active">
+        <a href="brainbox.plot.plot.driftmap.html" title="driftmap"
+           accesskey="N">next</a>
+      </li>
+      <li class="active">
+        <a href="../modules/plot.html" title="brainbox.plot: Plotting utilities for single units and populations"
+           accesskey="P">previous</a>
+      </li>
+    </ul>
+              
+	    </div>
+	  </div>
+	</div>
+        
+
+	<div class="row-fluid">
+      <div class="spc-rightsidebar span3">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="../modules/plot.html"
+                        title="previous chapter"><cite>brainbox.plot</cite>: Plotting utilities for single units and populations</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="brainbox.plot.plot.driftmap.html"
+                        title="next chapter">driftmap</a></p>
+  <h3>This Page</h3>
+  <div>
+    <a href="../_sources/api/brainbox.plot.plot.amp_heatmap.rst.txt"
+       rel="nofollow">Show Source</a>
+  </div>
+<div class="this-page-menu">
+  <a href="/scipy/docs/scipy-docs/api/brainbox.plot.plot.amp_heatmap.rst.rst">Edit page</a>
+</div>
+
+        </div>
+      </div>
+          <div class="span9">
+            
+        <div class="bodywrapper">
+          <div class="body" id="spc-section-body">
+            
+  <div class="section" id="amp-heatmap">
+<h1>amp_heatmap<a class="headerlink" href="#amp-heatmap" title="Permalink to this headline">¶</a></h1>
+<dl class="function">
+<dt id="brainbox.plot.plot.amp_heatmap">
+<code class="sig-name descname">amp_heatmap</code><span class="sig-paren">(</span><em class="sig-param">ephys_file</em>, <em class="sig-param">ts</em>, <em class="sig-param">ch</em>, <em class="sig-param">sr=30000</em>, <em class="sig-param">n_ch_probe=385</em>, <em class="sig-param">dtype='int16'</em>, <em class="sig-param">cmap_name='RdBu'</em>, <em class="sig-param">car=True</em>, <em class="sig-param">ax=None</em><span class="sig-paren">)</span><a class="headerlink" href="#brainbox.plot.plot.amp_heatmap" title="Permalink to this definition">¶</a></dt>
+<dd><p>Plots a heatmap of the normalized voltage values over time and space for given timestamps and
+channels, after (optionally) common-average-referencing.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ephys_file</strong> (<em>string</em>) – The file path to the binary ephys data.</p></li>
+<li><p><strong>ts</strong> (<em>array_like</em>) – A set of timestamps for which to get the voltage values.</p></li>
+<li><p><strong>ch</strong> (<em>array-like</em>) – The channels to use for extracting the voltage values.</p></li>
+<li><p><strong>sr</strong> (<em>int</em><em> (</em><em>optional</em><em>)</em>) – The sampling rate (in hz) that the ephys data was acquired at.</p></li>
+<li><p><strong>n_ch_probe</strong> (<em>int</em><em> (</em><em>optional</em><em>)</em>) – The number of channels of the recording.</p></li>
+<li><p><strong>dtype</strong> (<em>str</em><em> (</em><em>optional</em><em>)</em>) – The datatype represented by the bytes in <cite>ephys_file</cite>.</p></li>
+<li><p><strong>cmap_name</strong> (<em>string</em><em> (</em><em>optional</em><em>)</em>) – The name of the colormap associated with the plot.</p></li>
+<li><p><strong>car</strong> (<em>bool</em><em> (</em><em>optional</em><em>)</em>) – A flag for whether or not to perform common-average-referencing before extracting waveforms</p></li>
+<li><p><strong>ax</strong> (<em>axessubplot</em><em> (</em><em>optional</em><em>)</em>) – The axis handle to plot the histogram on. (if <cite>None</cite>, a new figure and axis is created)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><strong>v_vals</strong> – The voltage values.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>ndarray</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<p>1) Plot a heatmap of the spike amplitudes across 20 channels around the channel of max
+amplitude for all spikes in unit 1.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">ts</span> <span class="o">=</span> <span class="n">units_b</span><span class="p">[</span><span class="s1">&#39;times&#39;</span><span class="p">][</span><span class="s1">&#39;1&#39;</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">max_ch</span> <span class="o">=</span> <span class="n">clstrs_b</span><span class="p">[</span><span class="s1">&#39;channels&#39;</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">if</span> <span class="n">max_ch</span> <span class="o">&lt;</span> <span class="n">n_c_ch</span><span class="p">:</span>  <span class="c1"># take only channels greater than `max_ch`.</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">ch</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">max_ch</span><span class="p">,</span> <span class="n">max_ch</span> <span class="o">+</span> <span class="mi">20</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">elif</span> <span class="p">(</span><span class="n">max_ch</span> <span class="o">+</span> <span class="n">n_c_ch</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">n_ch_probe</span><span class="p">:</span>  <span class="c1"># take only channels less than `max_ch`.</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">ch</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">max_ch</span> <span class="o">-</span> <span class="mi">20</span><span class="p">,</span> <span class="n">max_ch</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">else</span><span class="p">:</span>  <span class="c1"># take `n_c_ch` around `max_ch`.</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">ch</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">max_ch</span> <span class="o">-</span> <span class="mi">10</span><span class="p">,</span> <span class="n">max_ch</span> <span class="o">+</span> <span class="mi">10</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">bb</span><span class="o">.</span><span class="n">plot</span><span class="o">.</span><span class="n">amp_heatmap</span><span class="p">(</span><span class="n">path_to_ephys_file</span><span class="p">,</span> <span class="n">ts</span><span class="p">,</span> <span class="n">ch</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</div>
+
+
+          </div>
+        </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container container-navbar-bottom">
+      <div class="spc-navbar">
+        
+      </div>
+    </div>
+    <div class="container">
+    <div class="footer">
+    <div class="row-fluid">
+    <ul class="inline pull-left">
+      <li>
+        &copy; Copyright 2020, Berk Gercek, Jai Bhagat, Matthew Whiteway, Olivier Winter,International Brain Laboratory.
+      </li>
+      <li>
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 2.3.1.
+      </li>
+    </ul>
+    </div>
+    </div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8">
+    
+    <title>Installing Brainbox &mdash; Brainbox 0.1.0 documentation</title>
+    
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-extend.css">
+    <link rel="stylesheet" href="../_static/scipy.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" >
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '0.1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="../_static/language_data.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../_static/js/copybutton.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" >
+    <link rel="search" title="Search" href="../search.html" >
+    <link rel="top" title="Brainbox 0.1.0 documentation" href="../index.html" >
+    <link rel="next" title="Quickstart" href="quickstart.html" >
+    <link rel="prev" title="Overview of Brainbox" href="../overview.html" > 
+  </head>
+  <body>
+
+  <div class="container">
+    <div class="header">
+    </div>
+  </div>
+
+
+    <div class="container">
+      <div class="main">
+        
+	<div class="row-fluid">
+	  <div class="span12">
+	    <div class="spc-navbar">
+              
+    <ul class="nav nav-pills pull-left">
+        <li class="active"><a href="["></a></li>
+        <li class="active"><a href="]"></a></li>
+	
+        <li class="active"><a href="../index.html">Brainbox 0.1.0 documentation</a></li>
+	 
+    </ul>
+              
+              
+    <ul class="nav nav-pills pull-right">
+      <li class="active">
+        <a href="../genindex.html" title="General Index"
+           accesskey="I">index</a>
+      </li>
+      <li class="active">
+        <a href="../py-modindex.html" title="Python Module Index"
+           >modules</a>
+      </li>
+      <li class="active">
+        <a href="quickstart.html" title="Quickstart"
+           accesskey="N">next</a>
+      </li>
+      <li class="active">
+        <a href="../overview.html" title="Overview of Brainbox"
+           accesskey="P">previous</a>
+      </li>
+    </ul>
+              
+	    </div>
+	  </div>
+	</div>
+        
+
+	<div class="row-fluid">
+      <div class="spc-rightsidebar span3">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../index.html">Table of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Installing Brainbox</a><ul>
+<li><a class="reference internal" href="#key-dependencies">Key Dependencies</a></li>
+<li><a class="reference internal" href="#brainbox-requires-ibllib">Brainbox requires ibllib</a></li>
+<li><a class="reference internal" href="#setting-up-a-conda-environment-for-ibllib">Setting up a conda environment for ibllib</a></li>
+<li><a class="reference internal" href="#clone-ibllib-into-your-machine">Clone ibllib into your machine</a></li>
+<li><a class="reference internal" href="#tell-python-to-use-brainbox">Tell python to use brainbox</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="../overview.html"
+                        title="previous chapter">Overview of Brainbox</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="quickstart.html"
+                        title="next chapter">Quickstart</a></p>
+  <h3>This Page</h3>
+  <div>
+    <a href="../_sources/usage/installation.md.txt"
+       rel="nofollow">Show Source</a>
+  </div>
+<div class="this-page-menu">
+  <a href="/scipy/docs/scipy-docs/usage/installation.md.rst">Edit page</a>
+</div>
+
+        </div>
+      </div>
+          <div class="span9">
+            
+        <div class="bodywrapper">
+          <div class="body" id="spc-section-body">
+            
+  <div class="section" id="installing-brainbox">
+<h1>Installing Brainbox<a class="headerlink" href="#installing-brainbox" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="key-dependencies">
+<h2>Key Dependencies<a class="headerlink" href="#key-dependencies" title="Permalink to this headline">¶</a></h2>
+<p>Brainbox requires <strong>Python 3.6 or higher</strong>. Other dependencies can be installed using the <code class="docutils literal notranslate"><span class="pre">requirements.txt</span></code> or <code class="docutils literal notranslate"><span class="pre">environment.yml</span></code> files in included in brainbox using pip or conda, respectively.</p>
+</div>
+<div class="section" id="brainbox-requires-ibllib">
+<h2>Brainbox requires ibllib<a class="headerlink" href="#brainbox-requires-ibllib" title="Permalink to this headline">¶</a></h2>
+<p>Brainbox is for the moment a submodule of ibllib, a suite of python code used by the International Brain Lab to support its experimental infrastructure and data analysis pipelines.</p>
+</div>
+<div class="section" id="setting-up-a-conda-environment-for-ibllib">
+<h2>Setting up a conda environment for ibllib<a class="headerlink" href="#setting-up-a-conda-environment-for-ibllib" title="Permalink to this headline">¶</a></h2>
+<p>To install brainbox you must first install ibllib via the terminal. This process should be the same for Windows, OS X, and Linux.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">conda</span> <span class="n">create</span> <span class="o">-</span><span class="n">n</span> <span class="n">brainbox</span> <span class="o">--</span><span class="n">python</span><span class="o">=</span><span class="n">python3</span><span class="o">.</span><span class="mi">7</span>
+<span class="n">conda</span> <span class="n">activate</span> <span class="n">brainbox</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="clone-ibllib-into-your-machine">
+<h2>Clone ibllib into your machine<a class="headerlink" href="#clone-ibllib-into-your-machine" title="Permalink to this headline">¶</a></h2>
+<p>We will use git in the terminal to clone the GitHub repository for ibllib onto our machine. Windows does not come with git installed. (You can download it here.)[https://gitforwindows.org/]</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">cd</span> <span class="o">~/</span><span class="n">Documents</span> <span class="c1"># Change this to wherever you want the ibllib directory to live</span>
+<span class="n">git</span> <span class="n">clone</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">github</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="nb">int</span><span class="o">-</span><span class="n">brain</span><span class="o">-</span><span class="n">lab</span><span class="o">/</span><span class="n">ibllib</span>
+<span class="n">cd</span> <span class="n">ibllib</span>
+<span class="n">git</span> <span class="n">checkout</span> <span class="n">brainbox</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="tell-python-to-use-brainbox">
+<h2>Tell python to use brainbox<a class="headerlink" href="#tell-python-to-use-brainbox" title="Permalink to this headline">¶</a></h2>
+<p>Since Brainbox is a submodule of ibllib, we will need to install all of ibllib from the top-level directory. After running the above code to clone ibllib, run the following command: (Be sure you’re in the main ibllib directory!)</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="o">-</span><span class="n">e</span> <span class="o">.</span>
+</pre></div>
+</div>
+<p>All done! You should now be able to use brainbox from the brainbox conda environment. This means that in new terminal sessions, after you run</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">conda</span> <span class="n">activate</span> <span class="n">brainbox</span> <span class="c1"># Or whatever you named the environment</span>
+</pre></div>
+</div>
+<p>Your python installation will have access to brainbox via <code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">brainbox</span></code>.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container container-navbar-bottom">
+      <div class="spc-navbar">
+        
+      </div>
+    </div>
+    <div class="container">
+    <div class="footer">
+    <div class="row-fluid">
+    <ul class="inline pull-left">
+      <li>
+        &copy; Copyright 2020, Berk Gercek, Jai Bhagat, Matthew Whiteway, Olivier Winter,International Brain Laboratory.
+      </li>
+      <li>
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 2.3.1.
+      </li>
+    </ul>
+    </div>
+    </div>
+    </div>
+  </body>
+</html>

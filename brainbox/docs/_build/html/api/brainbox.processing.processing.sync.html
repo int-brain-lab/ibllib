@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8">
+    
+    <title>sync &mdash; Brainbox 0.1.0 documentation</title>
+    
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="../_static/css/spc-extend.css">
+    <link rel="stylesheet" href="../_static/scipy.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" >
+    <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" >
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '0.1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="../_static/language_data.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../_static/js/copybutton.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" >
+    <link rel="search" title="Search" href="../search.html" >
+    <link rel="top" title="Brainbox 0.1.0 documentation" href="../index.html" >
+    <link rel="up" title="brainbox.processing: Functions for transforming data" href="../modules/processing.html" >
+    <link rel="next" title="brainbox.quality: General quality control metrics for data" href="../modules/quality.html" >
+    <link rel="prev" title="get_units_bunch" href="brainbox.processing.processing.get_units_bunch.html" > 
+  </head>
+  <body>
+
+  <div class="container">
+    <div class="header">
+    </div>
+  </div>
+
+
+    <div class="container">
+      <div class="main">
+        
+	<div class="row-fluid">
+	  <div class="span12">
+	    <div class="spc-navbar">
+              
+    <ul class="nav nav-pills pull-left">
+        <li class="active"><a href="["></a></li>
+        <li class="active"><a href="]"></a></li>
+	
+        <li class="active"><a href="../index.html">Brainbox 0.1.0 documentation</a></li>
+	
+          <li class="active"><a href="../modules/processing.html" accesskey="U"><cite>brainbox.processing</cite>: Functions for transforming data</a></li> 
+    </ul>
+              
+              
+    <ul class="nav nav-pills pull-right">
+      <li class="active">
+        <a href="../genindex.html" title="General Index"
+           accesskey="I">index</a>
+      </li>
+      <li class="active">
+        <a href="../py-modindex.html" title="Python Module Index"
+           >modules</a>
+      </li>
+      <li class="active">
+        <a href="../modules/quality.html" title="brainbox.quality: General quality control metrics for data"
+           accesskey="N">next</a>
+      </li>
+      <li class="active">
+        <a href="brainbox.processing.processing.get_units_bunch.html" title="get_units_bunch"
+           accesskey="P">previous</a>
+      </li>
+    </ul>
+              
+	    </div>
+	  </div>
+	</div>
+        
+
+	<div class="row-fluid">
+      <div class="spc-rightsidebar span3">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="brainbox.processing.processing.get_units_bunch.html"
+                        title="previous chapter">get_units_bunch</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="../modules/quality.html"
+                        title="next chapter"><cite>brainbox.quality</cite>: General quality control metrics for data</a></p>
+  <h3>This Page</h3>
+  <div>
+    <a href="../_sources/api/brainbox.processing.processing.sync.rst.txt"
+       rel="nofollow">Show Source</a>
+  </div>
+<div class="this-page-menu">
+  <a href="/scipy/docs/scipy-docs/api/brainbox.processing.processing.sync.rst.rst">Edit page</a>
+</div>
+
+        </div>
+      </div>
+          <div class="span9">
+            
+        <div class="bodywrapper">
+          <div class="body" id="spc-section-body">
+            
+  <div class="section" id="sync">
+<h1>sync<a class="headerlink" href="#sync" title="Permalink to this headline">¶</a></h1>
+<dl class="function">
+<dt id="brainbox.processing.processing.sync">
+<code class="sig-name descname">sync</code><span class="sig-paren">(</span><em class="sig-param">dt</em>, <em class="sig-param">times=None</em>, <em class="sig-param">values=None</em>, <em class="sig-param">timeseries=None</em>, <em class="sig-param">offsets=None</em>, <em class="sig-param">interp='zero'</em>, <em class="sig-param">fillval=nan</em><span class="sig-paren">)</span><a class="headerlink" href="#brainbox.processing.processing.sync" title="Permalink to this definition">¶</a></dt>
+<dd><p>Function for resampling a single or multiple time series to a single, evenly-spaced, delta t
+between observations. Uses interpolation to find values.</p>
+<p>Can be used on raw numpy arrays of timestamps and values using the ‘times’ and ‘values’ kwargs
+and/or on brainbox.core.TimeSeries objects passed to the ‘timeseries’ kwarg. If passing both
+TimeSeries objects and numpy arrays, the offsets passed should be for the TS objects first and
+then the numpy arrays.</p>
+<p>Uses scipy’s interpolation library to perform interpolation.
+See scipy.interp1d for more information regarding interp and fillval parameters.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dt</strong> (<em>float</em>) – Separation of points which the output timeseries will be sampled at</p></li>
+<li><p><strong>timeseries</strong> (<em>tuple of TimeSeries objects</em><em>, or </em><em>a single TimeSeries object.</em>) – A group of time series to perform alignment or a single time series.
+Must have time stamps.</p></li>
+<li><p><strong>times</strong> (<em>np.ndarray</em><em> or </em><em>list of np.ndarrays</em>) – time stamps for the observations in ‘values’]</p></li>
+<li><p><strong>values</strong> (<em>np.ndarray</em><em> or </em><em>list of np.ndarrays</em>) – observations corresponding to the timestamps in ‘times’</p></li>
+<li><p><strong>offsets</strong> (<em>tuple of floats</em><em>, </em><em>optional</em>) – tuple of offsets for time stamps of each time series. Offsets for passed
+TimeSeries objects first, then offsets for passed numpy arrays. defaults to None</p></li>
+<li><p><strong>interp</strong> (<em>str</em>) – Type of interpolation to use. Refer to scipy.interpolate.interp1d for possible
+values, defaults to np.nan</p></li>
+<li><p><strong>fillval</strong> – Fill values to use when interpolating outside of range of data. See interp1d
+for possible values, defaults to np.nan</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>TimeSeries object with each row representing synchronized values of all
+input TimeSeries. Will carry column names from input time series if all of them have column
+names.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+
+
+          </div>
+        </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container container-navbar-bottom">
+      <div class="spc-navbar">
+        
+      </div>
+    </div>
+    <div class="container">
+    <div class="footer">
+    <div class="row-fluid">
+    <ul class="inline pull-left">
+      <li>
+        &copy; Copyright 2020, Berk Gercek, Jai Bhagat, Matthew Whiteway, Olivier Winter,International Brain Laboratory.
+      </li>
+      <li>
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 2.3.1.
+      </li>
+    </ul>
+    </div>
+    </div>
+    </div>
+  </body>
+</html>
