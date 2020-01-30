@@ -3,32 +3,42 @@ Computes task related output
 '''
 
 import numpy as np
-from sklearn.metrics import roc_curve, auc
+from scipy.stats import ranksums
+from sklearn.metrics import roc_auc_score
 from brainbox.core import Bunch
 from brainbox.population import xcorr
 
 
-def _get_spike_counts_in_bins(spike_times, spike_clusters, intervals=None):
-    """Return the number of spikes in a sequence of time intervals, for each neuron.
-    :param spike_times: times of spikes, in seconds
-    :type spike_times: 1D array
-    :param spike_clusters: spike neurons
-    :type spike_clusters: 1D array, same length as spike_times
-    :type intervals: the times of the events onsets and offsets
-    :param interval: 2D array
-    :rtype: 2D array of shape `(n_neurons, n_intervals)`
+def _get_spike_counts_in_bins(spike_times, spike_clusters, intervals):
     """
-    # Check inputs.
-    assert spike_times.ndim == spike_clusters.ndim == 1
-    assert spike_times.shape == spike_clusters.shape
-    intervals = np.atleast_2d(intervals)
+    Return the number of spikes in a sequence of time intervals, for each neuron.
+
+    Parameters
+    ----------
+    spike_times : 1D array
+        spike times (in seconds)
+    spike_clusters : 1D array
+        cluster ids corresponding to each event in `spikes`
+    intervals : 2D array of shape (n_events, 2)
+        the start and end times of the events
+
+    Returns
+    ---------
+    counts : 2D array of shape (n_neurons, n_events)
+        the spike counts of all neurons for all events
+        value (i, j) is the number of spikes of neuron `neurons[i]` in interval #j
+    neuron_ids : 1D array
+        list of neuron ids
+    """
+
+    # Check input
     assert intervals.ndim == 2
     assert intervals.shape[1] == 2
-    n_intervals = intervals.shape[0]
 
     # For each neuron and each interval, the number of spikes in the interval.
     neuron_ids = np.unique(spike_clusters)
     n_neurons = len(neuron_ids)
+    n_intervals = intervals.shape[0]
     counts = np.zeros((n_neurons, n_intervals), dtype=np.uint32)
     for j in range(n_intervals):
         t0, t1 = intervals[j, :]
@@ -37,7 +47,7 @@ def _get_spike_counts_in_bins(spike_times, spike_clusters, intervals=None):
             spike_clusters[(t0 <= spike_times) & (spike_times < t1)],
             minlength=neuron_ids.max() + 1)
         counts[:, j] = x[neuron_ids]
-    return counts  # value (i, j) is the number of spikes of neuron `neurons[i]` in interval #j
+    return counts, neuron_ids
 
 
 def responsive_units(spike_times, spike_clusters, event_times, pre_time=0.5, post_time=0.5):
@@ -47,11 +57,11 @@ def responsive_units(spike_times, spike_clusters, event_times, pre_time=0.5, pos
 
     Parameters
     ----------
-    spike_times : ndarray
+    spike_times : 1D array
         spike times (in seconds)
-    spike_clusters : ndarray
+    spike_clusters : 1D array
         cluster ids corresponding to each event in `spikes`
-    event_times : ndarray
+    event_times : 1D array
         times (in seconds) of the events from the two groups
     pre_time : float
         time (in seconds) to precede the event times to get the baseline
@@ -66,15 +76,25 @@ def responsive_units(spike_times, spike_clusters, event_times, pre_time=0.5, pos
         the p-values of all the clusters
     cluster_ids : ndarray
         cluster ids of the p-values
-
-    Examples
-    --------
-
     """
 
+    # Get spike counts for baseline and event timewindow
+    baseline_times = np.column_stack(((event_times - pre_time), event_times))
+    baseline_counts, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters,
+                                                             baseline_times)
+    times = np.column_stack((event_times, (event_times + post_time)))
+    spike_counts, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters, times)
 
+    # Do statistics
+    p_values = np.empty(spike_counts.shape[0])
+    for i in range(spike_counts.shape[0]):
+        if (np.sum(baseline_counts[i, :]) == 0) and (np.sum(spike_counts[i, :]) == 0):
+            p_values[i] = 1
+        else:
+            _, p_values[i] = ranksums(baseline_counts[i, :], spike_counts[i, :])
+    significant_units = cluster_ids[p_values < 0.05]
 
-
+    return significant_units, p_values, cluster_ids
 
 
 def calculate_roc(spike_times, spike_clusters, event_times, event_groups,
@@ -103,11 +123,15 @@ def calculate_roc(spike_times, spike_clusters, event_times, event_groups,
     -------
     auc_roc : ndarray
         an array of the area under the ROC curve for every neuron
-
-    Examples
-    --------
-
     """
 
+    # Get spike counts
+    times = np.column_stack(((event_times - pre_time), (event_times + post_time)))
+    spike_counts, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters, times)
 
+    # Calculate roc
+    auc_roc = np.empty(spike_counts.shape[0])
+    for i in range(spike_counts.shape[0]):
+        auc_roc[i], roc_auc_score(event_groups, spike_counts)
 
+    return auc_roc
