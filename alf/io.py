@@ -5,7 +5,7 @@ For a full overview of the scope of the format, see:
 https://ibllib.readthedocs.io/en/develop/04_reference.html#alf
 """
 
-import json
+import copy
 import logging
 import os
 import re
@@ -27,6 +27,38 @@ class AlfBunch(Bunch):
     @property
     def check_dimensions(self):
         return check_dimensions(self)
+
+    def append(self, b, inplace=False):
+        """
+        Appends one bunch to another, key by key
+        :param bunch:
+        :return: Bunch
+        """
+        # default is to return a copy
+        if inplace:
+            a = self
+        else:
+            a = AlfBunch(copy.deepcopy(self))
+        # handles empty bunches for convenience if looping
+        if b == {}:
+            return a
+        if a == {}:
+            return b
+        # right now supports only strictly matching keys. Will implement other cases as needed
+        if set(a.keys()) != set(b.keys()):
+            raise NotImplementedError("Append bunches only works with strictly matching keys"
+                                      "For more complex merges, convert to pandas dataframe.")
+        # do the merge; only concatenate lists and np arrays right now
+        for k in a:
+            if isinstance(a[k], np.ndarray):
+                a[k] = np.concatenate((a[k], b[k]), axis=0)
+            elif isinstance(a[k], list):
+                a[k].extend(b[k])
+            else:
+                _logger.warning(f"bunch key '{k}' is a {a[k].__class__}. I don't know how to"
+                                f" handle that. Use pandas for advanced features")
+        check_dimensions(a)
+        return a
 
     def to_df(self):
         return dataframe(self)
