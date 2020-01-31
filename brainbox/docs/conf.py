@@ -57,7 +57,7 @@ add_module_names = False
 # a list of builtin themes.
 #
 themedir = os.path.join(os.curdir, 'scipytheme', '_theme')
-html_theme = 'scipy'
+html_theme = 'pyramid'
 html_theme_path = [themedir]
 
 # Add any paths that contain custom static files (such as style sheets) here,
