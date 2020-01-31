@@ -59,7 +59,7 @@ add_module_names = False
 themedir = os.path.join(os.curdir, 'scipytheme', '_theme')
 html_theme = 'pyramid'
 html_theme_path = [themedir]
-
+html_logo = '_static/LogoSmall.jpg'
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
