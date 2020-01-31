@@ -4,7 +4,7 @@ Computes task related output
 
 import numpy as np
 from scipy.stats import ranksums, wilcoxon, ttest_ind, ttest_rel
-from _statsmodels import multipletests
+from ._statsmodels import multipletests
 from sklearn.metrics import roc_auc_score
 
 
