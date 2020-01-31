@@ -263,8 +263,9 @@ class BrainAtlas:
 @dataclass
 class Trajectory:
     """
-    3D Trajectory (usually for a linear probe)
-    Minimally defined by a vector and a point
+    3D Trajectory (usually for a linear probe). Minimally defined by a vector and a point.
+    instantiate from a best fit from a n by 3 array containing xyz coordinates:
+        trj = Trajectory.fit(xyz)
     """
     vector: np.ndarray
     point: np.ndarray
@@ -329,8 +330,55 @@ class Trajectory:
         return epoints[ind, :]
 
 
-class Insertion(Trajectory):
-    pass
+@dataclass
+class Insertion:
+    label: str
+    x: float
+    y: float
+    z: float
+    phi: float
+    theta: float
+    depth: float
+    beta: float
+
+    @staticmethod
+    def from_dict(d):
+        """
+        Constructs an Insertion object from the json information stored in probes.description file
+        :param trj: dictionary containing at least the following keys, in um
+           {
+            'x': 544.0,
+            'y': 1285.0,
+            'z': 0.0,
+            'phi': 0.0,
+            'theta': 5.0,
+            'depth': 4501.0
+            }
+        :return: Trajectory object
+        """
+        return Insertion(x=d['x'] / 1e6, y=d['y'] / 1e6, z=d['z'] / 1e6,
+                         phi=d['phi'], theta=d['theta'], depth=d['depth'] / 1e6,
+                         beta=d.get('beta', 0), label=d.get('label', ''))
+
+    @property
+    def trajectory(self):
+        """
+        Gets the trajectory object matching insertion coordinates
+        :return: atlas.Trajectory
+        """
+        return Trajectory.fit(self.xyz)
+
+    @property
+    def xyz(self):
+        return np.array((self.entry, self.tip))
+
+    @property
+    def entry(self):
+        return np.array((self.x, self.y, self.z))
+
+    @property
+    def tip(self):
+        return sph2cart(self.depth, self.theta, self.phi) + np.array((self.x, self.y, self.z))
 
 
 @dataclass
