@@ -31,4 +31,3 @@ bbp.peri_event_time_histogram(spikes.times,  # Spike times first
                               include_raster=True,  # adds a raster to the bottom
                               n_rasters=55,  # How many raster traces to include
                               ax=ax)  # Make sure we plot to the axis we created
-                                

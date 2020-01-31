@@ -15,3 +15,4 @@ ibllib.egg-info/
 .DS_Store
 scratch/
 _autosummary/
+brainbox/docs/_build/
