@@ -491,6 +491,19 @@ class ONE(OneAbstract):
         """
         oneibl.params.setup()
 
+    def path_from_eid(self, eid):
+        if not is_uuid_string(eid):
+            print(eid, " is not a valid eID/UUID string")
+            return
+        sess = self._alyxClient.rest('sessions', 'read', id=eid)
+        rel_path = Path().joinpath(
+            sess['subject'],
+            sess['start_time'].split('T')[0],
+            str(sess['number'])
+        )
+        cache_dir = self._get_cache_dir()
+
+
 
 def _validate_date_range(date_range):
     """
