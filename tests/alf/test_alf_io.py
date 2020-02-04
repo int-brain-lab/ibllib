@@ -195,11 +195,21 @@ class TestsAlf(unittest.TestCase):
 
 class TestSessionFolder(unittest.TestCase):
 
+    def test_isdatetime(self):
+        inp = ['açsldfkça', '12312', 34, '2020-01-01', '01-01-2020']
+        out = [False, False, False, True, False]
+        for i, o in zip(inp, out):
+            self.assertEqual(o, alf.io._isdatetime(i))
+
     def test_get_session_folder(self):
         inp = (Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001/raw_behavior_data/'
                     '_iblrig_micData.raw.wav'),
-               Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),)
+               Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),
+               '/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001/raw_behavior_data/_iblrig_micData.raw.wav',
+               '/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001',)
         out = (Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),
+               Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),
+               Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),
                Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),)
         for i, o in zip(inp, out):
             self.assertEqual(o, alf.io.get_session_path(i))

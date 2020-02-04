@@ -5,11 +5,13 @@ For a full overview of the scope of the format, see:
 https://ibllib.readthedocs.io/en/develop/04_reference.html#alf
 """
 
-import logging
 import json
+import logging
 import os
 import re
+from datetime import datetime
 from pathlib import Path
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -354,17 +356,24 @@ def is_uuid_string(string):
     else:
         return False
 
+def _isdatetime(s: str) -> bool:
+    try:
+        datetime.strptime(s, '%Y-%m-%d')
+        return True
+    except Exception:
+        return False
 
-def get_session_path(path_object):
-    """
-    From a full file path or folder path, gets the session root path
-    :param path_object: pathlib.Path or string
-    :return:
-    """
-    path_object = Path(path_object)
-    s = _regexp_session_path(path_object, os.sep)
-    if s:
-        return Path(str(path_object)[:s.span()[-1]])
+
+def get_session_path(path: Union[str, Path]) -> Path:
+    """Returns the session path from any filepath if the date/number
+    pattern is found"""
+    path = Path(path)
+    sess = None
+    for i, p in enumerate(path.parts):
+        if p.isdigit() and _isdatetime(path.parts[i - 1]):
+            sess = Path().joinpath(*path.parts[:i + 1])
+
+    return sess
 
 
 def is_session_path(path_object):
