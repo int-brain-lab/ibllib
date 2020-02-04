@@ -342,9 +342,9 @@ def add_uuid_string(file_path, uuid):
     return file_path.parent.joinpath(f"{'.'.join(name_parts)}.{uuid}{file_path.suffix}")
 
 
-def is_uuid_string(string):
+def is_uuid_string(string: str) -> bool:
     """
-    Bool test to c
+    Bool test for uuid version 4
     """
     if string is None:
         return False
