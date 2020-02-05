@@ -12,6 +12,7 @@
 #
 import os
 import sys
+import sphinx_material
 sys.path.insert(0, os.path.abspath('..'))
 
 # -- Project information -----------------------------------------------------
@@ -38,6 +39,7 @@ extensions = ['recommonmark',
               'sphinx.ext.doctest',
               'sphinx.ext.inheritance_diagram',
               'sphinx_automodapi.automodapi',
+              'sphinx_material',
               ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -57,8 +59,36 @@ add_module_names = False
 # a list of builtin themes.
 #
 themedir = os.path.join(os.curdir, 'scipytheme', '_theme')
-html_theme = 'nature'
-html_theme_path = [themedir]
+html_theme = 'sphinx_material'
+html_theme_options = {
+
+    # Set the name of the project to appear in the navigation.
+    'nav_title': 'Brainbox',
+
+    # Set you GA account ID to enable tracking
+    # 'google_analytics_account': 'UA-XXXXX',
+
+    # Specify a base_url used to generate sitemap.xml. If not
+    # specified, then no sitemap will be built.
+    'base_url': 'https://brainbox.internationalbrainlab.org/',
+
+    # Set the color and the accent color
+    'color_primary': 'green',
+    'color_accent': 'light-green',
+
+    # Set the repo location to get a badge with stats
+    'repo_url': 'https://github.com/int-brain-lab/blob/brainbox/brainbox/',
+    'repo_name': 'ibllib',
+
+    # Visible levels of the global TOC; -1 means unlimited
+    'globaltoc_depth': 3,
+    # If False, expand all TOC entries
+    'globaltoc_collapse': False,
+    # If True, show hidden TOC entries
+    'globaltoc_includehidden': False,
+}
+html_theme_path = sphinx_material.html_theme_path()
+html_context = sphinx_material.get_html_context()
 html_logo = '_static/LogoFullResAlpha.png'
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
