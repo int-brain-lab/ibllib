@@ -50,7 +50,7 @@ def _get_spike_counts_in_bins(spike_times, spike_clusters, intervals):
 
 
 def responsive_units(spike_times, spike_clusters, event_times,
-                     pre_time=0.5, post_time=0.5, alpha=0.05):
+                     pre_time=[0.5, 0], post_time=[0, 0.5], alpha=0.05):
     """
     Determine responsive neurons by doing a Wilcoxon Signed-Rank test between a baseline period
     before a certain task event (e.g. stimulus onset) and a period after the task event.
@@ -63,9 +63,10 @@ def responsive_units(spike_times, spike_clusters, event_times,
         cluster ids corresponding to each event in `spikes`
     event_times : 1D array
         times (in seconds) of the events from the two groups
-    pre_time : float
-        time (in seconds) to precede the event times to get the baseline
-    post_time : float
+    pre_time : two-element array
+        time (in seconds) preceding the event to get the baseline (e.g. [0.5, 0.2] would be a
+        window starting 0.5 seconds before the event and ending at 0.2 seconds before the event)
+    post_time : two-element array
         time (in seconds) to follow the event times
     alpha : float
         alpha to use for statistical significance
@@ -81,10 +82,10 @@ def responsive_units(spike_times, spike_clusters, event_times,
     """
 
     # Get spike counts for baseline and event timewindow
-    baseline_times = np.column_stack(((event_times - pre_time), event_times))
+    baseline_times = np.column_stack(((event_times - pre_time[0]), (event_times - pre_time[1])))
     baseline_counts, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters,
                                                              baseline_times)
-    times = np.column_stack((event_times, (event_times + post_time)))
+    times = np.column_stack(((event_times + post_time[0]), (event_times + post_time[1])))
     spike_counts, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters, times)
 
     # Do statistics
