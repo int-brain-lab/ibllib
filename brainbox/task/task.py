@@ -90,7 +90,7 @@ def responsive_units(spike_times, spike_clusters, event_times,
     # Do statistics
     p_values = np.empty(spike_counts.shape[0])
     for i in range(spike_counts.shape[0]):
-        if (np.sum(baseline_counts[i, :]) == 0) and (np.sum(spike_counts[i, :]) == 0):
+        if np.sum(baseline_counts[i, :] - spike_counts[i, :]) == 0:
             p_values[i] = 1
         else:
             _, p_values[i] = wilcoxon(baseline_counts[i, :], spike_counts[i, :])
