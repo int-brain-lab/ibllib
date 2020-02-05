@@ -26,8 +26,8 @@ def _get_spike_counts_in_bins(spike_times, spike_clusters, intervals):
     counts : 2D array of shape (n_neurons, n_events)
         the spike counts of all neurons ffrom scipy.stats import sem, tor all events
         value (i, j) is the number of spikes of neuron `neurons[i]` in interval #j
-    neuron_ids : 1D array
-        list of neuron ids
+    cluster_ids : 1D array
+        list of cluster ids
     """
 
     # Check input
@@ -35,8 +35,8 @@ def _get_spike_counts_in_bins(spike_times, spike_clusters, intervals):
     assert intervals.shape[1] == 2
 
     # For each neuron and each interval, the number of spikes in the interval.
-    neuron_ids = np.unique(spike_clusters)
-    n_neurons = len(neuron_ids)
+    cluster_ids = np.unique(spike_clusters)
+    n_neurons = len(cluster_ids)
     n_intervals = intervals.shape[0]
     counts = np.zeros((n_neurons, n_intervals), dtype=np.uint32)
     for j in range(n_intervals):
@@ -44,9 +44,9 @@ def _get_spike_counts_in_bins(spike_times, spike_clusters, intervals):
         # Count the number of spikes in the window, for each neuron.
         x = np.bincount(
             spike_clusters[(t0 <= spike_times) & (spike_times < t1)],
-            minlength=neuron_ids.max() + 1)
-        counts[:, j] = x[neuron_ids]
-    return counts, neuron_ids
+            minlength=cluster_ids.max() + 1)
+        counts[:, j] = x[cluster_ids]
+    return counts, cluster_ids
 
 
 def responsive_units(spike_times, spike_clusters, event_times,
