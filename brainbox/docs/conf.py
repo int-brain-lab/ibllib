@@ -73,12 +73,12 @@ html_theme_options = {
     'base_url': 'https://brainbox.internationalbrainlab.org/',
 
     # Set the color and the accent color
-    'color_primary': 'green',
-    'color_accent': 'light-green',
+    'color_primary': 'forest',
+    'color_accent': 'green',
 
     # Set the repo location to get a badge with stats
-    'repo_url': 'https://github.com/int-brain-lab/blob/brainbox/brainbox/',
-    'repo_name': 'ibllib',
+    'repo_url': 'https://github.com/int-brain-lab/ibllib/blob/brainbox/brainbox/',
+    'repo_name': 'Brainbox in ibllib',
 
     # Visible levels of the global TOC; -1 means unlimited
     'globaltoc_depth': 3,
@@ -94,6 +94,10 @@ html_logo = '_static/LogoFullResAlpha.png'
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
+# Custom sidebar templates, maps document names to template names.
+html_sidebars = {
+    "**": ["logo-text.html", "globaltoc.html", "localtoc.html", "searchbox.html"]
+}
 
 # -----------------------------------------------------------------------------
 # Autosummary
