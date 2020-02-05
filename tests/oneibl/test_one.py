@@ -236,5 +236,53 @@ class TestMisc(unittest.TestCase):
         self.assertEqual(_validate_date_range(val), val)
 
 
+class TestPathsToEidAndBack(unittest.TestCase):
+
+    def setUp(self):
+        # Init connection to the database
+        one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
+                  password='TapetesBloc18')
+        self.eids = ['cf264653-2deb-44cb-aa84-89b82507028a',
+                '4e0b3320-47b7-416e-b842-c34dc9004cf8',
+                'a9d89baf-9905-470c-8565-859ff212c7be',
+                'aaf101c3-2581-450a-8abd-ddb8f557a5ad',
+        ]
+        self.partial_eid_paths = [
+            None,
+            None,
+            'FlatIron/mainenlab/Subjects/ZM_1743/2019-06-04/001',
+            'FlatIron/cortexlab/Subjects/KS005/2019-04-04/004',
+        ]
+        self.One = one
+
+    def test_path_from_eid(self):
+        # Test if eid's produce correct output
+        for e, p in zip(self.eids, self.partial_eid_paths):
+            self.assertTrue(str(p) in str(self.One.path_from_eid(e)))
+        # Test if list input produces valid list output
+        list_output = self.One.path_from_eid(self.eids)
+        self.assertTrue(isinstance(list_output, list))
+        self.assertTrue(
+            all([str(p) in str(o) for p, o in zip(self.partial_eid_paths, list_output)])
+        )
+
+    def test_eid_from_path(self):
+        # test if paths produce expected eid's
+        paths = self.partial_eid_paths[-2:]
+        paths.append('FlatIron/mainenlab/Subjects/ZM_1743/2019-06-04/001/bla.ble')
+        paths.append('some/other/root/FlatIron/cortexlab/Subjects/KS005/2019-04-04/004/bli/blo.blu')
+        eids = self.eids[-2:]
+        eids.append('a9d89baf-9905-470c-8565-859ff212c7be')
+        eids.append('aaf101c3-2581-450a-8abd-ddb8f557a5ad')
+        for p, e in zip(paths, eids):
+            self.assertTrue(e == str(self.One.eid_from_path(p)))
+        # Test if list input produces correct list output
+        list_output = self.One.eid_from_path(paths)
+        self.assertTrue(isinstance(list_output, list))
+        self.assertTrue(
+            all([e == o for e, o in zip(eids, list_output)])
+        )
+
+
 if __name__ == '__main__':
     unittest.main(exit=False)
