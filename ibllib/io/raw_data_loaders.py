@@ -121,36 +121,6 @@ def load_settings(session_path):
     return settings
 
 
-def _load_encoder_events_file_lt5(file_path):
-    """
-    File loader without the session overhead
-    :param file_path:
-    :return: dataframe of encoder events
-    """
-    if file_path.stat().st_size == 0:
-        logger_.error("_iblrig_encoderEvents.raw.ssv is an empty file. ")
-        raise ValueError("_iblrig_encoderEvents.raw.ssv is an empty file. ABORT EXTRACTION. ")
-    data = pd.read_csv(file_path, sep=' ', header=None, error_bad_lines=False)
-    data = data.drop([0, 2, 5], axis=1)
-    data.columns = ['re_ts', 'sm_ev', 'bns_ts']
-    return _groom_wheel_data_lt5(data, label='_iblrig_encoderEvents.raw.ssv', path=file_path)
-
-
-def _load_encoder_events_file_ge5(file_path):
-    """
-    File loader without the session overhead
-    :param file_path:
-    :return: dataframe of encoder events
-    """
-    if file_path.stat().st_size == 0:
-        logger_.error("_iblrig_encoderEvents.raw.ssv is an empty file. ")
-        raise ValueError("_iblrig_encoderEvents.raw.ssv is an empty file. ABORT EXTRACTION. ")
-    data = pd.read_csv(file_path, sep=' ', header=None, error_bad_lines=False)
-    data = data.drop([2], axis=1)
-    data.columns = ['re_ts', 'sm_ev']
-    return _groom_wheel_data_ge5(data, label='_iblrig_encoderEvents.raw.ssv', path=file_path)
-
-
 def load_stim_position_screen(session_path):
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_stimPositionScreen.raw*.csv"), None)
@@ -173,12 +143,6 @@ def load_encoder_events(session_path, settings=False):
     3: closed_loop
     4: freeze_error / freeze_correct
 
-    Raw datafile Columns:
-        Event, RE timestamp, Source, data, Bonsai Timestamp
-
-    Event is always equal 'Event' Source is always equal 'StateMachine'. For
-    this reason these columns are dropped.
-
     >>> data.columns
     >>> ['re_ts',   # Rotary Encoder Timestamp (ms) 'numpy.int64'
          'sm_ev',   # State Machine Event           'numpy.int64'
@@ -198,7 +162,11 @@ def load_encoder_events(session_path, settings=False):
         settings = load_settings(session_path)
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
-
+        # auto-detect old files when version is not labeled
+        with open(path) as fid:
+            line = fid.readline()
+        if line.startswith('Event') and 'StateMachine' in line:
+            settings = {'IBLRIG_VERSION_TAG': '0.0.0'}
     if not path:
         return None
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
@@ -207,27 +175,60 @@ def load_encoder_events(session_path, settings=False):
         return _load_encoder_events_file_lt5(path)
 
 
-def _load_encoder_positions_file(file_path, **kwargs):
+def _load_encoder_ssv_file(file_path, **kwargs):
+    file_path = Path(file_path)
     if file_path.stat().st_size == 0:
-        logger_.error("_iblrig_encoderPositions.raw.ssv is an empty file. ")
-        raise ValueError("_iblrig_encoderPositions.raw.ssv is an empty file. ABORT EXTRACTION. ")
+        logger_.error(f"{file_path.name} is an empty file. ")
+        raise ValueError(f"{file_path.name} is an empty file. ABORT EXTRACTION. ")
     return pd.read_csv(file_path, sep=' ', header=None, error_bad_lines=False, **kwargs)
 
 
 def _load_encoder_positions_file_lt5(file_path):
-    # file loader without the session overhead
-    data = _load_encoder_positions_file(file_path,
-                                        names=['_', 're_ts', 're_pos', 'bns_ts', '__'],
-                                        usecols=['re_ts', 're_pos', 'bns_ts'])
+    """
+    File loader without the session overhead
+    :param file_path:
+    :return: dataframe of encoder events
+    """
+    data = _load_encoder_ssv_file(file_path,
+                                  names=['_', 're_ts', 're_pos', 'bns_ts', '__'],
+                                  usecols=['re_ts', 're_pos', 'bns_ts'])
     return _groom_wheel_data_lt5(data, label='_iblrig_encoderPositions.raw.ssv', path=file_path)
 
 
 def _load_encoder_positions_file_ge5(file_path):
-    # file loader without the session overhead
-    data = _load_encoder_positions_file(file_path,
-                                        names=['re_ts', 're_pos', '_'],
-                                        usecols=['re_ts', 're_pos'])
+    """
+    File loader without the session overhead
+    :param file_path:
+    :return: dataframe of encoder events
+    """
+    data = _load_encoder_ssv_file(file_path,
+                                  names=['re_ts', 're_pos', '_'],
+                                  usecols=['re_ts', 're_pos'])
     return _groom_wheel_data_ge5(data, label='_iblrig_encoderPositions.raw.ssv', path=file_path)
+
+
+def _load_encoder_events_file_lt5(file_path):
+    """
+    File loader without the session overhead
+    :param file_path:
+    :return: dataframe of encoder events
+    """
+    data = _load_encoder_ssv_file(file_path,
+                                  names=['_', 're_ts', '__', 'sm_ev', 'bns_ts', '___'],
+                                  usecols=['re_ts', 'sm_ev', 'bns_ts'])
+    return _groom_wheel_data_lt5(data, label='_iblrig_encoderEvents.raw.ssv', path=file_path)
+
+
+def _load_encoder_events_file_ge5(file_path):
+    """
+    File loader without the session overhead
+    :param file_path:
+    :return: dataframe of encoder events
+    """
+    data = _load_encoder_ssv_file(file_path,
+                                  names=['re_ts', 'sm_ev', '_'],
+                                  usecols=['re_ts', 'sm_ev'])
+    return _groom_wheel_data_ge5(data, label='_iblrig_encoderEvents.raw.ssv', path=file_path)
 
 
 def load_encoder_positions(session_path, settings=False):
@@ -265,7 +266,11 @@ def load_encoder_positions(session_path, settings=False):
         settings = load_settings(session_path)
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
-
+        # auto-detect old files when version is not labeled
+        with open(path) as fid:
+            line = fid.readline()
+        if line.startswith('Position'):
+            settings = {'IBLRIG_VERSION_TAG': '0.0.0'}
     if not path:
         return None
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
@@ -439,7 +444,7 @@ def _groom_wheel_data_ge5(data, label='file ', path=''):
     """
     data = _clean_wheel_dataframe(data, label, path)
     # check if the time scale is in ms
-    if (data['re_ts'].iloc[-1] - data['re_ts'].iloc[0]) / 1e6 < 0:
+    if (data['re_ts'].iloc[-1] - data['re_ts'].iloc[0]) / 1e6 < 20:
         logger_.warning('Rotary encoder reset logs events in ms instead of us: ' +
                         'RE firmware needs upgrading and wheel velocity is potentially inaccurate')
         data['re_ts'] = data['re_ts'] * 1000
@@ -467,3 +472,50 @@ def get_port_events(events: dict, name: str = '') -> list:
     out = sorted(out)
 
     return out
+
+
+def sync_trials_robust(t0, t1, diff_threshold=0.001, drift_threshold_ppm=200, max_shift=5,
+                       return_index=False):
+    """
+    Attempts to find matching timestamps in 2 time-series that have an offset, are drifting,
+    and are most likely incomplete: sizes don't have to match, some pulses may be missing
+    in any serie.
+    Only works with irregular time series as it relies on the derivative to match sync.
+    :param t0:
+    :param t1:
+    :param diff_threshold:
+    :param drift_threshold_ppm: (150)
+    :param max_shift: (200)
+    :param return_index (False)
+    :return:
+    """
+    nsync = min(t0.size, t1.size)
+    dt0 = np.diff(t0)
+    dt1 = np.diff(t1)
+    ind = np.zeros_like(dt0) * np.nan
+    i0 = 0
+    i1 = 0
+    cdt = np.nan  # the current time difference between the two series to compute drift
+    while i0 < (nsync - 1):
+        # look in the next max_shift events the ones whose derivative match
+        isearch = np.arange(i1, min(max_shift + i1, dt1.size))
+        dec = np.abs(dt0[i0] - dt1[isearch]) < diff_threshold
+        # another constraint is to check the dt for the maximum drift
+        if ~np.isnan(cdt):
+            drift_ppm = np.abs((cdt - (t0[i0] - t1[isearch])) / dt1[isearch]) * 1e6
+            dec = np.logical_and(dec, drift_ppm <= drift_threshold_ppm)
+        # if one is found
+        if np.any(dec):
+            ii1 = np.where(dec)[0][0]
+            ind[i0] = i1 + ii1
+            i1 += ii1 + 1
+            cdt = t0[i0 + 1] - t1[i1 + ii1]
+        i0 += 1
+    it0 = np.where(~np.isnan(ind))[0]
+    it1 = ind[it0].astype(np.int)
+    ind0 = np.unique(np.r_[it0, it0 + 1])
+    ind1 = np.unique(np.r_[it1, it1 + 1])
+    if return_index:
+        return t0[ind0], t1[ind1], ind0, ind1
+    else:
+        return t0[ind0], t1[ind1]

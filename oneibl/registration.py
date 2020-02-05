@@ -7,7 +7,7 @@ from dateutil import parser as dateparser
 import ibllib.time
 from ibllib.misc import version, log2session
 import ibllib.io.raw_data_loaders as raw
-import ibllib.io.flags as flags
+from ibllib.io import flags, hashfile
 
 from oneibl.one import ONE
 
@@ -15,6 +15,7 @@ logger_ = logging.getLogger('ibllib.alf')
 REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
                               'logs/**/_ibl_log.*.log',
                               'raw_behavior_data/**/_iblrig_*.*',
+                              'raw_passive_data/**/_iblrig_*.*',
                               'raw_behavior_data/**/_iblmic_*.*',
                               'raw_video_data/**/_iblrig_*.*',
                               'raw_video_data/**/_ibl_*.*',
@@ -77,7 +78,7 @@ class RegistrationClient:
             logger_.info('registered' + '\n')
 
     @log2session('register')
-    def register_session(self, ses_path, file_list=True, repository_name=None):
+    def register_session(self, ses_path, file_list=True):
         """
         Register session in Alyx
 
@@ -175,6 +176,8 @@ class RegistrationClient:
         # register all files that match the Alyx patterns, warn user when files are encountered
         rename_files_compatibility(ses_path, md['IBLRIG_VERSION_TAG'])
         F = []  # empty list whose keys will be relative paths and content filenames
+        md5s = []
+        file_sizes = []
         for fn in _glob_session(ses_path):
             if fn.suffix in ['.flag', '.error', '.avi']:
                 logger_.debug('Excluded: ', str(fn))
@@ -198,11 +201,16 @@ class RegistrationClient:
             # extract the relative path of the file
             rel_path = Path(str(fn)[str(fn).find(str(gen_rel_path)):])
             F.append(str(rel_path.relative_to(gen_rel_path)))
+            file_sizes.append(fn.stat().st_size)
+            md5s.append(hashfile.md5(fn) if fn.stat().st_size < 1024 ** 3 else None)
             logger_.info('Registering ' + str(fn))
 
         r_ = {'created_by': username,
               'path': str(gen_rel_path),
               'filenames': F,
+              'hashes': md5s,
+              'filesizes': file_sizes,
+              'versions': [version.ibllib() for _ in F]
               }
         self.one.alyx.post('/register-file', data=r_)
 
@@ -221,7 +229,7 @@ def _register_bool(fn, file_list):
         return file_list
     if isinstance(file_list, str):
         file_list = [file_list]
-    return any([fil in fn for fil in file_list])
+    return any([str(fil) in fn for fil in file_list])
 
 
 def _read_settings_json_compatibility_enforced(json_file):

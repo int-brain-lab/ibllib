@@ -1,3 +1,36 @@
+### Release Notes 1.4.8 - 2020-01-27
+-   ONE Light Windows fixes
+-   Installation documentation separates conda and virtualenv options
+-   Conda yaml environement file for ibllib
+
+### Release Notes 1.4.7 
+-   ONE Light for behaviour paper data release   
+-   ONE() standard syntax matching the one light examples
+
+### Release Notes 1.4.6 
+-   Alyx registration: add md5, version and filesize to the pipeline registration
+-   Data Patcher: allows to register data from anywhere through FTP/SSH/GLobus
+-   ONE Light for behaviour paper data release 
+
+### Release Notes 1.4.5 Hotfix
+-   Ephys extraction: left probability bug when sequence was 0 - fixed
+
+### Release Notes 1.4.4
+-   Ephys extraction:
+    -   left probability extracted properly
+    -   add robustness to audio fronts extraction in FPGA
+-   Passive stimulus: raw data registered in pipeline
+-   Training extraction: microphone extraction for habituation sessions
+-   ALF: specific to_dataframe method for Bunch
+    
+### Release Notes 1.4.3 Hotfix
+-   Ephys extraction: handle fringe case where recording is interrupted in the middle
+-   Wheel extraction: if rotary encoder version is outdated and stores data in the wrong unit, auto-detect and output in seconds even for new versions
+
+### Release Notes 1.4.2
+-  FPGA/bpod events synchronization performed even when their counts do not match
+-  Updated requirement versions for mtscomp and phylib
+
 ### Release Notes 1.4.1
 -   wheel extraction outputs a timestamps attribute, not times
 -   make the wheel extraction more robust

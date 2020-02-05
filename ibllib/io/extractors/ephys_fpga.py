@@ -9,6 +9,7 @@ from scipy import interpolate
 from brainbox.core import Bunch
 from brainbox.behavior import wheel as whl
 
+import ibllib.exceptions as err
 import ibllib.plots as plots
 import ibllib.io.spikeglx
 import ibllib.dsp as dsp
@@ -212,15 +213,13 @@ def _audio_events_extraction(audio_t, audio_fronts):
     """
     # make sure that there are no 2 consecutive fall or consecutive rise events
     assert(np.all(np.abs(np.diff(audio_fronts)) == 2))
-    # make sure that the first event is a rise
-    assert(audio_fronts[0] == 1)
     # take only even time differences: ie. from rising to falling fronts
     dt = np.diff(audio_t)[::2]
     # detect ready tone by length below 110 ms
     i_ready_tone_in = np.r_[np.where(dt <= 0.11)[0] * 2]
     t_ready_tone_in = audio_t[i_ready_tone_in]
     # error tones are events lasting from 400ms to 600ms
-    i_error_tone_in = np.where(np.logical_and(0.4 < dt, dt < 0.6))[0] * 2
+    i_error_tone_in = np.where(np.logical_and(0.4 < dt, dt < 1.2))[0] * 2
     t_error_tone_in = audio_t[i_error_tone_in]
     return t_ready_tone_in, t_error_tone_in
 
@@ -336,6 +335,9 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
     :return: trials dictionary
     """
     bpod = _get_sync_fronts(sync, chmap['bpod'], tmax=tmax)
+    if bpod.times.size == 0:
+        raise err.SyncBpodFpgaException('No Bpod event found in FPGA. No behaviour extraction. '
+                                        'Check channel maps.')
     frame2ttl = _get_sync_fronts(sync, chmap['frame2ttl'], tmax=tmax)
     audio = _get_sync_fronts(sync, chmap['audio'], tmax=tmax)
     # extract events from the fronts for each trace
@@ -346,7 +348,7 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
     # stim off time is the first frame2ttl rise/fall after the trial start
     # does not apply for 1st trial
     ind = np.searchsorted(frame2ttl['times'], t_iti_in, side='left')
-    t_stim_off = frame2ttl['times'][ind]
+    t_stim_off = frame2ttl['times'][np.minimum(ind, frame2ttl.times.size - 1)]
     t_stim_freeze = frame2ttl['times'][np.maximum(ind - 1, 0)]
     # stimOn_times: first fram2ttl change after trial start
     trials = Bunch({
@@ -369,7 +371,7 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
     if display:
         width = 0.5
         ymax = 5
-        plt.figure()
+        plt.figure("Ephys FPGA Sync")
         ax = plt.gca()
         r0 = _get_sync_fronts(sync, chmap['rotary_encoder_0'])
         plots.squares(bpod['times'], bpod['polarities'] * 0.4 + 1,
@@ -417,6 +419,21 @@ def align_with_bpod(session_path):
     # check consistency
     output_path = Path(session_path) / 'alf'
     trials = alf.io.load_object(output_path, '_ibl_trials')
+    if alf.io.check_dimensions(trials) != 0:
+        # patching things up if the bpod and FPGA don't have the same recording span
+        _logger.warning("BPOD/FPGA synchronization: Bpod and FPGA don't have the same amount of"
+                        " trial start events. Patching alf files.")
+        _, _, ibpod, ifpga = raw.sync_trials_robust(
+            trials['intervals_bpod'][:, 0], trials['intervals'][:, 0], return_index=True)
+        if ibpod.size == 0:
+            raise err.SyncBpodFpgaException('Can not sync BPOD and FPGA - no matching sync pulses '
+                                            'found.')
+        for k in trials:
+            if 'bpod' in k:
+                trials[k] = trials[k][ibpod]
+            else:
+                trials[k] = trials[k][ibpod]
+        alf.io.save_object_npy(output_path, trials, '_ibl_trials')
     assert(alf.io.check_dimensions(trials) == 0)
     tlen = (np.diff(trials['intervals_bpod']) - np.diff(trials['intervals']))[:-1] - ITI_DURATION
     assert(np.all(np.abs(tlen[np.invert(np.isnan(tlen))]) < 5 * 1e-3))

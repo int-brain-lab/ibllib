@@ -12,6 +12,7 @@ from scipy import interpolate
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
 from brainbox.behavior import wheel
+import ibllib.exceptions as err
 
 logger_ = logging.getLogger('ibllib.alf')
 WHEEL_RADIUS_CM = 1  # we want the output in radians
@@ -58,9 +59,12 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
         'closed_loop': np.array([tr['behavior_data']['States timestamps']
                                  ['closed_loop'][0][0] for tr in bpod_data]),
     }
+    if rote['closed_loop'].size <= 1:
+        raise err.SyncBpodWheelException("Not enough Rotary Encoder events to perform wheel"
+                                         " synchronization. Wheel data not extracted")
     # bpod bug that spits out events in ms instead of us
     if np.diff(bpod['closed_loop'][[-1, 0]])[0] / np.diff(rote['closed_loop'][[-1, 0]])[0] > 900:
-        logger_.error("Rotary encoder stores values in ms instead of us. Wheel timing inaccurrate")
+        logger_.error("Rotary encoder stores values in ms instead of us. Wheel timing inaccurate")
         rote['stim_on'] *= 1e3
         rote['closed_loop'] *= 1e3
     # just use the closed loop for synchronization
@@ -83,12 +87,12 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
         indko = np.where(np.abs(diff_last_match) >= DIFF_THRESHOLD)[0]
     # last resort is to use ad-hoc sync function
     else:
-        bp, re = sync_trials_robust(bpod['closed_loop'], rote['closed_loop'],
-                                    diff_threshold=DIFF_THRESHOLD, max_shift=5)
+        bp, re = raw.sync_trials_robust(bpod['closed_loop'], rote['closed_loop'],
+                                        diff_threshold=DIFF_THRESHOLD, max_shift=5)
         indko = np.array([])
         # raise ValueError("Can't sync bpod and rotary encoder: non-contiguous sync pulses")
     # remove faulty indices due to missing or bad syncs
-    indko = np.unique(np.r_[indko + 1, indko])
+    indko = np.int32(np.unique(np.r_[indko + 1, indko]))
     re = np.delete(re, indko)
     bp = np.delete(bp, indko)
     # check the linear drift
@@ -96,38 +100,6 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
     poly = np.polyfit(bp, re, 1)
     assert np.all(np.abs(np.polyval(poly, bp) - re) < 0.002)
     return interpolate.interp1d(re, bp, fill_value="extrapolate")
-
-
-def sync_trials_robust(t0, t1, diff_threshold=0.001, max_shift=5):
-    """
-    Attempts to find matching timestamps in 2 time-series that have an offset, are drifting,
-    and are most likely incomplete: sizes don't have to match, some pulses may be missing
-    on one serie but not another.
-    Only works with irregular time series as it relies on the derivative to match sync.
-    :param t0:
-    :param t1:
-    :param diff_threshold:
-    :param max_shift:
-    :return:
-    """
-    nsync = min(t0.size, t1.size)
-    dt0 = np.diff(t0)
-    dt1 = np.diff(t1)
-    ind = np.zeros_like(dt0) * np.nan
-    i0 = 0
-    i1 = 0
-    while i0 < (nsync - 1):
-        # look in the next max_shift events the ones whose derivative match
-        dec = np.abs(dt0[i0] - dt1[np.arange(i1, min(max_shift + i1, dt1.size))]) < diff_threshold
-        # if one is found
-        if np.any(dec):
-            ii1 = np.where(dec)[0][0]
-            ind[i0] = i1 + ii1
-            i1 += ii1 + 1
-        i0 += 1
-    it0 = np.where(~np.isnan(ind))[0]
-    it1 = ind[it0].astype(np.int)
-    return t0[np.unique(np.r_[it0, it0 + 1])], t1[np.unique(np.r_[it1, it1 + 1])]
 
 
 def get_wheel_data(session_path, bp_data=None, save=False, display=False):

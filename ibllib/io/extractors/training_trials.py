@@ -7,13 +7,14 @@ the PyBpod rig raw data.
 
 Each DatasetType in the IBL pipeline should have one extractor function.
 """
-import ibllib.io.raw_data_loaders as raw
-import numpy as np
-import os
 import logging
+import os
 from pathlib import Path
-import cv2
 
+import cv2
+import numpy as np
+
+import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import version
 
 logger_ = logging.getLogger('ibllib.alf')

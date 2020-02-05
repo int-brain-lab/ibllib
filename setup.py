@@ -24,7 +24,7 @@ with open('requirements.txt') as f:
 
 setup(
     name='ibllib',
-    version='1.4.1',
+    version='1.4.8',
     python_requires='>={}.{}'.format(*REQUIRED_PYTHON),
     description='IBL libraries',
     license="MIT",
@@ -35,5 +35,10 @@ setup(
     packages=find_packages(exclude=['scratch']),  # same as name
     # external packages as dependencies
     install_requires=require,
-    scripts={}
+    entry_points={
+        'console_scripts': [
+            'onelight=oneibl.onelight:one',
+        ],
+    },
+    scripts={},
 )

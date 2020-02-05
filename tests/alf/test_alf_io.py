@@ -3,10 +3,33 @@ import tempfile
 from pathlib import Path
 import shutil
 import json
+import uuid
 
 import numpy as np
 
 import alf.io
+
+
+class TestAlfBunch(unittest.TestCase):
+
+    def test_to_dataframe_scalars(self):
+        simple = alf.io.AlfBunch({'titi': np.random.rand(500),
+                                  'toto': np.random.rand(500)})
+        df = simple.to_df()
+        self.assertTrue(np.all(df['titi'].values == simple.titi))
+        self.assertTrue(np.all(df['toto'].values == simple.toto))
+        self.assertTrue(len(df.columns) == 2)
+
+    def test_to_dataframe_vectors(self):
+        vectors = alf.io.AlfBunch({'titi': np.random.rand(500, 1),
+                                   'toto': np.random.rand(500),
+                                   'tata': np.random.rand(500, 2)})
+        df = vectors.to_df()
+        self.assertTrue(np.all(df['titi'].values == vectors.titi[:, 0]))
+        self.assertTrue(np.all(df['toto'].values == vectors.toto))
+        self.assertTrue(np.all(df['tata_0'].values == vectors.tata[:, 0]))
+        self.assertTrue(np.all(df['tata_1'].values == vectors.tata[:, 1]))
+        self.assertTrue(len(df.columns) == 4)
 
 
 class TestsAlfPartsFilters(unittest.TestCase):
@@ -189,8 +212,17 @@ class TestSessionFolder(unittest.TestCase):
         o = alf.io._regexp_session_path(Path('/mnt/s0/Data/Subjects/ZM_1368/2019/1'), '\\')
         self.assertIsNone(o)
 
+    def test_is_session_folder(self):
+        inp = [(Path('/mnt/s0/Data/Subjects/ibl_witten_14/2019-12-04'), False),
+               ('/mnt/s0/Data/Subjects/ibl_witten_14/2019-12-04', False),
+               (Path('/mnt/s0/Data/Subjects/ibl_witten_14/2019-12-04/001'), True),
+               (Path('/mnt/s0/Data/Subjects/ibl_witten_14/2019-12-04/001/tutu'), False),
+               ('/mnt/s0/Data/Subjects/ibl_witten_14/2019-12-04/001/', True)]
+        for i in inp:
+            self.assertEqual(alf.io.is_session_path(i[0]), i[1])
 
-class TestRemoveUUID(unittest.TestCase):
+
+class TestUUID_Files(unittest.TestCase):
 
     def test_remove_uuid(self):
         with tempfile.TemporaryDirectory() as dir:
@@ -208,6 +240,19 @@ class TestRemoveUUID(unittest.TestCase):
                             Path(dir).joinpath('toto.json'))
             self.assertTrue(alf.io.remove_uuid_file(str(f3)) ==
                             Path(dir).joinpath('toto.json'))
+
+    def test_add_uuid(self):
+        _uuid = uuid.uuid4()
+
+        file_with_uuid = f'/titi/tutu.part1.part1.{_uuid}.json'
+        inout = [
+            (file_with_uuid, Path(file_with_uuid)),
+            ('/tutu/tata.json', Path(f'/tutu/tata.{_uuid}.json')),
+            ('/tutu/tata.part1.json', Path(f'/tutu/tata.part1.{_uuid}.json')),
+        ]
+        for tup in inout:
+            self.assertEqual(tup[1], alf.io.add_uuid_string(tup[0], _uuid))
+            self.assertEqual(tup[1], alf.io.add_uuid_string(tup[0], str(_uuid)))
 
 
 if __name__ == "__main__":

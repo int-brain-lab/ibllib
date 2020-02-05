@@ -1,0 +1,26 @@
+name: ibllib
+channels:
+  - defaults
+dependencies:
+  - click
+  - ipython
+  - matplotlib
+  - numpy
+  - pandas
+  - pip
+  - python >= 3.6
+  - requests
+  - scipy
+  - seaborn
+  - tqdm
+  - pip:
+    - autopep8
+    - colorlog
+    - dataclasses
+    - flake8
+    - globus-sdk
+    - ibllib
+    - mtscomp
+    - phylib
+    - pynrrd
+    - pyqt5

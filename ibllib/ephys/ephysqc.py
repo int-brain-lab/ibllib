@@ -460,6 +460,10 @@ def qc_fpga_task(fpga_trials, alf_trials):
     """
     This part of the function uses only fpga_trials information
     """
+    # check number of feedbacks: should always be one
+    qc_trials['n_feedback'] = (np.uint32(~np.isnan(fpga_trials['valve_open'])) +
+                               np.uint32(~np.isnan(fpga_trials['error_tone_in'])))
+
     # check for non-Nans
     qc_trials['stimOn_times_nan'] = ~np.isnan(fpga_trials['stimOn_times'])
     qc_trials['goCue_times_nan'] = ~np.isnan(fpga_trials['goCue_times'])
@@ -481,7 +485,7 @@ def qc_fpga_task(fpga_trials, alf_trials):
 
     # iti_in whithin 0.01 sec of stimOff
     qc_trials['iti_in_delay_stim_off'] = \
-        np.abs(fpga_trials['stimOff_times'] - fpga_trials['iti_in']) < ITI_IN_STIM_OFF_JITTER,
+        np.abs(fpga_trials['stimOff_times'] - fpga_trials['iti_in']) < ITI_IN_STIM_OFF_JITTER
 
     # stimOff 2 secs after error_tone_in with jitter
     # noise off happens 2 secs after stimm, with 0.1 as acceptable jitter
@@ -496,13 +500,13 @@ def qc_fpga_task(fpga_trials, alf_trials):
     # TEST  Response times (from session start) should be increasing continuously
     #       Note: RT are not durations but time stamps from session start
     #       1. check for non-Nans
-    qc_trials['response_times_nan'] = ~np.isnan(alf_trials['response_times']),
+    qc_trials['response_times_nan'] = ~np.isnan(alf_trials['response_times'])
     #       2. check for positive increase
     qc_trials['response_times_increase'] = \
-        np.diff(np.append([0], alf_trials['response_times'])) > 0,
+        np.diff(np.append([0], alf_trials['response_times'])) > 0
     # TEST  Response times (from goCue) should be positive
     qc_trials['response_times_goCue_times_diff'] = \
-        alf_trials['response_times'] - alf_trials['goCue_times'] > 0,
+        alf_trials['response_times'] - alf_trials['goCue_times'] > 0
     # TEST  1. Response_times should be before feedback
     qc_trials['response_before_feedback'] = \
         alf_trials['feedback_times'] - alf_trials['response_times'] > 0
