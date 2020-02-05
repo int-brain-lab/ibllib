@@ -45,6 +45,7 @@ Brainbox API reference
     modules/quality
     modules/simulation
     modules/singlecell
+    modules/task
 
 Indices and tables
 ==================
