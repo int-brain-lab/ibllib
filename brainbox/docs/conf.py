@@ -20,8 +20,8 @@ sys.path.insert(0, os.path.abspath('..'))
 project = 'Brainbox'
 copyright = '2020, Berk Gercek, Jai Bhagat, Matthew Whiteway, Olivier Winter,' +\
     'International Brain Laboratory'
-author = 'Berk Gercek, Jai Bhagat, Matthew Whiteway, Olivier Winter, International Brain' +\
-    'Laboratory'
+author = 'Berk Gercek, Jai Bhagat, Guido Meijer, Cyrille Rossant, Matthew Whiteway,' +\
+    'Olivier Winter, International Brain Laboratory'
 
 # The full version, including alpha/beta/rc tags
 release = '0.1.0'
@@ -63,7 +63,7 @@ html_theme = 'sphinx_material'
 html_theme_options = {
 
     # Set the name of the project to appear in the navigation.
-    'nav_title': 'Brainbox',
+    'nav_title': 'Brainbox: Tools for neural data',
 
     # Set you GA account ID to enable tracking
     # 'google_analytics_account': 'UA-XXXXX',
@@ -73,27 +73,31 @@ html_theme_options = {
     'base_url': 'https://brainbox.internationalbrainlab.org/',
 
     # Set the color and the accent color
-    'color_primary': 'green',
-    'color_accent': 'light-green',
+    'color_primary': 'blue-grey',
+    'color_accent': 'amber',
 
     # Set the repo location to get a badge with stats
-    'repo_url': 'https://github.com/int-brain-lab/blob/brainbox/brainbox/',
-    'repo_name': 'ibllib',
+    'repo_url': 'https://github.com/int-brain-lab/ibllib/blob/brainbox/brainbox/',
+    'repo_name': 'Brainbox in ibllib',
 
     # Visible levels of the global TOC; -1 means unlimited
     'globaltoc_depth': 3,
     # If False, expand all TOC entries
-    'globaltoc_collapse': False,
+    'globaltoc_collapse': True,
     # If True, show hidden TOC entries
     'globaltoc_includehidden': False,
 }
 html_theme_path = sphinx_material.html_theme_path()
 html_context = sphinx_material.get_html_context()
-html_logo = '_static/LogoFullResAlpha.png'
+html_logo = '_static/IBL_b_n_w.png'
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
+# Custom sidebar templates, maps document names to template names.
+html_sidebars = {
+    "**": ["logo-text.html", "globaltoc.html", "localtoc.html", "searchbox.html"]
+}
 
 # -----------------------------------------------------------------------------
 # Autosummary
