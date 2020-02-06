@@ -59,7 +59,6 @@ DAMAGE.
 
 import numpy as np
 import pandas as pd
-from statsmodels.iolib import summary2
 
 
 class RegressionFDR(object):
@@ -167,14 +166,6 @@ class RegressionFDR(object):
             return self._unq[self._ufdr <= tfdr][0]
         else:
             return np.inf
-
-    def summary(self):
-
-        summ = summary2.Summary()
-        summ.add_title("Regression FDR results")
-        summ.add_df(self.fdr_df)
-
-        return summ
 
 
 def _design_knockoff_sdp(exog):
