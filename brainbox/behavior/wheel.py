@@ -9,8 +9,7 @@ from scipy.linalg import hankel
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 
-__all__ = [
-           'cm_to_deg',
+__all__ = ['cm_to_deg',
            'cm_to_rad',
            'convolve',
            'hankel',
@@ -20,8 +19,7 @@ __all__ = [
            'samples_to_cm',
            'traces_by_trial',
            'velocity',
-           'velocity_smoothed',
-]
+           'velocity_smoothed', ]
 
 # Define some constants
 ENC_RES = 1024 * 4  # Rotary encoder resolution, assumes X4 encoding
