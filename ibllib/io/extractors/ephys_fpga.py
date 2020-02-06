@@ -331,7 +331,8 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
     :param save: True/False
     :param chmap: dictionary containing channel index. Default to constant.
         chmap = {'bpod': 7, 'frame2ttl': 12, 'audio': 15}
-    :param display: show the full session sync pulses display
+    :param display: bool or matplotlib axes: show the full session sync pulses display
+    defaults to False
     :return: trials dictionary
     """
     bpod = _get_sync_fronts(sync, chmap['bpod'], tmax=tmax)
@@ -371,8 +372,11 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
     if display:
         width = 0.5
         ymax = 5
-        plt.figure("Ephys FPGA Sync")
-        ax = plt.gca()
+        if isinstance(display, bool):
+            plt.figure("Ephys FPGA Sync")
+            ax = plt.gca()
+        else:
+            ax = display
         r0 = _get_sync_fronts(sync, chmap['rotary_encoder_0'])
         plots.squares(bpod['times'], bpod['polarities'] * 0.4 + 1,
                       ax=ax, label='bpod=1', color='k')
