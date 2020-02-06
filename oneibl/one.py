@@ -6,7 +6,7 @@ import tqdm
 
 from ibllib.misc import pprint
 from ibllib.io.one import OneAbstract
-from alf.io import load_file_content, remove_uuid_file, is_uuid_string, AlfBunch
+from alf.io import load_file_content, remove_uuid_file, is_uuid_string, AlfBunch, get_session_path
 
 import oneibl.webclient as wc
 from oneibl.dataclass import SessionDataInfo
@@ -436,6 +436,9 @@ class ONE(OneAbstract):
             eids = [s['url'] for s in ses]
         eids = [e.split('/')[-1] for e in eids]  # remove url to make it portable
         if details:
+            for s in ses:
+                s['local_path'] = str(Path(self._par.CACHE_DIR, s['lab'], 'Subjects', s['subject'],
+                                           s['start_time'][:10], str(s['number']).zfill(3)))
             return eids, ses
         else:
             return eids
@@ -491,6 +494,51 @@ class ONE(OneAbstract):
         """
         oneibl.params.setup()
 
+    def path_from_eid(self, eid: str, grep_str=None) -> Path:
+        # If eid is a list of eIDs recurse through list and return the results
+        if isinstance(eid, list):
+            path_list = []
+            for p in eid:
+                path_list.append(self.path_from_eid(p, grep_str=grep_str))
+            return path_list
+        # If not valid return None
+        if not is_uuid_string(eid):
+            print(eid, " is not a valid eID/UUID string")
+            return
+        # Load data, if no data present on disk return None
+        data = self._load(eid, download_only=True, offline=True)
+        if not data.local_path:
+            return None
+        # If user defined a grep list of specific files return paths to files
+        if grep_str is not None:
+            files = [x for x in data.local_path if grep_str in str(x)]
+            return files
+        # If none of the above happen return the session path of the first file you find
+        session_path = get_session_path(data.local_path[0])
+
+        return session_path
+
+    def eid_from_path(self, path_obj):
+        # If path_obj is a list recurse through it and return a list
+        if isinstance(path_obj, list):
+            path_obj = [Path(x) for x in path_obj]
+            eid_list = []
+            for p in path_obj:
+                eid_list.append(self.eid_from_path(p))
+            return eid_list
+        # else ensure the path ends with mouse,date, number
+        path_obj = Path(path_obj)
+        session_path = get_session_path(path_obj)
+        # if path does not have a date and a number return None
+        if session_path is None:
+            return None
+        # search for subj, date, number XXX: hits the DB
+        uuid = self.search(subjects=session_path.parts[-3],
+                           date_range=session_path.parts[-2],
+                           number=session_path.parts[-1])
+        # Return the uuid if any
+        return uuid[0] if uuid else None
+
 
 def _validate_date_range(date_range):
     """
@@ -501,27 +549,3 @@ def _validate_date_range(date_range):
     if len(date_range) == 1:
         date_range = [date_range[0], date_range[0]]
     return date_range
-
-
-# TODO: little command-line tool for main ONE
-# def main():
-#     import argparse
-
-#     parser = argparse.ArgumentParser(description='ONE client.')
-#     parser.add_argument('command', help='ONE command name')
-#     parser.add_argument('dataset_types', nargs='*', help='requested dataset types')
-#     parser.add_argument('--limit', type=int, help='maximum number of results to return')
-
-#     args = parser.parse_args()
-#     cmd = args.command
-#     one = ONE()
-
-#     if cmd == 'search':
-#         eids = one.search(dataset_types=args.dataset_types, limit=args.limit)
-#         if not eids:
-#             return
-#         one.load(eids[0], download_only=True)
-
-
-# if __name__ == '__main__':
-#     main()

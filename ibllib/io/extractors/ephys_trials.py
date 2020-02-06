@@ -64,6 +64,12 @@ def get_probabilityLeft(session_path, save=False, data=False, settings=False):
         prev = bl
     # Trim to actual number of trials
     pLeft = pLeft[: len(data)]
+    # Deduce the generative probabilities
+    gLeft = np.array(pLeft)
+    gLeft[gLeft == 0.5] = 0.5
+    gLeft[gLeft < 0.5] = 0.2
+    gLeft[gLeft > 0.5] = 0.8
+    pLeft = gLeft.tolist()
     if raw.save_bool(save, "_ibl_trials.probabilityLeft.npy"):
         lpath = Path(session_path).joinpath("alf", "_ibl_trials.probabilityLeft.npy")
         np.save(lpath, pLeft)
