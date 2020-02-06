@@ -163,10 +163,14 @@ class TestExtractTrialData(unittest.TestCase):
         rn = ibllib.io.extractors.training_trials.get_repNum(
             self.training_lt5['path'])
         self.assertTrue(isinstance(rn, np.ndarray))
+        for i in range(3):
+            self.assertTrue(i in rn)
         # -- version >= 5.0.0
         rn = ibllib.io.extractors.training_trials.get_repNum(
             self.training_ge5['path'])
         self.assertTrue(isinstance(rn, np.ndarray))
+        for i in range(4):
+            self.assertTrue(i in rn)
 
         # BIASED SESSIONS have no repeted trials
 

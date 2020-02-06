@@ -2,10 +2,31 @@ import unittest
 
 import numpy as np
 
-from ibllib.atlas import BrainCoordinates, sph2cart, cart2sph, Trajectory
+from ibllib.atlas import BrainCoordinates, sph2cart, cart2sph, Trajectory, Insertion
 
 
 class TestInsertion(unittest.TestCase):
+
+    def test_init(self):
+        d = {
+            'label': 'probe00',
+            'x': 544.0,
+            'y': 1285.0,
+            'z': 0.0,
+            'phi': 0.0,
+            'theta': 5.0,
+            'depth': 4501.0,
+            'beta': 0.0}
+        ins = Insertion.from_dict(d)
+        # eval the entry point, should be super close
+        dxyz = ins.trajectory.eval_x(d['x'] / 1e6) - np.array((d['x'], d['y'], d['z'])) / 1e6
+        self.assertTrue(np.all(np.isclose(dxyz, 0)))
+        # test methods tip/entry/xyz
+        dd = np.sum(np.sqrt(np.diff(ins.xyz, axis=0) ** 2)) - d['depth'] / 1e6
+        self.assertLess(abs(dd), 0.01)
+
+
+class TestTrajectory(unittest.TestCase):
 
     def test_eval_trajectory(self):
         line = Trajectory.fit(np.array([[0.3, 0.3, 0.4], [0, 0, 1]]))
