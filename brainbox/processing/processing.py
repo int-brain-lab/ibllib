@@ -1,8 +1,8 @@
 '''
-Set of functions for processing data from one form into another,
-for example taking spike times and then binning them into non-overlapping
-bins or convolving with a gaussian kernel.
+Processes data from one form into another, e.g. taking spike times and binning them into
+non-overlapping bins and convolving spike times with a gaussian kernel.
 '''
+
 import numpy as np
 import pandas as pd
 from scipy import interpolate
@@ -202,3 +202,159 @@ def bin_spikes(spikes, binsize, interval_indices=False):
         return core.TimeSeries(times=intervals, values=rates.T[:-1], columns=clusters)
     else:
         return core.TimeSeries(times=tbins, values=rates.T, columns=clusters)
+
+
+def get_units_bunch(spks_b, *args):
+    '''
+    Returns a bunch, where the bunch keys are keys from `spks` with labels of spike information
+    (e.g. unit IDs, times, features, etc.), and the values for each key are arrays with values for
+    each unit: these arrays are ordered and can be indexed by unit id.
+
+    Parameters
+    ----------
+    spks_b : bunch
+        A spikes bunch containing fields with spike information (e.g. unit IDs, times, features,
+        etc.) for all spikes.
+    features : list of strings (optional positional arg)
+        A list of names of labels of spike information (which must be keys in `spks`) that specify
+        which labels to return as keys in `units`. If not provided, all keys in `spks` are returned
+        as keys in `units`.
+
+    Returns
+    -------
+    units_b : bunch
+        A bunch with keys of labels of spike information (e.g. cluster IDs, times, features, etc.)
+        whose values are arrays that hold values for each unit. The arrays for each key are ordered
+        by unit ID.
+
+    Examples
+    --------
+    1) Create a units bunch given a spikes bunch, and get the amps for unit #4 from the units
+    bunch.
+        >>> import brainbox as bb
+        >>> import alf.io as aio
+        >>> import ibllib.ephys.spikes as e_spks
+        (*Note, if there is no 'alf' directory, make 'alf' directory from 'ks2' output directory):
+        >>> e_spks.ks2_to_alf(path_to_ks_out, path_to_alf_out)
+        >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
+        >>> units_b = bb.processing.get_units_bunch(spks_b)
+        # Get amplitudes for unit 4.
+        >>> amps = units_b['amps']['4']
+
+    TODO add computation time estimate?
+    '''
+
+    # Initialize `units`
+    units_b = core.Bunch()
+    # Get the keys to return for `units`:
+    if not args:
+        feat_keys = list(spks_b.keys())
+    else:
+        feat_keys = args[0]
+    # Get unit id for each spike and number of units. *Note: `n_units` might not equal `len(units)`
+    # because some clusters may be empty (due to a "wontfix" bug in ks2).
+    spks_unit_id = spks_b['clusters']
+    n_units = np.max(spks_unit_id)
+    units = np.unique(spks_b['clusters'])
+    # For each key in `units`, iteratively get each unit's values and add as a key to a bunch,
+    # `feat_bunch`. After iterating through all units, add `feat_bunch` as a key to `units`:
+    for feat in feat_keys:
+        # Initialize `feat_bunch` with a key for each unit.
+        feat_bunch = core.Bunch((str(unit), np.array([])) for unit in np.arange(n_units))
+        for unit in units:
+            unit_idxs = np.where(spks_unit_id == unit)[0]
+            feat_bunch[str(unit)] = spks_b[feat][unit_idxs]
+        units_b[feat] = feat_bunch
+    return units_b
+
+
+def filter_units(units_b, t, **kwargs):
+    '''
+    Filters units according to some parameters. **kwargs are the keyword parameters used to filter
+    the units.
+
+    Parameters
+    ----------
+    units_b : bunch
+        A bunch with keys of labels of spike information (e.g. cluster IDs, times, features, etc.)
+        whose values are arrays that hold values for each unit. The arrays for each key are ordered
+        by unit ID.
+    t : float
+        Duration of time over which to calculate the firing rate and false positive rate.
+
+    Keyword Parameters
+    ------------------
+    min_amp : float
+        The minimum mean amplitude (in V) of the spikes in the unit. Default value is 50e-6.
+    min_fr : float
+        The minimum firing rate (in Hz) of the unit. Default value is 0.5.
+    max_fpr : float
+        The maximum false positive rate of the unit (using the fp formula in Hill et al. (2011)
+        J Neurosci 31: 8699-8705). Default value is 0.2.
+    rp : float
+        The refractory period (in s) of the unit. Used to calculate `max_fp`. Default value is
+        0.002.
+
+    Returns
+    -------
+    filt_units : ndarray
+        The ids of the filtered units.
+
+    See Also
+    --------
+    get_units_bunch
+
+    Examples
+    --------
+    1) Filter units according to the default parameters.
+        >>> import brainbox as bb
+        >>> import alf.io as aio
+        >>> import ibllib.ephys.spikes as e_spks
+        (*Note, if there is no 'alf' directory, make 'alf' directory from 'ks2' output directory):
+        >>> e_spks.ks2_to_alf(path_to_ks_out, path_to_alf_out)
+        # Get a spikes bunch, units bunch, and filter the units.
+        >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
+        >>> units_b = bb.processing.get_units_bunch(spks_b, ['times', 'amps', 'clusters'])
+        >>> T = spks_b['times'][-1] - spks_b['times'][0]
+        >>> filtered_units = bb.processing.filter_units(units_b, T)
+
+    2) Filter units with no minimum amplitude, a minimum firing rate of 1 Hz, and a max false
+    positive rate of 0.2, given a refractory period of 2 ms.
+        >>> filtered_units  = bb.processing.filter_units(units_b, T, min_amp=0, min_fr=1)
+
+    TODO: `units_b` input arg could eventually be replaced by `clstrs_b` if the required metrics
+          are in `clstrs_b['metrics']`
+    '''
+
+    # Set params
+    params = {'min_amp': 50e-6, 'min_fr': 0.5, 'max_fpr': 0.2, 'rp': 0.002}  # defaults
+    params.update(kwargs)  # update from **kwargs
+
+    # Iteratively filter the units for each filter param #
+    # -------------------------------------------------- #
+    units = np.asarray(list(units_b.amps.keys()))
+    # Remove empty clusters
+    empty_cl = np.where([len(units_b.amps[unit]) == 0 for unit in units])[0]
+    filt_units = np.delete(units, empty_cl)
+    for param in params.keys():
+        if param == 'min_amp':  # return units above with amp > `'min_amp'`
+            mean_amps = np.asarray([np.mean(units_b.amps[unit]) for unit in filt_units])
+            filt_idxs = np.where(mean_amps > params['min_amp'])[0]
+            filt_units = filt_units[filt_idxs]
+        elif param == 'min_fr':  # return units with fr > `'min_fr'`
+            fr = np.asarray([len(units_b.amps[unit]) /
+                            (units_b.times[unit][-1] - units_b.times[unit][0])
+                            for unit in filt_units])
+            filt_idxs = np.where(fr > params['min_fr'])[0]
+            filt_units = filt_units[filt_idxs]
+        elif param == 'max_fpr':  # return units with fpr < `'max_fpr'`
+            fpr = np.zeros_like(filt_units, dtype='float')
+            for i, unit in enumerate(filt_units):
+                n_spks = len(units_b.amps[unit])
+                n_isi_viol = len(np.where(np.diff(units_b.times[unit]) < params['rp'])[0])
+                # fpr is min of roots of solved quadratic equation (Hill, et al. 2011).
+                c = (t * n_isi_viol) / (2 * params['rp'] * n_spks**2)  # 3rd term in quadratic
+                fpr[i] = np.min(np.abs(np.roots([-1, 1, c])))  # solve quadratic
+            filt_idxs = np.where(fpr < params['max_fpr'])[0]
+            filt_units = filt_units[filt_idxs]
+    return filt_units.astype(int)

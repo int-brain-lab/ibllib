@@ -1,4 +1,3 @@
-from pathlib import Path
 import alf.io
 from oneibl.one import ONE
 
