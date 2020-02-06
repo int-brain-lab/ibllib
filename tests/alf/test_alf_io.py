@@ -242,7 +242,8 @@ class TestSessionFolder(unittest.TestCase):
         inp = (Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001/raw_behavior_data/'
                     '_iblrig_micData.raw.wav'),
                Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),
-               '/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001/raw_behavior_data/_iblrig_micData.raw.wav',
+               '/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001/raw_behavior_data'
+               '/_iblrig_micData.raw.wav',
                '/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001',)
         out = (Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),
                Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),

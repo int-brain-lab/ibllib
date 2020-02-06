@@ -5,9 +5,9 @@ For a full overview of the scope of the format, see:
 https://ibllib.readthedocs.io/en/develop/04_reference.html#alf
 """
 
+import json
 import copy
 import logging
-import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -387,6 +387,7 @@ def is_uuid_string(string: str) -> bool:
         return True
     else:
         return False
+
 
 def _isdatetime(s: str) -> bool:
     try:

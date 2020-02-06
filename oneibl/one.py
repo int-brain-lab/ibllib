@@ -436,6 +436,9 @@ class ONE(OneAbstract):
             eids = [s['url'] for s in ses]
         eids = [e.split('/')[-1] for e in eids]  # remove url to make it portable
         if details:
+            for s in ses:
+                s['local_path'] = str(Path(self._par.CACHE_DIR, s['lab'], 'Subjects', s['subject'],
+                                           s['start_time'][:10], str(s['number']).zfill(3)))
             return eids, ses
         else:
             return eids
@@ -530,9 +533,9 @@ class ONE(OneAbstract):
         if session_path is None:
             return None
         # search for subj, date, number XXX: hits the DB
-        uuid =  self.search(subjects=session_path.parts[-3],
-                            date_range=session_path.parts[-2],
-                            number=session_path.parts[-1])
+        uuid = self.search(subjects=session_path.parts[-3],
+                           date_range=session_path.parts[-2],
+                           number=session_path.parts[-1])
         # Return the uuid if any
         return uuid[0] if uuid else None
 
@@ -546,33 +549,3 @@ def _validate_date_range(date_range):
     if len(date_range) == 1:
         date_range = [date_range[0], date_range[0]]
     return date_range
-
-
-# TODO: little command-line tool for main ONE
-# def main():
-#     import argparse
-
-#     parser = argparse.ArgumentParser(description='ONE client.')
-#     parser.add_argument('command', help='ONE command name')
-#     parser.add_argument('dataset_types', nargs='*', help='requested dataset types')
-#     parser.add_argument('--limit', type=int, help='maximum number of results to return')
-
-#     args = parser.parse_args()
-#     cmd = args.command
-#     one = ONE()
-
-#     if cmd == 'search':
-#         eids = one.search(dataset_types=args.dataset_types, limit=args.limit)
-#         if not eids:
-#             return
-#         one.load(eids[0], download_only=True)
-
-
-if __name__ == '__main__':
-    # main()
-    from oneibl.one import ONE
-    one = ONE()
-    sess_name = "DY_011/2020-01-30/001/probe00"
-    uuid_in = '2199306e-488a-40ab-93cb-2d2264775578'
-
-    one.path_from_eid(uuid_in)

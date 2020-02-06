@@ -127,6 +127,24 @@ class BrainCoordinates:
     def zlim(self):
         return self.i2z(np.array([0, self.nz - 1]))
 
+    """returns scales"""
+    @property
+    def xscale(self):
+        return self.i2x(np.arange(self.nx))
+
+    @property
+    def yscale(self):
+        return self.i2y(np.arange(self.ny))
+
+    @property
+    def zscale(self):
+        return self.i2z(np.arange(self.nz))
+
+    """returns the 3d mgrid used for 3d visualization"""
+    @property
+    def mgrid(self):
+        return np.meshgrid(self.xscale, self.yscale, self.zscale)
+
 
 class BrainAtlas:
     """
@@ -370,7 +388,7 @@ class Insertion:
 
     @property
     def xyz(self):
-        return np.array((self.entry, self.tip))
+        return np.c_[self.entry, self.tip].transpose()
 
     @property
     def entry(self):
@@ -378,7 +396,7 @@ class Insertion:
 
     @property
     def tip(self):
-        return sph2cart(self.depth, self.theta, self.phi) + np.array((self.x, self.y, self.z))
+        return sph2cart(- self.depth, self.theta, self.phi) + np.array((self.x, self.y, self.z))
 
 
 @dataclass

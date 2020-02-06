@@ -243,10 +243,10 @@ class TestPathsToEidAndBack(unittest.TestCase):
         one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
                   password='TapetesBloc18')
         self.eids = ['cf264653-2deb-44cb-aa84-89b82507028a',
-                '4e0b3320-47b7-416e-b842-c34dc9004cf8',
-                'a9d89baf-9905-470c-8565-859ff212c7be',
-                'aaf101c3-2581-450a-8abd-ddb8f557a5ad',
-        ]
+                     '4e0b3320-47b7-416e-b842-c34dc9004cf8',
+                     'a9d89baf-9905-470c-8565-859ff212c7be',
+                     'aaf101c3-2581-450a-8abd-ddb8f557a5ad',
+                     ]
         self.partial_eid_paths = [
             None,
             None,
@@ -270,7 +270,8 @@ class TestPathsToEidAndBack(unittest.TestCase):
         # test if paths produce expected eid's
         paths = self.partial_eid_paths[-2:]
         paths.append('FlatIron/mainenlab/Subjects/ZM_1743/2019-06-04/001/bla.ble')
-        paths.append('some/other/root/FlatIron/cortexlab/Subjects/KS005/2019-04-04/004/bli/blo.blu')
+        paths.append('some/other/root/FlatIron/cortexlab/'
+                     'Subjects/KS005/2019-04-04/004/bli/blo.blu')
         eids = self.eids[-2:]
         eids.append('a9d89baf-9905-470c-8565-859ff212c7be')
         eids.append('aaf101c3-2581-450a-8abd-ddb8f557a5ad')
