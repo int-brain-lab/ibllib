@@ -37,15 +37,15 @@ class TestTask(unittest.TestCase):
         spike_clusters = self.test_data['spike_clusters']
         event_times = self.test_data['event_times']
         alpha = 0.5
-        significant_units, p_values, cluster_ids = bb.task.responsive_units(spike_times,
-                                                                            spike_clusters,
-                                                                            event_times,
-                                                                            pre_time=0.5,
-                                                                            post_time=0.5,
-                                                                            alpha=alpha)
+        sig_units, stats, p_values, cluster_ids = bb.task.responsive_units(spike_times,
+                                                                           spike_clusters,
+                                                                           event_times,
+                                                                           pre_time=0.5,
+                                                                           post_time=0.5,
+                                                                           alpha=alpha)
         num_clusters = np.size(np.unique(spike_clusters))
-        assert(np.size(significant_units) == 125)
-        self.assertTrue(np.sum(p_values < alpha) == np.size(significant_units))
+        assert(np.size(sig_units) == 125)
+        self.assertTrue(np.sum(p_values < alpha) == np.size(sig_units))
         self.assertTrue(np.size(cluster_ids) == num_clusters)
 
     def test_differentiate_units(self):
@@ -56,31 +56,31 @@ class TestTask(unittest.TestCase):
         event_times = self.test_data['event_times']
         event_groups = self.test_data['event_groups']
         alpha = 0.99
-        significant_units, p_values, cluster_ids = bb.task.differentiate_units(spike_times,
-                                                                               spike_clusters,
-                                                                               event_times,
-                                                                               event_groups,
-                                                                               pre_time=0.5,
-                                                                               post_time=0.5,
-                                                                               alpha=alpha)
+        sig_units, stats, p_values, cluster_ids = bb.task.differentiate_units(spike_times,
+                                                                              spike_clusters,
+                                                                              event_times,
+                                                                              event_groups,
+                                                                              pre_time=0.5,
+                                                                              post_time=0.5,
+                                                                              alpha=alpha)
         num_clusters = np.size(np.unique(spike_clusters))
-        self.assertTrue(np.size(significant_units) == 1)
-        self.assertTrue(np.sum(p_values < alpha) == np.size(significant_units))
+        self.assertTrue(np.size(sig_units) == 1)
+        self.assertTrue(np.sum(p_values < alpha) == np.size(sig_units))
         self.assertTrue(np.size(cluster_ids) == num_clusters)
 
-    def test_calculate_roc(self):
+    def test_roc_between_two_events(self):
         if self.test_data is None:
             return
         spike_times = self.test_data['spike_times']
         spike_clusters = self.test_data['spike_clusters']
         event_times = self.test_data['event_times']
         event_groups = self.test_data['event_groups']
-        auc_roc, cluster_ids = bb.task.calculate_roc(spike_times,
-                                                     spike_clusters,
-                                                     event_times,
-                                                     event_groups,
-                                                     pre_time=0.5,
-                                                     post_time=0.5)
+        auc_roc, cluster_ids = bb.task.roc_between_two_events(spike_times,
+                                                              spike_clusters,
+                                                              event_times,
+                                                              event_groups,
+                                                              pre_time=0.5,
+                                                              post_time=0.5)
         num_clusters = np.size(np.unique(spike_clusters))
         self.assertTrue(np.sum(auc_roc < 0.3) == 24)
         self.assertTrue(np.sum(auc_roc > 0.7) == 10)

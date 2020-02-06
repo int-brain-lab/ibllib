@@ -75,6 +75,8 @@ def responsive_units(spike_times, spike_clusters, event_times,
     -------
     significant_units : ndarray
         an array with the indices of clusters that are significatly modulated
+    stats : 1D array
+        the statistic of the test that was performed
     p_values : ndarray
         the p-values of all the clusters
     cluster_ids : ndarray
@@ -90,17 +92,19 @@ def responsive_units(spike_times, spike_clusters, event_times,
 
     # Do statistics
     p_values = np.empty(spike_counts.shape[0])
+    stats = np.empty(spike_counts.shape[0])
     for i in range(spike_counts.shape[0]):
         if np.sum(baseline_counts[i, :] - spike_counts[i, :]) == 0:
             p_values[i] = 1
+            stats[i] = 0
         else:
-            _, p_values[i] = wilcoxon(baseline_counts[i, :], spike_counts[i, :])
+            stats[i], p_values[i] = wilcoxon(baseline_counts[i, :], spike_counts[i, :])
 
     # Perform FDR correction for multiple testing
     sig_units, p_values, _, _ = multipletests(p_values, alpha)
     significant_units = cluster_ids[sig_units]
 
-    return significant_units, p_values, cluster_ids
+    return significant_units, stats, p_values, cluster_ids
 
 
 def differentiate_units(spike_times, spike_clusters, event_times, event_groups,
@@ -135,9 +139,11 @@ def differentiate_units(spike_times, spike_clusters, event_times, event_groups,
 
     Returns
     -------
-    significant_units : ndarray
+    significant_units : 1D array
         an array with the indices of clusters that are significatly modulated
-    p_values : ndarray
+    stats : 1D array
+        the statistic of the test that was performed
+    p_values : 1D array
         the p-values of all the clusters
     cluster_ids : ndarray
         cluster ids of the p-values
@@ -159,28 +165,77 @@ def differentiate_units(spike_times, spike_clusters, event_times, event_groups,
 
     # Do statistics
     p_values = np.empty(len(cluster_ids))
+    stats = np.empty(len(cluster_ids))
     for i in range(len(cluster_ids)):
         if (np.sum(counts_1[i, :]) == 0) and (np.sum(counts_2[i, :]) == 0):
             p_values[i] = 1
+            stats[i] = 0
         else:
             if test == 'ranksums':
-                _, p_values[i] = ranksums(counts_1[i, :], counts_2[i, :])
+                stats[i], p_values[i] = ranksums(counts_1[i, :], counts_2[i, :])
             elif test == 'signrank':
-                _, p_values[i] = wilcoxon(counts_1[i, :], counts_2[i, :])
+                stats[i], p_values[i] = wilcoxon(counts_1[i, :], counts_2[i, :])
             elif test == 'ttest':
-                _, p_values[i] = ttest_ind(counts_1[i, :], counts_2[i, :])
+                stats[i], p_values[i] = ttest_ind(counts_1[i, :], counts_2[i, :])
             elif test == 'paired_ttest':
-                _, p_values[i] = ttest_rel(counts_1[i, :], counts_2[i, :])
+                stats[i], p_values[i] = ttest_rel(counts_1[i, :], counts_2[i, :])
 
     # Perform FDR correction for multiple testing
     sig_units, p_values, _, _ = multipletests(p_values, alpha)
     significant_units = cluster_ids[sig_units]
 
-    return significant_units, p_values, cluster_ids
+    return significant_units, stats, p_values, cluster_ids
 
 
-def calculate_roc(spike_times, spike_clusters, event_times, event_groups,
-                  pre_time=0, post_time=0.25):
+def roc_single_event(spike_times, spike_clusters, event_times,
+                     pre_time=[0.5, 0], post_time=[0, 0.5]):
+    """
+    Determine how well neurons respond to a certain task event by calculating the area under the
+    ROC curve between a baseline period before the event and a period after the event.
+    Values of > 0.5 indicate the neuron respons positively to the event and < 0.5 indicate
+    a negative response.
+
+    Parameters
+    ----------
+    spike_times : 1D array
+        spike times (in seconds)
+    spike_clusters : 1D array
+        cluster ids corresponding to each event in `spikes`
+    event_times : 1D array
+        times (in seconds) of the events from the two groups
+    pre_time : two-element array
+        time (in seconds) preceding the event to get the baseline (e.g. [0.5, 0.2] would be a
+        window starting 0.5 seconds before the event and ending at 0.2 seconds before the event)
+    post_time : two-element array
+        time (in seconds) to follow the event times
+
+    Returns
+    -------
+    auc_roc : 1D array
+        the area under the ROC curve
+    cluster_ids : 1D array
+        cluster ids of the p-values
+    """
+
+    # Get spike counts for baseline and event timewindow
+    baseline_times = np.column_stack(((event_times - pre_time[0]), (event_times - pre_time[1])))
+    baseline_counts, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters,
+                                                             baseline_times)
+    times = np.column_stack(((event_times + post_time[0]), (event_times + post_time[1])))
+    spike_counts, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters, times)
+
+    # Calculate area under the ROC curve per neuron
+    auc_roc = np.empty(spike_counts.shape[0])
+    for i in range(spike_counts.shape[0]):
+        auc_roc[i] = roc_auc_score(np.concatenate((np.zeros(baseline_counts.shape[1]),
+                                                   np.ones(spike_counts.shape[1]))),
+                                   np.concatenate((baseline_counts[i, :], spike_counts[i, :])))
+
+    return auc_roc, cluster_ids
+
+
+def roc_between_two_events(spike_times, spike_clusters, event_times, event_groups,
+                           pre_time=0, post_time=0.25):
     """
     Calcluate area under the ROC curve that indicates how well the activity of the neuron
     distiguishes between two events (e.g. movement to the right vs left). A value of 0.5 indicates
