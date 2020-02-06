@@ -199,8 +199,8 @@ def _design_knockoff_sdp(exog):
     h1 = 2 * Sigma
     h1 = matrix(h1)
     i, j = np.diag_indices(nvar)
-    G1 = np.zeros((nvar*nvar, nvar))
-    G1[i*nvar + j, i] = 1
+    G1 = np.zeros((nvar * nvar, nvar))
+    G1[i * nvar + j, i] = 1
     G1 = matrix(G1)
 
     solvers.options['show_progress'] = False
@@ -227,7 +227,7 @@ def _design_knockoff_equi(exog):
 
     nobs, nvar = exog.shape
 
-    if nobs < 2*nvar:
+    if nobs < 2 * nvar:
         msg = "The equivariant knockoff can ony be used when n >= 2*p"
         raise ValueError(msg)
 
@@ -240,7 +240,7 @@ def _design_knockoff_equi(exog):
     ev, _ = np.linalg.eig(xcov)
     evmin = np.min(ev)
 
-    sl = min(2*evmin, 1)
+    sl = min(2 * evmin, 1)
     sl = sl * np.ones(nvar)
 
     exogn = _get_knmat(exog, xcov, sl)

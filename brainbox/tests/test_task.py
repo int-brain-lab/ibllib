@@ -22,7 +22,7 @@ class TestTask(unittest.TestCase):
         spike_times = self.test_data['spike_times']
         spike_clusters = self.test_data['spike_clusters']
         event_times = self.test_data['event_times']
-        times = np.column_stack(((event_times-0.5), (event_times+0.5)))
+        times = np.column_stack(((event_times - 0.5), (event_times + 0.5)))
         counts, cluster_ids = bb.task._get_spike_counts_in_bins(spike_times,
                                                                 spike_clusters,
                                                                 times)

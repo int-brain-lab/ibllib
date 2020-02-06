@@ -63,7 +63,7 @@ def _ecdf(x):
     '''no frills empirical cdf used in fdrcorrection
     '''
     nobs = len(x)
-    return np.arange(1, nobs+1)/float(nobs)
+    return np.arange(1, nobs + 1) / float(nobs)
 
 
 multitest_methods_names = {'b': 'Bonferroni',
@@ -172,7 +172,7 @@ def multipletests(pvals, alpha=0.05, method='hs', is_sorted=False,
         pvals = np.take(pvals, sortind)
 
     ntests = len(pvals)
-    alphacSidak = 1 - np.power((1. - alphaf), 1./ntests)
+    alphacSidak = 1 - np.power((1. - alphaf), 1. / ntests)
     alphacBonf = alphaf / float(ntests)
     if method.lower() in ['b', 'bonf', 'bonferroni']:
         reject = pvals <= alphacBonf
@@ -184,7 +184,7 @@ def multipletests(pvals, alpha=0.05, method='hs', is_sorted=False,
 
     elif method.lower() in ['hs', 'holm-sidak']:
         alphacSidak_all = 1 - np.power((1. - alphaf),
-                                       1./np.arange(ntests, 0, -1))
+                                       1. / np.arange(ntests, 0, -1))
         notreject = pvals > alphacSidak_all
         del alphacSidak_all
 
@@ -233,7 +233,7 @@ def multipletests(pvals, alpha=0.05, method='hs', is_sorted=False,
         # we need a copy because we overwrite it in a loop
         a = pvals.copy()
         for m in range(ntests, 1, -1):
-            cim = np.min(m * pvals[-m:] / np.arange(1, m+1.))
+            cim = np.min(m * pvals[-m:] / np.arange(1, m + 1.))
             a[-m:] = np.maximum(a[-m:], cim)
             a[:-m] = np.maximum(a[:-m], np.minimum(m * pvals[:-m], cim))
         pvals_corrected = a
@@ -264,7 +264,7 @@ def multipletests(pvals, alpha=0.05, method='hs', is_sorted=False,
         # adaptive stepdown in Gavrilov, Benjamini, Sarkar, Annals of Statistics 2009
 
         ii = np.arange(1, ntests + 1)
-        q = (ntests + 1. - ii)/ii * pvals / (1. - pvals)
+        q = (ntests + 1. - ii) / ii * pvals / (1. - pvals)
         pvals_corrected_raw = np.maximum.accumulate(q)  # up requirementd
 
         pvals_corrected = np.minimum.accumulate(pvals_corrected_raw[::-1])[::-1]
@@ -327,11 +327,11 @@ def fdrcorrection(pvals, alpha=0.05, method='indep', is_sorted=False):
     if method in ['i', 'indep', 'p', 'poscorr']:
         ecdffactor = _ecdf(pvals_sorted)
     elif method in ['n', 'negcorr']:
-        cm = np.sum(1./np.arange(1, len(pvals_sorted)+1))  # corrected this
+        cm = np.sum(1. / np.arange(1, len(pvals_sorted) + 1))  # corrected this
         ecdffactor = _ecdf(pvals_sorted) / cm
     else:
         raise ValueError('only indep and negcorr implemented')
-    reject = pvals_sorted <= ecdffactor*alpha
+    reject = pvals_sorted <= ecdffactor * alpha
     if reject.any():
         rejectmax = max(np.nonzero(reject)[0])
         reject[:rejectmax] = True
@@ -402,7 +402,7 @@ def fdrcorrection_twostage(pvals, alpha=0.05, method='bky', iter=False,
 
     ntests = len(pvals)
     if method == 'bky':
-        fact = (1.+alpha)
+        fact = (1. + alpha)
         alpha_prime = alpha / fact
     elif method == 'bh':
         fact = 1.
@@ -665,4 +665,4 @@ class NullDistribution(object):
         """
 
         zval = (zscores - self.mean) / self.sd
-        return np.exp(-0.5*zval**2 - np.log(self.sd) - 0.5*np.log(2*np.pi))
+        return np.exp(-0.5 * zval**2 - np.log(self.sd) - 0.5 * np.log(2 * np.pi))
