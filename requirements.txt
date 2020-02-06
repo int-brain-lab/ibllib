@@ -16,4 +16,4 @@ opencv-python>=4.1.1.26
 phylib>=2.2
 pynrrd>=0.4.0
 tqdm>=4.32.1
-sklearn>=0.22.1
+scikit-learn>=0.22.1
