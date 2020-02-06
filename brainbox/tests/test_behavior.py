@@ -11,7 +11,7 @@ class TestWheel(unittest.TestCase):
         # Test data is in the form ((inputs), (outputs)) where inputs is a tuple containing a
         # numpy array of timestamps and one of positions; outputs is a tuple of outputs from
         # teh function under test, e.g. wheel.movements
-        pickle_file = Path(__file__).parent.joinpath('wheel_test.pickle')
+        pickle_file = Path(__file__).parent.joinpath('wheel_test.p')
         if not pickle_file.exists():
             self.test_data = None
         else:
