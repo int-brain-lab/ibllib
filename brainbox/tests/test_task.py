@@ -40,11 +40,11 @@ class TestTask(unittest.TestCase):
         sig_units, stats, p_values, cluster_ids = bb.task.responsive_units(spike_times,
                                                                            spike_clusters,
                                                                            event_times,
-                                                                           pre_time=0.5,
-                                                                           post_time=0.5,
+                                                                           pre_time=[0.5, 0],
+                                                                           post_time=[0, 0.5],
                                                                            alpha=alpha)
         num_clusters = np.size(np.unique(spike_clusters))
-        assert(np.size(sig_units) == 125)
+        self.assertTrue(np.size(sig_units) == 125)
         self.assertTrue(np.sum(p_values < alpha) == np.size(sig_units))
         self.assertTrue(np.size(cluster_ids) == num_clusters)
 
@@ -66,6 +66,22 @@ class TestTask(unittest.TestCase):
         num_clusters = np.size(np.unique(spike_clusters))
         self.assertTrue(np.size(sig_units) == 1)
         self.assertTrue(np.sum(p_values < alpha) == np.size(sig_units))
+        self.assertTrue(np.size(cluster_ids) == num_clusters)
+
+    def test_roc_single_event(self):
+        if self.test_data is None:
+            return
+        spike_times = self.test_data['spike_times']
+        spike_clusters = self.test_data['spike_clusters']
+        event_times = self.test_data['event_times']
+        auc_roc, cluster_ids = bb.task.roc_single_event(spike_times,
+                                                        spike_clusters,
+                                                        event_times,
+                                                        pre_time=[0.5, 0],
+                                                        post_time=[0, 0.5])
+        num_clusters = np.size(np.unique(spike_clusters))
+        self.assertTrue(np.sum(auc_roc < 0.3) == 4)
+        self.assertTrue(np.sum(auc_roc > 0.6) == 25)
         self.assertTrue(np.size(cluster_ids) == num_clusters)
 
     def test_roc_between_two_events(self):
