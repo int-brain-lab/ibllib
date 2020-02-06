@@ -437,8 +437,12 @@ class ONE(OneAbstract):
         eids = [e.split('/')[-1] for e in eids]  # remove url to make it portable
         if details:
             for s in ses:
-                s['local_path'] = str(Path(self._par.CACHE_DIR, s['lab'], 'Subjects', s['subject'],
-                                           s['start_time'][:10], str(s['number']).zfill(3)))
+                if all([s.get('lab'), s.get('subject'), s.get('start_time')]):
+                    s['local_path'] = str(Path(self._par.CACHE_DIR, s['lab'], 'Subjects',
+                                               s['subject'], s['start_time'][:10],
+                                               str(s['number']).zfill(3)))
+                else:
+                    s['local_path'] = None
             return eids, ses
         else:
             return eids
