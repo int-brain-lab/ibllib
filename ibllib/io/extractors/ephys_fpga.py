@@ -379,13 +379,13 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
             ax = display
         r0 = _get_sync_fronts(sync, chmap['rotary_encoder_0'])
         plots.squares(bpod['times'], bpod['polarities'] * 0.4 + 1,
-                      ax=ax, label='bpod=1', color='k')
+                      ax=ax, color='k')
         plots.squares(frame2ttl['times'], frame2ttl['polarities'] * 0.4 + 2,
-                      ax=ax, label='frame2ttl=2', color='k')
+                      ax=ax, color='k')
         plots.squares(audio['times'], audio['polarities'] * 0.4 + 3,
-                      ax=ax, label='audio=3', color='k')
+                      ax=ax, color='k')
         plots.squares(r0['times'], r0['polarities'] * 0.4 + 4,
-                      ax=ax, label='r0=4', color='k')
+                      ax=ax, color='k')
         plots.vertical_lines(t_ready_tone_in, ymin=0, ymax=ymax,
                              ax=ax, label='ready tone in', color='b', linewidth=width)
         plots.vertical_lines(t_trial_start, ymin=0, ymax=ymax,
@@ -401,6 +401,8 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
         plots.vertical_lines(trials['stimOn_times'], ymin=0, ymax=ymax,
                              ax=ax, label='stim on', color='tab:orange', linewidth=width)
         ax.legend()
+        ax.set_yticklabels(['', 'bpod', 'f2ttl', 'audio', 're_0', ''])
+        ax.set_ylim([0, 5])
 
     if save and output_path:
         output_path = Path(output_path)
