@@ -27,49 +27,22 @@ def get_probabilityLeft(session_path, save=False, data=False, settings=False):
         settings = {"IBLRIG_VERSION_TAG": "100.0.0"}
     elif settings["IBLRIG_VERSION_TAG"] == "":
         settings.update({"IBLRIG_VERSION_TAG": "100.0.0"})
-    # LEN_BLOCKS is None up to v6.3.1 (also POSITIONS, CONTRASTS, et al.)
-    if settings["LEN_BLOCKS"] is None:
-        # Get from iblrig repo
-        num = settings.get("PRELOADED_SESSION_NUM", None)
-        if num is None:
-            num = settings.get("PREGENERATED_SESSION_NUM", None)
-        if num is None:
-            fn = settings.get('SESSION_LOADED_FILE_PATH', None)
-            fn = PureWindowsPath(fn).name
-            num = ''.join([d for d in fn if d.isdigit()])
-            if num == '':
-                raise ValueError("Can't extract left probability behaviour.")
-        master_branch = "https://raw.githubusercontent.com/int-brain-lab/iblrig/master/"
-        sessions_folder = "tasks/_iblrig_tasks_ephysChoiceWorld/sessions/"
-        fnames = [f"session_{num}_ephys_len_blocks.npy", f"session_{num}_ephys_pcqs.npy"]
-        tmp = tempfile.mkdtemp()
-        for fil in fnames:
-            oneibl.webclient.http_download_file(f"{master_branch}{sessions_folder}{fil}",
-                                                cache_dir=tmp)
-        # Load the files
-        len_blocks = np.load(f"{tmp}/{fnames[0]}").tolist()
-        pcqs = np.load(f"{tmp}/{fnames[1]}")
-        positions = [x[0] for x in pcqs]
-        # Patch the settings file
-        settings["LEN_BLOCKS"] = len_blocks
-        settings["POSITIONS"] = positions
-        # Cleanup
-        shutil.rmtree(tmp)
-    # Continue
-    pLeft = []
-    prev = 0
-    for bl, nt in zip(np.cumsum(settings["LEN_BLOCKS"]), settings["LEN_BLOCKS"]):
-        prob = np.sum([1 for x in np.sign(settings["POSITIONS"][prev:bl]) if x < 0]) / nt
-        pLeft.extend([prob] * nt)
-        prev = bl
-    # Deduce the generative probabilities
-    gLeft = np.array(pLeft)
-    gLeft[gLeft == 0.5] = 0.5
-    gLeft[gLeft < 0.5] = 0.2
-    gLeft[gLeft > 0.5] = 0.8
-    # Trim to actual number of trials
-    gLeft = gLeft[: len(data)]
-    gLeft = gLeft.tolist()
+    num = settings.get("PRELOADED_SESSION_NUM", None)
+    if num is None:
+        num = settings.get("PREGENERATED_SESSION_NUM", None)
+    if num is None:
+        fn = settings.get('SESSION_LOADED_FILE_PATH', None)
+        fn = PureWindowsPath(fn).name
+        num = ''.join([d for d in fn if d.isdigit()])
+        if num == '':
+            raise ValueError("Can't extract left probability behaviour.")
+    # Load the pregenerated file
+    sessions_folder = Path(raw.__file__).parent.joinpath('extractors', 'ephys_sessions')
+    fname = f"session_{num}_ephys_pcqs.npy"
+    pcqsp = np.load(sessions_folder.joinpath(fname))
+    pLeft = pcqsp[:, 4]
+    pLeft = pLeft[: len(data)]
+
     if raw.save_bool(save, "_ibl_trials.probabilityLeft.npy"):
         lpath = Path(session_path).joinpath("alf", "_ibl_trials.probabilityLeft.npy")
         np.save(lpath, pLeft)
