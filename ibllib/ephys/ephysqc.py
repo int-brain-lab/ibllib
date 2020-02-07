@@ -296,7 +296,7 @@ def spike_sorting_metrics(spike_times, spike_clusters, spike_amplitudes,
                                 xbin=params['presence_bin_length_secs'],
                                 ybin=cluster_ids, xlim=[tmin, tmax])[0]
     r.num_spikes = np.sum(presence_ratio > 0, axis=1)
-    r.firing_rate = r.num_spikes / (tmax - tmin)
+    r.firing_rate = r.num_spikes / params['presence_bin_length_secs']
     r.presence_ratio = np.sum(presence_ratio > 0, axis=1) / presence_ratio.shape[1]
     r.presence_ratio_std = np.std(presence_ratio, axis=1)
 
