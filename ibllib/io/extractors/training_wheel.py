@@ -11,7 +11,7 @@ from scipy import interpolate
 
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
-from brainbox.behavior import wheel
+import brainbox.behavior.wheel as wheel
 import ibllib.exceptions as err
 
 logger_ = logging.getLogger('ibllib.alf')
