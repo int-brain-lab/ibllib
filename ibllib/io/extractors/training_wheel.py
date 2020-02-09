@@ -11,8 +11,8 @@ from scipy import interpolate
 
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
-import ibllib.exceptions as err
 import brainbox.behavior.wheel as wheel
+import ibllib.exceptions as err
 
 logger_ = logging.getLogger('ibllib.alf')
 WHEEL_RADIUS_CM = 1  # we want the output in radians

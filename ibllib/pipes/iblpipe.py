@@ -34,6 +34,7 @@ import time
 from dask import visualize
 from dask.distributed import Client, LocalCluster
 
+from alf.io import is_session_path
 
 logger = logging.getLogger(__name__)
 
@@ -57,17 +58,11 @@ def all_file_globs_exist(session_dir, path_templates):
 STATUS_LIST = ('pending', 'processing', 'completed', 'error')
 
 
-def is_session_dir(path):
-    """Return whether a directory is a session directory or not."""
-    # TODO: improve how we determine whether a dir is a session dir or not.
-    return (Path(path) / 'raw_ephys_data').exists()
-
-
 def find_session_dirs(roots):
     """Recursively find a list of session dirs in one or several root directories."""
     for r in roots:
         for subdir in Path(r).rglob('*'):
-            if subdir.is_dir() and is_session_dir(subdir):
+            if subdir.is_dir() and is_session_path(subdir):
                 yield subdir
 
 
@@ -301,6 +296,7 @@ class Pipeline:
     def run(self):
         # TODO: check priority io etc
         # TODO: continuous server of dashboard
+        # the get method computes the dask graph
         return self.client.get(
             self.graph, [('end', session_dir) for session_dir in self.session_dirs])
 

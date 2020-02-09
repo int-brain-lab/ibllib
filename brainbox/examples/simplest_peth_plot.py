@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import alf.io
-from brainbox.singlecell import peths
+from brainbox.singlecell import calculate_peths
 
 from oneibl.one import ONE
 
@@ -14,7 +14,7 @@ ses_path = datasets[0].local_path.parent
 spikes = alf.io.load_object(ses_path, 'spikes')
 trials = alf.io.load_object(ses_path, '_ibl_trials')
 
-peth, bs = peths(spikes.times, spikes.clusters, [225, 52], trials.goCue_times)
+peth, bs = calculate_peths(spikes.times, spikes.clusters, [225, 52], trials.goCue_times)
 
 plt.plot(peth.tscale, peth.means.T)
 

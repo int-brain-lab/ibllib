@@ -99,6 +99,10 @@ class TestProcessing(unittest.TestCase):
         self.assertTrue(np.all(r.shape == (3, 5)))
 
 
+def test_get_unit_bunches():
+    pass
+
+
 if __name__ == "__main__":
     np.random.seed(0)
     unittest.main(exit=False)

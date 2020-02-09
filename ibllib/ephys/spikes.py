@@ -16,15 +16,18 @@ _logger = logging.getLogger('ibllib')
 
 
 @log2session_static('ephys')
-def probes_description(ses_path):
+def probes_description(ses_path, bin_exists=True):
     """
-    Aggregate probes informatin into ALF files
+    Aggregate probes information into ALF files
+    Input:
+        raw_ephys_data/probeXX/
+    Output:
         alf/probes.description.npy
         alf/probes.trajecory.npy
     """
 
     ses_path = Path(ses_path)
-    ephys_files = glob_ephys_files(ses_path)
+    ephys_files = glob_ephys_files(ses_path, bin_exists=bin_exists)
     subdirs, labels, efiles_sorted = zip(
         *sorted([(ep.ap.parent, ep.label, ep) for ep in ephys_files if ep.get('ap')]))
 
@@ -37,7 +40,9 @@ def probes_description(ses_path):
                                   'serial': int(md.serial),
                                   'raw_file_name': md.fileName,
                                   })
-    probe_description_file = ses_path.joinpath('alf', 'probes.description.json')
+    alf_path = ses_path.joinpath('alf')
+    alf_path.mkdir(exist_ok=True, parents=True)
+    probe_description_file = alf_path.joinpath('probes.description.json')
     with open(probe_description_file, 'w+') as fid:
         fid.write(json.dumps(probe_description))
 
@@ -62,7 +67,7 @@ def probes_description(ses_path):
         if i >= len(labels):
             break
         trajs.append(prb2alf(bpod_meta['PROBE_DATA'][f'probe0{i}'], labels[i]))
-    probe_trajectory_file = ses_path.joinpath('alf', 'probes.trajectory.json')
+    probe_trajectory_file = alf_path.joinpath('probes.trajectory.json')
     with open(probe_trajectory_file, 'w+') as fid:
         fid.write(json.dumps(trajs))
 

@@ -1,10 +1,9 @@
 '''
-Single-cell functions.
+Computes properties of single-cells, e.g. the autocorrelation and firing rate.
 '''
 
 import numpy as np
 from scipy.signal import convolve, gaussian
-
 from brainbox.core import Bunch
 from brainbox.population import xcorr
 
@@ -29,8 +28,9 @@ def acorr(spike_times, bin_size=None, window_size=None):
     return xc[0, 0, :]
 
 
-def peths(spike_times, spike_clusters, cluster_ids, align_times, pre_time=0.2,
-          post_time=0.5, bin_size=0.025, smoothing=0.025, return_fr=True):
+def calculate_peths(
+        spike_times, spike_clusters, cluster_ids, align_times, pre_time=0.2,
+        post_time=0.5, bin_size=0.025, smoothing=0.025, return_fr=True):
     """
     Calcluate peri-event time histograms; return means and standard deviations
     for each time point across specified clusters
@@ -135,3 +135,56 @@ def peths(spike_times, spike_clusters, cluster_ids, align_times, pre_time=0.2,
     tscale = (tscale[:-1] + tscale[1:]) / 2
     peths = Bunch({'means': peth_means, 'stds': peth_stds, 'tscale': tscale, 'cscale': ids})
     return peths, binned_spikes
+
+
+def firing_rate(ts, hist_win=0.01, fr_win=0.5):
+    '''
+    Computes the instantaneous firing rate of a unit over time by computing a histogram of spike
+    counts over a specified window of time, and summing this histogram over a sliding window of
+    specified time over a specified period of total time.
+
+    Parameters
+    ----------
+    ts : ndarray
+        The spike timestamps from which to compute the firing rate..
+    hist_win : float
+        The time window (in s) to use for computing spike counts.
+    fr_win : float
+        The time window (in s) to use as a moving slider to compute the instantaneous firing rate.
+
+    Returns
+    -------
+    fr : ndarray
+        The instantaneous firing rate over time (in hz).
+
+    See Also
+    --------
+    metrics.firing_rate_coeff_var
+    plot.firing_rate
+
+    Examples
+    --------
+    1) Compute the firing rate for unit 1 from the time of its first to last spike.
+        >>> import brainbox as bb
+        >>> import alf.io as aio
+        >>> import ibllib.ephys.spikes as e_spks
+        (*Note, if there is no 'alf' directory, make 'alf' directory from 'ks2' output directory):
+        >>> e_spks.ks2_to_alf(path_to_ks_out, path_to_alf_out)
+        # Load a spikes bunch and get the timestamps for unit 1, and calculate the instantaneous
+        # firing rate.
+        >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
+        >>> unit_idxs = np.where(spks_b['clusters'] == 1)[0]
+        >>> ts = spks_b['times'][unit_idxs]
+        >>> fr = bb.singlecell.firing_rate(ts)
+    '''
+
+    # Compute histogram of spike counts.
+    t_tot = ts[-1] - ts[0]
+    n_bins_hist = np.int(t_tot / hist_win)
+    counts = np.histogram(ts, n_bins_hist)[0]
+    # Compute moving average of spike counts to get instantaneous firing rate in s.
+    n_bins_fr = np.int(t_tot / fr_win)
+    step_sz = np.int(len(counts) / n_bins_fr)
+    fr = np.array([np.sum(counts[step:(step + step_sz)])
+                   for step in range(len(counts) - step_sz)]) / fr_win
+    return fr

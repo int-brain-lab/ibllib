@@ -49,6 +49,18 @@ class Patcher(abc.ABC):
         :param dry:
         :return:
         """
+        status = self._patch_dataset(path, dset_id=dset_id, dry=dry)
+        if not dry and status == 0:
+            self.one.alyx.rest('datasets', 'partial_update', id=dset_id,
+                               data={'hash': md5(path),
+                                     'file_size': path.stat().st_size,
+                                     'version': version.ibllib()}
+                               )
+
+    def _patch_dataset(self, path, dset_id=None, dry=False):
+        """
+        Private method that skips
+        """
         path = Path(path)
         if dset_id is None:
             dset_id = path.name.split('.')[-2]
@@ -64,14 +76,38 @@ class Patcher(abc.ABC):
         if remote_path.is_absolute():
             remote_path = remote_path.relative_to(remote_path.root)
         status = self._scp(path, Path(FLATIRON_MOUNT) / remote_path, dry=dry)[0]
-        if not dry and status == 0:
-            self.one.alyx.rest('datasets', 'partial_update', id=dset_id,
-                               data={'hash': md5(path),
-                                     'file_size': path.stat().st_size,
-                                     'version': version.ibllib()}
-                               )
+        return status
 
-    def create_dataset(self, path, server_repository=None, created_by='root', dry=False):
+    def register_dataset(self, file_list, created_by='root', server_repository=None, dry=False):
+        """
+        Registers a set of files belonging to a session only on the server
+        :param session_path:
+        :param filenames:
+        :param created_by:
+        :param server_repository:
+        :param dry:
+        :return:
+        """
+        if not isinstance(file_list, list):
+            file_list = [Path(file_list)]
+        assert len(set([alf.io.get_session_path(f) for f in file_list])) == 1
+        assert all([Path(f).exists() for f in file_list])
+        session_path = alf.io.get_session_path(file_list[0])
+        # first register the file
+        r = {'created_by': created_by,
+             'path': str(session_path.relative_to((session_path.parents[2]))),
+             'filenames': [str(p.relative_to(session_path)) for p in file_list],
+             'name': server_repository,
+             'server_only': True,
+             'hashes': [md5(p) for p in file_list],
+             'filesizes': [p.stat().st_size for p in file_list],
+             'versions': [version.ibllib() for _ in file_list]}
+        if not dry:
+            return self.one.alyx.rest('register-file', 'create', data=r)
+        else:
+            print(r)
+
+    def create_dataset(self, file_list, server_repository=None, created_by='root', dry=False):
         """
         Creates a new dataset on FlatIron and uploads it from arbitrary location.
         Rules for creation/patching are the same that apply for registration via Alyx
@@ -83,29 +119,18 @@ class Patcher(abc.ABC):
         :param created_by: alyx username for the dataset (optional, defaults to root)
         :return:
         """
-        if not isinstance(path, list):
-            path = [Path(path)]
-        assert len(set([alf.io.get_session_path(f) for f in path])) == 1
-        assert all([Path(f).exists() for f in path])
-        session_path = alf.io.get_session_path(path[0])
-
         # first register the file
-        r = {'created_by': created_by,
-             'path': str(session_path.relative_to((session_path.parents[2]))),
-             'filenames': [str(p.relative_to(session_path)) for p in path],
-             'name': server_repository,
-             'server_only': True,
-             'hashes': [md5(p) for p in path],
-             'filesizes': [p.stat().st_size for p in path],
-             'versions': [version.ibllib() for _ in path]}
-        if not dry:
-            datasets = self.one.alyx.rest('register-file', 'create', data=r)
-        else:
-            print(r)
+        if not isinstance(file_list, list):
+            file_list = [Path(file_list)]
+        assert len(set([alf.io.get_session_path(f) for f in file_list])) == 1
+        assert all([Path(f).exists() for f in file_list])
+        datasets = self.register_dataset(file_list, created_by=created_by,
+                                         server_repository=server_repository, dry=dry)
+        if dry:
             return
         # from the dataset info, set flatIron flag to exists=True
-        for p, d in zip(path, datasets):
-            self.patch_dataset(p, dset_id=d['id'], dry=dry)
+        for p, d in zip(file_list, datasets):
+            self._patch_dataset(p, dset_id=d['id'], dry=dry)
 
     def delete_dataset(self, dset_id, dry=False):
         dset = self.one.alyx.rest('datasets', "read", id=dset_id)
@@ -204,7 +229,7 @@ class GlobusPatcher(Patcher):
                     status = gtc.task_wait(task_id=resp['task_id'], timeout=30)
                 if status is False:
                     tinfo = gtc.get_task(task_id=resp['task_id'])['nice_status']
-                    raise ConnectionError(f"Could not connect to Globus {tinfo['nice_status']}")
+                    raise ConnectionError(f"Could not connect to Globus {tinfo}")
 
         # handles the transfers first
         if len(self.globus_transfer['DATA']) > 0:

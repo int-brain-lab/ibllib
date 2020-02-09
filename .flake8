@@ -10,5 +10,5 @@ exclude =
     venv,
     test_imports.py,
     build,
-    dist
-    brainbox/
+    dist,
+    brainbox/examples/

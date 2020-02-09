@@ -5,11 +5,13 @@ For a full overview of the scope of the format, see:
 https://ibllib.readthedocs.io/en/develop/04_reference.html#alf
 """
 
-import logging
 import json
-import os
+import copy
+import logging
 import re
+from datetime import datetime
 from pathlib import Path
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -25,6 +27,38 @@ class AlfBunch(Bunch):
     @property
     def check_dimensions(self):
         return check_dimensions(self)
+
+    def append(self, b, inplace=False):
+        """
+        Appends one bunch to another, key by key
+        :param bunch:
+        :return: Bunch
+        """
+        # default is to return a copy
+        if inplace:
+            a = self
+        else:
+            a = AlfBunch(copy.deepcopy(self))
+        # handles empty bunches for convenience if looping
+        if b == {}:
+            return a
+        if a == {}:
+            return b
+        # right now supports only strictly matching keys. Will implement other cases as needed
+        if set(a.keys()) != set(b.keys()):
+            raise NotImplementedError("Append bunches only works with strictly matching keys"
+                                      "For more complex merges, convert to pandas dataframe.")
+        # do the merge; only concatenate lists and np arrays right now
+        for k in a:
+            if isinstance(a[k], np.ndarray):
+                a[k] = np.concatenate((a[k], b[k]), axis=0)
+            elif isinstance(a[k], list):
+                a[k].extend(b[k])
+            else:
+                _logger.warning(f"bunch key '{k}' is a {a[k].__class__}. I don't know how to"
+                                f" handle that. Use pandas for advanced features")
+        check_dimensions(a)
+        return a
 
     def to_df(self):
         return dataframe(self)
@@ -340,9 +374,9 @@ def add_uuid_string(file_path, uuid):
     return file_path.parent.joinpath(f"{'.'.join(name_parts)}.{uuid}{file_path.suffix}")
 
 
-def is_uuid_string(string):
+def is_uuid_string(string: str) -> bool:
     """
-    Bool test to c
+    Bool test for uuid version 4
     """
     if string is None:
         return False
@@ -355,16 +389,24 @@ def is_uuid_string(string):
         return False
 
 
-def get_session_path(path_object):
-    """
-    From a full file path or folder path, gets the session root path
-    :param path_object: pathlib.Path or string
-    :return:
-    """
-    path_object = Path(path_object)
-    s = _regexp_session_path(path_object, os.sep)
-    if s:
-        return Path(str(path_object)[:s.span()[-1]])
+def _isdatetime(s: str) -> bool:
+    try:
+        datetime.strptime(s, '%Y-%m-%d')
+        return True
+    except Exception:
+        return False
+
+
+def get_session_path(path: Union[str, Path]) -> Path:
+    """Returns the session path from any filepath if the date/number
+    pattern is found"""
+    path = Path(path)
+    sess = None
+    for i, p in enumerate(path.parts):
+        if p.isdigit() and _isdatetime(path.parts[i - 1]):
+            sess = Path().joinpath(*path.parts[:i + 1])
+
+    return sess
 
 
 def is_session_path(path_object):

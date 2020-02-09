@@ -107,15 +107,19 @@ class TestEphysBehaviorExtraction(unittest.TestCase):
         data = raw.load_data(self.session_path)
         settings = raw.load_settings(self.session_path)
         pLeft0 = ephys_trials.get_probabilityLeft(
-            self.session_path, save=False, data=False, settings=False
+            self.session_path, save=False, data=data, settings=False
         )
         self.assertTrue(len(pLeft0) == len(data))
-        # Test if settings file has empty LEN_DATA
+        # Test if only generative prob values in data
+        self.assertTrue(all([x in [0.2, 0.5, 0.8] for x in np.unique(pLeft0)]))
+        # Test if settings file has empty LEN_DATA result is same
         settings.update({"LEN_BLOCKS": None})
         pLeft1 = ephys_trials.get_probabilityLeft(
             self.session_path, save=False, data=False, settings=settings
         )
-        self.assertTrue(pLeft0 == pLeft1)
+        self.assertTrue(all(pLeft0 == pLeft1))
+        # Test if only generative prob values in data
+        self.assertTrue(all([x in [0.2, 0.5, 0.8] for x in np.unique(pLeft1)]))
 
     def tearDown(self):
         pass
