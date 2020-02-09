@@ -360,7 +360,7 @@ class Insertion:
     beta: float
 
     @staticmethod
-    def from_dict(d):
+    def from_dict(d, brain_atlas=None):
         """
         Constructs an Insertion object from the json information stored in probes.description file
         :param trj: dictionary containing at least the following keys, in um
@@ -372,9 +372,16 @@ class Insertion:
             'theta': 5.0,
             'depth': 4501.0
             }
+        :param brain_atlas: None. If provided, disregards the z coordinate and locks the insertion
+        point to the z of the brain surface
         :return: Trajectory object
         """
-        return Insertion(x=d['x'] / 1e6, y=d['y'] / 1e6, z=d['z'] / 1e6,
+        z = d['z'] / 1e6
+        if brain_atlas:
+            iy = brain_atlas.bc.y2i(d['y'] / 1e6)
+            ix = brain_atlas.bc.y2i(d['x'] / 1e6)
+            z = brain_atlas.top[iy, ix]
+        return Insertion(x=d['x'] / 1e6, y=d['y'] / 1e6, z=z,
                          phi=d['phi'], theta=d['theta'], depth=d['depth'] / 1e6,
                          beta=d.get('beta', 0), label=d.get('label', ''))
 
