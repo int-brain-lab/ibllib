@@ -57,7 +57,7 @@ def log2session(func, log_file_name):
 def log2sessions_set(session_path, log_type):
     log_file = Path(session_path).joinpath(
         'logs', f'_ibl_log.info.{log_type}_v{version.ibllib()}.log')
-    log_file.parent.mkdir(exist_ok=True)
+    log_file.parent.mkdir(exist_ok=True, parents=True)
     fh = logging.FileHandler(log_file)
     str_format = '%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
     fh.setFormatter(logging.Formatter(str_format))
