@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from scipy import interpolate
 
 from brainbox.core import Bunch
-from brainbox.behavior import wheel as whl
+import brainbox.behavior.wheel as whl
 
 import ibllib.exceptions as err
 import ibllib.plots as plots
