@@ -1,10 +1,7 @@
-import tempfile
 from pathlib import Path, PureWindowsPath
-import shutil
 
 import numpy as np
 
-import oneibl.webclient
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.biased_trials import (
     get_choice,

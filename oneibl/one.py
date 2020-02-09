@@ -12,7 +12,7 @@ import oneibl.webclient as wc
 from oneibl.dataclass import SessionDataInfo
 import oneibl.params
 
-logger_ = logging.getLogger('ibllib')
+_logger = logging.getLogger('ibllib')
 
 
 _ENDPOINTS = {  # keynames are possible input arguments and values are actual endpoints
@@ -254,6 +254,9 @@ class ONE(OneAbstract):
         :rtype: AlfBunch instance
         """
         dataset_types = [dst for dst in self.list(eid) if dst.startswith(obj)]
+        if len(dataset_types) == 0:
+            _logger.warning(f"{eid} does not contain any {obj} object datasets")
+            return
         dsets = self._load(eid, dataset_types=dataset_types, **kwargs)
         return AlfBunch({
             '.'.join(dataset_types[i].split('.')[1:]): dsets[i]
@@ -324,7 +327,7 @@ class ONE(OneAbstract):
         list_out = []
         for dt in dataset_types:
             if dt not in dc.dataset_type:
-                logger_.warning('dataset ' + dt + ' not found for session: ' + eid_str)
+                _logger.warning('dataset ' + dt + ' not found for session: ' + eid_str)
                 list_out.append(None)
                 continue
             for i, x, in enumerate(dc.dataset_type):
@@ -414,7 +417,7 @@ class ONE(OneAbstract):
         for k in kwargs.keys():
             # check that the input matches one of the defined filters
             if k not in SEARCH_TERMS:
-                logger_.error(f'"{k}" is not a valid search keyword' + '\n' +
+                _logger.error(f'"{k}" is not a valid search keyword' + '\n' +
                               "Valid keywords are: " + str(set(SEARCH_TERMS.values())))
                 return
             # then make sure the field is formatted properly
