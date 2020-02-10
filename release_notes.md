@@ -1,4 +1,4 @@
-### Release Notes 1.4.8 - 2020-02-09
+### Release Notes 1.4.9 - 2020-02-09
 -   Big brainbox merge and release
 -   bugfix: clusters.metrics spiking rates accurate 
 -   probability left for ephys choice world contain generative probabilities, not outcomes
