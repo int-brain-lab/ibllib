@@ -24,7 +24,7 @@ with open('requirements.txt') as f:
 
 setup(
     name='ibllib',
-    version='1.4.9',
+    version='1.4.10',
     python_requires='>={}.{}'.format(*REQUIRED_PYTHON),
     description='IBL libraries',
     license="MIT",
@@ -33,6 +33,7 @@ setup(
     author='IBL Staff',
     url="https://www.internationalbrainlab.com/",
     packages=find_packages(exclude=['scratch']),  # same as name
+    include_package_data=True,
     # external packages as dependencies
     install_requires=require,
     entry_points={

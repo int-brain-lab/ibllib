@@ -528,6 +528,9 @@ def peri_event_time_histogram(
         raise ValueError('Cannot make a PETH with only one event.')
     if error_bars not in ('std', 'sem', 'none'):
         raise ValueError('Invalid error bar type was passed.')
+    if not all(np.isfinite(events)):
+        raise ValueError('There are NaN or inf values in the list of events passed. '
+                         ' Please remove non-finite data points and try again.')
 
     # Compute peths
     peths, binned_spikes = bb.singlecell.calculate_peths(spike_times, spike_clusters, [cluster_id],
