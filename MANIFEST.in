@@ -1,0 +1,1 @@
+include ibllib/io/extractors/ephys_sessions/*.npy

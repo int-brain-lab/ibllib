@@ -33,6 +33,7 @@ setup(
     author='IBL Staff',
     url="https://www.internationalbrainlab.com/",
     packages=find_packages(exclude=['scratch']),  # same as name
+    include_package_data=True,
     # external packages as dependencies
     install_requires=require,
     entry_points={
