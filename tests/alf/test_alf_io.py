@@ -255,7 +255,6 @@ class TestSessionFolder(unittest.TestCase):
         no_out = alf.io.get_session_path(None)
         self.assertTrue(no_out is None)
 
-
     def test_get_session_folder_regex(self):
         o = alf.io._regexp_session_path(r'C:\titi\toto\ZM_1368/2019-04-19/001', '\\')
         self.assertIsNotNone(o)
