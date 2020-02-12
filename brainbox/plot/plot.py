@@ -493,45 +493,45 @@ def peri_event_time_histogram(
 
     t_before : float, optional
         Time before event to plot (default: 0.2s)
-    t_after : float
+    t_after : float, optional
         Time after event to plot (default: 0.5s)
-    bin_size :float
+    bin_size :float, optional
         Width of bin for histograms (default: 0.025s)
-    smoothing : float
+    smoothing : float, optional
         Sigma of gaussian smoothing to use in histograms. (default: 0.025s)
-    as_rate : bool
+    as_rate : bool, optional
         Whether to use spike counts or rates in the plot (default: `True`, uses rates)
-    include_raster : bool
+    include_raster : bool, optional
         Whether to put a raster below the PETH of individual spike trains (default: `False`)
-    n_rasters : int
+    n_rasters : int, optional
         If include_raster is True, the number of rasters to include. If `None`
         will default to plotting rasters around all provided events. (default: `None`)
-    error_bars : {'std', 'sem', 'none'}
+    error_bars : {'std', 'sem', 'none'}, optional
         Defines which type of error bars to plot. Options are:
         -- `'std'` for 1 standard deviation
         -- `'sem'` for standard error of the mean
         -- `'none'` for only plotting the mean value
         (default: `'std'`)
-    ax : matplotlib axes
+    ax : matplotlib axes, optional
         If passed, the function will plot on the passed axes. Note: current
         behavior causes whatever was on the axes to be cleared before plotting!
         (default: `None`)
-    pethline_kwargs : dict
+    pethline_kwargs : dict, optional
         Dict containing line properties to define PETH plot line. Default
         is a blue line with weight of 2. Needs to have color. See matplotlib plot documentation
         for more options.
         (default: `{'color': 'blue', 'lw': 2}`)
-    errbar_kwargs : dict
+    errbar_kwargs : dict, optional
         Dict containing fill-between properties to define PETH error bars.
         Default is a blue fill with 50 percent opacity.. Needs to have color. See matplotlib
         fill_between documentation for more options.
         (default: `{'color': 'blue', 'alpha': 0.5}`)
-    eventline_kwargs : dict
+    eventline_kwargs : dict, optional
         Dict containing fill-between properties to define line at event.
         Default is a black line with 50 percent opacity.. Needs to have color. See matplotlib
         vlines documentation for more options.
         (default: `{'color': 'black', 'alpha': 0.5}`)
-    raster_kwargs : dict
+    raster_kwargs : dict, optional
         Dict containing properties defining lines in the raster plot.
         Default is black lines with line width of 0.5. See matplotlib vlines for more options.
         (default: `{'color': 'black', 'lw': 0.5}`)
