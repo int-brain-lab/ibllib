@@ -29,12 +29,26 @@ WHEEL_DIAMETER = 3.1 * 2  # Wheel diameter in cm
 def interpolate_position(re_ts, re_pos, freq=1000, kind='linear', fill_gaps=None):
     """
     Return linearly interpolated wheel position.
-    :param re_ts: numpy array of timestamps
-    :param re_pos: numpy array of unwrapped wheel positions
-    :param freq: frequency in Hz of the interpolation
-    :param kind: type of interpolation; 'linear' (default) or 'cubic'
-    :param fill_gaps: for gaps over this time (seconds), forward fill values before interpolation
-    :return: interpolated position and timestamps
+
+    Parameters
+    ----------
+    re_ts : array_like
+        Array of timestamps
+    re_pos: array_like
+        Array of unwrapped wheel positions
+    freq : float
+        frequency in Hz of the interpolation
+    kind : {'linear', 'cubic'}
+        Type of interpolation. Defaults to linear interpolation.
+    fill_gaps : float
+        Minimum gap length to fill. for gaps over this time (seconds),
+        forward fill values before interpolation
+    Returns
+    -------
+    yinterp : array
+        Interpolated position
+    t : array
+        Timestamps of interpolated positions
     """
     t = np.arange(re_ts[0], re_ts[-1], 1 / freq)  # Evenly resample at frequency
     yinterp = interpolate.interp1d(re_ts, re_pos, kind=kind)(t)
@@ -54,9 +68,17 @@ def velocity(re_ts, re_pos):
     Compute wheel velocity from non-uniformly sampled wheel data. Returns the velocity
     at the same samples locations as the position through interpolation.
 
-    :param re_ts: numpy array of timestamps
-    :param re_pos: numpy array of unwrapped wheel positions
-    :return: numpy array of velocities
+    Parameters
+    ----------
+    re_ts : array_like
+        Array of timestamps
+    re_pos: array_like
+        Array of unwrapped wheel positions
+
+    Returns
+    -------
+    np.ndarray
+        numpy array of velocities
     """
     dp = np.diff(re_pos)
     dt = np.diff(re_ts)
@@ -73,10 +95,22 @@ def velocity(re_ts, re_pos):
 def velocity_smoothed(pos, freq, smooth_size=0.03):
     """
     Compute wheel velocity from uniformly sampled wheel data
-    :param pos: numpy array of wheel positions
-    :param smooth_size: size of Gaussian smoothing window in seconds
-    :param freq: sampling frequency of the data
-    :return: tuple of velocity and acceleration values as numpy arrays
+
+    Parameters
+    ----------
+    pos : array_like
+        Array of wheel positions
+    smooth_size : float
+        Size of Gaussian smoothing window in seconds
+    freq : float
+        Sampling frequency of the data
+
+    Returns
+    -------
+    vel : np.ndarray
+        Array of velocity values
+    acc : np.ndarray
+        Array of acceleration values
     """
     # Define our smoothing window with an area of 1 so the units won't be changed
     stdSamps = np.round(smooth_size * freq)  # Standard deviation relative to sampling frequency

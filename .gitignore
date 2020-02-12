@@ -16,3 +16,4 @@ ibllib.egg-info/
 scratch/
 _autosummary/
 brainbox/docs/_build/
+brainbox/docs/api/

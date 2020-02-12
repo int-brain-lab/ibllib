@@ -18,10 +18,8 @@ sys.path.insert(0, os.path.abspath('..'))
 # -- Project information -----------------------------------------------------
 
 project = 'Brainbox'
-copyright = '2020, Berk Gercek, Jai Bhagat, Matthew Whiteway, Olivier Winter,' +\
-    'International Brain Laboratory'
-author = 'Berk Gercek, Jai Bhagat, Guido Meijer, Cyrille Rossant, Matthew Whiteway,' +\
-    'Olivier Winter, International Brain Laboratory'
+copyright = '2020, International Brain Laboratory'
+author = 'International Brain Laboratory'
 
 # The full version, including alpha/beta/rc tags
 release = '0.1.0'
