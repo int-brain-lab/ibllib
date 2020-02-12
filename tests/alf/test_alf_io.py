@@ -251,6 +251,10 @@ class TestSessionFolder(unittest.TestCase):
                Path('/mnt/s0/Data/Subjects/ZM_1368/2019-04-19/001'),)
         for i, o in zip(inp, out):
             self.assertEqual(o, alf.io.get_session_path(i))
+        # Test if None is passed
+        no_out = alf.io.get_session_path(None)
+        self.assertTrue(no_out is None)
+
 
     def test_get_session_folder_regex(self):
         o = alf.io._regexp_session_path(r'C:\titi\toto\ZM_1368/2019-04-19/001', '\\')
