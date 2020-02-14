@@ -400,6 +400,9 @@ def _isdatetime(s: str) -> bool:
 def get_session_path(path: Union[str, Path]) -> Path:
     """Returns the session path from any filepath if the date/number
     pattern is found"""
+    if path is None:
+        _logger.warning('Input path is None, exiting...')
+        return
     path = Path(path)
     sess = None
     for i, p in enumerate(path.parts):

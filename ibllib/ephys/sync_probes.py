@@ -59,8 +59,10 @@ def version3A(ses_path, display=True, type='smooth', tol=2.1):
     """
     ephys_files = spikeglx.glob_ephys_files(ses_path)
     nprobes = len(ephys_files)
-    if nprobes <= 1:
-        _logger.warning(f"Skipping single probe session: {ses_path}")
+    if nprobes == 1:
+        timestamps = np.array([[0., 0.], [1., 1.]])
+        sr = _get_sr(ephys_files[0])
+        _save_timestamps_npy(ephys_files[0], timestamps, sr)
         return True
 
     def get_sync_fronts(auxiliary_name):
@@ -126,10 +128,7 @@ def version3B(ses_path, display=True, type=None, tol=2.5):
         ef['sync_map'] = get_ibl_sync_map(ef, '3B')
     nidq_file = [ef for ef in ephys_files if ef.get('nidq')]
     ephys_files = [ef for ef in ephys_files if not ef.get('nidq')]
-    nprobes = len(ephys_files)
     # should have at least 2 probes and only one nidq
-    if nprobes <= 1:
-        return True
     assert(len(nidq_file) == 1)
     nidq_file = nidq_file[0]
     sync_nidq = _get_sync_fronts(nidq_file.sync, nidq_file.sync_map['imec_sync'])
