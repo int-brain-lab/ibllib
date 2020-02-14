@@ -115,7 +115,7 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
     return Bunch(sync)
 
 
-def _bpod_events_extraction(bpod_t, bpod_fronts):
+def _assign_events_bpod(bpod_t, bpod_polarities):
     """
     From detected fronts on the bpod sync traces, outputs the synchronisation events
     related to trial start and valve opening
@@ -124,11 +124,11 @@ def _bpod_events_extraction(bpod_t, bpod_fronts):
     :return: numpy arrays of times t_trial_start, t_valve_open and t_iti_in
     """
     TRIAL_START_TTL_LEN = 2.33e-4
-    VALVE_OPEN_TTL_LEN = 0.4
+    ITI_TTL_LEN = 0.4
     # make sure that there are no 2 consecutive fall or consecutive rise events
-    assert(np.all(np.abs(np.diff(bpod_fronts)) == 2))
+    assert(np.all(np.abs(np.diff(bpod_polarities)) == 2))
     # make sure that the first event is a rise
-    assert(bpod_fronts[0] == 1)
+    assert(bpod_polarities[0] == 1)
     # take only even time differences: ie. from rising to falling fronts
     dt = np.diff(bpod_t)[::2]
     # detect start trials event assuming length is 0.23 ms except the first trial
@@ -140,11 +140,11 @@ def _bpod_events_extraction(bpod_t, bpod_fronts):
     t_trial_start = t_trial_start[:-1]
     # valve open events are between 50ms to 300 ms
     i_valve_open = np.where(np.logical_and(dt > TRIAL_START_TTL_LEN,
-                                           dt < VALVE_OPEN_TTL_LEN))[0] * 2
+                                           dt < ITI_TTL_LEN))[0] * 2
     i_valve_open = np.delete(i_valve_open, np.where(i_valve_open < 2))
     t_valve_open = bpod_t[i_valve_open]
     # ITI events are above 400 ms
-    i_iti_in = np.where(dt > VALVE_OPEN_TTL_LEN)[0] * 2
+    i_iti_in = np.where(dt > ITI_TTL_LEN)[0] * 2
     i_iti_in = np.delete(i_iti_in, np.where(i_valve_open < 2))
     i_iti_in = bpod_t[i_iti_in]
     # # some debug plots when needed
@@ -202,7 +202,7 @@ def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, rad
         return t, p
 
 
-def _audio_events_extraction(audio_t, audio_fronts):
+def _assign_events_audio(audio_t, audio_polarities):
     """
     From detected fronts on the audio sync traces, outputs the synchronisation events
     related to tone in
@@ -212,7 +212,7 @@ def _audio_events_extraction(audio_t, audio_fronts):
     :return: numpy arrays t_ready_tone_in, t_error_tone_in
     """
     # make sure that there are no 2 consecutive fall or consecutive rise events
-    assert(np.all(np.abs(np.diff(audio_fronts)) == 2))
+    assert(np.all(np.abs(np.diff(audio_polarities)) == 2))
     # take only even time differences: ie. from rising to falling fronts
     dt = np.diff(audio_t)[::2]
     # detect ready tone by length below 110 ms
@@ -346,9 +346,9 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
     frame2ttl = _get_sync_fronts(sync, chmap['frame2ttl'], tmax=tmax)
     audio = _get_sync_fronts(sync, chmap['audio'], tmax=tmax)
     # extract events from the fronts for each trace
-    t_trial_start, t_valve_open, t_iti_in = _bpod_events_extraction(
+    t_trial_start, t_valve_open, t_iti_in = _assign_events_bpod(
         bpod['times'], bpod['polarities'])
-    t_ready_tone_in, t_error_tone_in = _audio_events_extraction(
+    t_ready_tone_in, t_error_tone_in = _assign_events_audio(
         audio['times'], audio['polarities'])
     # stim off time is the first frame2ttl rise/fall after the trial start
     # does not apply for 1st trial
@@ -557,3 +557,8 @@ def extract_all(session_path, save=False, tmax=None):
     extract_camera_sync(sync, alf_path, save=save, chmap=sync_chmap)
     extract_behaviour_sync(sync, alf_path, save=save, chmap=sync_chmap, tmax=tmax)
     align_with_bpod(session_path)  # checks consistency and compute dt with bpod
+
+
+if __name__ == "__main__":
+    session_path = '/home/nico/Projects/IBL/scratch/TestSubjects/_iblrig_test_mouse/2020-02-11/001'
+    extract_all(session_path, save=False, tmax=None)
