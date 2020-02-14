@@ -224,6 +224,10 @@ def _audio_events_extraction(audio_t, audio_fronts):
     return t_ready_tone_in, t_error_tone_in
 
 
+def _frame2ttl_events_extraction(f2ttl_t, f2ttl_fronts):
+    pass
+
+
 def _assign_events_to_trial(t_trial_start, t_event, take='last'):
     """
     Assign events to a trial given trial start times and event times.
@@ -350,7 +354,8 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
     # does not apply for 1st trial
     ind = np.searchsorted(frame2ttl['times'], t_iti_in, side='left')
     t_stim_off = frame2ttl['times'][np.minimum(ind, frame2ttl.times.size - 1)]
-    t_stim_freeze = frame2ttl['times'][np.maximum(ind - 1, 0)]
+    t_stim_freeze = frame2ttl['times'][np.minimum(ind, frame2ttl.times.size - 2)]
+    # t_stim_freeze = frame2ttl['times'][np.maximum(ind - 1, 0)]
     # stimOn_times: first fram2ttl change after trial start
     trials = Bunch({
         'ready_tone_in': _assign_events_to_trial(t_trial_start, t_ready_tone_in, take='first'),

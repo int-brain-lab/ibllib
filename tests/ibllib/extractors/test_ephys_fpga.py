@@ -114,3 +114,20 @@ class TestWheelExtraction(unittest.TestCase):
             self.ta, self.pa, self.tb, self.pb, ticks=np.pi * 2, coding='x2')
         self.assertTrue(np.all(t == t_))
         self.assertTrue(np.all(p == p_))
+
+
+class TestEventsExtraction(unittest.testcase):
+    def setUp(self):
+        self.session_path = '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL051/2020-02-10/001'
+        self.sync, self.sync_chmap = ephys_fpga._get_main_probe_sync(
+            self.session_path, bin_exists=False
+        )
+        self.syncs = ephys_fpga.extract_sync(
+            self.session_path, save=False
+        )
+
+    def test_frame2ttl_events_extraction(self):
+        f2ttl = ephys_fpga._get_sync_fronts(self.syncs, chmap=self.sync_chmap)
+
+    def test_extract_behavior_sync(self):
+        ephys_fpga.extract_behaviour_sync(self.sync, chmap=self.sync_chmap)
