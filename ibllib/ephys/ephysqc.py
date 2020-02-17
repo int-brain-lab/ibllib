@@ -3,6 +3,7 @@ Quality control of raw Neuropixel electrophysiology data.
 """
 from pathlib import Path
 import logging
+import shutil
 
 import numpy as np
 import pandas as pd
@@ -16,6 +17,8 @@ from ibllib.ephys import sync_probes
 from ibllib.io import spikeglx
 import ibllib.dsp as dsp
 import ibllib.io.extractors.ephys_fpga as fpga
+import ibllib.io.raw_data_loaders as raw
+from ibllib.io.extractors import ephys_trials, training_wheel
 from ibllib.misc import print_progress, log2session_static
 from phylib.io import model
 
@@ -519,3 +522,46 @@ def qc_fpga_task(fpga_trials, alf_trials):
     qc_session = {k: np.all(qc_trials[k]) for k in qc_trials}
 
     return qc_session, qc_trials
+
+
+def _qc_from_path(sess_path, display=True):
+    WHEEL = False
+    sess_path = Path(sess_path)
+    temp_alf_folder = sess_path.joinpath('fpga_test', 'alf')
+    temp_alf_folder.mkdir(parents=True, exist_ok=True)
+
+    raw_trials = raw.load_data(sess_path)
+    tmax = raw_trials[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
+
+    sync, chmap = fpga._get_main_probe_sync(sess_path, bin_exists=False)
+    _ = ephys_trials.extract_all(sess_path, output_path=temp_alf_folder, save=True)
+    # check that the output is complete
+    fpga_trials = fpga.extract_behaviour_sync(sync, output_path=temp_alf_folder, tmax=tmax,
+                                              chmap=chmap, save=True, display=display)
+    # align with the bpod
+    bpod2fpga = fpga.align_with_bpod(temp_alf_folder.parent)
+    alf_trials = alf.io.load_object(temp_alf_folder, '_ibl_trials')
+    shutil.rmtree(temp_alf_folder)
+    # do the QC
+    qcs, qct = qc_fpga_task(fpga_trials, alf_trials)
+
+    # do the wheel part
+    if WHEEL:
+        bpod_wheel = training_wheel.get_wheel_data(sess_path, save=False)
+        fpga_wheel = fpga.extract_wheel_sync(sync, chmap=chmap, save=False)
+
+        if display:
+            import matplotlib.pyplot as plt
+            t0 = max(np.min(bpod2fpga(bpod_wheel['re_ts'])), np.min(fpga_wheel['re_ts']))
+            dy = np.interp(t0, fpga_wheel['re_ts'], fpga_wheel['re_pos']) - np.interp(
+                t0, bpod2fpga(bpod_wheel['re_ts']), bpod_wheel['re_pos'])
+
+            fix, axes = plt.subplots(nrows=2, sharex='all', sharey='all')
+            # axes[0].plot(t, pos), axes[0].title.set_text('Extracted')
+            axes[0].plot(bpod2fpga(bpod_wheel['re_ts']), bpod_wheel['re_pos'] + dy)
+            axes[0].plot(fpga_wheel['re_ts'], fpga_wheel['re_pos'])
+            axes[0].title.set_text('FPGA')
+            axes[1].plot(bpod2fpga(bpod_wheel['re_ts']), bpod_wheel['re_pos'] + dy)
+            axes[1].title.set_text('Bpod')
+
+    return alf.io.dataframe({**fpga_trials, **alf_trials, **qct})
