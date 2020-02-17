@@ -44,7 +44,7 @@ class TestEphysSyncExtraction(unittest.TestCase):
                                 183.12896667, 183.12906667])
 
         t_trial_start, t_valve_open, _ = ephys_fpga._assign_events_bpod(bpod_times_,
-                                                                            bpod_fronts_)
+                                                                        bpod_fronts_)
         self.assertTrue(np.all(np.isclose(t_trial_start, t_trial_start_)))
         self.assertTrue(np.all(np.isclose(t_valve_open, t_valve_open_)))
 
@@ -63,7 +63,7 @@ class TestEphysSyncExtraction(unittest.TestCase):
         self.assertTrue(np.allclose(t_event_out_, t_event_nans, equal_nan=True, atol=0, rtol=0))
 
         # test with events before initial start trial
-      bpod_polaritiestart = np.arange(0, 5) * 10
+        t_trial_start = np.arange(0, 5) * 10
         t_event = np.arange(0, 5) * 10 - 2
         t_event_nans = ephys_fpga._assign_events_to_trial(t_trial_start, t_event)
         desired_out = np.array([8., 18., 28., 38., np.nan])
