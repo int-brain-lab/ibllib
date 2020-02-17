@@ -1,3 +1,7 @@
+### Release Notes 1.4.11 - 2020-02-14
+-   bugfix: Include sessions data files for ephys mock
+-   bugfix: Single probe 3B gets synchronized
+
 ### Release Notes 1.4.10 - 2020-02-10
 -   bugfix: Include sessions data files in pip package 
 

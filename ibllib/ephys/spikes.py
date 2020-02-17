@@ -104,31 +104,26 @@ def sync_spike_sortings(ses_path):
             continue
         probe_out_path = ses_path.joinpath('alf', label)
         probe_out_path.mkdir(parents=True, exist_ok=True)
-        # for multiple probes need to handle the synchronization
-        if len(subdirs) > 1:
-            # synchronize the spike sorted times only if there are several probes
-            sync_file = ef.ap.parent.joinpath(ef.ap.name.replace('.ap.', '.sync.')
-                                              ).with_suffix('.npy')
-            if not sync_file.exists():
-                """
-                if there is no sync file it means something went wrong. Outputs the spike sorting
-                in time according the the probe by followint ALF convention on the times objects
-                """
-                error_msg = f'No synchronisation file for {label}: {sync_file}. The spike-' \
-                            f'sorting is not synchronized and data not uploaded on Flat-Iron'
-                _logger.error(error_msg)
-                # remove the alf folder if the sync failed
-                shutil.rmtree(probe_out_path)
-                continue
-            # converts the folder to ALF
-            ks2_to_alf(subdir, probe_out_path, ampfactor=_sample2v(ef.ap), label=None, force=True)
-            # patch the spikes.times files manually
-            st_file = ses_path.joinpath(probe_out_path, 'spikes.times.npy')
-            interp_times = apply_sync(sync_file, np.load(st_file), forward=True)
-            np.save(st_file, interp_times)
-        else:
-            # converts the folder to ALF and computes metrics
-            ks2_to_alf(subdir, probe_out_path, ampfactor=_sample2v(ef.ap), label=None, force=True)
+        # handles the probes synchronization
+        sync_file = ef.ap.parent.joinpath(ef.ap.name.replace('.ap.', '.sync.')
+                                          ).with_suffix('.npy')
+        if not sync_file.exists():
+            """
+            if there is no sync file it means something went wrong. Outputs the spike sorting
+            in time according the the probe by following ALF convention on the times objects
+            """
+            error_msg = f'No synchronisation file for {label}: {sync_file}. The spike-' \
+                        f'sorting is not synchronized and data not uploaded on Flat-Iron'
+            _logger.error(error_msg)
+            # remove the alf folder if the sync failed
+            shutil.rmtree(probe_out_path)
+            continue
+        # converts the folder to ALF
+        ks2_to_alf(subdir, probe_out_path, ampfactor=_sample2v(ef.ap), label=None, force=True)
+        # patch the spikes.times files manually
+        st_file = ses_path.joinpath(probe_out_path, 'spikes.times.npy')
+        interp_times = apply_sync(sync_file, np.load(st_file), forward=True)
+        np.save(st_file, interp_times)
 
 
 def ks2_to_alf(ks_path, out_path, ampfactor=1, label=None, force=True):
