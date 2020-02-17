@@ -15,6 +15,7 @@ location to which ONE saves data when running the `load` method). It is recommen
 
 import os
 from pathlib import Path
+from warnings import warn
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -40,13 +41,18 @@ alf_dir = os.path.join(session_path, 'alf')
 alf_probe_dir = os.path.join(alf_dir, probe)
 ephys_file_dir = os.path.join(session_path, 'raw_ephys_data', probe)
 # Find 'ap' ephys file in `ephys_file_dir`
-for f in os.listdir(ephys_file_dir):
-        if f.endswith('ap.bin') or f.endswith('ap.cbin'):
-            ephys_file_path = os.path.join(ephys_file_dir, f)
-            break
-# Ensure directories and paths can be found
-assert os.path.isdir(ephys_file_dir) and os.path.isdir(alf_probe_dir) \
-    and os.path.isabs(ephys_file_path), 'Directories set incorrectly'
+ephys_file_path = None
+if Path.exists(Path(ephys_file_dir)):
+    for f in os.listdir(ephys_file_dir):
+            if f.endswith('ap.bin') or f.endswith('ap.cbin'):
+                ephys_file_path = os.path.join(ephys_file_dir, f)
+                break
+if ephys_file_path is None:
+    warn('Ephys file not found! Some of the examples in this script require ephys file,')
+
+# Ensure st least alf directory can be found
+assert os.path.isdir(alf_probe_dir), \
+    'Directories set incorrectly. {} not found'.format(alf_probe_dir)
 
 # Call brainbox functions #
 #-------------------------#
