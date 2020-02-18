@@ -17,3 +17,4 @@ scratch/
 _autosummary/
 brainbox/docs/_build/
 brainbox/docs/api/
+little_test.py
