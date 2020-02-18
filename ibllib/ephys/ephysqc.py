@@ -428,8 +428,8 @@ def qc_fpga_task(fpga_trials, alf_trials):
     :return: qc_session, qc_trials, True means QC passes while False indicates a failure
     """
 
-    GOCUE_STIMON_DELAY = 0.01
-    FEEDBACK_STIMFREEZE_DELAY = 0.01
+    GOCUE_STIMON_DELAY = 0.01  # -> 0.1
+    FEEDBACK_STIMFREEZE_DELAY = 0.01  # -> 0.1
     VALVE_STIM_OFF_DELAY = 1
     VALVE_STIM_OFF_JITTER = 0.1
     ITI_IN_STIM_OFF_JITTER = 0.1
