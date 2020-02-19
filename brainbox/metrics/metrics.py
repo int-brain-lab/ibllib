@@ -363,8 +363,9 @@ def firing_rate_fano_factor(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
 
     # Compute overall instantaneous firing rate and firing rate for each bin.
     fr = bb.singlecell.firing_rate(ts, hist_win=hist_win, fr_win=fr_win)
+    # this procedure can cut off data at the end, up to n_bins last timesteps
     bin_sz = np.int(fr.size / n_bins)
-    fr_binned = np.array([fr[(b * bin_sz):(b * bin_sz + bin_sz)] for b in range(n_bins)]) # this procedure can cut off data at the end, up to n_bins last timesteps
+    fr_binned = np.array([fr[(b * bin_sz):(b * bin_sz + bin_sz)] for b in range(n_bins)])
 
     print(fr.size / n_bins)
     print(bin_sz)
