@@ -19,10 +19,19 @@ from ibllib.io.extractors.training_trials import (
     get_port_events,
 )
 
-# Guido's test dataset
-sess_path = (
-    "/home/nico/Projects/IBL/github/iblapps/scratch/TestSubjects/_iblrig_test_mouse/2020-02-11/001"
-)
+
+def get_bpod_fronts(session_path, name="", save=False, data=False, settings=False):
+    if not data:
+        data = raw.load_data(session_path)
+    if not settings:
+        settings = raw.load_settings(session_path)
+    if settings is None:
+        settings = {"IBLRIG_VERSION_TAG": "100.0.0"}
+    elif settings["IBLRIG_VERSION_TAG"] == "":
+        settings.update({"IBLRIG_VERSION_TAG": "100.0.0"})
+
+    for tr in data:
+        tr["behavior_data"]["Events timestamps"]
 
 
 # --------------------------------------------------------------------------- #
@@ -86,7 +95,9 @@ def get_stimFreezeTrigger_times(session_path, save=False, data=False, settings=F
     stimFreezeTrigger = np.array([])
     for r, e, n, tr in zip(freeze_reward, freeze_error, no_go, data):
         if n:
-            stimFreezeTrigger = np.append(stimFreezeTrigger, np.nan)
+            stimFreezeTrigger = np.append(
+                stimFreezeTrigger, tr["behavior_data"]["States timestamps"]["no_go"][0][1]
+            )
             continue
         state = "freeze_reward" if r else "freeze_error"
         state = "no_go" if n else state
@@ -173,12 +184,23 @@ def get_stimOnOffFreeze_times_from_BNC1(session_path, save=False, data=False, se
         settings.update({"IBLRIG_VERSION_TAG": "100.0.0"})
 
     f2TTL = [get_port_events(tr, name="BNC1") for tr in data]
-    stimOn_times = np.array([tr[0] for tr in f2TTL])
-    # Make sure its the closest one to stim_on triggering state
-    stimOff_times = np.array([tr[-1] for tr in f2TTL])
-    # Make sure its the closest one to stim_off triggering state
-    stimFreeze_times = np.array([tr[-2] for tr in f2TTL])
-    # Make sure its the closest one to stim_freeze triggering state
+    stimOn_times = np.array([])
+    stimOff_times = np.array([])
+    stimFreeze_times = np.array([])
+
+    for tr in f2TTL:
+        if tr and len(tr) >= 2:
+            # 2nd order criteria:
+            # stimOn -> Closest one to stimOnTrigger?
+            # stimOff -> Closest one to stimOffTrigger?
+            # stimFreeze -> Closest one to stimFreezeTrigger?
+            stimOn_times = np.append(stimOn_times, tr[0])
+            stimOff_times = np.append(stimOff_times, tr[-1])
+            stimFreeze_times = np.append(stimFreeze_times, tr[-2])
+        else:
+            stimOn_times = np.append(stimOn_times, np.nan)
+            stimOff_times = np.append(stimOff_times, np.nan)
+            stimFreeze_times = np.append(stimFreeze_times, np.nan)
 
     if raw.save_bool(save, "_ibl_trials.stimOn_times.npy"):
         lpath = Path(session_path).joinpath("alf", "_ibl_trials.stimOn_times.npy")
@@ -367,7 +389,7 @@ def load_bpod_data(session_path):
     return out
 
 
-def bpod_qc_frame(session_path):
+def get_bpodqc_frame(session_path):
     bpod = load_bpod_data(session_path)
     correct = np.sign(bpod["position"]) + np.sign(bpod["choice"]) == 0
     error_tone_in = bpod["feedback_times"].copy()
@@ -386,6 +408,7 @@ def bpod_qc_frame(session_path):
 
     frame = {
         # Translate bpod data to match ephs_fpga_frame
+        "ready_tone_in": bpod["goCue_times"],
         "goCueTrigger_times": bpod["goCueTrigger_times"],
         "goCue_times": bpod["goCue_times"],
         "error_tone_in_trigger": bpod["error_tone_in_trigger"],
@@ -434,14 +457,13 @@ def bpod_qc_frame(session_path):
         "response_times_increase": np.diff(np.append([0], bpod["response_times"])) > 0,
         "response_times_goCue_times_diff": bpod["response_times"] - bpod["goCue_times"] > 0,
         "response_before_feedback": bpod["feedback_times"] - bpod["response_times"] > 0,
-        "response_feedback_delay": bpod["feedback_times"] - bpod["response_times"]
-        < RESPONSE_FEEDBACK_DELAY,
+        "response_feedback_delay": (
+            bpod["feedback_times"] - bpod["response_times"] < RESPONSE_FEEDBACK_DELAY
+        ),
     }
     #
     bpodqc_frame = pd.DataFrame.from_dict(frame)
-
-    # Can't get the actual freez times from bpod. TODO: make extractor!!
-    bpodqc_frame["stim_freeze"] = np.zeros(len(bpod["stimFreezeTrigger_times"])) * np.nan
+    return bpodqc_frame
 
 
 # --------------------------------------------------------------------------- #
@@ -449,7 +471,9 @@ def check_trigger_response(session_path):
     bpod = load_bpod_data(session_path)
     # get diff from triggers to detected events
     goCue_diff = bpod["goCueTrigger_times"] - bpod["goCue_times"]
-    stimOn_diff = bpod["stimOnTrigger_times"] - bpod["stimOn_times"]
+    stimOn_diff = bpod["stimOnTrigger_times"] - bpod["stimOn_times_BNC1"]
+    stimOff_diff = bpod["stimOffTrigger_times"] - bpod["stimOff_times_BNC1"]
+    stimFreeze_diff = bpod["stimFreezeTrigger_times"] - bpod["stimFreeze_times_BNC1"]
 
 
 def check_response_feedback(session_path):
@@ -474,28 +498,33 @@ def check_feedback_stim_off_delay(session_path):
 
 
 # --------------------------------------------------------------------------- #
-def quantify_failures(eid):
-    sess_path = one.path_from_eid(eid)
-    qc_frame = _qc_from_path(sess_path, display=True)
-
+def count_qc_failures(session_path):
+    fpgaqc_frame = _qc_from_path(session_path, display=True)
+    bpodqc_frame = get_bpodqc_frame(session_path)
     # Response feedback delay
-    sum(qc_frame.response_feedback_delay == False), len(qc_frame.response_feedback_delay)
+    sum(fpgaqc_frame.response_feedback_delay == False), len(fpgaqc_frame.response_feedback_delay)
     # Response before feedback
-    sum(qc_frame.response_before_feedback == False), len(qc_frame.response_before_feedback)
+    sum(fpgaqc_frame.response_before_feedback == False), len(fpgaqc_frame.response_before_feedback)
+
+
+# Make decorator for sesison_path based QC to accept eid's
+# Check input if valid eid
+# Download relevant datasets
+# Get the path and feed  it to the func [sess_path = one.path_from_eid(eid)]
 
 
 if __name__ == "__main__":
     from ibllib.ephys.bpodqc import *
     from ibllib.ephys.ephysqc import _qc_from_path
 
-    session_path = "/home/nico/Projects/IBL/github/iblapps/scratch/TestSubjects/_iblrig_test_mouse/2020-02-11/001"
+    # Guido's 3B
+    gsession_path = "/home/nico/Projects/IBL/github/iblapps/scratch/TestSubjects/_iblrig_test_mouse/2020-02-11/001"
+    # Alex's 3A
+    asession_path = "/home/nico/Projects/IBL/scratch/TestSubjects/_iblrig_test_mouse/2020-02-18/006"
+
+    session_path = gsession_path
     bpod = load_bpod_data(session_path)
-    fpgaqc = _qc_from_path(session_path)
+    fpgaqc_frame = _qc_from_path(session_path)
+    bpodqc_frame = get_bpodqc_frame(session_path)
 
-    np.less(
-        np.abs(bpod["stimOff_times_BNC1"] - bpod["error_tone_in"] - ERROR_STIM_OFF_DELAY),
-        ERROR_STIM_OFF_JITTER,
-        out=np.ones(len(bpod["stimOn_times"]), dtype=np.bool),
-        where=~np.isnan(bpod["error_tone_in"]),
-    )
-
+    bla = [(k, all(fpgaqc_frame[k] == bpodqc_frame[k])) for k in fpgaqc_frame if k in bpodqc_frame]
