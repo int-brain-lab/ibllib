@@ -407,6 +407,7 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
                              ax=ax, label='stim on', color='tab:orange', linewidth=width)
         ax.legend()
         ax.set_yticklabels(['', 'bpod', 'f2ttl', 'audio', 're_0', ''])
+        ax.set_yticks([0, 1, 2, 3, 4, 5])
         ax.set_ylim([0, 5])
 
     if save and output_path:
