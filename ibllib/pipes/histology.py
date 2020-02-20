@@ -38,7 +38,7 @@ def get_picked_tracks(histology_path, glob_pattern="*_pts_transformed.csv"):
         ixiyiz[:, 1] = 527 - ixiyiz[:, 1]
         ixiyiz = ixiyiz[np.argsort(ixiyiz[:, 2]), :]
         xyz = brat.bc.i2xyz(ixiyiz)
-        # xyz[:, 0] = - xyz[:, 0]
+        xyz[:, 0] = - xyz[:, 0]
         xyzs.append(xyz)
 
     return {'files': files_track, 'xyz': xyzs}
@@ -55,7 +55,6 @@ def get_micro_manipulator_data(subject, one=None, force_extract=False):
         one = ONE()
 
     eids, sessions = one.search(subject=subject, task_protocol='ephys', details=True)
-    dtypes = ['probes.description', 'probes.trajectory', ]
     probes = alf.io.AlfBunch({})
     for ses in sessions:
         sess_path = Path(ses['local_path'])
@@ -104,10 +103,10 @@ def plot_merged_result(probes, tracks, index=None):
     # ax[1].plot(xyz_channels[:, 1] * 1e3, xyz_channels[:, 2] * 1e3, 'y*')
 
 
-def plot2d_all(probes, tracks):
+def plot2d_all(trajectories, tracks):
     """
     Plot all tracks on a single 2d slice
-    :param probes:
+    :param trajectories: dictionary output of the Alyx REST query on trajectories
     :param tracks:
     :return:
     """
@@ -118,17 +117,17 @@ def plot2d_all(probes, tracks):
     for xyz in tracks['xyz']:
         axc.plot(xyz[:, 0] * 1e3, xyz[:, 2] * 1e3, 'b')
         axs.plot(xyz[:, 1] * 1e3, xyz[:, 2] * 1e3, 'b')
-    for trj in probes['trajectory']:
+    for trj in trajectories:
         ins = atlas.Insertion.from_dict(trj, brain_atlas=brat)
         xyz = ins.xyz
         axc.plot(xyz[:, 0] * 1e3, xyz[:, 2] * 1e3, 'r')
         axs.plot(xyz[:, 1] * 1e3, xyz[:, 2] * 1e3, 'r')
 
 
-def plot3d_all(probes, tracks):
+def plot3d_all(trajectories, tracks):
     """
     Plot all tracks on a single 2d slice
-    :param probes:
+    :param trajectories: dictionary output of the Alyx REST query on trajectories
     :param tracks:
     :return:
     """
@@ -142,7 +141,7 @@ def plot3d_all(probes, tracks):
         pts.append(mlab.plot3d(mlapdv[:, 1], mlapdv[:, 0], mlapdv[:, 2], line_width=3))
 
     plt_trj = []
-    for trj in probes['trajectory']:
+    for trj in trajectories:
         ins = atlas.Insertion.from_dict(trj, brain_atlas=brat)
         mlapdv = brat.bc.xyz2i(ins.xyz)
         plt = mlab.plot3d(mlapdv[:, 1], mlapdv[:, 0], mlapdv[:, 2],
@@ -150,9 +149,9 @@ def plot3d_all(probes, tracks):
         plt_trj.append(plt)
 
 
-def get_brain_regions(xyz, channels=SITES_COORDINATES, display=False):
+def get_brain_regions(xyz, channels_positions=SITES_COORDINATES, display=False):
     """
-    :param xyz:
+    :param xyz: numpy array of 3D coordinates
     :param channels:
     :param DISPLAY:
     :return:
@@ -172,9 +171,9 @@ def get_brain_regions(xyz, channels=SITES_COORDINATES, display=False):
     """
     Interpolate channel positions along the probe depth and get brain locations
     """
-    xyz_channels = np.zeros((channels.sitePositions.shape[0], 3))
+    xyz_channels = np.zeros((channels_positions.shape[0], 3))
     for m in np.arange(3):
-        xyz_channels[:, m] = np.interp(channels.sitePositions[:, 1] / 1e6,
+        xyz_channels[:, m] = np.interp(channels_positions[:, 1] / 1e6,
                                        d[ind_depths], xyz[ind_depths, m])
     brain_regions = brat.regions.get(brat.get_labels(xyz_channels))
 
