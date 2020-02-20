@@ -4,20 +4,23 @@ from pathlib import Path, PureWindowsPath
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from scipy import interpolate
 
 import ibllib.io.raw_data_loaders as raw
 import ibllib.plots as plots
 from ibllib.ephys.ephysqc import _qc_from_path
-from ibllib.io.extractors.training_trials import (get_choice,
-                                                  get_feedback_times,
-                                                  get_feedbackType,
-                                                  get_goCueOnset_times,
-                                                  get_goCueTrigger_times,
-                                                  get_intervals,
-                                                  get_port_events,
-                                                  get_response_times,
-                                                  get_stimOn_times,
-                                                  get_stimOnTrigger_times)
+from ibllib.io.extractors.training_trials import (
+    get_choice,
+    get_feedback_times,
+    get_feedbackType,
+    get_goCueOnset_times,
+    get_goCueTrigger_times,
+    get_intervals,
+    get_port_events,
+    get_response_times,
+    get_stimOn_times,
+    get_stimOnTrigger_times,
+)
 
 
 def get_bpod_fronts(session_path, save=False, data=False, settings=False):
@@ -33,10 +36,34 @@ def get_bpod_fronts(session_path, save=False, data=False, settings=False):
     BNC1_fronts = np.array([[np.nan, np.nan]])
     BNC2_fronts = np.array([[np.nan, np.nan]])
     for tr in data:
-        BNC1_fronts = np.append(BNC1_fronts, np.array([[x, 1] for x in tr["behavior_data"]["Events timestamps"].get('BNC1High', [np.nan])]), axis=0)
-        BNC1_fronts = np.append(BNC1_fronts, np.array([[x, -1] for x in tr["behavior_data"]["Events timestamps"].get('BNC1Low', [np.nan])]), axis=0)
-        BNC2_fronts = np.append(BNC2_fronts, np.array([[x, 1] for x in tr["behavior_data"]["Events timestamps"].get('BNC2High', [np.nan])]), axis=0)
-        BNC2_fronts = np.append(BNC2_fronts, np.array([[x, -1] for x in tr["behavior_data"]["Events timestamps"].get('BNC2Low', [np.nan])]), axis=0)
+        BNC1_fronts = np.append(
+            BNC1_fronts,
+            np.array([
+                [x, 1] for x in tr["behavior_data"]["Events timestamps"].get("BNC1High", [np.nan])
+            ]),
+            axis=0,
+        )
+        BNC1_fronts = np.append(
+            BNC1_fronts,
+            np.array([
+                [x, -1] for x in tr["behavior_data"]["Events timestamps"].get("BNC1Low", [np.nan])
+            ]),
+            axis=0,
+        )
+        BNC2_fronts = np.append(
+            BNC2_fronts,
+            np.array([
+                [x, 1] for x in tr["behavior_data"]["Events timestamps"].get("BNC2High", [np.nan])
+            ]),
+            axis=0,
+        )
+        BNC2_fronts = np.append(
+            BNC2_fronts,
+            np.array([
+                [x, -1] for x in tr["behavior_data"]["Events timestamps"].get("BNC2Low", [np.nan])
+            ]),
+            axis=0,
+        )
 
     BNC1_fronts = BNC1_fronts[1:, :]
     BNC1_fronts = BNC1_fronts[BNC1_fronts[:, 0].argsort()]
@@ -140,7 +167,7 @@ def get_stimOffTrigger_times(session_path, save=False, data=False, settings=Fals
     no_goTrigger_times = np.array(
         [tr["behavior_data"]["States timestamps"]["no_go"][0][0] for tr in data]
     )
-    # Stim off triggers are either in their own state or in the no_go state if the mouse did not move
+    # Stim off trigs are either in their own state or in the no_go state if the mouse did not move
     assert all(~np.isnan(no_goTrigger_times) == np.isnan(stimOffTrigger_times))
     stimOffTrigger_times[~np.isnan(no_goTrigger_times)] = no_goTrigger_times[
         ~np.isnan(no_goTrigger_times)
@@ -287,7 +314,10 @@ def get_error_tone_in_trigger(session_path, save=False, data=False, settings=Fal
     return error_tone_in_trigger
 
 
-def _get_trimmed_data_from_pregenerated_files(session_path, save=False, data=False, settings=False):
+def _get_trimmed_data_from_pregenerated_files(session_path,
+                                              save=False,
+                                              data=False,
+                                              settings=False):
     if not data:
         data = raw.load_data(session_path)
     if not settings:
@@ -336,12 +366,18 @@ def _get_trimmed_data_from_pregenerated_files(session_path, save=False, data=Fal
         lpath = Path(session_path).joinpath("alf", "_ibl_trials.probabilityLeft.npy")
         np.save(lpath, pLeft)
 
-    return {"position": pos, "contrast": con, "quiescence": qui, "phase": phase, "prob_left": pLeft}
+    return {"position": pos,
+            "contrast": con,
+            "quiescence": qui,
+            "phase": phase,
+            "prob_left": pLeft}
 
 
 def load_bpod_data(session_path):
     # one.load(
-    #     eid, dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"], download_only=True
+    #     eid,
+    #     dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"],
+    #     download_only=True
     # )
     # session_path = one.path_from_eid(eid)
     data = raw.load_data(session_path)
@@ -369,7 +405,9 @@ def load_bpod_data(session_path):
         "goCueTrigger_times": get_goCueTrigger_times(
             session_path, save=False, data=data, settings=settings
         ),
-        "goCue_times": get_goCueOnset_times(session_path, save=False, data=data, settings=settings),
+        "goCue_times": get_goCueOnset_times(
+            session_path, save=False, data=data, settings=settings
+        ),
         "error_tone_in_trigger": get_error_tone_in_trigger(
             session_path, save=False, data=data, settings=settings
         ),
@@ -451,8 +489,8 @@ def get_bpodqc_frame(session_path):
         ),
         "stim_freeze_before_feedback": bpod["feedback_times"] - bpod["stimFreeze_times_BNC1"] > 0,
         "stim_freeze_feedback_delay": (
-            np.abs(bpod["feedback_times"] - bpod["stimFreeze_times_BNC1"])
-            <= FEEDBACK_STIMFREEZE_DELAY
+            np.abs(bpod["feedback_times"] - bpod["stimFreeze_times_BNC1"]) <=
+            FEEDBACK_STIMFREEZE_DELAY
         ),
         "stimOff_delay_valve": np.less(
             np.abs(bpod["stimOff_times"] - bpod["valve_open"] - VALVE_STIM_OFF_DELAY),
@@ -494,11 +532,15 @@ def check_trigger_response(session_path):
     stimOff_diff = bpod["stimOffTrigger_times"] - bpod["stimOff_times_BNC1"]
     stimFreeze_diff = bpod["stimFreezeTrigger_times"] - bpod["stimFreeze_times_BNC1"]
 
+    return goCue_diff, stimOn_diff, stimOff_diff, stimFreeze_diff
+
 
 def check_response_feedback(session_path):
     bpod = load_bpod_data(session_path)
 
     resp_feedback_diff = bpod["response_times"] - bpod["feedback_times"]
+
+    return resp_feedback_diff
 
 
 def check_iti_stimOffTrig(session_path):
@@ -508,12 +550,15 @@ def check_iti_stimOffTrig(session_path):
     # 0.1 means that stimOff lasted more than 0.1 to go off.or BNC1 was not detected
     # 2 sec means it was a no go trial and the trig was at the beginning of the no_go state
     # that lasts for 2 sec after which itiState enters
+    return iti_stimOff_diff
 
 
 def check_feedback_stim_off_delay(session_path):
     bpod = load_bpod_data(session_path)
 
     valve_stim_off_diff = bpod["feedback_times"] - bpod["stimOffTrigger_times"]
+
+    return valve_stim_off_diff
 
 
 # --------------------------------------------------------------------------- #
@@ -536,8 +581,8 @@ def count_qc_failures(session_path):
         "response_times_goCue_times_diff",
     ]
     for k in qc_fields:
-        print("FPGA nFailed", k, ":", sum(fpgaqc_frame[k] == False), len(fpgaqc_frame[k]))
-        print("BPOD nFailed", k, ":", sum(bpodqc_frame[k] == False), len(bpodqc_frame[k]))
+        print("FPGA nFailed", k, ":", sum(np.bitwise_not(fpgaqc_frame[k])), len(fpgaqc_frame[k]))
+        print("BPOD nFailed", k, ":", sum(np.bitwise_now(bpodqc_frame[k])), len(bpodqc_frame[k]))
 
 
 def plot_bpod_session(session_path):
@@ -546,47 +591,140 @@ def plot_bpod_session(session_path):
     f, ax = plt.subplots()
     width = 0.5
     ymax = 5
-    plots.squares(BNC1['times'], BNC1['polarities'] * 0.4 + 1, ax=ax, c='k')
-    plots.squares(BNC2['times'], BNC2['polarities'] * 0.4 + 2, ax=ax, c='k')
-    plots.vertical_lines(bpodqc_frame['ready_tone_in'], ymin=0, ymax=ymax,
-                         ax=ax, label='ready_tone_in', color='b', linewidth=width)
-    plots.vertical_lines(bpodqc_frame['intervals_0'], ymin=0, ymax=ymax,
-                         ax=ax, label='start_trial', color='m', linewidth=width)
-    plots.vertical_lines(bpodqc_frame['error_tone_in_trigger'], ymin=0, ymax=ymax,
-                         ax=ax, label='error_tone_in_trigger', color='r', alpha=0.5, linewidth=width)
-    plots.vertical_lines(bpodqc_frame['error_tone_in'], ymin=0, ymax=ymax,
-                         ax=ax, label='error_tone_in', color='r', linewidth=width)
-    plots.vertical_lines(bpodqc_frame['valve_open'], ymin=0, ymax=ymax,
-                         ax=ax, label='valve_open', color='g', linewidth=width)
-    plots.vertical_lines(bpodqc_frame['stimFreezeTrigger_times'], ymin=0, ymax=ymax,
-                         ax=ax, label='stimFreezeTrigger_times', color='k', alpha=0.5, linewidth=width)
-    plots.vertical_lines(bpodqc_frame['stim_freeze'], ymin=0, ymax=ymax,
-                         ax=ax, label='stim_freeze', color='y', linewidth=width)
-    plots.vertical_lines(bpodqc_frame['stimOffTrigger_times'], ymin=0, ymax=ymax,
-                         ax=ax, label='stimOffTrigger_times', color='c', alpha=0.5, linewidth=width)
-    plots.vertical_lines(bpodqc_frame['stimOff_times'], ymin=0, ymax=ymax,
-                         ax=ax, label='stimOff_times', color='c', linewidth=width)
-    plots.vertical_lines(bpodqc_frame['stimOnTrigger_times'], ymin=0, ymax=ymax,
-                         ax=ax, label='stimOnTrigger_times', color='tab:orange', alpha=0.5, linewidth=width)
-    plots.vertical_lines(bpodqc_frame['stimOn_times'], ymin=0, ymax=ymax,
-                         ax=ax, label='stimOn_times', color='tab:orange', linewidth=width)
+    plots.squares(BNC1["times"], BNC1["polarities"] * 0.4 + 1, ax=ax, c="k")
+    plots.squares(BNC2["times"], BNC2["polarities"] * 0.4 + 2, ax=ax, c="k")
+    plots.vertical_lines(
+        bpodqc_frame["ready_tone_in"],
+        ymin=0,
+        ymax=ymax,
+        ax=ax,
+        label="ready_tone_in",
+        color="b",
+        linewidth=width,
+    )
+    plots.vertical_lines(
+        bpodqc_frame["intervals_0"],
+        ymin=0,
+        ymax=ymax,
+        ax=ax,
+        label="start_trial",
+        color="m",
+        linewidth=width,
+    )
+    plots.vertical_lines(
+        bpodqc_frame["error_tone_in_trigger"],
+        ymin=0,
+        ymax=ymax,
+        ax=ax,
+        label="error_tone_in_trigger",
+        color="r",
+        alpha=0.5,
+        linewidth=width,
+    )
+    plots.vertical_lines(
+        bpodqc_frame["error_tone_in"],
+        ymin=0,
+        ymax=ymax,
+        ax=ax,
+        label="error_tone_in",
+        color="r",
+        linewidth=width,
+    )
+    plots.vertical_lines(
+        bpodqc_frame["valve_open"],
+        ymin=0,
+        ymax=ymax,
+        ax=ax,
+        label="valve_open",
+        color="g",
+        linewidth=width,
+    )
+    plots.vertical_lines(
+        bpodqc_frame["stimFreezeTrigger_times"],
+        ymin=0,
+        ymax=ymax,
+        ax=ax,
+        label="stimFreezeTrigger_times",
+        color="k",
+        alpha=0.5,
+        linewidth=width,
+    )
+    plots.vertical_lines(
+        bpodqc_frame["stim_freeze"],
+        ymin=0,
+        ymax=ymax,
+        ax=ax,
+        label="stim_freeze",
+        color="y",
+        linewidth=width,
+    )
+    plots.vertical_lines(
+        bpodqc_frame["stimOffTrigger_times"],
+        ymin=0,
+        ymax=ymax,
+        ax=ax,
+        label="stimOffTrigger_times",
+        color="c",
+        alpha=0.5,
+        linewidth=width,
+    )
+    plots.vertical_lines(
+        bpodqc_frame["stimOff_times"],
+        ymin=0,
+        ymax=ymax,
+        ax=ax,
+        label="stimOff_times",
+        color="c",
+        linewidth=width,
+    )
+    plots.vertical_lines(
+        bpodqc_frame["stimOnTrigger_times"],
+        ymin=0,
+        ymax=ymax,
+        ax=ax,
+        label="stimOnTrigger_times",
+        color="tab:orange",
+        alpha=0.5,
+        linewidth=width,
+    )
+    plots.vertical_lines(
+        bpodqc_frame["stimOn_times"],
+        ymin=0,
+        ymax=ymax,
+        ax=ax,
+        label="stimOn_times",
+        color="tab:orange",
+        linewidth=width,
+    )
     ax.legend()
-    ax.set_yticklabels(['', 'f2ttl', 'audio', ''])
+    ax.set_yticklabels(["", "f2ttl", "audio", ""])
     ax.set_yticks([0, 1, 2, 3])
     ax.set_ylim([0, 3])
+
+
 # Make decorator for sesison_path based QC to accept eid's
 # Check input if valid eid
 # Download relevant datasets
 # Get the path and feed  it to the func [sess_path = one.path_from_eid(eid)]
 
 
+def convert_bpod_times_to_FPGA_times(session_path):
+    fpgaqc_frame = _qc_from_path(session_path)
+    bpodqc_frame = get_bpodqc_frame(session_path)
+    return interpolate.interp1d(
+        bpodqc_frame["intervals_0"], fpgaqc_frame["intervals_0"], fill_value="extrapolate"
+    )  # TODO: finish this!!!
+
+
+# TODO: refactor names of fpgaqc_frame to match ALF specs and bpodqc_frame
+# Remove bpodqc translation part to match fpgaqc_frame key names...
 if __name__ == "__main__":
     # from ibllib.ephys.bpodqc import *
-
+    subj_path = '/home/nico/Projects/IBL/github/iblapps/scratch/TestSubjects/'
     # Guido's 3B
-    gsession_path = "/home/nico/Projects/IBL/github/iblapps/scratch/TestSubjects/_iblrig_test_mouse/2020-02-11/001"
+    gsession_path = subj_path + "_iblrig_test_mouse/2020-02-11/001"
     # Alex's 3A
-    asession_path = "/home/nico/Projects/IBL/scratch/TestSubjects/_iblrig_test_mouse/2020-02-18/006"
+    asession_path = subj_path + "_iblrig_test_mouse/2020-02-18/006"
 
     session_path = gsession_path
     bpod = load_bpod_data(session_path)
