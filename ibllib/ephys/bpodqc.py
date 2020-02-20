@@ -1,24 +1,23 @@
 import os
 from pathlib import Path, PureWindowsPath
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
 import ibllib.io.raw_data_loaders as raw
 import ibllib.plots as plots
 from ibllib.ephys.ephysqc import _qc_from_path
-from ibllib.io.extractors.training_trials import (
-    get_choice,
-    get_goCueOnset_times,
-    get_goCueTrigger_times,
-    get_response_times,
-    get_stimOn_times,
-    get_stimOnTrigger_times,
-    get_feedback_times,
-    get_feedbackType,
-    get_intervals,
-    get_port_events,
-)
+from ibllib.io.extractors.training_trials import (get_choice,
+                                                  get_feedback_times,
+                                                  get_feedbackType,
+                                                  get_goCueOnset_times,
+                                                  get_goCueTrigger_times,
+                                                  get_intervals,
+                                                  get_port_events,
+                                                  get_response_times,
+                                                  get_stimOn_times,
+                                                  get_stimOnTrigger_times)
 
 
 def get_bpod_fronts(session_path, save=False, data=False, settings=False):
@@ -582,9 +581,7 @@ def plot_bpod_session(session_path):
 
 
 if __name__ == "__main__":
-    from ibllib.ephys.bpodqc import *
-    from ibllib.ephys.ephysqc import _qc_from_path
-    import matplotlib.pyplot as plt
+    # from ibllib.ephys.bpodqc import *
 
     # Guido's 3B
     gsession_path = "/home/nico/Projects/IBL/github/iblapps/scratch/TestSubjects/_iblrig_test_mouse/2020-02-11/001"
