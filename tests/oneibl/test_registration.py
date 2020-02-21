@@ -20,6 +20,26 @@ r = {'created_by': 'olivier',
 
 class TestRegistrationEndpoint(unittest.TestCase):
 
+    def test_task_names_extractors(self):
+        """
+        This is to test against regressions
+        """
+        task_out = [
+            ('_iblrig_tasks_biasedChoiceWorld3.7.0', 'Behavior training/tasks'),
+            ('_iblrig_tasks_biasedScanningChoiceWorld5.2.3', 'Behavior training/tasks'),
+            ('_iblrig_tasks_trainingChoiceWorld3.6.0', 'Behavior training/tasks'),
+            ('_iblrig_tasks_ephysChoiceWorld5.1.3', 'Ephys recording with acute probe(s)'),
+            ('_iblrig_calibration_frame2TTL4.1.3', None),
+            ('_iblrig_tasks_habituationChoiceWorld3.6.0', 'Behavior training/tasks'),
+            ('_iblrig_tasks_scanningOptoChoiceWorld5.0.0', None),
+            ('_iblrig_tasks_RewardChoiceWorld4.1.3', None),
+            ('_iblrig_calibration_screen4.1.3', None),
+            ('_iblrig_tasks_ephys_certification4.1.3', 'Ephys recording with acute probe(s)'),
+        ]
+        for to in task_out:
+            out = registration._alyx_procedure_from_task(to[0])
+            self.assertEqual(out, to[1])
+
     def test_single_registration(self):
         dataset = one.alyx.rest('register-file', 'create', data=r)
         ds = one.alyx.rest('datasets', 'read', id=dataset[0]['id'])
@@ -77,4 +97,15 @@ class TestRegistrationSession(unittest.TestCase):
                 self.assertTrue(ds['hash'] is not None)
                 self.assertTrue(ds['file_size'] is not None)
                 self.assertTrue(ds['version'] == version.ibllib())
+            # checks the procedure of the session
+            ses_info = one.alyx.rest('sessions', 'read', id=eid)
+            self.assertTrue(ses_info['procedures'] == ['Ephys recording with acute probe(s)'])
             one.alyx.rest('sessions', 'delete', id=eid)
+            # re-register the session as behaviour this time
+            settings['PYBPOD_PROTOCOL'] = '_iblrig_tasks_trainingChoiceWorld6.3.1'
+            with open(settings_file, 'w') as fid:
+                json.dump(settings, fid)
+            rc.register_session(session_path)
+            eid = one.search(subjects='clns0730', date_range=['2018-04-01', '2018-04-01'])[0]
+            ses_info = one.alyx.rest('sessions', 'read', id=eid)
+            self.assertTrue(ses_info['procedures'] == ['Behavior training/tasks'])

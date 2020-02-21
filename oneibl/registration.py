@@ -131,15 +131,16 @@ class RegistrationClient:
                             '{0:03d}'.format(int(md['SESSION_NUMBER'])))
 
         # if nothing found create a new session in Alyx
+        task_protocol = md['PYBPOD_PROTOCOL'] + md['IBLRIG_VERSION_TAG']
         if not session:
             ses_ = {'subject': subject['nickname'],
                     'users': [username],
                     'location': md['PYBPOD_BOARD'],
-                    'procedures': ['Behavior training/tasks'],
+                    'procedures': [_alyx_procedure_from_task(task_protocol)],
                     'lab': subject['lab'],
                     # 'project': project['name'],
                     'type': 'Experiment',
-                    'task_protocol': md['PYBPOD_PROTOCOL'] + md['IBLRIG_VERSION_TAG'],
+                    'task_protocol': task_protocol,
                     'number': md['SESSION_NUMBER'],
                     'start_time': ibllib.time.date2isostr(start_time),
                     'end_time': ibllib.time.date2isostr(end_time) if end_time else None,
@@ -222,6 +223,20 @@ class RegistrationClient:
             if re.match(reg, Path(full_file).name, re.IGNORECASE):
                 return True
         return False
+
+
+def _alyx_procedure_from_task(task_protocol):
+    import ibllib.pipes.extract_session
+    task_str = ibllib.pipes.extract_session.get_task_extractor_type(task_protocol)
+    lookup = {'biased': 'Behavior training/tasks',
+              'habituation': 'Behavior training/tasks',
+              'training': 'Behavior training/tasks',
+              'ephys': 'Ephys recording with acute probe(s)',
+              'mock_ephys': 'Ephys recording with acute probe(s)',
+              'sync_ephys': 'Ephys recording with acute probe(s)'}
+    if task_str not in lookup:
+        return
+    return lookup[task_str]
 
 
 def _register_bool(fn, file_list):
