@@ -1,3 +1,6 @@
+### Release Notes 1.4.12
+-   ephys registration sets the session.procedure field to acute recording
+
 ### Release Notes 1.4.11 - 2020-02-14
 -   bugfix: Include sessions data files for ephys mock
 -   bugfix: Single probe 3B gets synchronized

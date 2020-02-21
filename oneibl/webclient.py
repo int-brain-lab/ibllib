@@ -205,6 +205,7 @@ class AlyxClient:
         rest_query = rest_query.replace(self._base_url, '')
         if not rest_query.startswith('/'):
             rest_query = '/' + rest_query
+        logger_.debug(self._base_url + rest_query)
         r = reqfunction(self._base_url + rest_query, stream=True, headers=self._headers, data=data)
         if r and r.status_code in (200, 201):
             return json.loads(r.text)
@@ -391,14 +392,15 @@ class AlyxClient:
                 url = url + id
             # otherwise, look for a dictionary of filter terms
             elif kwargs:
+                url += '?'
                 for k in kwargs.keys():
                     if isinstance(kwargs[k], str):
                         query = kwargs[k]
                     elif isinstance(kwargs[k], list):
                         query = ','.join(kwargs[k])
                     else:
-                        continue
-                    url = url + f"?&{k}=" + query
+                        query = str(kwargs[k])
+                    url = url + f"&{k}=" + query
             return self.get('/' + url)
         if action == 'read':
             assert(endpoint_scheme[action]['action'] == 'get')

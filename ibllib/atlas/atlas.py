@@ -456,12 +456,13 @@ def AllenAtlas(res_um=25, par=None):
     image = np.swapaxes(np.swapaxes(image, 2, 0), 1, 2)  # image[iap, iml, idv]
     label, header = nrrd.read(file_label, index_order='C')  # dv, ml, ap
     label = np.swapaxes(np.swapaxes(label, 2, 0), 1, 2)  # label[iap, iml, idv]
+    # resulting volumes origin: x right, y front, z top
     df_regions = pd.read_csv(par.FILE_REGIONS)
     regions = BrainRegions(id=df_regions.id.values,
                            name=df_regions.name.values,
                            acronym=df_regions.acronym.values)
     xyz2dims = np.array([1, 0, 2])
     dims2xyz = np.array([1, 0, 2])
-    dxyz = res_um * 1e-6 * np.array([1, -1, -1])
+    dxyz = res_um * 1e-6 * np.array([-1, -1, -1])
     ibregma = (np.array(par.INDICES_BREGMA) * 10 / res_um)
     return BrainAtlas(image, label, regions, dxyz, ibregma, dims2xyz=dims2xyz, xyz2dims=xyz2dims)
