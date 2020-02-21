@@ -1,4 +1,5 @@
 import os
+import uuid
 from pathlib import Path, PureWindowsPath
 
 import matplotlib.pyplot as plt
@@ -8,19 +9,57 @@ from scipy import interpolate
 
 import ibllib.io.raw_data_loaders as raw
 import ibllib.plots as plots
+from alf.io import is_uuid_string
 from ibllib.ephys.ephysqc import _qc_from_path
-from ibllib.io.extractors.training_trials import (
-    get_choice,
-    get_feedback_times,
-    get_feedbackType,
-    get_goCueOnset_times,
-    get_goCueTrigger_times,
-    get_intervals,
-    get_port_events,
-    get_response_times,
-    get_stimOn_times,
-    get_stimOnTrigger_times,
-)
+from ibllib.io.extractors.training_trials import (get_choice,
+                                                  get_feedback_times,
+                                                  get_feedbackType,
+                                                  get_goCueOnset_times,
+                                                  get_goCueTrigger_times,
+                                                  get_intervals,
+                                                  get_port_events,
+                                                  get_response_times,
+                                                  get_stimOn_times,
+                                                  get_stimOnTrigger_times)
+from oneibl.one import ONE
+
+one = ONE()
+
+
+def uuid_to_path(func):
+    """ Check if first argument of func is eID, if valid return path
+    """
+    def wrapper(eid, *args, **kwargs):
+        # Check if first arg is path or eid
+        if is_uuid_string(str(eid)):
+            session_path = one.path_from_eid(eid)
+        func(session_path, *args, **kwargs)
+    return wrapper
+
+
+def dl_raw_behavior_data(func, full=False):
+    """ download data and settings for session
+    """
+    def wrapper(eid, *args, **kwargs):
+        # Check if first arg is path or eid
+        if is_uuid_string(str(eid)):
+            if full is True:
+                one.load(eid, download_only=True, dry_run=True)
+                session_path = one.path_from_eid(eid)
+        func(session_path, *args, **kwargs)
+    return wrapper
+
+
+def dl_data(func):
+    """ if
+    """
+    pass
+
+@uuid_to_path
+def test(some, value, other='ovalue'):
+    print("some:", some)
+    print("value:", value)
+    print("other:", other)
 
 
 def get_bpod_fronts(session_path, save=False, data=False, settings=False):
