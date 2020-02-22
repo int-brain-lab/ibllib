@@ -621,13 +621,11 @@ def count_qc_failures(session_path):
     ]
     for k in qc_fields:
         print("FPGA nFailed", k, ":", sum(np.bitwise_not(fpgaqc_frame[k])), len(fpgaqc_frame[k]))
-        print("BPOD nFailed", k, ":", sum(np.bitwise_now(bpodqc_frame[k])), len(bpodqc_frame[k]))
+        print("BPOD nFailed", k, ":", sum(np.bitwise_not(bpodqc_frame[k])), len(bpodqc_frame[k]))
 
 
-def plot_bpod_session(session_path):
+def plot_bpod_session(session_path, ax=None):
     BNC1, BNC2 = get_bpod_fronts(session_path)
-    plt.ion()
-    f, ax = plt.subplots()
     width = 0.5
     ymax = 5
     plots.squares(BNC1["times"], BNC1["polarities"] * 0.4 + 1, ax=ax, c="k")
@@ -767,10 +765,12 @@ if __name__ == "__main__":
 
     session_path = gsession_path
     bpod = load_bpod_data(session_path)
-    fpgaqc_frame = _qc_from_path(session_path)
+    fpgaqc_frame = _qc_from_path(session_path, display=False)
     bpodqc_frame = get_bpodqc_frame(session_path)
 
     bla = [(k, all(fpgaqc_frame[k] == bpodqc_frame[k])) for k in fpgaqc_frame if k in bpodqc_frame]
 
     count_qc_failures(session_path)
-    plot_bpod_session(session_path)
+    plt.ion()
+    f, ax = plt.subplots()
+    plot_bpod_session(session_path, ax=ax)
