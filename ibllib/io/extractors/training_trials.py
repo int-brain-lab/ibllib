@@ -393,7 +393,7 @@ def get_stimOn_times_ge5(session_path, data=False):
     stim_on_state = np.array([tr['behavior_data']['States timestamps']
                              ['stim_on'][0] for tr in data])
 
-    stimOn_times = np.array([])
+    stimOn_times = np.array([])  # XXX: stimOn times is NaN if stim not detected withing stim_on state, get from BNC1 first pulse!!
     for sync, on, off in zip(
             stim_sync_all, stim_on_state[:, 0], stim_on_state[:, 1]):
         pulse = sync[np.where(np.bitwise_and((sync > on), (sync <= off)))]

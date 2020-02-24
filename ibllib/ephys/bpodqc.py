@@ -11,16 +11,18 @@ import ibllib.io.raw_data_loaders as raw
 import ibllib.plots as plots
 from alf.io import is_uuid_string
 from ibllib.ephys.ephysqc import _qc_from_path
-from ibllib.io.extractors.training_trials import (get_choice,
-                                                  get_feedback_times,
-                                                  get_feedbackType,
-                                                  get_goCueOnset_times,
-                                                  get_goCueTrigger_times,
-                                                  get_intervals,
-                                                  get_port_events,
-                                                  get_response_times,
-                                                  get_stimOn_times,
-                                                  get_stimOnTrigger_times)
+from ibllib.io.extractors.training_trials import (
+    get_choice,
+    get_feedback_times,
+    get_feedbackType,
+    get_goCueOnset_times,
+    get_goCueTrigger_times,
+    get_intervals,
+    get_port_events,
+    get_response_times,
+    get_stimOn_times,
+    get_stimOnTrigger_times,
+)
 from oneibl.one import ONE
 
 one = ONE()
@@ -29,17 +31,20 @@ one = ONE()
 def uuid_to_path(func):
     """ Check if first argument of func is eID, if valid return path
     """
+
     def wrapper(eid, *args, **kwargs):
         # Check if first arg is path or eid
         if is_uuid_string(str(eid)):
             session_path = one.path_from_eid(eid)
         func(session_path, *args, **kwargs)
+
     return wrapper
 
 
 def dl_raw_behavior_data(func, full=False):
     """ download data and settings for session
     """
+
     def wrapper(eid, *args, **kwargs):
         # Check if first arg is path or eid
         if is_uuid_string(str(eid)):
@@ -47,6 +52,7 @@ def dl_raw_behavior_data(func, full=False):
                 one.load(eid, download_only=True, dry_run=True)
                 session_path = one.path_from_eid(eid)
         func(session_path, *args, **kwargs)
+
     return wrapper
 
 
@@ -55,8 +61,9 @@ def dl_data(func):
     """
     pass
 
+
 @uuid_to_path
-def test(some, value, other='ovalue'):
+def test(some, value, other="ovalue"):
     print("some:", some)
     print("value:", value)
     print("other:", other)
@@ -77,30 +84,30 @@ def get_bpod_fronts(session_path, save=False, data=False, settings=False):
     for tr in data:
         BNC1_fronts = np.append(
             BNC1_fronts,
-            np.array([
-                [x, 1] for x in tr["behavior_data"]["Events timestamps"].get("BNC1High", [np.nan])
-            ]),
+            np.array(
+                [[x, 1] for x in tr["behavior_data"]["Events timestamps"].get("BNC1High", [np.nan])]
+            ),
             axis=0,
         )
         BNC1_fronts = np.append(
             BNC1_fronts,
-            np.array([
-                [x, -1] for x in tr["behavior_data"]["Events timestamps"].get("BNC1Low", [np.nan])
-            ]),
+            np.array(
+                [[x, -1] for x in tr["behavior_data"]["Events timestamps"].get("BNC1Low", [np.nan])]
+            ),
             axis=0,
         )
         BNC2_fronts = np.append(
             BNC2_fronts,
-            np.array([
-                [x, 1] for x in tr["behavior_data"]["Events timestamps"].get("BNC2High", [np.nan])
-            ]),
+            np.array(
+                [[x, 1] for x in tr["behavior_data"]["Events timestamps"].get("BNC2High", [np.nan])]
+            ),
             axis=0,
         )
         BNC2_fronts = np.append(
             BNC2_fronts,
-            np.array([
-                [x, -1] for x in tr["behavior_data"]["Events timestamps"].get("BNC2Low", [np.nan])
-            ]),
+            np.array(
+                [[x, -1] for x in tr["behavior_data"]["Events timestamps"].get("BNC2Low", [np.nan])]
+            ),
             axis=0,
         )
 
@@ -353,10 +360,7 @@ def get_error_tone_in_trigger(session_path, save=False, data=False, settings=Fal
     return error_tone_in_trigger
 
 
-def _get_trimmed_data_from_pregenerated_files(session_path,
-                                              save=False,
-                                              data=False,
-                                              settings=False):
+def _get_trimmed_data_from_pregenerated_files(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
     if not settings:
@@ -405,11 +409,7 @@ def _get_trimmed_data_from_pregenerated_files(session_path,
         lpath = Path(session_path).joinpath("alf", "_ibl_trials.probabilityLeft.npy")
         np.save(lpath, pLeft)
 
-    return {"position": pos,
-            "contrast": con,
-            "quiescence": qui,
-            "phase": phase,
-            "prob_left": pLeft}
+    return {"position": pos, "contrast": con, "quiescence": qui, "phase": phase, "prob_left": pLeft}
 
 
 def load_bpod_data(session_path):
@@ -444,9 +444,7 @@ def load_bpod_data(session_path):
         "goCueTrigger_times": get_goCueTrigger_times(
             session_path, save=False, data=data, settings=settings
         ),
-        "goCue_times": get_goCueOnset_times(
-            session_path, save=False, data=data, settings=settings
-        ),
+        "goCue_times": get_goCueOnset_times(session_path, save=False, data=data, settings=settings),
         "error_tone_in_trigger": get_error_tone_in_trigger(
             session_path, save=False, data=data, settings=settings
         ),
@@ -528,8 +526,8 @@ def get_bpodqc_frame(session_path):
         ),
         "stim_freeze_before_feedback": bpod["feedback_times"] - bpod["stimFreeze_times_BNC1"] > 0,
         "stim_freeze_feedback_delay": (
-            np.abs(bpod["feedback_times"] - bpod["stimFreeze_times_BNC1"]) <=
-            FEEDBACK_STIMFREEZE_DELAY
+            np.abs(bpod["feedback_times"] - bpod["stimFreeze_times_BNC1"])
+            <= FEEDBACK_STIMFREEZE_DELAY
         ),
         "stimOff_delay_valve": np.less(
             np.abs(bpod["stimOff_times"] - bpod["valve_open"] - VALVE_STIM_OFF_DELAY),
@@ -563,15 +561,22 @@ def get_bpodqc_frame(session_path):
 
 
 # --------------------------------------------------------------------------- #
-def check_trigger_response(session_path):
+def get_trigger_response(session_path):
     bpod = load_bpod_data(session_path)
     # get diff from triggers to detected events
-    goCue_diff = bpod["goCueTrigger_times"] - bpod["goCue_times"]
-    stimOn_diff = bpod["stimOnTrigger_times"] - bpod["stimOn_times_BNC1"]
-    stimOff_diff = bpod["stimOffTrigger_times"] - bpod["stimOff_times_BNC1"]
-    stimFreeze_diff = bpod["stimFreezeTrigger_times"] - bpod["stimFreeze_times_BNC1"]
+    goCue_diff = np.abs(bpod["goCueTrigger_times"] - bpod["goCue_times"])
+    errorTone_diff = np.abs(bpod["error_tone_in_trigger"] - bpod["error_tone_in"])
+    stimOn_diff = np.abs(bpod["stimOnTrigger_times"] - bpod["stimOn_times_BNC1"])
+    stimOff_diff = np.abs(bpod["stimOffTrigger_times"] - bpod["stimOff_times_BNC1"])
+    stimFreeze_diff = np.abs(bpod["stimFreezeTrigger_times"] - bpod["stimFreeze_times_BNC1"])
 
-    return goCue_diff, stimOn_diff, stimOff_diff, stimFreeze_diff
+    return {
+        "goCue": goCue_diff,
+        "errorTone": errorTone_diff,
+        "stimOn": stimOn_diff,
+        "stimOff": stimOff_diff,
+        "stimFreeze": stimFreeze_diff,
+    }
 
 
 def check_response_feedback(session_path):
@@ -625,6 +630,9 @@ def count_qc_failures(session_path):
 
 
 def plot_bpod_session(session_path, ax=None):
+    if ax is None:
+        f, ax = plt.subplots()
+    bpodqc_frame = get_bpodqc_frame(session_path)
     BNC1, BNC2 = get_bpod_fronts(session_path)
     width = 0.5
     ymax = 5
@@ -753,24 +761,92 @@ def convert_bpod_times_to_FPGA_times(session_path):
     )  # TODO: finish this!!!
 
 
+def plot_trigger_response_diffs(eid, ax=None):
+    one.load(
+        eid, dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"], download_only=True
+    )
+    session_path = one.path_from_eid(eid)
+    trigger_diffs = check_trigger_response(session_path)
+
+    sett = raw.load_settings(session_path)
+    if ax is None:
+        f, ax = plt.subplots()
+    tit = f"{sett['SESSION_NAME']}: {eid}"
+    ax.title.set_text(tit)
+    ax.hist(trigger_diffs['goCue'], alpha=0.5, bins=5, label="goCue_diff")
+    ax.hist(trigger_diffs['errorTone'], alpha=0.5, bins=5, label="errorTone_diff")
+    ax.hist(trigger_diffs['stimOn'], alpha=0.5, bins=50, label="stimOn_diff")
+    ax.hist(trigger_diffs['stimOff'], alpha=0.5, bins=50, label="stimOff_diff")
+    ax.hist(trigger_diffs['stimFreeze'], alpha=0.5, bins=50, label="stimFreeze_diff")
+    ax.legend(loc="best")
+
+
+def describe_lab_trigger_diffs(labname):
+    eids, dets = one.search(
+        task_protocol="ephysChoiceWorld6.2.5",
+        lab=labname,
+        dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"],
+        details=True
+    )
+    trigger_diffs = {
+        'goCue': np.array([]),
+        'errorTone': np.array([]),
+        'stimOn': np.array([]),
+        'stimOff': np.array([]),
+        'stimFreeze': np.array([]),
+    }
+    for eid in eids:
+        one.load(eid, download_only=True, dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"],)
+        sp = one.path_from_eid(eid)
+        td = get_trigger_response(sp)
+        for k in trigger_diffs:
+            trigger_diffs[k] = np.append(trigger_diffs[k], td[k])
+
+    df = pd.DataFrame.from_dict(trigger_diffs)
+    print(df.describe())
+    for k in df:
+        print(k, 'nancount:', sum(np.isnan(df[k])))
+
 # TODO: refactor names of fpgaqc_frame to match ALF specs and bpodqc_frame
 # Remove bpodqc translation part to match fpgaqc_frame key names...
 if __name__ == "__main__":
     # from ibllib.ephys.bpodqc import *
-    subj_path = '/home/nico/Projects/IBL/github/iblapps/scratch/TestSubjects/'
+    subj_path = "/home/nico/Projects/IBL/github/iblapps/scratch/TestSubjects/"
     # Guido's 3B
     gsession_path = subj_path + "_iblrig_test_mouse/2020-02-11/001"
     # Alex's 3A
     asession_path = subj_path + "_iblrig_test_mouse/2020-02-18/006"
+    a2session_path = subj_path + "_iblrig_test_mouse/2020-02-21/011"
 
     session_path = gsession_path
-    bpod = load_bpod_data(session_path)
-    fpgaqc_frame = _qc_from_path(session_path, display=False)
-    bpodqc_frame = get_bpodqc_frame(session_path)
+    # bpod = load_bpod_data(session_path)
+    # fpgaqc_frame = _qc_from_path(session_path, display=False)
+    # bpodqc_frame = get_bpodqc_frame(session_path)
 
-    bla = [(k, all(fpgaqc_frame[k] == bpodqc_frame[k])) for k in fpgaqc_frame if k in bpodqc_frame]
+    # bla = [(k, all(fpgaqc_frame[k] == bpodqc_frame[k])) for k in fpgaqc_frame if k in bpodqc_frame]
 
-    count_qc_failures(session_path)
-    plt.ion()
-    f, ax = plt.subplots()
-    plot_bpod_session(session_path, ax=ax)
+    # count_qc_failures(session_path)
+    # plt.ion()
+    # f, ax = plt.subplots()
+    # plot_bpod_session(session_path, ax=ax)
+
+    # eid = "a71175be-d1fd-47a3-aa93-b830ea3634a1"
+    # plot_trigger_response_diffs(eid)
+    # one.search_terms()
+    # eids, dets = one.search(task_protocol="ephysChoiceWorld6.2.5", lab="mainenlab", details=True)
+    labs = one.list(None, "lab")
+    # for lab in labs:
+    #     eids, dets = one.search(
+    #         task_protocol="ephysChoiceWorld6.2.5",
+    #         lab=lab,
+    #         details=True,
+    #         dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"],
+    #     )
+    #     print(lab, len(eids))
+        # for eid in eids:
+        #     plot_trigger_response_diffs(eid)
+    lab = 'churchlandlab'
+    for lab in labs:
+        describe_lab_trigger_diffs(lab)
+
+print('.')
