@@ -42,7 +42,7 @@ def get_task_extractor_type(task_name):
             return
     if '_biasedChoiceWorld' in task_name:
         return 'biased'
-    elif 'biasedScanningChoiceWorld' in task_name:
+    elif 'biasedScanningChoiceWorld' or 'biasedVisOffChoiceWorld' in task_name:
         return 'biased'
     elif '_habituationChoiceWorld' in task_name:
         return 'habituation'
