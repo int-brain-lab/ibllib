@@ -17,9 +17,13 @@ Run the following to set-up the workspace to run the docstring examples:
 
 import time
 import numpy as np
+import pandas as pd
 import scipy.stats as stats
 import scipy.ndimage.filters as filters
 import brainbox as bb
+from brainbox.core import Bunch
+from brainbox.processing import bincount2D
+from ibllib.ephys.ephysqc import METRICS_PARAMS
 from ibllib.io import spikeglx
 # add spikemetrics as dependency?
 # import spikemetrics as sm
@@ -132,7 +136,7 @@ def feat_cutoff(feat, spks_per_bin=20, sigma=5, min_num_bins=50):
     Parameters
     ----------
     feat : ndarray
-        The spikes' feature values.
+        The spikes' feature values (e.g. amplitudes)
     spks_per_bin : int (optional)
         The number of spikes per bin from which to compute the spike feature histogram.
     sigma : int (optional)
@@ -233,6 +237,12 @@ def wf_similarity(wf1, wf2):
         >>> s = bb.metrics.wf_similarity(wf1, wf2)
 
     TODO check `s` calculation
+
+    take median of waveforms
+    xcorr all waveforms with median, and divide by autocorr of all waveforms
+    profile
+
+    for two sets of units: xcorr(cl1, cl2) / (sqrt autocorr(cl1) * autocorr(cl2))
     '''
 
     # Remove warning for dividing by 0 when calculating `s` (this is resolved by using
@@ -579,3 +589,97 @@ def fp_est(ts, rp=0.002):
     c = (t * n_isi_viol) / (2 * rp * n_spks**2)  # 3rd term in quadratic
     fp = np.min(np.abs(np.roots([-1, 1, c])))  # solve quadratic
     return fp
+
+
+def isi_violations(spike_train, min_time, max_time, isi_threshold, min_isi=0):
+    """Calculate ISI violations for a spike train.
+
+    Based on metric described in Hill et al. (2011) J Neurosci 31: 8699-8705
+
+    modified by Dan Denman from cortex-lab/sortingQuality GitHub by Nick Steinmetz
+
+    Inputs:
+    -------
+    spike_train : array of spike times
+    min_time : minimum time for potential spikes
+    max_time : maximum time for potential spikes
+    isi_threshold : threshold for isi violation
+    min_isi : threshold for duplicate spikes
+
+    Outputs:
+    --------
+    fpRate : rate of contaminating spikes as a fraction of overall rate
+        A perfect unit has a fpRate = 0
+        A unit with some contamination has a fpRate < 0.5
+        A unit with lots of contamination has a fpRate > 1.0
+    num_violations : total number of violations
+
+    """
+
+    duplicate_spikes = np.where(np.diff(spike_train) <= min_isi)[0]
+
+    spike_train = np.delete(spike_train, duplicate_spikes + 1)
+    isis = np.diff(spike_train)
+
+    num_spikes = spike_train.size
+    num_violations = np.sum(isis < isi_threshold)
+    violation_time = 2 * num_spikes * (isi_threshold - min_isi)
+    total_rate = spike_train.size / (max_time - min_time)
+    violation_rate = num_violations / violation_time
+    fpRate = violation_rate / total_rate
+
+    return fpRate, num_violations
+
+
+def spike_sorting_metrics(spike_times, spike_clusters, spike_amplitudes,
+                          params=METRICS_PARAMS, epochs=None):
+    """ Spike sorting QC metrics """
+    cluster_ids = np.arange(np.max(spike_clusters) + 1)
+    nclust = cluster_ids.size
+    r = Bunch({
+        'cluster_id': cluster_ids,
+        'num_spikes': np.zeros(nclust, ) + np.nan,
+        'firing_rate': np.zeros(nclust, ) + np.nan,
+        'presence_ratio': np.zeros(nclust, ) + np.nan,
+        'presence_ratio_std': np.zeros(nclust, ) + np.nan,
+        'isi_viol': np.zeros(nclust, ) + np.nan,
+        'amplitude_cutoff': np.zeros(nclust, ) + np.nan,
+        'amplitude_std': np.zeros(nclust, ) + np.nan,
+        # 'isolation_distance': np.zeros(nclust, ) + np.nan,
+        # 'l_ratio': np.zeros(nclust, ) + np.nan,
+        # 'd_prime': np.zeros(nclust, ) + np.nan,
+        # 'nn_hit_rate': np.zeros(nclust, ) + np.nan,
+        # 'nn_miss_rate': np.zeros(nclust, ) + np.nan,
+        # 'silhouette_score': np.zeros(nclust, ) + np.nan,
+        # 'max_drift': np.zeros(nclust, ) + np.nan,
+        # 'cumulative_drift': np.zeros(nclust, ) + np.nan,
+        'epoch_name': np.zeros(nclust, dtype='object'),
+    })
+
+    tmin = 0
+    tmax = spike_times[-1]
+
+    """computes basic metrics such as spike rate and presence ratio"""
+    presence_ratio = bincount2D(spike_times, spike_clusters,
+                                xbin=params['presence_bin_length_secs'],
+                                ybin=cluster_ids, xlim=[tmin, tmax])[0]
+    r.num_spikes = np.sum(presence_ratio > 0, axis=1)
+    r.firing_rate = r.num_spikes / params['presence_bin_length_secs']
+    r.presence_ratio = np.sum(presence_ratio > 0, axis=1) / presence_ratio.shape[1]
+    r.presence_ratio_std = np.std(presence_ratio, axis=1)
+
+    # loop over each cluster
+    for ic in np.arange(nclust):
+        # slice the spike_times array
+        ispikes = spike_clusters == cluster_ids[ic]
+        if np.all(~ispikes):
+            continue
+        st = spike_times[ispikes]
+        sa = spike_amplitudes[ispikes]
+        # compute metrics
+        r.isi_viol[ic], _ = metrics.isi_violations(st, tmin, tmax,
+                                                   isi_threshold=params['isi_threshold'], min_isi=params['min_isi'])
+        r.amplitude_cutoff[ic] = metrics.feat_cutoff(spike_amplitudes)
+        r.amplitude_std[ic] = np.std(sa)
+
+    return pd.DataFrame(r)

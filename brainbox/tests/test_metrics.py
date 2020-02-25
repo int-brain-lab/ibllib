@@ -1,3 +1,7 @@
+# Create synthetic dataset in a top-level function (times, amps, clusters)
+#
+
+
 
 def test_unit_stability():
     pass
@@ -13,3 +17,4 @@ def test_wf_similarity():
 
 def test_firing_rate_coeff_var():
     pass
+
