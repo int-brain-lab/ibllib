@@ -381,43 +381,44 @@ class ONE(OneAbstract):
         For a list of search terms, use the methods
 
         >>> one.search_terms()
-        
+
         :param dataset_types: list of dataset_types
         :type dataset_types: list of str
-        
+
         :param date_range: list of 2 strings or list of 2 dates that define the range
         :type date_range: list
 
         :param details: default False, returns also the session details as per the REST response
         :type details: bool
-        
+
         :param lab: a str or list of lab names
         :type lab: list or str
-        
+
         :param limit: default None, limits results (if pagination enabled on server)
         :type limit: int List of possible search terms
-       
+
         :param location: a str of lab location name
         :type location: str (TODO CHECK DEF,  ALSO LIST OF STR?)
-       
+
         :param number: number of session to be returned; will take the first n sessions found
         :type number: str or int
-        
+
         :param performance_gte: TODO DEF?
         :type performance_gte: TODO DEF?
-        
+
         :param performance_lte: TODO DEF?
         :type performance_lte: TODO DEF?
-       
+
         :param subjects: a list of subjects nickname
         :type subjects: list or str
-    
-        :param task_protocol: a str of task protocol name (can be partial, i.e. any task protocol containing that str will be found) 
+
+        :param task_protocol: a str of task protocol name (can be partial, i.e.
+                              any task protocol containing that str will be found)
         :type task_protocol: str (TODO ALSO LIST OF STR?)
-    
+
         :param users: a list of users
         :type users: list or str
-        
+
         :return: list of eids, if details is True, also returns a list of json dictionaries,
          each entry corresponding to a matching session
         :rtype: list, list
