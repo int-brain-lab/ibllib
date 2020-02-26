@@ -32,26 +32,8 @@ one = ONE(username='test_user',
 ```
 
 
-## Find an experiment
-Each experiment is identified by a unique string known as the "experiment ID" (EID). To find an EID, use the `one.search` command.
-
-The following example shows how to find the experiment(s) performed by the user `olivier`, on the 24 Aug 2018:
-
-```python
-from ibllib.misc import pprint
-eid = one.search(users='olivier', date_range=['2018-08-24', '2018-08-24'])
-pprint(eid)
-```
-returns
-```python
-[
-    "cf264653-2deb-44cb-aa84-89b82507028a"
-]
-```
-For full information dictionary about the session: 
-```python
-eid, ses_info= one.search(users='olivier', date_range=['2018-08-24', '2018-08-24'], details=True)
-```
+## Search method : find session EIDs
+Each experimental session is identified by a unique string known as the "experiment ID" (EID). To find an EID, use the `one.search` command.
 
 The searchable fields are listed with the following method:
 ```python
@@ -71,7 +53,29 @@ one.search_terms()
 
 ```
 
-## List method
+### Comprehensive example
+
+The following example shows how to find the experiment(s) performed by the user `olivier`, on the 24 Aug 2018:
+
+```python
+from ibllib.misc import pprint
+eid = one.search(users='olivier', date_range=['2018-08-24', '2018-08-24'])
+pprint(eid)
+```
+returns
+```python
+[
+    "cf264653-2deb-44cb-aa84-89b82507028a"
+]
+```
+To get all context information about the returned sessions, use the flag details:
+```python
+eid, ses_info= one.search(users='olivier', date_range=['2018-08-24', '2018-08-24'], details=True)
+```
+
+
+
+## List method : list datasets for given session EID
 Once you know the EID, you can list all the datasets for the experiment using the list command:
 ```python
 one.list(eid)
@@ -102,7 +106,7 @@ one.list(None, 'labs')
 ```
 
 
-## Load method
+## Load method : load data for given session EID
 ### General Use
 
 To load data for a given EID, use the `one.load` command:
@@ -162,46 +166,3 @@ t, empty, cl = one.load(eid, dataset_types=dataset_types)
 Returns an empty list for *cr* so that *t* and *cl* still get assigned the corresponding datasets values.
 
 
-## Search method
-The search methods allows to query the database to filter the list of UUIDs according to defined search terms.
-
-The list of search terms can be queried through:
-```python
-one.search_terms()
-```
-
-For example: (non-exhaustive list)
--   dataset_types
--   users
--   subject
--   date_range
-
-### One-to-one matches: subjects
-This is the simplest case that queries EEIDs (sessions) associated with a subject. There can only
-be one subject per session.
-
-```python
-eid = one.search(subject='flowers')
-pprint(eid)
-```
-
-Here is the simple implementation of the filter, where we query for the EEIDs (sessions) co-owned by
-all of the following users: olivier and test_user (case-sensitive).
-```python
-eid = one.search(users=['test_user', 'olivier'])
-```
-To get all context information about the returned sessions, use the flag details:
-```python
-eid, session_details= one.search(users=['test_user', 'olivier'], details=True)
-```
-
-The following would get all of the dataset for which olivier is an owner or a co-owner:
-```python
-eid  = one.search(users=['olivier'])
-pprint(eid)
-```
-
-It is also possible to filter sessions using a date-range:
-```python
-eid = one.search(users='olivier', date_range=['2018-08-24', '2018-08-24'])
-```
