@@ -400,23 +400,21 @@ class ONE(OneAbstract):
         :param location: a str or list of lab location (as per Alyx definition) name
                          Note: this corresponds to the specific rig, not the lab geographical
                          location per se
-        :type location: list or str (TODO CHECK?)
+        :type location: str
 
         :param number: number of session to be returned; will take the first n sessions found
         :type number: str or int
 
-        :param performance_gte: TODO DEF?
-        :type performance_gte: TODO DEF?
-
-        :param performance_lte: TODO DEF?
-        :type performance_lte: TODO DEF?
+        :param performance_lte / performance_gte: search only for sessions whose performance is
+        less equal or greater equal than a pre-defined threshold as a percentage (0-100)
+        :type performance_gte: float
 
         :param subjects: a list of subjects nickname
         :type subjects: list or str
 
         :param task_protocol: a str or list of task protocol name (can be partial, i.e.
                               any task protocol containing that str will be found)
-        :type task_protocol: str or list (TODO CHECK?)
+        :type task_protocol: str
 
         :param users: a list of users
         :type users: list or str
