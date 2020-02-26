@@ -397,9 +397,9 @@ class ONE(OneAbstract):
         :param limit: default None, limits results (if pagination enabled on server)
         :type limit: int List of possible search terms
 
-        :param location: a str or list of lab location (as per Alyx definition) name 
+        :param location: a str or list of lab location (as per Alyx definition) name
                          Note: this corresponds to the specific rig, not the lab geographical
-                               location per se
+                         location per se
         :type location: list or str (TODO CHECK?)
 
         :param number: number of session to be returned; will take the first n sessions found
