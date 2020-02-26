@@ -3,6 +3,7 @@
 Before you begin, make sure you have installed ibllib properly on your system as per the previous instructions.
 [Here](./_static/one_demo.html) is a shorter introduction to the One module in Ipython notebook format.
 
+The full module documentation is found [Here](./_autosummary/oneibl.one.html)
 
 ## Create ONE object
 
