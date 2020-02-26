@@ -27,15 +27,14 @@ def load_spike_sorting(eid, dataset_types=None):
 
     _ = one.load(eid, dataset_types=dtypes, download_only=True)
     probes = alf.io.load_object(session_path.joinpath('alf'), 'probes')
-    spikes = []
-    clusters = []
+    spikes = {}
+    clusters = {}
     for i, _ in enumerate(probes['description']):
         probe_path = session_path.joinpath('alf', probes['description'][i]['label'])
         cluster = alf.io.load_object(probe_path, object='clusters')
         spike = alf.io.load_object(probe_path, object='spikes')
-        cluster['probe_label'] = spike['probe_label'] = probes['description'][i]['label']
-
-        clusters.append(cluster)
-        spikes.append(spike)
+        label = probes['description'][i]['label']
+        clusters[label] = cluster
+        spikes[label] = spike
 
     return spikes, clusters
