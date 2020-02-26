@@ -165,4 +165,12 @@ t, empty, cl = one.load(eid, dataset_types=dataset_types)
 ```
 Returns an empty list for *cr* so that *t* and *cl* still get assigned the corresponding datasets values.
 
-
+## Getting help on methods via the command line
+These commands will return the docstring of each of the method; for example, for `one.search` type in an ipython terminal:
+```
+help(one.search)
+```
+or
+```
+print(one.search.__doc__)
+```
