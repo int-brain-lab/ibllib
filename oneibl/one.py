@@ -397,8 +397,10 @@ class ONE(OneAbstract):
         :param limit: default None, limits results (if pagination enabled on server)
         :type limit: int List of possible search terms
 
-        :param location: a str of lab location name
-        :type location: str (TODO CHECK DEF,  ALSO LIST OF STR?)
+        :param location: a str or list of lab location (as per Alyx definition) name 
+                         Note: this corresponds to the specific rig, not the lab geographical
+                               location per se
+        :type location: list or str (TODO CHECK?)
 
         :param number: number of session to be returned; will take the first n sessions found
         :type number: str or int
@@ -412,9 +414,9 @@ class ONE(OneAbstract):
         :param subjects: a list of subjects nickname
         :type subjects: list or str
 
-        :param task_protocol: a str of task protocol name (can be partial, i.e.
+        :param task_protocol: a str or list of task protocol name (can be partial, i.e.
                               any task protocol containing that str will be found)
-        :type task_protocol: str (TODO ALSO LIST OF STR?)
+        :type task_protocol: str or list (TODO CHECK?)
 
         :param users: a list of users
         :type users: list or str
