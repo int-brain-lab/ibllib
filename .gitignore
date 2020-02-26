@@ -17,5 +17,5 @@ scratch/
 _autosummary/
 brainbox/docs/_build/
 brainbox/docs/api/
-test.py
-code_showcase.py
+my_test.py
+my_code_showcase.py
