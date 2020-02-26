@@ -87,6 +87,9 @@ class TestRegistrationSession(unittest.TestCase):
             behavior_path = session_path.joinpath('raw_behavior_data')
             behavior_path.mkdir()
             settings_file = behavior_path.joinpath('_iblrig_taskSettings.raw.json')
+            eid = one.search(subjects='clns0730', date_range=['2018-04-01', '2018-04-01'])
+            if len(eid):
+                one.alyx.rest('sessions', 'delete', id=eid[0])
             with open(settings_file, 'w') as fid:
                 json.dump(settings, fid)
             rc = registration.RegistrationClient(one=one)

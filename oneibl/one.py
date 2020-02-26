@@ -382,22 +382,43 @@ class ONE(OneAbstract):
 
         >>> one.search_terms()
 
-        :param details: default False, returns also the session details as per the REST response
-        :type details: bool
-        :param limit: default None, limits results (if pagination enabled on server)
-        :type limit: int List of possible search terms
         :param dataset_types: list of dataset_types
         :type dataset_types: list of str
-        :param users: a list of users
-        :type users: list or str
-        :param subjects: a list of subjects nickname
-        :type subjects: list or str
-        :param lab: a str or list of lab names
-        :type lab: list or str
+
         :param date_range: list of 2 strings or list of 2 dates that define the range
         :type date_range: list
-        :param number: session number
+
+        :param details: default False, returns also the session details as per the REST response
+        :type details: bool
+
+        :param lab: a str or list of lab names
+        :type lab: list or str
+
+        :param limit: default None, limits results (if pagination enabled on server)
+        :type limit: int List of possible search terms
+
+        :param location: a str or list of lab location (as per Alyx definition) name
+                         Note: this corresponds to the specific rig, not the lab geographical
+                         location per se
+        :type location: str
+
+        :param number: number of session to be returned; will take the first n sessions found
         :type number: str or int
+
+        :param performance_lte / performance_gte: search only for sessions whose performance is
+        less equal or greater equal than a pre-defined threshold as a percentage (0-100)
+        :type performance_gte: float
+
+        :param subjects: a list of subjects nickname
+        :type subjects: list or str
+
+        :param task_protocol: a str or list of task protocol name (can be partial, i.e.
+                              any task protocol containing that str will be found)
+        :type task_protocol: str
+
+        :param users: a list of users
+        :type users: list or str
+
         :return: list of eids, if details is True, also returns a list of json dictionaries,
          each entry corresponding to a matching session
         :rtype: list, list
