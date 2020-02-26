@@ -163,8 +163,14 @@ Returns an empty list for *cr* so that *t* and *cl* still get assigned the corre
 
 
 ## Search method
-The search methods allows to query the database to filter the list of UUIDs according to
-the following fields:
+The search methods allows to query the database to filter the list of UUIDs according to defined search terms.
+
+The list of search terms can be queried through:
+```python
+one.search_terms()
+```
+
+For example: (non-exhaustive list)
 -   dataset_types
 -   users
 -   subject
@@ -177,10 +183,6 @@ be one subject per session.
 ```python
 eid = one.search(subject='flowers')
 pprint(eid)
-```
-The list of search terms can be queried through:
-```python
-ONE.search_terms()
 ```
 
 Here is the simple implementation of the filter, where we query for the EEIDs (sessions) co-owned by
