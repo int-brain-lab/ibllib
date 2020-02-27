@@ -6,6 +6,7 @@ Written by Sebastian Bruijns
 
 import numpy as np
 import time
+import matplotlib.pyplot as plt
 # TODO: take in eids and download data yourself?
 
 
@@ -13,7 +14,8 @@ def permut_test(data1, data2, metric, n_permut=1000, plot=False):
     """
     Compute the probability of observating metric difference for datasets, via permutation testing.
 
-    We're taking absolute values of differences, order of dataset input shouldn't matter
+    We're taking absolute values of differences, because the order of dataset input shouldn't
+    matter
     We're only computing means, what if we want to apply a more complicated function to the
     permutation result?
     Pay attention to always give one list (even if its just one dataset, but then it doesn't make
@@ -21,28 +23,31 @@ def permut_test(data1, data2, metric, n_permut=1000, plot=False):
 
     Parameters
     ----------
-    units_b : bunch
-        A units bunch containing fields with spike information (e.g. cluster IDs, times, features,
-        etc.) for all units.
-    units : array-like (optional)
-        A subset of all units for which to create the bar plot. (If `None`, all units are used)
-    feat_names : list of strings (optional)
-        A list of n
+    data1 : array-like
+        First data set, list or array of data-entities to use for permutation test
+        (make data2 optional and then permutation test more similar to tuning sensitivity?)
+    data2 : array-like
+        Second data set, also list or array of data-entities to use for permutation test
+    metric : function, array-like -> float
+        Metric to use for permutation test, will be used to reduce elements of data1 and data2
+        to one number
+    n_permut : integer (optional)
+        Number of perumtations to use for test
+    plot : Boolean (optional)
+        Whether or not to show a plot of the permutation distribution and a marker for the position
+        of the true difference in relation to this distribution
 
     Returns
     -------
-    p_vals_b : bunch
-        A bunch with `feat_n
-    cv_b : bunch
-        A bunch with `feat_names` as keys, c
+    p : float
+        p-value of true difference in permutation distribution
 
     See Also
     --------
-    aasdf
 
     Examples
     --------
-    asdf
+    TODO:
     """
     # Calculate metrics and true difference between groups
     metrics1 = [metric(d) for d in data1]
@@ -63,14 +68,29 @@ def permut_test(data1, data2, metric, n_permut=1000, plot=False):
     permut_diffs = np.abs(np.mean(diffs[permutations[:, :size1]], axis=1) - np.mean(diffs[permutations[:, size1:]], axis=1))
     p = len(permut_diffs[permut_diffs > true_diff]) / n_permut
 
+    if plot:
+        plot_permut_test(permut_diffs=permut_diffs, true_diff=true_diff)
+
     return p
+
+
+def plot_permut_test(permut_diffs, true_diff):
+    """Plot permutation test result."""
+    n, _, _ = plt.hist(permut_diffs)
+    plt.plot(true_diff, np.max(n) / 20, '*r', markersize=12)
+
+    # Prettify plot
+    plt.gca().spines['top'].set_visible(False)
+    plt.gca().spines['right'].set_visible(False)
+
+    plt.show()
 
 
 if __name__ == '__main__':
     rng = np.random.RandomState(2)
-    data1 = rng.normal(0, 1, (3, 5))
-    data2 = rng.normal(0.5, 1, (2, 5))
+    data1 = rng.normal(0, 1, (23, 5))
+    data2 = rng.normal(0.1, 1, (32, 5))
     t = time.time()
-    p = permut_test(data1, data2, np.mean)
+    p = permut_test(data1, data2, np.mean, plot=True)
     print(time.time() - t)
     print(p)
