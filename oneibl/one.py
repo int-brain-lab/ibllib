@@ -4,6 +4,7 @@ import logging
 import os
 import tqdm
 
+from ibllib.io import hashfile
 from ibllib.misc import pprint
 from ibllib.io.one import OneAbstract
 from alf.io import load_file_content, remove_uuid_file, is_uuid_string, AlfBunch, get_session_path
@@ -313,9 +314,9 @@ class ONE(OneAbstract):
                 relpath = PurePath(dc.url[ind].replace(self._par.HTTP_DATA_SERVER, '.')).parents[0]
                 cache_dir_file = PurePath(cache_dir, relpath)
                 Path(cache_dir_file).mkdir(parents=True, exist_ok=True)
-                dc.local_path[ind] = self._download_file(dc.url[ind], str(cache_dir_file),
-                                                         clobber=clobber, offline=offline,
-                                                         keep_uuid=keep_uuid)
+                dc.local_path[ind] = self._download_file(
+                    dc.url[ind], str(cache_dir_file), clobber=clobber, offline=offline,
+                    keep_uuid=keep_uuid, file_size=dc.file_size[ind], hash=dc.hash[ind])
         # load the files content in variables if requested
         if not download_only:
             for ind, fil in enumerate(dc.local_path):
@@ -479,11 +480,22 @@ class ONE(OneAbstract):
             cache_dir = str(PurePath(Path.home(), "Downloads", "FlatIron"))
         return cache_dir
 
-    def _download_file(self, url, cache_dir, clobber=False, offline=False, keep_uuid=False):
+    def _download_file(self, url, cache_dir, clobber=False, offline=False, keep_uuid=False,
+                       file_size=None, hash=None):
         local_path = cache_dir + os.sep + os.path.basename(url)
         if not keep_uuid:
             local_path = remove_uuid_file(local_path, dry=True)
-        if clobber or not Path(local_path).exists():
+        if Path(local_path).exists():
+            # overwrites the file if the expected filesize is different from the cached filesize
+            if file_size and Path(local_path).stat().st_size != file_size:
+                clobber = True
+            # overwrites the file if the expected hash is different from the cached hash
+            if hash and hashfile.md5(Path(local_path)) != hash:
+                clobber = True
+        # if there is no cached file, download
+        else:
+            clobber = True
+        if clobber:
             local_path = wc.http_download_file(url,
                                                username=self._par.HTTP_DATA_SERVER_LOGIN,
                                                password=self._par.HTTP_DATA_SERVER_PWD,
