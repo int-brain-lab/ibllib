@@ -5,6 +5,7 @@ from pathlib import Path
 
 import ibllib.pipes.extract_session
 from ibllib.pipes import experimental_data, misc
+from oneibl.one import ONE
 
 
 class TestCompression(unittest.TestCase):
@@ -190,7 +191,6 @@ class TestPipesMisc(unittest.TestCase):
 
     def test_rename_and_move(self):
         self._test_rename_ephys_files()
-        # TODO: Move files from the bad folders to the local_probe folders?
         # Test for 3A
         misc.move_ephys_files(self.local_session_path_3A)
         probe00_files = list(self.probe00_path_3A.rglob('*'))
@@ -263,6 +263,20 @@ class TestPipesMisc(unittest.TestCase):
         self.assertFalse(qc.exists())
         self.assertFalse(spike_sorting0.exists())
         self.assertFalse(spike_sorting1.exists())
+
+    # def test_create_alyx_probe_insertions(self):
+    #     # import oneibl.webclient as wc
+    #     # ac = wc.AlyxClient(
+    #     #     username='test_user', password='TapetesBloc18',
+    #     #     base_url='https://test.alyx.internationalbrainlab.org'
+    #     # )
+
+    #     one = ONE()
+    #     eid = '3663d82b-f197-4e8b-b299-7b803a155b84'
+    #     session_path = one.path_from_eid(eid)
+    #     misc.create_ephyspc_params(force=True, silent=True)
+    #     misc.create_alyx_probe_insertions(session_path)
+    #     misc.create_alyx_probe_insertions(session_path)
 
     def tearDown(self):
         shutil.rmtree(self.root_test_folder, ignore_errors=True)
