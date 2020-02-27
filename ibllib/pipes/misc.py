@@ -3,8 +3,9 @@ import shutil
 from pathlib import Path
 
 import alf.folders as folders
-import ibllib.io.params as params
 import ibllib.io.flags as flags
+import ibllib.io.params as params
+from oneibl.one import ONE
 
 
 def cli_ask_default(prompt: str, default: str):
@@ -233,6 +234,7 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False,
         move_ephys_files(str(session_path))
         # Copy wiring files
         copy_wiring_files(str(session_path), iblscripts_folder)
+        # create_alyx_probe_insertions(str(session_path))  # XXX: this!
         msg = f"Transfer to {remote_folder} with the same name?"
         resp = input(msg + "\n[y]es/[r]ename/[s]kip/[e]xit\n ^\n> ") or 'y'
         resp = resp.lower()
@@ -265,6 +267,35 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False,
             (remote_session_path / 'extract_me.flag').unlink()
         # Create remote flags
         create_ephys_flags(remote_session_path)
+
+
+def create_alyx_probe_insertions(session_path: str):
+    one = ONE()
+    eid = one.eid_from_path(session_path)
+    PARAMS = load_ephyspc_params()
+    probe_labels = [x for x in Path(session_path).glob('*') if x.is_dir() and ('00' in x or '01' in x)]
+    probe_model = PARAMS['PROBE_TYPE_00']
+    insertion = {'session': eid,
+                 'name': 'probe_00',
+                 'model': '3A'}
+    # create the dictionary
+    idict = {'session': insertions['session'][i]['url'][-36:],
+             'name': insertions['description'][i]['label'],
+             'model': insertions['description'][i]['model']}
+    # search for the corresponding insertion in Alyx
+    alyx_insertion = one.alyx.rest('insertions', 'list',
+                                   session=idict['session'],
+                                   model=idict['model'],
+                                   name=idict['name'])
+    # if it doesn't exist, create it
+    if len(alyx_insertion) == 0:
+        alyx_insertion = one.alyx.rest('insertions', 'create', data=idict)
+    else:
+        id = alyx_insertion[0]['url'][-36:]
+        if OVERWRITE:
+            alyx_insertion = one.alyx.rest('insertions', 'update', id=id, data=idict)
+        else:
+            alyx_insertion = alyx_insertion[0]
 
 
 def create_ephys_flags(session_folder: str or Path):
@@ -372,7 +403,7 @@ def move_ephys_files(session_folder: str) -> None:
             shutil.move(str(imf), str(probe00_path / imf.name))
         elif 'probe01' in str(imf):
             shutil.move(str(imf), str(probe01_path / imf.name))
-    # TODO: add remove old folder by getting it from imfa nd storing it into a var
+    # TODO: add remove old folder by getting it from imf and storing it into a var
     # 3B system
     imec0_files = session_path.rglob('*.imec0.*')
     imec1_files = session_path.rglob('*.imec1.*')
@@ -387,6 +418,14 @@ def move_ephys_files(session_folder: str) -> None:
     nidq_files = session_path.rglob('*.nidq.*')
     for nidqf in nidq_files:
         shutil.move(str(nidqf), str(raw_ephys_data_path / nidqf.name))
+    # Remove empty folder if empty
+    ls_folder = raw_ephys_data_path.glob('*')
+    # Get all folders that are not probe##
+    efolder = [
+        x for x in ls_folder if x.is_dir() and ('probe00' not in x.name or 'probe01' not in x.name)
+    ]
+    if not list(efolder.glob('*')):
+        efolder.rmdir()
 
 
 def create_custom_ephys_wirings(iblscripts_folder: str):
