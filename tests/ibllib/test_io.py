@@ -7,7 +7,7 @@ import shutil
 
 import numpy as np
 
-from ibllib.io import params, flags, jsonable, spikeglx, hashfile
+from ibllib.io import params, flags, jsonable, spikeglx, hashfile, misc
 import ibllib.io.raw_data_loaders as raw
 
 
@@ -512,30 +512,56 @@ class TestsHardwareParameters(unittest.TestCase):
             self.assertIsNone(spikeglx.get_sync_map(Path(tdir) / 'idontexist.json'))
 
 
-class TestsDelete(unittest.TestCase):
+class TestsMisc(unittest.TestCase):
 
     def setUp(self):
-        self.workdir = Path(__file__).parent / 'fixtures' / 'io' / 'spikeglx'
-        self.map3A = {'left_camera': 2,
-                      'right_camera': 3,
-                      'body_camera': 4,
-                      'bpod': 7,
-                      'frame2ttl': 12,
-                      'rotary_encoder_0': 13,
-                      'rotary_encoder_1': 14,
-                      'audio': 15}
-        self.map3B = {'left_camera': 0,
-                      'right_camera': 1,
-                      'body_camera': 2,
-                      'imec_sync': 3,
-                      'frame2ttl': 4,
-                      'rotary_encoder_0': 5,
-                      'rotary_encoder_1': 6,
-                      'audio': 7,
-                      'bpod': 16}
-        self.file3a = self.workdir / 'sample3A_g0_t0.imec.wiring.json'
-        self.file3b = self.workdir / 'sample3B_g0_t0.nidq.wiring.json'
+        self.tempdir = Path(tempfile.TemporaryDirectory().name)
+        self.tempdir.mkdir()
+        self.subdirs = [
+            self.tempdir / 'test_empty_parent',
+            self.tempdir / 'test_empty_parent' / 'test_empty',
+            self.tempdir / 'test_empty',
+            self.tempdir / 'test_full',
+        ]
+        self.file = self.tempdir / 'test_full' / 'file.txt'
 
+        _ = [x.mkdir() for x in self.subdirs]
+        self.file.touch()
+
+    def _resetup_folders(self):
+        self.file.unlink()
+        (self.tempdir / 'test_full').rmdir()
+        _ = [x.rmdir() for x in self.subdirs if x.exists()]
+        _ = [x.mkdir() for x in self.subdirs]
+        self.file.touch()
+
+    def test_delete_empty_folders(self):
+        pre = [x.exists() for x in self.subdirs]
+        pre_expected = [True, True, True, True]
+        self.assertTrue(all([x == y for x, y in zip(pre, pre_expected)]))
+
+        # Test dry run
+        pos_expected = None
+        pos = misc.delete_empty_folders(self.tempdir)
+        self.assertTrue(pos == pos_expected)
+        # Test dry=False, non recursive
+        pos_expected = [True, False, False, True]
+        misc.delete_empty_folders(self.tempdir, dry=False)
+        pos = [x.exists() for x in self.subdirs]
+        self.assertTrue(all([x == y for x, y in zip(pos, pos_expected)]))
+
+        self._resetup_folders()
+
+        # Test recursive
+        pos_expected = [False, False, False, True]
+        misc.delete_empty_folders(self.tempdir, dry=False, recursive=True)
+        pos = [x.exists() for x in self.subdirs]
+        self.assertTrue(all([x == y for x, y in zip(pos, pos_expected)]))
+
+    def tearDown(self):
+        self.file.unlink()
+        (self.tempdir / 'test_full').rmdir()
+        _ = [x.rmdir() for x in self.subdirs if x.exists()]
 
 if __name__ == "__main__":
     unittest.main(exit=False)
