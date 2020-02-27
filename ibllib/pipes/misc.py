@@ -101,19 +101,26 @@ def load_ephyspc_params():
     return load_params_dict('ephyspc_params')
 
 
-def create_videopc_params(force=False):
+def create_videopc_params(force=False, silent=False):
     if Path(params.getfile('videopc_params')).exists() and not force:
         print(f"{params.getfile('videopc_params')} exists already, exiting...")
         print(Path(params.getfile('videopc_params')).exists())
         return
-    data_folder_path = cli_ask_default(
-        r"Where's your LOCAL 'Subjects' data folder?", r"D:\iblrig_data\Subjects")
-    remote_data_folder_path = cli_ask_default(
-        r"Where's your REMOTE 'Subjects' data folder?",
-        r"\\iblserver.champalimaud.pt\ibldata\Subjects")
-    body_cam_idx = cli_ask_default("Please select the index of the BODY camera", '0')
-    left_cam_idx = cli_ask_default("Please select the index of the LEFT camera", '1')
-    right_cam_idx = cli_ask_default("Please select the index of the RIGHT camera", '2')
+    if silent:
+        data_folder_path = r"D:\iblrig_data\Subjects"
+        remote_data_folder_path = r"\\iblserver.champalimaud.pt\ibldata\Subjects"
+        body_cam_idx = 0
+        left_cam_idx = 1
+        right_cam_idx = 2
+    else:
+        data_folder_path = cli_ask_default(
+            r"Where's your LOCAL 'Subjects' data folder?", r"D:\iblrig_data\Subjects")
+        remote_data_folder_path = cli_ask_default(
+            r"Where's your REMOTE 'Subjects' data folder?",
+            r"\\iblserver.champalimaud.pt\ibldata\Subjects")
+        body_cam_idx = cli_ask_default("Please select the index of the BODY camera", '0')
+        left_cam_idx = cli_ask_default("Please select the index of the LEFT camera", '1')
+        right_cam_idx = cli_ask_default("Please select the index of the RIGHT camera", '2')
 
     param_dict = {
         'DATA_FOLDER_PATH': data_folder_path,
@@ -128,18 +135,24 @@ def create_videopc_params(force=False):
     return param_dict
 
 
-def create_ephyspc_params(force=False):
+def create_ephyspc_params(force=False, silent=False):
     if Path(params.getfile('ephyspc_params')).exists() and not force:
         print(f"{params.getfile('ephyspc_params')} exists already, exiting...")
         print(Path(params.getfile('ephyspc_params')).exists())
         return
-    data_folder_path = cli_ask_default(
-        r"Where's your LOCAL 'Subjects' data folder?", r"D:\iblrig_data\Subjects")
-    remote_data_folder_path = cli_ask_default(
-        r"Where's your REMOTE 'Subjects' data folder?",
-        r"\\iblserver.champalimaud.pt\ibldata\Subjects")
-    probe_type_00 = cli_ask_options("What's the type of PROBE 00?", ['3A', '3B'])
-    probe_type_01 = cli_ask_options("What's the type of PROBE 01?", ['3A', '3B'])
+    if silent:
+        data_folder_path = r"D:\iblrig_data\Subjects"
+        remote_data_folder_path = r"\\iblserver.champalimaud.pt\ibldata\Subjects"
+        probe_type_00 = '3A'
+        probe_type_01 = '3B'
+    else:
+        data_folder_path = cli_ask_default(
+            r"Where's your LOCAL 'Subjects' data folder?", r"D:\iblrig_data\Subjects")
+        remote_data_folder_path = cli_ask_default(
+            r"Where's your REMOTE 'Subjects' data folder?",
+            r"\\iblserver.champalimaud.pt\ibldata\Subjects")
+        probe_type_00 = cli_ask_options("What's the type of PROBE 00?", ['3A', '3B'])
+        probe_type_01 = cli_ask_options("What's the type of PROBE 01?", ['3A', '3B'])
     param_dict = {
         'DATA_FOLDER_PATH': data_folder_path,
         'REMOTE_DATA_FOLDER_PATH': remote_data_folder_path,
