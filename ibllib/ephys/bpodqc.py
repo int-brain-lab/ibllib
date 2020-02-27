@@ -1,6 +1,6 @@
 import os
-import uuid
 from pathlib import Path, PureWindowsPath
+from functools import partial, wraps
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -31,44 +31,55 @@ one = ONE()
 def uuid_to_path(func):
     """ Check if first argument of func is eID, if valid return path
     """
-
+    @wraps(func)
     def wrapper(eid, *args, **kwargs):
         # Check if first arg is path or eid
         if is_uuid_string(str(eid)):
             session_path = one.path_from_eid(eid)
+        else:
+            session_path = Path(eid)
         func(session_path, *args, **kwargs)
 
     return wrapper
 
 
-def dl_raw_behavior_data(func, full=False):
-    """ download data and settings for session
+def dl_raw_behavior_data(func=None, full=False, dry=False):
+    """ download data and settings for session from path
     """
+    if func is None:
+        return partial(dl_raw_behavior_data, full=full, dry=dry)
 
-    def wrapper(eid, *args, **kwargs):
+    @wraps(func)
+    def wrapper(session_path, *args, **kwargs):
         # Check if first arg is path or eid
+        eid = one.eid_from_path(session_path)
+        if eid is None:
+            print("Unknown argument: {eid}\nFirst argument must be valid eID or session path.")
         if is_uuid_string(str(eid)):
             if full is True:
-                one.load(eid, download_only=True, dry_run=True)
-                session_path = one.path_from_eid(eid)
+                dsts = [x for x in one.list(None, 'dataset_types') if '_iblrig_' in x]
+                one.load(eid, download_only=True, dry_run=dry, dataset_types=dsts)
+            else:
+                one.load(
+                    eid,
+                    dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"],
+                    download_only=True,
+                    dry_run=dry
+                )
         func(session_path, *args, **kwargs)
-
     return wrapper
-
-
-def dl_data(func):
-    """ if
-    """
-    pass
 
 
 @uuid_to_path
+@dl_raw_behavior_data(full=False, dry=False)
 def test(some, value, other="ovalue"):
     print("some:", some)
     print("value:", value)
     print("other:", other)
 
 
+@uuid_to_path
+@dl_raw_behavior_data(full=False, dry=False)
 def get_bpod_fronts(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
@@ -78,35 +89,46 @@ def get_bpod_fronts(session_path, save=False, data=False, settings=False):
         settings = {"IBLRIG_VERSION_TAG": "100.0.0"}
     elif settings["IBLRIG_VERSION_TAG"] == "":
         settings.update({"IBLRIG_VERSION_TAG": "100.0.0"})
-
     BNC1_fronts = np.array([[np.nan, np.nan]])
     BNC2_fronts = np.array([[np.nan, np.nan]])
     for tr in data:
         BNC1_fronts = np.append(
             BNC1_fronts,
             np.array(
-                [[x, 1] for x in tr["behavior_data"]["Events timestamps"].get("BNC1High", [np.nan])]
+                [
+                    [x, 1]
+                    for x in tr["behavior_data"]["Events timestamps"].get("BNC1High", [np.nan])
+                ]
             ),
             axis=0,
         )
         BNC1_fronts = np.append(
             BNC1_fronts,
             np.array(
-                [[x, -1] for x in tr["behavior_data"]["Events timestamps"].get("BNC1Low", [np.nan])]
+                [
+                    [x, -1]
+                    for x in tr["behavior_data"]["Events timestamps"].get("BNC1Low", [np.nan])
+                ]
             ),
             axis=0,
         )
         BNC2_fronts = np.append(
             BNC2_fronts,
             np.array(
-                [[x, 1] for x in tr["behavior_data"]["Events timestamps"].get("BNC2High", [np.nan])]
+                [
+                    [x, 1]
+                    for x in tr["behavior_data"]["Events timestamps"].get("BNC2High", [np.nan])
+                ]
             ),
             axis=0,
         )
         BNC2_fronts = np.append(
             BNC2_fronts,
             np.array(
-                [[x, -1] for x in tr["behavior_data"]["Events timestamps"].get("BNC2Low", [np.nan])]
+                [
+                    [x, -1]
+                    for x in tr["behavior_data"]["Events timestamps"].get("BNC2Low", [np.nan])
+                ]
             ),
             axis=0,
         )
@@ -337,7 +359,7 @@ def get_bonsai_sync_square_update_times(session_path, save=False, data=False, se
     return
 
 
-def get_error_tone_in_trigger(session_path, save=False, data=False, settings=False):
+def get_errorCueTrigger_times(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
     if not settings:
@@ -347,20 +369,22 @@ def get_error_tone_in_trigger(session_path, save=False, data=False, settings=Fal
     elif settings["IBLRIG_VERSION_TAG"] == "":
         settings.update({"IBLRIG_VERSION_TAG": "100.0.0"})
 
-    error_tone_in_trigger = np.zeros(len(data)) * np.nan
+    errorCueTrigger_times = np.zeros(len(data)) * np.nan
 
     for i, tr in enumerate(data):
         nogo = tr["behavior_data"]["States timestamps"]["no_go"][0][0]
         error = tr["behavior_data"]["States timestamps"]["error"][0][0]
         if np.all(~np.isnan(nogo)):
-            error_tone_in_trigger[i] = nogo
+            errorCueTrigger_times[i] = nogo
         elif np.all(~np.isnan(error)):
-            error_tone_in_trigger[i] = error
+            errorCueTrigger_times[i] = error
 
-    return error_tone_in_trigger
+    return errorCueTrigger_times
 
 
-def _get_trimmed_data_from_pregenerated_files(session_path, save=False, data=False, settings=False):
+def _get_trimmed_data_from_pregenerated_files(
+    session_path, save=False, data=False, settings=False
+):
     if not data:
         data = raw.load_data(session_path)
     if not settings:
@@ -409,7 +433,13 @@ def _get_trimmed_data_from_pregenerated_files(session_path, save=False, data=Fal
         lpath = Path(session_path).joinpath("alf", "_ibl_trials.probabilityLeft.npy")
         np.save(lpath, pLeft)
 
-    return {"position": pos, "contrast": con, "quiescence": qui, "phase": phase, "prob_left": pLeft}
+    return {
+        "position": pos,
+        "contrast": con,
+        "quiescence": qui,
+        "phase": phase,
+        "prob_left": pLeft,
+    }
 
 
 def load_bpod_data(session_path):
@@ -432,61 +462,70 @@ def load_bpod_data(session_path):
         "phase": None,
         "prob_left": None,
         "choice": get_choice(session_path, save=False, data=data, settings=settings),
+        "feedbackType": get_feedbackType(session_path, save=False, data=data, settings=settings),
+        "correct": None,
+        "intervals": get_intervals(session_path, save=False, data=data, settings=settings),
         "stimOnTrigger_times": get_stimOnTrigger_times(
+            session_path, save=False, data=data, settings=settings
+        ),
+        "stimOn_times": stimOn_times,
+        "stimOn_times_training": get_stimOn_times(
             session_path, save=False, data=data, settings=settings
         ),
         "stimOffTrigger_times": get_stimOffTrigger_times(
             session_path, save=False, data=data, settings=settings
         ),
+        "stimOff_times": stimOff_times,
+        "stimOff_times_from_state": get_stimOff_times_from_state(
+            session_path, save=False, data=data, settings=settings
+        ),
         "stimFreezeTrigger_times": get_stimFreezeTrigger_times(
             session_path, save=False, data=data, settings=settings
         ),
+        "stimFreeze_times": stimFreeze_times,
         "goCueTrigger_times": get_goCueTrigger_times(
             session_path, save=False, data=data, settings=settings
         ),
-        "goCue_times": get_goCueOnset_times(session_path, save=False, data=data, settings=settings),
-        "error_tone_in_trigger": get_error_tone_in_trigger(
+        "goCue_times": get_goCueOnset_times(
             session_path, save=False, data=data, settings=settings
         ),
+        "errorCueTrigger_times": get_errorCueTrigger_times(
+            session_path, save=False, data=data, settings=settings
+        ),
+        "errorCue_times": None,
+        "valveOpen_times": None,
         "response_times": get_response_times(
-            session_path, save=False, data=data, settings=settings
-        ),
-        "stimOn_times_BNC1": stimOn_times,
-        "stimOff_times_BNC1": stimOff_times,
-        "stimFreeze_times_BNC1": stimFreeze_times,
-        "stimOn_times": get_stimOn_times(session_path, save=False, data=data, settings=settings),
-        "stimOff_times": get_stimOff_times_from_state(
             session_path, save=False, data=data, settings=settings
         ),
         "feedback_times": get_feedback_times(
             session_path, save=False, data=data, settings=settings
         ),
-        "feedbackType": get_feedbackType(session_path, save=False, data=data, settings=settings),
-        "intervals": get_intervals(session_path, save=False, data=data, settings=settings),
         "itiIn_times": get_itiIn_times(session_path, save=False, data=data, settings=settings),
+        "intervals_0": None,
+        "intervals_1": None,
     }
     out.update(
         _get_trimmed_data_from_pregenerated_files(
             session_path, save=False, data=data, settings=settings
         )
     )
-    # get valve_time and error_tone_in_time from feedback_times
+    # get valve_time and errorCue_times from feedback_times
     correct = np.sign(out["position"]) + np.sign(out["choice"]) == 0
-    error_tone_in = out["feedback_times"].copy()
-    valve_open = out["feedback_times"].copy()
-    error_tone_in[correct] = np.nan
-    valve_open[~correct] = np.nan
-    out.update({"error_tone_in": error_tone_in, "valve_open": valve_open})
+    errorCue_times = out["feedback_times"].copy()
+    valveOpen_times = out["feedback_times"].copy()
+    errorCue_times[correct] = np.nan
+    valveOpen_times[~correct] = np.nan
+    out.update(
+        {"errorCue_times": errorCue_times, "valveOpen_times": valveOpen_times, "correct": correct}
+    )
+    # split intervals
+    out["intervals_0"] = out["intervals"][:, 0]
+    out["intervals_1"] = out["intervals"][:, 1]
     return out
 
 
 def get_bpodqc_frame(session_path):
     bpod = load_bpod_data(session_path)
-    correct = np.sign(bpod["position"]) + np.sign(bpod["choice"]) == 0
-    error_tone_in = bpod["feedback_times"].copy()
-    valve_time = bpod["feedback_times"].copy()
-    error_tone_in[correct] = np.nan
-    valve_time[~correct] = np.nan
 
     GOCUE_STIMON_DELAY = 0.01  # -> 0.1
     FEEDBACK_STIMFREEZE_DELAY = 0.01  # -> 0.1
@@ -497,55 +536,37 @@ def get_bpodqc_frame(session_path):
     ERROR_STIM_OFF_JITTER = 0.1  # -> 0.2
     RESPONSE_FEEDBACK_DELAY = 0.0005
 
-    frame = {
-        # Translate bpod data to match ephs_fpga_frame
-        "ready_tone_in": bpod["goCue_times"],
-        "goCueTrigger_times": bpod["goCueTrigger_times"],
-        "goCue_times": bpod["goCue_times"],
-        "error_tone_in_trigger": bpod["error_tone_in_trigger"],
-        "error_tone_in": bpod["error_tone_in"],
-        "valve_open": bpod["valve_open"],
-        "feedback_times": bpod["feedback_times"],
-        "stimOnTrigger_times": bpod["stimOnTrigger_times"],
-        "stimOn_times": bpod["stimOn_times_BNC1"],
-        "stimOffTrigger_times": bpod["stimOffTrigger_times"],
-        "stimOff_times": bpod["stimOff_times_BNC1"],
-        "stimFreezeTrigger_times": bpod["stimFreezeTrigger_times"],
-        "stim_freeze": bpod["stimFreeze_times_BNC1"],
-        "iti_in": bpod["itiIn_times"],
-        "intervals_0": bpod["intervals"][:, 0],
-        "intervals_1": bpod["intervals"][:, 1],
-        "response_times": bpod["response_times"],
-        # qc from here
-        "n_feedback": np.int32(~np.isnan(bpod["valve_open"]) + ~np.isnan(bpod["error_tone_in"])),
-        "stimOn_times_nan": ~np.isnan(bpod["stimOn_times_BNC1"]),
-        "goCue_times_nan": ~np.isnan(bpod["goCue_times"]),
-        "stimOn_times_before_goCue_times": bpod["goCue_times"] - bpod["stimOn_times_BNC1"] > 0,
-        "stimOn_times_goCue_times_delay": (
-            np.abs(bpod["goCue_times"] - bpod["stimOn_times_BNC1"]) <= GOCUE_STIMON_DELAY
+    qc_frame = {
+        "n_feedback": np.int32(
+            ~np.isnan(bpod["valveOpen_times"]) + ~np.isnan(bpod["errorCue_times"])
         ),
-        "stim_freeze_before_feedback": bpod["feedback_times"] - bpod["stimFreeze_times_BNC1"] > 0,
+        "stimOn_times_nan": ~np.isnan(bpod["stimOn_times"]),
+        "goCue_times_nan": ~np.isnan(bpod["goCue_times"]),
+        "stimOn_times_before_goCue_times": bpod["goCue_times"] - bpod["stimOn_times"] > 0,
+        "stimOn_times_goCue_times_delay": (
+            np.abs(bpod["goCue_times"] - bpod["stimOn_times"]) <= GOCUE_STIMON_DELAY
+        ),
+        "stim_freeze_before_feedback": bpod["feedback_times"] - bpod["stimFreeze_times"] > 0,
         "stim_freeze_feedback_delay": (
-            np.abs(bpod["feedback_times"] - bpod["stimFreeze_times_BNC1"])
-            <= FEEDBACK_STIMFREEZE_DELAY
+            np.abs(bpod["feedback_times"] - bpod["stimFreeze_times"]) <= FEEDBACK_STIMFREEZE_DELAY
         ),
         "stimOff_delay_valve": np.less(
-            np.abs(bpod["stimOff_times"] - bpod["valve_open"] - VALVE_STIM_OFF_DELAY),
+            np.abs(bpod["stimOff_times"] - bpod["valveOpen_times"] - VALVE_STIM_OFF_DELAY),
             VALVE_STIM_OFF_JITTER,
             out=np.ones(len(bpod["stimOn_times"]), dtype=np.bool),
-            where=~np.isnan(bpod["valve_open"]),
+            where=~np.isnan(bpod["valveOpen_times"]),
         ),
         "iti_in_delay_stim_off": np.less(
-            np.abs(bpod["stimOff_times_BNC1"] - bpod["itiIn_times"]),
+            np.abs(bpod["stimOff_times"] - bpod["itiIn_times"]),
             ITI_IN_STIM_OFF_JITTER,
             out=np.ones(len(bpod["stimOn_times"]), dtype=np.bool),
-            where=~np.isnan(bpod["error_tone_in"]),
+            where=~np.isnan(bpod["errorCue_times"]),
         ),  # FIXME: where= is wrong, no_go trials have a error tone but longer delay!
         "stimOff_delay_noise": np.less(
-            np.abs(bpod["stimOff_times_BNC1"] - bpod["error_tone_in"] - ERROR_STIM_OFF_DELAY),
+            np.abs(bpod["stimOff_times"] - bpod["errorCue_times"] - ERROR_STIM_OFF_DELAY),
             ERROR_STIM_OFF_JITTER,
             out=np.ones(len(bpod["stimOn_times"]), dtype=np.bool),
-            where=~np.isnan(bpod["error_tone_in"]),
+            where=~np.isnan(bpod["errorCue_times"]),
         ),
         "response_times_nan": ~np.isnan(bpod["response_times"]),
         "response_times_increase": np.diff(np.append([0], bpod["response_times"])) > 0,
@@ -555,8 +576,8 @@ def get_bpodqc_frame(session_path):
             bpod["feedback_times"] - bpod["response_times"] < RESPONSE_FEEDBACK_DELAY
         ),
     }
-    #
-    bpodqc_frame = pd.DataFrame.from_dict(frame)
+    bpodqc_frame = bpod.update(qc_frame)
+    bpodqc_frame = pd.DataFrame.from_dict(qc_frame)
     return bpodqc_frame
 
 
@@ -565,10 +586,10 @@ def get_trigger_response(session_path):
     bpod = load_bpod_data(session_path)
     # get diff from triggers to detected events
     goCue_diff = np.abs(bpod["goCueTrigger_times"] - bpod["goCue_times"])
-    errorTone_diff = np.abs(bpod["error_tone_in_trigger"] - bpod["error_tone_in"])
-    stimOn_diff = np.abs(bpod["stimOnTrigger_times"] - bpod["stimOn_times_BNC1"])
-    stimOff_diff = np.abs(bpod["stimOffTrigger_times"] - bpod["stimOff_times_BNC1"])
-    stimFreeze_diff = np.abs(bpod["stimFreezeTrigger_times"] - bpod["stimFreeze_times_BNC1"])
+    errorTone_diff = np.abs(bpod["errorCueTrigger_times"] - bpod["errorCue_times"])
+    stimOn_diff = np.abs(bpod["stimOnTrigger_times"] - bpod["stimOn_times"])
+    stimOff_diff = np.abs(bpod["stimOffTrigger_times"] - bpod["stimOff_times"])
+    stimFreeze_diff = np.abs(bpod["stimFreezeTrigger_times"] - bpod["stimFreeze_times"])
 
     return {
         "goCue": goCue_diff,
@@ -639,11 +660,21 @@ def plot_bpod_session(session_path, ax=None):
     plots.squares(BNC1["times"], BNC1["polarities"] * 0.4 + 1, ax=ax, c="k")
     plots.squares(BNC2["times"], BNC2["polarities"] * 0.4 + 2, ax=ax, c="k")
     plots.vertical_lines(
-        bpodqc_frame["ready_tone_in"],
+        bpodqc_frame["goCueTrigger_times"],
         ymin=0,
         ymax=ymax,
         ax=ax,
-        label="ready_tone_in",
+        label="goCueTrigger_times",
+        color="b",
+        alpha=0.5,
+        linewidth=width,
+    )
+    plots.vertical_lines(
+        bpodqc_frame["goCue_times"],
+        ymin=0,
+        ymax=ymax,
+        ax=ax,
+        label="goCue_times",
         color="b",
         linewidth=width,
     )
@@ -657,30 +688,30 @@ def plot_bpod_session(session_path, ax=None):
         linewidth=width,
     )
     plots.vertical_lines(
-        bpodqc_frame["error_tone_in_trigger"],
+        bpodqc_frame["errorCueTrigger_times"],
         ymin=0,
         ymax=ymax,
         ax=ax,
-        label="error_tone_in_trigger",
+        label="errorCueTrigger_times",
         color="r",
         alpha=0.5,
         linewidth=width,
     )
     plots.vertical_lines(
-        bpodqc_frame["error_tone_in"],
+        bpodqc_frame["errorCue_times"],
         ymin=0,
         ymax=ymax,
         ax=ax,
-        label="error_tone_in",
+        label="errorCue_times",
         color="r",
         linewidth=width,
     )
     plots.vertical_lines(
-        bpodqc_frame["valve_open"],
+        bpodqc_frame["valveOpen_times"],
         ymin=0,
         ymax=ymax,
         ax=ax,
-        label="valve_open",
+        label="valveOpen_times",
         color="g",
         linewidth=width,
     )
@@ -695,11 +726,11 @@ def plot_bpod_session(session_path, ax=None):
         linewidth=width,
     )
     plots.vertical_lines(
-        bpodqc_frame["stim_freeze"],
+        bpodqc_frame["stimFreeze_times"],
         ymin=0,
         ymax=ymax,
         ax=ax,
-        label="stim_freeze",
+        label="stimFreeze_times",
         color="y",
         linewidth=width,
     )
@@ -766,37 +797,41 @@ def plot_trigger_response_diffs(eid, ax=None):
         eid, dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"], download_only=True
     )
     session_path = one.path_from_eid(eid)
-    trigger_diffs = check_trigger_response(session_path)
+    trigger_diffs = get_trigger_response(session_path)
 
     sett = raw.load_settings(session_path)
     if ax is None:
         f, ax = plt.subplots()
     tit = f"{sett['SESSION_NAME']}: {eid}"
     ax.title.set_text(tit)
-    ax.hist(trigger_diffs['goCue'], alpha=0.5, bins=5, label="goCue_diff")
-    ax.hist(trigger_diffs['errorTone'], alpha=0.5, bins=5, label="errorTone_diff")
-    ax.hist(trigger_diffs['stimOn'], alpha=0.5, bins=50, label="stimOn_diff")
-    ax.hist(trigger_diffs['stimOff'], alpha=0.5, bins=50, label="stimOff_diff")
-    ax.hist(trigger_diffs['stimFreeze'], alpha=0.5, bins=50, label="stimFreeze_diff")
+    ax.hist(trigger_diffs["goCue"], alpha=0.5, bins=50, label="goCue_diff")
+    ax.hist(trigger_diffs["errorTone"], alpha=0.5, bins=50, label="errorTone_diff")
+    ax.hist(trigger_diffs["stimOn"], alpha=0.5, bins=50, label="stimOn_diff")
+    ax.hist(trigger_diffs["stimOff"], alpha=0.5, bins=50, label="stimOff_diff")
+    ax.hist(trigger_diffs["stimFreeze"], alpha=0.5, bins=50, label="stimFreeze_diff")
     ax.legend(loc="best")
 
 
 def describe_lab_trigger_diffs(labname):
     eids, dets = one.search(
-        task_protocol="ephysChoiceWorld6.2.5",
+        task_protocol="_iblrig_tasks_ephysChoiceWorld6.2.5",
         lab=labname,
         dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"],
-        details=True
+        details=True,
     )
     trigger_diffs = {
-        'goCue': np.array([]),
-        'errorTone': np.array([]),
-        'stimOn': np.array([]),
-        'stimOff': np.array([]),
-        'stimFreeze': np.array([]),
+        "goCue": np.array([]),
+        "errorTone": np.array([]),
+        "stimOn": np.array([]),
+        "stimOff": np.array([]),
+        "stimFreeze": np.array([]),
     }
     for eid in eids:
-        one.load(eid, download_only=True, dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"],)
+        one.load(
+            eid,
+            download_only=True,
+            dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"],
+        )
         sp = one.path_from_eid(eid)
         td = get_trigger_response(sp)
         for k in trigger_diffs:
@@ -805,10 +840,33 @@ def describe_lab_trigger_diffs(labname):
     df = pd.DataFrame.from_dict(trigger_diffs)
     print(df.describe())
     for k in df:
-        print(k, 'nancount:', sum(np.isnan(df[k])))
+        print(k, "nancount:", sum(np.isnan(df[k])))
 
-# TODO: refactor names of fpgaqc_frame to match ALF specs and bpodqc_frame
-# Remove bpodqc translation part to match fpgaqc_frame key names...
+
+def describe_trigger_response_diff(eid):
+    trigger_diffs = {
+        "goCue": np.array([]),
+        "errorTone": np.array([]),
+        "stimOn": np.array([]),
+        "stimOff": np.array([]),
+        "stimFreeze": np.array([]),
+    }
+    one.load(
+        eid,
+        download_only=True,
+        dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"],
+    )
+    sp = one.path_from_eid(eid)
+    td = get_trigger_response(sp)
+    for k in trigger_diffs:
+        trigger_diffs[k] = np.append(trigger_diffs[k], td[k])
+
+    df = pd.DataFrame.from_dict(trigger_diffs)
+    print(df.describe())
+    for k in df:
+        print(k, "nancount:", sum(np.isnan(df[k])))
+
+
 if __name__ == "__main__":
     # from ibllib.ephys.bpodqc import *
     subj_path = "/home/nico/Projects/IBL/github/iblapps/scratch/TestSubjects/"
@@ -823,7 +881,9 @@ if __name__ == "__main__":
     # fpgaqc_frame = _qc_from_path(session_path, display=False)
     # bpodqc_frame = get_bpodqc_frame(session_path)
 
-    # bla = [(k, all(fpgaqc_frame[k] == bpodqc_frame[k])) for k in fpgaqc_frame if k in bpodqc_frame]
+    # bla = [(
+    # k, all(fpgaqc_frame[k] == bpodqc_frame[k])) for k in fpgaqc_frame if k in bpodqc_frame
+    # ]
 
     # count_qc_failures(session_path)
     # plt.ion()
@@ -843,10 +903,11 @@ if __name__ == "__main__":
     #         dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"],
     #     )
     #     print(lab, len(eids))
-        # for eid in eids:
-        #     plot_trigger_response_diffs(eid)
-    lab = 'churchlandlab'
-    for lab in labs:
-        describe_lab_trigger_diffs(lab)
+    # for eid in eids:
+    #     plot_trigger_response_diffs(eid)
+    lab = "churchlandlab"
+    bla1, bla2 = get_bpod_fronts('0deb75fb-9088-42d9-b744-012fb8fc4afb')
+    # for lab in labs:
+    #     describe_lab_trigger_diffs(lab)
 
-print('.')
+print(".")

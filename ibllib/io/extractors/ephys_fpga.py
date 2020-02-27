@@ -358,20 +358,18 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
     # t_stim_freeze = frame2ttl['times'][np.maximum(ind - 1, 0)]
     # stimOn_times: first fram2ttl change after trial start
     trials = Bunch({
-        'ready_tone_in': _assign_events_to_trial(t_trial_start, t_ready_tone_in, take='first'),
-        'error_tone_in': _assign_events_to_trial(t_trial_start, t_error_tone_in),
-        'valve_open': _assign_events_to_trial(t_trial_start, t_valve_open),
-        'stim_freeze': _assign_events_to_trial(t_trial_start, t_stim_freeze),
+        'goCue_times': _assign_events_to_trial(t_trial_start, t_ready_tone_in, take='first'),
+        'errorCue_times': _assign_events_to_trial(t_trial_start, t_error_tone_in),
+        'valveOpen_times': _assign_events_to_trial(t_trial_start, t_valve_open),
+        'stimFreeze_times': _assign_events_to_trial(t_trial_start, t_stim_freeze),
         'stimOn_times': _assign_events_to_trial(t_trial_start, frame2ttl['times'], take='first'),
         'stimOff_times': _assign_events_to_trial(t_trial_start, t_stim_off),
-        'iti_in': _assign_events_to_trial(t_trial_start, t_iti_in)
+        'itiIn_times': _assign_events_to_trial(t_trial_start, t_iti_in)
     })
-    # goCue_times corresponds to the tone_in event
-    trials['goCue_times'] = np.copy(trials['ready_tone_in'])
     # feedback times are valve open on good trials and error tone in on error trials
-    trials['feedback_times'] = np.copy(trials['valve_open'])
-    ind_err = np.isnan(trials['valve_open'])
-    trials['feedback_times'][ind_err] = trials['error_tone_in'][ind_err]
+    trials['feedback_times'] = np.copy(trials['valveOpen_times'])
+    ind_err = np.isnan(trials['valveOpen_times'])
+    trials['feedback_times'][ind_err] = trials['errorCue_times'][ind_err]
     trials['intervals'] = np.c_[t_trial_start, trials['iti_in']]
 
     if display:
@@ -392,19 +390,19 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
         plots.squares(r0['times'], r0['polarities'] * 0.4 + 4,
                       ax=ax, color='k')
         plots.vertical_lines(t_ready_tone_in, ymin=0, ymax=ymax,
-                             ax=ax, label='ready tone in', color='b', linewidth=width)
+                             ax=ax, label='goCue_times', color='b', linewidth=width)
         plots.vertical_lines(t_trial_start, ymin=0, ymax=ymax,
                              ax=ax, label='start_trial', color='m', linewidth=width)
         plots.vertical_lines(t_error_tone_in, ymin=0, ymax=ymax,
                              ax=ax, label='error tone', color='r', linewidth=width)
         plots.vertical_lines(t_valve_open, ymin=0, ymax=ymax,
-                             ax=ax, label='valve open', color='g', linewidth=width)
+                             ax=ax, label='valveOpen_times', color='g', linewidth=width)
         plots.vertical_lines(t_stim_freeze, ymin=0, ymax=ymax,
-                             ax=ax, label='stim freeze', color='y', linewidth=width)
+                             ax=ax, label='stimFreeze_times', color='y', linewidth=width)
         plots.vertical_lines(t_stim_off, ymin=0, ymax=ymax,
                              ax=ax, label='stim off', color='c', linewidth=width)
         plots.vertical_lines(trials['stimOn_times'], ymin=0, ymax=ymax,
-                             ax=ax, label='stim on', color='tab:orange', linewidth=width)
+                             ax=ax, label='stimOn_times', color='tab:orange', linewidth=width)
         ax.legend()
         ax.set_yticklabels(['', 'bpod', 'f2ttl', 'audio', 're_0', ''])
         ax.set_yticks([0, 1, 2, 3, 4, 5])

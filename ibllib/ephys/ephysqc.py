@@ -207,7 +207,7 @@ def validate_ttl_test(ses_path, display=False):
     try:
         # note: tried to depend as little as possible on the extraction code but for the valve...
         behaviour = fpga.extract_behaviour_sync(rawsync, save=False, chmap=sync_map)
-        res = behaviour.valve_open.size > 1
+        res = behaviour.valveOpen_times.size > 1
     except AssertionError:
         res = False
     # check that the reward valve is actionned at least once
@@ -464,8 +464,8 @@ def qc_fpga_task(fpga_trials, alf_trials):
     This part of the function uses only fpga_trials information
     """
     # check number of feedbacks: should always be one
-    qc_trials['n_feedback'] = (np.uint32(~np.isnan(fpga_trials['valve_open'])) +
-                               np.uint32(~np.isnan(fpga_trials['error_tone_in'])))
+    qc_trials['n_feedback'] = (np.uint32(~np.isnan(fpga_trials['valveOpen_times'])) +
+                               np.uint32(~np.isnan(fpga_trials['errorCue_times'])))
 
     # check for non-Nans
     qc_trials['stimOn_times_nan'] = ~np.isnan(fpga_trials['stimOn_times'])
@@ -477,25 +477,25 @@ def qc_fpga_task(fpga_trials, alf_trials):
 
     # stimFreeze before feedback
     qc_trials['stim_freeze_before_feedback'], qc_trials['stim_freeze_feedback_delay'] = \
-        strictly_after(fpga_trials['stim_freeze'], fpga_trials['feedback_times'],
+        strictly_after(fpga_trials['stimFreeze_times'], fpga_trials['feedback_times'],
                        FEEDBACK_STIMFREEZE_DELAY)
 
     # stimOff 1 sec after valve, with 0.1 as acceptable jitter
     qc_trials['stimOff_delay_valve'] = np.less(
-        np.abs(fpga_trials['stimOff_times'] - fpga_trials['valve_open'] - VALVE_STIM_OFF_DELAY),
+        np.abs(fpga_trials['stimOff_times'] - fpga_trials['valveOpen_times'] - VALVE_STIM_OFF_DELAY),
         VALVE_STIM_OFF_JITTER, out=np.ones(ntrials, dtype=np.bool),
-        where=~np.isnan(fpga_trials['valve_open']))
+        where=~np.isnan(fpga_trials['valveOpen_times']))
 
     # iti_in whithin 0.01 sec of stimOff
     qc_trials['iti_in_delay_stim_off'] = \
-        np.abs(fpga_trials['stimOff_times'] - fpga_trials['iti_in']) < ITI_IN_STIM_OFF_JITTER
+        np.abs(fpga_trials['stimOff_times'] - fpga_trials['itiIn_times']) < ITI_IN_STIM_OFF_JITTER
 
-    # stimOff 2 secs after error_tone_in with jitter
+    # stimOff 2 secs after errorCue_times with jitter
     # noise off happens 2 secs after stimm, with 0.1 as acceptable jitter
     qc_trials['stimOff_delay_noise'] = np.less(
-        np.abs(fpga_trials['stimOff_times'] - fpga_trials['error_tone_in'] - ERROR_STIM_OFF_DELAY),
+        np.abs(fpga_trials['stimOff_times'] - fpga_trials['errorCue_times'] - ERROR_STIM_OFF_DELAY),
         ERROR_STIM_OFF_JITTER, out=np.ones(ntrials, dtype=np.bool),
-        where=~np.isnan(fpga_trials['error_tone_in']))
+        where=~np.isnan(fpga_trials['errorCue_times']))
 
     """
     This part uses only alf_trials information
