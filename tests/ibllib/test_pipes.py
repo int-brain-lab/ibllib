@@ -1,10 +1,12 @@
 import shutil
 import tempfile
 import unittest
+import datetime
 from pathlib import Path
 
 import ibllib.pipes.extract_session
 from ibllib.pipes import experimental_data, misc
+from oneibl.one import ONE
 
 
 class TestCompression(unittest.TestCase):
@@ -190,7 +192,6 @@ class TestPipesMisc(unittest.TestCase):
 
     def test_rename_and_move(self):
         self._test_rename_ephys_files()
-        # TODO: Move files from the bad folders to the local_probe folders?
         # Test for 3A
         misc.move_ephys_files(self.local_session_path_3A)
         probe00_files = list(self.probe00_path_3A.rglob('*'))
@@ -263,6 +264,48 @@ class TestPipesMisc(unittest.TestCase):
         self.assertFalse(qc.exists())
         self.assertFalse(spike_sorting0.exists())
         self.assertFalse(spike_sorting1.exists())
+
+    def test_create_alyx_probe_insertions(self):
+        # Connect to test DB
+        one = ONE(
+            username='test_user',
+            password='TapetesBloc18',
+            base_url='https://test.alyx.internationalbrainlab.org'
+        )
+        # Use existing session on test database
+        eid = 'b1c968ad-4874-468d-b2e4-5ffa9b9964e9'
+        # Force probe insertion 3A
+        misc.create_alyx_probe_insertions(
+            eid,
+            one=one,
+            model='3A',
+            labels=['probe00', 'probe01'])
+        # Verify it's been inserted
+        alyx_insertion = one.alyx.rest('insertions', 'list',
+                                       session=eid)
+        self.assertTrue(alyx_insertion[0]['model']=='3A')
+        self.assertTrue(alyx_insertion[0]['name'] in ['probe00', 'probe01'])
+        self.assertTrue(alyx_insertion[1]['model']=='3A')
+        self.assertTrue(alyx_insertion[1]['name']in ['probe00', 'probe01'])
+        # Cleanup DB
+        one.alyx.rest('insertions', 'delete', id=alyx_insertion[0]['url'][-36:])
+        one.alyx.rest('insertions', 'delete', id=alyx_insertion[1]['url'][-36:])
+        # Force probe insertion 3B
+        misc.create_alyx_probe_insertions(
+            eid,
+            one=one,
+            model='3B2',
+            labels=['probe00', 'probe01'])
+        # Verify it's been inserted
+        alyx_insertion = one.alyx.rest('insertions', 'list',
+                                       session=eid)
+        self.assertTrue(alyx_insertion[0]['model']=='3B2')
+        self.assertTrue(alyx_insertion[0]['name'] in ['probe00', 'probe01'])
+        self.assertTrue(alyx_insertion[1]['model']=='3B2')
+        self.assertTrue(alyx_insertion[1]['name'] in ['probe00', 'probe01'])
+        # Cleanup DB
+        one.alyx.rest('insertions', 'delete', id=alyx_insertion[0]['url'][-36:])
+        one.alyx.rest('insertions', 'delete', id=alyx_insertion[1]['url'][-36:])
 
     def tearDown(self):
         shutil.rmtree(self.root_test_folder, ignore_errors=True)

@@ -3,8 +3,11 @@ import shutil
 from pathlib import Path
 
 import alf.folders as folders
-import ibllib.io.params as params
+from alf.io import is_uuid_string
 import ibllib.io.flags as flags
+import ibllib.io.params as params
+import ibllib.io.spikeglx as spikeglx
+from oneibl.one import ONE
 
 
 def cli_ask_default(prompt: str, default: str):
@@ -100,19 +103,26 @@ def load_ephyspc_params():
     return load_params_dict('ephyspc_params')
 
 
-def create_videopc_params(force=False):
+def create_videopc_params(force=False, silent=False):
     if Path(params.getfile('videopc_params')).exists() and not force:
         print(f"{params.getfile('videopc_params')} exists already, exiting...")
         print(Path(params.getfile('videopc_params')).exists())
         return
-    data_folder_path = cli_ask_default(
-        r"Where's your LOCAL 'Subjects' data folder?", r"D:\iblrig_data\Subjects")
-    remote_data_folder_path = cli_ask_default(
-        r"Where's your REMOTE 'Subjects' data folder?",
-        r"\\iblserver.champalimaud.pt\ibldata\Subjects")
-    body_cam_idx = cli_ask_default("Please select the index of the BODY camera", '0')
-    left_cam_idx = cli_ask_default("Please select the index of the LEFT camera", '1')
-    right_cam_idx = cli_ask_default("Please select the index of the RIGHT camera", '2')
+    if silent:
+        data_folder_path = r"D:\iblrig_data\Subjects"
+        remote_data_folder_path = r"\\iblserver.champalimaud.pt\ibldata\Subjects"
+        body_cam_idx = 0
+        left_cam_idx = 1
+        right_cam_idx = 2
+    else:
+        data_folder_path = cli_ask_default(
+            r"Where's your LOCAL 'Subjects' data folder?", r"D:\iblrig_data\Subjects")
+        remote_data_folder_path = cli_ask_default(
+            r"Where's your REMOTE 'Subjects' data folder?",
+            r"\\iblserver.champalimaud.pt\ibldata\Subjects")
+        body_cam_idx = cli_ask_default("Please select the index of the BODY camera", '0')
+        left_cam_idx = cli_ask_default("Please select the index of the LEFT camera", '1')
+        right_cam_idx = cli_ask_default("Please select the index of the RIGHT camera", '2')
 
     param_dict = {
         'DATA_FOLDER_PATH': data_folder_path,
@@ -127,18 +137,24 @@ def create_videopc_params(force=False):
     return param_dict
 
 
-def create_ephyspc_params(force=False):
+def create_ephyspc_params(force=False, silent=False):
     if Path(params.getfile('ephyspc_params')).exists() and not force:
         print(f"{params.getfile('ephyspc_params')} exists already, exiting...")
         print(Path(params.getfile('ephyspc_params')).exists())
         return
-    data_folder_path = cli_ask_default(
-        r"Where's your LOCAL 'Subjects' data folder?", r"D:\iblrig_data\Subjects")
-    remote_data_folder_path = cli_ask_default(
-        r"Where's your REMOTE 'Subjects' data folder?",
-        r"\\iblserver.champalimaud.pt\ibldata\Subjects")
-    probe_type_00 = cli_ask_options("What's the type of PROBE 00?", ['3A', '3B'])
-    probe_type_01 = cli_ask_options("What's the type of PROBE 01?", ['3A', '3B'])
+    if silent:
+        data_folder_path = r"D:\iblrig_data\Subjects"
+        remote_data_folder_path = r"\\iblserver.champalimaud.pt\ibldata\Subjects"
+        probe_type_00 = '3A'
+        probe_type_01 = '3B'
+    else:
+        data_folder_path = cli_ask_default(
+            r"Where's your LOCAL 'Subjects' data folder?", r"D:\iblrig_data\Subjects")
+        remote_data_folder_path = cli_ask_default(
+            r"Where's your REMOTE 'Subjects' data folder?",
+            r"\\iblserver.champalimaud.pt\ibldata\Subjects")
+        probe_type_00 = cli_ask_options("What's the type of PROBE 00?", ['3A', '3B'])
+        probe_type_01 = cli_ask_options("What's the type of PROBE 01?", ['3A', '3B'])
     param_dict = {
         'DATA_FOLDER_PATH': data_folder_path,
         'REMOTE_DATA_FOLDER_PATH': remote_data_folder_path,
@@ -233,6 +249,7 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False,
         move_ephys_files(str(session_path))
         # Copy wiring files
         copy_wiring_files(str(session_path), iblscripts_folder)
+        create_alyx_probe_insertions(str(session_path))
         msg = f"Transfer to {remote_folder} with the same name?"
         resp = input(msg + "\n[y]es/[r]ename/[s]kip/[e]xit\n ^\n> ") or 'y'
         resp = resp.lower()
@@ -265,6 +282,49 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False,
             (remote_session_path / 'extract_me.flag').unlink()
         # Create remote flags
         create_ephys_flags(remote_session_path)
+
+
+def create_alyx_probe_insertions(session_path: str,
+                                 force: bool = False,
+                                 one: object = None,
+                                 model: str = None,
+                                 labels: list = None):
+    if is_uuid_string(session_path):
+        eid = session_path
+    else:
+        eid = one.eid_from_path(session_path)
+    if eid is None:
+        print('Session not found on Alyx: please create session before creating insertions')
+    if one is None:
+        one = ONE()
+    if model is None:
+        probe_model = spikeglx.get_neuropixel_version_from_folder(session_path)
+        pmodel = '3B2' if probe_model == '3B' else probe_model
+    else:
+        pmodel = model
+    raw_ephys_data_path = session_path / 'raw_ephys_data'
+    if labels is None:
+        probe_labels = [x.name for x in Path(raw_ephys_data_path).glob('*') if x.is_dir() and ('00' in x.name or '01' in x.name)]
+    else:
+        probe_labels = labels
+    # create the dictionary
+    for plabel in probe_labels:
+        insdict = {'session': eid,
+                   'name': plabel,
+                   'model': pmodel}
+        # search for the corresponding insertion in Alyx
+        alyx_insertion = one.alyx.rest('insertions', 'list',
+                                       session=insdict['session'],
+                                       name=insdict['name'])
+        # if it doesn't exist, create it
+        if len(alyx_insertion) == 0:
+            alyx_insertion = one.alyx.rest('insertions', 'create', data=insdict)
+        else:
+            eid = alyx_insertion[0]['url'][-36:]
+            if force:
+                alyx_insertion = one.alyx.rest('insertions', 'update', id=eid, data=insdict)
+            else:
+                alyx_insertion = alyx_insertion[0]
 
 
 def create_ephys_flags(session_folder: str or Path):
@@ -372,7 +432,6 @@ def move_ephys_files(session_folder: str) -> None:
             shutil.move(str(imf), str(probe00_path / imf.name))
         elif 'probe01' in str(imf):
             shutil.move(str(imf), str(probe01_path / imf.name))
-    # TODO: add remove old folder by getting it from imfa nd storing it into a var
     # 3B system
     imec0_files = session_path.rglob('*.imec0.*')
     imec1_files = session_path.rglob('*.imec1.*')
@@ -387,6 +446,9 @@ def move_ephys_files(session_folder: str) -> None:
     nidq_files = session_path.rglob('*.nidq.*')
     for nidqf in nidq_files:
         shutil.move(str(nidqf), str(raw_ephys_data_path / nidqf.name))
+    # Delete all empty folders recursively
+    from ibllib.io.misc import delete_empty_folders
+    delete_empty_folders(raw_ephys_data_path, dry=False, recursive=True)
 
 
 def create_custom_ephys_wirings(iblscripts_folder: str):
