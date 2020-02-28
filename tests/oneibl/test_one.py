@@ -3,6 +3,7 @@ import numpy as np
 import requests
 from pathlib import Path
 
+import ibllib.io.hashfile
 from alf.io import remove_uuid_file
 from oneibl.one import ONE
 
@@ -48,16 +49,12 @@ class TestSearch(unittest.TestCase):
 class TestList(unittest.TestCase):
 
     def setUp(self):
-        # Init connection to the database
-        one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
-                  password='TapetesBloc18')
+        # Init connection to the databas
         eids = ['cf264653-2deb-44cb-aa84-89b82507028a', '4e0b3320-47b7-416e-b842-c34dc9004cf8']
         self.eid = eids[0]
         self.eid2 = eids[1]
-        self.One = one
 
     def test_list(self):
-        one = self.One
         # tests with a single input and a list input
         EIDs = [self.eid,
                 [self.eid, self.eid2]]
@@ -73,7 +70,6 @@ class TestList(unittest.TestCase):
             usr, ses = one.list(eid, keyword='users', details=True)
 
     def test_list_error(self):
-        one = self.One
         a = 0
         eid = self.eid
         try:
@@ -84,13 +80,11 @@ class TestList(unittest.TestCase):
         self.assertTrue(a == 1)
 
     def test_help(self):
-        one = self.One
         dtypes = one.list(None, keyword='dataset-types')
         one.help(dtypes[0])
         one.help([])
 
     def test_list_allkeys(self):
-        one = self.One
         for k in one.keywords():
             rep = one.list(keyword=k)
             self.assertTrue(len(rep) > 1)
@@ -100,16 +94,12 @@ class TestLoad(unittest.TestCase):
 
     def setUp(self):
         # Init connection to the database
-        one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
-                  password='TapetesBloc18')
         eids = ['cf264653-2deb-44cb-aa84-89b82507028a', '4e0b3320-47b7-416e-b842-c34dc9004cf8']
         self.eid = eids[0]
         self.eid2 = eids[1]
-        self.One = one
 
     def test_load_multiple_sessions(self):
         # init stuff to run from cli
-        one = self.One
         eids = [self.eid, self.eid2]
 
         # 2 sessions, data exists on both, dclass output
@@ -140,7 +130,6 @@ class TestLoad(unittest.TestCase):
         self.assertTrue(len(out.data[1]) == 5126 and out.data[0] is None)
 
     def test_load_uuid(self):
-        one = self.One
         dataset_types = ['eye.blink']
         eid = ('https://test.alyx.internationalbrainlab.org/'
                'sessions/' + self.eid)
@@ -154,7 +143,6 @@ class TestLoad(unittest.TestCase):
 
     def test_load(self):
         # Test with 3 actual datasets predefined
-        one = self.One
         dataset_types = ['clusters.channels', 'clusters._phy_annotation', 'clusters.probes']
         eid = ('https://test.alyx.internationalbrainlab.org/'
                'sessions/' + self.eid)
@@ -183,7 +171,6 @@ class TestLoad(unittest.TestCase):
 
     def test_load_empty(self):
         # Test with a session that doesn't have any dataset on the Flat Iron
-        one = self.One
         eid = self.eid
         dataset_types = ['wheel.velocity', 'passiveTrials.included']
         a, b = one.load(eid, dataset_types=dataset_types)
@@ -191,7 +178,6 @@ class TestLoad(unittest.TestCase):
 
     def test_load_from_uuid(self):
         # Test the query with only the UUID string and not the full URL (no data here)
-        one = self.One
         eid = self.eid
         dataset_types = ['wheel.velocity', 'wheel.timestamps']
         aa = one.load(eid, dataset_types=dataset_types)
@@ -199,24 +185,45 @@ class TestLoad(unittest.TestCase):
 
     def test_load_all_data_available(self):
         # Test without a dataset list should download everything and output a dictionary
-        one = self.One
         eid = self.eid2
         a = one.load(eid, dataset_types='__all__')
         self.assertTrue(len(a.data) >= 5)
 
     def test_load_fileformats(self):
         # npy already works for other tests around, tsv and csv implemented so far
-        one = self.One
         eid = self.eid
         one.load(eid, dataset_types=['probes.description'])
 
     def test_session_does_not_exist(self):
         eid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
-        self.assertRaises(requests.HTTPError, self.One.load, eid)
+        self.assertRaises(requests.HTTPError, one.load, eid)
 
     def test_load_offline(self):
-        a = self.One.load(self.eid, dataset_types='_ibl_lickPiezo.raw.npy', offline=True)
+        a = one.load(self.eid, dataset_types='_ibl_lickPiezo.raw.npy', offline=True)
         self.assertTrue(a == [None])
+
+    def test_load_newversion(self):
+        eid = self.eid
+        # get the original file from the server
+        file = one.load(eid, dataset_types=['channels.localCoordinates'], download_only=True,
+                        clobber=True)[0]
+        fsize = file.stat().st_size
+        hash = ibllib.io.hashfile.md5(file)
+        data_server = np.load(file)
+        # overwrite the local file
+        np.save(file, np.zeros([25, 0]))
+        # here we patch the dataset with the server filesize and hash
+        dset = one.alyx.rest('datasets', 'list',
+                             dataset_type='channels.localCoordinates', session=eid)
+        one.alyx.rest('datasets', 'partial_update', id=dset[0]['url'][-36:],
+                      data={'file_size': fsize, 'hash': hash})
+        data = one.load(eid, dataset_types=['channels.localCoordinates'])[0]
+        self.assertTrue(data.shape == data_server.shape)
+        # here we patch a dataset and make sure it overwrites if the checksum is different
+        np.save(file, data_server * 2)
+        data = one.load(eid, dataset_types=['channels.localCoordinates'])[0]
+        self.assertTrue(data.shape == data_server.shape)
+        self.assertTrue(np.all(np.equal(data, data_server)))
 
 
 class TestMisc(unittest.TestCase):
@@ -240,8 +247,6 @@ class TestPathsToEidAndBack(unittest.TestCase):
 
     def setUp(self):
         # Init connection to the database
-        one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
-                  password='TapetesBloc18')
         self.eids = ['cf264653-2deb-44cb-aa84-89b82507028a',
                      '4e0b3320-47b7-416e-b842-c34dc9004cf8',
                      'a9d89baf-9905-470c-8565-859ff212c7be',
@@ -253,14 +258,13 @@ class TestPathsToEidAndBack(unittest.TestCase):
             'FlatIron/mainenlab/Subjects/ZM_1743/2019-06-04/001',
             'FlatIron/cortexlab/Subjects/KS005/2019-04-04/004',
         ]
-        self.One = one
 
     def test_path_from_eid(self):
         # Test if eid's produce correct output
         for e, p in zip(self.eids, self.partial_eid_paths):
-            self.assertTrue(str(p) in str(self.One.path_from_eid(e)))
+            self.assertTrue(str(p) in str(one.path_from_eid(e)))
         # Test if list input produces valid list output
-        list_output = self.One.path_from_eid(self.eids)
+        list_output = one.path_from_eid(self.eids)
         self.assertTrue(isinstance(list_output, list))
         self.assertTrue(
             all([str(p) in str(o) for p, o in zip(self.partial_eid_paths, list_output)])
@@ -276,9 +280,9 @@ class TestPathsToEidAndBack(unittest.TestCase):
         eids.append('a9d89baf-9905-470c-8565-859ff212c7be')
         eids.append('aaf101c3-2581-450a-8abd-ddb8f557a5ad')
         for p, e in zip(paths, eids):
-            self.assertTrue(e == str(self.One.eid_from_path(p)))
+            self.assertTrue(e == str(one.eid_from_path(p)))
         # Test if list input produces correct list output
-        list_output = self.One.eid_from_path(paths)
+        list_output = one.eid_from_path(paths)
         self.assertTrue(isinstance(list_output, list))
         self.assertTrue(
             all([e == o for e, o in zip(eids, list_output)])
