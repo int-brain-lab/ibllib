@@ -563,5 +563,6 @@ class TestsMisc(unittest.TestCase):
         (self.tempdir / 'test_full').rmdir()
         _ = [x.rmdir() for x in self.subdirs if x.exists()]
 
+
 if __name__ == "__main__":
     unittest.main(exit=False)
