@@ -7,7 +7,7 @@ import shutil
 
 import numpy as np
 
-from ibllib.io import params, flags, jsonable, spikeglx, hashfile
+from ibllib.io import params, flags, jsonable, spikeglx, hashfile, misc
 import ibllib.io.raw_data_loaders as raw
 
 
@@ -511,6 +511,57 @@ class TestsHardwareParameters(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tdir:
             self.assertIsNone(spikeglx.get_sync_map(Path(tdir) / 'idontexist.json'))
 
+
+class TestsMisc(unittest.TestCase):
+
+    def setUp(self):
+        self.tempdir = Path(tempfile.TemporaryDirectory().name)
+        self.tempdir.mkdir()
+        self.subdirs = [
+            self.tempdir / 'test_empty_parent',
+            self.tempdir / 'test_empty_parent' / 'test_empty',
+            self.tempdir / 'test_empty',
+            self.tempdir / 'test_full',
+        ]
+        self.file = self.tempdir / 'test_full' / 'file.txt'
+
+        _ = [x.mkdir() for x in self.subdirs]
+        self.file.touch()
+
+    def _resetup_folders(self):
+        self.file.unlink()
+        (self.tempdir / 'test_full').rmdir()
+        _ = [x.rmdir() for x in self.subdirs if x.exists()]
+        _ = [x.mkdir() for x in self.subdirs]
+        self.file.touch()
+
+    def test_delete_empty_folders(self):
+        pre = [x.exists() for x in self.subdirs]
+        pre_expected = [True, True, True, True]
+        self.assertTrue(all([x == y for x, y in zip(pre, pre_expected)]))
+
+        # Test dry run
+        pos_expected = None
+        pos = misc.delete_empty_folders(self.tempdir)
+        self.assertTrue(pos == pos_expected)
+        # Test dry=False, non recursive
+        pos_expected = [True, False, False, True]
+        misc.delete_empty_folders(self.tempdir, dry=False)
+        pos = [x.exists() for x in self.subdirs]
+        self.assertTrue(all([x == y for x, y in zip(pos, pos_expected)]))
+
+        self._resetup_folders()
+
+        # Test recursive
+        pos_expected = [False, False, False, True]
+        misc.delete_empty_folders(self.tempdir, dry=False, recursive=True)
+        pos = [x.exists() for x in self.subdirs]
+        self.assertTrue(all([x == y for x, y in zip(pos, pos_expected)]))
+
+    def tearDown(self):
+        self.file.unlink()
+        (self.tempdir / 'test_full').rmdir()
+        _ = [x.rmdir() for x in self.subdirs if x.exists()]
 
 if __name__ == "__main__":
     unittest.main(exit=False)
