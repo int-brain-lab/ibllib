@@ -159,7 +159,7 @@ def firing_rate(ts, hist_win=0.01, fr_win=0.5):
 
     See Also
     --------
-    metrics.firing_rate_coeff_var
+    metrics.firing_rate_cv
     plot.firing_rate
 
     Examples

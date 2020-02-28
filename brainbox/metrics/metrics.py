@@ -13,24 +13,33 @@ Run the following to set-up the workspace to run the docstring examples:
 >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
 >>> clstrs_b = aio.load_object(path_to_alf_out, 'clusters')
 >>> units_b = bb.processing.get_units_bunch(spks_b)  # may take a few mins to compute
+
+TODO add spikemetrics as dependency?
+TODO metrics that could be added: iso_dist, l_ratio, d_prime, nn_hit, nn_miss, sil
 """
 
 import time
 import numpy as np
-import pandas as pd
 import scipy.stats as stats
 import scipy.ndimage.filters as filters
 import brainbox as bb
 from brainbox.core import Bunch
 from brainbox.processing import bincount2D
-from ibllib.ephys.ephysqc import METRICS_PARAMS
 from ibllib.io import spikeglx
-# add spikemetrics as dependency?
-# import spikemetrics as sm
+
+# Parameters to be used in `quick_unit_metrics`
+METRICS_PARAMS = {
+    'presence_window': 10,
+    'refractory_period': 0.0015,
+    'min_isi': 0.0001,
+    'spks_per_bin_for_fn_est': 50,
+    'std_smoothing_kernel_for_fn_est': 4,
+    'min_num_bins_for_fn_est': 50,
+}
 
 
 def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='ks'):
-    '''
+    """
     Computes the probability that the empirical spike feature distribution(s), for specified
     feature(s), for all units, comes from a specific theoretical distribution, based on a specified
     statistical test. Also computes the coefficients of variation of the spike feature(s) for all
@@ -80,7 +89,7 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
         # Get all unit IDs which have amps variance > 50
         >>> var_vals = np.array(tuple(variances_b['amps'].values()))
         >>> bad_units = np.where(var_vals > 50)
-    '''
+    """
 
     # Get units.
     if not(units is None):  # we're using a subset of all units
@@ -126,10 +135,10 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
     return p_vals_b, cv_b
 
 
-def feat_cutoff(feat, spks_per_bin=20, sigma=5, min_num_bins=50):
-    '''
-    Computes the approximate fraction of spikes missing from a spike feature distribution for a
-    given unit, assuming the distribution is symmetric.
+def fn_est(feat, spks_per_bin=20, sigma=4, min_num_bins=50):
+    """
+    Computes the approximate fraction of spikes missing (a false negative estimate) from a spike feature distribution
+    for a given unit, assuming the distribution is symmetric. fn_est
 
     Inspired by metric described in Hill et al. (2011) J Neurosci 31: 8699-8705.
 
@@ -158,7 +167,7 @@ def feat_cutoff(feat, spks_per_bin=20, sigma=5, min_num_bins=50):
 
     See Also
     --------
-    plot.feat_cutoff
+    plot.fn_est
 
     Examples
     --------
@@ -166,8 +175,8 @@ def feat_cutoff(feat, spks_per_bin=20, sigma=5, min_num_bins=50):
     amplitudes, assuming the distribution of the unit's spike amplitudes is symmetric.
         # Get unit 1 amplitudes from a unit bunch, and compute fraction spikes missing.
         >>> feat = units_b['amps']['1']
-        >>> fraction_missing = bb.plot.feat_cutoff(feat)
-    '''
+        >>> fraction_missing = bb.plot.fn_est(feat)
+    """
 
     # Ensure minimum number of spikes requirement is met.
     error_str = 'The number of spikes in this unit is {0}, ' \
@@ -193,7 +202,7 @@ def feat_cutoff(feat, spks_per_bin=20, sigma=5, min_num_bins=50):
 
 
 def wf_similarity(wf1, wf2):
-    '''
+    """
     Computes a unit normalized spatiotemporal similarity score between two sets of waveforms.
     This score is based on how waveform shape correlates for each pair of spikes between the
     two sets of waveforms across space and time. The shapes of the arrays of the two sets of
@@ -243,7 +252,7 @@ def wf_similarity(wf1, wf2):
     profile
 
     for two sets of units: xcorr(cl1, cl2) / (sqrt autocorr(cl1) * autocorr(cl2))
-    '''
+    """
 
     # Remove warning for dividing by 0 when calculating `s` (this is resolved by using
     # `np.nan_to_num`)
@@ -273,8 +282,8 @@ def wf_similarity(wf1, wf2):
     return s
 
 
-def firing_rate_coeff_var(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
-    '''
+def firing_rate_cv(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
+    """
     Computes the coefficient of variation of the firing rate: the ratio of the standard
     deviation to the mean.
 
@@ -282,9 +291,9 @@ def firing_rate_coeff_var(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
     ----------
     ts : ndarray
         The spike timestamps from which to compute the firing rate.
-    hist_win : float
+    hist_win : float (optional)
         The time window (in s) to use for computing spike counts.
-    fr_win : float
+    fr_win : float (optional)
         The time window (in s) to use as a moving slider to compute the instantaneous firing rate.
     n_bins : int (optional)
         The number of bins in which to compute a coefficient of variation of the firing rate.
@@ -312,9 +321,9 @@ def firing_rate_coeff_var(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
         >>> ts_1 = units_b['times']['1']
         >>> ts_2 = units_b['times']['2']
         >>> ts_2 = np.intersect1d(np.where(ts_2 > 60)[0], np.where(ts_2 < 120)[0])
-        >>> cv, cvs, fr = bb.metrics.firing_rate_coeff_var(ts_1)
-        >>> cv_2, cvs_2, fr_2 = bb.metrics.firing_rate_coeff_var(ts_2)
-    '''
+        >>> cv, cvs, fr = bb.metrics.firing_rate_cv(ts_1)
+        >>> cv_2, cvs_2, fr_2 = bb.metrics.firing_rate_cv(ts_2)
+    """
 
     # Compute overall instantaneous firing rate and firing rate for each bin.
     fr = bb.singlecell.firing_rate(ts, hist_win=hist_win, fr_win=fr_win)
@@ -329,14 +338,14 @@ def firing_rate_coeff_var(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
 
 
 def isi_viol(ts, rp=0.002):
-    '''
+    """
     Computes the fraction of isi violations for a unit.
 
     Parameters
     ----------
     ts : ndarray
         The spike timestamps from which to compute the firing rate.
-    rp : float
+    rp : float (optional)
         The refractory period (in s).
 
     Returns
@@ -358,7 +367,7 @@ def isi_viol(ts, rp=0.002):
         >>> unit_idxs = np.where(spks_b['clusters'] == 1)[0]
         >>> ts = spks_b['times'][unit_idxs]
         >>> frac_isi_viol, n_isi_viol, isi = bb.metrics.isi_viol(ts)
-    '''
+    """
 
     isis = np.diff(ts)
     v = np.where(isis < rp)[0]  # violations
@@ -367,7 +376,7 @@ def isi_viol(ts, rp=0.002):
 
 
 def max_drift(feat):
-    '''
+    """
     Computes the maximum drift (max - min) of a spike feature array.
 
     Parameters
@@ -392,14 +401,14 @@ def max_drift(feat):
         >>> amps = spks_b['amps'][unit_idxs]
         >>> depth_md = bb.metrics.max_drift(depths)
         >>> amp_md = bb.metrics.max_drift(amps)
-    '''
+    """
 
     md = np.max(feat) - np.min(feat)
     return md
 
 
 def cum_drift(feat):
-    '''
+    """
     Computes the cumulative drift (normalized by the total number of spikes) of a spike feature
     array.
 
@@ -425,14 +434,14 @@ def cum_drift(feat):
         >>> amps = spks_b['amps'][unit_idxs]
         >>> depth_cd = bb.metrics.cum_drift(depths)
         >>> amp_cd = bb.metrics.cum_drift(amps)
-    '''
+    """
 
     cd = np.sum(np.abs(np.diff(feat))) / len(feat)
     return cd
 
 
 def pres_ratio(ts, hist_win=10):
-    '''
+    """
     Computes the presence ratio of spike counts: the number of bins where there is at least one
     spike, over the total number of bins, given a specified bin width.
 
@@ -440,7 +449,7 @@ def pres_ratio(ts, hist_win=10):
     ----------
     ts : ndarray
         The spike timestamps from which to compute the presence ratio.
-    hist_win : float
+    hist_win : float (optional)
         The time window (in s) to use for computing the presence ratio.
 
     Returns
@@ -459,7 +468,7 @@ def pres_ratio(ts, hist_win=10):
     1) Compute the presence ratio for unit 1, given a window of 10 s.
         >>> ts = units_b['times']['1']
         >>> pr, pr_bins = bb.metrics.pres_ratio(ts)
-    '''
+    """
 
     bins = np.arange(0, ts[-1] + hist_win, hist_win)
     spks_bins, _ = np.histogram(ts, bins)
@@ -469,7 +478,7 @@ def pres_ratio(ts, hist_win=10):
 
 def ptp_over_noise(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='int16', offset=0,
                    car=True):
-    '''
+    """
     For specified channels, for specified timestamps, computes the mean (peak-to-peak amplitudes /
     the MADs of the background noise).
 
@@ -512,7 +521,7 @@ def ptp_over_noise(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='i
         >>> else:  # take `n_c_ch` around `max_ch`.
         >>>     ch = np.arange(max_ch - 10, max_ch + 10)
         >>> p = bb.metrics.ptp_over_noise(ephys_file, ts, ch)
-    '''
+    """
 
     # Ensure `ch` is ndarray
     ch = np.asarray(ch)
@@ -557,15 +566,16 @@ def ptp_over_noise(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='i
 
 
 def fp_est(ts, rp=0.002):
-    '''
-    An estimate of the fraction of false positive spikes in a unit
+    """
+    An estimate of the fraction of false positive spikes in a unit based on the number of spikes,
+    number of isi violations, and time between the first and last spike.
     (see Hill et al. (2011) J Neurosci 31: 8699-8705).
 
     Parameters
     ----------
     ts : ndarray_like
         The timestamps (in s) of the spikes.
-    rp : float
+    rp : float (optional)
         The refractory period (in s).
 
     Returns
@@ -573,12 +583,16 @@ def fp_est(ts, rp=0.002):
     fp : float
         An estimate of the fraction of false positives.
 
+    See Also
+    --------
+    fp_est2
+
     Examples
     --------
     1) Compute false positive estimate for unit 1.
         >>> ts = units_b['times']['1']
         >>> fp = bb.metrics.fp_est(ts)
-    '''
+    """
 
     # Get number of spikes, number of isi violations, and time from first to final spike.
     n_spks = len(ts)
@@ -591,95 +605,158 @@ def fp_est(ts, rp=0.002):
     return fp
 
 
-def isi_violations(spike_train, min_time, max_time, isi_threshold, min_isi=0):
-    """Calculate ISI violations for a spike train.
+def fp_est2(ts, min_time, max_time, rp=0.002, min_isi=0.0001):
+    """
+    An estimate of the fraction of false positive spikes in a unit based on the number of spikes,
+    number of isi violations, and time between the first and last spike.
+    (see Hill et al. (2011) J Neurosci 31: 8699-8705).
 
-    Based on metric described in Hill et al. (2011) J Neurosci 31: 8699-8705
+    Modified by Dan Denman from cortex-lab/sortingQuality GitHub by Nick Steinmetz.
 
-    modified by Dan Denman from cortex-lab/sortingQuality GitHub by Nick Steinmetz
+    Parameters
+    ----------
+    ts : ndarray_like
+        The timestamps (in s) of the spikes.
+    min_time : float
+        The minimum time (in s) that a potential spike occurred.
+    max_time : float
+        The maximum time (in s) that a potential spike occurred.
+    rp : float (optional)
+        The refractory period (in s).
+    min_isi : float (optional)
+        The minimum interspike-interval (in s) for counting duplicate spikes.
 
-    Inputs:
+    Returns
     -------
-    spike_train : array of spike times
-    min_time : minimum time for potential spikes
-    max_time : maximum time for potential spikes
-    isi_threshold : threshold for isi violation
-    min_isi : threshold for duplicate spikes
+    fp : float
+        An estimate of the fraction of false positives.
+        A perfect unit has a fp = 0
+        A unit with some contamination has a fp < 0.5
+        A unit with lots of contamination has a fp > 1.0
+    num_violations : int
+        The total number of isi violations.
 
-    Outputs:
+    See Also
     --------
-    fpRate : rate of contaminating spikes as a fraction of overall rate
-        A perfect unit has a fpRate = 0
-        A unit with some contamination has a fpRate < 0.5
-        A unit with lots of contamination has a fpRate > 1.0
-    num_violations : total number of violations
+    fp_est
+
+    Examples
+    --------
+    1) Compute false positive estimate for unit 1, with a minimum isi for counting duplicate
+    spikes of 0.1 ms.
+        >>> ts = units_b['times']['1']
+        >>> fp = bb.metrics.fp_est2(ts, min_isi=0.0001)
+    """
+
+    duplicate_spikes = np.where(np.diff(ts) <= min_isi)[0]
+
+    ts = np.delete(ts, duplicate_spikes + 1)
+    isis = np.diff(ts)
+
+    num_spikes = ts.size
+    num_violations = np.sum(isis < rp)
+    violation_time = 2 * num_spikes * (rp - min_isi)
+    total_rate = ts.size / (max_time - min_time)
+    violation_rate = num_violations / violation_time
+    fp = violation_rate / total_rate
+
+    return fp, num_violations
+
+
+def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
+                       params=METRICS_PARAMS):
+    """
+    Computes single unit metrics from only the spike times, amplitudes, and depths for a set of
+    units.
+
+    Parameters
+    ----------
+    ts : ndarray_like
+        The timestamps (in s) of the spikes.
+    rp : float
+        The refractory period (in s).
+    min_time : float
+        The minimum time (in s) that a potential spike occurred.
+    max_time : float
+        The maximum time (in s) that a potential spike occurred.
+    min_isi : float
+        The minimum interspike-interval (in s) for counting duplicate spikes.
+
+    Returns
+    -------
+    fp : float
+        An estimate of the fraction of false positives.
+        A perfect unit has a fp = 0
+        A unit with some contamination has a fp < 0.5
+        A unit with lots of contamination has a fp > 1.0
+    num_violations : int
+        The total number of isi violations.
+
+    Notes
+    -----
+    This function is called by `ephysqc.unit_metrics_ks2` which is called by `spikes.ks2_to_alf`
+    during alf extraction of an ephys dataset in the ibl ephys extraction pipeline.
+
+    Examples
+    --------
 
     """
 
-    duplicate_spikes = np.where(np.diff(spike_train) <= min_isi)[0]
-
-    spike_train = np.delete(spike_train, duplicate_spikes + 1)
-    isis = np.diff(spike_train)
-
-    num_spikes = spike_train.size
-    num_violations = np.sum(isis < isi_threshold)
-    violation_time = 2 * num_spikes * (isi_threshold - min_isi)
-    total_rate = spike_train.size / (max_time - min_time)
-    violation_rate = num_violations / violation_time
-    fpRate = violation_rate / total_rate
-
-    return fpRate, num_violations
-
-
-def spike_sorting_metrics(spike_times, spike_clusters, spike_amplitudes,
-                          params=METRICS_PARAMS, epochs=None):
-    """ Spike sorting QC metrics """
     cluster_ids = np.arange(np.max(spike_clusters) + 1)
     nclust = cluster_ids.size
     r = Bunch({
         'cluster_id': cluster_ids,
-        'num_spikes': np.zeros(nclust, ) + np.nan,
-        'firing_rate': np.zeros(nclust, ) + np.nan,
-        'presence_ratio': np.zeros(nclust, ) + np.nan,
-        'presence_ratio_std': np.zeros(nclust, ) + np.nan,
-        'isi_viol': np.zeros(nclust, ) + np.nan,
-        'amplitude_cutoff': np.zeros(nclust, ) + np.nan,
-        'amplitude_std': np.zeros(nclust, ) + np.nan,
-        # 'isolation_distance': np.zeros(nclust, ) + np.nan,
-        # 'l_ratio': np.zeros(nclust, ) + np.nan,
-        # 'd_prime': np.zeros(nclust, ) + np.nan,
-        # 'nn_hit_rate': np.zeros(nclust, ) + np.nan,
-        # 'nn_miss_rate': np.zeros(nclust, ) + np.nan,
-        # 'silhouette_score': np.zeros(nclust, ) + np.nan,
-        # 'max_drift': np.zeros(nclust, ) + np.nan,
-        # 'cumulative_drift': np.zeros(nclust, ) + np.nan,
-        'epoch_name': np.zeros(nclust, dtype='object'),
+        'num_spikes': np.full((nclust,), np.nan),
+        'firing_rate': np.full((nclust,), np.nan),
+        'presence_ratio': np.full((nclust,), np.nan),
+        'presence_ratio_std': np.full((nclust,), np.nan),
+        'frac_isi_viol': np.full((nclust,), np.nan),
+        'fp_estimate': np.full((nclust,), np.nan),
+        'fp_estimate2': np.full((nclust,), np.nan),
+        'fn_estimate': np.full((nclust,), np.nan),
+        'cum_amp_drift': np.full((nclust,), np.nan),
+        'max_amp_drift': np.full((nclust,), np.nan),
+        'cum_depth_drift': np.full((nclust,), np.nan),
+        'max_depth_drift': np.full((nclust,), np.nan),
+        # could add 'epoch_name' in future:
+        # 'epoch_name': np.zeros(nclust, dtype='object'),
     })
 
-    tmin = 0
+    # vectorized computation of basic metrics such as presence ratio and firing rate
+    tmin = spike_times[0]
     tmax = spike_times[-1]
-
-    """computes basic metrics such as spike rate and presence ratio"""
     presence_ratio = bincount2D(spike_times, spike_clusters,
-                                xbin=params['presence_bin_length_secs'],
+                                xbin=params['presence_window'],
                                 ybin=cluster_ids, xlim=[tmin, tmax])[0]
-    r.num_spikes = np.sum(presence_ratio > 0, axis=1)
-    r.firing_rate = r.num_spikes / params['presence_bin_length_secs']
     r.presence_ratio = np.sum(presence_ratio > 0, axis=1) / presence_ratio.shape[1]
     r.presence_ratio_std = np.std(presence_ratio, axis=1)
+    r.num_spikes = np.sum(presence_ratio, axis=1)
+    r.firing_rate = r.num_spikes / (tmax - tmin)
 
-    # loop over each cluster
+    # loop over each cluster to compute the rest of the metrics
     for ic in np.arange(nclust):
         # slice the spike_times array
         ispikes = spike_clusters == cluster_ids[ic]
-        if np.all(~ispikes):
+        if np.all(~ispikes):  # if this cluster has no spikes, continue
             continue
-        st = spike_times[ispikes]
-        sa = spike_amplitudes[ispikes]
-        # compute metrics
-        r.isi_viol[ic], _ = metrics.isi_violations(st, tmin, tmax,
-                                                   isi_threshold=params['isi_threshold'], min_isi=params['min_isi'])
-        r.amplitude_cutoff[ic] = metrics.feat_cutoff(spike_amplitudes)
-        r.amplitude_std[ic] = np.std(sa)
+        ts = spike_times[ispikes]
+        amps = spike_amps[ispikes]
+        depths = spike_depths[ispikes]
 
-    return pd.DataFrame(r)
+        # compute metrics
+        r.frac_isi_viol = isi_viol(ts, rp=params['refractory_period'])
+        r.fp_estimate = fp_est(ts, rp=params['refractory_period'])
+        r.fp_estimate2 = fp_est2(ts, tmin, tmax, rp=params['refractory_period'],
+                                 min_isi=params['min_isi'])
+        try: # this may fail because `fn_est` requires a min number of spikes
+            r.fn_estimate = fn_est(amps, spks_per_bin=params['spks_per_bin_for_fn_est'],
+                                   sigma=params['std_smoothing_kernel_for_fn_est'],
+                                   min_num_bins=params['min_num_bins_for_fn_est'])
+        except AssertionError:
+            pass
+        r.cum_amp_drift = cum_drift(amps)
+        r.max_amp_drift = max_drift(amps)
+        r.cum_depth_drift = cum_drift(depths)
+        r.max_depth_drift = max_drift(depths)
+
+    return r

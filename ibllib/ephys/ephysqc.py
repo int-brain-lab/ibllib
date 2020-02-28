@@ -10,7 +10,7 @@ from scipy import signal
 
 import alf.io
 from brainbox.core import Bunch
-from brainbox.metrics import spike_sorting_metrics
+from brainbox.metrics import quick_unit_metrics
 from ibllib.ephys import sync_probes
 from ibllib.io import spikeglx
 import ibllib.dsp as dsp
@@ -23,23 +23,6 @@ _logger = logging.getLogger('ibllib')
 
 RMS_WIN_LENGTH_SECS = 3
 WELCH_WIN_LENGTH_SAMPLES = 1024
-
-METRICS_PARAMS = {
-    'presence_bin_length_secs': 20,
-    "isi_threshold": 0.0015,
-    "min_isi": 0.000166,
-    "num_channels_to_compare": 13,
-    "max_spikes_for_unit": 500,
-    "max_spikes_for_nn": 10000,
-    "n_neighbors": 4,
-    'n_silhouette': 10000,
-    "quality_metrics_output_file": "metrics.csv",
-    "drift_metrics_interval_s": 51,
-    "drift_metrics_min_spikes_per_interval": 10,
-    "feat_cutoff_bins": 5,
-    "feat_cutoff_spks_per_bin": 5,
-    "feat_cutoff_sigma": 5
-}
 
 
 def rmsmap(fbin):
@@ -233,7 +216,7 @@ def validate_ttl_test(ses_path, display=False):
     return ok
 
 
-def _spike_sorting_metrics_ks2(ks2_path, save=True):
+def unit_metrics_ks2(ks2_path=None, m=None, save=True):
     """
     Given a path containing kilosort 2 output, compute quality metrics and optionally save them
     to a clusters_metric.csv file
@@ -242,16 +225,22 @@ def _spike_sorting_metrics_ks2(ks2_path, save=True):
     :return:
     """
 
-    m = phy_model_from_ks2_path(ks2_path)
-    r = spike_sorting_metrics(m.spike_times, m.spike_clusters, m.amplitudes, params=METRICS_PARAMS)
-    #  includes the ks2 contamination
+    # ensure that either a ks2_path or a phylib `TemplateModel` object with unit info is given
+    assert not(ks2_path is None and m is None), 'Must either specify a path to a ks2 output ' \
+                                                'directory, or a phylib `TemplateModel` object'
+    # create phylib `TemplateModel` if not given
+    m = phy_model_from_ks2_path(ks2_path) if None else m
+    # compute metrics and convert to `DataFrame`
+    r = pd.DataFrame(quick_unit_metrics(m.spike_clusters, m.spike_times, m.amplitudes, m.depths))
+
+    #  include the ks2 cluster contamination if `cluster_ContamPct` file exists
     file_contamination = ks2_path.joinpath('cluster_ContamPct.tsv')
     if file_contamination.exists():
         contam = pd.read_csv(file_contamination, sep='\t')
         contam.rename(columns={'ContamPct': 'ks2_contamination_pct'}, inplace=True)
         r = r.set_index('cluster_id', drop=False).join(contam.set_index('cluster_id'))
 
-    #  includes the ks2 labeling
+    #  include the ks2 cluster labels if `cluster_KSLabel` file exists
     file_labels = ks2_path.joinpath('cluster_KSLabel.tsv')
     if file_labels.exists():
         ks2_labels = pd.read_csv(file_labels, sep='\t')
@@ -283,6 +272,8 @@ def phy_model_from_ks2_path(ks2_path):
                                 dat_path=[],
                                 sample_rate=fs,
                                 n_channels_dat=nch)
+    m.depths = m.get_depths()
+
     return m
 
 

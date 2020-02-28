@@ -1,6 +1,6 @@
-feat_cutoff
+fn_est
 ===========
 
 .. currentmodule:: brainbox.metrics.metrics
 
-.. autofunction:: feat_cutoff
+.. autofunction:: fn_est
