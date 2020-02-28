@@ -35,51 +35,20 @@ def uuid_to_path(func):
     def wrapper(eid, *args, **kwargs):
         # Check if first arg is path or eid
         if is_uuid_string(str(eid)):
+            one.load(
+                eid,
+                dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"],
+                download_only=True,
+                dry_run=False
+            )
             session_path = one.path_from_eid(eid)
         else:
             session_path = Path(eid)
         func(session_path, *args, **kwargs)
-
-    return wrapper
-
-
-def dl_raw_behavior_data(func=None, full=False, dry=False):
-    """ download data and settings for session from path
-    """
-    if func is None:
-        return partial(dl_raw_behavior_data, full=full, dry=dry)
-
-    @wraps(func)
-    def wrapper(session_path, *args, **kwargs):
-        # Check if first arg is path or eid
-        eid = one.eid_from_path(session_path)
-        if eid is None:
-            print("Unknown argument: {eid}\nFirst argument must be valid eID or session path.")
-        if is_uuid_string(str(eid)):
-            if full is True:
-                dsts = [x for x in one.list(None, 'dataset_types') if '_iblrig_' in x]
-                one.load(eid, download_only=True, dry_run=dry, dataset_types=dsts)
-            else:
-                one.load(
-                    eid,
-                    dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"],
-                    download_only=True,
-                    dry_run=dry
-                )
-        func(session_path, *args, **kwargs)
     return wrapper
 
 
 @uuid_to_path
-@dl_raw_behavior_data(full=False, dry=False)
-def test(some, value, other="ovalue"):
-    print("some:", some)
-    print("value:", value)
-    print("other:", other)
-
-
-@uuid_to_path
-@dl_raw_behavior_data(full=False, dry=False)
 def get_bpod_fronts(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
@@ -89,6 +58,11 @@ def get_bpod_fronts(session_path, save=False, data=False, settings=False):
         settings = {"IBLRIG_VERSION_TAG": "100.0.0"}
     elif settings["IBLRIG_VERSION_TAG"] == "":
         settings.update({"IBLRIG_VERSION_TAG": "100.0.0"})
+
+    print(session_path)
+    print(data)
+    print(settings)
+
     BNC1_fronts = np.array([[np.nan, np.nan]])
     BNC2_fronts = np.array([[np.nan, np.nan]])
     for tr in data:
