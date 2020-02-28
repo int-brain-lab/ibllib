@@ -1,7 +1,6 @@
 import shutil
 import tempfile
 import unittest
-import datetime
 from pathlib import Path
 
 import ibllib.pipes.extract_session
@@ -283,9 +282,9 @@ class TestPipesMisc(unittest.TestCase):
         # Verify it's been inserted
         alyx_insertion = one.alyx.rest('insertions', 'list',
                                        session=eid)
-        self.assertTrue(alyx_insertion[0]['model']=='3A')
+        self.assertTrue(alyx_insertion[0]['model'] == '3A')
         self.assertTrue(alyx_insertion[0]['name'] in ['probe00', 'probe01'])
-        self.assertTrue(alyx_insertion[1]['model']=='3A')
+        self.assertTrue(alyx_insertion[1]['model'] == '3A')
         self.assertTrue(alyx_insertion[1]['name']in ['probe00', 'probe01'])
         # Cleanup DB
         one.alyx.rest('insertions', 'delete', id=alyx_insertion[0]['url'][-36:])
@@ -299,9 +298,9 @@ class TestPipesMisc(unittest.TestCase):
         # Verify it's been inserted
         alyx_insertion = one.alyx.rest('insertions', 'list',
                                        session=eid)
-        self.assertTrue(alyx_insertion[0]['model']=='3B2')
+        self.assertTrue(alyx_insertion[0]['model'] == '3B2')
         self.assertTrue(alyx_insertion[0]['name'] in ['probe00', 'probe01'])
-        self.assertTrue(alyx_insertion[1]['model']=='3B2')
+        self.assertTrue(alyx_insertion[1]['model'] == '3B2')
         self.assertTrue(alyx_insertion[1]['name'] in ['probe00', 'probe01'])
         # Cleanup DB
         one.alyx.rest('insertions', 'delete', id=alyx_insertion[0]['url'][-36:])

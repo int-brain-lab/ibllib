@@ -13,7 +13,8 @@ def delete_empty_folders(path, rglob_pattern='*', dry=True, recursive=False):
     :type rglob_pattern: str, optional
     :param dry: dry run will simulate the action, defaults to True
     :type dry: bool, optional
-    :param recursive: whether to recurse after the last level of empty folders is deleted, defaults to False
+    :param recursive: whether to recurse after the last level of empty folders
+                      is deleted, defaults to False
     :type recursive: bool, optional
     :return: [description]
     :rtype: [type]

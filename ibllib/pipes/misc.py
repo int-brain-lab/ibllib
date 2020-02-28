@@ -302,9 +302,12 @@ def create_alyx_probe_insertions(session_path: str,
         pmodel = '3B2' if probe_model == '3B' else probe_model
     else:
         pmodel = model
-    raw_ephys_data_path = session_path / 'raw_ephys_data'
+    raw_ephys_data_path = Path(session_path) / 'raw_ephys_data'
     if labels is None:
-        probe_labels = [x.name for x in Path(raw_ephys_data_path).glob('*') if x.is_dir() and ('00' in x.name or '01' in x.name)]
+        probe_labels = [
+            x.name for x in Path(raw_ephys_data_path).glob('*')
+            if x.is_dir() and ('00' in x.name or '01' in x.name)
+        ]
     else:
         probe_labels = labels
     # create the dictionary
