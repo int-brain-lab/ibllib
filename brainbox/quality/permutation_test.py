@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 # TODO: take in eids and download data yourself?
 
 
-def permut_test(data1, data2, metric, n_permut=1000, plot=False):
+def permut_test(data1, data2, metric, n_permut=1000, show=False, title=None):
     """
     Compute the probability of observating metric difference for datasets, via permutation testing.
 
@@ -44,6 +44,7 @@ def permut_test(data1, data2, metric, n_permut=1000, plot=False):
 
     See Also
     --------
+    TODO:
 
     Examples
     --------
@@ -68,13 +69,13 @@ def permut_test(data1, data2, metric, n_permut=1000, plot=False):
     permut_diffs = np.abs(np.mean(diffs[permutations[:, :size1]], axis=1) - np.mean(diffs[permutations[:, size1:]], axis=1))
     p = len(permut_diffs[permut_diffs > true_diff]) / n_permut
 
-    if plot:
-        plot_permut_test(permut_diffs=permut_diffs, true_diff=true_diff)
+    if show or title:
+        plot_permut_test(permut_diffs=permut_diffs, true_diff=true_diff, p=p, title=title)
 
     return p
 
 
-def plot_permut_test(permut_diffs, true_diff):
+def plot_permut_test(permut_diffs, true_diff, p, title=None):
     """Plot permutation test result."""
     n, _, _ = plt.hist(permut_diffs)
     plt.plot(true_diff, np.max(n) / 20, '*r', markersize=12)
@@ -82,8 +83,11 @@ def plot_permut_test(permut_diffs, true_diff):
     # Prettify plot
     plt.gca().spines['top'].set_visible(False)
     plt.gca().spines['right'].set_visible(False)
+    plt.title("p = {}".format(p))
 
-    plt.show()
+    if title:
+        plt.savefig(title + '.png')
+    plt.close()
 
 
 if __name__ == '__main__':
