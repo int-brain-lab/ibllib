@@ -85,7 +85,7 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
                         ' number was {}, and the maximum channel number was {}. Check specified'
                         ' channel numbers and try again.'.format(np.min(ch), np.max(ch)))
 
-    # car should be a separate function
+    # TODO car should be a separate function
     if car:  # compute spatial noise in chunks
         # (previously computed temporal noise also, but was too costly)
         # Get number of chunks.
