@@ -64,7 +64,7 @@ def uuid_to_path(func=None, dl=False, full=False, dry=False, force=False):
     return wrapper
 
 
-@uuid_to_path(dl=True, full=False, force=False, dry=False)
+@uuid_to_path(dl=True)
 def get_bpod_fronts(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
@@ -131,7 +131,7 @@ def get_bpod_fronts(session_path, save=False, data=False, settings=False):
 
 
 # --------------------------------------------------------------------------- #
-@uuid_to_path
+@uuid_to_path(dl=True)
 def get_itiIn_times(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
@@ -153,7 +153,7 @@ def get_itiIn_times(session_path, save=False, data=False, settings=False):
     return itiIn_times
 
 
-@uuid_to_path
+@uuid_to_path(dl=True)
 def get_stimFreezeTrigger_times(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
@@ -207,7 +207,7 @@ def get_stimFreezeTrigger_times(session_path, save=False, data=False, settings=F
     return stimFreezeTrigger
 
 
-@uuid_to_path
+@uuid_to_path(dl=True)
 def get_stimOffTrigger_times(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
@@ -237,7 +237,7 @@ def get_stimOffTrigger_times(session_path, save=False, data=False, settings=Fals
     return stimOffTrigger_times
 
 
-@uuid_to_path
+@uuid_to_path(dl=True)
 def get_stimOff_times_from_state(session_path, save=False, data=False, settings=False):
     """ Will return NaN is trigger state == 0.1 secs
     """
@@ -269,7 +269,7 @@ def get_stimOff_times_from_state(session_path, save=False, data=False, settings=
     return stimOff_times
 
 
-@uuid_to_path
+@uuid_to_path(dl=True)
 def get_stimOnOffFreeze_times_from_BNC1(session_path, save=False, data=False, settings=False):
     """Get stim onset offset and freeze using the FPGA specifications"""
     if not data:
@@ -317,7 +317,7 @@ def get_stimOnOffFreeze_times_from_BNC1(session_path, save=False, data=False, se
     return stimOn_times, stimOff_times, stimFreeze_times
 
 
-@uuid_to_path
+@uuid_to_path(dl=True)
 def get_bonsai_screen_data(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
@@ -333,7 +333,7 @@ def get_bonsai_screen_data(session_path, save=False, data=False, settings=False)
     return screen_data
 
 
-@uuid_to_path
+@uuid_to_path(dl=True)
 def get_bonsai_sync_square_update_times(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
@@ -352,7 +352,7 @@ def get_bonsai_sync_square_update_times(session_path, save=False, data=False, se
     return
 
 
-@uuid_to_path
+@uuid_to_path(dl=True)
 def get_errorCueTrigger_times(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
@@ -376,7 +376,7 @@ def get_errorCueTrigger_times(session_path, save=False, data=False, settings=Fal
     return errorCueTrigger_times
 
 
-@uuid_to_path
+@uuid_to_path(dl=True)
 def _get_trimmed_data_from_pregenerated_files(
     session_path, save=False, data=False, settings=False
 ):
@@ -437,7 +437,7 @@ def _get_trimmed_data_from_pregenerated_files(
     }
 
 
-@uuid_to_path
+@uuid_to_path(dl=True)
 def load_bpod_data(session_path):
     # one.load(
     #     eid,
@@ -520,7 +520,7 @@ def load_bpod_data(session_path):
     return out
 
 
-@uuid_to_path
+@uuid_to_path(dl=True)
 def get_bpodqc_frame(session_path):
     bpod = load_bpod_data(session_path)
 
@@ -579,7 +579,7 @@ def get_bpodqc_frame(session_path):
 
 
 # --------------------------------------------------------------------------- #
-@uuid_to_path
+@uuid_to_path(dl=True)
 def get_trigger_response(session_path):
     bpod = load_bpod_data(session_path)
     # get diff from triggers to detected events
@@ -598,7 +598,7 @@ def get_trigger_response(session_path):
     }
 
 
-@uuid_to_path
+@uuid_to_path(dl=True)
 def check_response_feedback(session_path):
     bpod = load_bpod_data(session_path)
 
@@ -607,7 +607,7 @@ def check_response_feedback(session_path):
     return resp_feedback_diff
 
 
-@uuid_to_path
+@uuid_to_path(dl=True)
 def check_iti_stimOffTrig(session_path):
     bpod = load_bpod_data(session_path)
 
@@ -618,7 +618,7 @@ def check_iti_stimOffTrig(session_path):
     return iti_stimOff_diff
 
 
-@uuid_to_path
+@uuid_to_path(dl=True)
 def check_feedback_stim_off_delay(session_path):
     bpod = load_bpod_data(session_path)
 
@@ -628,7 +628,7 @@ def check_feedback_stim_off_delay(session_path):
 
 
 # --------------------------------------------------------------------------- #
-@uuid_to_path
+@uuid_to_path(dl=True)
 def count_qc_failures(session_path):
     fpgaqc_frame = _qc_from_path(session_path, display=True)
     bpodqc_frame = get_bpodqc_frame(session_path)
@@ -652,7 +652,7 @@ def count_qc_failures(session_path):
         print("BPOD nFailed", k, ":", sum(np.bitwise_not(bpodqc_frame[k])), len(bpodqc_frame[k]))
 
 
-@uuid_to_path
+@uuid_to_path(dl=True)
 def plot_bpod_session(session_path, ax=None):
     if ax is None:
         f, ax = plt.subplots()
@@ -787,7 +787,7 @@ def plot_bpod_session(session_path, ax=None):
 # Get the path and feed  it to the func [sess_path = one.path_from_eid(eid)]
 
 
-@uuid_to_path
+@uuid_to_path(dl=True)
 def convert_bpod_times_to_FPGA_times(session_path):
     fpgaqc_frame = _qc_from_path(session_path)
     bpodqc_frame = get_bpodqc_frame(session_path)
@@ -796,15 +796,12 @@ def convert_bpod_times_to_FPGA_times(session_path):
     )  # TODO: finish this!!!
 
 
-@uuid_to_path
-def plot_trigger_response_diffs(eid, ax=None):
-    one.load(
-        eid, dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"], download_only=True
-    )
-    session_path = one.path_from_eid(eid)
+@uuid_to_path(dl=True)
+def plot_trigger_response_diffs(session_path, ax=None):
     trigger_diffs = get_trigger_response(session_path)
 
     sett = raw.load_settings(session_path)
+    eid = one.eid_from_path(session_path)
     if ax is None:
         f, ax = plt.subplots()
     tit = f"{sett['SESSION_NAME']}: {eid}"
@@ -848,7 +845,7 @@ def describe_lab_trigger_diffs(labname):
         print(k, "nancount:", sum(np.isnan(df[k])))
 
 
-@uuid_to_path
+@uuid_to_path(dl=True)
 def describe_trigger_response_diff(session_path):  # XXX: this!
     trigger_diffs_out = {
         "goCue": np.array([]),
