@@ -100,8 +100,8 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
     unit_list = list(units_b[feat_names[0]].keys())  # get new `unit_list` after removing units
 
     # Initialize `p_vals` and `variances`.
-    p_vals_b = bb.core.Bunch()
-    cv_b = bb.core.Bunch()
+    p_vals_b = Bunch()
+    cv_b = Bunch()
 
     # Set the test as a lambda function (in future, more tests can be added to this dict)
     tests = \
@@ -115,8 +115,8 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
     # `variances_feat`. After iterating through all units, add these bunches as keys to their
     # respective parent bunches, `p_vals` and `variances`.
     for feat in feat_names:
-        p_vals_feat = bb.core.Bunch((unit, 0) for unit in unit_list)
-        cv_feat = bb.core.Bunch((unit, 0) for unit in unit_list)
+        p_vals_feat = Bunch((unit, 0) for unit in unit_list)
+        cv_feat = Bunch((unit, 0) for unit in unit_list)
         for unit in unit_list:
             # If we're missing units/features, create a NaN placeholder and skip them:
             if len(units_b['times'][str(unit)]) == 0:
@@ -245,12 +245,10 @@ def wf_similarity(wf1, wf2):
         >>> wf2 = bb.io.extract_waveforms(path_to_ephys_file, ts2, ch)
         >>> s = bb.metrics.wf_similarity(wf1, wf2)
 
-    TODO check `s` calculation
-
+    TODO check `s` calculation:
     take median of waveforms
     xcorr all waveforms with median, and divide by autocorr of all waveforms
     profile
-
     for two sets of units: xcorr(cl1, cl2) / (sqrt autocorr(cl1) * autocorr(cl2))
     """
 
