@@ -744,19 +744,19 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         depths = spike_depths[ispikes]
 
         # compute metrics
-        r.frac_isi_viol = isi_viol(ts, rp=params['refractory_period'])
-        r.fp_estimate = fp_est(ts, rp=params['refractory_period'])
-        r.fp_estimate2 = fp_est2(ts, tmin, tmax, rp=params['refractory_period'],
+        r.frac_isi_viol[ic], _, _ = isi_viol(ts, rp=params['refractory_period'])
+        r.fp_estimate[ic] = fp_est(ts, rp=params['refractory_period'])
+        r.fp_estimate2[ic], _ = fp_est2(ts, tmin, tmax, rp=params['refractory_period'],
                                  min_isi=params['min_isi'])
         try: # this may fail because `fn_est` requires a min number of spikes
-            r.fn_estimate = fn_est(amps, spks_per_bin=params['spks_per_bin_for_fn_est'],
-                                   sigma=params['std_smoothing_kernel_for_fn_est'],
-                                   min_num_bins=params['min_num_bins_for_fn_est'])
+            r.fn_estimate[ic], _, _ = fn_est(amps, spks_per_bin=params['spks_per_bin_for_fn_est'],
+                                             sigma=params['std_smoothing_kernel_for_fn_est'],
+                                             min_num_bins=params['min_num_bins_for_fn_est'])
         except AssertionError:
             pass
-        r.cum_amp_drift = cum_drift(amps)
-        r.max_amp_drift = max_drift(amps)
-        r.cum_depth_drift = cum_drift(depths)
-        r.max_depth_drift = max_drift(depths)
+        r.cum_amp_drift[ic] = cum_drift(amps)
+        r.max_amp_drift[ic] = max_drift(amps)
+        r.cum_depth_drift[ic] = cum_drift(depths)
+        r.max_depth_drift[ic] = max_drift(depths)
 
     return r
