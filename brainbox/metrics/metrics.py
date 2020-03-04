@@ -669,28 +669,54 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
     Computes single unit metrics from only the spike times, amplitudes, and depths for a set of
     units.
 
+    Metrics computed:
+        num_spikes
+        firing_rate
+        presence_ratio
+        presence_ratio_std
+        frac_isi_viol (see `isi_viol`)
+        fp_estimate (see `fp_est`)
+        fp_estimate2 (see `fp_est2`)
+        fn_estimate (see `fn_est`)
+        cum_amp_drift (see `cum_drift`)
+        max_amp_drift (see `max_drift`)
+        cum_depth_drift (see `cum_drift`)
+        max_depth_drift (see `max_drift`)
+
     Parameters
     ----------
-    ts : ndarray_like
-        The timestamps (in s) of the spikes.
-    rp : float
-        The refractory period (in s).
-    min_time : float
-        The minimum time (in s) that a potential spike occurred.
-    max_time : float
-        The maximum time (in s) that a potential spike occurred.
-    min_isi : float
-        The minimum interspike-interval (in s) for counting duplicate spikes.
+    spike_clusters : ndarray_like
+        A vector of the unit ids for a set of spikes.
+    spike_times : ndarray_like
+        A vector of the timestamps for a set of spikes.
+    spike_amps : ndarray_like
+        A vector of the amplitudes for a set of spikes.
+    spike_depths : ndarray_like
+        A vector of the depths for a set of spikes.
+    params : dict (optional)
+        Parameters used for computing some of the metrics in the function:
+            'presence_window': float
+                The time window (in s) used to look for spikes when computing the presence ratio.
+            'refractory_period': float
+                The refractory period used when computing isi violations and the false positive
+                estimate.
+            'min_isi': float
+                The minimum interspike-interval (in s) for counting duplicate spikes when computing
+                the false positive estimate.
+            'spks_per_bin_for_fn_est': int
+                The number of spikes per bin used to compute the spike amplitude pdf for a unit,
+                when computing the false negative estimate.
+            'std_smoothing_kernel_for_fn_est': float
+                The standard deviation for the gaussian kernel used to compute the spike amplitude
+                pdf for a unit, when computing the false negative estimate.
+            'min_num_bins_for_fn_est': int
+                The minimum number of bins used to compute the spike amplitude pdf for a unit,
+                when computing the false negative estimate.
 
     Returns
     -------
-    fp : float
-        An estimate of the fraction of false positives.
-        A perfect unit has a fp = 0
-        A unit with some contamination has a fp < 0.5
-        A unit with lots of contamination has a fp > 1.0
-    num_violations : int
-        The total number of isi violations.
+    r : bunch
+        A bunch whose keys are the computed spike metrics.
 
     Notes
     -----
@@ -699,7 +725,14 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
 
     Examples
     --------
-
+    1) Compute quick metrics from a ks2 output directory:
+        >>> from ibllib.ephys.ephysqc import phy_model_from_ks2_path
+        >>> m = phy_model_from_ks2_path(path_to_ks2_out)
+        >>> cluster_ids = m.spike_clusters
+        >>> ts = m.spike_times
+        >>> amps = m.amplitudes
+        >>> depths = m.depths
+        >>> r = bb.metrics.quick_unit_metrics(cluster_ids, ts, amps, depths)
     """
 
     cluster_ids = np.arange(np.max(spike_clusters) + 1)
