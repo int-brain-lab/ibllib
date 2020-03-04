@@ -574,7 +574,7 @@ def get_bpodqc_frame(session_path):
         ),
     }
     bpodqc_frame = bpod.update(qc_frame)
-    bpodqc_frame = pd.DataFrame.from_dict(qc_frame)
+    bpodqc_frame = pd.DataFrame.from_dict(bpodqc_frame)
     return bpodqc_frame
 
 
