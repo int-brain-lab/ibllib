@@ -137,8 +137,8 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
 
 def fn_est(feat, spks_per_bin=20, sigma=4, min_num_bins=50):
     """
-    Computes the approximate fraction of spikes missing (a false negative estimate) from a spike feature distribution
-    for a given unit, assuming the distribution is symmetric. fn_est
+    Computes the approximate fraction of spikes missing (a false negative estimate) from a spike
+    feature distribution for a given unit, assuming the distribution is symmetric.
 
     Inspired by metric described in Hill et al. (2011) J Neurosci 31: 8699-8705.
 
@@ -778,8 +778,8 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         r.frac_isi_viol[ic], _, _ = isi_viol(ts, rp=params['refractory_period'])
         r.fp_estimate[ic] = fp_est(ts, rp=params['refractory_period'])
         r.fp_estimate2[ic], _ = fp_est2(ts, tmin, tmax, rp=params['refractory_period'],
-                                 min_isi=params['min_isi'])
-        try: # this may fail because `fn_est` requires a min number of spikes
+                                        min_isi=params['min_isi'])
+        try:  # this may fail because `fn_est` requires a min number of spikes
             r.fn_estimate[ic], _, _ = fn_est(amps, spks_per_bin=params['spks_per_bin_for_fn_est'],
                                              sigma=params['std_smoothing_kernel_for_fn_est'],
                                              min_num_bins=params['min_num_bins_for_fn_est'])
