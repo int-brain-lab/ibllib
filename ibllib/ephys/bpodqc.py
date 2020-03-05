@@ -380,6 +380,9 @@ def get_errorCueTrigger_times(session_path, save=False, data=False, settings=Fal
 def _get_trimmed_data_from_pregenerated_files(
     session_path, save=False, data=False, settings=False
 ):
+    """Extracts positions, contrasts, quiescent delay, stimulus phase and probability left
+    from pregenerated session files.
+    Optional: saves alf contrastLR and probabilityLeft npy files"""
     if not data:
         data = raw.load_data(session_path)
     if not settings:
@@ -439,12 +442,7 @@ def _get_trimmed_data_from_pregenerated_files(
 
 @uuid_to_path(dl=True)
 def load_bpod_data(session_path):
-    # one.load(
-    #     eid,
-    #     dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"],
-    #     download_only=True
-    # )
-    # session_path = one.path_from_eid(eid)
+    """Extracts and loads ephys sessions from bpod data"""
     data = raw.load_data(session_path)
     settings = raw.load_settings(session_path)
     stimOn_times, stimOff_times, stimFreeze_times = get_stimOnOffFreeze_times_from_BNC1(
@@ -517,11 +515,14 @@ def load_bpod_data(session_path):
     # split intervals
     out["intervals_0"] = out["intervals"][:, 0]
     out["intervals_1"] = out["intervals"][:, 1]
+    _ = out.pop('intervals')
     return out
 
 
 @uuid_to_path(dl=True)
-def get_bpodqc_frame(session_path):
+def get_bpodqc_frame(session_path, qc_frame_only=False):
+    """loads/extracts data from bpod raw files and appends computed qc variables to data frame
+    optional returns only qc_frame"""
     bpod = load_bpod_data(session_path)
 
     GOCUE_STIMON_DELAY = 0.01  # -> 0.1
@@ -573,14 +574,15 @@ def get_bpodqc_frame(session_path):
             bpod["feedback_times"] - bpod["response_times"] < RESPONSE_FEEDBACK_DELAY
         ),
     }
-    bpodqc_frame = bpod.update(qc_frame)
+    bpodqc_frame = bpod.copy()
+    bpodqc_frame.update(qc_frame)
     bpodqc_frame = pd.DataFrame.from_dict(bpodqc_frame)
-    return bpodqc_frame
+    return bpodqc_frame if not qc_frame_only else qc_frame
 
 
 # --------------------------------------------------------------------------- #
 @uuid_to_path(dl=True)
-def get_trigger_response(session_path):
+def get_trigger_response_diffs(session_path):
     bpod = load_bpod_data(session_path)
     # get diff from triggers to detected events
     goCue_diff = np.abs(bpod["goCueTrigger_times"] - bpod["goCue_times"])
@@ -596,15 +598,6 @@ def get_trigger_response(session_path):
         "stimOff": stimOff_diff,
         "stimFreeze": stimFreeze_diff,
     }
-
-
-@uuid_to_path(dl=True)
-def check_response_feedback(session_path):
-    bpod = load_bpod_data(session_path)
-
-    resp_feedback_diff = bpod["response_times"] - bpod["feedback_times"]
-
-    return resp_feedback_diff
 
 
 @uuid_to_path(dl=True)
@@ -798,7 +791,7 @@ def convert_bpod_times_to_FPGA_times(session_path):
 
 @uuid_to_path(dl=True)
 def plot_trigger_response_diffs(session_path, ax=None):
-    trigger_diffs = get_trigger_response(session_path)
+    trigger_diffs = get_trigger_response_diffs(session_path)
 
     sett = raw.load_settings(session_path)
     eid = one.eid_from_path(session_path)
@@ -835,7 +828,7 @@ def describe_lab_trigger_diffs(labname):
             dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"],
         )
         sp = one.path_from_eid(eid)
-        td = get_trigger_response(sp)
+        td = get_trigger_response_diffs(sp)
         for k in trigger_diffs:
             trigger_diffs[k] = np.append(trigger_diffs[k], td[k])
 
@@ -855,7 +848,7 @@ def describe_trigger_response_diff(session_path):  # XXX: this!
         "stimFreeze": np.array([]),
     }
 
-    td = get_trigger_response(session_path)
+    td = get_trigger_response_diffs(session_path)
     for k in trigger_diffs_out:
         trigger_diffs_out[k] = np.append(trigger_diffs_out[k], td[k])
 
