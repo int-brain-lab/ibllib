@@ -255,6 +255,8 @@ def _check_diff_3b(sync):
     THRESH_PPM = 150
     d = np.diff(sync.times[sync.polarities == 1])
     dt = np.median(d)
-    _logger.error(f'Synchronizations bursts over {THRESH_PPM} ppm between sync pulses. '
-                  'Sync using "exact" match between pulses.')
-    return np.all(np.abs((d - dt) / dt * 1e6) < THRESH_PPM)
+    qc_pass = np.all(np.abs((d - dt) / dt * 1e6) < THRESH_PPM)
+    if not qc_pass:
+        _logger.error(f'Synchronizations bursts over {THRESH_PPM} ppm between sync pulses. '
+                      'Sync using "exact" match between pulses.')
+    return qc_pass

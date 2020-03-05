@@ -122,7 +122,8 @@ def sync_spike_sortings(ses_path):
         ks2_to_alf(subdir, probe_out_path, ampfactor=_sample2v(ef.ap), label=None, force=True)
         # patch the spikes.times files manually
         st_file = ses_path.joinpath(probe_out_path, 'spikes.times.npy')
-        interp_times = apply_sync(sync_file, np.load(st_file), forward=True)
+        spike_samples = ses_path.joinpath(probe_out_path, 'spikes.samples.npy')
+        interp_times = apply_sync(sync_file, spike_samples / sr, forward=True)
         np.save(st_file, interp_times)
 
 
