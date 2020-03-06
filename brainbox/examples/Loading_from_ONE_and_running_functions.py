@@ -188,4 +188,4 @@ fig12 = plt.gcf()
 # Save figs in a directory
 fig_dir = Path.cwd()  # current working directory
 fig_list = [fig1, fig2, fig3, fig4, fig5, fig6, fig7, fig8, fig9, fig10, fig11, fig12]
-[f.savefig(Path.joinpath('fig' + str(i + 1))) for i, f in enumerate(fig_list)]
+[f.savefig(Path.joinpath(fig_dir, 'fig' + str(i + 1))) for i, f in enumerate(fig_list)]
