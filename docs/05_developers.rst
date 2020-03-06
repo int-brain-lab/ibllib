@@ -6,6 +6,16 @@ Python Modules Docstrings
     :titlesonly:
     :glob:
 
+--------------------------------------------------------
+oneibl module
+--------------------------------------------------------
+
+.. autosummary::
+   :toctree: _autosummary
+
+   oneibl.one
+   oneibl.registration
+   oneibl.webclient
 
 --------------------------------------------------------
 alf module
@@ -55,13 +65,4 @@ ibllib module
    ibllib.plots
 
 
---------------------------------------------------------
-oneibl module
---------------------------------------------------------
 
-.. autosummary::
-   :toctree: _autosummary
-
-   oneibl.one
-   oneibl.registration
-   oneibl.webclient

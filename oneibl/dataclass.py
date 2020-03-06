@@ -16,6 +16,8 @@ class SessionDataInfo:
     eid: list = field(default_factory=list)
     url: list = field(default_factory=list)
     data: list = field(default_factory=list)
+    hash: list = field(default_factory=list)
+    file_size: list = field(default_factory=list)
 
     def __str__(self):
         str_out = ''
@@ -65,6 +67,8 @@ class SessionDataInfo:
             eid=[eid for d in dsets],  # [ses_info['url'][-36:] for d in dsets],
             url=[d['data_url'] for d in dsets],
             data=[None for d in dsets],
+            hash=[d['hash'] for d in dsets],
+            file_size=[d['file_size'] for d in dsets]
         )
 
     @staticmethod

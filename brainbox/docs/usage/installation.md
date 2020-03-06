@@ -10,7 +10,7 @@ Brainbox is for the moment a submodule of ibllib, a suite of python code used by
 To install brainbox you must first install ibllib via the terminal. This process should be the same for Windows, OS X, and Linux.
 
 ```
-conda create -n brainbox --python=python3.7
+conda create -n brainbox python=3.7
 conda activate brainbox
 ```
 
