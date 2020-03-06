@@ -132,6 +132,38 @@ def get_bpod_fronts(session_path, save=False, data=False, settings=False):
 
 # --------------------------------------------------------------------------- #
 @uuid_to_path(dl=True)
+def get_trial_type(session_path, save=False, data=False, settings=False):
+    if not data:
+        data = raw.load_data(session_path)
+    if not settings:
+        settings = raw.load_settings(session_path)
+    if settings is None:
+        settings = {"IBLRIG_VERSION_TAG": "100.0.0"}
+    elif settings["IBLRIG_VERSION_TAG"] == "":
+        settings.update({"IBLRIG_VERSION_TAG": "100.0.0"})
+
+    trial_type = []
+    for tr in data:
+        if ~np.isnan(tr["behavior_data"]["States timestamps"]['reward'][0][0]):
+            trial_type.append(1)
+        elif ~np.isnan(tr["behavior_data"]["States timestamps"]['error'][0][0]):
+            trial_type.append(-1)
+        elif ~np.isnan(tr["behavior_data"]["States timestamps"]['no_go'][0][0]):
+            trial_type.append(0)
+        else:
+            print("trial is not in {-1, 0, 1}")
+            trial_type.append(np.nan)
+
+    trial_type = np.array(trial_type)
+
+    if raw.save_bool(save, "_ibl_trials.type.npy"):
+        lpath = os.path.join(session_path, "alf", "_ibl_trials.type.npy")
+        np.save(lpath, trial_type)
+
+    return trial_type
+
+
+@uuid_to_path(dl=True)
 def get_itiIn_times(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
