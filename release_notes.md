@@ -1,4 +1,4 @@
-### Release Notes 1.4.12
+### Release Notes 1.4.12 - 2020-02-06
 -   ONE.load overwrites local file if filesizes different or hash mismatch
 -   ephys extraction:
     -   registration sets the session.procedure field to acute recording
