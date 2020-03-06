@@ -594,7 +594,7 @@ def fp_est(ts, rp=0.002):
 
     # Get number of spikes, number of isi violations, and time from first to final spike.
     n_spks = len(ts)
-    n_isi_viol = len(np.where(np.diff(ts < rp)[0]))
+    n_isi_viol = np.sum(np.diff(ts) < rp)
     t = ts[-1] - ts[0]
 
     # `fp` is min of roots of solved quadratic equation.
