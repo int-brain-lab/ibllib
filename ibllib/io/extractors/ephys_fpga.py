@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 from scipy import interpolate
 
 from brainbox.core import Bunch
-import brainbox.behavior.wheel as whl
 
 import ibllib.exceptions as err
 import ibllib.plots as plots
@@ -20,7 +19,7 @@ import ibllib.io.raw_data_loaders as raw
 _logger = logging.getLogger('ibllib')
 
 SYNC_BATCH_SIZE_SAMPLES = 2 ** 18  # number of samples to read at once in bin file for sync
-WHEEL_RADIUS_CM = 3.1
+WHEEL_RADIUS_CM = 1  # stay in radians
 WHEEL_TICKS = 1024
 
 BPOD_FPGA_DRIFT_THRESHOLD_PPM = 150
@@ -316,8 +315,6 @@ def extract_wheel_sync(sync, output_path=None, save=False, chmap=None):
         # last phase of the process is to save the alf data-files
         np.save(output_path / '_ibl_wheel.position.npy', wheel['re_pos'])
         np.save(output_path / '_ibl_wheel.timestamps.npy', wheel['re_ts'])
-        np.save(output_path / '_ibl_wheel.velocity.npy',
-                whl.velocity(wheel['re_ts'], wheel['re_pos']))
     return wheel
 
 

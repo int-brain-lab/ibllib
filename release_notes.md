@@ -1,5 +1,13 @@
 ### Release Notes 1.4.12
--   ephys registration sets the session.procedure field to acute recording
+-   ONE.load overwrites local file if filesizes different or hash mismatch
+-   ephys extraction:
+    -   registration sets the session.procedure field to acute recording
+    -   bugfix synchronization on re-extraction: always recompute spike.times from spike.samples
+    -   ephys registration sets the session.procedure field to acute recording
+-   training extraction:
+    -   added biasedVisOffChoiceWorld as training extractor
+-   wheel data
+    -   dropping support for wheel velocity, not extracted anymore
 
 ### Release Notes 1.4.11 - 2020-02-14
 -   bugfix: Include sessions data files for ephys mock
