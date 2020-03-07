@@ -1,3 +1,6 @@
+### Release Notes 1.4.13 - 2020-02-07
+-   Hotfix: rig transfer - create probes. One variable used before assignation. 
+
 ### Release Notes 1.4.12 - 2020-02-06
 -   ONE.load overwrites local file if filesizes different or hash mismatch
 -   ephys extraction:
