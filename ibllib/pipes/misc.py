@@ -249,7 +249,11 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False,
         move_ephys_files(str(session_path))
         # Copy wiring files
         copy_wiring_files(str(session_path), iblscripts_folder)
-        create_alyx_probe_insertions(str(session_path))
+        try:
+            create_alyx_probe_insertions(str(session_path))
+        except BaseException as e:
+            print(e, "\nCreation failed, please create the probe insertions manually.",
+                  "Continuing transfer...")
         msg = f"Transfer to {remote_folder} with the same name?"
         resp = input(msg + "\n[y]es/[r]ename/[s]kip/[e]xit\n ^\n> ") or 'y'
         resp = resp.lower()
@@ -289,14 +293,14 @@ def create_alyx_probe_insertions(session_path: str,
                                  one: object = None,
                                  model: str = None,
                                  labels: list = None):
+    if one is None:
+        one = ONE()
     if is_uuid_string(session_path):
         eid = session_path
     else:
         eid = one.eid_from_path(session_path)
     if eid is None:
         print('Session not found on Alyx: please create session before creating insertions')
-    if one is None:
-        one = ONE()
     if model is None:
         probe_model = spikeglx.get_neuropixel_version_from_folder(session_path)
         pmodel = '3B2' if probe_model == '3B' else probe_model
