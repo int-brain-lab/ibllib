@@ -614,25 +614,6 @@ def get_bpodqc_frame(session_path, qc_frame_only=False):
 
 # --------------------------------------------------------------------------- #
 @uuid_to_path(dl=True)
-def get_trigger_response_diffs(session_path):
-    bpod = load_bpod_data(session_path)
-    # get diff from triggers to detected events
-    goCue_diff = np.abs(bpod["goCueTrigger_times"] - bpod["goCue_times"])
-    errorTone_diff = np.abs(bpod["errorCueTrigger_times"] - bpod["errorCue_times"])
-    stimOn_diff = np.abs(bpod["stimOnTrigger_times"] - bpod["stimOn_times"])
-    stimOff_diff = np.abs(bpod["stimOffTrigger_times"] - bpod["stimOff_times"])
-    stimFreeze_diff = np.abs(bpod["stimFreezeTrigger_times"] - bpod["stimFreeze_times"])
-
-    return {
-        "goCue": goCue_diff,
-        "errorTone": errorTone_diff,
-        "stimOn": stimOn_diff,
-        "stimOff": stimOff_diff,
-        "stimFreeze": stimFreeze_diff,
-    }
-
-
-@uuid_to_path(dl=True)
 def check_iti_stimOffTrig(session_path):
     bpod = load_bpod_data(session_path)
 
@@ -822,8 +803,8 @@ def convert_bpod_times_to_FPGA_times(session_path):
 
 
 @uuid_to_path(dl=True)
-def plot_trigger_response_diffs(session_path, ax=None):
-    trigger_diffs = get_trigger_response_diffs(session_path)
+def plot_session_trigger_response_diffs(session_path, ax=None):
+    trigger_diffs = get_session_trigger_response_diffs(session_path)
 
     sett = raw.load_settings(session_path)
     eid = one.eid_from_path(session_path)
@@ -832,62 +813,78 @@ def plot_trigger_response_diffs(session_path, ax=None):
     tit = f"{sett['SESSION_NAME']}: {eid}"
     ax.title.set_text(tit)
     ax.hist(trigger_diffs["goCue"], alpha=0.5, bins=50, label="goCue_diff")
-    ax.hist(trigger_diffs["errorTone"], alpha=0.5, bins=50, label="errorTone_diff")
+    ax.hist(trigger_diffs["errorCue"], alpha=0.5, bins=50, label="errorCue_diff")
     ax.hist(trigger_diffs["stimOn"], alpha=0.5, bins=50, label="stimOn_diff")
     ax.hist(trigger_diffs["stimOff"], alpha=0.5, bins=50, label="stimOff_diff")
     ax.hist(trigger_diffs["stimFreeze"], alpha=0.5, bins=50, label="stimFreeze_diff")
     ax.legend(loc="best")
 
 
-def describe_lab_trigger_diffs(labname):
+@uuid_to_path(dl=True)
+def get_session_trigger_response_diffs(session_path):
+    bpod = load_bpod_data(session_path)
+    # get diff from triggers to detected events
+    goCue_diff = np.abs(bpod["goCueTrigger_times"] - bpod["goCue_times"])
+    errorCue_diff = np.abs(bpod["errorCueTrigger_times"] - bpod["errorCue_times"])
+    stimOn_diff = np.abs(bpod["stimOnTrigger_times"] - bpod["stimOn_times"])
+    stimOff_diff = np.abs(bpod["stimOffTrigger_times"] - bpod["stimOff_times"])
+    stimFreeze_diff = np.abs(bpod["stimFreezeTrigger_times"] - bpod["stimFreeze_times"])
+
+    return {
+        "goCue": goCue_diff,
+        "errorCue": errorCue_diff,
+        "stimOn": stimOn_diff,
+        "stimOff": stimOff_diff,
+        "stimFreeze": stimFreeze_diff,
+    }
+
+
+def _describe_trigger_diffs(trigger_diffs):
+    print(trigger_diffs.describe())
+    for k in trigger_diffs:
+        print(k, "nancount:", sum(np.isnan(trigger_diffs[k])))
+
+    return trigger_diffs
+
+
+@uuid_to_path(dl=True)
+def describe_sesion_trigger_response_diffs(session_path):
+    trigger_diffs = get_session_trigger_response_diffs(session_path)
+    return _describe_trigger_diffs(trigger_diffs)
+
+
+def get_trigger_response_diffs(eid_or_path_list):
+    trigger_diffs = {
+        "goCue": np.array([]),
+        "errorCue": np.array([]),
+        "stimOn": np.array([]),
+        "stimOff": np.array([]),
+        "stimFreeze": np.array([]),
+    }
+    for sess in eid_or_path_list:
+        td = get_session_trigger_response_diffs(sess)
+        for k in trigger_diffs:
+            trigger_diffs[k] = np.append(trigger_diffs[k], td[k])
+
+    df = pd.DataFrame.from_dict(trigger_diffs)
+
+    return df
+
+
+def describe_trigger_response_diffs(eid_or_path_list):
+    trigger_diffs = get_trigger_response_diffs(eid_or_path_list)
+    return _describe_trigger_diffs(trigger_diffs)
+
+
+def describe_lab_trigger_response_diffs(labname):
     eids, dets = one.search(
         task_protocol="_iblrig_tasks_ephysChoiceWorld6.2.5",
         lab=labname,
         dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"],
         details=True,
     )
-    trigger_diffs = {
-        "goCue": np.array([]),
-        "errorTone": np.array([]),
-        "stimOn": np.array([]),
-        "stimOff": np.array([]),
-        "stimFreeze": np.array([]),
-    }
-    for eid in eids:
-        one.load(
-            eid,
-            download_only=True,
-            dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"],
-        )
-        sp = one.path_from_eid(eid)
-        td = get_trigger_response_diffs(sp)
-        for k in trigger_diffs:
-            trigger_diffs[k] = np.append(trigger_diffs[k], td[k])
-
-    df = pd.DataFrame.from_dict(trigger_diffs)
-    print(df.describe())
-    for k in df:
-        print(k, "nancount:", sum(np.isnan(df[k])))
-
-
-@uuid_to_path(dl=True)
-def describe_trigger_response_diff(session_path):  # XXX: this!
-    trigger_diffs_out = {
-        "goCue": np.array([]),
-        "errorTone": np.array([]),
-        "stimOn": np.array([]),
-        "stimOff": np.array([]),
-        "stimFreeze": np.array([]),
-    }
-
-    td = get_trigger_response_diffs(session_path)
-    for k in trigger_diffs_out:
-        trigger_diffs_out[k] = np.append(trigger_diffs_out[k], td[k])
-
-    df = pd.DataFrame.from_dict(trigger_diffs_out)
-    print(df.describe())
-    for k in df:
-        print(k, "nancount:", sum(np.isnan(df[k])))
+    trigger_diffs = get_trigger_response_diffs(eids)
+    return _describe_trigger_diffs(trigger_diffs)
 
 
 if __name__ == "__main__":
@@ -914,7 +911,7 @@ if __name__ == "__main__":
     # plot_bpod_session(session_path, ax=ax)
 
     # eid = "a71175be-d1fd-47a3-aa93-b830ea3634a1"
-    # plot_trigger_response_diffs(eid)
+    # plot_session_trigger_response_diffs(eid)
     # one.search_terms()
     # eids, dets = one.search(task_protocol="ephysChoiceWorld6.2.5", lab="mainenlab", details=True)
     labs = one.list(None, "lab")
@@ -927,12 +924,12 @@ if __name__ == "__main__":
     #     )
     #     print(lab, len(eids))
     # for eid in eids:
-    #     plot_trigger_response_diffs(eid)
+    #     plot_session_trigger_response_diffs(eid)
     lab = "churchlandlab"
     eid = '0deb75fb-9088-42d9-b744-012fb8fc4afb'
 
     bla1, bla2 = get_bpod_fronts(eid)
     # for lab in labs:
-    #     describe_lab_trigger_diffs(lab)
+    #     describe_lab_trigger_response_diffs(lab)
 
 print(".")
