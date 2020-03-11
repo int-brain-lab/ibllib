@@ -1,6 +1,6 @@
-fn_est
+missed_spikes_est
 ===========
 
 .. currentmodule:: brainbox.metrics.metrics
 
-.. autofunction:: fn_est
+.. autofunction:: missed_spikes_est

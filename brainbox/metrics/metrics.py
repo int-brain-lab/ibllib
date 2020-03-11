@@ -19,9 +19,11 @@ TODO metrics that could be added: iso_dist, l_ratio, d_prime, nn_hit, nn_miss, s
 """
 
 import time
+
 import numpy as np
-import scipy.stats as stats
 import scipy.ndimage.filters as filters
+import scipy.stats as stats
+
 import brainbox as bb
 from brainbox.core import Bunch
 from brainbox.processing import bincount2D
@@ -32,9 +34,9 @@ METRICS_PARAMS = {
     'presence_window': 10,
     'refractory_period': 0.0015,
     'min_isi': 0.0001,
-    'spks_per_bin_for_fn_est': 10,
-    'std_smoothing_kernel_for_fn_est': 4,
-    'min_num_bins_for_fn_est': 50,
+    'spks_per_bin_for_missed_spks_est': 10,
+    'std_smoothing_kernel_for_missed_spks_est': 4,
+    'min_num_bins_for_missed_spks_est': 50,
 }
 
 
@@ -92,11 +94,11 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
     """
 
     # Get units.
-    if not(units is None):  # we're using a subset of all units
+    if not (units is None):  # we're using a subset of all units
         unit_list = list(units_b[feat_names[0]].keys())
         # for each `feat` and unit in `unit_list`, remove unit from `units_b` if not in `units`
         for feat in feat_names:
-            [units_b[feat].pop(unit) for unit in unit_list if not(int(unit) in units)]
+            [units_b[feat].pop(unit) for unit in unit_list if not (int(unit) in units)]
     unit_list = list(units_b[feat_names[0]].keys())  # get new `unit_list` after removing units
 
     # Initialize `p_vals` and `variances`.
@@ -135,10 +137,10 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
     return p_vals_b, cv_b
 
 
-def fn_est(feat, spks_per_bin=20, sigma=4, min_num_bins=50):
+def missed_spikes_est(feat, spks_per_bin=20, sigma=4, min_num_bins=50):
     """
-    Computes the approximate fraction of spikes missing (a false negative estimate) from a spike
-    feature distribution for a given unit, assuming the distribution is symmetric.
+    Computes the approximate fraction of spikes missing (i.e. a pseudo false negative estimate)
+    from a spike feature distribution for a given unit, assuming the distribution is symmetric.
 
     Inspired by metric described in Hill et al. (2011) J Neurosci 31: 8699-8705.
 
@@ -167,7 +169,7 @@ def fn_est(feat, spks_per_bin=20, sigma=4, min_num_bins=50):
 
     See Also
     --------
-    plot.fn_est
+    plot.missed_spikes_est
 
     Examples
     --------
@@ -175,7 +177,7 @@ def fn_est(feat, spks_per_bin=20, sigma=4, min_num_bins=50):
     amplitudes, assuming the distribution of the unit's spike amplitudes is symmetric.
         # Get unit 1 amplitudes from a unit bunch, and compute fraction spikes missing.
         >>> feat = units_b['amps']['1']
-        >>> fraction_missing = bb.plot.fn_est(feat)
+        >>> fraction_missing = bb.plot.missed_spikes_est(feat)
     """
 
     # Ensure minimum number of spikes requirement is met.
@@ -272,7 +274,7 @@ def wf_similarity(wf1, wf2):
             s_spk = \
                 np.sum(np.nan_to_num(
                     wf1[spk1, :, :] * wf2[spk2, :, :] /
-                    np.sqrt(wf1[spk1, :, :]**2 * wf2[spk2, :, :]**2))) / (n_samples * n_ch)
+                    np.sqrt(wf1[spk1, :, :] ** 2 * wf2[spk2, :, :] ** 2))) / (n_samples * n_ch)
             similarity_matrix[spk1, spk2] = s_spk
 
     # Return mean of similarity matrix
@@ -531,7 +533,7 @@ def ptp_over_noise(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='i
 
     # Initialize `mean_ptp` based on `ch`, and compute mean ptp of all spikes for each ch.
     mean_ptp = np.zeros((ch.size,))
-    for cur_ch in range(ch.size,):
+    for cur_ch in range(ch.size, ):
         mean_ptp[cur_ch] = np.mean(np.max(wf[:, :, cur_ch], axis=1) -
                                    np.min(wf[:, :, cur_ch], axis=1))
 
@@ -563,10 +565,10 @@ def ptp_over_noise(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='i
     return ptp_sigma
 
 
-def fp_est(ts, rp=0.002):
+def contamination_est(ts, rp=0.002):
     """
-    An estimate of the fraction of false positive spikes in a unit based on the number of spikes,
-    number of isi violations, and time between the first and last spike.
+    An estimate of the contamination of the unit (i.e. a pseudo false positive measure) based on
+    the number of spikes, number of isi violations, and time between the first and last spike.
     (see Hill et al. (2011) J Neurosci 31: 8699-8705).
 
     Parameters
@@ -578,18 +580,18 @@ def fp_est(ts, rp=0.002):
 
     Returns
     -------
-    fp : float
-        An estimate of the fraction of false positives.
+    ce : float
+        An estimate of the fraction of contamination.
 
     See Also
     --------
-    fp_est2
+    contamination_est2
 
     Examples
     --------
-    1) Compute false positive estimate for unit 1.
+    1) Compute contamination estimate for unit 1.
         >>> ts = units_b['times']['1']
-        >>> fp = bb.metrics.fp_est(ts)
+        >>> ce = bb.metrics.contamination_est(ts)
     """
 
     # Get number of spikes, number of isi violations, and time from first to final spike.
@@ -597,16 +599,16 @@ def fp_est(ts, rp=0.002):
     n_isi_viol = np.sum(np.diff(ts) < rp)
     t = ts[-1] - ts[0]
 
-    # `fp` is min of roots of solved quadratic equation.
-    c = (t * n_isi_viol) / (2 * rp * n_spks**2)  # 3rd term in quadratic
-    fp = np.min(np.abs(np.roots([-1, 1, c])))  # solve quadratic
-    return fp
+    # `ce` is min of roots of solved quadratic equation.
+    c = (t * n_isi_viol) / (2 * rp * n_spks ** 2)  # 3rd term in quadratic
+    ce = np.min(np.abs(np.roots([-1, 1, c])))  # solve quadratic
+    return ce
 
 
-def fp_est2(ts, min_time, max_time, rp=0.002, min_isi=0.0001):
+def contamination_est2(ts, min_time, max_time, rp=0.002, min_isi=0.0001):
     """
-    An estimate of the fraction of false positive spikes in a unit based on the number of spikes,
-    number of isi violations, and time between the first and last spike.
+    An estimate of the contamination of the unit (i.e. a pseudo false positive measure) based on
+    the number of spikes, number of isi violations, and time between the first and last spike.
     (see Hill et al. (2011) J Neurosci 31: 8699-8705).
 
     Modified by Dan Denman from cortex-lab/sortingQuality GitHub by Nick Steinmetz.
@@ -626,24 +628,24 @@ def fp_est2(ts, min_time, max_time, rp=0.002, min_isi=0.0001):
 
     Returns
     -------
-    fp : float
-        An estimate of the fraction of false positives.
-        A perfect unit has a fp = 0
-        A unit with some contamination has a fp < 0.5
-        A unit with lots of contamination has a fp > 1.0
+    ce : float
+        An estimate of the contamination.
+        A perfect unit has a ce = 0
+        A unit with some contamination has a ce < 0.5
+        A unit with lots of contamination has a ce > 1.0
     num_violations : int
         The total number of isi violations.
 
     See Also
     --------
-    fp_est
+    contamination_est
 
     Examples
     --------
-    1) Compute false positive estimate for unit 1, with a minimum isi for counting duplicate
+    1) Compute contamination estimate for unit 1, with a minimum isi for counting duplicate
     spikes of 0.1 ms.
         >>> ts = units_b['times']['1']
-        >>> fp = bb.metrics.fp_est2(ts, min_isi=0.0001)
+        >>> ce = bb.metrics.contamination_est2(ts, min_isi=0.0001)
     """
 
     duplicate_spikes = np.where(np.diff(ts) <= min_isi)[0]
@@ -656,9 +658,9 @@ def fp_est2(ts, min_time, max_time, rp=0.002, min_isi=0.0001):
     violation_time = 2 * num_spikes * (rp - min_isi)
     total_rate = ts.size / (max_time - min_time)
     violation_rate = num_violations / violation_time
-    fp = violation_rate / total_rate
+    ce = violation_rate / total_rate
 
-    return fp, num_violations
+    return ce, num_violations
 
 
 def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
@@ -673,9 +675,9 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         presence_ratio
         presence_ratio_std
         frac_isi_viol (see `isi_viol`)
-        fp_estimate (see `fp_est`)
-        fp_estimate2 (see `fp_est2`)
-        fn_estimate (see `fn_est`)
+        contamination_est (see `contamination_est`)
+        contamination_est2 (see `contamination_est2`)
+        missed_spikes_est (see `missed_spikes_est`)
         cum_amp_drift (see `cum_drift`)
         max_amp_drift (see `max_drift`)
         cum_depth_drift (see `cum_drift`)
@@ -696,20 +698,20 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
             'presence_window': float
                 The time window (in s) used to look for spikes when computing the presence ratio.
             'refractory_period': float
-                The refractory period used when computing isi violations and the false positive
+                The refractory period used when computing isi violations and the contamination
                 estimate.
             'min_isi': float
                 The minimum interspike-interval (in s) for counting duplicate spikes when computing
-                the false positive estimate.
-            'spks_per_bin_for_fn_est': int
+                the contamination estimate.
+            'spks_per_bin_for_missed_spks_est': int
                 The number of spikes per bin used to compute the spike amplitude pdf for a unit,
-                when computing the false negative estimate.
-            'std_smoothing_kernel_for_fn_est': float
+                when computing the missed spikes estimate.
+            'std_smoothing_kernel_for_missed_spks_est': float
                 The standard deviation for the gaussian kernel used to compute the spike amplitude
-                pdf for a unit, when computing the false negative estimate.
-            'min_num_bins_for_fn_est': int
+                pdf for a unit, when computing the missed spikes estimate.
+            'min_num_bins_for_missed_spks_est': int
                 The minimum number of bins used to compute the spike amplitude pdf for a unit,
-                when computing the false negative estimate.
+                when computing the missed spikes estimate.
 
     Returns
     -------
@@ -742,9 +744,9 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         'presence_ratio': np.full((nclust,), np.nan),
         'presence_ratio_std': np.full((nclust,), np.nan),
         'frac_isi_viol': np.full((nclust,), np.nan),
-        'fp_estimate': np.full((nclust,), np.nan),
-        'fp_estimate2': np.full((nclust,), np.nan),
-        'fn_estimate': np.full((nclust,), np.nan),
+        'contamination_est': np.full((nclust,), np.nan),
+        'contamination_est2': np.full((nclust,), np.nan),
+        'missed_spikes_est': np.full((nclust,), np.nan),
         'cum_amp_drift': np.full((nclust,), np.nan),
         'max_amp_drift': np.full((nclust,), np.nan),
         'cum_depth_drift': np.full((nclust,), np.nan),
@@ -776,13 +778,14 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
 
         # compute metrics
         r.frac_isi_viol[ic], _, _ = isi_viol(ts, rp=params['refractory_period'])
-        r.fp_estimate[ic] = fp_est(ts, rp=params['refractory_period'])
-        r.fp_estimate2[ic], _ = fp_est2(ts, tmin, tmax, rp=params['refractory_period'],
-                                        min_isi=params['min_isi'])
-        try:  # this may fail because `fn_est` requires a min number of spikes
-            r.fn_estimate[ic], _, _ = fn_est(amps, spks_per_bin=params['spks_per_bin_for_fn_est'],
-                                             sigma=params['std_smoothing_kernel_for_fn_est'],
-                                             min_num_bins=params['min_num_bins_for_fn_est'])
+        r.contamination_est[ic] = contamination_est(ts, rp=params['refractory_period'])
+        r.contamination_est2[ic], _ = contamination_est2(
+            ts, tmin, tmax, rp=params['refractory_period'], min_isi=params['min_isi'])
+        try:  # this may fail because `missed_spikes_est` requires a min number of spikes
+            r.missed_soikes_est[ic], _, _ = missed_spikes_est(
+                amps, spks_per_bin=params['spks_per_bin_for_missed_spks_est'],
+                sigma=params['std_smoothing_kernel_for_missed_spks_est'],
+                min_num_bins=params['min_num_bins_for_missed_spks_est'])
         except AssertionError:
             pass
         r.cum_amp_drift[ic] = cum_drift(amps)

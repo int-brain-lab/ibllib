@@ -18,8 +18,10 @@ Run the following to set-up the workspace to run the docstring examples:
 
 import time
 from warnings import warn
-import numpy as np
+
 import matplotlib.pyplot as plt
+import numpy as np
+
 # from matplotlib.ticker import StrMethodFormatter
 import brainbox as bb
 from ibllib.io import spikeglx
@@ -71,10 +73,10 @@ def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cma
     '''
 
     # Get units.
-    if not(units is None):  # we're using a subset of all units
+    if not (units is None):  # we're using a subset of all units
         unit_list = list(units_b['depths'].keys())
         # For each unit in `unit_list`, remove unit from `units_b` if not in `units`.
-        [units_b['depths'].pop(unit) for unit in unit_list if not(int(unit) in units)]
+        [units_b['depths'].pop(unit) for unit in unit_list if not (int(unit) in units)]
     unit_list = list(units_b['depths'].keys())  # get new `unit_list` after removing unit
 
     # Calculate coefficients of variation for all units
@@ -116,7 +118,7 @@ def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cma
     return cv_vals, p_vals
 
 
-def fn_est(feat, feat_name, spks_per_bin=20, sigma=5, min_num_bins=50, ax=None):
+def missed_spikes_est(feat, feat_name, spks_per_bin=20, sigma=5, min_num_bins=50, ax=None):
     '''
     Plots the pdf of an estimated symmetric spike feature distribution, with a vertical cutoff line
     that indicates the approximate fraction of spikes missing from the distribution, assuming the
@@ -153,12 +155,12 @@ def fn_est(feat, feat_name, spks_per_bin=20, sigma=5, min_num_bins=50, ax=None):
     1) Plot cutoff line indicating the fraction of spikes missing from a unit based on the recorded
     unit's spike amplitudes, assuming the distribution of the unit's spike amplitudes is symmetric.
         >>> feat = units_b['amps']['1']
-        >>> fraction_missing = bb.plot.fn_est(feat, feat_name='amps', unit=1)
+        >>> fraction_missing = bb.plot.missed_spikes_est(feat, feat_name='amps', unit=1)
     '''
 
     # Calculate the feature distribution histogram and fraction of spikes missing.
     fraction_missing, pdf, cutoff_idx = \
-        bb.metrics.fn_est(feat, spks_per_bin, sigma, min_num_bins)
+        bb.metrics.missed_spikes_est(feat, spks_per_bin, sigma, min_num_bins)
 
     # Plot.
     if ax is None:  # create two axes
@@ -442,7 +444,7 @@ def firing_rate(ts, hist_win=0.01, fr_win=0.5, n_bins=10, show_fr_cv=True, ax=No
 
     if ax is None:
         fig, ax = plt.subplots()
-    if not(show_fr_cv):  # compute just the firing rate
+    if not (show_fr_cv):  # compute just the firing rate
         fr = bb.singlecell.firing_rate(ts, hist_win=hist_win, fr_win=fr_win)
     else:  # compute firing rate and coefficients of variation
         cv, cvs, fr = bb.metrics.firing_rate_cv(ts, hist_win=hist_win, fr_win=fr_win,
@@ -453,7 +455,7 @@ def firing_rate(ts, hist_win=0.01, fr_win=0.5, n_bins=10, show_fr_cv=True, ax=No
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Rate (s$^-1$)')
 
-    if not(show_fr_cv):
+    if not (show_fr_cv):
         return fr
     else:  # show coefficients of variation
         y_max = np.max(fr) * 1.05

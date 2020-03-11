@@ -71,7 +71,7 @@ fig, var_vals, p_vals = bb.plot.feat_vars(spks)
 # Fig 2 -- SINGLE UNIT
 # Plot cutoff line indicating the fraction of spikes missing from a unit based on the recorded
 #  unit's spike amplitudes, assuming the distribution of the unit's spike amplitudes is symmetric.
-fig, fraction_missing = bb.plot.fn_est(spks, 1)
+fig, fraction_missing = bb.plot.missed_spikes_est(spks, 1)
 
 # Fig 3 -- SINGLE UNIT
 # Compare first and last 100 spike waveforms for unit1, across 20 channels around the channel
