@@ -32,7 +32,7 @@ METRICS_PARAMS = {
     'presence_window': 10,
     'refractory_period': 0.0015,
     'min_isi': 0.0001,
-    'spks_per_bin_for_fn_est': 50,
+    'spks_per_bin_for_fn_est': 10,
     'std_smoothing_kernel_for_fn_est': 4,
     'min_num_bins_for_fn_est': 50,
 }
