@@ -782,7 +782,7 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         r.contamination_est2[ic], _ = contamination_est2(
             ts, tmin, tmax, rp=params['refractory_period'], min_isi=params['min_isi'])
         try:  # this may fail because `missed_spikes_est` requires a min number of spikes
-            r.missed_soikes_est[ic], _, _ = missed_spikes_est(
+            r.missed_spikes_est[ic], _, _ = missed_spikes_est(
                 amps, spks_per_bin=params['spks_per_bin_for_missed_spks_est'],
                 sigma=params['std_smoothing_kernel_for_missed_spks_est'],
                 min_num_bins=params['min_num_bins_for_missed_spks_est'])
