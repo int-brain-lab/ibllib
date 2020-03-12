@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from scipy import interpolate
 
 from brainbox.core import Bunch
+import brainbox.behavior.wheel as wh
 
 import ibllib.exceptions as err
 import ibllib.plots as plots
@@ -302,7 +303,7 @@ def extract_wheel_sync(sync, output_path=None, save=False, chmap=None):
     :param save: True/False
     :param chmap: dictionary containing channel indices. Default to constant.
         chmap = {'rotary_encoder_0': 13, 'rotary_encoder_1': 14}
-    :return: dictionary containing wheel data, 'wheel_ts', 're_ts'
+    :return: dictionary containing wheel data, 're_pos', 're_ts'
     """
     wheel = {}
     channela = _get_sync_fronts(sync, chmap['rotary_encoder_0'])
@@ -316,6 +317,66 @@ def extract_wheel_sync(sync, output_path=None, save=False, chmap=None):
         np.save(output_path / '_ibl_wheel.position.npy', wheel['re_pos'])
         np.save(output_path / '_ibl_wheel.timestamps.npy', wheel['re_ts'])
     return wheel
+
+
+def extract_wheel_moves(wheel, output_path=None, save=False):
+    """
+    Extract wheel positions and times from sync fronts dictionary
+
+    :param wheel: dictionary containing wheel data, 're_pos', 're_ts'
+    :param output_path: where to save the data
+    :param save: True/False
+    :return: wheel_moves dictionary
+    """
+    if len(wheel['re_ts'].shape) == 1:
+        assert wheel['re_ts'].size == wheel['re_pos'].size, 'wheel data dimension mismatch'
+        assert np.all(
+            np.diff(wheel['re_ts']) > 0), 'wheel timestamps not monotonically increasing'
+    else:
+        _logger.debug('2D wheel timestamps')
+
+    # Check the values and units of wheel position
+    res = np.array([wh.ENC_RES, wh.ENC_RES / 2, wh.ENC_RES / 4])
+    min_change_rad = 2 * np.pi / res
+    min_change_cm = wh.WHEEL_DIAMETER * np.pi / res
+    pos_diff = np.abs(np.ediff1d(wheel['re_pos']))
+    if pos_diff.min() < min_change_cm.min():
+        # Assume values are in radians
+        units = 'rad'
+        encoding = np.argmin(np.abs(min_change_rad - pos_diff.min()))
+        min_change = min_change_rad[encoding]
+    else:
+        units = 'cm'
+        encoding = np.argmin(np.abs(min_change_cm - pos_diff.min()))
+        min_change = min_change_cm[encoding]
+    enc_names = {0: '4X', 1: '2X', 2: '1X'}
+    _logger.info('Wheel in %s units using %s encoding', units, enc_names[int(encoding)])
+    assert np.allclose(pos_diff, min_change, rtol=1e-05), 'wheel position skips'
+
+    # Convert the pos threshold defaults from samples to correct unit
+    thresholds = wh.samples_to_cm(np.array([8, 1.5]), resolution=res[encoding])
+    if units == 'rad':
+        thresholds = wh.cm_to_rad(thresholds)
+    kwargs = {'pos_thresh': thresholds[0], 'pos_thresh_onset': thresholds[1]}
+    #  kwargs = {'make_plots': True, **kwargs}
+
+    # Interpolate and get onsets
+    pos, t = wh.interpolate_position(wheel['re_ts'], wheel['re_pos'], freq=1000)
+    on, off, amp, peak_vel = wh.movements(t, pos, freq=1000, **kwargs)
+    assert on.size == off.size, 'onset/offset number mismatch'
+    assert np.all(np.diff(on) > 0) and np.all(
+        np.diff(off) > 0), 'onsets/offsets not monotonically increasing'
+    assert np.all((off - on) > 0), 'not all offsets occur after onset'
+
+    # Put into dict
+    wheel_moves = {'intervals': np.c_[on, off], 'amps': amp, 'peakVels': peak_vel}
+
+    if save and output_path:
+        output_path = Path(output_path)
+        np.save(output_path / '_ibl_wheelMoves.intervals.npy', wheel_moves['intervals'])
+        # np.save(output_path / '_ibl_wheelMoves.amplitudes.npy', wheel_moves['amps'])
+        # np.save(output_path / '_ibl_wheelMoves.peakVelocity.npy', wheel_moves['peakVels'])
+    return wheel_moves
 
 
 def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, display=False,
@@ -545,7 +606,8 @@ def extract_all(session_path, save=False, tmax=None):
             tmax = np.inf
 
     sync, sync_chmap = _get_main_probe_sync(session_path)
-    extract_wheel_sync(sync, alf_path, save=save, chmap=sync_chmap)
+    wheel = extract_wheel_sync(sync, alf_path, save=save, chmap=sync_chmap)
+    extract_wheel_moves(wheel, alf_path, save=save)
     extract_camera_sync(sync, alf_path, save=save, chmap=sync_chmap)
     extract_behaviour_sync(sync, alf_path, save=save, chmap=sync_chmap, tmax=tmax)
     align_with_bpod(session_path)  # checks consistency and compute dt with bpod
