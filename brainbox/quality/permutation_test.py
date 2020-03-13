@@ -51,7 +51,11 @@ def permut_test(data1, data2, metric, n_permut=1000, show=False, title=None):
     TODO:
     """
     # Calculate metrics and true difference between groups
+    print('data1')
+    print(data1)
     metrics1 = [metric(d) for d in data1]
+    print('metrics1')
+    print(metrics1)
     metrics2 = [metric(d) for d in data2]
     true_diff = np.abs(np.mean(metrics1) - np.mean(metrics2))
 
