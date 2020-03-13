@@ -1,23 +1,13 @@
-from pathlib import Path
-import glob, os
-
-import matplotlib.pyplot as plt
 import numpy as np
-import seaborn as sns
+import brainbox as bb
+import alf.io as ioalf
+from oneibl.one import ONE
 
-from ibllib.ephys import ephysqc
-from ibllib.examples.ibllib import _plot_spectra, _plot_rmsmap
-import alf.io
-import tkinter.filedialog
 
-# find the correct session to work on
-fbinpath = tkinter.filedialog.askdirectory()
-os.chdir(fbinpath)
-for file in glob.glob("*.lf.bin"):
-    print(file)
+# Download data
+one = ONE()
+eid = one.search(subject='ZM_2240', date_range=['2020-01-22', '2020-01-22'])
+lf_path = one.load(eid[0], dataset_types=['ephysData.raw.lf'], download_only=True)[0]
+raw = ioalf.load_object(lf_path)
 
-# make sure you send a path for the time being and not a string
-ephysqc.extract_rmsmap(os.path.join(fbinpath, file))
-
-_plot_spectra(fbinpath, 'lf')
-_plot_rmsmap(fbinpath, 'lf')
+#

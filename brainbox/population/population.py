@@ -233,12 +233,17 @@ def decode(spike_times, spike_clusters, event_times, event_groups,
 
     Returns
     -------
-    accuracy : float
-        the accuracy of the classifier
-    F1 : float
-        F1 score of the classifier
-    auroc : float
-        the area under the ROC curve of the classification performance
+    results : dict
+        dictionary with decoding results
+
+        accuracy : float
+            accuracy of the classifier in percentage correct
+        f1 : float
+            F1 score of the classifier
+        auroc : float
+            the area under the ROC curve of the classification performance
+        confusion_matrix : NxN array
+            normalized confusion matrix
     """
 
     # Check input
