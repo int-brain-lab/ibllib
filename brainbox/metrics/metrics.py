@@ -314,7 +314,7 @@ def firing_rate_coeff_var(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
     # Compute coefficient of variations of firing rate for each bin, and the mean c.v.
     cvs = np.std(fr_binned, axis=1) / np.mean(fr_binned, axis=1)
     # NaNs from zero spikes are turned into 0's
-    cvs[np.isnan(cvs)] = 0
+    # cvs[np.isnan(cvs)] = 0 nan's can happen if neuron doesn't spike in a bin
     cv = np.mean(cvs)
 
     return cv, cvs, fr
