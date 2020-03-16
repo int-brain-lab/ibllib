@@ -7,6 +7,7 @@ from scipy.interpolate import interp1d
 
 import alf.io
 from brainbox.core import Bunch
+from ibllib.exceptions import Neuropixel3BSyncFrontsNonMatching
 import ibllib.io.spikeglx as spikeglx
 from ibllib.misc import log2session_static
 from ibllib.io.extractors.ephys_fpga import _get_sync_fronts, get_ibl_sync_map
@@ -57,7 +58,7 @@ def version3A(ses_path, display=True, type='smooth', tol=2.1):
     :param type: linear, exact or smooth
     :return: bool True on a a successful sync
     """
-    ephys_files = spikeglx.glob_ephys_files(ses_path)
+    ephys_files = spikeglx.glob_ephys_files(ses_path, bin_exists=False)
     nprobes = len(ephys_files)
     if nprobes == 1:
         timestamps = np.array([[0., 0.], [1., 1.]])
@@ -137,7 +138,10 @@ def version3B(ses_path, display=True, type=None, tol=2.5):
     for ef in ephys_files:
         sync_probe = _get_sync_fronts(ef.sync, ef.sync_map['imec_sync'])
         sr = _get_sr(ef)
-        assert(sync_nidq.times.size == sync_probe.times.size)
+        try:
+            assert(sync_nidq.times.size == sync_probe.times.size)
+        except AssertionError as e:
+            raise Neuropixel3BSyncFrontsNonMatching(f"{ses_path}")
         # if the qc of the diff finds anomalies, do not attempt to smooth the interp function
         qcdiff = _check_diff_3b(sync_probe)
         if not qcdiff:
