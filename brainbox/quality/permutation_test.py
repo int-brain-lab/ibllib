@@ -70,7 +70,8 @@ def permut_test(data1, data2, metric, n_permut=1000, show=False, title=None):
         np.random.shuffle(indizes)
         permutations[i] = indizes
 
-    permut_diffs = np.abs(np.mean(diffs[permutations[:, :size1]], axis=1) -
+    permut_diffs =
+        np.abs(np.mean(diffs[permutations[:, :size1]], axis=1) -
         np.mean(diffs[permutations[:, size1:]], axis=1))
     p = len(permut_diffs[permut_diffs > true_diff]) / n_permut
 
