@@ -332,9 +332,68 @@ def firing_rate_cv(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
 
     # Compute coefficient of variations of firing rate for each bin, and the mean c.v.
     cvs = np.std(fr_binned, axis=1) / np.mean(fr_binned, axis=1)
+    # NaNs from zero spikes are turned into 0's
+    # cvs[np.isnan(cvs)] = 0 nan's can happen if neuron doesn't spike in a bin
     cv = np.mean(cvs)
 
     return cv, cvs, fr
+
+
+def firing_rate_fano_factor(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
+    '''
+    Computes the fano factor of the firing rate: the ratio of the variance to the mean.
+    (Almost identical to coeff. of variation)
+
+    Parameters
+    ----------
+    ts : ndarray
+        The spike timestamps from which to compute the firing rate.
+    hist_win : float
+        The time window (in s) to use for computing spike counts.
+    fr_win : float
+        The time window (in s) to use as a moving slider to compute the instantaneous firing rate.
+    n_bins : int (optional)
+        The number of bins in which to compute a fano factor of the firing rate.
+
+    Returns
+    -------
+    ff : float
+        The mean fano factor of the firing rate of the `n_bins` number of factors
+        computed.
+    ffs : ndarray
+        The fano factors of the firing for each bin of `n_bins`.
+    fr : ndarray
+        The instantaneous firing rate over time (in hz).
+
+    See Also
+    --------
+    singlecell.firing_rate
+    plot.firing_rate
+
+    Examples
+    --------
+    1) Compute the fano factor of the firing rate for unit 1 from the time of its
+    first to last spike, and compute the fano factor of the firing rate for unit 2
+    from the first to second minute.
+        >>> ts_1 = units_b['times']['1']
+        >>> ts_2 = units_b['times']['2']
+        >>> ts_2 = np.intersect1d(np.where(ts_2 > 60)[0], np.where(ts_2 < 120)[0])
+        >>> ff, ffs, fr = bb.metrics.firing_rate_fano_factor(ts_1)
+        >>> ff_2, ffs_2, fr_2 = bb.metrics.firing_rate_fano_factor(ts_2)
+    '''
+
+    # Compute overall instantaneous firing rate and firing rate for each bin.
+    fr = bb.singlecell.firing_rate(ts, hist_win=hist_win, fr_win=fr_win)
+    # this procedure can cut off data at the end, up to n_bins last timesteps
+    bin_sz = np.int(fr.size / n_bins)
+    fr_binned = np.array([fr[(b * bin_sz):(b * bin_sz + bin_sz)] for b in range(n_bins)])
+
+    # Compute fano factor of firing rate for each bin, and the mean fano factor
+    ffs = np.var(fr_binned, axis=1) / np.mean(fr_binned, axis=1)
+    # ffs[np.isnan(ffs)] = 0 nan's can happen if neuron doesn't spike in a bin
+    ff = np.mean(ffs)
+
+    return ff, ffs, fr
 
 
 def isi_viol(ts, rp=0.002):

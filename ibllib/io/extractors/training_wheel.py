@@ -11,7 +11,6 @@ from scipy import interpolate
 
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
-import brainbox.behavior.wheel as wheel
 import ibllib.exceptions as err
 
 logger_ = logging.getLogger('ibllib.alf')
@@ -102,7 +101,7 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
     return interpolate.interp1d(re, bp, fill_value="extrapolate")
 
 
-def get_wheel_data(session_path, bp_data=None, save=False, display=False):
+def get_wheel_position(session_path, bp_data=None, save=False, display=False):
     """
     Get wheel data from raw files and converts positions into radians mathematical convention
      (anti-clockwise = +) and timestamps into seconds relative to Bpod clock.
@@ -269,39 +268,5 @@ def get_wheel_data(session_path, bp_data=None, save=False, display=False):
     return data
 
 
-def get_velocity(session_path, save=False, data_wheel=None):
-    """
-    Compute velocity from non-uniformly acquired positions and timestamps.
-    **Optional:** save _ibl_trials.velocity.npy
-
-    Uses signed_contrast to create left and right contrast vectors.
-
-    :param session_path: absolute path of session folder
-    :type session_path: str
-    :param save: wether to save the corresponding alf file
-                 to the alf folder, defaults to False
-    :type save: bool, optional
-    :return: numpy.ndarray
-    :rtype: dtype('float64')
-    """
-    if not isinstance(data_wheel, np.ndarray):
-        data_wheel = get_wheel_data(session_path, save=False)
-    if data_wheel is None:
-        logger_.error('No wheel data for ' + str(session_path))
-        return None
-
-    velocity = wheel.velocity(data_wheel['re_ts'], data_wheel['re_pos'])
-
-    if raw.save_bool(save, '_ibl_wheel.velocity.npy'):
-        check_alf_folder(session_path)
-        fpath = os.path.join(session_path, 'alf',
-                             '_ibl_wheel.velocity.npy')
-        np.save(fpath, velocity)
-
-    return velocity
-
-
 def extract_all(session_path, bp_data=None, save=False):
-    data = get_wheel_data(session_path, bp_data=bp_data, save=save)
-    velocity = get_velocity(session_path, save=save, data_wheel=data)
-    return data, velocity
+    return get_wheel_position(session_path, bp_data=bp_data, save=save)

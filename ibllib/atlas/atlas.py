@@ -149,8 +149,8 @@ class BrainCoordinates:
 class BrainAtlas:
     """
     Objects that holds image, labels and coordinate transforms for a brain Atlas.
-    Currently this is the designted for the AllenCCF at several resolutions,
-    yet this class could be extended/subclassed in the future if the need for other atlases arises.
+    Currently this is designed for the AllenCCF at several resolutions,
+    yet this class can be used for other atlases arises.
     """
     def __init__(self, image, label, regions, dxyz, iorigin=[0, 0, 0],
                  dims2xyz=[0, 1, 2], xyz2dims=[0, 1, 2]):
@@ -174,7 +174,7 @@ class BrainAtlas:
         bc = BrainCoordinates(nxyz=nxyz, xyz0=(0, 0, 0), dxyz=dxyz)
         self.bc = BrainCoordinates(nxyz=nxyz, xyz0=- bc.i2xyz(iorigin), dxyz=dxyz)
         """
-        Get the volume top surface
+        Get the volume top surface, this is needed to compute probe insertions intersections
         """
         l0 = self.label == 0
         s = np.zeros(self.label.shape[:2])
@@ -346,6 +346,13 @@ class Trajectory:
         epoints = epoints[~np.all(np.isnan(epoints), axis=1)]
         ind = np.all(np.bitwise_and(bounds[0, :] <= epoints, epoints <= bounds[1, :]), axis=1)
         return epoints[ind, :]
+
+    def insertion(self, ba):
+        """
+        Given a Trajectory and a BrainAtlas object, computes the Insertion
+        :param ba:
+        :return:
+        """
 
 
 @dataclass

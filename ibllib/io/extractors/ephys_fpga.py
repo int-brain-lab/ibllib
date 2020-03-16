@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 from scipy import interpolate
 
 from brainbox.core import Bunch
-import brainbox.behavior.wheel as whl
 
 import ibllib.exceptions as err
 import ibllib.plots as plots
@@ -20,7 +19,7 @@ import ibllib.io.raw_data_loaders as raw
 _logger = logging.getLogger('ibllib')
 
 SYNC_BATCH_SIZE_SAMPLES = 2 ** 18  # number of samples to read at once in bin file for sync
-WHEEL_RADIUS_CM = 3.1
+WHEEL_RADIUS_CM = 1  # stay in radians
 WHEEL_TICKS = 1024
 
 BPOD_FPGA_DRIFT_THRESHOLD_PPM = 150
@@ -316,8 +315,6 @@ def extract_wheel_sync(sync, output_path=None, save=False, chmap=None):
         # last phase of the process is to save the alf data-files
         np.save(output_path / '_ibl_wheel.position.npy', wheel['re_pos'])
         np.save(output_path / '_ibl_wheel.timestamps.npy', wheel['re_ts'])
-        np.save(output_path / '_ibl_wheel.velocity.npy',
-                whl.velocity(wheel['re_ts'], wheel['re_pos']))
     return wheel
 
 
@@ -442,7 +439,7 @@ def align_with_bpod(session_path):
         alf.io.save_object_npy(output_path, trials, '_ibl_trials')
     assert(alf.io.check_dimensions(trials) == 0)
     tlen = (np.diff(trials['intervals_bpod']) - np.diff(trials['intervals']))[:-1] - ITI_DURATION
-    assert(np.all(np.abs(tlen[np.invert(np.isnan(tlen))]) < 5 * 1e-3))
+    assert(np.all(np.abs(tlen[np.invert(np.isnan(tlen))])[:-1] < 5 * 1e-3))
     # dt is the delta to apply to bpod times in order to be on the ephys clock
     dt = trials['intervals'][:, 0] - trials['intervals_bpod'][:, 0]
     # compute the clock drift bpod versus dt
@@ -493,7 +490,7 @@ def _get_all_probes_sync(session_path, bin_exists=True):
     # round-up of all bin ephys files in the session, infer revision and get sync map
     ephys_files = glob_ephys_files(session_path, bin_exists=bin_exists)
     version = get_neuropixel_version_from_files(ephys_files)
-    extract_sync(session_path, save=True)
+    extract_sync(session_path, save=True, ephys_files=ephys_files)
     # attach the sync information to each binary file found
     for ef in ephys_files:
         ef['sync'] = alf.io.load_object(ef.path, '_spikeglx_sync', short_keys=True)
@@ -525,7 +522,7 @@ def _get_main_probe_sync(session_path, bin_exists=True):
     return sync, sync_chmap
 
 
-def extract_all(session_path, save=False, tmax=None):
+def extract_all(session_path, save=False, tmax=None, bin_exists=True):
     """
     For the IBL ephys task, reads ephys binary file and extract:
         -   sync
@@ -547,7 +544,7 @@ def extract_all(session_path, save=False, tmax=None):
         except Exception:
             tmax = np.inf
 
-    sync, sync_chmap = _get_main_probe_sync(session_path)
+    sync, sync_chmap = _get_main_probe_sync(session_path, bin_exists=bin_exists)
     extract_wheel_sync(sync, alf_path, save=save, chmap=sync_chmap)
     extract_camera_sync(sync, alf_path, save=save, chmap=sync_chmap)
     extract_behaviour_sync(sync, alf_path, save=save, chmap=sync_chmap, tmax=tmax)

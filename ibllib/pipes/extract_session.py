@@ -29,7 +29,7 @@ def get_task_extractor_type(task_name):
     _iblrig_tasks_biasedChoiceWorld3.7.0 returns "biased"
     _iblrig_tasks_trainingChoiceWorld3.6.0 returns "training'
     :param task_name:
-    :return:
+    :return: one of ['biased', 'habituation', 'training', 'ephys', 'mock_ephys', 'sync_ephys']
     """
     if isinstance(task_name, Path):
         try:
@@ -43,6 +43,8 @@ def get_task_extractor_type(task_name):
     if '_biasedChoiceWorld' in task_name:
         return 'biased'
     elif 'biasedScanningChoiceWorld' in task_name:
+        return 'biased'
+    elif 'biasedVisOffChoiceWorld' in task_name:
         return 'biased'
     elif '_habituationChoiceWorld' in task_name:
         return 'habituation'
