@@ -140,7 +140,7 @@ def version3B(ses_path, display=True, type=None, tol=2.5):
         sr = _get_sr(ef)
         try:
             assert(sync_nidq.times.size == sync_probe.times.size)
-        except AssertionError as e:
+        except AssertionError:
             raise Neuropixel3BSyncFrontsNonMatching(f"{ses_path}")
         # if the qc of the diff finds anomalies, do not attempt to smooth the interp function
         qcdiff = _check_diff_3b(sync_probe)
