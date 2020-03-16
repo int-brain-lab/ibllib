@@ -146,7 +146,7 @@ class RegistrationClient:
                     'end_time': ibllib.time.date2isostr(end_time) if end_time else None,
                     'n_correct_trials': n_correct_trials,
                     'n_trials': n_trials,
-                    'json': json.dumps(md, indent=1),
+                    'json': md,
                     }
             session = self.one.alyx.rest('sessions', 'create', data=ses_)
             if md['SUBJECT_WEIGHT']:
