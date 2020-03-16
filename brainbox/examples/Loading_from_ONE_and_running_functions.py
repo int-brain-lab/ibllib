@@ -25,38 +25,32 @@ import pandas as pd
 from oneibl.one import ONE
 import alf.io as aio
 import brainbox as bb
+from ibllib.io.spikeglx import glob_ephys_files
 
 # Set eid and probe name #
-#------------------------#
+# ------------------------#
 one = ONE()
 eid = one.search(subject='ZM_2104', date='2019-09-19', number=1)[0]
 probe = 'probe_right'  # *Note: new probe naming convention is 'probe00', 'probe01', etc.
 
 # Get important directories from `eid` #
-#--------------------------------------#
-spikes_path = one.load(eid, dataset_types='spikes.amps', clobber=False, download_only=True)[0]
-alf_dir_part = np.where([part == 'alf' for part in Path(spikes_path).parts])[0][0]
-session_path = os.path.join(*Path(spikes_path).parts[:alf_dir_part])
-alf_dir = os.path.join(session_path, 'alf')
-alf_probe_dir = os.path.join(alf_dir, probe)
-ephys_file_dir = os.path.join(session_path, 'raw_ephys_data', probe)
-# Find 'ap' ephys file in `ephys_file_dir`
+# --------------------------------------#
+session_path = one.path_from_eid(eid)
+alf_dir = Path.joinpath(session_path, 'alf')
+alf_probe_dir = Path.joinpath(alf_dir, probe)
+ephys_files = glob_ephys_files(session_path)
 ephys_file_path = None
-if Path.exists(Path(ephys_file_dir)):
-    for f in os.listdir(ephys_file_dir):
-            if f.endswith('ap.bin') or f.endswith('ap.cbin'):
-                ephys_file_path = os.path.join(ephys_file_dir, f)
-                break
-if ephys_file_path is None:
+if ephys_files:
+    ephys_file_path = ephys_files[0]['ap']
+else:
     warn('Ephys file not found! Some of the examples in this script require ephys file,')
 
-# Ensure st least alf directory can be found
-assert os.path.isdir(alf_probe_dir), \
+# Ensure at least alf directory can be found
+assert Path.exists(alf_probe_dir), \
     'Directories set incorrectly. {} not found'.format(alf_probe_dir)
 
 # Call brainbox functions #
-#-------------------------#
-
+# -------------------------#
 # Change variable names to same names used in brainbox docstrings
 path_to_ephys_file = ephys_file_path
 path_to_alf_out = alf_probe_dir
@@ -113,8 +107,8 @@ fig5 = plt.gcf()
 
 # Plot and compare two sets of waveforms from two different time epochs for a single unit
 ts = units_b['times']['1']
-ts1 = ts[np.where(ts<60)[0]]
-ts2 = ts[np.where(ts>180)[0][:len(ts1)]]
+ts1 = ts[np.where(ts < 60)[0]]
+ts2 = ts[np.where(ts > 180)[0][:len(ts1)]]
 wf_1, wf_2, s = bb.plot.wf_comp(path_to_ephys_file, ts1, ts2, ch, car=True)  # may take a few mins
 fig6 = plt.gcf()
 
@@ -141,42 +135,40 @@ fig10.axes[0].set_ylabel('Depth (mm)')
 # Plot the peth for a single unit based on trial events. (This example requires '_ibl_trials')
 eid = one.search(subject='KS022', date='2019-12-10', number=1)[0]  # have to use a task session
 dtypes = [
-        'clusters.amps',
-        'clusters.channels',
-        'clusters.depths',
-        'clusters.metrics',
-        'clusters.peakToTrough',
-        'clusters.uuids',
-        'clusters.waveforms',
-        'clusters.waveformsChannels',
-        'spikes.amps',
-        'spikes.clusters',
-        'spikes.depths',
-        'spikes.samples',
-        'spikes.templates',
-        'spikes.times',
-        'trials.contrastLeft',
-        'trials.contrastRight',
-        'trials.feedback_times',
-        'trials.feedbackType',
-        'trials.goCue_times',
-        'trials.goCueTrigger_times',
-        'trials.included',
-        'trials.intervals',
-        'trials.itiDuration',
-        'trials.probabilityLeft',
-        'trials.repNum',
-        'trials.response_times',
-        'trials.rewardVolume',
-        'trials.stimOn_times',
-        ]
+    'clusters.amps',
+    'clusters.channels',
+    'clusters.depths',
+    'clusters.metrics',
+    'clusters.peakToTrough',
+    'clusters.uuids',
+    'clusters.waveforms',
+    'clusters.waveformsChannels',
+    'spikes.amps',
+    'spikes.clusters',
+    'spikes.depths',
+    'spikes.samples',
+    'spikes.templates',
+    'spikes.times',
+    'trials.contrastLeft',
+    'trials.contrastRight',
+    'trials.feedback_times',
+    'trials.feedbackType',
+    'trials.goCue_times',
+    'trials.goCueTrigger_times',
+    'trials.included',
+    'trials.intervals',
+    'trials.itiDuration',
+    'trials.probabilityLeft',
+    'trials.repNum',
+    'trials.response_times',
+    'trials.rewardVolume',
+    'trials.stimOn_times',
+]
 # get appropriate paths
-d_paths = one.load(eid, dataset_types=dtypes, clobber=False, download_only=True)
-spikes_path = one.load(eid, dataset_types='spikes.amps', clobber=False, download_only=True)[0]
-alf_dir_part = np.where([part == 'alf' for part in Path(spikes_path).parts])[0][0]
-session_path = os.path.join(*Path(spikes_path).parts[:alf_dir_part])
-alf_dir = os.path.join(session_path, 'alf')
-alf_probe_dir = os.path.join(alf_dir, probe)
+one.load(eid, dataset_types=dtypes, clobber=False, download_only=True)
+session_path = one.path_from_eid(eid)
+alf_dir = Path.joinpath(session_path, 'alf')
+alf_probe_dir = Path.joinpath(alf_dir, probe)
 
 # get trials bunch
 trials = aio.load_object(alf_dir, '_ibl_trials')
@@ -188,12 +180,11 @@ fig11 = plt.gcf()
 # plot peth with underlaid raster for each event, showing spikes 0.25 seconds before and after
 # each event
 bb.plot.peri_event_time_histogram(
-    spks_b.times, spks_b.clusters, trials.goCue_times, 1, t_before=0.25, t_after=0.25, 
+    spks_b.times, spks_b.clusters, trials.goCue_times, 1, t_before=0.25, t_after=0.25,
     include_raster=True)
 fig12 = plt.gcf()
 
-
 # Save figs in a directory
-fig_dir = os.getcwd()  # current working directory
+fig_dir = Path.cwd()  # current working directory
 fig_list = [fig1, fig2, fig3, fig4, fig5, fig6, fig7, fig8, fig9, fig10, fig11, fig12]
-[f.savefig(os.path.join('fig'+ str(i + 1))) for i,f in enumerate(fig_list)]
+[f.savefig(Path.joinpath(fig_dir, 'fig' + str(i + 1))) for i, f in enumerate(fig_list)]
