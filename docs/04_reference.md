@@ -21,21 +21,21 @@ Every experiment a data provider releases is identified by an *experiment ID* (e
 
 If a user already knows the eID of an experiment they are interested in, they can load data for the experiment using a command like:
 ```
-st, sc, cbl = ONE.load(eID, dataset_types=['spikes.times', 'spikes.clusters', 'clusters.brain_location'])
+st, sc, cbl = ONE().load(eID, dataset_types=['spikes.times', 'spikes.clusters', 'clusters.brain_location'])
 ```
 This command will download three datasets containing the times and cluster assignments of all spikes recorded in that experiment, together with an estimate of the brain location of each cluster. (In practice, the data will be cached on the user's local machine so it can be loaded repeatedly with only one download.)
 
 Many neural data signals are time series, and synchronizing these signals is often challenging. ONE will provide a function to interpolate any required timeseries to an evenly or unevenly-sampled timescale of the user's choice. For example the command:
 ```
-hxy, hth, t = ONE.loadTS(eID, dataset_types=['headTracking.xyPos', 'lfp.raw'], sample_rate=1000)
+hxy, hth, t = ONE().loadTS(eID, dataset_types=['headTracking.xyPos', 'lfp.raw'], sample_rate=1000)
 ```
 would interpolate head position and lfp to a common 1000 Hz sampling rate. The sample times are returned as `t`.
 
 #### Searching for experiments
 Finally, a user needs to be able to search the data released by a provider, to obtain the eIDs of experiments they want to analyze. To do so they would run a command like:
 ```
-eIDs = ONE.search(lab='CortexLabUCL', subject='hercules', dataset_types=['spikes.times', 'spikes.clusters','headTracking.xyPos'])
-eIDs, eInfo = ONE.search(details=True, lab='CortexLabUCL', subject='hercules', dataset_types=['spikes.times', 'spikes.clusters','headTracking.xyPos'])
+eIDs = ONE().search(lab='CortexLabUCL', subject='hercules', dataset_types=['spikes.times', 'spikes.clusters','headTracking.xyPos'])
+eIDs, eInfo = ONE().search(details=True, lab='CortexLabUCL', subject='hercules', dataset_types=['spikes.times', 'spikes.clusters','headTracking.xyPos'])
 ```
 This would find the eIDs for all experiments collected in the specified lab for the specified experimental subject, for which all of the required data is present. There will be more metadata options to refine the search (e.g. dates, genotypes, experimenter), and additional metadata on each matching experiment is returned in `eInfo`. However, the existence of dataset types is normally enough to find the data you want. For example, if you want to analyze electrophysiology in a particular behavior task, the experiments you want are exactly those with datasets describing the ephys recordings and that task's parameters.
 

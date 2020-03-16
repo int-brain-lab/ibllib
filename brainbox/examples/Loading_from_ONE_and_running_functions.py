@@ -51,7 +51,6 @@ assert Path.exists(alf_probe_dir), \
 
 # Call brainbox functions #
 # -------------------------#
-
 # Change variable names to same names used in brainbox docstrings
 path_to_ephys_file = ephys_file_path
 path_to_alf_out = alf_probe_dir

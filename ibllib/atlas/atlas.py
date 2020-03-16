@@ -149,8 +149,8 @@ class BrainCoordinates:
 class BrainAtlas:
     """
     Objects that holds image, labels and coordinate transforms for a brain Atlas.
-    Currently this is the designted for the AllenCCF at several resolutions,
-    yet this class could be extended/subclassed in the future if the need for other atlases arises.
+    Currently this is designed for the AllenCCF at several resolutions,
+    yet this class can be used for other atlases arises.
     """
     def __init__(self, image, label, regions, dxyz, iorigin=[0, 0, 0],
                  dims2xyz=[0, 1, 2], xyz2dims=[0, 1, 2]):
@@ -174,7 +174,7 @@ class BrainAtlas:
         bc = BrainCoordinates(nxyz=nxyz, xyz0=(0, 0, 0), dxyz=dxyz)
         self.bc = BrainCoordinates(nxyz=nxyz, xyz0=- bc.i2xyz(iorigin), dxyz=dxyz)
         """
-        Get the volume top surface
+        Get the volume top surface, this is needed to compute probe insertions intersections
         """
         l0 = self.label == 0
         s = np.zeros(self.label.shape[:2])
@@ -347,6 +347,13 @@ class Trajectory:
         ind = np.all(np.bitwise_and(bounds[0, :] <= epoints, epoints <= bounds[1, :]), axis=1)
         return epoints[ind, :]
 
+    def insertion(self, ba):
+        """
+        Given a Trajectory and a BrainAtlas object, computes the Insertion
+        :param ba:
+        :return:
+        """
+
 
 @dataclass
 class Insertion:
@@ -456,12 +463,13 @@ def AllenAtlas(res_um=25, par=None):
     image = np.swapaxes(np.swapaxes(image, 2, 0), 1, 2)  # image[iap, iml, idv]
     label, header = nrrd.read(file_label, index_order='C')  # dv, ml, ap
     label = np.swapaxes(np.swapaxes(label, 2, 0), 1, 2)  # label[iap, iml, idv]
+    # resulting volumes origin: x right, y front, z top
     df_regions = pd.read_csv(par.FILE_REGIONS)
     regions = BrainRegions(id=df_regions.id.values,
                            name=df_regions.name.values,
                            acronym=df_regions.acronym.values)
     xyz2dims = np.array([1, 0, 2])
     dims2xyz = np.array([1, 0, 2])
-    dxyz = res_um * 1e-6 * np.array([1, -1, -1])
+    dxyz = res_um * 1e-6 * np.array([-1, -1, -1])
     ibregma = (np.array(par.INDICES_BREGMA) * 10 / res_um)
     return BrainAtlas(image, label, regions, dxyz, ibregma, dims2xyz=dims2xyz, xyz2dims=xyz2dims)
