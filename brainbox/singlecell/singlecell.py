@@ -188,5 +188,5 @@ def firing_rate(ts, hist_win=0.01, fr_win=0.5):
     step_sz = np.int(len(counts) / n_bins_fr)
     fr = np.convolve(counts, np.ones(step_sz)) / fr_win
     fr = fr[step_sz - 1:- step_sz]
-    
+
     return fr
