@@ -102,7 +102,7 @@ fig4 = plt.gcf()
 
 # Plot distribution cutoff of a spike feature for a single unit
 amps = units_b['amps']['1']
-fraction_missing = bb.plot.feat_cutoff(amps, feat_name='amps')
+fraction_missing = bb.plot.missed_spikes_est(amps, feat_name='amps')
 fig5 = plt.gcf()
 
 # Plot and compare two sets of waveforms from two different time epochs for a single unit

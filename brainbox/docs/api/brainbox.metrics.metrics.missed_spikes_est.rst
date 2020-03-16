@@ -1,6 +1,6 @@
-feat_cutoff
+missed_spikes_est
 ===========
 
 .. currentmodule:: brainbox.metrics.metrics
 
-.. autofunction:: feat_cutoff
+.. autofunction:: missed_spikes_est
