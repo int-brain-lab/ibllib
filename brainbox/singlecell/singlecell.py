@@ -186,6 +186,7 @@ def firing_rate(ts, hist_win=0.01, fr_win=0.5):
     # Compute moving average of spike counts to get instantaneous firing rate in s.
     n_bins_fr = np.int(t_tot / fr_win)
     step_sz = np.int(len(counts) / n_bins_fr)
-    fr = np.array([np.sum(counts[step:(step + step_sz)])
-                   for step in range(len(counts) - step_sz)]) / fr_win
+    fr = np.convolve(counts, np.ones(step_sz)) / fr_win
+    fr = fr[step_sz - 1:- step_sz]
+    
     return fr

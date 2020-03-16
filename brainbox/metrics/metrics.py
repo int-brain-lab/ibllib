@@ -370,12 +370,8 @@ def firing_rate_fano_factor(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
     fr_binned = np.array([fr[(b * bin_sz):(b * bin_sz + bin_sz)] for b in range(n_bins)])
 
     # Compute fano factor of firing rate for each bin, and the mean fano factor
-    print(fr_binned)
-    print(fr_binned.shape)
-    quit()
     ffs = np.var(fr_binned, axis=1) / np.mean(fr_binned, axis=1)
-    # NaNs from zero spikes are turned into 0's
-    ffs[np.isnan(ffs)] = 0
+    # ffs[np.isnan(ffs)] = 0 nan's can happen if neuron doesn't spike in a bin
     ff = np.mean(ffs)
 
     return ff, ffs, fr
