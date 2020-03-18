@@ -1,6 +1,7 @@
 import numpy as np
 import brainbox as bb
 import matplotlib.pyplot as plt
+import seaborn as sns
 from matplotlib.gridspec import GridSpec
 import alf.io as ioalf
 from oneibl.one import ONE
@@ -18,29 +19,37 @@ raw = spikeglx.Reader(lf_path)
 signal = raw.read(nsel=slice(None, 100000, None), csel=slice(None, None, None))[0]
 signal = np.rot90(signal)
 
-freqs, psd = bb.lfp.power_spectrum(signal, raw.fs)
+# %% Calculate power spectrum and coherence between two random channels
 
-# %% Create plots
+ps_freqs, ps = bb.lfp.power_spectrum(signal, fs=raw.fs)
+random_ch = np.random.choice(raw.nc, 2)
+coh_freqs, coh, phase_lag = bb.lfp.coherence(signal[random_ch[0], :],
+                                             signal[random_ch[1], :], fs=raw.fs)
+
+# %% Create power spectrum and coherence plot
 
 fig = plt.figure(figsize=(18, 12))
 gs = GridSpec(2, 2, figure=fig)
+cmap = sns.cubehelix_palette(dark=1, light=0, as_cmap=True)
 
 ax1 = fig.add_subplot(gs[:, 0])
-pos = ax1.imshow(np.log10(psd[:, :150]), aspect='auto', vmax=-5)
-ax1.set(ylabel='Channels', xlabel='Frequency (Hz)')
-cbar = fig.colorbar(pos, ax=ax1)
-cbar.set_label('log10 power ($V^2$)', rotation=270, labelpad=10)
+sns.heatmap(data=np.log10(ps[:, ps_freqs < 140]), cbar=True, ax=ax1, yticklabels=50,
+            cmap=cmap, cbar_kws={'label': 'log10 power ($V^2$)'})
+ax1.set(xticks=np.arange(0, np.sum(ps_freqs < 140), 50),
+        xticklabels=np.array(ps_freqs[np.arange(0, np.sum(ps_freqs < 140), 50)], dtype=int),
+        ylabel='Channels', xlabel='Frequency (Hz)')
+
 
 ax2 = fig.add_subplot(gs[0, 1])
-random_channel = np.random.choice(raw.nc)
-ax2.plot(freqs, psd[random_channel, :])
-ax2.set(xlim=[1, 150], yscale='log', ylabel='Power ($V^2$)',
-        xlabel='Frequency (Hz)', title='Channel %d' % random_channel)
+ax2.plot(ps_freqs, ps[random_ch[0], :])
+ax2.set(xlim=[1, 140], yscale='log', ylabel='Power ($V^2$)',
+        xlabel='Frequency (Hz)', title='Channel %d' % random_ch[0])
 
 ax3 = fig.add_subplot(gs[1, 1])
-random_channel = np.random.choice(raw.nc)
-ax3.plot(freqs, psd[random_channel, :])
-ax3.set(xlim=[1, 150], yscale='log', ylabel='Power ($V^2$)',
-        xlabel='Frequency (Hz)', title='Channel %d' % random_channel)
+ax3.plot(coh_freqs, coh)
+ax3.set(xlim=[1, 140], ylabel='Coherence', xlabel='Frequency (Hz)',
+        title='Channel %d and %d' % (random_ch[0], random_ch[1]))
 
 plt.tight_layout(pad=5)
+
+# %% Create
