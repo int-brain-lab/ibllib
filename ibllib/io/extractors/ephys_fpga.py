@@ -457,7 +457,7 @@ def align_with_bpod(session_path):
             continue
         np.save(output_path.joinpath(f'_ibl_trials.{k[:-5]}.npy'), trials[k] + dt)
     return interpolate.interp1d(trials['intervals_bpod'][:, 0],
-                                trials['intervals'][:, 0], fill_value="extrapolate")
+                                trials['intervals'][:, 0], fill_value="extrapolate")  # XXX: THIS!
 
 
 def extract_sync(session_path, save=False, force=False, ephys_files=None):
