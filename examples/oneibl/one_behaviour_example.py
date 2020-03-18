@@ -16,10 +16,16 @@ subject_details = one.alyx.rest('subjects', 'read', 'IBL_14')
 
 # plot the weight curve
 # https://alyx.internationalbrainlab.org/admin-actions/water-history/37c8f897-cbcc-4743-bad6-764ccbbfb190
-wei = pd.DataFrame(subject_details['weighings'])
-wei['date_time'].apply(isostr2date)
-wei.sort_values('date_time', inplace=True)
-plt.plot(wei.date_time, wei.weight)
+
+# Get and show list of keys, check 'weighings' is present
+k = subject_details.keys()
+print(k)
+
+if 'weighings' in k:
+    wei = pd.DataFrame(subject_details['weighings'])
+    wei['date_time'].apply(isostr2date)
+    wei.sort_values('date_time', inplace=True)
+    plt.plot(wei.date_time, wei.weight)
 
 # now let's get some session information
 ses_ids = one.search(subjects='IBL_14', date_range='2018-11-27')
