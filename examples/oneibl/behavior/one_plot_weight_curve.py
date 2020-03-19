@@ -28,3 +28,4 @@ if 'weighings' in k:
     # https://alyx.internationalbrainlab.org/admin-actions/water-history/37c8f897-cbcc-4743-bad6-764ccbbfb190
 
     plt.plot(wei.date_time, wei.weight)
+    plt.show()
