@@ -1,3 +1,8 @@
+'''
+Plot weight curve from behavior data downloaded via ONE.
+'''
+#  Author: Olivier Winter
+
 import matplotlib.pyplot as plt
 import pandas as pd
 
@@ -14,6 +19,7 @@ k = subject_details.keys()
 print(k)
 
 if 'weighings' in k:
+    # Put the weighings data into a pandas dataframe
     wei = pd.DataFrame(subject_details['weighings'])
     wei['date_time'].apply(isostr2date)
     wei.sort_values('date_time', inplace=True)

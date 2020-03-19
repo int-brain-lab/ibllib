@@ -1,3 +1,12 @@
+'''
+TODO CHECK THIS IS THE REGULAR WAY TO PLOT PSYC CURVE
+Plot psychometric curve from behavior data downloaded via ONE.
+
+Uses the functions get_behavior() and plot_psychometric()
+from the module TODO
+'''
+#  Author: Olivier Winter
+
 import matplotlib.pyplot as plt
 
 from oneibl.one import ONE
