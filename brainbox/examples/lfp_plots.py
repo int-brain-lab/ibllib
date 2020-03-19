@@ -3,21 +3,26 @@ import brainbox as bb
 import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.gridspec import GridSpec
-import alf.io as ioalf
 from oneibl.one import ONE
 from ibllib.io import spikeglx
 
 # Download data
 one = ONE()
 eid = one.search(subject='ZM_2240', date_range=['2020-01-23', '2020-01-23'])
-lf_path = one.load(eid[0], dataset_types=['ephysData.raw.lf', 'ephysData.raw.meta',
-                                          'ephysData.raw.ch'],
-                   download_only=True)[0]
+lf_paths = one.load(eid[0], dataset_types=['ephysData.raw.lf', 'ephysData.raw.meta',
+                                           'ephysData.raw.ch'],
+                    download_only=True)
 
-# Read in data
-raw = spikeglx.Reader(lf_path)
+# Read in raw LFP data from probe00
+raw = spikeglx.Reader(lf_paths[0])
 signal = raw.read(nsel=slice(None, 100000, None), csel=slice(None, None, None))[0]
 signal = np.rot90(signal)
+
+ts = one.load(eid[0], 'ephysData.raw.timestamps')
+
+# Read in spectral density from probe00
+sd_freqs = one.load(eid[0], '_iblqc_ephysSpectralDensity.freqs')[0]
+sd_power = one.load(eid[0], '_iblqc_ephysSpectralDensity.power')[0]
 
 # %% Calculate power spectrum and coherence between two random channels
 
@@ -52,4 +57,21 @@ ax3.set(xlim=[1, 140], ylabel='Coherence', xlabel='Frequency (Hz)',
 
 plt.tight_layout(pad=5)
 
-# %% Create
+# %% Calculate spike triggered average
+
+# Read in spike data
+spikes = one.load_object(eid[0], 'spikes')
+clusters = one.load_object(eid[0], 'clusters')
+
+# Pick two random neurons
+random_neurons = np.random.choice(
+                    clusters.metrics.cluster_id[clusters.metrics.ks2_label == 'good'], 2)
+spiketrain = spikes.times[spikes.clusters == random_neurons[0]]
+sta, time = bb.lfp.spike_triggered_average(signal[random_ch[0], :], spiketrain)
+
+# %% Plot spike triggered LFP
+
+f, ax1 = plt.subplots(1, 1)
+
+ax1.plot(time, sta)
+ax1.set(ylabel='Spike triggered LFP average (uV)', xlabel='Time (ms)')
