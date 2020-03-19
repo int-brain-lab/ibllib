@@ -1,5 +1,25 @@
 import alf.io
+from ibllib.io import spikeglx
 from oneibl.one import ONE
+
+
+def load_lfp(eid, one=None, dataset_types=None):
+    """
+    From an eid, hits the Alyx database and downloads the standard set of datasets
+    needed for LFP
+    :param eid:
+    :param dataset_types: additional dataset types to add to the list
+    :return: spikeglx.Reader
+    """
+    if dataset_types is None:
+        dataset_types = []
+    dtypes = dataset_types + ['ephysData.raw.lf', 'ephysData.raw.meta', 'ephysData.raw.ch']
+    one.load(eid, dataset_types=dtypes, download_only=True)
+    session_path = one.path_from_eid(eid)
+
+    efiles = [ef for ef in spikeglx.glob_ephys_files(session_path, bin_exists=False)
+              if ef.get('lf', None)]
+    return [spikeglx.Reader(ef['lf']) for ef in efiles]
 
 
 def load_ephys_session(eid, one=None, dataset_types=None):
