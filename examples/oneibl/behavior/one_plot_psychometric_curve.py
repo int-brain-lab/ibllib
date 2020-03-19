@@ -3,11 +3,12 @@ import matplotlib.pyplot as plt
 from oneibl.one import ONE
 
 from load_mouse_data import get_behavior  # TODO WRITE DEPENDENCY;
-from behavior_plots import plot_psychometric # TODO THESE MODULES ARE NOT IN IBLLIB
+from behavior_plots import plot_psychometric  # TODO THESE MODULES ARE NOT IN IBLLIB
 
 one = ONE()
 
 # Get session information (FYI, not used for plotting)
+# https://alyx.internationalbrainlab.org/admin/actions/session/e752b02d-b54d-4373-b51e-0b31be5f8ee5/change/
 ses_ids = one.search(subjects='IBL_14', date_range='2018-11-27')
 print(one.list(ses_ids[0]))
 

@@ -6,7 +6,6 @@ from ibllib.time import isostr2date
 
 one = ONE()
 
-# https://alyx.internationalbrainlab.org/admin/actions/session/e752b02d-b54d-4373-b51e-0b31be5f8ee5/change/
 # Get the subject information. We want in particular weighings, that is only accessible through the rest endpoint.
 subject_details = one.alyx.rest('subjects', 'read', 'IBL_14')
 
