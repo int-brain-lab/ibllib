@@ -155,6 +155,8 @@ plt.show()
 
 
 
+
+
 #examples that work:
 #true fr is 10, fr_cont=0, true rp = 2, crosses at 2. true rp = 4, crosses at 4. etc.
 #same but with fr_cont=1, crosses earlier!
