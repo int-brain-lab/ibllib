@@ -115,7 +115,7 @@ trainA[spkTs[isi_viols]] = 0
 #sanity check, isi_viols2 should be an empty array
 spkTs2 = np.where(trainA==1)[0] #spike times in ms
 isis2 = np.diff(spkTs2)
-isi_viols2 = np.where(isis2<rp)
+isi_viols2 = np.where(isis2<true_rp)
 
 
 #now add a contaminating neuron. 
@@ -156,6 +156,55 @@ plt.show()
 
 
 
+#idea: load ISIs from a real neuron instead:
+from pathlib import Path
+import numpy as np
+import alf.io as aio
+import matplotlib.pyplot as plt
+
+
+#def run_noise_cutoff():
+alf_dir = r'C:\Users\Steinmetz Lab User\Documents\Lab\SpikeSortingOutput\Hopkins_CortexLab\test_path_alf'
+ks_dir = r'C:\Users\Steinmetz Lab User\Documents\Lab\SpikeSortingOutput\Hopkins_CortexLab'
+
+
+spks_b = aio.load_object(alf_dir, 'spikes')
+clstrs_b = aio.load_object(alf_dir, 'clusters')
+units_b = bb.processing.get_units_bunch(spks_b)
+units = list(units_b.amps.keys())
+n_units = np.max(spks_b.clusters) + 1
+
+unit = units[0]
+ts = units_b['times'][unit]
+fr_source = len(ts)/(ts[-1]-ts[0])
+
+
+isis = np.diff(ts)
+isis_sampled = random.choices(isis,k=10000)
+ts_sampled = np.cumsum(isis_sampled)
+total_time = ts_sampled[-1]
+#sanity check, fr_sampled should approximate fr_source
+fr_sampled = len(ts_sampled)/(total_time)
+
+#version 2: do some jiter around each isi.
+
+
+
+
+
+
+
+#remove isi_violations
+true_rp =.002
+isi_viols = np.where(np.array(isis_sampled)<true_rp)
+n_isi_viols = len(isi_viols[0])
+#get rid of isi violations to make this a real "biological" neuron
+ts_sampled[ts_sampled[isi_viols]] = 0
+
+#sanity check, isi_viols2 should be an empty array
+spkTs2 = np.where(trainA==1)[0] #spike times in ms
+isis2 = np.diff(spkTs2)
+isi_viols2 = np.where(isis2<rp)
 
 #examples that work:
 #true fr is 10, fr_cont=0, true rp = 2, crosses at 2. true rp = 4, crosses at 4. etc.
