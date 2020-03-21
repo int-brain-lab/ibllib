@@ -347,24 +347,39 @@ class Trajectory:
         ind = np.all(np.bitwise_and(bounds[0, :] <= epoints, epoints <= bounds[1, :]), axis=1)
         return epoints[ind, :]
 
-    def insertion(self, ba):
-        """
-        Given a Trajectory and a BrainAtlas object, computes the Insertion
-        :param ba:
-        :return:
-        """
-
 
 @dataclass
 class Insertion:
-    label: str
+    """
+    Defines an ephys probe insertion in 3D coordinate. IBL conventions.
+    To instantiate, use the static methods:
+    Insertion.from_track
+    Insertion.from_dict
+    """
     x: float
     y: float
     z: float
     phi: float
     theta: float
     depth: float
-    beta: float
+    label: str = ''
+    beta: float = 0
+
+    @staticmethod
+    def from_track(xyzs, brain_atlas=None):
+        """
+        :param brain_atlas: None. If provided, disregards the z coordinate and locks the insertion
+        point to the z of the brain surface
+        :return: Trajectory object
+        """
+        assert brain_atlas, 'Input argument brain_atlas must be defined'
+        traj = Trajectory.fit(xyzs)
+        entry = Insertion._get_brain_entry(traj, brain_atlas)
+        tip = xyzs[np.argmin(xyzs[:, 2]), :]
+        depth, theta, phi = cart2sph(*(entry - tip))
+        insertion_dict = {'x': entry[0], 'y': entry[1], 'z': entry[2],
+                          'phi': phi, 'theta': theta, 'depth': depth}
+        return Insertion(**insertion_dict)
 
     @staticmethod
     def from_dict(d, brain_atlas=None):
@@ -386,7 +401,7 @@ class Insertion:
         z = d['z'] / 1e6
         if brain_atlas:
             iy = brain_atlas.bc.y2i(d['y'] / 1e6)
-            ix = brain_atlas.bc.y2i(d['x'] / 1e6)
+            ix = brain_atlas.bc.x2i(d['x'] / 1e6)
             z = brain_atlas.top[iy, ix]
         return Insertion(x=d['x'] / 1e6, y=d['y'] / 1e6, z=z,
                          phi=d['phi'], theta=d['theta'], depth=d['depth'] / 1e6,
@@ -411,6 +426,23 @@ class Insertion:
     @property
     def tip(self):
         return sph2cart(- self.depth, self.theta, self.phi) + np.array((self.x, self.y, self.z))
+
+    @staticmethod
+    def _get_brain_entry(traj, brain_atlas):
+        """
+        Given a Trajectory and a BrainAtlas object, computes the brain entry coordinate as the
+        intersection of the trajectory and the brain surface (brain_atlas.top)
+        :param brain_atlas:
+        :return: 3 element array x,y,z
+        """
+        # do a recursive look-up of the brain surface along the trajectory, 5 is more than enough
+        z = 0
+        for m in range(5):
+            xyz = traj.eval_z(z)[0]
+            iy = brain_atlas.bc.y2i(xyz[1])
+            ix = brain_atlas.bc.x2i(xyz[0])
+            z = brain_atlas.top[iy, ix]
+        return xyz
 
 
 @dataclass
@@ -438,7 +470,7 @@ def AllenAtlas(res_um=25, par=None):
     """
     Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
     using the IBL Bregma and coordinate system
-    :param res_um: 25 or 50 um
+    :param res_um: 10, 25 or 50 um
     :return: atlas.BrainAtlas
     """
     if par is None:

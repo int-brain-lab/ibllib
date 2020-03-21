@@ -1,13 +1,45 @@
 import unittest
+from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
-from ibllib.atlas import BrainCoordinates, sph2cart, cart2sph, Trajectory, Insertion
+from ibllib.io import params
+from ibllib.atlas import (BrainAtlas, BrainCoordinates, sph2cart, cart2sph, Trajectory,
+                          Insertion, BrainRegions)
+
+
+def _create_mock_atlas():
+    """
+    Instantiates a mock atlas.BrainAtlas for testing purposes mimicking Allen Atlas
+    using the IBL Bregma and coordinate system
+    """
+    # Bregma indices for the 10um Allen Brain Atlas, mlapdv
+    par = {
+        'PATH_ATLAS': '/datadisk/BrainAtlas/ATLASES/Allen/',
+        'FILE_REGIONS': str(Path(__file__).parent.joinpath('allen_structure_tree.csv')),
+        'INDICES_BREGMA': list(np.array([1140 - (570 + 3.9), 540, 0 + 33.2]))
+    }
+    par = params.read('ibl_histology', default=par)
+    image, label = [np.zeros((528, 456, 320), dtype=np.bool) for _ in range(2)]
+    df_regions = pd.read_csv(par.FILE_REGIONS)
+    regions = BrainRegions(id=df_regions.id.values,
+                           name=df_regions.name.values,
+                           acronym=df_regions.acronym.values)
+    xyz2dims = np.array([1, 0, 2])
+    dims2xyz = np.array([1, 0, 2])
+    dxyz = 25 * 1e-6 * np.array([-1, -1, -1])
+    ibregma = (np.array(par.INDICES_BREGMA) * 10 / 25)
+    ba = BrainAtlas(image, label, regions, dxyz, ibregma, dims2xyz=dims2xyz, xyz2dims=xyz2dims)
+    X, Y = np.meshgrid(ba.bc.xscale, ba.bc.yscale)
+    top = X ** 2 + Y ** 2
+    ba.top = (top - np.min(top)) / (np.max(top) - np.min(top)) * .001
+    return ba
 
 
 class TestInsertion(unittest.TestCase):
 
-    def test_init(self):
+    def test_init_from_dict(self):
         d = {
             'label': 'probe00',
             'x': 544.0,
@@ -24,6 +56,28 @@ class TestInsertion(unittest.TestCase):
         # test methods tip/entry/xyz
         dd = np.sum(np.sqrt(np.diff(ins.xyz, axis=0) ** 2)) - d['depth'] / 1e6
         self.assertLess(abs(dd), 0.01)
+
+    def test_init_from_track(self):
+        brain_atlas = _create_mock_atlas()
+        xyz_track = np.array([[0.003139, -0.00405, -0.000793],
+                              [0.003089, -0.00405, -0.001043],
+                              [0.003014, -0.004025, -0.001268],
+                              [0.003014, -0.00405, -0.001393],
+                              [0.002939, -0.00405, -0.001643],
+                              [0.002914, -0.004025, -0.001918],
+                              [0.002989, -0.0041, -0.002168],
+                              [0.002914, -0.004075, -0.002318],
+                              [0.002939, -0.0041, -0.002368],
+                              [0.002914, -0.0041, -0.002443],
+                              [0.002839, -0.0041, -0.002743],
+                              [0.002764, -0.0041, -0.003068],
+                              [0.002589, -0.004125, -0.003768],
+                              [0.002489, -0.004275, -0.004893],
+                              [0.002439, -0.004375, -0.005093],
+                              [0.002364, -0.0044, -0.005418]])
+        insertion = Insertion.from_track(xyz_track, brain_atlas)
+        self.assertTrue(np.allclose(insertion.tip, xyz_track[-1, :]))
+        self.assertTrue(abs(insertion.theta - 10.58704241) < 1e6)
 
 
 class TestTrajectory(unittest.TestCase):

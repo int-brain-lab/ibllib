@@ -179,11 +179,11 @@ def get_brain_regions(xyz, channels_positions=SITES_COORDINATES, brain_atlas=bra
     brain_regions = brain_atlas.regions.get(brat.get_labels(xyz_channels))
 
     """
-    Get the best linear fit probe trajectory using points cloud
+    Get the probe insertion from the coordinates
     """
-    track = atlas.Trajectory.fit(xyz)
+    insertion = atlas.Insertion.from_track(xyz, brain_atlas)
 
-    return brain_regions, track
+    return brain_regions, insertion
 
 
 def extract_brain_regions(session_path, display=False):
