@@ -20,6 +20,8 @@ def cart2sph(x, y, z):
     theta = np.zeros_like(r)
     iok = r != 0
     theta[iok] = np.arccos(z[iok] / r[iok]) * 180 / np.pi
+    if theta.size == 1:
+        theta = np.float(theta)
     return r, theta, phi
 
 
@@ -482,9 +484,7 @@ def AllenAtlas(res_um=25, par=None):
         }
         par = params.read('ibl_histology', default=pdefault)
         if not Path(par.PATH_ATLAS).exists():
-            raise NotImplementedError("Atlas doesn't exist ! Mock option not implemented yet")
-            # TODO: mock atlas to get only the coordinate framework
-            pass
+            raise FileNotFoundError(f"{par.PATH_ATLAS}  doesn't exist !")
         params.write('ibl_histology', par)
     else:
         par = Bunch(par)

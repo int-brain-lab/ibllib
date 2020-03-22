@@ -204,7 +204,7 @@ class AlyxClient:
 
     def _generic_request(self, reqfunction, rest_query, data=None):
         # if the data is a dictionary, it has to be converted to json text
-        if isinstance(data, dict):
+        if isinstance(data, dict) or isinstance(data, list):
             data = json.dumps(data)
         # makes sure the base url is the one from the instance
         rest_query = rest_query.replace(self._base_url, '')

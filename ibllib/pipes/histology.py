@@ -149,12 +149,12 @@ def plot3d_all(trajectories, tracks):
         plt_trj.append(plt)
 
 
-def get_brain_regions(xyz, channels_positions=SITES_COORDINATES, brain_atlas=brat, display=False):
+def get_brain_regions(xyz, channels_positions=SITES_COORDINATES, brain_atlas=brat):
     """
     :param xyz: numpy array of 3D coordinates corresponding to a picked track or a trajectory
     the deepest point is considered the tip.
-    :param channels:
-    :param DISPLAY:
+    :param channels_positions:
+    :param brain_atlas:
     :return:
     """
 
@@ -177,7 +177,10 @@ def get_brain_regions(xyz, channels_positions=SITES_COORDINATES, brain_atlas=bra
         xyz_channels[:, m] = np.interp(channels_positions[:, 1] / 1e6,
                                        d[ind_depths], xyz[ind_depths, m])
     brain_regions = brain_atlas.regions.get(brat.get_labels(xyz_channels))
-
+    brain_regions['xyz'] = xyz_channels
+    brain_regions['lateral'] = channels_positions[:, 0]
+    brain_regions['axial'] = channels_positions[:, 1]
+    assert np.unique([len(brain_regions[k]) for k in brain_regions]).size == 1
     """
     Get the probe insertion from the coordinates
     """
