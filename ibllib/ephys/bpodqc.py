@@ -1,28 +1,28 @@
 import os
-from pathlib import Path, PureWindowsPath
 from functools import partial, wraps
+from pathlib import Path, PureWindowsPath
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy import interpolate
 
+import ibllib.io.extractors.ephys_fpga as fpga
 import ibllib.io.raw_data_loaders as raw
 import ibllib.plots as plots
 from alf.io import is_uuid_string
 from ibllib.ephys.ephysqc import _qc_from_path
-from ibllib.io.extractors.training_trials import (
-    get_choice,
-    get_feedback_times,
-    get_feedbackType,
-    get_goCueOnset_times,
-    get_goCueTrigger_times,
-    get_intervals,
-    get_port_events,
-    get_response_times,
-    get_stimOn_times,
-    get_stimOnTrigger_times,
-)
+from ibllib.io.extractors import ephys_trials
+from ibllib.io.extractors.training_trials import (get_choice,
+                                                  get_feedback_times,
+                                                  get_feedbackType,
+                                                  get_goCueOnset_times,
+                                                  get_goCueTrigger_times,
+                                                  get_intervals,
+                                                  get_port_events,
+                                                  get_response_times,
+                                                  get_stimOn_times,
+                                                  get_stimOnTrigger_times)
 from oneibl.one import ONE
 
 one = ONE()
@@ -480,6 +480,7 @@ def load_bpod_data(session_path):
     stimOn_times, stimOff_times, stimFreeze_times = get_stimOnOffFreeze_times_from_BNC1(
         session_path
     )
+    bpod2fpga = fpga.align_with_bpod(session_path)
 
     out = {
         "position": None,
@@ -787,24 +788,34 @@ def plot_bpod_session(session_path, ax=None):
     ax.set_ylim([0, 3])
 
 
-# Make decorator for sesison_path based QC to accept eid's
-# Check input if valid eid
-# Download relevant datasets
-# Get the path and feed  it to the func [sess_path = one.path_from_eid(eid)]
-
-
 @uuid_to_path(dl=True)
-def convert_bpod_times_to_FPGA_times(session_path):
-    fpgaqc_frame = _qc_from_path(session_path)
-    bpodqc_frame = get_bpodqc_frame(session_path)
-    return interpolate.interp1d(
-        bpodqc_frame["intervals_0"], fpgaqc_frame["intervals_0"], fill_value="extrapolate"
-    )  # TODO: finish this!!!
+def get_bpod2fpga_times_func(session_path):
+    session_path = Path(session_path)
+
+    # Load bpod intervals
+    data = raw.load_data(session_path)
+    settings = raw.load_settings(session_path)
+    bpod_intervals = get_intervals(session_path, save=False, data=data, settings=settings)
+    # Load _ibl_trials.intervals.npy
+    eid = one.eid_from_path(session_path)
+    if eid is None:
+        print(f"No session found with path = {session_path}")
+    fpga_intervals = one.load(eid, dataset_types='trials.intervals')
+    if not fpga_intervals:
+        print(f"tirals.intervals datasetType not found for session {eid}")
+    else:
+        fpga_intervals = fpga_intervals[0]
+    # align
+    bpod_tstarts, fpga_tstarts = raw.sync_trials_robust(bpod_intervals[:, 0], fpga_intervals[:, 0])
+    # Generate interp func
+    bpod2fpga = interpolate.interp1d(bpod_tstarts, fpga_tstarts, fill_value="extrapolate")
+
+    return bpod2fpga
 
 
 @uuid_to_path(dl=True)
 def plot_session_trigger_response_diffs(session_path, ax=None):
-    trigger_diffs = get_session_trigger_response_diffs(session_path)
+    trigger_diffs = get_session_trigger_response_delays(session_path)
 
     sett = raw.load_settings(session_path)
     eid = one.eid_from_path(session_path)
@@ -821,7 +832,7 @@ def plot_session_trigger_response_diffs(session_path, ax=None):
 
 
 @uuid_to_path(dl=True)
-def get_session_trigger_response_diffs(session_path):
+def get_session_trigger_response_delays(session_path):
     bpod = load_bpod_data(session_path)
     # get diff from triggers to detected events
     goCue_diff = np.abs(bpod["goCueTrigger_times"] - bpod["goCue_times"])
@@ -849,7 +860,7 @@ def _describe_trigger_diffs(trigger_diffs):
 
 @uuid_to_path(dl=True)
 def describe_sesion_trigger_response_diffs(session_path):
-    trigger_diffs = get_session_trigger_response_diffs(session_path)
+    trigger_diffs = get_session_trigger_response_delays(session_path)
     return _describe_trigger_diffs(trigger_diffs)
 
 
@@ -862,7 +873,7 @@ def get_trigger_response_diffs(eid_or_path_list):
         "stimFreeze": np.array([]),
     }
     for sess in eid_or_path_list:
-        td = get_session_trigger_response_diffs(sess)
+        td = get_session_trigger_response_delays(sess)
         for k in trigger_diffs:
             trigger_diffs[k] = np.append(trigger_diffs[k], td[k])
 
@@ -876,7 +887,7 @@ def describe_trigger_response_diffs(eid_or_path_list):
     return _describe_trigger_diffs(trigger_diffs)
 
 
-def describe_lab_trigger_response_diffs(labname):
+def describe_lab_trigger_response_delays(labname):
     eids, dets = one.search(
         task_protocol="_iblrig_tasks_ephysChoiceWorld6.2.5",
         lab=labname,
