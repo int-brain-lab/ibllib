@@ -174,7 +174,7 @@ units_b = bb.processing.get_units_bunch(spks_b)
 units = list(units_b.amps.keys())
 n_units = np.max(spks_b.clusters) + 1
 
-unit = units[0]
+unit = units[1]
 ts = units_b['times'][unit]
 fr_source = len(ts)/(ts[-1]-ts[0])
 
@@ -193,18 +193,71 @@ fr_sampled = len(ts_sampled)/(total_time)
 
 
 
-
 #remove isi_violations
 true_rp =.002
 isi_viols = np.where(np.array(isis_sampled)<true_rp)
 n_isi_viols = len(isi_viols[0])
 #get rid of isi violations to make this a real "biological" neuron
-ts_sampled[ts_sampled[isi_viols]] = 0
+    
+timestamps_sampled_real = np.delete(ts_sampled,isi_viols)
+
+train_real = np.zeros(int(np.ceil(total_time*10000))+1)
+timestamps_micros = [element * 10000 for element in timestamps_sampled_real]
+train_real[np.ceil(timestamps_micros).astype(int)]=1
+
+#now add contaminating neuron
+nbins = np.ceil(total_time*10000+1)
+dt = 1/10000
+fr_cont = 1
+train_cont=[]
+for i in range(int(nbins)):
+    if  random.random() < fr_cont*dt:
+        train_cont.append(1)
+    else:
+        train_cont.append(0)
+
+#should this one be biological too? get rid of isi viols
+
+train_observed = train_real+train_cont
+spkTs_observed = np.where(train_observed==1)[0] #spike times in ms
+isis_observed = np.diff(spkTs_observed)
+
+FR_observed = sum(train_observed)/len(train_real)*dt
+
+
+fr_idx = (np.abs(FR_vec - FR_observed)).argmin()
+cont_acceptable = max_acceptable_count[fr_idx]
+cont_observed = []
+for rp in RP_vec:
+    isi_viols_observed = np.where(isis_observed<(rp*1000))[0]
+    print()
+    cont_observed.append(len(isi_viols_observed))
+    
+plt.plot(RP_vec*1000,cont_acceptable,'b--', RP_vec*1000,cont_observed,'r--')
+plt.xlabel('Refractory period length (ms)')
+plt.xticks(np.arange(0,RP_vec[-1]*1000,1))
+#, np.round(RP_vec[np.arange(0,len(RP_vec+1),5)]*1000,decimals=2))
+plt.show()
+
+
+
+
+
+
+
+train_real=[]
+for i in np.arange(0,total_time,.0001):
+    if timestamps_sampled_real[idx]==i:
+        train_real.append(1)
+    else:
+        train_real.append(0)
+    idx+=1
+
 
 #sanity check, isi_viols2 should be an empty array
-spkTs2 = np.where(trainA==1)[0] #spike times in ms
-isis2 = np.diff(spkTs2)
-isi_viols2 = np.where(isis2<rp)
+#spkTs2 = np.where(trainA==1)[0] #spike times in ms
+#isis2 = np.diff(spkTs2)
+#isi_viols2 = np.where(isis2<rp)
 
 #examples that work:
 #true fr is 10, fr_cont=0, true rp = 2, crosses at 2. true rp = 4, crosses at 4. etc.
