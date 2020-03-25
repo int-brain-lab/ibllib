@@ -76,4 +76,4 @@ def load_spike_sorting(eid, one=None, dataset_types=None):
         clusters[label] = cluster
         spikes[label] = spike
 
-    return (spikes, clusters), ''
+    return spikes, clusters
