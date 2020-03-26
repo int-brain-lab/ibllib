@@ -13,7 +13,6 @@ def max_acceptable_cont(FR, RP, rec_duration,acceptableCont, thresh ):
     trueContRate = np.linspace(0,FR,100)
     timeForViol = RP*2*(FR-acceptableCont)*rec_duration
    
-    max_acceptable = acceptableCont*timeForViol
     
     expectedCountAtFullCont = FR*timeForViol
     obsContCountVec = np.arange(0,expectedCountAtFullCont,1)
