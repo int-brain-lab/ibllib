@@ -86,35 +86,28 @@ for bt in range(nbt):
             cont_observed[bt][pidx][rpidx] = len(isi_viols_observed) #.append(len(isi_viols_observed))
             rpidx+=1
         pidx+=1
-        
+  
 
-
-
+#plot distributions at one p_cont to check that it is poisson, with the correct mean
 rp_choice = 0.0031
 l = fr_sampled*.1*2*total_time*rp_choice
 x = np.arange(0,20,1)
 y = poisson.pmf(x, l)
-
 plt.hist(cont_observed[:,0,np.where(RP_vec==rp_choice)[0]],density=True)
 plt.plot(y)
-
-
 #plt.hist(isis_observed/10000,50,density=True)
 plt.ylim(0,.4)
 plt.show()
 
 
-
-
-
 #plot
 plt.plot(RP_vec*1000,cont_acceptable,'k-', label='acceptable')
-plt.plot(RP_vec*1000,cont_observed[0][0],'r--',label='0% contamination')
+plt.plot(RP_vec*1000,cont_observed[0][0],'g--',label='10% contamination')
 plt.legend(loc='upper left', shadow=False, fontsize='medium')
 plt.xlabel('Refractory period length (ms)')
 plt.ylabel('Number ISI violations')
 plt.xticks(np.arange(0,RP_vec[-1]*1000,1))
-#plt.ylim(0,25)
+plt.ylim(0,50)
 plt.show()
   
 

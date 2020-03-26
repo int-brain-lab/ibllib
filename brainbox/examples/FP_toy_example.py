@@ -95,7 +95,7 @@ plt.legend(loc='upper left', shadow=False, fontsize='medium')
 plt.xlabel('Refractory period length (ms)')
 plt.ylabel('Number ISI violations')
 plt.xticks(np.arange(0,RP_vec[-1]*1000,1))
-#plt.ylim(0,5)
+plt.ylim(0,10)
 plt.show()
 
 
