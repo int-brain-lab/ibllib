@@ -22,7 +22,7 @@ units_b = bb.processing.get_units_bunch(spks_b)
 units = list(units_b.amps.keys())
 n_units = np.max(spks_b.clusters) + 1
 
-unit = units[635] #635
+unit = units[681] #635 #681 #838
 ts = units_b['times'][unit]
 fr_source = len(ts)/(ts[-1]-ts[0])
 print(fr_source)
@@ -35,7 +35,7 @@ total_time = ts_sampled[-1]
 fr_sampled = len(ts_sampled)/(total_time)
 
 #remove isi_violations
-true_rp =.004
+true_rp =.003
 isi_viols = np.where(np.array(isis_sampled)<true_rp)
 n_isi_viols = len(isi_viols[0])
 #get rid of isi violations to make this a real "biological" neuron
@@ -54,107 +54,53 @@ percent_cont = np.arange(0,15,2.5)
 
 cont_observed = np.empty([len(percent_cont),len(RP_vec)])
 
-
+cont_acceptable=np.empty([len(RP_vec)])
 rpidx=0
 for rp in RP_vec:
-    cont_acceptable[rpidx] = max_acceptable_cont(FR_observed,rp,total_time,FR_observed*.1,.1)
+    cont_acceptable[rpidx] = max_acceptable_cont(fr_sampled,rp,total_time,fr_sampled*.1,.1)
     rpidx+=1
 
 pidx=0
 for p in percent_cont:
+    #generate a contaminating neuron whos fr is p% of the main neuron
     isis_cont = random.choices(isis,k=(int(len(ts)*p/100)))
     ts_cont = np.cumsum(isis_cont)
     fr_cont = len(ts_cont)/total_time
-    print(fr_cont)
     train_cont = np.zeros(int(np.ceil(total_time*10000))+1)
     timestamps_micros = [element * 10000 for element in ts_cont]
     train_cont[np.ceil(timestamps_micros).astype(int)]=1
-
-#    
-#    fr_cont = (p/100)*fr_sampled
-#    train_cont=[]
-#    for i in range(int(nbins)):
-#        if  random.random() < fr_cont*dt:
-#            train_cont.append(1)
-#        else:
-#            train_cont.append(0)
-#sanity check: should equal fr_cont
-#print(sum(train_cont)/(len(train_cont)/10000))
-
-#should this one be biological too? get rid of isi viols
-
     train_observed = train_real+train_cont
     spkTs_observed = np.where(train_observed==1)[0] #spike times in ms
     isis_observed = np.diff(spkTs_observed)
     
-    FR_observed = sum(train_observed)/(len(train_real)*dt)
-
-
-    fr_idx = (np.abs(FR_vec - FR_observed)).argmin()
     rpidx=0
     for rp in RP_vec:
-        cont_acceptable[rpidx] = max_acceptable_cont(FR_observed,rp,total_time,FR_observed*.1,.1)
+#        cont_acceptable[rpidx] = max_acceptable_cont(FR_observed,rp,total_time,FR_observed*.1,.1)
 
         isi_viols_observed = np.where(isis_observed<(rp*10000))[0]
-        print()
         cont_observed[pidx][rpidx] = len(isi_viols_observed) #.append(len(isi_viols_observed))
         rpidx+=1
     pidx+=1
     
-plt.plot(RP_vec*1000,cont_acceptable,'k-', 
-         RP_vec*1000,cont_observed[0],'r--',
-         RP_vec*1000,cont_observed[1],'b--',
-         RP_vec*1000,cont_observed[2],'y--',
-         RP_vec*1000,cont_observed[3],'c--')
-         
+
+#plot
+plt.plot(RP_vec*1000,cont_acceptable,'k-', label='acceptable')
+plt.plot(RP_vec*1000,cont_observed[0],'r--',label='0% contamination')
+plt.plot(RP_vec*1000,cont_observed[1],'b--', label='2.5% contamination')
+plt.plot(RP_vec*1000,cont_observed[2],'y--', label='5% contamination')
+plt.plot(RP_vec*1000,cont_observed[3],'c--', label='7.5% contamination')
+plt.plot( RP_vec*1000,cont_observed[4],'g--', label='10% contamination')
+plt.plot( RP_vec*1000,cont_observed[5],'m--', label='12.5% contamination')
+plt.legend(loc='upper left', shadow=False, fontsize='medium')
 plt.xlabel('Refractory period length (ms)')
+plt.ylabel('Number ISI violations')
 plt.xticks(np.arange(0,RP_vec[-1]*1000,1))
-#, np.round(RP_vec[np.arange(0,len(RP_vec+1),5)]*1000,decimals=2))
+#plt.ylim(0,5)
 plt.show()
 
 
-
-
-plt.plot(RP_vec*1000,cont_acceptable,'k-', RP_vec*1000,cont_observed[0],'c--')
-plt.plot(RP_vec*1000,cont_acceptable,'k-', 
-         RP_vec*1000,cont_observed[0],'r--',
-         RP_vec*1000,cont_observed[1],'b--',
-         RP_vec*1000,cont_observed[2],'y--',
-         RP_vec*1000,cont_observed[3],'c--',
-         RP_vec*1000,cont_observed[4],'r--',
-         RP_vec*1000,cont_observed[5],'b--')
-#         RP_vec*1000,cont_observed[6],'y--',
-#         RP_vec*1000,cont_observed[7],'c--')
-#         RP_vec*1000,cont_observed[8],'r--',
-#         RP_vec*1000,cont_observed[9],'b--',
-#         RP_vec*1000,cont_observed[10],'y--',
-#         RP_vec*1000,cont_observed[11],'c--',)
-plt.ylim(0,25)
-plt.show()
-
-
-#train_real=[]
-#for i in np.arange(0,total_time,.0001):
-#    if timestamps_sampled_real[idx]==i:
-#        train_real.append(1)
-#    else:
-#        train_real.append(0)
-#    idx+=1
-
-
-#sanity check, isi_viols2 should be an empty array
-#spkTs2 = np.where(trainA==1)[0] #spike times in ms
-#isis2 = np.diff(spkTs2)
-#isi_viols2 = np.where(isis2<rp)
-
-#examples that work:
-#true fr is 10, fr_cont=0, true rp = 2, crosses at 2. true rp = 4, crosses at 4. etc.
-#same but with fr_cont=1, crosses earlier!
-
-
-
-#example issues:
-#same example as above but with fr_cont=.1, stays close to acceptable until true_rp. BUT, crosses earlier!
-#why step functions? 
-#fr_cont = 0 has a refractory period of 5?!
-
+#check which percent contaminations pass
+for i in range(0,len(percent_cont)):
+    list3 = [1 for item1, item2 in zip(cont_observed[i], cont_acceptable) if item1 < item2]
+    if len(list3)>0:
+        print(percent_cont[i])
