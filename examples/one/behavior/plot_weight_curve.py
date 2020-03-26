@@ -11,7 +11,8 @@ from ibllib.time import isostr2date
 
 one = ONE()
 
-# Get the subject information. We want in particular weighings, that is only accessible through the rest endpoint.
+# Get the subject information.
+# We want in particular weighings, that is only accessible through the rest endpoint.
 subject_details = one.alyx.rest('subjects', 'read', 'IBL_14')
 
 # Get and show list of keys, check 'weighings' is present

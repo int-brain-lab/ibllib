@@ -17,7 +17,8 @@ one.load(eid, dataset_types=dtypes, download_only=True)
 
 # Get the files information
 session_path = one.path_from_eid(eid)
-efiles = [ef for ef in spikeglx.glob_ephys_files(session_path, bin_exists=False) if ef.get('lf', None)]
+efiles = [ef for ef in spikeglx.glob_ephys_files(session_path, bin_exists=False) if
+          ef.get('lf', None)]
 
 # Read the files and get the data
 lfreader = spikeglx.Reader(efiles[0]['lf'])
@@ -29,9 +30,7 @@ dat_volt = lfreader.read(nsel=slice(0, 1000, None))
 dat_samp = lfreader.data[:10000, :]
 
 # Get the conversion factor and check it matches
-s2mv = lfreader.channel_conversion_sample2v['lf'][0] # converstion sample to Volts
+s2mv = lfreader.channel_conversion_sample2v['lf'][0]  # Convert sample to Volts
 
-if lfreader._raw[55, 5] * s2mv == lfreader[55, 5]: # TODO OLIVIER CHECK TEST
-    ValueError
-if dat_nom2 * s2mv == dat_nom1
+if lfreader._raw[55, 5] * s2mv == lfreader[55, 5]:  # TODO OLIVIER CHECK TEST
     ValueError

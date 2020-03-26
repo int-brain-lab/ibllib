@@ -7,7 +7,9 @@ from oneibl.one import ONE
 
 one = ONE(base_url='https://dev.alyx.internationalbrainlab.org')
 
+
 # Define an example function to input 'Hydrogel 5% Citric Acid' with user 'valeria' on Alyx dev
+
 def _example_change_wa(dates, sub):
     for dat in dates:
         for s in sub:
@@ -19,7 +21,8 @@ def _example_change_wa(dates, sub):
                 'adlib': True}
             # Do not use the example on anything else than alyx-dev !
             if one.alyx._base_url == 'https://dev.alyx.internationalbrainlab.org':
-                rep = one.alyx.rest('water-administrations', 'create', data=wa_)
+                one.alyx.rest('water-administrations', 'create', data=wa_)
+
 
 # Define date range
 dates = ['2018-11-19T12:00', '2018-11-22T12:00', '2018-11-23T12:00']
