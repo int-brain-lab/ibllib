@@ -22,7 +22,7 @@ units_b = bb.processing.get_units_bunch(spks_b)
 units = list(units_b.amps.keys())
 n_units = np.max(spks_b.clusters) + 1
 
-unit = units[681] #635 #681 #838
+unit = units[635] #635 #681 #838
 ts = units_b['times'][unit]
 fr_source = len(ts)/(ts[-1]-ts[0])
 print(fr_source)
@@ -95,7 +95,7 @@ plt.legend(loc='upper left', shadow=False, fontsize='medium')
 plt.xlabel('Refractory period length (ms)')
 plt.ylabel('Number ISI violations')
 plt.xticks(np.arange(0,RP_vec[-1]*1000,1))
-plt.ylim(0,10)
+#plt.ylim(0,10)
 plt.show()
 
 

@@ -53,7 +53,7 @@ dt = 1/10000
 percent_cont = np.arange(10,11,1)# np.arange(0,15,2.5)
 
 
-nbt=50
+nbt=1000
 
 cont_observed = np.empty([nbt,len(percent_cont),len(RP_vec)])
 
@@ -99,6 +99,12 @@ plt.plot(y)
 plt.ylim(0,.4)
 plt.show()
 
+
+#at one slice, how many cont_observed at 10% contamination are below max acceptable?
+acceptable = cont_acceptable[np.where(RP_vec==rp_choice)[0]]
+dist_10 = cont_observed[:,0,np.where(RP_vec==rp_choice)[0]]
+number_pass = np.where(dist_10<=acceptable)[0]
+percent_pass = len(number_pass)/len(dist_10)
 
 #plot
 plt.plot(RP_vec*1000,cont_acceptable,'k-', label='acceptable')
