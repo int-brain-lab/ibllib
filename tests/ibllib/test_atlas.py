@@ -1,12 +1,9 @@
 import unittest
-from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
-from ibllib.io import params
-from ibllib.atlas import (BrainAtlas, BrainCoordinates, sph2cart, cart2sph, Trajectory,
-                          Insertion, BrainRegions)
+from ibllib.atlas import (BrainCoordinates, cart2sph, sph2cart, Trajectory,
+                          Insertion, ALLEN_CCF_LANDMARKS_MLAPDV_UM, AllenAtlas)
 
 
 def _create_mock_atlas():
@@ -14,27 +11,19 @@ def _create_mock_atlas():
     Instantiates a mock atlas.BrainAtlas for testing purposes mimicking Allen Atlas
     using the IBL Bregma and coordinate system
     """
-    # Bregma indices for the 10um Allen Brain Atlas, mlapdv
-    par = {
-        'PATH_ATLAS': '/datadisk/BrainAtlas/ATLASES/Allen/',
-        'FILE_REGIONS': str(Path(__file__).parent.joinpath('allen_structure_tree.csv')),
-        'INDICES_BREGMA': list(np.array([1140 - (570 + 3.9), 540, 0 + 33.2]))
-    }
-    par = params.read('ibl_histology', default=par)
-    image, label = [np.zeros((528, 456, 320), dtype=np.bool) for _ in range(2)]
-    df_regions = pd.read_csv(par.FILE_REGIONS)
-    regions = BrainRegions(id=df_regions.id.values,
-                           name=df_regions.name.values,
-                           acronym=df_regions.acronym.values)
-    xyz2dims = np.array([1, 0, 2])
-    dims2xyz = np.array([1, 0, 2])
-    dxyz = 25 * 1e-6 * np.array([-1, -1, -1])
-    ibregma = (np.array(par.INDICES_BREGMA) * 10 / 25)
-    ba = BrainAtlas(image, label, regions, dxyz, ibregma, dims2xyz=dims2xyz, xyz2dims=xyz2dims)
+    ba = AllenAtlas(res_um=25, mock=True)
     X, Y = np.meshgrid(ba.bc.xscale, ba.bc.yscale)
     top = X ** 2 + Y ** 2
     ba.top = (top - np.min(top)) / (np.max(top) - np.min(top)) * .001
     return ba
+
+
+class TestCoordinateConversions(unittest.TestCase):
+
+    def test_allen_ba(self):
+        ba = _create_mock_atlas()
+        self.assertTrue(np.allclose(ba.bc.xyz2i(np.array([0, 0, 0]), round=False),
+                                    ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / 25))
 
 
 class TestInsertion(unittest.TestCase):

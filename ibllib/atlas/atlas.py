@@ -9,6 +9,8 @@ import nrrd
 from brainbox.core import Bunch
 from ibllib.io import params
 
+ALLEN_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5739, 5400, 332])}
+
 
 def cart2sph(x, y, z):
     """
@@ -468,40 +470,58 @@ class BrainRegions:
                      acronym=self.acronym[iself[uind]])
 
 
-def AllenAtlas(res_um=25, par=None):
+class AllenAtlas(BrainAtlas):
+    def __init__(self, res_um=25, par=None, scaling=np.array([1, 1, 1]), mock=False):
+        """
+        Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
+        using the IBL Bregma and coordinate system
+        :param res_um: 10, 25 or 50 um
+        :return: atlas.BrainAtlas
+        """
+        if par is None:
+            # Bregma indices for the 10um Allen Brain Atlas, mlapdv
+            pdefault = {
+                'PATH_ATLAS': '/datadisk/BrainAtlas/ATLASES/Allen/',
+                'FILE_REGIONS': str(Path(__file__).parent.joinpath('allen_structure_tree.csv')),
+            }
+            par = params.read('ibl_histology', default=pdefault)
+            if not Path(par.PATH_ATLAS).exists() and not mock:
+                raise FileNotFoundError(f"{par.PATH_ATLAS}  doesn't exist !")
+            params.write('ibl_histology', par)
+        else:
+            par = Bunch(par)
+        # file_image = Path(path_atlas).joinpath(f'ara_nissl_{res_um}.nrrd')
+        file_image = Path(par.PATH_ATLAS).joinpath(f'average_template_{res_um}.nrrd')
+        file_label = Path(par.PATH_ATLAS).joinpath(f'annotation_{res_um}.nrrd')
+        if mock:
+            image, label = [np.zeros((528, 456, 320), dtype=np.bool) for _ in range(2)]
+        else:
+            image, _ = nrrd.read(file_image, index_order='C')  # dv, ml, ap
+            label, _ = nrrd.read(file_label, index_order='C')  # dv, ml, ap
+            label = np.swapaxes(np.swapaxes(label, 2, 0), 1, 2)  # label[iap, iml, idv]
+            image = np.swapaxes(np.swapaxes(image, 2, 0), 1, 2)  # image[iap, iml, idv]
+        # resulting volumes origin: x right, y front, z top
+        df_regions = pd.read_csv(par.FILE_REGIONS)
+        regions = BrainRegions(id=df_regions.id.values,
+                               name=df_regions.name.values,
+                               acronym=df_regions.acronym.values)
+        xyz2dims = np.array([1, 0, 2])
+        dims2xyz = np.array([1, 0, 2])
+        dxyz = res_um * 1e-6 * np.array([1, -1, -1]) * scaling
+        # we use Bregma as the origin
+        ibregma = (ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / res_um)
+        super().__init__(image, label, regions, dxyz, ibregma,
+                         dims2xyz=dims2xyz, xyz2dims=xyz2dims)
+
+
+def NeedlesAtlas(res_um=25, par=None):
     """
     Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
-    using the IBL Bregma and coordinate system
+    using the IBL Bregma and coordinate system. The Needles atlas defines a stretch along AP
+    axis and a sqeeze along the DV axis.
     :param res_um: 10, 25 or 50 um
     :return: atlas.BrainAtlas
     """
-    if par is None:
-        # Bregma indices for the 10um Allen Brain Atlas, mlapdv
-        pdefault = {
-            'PATH_ATLAS': '/datadisk/BrainAtlas/ATLASES/Allen/',
-            'FILE_REGIONS': str(Path(__file__).parent.joinpath('allen_structure_tree.csv')),
-            'INDICES_BREGMA': list(np.array([1140 - (570 + 3.9), 540, 0 + 33.2]))
-        }
-        par = params.read('ibl_histology', default=pdefault)
-        if not Path(par.PATH_ATLAS).exists():
-            raise FileNotFoundError(f"{par.PATH_ATLAS}  doesn't exist !")
-        params.write('ibl_histology', par)
-    else:
-        par = Bunch(par)
-    # file_image = Path(path_atlas).joinpath(f'ara_nissl_{res_um}.nrrd')
-    file_image = Path(par.PATH_ATLAS).joinpath(f'average_template_{res_um}.nrrd')
-    file_label = Path(par.PATH_ATLAS).joinpath(f'annotation_{res_um}.nrrd')
-    image, header = nrrd.read(file_image, index_order='C')  # dv, ml, ap
-    image = np.swapaxes(np.swapaxes(image, 2, 0), 1, 2)  # image[iap, iml, idv]
-    label, header = nrrd.read(file_label, index_order='C')  # dv, ml, ap
-    label = np.swapaxes(np.swapaxes(label, 2, 0), 1, 2)  # label[iap, iml, idv]
-    # resulting volumes origin: x right, y front, z top
-    df_regions = pd.read_csv(par.FILE_REGIONS)
-    regions = BrainRegions(id=df_regions.id.values,
-                           name=df_regions.name.values,
-                           acronym=df_regions.acronym.values)
-    xyz2dims = np.array([1, 0, 2])
-    dims2xyz = np.array([1, 0, 2])
-    dxyz = res_um * 1e-6 * np.array([-1, -1, -1])
-    ibregma = (np.array(par.INDICES_BREGMA) * 10 / res_um)
-    return BrainAtlas(image, label, regions, dxyz, ibregma, dims2xyz=dims2xyz, xyz2dims=xyz2dims)
+    DV_SCALE = 0.952  # multiplicative factor on DV dimension, determined from MRI->CCF transform
+    AP_SCALE = 1.087  # multiplicative factor on AP dimension
+    return AllenAtlas(res_um=res_um, par=par, scaling=np.array([1, AP_SCALE, DV_SCALE]))

@@ -16,7 +16,6 @@ atlas_params = {
     'PATH_ATLAS': str('/datadisk/BrainAtlas/ATLASES/Allen'),
     'FILE_REGIONS':
         str(Path(inspect.getfile(atlas.AllenAtlas)).parent.joinpath('allen_structure_tree.csv')),
-    'INDICES_BREGMA': list(np.array([1140 - (570 + 3.9), 540, 0 + 33.2]))
 }
 # origin Allen left, front, up
 brain_atlas = atlas.AllenAtlas(res_um=25, par=atlas_params)
