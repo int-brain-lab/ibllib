@@ -286,15 +286,15 @@ def plot_wheel_move_before_feedback(details: list, ax=None, describe=False):
 # Variable name: stimulus_move_before_goCue
 # Metric: count of stimulus change events between trialstart_time and (gocue_time-20ms)
 # Criterion: 0 on 99% of trials
-def load_(eid):
+def load_session_stimulus_move_before_goCue(eid):
     pass
 
 
-def process_(details):
+def process_session_stimulus_move_before_goCue(details):
     pass
 
 
-def plot_(details: list, ax=None, describe=False):
+def plot_session_stimulus_move_before_goCue(details: list, ax=None, describe=False):
     pass
 
 
@@ -302,265 +302,269 @@ def plot_(details: list, ax=None, describe=False):
 # Variable name: positive_feedback_stimOff_delays
 # Metric: abs((stimoff_time - feedback_time) - 1s)
 # Criterion: <20 ms on 99% of correct trials
-def load_(eid):
+def load_session_positive_feedback_stimOff_delays(eid):
     pass
 
 
-def process_(details):
+def process_session_positive_feedback_stimOff_delays(details):
     pass
 
 
-def plot_(details: list, ax=None, describe=False):
+def plot_session_positive_feedback_stimOff_delays(details: list, ax=None, describe=False):
     pass
 
 
-# 9.Delay between noise and stim off should be 2 second ✓ Ephys ✘ Bpod
+# 9.Delay between noise and stim off should be 2 second ✓ Ephys
 # Variable name: negative_feedback_stimOff_delays
 # Metric: abs((stimoff_time - feedback_time) - 2s)
 # Criterion: <20 ms on 99% of incorrect trials
-def load_(eid):
+def load_session_negative_feedback_stimOff_delays(eid):
     pass
 
 
-def process_(details):
+def process_session_negative_feedback_stimOff_delays(details):
     pass
 
 
-def plot_(details: list, ax=None, describe=False):
+def plot_session_negative_feedback_stimOff_delays(details: list, ax=None, describe=False):
     pass
 
 
-# 10. Number of Bonsai command to change screen should match Number of state change of frame2ttl ✓ Ephys ✘ Bpod
+# 10. Number of Bonsai command to change screen should match Number of state change of frame2ttl
 # Variable name: syncSquare
 # Metric: (count of bonsai screen updates) - (count of frame2ttl)
 # Criterion: 0 on 99% of trials
-def load_(eid):
-    pass
+# def load_session_(eid):
+#     pass
 
 
-def process_(details):
-    pass
+# def process_session_(details):
+#     pass
 
 
-def plot_(details: list, ax=None, describe=False):
-    pass
+# def plot_session_(details: list, ax=None, describe=False):
+#     pass
 
 
-# 11. No valve outputs between trialstart_time and gocue_time-20 ms ✘ Ephys ✘ Bpod
+# 11. No valve outputs between trialstart_time and gocue_time-20 ms
 # Variable name: valve_pre_trial
 # Metric: count of valve events between trialstart_time and (gocue_time-20ms)
 # Criterion: 0 on 99% of trials
-def load_(eid):
+def load_session_valve_pre_trial(eid):
     pass
 
 
-def process_(details):
+def process_session_valve_pre_trial(details):
     pass
 
 
-def plot_(details: list, ax=None, describe=False):
+def plot_session_valve_pre_trial(details: list, ax=None, describe=False):
     pass
 
 
-# 12. No audio outputs between trialstart_time and gocue_time-20 ms ✘ Ephys ✘ Bpod
+# 12. No audio outputs between trialstart_time and gocue_time-20 ms
 # Variable name: audio_pre_trial
 # Metric: count of audio events between trialstart_time and (gocue_time-20ms)
 # Criterion: 0 on 99% of trials
-def load_(eid):
+def load_session_audio_pre_trial(eid):
     pass
 
 
-def process_(details):
+def process_session_audio_pre_trial(details):
     pass
 
 
-def plot_(details: list, ax=None, describe=False):
+def plot_session_audio_pre_trial(details: list, ax=None, describe=False):
     pass
+
 
 # Sequence of events:
-# 13. on incorrect / miss trials : 2 audio events, 2 Bpod events (trial start, ITI) ✘ Ephys ✘ Bpod
+# 13. on incorrect / miss trials : 2 audio events, 2 Bpod events (trial start, ITI)
 # Variable name: trial_event_sequence_error
 # Metric: Bpod (trial start) > audio (go cue) > audio (wrong) > Bpod (ITI)
 # Criterion: All three boolean comparisons true on 99% of trials
-def load_(eid):
+def load_session_trial_event_sequence_error(eid):
     pass
 
 
-def process_(details):
+def process_session_trial_event_sequence_error(details):
     pass
 
 
-def plot_(details: list, ax=None, describe=False):
+def plot_session_trial_event_sequence_error(details: list, ax=None, describe=False):
     pass
 
 
-# 14. on correct trials : 1 audio events, 3 Bpod events (valve open, trial start, ITI) ✘ Ephys ✘ Bpod (ITI task version dependent on ephys)
+# 14. on correct trials : 1 audio events, 3 Bpod events (valve open, trial start, ITI)
+# (ITI task version dependent on ephys)
 # Variable name: trial_event_sequence_correct
 # Metric: Bpod (trial start) > audio (go cue) > Bpod (valve) > Bpod (ITI)
 # Criterion: All three boolean comparisons true on 99% of trials
-def load_(eid):
+def load_session_trial_event_sequence_correct(eid):
     pass
 
 
-def process_(details):
+def process_session_trial_event_sequence_correct(details):
     pass
 
 
-def plot_(details: list, ax=None, describe=False):
+def plot_session_trial_event_sequence_correct(details: list, ax=None, describe=False):
     pass
 
 
-# 15. Time between goCue and feedback <= 60s ✘ Ephys ✘ Bpod
+# 15. Time between goCue and feedback <= 60s
 # Variable name: trial_length
 # Metric: (feedback_time - gocue_time) < 60.1 s AND (feedback_time - gocue_time) > 0 s
 # Criterion: both true on 99% of trials
-def load_(eid):
+def load_session_trial_length(eid):
     pass
 
 
-def process_(details):
+def process_session_trial_length(details):
     pass
 
 
-def plot_(details: list, ax=None, describe=False):
+def plot_session_trial_length(details: list, ax=None, describe=False):
     pass
 
 
-# 16. Between go tone and feedback, frame2ttl should be changing at ~60Hz if wheel moves (exact frequency depending on velocity) ✘ Ephys ✘ Bpod
+# 16. Between go tone and feedback, frame2ttl should be changing at ~60Hz
+# if wheel moves (exact frequency depending on velocity)
 # Variable name:
 # Metric:
 # Criterion:
-def load_(eid):
-    pass
+# def load_session_(eid):
+#     pass
 
 
-def process_(details):
-    pass
+# def process_session_(details):
+#     pass
 
 
-def plot_(details: list, ax=None, describe=False):
-    pass
+# def plot_session_(details: list, ax=None, describe=False):
+#     pass
 
 
 # Session level?
-# bpod_ntrials = len(raw.load_data(one.path_from_eid(eid)))
+# bpod_ntrials = len(raw.load_session_data(one.path_from_eid(eid)))
 # 17. Proportion of datasetTypes extracted
 # Variable name: nDatasetTypes
-# Metric: len(one.load(eid, offline=True, download_only=True)) / nExpetedDatasetTypes (hardcoded per task?)
-def load_(eid):
+# Metric: len(one.load(eid, offline=True, download_session_only=True)) / nExpetedDatasetTypes
+# (hardcoded per task?)
+def load_session_nDatasetTypes(eid):
     pass
 
 
-def process_(details):
+def session_process_session_nDatasetTypes(session_details):
     pass
 
 
-def plot_(details: list, ax=None, describe=False):
+def plot_session_nDatasetTypes(details: list, ax=None, describe=False):
     pass
 
 
 # 18. Proportion of ntrials from ONE to bpod
 # Variable name: intervals
 # Metric: len(one.load(eid, dataset_types=’trials.intervals’)) / bpod_ntrials
-def load_(eid):
+def load_session_intervals(eid):
     pass
 
 
-def process_(details):
+def process_session_intervals(details):
     pass
 
 
-def plot_(details: list, ax=None, describe=False):
+def plot_session_intervals(details: list, ax=None, describe=False):
     pass
 
 
 # 19.Proportion of stimOnTrigger_times to bpod_ntrials
 # Variable name: stimOnTrigger_times
 # Metric: len(one.load(eid, dataset_types=’trials.stimOnTrigger_times’)) / bpod_ntrials
-def load_(eid):
+def load_session_stimOnTrigger_times(eid):
     pass
 
 
-def process_(details):
+def process_session_stimOnTrigger_times(details):
     pass
 
 
-def plot_(details: list, ax=None, describe=False):
+def plot_session_stimOnTrigger_times(details: list, ax=None, describe=False):
     pass
 
 
 # 20.Proportion of stimOn_times to ntrials
 # Variable name: stimOn_times
 # Metric:
-def load_(eid):
+def load_session_stimOn_times(eid):
     pass
 
 
-def process_(details):
+def process_session_stimOn_times(details):
     pass
 
 
-def plot_(details: list, ax=None, describe=False):
+def plot_session_stimOn_times(details: list, ax=None, describe=False):
     pass
 
 
 # 21.Proportion of goCueTrigger_times to bpod_ntrials
 # Variable name: goCueTrigger_times
 # Metric:
-def load_(eid):
+def load_session_goCueTrigger_times(eid):
     pass
 
 
-def process_(details):
+def process_session_goCueTrigger_times(details):
     pass
 
 
-def plot_(details: list, ax=None, describe=False):
+def plot_session_goCueTrigger_times(details: list, ax=None, describe=False):
     pass
 
 
 # 22.Proportion of goCue_times to bpod_ntrials
 # Variable name: goCue_times
 # Metric:
-def load_(eid):
+def load_session_goCue_times(eid):
     pass
 
 
-def process_(details):
+def process_session_goCue_times(details):
     pass
 
 
-def plot_(details: list, ax=None, describe=False):
+def plot_session_goCue_times(details: list, ax=None, describe=False):
     pass
 
 
 # 23. Proportion of response_times to bpod_ntrials
 # Variable name: response_times
 # Metric:
-def load_(eid):
+def load_session_response_times(eid):
     pass
 
 
-def process_(details):
+def process_session_response_times(details):
     pass
 
 
-def plot_(details: list, ax=None, describe=False):
+def plot_session_response_times(details: list, ax=None, describe=False):
     pass
 
 
 # 24.Proportion of feedback_times to bpod_ntrials
 # Variable name: feedback_times
 # Metric:
-def load_(eid):
+def load_session_feedback_times(eid):
     pass
 
 
-def process_(details):
+def process_session_feedback_times(details):
     pass
 
 
-def plot_(details: list, ax=None, describe=False):
+def plot_session_feedback_times(details: list, ax=None, describe=False):
     pass
 
 
@@ -570,15 +574,15 @@ def plot_(details: list, ax=None, describe=False):
 # Variable name: goCue_delays
 # Metric: goCue_times - goCueTrigger_times
 # Criterion: 99% <= 1ms
-def load_(eid):
+def load_session_goCue_delays(eid):
     pass
 
 
-def process_(details):
+def process_session_goCue_delays(details):
     pass
 
 
-def plot_(details: list, ax=None, describe=False):
+def plot_session_goCue_delays(details: list, ax=None, describe=False):
     pass
 
 
@@ -586,15 +590,15 @@ def plot_(details: list, ax=None, describe=False):
 # Variable name: errorCue_delays
 # Metric: errorCue_times - errorCueTrigger_times
 # Criterion: 99% <= 1ms
-def load_(eid):
+def load_session_errorCue_delays(eid):
     pass
 
 
-def process_(details):
+def process_session_errorCue_delays(details):
     pass
 
 
-def plot_(details: list, ax=None, describe=False):
+def plot_session_errorCue_delays(details: list, ax=None, describe=False):
     pass
 
 
@@ -602,15 +606,15 @@ def plot_(details: list, ax=None, describe=False):
 # Variable name: stimOn_delays
 # Metric: stimOn_times - stiomOnTrigger_times
 # Criterion: 99% <  150ms
-def load_(eid):
+def load_session_stimOn_delays(eid):
     pass
 
 
-def process_(details):
+def process_session_stimOn_delays(details):
     pass
 
 
-def plot_(details: list, ax=None, describe=False):
+def plot_session_stimOn_delays(details: list, ax=None, describe=False):
     pass
 
 
@@ -618,15 +622,15 @@ def plot_(details: list, ax=None, describe=False):
 # Variable name: stimOff_delays
 # Metric: stimOff_times - stimOffTrigger_times
 # Criterion:99% <  150ms
-def load_(eid):
+def load_session_stimOff_delays(eid):
     pass
 
 
-def process_(details):
+def process_session_stimOff_delays(details):
     pass
 
 
-def plot_(details: list, ax=None, describe=False):
+def plot_session_stimOff_delays(details: list, ax=None, describe=False):
     pass
 
 
@@ -634,15 +638,15 @@ def plot_(details: list, ax=None, describe=False):
 # Variable name: stimFreeze_delays
 # Metric: stimFreeze_times - stimFreezeTrigger_times
 # Criterion: 99% <  150ms
-def load_(eid):
+def load_session_stimFreeze_delays(eid):
     pass
 
 
-def process_(details):
+def process_session_stimFreeze_delays(details):
     pass
 
 
-def plot_(details: list, ax=None, describe=False):
+def plot_session_stimFreeze_delays(details: list, ax=None, describe=False):
     pass
 
 
