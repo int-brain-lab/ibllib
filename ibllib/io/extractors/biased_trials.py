@@ -33,6 +33,7 @@ def get_contrastLR(session_path, save=False, data=False, settings=False):
     :return: numpy.ndarray
     :rtype: dtype('float64')
     """
+        
     if not data:
         data = raw.load_data(session_path)
     if not settings:
@@ -64,13 +65,13 @@ def extract_all(session_path, save=False, data=False, settings=False):
         settings = raw.load_settings(session_path)
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
-
     # Common to all versions
     feedbackType = get_feedbackType(session_path, save=save, data=data, settings=settings)
     contrastLeft, contrastRight = get_contrastLR(
         session_path, save=save, data=data, settings=settings)
-    probabilityLeft = get_probabilityLeft(
-        session_path, save=save, data=data, settings=settings)
+    #assert same number of fpga and bpod trials
+    len_from_ephys = len(np.load(session_path + '/alf/_ibl_trials.goCue_times.npy'))
+    assert len_from_ephys == len(contrastLeft) 
     choice = get_choice(session_path, save=save, data=data, settings=settings)
     rewardVolume = get_rewardVolume(session_path, save=save, data=data, settings=settings)
     feedback_times = get_feedback_times(session_path, save=save, data=data, settings=settings)
@@ -80,12 +81,9 @@ def extract_all(session_path, save=False, data=False, settings=False):
     go_cue_trig_times = get_goCueTrigger_times(
         session_path, save=save, data=data, settings=settings)
     go_cue_times = get_goCueOnset_times(session_path, save=save, data=data, settings=settings)
-    camera_timestamps = get_camera_timestamps(
-        session_path, save=save, data=data, settings=settings)
     out = {'feedbackType': feedbackType,
            'contrastLeft': contrastLeft,
            'contrastRight': contrastRight,
-           'probabilityLeft': probabilityLeft,
            'session_path': session_path,
            'choice': choice,
            'rewardVolume': rewardVolume,
@@ -93,7 +91,6 @@ def extract_all(session_path, save=False, data=False, settings=False):
            'stimOn_times': stimOn_times,
            'intervals': intervals,
            'response_times': response_times,
-           'camera_timestamps': camera_timestamps,
            'goCue_times': go_cue_times,
            'goCueTrigger_times': go_cue_trig_times}
 

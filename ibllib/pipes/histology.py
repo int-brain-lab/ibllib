@@ -8,15 +8,12 @@ import numpy as np
 from ibllib.ephys.neuropixel import SITES_COORDINATES
 from oneibl.one import ONE
 import alf.io
+from ibllib.io import params
 import ibllib.atlas as atlas
 from ibllib.ephys.spikes import probes_description as extract_probes
 
 _logger = logging.getLogger('ibllib')
-atlas_params = {
-    'PATH_ATLAS': str('/datadisk/BrainAtlas/ATLASES/Allen'),
-    'FILE_REGIONS':
-        str(Path(inspect.getfile(atlas.AllenAtlas)).parent.joinpath('allen_structure_tree.csv')),
-}
+atlas_params = params.read('ibl_histology')
 # origin Allen left, front, up
 brain_atlas = atlas.AllenAtlas(res_um=25, par=atlas_params)
 
