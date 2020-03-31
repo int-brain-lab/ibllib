@@ -1,5 +1,4 @@
 from pathlib import Path
-import inspect
 import logging
 
 import matplotlib.pyplot as plt
@@ -8,14 +7,13 @@ import numpy as np
 from ibllib.ephys.neuropixel import SITES_COORDINATES
 from oneibl.one import ONE
 import alf.io
-from ibllib.io import params
 import ibllib.atlas as atlas
 from ibllib.ephys.spikes import probes_description as extract_probes
 
 _logger = logging.getLogger('ibllib')
-atlas_params = params.read('ibl_histology')
+
 # origin Allen left, front, up
-brain_atlas = atlas.AllenAtlas(res_um=25, par=atlas_params)
+brain_atlas = atlas.AllenAtlas(res_um=25)
 
 
 def load_track_csv(file_track):
@@ -24,12 +22,12 @@ def load_track_csv(file_track):
     :param file_track:
     :return: xyz
     """
-    # apmldv in the histology file is flipped along x and y directions
+    # apmldv in the histology file is flipped along y direction
     ixiyiz = np.loadtxt(file_track, delimiter=',')[:, [1, 0, 2]]
     ixiyiz[:, 1] = 527 - ixiyiz[:, 1]
     ixiyiz = ixiyiz[np.argsort(ixiyiz[:, 2]), :]
     xyz = brain_atlas.bc.i2xyz(ixiyiz)
-    xyz[:, 0] = - xyz[:, 0]
+    # xyz[:, 0] = - xyz[:, 0]
     return xyz
 
 
@@ -171,9 +169,9 @@ def get_brain_regions(xyz, channels_positions=SITES_COORDINATES, brain_atlas=bra
     d = atlas.cart2sph(xyz[:, 0] - xyz[0, 0], xyz[:, 1] - xyz[0, 1], xyz[:, 2] - xyz[0, 2])[0]
     ind_depths = np.argsort(d)
     d = np.sort(d)
-    #iid = np.where(np.diff(d) >= 0)[0]
-    #ind_depths = ind_depths[iid]
-    #d = d[iid]
+    iid = np.where(np.diff(d) >= 0)[0]
+    ind_depths = ind_depths[iid]
+    d = d[iid]
 
     """
     Interpolate channel positions along the probe depth and get brain locations
@@ -244,3 +242,4 @@ def register_track(probe_id, picks=None, one=None):
             'trajectory_estimate': hist_traj['id']
         })
     one.alyx.rest('channels', 'create', data=channel_dict)
+    return brain_locations, insertion_histology
