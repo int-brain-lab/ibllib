@@ -103,6 +103,10 @@ def _load_df_from_details(details=None, func=None):
 
 
 # ---------------------------------------------------------------------------- #
+# 1.
+# Variable name: stimOn_goCue_delays
+# Metric: goCue_times - stimOn_times (from ONE)
+# Criterion: (M<10 ms for 99%) of trials AND (M > 0 ms for 99% of trials)
 def load_session_stimon_gocue_delays(eid):
     return _one_load_session_delays_between_events(
         eid, "trials.stimOn_times", "trials.goCue_times"
@@ -134,6 +138,10 @@ def plot_session_stimon_gocue_delays(details: list, ax=None, describe=False):
     p.set(xscale="symlog")
 
 
+# 2.
+# Variable name: response_feedback_delays
+# Metric: Feedback_time - response_time
+# Criterion: (M <10 ms for 99% of trials) AND ( M > 0 ms for 100% of trials)
 def load_session_response_feddback_delays(eid):
     return _one_load_session_delays_between_events(
         eid, "trials.response_times", "trials.feedback_times"
@@ -164,7 +172,10 @@ def plot_session_response_feedback_delays(details: list, ax=None, describe=False
     p.set(xscale="symlog")
 
 
-# 3. stimFreeze_response_delays_qc
+# 3.
+# Variable name: response_stimFreeze_delays
+# Metric: stim_freeze - response_time
+# Criterion: (M<100 ms for 99% of trials) AND (M > 0 ms for 100% of trials)
 def load_session_response_stimFreeze_delays(eid):
     response = one.load(eid, dataset_types=["trials.response_times"])[0]
     _, _, stimFreeze = bpodqc.get_stimOnOffFreeze_times_from_BNC1(eid)
@@ -201,41 +212,438 @@ def plot_session_response_stimFreeze_delays(details: list, ax=None, describe=Fal
     p.set(xscale="symlog")
 
 
-# 4. stimOff_itiIn_delays_qc
-def load_session_itiIn_stimOff_delays(eid):
-    response = one.load(eid, dataset_types=["trials.response_times"])[0]
-    _, _, stimFreeze = bpodqc.get_stimOnOffFreeze_times_from_BNC1(eid)
-    bpod2fpga = bpodqc.get_bpod2fpga_times_func(eid)
-    stimFreeze = bpod2fpga(stimFreeze)
-    if len(response) != len(stimFreeze):
-        session_path = one.path_from_eid(eid)
-        response = bpodqc.get_response_times(session_path, save=False)
-    assert len(response) == len(stimFreeze)
-    return stimFreeze - response
+# 4.
+# Variable name: stimOff_itiIn_delays
+# Metric: iti_in - stim_off
+# Criterion: (M<10 ms for 99% of trials) AND (M > 0 ms for 99% of trials)
+def load_session_stimOff_itiIn_delays(eid):
+    itiIn = bpodqc.get_itiIn_times(eid, save=False)
+    _, stimOff, _ = bpodqc.get_stimOnOffFreeze_times_from_BNC1(eid, save=False)
+    if len(itiIn) != len(stimOff):
+        print(f"Length mismatch iniIn and stimOff: {len(itiIn)}, {len(stimOff)}")
+    return itiIn - stimOff
 
 
-def process_session_itiIn_stimOff_delays(details):
+def process_session_stimOff_itiIn_delays(details):
+    """process a list of sessions from details objects"""
     if details is None:
         return
-    df = _load_df_from_details(details, func=load_session_itiIn_stimOff_delays)
+    df = _load_df_from_details(details, func=load_session_stimOff_itiIn_delays)
     return df
 
 
-def plot_session_itiIn_stimOff_delays(details: list, ax=None, describe=False):
+def plot_session_stimOff_itiIn_delays(details: list, ax=None, describe=False):
     if details is None:
         return
     if ax is None:
         f, ax = plt.subplots()
     # Load and process data
-    df = process_session_itiIn_stimOff_delays(details)
+    df = process_session_stimOff_itiIn_delays(details)
     if describe:
         desc = df.describe()
         print(json.dumps(json.loads(desc.to_json()), indent=1))
     # Plot
     p = sns.boxplot(data=df, ax=ax, orient="h")
-    p.set_title("stimOff - itiIn")
+    p.set_title("itiIn - stimOff")
     p.set_xlabel("Seconds (s)")
     p.set(xscale="symlog")
+
+
+# 5.
+# Variable name: wheel_freeze_during_quiescence
+# Metric: max(abs( w(t) - w_start )) over interval
+# interval = [quiescent_end_time-quiescent_duration+0.02, quiescent_end_time]
+# Criterion: <2 ticks for 99% of trials
+def load_session_wheel_freeze_during_quiescence(eid):
+    pass
+
+
+def process_session_wheel_freeze_during_quiescence(details):
+    pass
+
+
+def plot_wheel_freeze_during_quiescence(details: list, ax=None, describe=False):
+    pass
+
+
+# 6.
+# Variable name: wheel_move_before_feedback
+# Metric: max(abs( w(t) - w_start )) over interval [gocue_time, feedback_time]
+# Criterion: >2 ticks for 99% of non-NoGo trials
+def load_wheel_move_before_feedback(eid):
+    pass
+
+
+def process_wheel_move_before_feedback(details):
+    pass
+
+
+def plot_wheel_move_before_feedback(details: list, ax=None, describe=False):
+    pass
+
+
+# 7.
+# Variable name: stimulus_move_before_goCue
+# Metric: count of stimulus change events between trialstart_time and (gocue_time-20ms)
+# Criterion: 0 on 99% of trials
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+
+# 8.
+# Variable name: positive_feedback_stimOff_delays
+# Metric: abs((stimoff_time - feedback_time) - 1s)
+# Criterion: <20 ms on 99% of correct trials
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+
+# 9.Delay between noise and stim off should be 2 second ✓ Ephys ✘ Bpod
+# Variable name: negative_feedback_stimOff_delays
+# Metric: abs((stimoff_time - feedback_time) - 2s)
+# Criterion: <20 ms on 99% of incorrect trials
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+
+# 10. Number of Bonsai command to change screen should match Number of state change of frame2ttl ✓ Ephys ✘ Bpod
+# Variable name: syncSquare
+# Metric: (count of bonsai screen updates) - (count of frame2ttl)
+# Criterion: 0 on 99% of trials
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+
+# 11. No valve outputs between trialstart_time and gocue_time-20 ms ✘ Ephys ✘ Bpod
+# Variable name: valve_pre_trial
+# Metric: count of valve events between trialstart_time and (gocue_time-20ms)
+# Criterion: 0 on 99% of trials
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+
+# 12. No audio outputs between trialstart_time and gocue_time-20 ms ✘ Ephys ✘ Bpod
+# Variable name: audio_pre_trial
+# Metric: count of audio events between trialstart_time and (gocue_time-20ms)
+# Criterion: 0 on 99% of trials
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+# Sequence of events:
+# 13. on incorrect / miss trials : 2 audio events, 2 Bpod events (trial start, ITI) ✘ Ephys ✘ Bpod
+# Variable name: trial_event_sequence_error
+# Metric: Bpod (trial start) > audio (go cue) > audio (wrong) > Bpod (ITI)
+# Criterion: All three boolean comparisons true on 99% of trials
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+
+# 14. on correct trials : 1 audio events, 3 Bpod events (valve open, trial start, ITI) ✘ Ephys ✘ Bpod (ITI task version dependent on ephys)
+# Variable name: trial_event_sequence_correct
+# Metric: Bpod (trial start) > audio (go cue) > Bpod (valve) > Bpod (ITI)
+# Criterion: All three boolean comparisons true on 99% of trials
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+
+# 15. Time between goCue and feedback <= 60s ✘ Ephys ✘ Bpod
+# Variable name: trial_length
+# Metric: (feedback_time - gocue_time) < 60.1 s AND (feedback_time - gocue_time) > 0 s
+# Criterion: both true on 99% of trials
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+
+# 16. Between go tone and feedback, frame2ttl should be changing at ~60Hz if wheel moves (exact frequency depending on velocity) ✘ Ephys ✘ Bpod
+# Variable name:
+# Metric:
+# Criterion:
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+
+# Session level?
+# bpod_ntrials = len(raw.load_data(one.path_from_eid(eid)))
+# 17. Proportion of datasetTypes extracted
+# Variable name: nDatasetTypes
+# Metric: len(one.load(eid, offline=True, download_only=True)) / nExpetedDatasetTypes (hardcoded per task?)
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+
+# 18. Proportion of ntrials from ONE to bpod
+# Variable name: intervals
+# Metric: len(one.load(eid, dataset_types=’trials.intervals’)) / bpod_ntrials
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+
+# 19.Proportion of stimOnTrigger_times to bpod_ntrials
+# Variable name: stimOnTrigger_times
+# Metric: len(one.load(eid, dataset_types=’trials.stimOnTrigger_times’)) / bpod_ntrials
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+
+# 20.Proportion of stimOn_times to ntrials
+# Variable name: stimOn_times
+# Metric:
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+
+# 21.Proportion of goCueTrigger_times to bpod_ntrials
+# Variable name: goCueTrigger_times
+# Metric:
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+
+# 22.Proportion of goCue_times to bpod_ntrials
+# Variable name: goCue_times
+# Metric:
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+
+# 23. Proportion of response_times to bpod_ntrials
+# Variable name: response_times
+# Metric:
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+
+# 24.Proportion of feedback_times to bpod_ntrials
+# Variable name: feedback_times
+# Metric:
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+
+# Trigger response checks
+
+# 25.Trigger response difference
+# Variable name: goCue_delays
+# Metric: goCue_times - goCueTrigger_times
+# Criterion: 99% <= 1ms
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+
+# 26.Trigger response difference
+# Variable name: errorCue_delays
+# Metric: errorCue_times - errorCueTrigger_times
+# Criterion: 99% <= 1ms
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+
+# 27. Trigger response difference
+# Variable name: stimOn_delays
+# Metric: stimOn_times - stiomOnTrigger_times
+# Criterion: 99% <  150ms
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+
+# 28.Trigger response difference
+# Variable name: stimOff_delays
+# Metric: stimOff_times - stimOffTrigger_times
+# Criterion:99% <  150ms
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
+
+
+# 29.Trigger response difference
+# Variable name: stimFreeze_delays
+# Metric: stimFreeze_times - stimFreezeTrigger_times
+# Criterion: 99% <  150ms
+def load_(eid):
+    pass
+
+
+def process_(details):
+    pass
+
+
+def plot_(details: list, ax=None, describe=False):
+    pass
 
 
 if __name__ == "__main__":
@@ -259,7 +667,7 @@ if __name__ == "__main__":
         if ed is not None:
             eids.extend(ed[0])
             details.extend(ed[1])
-    plot_session_itiIn_stimOff_delays(details, describe=True)
+    plot_session_stimOff_itiIn_delays(details, describe=True)
     plt.show()
     #  get_session_stimon_gocue_delays(eid)
     # get_response_feddback_delays(eid)
