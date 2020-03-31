@@ -113,9 +113,9 @@ def velocity_smoothed(pos, freq, smooth_size=0.03):
         Array of acceleration values
     """
     # Define our smoothing window with an area of 1 so the units won't be changed
-    stdSamps = np.round(smooth_size * freq)  # Standard deviation relative to sampling frequency
-    N = stdSamps * 6  # Number of points in the Gaussian
-    gauss_std = (N - 1) / 6  # @fixme magic number everywhere!
+    std_samps = np.round(smooth_size * freq)  # Standard deviation relative to sampling frequency
+    N = std_samps * 6  # Number of points in the Gaussian covering +/-3 standard deviations
+    gauss_std = (N - 1) / 6
     win = gaussian(N, gauss_std)
     win = win / win.sum()  # Normalize amplitude
 
@@ -128,7 +128,7 @@ def velocity_smoothed(pos, freq, smooth_size=0.03):
 
 def last_movement_onset(t, vel, event_time):
     """
-    Find the time at which movement started, given an event timestamp that accured during the
+    Find the time at which movement started, given an event timestamp that occurred during the
     movement.  Movement start is defined as the first sample after the velocity has been zero
     for at least 50ms
     :param t: numpy array of wheel timestamps in seconds
@@ -155,23 +155,42 @@ def last_movement_onset(t, vel, event_time):
 def movements(t, pos, freq=1000, pos_thresh=8, t_thresh=.2, min_gap=.1, pos_thresh_onset=1.5,
               min_dur=.05, make_plots=False):
     """
-    Return linearly interpolated wheel position.
-    :param t: An array of wheel timestamps in absolute seconds
-    :param pos: An array of evenly sampled wheel positions
-    :param freq: The sampling rate for linear interpolation
-    :param pos_thresh: The minimum required movement during the t_thresh window to be considered
-    part of a movement
-    :param t_thresh: The time window over which to check whether the pos_thresh has been crossed
-    :param min_gap: The minimum time between one movement's offset and another movement's onset
-    in order to be considered separate.  Movements with a gap smaller than this are 'stictched
-    together'
-    :param pos_thresh_onset: A lower threshold for finding precise onset times.  The first
-    position of each movement transition that is this much bigger than the starting position is
-    considered the onset
-    :param min_dur: The minimum duration of a valid movement.  Detected movements shorter than
-    this are ignored
-    :param make_plots: plot trace of position and velocity, showing detected onsets and offsets
-    :return: Tuple of onset and offset times, movement amplitudes and peak velocity times
+    Detect wheel movements.
+
+    Parameters
+    ----------
+    t : array_like
+        An array of wheel timestamps in absolute seconds
+    pos : array_like
+        An array of evenly sampled wheel positions
+    freq : int
+        The sampling rate of the wheel data
+    pos_thresh : float
+        The minimum required movement during the t_thresh window to be considered part of a
+        movement
+    t_thresh : float
+        The time window over which to check whether the pos_thresh has been crossed
+    min_gap : float
+        The minimum time between one movement's offset and another movement's onset in order to be
+        considered separate.  Movements with a gap smaller than this are 'stictched together'
+    pos_thresh_onset : float
+        A lower threshold for finding precise onset times.  The first position of each movement
+        transition that is this much bigger than the starting position is considered the onset
+    min_dur : float
+        The minimum duration of a valid movement.  Detected movements shorter than this are ignored
+    make_plots : boolean
+        Plot trace of position and velocity, showing detected onsets and offsets
+
+    Returns
+    -------
+    onsets : np.ndarray
+        Timestamps of detected movement onsets
+    offsets : np.ndarray
+        Timestamps of detected movement offsets
+    peak_amps : np.ndarray
+        The absolute maximum amplitude of each detected movement, relative to onset position
+    peak_vel_times : np.ndarray
+        Timestamps of peak velocity for each detected movement
     """
     # Wheel position must be evenly sampled.
     dt = np.diff(t)
@@ -253,7 +272,11 @@ def movements(t, pos, freq=1000, pos_thresh=8, t_thresh=.2, min_gap=.1, pos_thre
         offsets = offsets[np.append(~gap_too_small, True)]  # always keep last offset
         offset_samps = offset_samps[np.append(~gap_too_small, True)]
 
-    move_amps = pos[offset_samps] - pos[onset_samps]
+    # Calculate the peak amplitudes -
+    # the maximum absolute value of the difference from the onset position
+    peaks = (pos[m + np.abs(pos[m:n] - pos[m]).argmax()] - pos[m]
+             for m, n in zip(onset_samps, offset_samps))
+    peak_amps = np.fromiter(peaks, dtype=float, count=onsets.size)
     N = 10  # Number of points in the Gaussian
     STDEV = 1.8  # Equivalent to a width factor (alpha value) of 2.5
     gauss = gaussian(N, STDEV)  # A 10-point Gaussian window of a given s.d.
@@ -282,7 +305,7 @@ def movements(t, pos, freq=1000, pos_thresh=8, t_thresh=.2, min_gap=.1, pos_thre
         axes[0].legend(['onsets', 'offsets', 'in movement'])
         plt.show()
 
-    return onsets, offsets, move_amps, peak_vel_times
+    return onsets, offsets, peak_amps, peak_vel_times
 
 
 def cm_to_deg(positions, wheel_diameter=WHEEL_DIAMETER):
@@ -335,12 +358,7 @@ def traces_by_trial(t, pos, trials, start='stimOn_times', end='feedback_times'):
     traces = np.vstack((pos, t))
 
     def to_mask(a, b):
-        (t > a) & (t < b)
-    #  to_dict = lambda a, b, c: position: a
+        return (t > a) & (t < b)
+    
     cuts = [traces[:, to_mask(s, e)] for s, e in zip(trials[start], trials[end])]
-    # ans = map(to_mask, zip(trials[start], trials[end]))
-    # for s, e in zip(trials[start], trials[end]):
-    #     mask = (wheel['times'] > s) & (wheel['times'] < e)
-    #     cuts = traces[:, mask]
-
     return [(cuts[n][0, :], cuts[n][1, :], cuts[n][2, :]) for n in range(len(cuts))]

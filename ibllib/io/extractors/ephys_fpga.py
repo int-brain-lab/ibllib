@@ -344,21 +344,22 @@ def extract_wheel_moves(wheel, output_path=None, save=False):
         # Assume values are in radians
         units = 'rad'
         encoding = np.argmin(np.abs(min_change_rad - pos_diff.min()))
-        min_change = min_change_rad[encoding]
+        #  min_change = min_change_rad[encoding]
     else:
         units = 'cm'
         encoding = np.argmin(np.abs(min_change_cm - pos_diff.min()))
-        min_change = min_change_cm[encoding]
+        #  min_change = min_change_cm[encoding]
     enc_names = {0: '4X', 1: '2X', 2: '1X'}
     _logger.info('Wheel in %s units using %s encoding', units, enc_names[int(encoding)])
-    assert np.allclose(pos_diff, min_change, rtol=1e-05), 'wheel position skips'
+    # The below assertion is violated by Bpod wheel data
+    #  assert np.allclose(pos_diff, min_change, rtol=1e-05), 'wheel position skips'
 
     # Convert the pos threshold defaults from samples to correct unit
     thresholds = wh.samples_to_cm(np.array([8, 1.5]), resolution=res[encoding])
     if units == 'rad':
         thresholds = wh.cm_to_rad(thresholds)
     kwargs = {'pos_thresh': thresholds[0], 'pos_thresh_onset': thresholds[1]}
-    #  kwargs = {'make_plots': True, **kwargs}
+    #  kwargs = {'make_plots': True, **kwargs}  # For plotting detected movements
 
     # Interpolate and get onsets
     pos, t = wh.interpolate_position(wheel['re_ts'], wheel['re_pos'], freq=1000)
@@ -374,8 +375,8 @@ def extract_wheel_moves(wheel, output_path=None, save=False):
     if save and output_path:
         output_path = Path(output_path)
         np.save(output_path / '_ibl_wheelMoves.intervals.npy', wheel_moves['intervals'])
-        # np.save(output_path / '_ibl_wheelMoves.amplitudes.npy', wheel_moves['amps'])
-        # np.save(output_path / '_ibl_wheelMoves.peakVelocity.npy', wheel_moves['peakVels'])
+        np.save(output_path / '_ibl_wheelMoves.peakAmplitude.npy', wheel_moves['amps'])
+        # np.save(output_path / '_ibl_wheelMoves.peakVelocity_times.npy', wheel_moves['peakVels'])
     return wheel_moves
 
 
