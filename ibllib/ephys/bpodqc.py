@@ -567,6 +567,37 @@ def get_bpodqc_frame(session_path, qc_frame_only=False):
     ERROR_STIM_OFF_JITTER = 0.1  # -> 0.2
     RESPONSE_FEEDBACK_DELAY = 0.0005
 
+# get from qccriteria.py (create!)
+    qc_frame = {
+        "nDatasetTypes": float,  # (Point 17)
+        "intervals": float,  # (Point 18)
+        "stimOnTrigger_times": float,  # (Point 19)
+        "stimOn_times": float,  # (Point 20)
+        "goCueTrigger_times": float,  # (Point 21)
+        "goCue_times": float,  # (Point 22)
+        "response_times": float,  # (Point 23)
+        "feedback_times": float,  # (Point 24)
+        "goCue_delays": float,  #  (Point 25)
+        "errorCue_delays": float,  # (Point 26)
+        "stimOn_delays": float,  # (Point 27)
+        "stimOff_delays": float,  # (Point 28)
+        "stimFreeze_delays": float,  # (Point 29)
+        "stimOn_goCue_delays": float,  # (Point 1)
+        "response_feedback_delays": float,  # (Point 2)
+        "response_stimFreeze_delays": float,  # (Point 3)
+        "stimOff_itiIn_delays": float,  # (Point 4)
+        "wheel_freeze_during_quiescence": float,  # (Point 5)
+        "wheel_move_before_feedback": float,  # (Point 6)
+        "stimulus_move_before_goCue": float,  # (Point 7)
+        "positive_feedback_stimOff_delays": float,  # (Point 8)
+        "negative_feedback_stimOff_delays": float,  # (Point 9)
+        "valve_pre_trial": float,  # (Point 11)
+        "audio_pre_trial": float,  # (Point 12)
+        "trial_event_sequence_error": float,  # (Point 13)
+        "trial_event_sequence_correct": float,  # (Point 14)
+        "trial_length": float,  # (Point 15)
+        }
+
     qc_frame = {
         "n_feedback": np.int32(
             ~np.isnan(bpod["valveOpen_times"]) + ~np.isnan(bpod["errorCue_times"])
