@@ -169,9 +169,7 @@ def get_brain_regions(xyz, channels_positions=SITES_COORDINATES, brain_atlas=bra
     d = atlas.cart2sph(xyz[:, 0] - xyz[0, 0], xyz[:, 1] - xyz[0, 1], xyz[:, 2] - xyz[0, 2])[0]
     ind_depths = np.argsort(d)
     d = np.sort(d)
-    iid = np.where(np.diff(d) >= 0)[0]
-    ind_depths = ind_depths[iid]
-    d = d[iid]
+    assert np.all(np.diff(d) > 0), "Depths should be stricly increasing"
 
     """
     Interpolate channel positions along the probe depth and get brain locations
