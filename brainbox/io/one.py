@@ -1,3 +1,4 @@
+import numpy as np
 import alf.io
 from ibllib.io import spikeglx
 from oneibl.one import ONE
@@ -20,6 +21,45 @@ def load_lfp(eid, one=None, dataset_types=None):
     efiles = [ef for ef in spikeglx.glob_ephys_files(session_path, bin_exists=False)
               if ef.get('lf', None)]
     return [spikeglx.Reader(ef['lf']) for ef in efiles]
+
+
+def load_channel_locations(eid, one=None, probe=None):
+    """
+    From an eid, get brain locations from Alyx database
+    analysis.
+    :param eid: session eid or dictionary returned by one.alyx.rest('sessions', 'read', id=eid)
+    :param dataset_types: additional spikes/clusters objects to add to the standard list
+    :return:
+    """
+    if isinstance(eid, dict):
+        ses = eid
+    else:
+        # need to query alyx. Make sure we have a one client before we hit the endpoint
+        if not one:
+            one = ONE()
+        ses = one.alyx.rest('sessions', 'read', id=eid)
+    if isinstance(probe, str):
+        probe = list(probe)
+    labels = probe if probe else [pi['name'] for pi in ses['probe_insertion']]
+    channels = {}
+    for label in labels:
+        i = [i for i, pi in enumerate(ses['probe_insertion']) if pi['name'] == label]
+        if len(i) == 0:
+            continue
+        trajs = ses['probe_insertion'][i[0]]['trajectory_estimate']
+        if not trajs:
+            continue
+        # the trajectories are ordered within the serializer: histology processed, histology,
+        # micro manipulator, plannes so the first is always the desired one
+        traj = trajs[0]
+        channels[label] = {
+            'atlas_id': np.array([ch['brain_region']['id'] for ch in traj['channels']]),
+            'acronym': np.array([ch['brain_region']['acronym'] for ch in traj['channels']]),
+            'x': np.array([ch['x'] for ch in traj['channels']]) / 1e6,
+            'y': np.array([ch['y'] for ch in traj['channels']]) / 1e6,
+            'z': np.array([ch['z'] for ch in traj['channels']]) / 1e6,
+        }
+    return channels
 
 
 def load_ephys_session(eid, one=None, dataset_types=None):
