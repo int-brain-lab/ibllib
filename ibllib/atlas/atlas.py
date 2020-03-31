@@ -488,8 +488,8 @@ class AllenAtlas(BrainAtlas):
             if not Path(par.PATH_ATLAS).exists() and not mock:
                 raise FileNotFoundError(f"{par.PATH_ATLAS}  doesn't exist !")
             params.write('ibl_histology', par)
-        else:
-            par = Bunch(par)
+        #else:
+            #par = Bunch(par)
         # file_image = Path(path_atlas).joinpath(f'ara_nissl_{res_um}.nrrd')
         file_image = Path(par.PATH_ATLAS).joinpath(f'average_template_{res_um}.nrrd')
         file_label = Path(par.PATH_ATLAS).joinpath(f'annotation_{res_um}.nrrd')
