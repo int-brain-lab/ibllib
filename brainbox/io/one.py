@@ -39,7 +39,7 @@ def load_channel_locations(eid, one=None, probe=None):
             one = ONE()
         ses = one.alyx.rest('sessions', 'read', id=eid)
     if isinstance(probe, str):
-        probe = list(probe)
+        probe = [probe]
     labels = probe if probe else [pi['name'] for pi in ses['probe_insertion']]
     channels = {}
     for label in labels:
