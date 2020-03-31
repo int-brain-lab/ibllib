@@ -1,7 +1,10 @@
 import numpy as np
+
 import alf.io
 from ibllib.io import spikeglx
 from oneibl.one import ONE
+
+from brainbox.core import Bunch
 
 
 def load_lfp(eid, one=None, dataset_types=None):
@@ -41,7 +44,7 @@ def load_channel_locations(eid, one=None, probe=None):
     if isinstance(probe, str):
         probe = [probe]
     labels = probe if probe else [pi['name'] for pi in ses['probe_insertion']]
-    channels = {}
+    channels = Bunch({})
     for label in labels:
         i = [i for i, pi in enumerate(ses['probe_insertion']) if pi['name'] == label]
         if len(i) == 0:
@@ -52,13 +55,15 @@ def load_channel_locations(eid, one=None, probe=None):
         # the trajectories are ordered within the serializer: histology processed, histology,
         # micro manipulator, plannes so the first is always the desired one
         traj = trajs[0]
-        channels[label] = {
+        channels[label] = Bunch({
             'atlas_id': np.array([ch['brain_region']['id'] for ch in traj['channels']]),
             'acronym': np.array([ch['brain_region']['acronym'] for ch in traj['channels']]),
             'x': np.array([ch['x'] for ch in traj['channels']]) / 1e6,
             'y': np.array([ch['y'] for ch in traj['channels']]) / 1e6,
             'z': np.array([ch['z'] for ch in traj['channels']]) / 1e6,
-        }
+            'axial_um': np.array([ch['axial'] for ch in traj['channels']]),
+            'lateral_um': np.array([ch['lateral'] for ch in traj['channels']])
+        })
     return channels
 
 
@@ -102,8 +107,8 @@ def load_spike_sorting(eid, one=None, dataset_types=None):
     except FileNotFoundError:
         print("no probes")
         return (None, None), 'no probes'
-    spikes = {}
-    clusters = {}
+    spikes = Bunch({})
+    clusters = Bunch({})
     for i, _ in enumerate(probes['description']):
         probe_path = session_path.joinpath('alf', probes['description'][i]['label'])
         try:
