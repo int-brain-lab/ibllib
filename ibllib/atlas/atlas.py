@@ -471,11 +471,17 @@ class BrainRegions:
 
 
 class AllenAtlas(BrainAtlas):
+    """
+    Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
+    using the IBL Bregma and coordinate system
+    """
+
     def __init__(self, res_um=25, par=None, scaling=np.array([1, 1, 1]), mock=False):
         """
-        Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
-        using the IBL Bregma and coordinate system
         :param res_um: 10, 25 or 50 um
+        :param par: dictionary of parameters to override systems ones
+        :param scaling:
+        :param mock:
         :return: atlas.BrainAtlas
         """
         if par is None:
@@ -488,8 +494,6 @@ class AllenAtlas(BrainAtlas):
             if not Path(par.PATH_ATLAS).exists() and not mock:
                 raise FileNotFoundError(f"{par.PATH_ATLAS}  doesn't exist !")
             params.write('ibl_histology', par)
-        else:
-            par = Bunch(par)
         # file_image = Path(path_atlas).joinpath(f'ara_nissl_{res_um}.nrrd')
         file_image = Path(par.PATH_ATLAS).joinpath(f'average_template_{res_um}.nrrd')
         file_label = Path(par.PATH_ATLAS).joinpath(f'annotation_{res_um}.nrrd')
@@ -510,11 +514,21 @@ class AllenAtlas(BrainAtlas):
         dxyz = res_um * 1e-6 * np.array([1, -1, -1]) * scaling
         # we use Bregma as the origin
         ibregma = (ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / res_um)
+        self.res_um = res_um
         super().__init__(image, label, regions, dxyz, ibregma,
                          dims2xyz=dims2xyz, xyz2dims=xyz2dims)
 
+    def xyz2ccf(self, xyz):
+        """
+        Converts coordinates to the CCF coordinates, which is assumed to be the cube indices
+        times the spacing so far.
+        :param xyz:
+        :return: mlapdv coordinates in um, origin is the front left top corner of the data volume
+        """
+        return self.bc.xyz2i(xyz) * np.float(self.res_um)
 
-def NeedlesAtlas(res_um=25, par=None):
+
+def NeedlesAtlas(*args, **kwargs):
     """
     Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
     using the IBL Bregma and coordinate system. The Needles atlas defines a stretch along AP
@@ -524,4 +538,5 @@ def NeedlesAtlas(res_um=25, par=None):
     """
     DV_SCALE = 0.952  # multiplicative factor on DV dimension, determined from MRI->CCF transform
     AP_SCALE = 1.087  # multiplicative factor on AP dimension
-    return AllenAtlas(res_um=res_um, par=par, scaling=np.array([1, AP_SCALE, DV_SCALE]))
+    kwargs['scaling'] = np.array([1, AP_SCALE, DV_SCALE])
+    return AllenAtlas(*args, **kwargs)
