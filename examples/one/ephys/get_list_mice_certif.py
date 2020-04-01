@@ -41,5 +41,5 @@ for i_su in range(0, len(su)):
           f' - N planned traces: {len(tr_pl)} - N tracked traces: {len(tr_tr)}')
 
 # TODO -- How many recording sessions were done per lab
-prob_des = one.load(eid, dataset_types=['probes.description'])
-n_probe = len(prob_des[0])
+# prob_des = one.load(eid, dataset_types=['probes.description'])
+# n_probe = len(prob_des[0])
