@@ -8,7 +8,7 @@ import seaborn as sns
 import ibllib.ephys.bpodqc as bpodqc
 from ibllib.ephys.ephysqc import _qc_from_path
 from oneibl.one import ONE
-
+from alf.io import is_uuid_string, is_session_path, is_details_dict
 # plt.ion()
 
 one = ONE(
@@ -102,6 +102,39 @@ def _load_df_from_details(details=None, func=None):
     return df
 
 
+def boxplots_from_df(
+    df,
+    ax=None,
+    describe=False,
+    title="",
+    xlabel="Seconds (s)",
+    xscale="symlog",
+):
+    if ax is None:
+        f, ax = plt.subplots()
+
+    if describe:
+        desc = df.describe()
+        print(json.dumps(json.loads(desc.to_json()), indent=1))
+    # Plot
+    p = sns.boxplot(data=df, ax=ax, orient="h")
+    p.set_title(title)
+    p.set_xlabel(xlabel)
+    p.set(xscale=xscale)
+
+
+def _to_eid(invar):
+    outvar = []
+    if isinstance(invar, list):
+        for i in invar:
+            outvar.append(_to_eid(i))
+        return outvar
+    elif isinstance(invar, dict) and is_details_dict(invar):
+        return invar["url"][-36:]
+    elif isinstance(invar, str) and is_session_path(invar):
+        return one.eid_from_path(invar)
+    elif isinstance(invar, str) and is_uuid_string(invar):
+        return invar
 # ---------------------------------------------------------------------------- #
 # 1.
 # Variable name: stimOn_goCue_delays
