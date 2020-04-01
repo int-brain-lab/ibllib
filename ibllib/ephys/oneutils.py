@@ -22,6 +22,8 @@ def _one_load_session_delays_between_events(eid, dstype1, dstype2):
 
 
 def _to_eid(invar):
+    """ get eid from: details, path, or lists of
+    """
     outvar = []
     if isinstance(invar, list) or isinstance(invar, tuple):
         for i in invar:
@@ -33,6 +35,9 @@ def _to_eid(invar):
         return one.eid_from_path(invar)
     elif isinstance(invar, str) and is_uuid_string(invar):
         return invar
+    else:
+        print("Unknown input type: please input a valid path or details object")
+        return
 
 
 def search_lab_ephys_sessions(
@@ -112,20 +117,25 @@ if __name__ == "__main__":
         "local_path": "/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_2240/2020-01-22/001",
     }
     lab = "mainenlab"
-    print(random_ephys_session(lab, complete=False))
-    print(random_ephys_session(lab, complete=True))
-
-    print(_to_eid(eid))
-    print(_to_eid([eid, eid]))
-    print(_to_eid((eid, eid)))
-    print(_to_eid(sp))
-    print(_to_eid([sp, sp]))
-    print(_to_eid((sp, sp)))
-    print(_to_eid(det))
-    print(_to_eid([det, det]))
-    print(_to_eid((det, det)))
-    print(_to_eid(123))
-    print(_to_eid('sda'))
-    print(_to_eid({1:2}))
-    print(_to_eid([1,2]))
-    print(_to_eid((1,2)))
+    # Test random dataset
+    print(is_uuid_string(random_ephys_session(lab, complete=False)[0]))
+    print(is_details_dict(random_ephys_session(lab, complete=False)[1]))
+    print(random_ephys_session(lab, complete=True) == None)
+    print(random_ephys_session('sakjdhka', complete=False) == None)
+    # Test _to_eid
+    # All == eid
+    print(_to_eid(eid) == eid)
+    print(_to_eid([eid, eid]) == [eid, eid])
+    print(_to_eid((eid, eid)) ==[eid, eid])
+    print(_to_eid(sp) == eid)
+    print(_to_eid([sp, sp]) == [eid, eid])
+    print(_to_eid((sp, sp)) == [eid, eid])
+    print(_to_eid(det) == eid)
+    print(_to_eid([det, det]) == [eid, eid])
+    print(_to_eid((det, det)) == [eid, eid])
+    # All None
+    print(_to_eid(123) is None)
+    print(_to_eid("sda") is None)
+    print(_to_eid({1: 2}) is None)
+    print(_to_eid([1, 2]) == [None, None])
+    print(_to_eid((1, 2)) == [None, None])
