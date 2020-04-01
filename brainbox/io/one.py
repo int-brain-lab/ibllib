@@ -79,6 +79,7 @@ def load_spike_sorting(eid, one=None, dataset_types=None):
     From an eid, hits the Alyx database and downloads a standard set of dataset types to perform
     analysis.
     :param eid:
+    :param one:
     :param dataset_types: additional spikes/clusters objects to add to the standard list
     :return:
     """
@@ -90,16 +91,19 @@ def load_spike_sorting(eid, one=None, dataset_types=None):
         print("no session path")
         return (None, None), 'no session path'
 
-    dtypes = [
-        'clusters.channels',
-        'clusters.depths',
-        'clusters.metrics',
-        'spikes.clusters',
-        'spikes.times',
-        'probes.description',
-    ]
-    if dataset_types:
-        dtypes = list(set(dataset_types + dtypes))
+    if dataset_types is None:
+        dtypes = [
+            'clusters.channels',
+            'clusters.depths',
+            'clusters.metrics',
+            'spikes.clusters',
+            'spikes.times',
+            'probes.description',
+        ]
+    else:
+        dtypes = dataset_types
+    # For future: Append extra optional DS
+    #    dtypes = list(set(dataset_types + dtypes))
 
     _ = one.load(eid, dataset_types=dtypes, download_only=True)
     try:
@@ -113,10 +117,10 @@ def load_spike_sorting(eid, one=None, dataset_types=None):
         probe_path = session_path.joinpath('alf', probes['description'][i]['label'])
         try:
             cluster = alf.io.load_object(probe_path, object='clusters')
+            spike = alf.io.load_object(probe_path, object='spikes')
         except FileNotFoundError:
             print("one probe missing")
             return (None, None), "one probe missing"
-        spike = alf.io.load_object(probe_path, object='spikes')
         label = probes['description'][i]['label']
         clusters[label] = cluster
         spikes[label] = spike
