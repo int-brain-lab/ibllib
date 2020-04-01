@@ -22,7 +22,7 @@ units_b = bb.processing.get_units_bunch(spks_b)
 units = list(units_b.amps.keys())
 n_units = np.max(spks_b.clusters) + 1
 
-unit = units[681] #635 max spike rate 
+unit = units[635] #635 max spike rate #681 1.43
 ts = units_b['times'][unit]
 fr_source = len(ts)/(ts[-1]-ts[0])
 print(fr_source)
@@ -35,7 +35,7 @@ total_time = ts_sampled[-1]
 fr_sampled = len(ts_sampled)/(total_time)
 
 #remove isi_violations
-true_rp =.004
+true_rp =.003
 isi_viols = np.where(np.array(isis_sampled)<true_rp)
 n_isi_viols = len(isi_viols[0])
 #get rid of isi violations to make this a real "biological" neuron
@@ -53,7 +53,7 @@ dt = 1/10000
 percent_cont = np.arange(10,11,1)# np.arange(0,15,2.5)
 
 
-nbt=1000
+nbt=100#000
 
 cont_observed = np.empty([nbt,len(percent_cont),len(RP_vec)])
 
@@ -76,35 +76,43 @@ for bt in range(nbt):
         train_cont[np.ceil(timestamps_micros).astype(int)]=1
         train_observed = train_real+train_cont
         spkTs_observed = np.where(train_observed==1)[0] #spike times in ms
-        isis_observed = np.diff(spkTs_observed)
+        
+        c0 = correlograms(spkTs_observed,np.zeros(len(spkTs_observed),dtype='int8'),cluster_ids=[0],bin_size=0.0001,window_size=total_time,sample_rate=10000,symmetrize=False)
+        isis_observed = c0[0,0]
+#        isis_observed = np.diff(spkTs_observed)
         
         rpidx=0
         for rp in RP_vec:
     #        cont_acceptable[rpidx] = max_acceptable_cont(FR_observed,rp,total_time,FR_observed*.1,.1)
-    
-            isi_viols_observed = np.where(isis_observed<(rp*10000))[0]
-            cont_observed[bt][pidx][rpidx] = len(isi_viols_observed) #.append(len(isi_viols_observed))
+            rp_converted = int(rp*100000000)
+            isi_viols_observed = isis_observed[0:rp_converted]
+            cont_observed[bt][pidx][rpidx] = sum(isi_viols_observed) #.append(len(isi_viols_observed))
             rpidx+=1
         pidx+=1
   
 
 #plot distributions at one p_cont to check that it is poisson, with the correct mean
 rp_choice = 0.0031
-l = fr_sampled*.1*2*total_time*rp_choice
-x = np.arange(0,20,1)
+l = fr_sampled*.1*total_time*rp_choice*fr_sampled #changed to include another fr_sampled
+x = np.arange(0,l*3,1)
 y = poisson.pmf(x, l)
 plt.hist(cont_observed[:,0,np.where(RP_vec==rp_choice)[0]],density=True)
 plt.plot(y)
 #plt.hist(isis_observed/10000,50,density=True)
-plt.ylim(0,.4)
+#plt.ylim(0,.4)
+#plt.xlim(2000,3000)
 plt.show()
 
+
+plt.plot(c0[0,0])
+plt.xlim(0,0.25*1e7)
 
 #at one slice, how many cont_observed at 10% contamination are below max acceptable?
 acceptable = cont_acceptable[np.where(RP_vec==rp_choice)[0]]
 dist_10 = cont_observed[:,0,np.where(RP_vec==rp_choice)[0]]
-number_pass = np.where(dist_10<=acceptable)[0]
+number_pass = np.where(dist_10<=acceptable/2)[0]
 percent_pass = len(number_pass)/len(dist_10)
+print(percent_pass)
 
 #plot
 plt.plot(RP_vec*1000,cont_acceptable,'k-', label='acceptable')

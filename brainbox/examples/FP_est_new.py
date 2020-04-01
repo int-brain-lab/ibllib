@@ -16,57 +16,60 @@ import time
 import matplotlib 
 import matplotlib.cm as cm
 
-nSim = 10
+nSim = 1000
 
 binSize = 0.0005
 b = np.arange(1e-6,0.0055,binSize)
 
-baseRates = np.logspace(-0.3,1.3,8)
+baseRates = np.logspace(-0.3,1.3,20)
 recDur = 3600
-rp = 0.004
-contPct = np.arange(0.01,0.2,0.02) 
-thresh = 0.2
 
+rpvec=np.arange(0.001,0.005,0.001)
+for rp in rpvec:
+    
+    contPct = np.arange(0.01,0.2,0.02) 
+    thresh = 0.2
+    
+    
+    colors = matplotlib.cm.rainbow(np.linspace(0, 1, len(baseRates)))
+    
+    passPct = np.zeros([len(baseRates), len(contPct)])
+    #colors = hsv(numel(baseRates));  this needs to be fixed, made into python with cv2. 
+    
+    start_time=time.time()
+    bidx=0
+    for baseRate in baseRates:
+        cidx=0
+        for c in contPct:
+            contRate = baseRate*c
+            rpidx=np.where(b<rp)[0][-1]+1
+            mfunc =np.vectorize(max_acceptable_cont_2)
+            m = mfunc(baseRate,b[0:(rpidx+1)],recDur,baseRate/10,thresh)
 
-colors = matplotlib.cm.rainbow(np.linspace(0, 1, len(baseRates)))
+            
+            simRes = np.zeros([nSim,rpidx+1])
+            for n in range(nSim):
+                st = genST(baseRate,recDur)
+                isi = np.diff(np.insert(st,0,0)) 
+                isi = np.delete(isi,np.where(isi<rp)[0]) 
+                st = np.cumsum(isi)
+                if c>0:
+                    contST = genST(contRate,recDur)
+                else:
+                    contST=[]
+                combST = np.sort(np.concatenate((st, contST)))
+                c0 = correlograms(combST,np.zeros(len(combST),dtype='int8'),cluster_ids=[0],bin_size=binSize,sample_rate=20000,window_size=.05,symmetrize=False)
+                simRes[n,:] = np.cumsum(c0[0,0,0:(rpidx+1)])
+                len(simRes)
+            passPct[bidx,cidx]=sum(np.any(np.less_equal(simRes[:,0:],m),axis=1))/nSim*100
+            cidx+=1
+    #        print(time.time() - start_time)
+    
+        plt.plot(contPct,passPct[bidx,:],'o-',color=colors[bidx],label=str(baseRates[bidx]))
+        bidx+=1
+    plt.legend(bbox_to_anchor=(1.04,1), loc="upper left") 
+    plt.show()
 
-passPct = np.zeros([len(baseRates), len(contPct)])
-#colors = hsv(numel(baseRates));  this needs to be fixed, made into python with cv2. 
-
-start_time=time.time()
-bidx=0
-for baseRate in baseRates:
-    cidx=0
-    for c in contPct:
-        contRate = baseRate*c
-        
-        mfunc =np.vectorize(max_acceptable_cont_2)
-        m = mfunc(baseRate,b[1:-1],recDur,baseRate/10,thresh)
-        
-        simRes = np.zeros([nSim,len(b)-2])
-        for n in range(nSim):
-            st = genST(baseRate,recDur)
-            isi = np.diff(np.insert(st,0,0)) 
-            isi = np.delete(isi,np.where(isi<rp)[0]) 
-            st = np.cumsum(isi)
-            if c>0:
-                contST = genST(contRate,recDur)
-            else:
-                contST=[]
-            combST = np.sort(np.concatenate((st, contST)))
-            c0 = correlograms(combST,np.zeros(len(combST),dtype='int8'),cluster_ids=[0],bin_size=binSize,sample_rate=20000,window_size=.05,symmetrize=False)
-            simRes[n,:] = np.cumsum(c0[0,0,0:len(b)-2])
-        
-        passPct[bidx,cidx]=sum(np.any(np.less_equal(simRes[:,0:],m),axis=1))/nSim*100
-        cidx+=1
-#        print(time.time() - start_time)
-
-    plt.plot(contPct,passPct[bidx,:],'o-',color=colors[bidx],label=str(baseRates[bidx]))
-    bidx+=1
-plt.legend()    
-plt.show()
-print(m)
-print(st)
 
 
 #
