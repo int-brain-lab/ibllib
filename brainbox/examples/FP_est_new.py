@@ -13,10 +13,11 @@ from max_acceptable_isi_viol_2 import genST
 import cv2
 from phylib.stats import correlograms
 import time
-import matplotlib 
+import matplotlib
+import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 
-nSim = 1000
+nSim = 100
 
 binSize = 0.0005
 b = np.arange(1e-6,0.0055,binSize)
@@ -24,7 +25,7 @@ b = np.arange(1e-6,0.0055,binSize)
 baseRates = np.logspace(-0.3,1.3,20)
 recDur = 3600
 
-rpvec=np.arange(0.001,0.005,0.001)
+rpvec=np.arange(0.001,0.005,0.0005)
 for rp in rpvec:
     
     contPct = np.arange(0.01,0.2,0.02) 
@@ -44,10 +45,10 @@ for rp in rpvec:
             contRate = baseRate*c
             rpidx=np.where(b<rp)[0][-1]+1
             mfunc =np.vectorize(max_acceptable_cont_2)
-            m = mfunc(baseRate,b[0:(rpidx+1)],recDur,baseRate/10,thresh)
+            m = mfunc(baseRate,b[1:-1],recDur,baseRate/10,thresh)
 
             
-            simRes = np.zeros([nSim,rpidx+1])
+            simRes = np.zeros([nSim,len(b)-2])
             for n in range(nSim):
                 st = genST(baseRate,recDur)
                 isi = np.diff(np.insert(st,0,0)) 
@@ -59,7 +60,7 @@ for rp in rpvec:
                     contST=[]
                 combST = np.sort(np.concatenate((st, contST)))
                 c0 = correlograms(combST,np.zeros(len(combST),dtype='int8'),cluster_ids=[0],bin_size=binSize,sample_rate=20000,window_size=.05,symmetrize=False)
-                simRes[n,:] = np.cumsum(c0[0,0,0:(rpidx+1)])
+                simRes[n,:] = np.cumsum(c0[0,0,0:(len(b)-2)])
                 len(simRes)
             passPct[bidx,cidx]=sum(np.any(np.less_equal(simRes[:,0:],m),axis=1))/nSim*100
             cidx+=1
