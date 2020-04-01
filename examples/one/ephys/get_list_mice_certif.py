@@ -17,7 +17,7 @@ dataset_types = ['spikes.times',
 eid, det = one.search(task_protocol='ephys_certification',
                       dataset_types=dataset_types,  details=True)
 
-# sub = [p['subject'] for p in det]
+sub = [p['subject'] for p in det]
 # sub_unique = list(set(sub))
 
 # lab = [p['lab'] for p in det]
@@ -30,7 +30,11 @@ eid, det = one.search(task_protocol='ephys_certification',
 su, ind_su = numpy.unique(sub, return_index=True)
 lab_arr = numpy.array(lab)
 lu = lab_arr[ind_su]
+
 for i_su in range(0, len(su)):
-    print(f'Subject: {su[i_su]} \t--\t Lab: {lu[i_su]}')
+    # Find how many recordings were made with this animals
+    sess_id = numpy.where(numpy.array(sub) == su[i_su])
+    # Display
+    print(f'Subject: {su[i_su]} \t--\t Lab: {lu[i_su]} -- N session: {len(sess_id[0])}')
 
 # TODO -- How many recording sessions were done per lab
