@@ -16,13 +16,10 @@ lf_paths = one.load(eid[0], dataset_types=['ephysData.raw.lf', 'ephysData.raw.me
 # Read in raw LFP data from probe00
 raw = spikeglx.Reader(lf_paths[0])
 signal = raw.read(nsel=slice(None, 100000, None), csel=slice(None, None, None))[0]
+signal = signal * raw.channel_conversion_sample2v['lf']  # Convert samples into uV
 signal = np.rot90(signal)
 
 ts = one.load(eid[0], 'ephysData.raw.timestamps')
-
-# Read in spectral density from probe00
-sd_freqs = one.load(eid[0], '_iblqc_ephysSpectralDensity.freqs')[0]
-sd_power = one.load(eid[0], '_iblqc_ephysSpectralDensity.power')[0]
 
 # %% Calculate power spectrum and coherence between two random channels
 

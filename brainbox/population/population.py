@@ -6,10 +6,13 @@ Code for decoding by G. Meijer
 '''
 
 import numpy as np
+import types
+from itertools import groupby
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import KFold, LeaveOneOut
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.model_selection import KFold, LeaveOneOut, LeaveOneGroupOut
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, roc_auc_score
 
 
@@ -188,8 +191,9 @@ def xcorr(spike_times, spike_clusters, bin_size=None, window_size=None):
     return _symmetrize_correlograms(correlograms)
 
 
-def decode(spike_times, spike_clusters, event_times, event_groups,
-           pre_time=0, post_time=0.5, classifier='bayes', num_splits=5, iterations=1):
+def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, post_time=0.5,
+           classifier='bayes', cross_validation='kfold', num_splits=5, prob_left=[],
+           custom_validation=[], iterations=1):
     """
     Use decoding to classify groups of trials (e.g. stim left/right). Classification is done using
     the population vector of summed spike counts from the specified time window. Cross-validation
@@ -211,25 +215,43 @@ def decode(spike_times, spike_clusters, event_times, event_groups,
     event_groups : 1D array
         group identities of the events, can be any number of groups, accepts integers and strings
     pre_time : float
-        time (in seconds) to precede the event times to get the baseline
+        time (in seconds) preceding the event times
     post_time : float
-        time (in seconds) to follow the event times
+        time (in seconds) following the event times
     classifier : string
         which decoder to use, options are:
             'bayes'         Naive Bayes
             'forest'        Random forest (with 100 trees)
             'regression'    Logistic regression
+            'lda'           Linear Discriminant Analysis
+    cross_validation : string
+        which cross-validation method to use, options are:
+            'none'              No cross-validation
+            'kfold'             K-fold cross-validation
+            'leave-one-out'     Leave out the trial that is being decoded
+            'block'             Leave out the entire block the to-be-decoded trial is in
+            'custom'            Any custom cross-validation provided by the user
     num_splits : integer
-        Number of splits to use for n-fold cross validation, a value of 5 means that the decoder
+        ** only for 'kfold' cross-validation **
+        Number of splits to use for k-fold cross validation, a value of 5 means that the decoder
         will be trained on 4/5th of the data and used to predict the remaining 1/5th. This process
         is repeated five times so that all data has been used as both training and test set.
-        To use leave-one-out cross validation use num_splits = 1
+    prob_left : 1D array
+        ** only for 'block' cross-validation **
+        the probability of the stimulus appearing on the left for each trial in event_times
+    custom_validation : generator
+        ** only for 'custom' cross-validation **
+        a generator object with the splits to be used for cross validation using this format:
+            (
+                (split1_train_idxs, split1_test_idxs),
+                (split2_train_idxs, split2_test_idxs),
+                (split3_train_idxs, split3_test_idxs),
+             ...)
     iterations : integer
-        How often to repeat the n-fold cross validation. Randomly splitting the data into train
+        How often to repeat the classification process. Randomly splitting the data into train
         and test sets can introduce small discrepencies in the decoding performance depending on
         where the splits are made. This variability is reduced by repeating the cross validation
         several times and taking the mean of the resulting classification performances.
-        This number is ignored during leave-one-out cross validation
 
     Returns
     -------
@@ -247,8 +269,13 @@ def decode(spike_times, spike_clusters, event_times, event_groups,
     """
 
     # Check input
-    assert classifier in ['bayes', 'forest', 'regression']
+    assert classifier in ['bayes', 'forest', 'regression', 'lda']
+    assert cross_validation in ['none', 'kfold', 'leave-one-out', 'block', 'custom']
     assert event_times.shape[0] == event_groups.shape[0]
+    if cross_validation == 'block':
+        assert event_times.shape[0] == prob_left.shape[0]
+    if cross_validation == 'custom':
+        assert isinstance(custom_validation, types.GeneratorType)
 
     # Get matrix of all neuronal responses
     times = np.column_stack(((event_times - pre_time), (event_times + post_time)))
@@ -262,19 +289,27 @@ def decode(spike_times, spike_clusters, event_times, event_groups,
         clf = GaussianNB()
     elif classifier == 'regression':
         clf = LogisticRegression(solver='liblinear', multi_class='auto')
+    elif classifier == 'lda':
+        clf = LinearDiscriminantAnalysis()
 
     # Initialize cross-validation
-    if num_splits == 1:
-        cv = LeaveOneOut()
-        iterations = 1  # only classify once when using leave-one-out
-    else:
-        cv = KFold(n_splits=num_splits, shuffle=True)
+    if cross_validation == 'leave-one-out':
+        cv = LeaveOneOut().split(pop_vector)
+    elif cross_validation == 'kfold':
+        cv = KFold(n_splits=num_splits).split(pop_vector)
+    elif cross_validation == 'block':
+        block_lengths = [sum(1 for i in g) for k, g in groupby(prob_left)]
+        blocks = np.repeat(np.arange(len(block_lengths)), block_lengths)
+        cv = LeaveOneGroupOut().split(pop_vector, groups=blocks)
+    elif cross_validation == 'custom':
+        cv = custom_validation
 
     # Pre-allocate variables
     acc_all = np.zeros(iterations)
     f1_all = np.zeros(iterations)
     auroc_all = np.zeros(iterations)
-    cm_all = np.zeros((np.shape(np.unique(event_groups))[0], np.shape(np.unique(event_groups))[0],
+    cm_all = np.zeros((np.shape(np.unique(event_groups))[0],
+                       np.shape(np.unique(event_groups))[0],
                        iterations))
 
     # Classify several times, determined by iterations
@@ -284,18 +319,29 @@ def decode(spike_times, spike_clusters, event_times, event_groups,
         y_pred = np.zeros(event_groups.shape)
         y_probs = np.zeros(event_groups.shape)
 
-        # Loop over the splits into train and test
-        for train_index, test_index in cv.split(pop_vector):
+        if cross_validation == 'none':
 
-            # Fit the model to the training data
-            clf.fit(pop_vector[train_index], [event_groups[j] for j in train_index])
+            # Fit the model on all the data and predict
+            clf.fit(pop_vector, event_groups)
+            y_pred = clf.predict(pop_vector)
 
-            # Predict the test data
-            y_pred[test_index] = clf.predict(pop_vector[test_index])
+            #  Get the probability of the prediction for ROC analysis
+            probs = clf.predict_proba(pop_vector)
+            y_probs = probs[:, 1]  # keep positive only
 
-            # Get the probability of the prediction for ROC analysis
-            probs = clf.predict_proba(pop_vector[test_index])
-            y_probs[test_index] = probs[:, 1]  # keep positive only
+        else:
+            # Loop over the splits into train and test
+            for train_index, test_index in cv:
+
+                # Fit the model to the training data
+                clf.fit(pop_vector[train_index], [event_groups[j] for j in train_index])
+
+                # Predict the test data
+                y_pred[test_index] = clf.predict(pop_vector[test_index])
+
+                # Get the probability of the prediction for ROC analysis
+                probs = clf.predict_proba(pop_vector[test_index])
+                y_probs[test_index] = probs[:, 1]  # keep positive only
 
         # Calculate performance metrics and confusion matrix
         acc_all[i] = accuracy_score(event_groups, y_pred)
@@ -305,16 +351,16 @@ def decode(spike_times, spike_clusters, event_times, event_groups,
         cm_all[:, :, i] = conf_matrix / conf_matrix.sum(axis=1)[:, np.newaxis]  # normalize
 
     # Add to results dictionary
-    if num_splits == 1:
-        results = dict({'accuracy': np.mean(acc_all), 'f1': np.mean(f1_all),
-                        'auroc': np.mean(auroc_all), 'confusion_matrix': np.mean(cm_all, axis=2),
-                        'n_groups': np.shape(np.unique(event_groups))[0],
-                        'classifier': classifier, 'cross_validation': 'leave-one-out'})
-    else:
+    if cross_validation == 'kfold':
         results = dict({'accuracy': np.mean(acc_all), 'f1': np.mean(f1_all),
                         'auroc': np.mean(auroc_all), 'confusion_matrix': np.mean(cm_all, axis=2),
                         'n_groups': np.shape(np.unique(event_groups))[0],
                         'classifier': classifier, 'cross_validation': '%d-fold' % num_splits,
                         'iterations': iterations})
+    else:
+        results = dict({'accuracy': np.mean(acc_all), 'f1': np.mean(f1_all),
+                        'auroc': np.mean(auroc_all), 'confusion_matrix': np.mean(cm_all, axis=2),
+                        'n_groups': np.shape(np.unique(event_groups))[0],
+                        'classifier': classifier, 'cross_validation': cross_validation})
 
     return results
