@@ -11,12 +11,6 @@ from oneibl.one import ONE
 from alf.io import is_uuid_string, is_session_path, is_details_dict
 # plt.ion()
 
-one = ONE(
-    username="niccolo",
-    password="ItTakesBrains!",
-    base_url="https://alyx.internationalbrainlab.org",
-)
-
 
 def _one_load_session_delays_between_events(eid, dstype1, dstype2):
     """ Returns difference between times of 2 different dataset types
