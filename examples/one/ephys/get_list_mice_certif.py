@@ -35,6 +35,11 @@ for i_su in range(0, len(su)):
     # Find how many recordings were made with this animals
     sess_id = numpy.where(numpy.array(sub) == su[i_su])
     # Display
-    print(f'Subject: {su[i_su]} \t--\t Lab: {lu[i_su]} -- N session: {len(sess_id[0])}')
+    tr_pl = one.alyx.rest('trajectories', 'list', subject=su[i_su], provenance='Planned')
+    tr_tr = one.alyx.rest('trajectories', 'list', subject=su[i_su], provenance='Histology track')
+    print(f'Subject: {su[i_su]} - Lab: {lu[i_su]} - N session: {len(sess_id[0])}'
+          f' - N planned traces: {len(tr_pl)} - N tracked traces: {len(tr_tr)}')
 
 # TODO -- How many recording sessions were done per lab
+prob_des = one.load(eid, dataset_types=['probes.description'])
+n_probe = len(prob_des[0])
