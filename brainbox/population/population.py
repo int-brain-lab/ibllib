@@ -292,18 +292,6 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
     elif classifier == 'lda':
         clf = LinearDiscriminantAnalysis()
 
-    # Initialize cross-validation
-    if cross_validation == 'leave-one-out':
-        cv = LeaveOneOut().split(pop_vector)
-    elif cross_validation == 'kfold':
-        cv = KFold(n_splits=num_splits).split(pop_vector)
-    elif cross_validation == 'block':
-        block_lengths = [sum(1 for i in g) for k, g in groupby(prob_left)]
-        blocks = np.repeat(np.arange(len(block_lengths)), block_lengths)
-        cv = LeaveOneGroupOut().split(pop_vector, groups=blocks)
-    elif cross_validation == 'custom':
-        cv = custom_validation
-
     # Pre-allocate variables
     acc_all = np.zeros(iterations)
     f1_all = np.zeros(iterations)
@@ -330,6 +318,18 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
             y_probs = probs[:, 1]  # keep positive only
 
         else:
+            # Perform cross-validation
+            if cross_validation == 'leave-one-out':
+                cv = LeaveOneOut().split(pop_vector)
+            elif cross_validation == 'kfold':
+                cv = KFold(n_splits=num_splits).split(pop_vector)
+            elif cross_validation == 'block':
+                block_lengths = [sum(1 for i in g) for k, g in groupby(prob_left)]
+                blocks = np.repeat(np.arange(len(block_lengths)), block_lengths)
+                cv = LeaveOneGroupOut().split(pop_vector, groups=blocks)
+            elif cross_validation == 'custom':
+                cv = custom_validation
+
             # Loop over the splits into train and test
             for train_index, test_index in cv:
 
