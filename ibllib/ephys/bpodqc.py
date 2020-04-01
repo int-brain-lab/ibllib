@@ -52,6 +52,9 @@ def uuid_to_path(func=None, dl=False, full=False, dry=False, force=False):
 
     @wraps(func)
     def wrapper(eid, *args, **kwargs):
+        if eid is None:
+            print("Input eid or session_path is None")
+            return
         # Check if first arg is path or eid
         if is_uuid_string(str(eid)):
             session_path = one.path_from_eid(eid)
@@ -473,14 +476,14 @@ def _get_trimmed_data_from_pregenerated_files(
 
 
 @uuid_to_path(dl=True)
-def load_bpod_data(session_path):
+def load_bpod_data(session_path, fpga_time=False):
     """Extracts and loads ephys sessions from bpod data"""
+    print(session_path)
     data = raw.load_data(session_path)
     settings = raw.load_settings(session_path)
     stimOn_times, stimOff_times, stimFreeze_times = get_stimOnOffFreeze_times_from_BNC1(
         session_path
     )
-    bpod2fpga = fpga.align_with_bpod(session_path)
 
     out = {
         "position": None,
@@ -549,6 +552,11 @@ def load_bpod_data(session_path):
     out["intervals_0"] = out["intervals"][:, 0]
     out["intervals_1"] = out["intervals"][:, 1]
     _ = out.pop('intervals')
+    if fpga_time:
+        bpod2fpga = get_bpod2fpga_times_func(session_path)
+        for k in out:
+            if '_times' in k or 'intervals' in k:
+                out[k] = bpod2fpga(out[k])
     return out
 
 
@@ -577,7 +585,7 @@ def get_bpodqc_frame(session_path, qc_frame_only=False):
         "goCue_times": float,  # (Point 22)
         "response_times": float,  # (Point 23)
         "feedback_times": float,  # (Point 24)
-        "goCue_delays": float,  #  (Point 25)
+        "goCue_delays": float,  # (Point 25)
         "errorCue_delays": float,  # (Point 26)
         "stimOn_delays": float,  # (Point 27)
         "stimOff_delays": float,  # (Point 28)
@@ -596,7 +604,7 @@ def get_bpodqc_frame(session_path, qc_frame_only=False):
         "trial_event_sequence_error": float,  # (Point 13)
         "trial_event_sequence_correct": float,  # (Point 14)
         "trial_length": float,  # (Point 15)
-        }
+    }
 
     qc_frame = {
         "n_feedback": np.int32(
@@ -831,6 +839,7 @@ def get_bpod2fpga_times_func(session_path):
     eid = one.eid_from_path(session_path)
     if eid is None:
         print(f"No session found with path = {session_path}")
+        return
     fpga_intervals = one.load(eid, dataset_types='trials.intervals')
     if not fpga_intervals:
         print(f"tirals.intervals datasetType not found for session {eid}")
@@ -937,6 +946,7 @@ if __name__ == "__main__":
     # Alex's 3A
     asession_path = subj_path + "_iblrig_test_mouse/2020-02-18/006"
     a2session_path = subj_path + "_iblrig_test_mouse/2020-02-21/011"
+    eid = "af74b29d-a671-4c22-a5e8-1e3d27e362f3"
 
     session_path = gsession_path
     # bpod = load_bpod_data(session_path)
