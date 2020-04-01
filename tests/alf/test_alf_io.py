@@ -272,6 +272,27 @@ class TestSessionFolder(unittest.TestCase):
         for i in inp:
             self.assertEqual(alf.io.is_session_path(i[0]), i[1])
 
+    def test_is_uuid_string(self):
+        testins = [
+            None,
+            'some_string',
+            'f6ffe25827-06-425aaa-f5-919f70025835',
+            'f6ffe258-2706-425a-aaf5-919f70025835']
+        expected = [False, False, False, True]
+        for i, e in zip(testins, expected):
+            self.assertTrue(alf.io.is_uuid_string(i) == e)
+
+    def test_is_details_dict(self):
+        keys = ['subject', 'start_time', 'number', 'lab', 'url', 'task_protocol', 'local_path']
+        testins = [
+            None,
+            dict.fromkeys(keys[1:]),
+            dict.fromkeys(keys),
+        ]
+        expected = [False, False, True]
+        for i, e in zip(testins, expected):
+            self.assertTrue(alf.io.is_details_dict(i) == e)
+
 
 class TestUUID_Files(unittest.TestCase):
 
