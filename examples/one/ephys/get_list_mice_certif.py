@@ -20,7 +20,7 @@ eid, det = one.search(task_protocol='ephys_certification',
 sub = [p['subject'] for p in det]
 # sub_unique = list(set(sub))
 
-# lab = [p['lab'] for p in det]
+lab = [p['lab'] for p in det]
 # lab_unique = list(set(lab))
 
 # task = [p['task_protocol'] for p in det]
