@@ -16,7 +16,7 @@ start_time = datetime.datetime.now()
 
 # Date-Time of imaging (example)
 img_date = datetime.datetime(2020, 4, 1, 17, 28, 55, 536948)
-json_note = {'imaging_time' = img_date}  # TODO Does not work written like this
+json_note = {'imaging_time' : img_date}  # TODO Does not work written like this
 
 ses_ = {'subject': subject,
         'users': 'steven.west',
