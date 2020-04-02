@@ -18,8 +18,17 @@ TASK_PROTOCOL = 'SWC_Histology_Serial2P_v0.0.1'
 sample_imaging_date = datetime.datet(2020, 2, 1)  # Format: y - m - d
 sample_reception_date = datetime.date(2020, 4, 1)
 
-json_note = {'sample_reception_date': ibllib.time.date2isostr(sample_reception_date)[:10]}
-# Saving only the date
+json_note = {
+        'sample_reception_date': ibllib.time.date2isostr(sample_reception_date)[:10]
+#     'elastix_affine_transform': np.zeros((4, 4)),
+#     'tilt': 0,
+#     'yaw': 0,
+#     'roll': 0,
+#     'dv_scale': 1,
+#     'ap_scale': 1,
+#     'ml_scale': 1
+}
+
 
 ses_ = {'subject': subject,
         'users': ['steven.west'],
