@@ -5,15 +5,20 @@ Get list of subjects associated to the repeated site probe trajectory from ONE.
 
 from oneibl.one import ONE
 
-one = ONE()
+one = ONE(base_url='https://dev.alyx.internationalbrainlab.org')
 # find projects: proj = one.alyx.rest('projects', 'list')
 # proj_list = [p['name'] for p in proj]
 traj = one.alyx.rest('trajectories', 'list', provenance='Planned',
                      x=-2243, y=-2000)  # repeated site coordinate
 # TODO add filter: project='ibl_neuropixel_brainwide_01'
+# TODO filter 'task_protocol': '_iblrig_tasks_ephysChoiceWorld6.2.5'
 
 # Display subjects names
 sess = [p['session'] for p in traj]
 sub = [p['subject'] for p in sess]
 
-print(f'Subject: {sub}')
+task = [p['task_protocol'] for p in sess]
+
+for i_su in range(0, len(sub)):
+    tr_tr = one.alyx.rest('trajectories', 'list', subject=sub[i_su], provenance='Histology track')
+    print(f'Subject: {sub[i_su]} - {task[i_su]} - N tracked traces: {len(tr_tr)}')
