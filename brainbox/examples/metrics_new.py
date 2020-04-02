@@ -17,7 +17,6 @@ from phylib.stats import correlograms
 import pandas as pd
 from defined_metrics import FP_RP, noise_cutoff
 
-#def run_noise_cutoff():
 alf_dir = r'C:\Users\Steinmetz Lab User\Documents\Lab\SpikeSortingOutput\Hopkins_CortexLab\test_path_alf'
 ks_dir = r'C:\Users\Steinmetz Lab User\Documents\Lab\SpikeSortingOutput\Hopkins_CortexLab'
 
