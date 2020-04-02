@@ -15,7 +15,7 @@ dataset_types = ['spikes.times',
 #                         dataset_types=dataset_types, details=True)
 
 eid, det = one.search(task_protocol='ephys_certification',
-                      dataset_types=dataset_types,  details=True)
+                      dataset_types=dataset_types, details=True)
 
 sub = [p['subject'] for p in det]
 # sub_unique = list(set(sub))
