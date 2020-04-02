@@ -47,12 +47,8 @@ def noise_cutoff(amps,quartile_length=.25,std_cutoff = 2):
         plt.xlim(10,37)
         plt.ylim(0, 200)
         plt.show()
-        
-        
+               
         dx = np.diff(n)
-        
-        #assumption: it will always be cut off on the low side, not the high side, because of spike sorting.
-         
         
         idx_nz = np.nonzero(dx) #indices of nonzeros
         length_nonzeros = idx_nz[0][-1]-idx_nz[0][0] #length of the entire stretch, from first nonzero to last nonzero
