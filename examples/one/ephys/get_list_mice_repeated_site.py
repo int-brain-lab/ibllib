@@ -11,7 +11,7 @@ one = ONE(base_url='https://dev.alyx.internationalbrainlab.org')
 traj = one.alyx.rest('trajectories', 'list', provenance='Planned',
                      x=-2243, y=-2000)  # repeated site coordinate
 # TODO add filter: project='ibl_neuropixel_brainwide_01'
-# TODO filter 'task_protocol': '_iblrig_tasks_ephysChoiceWorld6.2.5'
+# TODO filter 'task_protocol': '_iblrig_tasks_ephysChoiceWorld'
 
 # Display subjects names
 sess = [p['session'] for p in traj]
