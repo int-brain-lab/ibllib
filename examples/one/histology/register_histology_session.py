@@ -1,6 +1,6 @@
 '''
 Register histology session for example mouse
-Note, we have defined: start_time = sample_imaging_date
+Note, we have defined: start_time = sample_imaging_date (putting time values to 0)
 '''
 # Author: Gaelle Chapuis
 
@@ -15,7 +15,7 @@ subject = 'CSHL028'  # example
 TASK_PROTOCOL = 'SWC_Histology_Serial2P_v0.0.1'
 
 # Date-Time of imaging (example), change as needed
-sample_imaging_date = datetime.date(2020, 2, 1)  # Format: y - m - d
+sample_imaging_date = datetime.datetime(2020, 2, 1, 0, 0, 0, 000000)  # Format: y - m - d, time values 0
 sample_reception_date = datetime.date(2020, 4, 1)
 
 json_note = {'sample_reception_date': sample_reception_date}
