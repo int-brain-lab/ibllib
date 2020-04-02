@@ -1,10 +1,55 @@
+from functools import partial, wraps
+from pathlib import Path
+
 import numpy as np
-from oneibl.one import ONE
+
 from alf.io import is_details_dict, is_session_path, is_uuid_string
+from oneibl.one import ONE
 
 one = ONE()
 
 
+# Decorators
+def _dl_raw_behavior(session_path, full=False, dry=False, force=False):
+    """ Helper function to download raw behavioral data from session_path based functions
+    """
+    dsts = [x for x in one.list(None, 'dataset_types') if '_iblrig_' in x]
+    min_dsts = ["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"]
+    session_path = Path(session_path)
+    eid = one.eid_from_path(session_path)
+
+    if eid is None:
+        return
+    if full:
+        one.load(eid, download_only=True, dry_run=dry, dataset_types=dsts, clobber=force)
+    elif not full:
+        one.load(eid, download_only=True, dry_run=dry, dataset_types=min_dsts, clobber=force)
+
+
+def uuid_to_path(func=None, dl=False, full=False, dry=False, force=False):
+    """ Check if first argument of func is eID, if valid return path with oprional download
+    """
+    if func is None:
+        return partial(uuid_to_path, dl=dl, full=full, dry=dry, force=force)
+
+    @wraps(func)
+    def wrapper(eid, *args, **kwargs):
+        if eid is None:
+            print("Input eid or session_path is None")
+            return
+        # Check if first arg is path or eid
+        if is_uuid_string(str(eid)):
+            session_path = one.path_from_eid(eid)
+        else:
+            session_path = Path(eid)
+        if dl:
+            _dl_raw_behavior(session_path, full=full, dry=dry, force=force)
+
+        return func(session_path, *args, **kwargs)
+    return wrapper
+
+
+# Other utils
 def _one_load_session_delays_between_events(eid, dstype1, dstype2):
     """ Returns difference between times of 2 different dataset types
     Func is called with eid and dstypes in temporal order, returns delay between
