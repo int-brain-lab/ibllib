@@ -11,12 +11,15 @@ one = ONE(base_url='https://dev.alyx.internationalbrainlab.org')
 
 subject = 'CSHL028' # example
 TASK_PROTOCOL = 'SWC_Histology_Serial2P_v0.0.1'
-# Date-Time of registration
-start_time = datetime.datetime.now()
 
-# Date-Time of imaging (example)
-img_date = datetime.datetime(2020, 4, 1, 17, 28, 55, 536948)
-json_note = {'imaging_time': img_date}
+# Note, we have defined:
+# start_time = sample_imaging_date
+
+# Date-Time of imaging (example), change as needed 
+sample_imaging_date = datetime.datetime.now()
+sample_reception_date = datetime.datetime(2020, 4, 1, 17, 28, 55, 536948)
+
+json_note = {'sample_reception_date': sample_reception_date}
 
 ses_ = {'subject': subject,
         'users': 'steven.west',
@@ -27,7 +30,7 @@ ses_ = {'subject': subject,
         # 'type': 'Experiment',
         'task_protocol': TASK_PROTOCOL,
         'number': 1,
-        'start_time': ibllib.time.date2isostr(start_time),
+        'start_time': ibllib.time.date2isostr(sample_imaging_date),
         # 'end_time': ibllib.time.date2isostr(end_time) if end_time else None,
         # 'n_correct_trials': n_correct_trials,
         #'n_trials': n_trials,
