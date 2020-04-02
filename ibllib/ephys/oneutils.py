@@ -157,7 +157,8 @@ if __name__ == "__main__":
         "start_time": "2020-01-22T10:50:59",
         "number": 1,
         "lab": "mainenlab",
-        "url": "https://alyx.internationalbrainlab.org/sessions/259927fd-7563-4b03-bc5d-17b4d0fa7a55",
+        "url":
+            "https://alyx.internationalbrainlab.org/sessions/259927fd-7563-4b03-bc5d-17b4d0fa7a55",
         "task_protocol": "_iblrig_tasks_ephysChoiceWorld6.2.5",
         "local_path": "/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_2240/2020-01-22/001",
     }
@@ -165,13 +166,13 @@ if __name__ == "__main__":
     # Test random dataset
     print(is_uuid_string(random_ephys_session(lab, complete=False)[0]))
     print(is_details_dict(random_ephys_session(lab, complete=False)[1]))
-    print(random_ephys_session(lab, complete=True) == None)
-    print(random_ephys_session('sakjdhka', complete=False) == None)
+    print(random_ephys_session(lab, complete=True) is None)
+    print(random_ephys_session('sakjdhka', complete=False) is None)
     # Test _to_eid
     # All == eid
     print(_to_eid(eid) == eid)
     print(_to_eid([eid, eid]) == [eid, eid])
-    print(_to_eid((eid, eid)) ==[eid, eid])
+    print(_to_eid((eid, eid)) == [eid, eid])
     print(_to_eid(sp) == eid)
     print(_to_eid([sp, sp]) == [eid, eid])
     print(_to_eid((sp, sp)) == [eid, eid])
