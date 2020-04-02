@@ -16,6 +16,7 @@ import time
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+from phylib.stats import correlograms
 
 nSim = 100
 
