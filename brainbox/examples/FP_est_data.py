@@ -12,6 +12,7 @@ import numpy as np
 import alf.io as aio
 import matplotlib.pyplot as plt
 from max_acceptable_isi_viol import max_acceptable_cont
+import brainbox as bb
 
 #def run_noise_cutoff():
 alf_dir = r'C:\Users\Steinmetz Lab User\Documents\Lab\SpikeSortingOutput\Hopkins_CortexLab\test_path_alf'
@@ -28,3 +29,4 @@ unit = units[635] #635 max spike rate #681 1.43
 ts = units_b['times'][unit]
 fr_source = len(ts)/(ts[-1]-ts[0])
 print(fr_source)
+
