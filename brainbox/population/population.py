@@ -192,8 +192,8 @@ def xcorr(spike_times, spike_clusters, bin_size=None, window_size=None):
 
 
 def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, post_time=0.5,
-           classifier='bayes', cross_validation='kfold', num_splits=5, prob_left=[],
-           custom_validation=[], iterations=1):
+           classifier='bayes', cross_validation='kfold', num_splits=5, prob_left=None,
+           custom_validation=None, n_neurons='all', iterations=1):
     """
     Use decoding to classify groups of trials (e.g. stim left/right). Classification is done using
     the population vector of summed spike counts from the specified time window. Cross-validation
@@ -229,7 +229,7 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
             'none'              No cross-validation
             'kfold'             K-fold cross-validation
             'leave-one-out'     Leave out the trial that is being decoded
-            'block'             Leave out the entire block the to-be-decoded trial is in
+            'block'             Leave out the block the to-be-decoded trial is in
             'custom'            Any custom cross-validation provided by the user
     num_splits : integer
         ** only for 'kfold' cross-validation **
@@ -247,11 +247,6 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
                 (split2_train_idxs, split2_test_idxs),
                 (split3_train_idxs, split3_test_idxs),
              ...)
-    iterations : integer
-        How often to repeat the classification process. Randomly splitting the data into train
-        and test sets can introduce small discrepencies in the decoding performance depending on
-        where the splits are made. This variability is reduced by repeating the cross validation
-        several times and taking the mean of the resulting classification performances.
 
     Returns
     -------
@@ -293,28 +288,34 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
         clf = LinearDiscriminantAnalysis()
 
     # Pre-allocate variables
-    acc_all = np.zeros(iterations)
-    f1_all = np.zeros(iterations)
-    auroc_all = np.zeros(iterations)
-    cm_all = np.zeros((np.shape(np.unique(event_groups))[0],
-                       np.shape(np.unique(event_groups))[0],
-                       iterations))
+    acc = np.zeros(iterations)
+    f1 = np.zeros(iterations)
+    auroc = np.zeros(iterations)
+    conf_matrix_norm = np.zeros((np.shape(np.unique(event_groups))[0],
+                                 np.shape(np.unique(event_groups))[0],
+                                 iterations))
 
-    # Classify several times, determined by iterations
     for i in range(iterations):
 
         # Pre-allocate variables for this iteration
         y_pred = np.zeros(event_groups.shape)
         y_probs = np.zeros(event_groups.shape)
 
+        # Get neurons to use for this iteration
+        if n_neurons == 'all':
+            sub_pop_vector = pop_vector
+        else:
+            use_neurons = np.random.choice(pop_vector.shape[1], n_neurons, replace=False)
+            sub_pop_vector = pop_vector[:, use_neurons]
+
         if cross_validation == 'none':
 
             # Fit the model on all the data and predict
-            clf.fit(pop_vector, event_groups)
-            y_pred = clf.predict(pop_vector)
+            clf.fit(pop_vector[:, use_neurons], event_groups)
+            y_pred = clf.predict(pop_vector[:, use_neurons])
 
             #  Get the probability of the prediction for ROC analysis
-            probs = clf.predict_proba(pop_vector)
+            probs = clf.predict_proba(pop_vector[:, use_neurons])
             y_probs = probs[:, 1]  # keep positive only
 
         else:
@@ -334,33 +335,132 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
             for train_index, test_index in cv:
 
                 # Fit the model to the training data
-                clf.fit(pop_vector[train_index], [event_groups[j] for j in train_index])
+                clf.fit(sub_pop_vector[train_index], event_groups[train_index])
 
                 # Predict the test data
-                y_pred[test_index] = clf.predict(pop_vector[test_index])
+                y_pred[test_index] = clf.predict(sub_pop_vector[test_index])
 
                 # Get the probability of the prediction for ROC analysis
-                probs = clf.predict_proba(pop_vector[test_index])
+                probs = clf.predict_proba(sub_pop_vector[test_index])
                 y_probs[test_index] = probs[:, 1]  # keep positive only
 
         # Calculate performance metrics and confusion matrix
-        acc_all[i] = accuracy_score(event_groups, y_pred)
-        f1_all[i] = f1_score(event_groups, y_pred)
-        auroc_all[i] = roc_auc_score(event_groups, y_probs)
+        acc[i] = accuracy_score(event_groups, y_pred)
+        f1[i] = f1_score(event_groups, y_pred)
+        auroc[i] = roc_auc_score(event_groups, y_probs)
         conf_matrix = confusion_matrix(event_groups, y_pred)
-        cm_all[:, :, i] = conf_matrix / conf_matrix.sum(axis=1)[:, np.newaxis]  # normalize
+        conf_matrix_norm[:, :, i] = conf_matrix / conf_matrix.sum(axis=1)[:, np.newaxis]
 
     # Add to results dictionary
     if cross_validation == 'kfold':
-        results = dict({'accuracy': np.mean(acc_all), 'f1': np.mean(f1_all),
-                        'auroc': np.mean(auroc_all), 'confusion_matrix': np.mean(cm_all, axis=2),
+        results = dict({'accuracy': acc, 'f1': f1, 'auroc': auroc,
+                        'confusion_matrix': conf_matrix_norm,
                         'n_groups': np.shape(np.unique(event_groups))[0],
                         'classifier': classifier, 'cross_validation': '%d-fold' % num_splits,
                         'iterations': iterations})
     else:
-        results = dict({'accuracy': np.mean(acc_all), 'f1': np.mean(f1_all),
-                        'auroc': np.mean(auroc_all), 'confusion_matrix': np.mean(cm_all, axis=2),
+        results = dict({'accuracy': acc, 'f1': f1, 'auroc': auroc,
+                        'confusion_matrix': conf_matrix_norm,
                         'n_groups': np.shape(np.unique(event_groups))[0],
-                        'classifier': classifier, 'cross_validation': cross_validation})
+                        'classifier': classifier, 'cross_validation': cross_validation,
+                        'iterations': iterations})
 
     return results
+
+
+def lda_project(spike_times, spike_clusters, event_times, event_groups, pre_time=0, post_time=0.5,
+                cross_validation='kfold', num_splits=5, prob_left=None, custom_validation=None):
+    """
+    Use linear discriminant analysis to project population vectors to the line that best separates
+    the two groups. When cross-validation is used, the LDA projection is fitted on the training
+    data after which the test data is projected to this projection.
+
+    spike_times : 1D array
+        spike times (in seconds)
+    spike_clusters : 1D array
+        cluster ids corresponding to each event in `spikes`
+    event_times : 1D array
+        times (in seconds) of the events from the two groups
+    event_groups : 1D array
+        group identities of the events, can be any number of groups, accepts integers and strings
+    pre_time : float
+        time (in seconds) preceding the event times
+    post_time : float
+        time (in seconds) following the event times
+    cross_validation : string
+        which cross-validation method to use, options are:
+            'none'              No cross-validation
+            'kfold'             K-fold cross-validation
+            'leave-one-out'     Leave out the trial that is being decoded
+            'block'             Leave out the block the to-be-decoded trial is in
+            'custom'            Any custom cross-validation provided by the user
+    num_splits : integer
+        ** only for 'kfold' cross-validation **
+        Number of splits to use for k-fold cross validation, a value of 5 means that the decoder
+        will be trained on 4/5th of the data and used to predict the remaining 1/5th. This process
+        is repeated five times so that all data has been used as both training and test set.
+    prob_left : 1D array
+        ** only for 'block' cross-validation **
+        the probability of the stimulus appearing on the left for each trial in event_times
+    custom_validation : generator
+        ** only for 'custom' cross-validation **
+        a generator object with the splits to be used for cross validation using this format:
+            (
+                (split1_train_idxs, split1_test_idxs),
+                (split2_train_idxs, split2_test_idxs),
+                (split3_train_idxs, split3_test_idxs),
+             ...)
+    n_neurons : int
+        Group size of number of neurons to be sub-selected
+
+    Returns
+    -------
+    lda_projection : 1D array
+        the position along the LDA projection axis for the population vector of each trial
+
+    """
+
+    # Check input
+    assert cross_validation in ['none', 'kfold', 'leave-one-out', 'block', 'custom']
+    assert event_times.shape[0] == event_groups.shape[0]
+    if cross_validation == 'block':
+        assert event_times.shape[0] == prob_left.shape[0]
+    if cross_validation == 'custom':
+        assert isinstance(custom_validation, types.GeneratorType)
+
+    # Get matrix of all neuronal responses
+    times = np.column_stack(((event_times - pre_time), (event_times + post_time)))
+    pop_vector, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters, times)
+    pop_vector = np.rot90(pop_vector)
+
+    # Initialize
+    lda = LinearDiscriminantAnalysis()
+    lda_projection = np.zeros(event_groups.shape)
+
+    if cross_validation == 'none':
+        # Find the best LDA projection on all data and transform those data
+        lda_projection = lda.fit_transform(pop_vector, event_groups)
+
+    else:
+        # Perform cross-validation
+        if cross_validation == 'leave-one-out':
+            cv = LeaveOneOut().split(pop_vector)
+        elif cross_validation == 'kfold':
+            cv = KFold(n_splits=num_splits).split(pop_vector)
+        elif cross_validation == 'block':
+            block_lengths = [sum(1 for i in g) for k, g in groupby(prob_left)]
+            blocks = np.repeat(np.arange(len(block_lengths)), block_lengths)
+            cv = LeaveOneGroupOut().split(pop_vector, groups=blocks)
+        elif cross_validation == 'custom':
+            cv = custom_validation
+
+        # Loop over the splits into train and test
+        for train_index, test_index in cv:
+
+            # Find LDA projection on the training data
+            lda.fit(pop_vector[train_index], [event_groups[j] for j in train_index])
+
+            # Project the held-out test data to projection
+            lda_projection[test_index] = np.rot90(lda.transform(pop_vector[test_index]))[0]
+
+    return lda_projection
