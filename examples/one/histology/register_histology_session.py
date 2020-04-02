@@ -18,12 +18,12 @@ TASK_PROTOCOL = 'SWC_Histology_Serial2P_v0.0.1'
 sample_imaging_date = datetime.datet(2020, 2, 1)  # Format: y - m - d
 sample_reception_date = datetime.date(2020, 4, 1)
 
-json_note = {'sample_reception_date': sample_reception_date}
+json_note = {'sample_reception_date': ibllib.time.date2isostr(sample_reception_date)}
 
 ses_ = {'subject': subject,
-        'users': 'steven.west',
+        'users': ['steven.west'],
         'location': 'serial2P_01',
-        'procedures': 'Histology',
+        'procedures': ['Histology'],
         'lab': 'mrsicflogellab',
         # 'project': project['name'],
         # 'type': 'Experiment',
