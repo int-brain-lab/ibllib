@@ -272,6 +272,7 @@ class AlyxClient:
         :return: (dict/list) json interpreted dictionary from response
         """
         rep = self._generic_request(requests.get, rest_query)
+        _logger.debug(rest_query)
         if isinstance(rep, dict) and list(rep.keys()) == ['count', 'next', 'previous', 'results']:
             if len(rep['results']) < rep['count']:
                 rep = _PaginatedResponse(self, rep)

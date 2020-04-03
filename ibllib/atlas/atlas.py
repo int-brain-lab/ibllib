@@ -484,16 +484,14 @@ class AllenAtlas(BrainAtlas):
         :param mock:
         :return: atlas.BrainAtlas
         """
+        FILE_REGIONS = str(Path(__file__).parent.joinpath('allen_structure_tree.csv'))
         if par is None:
-            # Bregma indices for the 10um Allen Brain Atlas, mlapdv
-            pdefault = {
-                'PATH_ATLAS': '/datadisk/BrainAtlas/ATLASES/Allen/',
-                'FILE_REGIONS': str(Path(__file__).parent.joinpath('allen_structure_tree.csv')),
-            }
-            par = params.read('ibl_histology', default=pdefault)
+            par = params.read('one_params')
+            if not par.as_dict().get('PATH_ATLAS', None):
+                setup()
+                par = params.read('one_params')
             if not Path(par.PATH_ATLAS).exists() and not mock:
                 raise FileNotFoundError(f"{par.PATH_ATLAS}  doesn't exist !")
-            params.write('ibl_histology', par)
         # file_image = Path(path_atlas).joinpath(f'ara_nissl_{res_um}.nrrd')
         file_image = Path(par.PATH_ATLAS).joinpath(f'average_template_{res_um}.nrrd')
         file_label = Path(par.PATH_ATLAS).joinpath(f'annotation_{res_um}.nrrd')
@@ -505,7 +503,7 @@ class AllenAtlas(BrainAtlas):
             label = np.swapaxes(np.swapaxes(label, 2, 0), 1, 2)  # label[iap, iml, idv]
             image = np.swapaxes(np.swapaxes(image, 2, 0), 1, 2)  # image[iap, iml, idv]
         # resulting volumes origin: x right, y front, z top
-        df_regions = pd.read_csv(par.FILE_REGIONS)
+        df_regions = pd.read_csv(FILE_REGIONS)
         regions = BrainRegions(id=df_regions.id.values,
                                name=df_regions.name.values,
                                acronym=df_regions.acronym.values)
@@ -540,3 +538,21 @@ def NeedlesAtlas(*args, **kwargs):
     AP_SCALE = 1.087  # multiplicative factor on AP dimension
     kwargs['scaling'] = np.array([1, AP_SCALE, DV_SCALE])
     return AllenAtlas(*args, **kwargs)
+
+
+def setup():
+    """
+    Adds parameters to the param file
+    :return:
+    """
+    from PyQt5.QtWidgets import QFileDialog
+
+    my_atlas_path = str(QFileDialog.getExistingDirectory(None, "Get Atlas Directory"))
+
+    default = {"PATH_ATLAS": my_atlas_path}
+    par = params.read('one_params', default=default)
+    par = par.set('PATH_ATLAS', my_atlas_path)
+    params.write('one_params', par)
+
+    par = params.read('one_params')
+    assert par.PATH_ATLAS == my_atlas_path
