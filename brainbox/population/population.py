@@ -294,6 +294,8 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
     conf_matrix_norm = np.zeros((np.shape(np.unique(event_groups))[0],
                                  np.shape(np.unique(event_groups))[0],
                                  iterations))
+    pred = np.zeros([iterations, pop_vector.shape[0]])
+    prob = np.zeros([iterations, pop_vector.shape[0]])
 
     for i in range(iterations):
 
@@ -351,15 +353,21 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
         conf_matrix = confusion_matrix(event_groups, y_pred)
         conf_matrix_norm[:, :, i] = conf_matrix / conf_matrix.sum(axis=1)[:, np.newaxis]
 
+        # Add prediction and probability to matrix
+        pred[i, :] = y_pred
+        prob[i, :] = y_probs
+
     # Add to results dictionary
     if cross_validation == 'kfold':
         results = dict({'accuracy': acc, 'f1': f1, 'auroc': auroc,
+                        'predictions': pred, 'probabilities': prob,
                         'confusion_matrix': conf_matrix_norm,
                         'n_groups': np.shape(np.unique(event_groups))[0],
                         'classifier': classifier, 'cross_validation': '%d-fold' % num_splits,
                         'iterations': iterations})
     else:
         results = dict({'accuracy': acc, 'f1': f1, 'auroc': auroc,
+                        'predictions': pred, 'probabilities': prob,
                         'confusion_matrix': conf_matrix_norm,
                         'n_groups': np.shape(np.unique(event_groups))[0],
                         'classifier': classifier, 'cross_validation': cross_validation,
