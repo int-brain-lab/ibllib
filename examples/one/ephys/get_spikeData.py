@@ -1,6 +1,6 @@
 '''
-Get spikes data for all probes in a single session via ONE and brainbox.
-TODO return list of bunch via one.load_object and bbone.load_spike_sorting
+Get spikes data and associate brain regions for all probes in a single session via ONE and brainbox.
+TODO return dict of bunch via one.load_object and bbone.load_spike_sorting
 TODO clarify what loading method to use between the two
 '''
 # Author: Gaelle Chapuis
@@ -13,21 +13,38 @@ import brainbox.io.one as bbone
 one = ONE()
 
 # --- Example session:
-eid = 'da188f2c-553c-4e04-879b-c9ea2d1b9a93'
+# from sebastian:
+eid = 'aad23144-0e52-4eac-80c5-c4ee2decb198'  # !! WARNING NO PROBE AS OUTPUT !
+#eid = 'da188f2c-553c-4e04-879b-c9ea2d1b9a93' # Test: 2 probes
+
+# ----- RECOMMENDED ------
+
+# TODO dict of bunch for several probes
+# TODO return only selected list of ds types if input arg is given (if none given, default)
+# TODO separate load_spike_sorting into underlying spikes / cluster object loading functions
+#  (now returns only spikes?)
+dic_spk_bunch, dic_clus = bbone.load_spike_sorting(eid, one=one)
+
+
+# -- Get brain regions
+channels = bbone.load_channel_locations(eid, one=one)
+channels[label1]
+
 
 # --- Download spikes data
 # 1. either a specific subset of dataset types via the one command
 # 2. either the whole spikes object via the one
-
+'''
 # Option 1 -- Download only subset of dataset in spike object
 dataset_types = ['spikes.times',
                  'spikes.clusters']
 one.load(eid, dataset_types=dataset_types)
 
+
 # Option 2 -- Download and load into memory the whole spikes object
 spks_b1 = one.load_object(eid, 'spikes')
 # TODO OUTPUT DOES NOT WORK for multiple probes,  which probe returned unknown
-# TODO return list of bunch
+# TODO return dict of bunch
 
 
 # --- Get single probe directory filename either by
@@ -49,9 +66,4 @@ probe_dir = session_path.joinpath('alf', label1)
 # Make bunch per probe using brainbox
 spks_b = aio.load_object(probe_dir, 'spikes')
 units_b = bb.processing.get_units_bunch(spks_b)
-
-# TODO list of bunch for several probes
-# TODO return only selected list of ds types if input arg is given (if none given, default)
-# TODO separate load_spike_sorting into underlying spikes / cluster object loading functions
-#  (now returns only spikes?)
-dic_spk_bunch, dic_clus = bbone.load_spike_sorting(eid, one=one, dataset_types=dataset_types)
+'''

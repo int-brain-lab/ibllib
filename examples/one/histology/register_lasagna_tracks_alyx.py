@@ -2,12 +2,12 @@ from pathlib import Path
 from ibllib.pipes import histology
 
 from oneibl.one import ONE
-path_tracks = "/datadisk/GoogleDrive/TeamDrives/olivier.winter@internationalbrainlab.org/WG-Histology/Tracks/00_to_add"
+path_tracks = "/Users/gaelle/Downloads/electrodetracks"
 glob_pattern = "*_probe*_pts*.csv"
 
 # ALYX_URL = "http://localhost:8000"
-# ALYX_URL = "https://dev.alyx.internationalbrainlab.org"
-ALYX_URL = "https://alyx.internationalbrainlab.org"
+ALYX_URL = "https://dev.alyx.internationalbrainlab.org"
+# ALYX_URL = "https://alyx.internationalbrainlab.org"
 
 one = ONE(base_url=ALYX_URL)
 

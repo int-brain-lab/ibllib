@@ -91,19 +91,19 @@ def load_spike_sorting(eid, one=None, dataset_types=None):
         print("no session path")
         return (None, None), 'no session path'
 
+    dtypes_default = [
+        'clusters.channels',
+        'clusters.depths',
+        'clusters.metrics',
+        'spikes.clusters',
+        'spikes.times',
+        'probes.description',
+    ]
     if dataset_types is None:
-        dtypes = [
-            'clusters.channels',
-            'clusters.depths',
-            'clusters.metrics',
-            'spikes.clusters',
-            'spikes.times',
-            'probes.description',
-        ]
+        dtypes = dtypes_default
     else:
-        dtypes = dataset_types
-    # For future: Append extra optional DS
-    #    dtypes = list(set(dataset_types + dtypes))
+        #  Append extra optional DS
+        dtypes = list(set(dataset_types + dtypes_default))
 
     _ = one.load(eid, dataset_types=dtypes, download_only=True)
     try:
