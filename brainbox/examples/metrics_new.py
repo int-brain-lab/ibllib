@@ -36,8 +36,9 @@ for unit in units:
     amps = units_b['amps'][unit]
     ch = clstrs_b['channels'][int(unit)]  # channel of max amplitude
 
-    
-    if (FP_RP(ts) and not noise_cutoff(amps,quartile_length=.25,std_cutoff = 2)) : #add: and mean(amps)>50??
+    RefPViol[int(unit)] = FP_RP(ts)
+    NoiseCutoff[int(unit)] = 
+    if (FP_RP(ts) and not noise_cutoff(amps,quartile_length=.25,std_cutoff = 2)) : #to do: add and mean(amps)>50microvolts?
         label[int(unit)] = 1
     else:
         label[int(unit)] = 0
