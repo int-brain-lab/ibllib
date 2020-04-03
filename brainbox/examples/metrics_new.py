@@ -15,7 +15,7 @@ from max_acceptable_isi_viol_2 import max_acceptable_cont_2
 import brainbox as bb
 from phylib.stats import correlograms
 import pandas as pd
-from defined_metrics import FP_RP, noise_cutoff
+from defined_metrics import FP_RP, noise_cutoff, peak_to_peak_amp
 
 alf_dir = r'C:\Users\Steinmetz Lab User\Documents\Lab\SpikeSortingOutput\Hopkins_CortexLab\test_path_alf'
 ks_dir = r'C:\Users\Steinmetz Lab User\Documents\Lab\SpikeSortingOutput\Hopkins_CortexLab'
