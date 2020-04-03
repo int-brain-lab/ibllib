@@ -5,9 +5,10 @@ TODO clarify what loading method to use between the two
 '''
 # Author: Gaelle Chapuis
 
-from oneibl.one import ONE
+
 import alf.io as aio
 import brainbox as bb
+from oneibl.one import ONE
 import brainbox.io.one as bbone
 
 one = ONE()
@@ -18,12 +19,6 @@ eid = 'aad23144-0e52-4eac-80c5-c4ee2decb198'
 #eid = 'da188f2c-553c-4e04-879b-c9ea2d1b9a93' # Test: 2 probes
 
 # ----- RECOMMENDED ------
-
-# TODO dict of bunch for several probes
-# TODO return only selected list of ds types if input arg is given (if none given, default)
-# TODO separate load_spike_sorting into underlying spikes / cluster object loading functions
-#  (now returns only spikes?)
-
 # --- Get spikes and clusters data
 dic_spk_bunch, dic_clus = bbone.load_spike_sorting(eid, one=one)
 
@@ -34,6 +29,10 @@ probe_labels = list(channels.keys())  # Convert dict_keys into list
 
 
 
+# TODO dict of bunch for several probes
+# TODO return only selected list of ds types if input arg is given (if none given, default)
+# TODO separate load_spike_sorting into underlying spikes / cluster object loading functions
+#  (now returns only spikes?)
 
 # --- Download spikes data
 # 1. either a specific subset of dataset types via the one command

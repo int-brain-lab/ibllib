@@ -40,6 +40,7 @@ glob_pattern = "*_probe*_pts*.csv"
 one = ONE(base_url=ALYX_URL)
 
 path_tracks = Path(path_tracks)
+assert path_tracks.exists()
 
 
 def parse_filename(track_file):
