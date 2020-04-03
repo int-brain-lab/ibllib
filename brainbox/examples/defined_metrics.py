@@ -18,19 +18,22 @@ from phylib.stats import correlograms
 import pandas as pd
 
 def FP_RP(ts):
-    binSize=0.00025
+    binSize=0.25 #in ms
+    b= np.arange(0,10.25,binSize)/1000 + 1e-6 #bins in seconds
+    bTestIdx = [5, 6, 7, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40]
+    bTest = [b[i] for i in bTestIdx]
 
-    b = np.arange(1e-6,0.0055,binSize)
     thresh = 0.2
-    pctPass=0.1
+    acceptThresh=0.1
     if(len(ts)>0 and ts[-1]>ts[0]):
         recDur = (ts[-1]-ts[0])
         fr = len(ts)/recDur
         # print(fr_source)
         mfunc =np.vectorize(max_acceptable_cont_2)
-        m = mfunc(fr,b[1:-1],recDur,fr*pctPass,thresh)
-        c0 = correlograms(ts,np.zeros(len(ts),dtype='int8'),cluster_ids=[0],bin_size=binSize,sample_rate=20000,window_size=.05,symmetrize=False)
-        res = np.cumsum(c0[0,0,0:(len(b)-2)])
+        m = mfunc(fr,bTest,recDur,fr*acceptThresh,thresh)
+        c0 = correlograms(ts,np.zeros(len(ts),dtype='int8'),cluster_ids=[0],bin_size=binSize/1000,sample_rate=20000,window_size=.05,symmetrize=False)
+        cumsumc0 = np.cumsum(c0[0,0,:])
+        res = cumsumc0[bTestIdx]
         didpass = int(np.any(np.less_equal(res,m)))
         #OR
         didpass2 = didpass
@@ -48,11 +51,11 @@ def noise_cutoff(amps,quartile_length=.25,std_cutoff = 2):
         nbins = 500
         bins_list= np.linspace(0, np.max(amps), nbins)
         n,bins,patches = plt.hist(amps,bins = bins_list ,facecolor = 'blue',alpha = 0.5)
-        plt.xticks(np.arange(10,40,5))
-        plt.yticks(np.arange(0,1000,200))
-        plt.xlim(10,37)
-        plt.ylim(0, 200)
-        plt.show()
+        # plt.xticks(np.arange(10,40,5))
+        # plt.yticks(np.arange(0,1000,200))
+        # plt.xlim(10,37)
+        # plt.ylim(0, 200)
+        # plt.show()
                
         dx = np.diff(n)
         
@@ -69,3 +72,6 @@ def noise_cutoff(amps,quartile_length=.25,std_cutoff = 2):
         within_2stds = first_low_quartile<mean_high_quartile + std_cutoff*std_high_quartile or first_low_quartile<mean_high_quartile - std_cutoff*std_high_quartile
         cutoff = 0 if within_2stds else 1
         return cutoff 
+    
+    
+def peak_to_peak_amp():

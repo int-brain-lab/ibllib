@@ -19,7 +19,7 @@ from defined_metrics import FP_RP, noise_cutoff
 
 alf_dir = r'C:\Users\Steinmetz Lab User\Documents\Lab\SpikeSortingOutput\Hopkins_CortexLab\test_path_alf'
 ks_dir = r'C:\Users\Steinmetz Lab User\Documents\Lab\SpikeSortingOutput\Hopkins_CortexLab'
-
+ephys_file_path = r'C:\Users\Steinmetz Lab User\Documents\Lab\SpikeSortingOutput\Hopkins_CortexLab\Hopkins_20160722_g0_t0.imec.ap_CAR'
 
 spks_b = aio.load_object(alf_dir, 'spikes')
 clstrs_b = aio.load_object(alf_dir, 'clusters')
@@ -34,6 +34,8 @@ for unit in units:
     #unit = units[685] #635 max spike rate #681 1.43
     ts = units_b['times'][unit]
     amps = units_b['amps'][unit]
+    ch = clstrs_b['channels'][int(unit)]  # channel of max amplitude
+
     
     if (FP_RP(ts) and not noise_cutoff(amps,quartile_length=.25,std_cutoff = 2)) : #add: and mean(amps)>50??
         label[int(unit)] = 1
