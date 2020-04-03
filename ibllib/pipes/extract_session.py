@@ -10,19 +10,16 @@ Extract data OR return error to user saying that the task has no extractors
 import logging
 import json
 from pathlib import Path
-import sys
 
 from alf.io import get_session_path
 from ibllib.misc import log2session_static
-from ibllib.io.extractors import (ephys_trials,
+from ibllib.io.extractors import (ephys_trials, ephys_fpga,
                                   biased_wheel, biased_trials,
                                   training_trials, training_wheel)
-import rewardworld.ephys.ephys_fpga_opto as ephys_fpga
 from ibllib.io import raw_data_loaders as rawio
 import ibllib.io.flags as flags
 
 logger_ = logging.getLogger('ibllib.alf')
-sys.path.insert(1, '/Users/alex/Documents/PYTHON/rewardworld/ephys')
 
 
 def get_task_extractor_type(task_name):

@@ -52,5 +52,6 @@ units_b = bb.processing.get_units_bunch(spks_b)
 
 # TODO list of bunch for several probes
 # TODO return only selected list of ds types if input arg is given (if none given, default)
-# TODO separate load_spike_sorting into underlying spikes / cluster object loading functions (now returns only spikes?)
+# TODO separate load_spike_sorting into underlying spikes / cluster object loading functions
+#  (now returns only spikes?)
 dic_spk_bunch, dic_clus = bbone.load_spike_sorting(eid, one=one, dataset_types=dataset_types)
