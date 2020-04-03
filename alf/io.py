@@ -433,5 +433,14 @@ def _regexp_session_path(path_object, separator):
 def is_details_dict(dict_obj):
     if dict_obj is None:
         return False
-    keys = ['subject', 'start_time', 'number', 'lab', 'url', 'task_protocol', 'local_path']
+    keys = [
+        'subject',
+        'start_time',
+        'number',
+        'lab',
+        'project',
+        'url',
+        'task_protocol',
+        'local_path'
+    ]
     return set(dict_obj.keys()) == set(keys)
