@@ -283,7 +283,16 @@ class TestSessionFolder(unittest.TestCase):
             self.assertTrue(alf.io.is_uuid_string(i) == e)
 
     def test_is_details_dict(self):
-        keys = ['subject', 'start_time', 'number', 'lab', 'url', 'task_protocol', 'local_path']
+        keys = [
+            'subject',
+            'start_time',
+            'number',
+            'lab',
+            'project',
+            'url',
+            'task_protocol',
+            'local_path'
+        ]
         testins = [
             None,
             dict.fromkeys(keys[1:]),
