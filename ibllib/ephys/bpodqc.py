@@ -452,6 +452,7 @@ def load_bpod_data(session_path, fpga_time=False):
         "choice": get_choice(session_path, save=False, data=data, settings=settings),
         "feedbackType": get_feedbackType(session_path, save=False, data=data, settings=settings),
         "correct": None,
+        "outcome": None,
         "intervals": get_intervals(session_path, save=False, data=data, settings=settings),
         "stimOnTrigger_times": get_stimOnTrigger_times(
             session_path, save=False, data=data, settings=settings
@@ -510,6 +511,8 @@ def load_bpod_data(session_path, fpga_time=False):
     out["intervals_0"] = out["intervals"][:, 0]
     out["intervals_1"] = out["intervals"][:, 1]
     _ = out.pop('intervals')
+    out["outcome"] = out["feedbackType"].copy()
+    out['outcome'][out['choice'] == 0] = 0
     if fpga_time:
         bpod2fpga = get_bpod2fpga_times_func(session_path)
         for k in out:
@@ -905,7 +908,6 @@ if __name__ == "__main__":
     asession_path = subj_path + "_iblrig_test_mouse/2020-02-18/006"
     a2session_path = subj_path + "_iblrig_test_mouse/2020-02-21/011"
     eid = "af74b29d-a671-4c22-a5e8-1e3d27e362f3"
-
     session_path = gsession_path
     # bpod = load_bpod_data(session_path)
     # fpgaqc_frame = _qc_from_path(session_path, display=False)
@@ -941,5 +943,7 @@ if __name__ == "__main__":
     bla1, bla2 = get_bpod_fronts(eid)
     # for lab in labs:
     #     describe_lab_trigger_response_diffs(lab)
+    eid = '2e6e179c-fccc-4e8f-9448-ce5b6858a183'
+    describe_sesion_trigger_response_diffs(eid)
 
 print(".")
