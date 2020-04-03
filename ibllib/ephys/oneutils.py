@@ -67,7 +67,7 @@ def _one_load_session_delays_between_events(eid, dstype1, dstype2):
 
 
 def _to_eid(invar):
-    """ get eid from: details, path, or lists of
+    """ get eid from: details, path, or lists of details or paths
     """
     outvar = []
     if isinstance(invar, list) or isinstance(invar, tuple):
@@ -146,6 +146,7 @@ def random_ephys_session(lab, complete=False):
         return
     eids, dets = sessions
     out = np.random.choice(dets)
+    print(out)
     return _to_eid(out), out
 
 
