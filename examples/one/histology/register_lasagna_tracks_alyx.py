@@ -1,10 +1,10 @@
 '''
-Register single histology track session.
+Register on Alyx the set of tracked traces (after histology) for a given mouse.
 
 All your tracks should be in a single folder, and the files names should follow the nomenclature
 {yyyy-mm-dd}_{SubjectName}_{SessionNumber}_{ProbeLabel}_pts.csv
 
-Edit only the variable 'path_tracks'(set it either to your local directory [example given here],
+Edit the variable 'path_tracks'(set it either to your local directory [example given here],
 either to the Google folder if synched to your machine).
 
 To check if the registration worked, go to the admin interface
@@ -14,7 +14,8 @@ If you want to test first, use  ALYX_URL = "https://dev.alyx.internationalbrainl
 And check on:
 https://dev.alyx.internationalbrainlab.org/admin/experiments/trajectoryestimate/?
 
-When ready, change to the       ALYX_URL = "https://alyx.internationalbrainlab.org"
+When you feel confident you can upload without error,
+change to the   ALYX_URL = "https://alyx.internationalbrainlab.org"
 
 '''
 # Author: Olivier Winter
