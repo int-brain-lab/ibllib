@@ -18,22 +18,28 @@ from phylib.stats import correlograms
 import pandas as pd
 
 def FP_RP(ts):
-    binSize=0.0005
+    binSize=0.00025
 
     b = np.arange(1e-6,0.0055,binSize)
-    thresh = 0.1
-    if(len(ts)>0):
+    thresh = 0.2
+    pctPass=0.1
+    if(len(ts)>0 and ts[-1]>ts[0]):
         recDur = (ts[-1]-ts[0])
-        fr_source = len(ts)/recDur
-        print(fr_source)
+        fr = len(ts)/recDur
+        # print(fr_source)
         mfunc =np.vectorize(max_acceptable_cont_2)
-        m = mfunc(fr_source,b[1:-1],recDur,fr_source/10,thresh)
+        m = mfunc(fr,b[1:-1],recDur,fr*pctPass,thresh)
         c0 = correlograms(ts,np.zeros(len(ts),dtype='int8'),cluster_ids=[0],bin_size=binSize,sample_rate=20000,window_size=.05,symmetrize=False)
         res = np.cumsum(c0[0,0,0:(len(b)-2)])
         didpass = int(np.any(np.less_equal(res,m)))
+        #OR
+        didpass2 = didpass
+        # if res(np.where(m==-1)[0])==0:
+        #     didpass2 = 1
         # print(didpass[uidx])
     else: 
         didpass=0
+        # didpass2 = 0
 
     return didpass
     

@@ -20,10 +20,7 @@ from defined_metrics import FP_RP, noise_cutoff
 alf_dir = r'C:\Users\Steinmetz Lab User\Documents\Lab\SpikeSortingOutput\Hopkins_CortexLab\test_path_alf'
 ks_dir = r'C:\Users\Steinmetz Lab User\Documents\Lab\SpikeSortingOutput\Hopkins_CortexLab'
 
-binSize=0.0005
 
-b = np.arange(1e-6,0.0055,binSize)
-thresh = 0.1
 spks_b = aio.load_object(alf_dir, 'spikes')
 clstrs_b = aio.load_object(alf_dir, 'clusters')
 units_b = bb.processing.get_units_bunch(spks_b)

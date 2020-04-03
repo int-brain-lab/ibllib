@@ -20,8 +20,16 @@ from phylib.stats import correlograms
 
 nSim = 100
 
-binSize = 0.0005
-b = np.arange(1e-6,0.0055,binSize)
+# binSize = 0.0005
+# b = np.arange(1e-6,0.0055,binSize)
+
+
+b = np.arange(0,.0125,binSize)+1e-6
+bTestIdx = [2, 3, 4, 5, 6, 8, 10, 15,  20]
+bTest = [b[i] for i in bTestIdx]
+
+thresh = 0.2
+acceptThres=0.1
 
 baseRates = np.logspace(-0.3,1.3,20)
 recDur = 3600
@@ -30,8 +38,7 @@ rpvec=np.arange(0.001,0.005,0.0005)
 for rp in rpvec:
     
     contPct = np.arange(0.01,0.2,0.02) 
-    thresh = 0.2
-    
+
     
     colors = matplotlib.cm.rainbow(np.linspace(0, 1, len(baseRates)))
     
@@ -46,10 +53,10 @@ for rp in rpvec:
             contRate = baseRate*c
             rpidx=np.where(b<rp)[0][-1]+1
             mfunc =np.vectorize(max_acceptable_cont_2)
-            m = mfunc(baseRate,b[1:-1],recDur,baseRate/10,thresh)
+            m = mfunc(baseRate,bTest,recDur,baseRate*acceptThresh,thresh)
 
             
-            simRes = np.zeros([nSim,len(b)-2])
+            simRes = np.zeros([nSim,len(bTestIdx)])
             for n in range(nSim):
                 st = genST(baseRate,recDur)
                 isi = np.diff(np.insert(st,0,0)) 
@@ -61,7 +68,7 @@ for rp in rpvec:
                     contST=[]
                 combST = np.sort(np.concatenate((st, contST)))
                 c0 = correlograms(combST,np.zeros(len(combST),dtype='int8'),cluster_ids=[0],bin_size=binSize,sample_rate=20000,window_size=.05,symmetrize=False)
-                simRes[n,:] = np.cumsum(c0[0,0,0:(len(b)-2)])
+                simRes[n,:] = np.cumsum(c0[0,0,bTest])
                 len(simRes)
             passPct[bidx,cidx]=sum(np.any(np.less_equal(simRes[:,0:],m),axis=1))/nSim*100
             cidx+=1

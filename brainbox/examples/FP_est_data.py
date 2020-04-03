@@ -22,7 +22,12 @@ ks_dir = r'C:\Users\Steinmetz Lab User\Documents\Lab\SpikeSortingOutput\Hopkins_
 
 binSize=0.0005
 
-b = np.arange(1e-6,0.0055,binSize)
+# b = np.arange(1e-6,0.0055,binSize)
+# b=[1,1.5,2,2.5,3,3.5,4,5,7,10]
+b = np.arange(0,.0125,binSize)+1e-6
+bTestIdx = [2, 3, 4, 5, 6, 8, 10, 15,  20]
+bTest = [b[i] for i in bTestIdx]
+
 thresh = 0.1
 spks_b = aio.load_object(alf_dir, 'spikes')
 clstrs_b = aio.load_object(alf_dir, 'clusters')
@@ -41,9 +46,9 @@ for unit in units:
         fr_source = len(ts)/recDur
         print(fr_source)
         mfunc =np.vectorize(max_acceptable_cont_2)
-        m = mfunc(fr_source,b[1:-1],recDur,fr_source/10,thresh)
+        m = mfunc(fr_source,bTest,recDur,fr_source/10,thresh)
         c0 = correlograms(ts,np.zeros(len(ts),dtype='int8'),cluster_ids=[0],bin_size=binSize,sample_rate=20000,window_size=.05,symmetrize=False)
-        res = np.cumsum(c0[0,0,0:(len(b)-2)])
+        res = np.cumsum(c0[0,0,bTestIdx])
         didpass[uidx] = int(np.any(np.less_equal(res,m)))
         print(didpass[uidx])
         uidx+=1
