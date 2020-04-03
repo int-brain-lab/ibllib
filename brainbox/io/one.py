@@ -76,11 +76,17 @@ def load_ephys_session(eid, one=None, dataset_types=None):
 
 def load_spike_sorting(eid, one=None, dataset_types=None):
     """
-    From an eid, hits the Alyx database and downloads a standard set of dataset types to perform
-    analysis.
+    From an eid, hits the Alyx database and downloads a standard default set of dataset types to perform
+    analysis:
+        'clusters.channels',
+        'clusters.depths',
+        'clusters.metrics',
+        'spikes.clusters',
+        'spikes.times',
+        'probes.description'
     :param eid:
     :param one:
-    :param dataset_types: additional spikes/clusters objects to add to the standard list
+    :param dataset_types: additional spikes/clusters objects to add to the standard default list
     :return:
     """
     if not one:
@@ -97,7 +103,7 @@ def load_spike_sorting(eid, one=None, dataset_types=None):
         'clusters.metrics',
         'spikes.clusters',
         'spikes.times',
-        'probes.description',
+        'probes.description'
     ]
     if dataset_types is None:
         dtypes = dtypes_default

@@ -14,7 +14,7 @@ one = ONE()
 
 # --- Example session:
 # from sebastian:
-eid = 'aad23144-0e52-4eac-80c5-c4ee2decb198'  # !! WARNING NO PROBE AS OUTPUT !
+eid = 'aad23144-0e52-4eac-80c5-c4ee2decb198'
 #eid = 'da188f2c-553c-4e04-879b-c9ea2d1b9a93' # Test: 2 probes
 
 # ----- RECOMMENDED ------
@@ -23,12 +23,16 @@ eid = 'aad23144-0e52-4eac-80c5-c4ee2decb198'  # !! WARNING NO PROBE AS OUTPUT !
 # TODO return only selected list of ds types if input arg is given (if none given, default)
 # TODO separate load_spike_sorting into underlying spikes / cluster object loading functions
 #  (now returns only spikes?)
+
+# --- Get spikes and clusters data
 dic_spk_bunch, dic_clus = bbone.load_spike_sorting(eid, one=one)
 
 
 # -- Get brain regions
 channels = bbone.load_channel_locations(eid, one=one)
-channels[label1]
+probe_labels = list(channels.keys())  # Convert dict_keys into list
+
+
 
 
 # --- Download spikes data
@@ -57,7 +61,7 @@ n_probe = len(prob_des[0])
 # i_probe can be 0:n_probe-1 ; in this example = 1 (2 probes)
 i_probe = 1
 label1 = prob_des[0][i_probe].get('label')
-
+#channels[label1]
 
 # -- Set single probe directory path
 session_path = one.path_from_eid(eid)
