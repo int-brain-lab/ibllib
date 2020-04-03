@@ -8,6 +8,7 @@ import nrrd
 
 from brainbox.core import Bunch
 from ibllib.io import params
+from oneibl.webclient import http_download_file
 
 ALLEN_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5739, 5400, 332])}
 
@@ -484,20 +485,19 @@ class AllenAtlas(BrainAtlas):
         :param mock:
         :return: atlas.BrainAtlas
         """
+        par = params.read('one_params')
         FILE_REGIONS = str(Path(__file__).parent.joinpath('allen_structure_tree.csv'))
-        if par is None:
-            par = params.read('one_params')
-            if not par.as_dict().get('PATH_ATLAS', None):
-                setup()
-                par = params.read('one_params')
-            if not Path(par.PATH_ATLAS).exists() and not mock:
-                raise FileNotFoundError(f"{par.PATH_ATLAS}  doesn't exist !")
-        # file_image = Path(path_atlas).joinpath(f'ara_nissl_{res_um}.nrrd')
-        file_image = Path(par.PATH_ATLAS).joinpath(f'average_template_{res_um}.nrrd')
-        file_label = Path(par.PATH_ATLAS).joinpath(f'annotation_{res_um}.nrrd')
+        FLAT_IRON_ATLAS_REL_PATH = Path('histology', 'ATLAS', 'Needles', 'Allen')
         if mock:
             image, label = [np.zeros((528, 456, 320), dtype=np.bool) for _ in range(2)]
         else:
+            path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
+            file_image = path_atlas.joinpath(f'average_template_{res_um}.nrrd')
+            file_label = path_atlas.joinpath(f'annotation_{res_um}.nrrd')
+            if not file_image.exists():
+                _download_atlas_flatiron(file_image, FLAT_IRON_ATLAS_REL_PATH, par)
+            if not file_label.exists():
+                _download_atlas_flatiron(file_label, FLAT_IRON_ATLAS_REL_PATH, par)
             image, _ = nrrd.read(file_image, index_order='C')  # dv, ml, ap
             label, _ = nrrd.read(file_label, index_order='C')  # dv, ml, ap
             label = np.swapaxes(np.swapaxes(label, 2, 0), 1, 2)  # label[iap, iml, idv]
@@ -540,19 +540,10 @@ def NeedlesAtlas(*args, **kwargs):
     return AllenAtlas(*args, **kwargs)
 
 
-def setup():
-    """
-    Adds parameters to the param file
-    :return:
-    """
-    from PyQt5.QtWidgets import QFileDialog
-
-    my_atlas_path = str(QFileDialog.getExistingDirectory(None, "Get Atlas Directory"))
-
-    default = {"PATH_ATLAS": my_atlas_path}
-    par = params.read('one_params', default=default)
-    par = par.set('PATH_ATLAS', my_atlas_path)
-    params.write('one_params', par)
-
-    par = params.read('one_params')
-    assert par.PATH_ATLAS == my_atlas_path
+def _download_atlas_flatiron(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
+    file_image.parent.mkdir(exist_ok=True, parents=True)
+    url = (par.HTTP_DATA_SERVER + '/' +
+           '/'.join(FLAT_IRON_ATLAS_REL_PATH.parts) + '/' + file_image.name)
+    http_download_file(url, cache_dir=Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH),
+                       username=par.HTTP_DATA_SERVER_LOGIN,
+                       password=par.HTTP_DATA_SERVER_PWD)

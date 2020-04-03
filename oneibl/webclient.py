@@ -91,7 +91,7 @@ def http_download_file(full_link_to_file, *, clobber=False, offline=False,
         cache_dir = str(Path.home().joinpath("Downloads"))
 
     # This is the local file name
-    file_name = cache_dir + os.sep + os.path.basename(full_link_to_file)
+    file_name = str(cache_dir) + os.sep + os.path.basename(full_link_to_file)
 
     # do not overwrite an existing file unless specified
     if not clobber and os.path.exists(file_name):
