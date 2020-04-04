@@ -41,7 +41,6 @@ def gen_metrics_labels(alf_dir, ks_dir):
     RefPViol = np.empty([len(units)])
     NoiseCutoff = np.empty([len(units)])
     for unit in units:
-        #unit = units[685] #635 max spike rate #681 1.43
         ts = units_b['times'][unit]
         amps = units_b['amps'][unit]
         ch = clstrs_b['channels'][int(unit)]  # channel of max amplitude
