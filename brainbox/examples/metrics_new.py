@@ -60,14 +60,14 @@ def gen_metrics_labels(eid,probe_name):
         
     try:
         refpvioldf = pd.DataFrame(RefPViol)
-        refpvioldf.to_csv(Path(ephys_file_dir, 'RefPViol.tsv'),
+        refpvioldf.to_csv(Path(alf_probe_dir, 'RefPViol.tsv'),
                                 sep='\t', header=['RefPViol'])
     except Exception as err:
         print("Could not save 'RefPViol' to .tsv. Details: \n {}".format(err))
         
     try:
         noisecutoffdf = pd.DataFrame(NoiseCutoff)
-        noisecutoffdf.to_csv(Path(ephys_file_dir, 'NoiseCutoff.tsv'),
+        noisecutoffdf.to_csv(Path(alf_probe_dir, 'NoiseCutoff.tsv'),
                                 sep='\t', header=['NoiseCutoff'])
     except Exception as err:
         print("Could not save 'NoiseCutoff' to .tsv. Details: \n {}".format(err))
@@ -75,7 +75,7 @@ def gen_metrics_labels(eid,probe_name):
    
     try:
         labeldf = pd.DataFrame(label)
-        labeldf.to_csv(Path(ephys_file_dir, 'label.tsv'),
+        labeldf.to_csv(Path(alf_probe_dir, 'label.tsv'),
                                 sep='\t', header=['label'])
     except Exception as err:
         print("Could not save 'label' to .tsv. Details: \n {}".format(err))
