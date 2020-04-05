@@ -4,17 +4,19 @@ Created on Wed Apr  1 21:46:59 2020
 
 @author: Steinmetz Lab User
 Example:
-  # define alf and ks directories:
->>>alf_dir = r'C:\Users\Steinmetz Lab User\Documents\Lab\SpikeSortingOutput\Hopkins_CortexLab\test_path_alf'
->>>ks_dir = r'C:\Users\Steinmetz Lab User\Documents\Lab\SpikeSortingOutput\Hopkins_CortexLab'
-
+    
+  # define eid and probe    
+>>>eid = '5cf2b2b7-1a88-40cd-adfc-f4a031ff7412'
+>>>probe_name = 'probe_right'
   # run gen_metrics_labels
 >>>from metrics_new import gen_metrics_labels
->>>gen_metrics_labels(alf_dir, ks_dir)
+>>>gen_metrics_labels(eid,probe_name)
 """
 
 
 import time
+import os
+from oneibl.one import ONE
 from pathlib import Path
 import numpy as np
 import alf.io as aio
@@ -28,9 +30,13 @@ from defined_metrics import FP_RP, noise_cutoff, peak_to_peak_amp
 
 
 
-def gen_metrics_labels(alf_dir, ks_dir):
-    spks_b = aio.load_object(alf_dir, 'spikes')
-    clstrs_b = aio.load_object(alf_dir, 'clusters')
+def gen_metrics_labels(eid,probe_name):
+
+    one=ONE()
+    ses_path=one.path_from_eid(eid)    
+    alf_probe_dir = os.path.join(ses_path, 'alf', probe_name)
+    ephys_file_dir = os.path.join(ses_path, 'raw_ephys_data', probe_name)
+    spks_b = aio.load_object(alf_probe_dir, 'spikes')  
     units_b = bb.processing.get_units_bunch(spks_b)
     units = list(units_b.amps.keys())
     n_units = np.max(spks_b.clusters) + 1
@@ -43,7 +49,6 @@ def gen_metrics_labels(alf_dir, ks_dir):
     for unit in units:
         ts = units_b['times'][unit]
         amps = units_b['amps'][unit]
-        ch = clstrs_b['channels'][int(unit)]  # channel of max amplitude
     
         RefPViol[int(unit)] = FP_RP(ts)
         NoiseCutoff[int(unit)] = noise_cutoff(amps,quartile_length=.25,std_cutoff = 2)
@@ -55,14 +60,14 @@ def gen_metrics_labels(alf_dir, ks_dir):
         
     try:
         refpvioldf = pd.DataFrame(RefPViol)
-        refpvioldf.to_csv(Path(ks_dir, 'RefPViol.tsv'),
+        refpvioldf.to_csv(Path(ephys_file_dir, 'RefPViol.tsv'),
                                 sep='\t', header=['RefPViol'])
     except Exception as err:
         print("Could not save 'RefPViol' to .tsv. Details: \n {}".format(err))
         
     try:
         noisecutoffdf = pd.DataFrame(NoiseCutoff)
-        noisecutoffdf.to_csv(Path(ks_dir, 'NoiseCutoff.tsv'),
+        noisecutoffdf.to_csv(Path(ephys_file_dir, 'NoiseCutoff.tsv'),
                                 sep='\t', header=['NoiseCutoff'])
     except Exception as err:
         print("Could not save 'NoiseCutoff' to .tsv. Details: \n {}".format(err))
@@ -70,7 +75,7 @@ def gen_metrics_labels(alf_dir, ks_dir):
    
     try:
         labeldf = pd.DataFrame(label)
-        labeldf.to_csv(Path(ks_dir, 'label.tsv'),
+        labeldf.to_csv(Path(ephys_file_dir, 'label.tsv'),
                                 sep='\t', header=['label'])
     except Exception as err:
         print("Could not save 'label' to .tsv. Details: \n {}".format(err))
