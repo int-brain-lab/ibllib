@@ -86,7 +86,11 @@ def _to_eid(invar):
 
 
 def search_lab_ephys_sessions(
-    lab: str, dstypes: list = [], nlatest: int = 3, det: bool = True, check_download: bool = False
+    lab: str,
+    dstypes: list = [],
+    nlatest: int = 3,
+    det: bool = True,
+    check_download: bool = False
 ):
     ephys_sessions0, session_details0 = one.search(
         task_protocol="_iblrig_tasks_ephysChoiceWorld6.4.0",
@@ -109,7 +113,7 @@ def search_lab_ephys_sessions(
         print(f"No sessions found for {lab}")
         return
     if not check_download:
-        return ephys_sessions, session_details if det else ephys_sessions
+        return ephys_sessions[:nlatest], session_details[:nlatest] if det else ephys_sessions[:nlatest]
     print(f"Processing {lab}")
     out_sessions = []
     out_details = []
@@ -148,6 +152,11 @@ def random_ephys_session(lab, complete=False):
     out = np.random.choice(dets)
     print(out)
     return _to_eid(out), out
+
+
+def random_lab():
+    labs = one.list(None, 'lab')
+    return np.random.choice(labs)
 
 
 if __name__ == "__main__":

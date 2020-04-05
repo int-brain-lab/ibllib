@@ -110,10 +110,10 @@ def get_qcmetrics_frame(eid, data=None, pass_crit=False):
         ),  # (Point 9)
         "valve_pre_trial": load_valve_pre_trial(eid, data=data),  # (Point 11)
         "audio_pre_trial": load_audio_pre_trial(eid, data=data),  # (Point 12)
-        "trial_event_sequence_error": load_trial_event_sequence_error(
+        "error_trial_event_sequence": load_error_trial_event_sequence(
             eid, data=data
         ),  # (Point 13)
-        "trial_event_sequence_correct": load_trial_event_sequence_correct(
+        "correct_trial_event_sequence": load_correct_trial_event_sequence(
             eid, data=data
         ),  # (Point 14)
         "trial_length": load_trial_length(eid, data=data),  # (Point 15)
@@ -170,10 +170,10 @@ def get_qccriteria_frame(eid, data=None, pass_crit=True):
         ),  # (Point 9)
         "valve_pre_trial": load_valve_pre_trial(eid, data=data, pass_crit=True),  # (Point 11)
         "audio_pre_trial": load_audio_pre_trial(eid, data=data, pass_crit=True),  # (Point 12)
-        "trial_event_sequence_error": load_trial_event_sequence_error(
+        "error_trial_event_sequence": load_error_trial_event_sequence(
             eid, data=data, pass_crit=True
         ),  # (Point 13)
-        "trial_event_sequence_correct": load_trial_event_sequence_correct(
+        "correct_trial_event_sequence": load_correct_trial_event_sequence(
             eid, data=data, pass_crit=True
         ),  # (Point 14)
         "trial_length": load_trial_length(eid, data=data, pass_crit=True),  # (Point 15)
@@ -357,9 +357,9 @@ def load_audio_pre_trial(eid, data=None, pass_crit=False):
 
 # Sequence of events:
 @bpod_data_loader
-def load_trial_event_sequence_error(eid, data=None, pass_crit=False):
+def load_error_trial_event_sequence(eid, data=None, pass_crit=False):
     """ 13. on incorrect / miss trials : 2 audio events, 2 Bpod events (trial start, ITI)
-    Variable name: trial_event_sequence_error
+    Variable name: error_trial_event_sequence
     Metric: Bpod (trial start) > audio (go cue) > audio (wrong) > Bpod (ITI)
     Criterion: All three boolean comparisons true on 99% of trials
     """
@@ -374,10 +374,10 @@ def load_trial_event_sequence_error(eid, data=None, pass_crit=False):
 
 
 @bpod_data_loader
-def load_trial_event_sequence_correct(eid, data=None, pass_crit=False):
+def load_correct_trial_event_sequence(eid, data=None, pass_crit=False):
     """ 14. on correct trials : 1 audio events, 3 Bpod events (valve open, trial start, ITI)
     (ITI task version dependent on ephys)
-    Variable name: trial_event_sequence_correct
+    Variable name: correct_trial_event_sequence
     Metric: Bpod (trial start) > audio (go cue) > Bpod (valve) > Bpod (ITI)
     Criterion: All three boolean comparisons true on 99% of trials
     """
@@ -575,7 +575,6 @@ def load_feedback_times(eid, data=None, pass_crit=False):
 
 if __name__ == "__main__":
     eid, det = random_ephys_session("churchlandlab")
-    print(det)
     # eid = "2e6e179c-fccc-4e8f-9448-ce5b6858a183"
     # det = {
     #     "subject": "CSHL060",
