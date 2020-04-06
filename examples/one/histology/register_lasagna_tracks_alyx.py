@@ -20,17 +20,18 @@ change to the   ALYX_URL = "https://alyx.internationalbrainlab.org"
 '''
 # Author: Olivier Winter
 from pathlib import Path
+import logging
+
 from ibllib.pipes import histology
-
 from oneibl.one import ONE
-
+_logger = logging.getLogger('ibllib')
 # ======== EDIT FOR USERS ====
 
 # Edit so as to reflect the directory containing your electrode tracks
 path_tracks = "/Users/gaelle/Downloads/electrodetracks_lic3"
-
+path_tracks = "/datadisk/GoogleDrive/TeamDrives/olivier.winter@internationalbrainlab.org/WG-Histology/Tracks"
 ALYX_URL = "https://dev.alyx.internationalbrainlab.org"  # FOR TESTING
-# ALYX_URL = "https://alyx.internationalbrainlab.org"  # UNCOMMENT WHEN READY
+ALYX_URL = "https://alyx.internationalbrainlab.org"  # UNCOMMENT WHEN READY
 
 
 # ======== DO NOT EDIT BELOW ====
@@ -52,10 +53,15 @@ def parse_filename(track_file):
     return search_filter
 
 
-for track_file in path_tracks.rglob(glob_pattern):
+OFFSET = 0
+track_files = list(path_tracks.rglob(glob_pattern))
+track_files.sort()
+for ii, track_file in enumerate(track_files):
+    if ii < OFFSET:
+        continue
     # '{yyyy-mm-dd}}_{nickname}_{session_number}_{probe_label}_pts.csv'
     # beware: there may be underscores in the subject nickname
-    print(track_file)
+    print(ii, track_file)
     search_filter = parse_filename(track_file)
     probe = one.alyx.rest('insertions', 'list', **search_filter)
     if len(probe) == 0:
@@ -74,8 +80,8 @@ for track_file in path_tracks.rglob(glob_pattern):
     xyz_picks = histology.load_track_csv(track_file)
     try:
         histology.register_track(probe_id, xyz_picks, one=one)
-    except Exception as e:
-        pass
+    except Exception:
+        _logger.error(str(track_file))
 
 
 def test_filename_parser():
