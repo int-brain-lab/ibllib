@@ -23,6 +23,9 @@ def load_track_csv(file_track):
     :return: xyz
     """
     # apmldv in the histology file is flipped along y direction
+    file_track = Path(file_track)
+    if file_track.stat().st_size == 0:
+        return np.array([])
     ixiyiz = np.loadtxt(file_track, delimiter=',')[:, [1, 0, 2]]
     ixiyiz[:, 1] = 527 - ixiyiz[:, 1]
     ixiyiz = ixiyiz[np.argsort(ixiyiz[:, 2]), :]
@@ -115,17 +118,17 @@ def plot2d_all(trajectories, tracks):
     :return:
     """
     plt.figure()
-    axs = brain_atlas.plot_sslice(brain_atlas.bc.i2x(190) * 1e3, cmap=plt.get_cmap('bone'))
+    axs = brain_atlas.plot_sslice(brain_atlas.bc.i2x(190), cmap=plt.get_cmap('bone'))
     plt.figure()
-    axc = brain_atlas.plot_cslice(brain_atlas.bc.i2y(350) * 1e3)
+    axc = brain_atlas.plot_cslice(brain_atlas.bc.i2y(350))
     for xyz in tracks['xyz']:
-        axc.plot(xyz[:, 0] * 1e3, xyz[:, 2] * 1e3, 'b')
-        axs.plot(xyz[:, 1] * 1e3, xyz[:, 2] * 1e3, 'b')
+        axc.plot(xyz[:, 0] * 1e3, xyz[:, 2] * 1e6, 'b')
+        axs.plot(xyz[:, 1] * 1e3, xyz[:, 2] * 1e6, 'b')
     for trj in trajectories:
         ins = atlas.Insertion.from_dict(trj, brain_atlas=brain_atlas)
         xyz = ins.xyz
-        axc.plot(xyz[:, 0] * 1e3, xyz[:, 2] * 1e3, 'r')
-        axs.plot(xyz[:, 1] * 1e3, xyz[:, 2] * 1e3, 'r')
+        axc.plot(xyz[:, 0] * 1e3, xyz[:, 2] * 1e6, 'r')
+        axs.plot(xyz[:, 1] * 1e3, xyz[:, 2] * 1e6, 'r')
 
 
 def plot3d_all(trajectories, tracks):
@@ -161,14 +164,23 @@ def get_brain_regions(xyz, channels_positions=SITES_COORDINATES, brain_atlas=bra
     :param brain_atlas:
     :return:
     """
-
+    # TODO: test 2 values (insertion)
+    # TODO: test duplicates: track_files = [Path("/datadisk/GoogleDrive/TeamDrives/
+    #  olivier.winter@internationalbrainlab.org/WG-Histology/Tracks/cortexlab/
+    #  KS014/2019-12-04_KS014_001_probe00_pts.csv")]
     """
     this is the depth along the probe (from the first point which is the deepest labeled point)
     Due to the blockiness, depths may not be unique along the track so it has to be prepared
     """
+    xyz = xyz[np.argsort(xyz[:, 2]), :]
     d = atlas.cart2sph(xyz[:, 0] - xyz[0, 0], xyz[:, 1] - xyz[0, 1], xyz[:, 2] - xyz[0, 2])[0]
-    ind_depths = np.argsort(d)
-    d = np.sort(d)
+    indsort = np.argsort(d)
+    xyz = xyz[indsort, :]
+    d = d[indsort]
+    iduplicates = np.where(np.diff(d) == 0)[0]
+    xyz = np.delete(xyz, iduplicates, axis=0)
+    d = np.delete(d, iduplicates, axis=0)
+
     assert np.all(np.diff(d) > 0), "Depths should be stricly increasing"
 
     """
@@ -176,8 +188,7 @@ def get_brain_regions(xyz, channels_positions=SITES_COORDINATES, brain_atlas=bra
     """
     xyz_channels = np.zeros((channels_positions.shape[0], 3))
     for m in np.arange(3):
-        xyz_channels[:, m] = np.interp(channels_positions[:, 1] / 1e6,
-                                       d[ind_depths], xyz[ind_depths, m])
+        xyz_channels[:, m] = np.interp(channels_positions[:, 1] / 1e6, d, xyz[:, m])
     brain_regions = brain_atlas.regions.get(brain_atlas.get_labels(xyz_channels))
     brain_regions['xyz'] = xyz_channels
     brain_regions['lateral'] = channels_positions[:, 0]
@@ -200,25 +211,33 @@ def register_track(probe_id, picks=None, one=None):
     3) Channel locations are set in the table
     """
     assert one
-    brain_locations, insertion_histology = get_brain_regions(picks)
-    # 1) update the alyx models, first put the picked points in the insertion json
-    one.alyx.rest('insertions', 'partial_update',
-                  id=probe_id,
-                  data={'json': {'xyz_picks': np.int32(picks * 1e6).tolist()}})
-    # TODO: add the affine transform parameters
-
-    # 2) patch or create the trajectory coming from histology track
-    tdict = {'probe_insertion': probe_id,
-             'x': insertion_histology.x * 1e6,
-             'y': insertion_histology.y * 1e6,
-             'z': insertion_histology.z * 1e6,
-             'phi': insertion_histology.phi,
-             'theta': insertion_histology.theta,
-             'depth': insertion_histology.depth * 1e6,
-             'roll': insertion_histology.beta,
-             'provenance': 'Histology track',
-             'coordinate_system': 'IBL-Allen',
-             }
+    # 0) if it's an empty track, create a null trajectory and exit
+    if picks is None or picks.size == 0:
+        tdict = {'probe_insertion': probe_id,
+                 'x': None, 'y': None, 'z': None,
+                 'phi': None, 'theta': None, 'depth': None, 'roll': None,
+                 'provenance': 'Histology track',
+                 'coordinate_system': 'IBL-Allen',
+                 }
+        brain_locations = None
+    else:
+        brain_locations, insertion_histology = get_brain_regions(picks)
+        # 1) update the alyx models, first put the picked points in the insertion json
+        one.alyx.rest('insertions', 'partial_update',
+                      id=probe_id,
+                      data={'json': {'xyz_picks': np.int32(picks * 1e6).tolist()}})
+        # 2) patch or create the trajectory coming from histology track
+        tdict = {'probe_insertion': probe_id,
+                 'x': insertion_histology.x * 1e6,
+                 'y': insertion_histology.y * 1e6,
+                 'z': insertion_histology.z * 1e6,
+                 'phi': insertion_histology.phi,
+                 'theta': insertion_histology.theta,
+                 'depth': insertion_histology.depth * 1e6,
+                 'roll': insertion_histology.beta,
+                 'provenance': 'Histology track',
+                 'coordinate_system': 'IBL-Allen',
+                 }
     hist_traj = one.alyx.rest('trajectories', 'list',
                               probe_insertion=probe_id,
                               provenance='Histology track')
@@ -227,6 +246,8 @@ def register_track(probe_id, picks=None, one=None):
         one.alyx.rest('trajectories', 'delete', id=hist_traj[0]['id'])
     hist_traj = one.alyx.rest('trajectories', 'create', data=tdict)
 
+    if brain_locations is None:
+        return brain_locations, None
     # 3) create channel locations
     channel_dict = []
     for i in np.arange(brain_locations.id.size):

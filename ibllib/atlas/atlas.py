@@ -157,7 +157,7 @@ class BrainAtlas:
     Currently this is designed for the AllenCCF at several resolutions,
     yet this class can be used for other atlases arises.
     """
-    def __init__(self, image, label, regions, dxyz, iorigin=[0, 0, 0],
+    def __init__(self, image, label, dxyz, regions, iorigin=[0, 0, 0],
                  dims2xyz=[0, 1, 2], xyz2dims=[0, 1, 2]):
         """
         self.image: image volume (ap, ml, dv)
@@ -249,38 +249,55 @@ class BrainAtlas:
         ax.imshow(im, extent=extent, cmap=cmap, **kwargs)
         return ax
 
+    def slice(self, coordinate, axis, volume='image'):
+        """
+        :param coordinate: float
+        :param axis: xyz convention:  0 for ml, 1 for ap, 2
+        :param volume: 'image' or 'annotation'
+        :return: 2d array or 3d RGB numpy int8 array
+        """
+        index = self.bc.xyz2i(np.array([coordinate] * 3))[axis]
+        if volume == 'annotation':
+            im = self.label.take(index, axis=self.xyz2dims[axis])
+            if self.regions is None or getattr(self.regions, 'rgb', None) is None:
+                return im
+            else:  # if the regions exist and have the rgb attribute, do the rgb lookup
+                # the lookup is done in pure numpy for speed. This is the ismember matlab fcn
+                im_unique, ilabels, iim = np.unique(im, return_index=True, return_inverse=True)
+                _, ir_unique, _ = np.intersect1d(self.regions.id, im_unique, return_indices=True)
+                return np.reshape(self.regions.rgb[ir_unique[iim], :], (*im.shape, 3))
+        else:
+            return self.image.take(index, axis=self.xyz2dims[axis])
+
     def plot_cslice(self, ap_coordinate, volume='image', **kwargs):
         """
         Imshow a coronal slice
-        :param: ap_coordinate (mm)
-        :param: ax
+        :param: ap_coordinate (m)
+        :return: ax
         """
-        vol = self.label if volume == 'annotation' else self.image
-        return self._plot_slice(vol[self.bc.y2i(ap_coordinate / 1e3), :, :].transpose(),
-                                extent=np.r_[self.bc.xlim * 1e3, np.flip(self.bc.zlim) * 1e3],
-                                **kwargs)
+        cslice = self.slice(ap_coordinate, axis=1, volume=volume)
+        extent = np.r_[self.bc.xlim, np.flip(self.bc.zlim)] * 1e6
+        return self._plot_slice(np.swapaxes(cslice, 0, 1), extent=extent, **kwargs)
 
     def plot_hslice(self, dv_coordinate, volume='image', **kwargs):
         """
         Imshow a horizontal slice
-        :param: dv_coordinate (mm)
-        :param: ax
+        :param: dv_coordinate (m)
+        :return: ax
         """
-        vol = self.label if volume == 'annotation' else self.image
-        return self._plot_slice(vol[:, :, self.bc.z2i(dv_coordinate / 1e3)].transpose(),
-                                extent=np.r_[self.bc.ylim * 1e3, self.bc.xlim * 1e3],
-                                **kwargs)
+        hslice = self.slice(dv_coordinate, axis=2, volume=volume)
+        extent = np.r_[self.bc.ylim, self.bc.xlim] * 1e6
+        return self._plot_slice(np.swapaxes(hslice, 0, 1), extent=extent, **kwargs)
 
     def plot_sslice(self, ml_coordinate, volume='image', **kwargs):
         """
         Imshow a sagittal slice
-        :param: ml_coordinate (mm)
-        :param: ax
+        :param: ml_coordinate (m)
+        :return: ax
         """
-        vol = self.label if volume == 'annotation' else self.image
-        return self._plot_slice(vol[:, self.bc.x2i(ml_coordinate / 1e3), :].transpose(),
-                                extent=np.r_[self.bc.ylim * 1e3, np.flip(self.bc.zlim) * 1e3],
-                                **kwargs)
+        sslice = self.slice(ml_coordinate, axis=0, volume=volume)
+        extent = np.r_[self.bc.ylim, np.flip(self.bc.zlim)] * 1e6
+        return self._plot_slice(np.swapaxes(sslice, 0, 1), extent=extent, **kwargs)
 
 
 @dataclass
@@ -460,6 +477,7 @@ class BrainRegions:
     id: np.ndarray
     name: np.object
     acronym: np.object
+    rgb: np.uint8
 
     def get(self, ids) -> Bunch:
         """
@@ -503,17 +521,14 @@ class AllenAtlas(BrainAtlas):
             label = np.swapaxes(np.swapaxes(label, 2, 0), 1, 2)  # label[iap, iml, idv]
             image = np.swapaxes(np.swapaxes(image, 2, 0), 1, 2)  # image[iap, iml, idv]
         # resulting volumes origin: x right, y front, z top
-        df_regions = pd.read_csv(FILE_REGIONS)
-        regions = BrainRegions(id=df_regions.id.values,
-                               name=df_regions.name.values,
-                               acronym=df_regions.acronym.values)
+        regions = _regions_from_allen_csv(FILE_REGIONS)
         xyz2dims = np.array([1, 0, 2])
         dims2xyz = np.array([1, 0, 2])
         dxyz = res_um * 1e-6 * np.array([1, -1, -1]) * scaling
         # we use Bregma as the origin
         ibregma = (ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / res_um)
         self.res_um = res_um
-        super().__init__(image, label, regions, dxyz, ibregma,
+        super().__init__(image, label, dxyz, regions, ibregma,
                          dims2xyz=dims2xyz, xyz2dims=xyz2dims)
 
     def xyz2ccf(self, xyz):
@@ -547,3 +562,21 @@ def _download_atlas_flatiron(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
     http_download_file(url, cache_dir=Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH),
                        username=par.HTTP_DATA_SERVER_LOGIN,
                        password=par.HTTP_DATA_SERVER_PWD)
+
+
+def _regions_from_allen_csv(csv_file):
+    """
+    Reads csv file containing the ALlen Ontology and instantiates a BrainRegions object
+    :param csv_file:
+    :return: BrainRegions object
+    """
+    df_regions = pd.read_csv(csv_file)
+    # converts colors to RGB uint8 array
+    c = np.uint32(df_regions.color_hex_triplet.map(
+        lambda x: int(x, 16) if isinstance(x, str) else 256 ** 3 - 1))
+    c = np.flip(np.reshape(c.view(np.uint8), (df_regions.id.size, 4))[:, :3], 1)
+    # creates the BrainRegion instance
+    return BrainRegions(id=df_regions.id.values,
+                        name=df_regions.name.values,
+                        acronym=df_regions.acronym.values,
+                        rgb=c)
