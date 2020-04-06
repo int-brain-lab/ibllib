@@ -15,11 +15,11 @@ subject = 'CSHL028'  # example
 TASK_PROTOCOL = 'SWC_Histology_Serial2P_v0.0.1'
 
 # Date-Time of imaging (example), change as needed
-sample_imaging_date = datetime.datet(2020, 2, 1)  # Format: y - m - d
+sample_imaging_date = datetime.date(2020, 2, 1)  # Format: y - m - d
 sample_reception_date = datetime.date(2020, 4, 1)
 
 json_note = {
-        'sample_reception_date': ibllib.time.date2isostr(sample_reception_date)[:10]
+        'sample_reception_date': ibllib.time.date2isostr(sample_reception_date)
 #     'elastix_affine_transform': np.zeros((4, 4)),
 #     'tilt': 0,
 #     'yaw': 0,
@@ -39,7 +39,7 @@ ses_ = {'subject': subject,
         # 'type': 'Experiment',
         'task_protocol': TASK_PROTOCOL,
         'number': 1,
-        'start_time': ibllib.time.date2isostr(sample_imaging_date)[:10],  # Saving only the date
+        'start_time': ibllib.time.date2isostr(sample_imaging_date),  # Saving only the date
         # 'end_time': ibllib.time.date2isostr(end_time) if end_time else None,
         # 'n_correct_trials': n_correct_trials,
         # 'n_trials': n_trials,
