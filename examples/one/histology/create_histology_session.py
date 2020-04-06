@@ -7,6 +7,16 @@ Note, we have defined: start_time = sample_imaging_date
 import datetime
 from oneibl.one import ONE
 import ibllib.time
+import numpy as np
+import json
+from json import JSONEncoder
+
+# override deault method of JSONEncoder to implement custom NumPy JSON serialization.
+class NumpyArrayEncoder(JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return JSONEncoder.default(self, obj)
 
 # Test first on dev alyx for example
 one = ONE(base_url='https://dev.alyx.internationalbrainlab.org')
@@ -18,17 +28,23 @@ TASK_PROTOCOL = 'SWC_Histology_Serial2P_v0.0.1'
 sample_imaging_date = datetime.date(2020, 2, 1)  # Format: y - m - d
 sample_reception_date = datetime.date(2020, 4, 1)
 
+# create elastix afffine transform numpy array:
+array = np.zeros((4, 4)) #UPDATE with correct transform!
+elastix_affine_transform = {"elastix_affine_transform": array}
+
 json_note = {
-        'sample_reception_date': ibllib.time.date2isostr(sample_reception_date)
-#     'elastix_affine_transform': np.zeros((4, 4)),
-#     'tilt': 0,
-#     'yaw': 0,
-#     'roll': 0,
-#     'dv_scale': 1,
-#     'ap_scale': 1,
-#     'ml_scale': 1
+        'sample_reception_date': ibllib.time.date2isostr(sample_reception_date),
+        'elastix_affine_transform': array,
+        'tilt': 0,
+        'yaw': 0,
+        'roll': 0,
+        'dv_scale': 1,
+        'ap_scale': 1,
+        'ml_scale': 1
 }
 
+# use dump() to properly encode np array:
+json_note = json.dumps(json_note, cls=NumpyArrayEncoder)
 
 ses_ = {'subject': subject,
         'users': ['steven.west'],
@@ -45,4 +61,5 @@ ses_ = {'subject': subject,
         # 'n_trials': n_trials,
         'json': json_note
         }
+
 session = one.alyx.rest('sessions', 'create', data=ses_)
