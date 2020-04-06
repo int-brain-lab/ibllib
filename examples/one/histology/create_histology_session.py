@@ -2,7 +2,7 @@
 Register histology session for example mouse
 Note, we have defined: start_time = sample_imaging_date
 '''
-# Author: Gaelle Chapuis
+# Author: Gaelle Chapuis, Steven J. West
 
 import datetime
 from oneibl.one import ONE
@@ -46,7 +46,8 @@ json_note = {
 # use dump() to properly encode np array:
 json_note = json.dumps(json_note, cls=NumpyArrayEncoder)
 
-ses_ = {'subject': subject,
+ses_ = {
+        'subject': subject,
         'users': ['steven.west'],
         'location': 'serial2P_01',
         'procedures': ['Histology'],
@@ -60,6 +61,14 @@ ses_ = {'subject': subject,
         # 'n_correct_trials': n_correct_trials,
         # 'n_trials': n_trials,
         'json': json_note
-        }
+}
+
+# overwrites the session if it already exists
+ses_date = ibllib.time.date2isostr(sample_imaging_date)[:10]
+ses = one.alyx.rest('sessions', 'list', subject=subject, number=1,
+                    date_range=[ses_date, ses_date])
+if len(ses) > 0:
+        one.alyx.rest('sessions', 'delete', ses[0]['url'])
 
 session = one.alyx.rest('sessions', 'create', data=ses_)
+
