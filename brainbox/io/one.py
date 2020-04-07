@@ -134,16 +134,15 @@ def load_spike_sorting(eid, one=None, dataset_types=None):
     return spikes, clusters
 
 
-def load_spike_sorting_with_channel(eid, one=None):
-    # --- Get spikes and clusters data
-    # TODO change(how to?) as this calls ONE again for connection to Alyx
-    dic_spk_bunch, dic_clus = load_spike_sorting(eid, one=one)
-
-    # -- Get brain regions and assign to clusters
-    # TODO change(how to?) as this calls ONE again for connection to Alyx
-    channels = load_channel_locations(eid, one=one)
+def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
     probe_labels = list(channels.keys())  # Convert dict_keys into list
-    keys_to_add = ['acronym', 'atlas_id']
+    keys_to_add_default = ['acronym', 'atlas_id']
+
+    if keys_to_add_extra is None:
+        keys_to_add = keys_to_add_default
+    else:
+        #  Append extra optional keys
+        keys_to_add = list(set(keys_to_add_extra + keys_to_add_default))
 
     for i_p in range(0, len(probe_labels)):
         clu_ch = dic_clus[probe_labels[i_p]]['channels']
@@ -160,5 +159,16 @@ def load_spike_sorting_with_channel(eid, one=None):
                       f'the right element number compared to cluster.'
                       f'Data in new cluster key {key} is thus returned empty.')
                 dic_clus[probe_labels[i_p]][key] = []
+
+    return dic_clus
+
+
+def load_spike_sorting_with_channel(eid, one=None):
+    # --- Get spikes and clusters data
+    dic_spk_bunch, dic_clus = load_spike_sorting(eid, one=one)
+
+    # -- Get brain regions and assign to clusters
+    channels = load_channel_locations(eid, one=one)
+    dic_clus = merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None)
 
     return dic_spk_bunch, dic_clus, channels
