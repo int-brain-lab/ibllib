@@ -15,8 +15,9 @@ one = ONE()
 
 # --- Example session:
 
-eid = 'aad23144-0e52-4eac-80c5-c4ee2decb198'  # from sebastian
+# eid = 'aad23144-0e52-4eac-80c5-c4ee2decb198'  # from sebastian
 # eid = 'da188f2c-553c-4e04-879b-c9ea2d1b9a93' # Test: 2 probes
+eid = '1ca38b2b-0ddc-41c7-a598-5009ea742995'  # Test from NYU-15 that has no channels registered
 
 # ----- RECOMMENDED ------
 # --- Get spikes and clusters data
