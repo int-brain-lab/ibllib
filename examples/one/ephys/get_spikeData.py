@@ -1,13 +1,13 @@
 '''
-Get spikes data and associate brain regions for all probes in a single session via ONE and brainbox.
+Get spikes data and associate brain regions for all probes in a single session via
+ONE and brainbox.
 TODO return dict of bunch via one.load_object and bbone.load_spike_sorting
 TODO clarify what loading method to use between the two
 '''
 # Author: Gaelle Chapuis
 
-
-import alf.io as aio
-import brainbox as bb
+# import alf.io as aio
+# import brainbox as bb
 from oneibl.one import ONE
 import brainbox.io.one as bbone
 
