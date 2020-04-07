@@ -462,7 +462,7 @@ class Insertion:
         :param z: init position for the lookup
         :return: 3 element array x,y,z
         """
-        # do a recursive look-up of the brain surface along the trajectory, 5 is more than enough        z = 0
+        # do a recursive look-up of the brain surface along the trajectory, 5 is more than enough
         for m in range(5):
             xyz = traj.eval_z(z)[0]
             iy = brain_atlas.bc.y2i(xyz[1])

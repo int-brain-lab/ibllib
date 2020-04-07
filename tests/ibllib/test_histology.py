@@ -6,6 +6,7 @@ import numpy as np
 from ibllib.pipes import histology
 import ibllib.atlas as atlas
 
+
 class TestHistology(unittest.TestCase):
 
     def setUp(self) -> None:
