@@ -485,8 +485,10 @@ class BrainRegions:
         """
         uid, uind = np.unique(ids, return_inverse=True)
         a, iself, _ = np.intersect1d(self.id, uid, assume_unique=False, return_indices=True)
-        return Bunch(id=self.id[iself[uind]], name=self.name[iself[uind]],
-                     acronym=self.acronym[iself[uind]])
+        return Bunch(id=self.id[iself[uind]],
+                     name=self.name[iself[uind]],
+                     acronym=self.acronym[iself[uind]],
+                     rgb=self.rgb[iself[uind]])
 
 
 class AllenAtlas(BrainAtlas):
