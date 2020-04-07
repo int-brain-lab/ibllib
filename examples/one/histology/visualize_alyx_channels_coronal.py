@@ -1,15 +1,22 @@
+
+'''
+Plot a coronal slice (best fit) that contains a given probe track.
+As input, use an eID and probe label.
+'''
+# Author: Olivier Winter
+
 import numpy as np
 
 import ibllib.atlas as atlas
 from oneibl.one import ONE
 import brainbox.io.one as bbone
 
-# parameters section
+# === Parameters section (edit) ===
 eid = 'aad23144-0e52-4eac-80c5-c4ee2decb198'
 probe_label = 'probe01'
 FULL_BLOWN_GUI = True  # set to False for simple matplotlib view
 
-# code
+# === Code (do not edit) ===
 ba = atlas.AllenAtlas(25)
 one = ONE(base_url="https://alyx.internationalbrainlab.org")
 one.path_from_eid(eid)

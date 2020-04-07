@@ -1,13 +1,19 @@
+'''
+Plot a coronal slice (best fit) that contains a given probe track.
+As input, use the path to a probe track (_pts.csv).
+'''
+# Author: Olivier Winter
+
 import numpy as np
 
 from ibllib.pipes import histology
 import ibllib.atlas as atlas
 
-# Parameters section
+# === Parameters section (edit) ===
+track_file = "/Users/gaelle/Downloads/electrodetracks_lic3/2019-08-27_lic3_002_probe00_pts.csv"
 FULL_BLOWN_GUI = True  # set to False for simple matplotlib view
-track_file = "/datadisk/Data/Histology/_track/2019-12-10_KS023_001_probe01_pts.csv"
 
-# Code
+# === Code (do not edit) ===
 ba = atlas.AllenAtlas(res_um=25)
 xyz_picks = histology.load_track_csv(track_file)
 bl, ins = histology.get_brain_regions(xyz_picks)
