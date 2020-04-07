@@ -348,6 +348,15 @@ class Trajectory:
         """
         return self._eval(z, dim=2)
 
+    def project(self, point):
+        """
+        projects a point onto the trajectory line
+        :param point: np.array(x, y, z) coordinates
+        :return:
+        """
+        return (self.point + np.dot(point - self.point, self.vector) /
+                np.dot(self.vector, self.vector) * self.vector)
+
     def _eval(self, c, dim):
         # uses symmetric form of 3d line equation to get xyz coordinates given one coordinate
         if not isinstance(c, np.ndarray):
@@ -400,8 +409,11 @@ class Insertion:
         """
         assert brain_atlas, 'Input argument brain_atlas must be defined'
         traj = Trajectory.fit(xyzs)
+        # project the deepest point into the vector to get the tip coordinate
+        tip = traj.project(xyzs[np.argmin(xyzs[:, 2]), :])
+        # get intersection with the brain surface as an entry point
         entry = Insertion.get_brain_entry(traj, brain_atlas)
-        tip = xyzs[np.argmin(xyzs[:, 2]), :]
+        # convert to spherical system to store the insertion
         depth, theta, phi = cart2sph(*(entry - tip))
         insertion_dict = {'x': entry[0], 'y': entry[1], 'z': entry[2],
                           'phi': phi, 'theta': theta, 'depth': depth}

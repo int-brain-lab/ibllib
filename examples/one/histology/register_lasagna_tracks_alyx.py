@@ -29,7 +29,7 @@ _logger = logging.getLogger('ibllib')
 
 # Edit so as to reflect the directory containing your electrode tracks
 path_tracks = "/Users/gaelle/Downloads/electrodetracks_lic3"
-path_tracks = "/datadisk/GoogleDrive/TeamDrives/olivier.winter@internationalbrainlab.org/WG-Histology/Tracks"
+path_tracks = "/datadisk/GoogleDrive/TeamDrives/olivier.winter@internationalbrainlab.org/WG-Histology/Tracks/00_to_add"
 ALYX_URL = "https://dev.alyx.internationalbrainlab.org"  # FOR TESTING
 ALYX_URL = "https://alyx.internationalbrainlab.org"  # UNCOMMENT WHEN READY
 
@@ -56,12 +56,13 @@ def parse_filename(track_file):
 OFFSET = 0
 track_files = list(path_tracks.rglob(glob_pattern))
 track_files.sort()
+ntracks = len(track_files)
 for ii, track_file in enumerate(track_files):
     if ii < OFFSET:
         continue
     # '{yyyy-mm-dd}}_{nickname}_{session_number}_{probe_label}_pts.csv'
     # beware: there may be underscores in the subject nickname
-    print(ii, track_file)
+    print(ii, ntracks, track_file)
     search_filter = parse_filename(track_file)
     probe = one.alyx.rest('insertions', 'list', **search_filter)
     if len(probe) == 0:

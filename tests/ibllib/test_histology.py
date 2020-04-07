@@ -14,19 +14,25 @@ class TestHistology(unittest.TestCase):
         self.path_tracks = Path(__file__).parent.joinpath('fixtures', 'histology', 'tracks')
 
     def test_histology_get_brain_regions(self):
-
+        # first part of the test is to check on an actual track file
         for file_track in self.path_tracks.rglob("*_pts.csv"):
             xyz = histology.load_track_csv(file_track)
-            # TODO: test 2 values (insertion)
             channels, ins = histology.get_brain_regions(xyz=xyz, brain_atlas=self.brain_atlas)
-            # the algorithms gets the best fit, which won't include the last coordinate
+        # also check that it works from an insertion
+        channels, ins2 = histology.get_brain_regions(xyz=ins.xyz, brain_atlas=self.brain_atlas)
+        self.assertTrue(channels.acronym[-1] == 'VISpm1')
+        self.assertTrue(channels.acronym[0] == 'MRN')
+        a = np.array([ins.x, ins.y, ins.z, ins.phi, ins.theta, ins.depth])
+        b = np.array([ins2.x, ins2.y, ins2.z, ins2.phi, ins2.theta, ins2.depth])
+        self.assertTrue(np.all(np.isclose(a, b)))
 
     def test_histology_insertion_from_track(self):
 
         for file_track in self.path_tracks.rglob("*_pts.csv"):
             xyz = histology.load_track_csv(file_track)
             insertion = atlas.Insertion.from_track(xyz, brain_atlas=self.brain_atlas)
-            # self.assertFalse(np.all(np.isclose(ins.tip, xyz[-1])))
+            # checks that the tip coordinate is not the deepest point but its projection
+            self.assertFalse(np.all(np.isclose(insertion.tip, xyz[-1])))
 
     def test_get_brain_exit_entry(self):
         traj = atlas.Trajectory.fit(np.array([[0, 0, 0], [0, 0, 0.005]]))
