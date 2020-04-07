@@ -164,10 +164,6 @@ def get_brain_regions(xyz, channels_positions=SITES_COORDINATES, brain_atlas=bra
     :param brain_atlas:
     :return:
     """
-    # TODO: test 2 values (insertion)
-    # TODO: test duplicates: track_files = [Path("/datadisk/GoogleDrive/TeamDrives/
-    #  olivier.winter@internationalbrainlab.org/WG-Histology/Tracks/cortexlab/
-    #  KS014/2019-12-04_KS014_001_probe00_pts.csv")]
     """
     this is the depth along the probe (from the first point which is the deepest labeled point)
     Due to the blockiness, depths may not be unique along the track so it has to be prepared

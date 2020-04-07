@@ -182,17 +182,21 @@ class BrainAtlas:
         Get the volume top surface, this is needed to compute probe insertions intersections
         """
         l0 = self.label == 0
-        s = np.zeros(self.label.shape[:2])
-        s[np.all(l0, axis=2)] = np.nan
+        bottom = np.zeros(self.label.shape[:2])
+        top = np.zeros(self.label.shape[:2])
+        top[np.all(l0, axis=2)] = np.nan
+        bottom[np.all(l0, axis=2)] = np.nan
         iz = 0
         # not very elegant, but fast enough for our purposes
         while True:
             if iz >= l0.shape[2]:
                 break
-            inds = np.bitwise_and(s == 0, ~l0[:, :, iz])
-            s[inds] = iz
+            top[np.bitwise_and(top == 0, ~l0[:, :, iz])] = iz
+            ireverse = l0.shape[2] - 1 - iz
+            bottom[np.bitwise_and(bottom == 0, ~l0[:, :, ireverse])] = ireverse
             iz += 1
-        self.top = self.bc.i2z(s)
+        self.top = self.bc.i2z(top)
+        self.bottom = self.bc.i2z(bottom)
 
     def _lookup(self, xyz):
         """
@@ -396,7 +400,7 @@ class Insertion:
         """
         assert brain_atlas, 'Input argument brain_atlas must be defined'
         traj = Trajectory.fit(xyzs)
-        entry = Insertion._get_brain_entry(traj, brain_atlas)
+        entry = Insertion.get_brain_entry(traj, brain_atlas)
         tip = xyzs[np.argmin(xyzs[:, 2]), :]
         depth, theta, phi = cart2sph(*(entry - tip))
         insertion_dict = {'x': entry[0], 'y': entry[1], 'z': entry[2],
@@ -450,7 +454,24 @@ class Insertion:
         return sph2cart(- self.depth, self.theta, self.phi) + np.array((self.x, self.y, self.z))
 
     @staticmethod
-    def _get_brain_entry(traj, brain_atlas):
+    def _get_surface_intersection(traj, brain_atlas, surface, z=0):
+        """
+        Given a Trajectory and a BrainAtlas object, computes the intersection of the trajectory
+        and a surface (usually brain_atlas.top)
+        :param brain_atlas:
+        :param z: init position for the lookup
+        :return: 3 element array x,y,z
+        """
+        # do a recursive look-up of the brain surface along the trajectory, 5 is more than enough        z = 0
+        for m in range(5):
+            xyz = traj.eval_z(z)[0]
+            iy = brain_atlas.bc.y2i(xyz[1])
+            ix = brain_atlas.bc.x2i(xyz[0])
+            z = surface[iy, ix]
+        return xyz
+
+    @staticmethod
+    def get_brain_exit(traj, brain_atlas):
         """
         Given a Trajectory and a BrainAtlas object, computes the brain entry coordinate as the
         intersection of the trajectory and the brain surface (brain_atlas.top)
@@ -458,13 +479,19 @@ class Insertion:
         :return: 3 element array x,y,z
         """
         # do a recursive look-up of the brain surface along the trajectory, 5 is more than enough
-        z = 0
-        for m in range(5):
-            xyz = traj.eval_z(z)[0]
-            iy = brain_atlas.bc.y2i(xyz[1])
-            ix = brain_atlas.bc.x2i(xyz[0])
-            z = brain_atlas.top[iy, ix]
-        return xyz
+        return Insertion._get_surface_intersection(traj, brain_atlas,
+                                                   brain_atlas.bottom, z=brain_atlas.bc.zlim[-1])
+
+    @staticmethod
+    def get_brain_entry(traj, brain_atlas):
+        """
+        Given a Trajectory and a BrainAtlas object, computes the brain entry coordinate as the
+        intersection of the trajectory and the brain surface (brain_atlas.top)
+        :param brain_atlas:
+        :return: 3 element array x,y,z
+        """
+        # do a recursive look-up of the brain surface along the trajectory, 5 is more than enough
+        return Insertion._get_surface_intersection(traj, brain_atlas, brain_atlas.top, z=0)
 
 
 @dataclass
