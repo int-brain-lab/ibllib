@@ -31,7 +31,7 @@ for i_p in range(0, len(probe_labels)):
     clu_ch = dic_clus[probe_labels[i_p]]['channels']
     ch_acronym = channels[probe_labels[i_p]]['acronym']
     assert max(clu_ch) <= len(ch_acronym)  # Check length as will use clu_ch as index
-    clu_acronym = ch_acronym[clu_ch]
+    dic_clus[probe_labels[i_p]]['acronym'] = ch_acronym[clu_ch]
 
 
 # TODO dict of bunch for several probes
