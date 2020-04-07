@@ -26,12 +26,22 @@ dic_spk_bunch, dic_clus = bbone.load_spike_sorting(eid, one=one)
 # -- Get brain regions and assign to clusters
 channels = bbone.load_channel_locations(eid, one=one)
 probe_labels = list(channels.keys())  # Convert dict_keys into list
+keys_to_add = ['acronym', 'atlas_id']
 
 for i_p in range(0, len(probe_labels)):
     clu_ch = dic_clus[probe_labels[i_p]]['channels']
-    ch_acronym = channels[probe_labels[i_p]]['acronym']
-    assert max(clu_ch) <= len(ch_acronym)  # Check length as will use clu_ch as index
-    dic_clus[probe_labels[i_p]]['acronym'] = ch_acronym[clu_ch]
+
+    for i_k in range(0, len(keys_to_add)):
+        key = keys_to_add[i_k]
+        assert key in channels[probe_labels[i_p]].keys()
+        ch_key = channels[probe_labels[i_p]][key]
+
+        assert max(clu_ch) <= len(ch_key)  # Check length as will use clu_ch as index
+        dic_clus[probe_labels[i_p]][key] = ch_key[clu_ch]
+
+
+# Try with eid that does not have any probe planned/histology values in Alyx
+
 
 
 # TODO dict of bunch for several probes

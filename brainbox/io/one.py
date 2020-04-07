@@ -53,7 +53,7 @@ def load_channel_locations(eid, one=None, probe=None):
         if not trajs:
             continue
         # the trajectories are ordered within the serializer: histology processed, histology,
-        # micro manipulator, plannes so the first is always the desired one
+        # micro manipulator, planned so the first is always the desired one
         traj = trajs[0]
         channels[label] = Bunch({
             'atlas_id': np.array([ch['brain_region']['id'] for ch in traj['channels']]),
