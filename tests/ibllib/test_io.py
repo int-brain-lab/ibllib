@@ -255,11 +255,22 @@ class TestsSpikeGLX_compress(unittest.TestCase):
             nc=385, sync_depth=16, random=True)['bin_file']
         self.sr = spikeglx.Reader(self.file_bin)
 
+    def test_read_slices(self):
+        sr = self.sr
+        s2mv = sr.channel_conversion_sample2v['ap'][0]
+        # test the slicing of reader object
+        self.assertTrue(np.all(np.isclose(sr._raw[5:500, :-1] * s2mv, sr[5:500, :-1])))
+        self.assertTrue(np.all(np.isclose(sr._raw[5:500, 5] * s2mv, sr[5:500, 5])))
+        self.assertTrue(np.all(np.isclose(sr._raw[5, :-1] * s2mv, sr[5, :-1])))
+        self.assertTrue(sr._raw[55, 5] * s2mv == sr[55, 5])
+        self.assertTrue(np.all(np.isclose(sr._raw[55] * s2mv, sr[55])))
+        self.assertTrue(np.all(np.isclose(sr._raw[5:500] * s2mv, sr[5:500])[:, :-1]))
+
     def test_compress(self):
 
         def compare_data(sr0, sr1):
             # test direct reading through memmap / mtscompreader
-            self.assertTrue(np.all(sr0.data[1200:1210, 12] == sr1.data[1200:1210, 12]))
+            self.assertTrue(np.all(sr0._raw[1200:1210, 12] == sr1._raw[1200:1210, 12]))
             # test reading through methods
             d0, s0 = sr0.read_samples(1200, 54245)
             d1, s1 = sr1.read_samples(1200, 54245)

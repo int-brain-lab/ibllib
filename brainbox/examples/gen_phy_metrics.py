@@ -85,8 +85,9 @@ def gen_metrics(alf_dir, ks_dir, ephys_file_path=None):
 
         # Need timestamps, amps, depths
         ts = units_b['times'][unit]
-        amps = units_b['times'][unit]
-        depths = units_b['times'][unit]
+        #Bug was below: amps and depths were defined as units_b['times'][unit]!
+        amps = units_b['amps'][unit]
+        depths = units_b['depths'][unit]
 
         # Cumulative drift of spike amplitudes, normalized by total number of spikes.
         try:

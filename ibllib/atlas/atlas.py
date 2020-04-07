@@ -8,6 +8,9 @@ import nrrd
 
 from brainbox.core import Bunch
 from ibllib.io import params
+from oneibl.webclient import http_download_file
+
+ALLEN_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5739, 5400, 332])}
 
 
 def cart2sph(x, y, z):
@@ -20,6 +23,8 @@ def cart2sph(x, y, z):
     theta = np.zeros_like(r)
     iok = r != 0
     theta[iok] = np.arccos(z[iok] / r[iok]) * 180 / np.pi
+    if theta.size == 1:
+        theta = np.float(theta)
     return r, theta, phi
 
 
@@ -152,7 +157,7 @@ class BrainAtlas:
     Currently this is designed for the AllenCCF at several resolutions,
     yet this class can be used for other atlases arises.
     """
-    def __init__(self, image, label, regions, dxyz, iorigin=[0, 0, 0],
+    def __init__(self, image, label, dxyz, regions, iorigin=[0, 0, 0],
                  dims2xyz=[0, 1, 2], xyz2dims=[0, 1, 2]):
         """
         self.image: image volume (ap, ml, dv)
@@ -244,38 +249,55 @@ class BrainAtlas:
         ax.imshow(im, extent=extent, cmap=cmap, **kwargs)
         return ax
 
+    def slice(self, coordinate, axis, volume='image'):
+        """
+        :param coordinate: float
+        :param axis: xyz convention:  0 for ml, 1 for ap, 2
+        :param volume: 'image' or 'annotation'
+        :return: 2d array or 3d RGB numpy int8 array
+        """
+        index = self.bc.xyz2i(np.array([coordinate] * 3))[axis]
+        if volume == 'annotation':
+            im = self.label.take(index, axis=self.xyz2dims[axis])
+            if self.regions is None or getattr(self.regions, 'rgb', None) is None:
+                return im
+            else:  # if the regions exist and have the rgb attribute, do the rgb lookup
+                # the lookup is done in pure numpy for speed. This is the ismember matlab fcn
+                im_unique, ilabels, iim = np.unique(im, return_index=True, return_inverse=True)
+                _, ir_unique, _ = np.intersect1d(self.regions.id, im_unique, return_indices=True)
+                return np.reshape(self.regions.rgb[ir_unique[iim], :], (*im.shape, 3))
+        else:
+            return self.image.take(index, axis=self.xyz2dims[axis])
+
     def plot_cslice(self, ap_coordinate, volume='image', **kwargs):
         """
         Imshow a coronal slice
-        :param: ap_coordinate (mm)
-        :param: ax
+        :param: ap_coordinate (m)
+        :return: ax
         """
-        vol = self.label if volume == 'annotation' else self.image
-        return self._plot_slice(vol[self.bc.y2i(ap_coordinate / 1e3), :, :].transpose(),
-                                extent=np.r_[self.bc.xlim * 1e3, np.flip(self.bc.zlim) * 1e3],
-                                **kwargs)
+        cslice = self.slice(ap_coordinate, axis=1, volume=volume)
+        extent = np.r_[self.bc.xlim, np.flip(self.bc.zlim)] * 1e6
+        return self._plot_slice(np.swapaxes(cslice, 0, 1), extent=extent, **kwargs)
 
     def plot_hslice(self, dv_coordinate, volume='image', **kwargs):
         """
         Imshow a horizontal slice
-        :param: dv_coordinate (mm)
-        :param: ax
+        :param: dv_coordinate (m)
+        :return: ax
         """
-        vol = self.label if volume == 'annotation' else self.image
-        return self._plot_slice(vol[:, :, self.bc.z2i(dv_coordinate / 1e3)].transpose(),
-                                extent=np.r_[self.bc.ylim * 1e3, self.bc.xlim * 1e3],
-                                **kwargs)
+        hslice = self.slice(dv_coordinate, axis=2, volume=volume)
+        extent = np.r_[self.bc.ylim, self.bc.xlim] * 1e6
+        return self._plot_slice(np.swapaxes(hslice, 0, 1), extent=extent, **kwargs)
 
     def plot_sslice(self, ml_coordinate, volume='image', **kwargs):
         """
         Imshow a sagittal slice
-        :param: ml_coordinate (mm)
-        :param: ax
+        :param: ml_coordinate (m)
+        :return: ax
         """
-        vol = self.label if volume == 'annotation' else self.image
-        return self._plot_slice(vol[:, self.bc.x2i(ml_coordinate / 1e3), :].transpose(),
-                                extent=np.r_[self.bc.ylim * 1e3, np.flip(self.bc.zlim) * 1e3],
-                                **kwargs)
+        sslice = self.slice(ml_coordinate, axis=0, volume=volume)
+        extent = np.r_[self.bc.ylim, np.flip(self.bc.zlim)] * 1e6
+        return self._plot_slice(np.swapaxes(sslice, 0, 1), extent=extent, **kwargs)
 
 
 @dataclass
@@ -347,24 +369,39 @@ class Trajectory:
         ind = np.all(np.bitwise_and(bounds[0, :] <= epoints, epoints <= bounds[1, :]), axis=1)
         return epoints[ind, :]
 
-    def insertion(self, ba):
-        """
-        Given a Trajectory and a BrainAtlas object, computes the Insertion
-        :param ba:
-        :return:
-        """
-
 
 @dataclass
 class Insertion:
-    label: str
+    """
+    Defines an ephys probe insertion in 3D coordinate. IBL conventions.
+    To instantiate, use the static methods:
+    Insertion.from_track
+    Insertion.from_dict
+    """
     x: float
     y: float
     z: float
     phi: float
     theta: float
     depth: float
-    beta: float
+    label: str = ''
+    beta: float = 0
+
+    @staticmethod
+    def from_track(xyzs, brain_atlas=None):
+        """
+        :param brain_atlas: None. If provided, disregards the z coordinate and locks the insertion
+        point to the z of the brain surface
+        :return: Trajectory object
+        """
+        assert brain_atlas, 'Input argument brain_atlas must be defined'
+        traj = Trajectory.fit(xyzs)
+        entry = Insertion._get_brain_entry(traj, brain_atlas)
+        tip = xyzs[np.argmin(xyzs[:, 2]), :]
+        depth, theta, phi = cart2sph(*(entry - tip))
+        insertion_dict = {'x': entry[0], 'y': entry[1], 'z': entry[2],
+                          'phi': phi, 'theta': theta, 'depth': depth}
+        return Insertion(**insertion_dict)
 
     @staticmethod
     def from_dict(d, brain_atlas=None):
@@ -386,7 +423,7 @@ class Insertion:
         z = d['z'] / 1e6
         if brain_atlas:
             iy = brain_atlas.bc.y2i(d['y'] / 1e6)
-            ix = brain_atlas.bc.y2i(d['x'] / 1e6)
+            ix = brain_atlas.bc.x2i(d['x'] / 1e6)
             z = brain_atlas.top[iy, ix]
         return Insertion(x=d['x'] / 1e6, y=d['y'] / 1e6, z=z,
                          phi=d['phi'], theta=d['theta'], depth=d['depth'] / 1e6,
@@ -412,6 +449,23 @@ class Insertion:
     def tip(self):
         return sph2cart(- self.depth, self.theta, self.phi) + np.array((self.x, self.y, self.z))
 
+    @staticmethod
+    def _get_brain_entry(traj, brain_atlas):
+        """
+        Given a Trajectory and a BrainAtlas object, computes the brain entry coordinate as the
+        intersection of the trajectory and the brain surface (brain_atlas.top)
+        :param brain_atlas:
+        :return: 3 element array x,y,z
+        """
+        # do a recursive look-up of the brain surface along the trajectory, 5 is more than enough
+        z = 0
+        for m in range(5):
+            xyz = traj.eval_z(z)[0]
+            iy = brain_atlas.bc.y2i(xyz[1])
+            ix = brain_atlas.bc.x2i(xyz[0])
+            z = brain_atlas.top[iy, ix]
+        return xyz
+
 
 @dataclass
 class BrainRegions:
@@ -423,6 +477,7 @@ class BrainRegions:
     id: np.ndarray
     name: np.object
     acronym: np.object
+    rgb: np.uint8
 
     def get(self, ids) -> Bunch:
         """
@@ -430,46 +485,100 @@ class BrainRegions:
         """
         uid, uind = np.unique(ids, return_inverse=True)
         a, iself, _ = np.intersect1d(self.id, uid, assume_unique=False, return_indices=True)
-        return Bunch(id=self.id[iself[uind]], name=self.name[iself[uind]],
-                     acronym=self.acronym[iself[uind]])
+        return Bunch(id=self.id[iself[uind]],
+                     name=self.name[iself[uind]],
+                     acronym=self.acronym[iself[uind]],
+                     rgb=self.rgb[iself[uind]])
 
 
-def AllenAtlas(res_um=25, par=None):
+class AllenAtlas(BrainAtlas):
     """
     Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
     using the IBL Bregma and coordinate system
-    :param res_um: 25 or 50 um
+    """
+
+    def __init__(self, res_um=25, par=None, scaling=np.array([1, 1, 1]), mock=False):
+        """
+        :param res_um: 10, 25 or 50 um
+        :param par: dictionary of parameters to override systems ones
+        :param scaling:
+        :param mock:
+        :return: atlas.BrainAtlas
+        """
+        par = params.read('one_params')
+        FILE_REGIONS = str(Path(__file__).parent.joinpath('allen_structure_tree.csv'))
+        FLAT_IRON_ATLAS_REL_PATH = Path('histology', 'ATLAS', 'Needles', 'Allen')
+        if mock:
+            image, label = [np.zeros((528, 456, 320), dtype=np.bool) for _ in range(2)]
+        else:
+            path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
+            file_image = path_atlas.joinpath(f'average_template_{res_um}.nrrd')
+            file_label = path_atlas.joinpath(f'annotation_{res_um}.nrrd')
+            if not file_image.exists():
+                _download_atlas_flatiron(file_image, FLAT_IRON_ATLAS_REL_PATH, par)
+            if not file_label.exists():
+                _download_atlas_flatiron(file_label, FLAT_IRON_ATLAS_REL_PATH, par)
+            image, _ = nrrd.read(file_image, index_order='C')  # dv, ml, ap
+            label, _ = nrrd.read(file_label, index_order='C')  # dv, ml, ap
+            label = np.swapaxes(np.swapaxes(label, 2, 0), 1, 2)  # label[iap, iml, idv]
+            image = np.swapaxes(np.swapaxes(image, 2, 0), 1, 2)  # image[iap, iml, idv]
+        # resulting volumes origin: x right, y front, z top
+        regions = _regions_from_allen_csv(FILE_REGIONS)
+        xyz2dims = np.array([1, 0, 2])
+        dims2xyz = np.array([1, 0, 2])
+        dxyz = res_um * 1e-6 * np.array([1, -1, -1]) * scaling
+        # we use Bregma as the origin
+        ibregma = (ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / res_um)
+        self.res_um = res_um
+        super().__init__(image, label, dxyz, regions, ibregma,
+                         dims2xyz=dims2xyz, xyz2dims=xyz2dims)
+
+    def xyz2ccf(self, xyz):
+        """
+        Converts coordinates to the CCF coordinates, which is assumed to be the cube indices
+        times the spacing so far.
+        :param xyz:
+        :return: mlapdv coordinates in um, origin is the front left top corner of the data volume
+        """
+        return self.bc.xyz2i(xyz) * np.float(self.res_um)
+
+
+def NeedlesAtlas(*args, **kwargs):
+    """
+    Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
+    using the IBL Bregma and coordinate system. The Needles atlas defines a stretch along AP
+    axis and a sqeeze along the DV axis.
+    :param res_um: 10, 25 or 50 um
     :return: atlas.BrainAtlas
     """
-    if par is None:
-        # Bregma indices for the 10um Allen Brain Atlas, mlapdv
-        pdefault = {
-            'PATH_ATLAS': '/datadisk/BrainAtlas/ATLASES/Allen/',
-            'FILE_REGIONS': str(Path(__file__).parent.joinpath('allen_structure_tree.csv')),
-            'INDICES_BREGMA': list(np.array([1140 - (570 + 3.9), 540, 0 + 33.2]))
-        }
-        par = params.read('ibl_histology', default=pdefault)
-        if not Path(par.PATH_ATLAS).exists():
-            raise NotImplementedError("Atlas doesn't exist ! Mock option not implemented yet")
-            # TODO: mock atlas to get only the coordinate framework
-            pass
-        params.write('ibl_histology', par)
-    else:
-        par = Bunch(par)
-    # file_image = Path(path_atlas).joinpath(f'ara_nissl_{res_um}.nrrd')
-    file_image = Path(par.PATH_ATLAS).joinpath(f'average_template_{res_um}.nrrd')
-    file_label = Path(par.PATH_ATLAS).joinpath(f'annotation_{res_um}.nrrd')
-    image, header = nrrd.read(file_image, index_order='C')  # dv, ml, ap
-    image = np.swapaxes(np.swapaxes(image, 2, 0), 1, 2)  # image[iap, iml, idv]
-    label, header = nrrd.read(file_label, index_order='C')  # dv, ml, ap
-    label = np.swapaxes(np.swapaxes(label, 2, 0), 1, 2)  # label[iap, iml, idv]
-    # resulting volumes origin: x right, y front, z top
-    df_regions = pd.read_csv(par.FILE_REGIONS)
-    regions = BrainRegions(id=df_regions.id.values,
-                           name=df_regions.name.values,
-                           acronym=df_regions.acronym.values)
-    xyz2dims = np.array([1, 0, 2])
-    dims2xyz = np.array([1, 0, 2])
-    dxyz = res_um * 1e-6 * np.array([-1, -1, -1])
-    ibregma = (np.array(par.INDICES_BREGMA) * 10 / res_um)
-    return BrainAtlas(image, label, regions, dxyz, ibregma, dims2xyz=dims2xyz, xyz2dims=xyz2dims)
+    DV_SCALE = 0.952  # multiplicative factor on DV dimension, determined from MRI->CCF transform
+    AP_SCALE = 1.087  # multiplicative factor on AP dimension
+    kwargs['scaling'] = np.array([1, AP_SCALE, DV_SCALE])
+    return AllenAtlas(*args, **kwargs)
+
+
+def _download_atlas_flatiron(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
+    file_image.parent.mkdir(exist_ok=True, parents=True)
+    url = (par.HTTP_DATA_SERVER + '/' +
+           '/'.join(FLAT_IRON_ATLAS_REL_PATH.parts) + '/' + file_image.name)
+    http_download_file(url, cache_dir=Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH),
+                       username=par.HTTP_DATA_SERVER_LOGIN,
+                       password=par.HTTP_DATA_SERVER_PWD)
+
+
+def _regions_from_allen_csv(csv_file):
+    """
+    Reads csv file containing the ALlen Ontology and instantiates a BrainRegions object
+    :param csv_file:
+    :return: BrainRegions object
+    """
+    df_regions = pd.read_csv(csv_file)
+    # converts colors to RGB uint8 array
+    c = np.uint32(df_regions.color_hex_triplet.map(
+        lambda x: int(x, 16) if isinstance(x, str) else 256 ** 3 - 1))
+    c = np.flip(np.reshape(c.view(np.uint8), (df_regions.id.size, 4))[:, :3], 1)
+    # creates the BrainRegion instance
+    return BrainRegions(id=df_regions.id.values,
+                        name=df_regions.name.values,
+                        acronym=df_regions.acronym.values,
+                        rgb=c)

@@ -327,9 +327,9 @@ def create_alyx_probe_insertions(session_path: str,
         if len(alyx_insertion) == 0:
             alyx_insertion = one.alyx.rest('insertions', 'create', data=insdict)
         else:
-            eid = alyx_insertion[0]['url'][-36:]
+            iid = alyx_insertion[0]['id']
             if force:
-                alyx_insertion = one.alyx.rest('insertions', 'update', id=eid, data=insdict)
+                alyx_insertion = one.alyx.rest('insertions', 'update', id=iid, data=insdict)
             else:
                 alyx_insertion = alyx_insertion[0]
 

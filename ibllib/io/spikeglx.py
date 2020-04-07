@@ -37,19 +37,26 @@ class Reader:
         self.channel_conversion_sample2v = _conversion_sample2v_from_meta(self.meta)
         # if we are not looking at a compressed file, use a memmap, otherwise instantiate mtscomp
         if self.is_mtscomp:
-            self.data = mtscomp.Reader()
-            self.data.open(self.file_bin, self.file_bin.with_suffix('.ch'))
+            self._raw = mtscomp.Reader()
+            self._raw.open(self.file_bin, self.file_bin.with_suffix('.ch'))
         else:
             if self.nc * self.ns * 2 != self.nbytes:
                 _logger.warning(str(sglx_file) + " : meta data and filesize do not checkout")
-            self.data = np.memmap(sglx_file, dtype='int16', mode='r', shape=(self.ns, self.nc))
+            self._raw = np.memmap(sglx_file, dtype='int16', mode='r', shape=(self.ns, self.nc))
+
+    def __getitem__(self, item):
+        if isinstance(item, int) or isinstance(item, slice):
+            return self.read(nsel=item, sync=False)
+        elif len(item) == 2:
+            return self.read(nsel=item[0], csel=item[1], sync=False)
 
     @property
     def is_mtscomp(self):
-        return 'cbin' in self.file_bin.suffix and self.file_bin.with_suffix('.ch').exists()
+        return 'cbin' in self.file_bin.suffix
 
     @property
     def version(self):
+        """:return: """
         if not self.meta:
             return None
         return _get_neuropixel_version_from_meta(self.meta)
@@ -89,7 +96,7 @@ class Reader:
         :param slice_c: slice or channel indices
         :return: float32 array
         """
-        darray = np.float32(self.data[nsel, csel])
+        darray = np.float32(self._raw[nsel, csel])
         darray *= self.channel_conversion_sample2v[self.type][csel]
         if sync:
             return darray, self.read_sync(nsel)
@@ -118,7 +125,7 @@ class Reader:
         """
         if not self.meta:
             _logger.warning('Sync trace not labeled in metadata. Assuming last trace')
-        return split_sync(self.data[_slice, _get_sync_trace_indices_from_meta(self.meta)])
+        return split_sync(self._raw[_slice, _get_sync_trace_indices_from_meta(self.meta)])
 
     def read_sync_analog(self, _slice=slice(0, 10000)):
         """

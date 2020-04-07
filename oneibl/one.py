@@ -82,7 +82,8 @@ SEARCH_TERMS = {  # keynames are possible input arguments and values are actual 
     'location': 'location',
     'lab_location': 'location',
     'performance_lte': 'performance_lte',
-    'performance_gte': 'performance_gte'
+    'performance_gte': 'performance_gte',
+    'project': 'project',
 }
 
 

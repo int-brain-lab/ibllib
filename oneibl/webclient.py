@@ -91,7 +91,7 @@ def http_download_file(full_link_to_file, *, clobber=False, offline=False,
         cache_dir = str(Path.home().joinpath("Downloads"))
 
     # This is the local file name
-    file_name = cache_dir + os.sep + os.path.basename(full_link_to_file)
+    file_name = str(cache_dir) + os.sep + os.path.basename(full_link_to_file)
 
     # do not overwrite an existing file unless specified
     if not clobber and os.path.exists(file_name):
@@ -204,7 +204,7 @@ class AlyxClient:
 
     def _generic_request(self, reqfunction, rest_query, data=None):
         # if the data is a dictionary, it has to be converted to json text
-        if isinstance(data, dict):
+        if isinstance(data, dict) or isinstance(data, list):
             data = json.dumps(data)
         # makes sure the base url is the one from the instance
         rest_query = rest_query.replace(self._base_url, '')
@@ -272,6 +272,7 @@ class AlyxClient:
         :return: (dict/list) json interpreted dictionary from response
         """
         rep = self._generic_request(requests.get, rest_query)
+        _logger.debug(rest_query)
         if isinstance(rep, dict) and list(rep.keys()) == ['count', 'next', 'previous', 'results']:
             if len(rep['results']) < rep['count']:
                 rep = _PaginatedResponse(self, rep)
