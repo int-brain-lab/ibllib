@@ -14,19 +14,24 @@ import brainbox.io.one as bbone
 one = ONE()
 
 # --- Example session:
-# from sebastian:
-eid = 'aad23144-0e52-4eac-80c5-c4ee2decb198'
-#eid = 'da188f2c-553c-4e04-879b-c9ea2d1b9a93' # Test: 2 probes
+
+eid = 'aad23144-0e52-4eac-80c5-c4ee2decb198'  # from sebastian
+# eid = 'da188f2c-553c-4e04-879b-c9ea2d1b9a93' # Test: 2 probes
 
 # ----- RECOMMENDED ------
 # --- Get spikes and clusters data
 dic_spk_bunch, dic_clus = bbone.load_spike_sorting(eid, one=one)
 
 
-# -- Get brain regions
+# -- Get brain regions and assign to clusters
 channels = bbone.load_channel_locations(eid, one=one)
 probe_labels = list(channels.keys())  # Convert dict_keys into list
 
+for i_p in range(0, len(probe_labels)):
+    clu_ch = dic_clus[probe_labels[i_p]]['channels']
+    ch_acronym = channels[probe_labels[i_p]]['acronym']
+    assert max(clu_ch) <= len(ch_acronym)  # Check length as will use clu_ch as index
+    clu_acronym = ch_acronym[clu_ch]
 
 
 # TODO dict of bunch for several probes
