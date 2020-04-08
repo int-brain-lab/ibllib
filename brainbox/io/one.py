@@ -64,6 +64,11 @@ def load_channel_locations(eid, one=None, probe=None):
             'axial_um': np.array([ch['axial'] for ch in traj['channels']]),
             'lateral_um': np.array([ch['lateral'] for ch in traj['channels']])
         })
+
+        # Check that channels mapping matches coordinate on Flatiron
+        channel_coord = one.load_dataset(eid=eid, dataset_type='channels.localCoordinates')
+        assert np.all(np.c_[channels[label]['lateral_um'], channels[label]['axial_um']] == channel_coord)
+
     return channels
 
 

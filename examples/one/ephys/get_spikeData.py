@@ -11,7 +11,6 @@ from oneibl.one import ONE
 import brainbox.io.one as bbone
 
 one = ONE()
-one.load_object()
 
 # --- Example session:
 eid = 'aad23144-0e52-4eac-80c5-c4ee2decb198'  # Example: repeated site
