@@ -137,6 +137,7 @@ def load_spike_sorting(eid, one=None, dataset_types=None):
 def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
     '''
     Takes (default and any extra) values in given keys from channels and assign them to clusters.
+    If channels does not contain any data, the new keys are added to clusters but left empty.
     :param dic_clus: dict of bunch, 1 bunch per probe, containing cluster information
     :param channels: dict of bunch, 1 bunch per probe, containing channels information
     :param keys_to_add_extra: Any extra keys contained in channels (will be added to default
@@ -157,15 +158,15 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
 
         for i_k in range(0, len(keys_to_add)):
             key = keys_to_add[i_k]
-            assert key in channels[probe_labels[i_p]].keys()
+            assert key in channels[probe_labels[i_p]].keys()  # Check key is in channels
             ch_key = channels[probe_labels[i_p]][key]
 
-            if max(clu_ch) <= len(ch_key):  # Check length as will use clu_ch as index
+            if max(clu_ch) < len(ch_key):  # Check length as will use clu_ch as index
                 dic_clus[probe_labels[i_p]][key] = ch_key[clu_ch]
             else:
                 print(f'Channels in probe {probe_labels[i_p]} does not have'
-                      f'the right element number compared to cluster.'
-                      f'Data in new cluster key {key} is thus returned empty.')
+                      f' the right element number compared to cluster.'
+                      f' Data in new cluster key {key} is thus returned empty.')
                 dic_clus[probe_labels[i_p]][key] = []
 
     return dic_clus
