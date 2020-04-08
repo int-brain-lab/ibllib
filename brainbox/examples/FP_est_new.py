@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from phylib.stats import correlograms
 
-nSim = 100
+nSim = 1000
 binSize=0.25 #in ms
 b= np.arange(0,10.25,binSize)/1000 + 1e-6 #bins in seconds
 bTestIdx = [5, 6, 7, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40]
@@ -31,7 +31,7 @@ baseRates = np.logspace(-0.3,1.3,20)
 recDur = 3600
 
 rpvec=[.001,.0015,0.002,0.0025,0.003,0.004,0.005,0.0075,0.01] #true RPs in seconds 
-fig, axs = plt.subplots(1,len(rpvec), figsize=(15, 6), facecolor='w', edgecolor='k') #initialize subplots
+fig, axs = plt.subplots(1,len(rpvec), figsize=(25, 6), facecolor='w', edgecolor='k') #initialize subplots
 rpidx=0
 for rp in rpvec:
     #print(rpidx)  
@@ -78,15 +78,18 @@ for rp in rpvec:
         
         #print(rpidx)
         axs[rpidx].plot(contPct,passPct[baseidx,:],'o-',color=colors[baseidx],label=str(baseRates[baseidx]))
+
         #axs2[rpidx].plot(contPct,classicPassPct[baseidx,:],'o-',color=colors[baseidx],label=str(baseRates[baseidx]))
         # plt.plot(contPct,classicPassPct[])
         baseidx+=1
     print(np.mean(passPct[:,:]))    
     axs[rpidx].title.set_text('True RP is {}'.format(np.round(rp,4))) 
+    axs[0].set_ylabel('Percent accept (%)')
+    axs[rpidx].set_xlabel('Fraction contaminated')
     rpidx+=1
     print(time.time() - start_time)
 
-#fig.legend(bbox_to_anchor=(1.04,1), loc="upper left") 
+fig.legend(bbox_to_anchor=(1.04,1), loc="upper left") 
 plt.show()
 
 
