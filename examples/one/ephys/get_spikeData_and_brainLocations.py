@@ -1,38 +1,44 @@
 '''
-Get spikes data and associate brain regions for all probes in a single session via ONE and brainbox.
-TODO return dict of bunch via one.load_object and bbone.load_spike_sorting
-TODO clarify what loading method to use between the two
+Get spikes data and associate brain regions for all probes in a single session via
+ONE and brainbox.
+TODO return dict of bunch via one.load_object
 '''
 # Author: Gaelle Chapuis
 
-
-import alf.io as aio
-import brainbox as bb
+# import alf.io as aio
+# import brainbox as bb
 from oneibl.one import ONE
 import brainbox.io.one as bbone
 
 one = ONE()
 
 # --- Example session:
-# from sebastian:
-eid = 'aad23144-0e52-4eac-80c5-c4ee2decb198'
-#eid = 'da188f2c-553c-4e04-879b-c9ea2d1b9a93' # Test: 2 probes
+eid = 'aad23144-0e52-4eac-80c5-c4ee2decb198'  # Example: repeated site
 
-# ----- RECOMMENDED ------
-# --- Get spikes and clusters data
-dic_spk_bunch, dic_clus = bbone.load_spike_sorting(eid, one=one)
+# Test with eid that does not have any probe planned/histology values in Alyx
+# eid = 'da188f2c-553c-4e04-879b-c9ea2d1b9a93'
 
 
-# -- Get brain regions
+# ----- RECOMMENDED: Option 1 (default) ------
+# 1. Get spikes, cluster (with brain regions assigned to clusters) and channels
+spikes, clusters, channels = bbone.load_spike_sorting_with_channel(eid, one=one)
+del spikes, clusters, channels  # Delete for the purpose of the example
+
+# ---------------------------------------------
+# 2. Get only spikes and clusters (without brain regions assigned to clusters)
+#    data separately from channels
+#    Use merger function to get channels information into clusters
+#    Adding feature x, y from default
+spikes, clusters = bbone.load_spike_sorting(eid, one=one)
 channels = bbone.load_channel_locations(eid, one=one)
-probe_labels = list(channels.keys())  # Convert dict_keys into list
+keys = ['x', 'y']
+clusters_brain = bbone.merge_clusters_channels(clusters, channels, keys_to_add_extra=keys)
+del spikes, clusters, clusters_brain, channels  # Delete for the purpose of the example
 
 
+# ---------------- WIP ---------------------
 
-# TODO dict of bunch for several probes
-# TODO return only selected list of ds types if input arg is given (if none given, default)
-# TODO separate load_spike_sorting into underlying spikes / cluster object loading functions
-#  (now returns only spikes?)
+# TODO one.load_object(): return dict of bunch
 
 # --- Download spikes data
 # 1. either a specific subset of dataset types via the one command
