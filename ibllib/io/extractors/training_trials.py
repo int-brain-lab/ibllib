@@ -566,7 +566,7 @@ def get_response_times(session_path, save=False, data=False, settings=False):
 
     :param session_path: Absolute path of session folder
     :type session_path: str
-    :param save: wether to save the corresponding alf file
+    :param save: whether to save the corresponding alf file
                  to the alf folder, defaults to False
     :param save: bool, optional
     :return: numpy.ndarray

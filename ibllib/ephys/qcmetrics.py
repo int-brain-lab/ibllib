@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-from brainbox.behavior.wheel import traces_by_trial
+from brainbox.behavior.wheel import traces_by_trial, cm_to_rad
 import ibllib.ephys.bpodqc as bpodqc
 from ibllib.io.extractors.training_wheel import get_wheel_position
 from ibllib.ephys.oneutils import search_lab_ephys_sessions, _to_eid, random_ephys_session
@@ -104,6 +104,7 @@ def get_qcmetrics_frame(eid, data=None, pass_crit=False):
         ),  # (Point 5)
         "wheel_move_before_feedback": load_wheel_move_before_feedback(eid, data=data),  # (Point 6)
         "stimulus_move_before_goCue": load_stimulus_move_before_goCue(eid, data=data),  # (Point 7)
+        "wheel_move_during_closed_loop": load_wheel_move_during_closed_loop(eid, data=data),
         "positive_feedback_stimOff_delays": load_positive_feedback_stimOff_delays(
             eid, data=data
         ),  # (Point 8)
@@ -161,6 +162,9 @@ def get_qccriteria_frame(eid, data=None, pass_crit=True):
         "wheel_move_before_feedback": load_wheel_move_before_feedback(
             eid, data=data, pass_crit=True
         ),  # (Point 6)
+        "wheel_move_during_closed_loop": load_wheel_move_during_closed_loop(
+            eid, data=data, pass_crit=True
+        ),  
         "stimulus_move_before_goCue": load_stimulus_move_before_goCue(
             eid, data=data, pass_crit=True
         ),  # (Point 7)
@@ -303,32 +307,61 @@ def load_wheel_move_before_feedback(eid, data=None, pass_crit=False):
     # Load Bpod wheel data
     wheel_data = get_wheel_position(one.path_from_eid(eid))
     assert np.all(np.diff(wheel_data['re_ts']) > 0)
-    # The following seems more reasonable to me
     # Get tuple of wheel times and positions within 100ms of feedback
-    # traces = traces_by_trial(wheel_data['re_ts'], wheel_data['re_pos'],
-    #                          start=data['feedback_times'] - .05,
-    #                          end=data['feedback_times'] + .05)
-    # metric = np.zeros_like(data['feedback_times'])
-    # for i, trial in enumerate(traces):
-    #     pos = trial[1]
-    #     if pos.size > 1:
-    #         metric[i] = pos[-1] - pos[0]
-    # passed = metric != 0
-
-    # Get tuple of wheel times and positions over closed-loop period for each trial
     traces = traces_by_trial(wheel_data['re_ts'], wheel_data['re_pos'],
-                             start=data['goCue_times'],
-                             end=data['feedback_times'])
+                             start=data['feedback_times'] - .05,
+                             end=data['feedback_times'] + .05)
     metric = np.zeros_like(data['feedback_times'])
-    # For each trial find the distance moved
+    # For each trial find the displacement
     for i, trial in enumerate(traces):
         pos = trial[1]
         if pos.size > 1:
-            metric[i] = np.abs(pos.max() - pos.min())
-    metric = 180 * metric / np.pi  # convert to degrees
-    criterion = 2
+            metric[i] = pos[-1] - pos[0]
     metric = metric[~data["choice"] == 0]  # except no-go trials
-    passed = metric > criterion
+    passed = metric != 0
+    return np.mean(passed) if pass_crit else metric
+
+
+@bpod_data_loader
+def load_wheel_move_during_closed_loop(eid, data=None, pass_crit=False):
+    """ Wheel should move a sufficient amount during the closed-loop period
+    Variable name: wheel_move_during_closed_loop
+    Metric: abs(w_resp - w_t0) - threshold_displacement, where w_resp = position at response 
+      time, w_t0 = position at go cue time, threshold_displacement = displacement required to move 
+      35 visual degrees
+    Criterion: displacement < 1 visual degree for 99% of non-NoGo trials
+    """
+    # Load Bpod wheel data
+    wheel_data = get_wheel_position(one.path_from_eid(eid))
+    # Load gain and thresholds for each trial
+    task_data = one.load_object(eid, '_iblrig_taskData.raw')
+    trial_pars = np.array([(t['stim_gain'], t['position']) for t in task_data['raw']])
+    assert np.all(np.diff(wheel_data['re_ts']) > 0)
+
+    # Get tuple of wheel times and positions over each trial's closed-loop period
+    traces = traces_by_trial(wheel_data['re_ts'], wheel_data['re_pos'],
+                             start=data['goCueTrigger_times'],
+                             end=data['response_times'])
+
+    metric = np.zeros_like(data['feedback_times']) 
+    # For each trial find the absolute displacement
+    for i, trial in enumerate(traces):
+        t, pos = trial
+        # Find the position of the preceding sample and subtract it
+        origin = wheel_data['re_pos'][wheel_data['re_ts'] < t[0]][-1]
+        if pos.size > 0:
+            metric[i] = np.abs(pos - origin).max()
+
+    # trial_pars = (gain, threshold)
+    gain = trial_pars[:, 0]  # visual deg azimuth / mm, may change over session
+    thresh = trial_pars[:, 1]  # visual deg azimuth, should be constant
+    # abs displacement, s, in mm required to move 35 visual degrees
+    s_mm = np.abs(thresh / gain)  # don't care about direction
+    criterion = cm_to_rad(s_mm * 1e-1)  # convert abs displacement to radians (wheel pos is in rad)
+    metric = metric - criterion  # difference should be close to 0
+    metric = metric[~data["choice"] == 0]  # except no-go trials
+    rad_per_deg = cm_to_rad(1/gain * 1e-1)
+    passed = np.abs(metric) < rad_per_deg[~data["choice"] == 0]  # less that 1 visual degree off
     return np.mean(passed) if pass_crit else metric
 
 
