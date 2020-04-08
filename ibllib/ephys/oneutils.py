@@ -13,8 +13,17 @@ one = ONE()
 def _dl_raw_behavior(session_path, full=False, dry=False, force=False):
     """ Helper function to download raw behavioral data from session_path based functions
     """
-    dsts = [x for x in one.list(None, 'dataset_types') if '_iblrig_' in x]
-    min_dsts = ["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"]
+    dsts = [x for x in one.list(None, "dataset_types") if "_iblrig_" in x]
+    min_dsts = [
+        "_iblrig_taskData.raw",
+        "_iblrig_taskSettings.raw",
+        "_iblrig_stimPositionScreen.raw",
+        "_iblrig_syncSquareUpdate.raw",
+        "_iblrig_encoderEvents.raw",
+        "_iblrig_encoderPositions.raw",
+        "_iblrig_encoderTrialInfo.raw",
+        "_iblrig_ambientSensorData.raw",
+    ]
     session_path = Path(session_path)
     eid = one.eid_from_path(session_path)
 
@@ -46,6 +55,7 @@ def uuid_to_path(func=None, dl=False, full=False, dry=False, force=False):
             _dl_raw_behavior(session_path, full=full, dry=dry, force=force)
 
         return func(session_path, *args, **kwargs)
+
     return wrapper
 
 
@@ -86,11 +96,7 @@ def _to_eid(invar):
 
 
 def search_lab_ephys_sessions(
-    lab: str,
-    dstypes: list = [],
-    nlatest: int = 3,
-    det: bool = True,
-    check_download: bool = False
+    lab: str, dstypes: list = [], nlatest: int = 3, det: bool = True, check_download: bool = False
 ):
     ephys_sessions0, session_details0 = one.search(
         task_protocol="_iblrig_tasks_ephysChoiceWorld6.4.0",
@@ -113,7 +119,10 @@ def search_lab_ephys_sessions(
         print(f"No sessions found for {lab}")
         return
     if not check_download:
-        return ephys_sessions[:nlatest], session_details[:nlatest] if det else ephys_sessions[:nlatest]
+        return (
+            ephys_sessions[:nlatest],
+            session_details[:nlatest] if det else ephys_sessions[:nlatest],
+        )
     print(f"Processing {lab}")
     out_sessions = []
     out_details = []
@@ -155,7 +164,7 @@ def random_ephys_session(lab, complete=False):
 
 
 def random_lab():
-    labs = one.list(None, 'lab')
+    labs = one.list(None, "lab")
     return np.random.choice(labs)
 
 
@@ -167,8 +176,7 @@ if __name__ == "__main__":
         "start_time": "2020-01-22T10:50:59",
         "number": 1,
         "lab": "mainenlab",
-        "url":
-            "https://alyx.internationalbrainlab.org/sessions/259927fd-7563-4b03-bc5d-17b4d0fa7a55",
+        "url": "https://alyx.internationalbrainlab.org/sessions/259927fd-7563-4b03-bc5d-17b4d0fa7a55",
         "task_protocol": "_iblrig_tasks_ephysChoiceWorld6.2.5",
         "local_path": "/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_2240/2020-01-22/001",
     }
@@ -177,7 +185,7 @@ if __name__ == "__main__":
     print(is_uuid_string(random_ephys_session(lab, complete=False)[0]))
     print(is_details_dict(random_ephys_session(lab, complete=False)[1]))
     print(random_ephys_session(lab, complete=True) is None)
-    print(random_ephys_session('sakjdhka', complete=False) is None)
+    print(random_ephys_session("sakjdhka", complete=False) is None)
     # Test _to_eid
     # All == eid
     print(_to_eid(eid) == eid)
