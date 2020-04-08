@@ -64,16 +64,6 @@ def boxplot_metrics(eid, qcmetrics_frame=None):
     boxplots_from_df(df, describe=True)
 
 
-class SessionBehaviorMetrics(object):
-    def __init__(self, eid, from_one=False):
-        self.eid = eid
-        self.data = bpodqc.load_bpod_data(eid, fpga_time=from_one)
-        self.from_one = from_one
-
-    def compute_metrics(self):
-        return
-
-
 def bpod_data_loader(func):
     """ Checks if data is None loads eid data in case
     """
@@ -89,100 +79,126 @@ def bpod_data_loader(func):
 
 @bpod_data_loader
 def get_qcmetrics_frame(eid, data=None, pass_crit=False):
+    """Plottable metrics based on timings"""
     qcmetrics_frame = {
-        "goCue_delays": load_goCue_delays(eid, data=data),  # (Point 25)
-        "errorCue_delays": load_errorCue_delays(eid, data=data),  # (Point 26)
-        "stimOn_delays": load_stimOn_delays(eid, data=data),  # (Point 27)
-        "stimOff_delays": load_stimOff_delays(eid, data=data),  # (Point 28)
-        "stimFreeze_delays": load_stimFreeze_delays(eid, data=data),  # (Point 29)
-        "stimOn_goCue_delays": load_stimon_gocue_delays(eid, data=data),  # (Point 1)
-        "response_feedback_delays": load_response_feddback_delays(eid, data=data),  # (Point 2)
-        "response_stimFreeze_delays": load_response_stimFreeze_delays(eid, data=data),  # (Point 3)
-        "stimOff_itiIn_delays": load_stimOff_itiIn_delays(eid, data=data),  # (Point 4)
-        "wheel_freeze_during_quiescence": load_wheel_freeze_during_quiescence(
+        "_bpod_goCue_delays": load_goCue_delays(eid, data=data),  # (Point 25)
+        "_bpod_errorCue_delays": load_errorCue_delays(eid, data=data),  # (Point 26)
+        "_bpod_stimOn_delays": load_stimOn_delays(eid, data=data),  # (Point 27)
+        "_bpod_stimOff_delays": load_stimOff_delays(eid, data=data),  # (Point 28)
+        "_bpod_stimFreeze_delays": load_stimFreeze_delays(eid, data=data),  # (Point 29)
+        "_bpod_stimOn_goCue_delays": load_stimon_gocue_delays(eid, data=data),  # (Point 1)
+        "_bpod_response_feedback_delays": load_response_feddback_delays(
+            eid, data=data
+        ),  # (Point 2)
+        "_bpod_response_stimFreeze_delays": load_response_stimFreeze_delays(
+            eid, data=data
+        ),  # (Point 3)
+        "_bpod_stimOff_itiIn_delays": load_stimOff_itiIn_delays(eid, data=data),  # (Point 4)
+        "_bpod_wheel_freeze_during_quiescence": load_wheel_freeze_during_quiescence(
             eid, data=data
         ),  # (Point 5)
-        "wheel_move_before_feedback": load_wheel_move_before_feedback(eid, data=data),  # (Point 6)
-        "stimulus_move_before_goCue": load_stimulus_move_before_goCue(eid, data=data),  # (Point 7)
-        "wheel_move_during_closed_loop": load_wheel_move_during_closed_loop(eid, data=data),
-        "positive_feedback_stimOff_delays": load_positive_feedback_stimOff_delays(
+        "_bpod_wheel_move_before_feedback": load_wheel_move_before_feedback(
+            eid, data=data
+        ),  # (Point 6)
+        "_bpod_stimulus_move_before_goCue": load_stimulus_move_before_goCue(
+            eid, data=data
+        ),  # (Point 7)
+        "_bpod_wheel_move_during_closed_loop": load_wheel_move_during_closed_loop(eid, data=data),
+        "_bpod_positive_feedback_stimOff_delays": load_positive_feedback_stimOff_delays(
             eid, data=data
         ),  # (Point 8)
-        "negative_feedback_stimOff_delays": load_negative_feedback_stimOff_delays(
+        "_bpod_negative_feedback_stimOff_delays": load_negative_feedback_stimOff_delays(
             eid, data=data
         ),  # (Point 9)
-        "valve_pre_trial": load_valve_pre_trial(eid, data=data),  # (Point 11)
-        "audio_pre_trial": load_audio_pre_trial(eid, data=data),  # (Point 12)
-        "error_trial_event_sequence": load_error_trial_event_sequence(
+        "_bpod_valve_pre_trial": load_valve_pre_trial(eid, data=data),  # (Point 11)
+        "_bpod_audio_pre_trial": load_audio_pre_trial(eid, data=data),  # (Point 12)
+        "_bpod_error_trial_event_sequence": load_error_trial_event_sequence(
             eid, data=data
         ),  # (Point 13)
-        "correct_trial_event_sequence": load_correct_trial_event_sequence(
+        "_bpod_correct_trial_event_sequence": load_correct_trial_event_sequence(
             eid, data=data
         ),  # (Point 14)
-        "trial_length": load_trial_length(eid, data=data),  # (Point 15)
+        "_bpod_trial_length": load_trial_length(eid, data=data),  # (Point 15)
     }
     return qcmetrics_frame
 
 
 @bpod_data_loader
 def get_qccriteria_frame(eid, data=None, pass_crit=True):
+    """Full extended_qc_frame
+    (one value per metric as proportion of trial level criteria that passed)"""
     qccriteria_frame = {
-        "nDatasetTypes": load_nDatasetTypes(eid, data=data, pass_crit=True),  # (Point 17)
-        "intervals": load_intervals(eid, data=data, pass_crit=True),  # (Point 18)
-        "stimOnTrigger_times": load_stimOnTrigger_times(
+        "_one_nDatasetTypes": load_nDatasetTypes(eid, data=data, pass_crit=True),  # (Point 17)
+        "_one_intervals": load_intervals(eid, data=data, pass_crit=True),  # (Point 18)
+        "_one_intervals_count": None,
+        "_one_stimOnTrigger_times": load_stimOnTrigger_times(
             eid, data=data, pass_crit=True
         ),  # (Point 19)
-        "stimOn_times": load_stimOn_times(eid, data=data, pass_crit=True),  # (Point 20)
-        "goCueTrigger_times": load_goCueTrigger_times(
+        "_one_stimOnTrigger_times_count": None,
+        "_one_stimOn_times": load_stimOn_times(eid, data=data, pass_crit=True),  # (Point 20)
+        "_one_stimOn_times_count": None,
+        "_one_goCueTrigger_times": load_goCueTrigger_times(
             eid, data=data, pass_crit=True
         ),  # (Point 21)
-        "goCue_times": load_goCue_times(eid, data=data, pass_crit=True),  # (Point 22)
-        "response_times": load_response_times(eid, data=data, pass_crit=True),  # (Point 23)
-        "feedback_times": load_feedback_times(eid, data=data, pass_crit=True),  # (Point 24)
-        "goCue_delays": load_goCue_delays(eid, data=data, pass_crit=True),  # (Point 25)
-        "errorCue_delays": load_errorCue_delays(eid, data=data, pass_crit=True),  # (Point 26)
-        "stimOn_delays": load_stimOn_delays(eid, data=data, pass_crit=True),  # (Point 27)
-        "stimOff_delays": load_stimOff_delays(eid, data=data, pass_crit=True),  # (Point 28)
-        "stimFreeze_delays": load_stimFreeze_delays(eid, data=data, pass_crit=True),  # (Point 29)
-        "stimOn_goCue_delays": load_stimon_gocue_delays(
+        "_one_goCueTrigger_times_count": None,
+        "_one_goCue_times": load_goCue_times(eid, data=data, pass_crit=True),  # (Point 22)
+        "_one_goCue_times_count": None,
+        "_one_response_times": load_response_times(eid, data=data, pass_crit=True),  # (Point 23)
+        "_one_response_times_count": None,
+        "_one_feedback_times": load_feedback_times(eid, data=data, pass_crit=True),  # (Point 24)
+        "_one_feedback_times_count": None,
+        "_bpod_goCue_delays": load_goCue_delays(eid, data=data, pass_crit=True),  # (Point 25)
+        "_bpod_errorCue_delays": load_errorCue_delays(
+            eid, data=data, pass_crit=True
+        ),  # (Point 26)
+        "_bpod_stimOn_delays": load_stimOn_delays(eid, data=data, pass_crit=True),  # (Point 27)
+        "_bpod_stimOff_delays": load_stimOff_delays(eid, data=data, pass_crit=True),  # (Point 28)
+        "_bpod_stimFreeze_delays": load_stimFreeze_delays(
+            eid, data=data, pass_crit=True
+        ),  # (Point 29)
+        "_bpod_stimOn_goCue_delays": load_stimon_gocue_delays(
             eid, data=data, pass_crit=True
         ),  # (Point 1)
-        "response_feedback_delays": load_response_feddback_delays(
+        "_bpod_response_feedback_delays": load_response_feddback_delays(
             eid, data=data, pass_crit=True
         ),  # (Point 2)
-        "response_stimFreeze_delays": load_response_stimFreeze_delays(
+        "_bpod_response_stimFreeze_delays": load_response_stimFreeze_delays(
             eid, data=data, pass_crit=True
         ),  # (Point 3)
-        "stimOff_itiIn_delays": load_stimOff_itiIn_delays(
+        "_bpod_stimOff_itiIn_delays": load_stimOff_itiIn_delays(
             eid, data=data, pass_crit=True
         ),  # (Point 4)
-        "wheel_freeze_during_quiescence": load_wheel_freeze_during_quiescence(
+        "_bpod_wheel_freeze_during_quiescence": load_wheel_freeze_during_quiescence(
             eid, data=data, pass_crit=True
         ),  # (Point 5)
-        "wheel_move_before_feedback": load_wheel_move_before_feedback(
+        "_bpod_wheel_move_before_feedback": load_wheel_move_before_feedback(
             eid, data=data, pass_crit=True
         ),  # (Point 6)
-        "wheel_move_during_closed_loop": load_wheel_move_during_closed_loop(
+        "_bpod_wheel_move_during_closed_loop": load_wheel_move_during_closed_loop(
             eid, data=data, pass_crit=True
-        ),  
-        "stimulus_move_before_goCue": load_stimulus_move_before_goCue(
+        ),
+        "_bpod_stimulus_move_before_goCue": load_stimulus_move_before_goCue(
             eid, data=data, pass_crit=True
         ),  # (Point 7)
-        "positive_feedback_stimOff_delays": load_positive_feedback_stimOff_delays(
+        "_bpod_positive_feedback_stimOff_delays": load_positive_feedback_stimOff_delays(
             eid, data=data, pass_crit=True
         ),  # (Point 8)
-        "negative_feedback_stimOff_delays": load_negative_feedback_stimOff_delays(
+        "_bpod_negative_feedback_stimOff_delays": load_negative_feedback_stimOff_delays(
             eid, data=data, pass_crit=True
         ),  # (Point 9)
-        "valve_pre_trial": load_valve_pre_trial(eid, data=data, pass_crit=True),  # (Point 11)
-        "audio_pre_trial": load_audio_pre_trial(eid, data=data, pass_crit=True),  # (Point 12)
-        "error_trial_event_sequence": load_error_trial_event_sequence(
+        "_bpod_valve_pre_trial": load_valve_pre_trial(
+            eid, data=data, pass_crit=True
+        ),  # (Point 11)
+        "_bpod_audio_pre_trial": load_audio_pre_trial(
+            eid, data=data, pass_crit=True
+        ),  # (Point 12)
+        "_bpod_error_trial_event_sequence": load_error_trial_event_sequence(
             eid, data=data, pass_crit=True
         ),  # (Point 13)
-        "correct_trial_event_sequence": load_correct_trial_event_sequence(
+        "_bpod_correct_trial_event_sequence": load_correct_trial_event_sequence(
             eid, data=data, pass_crit=True
         ),  # (Point 14)
-        "trial_length": load_trial_length(eid, data=data, pass_crit=True),  # (Point 15)
+        "_bpod_trial_length": load_trial_length(eid, data=data, pass_crit=True),  # (Point 15)
     }
     return qccriteria_frame
 
@@ -266,16 +282,19 @@ def load_wheel_freeze_during_quiescence(eid, data=None, pass_crit=False):
     # Load Bpod wheel data
     wheel_data = get_wheel_position(one.path_from_eid(eid))
     # Load quiescent period lengths
-    task_data = one.load_object(eid, '_iblrig_taskData.raw')
-    quiescent_periods = np.array([t['quiescent_period'] for t in task_data['raw']])
-    assert np.all(np.diff(wheel_data['re_ts']) > 0)
-    assert quiescent_periods.size == data['goCueTrigger_times'].size
+    task_data = one.load_object(eid, "_iblrig_taskData.raw")
+    quiescent_periods = np.array([t["quiescent_period"] for t in task_data["raw"]])
+    assert np.all(np.diff(wheel_data["re_ts"]) > 0)
+    assert quiescent_periods.size == data["goCueTrigger_times"].size
     # Get tuple of wheel times and positions over each trial's quiescence period
-    qevt_start_times = data['goCueTrigger_times'] - quiescent_periods
-    traces = traces_by_trial(wheel_data['re_ts'], wheel_data['re_pos'],
-                             start=qevt_start_times,
-                             end=data['goCueTrigger_times'])
-    
+    qevt_start_times = data["goCueTrigger_times"] - quiescent_periods
+    traces = traces_by_trial(
+        wheel_data["re_ts"],
+        wheel_data["re_pos"],
+        start=qevt_start_times,
+        end=data["goCueTrigger_times"],
+    )
+
     # metric = np.zeros_like(quiescent_periods)
     # for i, trial in enumerate(traces):
     #     pos = trial[1]
@@ -288,7 +307,7 @@ def load_wheel_freeze_during_quiescence(eid, data=None, pass_crit=False):
         # Get the last position before the period began
         if pos.size > 1:
             # Find the position of the preceding sample and subtract it
-            origin = wheel_data['re_pos'][wheel_data['re_ts'] < t[0]][-1]
+            origin = wheel_data["re_pos"][wheel_data["re_ts"] < t[0]][-1]
             # Find the absolute min and max relative to the last sample
             metric[i, :] = np.abs([np.min(pos - origin), np.max(pos - origin)])
     metric = 180 * metric / np.pi  # convert to degrees from radians
@@ -306,12 +325,15 @@ def load_wheel_move_before_feedback(eid, data=None, pass_crit=False):
     """
     # Load Bpod wheel data
     wheel_data = get_wheel_position(one.path_from_eid(eid))
-    assert np.all(np.diff(wheel_data['re_ts']) > 0)
+    assert np.all(np.diff(wheel_data["re_ts"]) > 0)
     # Get tuple of wheel times and positions within 100ms of feedback
-    traces = traces_by_trial(wheel_data['re_ts'], wheel_data['re_pos'],
-                             start=data['feedback_times'] - .05,
-                             end=data['feedback_times'] + .05)
-    metric = np.zeros_like(data['feedback_times'])
+    traces = traces_by_trial(
+        wheel_data["re_ts"],
+        wheel_data["re_pos"],
+        start=data["feedback_times"] - 0.05,
+        end=data["feedback_times"] + 0.05,
+    )
+    metric = np.zeros_like(data["feedback_times"])
     # For each trial find the displacement
     for i, trial in enumerate(traces):
         pos = trial[1]
@@ -326,29 +348,32 @@ def load_wheel_move_before_feedback(eid, data=None, pass_crit=False):
 def load_wheel_move_during_closed_loop(eid, data=None, pass_crit=False):
     """ Wheel should move a sufficient amount during the closed-loop period
     Variable name: wheel_move_during_closed_loop
-    Metric: abs(w_resp - w_t0) - threshold_displacement, where w_resp = position at response 
-      time, w_t0 = position at go cue time, threshold_displacement = displacement required to move 
+    Metric: abs(w_resp - w_t0) - threshold_displacement, where w_resp = position at response
+      time, w_t0 = position at go cue time, threshold_displacement = displacement required to move
       35 visual degrees
     Criterion: displacement < 1 visual degree for 99% of non-NoGo trials
     """
     # Load Bpod wheel data
     wheel_data = get_wheel_position(one.path_from_eid(eid))
     # Load gain and thresholds for each trial
-    task_data = one.load_object(eid, '_iblrig_taskData.raw')
-    trial_pars = np.array([(t['stim_gain'], t['position']) for t in task_data['raw']])
-    assert np.all(np.diff(wheel_data['re_ts']) > 0)
+    task_data = one.load_object(eid, "_iblrig_taskData.raw")
+    trial_pars = np.array([(t["stim_gain"], t["position"]) for t in task_data["raw"]])
+    assert np.all(np.diff(wheel_data["re_ts"]) > 0)
 
     # Get tuple of wheel times and positions over each trial's closed-loop period
-    traces = traces_by_trial(wheel_data['re_ts'], wheel_data['re_pos'],
-                             start=data['goCueTrigger_times'],
-                             end=data['response_times'])
+    traces = traces_by_trial(
+        wheel_data["re_ts"],
+        wheel_data["re_pos"],
+        start=data["goCueTrigger_times"],
+        end=data["response_times"],
+    )
 
-    metric = np.zeros_like(data['feedback_times']) 
+    metric = np.zeros_like(data["feedback_times"])
     # For each trial find the absolute displacement
     for i, trial in enumerate(traces):
         t, pos = trial
         # Find the position of the preceding sample and subtract it
-        origin = wheel_data['re_pos'][wheel_data['re_ts'] < t[0]][-1]
+        origin = wheel_data["re_pos"][wheel_data["re_ts"] < t[0]][-1]
         if pos.size > 0:
             metric[i] = np.abs(pos - origin).max()
 
@@ -360,7 +385,7 @@ def load_wheel_move_during_closed_loop(eid, data=None, pass_crit=False):
     criterion = cm_to_rad(s_mm * 1e-1)  # convert abs displacement to radians (wheel pos is in rad)
     metric = metric - criterion  # difference should be close to 0
     metric = metric[~data["choice"] == 0]  # except no-go trials
-    rad_per_deg = cm_to_rad(1/gain * 1e-1)
+    rad_per_deg = cm_to_rad(1 / gain * 1e-1)
     passed = np.abs(metric) < rad_per_deg[~data["choice"] == 0]  # less that 1 visual degree off
     return np.mean(passed) if pass_crit else metric
 
@@ -666,6 +691,24 @@ def load_feedback_times(eid, data=None, pass_crit=False):
     if dset is not None:
         return len(dset) / len(data["intervals_0"])
     return
+
+
+class SessionBehaviorMetrics(object):
+    def __init__(self, eid):
+        self.eid = eid
+        self.data = bpodqc.load_bpod_data(eid, fpga_time=False)
+
+    def compute_metrics(self):
+        return
+
+    def apply_criteria(self):
+        pass
+
+    def get_extended_qc_frame(self):
+        pass
+
+    def patch_alyx_extended_qc(self, frame):
+        pass
 
 
 if __name__ == "__main__":
