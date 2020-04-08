@@ -32,7 +32,7 @@ def load_channel_locations(eid, one=None, probe=None):
     analysis.
     :param eid: session eid or dictionary returned by one.alyx.rest('sessions', 'read', id=eid)
     :param dataset_types: additional spikes/clusters objects to add to the standard list
-    :return:
+    :return: channels
     """
     if isinstance(eid, dict):
         ses = eid
@@ -87,7 +87,7 @@ def load_spike_sorting(eid, one=None, dataset_types=None):
     :param eid:
     :param one:
     :param dataset_types: additional spikes/clusters objects to add to the standard default list
-    :return:
+    :return: spikes, clusters (dict of bunch, 1 bunch per probe)
     """
     if not one:
         one = ONE()
@@ -135,6 +135,14 @@ def load_spike_sorting(eid, one=None, dataset_types=None):
 
 
 def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
+    '''
+    Takes (default and any extra) values in given keys from channels and assign them to clusters.
+    :param dic_clus: dict of bunch, 1 bunch per probe, containing cluster information
+    :param channels: dict of bunch, 1 bunch per probe, containing channels information
+    :param keys_to_add_extra: Any extra keys contained in channels (will be added to default
+    ['acronym', 'atlas_id'])
+    :return: clusters (dict of bunch, 1 bunch per probe), with new keys values.
+    '''
     probe_labels = list(channels.keys())  # Convert dict_keys into list
     keys_to_add_default = ['acronym', 'atlas_id']
 
@@ -164,6 +172,13 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
 
 
 def load_spike_sorting_with_channel(eid, one=None):
+    '''
+    For a given eid, get spikes, clusters and channels information, and merges clusters
+    and channels information before returning all three variables.
+    :param eid:
+    :param one:
+    :return: spikes, clusters, channels (dict of bunch, 1 bunch per probe)
+    '''
     # --- Get spikes and clusters data
     dic_spk_bunch, dic_clus = load_spike_sorting(eid, one=one)
 
