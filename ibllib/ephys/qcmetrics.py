@@ -6,7 +6,9 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
+from brainbox.behavior.wheel import traces_by_trial
 import ibllib.ephys.bpodqc as bpodqc
+from ibllib.io.extractors.training_wheel import get_wheel_position
 from ibllib.ephys.oneutils import search_lab_ephys_sessions, _to_eid, random_ephys_session
 from oneibl.one import ONE
 from alf.io import is_details_dict
@@ -253,11 +255,42 @@ def load_wheel_freeze_during_quiescence(eid, data=None, pass_crit=False):
     """ 5. Wheel should not move more than 2 ticks each direction for at least 0.2 + 0.2-0.6
     amount of time (quiescent period; exact value in bpod['quiescence']) before go cue
     Variable name: wheel_freeze_during_quiescence
-    Metric: max(abs( w(t) - w_start )) over interval
+    Metric: abs(min(W - w_t0), max(W - w_t0)) where W is wheel pos over interval
     interval = [quiescent_end_time-quiescent_duration+0.02, quiescent_end_time]
-    Criterion: <2 ticks for 99% of trials
+    Criterion: <2 degrees for 99% of trials
     """
-    return
+    # Load Bpod wheel data
+    wheel_data = get_wheel_position(one.path_from_eid(eid))
+    # Load quiescent period lengths
+    task_data = one.load_object(eid, '_iblrig_taskData.raw')
+    quiescent_periods = np.array([t['quiescent_period'] for t in task_data['raw']])
+    assert np.all(np.diff(wheel_data['re_ts']) > 0)
+    assert quiescent_periods.size == data['goCueTrigger_times'].size
+    # Get tuple of wheel times and positions over each trial's quiescence period
+    qevt_start_times = data['goCueTrigger_times'] - quiescent_periods
+    traces = traces_by_trial(wheel_data['re_ts'], wheel_data['re_pos'],
+                             start=qevt_start_times,
+                             end=data['goCueTrigger_times'])
+    
+    # metric = np.zeros_like(quiescent_periods)
+    # for i, trial in enumerate(traces):
+    #     pos = trial[1]
+    #     if pos.size > 1:
+    #         metric[i] = np.abs(pos.max() - pos.min())
+    # -OR-
+    metric = np.zeros((len(quiescent_periods), 2))  # (n_trials, n_directions)
+    for i, trial in enumerate(traces):
+        t, pos = trial
+        # Get the last position before the period began
+        if pos.size > 1:
+            # Find the position of the preceding sample and subtract it
+            origin = wheel_data['re_pos'][wheel_data['re_ts'] < t[0]][-1]
+            # Find the absolute min and max relative to the last sample
+            metric[i, :] = np.abs([np.min(pos - origin), np.max(pos - origin)])
+    metric = 180 * metric / np.pi  # convert to degrees from radians
+    criterion = 2  # Position shouldn't change more than 2 in either direction
+    passed = np.all(metric < criterion, axis=1)
+    return np.mean(passed) if pass_crit else metric
 
 
 @bpod_data_loader
@@ -265,9 +298,38 @@ def load_wheel_move_before_feedback(eid, data=None, pass_crit=False):
     """ 6. Wheel should move before feedback
     Variable name: wheel_move_before_feedback
     Metric: max(abs( w(t) - w_start )) over interval [gocue_time, feedback_time]
-    Criterion: >2 ticks for 99% of non-NoGo trials
+    Criterion: >2 degrees for 99% of non-NoGo trials
     """
-    return
+    # Load Bpod wheel data
+    wheel_data = get_wheel_position(one.path_from_eid(eid))
+    assert np.all(np.diff(wheel_data['re_ts']) > 0)
+    # The following seems more reasonable to me
+    # Get tuple of wheel times and positions within 100ms of feedback
+    # traces = traces_by_trial(wheel_data['re_ts'], wheel_data['re_pos'],
+    #                          start=data['feedback_times'] - .05,
+    #                          end=data['feedback_times'] + .05)
+    # metric = np.zeros_like(data['feedback_times'])
+    # for i, trial in enumerate(traces):
+    #     pos = trial[1]
+    #     if pos.size > 1:
+    #         metric[i] = pos[-1] - pos[0]
+    # passed = metric != 0
+
+    # Get tuple of wheel times and positions over closed-loop period for each trial
+    traces = traces_by_trial(wheel_data['re_ts'], wheel_data['re_pos'],
+                             start=data['goCue_times'],
+                             end=data['feedback_times'])
+    metric = np.zeros_like(data['feedback_times'])
+    # For each trial find the distance moved
+    for i, trial in enumerate(traces):
+        pos = trial[1]
+        if pos.size > 1:
+            metric[i] = np.abs(pos.max() - pos.min())
+    metric = 180 * metric / np.pi  # convert to degrees
+    criterion = 2
+    metric = metric[~data["choice"] == 0]  # except no-go trials
+    passed = metric > criterion
+    return np.mean(passed) if pass_crit else metric
 
 
 @bpod_data_loader
