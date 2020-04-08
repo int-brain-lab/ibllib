@@ -1,0 +1,42 @@
+# Author: Olivier
+from mayavi import mlab
+
+from atlaselectrophysiology import rendering
+import ibllib.atlas as atlas
+from oneibl.one import ONE
+
+one = ONE(base_url="https://alyx.internationalbrainlab.org")
+
+
+fig = rendering.figure()
+subject = 'KS003'
+trajs = one.alyx.rest('trajectories', 'list', subject=subject)
+
+ba_allen = atlas.AllenAtlas(25)
+ba_needles = atlas.NeedlesAtlas(25)
+
+
+plt_trj = []
+for index, trj in enumerate(trajs):
+    if trj['coordinate_system'] == 'IBL-Allen':
+        brain_atlas = ba_allen
+    elif trj['coordinate_system'] == 'Needles-Allen':
+        brain_atlas = ba_needles
+    ins = atlas.Insertion.from_dict(trj, brain_atlas=brain_atlas)
+    ins = atlas.Insertion.from_dict(trj, brain_atlas=ba_allen)
+    mlapdv = brain_atlas.bc.xyz2i(ins.xyz) * 25.0
+    if trj['provenance'] == 'Micro-manipulator':
+        color = (0., 1., 0.)
+    elif trj['provenance'] == 'Histology track':
+        color = (1., 0., 0.)
+    elif trj['provenance'] == 'Planned':
+        color = (0., 0., 1.)
+
+    lab = f"{trj['session']['subject']}/{trj['session']['start_time'][:10]}/" \
+          f"{str(trj['session']['number']).zfill(3)}"
+    plt = mlab.plot3d(mlapdv[:, 1], mlapdv[:, 2], mlapdv[:, 0],
+                      line_width=3, color=color, tube_radius=20)
+    # setup the labels at the top of the trajectories
+    mlab.text3d(mlapdv[0, 1], mlapdv[0, 2], mlapdv[0, 0] - 500, lab,
+                line_width=4, color=tuple(color), figure=fig, scale=150)
+    plt_trj.append(plt)

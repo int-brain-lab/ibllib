@@ -12,4 +12,3 @@ exclude =
     build,
     dist,
     brainbox/examples/
-    examples

@@ -29,10 +29,10 @@ _logger = logging.getLogger('ibllib')
 
 # Edit so as to reflect the directory containing your electrode tracks
 path_tracks = "/Users/gaelle/Downloads/electrodetracks_lic3"
-path_tracks = "/datadisk/GoogleDrive/TeamDrives/olivier.winter@internationalbrainlab.org/WG-Histology/Tracks/00_to_add"
+path_tracks = "/datadisk/GoogleDrive/TeamDrives/olivier.winter@internation" \
+              "albrainlab.org/WG-Histology/Tracks/00_to_add"
 ALYX_URL = "https://dev.alyx.internationalbrainlab.org"  # FOR TESTING
 ALYX_URL = "https://alyx.internationalbrainlab.org"  # UNCOMMENT WHEN READY
-
 
 # ======== DO NOT EDIT BELOW ====
 # ALYX_URL = "http://localhost:8000"
@@ -48,7 +48,7 @@ def parse_filename(track_file):
     tmp = track_file.name.split('_')
     inumber = [i for i, s in enumerate(tmp) if s.isdigit and len(s) == 3][-1]
     search_filter = {'date': tmp[0], 'experiment_number': int(tmp[inumber]),
-                     'name': '_'.join(tmp[inumber+1:-1]),
+                     'name': '_'.join(tmp[inumber + 1:- 1]),
                      'subject': '_'.join(tmp[1:inumber])}
     return search_filter
 
@@ -88,8 +88,8 @@ for ii, track_file in enumerate(track_files):
 def test_filename_parser():
     tdata = [
         {'input': Path("/gna/electrode_tracks_SWC_014/2019-12-12_SWC_014_001_probe01_fit.csv"),
-          'output': {'date': '2019-12-12', 'experiment_number': 1, 'name': 'probe01',
-                     'subject': 'SWC_014'}},
+         'output': {'date': '2019-12-12', 'experiment_number': 1, 'name': 'probe01',
+                    'subject': 'SWC_014'}},
         {'input': Path("/gna/datadisk/Data/Histology/"
                        "tracks/ZM_2407/2019-11-06_ZM_2407_001_probe_00_pts.csv"),
          'output': {'date': '2019-11-06', 'experiment_number': 1, 'name': 'probe_00',
@@ -97,7 +97,7 @@ def test_filename_parser():
         {'input': Path("/gna/2019-12-06_KS023_001_probe01_pts.csv"),
          'output': {'date': '2019-12-06', 'experiment_number': 1, 'name': 'probe01',
                     'subject': 'KS023'}},
-        ]
+    ]
     for t in tdata:
         track_file = t['input']
         assert t['output'] == parse_filename(track_file)

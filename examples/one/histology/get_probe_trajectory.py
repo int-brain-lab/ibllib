@@ -18,4 +18,3 @@ trajs = one.alyx.rest('trajectories', 'list', session=eid, provenance='micro-man
 
 # Transform into list for analysis
 trajs = list(trajs)
-

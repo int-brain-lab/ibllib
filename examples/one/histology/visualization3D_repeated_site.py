@@ -1,3 +1,4 @@
+# Author: Olivier
 from pathlib import Path
 import pickle
 
@@ -28,7 +29,7 @@ if file_pickle.exists() or False:
 else:
     one = ONE()
     ins = Bunch({'eid': eids, 'probe_label': probes,
-                 'insertion': [], 'channels': [], 'session':[]})
+                 'insertion': [], 'channels': [], 'session': []})
     for eid, probe_label in zip(ins.eid, ins.probe_label):
         traj = one.alyx.rest('trajectories', 'list', session=eid,
                              provenance='Histology track', probe=probe_label)[0]
@@ -45,16 +46,16 @@ fig = rendering.figure(grid=False)  # set grid=True for ugly axes
 for m in np.arange(len(ins.eid)):
     print(ins.session[m]['subject'], ins.session[m]['start_time'][:10],
           ins.session[m]['number'], ins.probe_label[m])
-    color =  rendering.color_cycle(m)
+    color = rendering.color_cycle(m)
     mlapdv = brain_atlas.xyz2ccf(ins.insertion[m].xyz)
     # display the trajectories
     mlab.plot3d(mlapdv[:, 1], mlapdv[:, 2], mlapdv[:, 0],
-                      line_width=1, tube_radius=10, color=color)
+                line_width=1, tube_radius=10, color=color)
     xyz_channels = np.c_[ins.channels[m].x, ins.channels[m].y, ins.channels[m].z]
     mlapdv_channels = brain_atlas.xyz2ccf(xyz_channels)
     # display the channels locations
     mlab.points3d(mlapdv_channels[:, 1], mlapdv_channels[:, 2], mlapdv_channels[:, 0],
                   color=color, scale_factor=50)
     # setup the labels at the top of the trajectories
-    mlab.text3d(mlapdv[0, 1], mlapdv[0, 2], mlapdv[0, 0] - 500,  ins.session[m]['subject'],
+    mlab.text3d(mlapdv[0, 1], mlapdv[0, 2], mlapdv[0, 0] - 500, ins.session[m]['subject'],
                 line_width=4, color=tuple(color), figure=fig, scale=150)
