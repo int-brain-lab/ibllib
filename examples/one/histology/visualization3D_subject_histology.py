@@ -1,4 +1,5 @@
 # Author: Olivier
+# run "%qui qt" magic command from Ipython prompt for interactive mode
 from mayavi import mlab
 
 from atlaselectrophysiology import rendering
