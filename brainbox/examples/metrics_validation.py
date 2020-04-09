@@ -8,7 +8,10 @@ Created on Sun Apr  5 22:15:28 2020
 #compare labels
 
 import pandas as pd
+from pathlib import Path
+import numpy as np
 
+ks_dir = r'C:\Users\Steinmetz Lab User\Documents\Lab\SpikeSortingOutput\Hopkins_CortexLab'
 
 #load metrics labels
 labelsdf = pd.read_csv(Path(ks_dir,'label.tsv'),sep='\t')
@@ -24,19 +27,6 @@ rfp = rfpv['RefPViol']
 ks2df = pd.read_csv(Path(ks_dir,'cluster_group.tsv'),sep='\t')
 k = ks2df['group']
 kind = ks2df['cluster_id']
-
-
-# gg=np.intersect1d(np.where(k=='good'),np.where(l==1))
-# gb = np.intersect1d(np.where(k=='good'),np.where(l==0))
-# bg= np.intersect1d(np.where(k!='good'),np.where(l==1))
-# bb=np.intersect1d(np.where(k!='good'),np.where(l==0))
-
-
-
-# lind_kgood = l[np.where(k=='good')[0]]
-# lind_kbad = l[np.where(k=='bad')[0]]
-
-# gg =lind
 
 
 xg=kind[np.where(k=='good')[0]] #second column of this is cluster ids that are good
