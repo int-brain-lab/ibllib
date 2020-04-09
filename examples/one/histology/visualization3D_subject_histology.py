@@ -1,4 +1,5 @@
 # Author: Olivier
+# environment installation guide https://github.com/int-brain-lab/iblenv
 # run "%qui qt" magic command from Ipython prompt for interactive mode
 from mayavi import mlab
 
@@ -16,7 +17,6 @@ trajs = one.alyx.rest('trajectories', 'list', subject=subject)
 ba_allen = atlas.AllenAtlas(25)
 ba_needles = atlas.NeedlesAtlas(25)
 
-
 plt_trj = []
 for index, trj in enumerate(trajs):
     if trj['coordinate_system'] == 'IBL-Allen':
@@ -25,7 +25,8 @@ for index, trj in enumerate(trajs):
         brain_atlas = ba_needles
     ins = atlas.Insertion.from_dict(trj, brain_atlas=brain_atlas)
     ins = atlas.Insertion.from_dict(trj, brain_atlas=ba_allen)
-    mlapdv = brain_atlas.bc.xyz2i(ins.xyz) * 25.0
+
+    mlapdv = brain_atlas.xyz2ccf(ins.xyz)
     if trj['provenance'] == 'Micro-manipulator':
         color = (0., 1., 0.)
     elif trj['provenance'] == 'Histology track':

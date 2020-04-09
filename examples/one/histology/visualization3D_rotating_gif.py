@@ -1,5 +1,7 @@
 # Author: Olivier
+# environment installation guide https://github.com/int-brain-lab/iblenv
 # run "%qui qt" magic command from Ipython prompt for interactive mode
+
 import pandas as pd
 from mayavi import mlab
 from atlaselectrophysiology import rendering
