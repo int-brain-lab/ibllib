@@ -96,7 +96,7 @@ def get_qcmetrics_frame(eid, data=None, pass_crit=False):
         "stimOff_delays": load_stimOff_delays(eid, data=data),  # (Point 28)
         "stimFreeze_delays": load_stimFreeze_delays(eid, data=data),  # (Point 29)
         "stimOn_goCue_delays": load_stimon_gocue_delays(eid, data=data),  # (Point 1)
-        "response_feedback_delays": load_response_feddback_delays(eid, data=data),  # (Point 2)
+        "response_feedback_delays": load_response_feedback_delays(eid, data=data),  # (Point 2)
         "response_stimFreeze_delays": load_response_stimFreeze_delays(eid, data=data),  # (Point 3)
         "stimOff_itiIn_delays": load_stimOff_itiIn_delays(eid, data=data),  # (Point 4)
         "wheel_freeze_during_quiescence": load_wheel_freeze_during_quiescence(
@@ -147,7 +147,7 @@ def get_qccriteria_frame(eid, data=None, pass_crit=True):
         "stimOn_goCue_delays": load_stimon_gocue_delays(
             eid, data=data, pass_crit=True
         ),  # (Point 1)
-        "response_feedback_delays": load_response_feddback_delays(
+        "response_feedback_delays": load_response_feedback_delays(
             eid, data=data, pass_crit=True
         ),  # (Point 2)
         "response_stimFreeze_delays": load_response_stimFreeze_delays(
@@ -201,7 +201,7 @@ def load_stimon_gocue_delays(eid, data=None, pass_crit=False):
 
 
 @bpod_data_loader
-def load_response_feddback_delays(eid, data=None, pass_crit=False):
+def load_response_feedback_delays(eid, data=None, pass_crit=False):
     """ 2. response_time and feedback_time
     Variable name: response_feedback_delays
     Metric: Feedback_time - response_time
@@ -299,10 +299,10 @@ def load_wheel_freeze_during_quiescence(eid, data=None, pass_crit=False):
 
 @bpod_data_loader
 def load_wheel_move_before_feedback(eid, data=None, pass_crit=False):
-    """ 6. Wheel should move before feedback
+    """ 6. Wheel should move within 100ms of feedback
     Variable name: wheel_move_before_feedback
-    Metric: max(abs( w(t) - w_start )) over interval [gocue_time, feedback_time]
-    Criterion: >2 degrees for 99% of non-NoGo trials
+    Metric: (w_t - 0.05) - (w_t + 0.05) where t = feedback_time
+    Criterion: != 0 for 99% of non-NoGo trials
     """
     # Load Bpod wheel data
     wheel_data = get_wheel_position(one.path_from_eid(eid))
