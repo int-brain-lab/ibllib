@@ -2,7 +2,6 @@
 Set of functions to handle wheel data
 """
 import numpy as np
-import numba
 from numpy import pi
 import scipy.interpolate as interpolate
 from scipy.signal import convolve, gaussian
