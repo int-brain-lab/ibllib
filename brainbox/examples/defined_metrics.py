@@ -47,24 +47,40 @@ def FP_RP(ts):
     return didpass
     
     
-def noise_cutoff(amps,quartile_length=.25,std_cutoff = 2):
+def noise_cutoff(amps,quartile_length=.25):
         nbins = 500
-        if(len(amps)>0):
+        end_low=1
+        if(len(amps)>1):
             bins_list= np.linspace(0, np.max(amps), nbins)
             n,bins = np.histogram(amps,bins = bins_list) 
             dx = np.diff(n) 
             idx_nz = np.nonzero(dx) #indices of nonzeros
             length_nonzeros = idx_nz[0][-1]-idx_nz[0][0] #length of the entire stretch, from first nonzero to last nonzero
             high_quartile = 1-quartile_length
-            high_quartile_start_ind = int(np.ceil(high_quartile*(length_nonzeros)))
-            high_quartile_end_ind = idx_nz[0][-1]
-            mean_high_quartile = np.mean(dx[high_quartile_start_ind:high_quartile_end_ind])
-            std_high_quartile = np.std(dx[high_quartile_start_ind:high_quartile_end_ind])
-            first_low_quartile = dx[idx_nz[0][0]]
-            within_2stds = first_low_quartile<mean_high_quartile + std_cutoff*std_high_quartile or first_low_quartile<mean_high_quartile - std_cutoff*std_high_quartile
-            cutoff = 0 if within_2stds else 1
+            # high_quartile_start_ind = int(np.ceil(high_quartile*(length_nonzeros)))+idx_nz[0][0]
+            # high_quartile_end_ind = idx_nz[0][-1]
+            # mean_high_quartile = np.mean(n[high_quartile_start_ind:high_quartile_end_ind])
+            # std_high_quartile = np.std(n[high_quartile_start_ind:high_quartile_end_ind])
+            
+            idx_peak = np.argmax(n)
+            length_top_half = idx_nz[0][-1]-idx_peak
+            high_quartile = 1-(2*quartile_length)
+            
+            high_quartile_start_ind = int(np.ceil(high_quartile*length_top_half + idx_peak))
+            xx=idx_nz[0][idx_nz[0]>high_quartile_start_ind]
+            mean_high_quartile = np.mean(n[xx])
+            std_high_quartile = np.std(n[xx])
+                        
+            
+            first_low_quartile = (n[idx_nz[0][1]])
+            # within_2stds = first_low_quartile<mean_high_quartile + std_cutoff*std_high_quartile or first_low_quartile<mean_high_quartile - std_cutoff*std_high_quartile
+            # cutoff = 0 if within_2stds else 1
+            if std_high_quartile>0:
+                cutoff=(first_low_quartile-mean_high_quartile)/std_high_quartile
+            else:
+                cutoff=np.float64(np.nan)
         else:
-            cutoff=1
+            cutoff=np.float64(np.nan)
         return cutoff 
     
     

@@ -53,7 +53,7 @@ def gen_metrics_labels(eid,probe_name):
         RefPViol[int(unit)] = FP_RP(ts)
         NoiseCutoff[int(unit)] = noise_cutoff(amps,quartile_length=.25,std_cutoff = 2)
         
-        if (FP_RP(ts) and not noise_cutoff(amps,quartile_length=.25,std_cutoff = 2)) : #to do: add and mean(amps)>50microvolts?
+        if (FP_RP(ts) and noise_cutoff(amps,quartile_length=.25,std_cutoff = 2)<10) : #to do: add and mean(amps)>50microvolts?
             label[int(unit)] = 1
         else:
             label[int(unit)] = 0

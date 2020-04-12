@@ -57,7 +57,6 @@ print("number of both bad = ", len(interb0))
 
 #if mismatch, why?
 rfpval = rfpv['RefPViol'].tolist()
-rfpval[interg0]
 np.array(rfpval)[interg0.astype(int)]
 
 np.array(nc)[interg0.astype(int)]
@@ -66,3 +65,62 @@ np.array(nc)[interg0.astype(int)]
 #last cluster id for which tehre is a ks2/nick label is 954 (this is ind 542. )
 #then ind 543-647 correspond to 967 to 1209. those are missing!
 
+
+
+#check specific units
+import time
+import os
+from oneibl.one import ONE
+from pathlib import Path
+import numpy as np
+import alf.io as aio
+import matplotlib.pyplot as plt
+from max_acceptable_isi_viol_2 import max_acceptable_cont_2
+import brainbox as bb
+from phylib.stats import correlograms
+import pandas as pd
+from defined_metrics import FP_RP, noise_cutoff, peak_to_peak_amp
+alf_dir = r'C:\Users\Steinmetz Lab User\Documents\Lab\SpikeSortingOutput\Hopkins_CortexLab\test_path_alf'
+alf_probe_dir=alf_dir
+spks_b = aio.load_object(alf_probe_dir, 'spikes')  
+units_b = bb.processing.get_units_bunch(spks_b)
+units = list(units_b.amps.keys())
+
+unit = units[801]
+ts = units_b['times'][unit]
+amps = units_b['amps'][unit]
+
+#test a unit on noise cutoff
+nbins = 500
+end_low=5
+quartile_length=.25
+std_cutoff = 7
+# if(len(amps)>1):
+bins_list= np.linspace(0, np.max(amps), nbins)
+n,bins = np.histogram(amps,bins = bins_list)
+#sanity check plot 
+plt.hist(amps,bins = bins_list)
+dx = np.diff(n) 
+idx_nz = np.nonzero(dx) #indices of nonzeros
+length_nonzeros = idx_nz[0][-1]-idx_nz[0][0] #length of the entire stretch, from first nonzero to last nonzero
+idx_peak = np.argmax(n)
+length_top_half = idx_nz[0][-1]-idx_peak
+high_quartile = 1-quartile_length
+
+high_quartile_start_ind2 = int(np.ceil(.5*length_top_half + idx_peak))
+xx=idx_nz[0][idx_nz[0]>high_quartile_start_ind2]
+first_idx_after = xx[0]
+mean_touse = np.mean(n[xx])
+std_touse = np.std(n[xx])
+
+
+high_quartile_start_ind = int(np.ceil(high_quartile*(length_nonzeros)))+idx_nz[0][0]
+high_quartile_end_ind = idx_nz[0][-1]
+mean_high_quartile = np.mean(n[high_quartile_start_ind:high_quartile_end_ind])
+std_high_quartile = np.std(n[high_quartile_start_ind:high_quartile_end_ind])
+first_low_quartile = np.mean(n[idx_nz][1:end_low])
+
+cutoff=(first_low_quartile-mean_high_quartile)/std_high_quartile
+cutoff2 = (first_low_quartile-mean_touse)/std_touse
+print(cutoff)
+print(cutoff2)
