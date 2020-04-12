@@ -68,15 +68,18 @@ def noise_cutoff(amps,quartile_length=.25):
             
             high_quartile_start_ind = int(np.ceil(high_quartile*length_top_half + idx_peak))
             xx=idx_nz[0][idx_nz[0]>high_quartile_start_ind]
-            mean_high_quartile = np.mean(n[xx])
-            std_high_quartile = np.std(n[xx])
-                        
-            
-            first_low_quartile = (n[idx_nz[0][1]])
-            # within_2stds = first_low_quartile<mean_high_quartile + std_cutoff*std_high_quartile or first_low_quartile<mean_high_quartile - std_cutoff*std_high_quartile
-            # cutoff = 0 if within_2stds else 1
-            if std_high_quartile>0:
-                cutoff=(first_low_quartile-mean_high_quartile)/std_high_quartile
+            if len(n[xx])>0:
+                mean_high_quartile = np.mean(n[xx])
+                std_high_quartile = np.std(n[xx])
+                            
+                
+                first_low_quartile = (n[idx_nz[0][1]])
+                # within_2stds = first_low_quartile<mean_high_quartile + std_cutoff*std_high_quartile or first_low_quartile<mean_high_quartile - std_cutoff*std_high_quartile
+                # cutoff = 0 if within_2stds else 1
+                if std_high_quartile>0:
+                    cutoff=(first_low_quartile-mean_high_quartile)/std_high_quartile
+                else:
+                    cutoff=np.float64(np.nan)
             else:
                 cutoff=np.float64(np.nan)
         else:
