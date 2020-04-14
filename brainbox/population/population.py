@@ -259,8 +259,12 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
             F1 score of the classifier
         auroc : float
             the area under the ROC curve of the classification performance
-        confusion_matrix : NxN array
+        confusion_matrix : 2D array
             normalized confusion matrix
+        predictions : 2D array with dimensions iterations x trials
+            predicted group label for all trials in every iteration
+        probabilities : 2D array with dimensions iterations x trials
+            classification probability for all trials in every iteration
     """
 
     # Check input
