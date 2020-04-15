@@ -21,7 +21,7 @@ class TestHistology(unittest.TestCase):
         # also check that it works from an insertion
         channels, ins2 = histology.get_brain_regions(xyz=ins.xyz, brain_atlas=self.brain_atlas)
         self.assertTrue(channels.acronym[-1] == 'VISpm1')
-        self.assertTrue(channels.acronym[0] == 'MRN')
+        self.assertTrue(channels.acronym[0] == 'APN')
         a = np.array([ins.x, ins.y, ins.z, ins.phi, ins.theta, ins.depth])
         b = np.array([ins2.x, ins2.y, ins2.z, ins2.phi, ins2.theta, ins2.depth])
         self.assertTrue(np.all(np.isclose(a, b)))

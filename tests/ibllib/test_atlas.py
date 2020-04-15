@@ -65,7 +65,6 @@ class TestInsertion(unittest.TestCase):
                               [0.002439, -0.004375, -0.005093],
                               [0.002364, -0.0044, -0.005418]])
         insertion = Insertion.from_track(xyz_track, brain_atlas)
-        self.assertTrue(np.allclose(insertion.tip, xyz_track[-1, :]))
         self.assertTrue(abs(insertion.theta - 10.58704241) < 1e6)
 
 
