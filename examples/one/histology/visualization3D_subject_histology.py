@@ -28,11 +28,11 @@ for index, trj in enumerate(trajs):
 
     mlapdv = brain_atlas.xyz2ccf(ins.xyz)
     if trj['provenance'] == 'Micro-manipulator':
-        color = (0., 1., 0.)
+        color = (0., 1., 0.)  # Green
     elif trj['provenance'] == 'Histology track':
-        color = (1., 0., 0.)
+        color = (1., 0., 0.)  # Red
     elif trj['provenance'] == 'Planned':
-        color = (0., 0., 1.)
+        color = (0., 0., 1.)  # Blue
 
     lab = f"{trj['session']['subject']}/{trj['session']['start_time'][:10]}/" \
           f"{str(trj['session']['number']).zfill(3)}"

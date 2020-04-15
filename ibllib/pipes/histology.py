@@ -10,6 +10,7 @@ import alf.io
 import ibllib.atlas as atlas
 from ibllib.ephys.spikes import probes_description as extract_probes
 
+
 _logger = logging.getLogger('ibllib')
 
 # origin Allen left, front, up
@@ -258,3 +259,50 @@ def register_track(probe_id, picks=None, one=None):
         })
     one.alyx.rest('channels', 'create', data=channel_dict)
     return brain_locations, insertion_histology
+
+
+def _parse_filename(track_file):
+    tmp = track_file.name.split('_')
+    inumber = [i for i, s in enumerate(tmp) if s.isdigit and len(s) == 3][-1]
+    search_filter = {'date': tmp[0], 'experiment_number': int(tmp[inumber]),
+                     'name': '_'.join(tmp[inumber + 1:- 1]),
+                     'subject': '_'.join(tmp[1:inumber])}
+    return search_filter
+
+
+def register_track_files(path_tracks, one=None):
+    path_tracks = Path(path_tracks)
+
+    assert path_tracks.exists()
+    assert one
+
+    glob_pattern = "*_probe*_pts*.csv"
+
+    track_files = list(path_tracks.rglob(glob_pattern))
+    track_files.sort()
+
+    for _, track_file in enumerate(track_files):
+        # Nomenclature expected:
+        # '{yyyy-mm-dd}}_{nickname}_{session_number}_{probe_label}_pts.csv'
+        # beware: there may be underscores in the subject nickname
+
+        search_filter = _parse_filename(track_file)
+        probe = one.alyx.rest('insertions', 'list', **search_filter)
+        if len(probe) == 0:
+            eid = one.search(subject=search_filter['subject'], date_range=search_filter['date'],
+                             number=search_filter['experiment_number'])
+            if len(eid) == 0:
+                raise Exception("No session found")
+            insertion = {'session': eid[0],
+                         'name': search_filter['name']}
+            probe = one.alyx.rest('insertions', 'create', data=insertion)
+        elif len(probe) == 1:
+            probe = probe[0]
+        else:
+            raise ValueError("Multiple probes found.")
+        probe_id = probe['id']
+        xyz_picks = load_track_csv(track_file)
+        try:
+            register_track(probe_id, xyz_picks, one=one)
+        except Exception:
+            _logger.error(str(track_file))
