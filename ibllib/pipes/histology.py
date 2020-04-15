@@ -271,15 +271,23 @@ def _parse_filename(track_file):
 
 
 def register_track_files(path_tracks, one=None):
+    """
+    :param path_tracks: path to directory containing tracks; also works with a single file name
+    :param one:
+    :return:
+    """
+    glob_pattern = "*_probe*_pts*.csv"
+
     path_tracks = Path(path_tracks)
+
+    if not path_tracks.is_dir():
+        track_files = [path_tracks]
+    else:
+        track_files = list(path_tracks.rglob(glob_pattern))
+        track_files.sort()
 
     assert path_tracks.exists()
     assert one
-
-    glob_pattern = "*_probe*_pts*.csv"
-
-    track_files = list(path_tracks.rglob(glob_pattern))
-    track_files.sort()
 
     for _, track_file in enumerate(track_files):
         # Nomenclature expected:
