@@ -315,3 +315,4 @@ def register_track_files(path_tracks, one=None):
         except Exception as e:
             _logger.error(str(track_file))
             raise e
+        _logger.info(str(track_file))
