@@ -284,32 +284,34 @@ class BrainAtlas:
         :param volume: 'image' or 'annotation'
         :return: matplotlib axis
         """
-        axis = 1
+        if axis == 0:
+            axis_labels = np.array(['ap (um)', 'dv (um)', 'ml (um)'])
+        elif axis == 1:
+            axis_labels = np.array(['ml (um)', 'dv (um)', 'ap (um)'])
+        elif axis == 2:
+            axis_labels = np.array(['ml (um)', 'ap (um)', 'dv (um)'])
+
         tslice, width, height, depth = self.tilted_slice(xyz, axis, volume=volume)
         width = width * 1e6
         height = height * 1e6
         depth = depth * 1e6
         if not ax:
+            plt.figure()
             ax = plt.gca()
             ax.axis('equal')
         if not cmap:
             cmap = plt.get_cmap('bone')
-
+        # get the transfer function from y-axis to squeezed axis for second axe
         ab = np.linalg.solve(np.c_[height, height * 0 + 1], depth)
         height * ab[0] + ab[1]
-
         ax.imshow(tslice, extent=np.r_[width, height], cmap=cmap, **kwargs)
-
         sec_ax = ax.secondary_yaxis('right', functions=(
                                     lambda x: x * ab[0] + ab[1],
                                     lambda y: (y - ab[1]) / ab[0]))
-        sec_ax.set_label()
-
+        ax.set_xlabel(axis_labels[0])
+        ax.set_ylabel(axis_labels[1])
+        sec_ax.set_ylabel(axis_labels[2])
         return ax
-
-
-
-
 
     @staticmethod
     def _plot_slice(im, extent, ax=None, cmap=None, **kwargs):

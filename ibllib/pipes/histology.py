@@ -179,22 +179,34 @@ def get_brain_regions(xyz, channels_positions=SITES_COORDINATES, brain_atlas=bra
     d = np.delete(d, iduplicates, axis=0)
 
     assert np.all(np.diff(d) > 0), "Depths should be stricly increasing"
+    """
+    Get the probe insertion from the coordinates
+    """
+    insertion = atlas.Insertion.from_track(xyz, brain_atlas)
 
     """
     Interpolate channel positions along the probe depth and get brain locations
     """
+    # from scipy.interpolate import interp1d
+    # this is the cumulative distance from the lowest picked point
+    distance = np.cumsum(np.r_[0, np.sqrt(np.sum(np.diff(xyz, axis=0) ** 2, axis=1))])
+
+    TIP_SIZE_UM = 200
     xyz_channels = np.zeros((channels_positions.shape[0], 3))
     for m in np.arange(3):
-        xyz_channels[:, m] = np.interp(channels_positions[:, 1] / 1e6, d, xyz[:, m])
+        chdepths = channels_positions[:, 1] + TIP_SIZE_UM
+        xyz_channels[:, m] = np.interp(chdepths / 1e6, distance, xyz[:, m])
+        # xyz_channels[:, m] = interp1d(distance, xyz[:, m], kind='cubic')(chdepths / 1e6)
+
+    # plt.figure()
+    # plt.plot(xyz[:, 0] * 1e6, xyz[:, 2] * 1e6, 'k*'), plt.axis('equal')
+    # plt.plot(xyz_channels[:, 0] * 1e6, xyz_channels[:, 2] * 1e6, '.'), plt.axis('equal')
     brain_regions = brain_atlas.regions.get(brain_atlas.get_labels(xyz_channels))
     brain_regions['xyz'] = xyz_channels
     brain_regions['lateral'] = channels_positions[:, 0]
     brain_regions['axial'] = channels_positions[:, 1]
     assert np.unique([len(brain_regions[k]) for k in brain_regions]).size == 1
-    """
-    Get the probe insertion from the coordinates
-    """
-    insertion = atlas.Insertion.from_track(xyz, brain_atlas)
+
     return brain_regions, insertion
 
 
@@ -293,7 +305,8 @@ def register_track_files(path_tracks, one=None, overwrite=False):
     assert path_tracks.exists()
     assert one
 
-    for _, track_file in enumerate(track_files):
+    ntracks = len(track_files)
+    for ind, track_file in enumerate(track_files):
         # Nomenclature expected:
         # '{yyyy-mm-dd}}_{nickname}_{session_number}_{probe_label}_pts.csv'
         # beware: there may be underscores in the subject nickname
@@ -319,4 +332,4 @@ def register_track_files(path_tracks, one=None, overwrite=False):
         except Exception as e:
             _logger.error(str(track_file))
             raise e
-        _logger.info(str(track_file))
+        _logger.info(f"{ind + 1}/{ntracks}, {str(track_file)}")
