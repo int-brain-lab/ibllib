@@ -33,4 +33,4 @@ ALYX_URL = "https://dev.alyx.internationalbrainlab.org"  # FOR TESTING
 
 # ======== DO NOT EDIT BELOW ====
 one = ONE(base_url=ALYX_URL)
-histology.register_track_files(path_tracks=path_tracks, one=one)
+histology.register_track_files(path_tracks=path_tracks, one=one, overwrite=True)

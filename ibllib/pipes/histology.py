@@ -198,7 +198,7 @@ def get_brain_regions(xyz, channels_positions=SITES_COORDINATES, brain_atlas=bra
     return brain_regions, insertion
 
 
-def register_track(probe_id, picks=None, one=None):
+def register_track(probe_id, picks=None, one=None, overwrite=False):
     """
     Register the user picks to a probe in Alyx
     Here we update Alyx models on the database in 3 steps
@@ -240,7 +240,11 @@ def register_track(probe_id, picks=None, one=None):
                               provenance='Histology track')
     # if the trajectory exists, remove it, this will cascade delete existing channel locations
     if len(hist_traj):
-        one.alyx.rest('trajectories', 'delete', id=hist_traj[0]['id'])
+        if overwrite:
+            one.alyx.rest('trajectories', 'delete', id=hist_traj[0]['id'])
+        else:
+            raise FileExistsError('The session already exists, however overwrite is set to False.'
+                                  'If you want to overwrite, set overwrite=True.')
     hist_traj = one.alyx.rest('trajectories', 'create', data=tdict)
 
     if brain_locations is None:
@@ -270,7 +274,7 @@ def _parse_filename(track_file):
     return search_filter
 
 
-def register_track_files(path_tracks, one=None):
+def register_track_files(path_tracks, one=None, overwrite=False):
     """
     :param path_tracks: path to directory containing tracks; also works with a single file name
     :param one:
@@ -311,7 +315,7 @@ def register_track_files(path_tracks, one=None):
         probe_id = probe['id']
         try:
             xyz_picks = load_track_csv(track_file)
-            register_track(probe_id, xyz_picks, one=one)
+            register_track(probe_id, xyz_picks, one=one, overwrite=overwrite)
         except Exception as e:
             _logger.error(str(track_file))
             raise e
