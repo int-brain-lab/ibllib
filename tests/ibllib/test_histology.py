@@ -42,3 +42,20 @@ class TestHistology(unittest.TestCase):
         ix, iy = (self.brain_atlas.bc.x2i(0), self.brain_atlas.bc.y2i(0))
         self.assertTrue(np.isclose(self.brain_atlas.top[iy, ix], top[2]))
         self.assertTrue(np.isclose(self.brain_atlas.bottom[iy, ix], bottom[2]))
+
+    def test_filename_parser(self):
+        tdata = [
+            {'input': Path("/gna/electrode_tracks_SWC_014/2019-12-12_SWC_014_001_probe01_fit.csv"),
+             'output': {'date': '2019-12-12', 'experiment_number': 1, 'name': 'probe01',
+                        'subject': 'SWC_014'}},
+            {'input': Path("/gna/datadisk/Data/Histology/"
+                           "tracks/ZM_2407/2019-11-06_ZM_2407_001_probe_00_pts.csv"),
+             'output': {'date': '2019-11-06', 'experiment_number': 1, 'name': 'probe_00',
+                        'subject': 'ZM_2407'}},
+            {'input': Path("/gna/2019-12-06_KS023_001_probe01_pts.csv"),
+             'output': {'date': '2019-12-06', 'experiment_number': 1, 'name': 'probe01',
+                        'subject': 'KS023'}},
+        ]
+        for t in tdata:
+            track_file = t['input']
+            assert t['output'] == histology._parse_filename(track_file)

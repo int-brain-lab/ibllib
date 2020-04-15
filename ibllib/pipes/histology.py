@@ -10,6 +10,7 @@ import alf.io
 import ibllib.atlas as atlas
 from ibllib.ephys.spikes import probes_description as extract_probes
 
+
 _logger = logging.getLogger('ibllib')
 
 # origin Allen left, front, up
@@ -197,7 +198,7 @@ def get_brain_regions(xyz, channels_positions=SITES_COORDINATES, brain_atlas=bra
     return brain_regions, insertion
 
 
-def register_track(probe_id, picks=None, one=None):
+def register_track(probe_id, picks=None, one=None, overwrite=False):
     """
     Register the user picks to a probe in Alyx
     Here we update Alyx models on the database in 3 steps
@@ -239,7 +240,11 @@ def register_track(probe_id, picks=None, one=None):
                               provenance='Histology track')
     # if the trajectory exists, remove it, this will cascade delete existing channel locations
     if len(hist_traj):
-        one.alyx.rest('trajectories', 'delete', id=hist_traj[0]['id'])
+        if overwrite:
+            one.alyx.rest('trajectories', 'delete', id=hist_traj[0]['id'])
+        else:
+            raise FileExistsError('The session already exists, however overwrite is set to False.'
+                                  'If you want to overwrite, set overwrite=True.')
     hist_traj = one.alyx.rest('trajectories', 'create', data=tdict)
 
     if brain_locations is None:
@@ -258,3 +263,60 @@ def register_track(probe_id, picks=None, one=None):
         })
     one.alyx.rest('channels', 'create', data=channel_dict)
     return brain_locations, insertion_histology
+
+
+def _parse_filename(track_file):
+    tmp = track_file.name.split('_')
+    inumber = [i for i, s in enumerate(tmp) if s.isdigit and len(s) == 3][-1]
+    search_filter = {'date': tmp[0], 'experiment_number': int(tmp[inumber]),
+                     'name': '_'.join(tmp[inumber + 1:- 1]),
+                     'subject': '_'.join(tmp[1:inumber])}
+    return search_filter
+
+
+def register_track_files(path_tracks, one=None, overwrite=False):
+    """
+    :param path_tracks: path to directory containing tracks; also works with a single file name
+    :param one:
+    :return:
+    """
+    glob_pattern = "*_probe*_pts*.csv"
+
+    path_tracks = Path(path_tracks)
+
+    if not path_tracks.is_dir():
+        track_files = [path_tracks]
+    else:
+        track_files = list(path_tracks.rglob(glob_pattern))
+        track_files.sort()
+
+    assert path_tracks.exists()
+    assert one
+
+    for _, track_file in enumerate(track_files):
+        # Nomenclature expected:
+        # '{yyyy-mm-dd}}_{nickname}_{session_number}_{probe_label}_pts.csv'
+        # beware: there may be underscores in the subject nickname
+
+        search_filter = _parse_filename(track_file)
+        probe = one.alyx.rest('insertions', 'list', **search_filter)
+        if len(probe) == 0:
+            eid = one.search(subject=search_filter['subject'], date_range=search_filter['date'],
+                             number=search_filter['experiment_number'])
+            if len(eid) == 0:
+                raise Exception("No session found")
+            insertion = {'session': eid[0],
+                         'name': search_filter['name']}
+            probe = one.alyx.rest('insertions', 'create', data=insertion)
+        elif len(probe) == 1:
+            probe = probe[0]
+        else:
+            raise ValueError("Multiple probes found.")
+        probe_id = probe['id']
+        try:
+            xyz_picks = load_track_csv(track_file)
+            register_track(probe_id, xyz_picks, one=one, overwrite=overwrite)
+        except Exception as e:
+            _logger.error(str(track_file))
+            raise e
+        _logger.info(str(track_file))
