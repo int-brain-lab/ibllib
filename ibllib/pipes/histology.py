@@ -309,8 +309,9 @@ def register_track_files(path_tracks, one=None):
         else:
             raise ValueError("Multiple probes found.")
         probe_id = probe['id']
-        xyz_picks = load_track_csv(track_file)
         try:
+            xyz_picks = load_track_csv(track_file)
             register_track(probe_id, xyz_picks, one=one)
-        except Exception:
+        except Exception as e:
             _logger.error(str(track_file))
+            raise e

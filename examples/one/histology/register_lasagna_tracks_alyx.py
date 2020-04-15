@@ -26,16 +26,11 @@ from oneibl.one import ONE
 # ======== EDIT FOR USERS ====
 
 # Edit so as to reflect the directory containing your electrode tracks
-path_tracks = "/Users/gaelle/Downloads/electrodetracks_lic3"
-# path_tracks = "/datadisk/GoogleDrive/TeamDrives/olivier.winter@internation" \
-#              "albrainlab.org/WG-Histology/Tracks/00_to_add"
+path_tracks = "/Users/gaelle/Downloads/00_to_add"
+
 ALYX_URL = "https://dev.alyx.internationalbrainlab.org"  # FOR TESTING
 # ALYX_URL = "https://alyx.internationalbrainlab.org"  # UNCOMMENT WHEN READY
 
 # ======== DO NOT EDIT BELOW ====
-# ALYX_URL = "http://localhost:8000"
-
-
 one = ONE(base_url=ALYX_URL)
-
 histology.register_track_files(path_tracks=path_tracks, one=one)
