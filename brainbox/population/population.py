@@ -317,11 +317,11 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
         if cross_validation == 'none':
 
             # Fit the model on all the data and predict
-            clf.fit(pop_vector[:, use_neurons], event_groups)
-            y_pred = clf.predict(pop_vector[:, use_neurons])
+            clf.fit(sub_pop_vector, event_groups)
+            y_pred = clf.predict(sub_pop_vector)
 
             #  Get the probability of the prediction for ROC analysis
-            probs = clf.predict_proba(pop_vector[:, use_neurons])
+            probs = clf.predict_proba(sub_pop_vector)
             y_probs = probs[:, 1]  # keep positive only
 
         else:
@@ -360,6 +360,12 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
         # Add prediction and probability to matrix
         pred[i, :] = y_pred
         prob[i, :] = y_probs
+
+    # Make integers from arrays when there's only one iteration
+    if iterations == 1:
+        acc = acc[0]
+        f1 = f1[0]
+        auroc = auroc[0]
 
     # Add to results dictionary
     if cross_validation == 'kfold':

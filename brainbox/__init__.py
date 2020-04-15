@@ -2,7 +2,6 @@ from . import behavior
 from . import core
 from . import experimental
 from . import io
-from . import lfp
 from . import metrics
 from . import plot
 from . import population
