@@ -22,6 +22,7 @@ _logger = logging.getLogger('ibllib')
 SYNC_BATCH_SIZE_SAMPLES = 2 ** 18  # number of samples to read at once in bin file for sync
 WHEEL_RADIUS_CM = 1  # stay in radians
 WHEEL_TICKS = 1024
+MIN_QT = .2  # default minimum enforced quiescence period
 
 BPOD_FPGA_DRIFT_THRESHOLD_PPM = 150
 
@@ -319,13 +320,15 @@ def extract_wheel_sync(sync, output_path=None, save=False, chmap=None):
     return wheel
 
 
-def extract_wheel_moves(wheel, output_path=None, save=False):
+def extract_wheel_moves(wheel, output_path=None, save=False, display=False):
     """
     Extract wheel positions and times from sync fronts dictionary
 
     :param wheel: dictionary containing wheel data, 're_pos', 're_ts'
     :param output_path: where to save the data
     :param save: True/False
+    :param display: bool: show the wheel position and velocity for full session with detected
+    movements highlighted
     :return: wheel_moves dictionary
     """
     if len(wheel['re_ts'].shape) == 1:
@@ -358,8 +361,8 @@ def extract_wheel_moves(wheel, output_path=None, save=False):
     thresholds = wh.samples_to_cm(np.array([8, 1.5]), resolution=res[encoding])
     if units == 'rad':
         thresholds = wh.cm_to_rad(thresholds)
-    kwargs = {'pos_thresh': thresholds[0], 'pos_thresh_onset': thresholds[1]}
-    #  kwargs = {'make_plots': True, **kwargs}  # For plotting detected movements
+    kwargs = {'pos_thresh': thresholds[0], 'pos_thresh_onset': thresholds[1],
+              'make_plots': display}
 
     # Interpolate and get onsets
     pos, t = wh.interpolate_position(wheel['re_ts'], wheel['re_pos'], freq=1000)
@@ -383,7 +386,7 @@ def extract_wheel_moves(wheel, output_path=None, save=False):
 def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, display=False,
                            tmax=np.inf):
     """
-    Extract wheel positions and times from sync fronts dictionary
+    Extract trial event data and times from bpod and frame2ttl sync fronts
 
     :param sync: dictionary 'times', 'polarities' of fronts detected on sync trace for all 16 chans
     :param output_path: where to save the data
@@ -392,6 +395,7 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
         chmap = {'bpod': 7, 'frame2ttl': 12, 'audio': 15}
     :param display: bool or matplotlib axes: show the full session sync pulses display
     defaults to False
+    :param tmax: maximum timestamp to use in extraction, i.e. extract data up to this time
     :return: trials dictionary
     """
     bpod = _get_sync_fronts(sync, chmap['bpod'], tmax=tmax)
@@ -470,6 +474,58 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
         np.save(output_path / '_ibl_trials.intervals.npy', trials['intervals'])
         np.save(output_path / '_ibl_trials.feedback_times.npy', trials['feedback_times'])
     return trials
+
+
+def extract_first_movement_times(wheel_moves, trials, min_qt=None, output_path=None, save=False):
+    """
+    Extracts the time of the first sufficiently large wheel movement for each trial.
+    To be counted, the movement must occur between go cue / stim on and before feedback / response
+    time.  The movement onset is sometimes just before the cue (occurring in the gap between
+    quiescence end and cue start, or during the quiescence period but sub-threshold).  The movement
+    is sufficiently large if it is greater than or equal to THRESH
+
+    :param wheel_moves: dictionary of detected wheel movement onsets and peak amplitudes for use in
+    extracting each trial's time of first movement.
+    :param trials: dictionary of trial data
+    :param min_qt: the minimum quiescence period, if None a default is used
+    :param output_path: where to save the data
+    :param save: True/False
+    :return: numpy array of first movement times, bool array indicating whether movement
+    crossed response threshold, and array of indices for wheel_moves arrays
+    """
+    THRESH = .1  # peak amp should be at least .1 rad; ~1/3rd of the distance to threshold
+    # Determine minimum quiescent period
+    if min_qt is None:
+        min_qt = MIN_QT
+        _logger.info('minimum quiescent period assumed to be %.0fms', MIN_QT*1e3)
+    elif len(min_qt) > len(trials['goCue_times']):
+        min_qt = np.array(min_qt[0:trials['goCue_times'].size])
+
+    # Initialize as nans
+    first_move_onsets = np.full(trials['goCue_times'].shape, np.nan)
+    ids = np.full(trials['goCue_times'].shape, int(-1))
+    is_final_movement = np.zeros(trials['goCue_times'].shape, bool)
+    flinch = abs(wheel_moves['amps']) < THRESH
+    all_move_onsets = wheel_moves['intervals'][:, 0]
+    # Iterate over trials, extracting onsets approx. within closed-loop period
+    for i, (t1, t2) in enumerate(zip(trials['goCue_times'] - min_qt,
+                                     trials['feedback_times'])):
+        if ~np.isnan(t2 - t1):  # If both timestamps defined
+            mask = (all_move_onsets > t1) & (all_move_onsets < t2)
+            if np.any(mask):  # If any onsets for this trial
+                trial_onset_ids, = np.where(mask)
+                if np.any(~flinch[mask]):  # If any trial moves were sufficiently large
+                    ids[i] = trial_onset_ids[~flinch[mask]][0]  # Find first large move id
+                    first_move_onsets[i] = all_move_onsets[ids[i]]  # Save first large move onset
+                    is_final_movement[i] = ids[i] == trial_onset_ids[-1]  # Final move of trial
+        else:  # Log missing timestamps
+            _logger.warning('no reliable times for trial id %i', i + 1)
+
+    # Save ALF and return
+    if save and output_path:
+        output_path = Path(output_path)
+        np.save(output_path / '_ibl_trials.firstMovement_times.npy', first_move_onsets)
+    return first_move_onsets, is_final_movement, ids[ids != -1]
 
 
 def align_with_bpod(session_path):
@@ -606,9 +662,15 @@ def extract_all(session_path, save=False, tmax=None):
         except Exception:
             tmax = np.inf
 
+    try:
+        min_qt = raw.load_settings(session_path)['QUIESCENT_PERIOD']
+    except Exception:
+        min_qt = None
+
     sync, sync_chmap = _get_main_probe_sync(session_path)
     wheel = extract_wheel_sync(sync, alf_path, save=save, chmap=sync_chmap)
-    extract_wheel_moves(wheel, alf_path, save=save)
+    moves = extract_wheel_moves(wheel, alf_path, save=save)
     extract_camera_sync(sync, alf_path, save=save, chmap=sync_chmap)
-    extract_behaviour_sync(sync, alf_path, save=save, chmap=sync_chmap, tmax=tmax)
+    trials = extract_behaviour_sync(sync, alf_path, save=save, chmap=sync_chmap, tmax=tmax)
+    extract_first_movement_times(moves, trials, min_qt, alf_path, save=save)
     align_with_bpod(session_path)  # checks consistency and compute dt with bpod

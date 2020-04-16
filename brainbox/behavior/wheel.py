@@ -11,15 +11,13 @@ from matplotlib.collections import LineCollection
 
 __all__ = ['cm_to_deg',
            'cm_to_rad',
-           'convolve',
-           'hankel',
            'interpolate_position',
            'last_movement_onset',
            'movements',
            'samples_to_cm',
            'traces_by_trial',
            'velocity',
-           'velocity_smoothed', ]
+           'velocity_smoothed']
 
 # Define some constants
 ENC_RES = 1024 * 4  # Rotary encoder resolution, assumes X4 encoding
@@ -41,7 +39,7 @@ def interpolate_position(re_ts, re_pos, freq=1000, kind='linear', fill_gaps=None
     kind : {'linear', 'cubic'}
         Type of interpolation. Defaults to linear interpolation.
     fill_gaps : float
-        Minimum gap length to fill. for gaps over this time (seconds),
+        Minimum gap length to fill. For gaps over this time (seconds),
         forward fill values before interpolation
     Returns
     -------
