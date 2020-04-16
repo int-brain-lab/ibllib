@@ -163,7 +163,8 @@ def get_brain_regions(xyz, channels_positions=SITES_COORDINATES, brain_atlas=bra
     the deepest point is assumed to be the tip.
     :param channels_positions:
     :param brain_atlas:
-    :return:
+    :return: brain_regions (associated to each channel),
+             insertion (object atlas.Insertion, defining 2 points of entries (tip and end of probe))
     """
     """
     this is the depth along the probe (from the first point which is the deepest labeled point)
