@@ -267,9 +267,10 @@ class BrainAtlas:
         elif volume.lower() == 'image':
             tslice = self.image[indsl[0], indsl[1], indsl[2]]
 
-        width = sub_volume[:, wdim] if self.bc.dxyz[wdim] > 0 else np.flipud(sub_volume[:, wdim])
-        height = sub_volume[:, hdim] if self.bc.dxyz[hdim] > 0 else np.flipud(sub_volume[:, hdim])
-        depth = sub_volume[:, ddim] if self.bc.dxyz[ddim] > 0 else np.flipud(sub_volume[:, ddim])
+        #  get extents with correct convention NB: matplotlib flips the y-axis on imshow !
+        width = np.sort(sub_volume[:, wdim])[np.argsort(self.bc.lim(axis=wdim))]
+        height = np.flipud(np.sort(sub_volume[:, hdim])[np.argsort(self.bc.lim(axis=hdim))])
+        depth = np.flipud(np.sort(sub_volume[:, ddim])[np.argsort(self.bc.lim(axis=ddim))])
         return tslice, width, height, depth
 
     def plot_tilted_slice(self, xyz, axis, volume='image', cmap=None, ax=None, **kwargs):
