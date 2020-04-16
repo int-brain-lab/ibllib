@@ -229,6 +229,20 @@ class BrainAtlas:
         """
         return self.label.flat[self._lookup(xyz)]
 
+    def _label2rgb(self, imlabel):
+        """
+        Converts a slice from the label volume to its RGB equivalent for display
+        :param imlabel: 2D np-array containing label ids (slice of the label volume)
+        :return: 3D np-array of the slice uint8 rgb values
+        """
+        if self.regions is None or getattr(self.regions, 'rgb', None) is None:
+            return imlabel
+        else:  # if the regions exist and have the rgb attribute, do the rgb lookup
+            # the lookup is done in pure numpy for speed. This is the ismember matlab fcn
+            im_unique, ilabels, iim = np.unique(imlabel, return_index=True, return_inverse=True)
+            _, ir_unique, _ = np.intersect1d(self.regions.id, im_unique, return_indices=True)
+            return np.reshape(self.regions.rgb[ir_unique[iim], :], (*imlabel.shape, 3))
+
     def tilted_slice(self, xyz, axis, volume='image'):
         """
         From line coordinates, extracts the tilted plane containing the line from the 3D volume
@@ -263,7 +277,7 @@ class BrainAtlas:
         INDX, INDY = np.meshgrid(indx, indy)
         indsl = [[INDX, INDY, INDS][i] for i in np.argsort([wdim, hdim, ddim])[self.xyz2dims]]
         if volume.lower() == 'annotation':
-            tslice = self.label[indsl[0], indsl[1], indsl[2]]
+            tslice = self._label2rgb(self.label[indsl[0], indsl[1], indsl[2]])
         elif volume.lower() == 'image':
             tslice = self.image[indsl[0], indsl[1], indsl[2]]
 
@@ -334,15 +348,7 @@ class BrainAtlas:
         index = self.bc.xyz2i(np.array([coordinate] * 3))[axis]
         if volume == 'annotation':
             im = self.label.take(index, axis=self.xyz2dims[axis])
-            if self.regions is None or getattr(self.regions, 'rgb', None) is None:
-                return im
-            else:  # if the regions exist and have the rgb attribute, do the rgb lookup
-                # the lookup is done in pure numpy for speed. This is the ismember matlab fcn
-                im_unique, ilabels, iim = np.unique(im, return_index=True, return_inverse=True)
-                _, ir_unique, _ = np.intersect1d(self.regions.id, im_unique, return_indices=True)
-                return np.reshape(self.regions.rgb[ir_unique[iim], :], (*im.shape, 3))
-        else:
-            return self.image.take(index, axis=self.xyz2dims[axis])
+            return self._label2rgb(im)
 
     def plot_cslice(self, ap_coordinate, volume='image', **kwargs):
         """
