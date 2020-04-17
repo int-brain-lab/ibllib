@@ -64,7 +64,8 @@ for i_eIDs in range(0, len(eIDs)):
     timesgoCueon_Mic = TF['times_mic'][ind_5kOn[0] + 2]  # +2 as detection based on diff 2nd order
 
     # Display error is n_trial / goCue numbers differ
-    if len(a) >= n_trial:  # > as there may be other sounds outside the task with similar properties
+    if len(a) >= n_trial:
+        # > as there may be other sounds outside the task with similar properties
         print(f'{eIDs[i_eIDs]} Same number of goCue and trial')
     else:
         print(f'{eIDs[i_eIDs]} DIFFERENCE IN N TRIAL {n_trial} AND GO CUE {len(a)} DETECTED')
