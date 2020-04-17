@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from phylib.stats import correlograms
 
-nSim = 1000
+nSim = 500
 binSize=0.25 #in ms
 b= np.arange(0,10.25,binSize)/1000 + 1e-6 #bins in seconds
 bTestIdx = [5, 6, 7, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40]
@@ -27,12 +27,13 @@ bTest = [b[i] for i in bTestIdx]
 thresh = 0.2
 acceptThresh=0.1
 
-baseRates = np.logspace(-0.3,1.3,20)
+baseRates = np.logspace(-0.3,1.3,10)
 recDur = 3600
 
-rpvec=[.001,.0015,0.002,0.0025,0.003,0.004,0.005,0.0075,0.01] #true RPs in seconds 
+rpvec=[.0015,0.002,0.0025,0.003,0.004,0.005,0.0075,0.01] #true RPs in seconds 
 fig, axs = plt.subplots(1,len(rpvec), figsize=(25, 6), facecolor='w', edgecolor='k') #initialize subplots
 rpidx=0
+start_time=time.time()
 for rp in rpvec:
     #print(rpidx)  
     contPct = np.arange(0.01,0.2,0.02) 
@@ -41,7 +42,7 @@ for rp in rpvec:
     passPct = np.zeros([len(baseRates), len(contPct)])
     classicPassPct = np.zeros([len(baseRates), len(contPct)])
     
-    start_time=time.time()
+
     baseidx=0
     for baseRate in baseRates:
         cidx=0
@@ -90,6 +91,7 @@ for rp in rpvec:
     print(time.time() - start_time)
 
 fig.legend(bbox_to_anchor=(1.04,1), loc="upper left") 
+plt.savefig('simul_rp.png', dpi=300)
 plt.show()
 
 

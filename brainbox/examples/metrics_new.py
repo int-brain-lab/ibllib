@@ -35,7 +35,7 @@ def gen_metrics_labels(eid,probe_name):
     one=ONE()
     ses_path=one.path_from_eid(eid)    
     alf_probe_dir = os.path.join(ses_path, 'alf', probe_name)
-    ephys_file_dir = os.path.join(ses_path, 'raw_ephys_data', probe_name)
+    # ephys_file_dir = os.path.join(ses_path, 'raw_ephys_data', probe_name)
     spks_b = aio.load_object(alf_probe_dir, 'spikes')  
     units_b = bb.processing.get_units_bunch(spks_b)
     units = list(units_b.amps.keys())
@@ -53,7 +53,7 @@ def gen_metrics_labels(eid,probe_name):
         RefPViol[int(unit)] = FP_RP(ts)
         NoiseCutoff[int(unit)] = noise_cutoff(amps,quartile_length=.25)
         
-        if (FP_RP(ts) and noise_cutoff(amps,quartile_length=.25)<2) : #to do: add and mean(amps)>50microvolts?
+        if (FP_RP(ts) and noise_cutoff(amps,quartile_length=.25)<2.5) : #to do: add and mean(amps)>50microvolts?
             label[int(unit)] = 1
         else:
             label[int(unit)] = 0
@@ -82,3 +82,12 @@ def gen_metrics_labels(eid,probe_name):
         
     numpass=int(sum(label))
     print("Number of units that pass: ", numpass)
+
+    numpassRP=int(sum(RefPViol))
+    numpassAC=int(sum(NoiseCutoff[~np.isnan(NoiseCutoff)]<2.5))
+    ntot = len(label)
+    
+    print("Number of units that pass RP threshold: ", numpassRP)
+    print("Number of units that pass Amp Cutoff threshold: ", numpassAC)
+    print("Number of total units: ",ntot)
+    return numpass, numpassRP, numpassAC, ntot

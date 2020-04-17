@@ -49,7 +49,7 @@ def FP_RP(ts):
     
 def noise_cutoff(amps,quartile_length=.25):
         nbins = 500
-        end_low=1
+        end_low=5
         if(len(amps)>1):
             bins_list= np.linspace(0, np.max(amps), nbins)
             n,bins = np.histogram(amps,bins = bins_list) 
@@ -73,7 +73,7 @@ def noise_cutoff(amps,quartile_length=.25):
                 std_high_quartile = np.std(n[xx])
                             
                 
-                first_low_quartile = (n[idx_nz[0][1]])
+                first_low_quartile = np.mean(n[idx_nz[0][1:end_low]])
                 # within_2stds = first_low_quartile<mean_high_quartile + std_cutoff*std_high_quartile or first_low_quartile<mean_high_quartile - std_cutoff*std_high_quartile
                 # cutoff = 0 if within_2stds else 1
                 if std_high_quartile>0:
