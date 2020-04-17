@@ -1,5 +1,3 @@
-# @Author: Gaelle Chapuis
-# @Date: 17-04-2020
 """
 Aim: Assess if spectrogram contains as many goCue as n trials
 
@@ -8,19 +6,19 @@ Workflow:
 - Detect goCue on spectrogram and compare with N trials
 - Plot spectrogram with markers indicating goCue detected
 
-
 Script using:
 - ONE
 - alf for loading TF spectrogram
 - matplotlib to plot spectrogram
-
 """
+# @Author: Gaelle Chapuis
+# @Date: 17-04-2020
 
-from ibllib.io import raw_data_loaders
 import numpy as np
-import alf.io
 import matplotlib.pyplot as plt
 
+from ibllib.io import raw_data_loaders
+import alf.io
 from oneibl.one import ONE
 
 one = ONE()
@@ -32,10 +30,12 @@ dataset_types = [
     '_iblmic_audioSpectrogram.power',
     '_iblmic_audioSpectrogram.times_mic']
 
-# eIDs = one.search(task_protocol='bias',
-#                   location='_iblrig_churchlandlab_ephys_0',
-#                   dataset_types = dataset_types)
-eIDs = ['098bdac5-0e25-4f51-ae63-995be7fe81c7']
+eIDs = one.search(task_protocol='bias',
+                  location='_iblrig_danlab_ephys_0',
+                  dataset_types=dataset_types)
+# eIDs = ['098bdac5-0e25-4f51-ae63-995be7fe81c7'] # TEST EXAMPLE
+
+is_plot = False
 
 for i_eIDs in range(0, len(eIDs)):
     one.load(eIDs[i_eIDs], dataset_types=dataset_types, download_only=True)
@@ -69,18 +69,19 @@ for i_eIDs in range(0, len(eIDs)):
     else:
         print(f'{eIDs[i_eIDs]} DIFFERENCE IN N TRIAL {n_trial} AND GO CUE {len(a)} DETECTED')
 
-    # -- Plot spectrogram
-    tlims = TF['times_mic'][[0, -1]].flatten()
-    flims = TF['frequencies'][0, [0, -1]].flatten()
-    fig = plt.figure(figsize=[16, 7])
-    ax = plt.axes()
-    im = ax.imshow(20 * np.log10(TF['power'].T), aspect='auto', cmap=plt.get_cmap('magma'),
-                   extent=np.concatenate((tlims, flims)),
-                   origin='lower')
-    ax.set_xlabel(r'Time (s)')
-    ax.set_ylabel(r'Frequency (Hz)')
-    plt.colorbar(im)
-    im.set_clim(-100, -60)
+    if is_plot:
+        # -- Plot spectrogram
+        tlims = TF['times_mic'][[0, -1]].flatten()
+        flims = TF['frequencies'][0, [0, -1]].flatten()
+        fig = plt.figure(figsize=[16, 7])
+        ax = plt.axes()
+        im = ax.imshow(20 * np.log10(TF['power'].T), aspect='auto', cmap=plt.get_cmap('magma'),
+                       extent=np.concatenate((tlims, flims)),
+                       origin='lower')
+        ax.set_xlabel(r'Time (s)')
+        ax.set_ylabel(r'Frequency (Hz)')
+        plt.colorbar(im)
+        im.set_clim(-100, -60)
 
-    # -- Plot overlay goCue detected
-    plt.plot(timesgoCueon_Mic, a * 5000, marker="o")
+        # -- Plot overlay goCue detected
+        plt.plot(timesgoCueon_Mic, a * 5000, marker="o")
