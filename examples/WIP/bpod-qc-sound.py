@@ -31,7 +31,7 @@ dataset_types = [
     '_iblmic_audioSpectrogram.times_mic']
 
 eIDs = one.search(task_protocol='bias',
-                  location='_iblrig_danlab_ephys_0',
+                  location='_iblrig_churchlandlab_ephys_0',
                   dataset_types=dataset_types)
 # eIDs = ['098bdac5-0e25-4f51-ae63-995be7fe81c7'] # TEST EXAMPLE
 
@@ -64,7 +64,7 @@ for i_eIDs in range(0, len(eIDs)):
     timesgoCueon_Mic = TF['times_mic'][ind_5kOn[0] + 2]  # +2 as detection based on diff 2nd order
 
     # Display error is n_trial / goCue numbers differ
-    if len(a) == n_trial:
+    if len(a) >= n_trial:  # > as there may be other sounds outside the task with similar properties
         print(f'{eIDs[i_eIDs]} Same number of goCue and trial')
     else:
         print(f'{eIDs[i_eIDs]} DIFFERENCE IN N TRIAL {n_trial} AND GO CUE {len(a)} DETECTED')
