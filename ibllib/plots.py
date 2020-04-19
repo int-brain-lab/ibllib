@@ -2,8 +2,9 @@
 # -*- coding:utf-8 -*-
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy
 
-from ibllib.dsp import rms
+import ibllib.dsp as dsp
 
 
 def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=0, clip=2,
@@ -22,7 +23,7 @@ def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=
     """
     nech, ntr = w.shape
     tscale = np.arange(nech) / fs
-    sf = gain / np.sqrt(rms(w.flatten()))
+    sf = gain / np.sqrt(dsp.rms(w.flatten()))
 
     def insert_zeros(trace):
         # Insert zero locations in data trace and tt vector based on linear fit
@@ -115,7 +116,7 @@ class Traces:
         """
         nech, ntr = w.shape
         tscale = np.arange(nech) / fs * 1e3
-        sf = gain / rms(w.flatten()) / 2
+        sf = gain / dsp.rms(w.flatten()) / 2
         if ax is None:
             self.figure, ax = plt.subplots()
         else:
@@ -182,6 +183,47 @@ def vertical_lines(x, ymin=0, ymax=1, ax=None, **kwargs):
     if not ax:
         ax = plt.gca()
     ax.plot(x.T.flatten(), y.T.flatten(), **kwargs)
+
+
+def spectrum(w, fs, smooth=None, unwrap=True, axis=0, **kwargs):
+    """
+    Display spectral density of a signal along a given dimension
+    spectrum(w, fs)
+    :param w: signal
+    :param fs: sampling frequency (Hz)
+    :param smooth: (None) frequency samples to smooth over
+    :param unwrap: (True) unwraps the phase specrum
+    :param axis: axis on which to compute the FFT
+    :param kwargs: plot arguments to be passed to matplotlib
+    :return: matplotlib axes
+    """
+    axis = 0
+    smooth = None
+    unwrap = True
+
+    ns = w.shape[axis]
+    fscale = dsp.fscale(ns, 1 / fs, one_sided=True)
+    W = scipy.fft.rfft(w, axis=axis)
+    amp = 20 * np.log10(np.abs(W))
+    phi = np.angle(W)
+
+    if unwrap:
+        phi = np.unwrap(phi)
+
+    if smooth:
+        nf = np.round(smooth / fscale[1] / 2) * 2 + 1
+        amp = dsp.smooth.mwa(amp, nf)
+        phi = dsp.smooth.mwa(phi, nf)
+
+    fig, ax = plt.subplots(2, 1, sharex=True)
+    ax[0].plot(fscale, amp, **kwargs)
+    ax[1].plot(fscale, phi, **kwargs)
+
+    ax[0].set_title('Spectral Density (dB rel to amplitude.Hz^-0.5)')
+    ax[0].set_ylabel('Amp (dB)')
+    ax[1].set_ylabel('Phase (rad)')
+    ax[1].set_xlabel('Frequency (Hz)')
+    return ax
 
 
 if __name__ == "__main__":
