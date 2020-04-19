@@ -6,7 +6,8 @@ import matplotlib.pyplot as plt
 from ibllib.dsp import rms
 
 
-def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=0, **kwargs):
+def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=0, clip=2,
+           **kwargs):
     """
     Matplotlib display of wiggle traces
 
@@ -51,11 +52,14 @@ def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=
     for ntr in range(ntr):
         if fill:
             trace, t_trace = insert_zeros(w[:, ntr] * sf)
+            if clip:
+                trace = np.maximum(np.minimum(trace, clip), -clip)
             ax.fill_betweenx(t_trace + t0, ntr, trace + ntr,
                              where=trace >= 0,
                              facecolor=color,
                              linewidth=linewidth)
-        ax.plot(w[:, ntr] * sf + ntr, tscale + t0, color, linewidth=linewidth, **kwargs)
+        wplot = np.minimum(np.maximum(w[:, ntr] * sf, -clip), clip)
+        ax.plot(wplot + ntr, tscale + t0, color, linewidth=linewidth, **kwargs)
 
     ax.set_xlim(-1, ntr + 1)
     ax.set_ylim(tscale[0] + t0, tscale[-1] + t0)
@@ -63,18 +67,79 @@ def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=
     ax.set_xlabel('Trace')
     ax.invert_yaxis()
 
+    return ax
 
-def traces(w, **kwargs):
-    """
-    Matplotlib display of traces
 
-    :param w: 2D array (numpy array dimension nsamples, ntraces)
-    :param fs: sampling frequency
-    :param gain: display gain
-    :param ax: matplotlib axes object
-    :return: None
-    """
-    wiggle(w, **kwargs, fill=False)
+class Density:
+    def __init__(self, w, fs=1, cmap='bone', ax=None, **kwargs):
+        """
+        Matplotlib display of traces as a density display
+
+        :param w: 2D array (numpy array dimension nsamples, ntraces)
+        :param fs: sampling frequency (Hz)
+        :param ax: axis to plot in
+        :return: None
+        """
+        nech, ntr = w.shape
+        tscale = np.array([0, nech - 1]) / fs * 1e3
+        if ax is None:
+            self.figure, ax = plt.subplots()
+        else:
+            self.figure = ax.get_figure()
+        extent = [-0.5, ntr + 0.5, tscale[1], tscale[0]]
+        self.im = ax.imshow(w, aspect='auto', cmap=cmap, extent=extent, origin='upper', **kwargs)
+        ax.set_ylabel('Time (ms)')
+        ax.set_xlabel('Trace')
+        self.cid_key = self.figure.canvas.mpl_connect('key_press_event', self.on_key_press)
+        self.ax = ax
+
+    def on_key_press(self, event):
+        if event.key == 'ctrl+a':
+            self.im.set_data(self.im.get_array() * np.sqrt(2))
+        elif event.key == 'ctrl+z':
+            self.im.set_data(self.im.get_array() / np.sqrt(2))
+        else:
+            return
+        self.figure.canvas.draw()
+
+
+class Traces:
+    def __init__(self, w, fs=1, gain=0.71, color='k', ax=None, linewidth=0.5, t0=0, **kwargs):
+        """
+        Matplotlib display of traces as a density display
+
+        :param w: 2D array (numpy array dimension nsamples, ntraces)
+        :param fs: sampling frequency (Hz)
+        :param ax: axis to plot in
+        :return: None
+        """
+        nech, ntr = w.shape
+        tscale = np.arange(nech) / fs * 1e3
+        sf = gain / rms(w.flatten()) / 2
+        if ax is None:
+            self.figure, ax = plt.subplots()
+        else:
+            self.figure = ax.get_figure()
+        self.plot = ax.plot(w * sf + np.arange(ntr), tscale + t0, color,
+                            linewidth=linewidth, **kwargs)
+        ax.set_xlim(-1, ntr + 1)
+        ax.set_ylim(tscale[0] + t0, tscale[-1] + t0)
+        ax.set_ylabel('Time (ms)')
+        ax.set_xlabel('Trace')
+        ax.invert_yaxis()
+        self.cid_key = self.figure.canvas.mpl_connect('key_press_event', self.on_key_press)
+        self.ax = ax
+
+    def on_key_press(self, event):
+        if event.key == 'ctrl+a':
+            for i, l in enumerate(self.plot):
+                l.set_xdata((l.get_xdata() - i) * np.sqrt(2) + i)
+        elif event.key == 'ctrl+z':
+            for i, l in enumerate(self.plot):
+                l.set_xdata((l.get_xdata() - i) / np.sqrt(2) + i)
+        else:
+            return
+        self.figure.canvas.draw()
 
 
 def squares(tscale, polarity, ax=None, yrange=[-1, 1], **kwargs):
@@ -122,4 +187,4 @@ def vertical_lines(x, ymin=0, ymax=1, ax=None, **kwargs):
 if __name__ == "__main__":
     w = np.random.rand(500, 40) - 0.5
     wiggle(w, fs=30000)
-    traces(w, fs=30000, color='r')
+    Traces(w, fs=30000, color='r')
