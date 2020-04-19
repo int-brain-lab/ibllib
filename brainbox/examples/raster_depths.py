@@ -1,31 +1,29 @@
-from pathlib import Path
+"""
+author OW
+last reviewed/run 19-04-2020
+"""
 import matplotlib.pyplot as plt
 import numpy as np
 
 from oneibl.one import ONE
-import alf.io as ioalf
 import ibllib.plots as iblplt
 
-from brainbox.misc import bincount2D
+from brainbox.processing import bincount2D
+from brainbox.io import one as bbone
 
-T_BIN = 0.01
-D_BIN = 20
+T_BIN = 0.05
+D_BIN = 5
 
 # get the data from flatiron and the current folder
 one = ONE()
-eid = one.search(subject='ZM_1150', date='2019-05-07', number=1)
-D = one.load(eid[0], clobber=False, download_only=True)
-session_path = Path(D.local_path[0]).parent
+eid = one.search(subject='CSHL045', date='2020-02-26', number=1)[0]
 
-# load objects
-spikes = ioalf.load_object(session_path, 'spikes')
-clusters = ioalf.load_object(session_path, 'clusters')
-channels = ioalf.load_object(session_path, 'channels')
-trials = ioalf.load_object(session_path, '_ibl_trials')
+spikes, clusters, trials = bbone.load_ephys_session(eid, one=one)
 
+pname = list(spikes.keys())[0]
 
 # compute raster map as a function of site depth
-R, times, depths = bincount2D(spikes['times'], spikes['depths'], T_BIN, D_BIN)
+R, times, depths = bincount2D(spikes[pname]['times'], spikes[pname]['depths'], T_BIN, D_BIN)
 
 # plot raster map
 plt.imshow(R, aspect='auto', cmap='binary', vmax=T_BIN / 0.001 / 4,
