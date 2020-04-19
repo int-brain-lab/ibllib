@@ -213,11 +213,18 @@ class TestsAlf(unittest.TestCase):
     def test_check_dimensions(self):
         a = {'a': np.ones([10, 10]), 'b': np.ones([10, 2]), 'c': np.ones([10])}
         status = alf.io.check_dimensions(a)
-        self.assertTrue(status == 1)
+        self.assertTrue(status == 0)
         a = {'a': np.ones([10, 10]), 'b': np.ones([10, 1]), 'c': np.ones([10])}
         status = alf.io.check_dimensions(a)
         self.assertTrue(status == 0)
+        a = {'a': np.ones([10, 15]), 'b': np.ones([1, 15]), 'c': np.ones([10])}
+        status = alf.io.check_dimensions(a)
+        self.assertTrue(status == 0)
+        a = {'a': np.ones([9, 10]), 'b': np.ones([10, 1]), 'c': np.ones([10])}
+        status = alf.io.check_dimensions(a)
+        self.assertTrue(status == 1)
         # test for timestamps which is an exception to the rule
+        a = {'a': np.ones([10, 15]), 'b': np.ones([1, 15]), 'c': np.ones([10])}
         a['timestamps'] = np.ones([3, 1])
         a['timestamps.titi'] = np.ones([3, 1])
         status = alf.io.check_dimensions(a)

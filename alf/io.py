@@ -122,12 +122,11 @@ def check_dimensions(dico):
     # the dictionary may contain only excluded attributes, in this case return success
     if not shapes:
         return int(0)
-    lmax = max([len(s) for s in shapes])
-    for l in range(lmax):
-        sh = np.array([s[l] if (len(s) - 1 >= l) else 1 for s in shapes])
-        if not np.unique(sh[sh != 1]).size <= 1:
-            return int(1)
-    return int(0)
+    first_shapes = [sh[0] for sh in shapes]
+    if set(first_shapes).issubset(set([max(first_shapes), 1])):
+        return int(0)
+    else:
+        return int(1)
 
 
 def read_ts(filename):
