@@ -36,6 +36,7 @@ def load_channel_locations(eid, one=None, probe=None):
     """
     if isinstance(eid, dict):
         ses = eid
+        eid = ses['url'][-36:]
     else:
         # need to query alyx. Make sure we have a one client before we hit the endpoint
         if not one:
