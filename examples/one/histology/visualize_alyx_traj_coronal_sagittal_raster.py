@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import ibllib.atlas as atlas
 from oneibl.one import ONE
 import brainbox.io.one as bbone
-import brainbox as bb
+# import brainbox as bb
 
 # === Parameters section (edit) ===
 ba = atlas.AllenAtlas(25)
