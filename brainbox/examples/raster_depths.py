@@ -18,7 +18,7 @@ D_BIN = 5
 one = ONE()
 eid = one.search(subject='CSHL045', date='2020-02-26', number=1)[0]
 
-spikes, clusters, trials = bbone.load_ephys_session(eid, one=one)
+spikes, clusters, trials = bbone.load_ephys_session(eid, one=one, dataset_types=['spikes.depth'])
 
 pname = list(spikes.keys())[0]
 
