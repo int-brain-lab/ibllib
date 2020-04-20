@@ -46,6 +46,13 @@ for i_probe in range(0, n_probe):
     cax.plot(channels[probe_label].x * 1e6, channels[probe_label].z * 1e6, 'y.')
 
     # Raster plot
-    cd, md = bb.plot.driftmap(spikes[probe_label].times[0:-1:100],
-                              spikes[probe_label].depths[0:-1:100],
-                              ax=axs[2])
+
+    # -- Brainbox
+    # cd, md = bb.plot.driftmap(spikes[probe_label].times[0:-1:100],
+    #                           spikes[probe_label].depths[0:-1:100],
+    #                           ax=axs[2])
+
+    # -- Simple scatter plot
+    axs[2].plot(spikes[probe_label].times[0:-1:100],
+                spikes[probe_label].depths[0:-1:100],
+                color='k')
