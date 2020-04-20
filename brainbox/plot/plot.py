@@ -612,7 +612,8 @@ def peri_event_time_histogram(
     return ax
 
 
-def driftmap(ts, feat, ax=None, **kwargs):  # TODO add **kwargs
+def driftmap(ts, feat, ax=None, plot_style='bincount',
+             t_bin=0.01, d_bin=20, **kwargs):  # TODO add **kwargs
     '''
     Plots the driftmap of a spike feature array over time.
 
@@ -624,6 +625,9 @@ def driftmap(ts, feat, ax=None, **kwargs):  # TODO add **kwargs
         The spike timestamps from which to compute the firing rate.
     ax : axessubplot (optional)
         The axis handle to plot the histogram on. (if `None`, a new figure and axis is created)
+    t_bin: time bin
+    d_bin: depth bin
+    plot_style: 'scatter', 'bincount'
 
     Returns
     -------
@@ -658,16 +662,14 @@ def driftmap(ts, feat, ax=None, **kwargs):  # TODO add **kwargs
     if ax is None:
         fig, ax = plt.subplots()
 
-    ax.plot(ts, feat, **kwargs)
-
-    # T_BIN = 0.01
-    # D_BIN = 20
-    # compute raster map as a function of site depth
-    # R, times, depths = bincount2D(spikes['times'], spikes['depths'], T_BIN, D_BIN)
-    #
-    # # plot raster map
-    # plt.imshow(R, aspect='auto', cmap='binary', vmax=T_BIN / 0.001 / 4,
-    #            extent=np.r_[times[[0, -1]], depths[[0, -1]]], origin='lower')
+    if plot_style == 'scatter':
+        ax.plot(ts, feat, **kwargs)
+    elif plot_style == 'bincount':
+        # compute raster map as a function of site depth
+        R, times, depths = bb.processing.bincount2D(ts, feat, t_bin, d_bin)
+        # plot raster map
+        ax.imshow(R, aspect='auto', cmap='binary', vmax=t_bin / 0.001 / 4,
+                  extent=np.r_[times[[0, -1]], depths[[0, -1]]], origin='lower')
 
     return cd, md
 
