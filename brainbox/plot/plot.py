@@ -612,7 +612,7 @@ def peri_event_time_histogram(
     return ax
 
 
-def driftmap(ts, feat, ax=None):
+def driftmap(ts, feat, ax=None):  # TODO add **kwargs
     '''
     Plots the driftmap of a spike feature array over time.
 
@@ -654,6 +654,14 @@ def driftmap(ts, feat, ax=None):
 
     if ax is None:
         fig, ax = plt.subplots()
+
+    # plot_style_default = kwargs.get('color', "'k'")  # TODO
+    # if kwargs is None:
+    #     kwargs_plot = plot_style_default
+    # else:
+    #     kwargs_plot = kwargs
+    #
+    # ax.plot(ts, feat, kwargs_plot)
 
     ax.plot(ts, feat, '.')
 
