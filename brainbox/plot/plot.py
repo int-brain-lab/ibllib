@@ -612,7 +612,7 @@ def peri_event_time_histogram(
     return ax
 
 
-def driftmap(ts, feat, ax=None):
+def driftmap(ts, feat, ax=None, **kwargs):  # TODO add **kwargs
     '''
     Plots the driftmap of a spike feature array over time.
 
@@ -649,13 +649,25 @@ def driftmap(ts, feat, ax=None):
         >>> cd, md = bb.plot.driftmap(ts, depths)
     '''
 
+    if 'color' not in kwargs.keys():
+        kwargs['color'] = 'k'
+
     cd = bb.metrics.cum_drift(feat)
     md = bb.metrics.max_drift(feat)
 
     if ax is None:
         fig, ax = plt.subplots()
 
-    ax.plot(ts, feat, '.')
+    ax.plot(ts, feat, **kwargs)
+
+    # T_BIN = 0.01
+    # D_BIN = 20
+    # compute raster map as a function of site depth
+    # R, times, depths = bincount2D(spikes['times'], spikes['depths'], T_BIN, D_BIN)
+    #
+    # # plot raster map
+    # plt.imshow(R, aspect='auto', cmap='binary', vmax=T_BIN / 0.001 / 4,
+    #            extent=np.r_[times[[0, -1]], depths[[0, -1]]], origin='lower')
 
     return cd, md
 
