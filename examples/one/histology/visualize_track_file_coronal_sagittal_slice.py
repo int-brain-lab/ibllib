@@ -1,5 +1,6 @@
 """
-For a given track file (pts), plot the tilted slice.
+For a given track file (pts.csv), plot the coronal and sagittal
+slices in two separate figures.
 """
 # Author: Olivier Winter
 
