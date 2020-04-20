@@ -29,18 +29,16 @@ for i_probe in range(0, n_probe):
     ins = atlas.Insertion.from_dict(traj)
 
     # Initialise fig subplots
-    fig, axs = plt.subplots(1, 4)
-
-    # Coronal view
-    cax = ba.plot_cslice(ap_coordinate=np.mean(ins.xyz[:, 1]), volume='annotation', ax=axs[0])
-    cax.plot(ins.xyz[:, 0] * 1e6, ins.xyz[:, 2] * 1e6)
-    cax.plot(channels[probe_label].x * 1e6, channels[probe_label].z * 1e6, 'k*')
+    fig, axs = plt.subplots(1, 3)
 
     # Sagittal view
-    sax = ba.plot_sslice(ap_coordinate=np.mean(ins.xyz[:, 1]), volume='annotation', ax=axs[1])
+    sax = ba.plot_tilted_slice(ins.xyz, axis=0, ax=axs[0])
     sax.plot(ins.xyz[:, 1] * 1e6, ins.xyz[:, 2] * 1e6)
-    sax.plot(channels[probe_label].y * 1e6, channels[probe_label].z * 1e6, 'k*')
+    sax.plot(channels[probe_label].y * 1e6, channels[probe_label].z * 1e6, 'y.')
 
-    # Tilted slice
+    # Coronal view
+    cax = ba.plot_tilted_slice(ins.xyz, axis=1, ax=axs[1])
+    cax.plot(ins.xyz[:, 0] * 1e6, ins.xyz[:, 2] * 1e6)
+    cax.plot(channels[probe_label].x * 1e6, channels[probe_label].z * 1e6, 'y.')
 
     # Raster plot
