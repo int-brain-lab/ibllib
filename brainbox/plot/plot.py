@@ -613,7 +613,7 @@ def peri_event_time_histogram(
 
 
 def driftmap(ts, feat, ax=None, plot_style='bincount',
-             t_bin=0.01, d_bin=20, **kwargs):  # TODO add **kwargs
+             t_bin=0.01, d_bin=20, **kwargs):
     '''
     Plots the values of a spike feature array (y-axis) over time (x-axis).
     Two arguments can be given for the plot_style of the drift map:
