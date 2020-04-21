@@ -1,52 +1,64 @@
 '''
-For a given eID, plot the probe(s) track(s) and the corresponding raster(s).
+For a given eID, plot the PLANNED (blue) and HISTOLOGY (red)
+ probe(s) track(s) in:
+- sagittal view
+- coronal view
+- rotating brain
+
 '''
 # Author: Gaelle Chapuis
 
 import matplotlib.pyplot as plt
 import ibllib.atlas as atlas
 from oneibl.one import ONE
-import brainbox.io.one as bbone
 import brainbox.plot as bbplot
+from mayavi import mlab
+from atlaselectrophysiology import rendering
 
 # === Parameters section (edit) ===
-ba = atlas.AllenAtlas(25)
+
 one = ONE(base_url="https://alyx.internationalbrainlab.org")
 
 eid = 'aad23144-0e52-4eac-80c5-c4ee2decb198'
 
+# == CODE SECTION (DO NOT EDIT) ==
+
+
+def _plot3d_traj(traj, color, label, fig_handle,
+                 ba=atlas.AllenAtlas(25), line_width=3, tube_radius=20):
+    ins = atlas.Insertion.from_dict(traj)
+    mlapdv = ba.xyz2ccf(ins.xyz)
+    # Display the track
+    mlab.plot3d(mlapdv[:, 1], mlapdv[:, 2], mlapdv[:, 0],
+                line_width=line_width, color=color, tube_radius=tube_radius)
+
+    # Setup the  label at the top of the planned trajectory
+    mlab.text3d(mlapdv[0, 1], mlapdv[0, 2], mlapdv[0, 0] - 500, label,
+                line_width=4, color=color, figure=fig_handle, scale=500)
+    return mlapdv, ins
+
+
 prob_des = one.load(eid, dataset_types=['probes.description'])
 n_probe = len(prob_des[0])
 
-# Get information for the session
-spikes, clusters, channels = bbone.load_spike_sorting_with_channel(eid, one=one)
+# Plot empty atlas template
+fig = rendering.figure()
 
 # Loop over probes
 for i_probe in range(0, n_probe):
     # Get single probe trajectory
     probe_label = prob_des[0][i_probe].get('label')
 
-    traj = one.alyx.rest('trajectories', 'list', session=eid,
-                         provenance='Histology track', probe=probe_label)[0]
+    # Histology (red)
+    traj_h = one.alyx.rest('trajectories', 'list', session=eid,
+                           provenance='Histology track', probe=probe_label)[0]
+    color_h = (1., 0., 0.)
 
-    ins = atlas.Insertion.from_dict(traj)
+    # Planned (blue)
+    traj_p = one.alyx.rest('trajectories', 'list', session=eid,
+                           provenance='Planned', probe=probe_label)[0]
+    color_p = (0., 0., 1.)
 
-    # Initialise fig subplots
-    plt.figure(num=i_probe)
-    fig, axs = plt.subplots(1, 3)
-    fig.suptitle(f'Probe {probe_label}', fontsize=16)
-
-    # Sagittal view
-    sax = ba.plot_tilted_slice(ins.xyz, axis=0, ax=axs[0])
-    sax.plot(ins.xyz[:, 1] * 1e6, ins.xyz[:, 2] * 1e6)
-    sax.plot(channels[probe_label].y * 1e6, channels[probe_label].z * 1e6, 'y.')
-
-    # Coronal view
-    cax = ba.plot_tilted_slice(ins.xyz, axis=1, ax=axs[1])
-    cax.plot(ins.xyz[:, 0] * 1e6, ins.xyz[:, 2] * 1e6)
-    cax.plot(channels[probe_label].x * 1e6, channels[probe_label].z * 1e6, 'y.')
-
-    # Raster plot -- Brainbox
-    bbplot.driftmap(spikes[probe_label].times,
-                    spikes[probe_label].depths,
-                    ax=axs[2], plot_style='bincount')
+    # Plot traj
+    _plot3d_traj(traj_h, color=color_h, label=probe_label, fig_handle=fig)
+    _plot3d_traj(traj_p, color=color_p, label=probe_label, fig_handle=fig)
