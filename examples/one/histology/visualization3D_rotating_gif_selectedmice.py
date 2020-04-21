@@ -1,3 +1,8 @@
+"""
+Creates and saves webm video displaying a rotating template brain containing
+the penetrations done in selected animals (a color is given per animal).
+"""
+
 # Author: Gaelle Chapuis
 # environment installation guide https://github.com/int-brain-lab/iblenv
 # run "%qui qt" magic command from Ipython prompt for interactive mode
