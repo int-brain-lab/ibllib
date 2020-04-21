@@ -349,6 +349,8 @@ class BrainAtlas:
         if volume == 'annotation':
             im = self.label.take(index, axis=self.xyz2dims[axis])
             return self._label2rgb(im)
+        elif volume == 'image':
+            self.image.take(index, axis=self.xyz2dims[axis])
 
     def plot_cslice(self, ap_coordinate, volume='image', **kwargs):
         """
