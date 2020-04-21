@@ -12,15 +12,27 @@ from atlaselectrophysiology import rendering
 
 # === Parameters section (edit) ===
 
-one = ONE(base_url="https://alyx.internationalbrainlab.org")
+one = ONE(base_url="https://dev.alyx.internationalbrainlab.org")
 
-eid = 'aad23144-0e52-4eac-80c5-c4ee2decb198'
+eid = 'aad23144-0e52-4eac-80c5-c4ee2decb198'  # WORKING EXAMPLE
 
 # == CODE SECTION (DO NOT EDIT) ==
 
 
 def _plot3d_traj(traj, color, label, fig_handle,
                  ba=atlas.AllenAtlas(25), line_width=3, tube_radius=20):
+    """
+    Transform the traj into ins (atlas insertion), plot the track,
+    setup label on top of track
+    :param traj:
+    :param color:
+    :param label:
+    :param fig_handle:
+    :param ba:
+    :param line_width:
+    :param tube_radius:
+    :return: mlapdv, ins
+    """
     ins = atlas.Insertion.from_dict(traj)
     mlapdv = ba.xyz2ccf(ins.xyz)
     # Display the track
