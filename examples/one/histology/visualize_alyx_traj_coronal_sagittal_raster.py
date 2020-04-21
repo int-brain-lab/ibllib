@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import ibllib.atlas as atlas
 from oneibl.one import ONE
 import brainbox.io.one as bbone
-# import brainbox as bb
+import brainbox.plot as bbplot
 
 # === Parameters section (edit) ===
 ba = atlas.AllenAtlas(25)
@@ -33,7 +33,8 @@ for i_probe in range(0, n_probe):
 
     # Initialise fig subplots
     plt.figure(num=i_probe)
-    _, axs = plt.subplots(1, 3)
+    fig, axs = plt.subplots(1, 3)
+    fig.suptitle(f'Probe {probe_label}', fontsize=16)
 
     # Sagittal view
     sax = ba.plot_tilted_slice(ins.xyz, axis=0, ax=axs[0])
@@ -45,14 +46,7 @@ for i_probe in range(0, n_probe):
     cax.plot(ins.xyz[:, 0] * 1e6, ins.xyz[:, 2] * 1e6)
     cax.plot(channels[probe_label].x * 1e6, channels[probe_label].z * 1e6, 'y.')
 
-    # Raster plot
-
-    # -- Brainbox
-    # cd, md = bb.plot.driftmap(spikes[probe_label].times[0:-1:100],
-    #                           spikes[probe_label].depths[0:-1:100],
-    #                           ax=axs[2])
-
-    # -- Simple scatter plot
-    axs[2].plot(spikes[probe_label].times[0:-1:100],
-                spikes[probe_label].depths[0:-1:100],
-                color='k')
+    # Raster plot -- Brainbox
+    bbplot.driftmap(spikes[probe_label].times,
+                    spikes[probe_label].depths,
+                    ax=axs[2], plot_style='bincount')

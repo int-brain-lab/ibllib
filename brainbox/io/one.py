@@ -75,7 +75,7 @@ def load_channel_locations(eid, one=None, probe=None):
 
 
 def load_ephys_session(eid, one=None, dataset_types=None):
-    spikes, clusters = load_spike_sorting(eid, one=None, dataset_types=None)
+    spikes, clusters = load_spike_sorting(eid, one=None, dataset_types=dataset_types)
     trials = one.load_object(eid, obj='trials')
 
     return spikes, clusters, trials
