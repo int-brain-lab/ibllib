@@ -1,9 +1,6 @@
 '''
 For a given eID, plot the PLANNED (blue) and HISTOLOGY (red)
- probe(s) track(s) in:
-- sagittal view
-- coronal view
-- rotating brain
+ probe(s) track(s) in 3D template brain
 
 '''
 # Author: Gaelle Chapuis
