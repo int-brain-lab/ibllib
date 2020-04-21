@@ -656,8 +656,6 @@ def driftmap(ts, feat, ax=None, plot_style='bincount',
         >>> cd, md = bb.plot.driftmap(ts, depths)
     '''
 
-
-
     cd = bb.metrics.cum_drift(feat)
     md = bb.metrics.max_drift(feat)
 

@@ -8,10 +8,8 @@ For a given eID, plot the PLANNED (blue) and HISTOLOGY (red)
 '''
 # Author: Gaelle Chapuis
 
-import matplotlib.pyplot as plt
 import ibllib.atlas as atlas
 from oneibl.one import ONE
-import brainbox.plot as bbplot
 from mayavi import mlab
 from atlaselectrophysiology import rendering
 
