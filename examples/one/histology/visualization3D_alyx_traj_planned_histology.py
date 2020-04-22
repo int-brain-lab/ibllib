@@ -1,7 +1,7 @@
 '''
 For a given eID, plot the PLANNED (blue) and HISTOLOGY (red)
- probe(s) track(s) in 3D template brain
-
+probe(s) track(s) in 3D template brain, sagittal and coronal view.
+NB: coronal and sagittal views are done using tilted slices.
 '''
 # Author: Gaelle Chapuis
 
@@ -9,6 +9,7 @@ import ibllib.atlas as atlas
 from oneibl.one import ONE
 from mayavi import mlab
 from atlaselectrophysiology import rendering
+import matplotlib.pyplot as plt
 
 # === Parameters section (edit) ===
 
@@ -45,11 +46,12 @@ def _plot3d_traj(traj, color, label, fig_handle,
     return mlapdv, ins
 
 
+ba = atlas.AllenAtlas(25)
 prob_des = one.load(eid, dataset_types=['probes.description'])
 n_probe = len(prob_des[0])
 
 # Plot empty atlas template
-fig = rendering.figure()
+fig3D = rendering.figure()
 
 # Loop over probes
 for i_probe in range(0, n_probe):
@@ -67,5 +69,20 @@ for i_probe in range(0, n_probe):
     color_p = (0., 0., 1.)
 
     # Plot traj
-    _plot3d_traj(traj_h, color=color_h, label=probe_label, fig_handle=fig)
-    _plot3d_traj(traj_p, color=color_p, label=probe_label, fig_handle=fig)
+    _, ins_h = _plot3d_traj(traj_h, color=color_h, label=probe_label, fig_handle=fig3D)
+    _, ins_p = _plot3d_traj(traj_p, color=color_p, label=probe_label, fig_handle=fig3D)
+
+    # Initialise fig subplots
+    plt.figure(num=i_probe)
+    fig, axs = plt.subplots(1, 2)
+    fig.suptitle(f'Probe {probe_label}', fontsize=16)
+
+    # Sagittal view (take tilted slice from histology)
+    sax = ba.plot_tilted_slice(ins_h.xyz, axis=0, ax=axs[0])
+    sax.plot(ins_h.xyz[:, 1] * 1e6, ins_h.xyz[:, 2] * 1e6, color=color_h)
+    sax.plot(ins_p.xyz[:, 1] * 1e6, ins_p.xyz[:, 2] * 1e6, color=color_p)
+
+    # Coronal view (take tilted slice from histology)
+    cax = ba.plot_tilted_slice(ins_h.xyz, axis=1, ax=axs[1])
+    cax.plot(ins_h.xyz[:, 0] * 1e6, ins_h.xyz[:, 2] * 1e6, color=color_h)
+    cax.plot(ins_p.xyz[:, 0] * 1e6, ins_p.xyz[:, 2] * 1e6, color=color_p)
