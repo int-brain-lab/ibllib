@@ -14,6 +14,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.model_selection import KFold, LeaveOneOut, LeaveOneGroupOut
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, roc_auc_score
+from sklearn.utils import shuffle as sklearn_shuffle
 
 
 def _get_spike_counts_in_bins(spike_times, spike_clusters, intervals):
@@ -193,7 +194,7 @@ def xcorr(spike_times, spike_clusters, bin_size=None, window_size=None):
 
 def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, post_time=0.5,
            classifier='bayes', cross_validation='kfold', num_splits=5, prob_left=None,
-           custom_validation=None, n_neurons='all', iterations=1):
+           custom_validation=None, n_neurons='all', iterations=1, shuffle=False):
     """
     Use decoding to classify groups of trials (e.g. stim left/right). Classification is done using
     the population vector of summed spike counts from the specified time window. Cross-validation
@@ -247,6 +248,12 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
                 (split2_train_idxs, split2_test_idxs),
                 (split3_train_idxs, split3_test_idxs),
              ...)
+    n_neurons : string or integer
+        number of neurons to randomly subselect from the population (default is 'all')
+    iterations : int
+        number of times to repeat the decoding (especially usefull when subselecting neurons)
+    shuffle : boolean
+        whether to shuffle the trial labels each decoding iteration
 
     Returns
     -------
@@ -314,6 +321,10 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
             use_neurons = np.random.choice(pop_vector.shape[1], n_neurons, replace=False)
             sub_pop_vector = pop_vector[:, use_neurons]
 
+        # Shuffle trail labels if necessary
+        if shuffle is True:
+            event_groups = sklearn_shuffle(event_groups)
+
         if cross_validation == 'none':
 
             # Fit the model on all the data and predict
@@ -374,14 +385,14 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
                         'confusion_matrix': conf_matrix_norm,
                         'n_groups': np.shape(np.unique(event_groups))[0],
                         'classifier': classifier, 'cross_validation': '%d-fold' % num_splits,
-                        'iterations': iterations})
+                        'iterations': iterations, 'shuffle': shuffle})
     else:
         results = dict({'accuracy': acc, 'f1': f1, 'auroc': auroc,
                         'predictions': pred, 'probabilities': prob,
                         'confusion_matrix': conf_matrix_norm,
                         'n_groups': np.shape(np.unique(event_groups))[0],
                         'classifier': classifier, 'cross_validation': cross_validation,
-                        'iterations': iterations})
+                        'iterations': iterations, 'shuffle': shuffle})
 
     return results
 
