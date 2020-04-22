@@ -349,7 +349,7 @@ def remove_uuid_file(file_path, dry=False):
     name_parts.pop(-2)
     new_path = file_path.parent.joinpath('.'.join(name_parts))
     if not dry and file_path.exists():
-        file_path.rename(new_path)
+        file_path.replace(new_path)
     return new_path
 
 
