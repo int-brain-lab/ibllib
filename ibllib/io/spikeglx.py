@@ -201,19 +201,24 @@ class Reader:
         :return: boolean
         """
         if self.is_mtscomp:
-            _logger.warning("SHA1 hash is not implemented for compressed ephys. To check "
-                            "the spikeglx acquisition hash, uncompress the file first !")
-            return True
+            with open(self.file_bin.with_suffix('.ch')) as fid:
+                mtscomp_params = json.load(fid)
+            sm = mtscomp_params.get('sha1_compressed', None)
+            if sm is None:
+                _logger.warning("SHA1 hash is not implemented for compressed ephys. To check "
+                                "the spikeglx acquisition hash, uncompress the file first !")
+                return True
+            sm = sm.upper()
         else:
             sm = self.meta.fileSHA1
-            sc = hashfile.sha1(self.file_bin).upper()
-            if sm == sc:
-                log_func = _logger.info
-            else:
-                log_func = _logger.error
-            log_func(f"SHA1 metadata: {sm}")
-            log_func(f"SHA1 computed: {sc}")
-            return sm == sc
+        sc = hashfile.sha1(self.file_bin).upper()
+        if sm == sc:
+            log_func = _logger.info
+        else:
+            log_func = _logger.error
+        log_func(f"SHA1 metadata: {sm}")
+        log_func(f"SHA1 computed: {sc}")
+        return sm == sc
 
 
 def read(sglx_file, first_sample=0, last_sample=10000):

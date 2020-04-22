@@ -6,7 +6,7 @@ TODO not finished: number of subject per lab, number of recording per lab
 
 import numpy
 from oneibl.one import ONE
-one = ONE(base_url='https://dev.alyx.internationalbrainlab.org')
+one = ONE()  # base_url='https://dev.alyx.internationalbrainlab.org'
 
 dataset_types = ['spikes.times',
                  'spikes.clusters']

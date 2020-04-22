@@ -32,10 +32,11 @@ def load_channel_locations(eid, one=None, probe=None):
     analysis.
     :param eid: session eid or dictionary returned by one.alyx.rest('sessions', 'read', id=eid)
     :param dataset_types: additional spikes/clusters objects to add to the standard list
-    :return:
+    :return: channels
     """
     if isinstance(eid, dict):
         ses = eid
+        eid = ses['url'][-36:]
     else:
         # need to query alyx. Make sure we have a one client before we hit the endpoint
         if not one:
@@ -53,7 +54,7 @@ def load_channel_locations(eid, one=None, probe=None):
         if not trajs:
             continue
         # the trajectories are ordered within the serializer: histology processed, histology,
-        # micro manipulator, plannes so the first is always the desired one
+        # micro manipulator, planned so the first is always the desired one
         traj = trajs[0]
         channels[label] = Bunch({
             'atlas_id': np.array([ch['brain_region']['id'] for ch in traj['channels']]),
@@ -64,11 +65,17 @@ def load_channel_locations(eid, one=None, probe=None):
             'axial_um': np.array([ch['axial'] for ch in traj['channels']]),
             'lateral_um': np.array([ch['lateral'] for ch in traj['channels']])
         })
+
+        # Check that channels mapping matches coordinate on Flatiron
+        channel_coord = one.load_dataset(eid=eid, dataset_type='channels.localCoordinates')
+        assert np.all(np.c_[channels[label]['lateral_um'],
+                            channels[label]['axial_um']] == channel_coord)
+
     return channels
 
 
 def load_ephys_session(eid, one=None, dataset_types=None):
-    spikes, clusters = load_spike_sorting(eid, one=None, dataset_types=None)
+    spikes, clusters = load_spike_sorting(eid, one=None, dataset_types=dataset_types)
     trials = one.load_object(eid, obj='trials')
 
     return spikes, clusters, trials
@@ -87,7 +94,7 @@ def load_spike_sorting(eid, one=None, dataset_types=None):
     :param eid:
     :param one:
     :param dataset_types: additional spikes/clusters objects to add to the standard default list
-    :return:
+    :return: spikes, clusters (dict of bunch, 1 bunch per probe)
     """
     if not one:
         one = ONE()
@@ -132,3 +139,59 @@ def load_spike_sorting(eid, one=None, dataset_types=None):
         spikes[label] = spike
 
     return spikes, clusters
+
+
+def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
+    '''
+    Takes (default and any extra) values in given keys from channels and assign them to clusters.
+    If channels does not contain any data, the new keys are added to clusters but left empty.
+    :param dic_clus: dict of bunch, 1 bunch per probe, containing cluster information
+    :param channels: dict of bunch, 1 bunch per probe, containing channels information
+    :param keys_to_add_extra: Any extra keys contained in channels (will be added to default
+    ['acronym', 'atlas_id'])
+    :return: clusters (dict of bunch, 1 bunch per probe), with new keys values.
+    '''
+    probe_labels = list(channels.keys())  # Convert dict_keys into list
+    keys_to_add_default = ['acronym', 'atlas_id']
+
+    if keys_to_add_extra is None:
+        keys_to_add = keys_to_add_default
+    else:
+        #  Append extra optional keys
+        keys_to_add = list(set(keys_to_add_extra + keys_to_add_default))
+
+    for i_p in range(0, len(probe_labels)):
+        clu_ch = dic_clus[probe_labels[i_p]]['channels']
+
+        for i_k in range(0, len(keys_to_add)):
+            key = keys_to_add[i_k]
+            assert key in channels[probe_labels[i_p]].keys()  # Check key is in channels
+            ch_key = channels[probe_labels[i_p]][key]
+
+            if max(clu_ch) < len(ch_key):  # Check length as will use clu_ch as index
+                dic_clus[probe_labels[i_p]][key] = ch_key[clu_ch]
+            else:
+                print(f'Channels in probe {probe_labels[i_p]} does not have'
+                      f' the right element number compared to cluster.'
+                      f' Data in new cluster key {key} is thus returned empty.')
+                dic_clus[probe_labels[i_p]][key] = []
+
+    return dic_clus
+
+
+def load_spike_sorting_with_channel(eid, one=None):
+    '''
+    For a given eid, get spikes, clusters and channels information, and merges clusters
+    and channels information before returning all three variables.
+    :param eid:
+    :param one:
+    :return: spikes, clusters, channels (dict of bunch, 1 bunch per probe)
+    '''
+    # --- Get spikes and clusters data
+    dic_spk_bunch, dic_clus = load_spike_sorting(eid, one=one)
+
+    # -- Get brain regions and assign to clusters
+    channels = load_channel_locations(eid, one=one)
+    dic_clus = merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None)
+
+    return dic_spk_bunch, dic_clus, channels

@@ -62,6 +62,10 @@ class BrainCoordinates:
         self.nx, self.ny, self.nz = list(nxyz)
 
     @property
+    def dxyz(self):
+        return np.array([self.dx, self.dy, self.dz])
+
+    @property
     def nxyz(self):
         return np.array([self.nx, self.ny, self.nz])
 
@@ -132,6 +136,14 @@ class BrainCoordinates:
     def zlim(self):
         return self.i2z(np.array([0, self.nz - 1]))
 
+    def lim(self, axis):
+        if axis == 0:
+            return self.xlim
+        elif axis == 1:
+            return self.ylim
+        elif axis == 2:
+            return self.zlim
+
     """returns scales"""
     @property
     def xscale(self):
@@ -182,17 +194,21 @@ class BrainAtlas:
         Get the volume top surface, this is needed to compute probe insertions intersections
         """
         l0 = self.label == 0
-        s = np.zeros(self.label.shape[:2])
-        s[np.all(l0, axis=2)] = np.nan
+        bottom = np.zeros(self.label.shape[:2])
+        top = np.zeros(self.label.shape[:2])
+        top[np.all(l0, axis=2)] = np.nan
+        bottom[np.all(l0, axis=2)] = np.nan
         iz = 0
         # not very elegant, but fast enough for our purposes
         while True:
             if iz >= l0.shape[2]:
                 break
-            inds = np.bitwise_and(s == 0, ~l0[:, :, iz])
-            s[inds] = iz
+            top[np.bitwise_and(top == 0, ~l0[:, :, iz])] = iz
+            ireverse = l0.shape[2] - 1 - iz
+            bottom[np.bitwise_and(bottom == 0, ~l0[:, :, ireverse])] = ireverse
             iz += 1
-        self.top = self.bc.i2z(s)
+        self.top = self.bc.i2z(top)
+        self.bottom = self.bc.i2z(bottom)
 
     def _lookup(self, xyz):
         """
@@ -213,31 +229,104 @@ class BrainAtlas:
         """
         return self.label.flat[self._lookup(xyz)]
 
-    def _tilted_slice(self, linepts, sxdim=0, sydim=1, ssdim=1):
+    def _label2rgb(self, imlabel):
         """
-        Get a slice from the volume, tilted around 1 rotation axis
-        :param linepts: 2 points defining a probe trajectory. This trajectory is projected onto the
-        sxdim=0. The extracted slice corresponds to the plane orthogonal to the sxdim=0 plane
-        passing by the projected trajectory.
-        :param sxdim: = 0  coordinate system dimension corresponding to slice abscissa
-         (this direction is the rotation axis for tilt)
-        :param sydim: = 2  coordinate system dimension corresponding to slice ordinate
-        :param: ssdim: = 1  squeezed dimension
+        Converts a slice from the label volume to its RGB equivalent for display
+        :param imlabel: 2D np-array containing label ids (slice of the label volume)
+        :return: 3D np-array of the slice uint8 rgb values
+        """
+        if self.regions is None or getattr(self.regions, 'rgb', None) is None:
+            return imlabel
+        else:  # if the regions exist and have the rgb attribute, do the rgb lookup
+            # the lookup is done in pure numpy for speed. This is the ismember matlab fcn
+            im_unique, ilabels, iim = np.unique(imlabel, return_index=True, return_inverse=True)
+            _, ir_unique, _ = np.intersect1d(self.regions.id, im_unique, return_indices=True)
+            return np.reshape(self.regions.rgb[ir_unique[iim], :], (*imlabel.shape, 3))
 
-        For a tilted coronal slice (default), sxdim=0, sydim=2, ssdim=1
-        For a tilted sagittal slice, sxdim=1, sydim=2, ssdim=0
+    def tilted_slice(self, xyz, axis, volume='image'):
         """
-        tilt_line = linepts.copy()
-        tilt_line[:, sxdim] = 0
-        tilt_line_i = self.bc.xyz2i(tilt_line)
-        tile_shape = np.array([np.diff(tilt_line_i[:, sydim])[0] + 1, self.bc.nxyz[sxdim]])
+        From line coordinates, extracts the tilted plane containing the line from the 3D volume
+        :param xyz: np.array: points defining a probe trajectory in 3D space (xyz triplets)
+        if more than 2 points are provided will take the best fit
+        :param axis:
+            0: along ml = sagittal-slice
+            1: along ap = coronal-slice
+            2: along dv = horizontal-slice
+        :param volume: 'image' or 'annotation'
+        :return: np.array, abscissa extent (width), ordinate extent (height),
+        squeezed axis extent (depth)
+        """
+        if axis == 0:   # sagittal slice (squeeze/take along ml-axis)
+            wdim, hdim, ddim = (1, 2, 0)
+        elif axis == 1:  # coronal slice (squeeze/take along ap-axis)
+            wdim, hdim, ddim = (0, 2, 1)
+        elif axis == 2:  # horizontal slice (squeeze/take along dv-axis)
+            wdim, hdim, ddim = (0, 1, 2)
+        # get the best fit and find exit points of the volume along squeezed axis
+        trj = Trajectory.fit(xyz)
+        sub_volume = trj._eval(self.bc.lim(axis=hdim), axis=hdim)
+        sub_volume[:, wdim] = self.bc.lim(axis=wdim)
+        sub_volume_i = self.bc.xyz2i(sub_volume)
+        tile_shape = np.array([np.diff(sub_volume_i[:, hdim])[0] + 1, self.bc.nxyz[wdim]])
+        # get indices along each dimension
         indx = np.arange(tile_shape[1])
         indy = np.arange(tile_shape[0])
-        inds = np.linspace(*tilt_line_i[:, ssdim], tile_shape[0])
+        inds = np.linspace(*sub_volume_i[:, ddim], tile_shape[0])
+        # compute the slice indices and output the slice
         _, INDS = np.meshgrid(indx, np.int64(np.around(inds)))
         INDX, INDY = np.meshgrid(indx, indy)
-        inds = [[INDX, INDY, INDS][i] for i in np.argsort([sxdim, sydim, ssdim])[self.xyz2dims]]
-        return self.image[inds[0], inds[1], inds[2]]
+        indsl = [[INDX, INDY, INDS][i] for i in np.argsort([wdim, hdim, ddim])[self.xyz2dims]]
+        if volume.lower() == 'annotation':
+            tslice = self._label2rgb(self.label[indsl[0], indsl[1], indsl[2]])
+        elif volume.lower() == 'image':
+            tslice = self.image[indsl[0], indsl[1], indsl[2]]
+
+        #  get extents with correct convention NB: matplotlib flips the y-axis on imshow !
+        width = np.sort(sub_volume[:, wdim])[np.argsort(self.bc.lim(axis=wdim))]
+        height = np.flipud(np.sort(sub_volume[:, hdim])[np.argsort(self.bc.lim(axis=hdim))])
+        depth = np.flipud(np.sort(sub_volume[:, ddim])[np.argsort(self.bc.lim(axis=ddim))])
+        return tslice, width, height, depth
+
+    def plot_tilted_slice(self, xyz, axis, volume='image', cmap=None, ax=None, **kwargs):
+        """
+        From line coordinates, extracts the tilted plane containing the line from the 3D volume
+        :param xyz: np.array: points defining a probe trajectory in 3D space (xyz triplets)
+        if more than 2 points are provided will take the best fit
+        :param axis:
+            0: along ml = sagittal-slice
+            1: along ap = coronal-slice
+            2: along dv = horizontal-slice
+        :param volume: 'image' or 'annotation'
+        :return: matplotlib axis
+        """
+        if axis == 0:
+            axis_labels = np.array(['ap (um)', 'dv (um)', 'ml (um)'])
+        elif axis == 1:
+            axis_labels = np.array(['ml (um)', 'dv (um)', 'ap (um)'])
+        elif axis == 2:
+            axis_labels = np.array(['ml (um)', 'ap (um)', 'dv (um)'])
+
+        tslice, width, height, depth = self.tilted_slice(xyz, axis, volume=volume)
+        width = width * 1e6
+        height = height * 1e6
+        depth = depth * 1e6
+        if not ax:
+            plt.figure()
+            ax = plt.gca()
+            ax.axis('equal')
+        if not cmap:
+            cmap = plt.get_cmap('bone')
+        # get the transfer function from y-axis to squeezed axis for second axe
+        ab = np.linalg.solve(np.c_[height, height * 0 + 1], depth)
+        height * ab[0] + ab[1]
+        ax.imshow(tslice, extent=np.r_[width, height], cmap=cmap, **kwargs)
+        sec_ax = ax.secondary_yaxis('right', functions=(
+                                    lambda x: x * ab[0] + ab[1],
+                                    lambda y: (y - ab[1]) / ab[0]))
+        ax.set_xlabel(axis_labels[0])
+        ax.set_ylabel(axis_labels[1])
+        sec_ax.set_ylabel(axis_labels[2])
+        return ax
 
     @staticmethod
     def _plot_slice(im, extent, ax=None, cmap=None, **kwargs):
@@ -259,20 +348,15 @@ class BrainAtlas:
         index = self.bc.xyz2i(np.array([coordinate] * 3))[axis]
         if volume == 'annotation':
             im = self.label.take(index, axis=self.xyz2dims[axis])
-            if self.regions is None or getattr(self.regions, 'rgb', None) is None:
-                return im
-            else:  # if the regions exist and have the rgb attribute, do the rgb lookup
-                # the lookup is done in pure numpy for speed. This is the ismember matlab fcn
-                im_unique, ilabels, iim = np.unique(im, return_index=True, return_inverse=True)
-                _, ir_unique, _ = np.intersect1d(self.regions.id, im_unique, return_indices=True)
-                return np.reshape(self.regions.rgb[ir_unique[iim], :], (*im.shape, 3))
-        else:
+            return self._label2rgb(im)
+        elif volume == 'image':
             return self.image.take(index, axis=self.xyz2dims[axis])
 
     def plot_cslice(self, ap_coordinate, volume='image', **kwargs):
         """
         Imshow a coronal slice
         :param: ap_coordinate (m)
+        :param volume: 'image' or 'annotation'
         :return: ax
         """
         cslice = self.slice(ap_coordinate, axis=1, volume=volume)
@@ -283,6 +367,7 @@ class BrainAtlas:
         """
         Imshow a horizontal slice
         :param: dv_coordinate (m)
+        :param volume: 'image' or 'annotation'
         :return: ax
         """
         hslice = self.slice(dv_coordinate, axis=2, volume=volume)
@@ -293,6 +378,7 @@ class BrainAtlas:
         """
         Imshow a sagittal slice
         :param: ml_coordinate (m)
+        :param volume: 'image' or 'annotation'
         :return: ax
         """
         sslice = self.slice(ml_coordinate, axis=0, volume=volume)
@@ -326,7 +412,7 @@ class Trajectory:
         :param x: n by 1 or numpy array containing x-coordinates
         :return: n by 3 numpy array containing xyz-coordinates
         """
-        return self._eval(x, dim=0)
+        return self._eval(x, axis=0)
 
     def eval_y(self, y):
         """
@@ -334,7 +420,7 @@ class Trajectory:
         :param y: n by 1 or numpy array containing y-coordinates
         :return: n by 3 numpy array containing xyz-coordinates
         """
-        return self._eval(y, dim=1)
+        return self._eval(y, axis=1)
 
     def eval_z(self, z):
         """
@@ -342,19 +428,28 @@ class Trajectory:
         :param z: n by 1 or numpy array containing z-coordinates
         :return: n by 3 numpy array containing xyz-coordinates
         """
-        return self._eval(z, dim=2)
+        return self._eval(z, axis=2)
 
-    def _eval(self, c, dim):
+    def project(self, point):
+        """
+        projects a point onto the trajectory line
+        :param point: np.array(x, y, z) coordinates
+        :return:
+        """
+        return (self.point + np.dot(point - self.point, self.vector) /
+                np.dot(self.vector, self.vector) * self.vector)
+
+    def _eval(self, c, axis):
         # uses symmetric form of 3d line equation to get xyz coordinates given one coordinate
         if not isinstance(c, np.ndarray):
             c = np.array(c)
         while c.ndim < 2:
             c = c[..., np.newaxis]
         # there are cases where it's impossible to project if a line is // to the axis
-        if self.vector[dim] == 0:
+        if self.vector[axis] == 0:
             return np.nan * np.zeros((c.shape[0], 3))
         else:
-            return (c - self.point[dim]) * self.vector / self.vector[dim] + self.point
+            return (c - self.point[axis]) * self.vector / self.vector[axis] + self.point
 
     def exit_points(self, bc):
         """
@@ -396,8 +491,11 @@ class Insertion:
         """
         assert brain_atlas, 'Input argument brain_atlas must be defined'
         traj = Trajectory.fit(xyzs)
-        entry = Insertion._get_brain_entry(traj, brain_atlas)
-        tip = xyzs[np.argmin(xyzs[:, 2]), :]
+        # project the deepest point into the vector to get the tip coordinate
+        tip = traj.project(xyzs[np.argmin(xyzs[:, 2]), :])
+        # get intersection with the brain surface as an entry point
+        entry = Insertion.get_brain_entry(traj, brain_atlas)
+        # convert to spherical system to store the insertion
         depth, theta, phi = cart2sph(*(entry - tip))
         insertion_dict = {'x': entry[0], 'y': entry[1], 'z': entry[2],
                           'phi': phi, 'theta': theta, 'depth': depth}
@@ -450,7 +548,24 @@ class Insertion:
         return sph2cart(- self.depth, self.theta, self.phi) + np.array((self.x, self.y, self.z))
 
     @staticmethod
-    def _get_brain_entry(traj, brain_atlas):
+    def _get_surface_intersection(traj, brain_atlas, surface, z=0):
+        """
+        Given a Trajectory and a BrainAtlas object, computes the intersection of the trajectory
+        and a surface (usually brain_atlas.top)
+        :param brain_atlas:
+        :param z: init position for the lookup
+        :return: 3 element array x,y,z
+        """
+        # do a recursive look-up of the brain surface along the trajectory, 5 is more than enough
+        for m in range(5):
+            xyz = traj.eval_z(z)[0]
+            iy = brain_atlas.bc.y2i(xyz[1])
+            ix = brain_atlas.bc.x2i(xyz[0])
+            z = surface[iy, ix]
+        return xyz
+
+    @staticmethod
+    def get_brain_exit(traj, brain_atlas):
         """
         Given a Trajectory and a BrainAtlas object, computes the brain entry coordinate as the
         intersection of the trajectory and the brain surface (brain_atlas.top)
@@ -458,13 +573,19 @@ class Insertion:
         :return: 3 element array x,y,z
         """
         # do a recursive look-up of the brain surface along the trajectory, 5 is more than enough
-        z = 0
-        for m in range(5):
-            xyz = traj.eval_z(z)[0]
-            iy = brain_atlas.bc.y2i(xyz[1])
-            ix = brain_atlas.bc.x2i(xyz[0])
-            z = brain_atlas.top[iy, ix]
-        return xyz
+        return Insertion._get_surface_intersection(traj, brain_atlas,
+                                                   brain_atlas.bottom, z=brain_atlas.bc.zlim[-1])
+
+    @staticmethod
+    def get_brain_entry(traj, brain_atlas):
+        """
+        Given a Trajectory and a BrainAtlas object, computes the brain entry coordinate as the
+        intersection of the trajectory and the brain surface (brain_atlas.top)
+        :param brain_atlas:
+        :return: 3 element array x,y,z
+        """
+        # do a recursive look-up of the brain surface along the trajectory, 5 is more than enough
+        return Insertion._get_surface_intersection(traj, brain_atlas, brain_atlas.top, z=0)
 
 
 @dataclass
