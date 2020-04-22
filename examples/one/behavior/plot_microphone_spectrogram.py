@@ -5,8 +5,6 @@ For a given session eid, plot spectrogram of sound recorded via the microphone.
 
 import numpy as np
 import matplotlib.pyplot as plt
-
-from ibllib.io import raw_data_loaders
 import alf.io
 from oneibl.one import ONE
 
