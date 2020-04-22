@@ -35,6 +35,11 @@ keys = ['x', 'y']
 clusters_brain = bbone.merge_clusters_channels(clusters, channels, keys_to_add_extra=keys)
 del spikes, clusters, clusters_brain, channels  # Delete for the purpose of the example
 
+# ---------------------------------------------
+# 3. I don't want to connect to ONE and I already know my session path
+session_path = one.path_from_eid(eid)  # replace by your local path
+spikes, clusters = bbone.load_spike_sorting(session_path, one=one)
+# TODO offline loading of channel locations ? Probably by caching the queries.
 
 # ---------------- WIP ---------------------
 

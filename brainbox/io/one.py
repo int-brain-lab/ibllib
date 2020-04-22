@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 
 import alf.io
@@ -75,15 +77,9 @@ def load_channel_locations(eid, one=None, probe=None):
 
 
 def load_ephys_session(eid, one=None, dataset_types=None):
-    spikes, clusters = load_spike_sorting(eid, one=None, dataset_types=dataset_types)
-    trials = one.load_object(eid, obj='trials')
-
-    return spikes, clusters, trials
-
-
-def load_spike_sorting(eid, one=None, dataset_types=None):
     """
     From an eid, hits the Alyx database and downloads a standard default set of dataset types
+    From a local session Path (pathlib.Path), loads a standard default set of dataset types
      to perform analysis:
         'clusters.channels',
         'clusters.depths',
@@ -91,11 +87,38 @@ def load_spike_sorting(eid, one=None, dataset_types=None):
         'spikes.clusters',
         'spikes.times',
         'probes.description'
-    :param eid:
+    :param eid: experiment UUID or pathlib.Path of the local session
+    :param one:
+    :param dataset_types: additional spikes/clusters objects to add to the standard default list
+    :return: spikes, clusters, trials (dict of bunch, 1 bunch per probe)
+    """
+    spikes, clusters = load_spike_sorting(eid, one=None, dataset_types=dataset_types)
+    if isinstance(eid, Path):
+        trials = alf.io.load_object(eid.joinpath('alf'), object='trials')
+    else:
+        trials = one.load_object(eid, obj='trials')
+
+    return spikes, clusters, trials
+
+
+def load_spike_sorting(eid, one=None, dataset_types=None):
+    """
+    From an eid, hits the Alyx database and downloads a standard default set of dataset types
+    From a local session Path (pathlib.Path), loads a standard default set of dataset types
+     to perform analysis:
+        'clusters.channels',
+        'clusters.depths',
+        'clusters.metrics',
+        'spikes.clusters',
+        'spikes.times',
+        'probes.description'
+    :param eid: experiment UUID or pathlib.Path of the local session
     :param one:
     :param dataset_types: additional spikes/clusters objects to add to the standard default list
     :return: spikes, clusters (dict of bunch, 1 bunch per probe)
     """
+    if isinstance(eid, Path):
+        return _load_spike_sorting_local(eid)
     if not one:
         one = ONE()
     # This is a first draft, no safeguard, no error handling and a draft dataset list.
@@ -118,7 +141,12 @@ def load_spike_sorting(eid, one=None, dataset_types=None):
         #  Append extra optional DS
         dtypes = list(set(dataset_types + dtypes_default))
 
-    _ = one.load(eid, dataset_types=dtypes, download_only=True)
+    one.load(eid, dataset_types=dtypes, download_only=True)
+    return _load_spike_sorting_local(session_path)
+
+
+def _load_spike_sorting_local(session_path):
+    # gets clusters and spikes from a local session folder
     try:
         probes = alf.io.load_object(session_path.joinpath('alf'), 'probes')
     except FileNotFoundError:
