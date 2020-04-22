@@ -33,7 +33,7 @@ dataset_types = [
 eIDs = one.search(task_protocol='bias',
                   location='_iblrig_churchlandlab_ephys_0',
                   dataset_types=dataset_types)
-# eIDs = ['098bdac5-0e25-4f51-ae63-995be7fe81c7'] # TEST EXAMPLE
+# eIDs = '098bdac5-0e25-4f51-ae63-995be7fe81c7' # TEST EXAMPLE
 
 is_plot = False
 
