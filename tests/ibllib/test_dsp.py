@@ -9,10 +9,17 @@ from ibllib.dsp import WindowGenerator, rms, rises, falls, fronts, smooth, shift
 
 class TestShift(unittest.TestCase):
 
-    def test_shift(self):
+    def test_shift_1d(self):
         ns = 500
         w = scipy.signal.ricker(ns, 10)
         np.all(np.isclose(shift(w, 1), np.roll(w, 1)))
+
+    def test_shift_2d(self):
+        ns = 500
+        w = scipy.signal.ricker(ns, 10)
+        w = np.matlib.repmat(w, 100, 1).transpose()
+        np.all(np.isclose(shift(w, 1, axis=0), np.roll(w, 1, axis=0)))
+        np.all(np.isclose(shift(w, 1, axis=1), np.roll(w, 1, axis=1)))
 
 
 class TestSmooth(unittest.TestCase):

@@ -141,7 +141,7 @@ def shift(w, s, axis=0):
     ns = np.array(w.shape) * 0 + 1
     ns[axis] = w.shape[axis]
     dephas = np.zeros(ns)
-    dephas[1] = 1
+    np.put(dephas, 1, 1)
 
     W = freduce(scipy.fft.fft(w, axis=axis), axis=axis)
     dephas = freduce(scipy.fft.fft(dephas, axis=axis), axis=axis)
