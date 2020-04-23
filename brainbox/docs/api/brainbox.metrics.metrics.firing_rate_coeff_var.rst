@@ -1,6 +1,6 @@
-firing_rate_coeff_var
+firing_rate_cv
 =====================
 
 .. currentmodule:: brainbox.metrics.metrics
 
-.. autofunction:: firing_rate_coeff_var
+.. autofunction:: firing_rate_cv

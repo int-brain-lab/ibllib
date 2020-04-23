@@ -1,9 +1,25 @@
 import unittest
 import numpy as np
 import numpy.matlib as mat
+import scipy.signal
 
 import ibllib.dsp.fourier as ft
-from ibllib.dsp import WindowGenerator, rms, rises, falls, fronts, smooth
+from ibllib.dsp import WindowGenerator, rms, rises, falls, fronts, smooth, shift
+
+
+class TestShift(unittest.TestCase):
+
+    def test_shift_1d(self):
+        ns = 500
+        w = scipy.signal.ricker(ns, 10)
+        np.all(np.isclose(shift(w, 1), np.roll(w, 1)))
+
+    def test_shift_2d(self):
+        ns = 500
+        w = scipy.signal.ricker(ns, 10)
+        w = np.matlib.repmat(w, 100, 1).transpose()
+        np.all(np.isclose(shift(w, 1, axis=0), np.roll(w, 1, axis=0)))
+        np.all(np.isclose(shift(w, 1, axis=1), np.roll(w, 1, axis=1)))
 
 
 class TestSmooth(unittest.TestCase):

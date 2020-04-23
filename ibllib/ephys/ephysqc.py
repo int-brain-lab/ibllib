@@ -7,11 +7,10 @@ import logging
 import numpy as np
 import pandas as pd
 from scipy import signal
-from scipy.ndimage import gaussian_filter1d
 
 import alf.io
 from brainbox.core import Bunch
-from brainbox.processing import bincount2D
+from brainbox.metrics import quick_unit_metrics
 from ibllib.ephys import sync_probes
 from ibllib.io import spikeglx
 import ibllib.dsp as dsp
@@ -24,20 +23,6 @@ _logger = logging.getLogger('ibllib')
 
 RMS_WIN_LENGTH_SECS = 3
 WELCH_WIN_LENGTH_SAMPLES = 1024
-
-METRICS_PARAMS = {
-    'presence_bin_length_secs': 20,
-    "isi_threshold": 0.0015,
-    "min_isi": 0.000166,
-    "num_channels_to_compare": 13,
-    "max_spikes_for_unit": 500,
-    "max_spikes_for_nn": 10000,
-    "n_neighbors": 4,
-    'n_silhouette': 10000,
-    "quality_metrics_output_file": "metrics.csv",
-    "drift_metrics_interval_s": 51,
-    "drift_metrics_min_spikes_per_interval": 10
-}
 
 
 def rmsmap(fbin):
@@ -231,7 +216,7 @@ def validate_ttl_test(ses_path, display=False):
     return ok
 
 
-def _spike_sorting_metrics_ks2(ks2_path, save=True):
+def unit_metrics_ks2(ks2_path=None, m=None, save=True):
     """
     Given a path containing kilosort 2 output, compute quality metrics and optionally save them
     to a clusters_metric.csv file
@@ -240,16 +225,22 @@ def _spike_sorting_metrics_ks2(ks2_path, save=True):
     :return:
     """
 
-    m = phy_model_from_ks2_path(ks2_path)
-    r = spike_sorting_metrics(m.spike_times, m.spike_clusters, m.amplitudes, params=METRICS_PARAMS)
-    #  includes the ks2 contamination
+    # ensure that either a ks2_path or a phylib `TemplateModel` object with unit info is given
+    assert not(ks2_path is None and m is None), 'Must either specify a path to a ks2 output ' \
+                                                'directory, or a phylib `TemplateModel` object'
+    # create phylib `TemplateModel` if not given
+    m = phy_model_from_ks2_path(ks2_path) if None else m
+    # compute metrics and convert to `DataFrame`
+    r = pd.DataFrame(quick_unit_metrics(m.spike_clusters, m.spike_times, m.amplitudes, m.depths))
+
+    #  include the ks2 cluster contamination if `cluster_ContamPct` file exists
     file_contamination = ks2_path.joinpath('cluster_ContamPct.tsv')
     if file_contamination.exists():
         contam = pd.read_csv(file_contamination, sep='\t')
         contam.rename(columns={'ContamPct': 'ks2_contamination_pct'}, inplace=True)
         r = r.set_index('cluster_id', drop=False).join(contam.set_index('cluster_id'))
 
-    #  includes the ks2 labeling
+    #  include the ks2 cluster labels if `cluster_KSLabel` file exists
     file_labels = ks2_path.joinpath('cluster_KSLabel.tsv')
     if file_labels.exists():
         ks2_labels = pd.read_csv(file_labels, sep='\t')
@@ -261,137 +252,6 @@ def _spike_sorting_metrics_ks2(ks2_path, save=True):
         r.to_csv(ks2_path.joinpath(f'cluster_metrics.csv'))
 
     return r
-
-
-def spike_sorting_metrics(spike_times, spike_clusters, spike_amplitudes,
-                          params=METRICS_PARAMS, epochs=None):
-    """ Spike sorting QC metrics """
-    cluster_ids = np.arange(np.max(spike_clusters) + 1)
-    nclust = cluster_ids.size
-    r = Bunch({
-        'cluster_id': cluster_ids,
-        'num_spikes': np.zeros(nclust, ) + np.nan,
-        'firing_rate': np.zeros(nclust, ) + np.nan,
-        'presence_ratio': np.zeros(nclust, ) + np.nan,
-        'presence_ratio_std': np.zeros(nclust, ) + np.nan,
-        'isi_viol': np.zeros(nclust, ) + np.nan,
-        'amplitude_cutoff': np.zeros(nclust, ) + np.nan,
-        'amplitude_std': np.zeros(nclust, ) + np.nan,
-        # 'isolation_distance': np.zeros(nclust, ) + np.nan,
-        # 'l_ratio': np.zeros(nclust, ) + np.nan,
-        # 'd_prime': np.zeros(nclust, ) + np.nan,
-        # 'nn_hit_rate': np.zeros(nclust, ) + np.nan,
-        # 'nn_miss_rate': np.zeros(nclust, ) + np.nan,
-        # 'silhouette_score': np.zeros(nclust, ) + np.nan,
-        # 'max_drift': np.zeros(nclust, ) + np.nan,
-        # 'cumulative_drift': np.zeros(nclust, ) + np.nan,
-        'epoch_name': np.zeros(nclust, dtype='object'),
-    })
-
-    tmin = 0
-    tmax = spike_times[-1]
-
-    """computes basic metrics such as spike rate and presence ratio"""
-    presence_ratio = bincount2D(spike_times, spike_clusters,
-                                xbin=params['presence_bin_length_secs'],
-                                ybin=cluster_ids, xlim=[tmin, tmax])[0]
-    r.num_spikes = np.sum(presence_ratio > 0, axis=1)
-    r.firing_rate = r.num_spikes / params['presence_bin_length_secs']
-    r.presence_ratio = np.sum(presence_ratio > 0, axis=1) / presence_ratio.shape[1]
-    r.presence_ratio_std = np.std(presence_ratio, axis=1)
-
-    # loop over each cluster
-    for ic in np.arange(nclust):
-        # slice the spike_times array
-        ispikes = spike_clusters == cluster_ids[ic]
-        if np.all(~ispikes):
-            continue
-        st = spike_times[ispikes]
-        sa = spike_amplitudes[ispikes]
-        # compute metrics
-        r.isi_viol[ic], _ = isi_violations(st, tmin, tmax,
-                                           isi_threshold=params['isi_threshold'],
-                                           min_isi=params['min_isi'])
-        r.amplitude_cutoff[ic] = amplitude_cutoff(amplitudes=sa)
-        r.amplitude_std[ic] = np.std(sa)
-
-    return pd.DataFrame(r)
-
-
-def isi_violations(spike_train, min_time, max_time, isi_threshold, min_isi=0):
-    """Calculate ISI violations for a spike train.
-
-    Based on metric described in Hill et al. (2011) J Neurosci 31: 8699-8705
-
-    modified by Dan Denman from cortex-lab/sortingQuality GitHub by Nick Steinmetz
-
-    Inputs:
-    -------
-    spike_train : array of spike times
-    min_time : minimum time for potential spikes
-    max_time : maximum time for potential spikes
-    isi_threshold : threshold for isi violation
-    min_isi : threshold for duplicate spikes
-
-    Outputs:
-    --------
-    fpRate : rate of contaminating spikes as a fraction of overall rate
-        A perfect unit has a fpRate = 0
-        A unit with some contamination has a fpRate < 0.5
-        A unit with lots of contamination has a fpRate > 1.0
-    num_violations : total number of violations
-
-    """
-
-    duplicate_spikes = np.where(np.diff(spike_train) <= min_isi)[0]
-
-    spike_train = np.delete(spike_train, duplicate_spikes + 1)
-    isis = np.diff(spike_train)
-
-    num_spikes = spike_train.size
-    num_violations = np.sum(isis < isi_threshold)
-    violation_time = 2 * num_spikes * (isi_threshold - min_isi)
-    total_rate = spike_train.size / (max_time - min_time)
-    violation_rate = num_violations / violation_time
-    fpRate = violation_rate / total_rate
-
-    return fpRate, num_violations
-
-
-def amplitude_cutoff(amplitudes, num_histogram_bins=500, histogram_smoothing_value=3):
-    """ Calculate approximate fraction of spikes missing from a distribution of amplitudes
-
-    Assumes the amplitude histogram is symmetric (not valid in the presence of drift)
-
-    Inspired by metric described in Hill et al. (2011) J Neurosci 31: 8699-8705
-
-    Input:
-    ------
-    amplitudes : numpy.ndarray
-        Array of amplitudes (don't need to be in physical units)
-
-    Output:
-    -------
-    fraction_missing : float
-        Fraction of missing spikes (0-0.5)
-        If more than 50% of spikes are missing, an accurate estimate isn't possible
-
-    """
-
-    h, b = np.histogram(amplitudes, num_histogram_bins, density=True)
-
-    pdf = gaussian_filter1d(h, histogram_smoothing_value)
-    support = b[:-1]
-
-    peak_index = np.argmax(pdf)
-    G = np.argmin(np.abs(pdf[peak_index:] - pdf[0])) + peak_index
-
-    bin_size = np.mean(np.diff(support))
-    fraction_missing = np.sum(pdf[G:]) * bin_size
-
-    fraction_missing = np.min([fraction_missing, 0.5])
-
-    return fraction_missing
 
 
 def phy_model_from_ks2_path(ks2_path):
@@ -412,6 +272,8 @@ def phy_model_from_ks2_path(ks2_path):
                                 dat_path=[],
                                 sample_rate=fs,
                                 n_channels_dat=nch)
+    m.depths = m.get_depths()
+
     return m
 
 
