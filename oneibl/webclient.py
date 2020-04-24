@@ -236,7 +236,8 @@ class AlyxClient:
         self._base_url = base_url
         rep = requests.post(base_url + '/auth-token',
                             data=dict(username=username, password=password))
-        self._token = rep.json()
+        # Assign token or raise exception on internal server error
+        self._token = rep.json() if rep.ok else rep.raise_for_status()
         if not (list(self._token.keys()) == ['token']):
             _logger.error(rep)
             raise Exception('Alyx authentication error. Check your credentials')
