@@ -208,10 +208,10 @@ def get_qccriteria_frame(eid, data=None, pass_crit=True):
 def load_stimon_gocue_delays(eid, data=None, pass_crit=False):
     """ 1. StimOn and GoCue and should be within a 10 ms of each other on 99% of trials
     Variable name: stimOn_goCue_delays
-    Metric: goCue_times - stimOn_times (from ONE)
+    Metric: stimOn_times - goCue_times (from ONE)
     Criterion: (M<10 ms for 99%) of trials AND (M > 0 ms for 99% of trials)
     """
-    metric = data["goCue_times"] - data["stimOn_times"]
+    metric = data["stimOn_times"] - data["goCue_times"]
     criteria = (metric < 0.01) & (metric > 0)
     return np.mean(criteria) if pass_crit else metric
 
@@ -248,7 +248,7 @@ def load_response_stimFreeze_delays(eid, data=None, pass_crit=False):
     metric = data["stimFreeze_times"] - data["response_times"]
     criteria = (metric < 0.1) & (metric > 0)
     # Remove no_go trials (stimFreeze triggered differently in no_go trials)
-    nonogo_criteria = criteria[~data["choice"] == 0]
+    nonogo_criteria = criteria[data["choice"] != 0]  # FIXME shouldn't stim freeze on no-go trials?
     return np.mean(nonogo_criteria) if pass_crit else metric
 
 
@@ -266,7 +266,7 @@ def load_stimOff_itiIn_delays(eid, data=None, pass_crit=False):
     metric = data["itiIn_times"] - data["stimOff_times"]
     criteria = (metric < 0.01) & (metric >= 0)
     # Remove no_go trials (stimOff triggered differently in no_go trials)
-    nonogo_criteria = criteria[~data["choice"] == 0]
+    nonogo_criteria = criteria[data["choice"] != 0]
     return np.mean(nonogo_criteria) if pass_crit else metric
 
 
@@ -339,7 +339,7 @@ def load_wheel_move_before_feedback(eid, data=None, pass_crit=False):
         pos = trial[1]
         if pos.size > 1:
             metric[i] = pos[-1] - pos[0]
-    metric = metric[~data["choice"] == 0]  # except no-go trials
+    metric = metric[data["choice"] != 0]  # except no-go trials
     passed = metric != 0
     return np.mean(passed) if pass_crit else metric
 
@@ -384,9 +384,9 @@ def load_wheel_move_during_closed_loop(eid, data=None, pass_crit=False):
     s_mm = np.abs(thresh / gain)  # don't care about direction
     criterion = cm_to_rad(s_mm * 1e-1)  # convert abs displacement to radians (wheel pos is in rad)
     metric = metric - criterion  # difference should be close to 0
-    metric = metric[~data["choice"] == 0]  # except no-go trials
+    metric = metric[data["choice"] != 0]  # except no-go trials
     rad_per_deg = cm_to_rad(1 / gain * 1e-1)
-    passed = np.abs(metric) < rad_per_deg[~data["choice"] == 0]  # less than 1 visual degree off
+    passed = np.abs(metric) < rad_per_deg[data["choice"] != 0]  # less than 1 visual degree off
     return np.mean(passed) if pass_crit else metric
 
 
@@ -408,7 +408,7 @@ def load_stimulus_move_before_goCue(eid, data=None, pass_crit=False):
         metric = np.append(metric, np.count_nonzero(s[s > i] < (c - 0.02)))
 
     criteria = metric == 0
-    nonogo_criteria = criteria[~data["choice"] == 0]
+    nonogo_criteria = criteria[data["choice"] != 0]
     return np.mean(nonogo_criteria) if pass_crit else metric
 
 
@@ -432,7 +432,7 @@ def load_negative_feedback_stimOff_delays(eid, data=None, pass_crit=False):
     Criterion: <100 ms on 99% of incorrect trials
     """
     metric = np.abs(data["stimOff_times"] - data["errorCue_times"] - 2)
-    criteria = metric[data["outcome"] == -1] < 0.1
+    criteria = metric[data["outcome"] == -1] < 0.1  # FIXME the stimulus should freeze on nogos too
     return np.mean(criteria) if pass_crit else metric
 
 
@@ -455,7 +455,7 @@ def load_valve_pre_trial(eid, data=None, pass_crit=False):
     Criterion: 0 on 99% of trials
     """
     metric = ~(data["valveOpen_times"] < data["goCue_times"])
-    criteria = metric
+    criteria = metric  # FIXME this doesn't make sense
     return np.mean(criteria) if pass_crit else metric
 
 
