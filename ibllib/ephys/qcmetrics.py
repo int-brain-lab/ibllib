@@ -593,8 +593,21 @@ def load_stimFreeze_delays(eid, data=None, pass_crit=False):
     Criterion: 99% <  150ms
     """
     metric = data["stimFreeze_times"] - data["stimFreezeTrigger_times"]
-    criteria = metric[~np.isnan(metric)] <= 0.15
-    return np.mean(criteria) if pass_crit else metric
+    passed = metric[~np.isnan(metric)] <= 0.15
+    return np.mean(passed) if pass_crit else metric
+
+
+@bpod_data_loader
+def load_reward_volumes(eid, data=None, pass_crit=False):
+    """ xx.Reward volume tests
+    Variable name: rewardVolume
+    Metric: len(set(rewardVolume)) <= 2 & np.all(rewardVolume <= 3)
+    Criterion: 100%
+    """
+    metric = set(data['rewardVolume'])
+    passed = len(metric) <= 2 and all(map(lambda x: x <= 3, metric))
+    return passed if pass_crit else metric
+
 
 
 # Session level?

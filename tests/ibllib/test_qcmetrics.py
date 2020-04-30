@@ -67,6 +67,7 @@ class TestBpodTask(unittest.TestCase):
         data['errorCueTrigger_times'] = outcome_times(data['feedback_times'], ~data['correct'])
         data['errorCue_times'] = data['errorCueTrigger_times'] + trigg_delay
         data['valveOpen_times'] = outcome_times(data['feedback_times'], data['correct'])
+        data['rewardVolume'] = ~np.isnan(data['valveOpen_times']) * 3.
 
         # data = {
         #     "position": None,
@@ -236,6 +237,15 @@ class TestBpodTask(unittest.TestCase):
         n = len(self.data['stimFreeze_times'])
         expected = (n - 1) / n
         self.assertEqual(passed, expected, 'failed to detect dodgy timestamp')
+
+    def test_load_reward_volumes(self):
+        metric = qcmetrics.load_reward_volumes(self.eid, data=self.data, pass_crit=False)
+        self.assertEqual(metric, {0., 3.}, 'failed to return correct metric')
+        # Set incorrect volume
+        id = np.argmax(self.data['correct'])
+        self.data['rewardVolume'][id] = 4.
+        passed = qcmetrics.load_reward_volumes(self.eid, data=self.data, pass_crit=True)
+        self.assertFalse(passed, 'failed to detect incorrect reward volume')
 
 
 if __name__ == "__main__":

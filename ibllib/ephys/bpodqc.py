@@ -504,8 +504,13 @@ def load_bpod_data(session_path, fpga_time=False):
     valveOpen_times = out["feedback_times"].copy()
     errorCue_times[correct] = np.nan
     valveOpen_times[~correct] = np.nan
+    rewardVolume = np.zeros_like(correct)
+    rewardVolume[correct] = np.array([trial['reward_amount'] for trial in data])
     out.update(
-        {"errorCue_times": errorCue_times, "valveOpen_times": valveOpen_times, "correct": correct}
+        {"errorCue_times": errorCue_times,
+         "valveOpen_times": valveOpen_times,
+         "correct": correct,
+         "rewardVolume": rewardVolume}
     )
     # split intervals
     out["intervals_0"] = out["intervals"][:, 0]
