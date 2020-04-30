@@ -4,7 +4,21 @@ import numpy.matlib as mat
 import scipy.signal
 
 import ibllib.dsp.fourier as ft
-from ibllib.dsp import WindowGenerator, rms, rises, falls, fronts, smooth, shift
+from ibllib.dsp import WindowGenerator, rms, rises, falls, fronts, smooth, shift, fit_phase
+
+
+class TestPhaseRegression(unittest.TestCase):
+
+    def test_fit_phase1d(self):
+        w = np.zeros(500)
+        w[1] = 1
+        self.assertTrue(np.isclose(fit_phase(w, .002), .002))
+
+    def test_fit_phase2d(self):
+        w = np.zeros((500, 2))
+        w[1, 0], w[2, 1] = (1, 1)
+        self.assertTrue(np.all(np.isclose(fit_phase(w, .002, axis=0), np.array([.002, .004]))))
+        self.assertTrue(np.all(np.isclose(fit_phase(w.transpose(), .002), np.array([.002, .004]))))
 
 
 class TestShift(unittest.TestCase):
@@ -12,14 +26,14 @@ class TestShift(unittest.TestCase):
     def test_shift_1d(self):
         ns = 500
         w = scipy.signal.ricker(ns, 10)
-        np.all(np.isclose(shift(w, 1), np.roll(w, 1)))
+        self.assertTrue(np.all(np.isclose(shift(w, 1), np.roll(w, 1))))
 
     def test_shift_2d(self):
         ns = 500
         w = scipy.signal.ricker(ns, 10)
         w = np.matlib.repmat(w, 100, 1).transpose()
-        np.all(np.isclose(shift(w, 1, axis=0), np.roll(w, 1, axis=0)))
-        np.all(np.isclose(shift(w, 1, axis=1), np.roll(w, 1, axis=1)))
+        self.assertTrue(np.all(np.isclose(shift(w, 1, axis=0), np.roll(w, 1, axis=0))))
+        self.assertTrue(np.all(np.isclose(shift(w, 1, axis=1), np.roll(w, 1, axis=1))))
 
 
 class TestSmooth(unittest.TestCase):
