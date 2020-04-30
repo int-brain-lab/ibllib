@@ -1,7 +1,7 @@
 """
-How to decompress an ephys file
-Author: OW
+How to decompress an ephys file.
 """
+# Author: Olivier
 
 from pathlib import Path
 from ibllib.io import spikeglx

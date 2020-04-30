@@ -25,6 +25,11 @@ from oneibl.one import ONE
 
 # ======== EDIT FOR USERS ====
 
+# TODO Olivier
+# Function to download examples folder
+# joinpath one._par.CACHE_DIR / examples / ...
+# Change path
+
 # Edit so as to reflect the directory containing your electrode tracks
 path_tracks = "/Users/gaelle/Downloads/00_to_add"
 
