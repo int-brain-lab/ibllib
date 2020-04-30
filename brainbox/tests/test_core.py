@@ -7,6 +7,34 @@ import numpy as np
 from brainbox import core
 
 
+class TestIsmember(unittest.TestCase):
+
+    def test_ismember(self):
+        def _check_ismember(a, b, lia_, locb_):
+            lia, locb = core.ismember(a, b)
+            self.assertTrue(np.all(a[lia] == b[locb]))
+            self.assertTrue(np.all(lia_ == lia))
+            self.assertTrue(np.all(locb_ == locb))
+
+        b = np.array([0, 1, 3, 4, 4])
+        a = np.array([1, 4, 5, 4])
+        lia_ = np.array([True, True, False, True])
+        locb_ = np.array([1, 3, 3])
+        _check_ismember(a, b, lia_, locb_)
+
+        b = np.array([0, 4, 3, 1, 4])
+        a = np.array([1, 4, 5, 4])
+        lia_ = np.array([True, True, False, True])
+        locb_ = np.array([3, 1, 1])
+        _check_ismember(a, b, lia_, locb_)
+
+        b = np.array([0, 1, 3, 4])
+        a = np.array([1, 4, 5])
+        lia_ = np.array([True, True, False])
+        locb_ = np.array([1, 3])
+        _check_ismember(a, b, lia_, locb_)
+
+
 class TestBunch(unittest.TestCase):
 
     def test_sync(self):
