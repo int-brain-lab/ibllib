@@ -1,8 +1,6 @@
 # Mock dataset
 import unittest
-import random
 from functools import partial
-
 import numpy as np
 
 from ibllib.ephys import qcmetrics
@@ -17,53 +15,62 @@ class TestBpodTask(unittest.TestCase):
     def load_fake_bpod_data(self):
         """Create fake extractor output of bpodqc.load_data"""
         n = 5  # number of trials
-        duration = 3 * 60  # 3 min block
         trigg_delay = 1e-4  # an ideal delay between triggers and measured times
+        resp_feeback_delay = 1e-3  # delay between feedback and response
         N = partial(np.random.normal, (n,))  # Convenience function for norm dist sampling
-        start_times = np.sort(random.sample(set(np.arange(duration)), n) +
-                              np.random.random(size=(n,)))
-        assert np.all(np.diff(start_times) > 3)  # FIXME Fails on occasion
-        data = {
-            "phase": np.random.uniform(low=0, high=2 * np.pi, size=(n,)),
-            'goCue_times': start_times + N(2e-3)
-        }
-        data['stimOn_times'] = data['goCue_times'] + 1e-3
-        data['stimOn_times_training'] = data['stimOn_times']
-        data['stimOnTrigger_times'] = data['stimOn_times'] - trigg_delay
-        data['response_times'] = data['goCue_times'] + N(.5)
-        data['feedback_times'] = data['response_times'] + 1e-3
-        data['stimFreeze_times'] = data['response_times'] + 1e-2
-        data['stimFreezeTrigger_times'] = data['stimFreeze_times'] - trigg_delay
+        
         choice = np.ones((n,), dtype=int)
         choice[[1,3]] = -1  # a couple of incorrect trials
         choice[0] = 0  # a nogo trial
-        data['choice'] = choice
         # One trial of each type incorrect
         correct = choice != 0
         correct[np.argmax(choice == 1)] = 0
         correct[np.argmax(choice == -1)] = 0
-        data['correct'] = correct
+        
+        quiescence_length = .2 + np.random.standard_exponential(size=(n,))
+        iti_length = .5  # inter-trial interval
+        # trial lengths include quiescence period, a couple small trigger delays and iti
+        trial_lengths = quiescence_length + resp_feeback_delay + 1e-1 + iti_length
+        # add on 60s for nogos + feedback time (1 or 2s) + ~0.5s for other responses
+        trial_lengths += (choice == 0) * 60 + (~correct + 1) + (choice != 0) * N(.5)
+        start_times = np.concatenate(([0], np.cumsum(trial_lengths)[:-1]))
+        end_times = np.cumsum(trial_lengths) - 1e-2
+
+        data = {
+            'phase': np.random.uniform(low=0, high=2 * np.pi, size=(n,)),
+            'quiescence': start_times + quiescence_length,
+            'choice': choice,
+            'correct': correct,
+            'intervals_0': start_times,
+            'intervals_1': end_times,
+            'itiIn_times': end_times - iti_length
+        }
+        data['intervals'] = np.c_[start_times, end_times]  # FIXME this may not be required
+        data['goCueTrigger_times'] = data['quiescence'] + 1e-3
+        data['goCue_times'] = data['goCueTrigger_times'] + trigg_delay
+        data['stimOn_times'] = data['goCue_times'] + 1e-3
+        data['stimOn_times_training'] = data['stimOn_times']
+        data['stimOnTrigger_times'] = data['stimOn_times'] - trigg_delay
+        data['response_times'] = end_times - (resp_feeback_delay + 1e-1 + iti_length + (~correct + 1))
+        data['feedback_times'] = data['response_times'] + resp_feeback_delay
+        data['stimFreeze_times'] = data['response_times'] + 1e-2
+        data['stimFreezeTrigger_times'] = data['stimFreeze_times'] - trigg_delay
         data['feedbackType'] = np.vectorize(lambda x: -1 if x == 0 else x)(data['correct'])
-        outcome = data['feedbackType']
+        outcome = data['feedbackType'].copy()
         outcome[data['choice'] == 0] = 0
         data['outcome'] = outcome
         # Delay of 1 second if correct, 2 seconds if incorrect
         data['stimOffTrigger_times'] = data['feedback_times'] + (~correct + 1)
         data['stimOff_times'] = data['stimOffTrigger_times'] + trigg_delay
-        # Error tone times nan on incorrect trials FIXME Verify 
+        # Error tone times nan on incorrect trials
         outcome_times = np.vectorize(lambda x,y: x + 1e-2 if y else np.nan)
         data['errorCueTrigger_times'] = outcome_times(data['feedback_times'], ~data['correct'])
         data['errorCue_times'] = data['errorCueTrigger_times'] + trigg_delay
         data['valveOpen_times'] = outcome_times(data['feedback_times'], data['correct'])
-        # FIXME interval end before iti?
-        data['intervals_1'] = data['stimOff_times'] + 1e-1
-        data['itiIn_times'] = data['intervals_1'] + .8
-        data['intervals_0'] = data['startTimes']
 
         # data = {
         #     "position": None,
         #     "contrast": None,
-        #     "quiescence": None,
         #     "prob_left": None,
         #     "intervals": None,
         #     "stimOff_times_from_state": None,
@@ -116,37 +123,119 @@ class TestBpodTask(unittest.TestCase):
         id = np.argmax(self.data['correct'])
         self.data['stimOff_times'][id] = self.data['response_times'][id] + 1e-2
         passed = qcmetrics.load_positive_feedback_stimOff_delays(self.eid, data=self.data, pass_crit=True)
-        expected = (self.data['correct'] - 1) / self.data['correct'].sum()
+        expected = (self.data['correct'].sum() - 1) / self.data['correct'].sum()
         self.assertEqual(passed, expected, 'failed to detect dodgy timestamp')
         
     def test_load_negative_feedback_stimOff_delays(self):
-        err_trial = self.data['feedbackType'] == -1
+        err_trial = ~self.data['correct'] & self.data['outcome'] != 0
         metric = qcmetrics.load_negative_feedback_stimOff_delays(self.eid, data=self.data, pass_crit=False)
         self.assertTrue(np.allclose(metric[err_trial], 1e-2), 'failed to return correct metric')
         # Set incorrect timestamp (stimOff occurs 1s after response)
-        id = np.argmax(~self.data['correct'])
+        id = np.argmax(err_trial)
         self.data['stimOff_times'][id] = self.data['response_times'][id] + 1
         passed = qcmetrics.load_negative_feedback_stimOff_delays(self.eid, data=self.data, pass_crit=True)
-        expected = (~err_trial - 1) / ~err_trial.sum()
+        expected = (err_trial.sum() - 1) / err_trial.sum()
         self.assertEqual(passed, expected, 'failed to detect dodgy timestamp')  # TODO verify
         
     def test_load_valve_pre_trial(self):
         correct = self.data['correct']
         metric = qcmetrics.load_valve_pre_trial(self.eid, data=self.data, pass_crit=False)
-        self.assertTrue(np.all(metric[correct]), 'failed to return correct metric')
+        self.assertTrue(np.all(metric), 'failed to return correct metric')
         # Set incorrect timestamp (valveOpen_times occurs before goCue)
         id = np.argmax(correct)
         self.data['valveOpen_times'][id] = self.data['goCue_times'][id] - 1e-3
         passed = qcmetrics.load_valve_pre_trial(self.eid, data=self.data, pass_crit=True)
         expected = (correct.sum() - 1) / correct.sum()
-        self.assertEqual(passed, expected, 'failed to detect dodgy timestamp')  # TODO fails due to nans
+        self.assertEqual(passed, expected, 'failed to detect dodgy timestamp')
 
     @unittest.skip("not implemented")
     def test_load_audio_pre_trial(self):
         pass
 
     def test_load_error_trial_event_sequence(self):
-        pass # TODO intervals_0, itiIn_times
+        metric = qcmetrics.load_error_trial_event_sequence(self.eid, data=self.data, pass_crit=False)
+        self.assertTrue(np.all(metric), 'failed to return correct metric')
+        # Set incorrect timestamp (itiIn occurs before errorCue)
+        err_trial = ~self.data['correct']
+        id, = np.where(err_trial)
+        self.data['intervals_0'][id[0]] = np.inf
+        self.data['errorCue_times'][id[1]] = 0
+        passed = qcmetrics.load_error_trial_event_sequence(self.eid, data=self.data, pass_crit=True)
+        expected = (err_trial.sum() - 2) / err_trial.sum()
+        self.assertEqual(passed, expected, 'failed to detect dodgy timestamp')
+
+    def test_load_correct_trial_event_sequence(self):
+        metric = qcmetrics.load_correct_trial_event_sequence(self.eid, data=self.data, pass_crit=False)
+        self.assertTrue(np.all(metric), 'failed to return correct metric')
+        # Set incorrect timestamp
+        correct = self.data['correct']
+        id = np.argmax(correct)
+        self.data['intervals_0'][id] = np.inf
+        passed = qcmetrics.load_correct_trial_event_sequence(self.eid, data=self.data, pass_crit=True)
+        expected = (correct.sum() - 1) / correct.sum()
+        self.assertEqual(passed, expected, 'failed to detect dodgy timestamp')
+
+    def test_load_trial_length(self):
+        metric = qcmetrics.load_trial_length(self.eid, data=self.data, pass_crit=False)
+        self.assertTrue(np.all(metric), 'failed to return correct metric')
+        # Set incorrect timestamp
+        self.data['goCue_times'][-1] = 0
+        passed = qcmetrics.load_trial_length(self.eid, data=self.data, pass_crit=True)
+        n = len(self.data['goCue_times'])
+        expected = (n - 1) / n
+        self.assertEqual(passed, expected, 'failed to detect dodgy timestamp')
+        
+    def test_load_goCue_delays(self):
+        metric = qcmetrics.load_goCue_delays(self.eid, data=self.data, pass_crit=False)
+        self.assertTrue(np.allclose(metric, 1e-4), 'failed to return correct metric')
+        # Set incorrect timestamp
+        self.data['goCue_times'][1] = self.data['goCueTrigger_times'][1] + .1
+        passed = qcmetrics.load_goCue_delays(self.eid, data=self.data, pass_crit=True)
+        n = len(self.data['goCue_times'])
+        expected = (n - 1) / n
+        self.assertEqual(passed, expected, 'failed to detect dodgy timestamp')
+        
+    def test_load_errorCue_delays(self):
+        metric = qcmetrics.load_errorCue_delays(self.eid, data=self.data, pass_crit=False)
+        err_trial = ~self.data['correct']
+        self.assertTrue(np.allclose(metric[err_trial], 1e-4), 'failed to return correct metric')
+        # Set incorrect timestamp
+        id = np.argmax(err_trial)
+        self.data['errorCue_times'][id] = self.data['errorCueTrigger_times'][id] + .1
+        passed = qcmetrics.load_errorCue_delays(self.eid, data=self.data, pass_crit=True)
+        n = err_trial.sum()
+        expected = (n - 1) / n
+        self.assertEqual(passed, expected, 'failed to detect dodgy timestamp')
+        
+    def test_load_stimOn_delays(self):
+        metric = qcmetrics.load_stimOn_delays(self.eid, data=self.data, pass_crit=False)
+        self.assertTrue(np.allclose(metric, 1e-4), 'failed to return correct metric')
+        # Set incorrect timestamp
+        self.data['stimOn_times'][-1] = self.data['stimOnTrigger_times'][-1] + .2
+        passed = qcmetrics.load_stimOn_delays(self.eid, data=self.data, pass_crit=True)
+        n = len(self.data['stimOn_times'])
+        expected = (n - 1) / n
+        self.assertEqual(passed, expected, 'failed to detect dodgy timestamp')
+
+    def test_load_stimOff_delays(self):
+        metric = qcmetrics.load_stimOff_delays(self.eid, data=self.data, pass_crit=False)
+        self.assertTrue(np.allclose(metric, 1e-4), 'failed to return correct metric')
+        # Set incorrect timestamp
+        self.data['stimOff_times'][-1] = self.data['stimOffTrigger_times'][-1] + .2
+        passed = qcmetrics.load_stimOff_delays(self.eid, data=self.data, pass_crit=True)
+        n = len(self.data['stimOff_times'])
+        expected = (n - 1) / n
+        self.assertEqual(passed, expected, 'failed to detect dodgy timestamp')
+
+    def test_load_stimFreeze_delays(self):
+        metric = qcmetrics.load_stimFreeze_delays(self.eid, data=self.data, pass_crit=False)
+        self.assertTrue(np.allclose(metric, 1e-4), 'failed to return correct metric')
+        # Set incorrect timestamp
+        self.data['stimFreeze_times'][-1] = self.data['stimFreezeTrigger_times'][-1] + .2
+        passed = qcmetrics.load_stimFreeze_delays(self.eid, data=self.data, pass_crit=True)
+        n = len(self.data['stimFreeze_times'])
+        expected = (n - 1) / n
+        self.assertEqual(passed, expected, 'failed to detect dodgy timestamp')
 
 
 if __name__ == "__main__":

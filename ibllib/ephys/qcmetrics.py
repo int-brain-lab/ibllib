@@ -454,7 +454,7 @@ def load_valve_pre_trial(eid, data=None, pass_crit=False):
     Metric: count of valve events between trialstart_time and (gocue_time-20ms)
     Criterion: 0 on 99% of trials
     """
-    metric = ~(data["valveOpen_times"] < data["goCue_times"])
+    metric = ~(data["valveOpen_times"][data['correct']] < data["goCue_times"][data['correct']])
     criteria = metric  # FIXME this doesn't make sense
     return np.mean(criteria) if pass_crit else metric
 
