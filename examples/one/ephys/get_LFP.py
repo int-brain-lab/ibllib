@@ -23,14 +23,5 @@ efiles = [ef for ef in spikeglx.glob_ephys_files(session_path, bin_exists=False)
 # Read the files and get the data
 lfreader = spikeglx.Reader(efiles[0]['lf'])
 
-# -- Option 1 -- Get the data directly in Volts
-dat_volt = lfreader.read(nsel=slice(0, 1000, None))
-
-# -- Option 2 -- Get the data in samples
-dat_samp = lfreader.data[:10000, :]
-
-# Get the conversion factor and check it matches
-s2mv = lfreader.channel_conversion_sample2v['lf'][0]  # Convert sample to Volts
-
-if lfreader._raw[55, 5] * s2mv == lfreader[55, 5]:  # TODO OLIVIER CHECK TEST
-    ValueError
+# Get the first 10000 samples for all traces directly in Volts
+dat_volt = lfreader[:10000, :]
