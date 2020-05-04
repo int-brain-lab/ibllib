@@ -87,7 +87,7 @@ def get_qcmetrics_frame(eid, data=None, pass_crit=False):
         "_bpod_stimOff_delays": load_stimOff_delays(eid, data=data),  # (Point 28)
         "_bpod_stimFreeze_delays": load_stimFreeze_delays(eid, data=data),  # (Point 29)
         "_bpod_stimOn_goCue_delays": load_stimon_gocue_delays(eid, data=data),  # (Point 1)
-        "_bpod_response_feedback_delays": load_response_feddback_delays(
+        "_bpod_response_feedback_delays": load_response_feedback_delays(
             eid, data=data
         ),  # (Point 2)
         "_bpod_response_stimFreeze_delays": load_response_stimFreeze_delays(
@@ -159,7 +159,7 @@ def get_qccriteria_frame(eid, data=None, pass_crit=True):
         "_bpod_stimOn_goCue_delays": load_stimon_gocue_delays(
             eid, data=data, pass_crit=True
         ),  # (Point 1)
-        "_bpod_response_feedback_delays": load_response_feddback_delays(
+        "_bpod_response_feedback_delays": load_response_feedback_delays(
             eid, data=data, pass_crit=True
         ),  # (Point 2)
         "_bpod_response_stimFreeze_delays": load_response_stimFreeze_delays(

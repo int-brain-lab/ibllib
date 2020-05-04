@@ -18,7 +18,7 @@ class TestBpodTask(unittest.TestCase):
         trigg_delay = 1e-4  # an ideal delay between triggers and measured times
         resp_feeback_delay = 1e-3  # delay between feedback and response
         N = partial(np.random.normal, (n,))  # Convenience function for norm dist sampling
-        
+
         choice = np.ones((n,), dtype=int)
         choice[[1,3]] = -1  # a couple of incorrect trials
         choice[0] = 0  # a nogo trial
@@ -26,7 +26,7 @@ class TestBpodTask(unittest.TestCase):
         correct = choice != 0
         correct[np.argmax(choice == 1)] = 0
         correct[np.argmax(choice == -1)] = 0
-        
+
         quiescence_length = .2 + np.random.standard_exponential(size=(n,))
         iti_length = .5  # inter-trial interval
         # trial lengths include quiescence period, a couple small trigger delays and iti
@@ -116,7 +116,7 @@ class TestBpodTask(unittest.TestCase):
     @unittest.skip("not implemented")
     def test_load_stimulus_move_before_goCue(self):
         pass
-    
+
     def test_load_positive_feedback_stimOff_delays(self):
         metric = qcmetrics.load_positive_feedback_stimOff_delays(self.eid, data=self.data, pass_crit=False)
         self.assertTrue(np.allclose(metric[self.data['correct']], 1e-4), 'failed to return correct metric')
@@ -126,7 +126,7 @@ class TestBpodTask(unittest.TestCase):
         passed = qcmetrics.load_positive_feedback_stimOff_delays(self.eid, data=self.data, pass_crit=True)
         expected = (self.data['correct'].sum() - 1) / self.data['correct'].sum()
         self.assertEqual(passed, expected, 'failed to detect dodgy timestamp')
-        
+
     def test_load_negative_feedback_stimOff_delays(self):
         err_trial = ~self.data['correct'] & self.data['outcome'] != 0
         metric = qcmetrics.load_negative_feedback_stimOff_delays(self.eid, data=self.data, pass_crit=False)
@@ -137,7 +137,7 @@ class TestBpodTask(unittest.TestCase):
         passed = qcmetrics.load_negative_feedback_stimOff_delays(self.eid, data=self.data, pass_crit=True)
         expected = (err_trial.sum() - 1) / err_trial.sum()
         self.assertEqual(passed, expected, 'failed to detect dodgy timestamp')  # TODO verify
-        
+
     def test_load_valve_pre_trial(self):
         correct = self.data['correct']
         metric = qcmetrics.load_valve_pre_trial(self.eid, data=self.data, pass_crit=False)
@@ -185,7 +185,7 @@ class TestBpodTask(unittest.TestCase):
         n = len(self.data['goCue_times'])
         expected = (n - 1) / n
         self.assertEqual(passed, expected, 'failed to detect dodgy timestamp')
-        
+
     def test_load_goCue_delays(self):
         metric = qcmetrics.load_goCue_delays(self.eid, data=self.data, pass_crit=False)
         self.assertTrue(np.allclose(metric, 1e-4), 'failed to return correct metric')
@@ -195,7 +195,7 @@ class TestBpodTask(unittest.TestCase):
         n = len(self.data['goCue_times'])
         expected = (n - 1) / n
         self.assertEqual(passed, expected, 'failed to detect dodgy timestamp')
-        
+
     def test_load_errorCue_delays(self):
         metric = qcmetrics.load_errorCue_delays(self.eid, data=self.data, pass_crit=False)
         err_trial = ~self.data['correct']
@@ -207,7 +207,7 @@ class TestBpodTask(unittest.TestCase):
         n = err_trial.sum()
         expected = (n - 1) / n
         self.assertEqual(passed, expected, 'failed to detect dodgy timestamp')
-        
+
     def test_load_stimOn_delays(self):
         metric = qcmetrics.load_stimOn_delays(self.eid, data=self.data, pass_crit=False)
         self.assertTrue(np.allclose(metric, 1e-4), 'failed to return correct metric')

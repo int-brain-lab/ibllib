@@ -510,7 +510,8 @@ def load_bpod_data(session_path, fpga_time=False):
         {"errorCue_times": errorCue_times,
          "valveOpen_times": valveOpen_times,
          "correct": correct,
-         "rewardVolume": rewardVolume}
+         "rewardVolume": rewardVolume,
+         }
     )
     # split intervals
     out["intervals_0"] = out["intervals"][:, 0]
@@ -518,6 +519,7 @@ def load_bpod_data(session_path, fpga_time=False):
     _ = out.pop('intervals')
     out["outcome"] = out["feedbackType"].copy()
     out['outcome'][out['choice'] == 0] = 0
+    # Optional convert times to FPGA clock
     if fpga_time:
         bpod2fpga = get_bpod2fpga_times_func(session_path)
         for k in out:
