@@ -15,14 +15,14 @@ And check the data appears on:
 https://dev.alyx.internationalbrainlab.org/admin/experiments/trajectoryestimate/?
 
 When you feel confident you can upload without error,
-set example_overwrite = False ,
+set EXAMPLE_OVERWRITE = False ,
 change to the   ALYX_URL = "https://alyx.internationalbrainlab.org"
 and re-run.
 
-With example_overwrite = True, the script downloads an example dataset and runs
-the registration.
+With EXAMPLE_OVERWRITE = True, the script downloads an example dataset and runs
+the registration (used for automatic testing of the example).
 '''
-# Author: Olivier Winter
+# Author: Olivier, Gaelle
 
 from ibllib.pipes import histology
 from oneibl.one import ONE
@@ -33,7 +33,7 @@ from pathlib import Path
 # Edit so as to reflect the directory containing your electrode tracks
 path_tracks = "/Users/gaelle/Downloads/Flatiron/examples/00_to_add"
 
-example_overwrite = True  # Put to False when wanting to run the script on your data
+EXAMPLE_OVERWRITE = True  # Put to False when wanting to run the script on your data
 
 ALYX_URL = "https://dev.alyx.internationalbrainlab.org"  # FOR TESTING
 # ALYX_URL = "https://alyx.internationalbrainlab.org"  # UNCOMMENT WHEN READY
@@ -41,9 +41,9 @@ ALYX_URL = "https://dev.alyx.internationalbrainlab.org"  # FOR TESTING
 # ======== DO NOT EDIT BELOW ====
 one = ONE(base_url=ALYX_URL)
 
-if example_overwrite:
+if EXAMPLE_OVERWRITE:
     # TODO Olivier : Function to download examples folder
     cachepath = Path(one._par.CACHE_DIR)
-    path_tracks = cachepath.joinpath('examples', '00_to_add')
+    path_tracks = cachepath.joinpath('examples', 'histology', 'tracks_to_add')
 
 histology.register_track_files(path_tracks=path_tracks, one=one, overwrite=True)
