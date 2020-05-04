@@ -247,17 +247,8 @@ def register_track(probe_id, picks=None, one=None, overwrite=False):
                       id=probe_id,
                       data={'json': {'xyz_picks': np.int32(picks * 1e6).tolist()}})
         # 2) patch or create the trajectory coming from histology track
-        tdict = {'probe_insertion': probe_id,
-                 'x': insertion_histology.x * 1e6,
-                 'y': insertion_histology.y * 1e6,
-                 'z': insertion_histology.z * 1e6,
-                 'phi': insertion_histology.phi,
-                 'theta': insertion_histology.theta,
-                 'depth': insertion_histology.depth * 1e6,
-                 'roll': insertion_histology.beta,
-                 'provenance': 'Histology track',
-                 'coordinate_system': 'IBL-Allen',
-                 }
+        tdict = create_trajectory_dict(probe_id, insertion_histology, provenance='Histology track')
+
     hist_traj = one.alyx.rest('trajectories', 'list',
                               probe_insertion=probe_id,
                               provenance='Histology track')
@@ -273,6 +264,74 @@ def register_track(probe_id, picks=None, one=None, overwrite=False):
     if brain_locations is None:
         return brain_locations, None
     # 3) create channel locations
+    channel_dict = create_channel_dict(hist_traj, brain_locations)
+    one.alyx.rest('channels', 'create', data=channel_dict)
+    return brain_locations, insertion_histology
+
+
+def register_aligned_track(probe_id, insertion, brain_locations, one=None, overwrite=False):
+    """
+    Register ephys aligned trajectory and channel locations to Alyx
+    Here we update Alyx models on the database in 2 steps
+    1) The trajectory computed from the final electrode channel locations
+    2) Channel locations are set to the trajectory
+    """
+    assert one
+    tdict = create_trajectory_dict(probe_id, insertion, provenance='Ephys aligned histology track')
+
+    hist_traj = one.alyx.rest('trajectories', 'list',
+                              probe_insertion=probe_id,
+                              provenance='Ephys aligned histology track')
+    # if the trajectory exists, remove it, this will cascade delete existing channel locations
+    if len(hist_traj):
+        if overwrite:
+            one.alyx.rest('trajectories', 'delete', id=hist_traj[0]['id'])
+        else:
+            raise FileExistsError('The session already exists, however overwrite is set to False.'
+                                  'If you want to overwrite, set overwrite=True.')
+    hist_traj = one.alyx.rest('trajectories', 'create', data=tdict)
+
+    channel_dict = create_channel_dict(hist_traj, brain_locations)
+    one.alyx.rest('channels', 'create', data=channel_dict)
+
+
+def create_trajectory_dict(probe_id, insertion, provenance):
+    """
+    Create trajectory dictionary in form to upload to alyx
+    :param probe id: unique id of probe insertion
+    :type probe_id: string (hexadecimal UUID)
+    :param insertion: Insertion object describing entry and tip of trajectory
+    :type insertion: object atlas.Insertion
+    :param provenance: 'Histology track' or 'Ephys aligned histology track'
+    :type provenance: string
+    :return tdict:
+    :type tdict: dict
+    """
+    tdict = {'probe_insertion': probe_id,
+             'x': insertion.x * 1e6,
+             'y': insertion.y * 1e6,
+             'z': insertion.z * 1e6,
+             'phi': insertion.phi,
+             'theta': insertion.theta,
+             'depth': insertion.depth * 1e6,
+             'roll': insertion.beta,
+             'provenance': provenance,
+             'coordinate_system': 'IBL-Allen',
+             }
+
+    return tdict
+
+
+def create_channel_dict(traj, brain_locations):
+    """
+    Create channel dictionary in form to upload to alyx
+    :param traj: alyx trajectory object to attach channel information to
+    :type traj: dict
+    :param brain_locations: information about location of electrode channels in brain atlas
+    :type insertion: Bunch
+    :return tdict:
+    :type tdict: list of dict
+    """
     channel_dict = []
     for i in np.arange(brain_locations.id.size):
         channel_dict.append({
@@ -282,10 +341,10 @@ def register_track(probe_id, picks=None, one=None, overwrite=False):
             'axial': brain_locations.axial[i],
             'lateral': brain_locations.lateral[i],
             'brain_region': int(brain_locations.id[i]),
-            'trajectory_estimate': hist_traj['id']
+            'trajectory_estimate': traj['id']
         })
-    one.alyx.rest('channels', 'create', data=channel_dict)
-    return brain_locations, insertion_histology
+
+    return channel_dict
 
 
 def _parse_filename(track_file):
