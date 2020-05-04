@@ -85,14 +85,14 @@ class Patcher(abc.ABC):
         Registers a set of files belonging to a session only on the server
         :param file_list: (list of pathlib.Path)
         :param created_by: (string) name of user in Alyx (defaults to 'root')
-        :param server_repository: optional: (string) name of the server repository in Alyx
+        :param repository: optional: (string) name of the server repository in Alyx
         :param versions: optional (list of strings): versions tags (defaults to ibllib version)
         :param dry: (bool) False by default
         :return:
         """
-        register_dataset(file_list, one=self.one, **kwargs)
+        return register_dataset(file_list, one=self.one, server_only=True, **kwargs)
 
-    def create_dataset(self, file_list, server_repository=None, created_by='root', dry=False):
+    def create_dataset(self, file_list, repository=None, created_by='root', dry=False):
         """
         Creates a new dataset on FlatIron and uploads it from arbitrary location.
         Rules for creation/patching are the same that apply for registration via Alyx
@@ -110,7 +110,7 @@ class Patcher(abc.ABC):
         assert len(set([alf.io.get_session_path(f) for f in file_list])) == 1
         assert all([Path(f).exists() for f in file_list])
         datasets = self.register_dataset(file_list, created_by=created_by,
-                                         server_repository=server_repository, dry=dry)
+                                         repository=repository, dry=dry)
         if dry:
             return
         # from the dataset info, set flatIron flag to exists=True
@@ -273,10 +273,9 @@ class FTPPatcher(Patcher):
         self.ftp.prot_p()
         self.ftp.login(one._par.FTP_DATA_SERVER_LOGIN, one._par.FTP_DATA_SERVER_PWD)
 
-    def create_dataset(self, path, created_by='root', dry=False, server_repository='ibl_patcher'):
+    def create_dataset(self, path, created_by='root', dry=False, repository='ibl_patcher'):
         # overrides the superclass just to remove the server repository argument
-        super().create_dataset(path, created_by=created_by, dry=dry,
-                               server_repository=server_repository)
+        super().create_dataset(path, created_by=created_by, dry=dry, repository=repository)
 
     def _scp(self, local_path, remote_path, dry=True):
         # remote_path = '/mnt/ibl/zadorlab/Subjects/flowers/2018-07-13/001
@@ -296,7 +295,7 @@ class FTPPatcher(Patcher):
             try:
                 self.ftp.cwd(str(remote_path))
             except ftplib.all_errors:
-                self.cdtree(Path(remote_path.parent))
+                self.mktree(Path(remote_path.parent))
                 self.ftp.mkd(str(remote_path))
                 self.ftp.cwd(str(remote_path))
 

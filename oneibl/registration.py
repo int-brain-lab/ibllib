@@ -25,13 +25,15 @@ REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
                               ]
 
 
-def register_dataset(file_list, one=None, created_by='root', server_repository=None, dry=False):
+def register_dataset(file_list, one=None, created_by='root', repository=None, server_only=False,
+                     dry=False):
     """
     Registers a set of files belonging to a session only on the server
     :param file_list: (list of pathlib.Path or pathlib.Path)
     :param one: optional (oneibl.ONE), current one object, will create an instance if not provided
     :param created_by: (string) name of user in Alyx (defaults to 'root')
-    :param server_repository: optional: (string) name of the server repository in Alyx
+    :param repository: optional: (string) name of the repository in Alyx
+    :param server_only: optional: (bool) if True only creates on the Flatiron (defaults to False)
     :param versions: optional (list of strings): versions tags (defaults to ibllib version)
     :param dry: (bool) False by default
     :return:
@@ -45,8 +47,8 @@ def register_dataset(file_list, one=None, created_by='root', server_repository=N
     r = {'created_by': created_by,
          'path': str(session_path.relative_to((session_path.parents[2]))),
          'filenames': [str(p.relative_to(session_path)) for p in file_list],
-         'name': server_repository,
-         'server_only': True,
+         'name': repository,
+         'server_only': server_only,
          'hashes': [hashfile.md5(p) for p in file_list],
          'filesizes': [p.stat().st_size for p in file_list],
          'versions': [version.ibllib() for _ in file_list]}
