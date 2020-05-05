@@ -186,8 +186,9 @@ class Reader:
     def decompress_file(self, keep_original=True, **kwargs):
         """
         Decompresses a mtscomp file
-        :param keep_original: defaults True. If False, the original compressed file is deleted
-         and the current spikeglx.Reader object is modified in place
+        :param keep_original: defaults True. If False, the original compressed file (input)
+        is deleted and the current spikeglx.Reader object is modified in place
+        NB: This is not equivalent to overwrite (which replaces the output file)
         :return: pathlib.Path of the decompressed *.bin file
         """
         if 'out' not in kwargs:
