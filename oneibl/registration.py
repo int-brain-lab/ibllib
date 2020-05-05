@@ -8,7 +8,7 @@ import ibllib.time
 from ibllib.misc import version, log2session
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io import flags, hashfile
-
+import alf.io
 from oneibl.one import ONE
 
 logger_ = logging.getLogger('ibllib.alf')
@@ -23,6 +23,39 @@ REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
                               'raw_ephys_data/**/_spikeglx_*.*',
                               'raw_ephys_data/**/_iblqc_*.*',
                               ]
+
+
+def register_dataset(file_list, one=None, created_by='root', server_repository=None, dry=False):
+    """
+    Registers a set of files belonging to a session only on the server
+    :param file_list: (list of pathlib.Path or pathlib.Path)
+    :param one: optional (oneibl.ONE), current one object, will create an instance if not provided
+    :param created_by: (string) name of user in Alyx (defaults to 'root')
+    :param server_repository: optional: (string) name of the server repository in Alyx
+    :param versions: optional (list of strings): versions tags (defaults to ibllib version)
+    :param dry: (bool) False by default
+    :return:
+    """
+    if not isinstance(file_list, list):
+        file_list = [Path(file_list)]
+    assert len(set([alf.io.get_session_path(f) for f in file_list])) == 1
+    assert all([Path(f).exists() for f in file_list])
+    session_path = alf.io.get_session_path(file_list[0])
+    # first register the file
+    r = {'created_by': created_by,
+         'path': str(session_path.relative_to((session_path.parents[2]))),
+         'filenames': [str(p.relative_to(session_path)) for p in file_list],
+         'name': server_repository,
+         'server_only': True,
+         'hashes': [hashfile.md5(p) for p in file_list],
+         'filesizes': [p.stat().st_size for p in file_list],
+         'versions': [version.ibllib() for _ in file_list]}
+    if not dry:
+        if one is None:
+            one = ONE()
+        return one.alyx.rest('register-file', 'create', data=r)
+    else:
+        print(r)
 
 
 class RegistrationClient:
