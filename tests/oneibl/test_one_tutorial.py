@@ -15,6 +15,7 @@ import examples.one.ephys.get_list_mice_certif
 import examples.one.ephys.get_list_mice_repeated_site
 import examples.one.ephys.get_probe_label_dir
 import examples.one.ephys.get_spikeData_and_brainLocations
+import examples.one.ephys.sync_lfp_session_time
 
 # - Histology
 import examples.one.histology.register_lasagna_tracks_alyx

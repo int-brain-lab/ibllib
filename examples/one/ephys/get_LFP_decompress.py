@@ -22,23 +22,23 @@ one.load(eid, dataset_types=dtypes, download_only=True)
 
 # Get the files information
 session_path = one.path_from_eid(eid)
-efiles_op1 = [ef for ef in spikeglx.glob_ephys_files(session_path, bin_exists=False) if
-              ef.get('lf', None)]
+efiles = [ef for ef in spikeglx.glob_ephys_files(session_path, bin_exists=False) if
+          ef.get('lf', None)]
+efile = efiles[0]['lf']
 
 # === Option 2 === You can also input a file locally, e.g.
 # efile_op2 = Path("/probe00/_spikeglx_ephysData_g0_t0.imec.lf.cbin")
-# TODO test run
 # NB the .ch file matching the cbin file name must exit
 
 # === Read the files and get the data ===
 # Enough to do analysis
-sr_op1 = spikeglx.Reader(efiles_op1[0]['lf'])
+sr = spikeglx.Reader(efile)
 
 # Get the first 10000 samples for all traces directly in Volts
-dat_volt = sr_op1[:10000, :]
+dat_volt = sr[:10000, :]
 
 # === Decompress the data ===
 # Used by client code, e.g. Matlab for spike sorting
 # Give new path output name
-sr_op1.decompress_file(keep_original=True,  # Keeps the original file
-                       overwrite=True)  # Overwrite the out file in case it already exists
+sr.decompress_file(keep_original=True,  # Keeps the original file
+                   overwrite=True)  # Overwrite the out file in case it already exists
