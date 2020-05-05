@@ -1,7 +1,7 @@
 """
 Reads in and display a chunk of raw LFP synchronized on session time
-Author OW
 """
+# Author: Olivier
 
 import matplotlib.pyplot as plt
 import numpy as np

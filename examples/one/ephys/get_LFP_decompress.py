@@ -4,7 +4,7 @@ For client code (such as Matlab spike sorting) to run, it is
 necessary to decompress the file. Such decompression is not needed
 to access the data otherwise.
 '''
-# Author: Olivier Winter
+# Author: Olivier, Gaelle
 
 from ibllib.io import spikeglx
 from oneibl.one import ONE
@@ -39,4 +39,6 @@ dat_volt = sr_op1[:10000, :]
 
 # === Decompress the data ===
 # Used by client code, e.g. Matlab for spike sorting
-sr_op1.decompress_file(keep_original=True)
+# Give new path output name
+sr_op1.decompress_file(overwrite=False,
+                       out=session_path.joinpath('efile_lfp_decompressed'))
