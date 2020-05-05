@@ -183,28 +183,18 @@ class Reader:
             self.file_bin = file_out
         return file_out
 
-    def decompress_file(self, overwrite=False, **kwargs):
+    def decompress_file(self, keep_original=True, **kwargs):
         """
         Decompresses a mtscomp file
-        :param overwrite: defaults False. If True, the original compressed file is deleted
+        :param keep_original: defaults True. If False, the original compressed file is deleted
          and the current spikeglx.Reader object is modified in place
         :return: pathlib.Path of the decompressed *.bin file
         """
-        # Checks
-        assert self.is_mtscomp
-        print('TODO assert')
-
-        # Define file output and decompress
         if 'out' not in kwargs:
             kwargs['out'] = self.file_bin.with_suffix('.bin')
-            print('TODO here out')
-
-        print('TODO before compress')
-        mtscomp.decompress(self.file_bin, self.file_bin.with_suffix('.ch'),
-                           overwrite=overwrite, **kwargs)
-        print('TODO after compress')
-
-        if overwrite:
+        assert self.is_mtscomp
+        mtscomp.decompress(self.file_bin, self.file_bin.with_suffix('.ch'), **kwargs)
+        if not keep_original:
             self.file_bin.unlink()
             self.file_bin.with_suffix('.ch').unlink()
             self.file_bin = kwargs['out']

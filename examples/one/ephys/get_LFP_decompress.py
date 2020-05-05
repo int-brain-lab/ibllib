@@ -40,5 +40,5 @@ dat_volt = sr_op1[:10000, :]
 # === Decompress the data ===
 # Used by client code, e.g. Matlab for spike sorting
 # Give new path output name
-sr_op1.decompress_file(overwrite=False,
+sr_op1.decompress_file(keep_original=True,
                        out=session_path.joinpath('efile_lfp_decompressed'))
