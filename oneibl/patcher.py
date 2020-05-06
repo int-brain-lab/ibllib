@@ -21,6 +21,7 @@ FLATIRON_USER = 'datauser'
 FLATIRON_MOUNT = '/mnt/ibl'
 FTP_HOST = 'test.alyx.internationalbrainlab.org'
 FTP_PORT = 21
+DMZ_REPOSITORY = 'ibl_patcher'  # in alyx, the repository name containing the patched filerecords
 
 
 def _run_command(cmd, dry=True):
@@ -102,20 +103,21 @@ class Patcher(abc.ABC):
         can also be a list of full file pathes belonging to the same session.
         :param server_repository: Alyx server repository name
         :param created_by: alyx username for the dataset (optional, defaults to root)
-        :return:
+        :return: the registrations response, a list of dataset records
         """
         # first register the file
         if not isinstance(file_list, list):
             file_list = [Path(file_list)]
         assert len(set([alf.io.get_session_path(f) for f in file_list])) == 1
         assert all([Path(f).exists() for f in file_list])
-        datasets = self.register_dataset(file_list, created_by=created_by,
+        response = self.register_dataset(file_list, created_by=created_by,
                                          repository=repository, dry=dry)
         if dry:
             return
         # from the dataset info, set flatIron flag to exists=True
-        for p, d in zip(file_list, datasets):
+        for p, d in zip(file_list, response):
             self._patch_dataset(p, dset_id=d['id'], dry=dry)
+        return response
 
     def delete_dataset(self, dset_id, dry=False):
         dset = self.one.alyx.rest('datasets', "read", id=dset_id)
@@ -273,18 +275,30 @@ class FTPPatcher(Patcher):
         self.ftp.prot_p()
         self.ftp.login(one._par.FTP_DATA_SERVER_LOGIN, one._par.FTP_DATA_SERVER_PWD)
 
-    def create_dataset(self, path, created_by='root', dry=False, repository='ibl_patcher'):
+    def create_dataset(self, path, created_by='root', dry=False, repository=DMZ_REPOSITORY):
         # overrides the superclass just to remove the server repository argument
-        super().create_dataset(path, created_by=created_by, dry=dry, repository=repository)
+        response = super().create_dataset(path, created_by=created_by, dry=dry,
+                                          repository=repository)
+        # makes sure the only file labeled as existing is the ibl_patcher one
+        for ds in response:
+            for fr in ds['file_records']:
+                if fr['data_repository'] != repository:
+                    self.one.alyx.rest('files', 'partial_update', id=fr['id'],
+                                       data={'exists': False})
+        return response
 
     def _scp(self, local_path, remote_path, dry=True):
         # remote_path = '/mnt/ibl/zadorlab/Subjects/flowers/2018-07-13/001
         remote_path = Path(Path(FLATIRON_MOUNT).root).joinpath(
             remote_path.relative_to(FLATIRON_MOUNT))
         # local_path
-        # remote_path.parent
         self.mktree(remote_path.parent)
+        # if the file already exists on the buffer, do not overwrite
+        if local_path.name in self.ftp.nlst():
+            _logger.info(f"FTP already on server {local_path}")
+            return 0, ''
         self.ftp.pwd()
+        _logger.info(f"FTP upload {local_path}")
         with open(local_path, 'rb') as fid:
             self.ftp.storbinary(f'STOR {local_path.name}', fid)
         return 0, ''
@@ -302,3 +316,11 @@ class FTPPatcher(Patcher):
     def _rm(self, flatiron_path, dry=True):
         raise PermissionError("This Patcher does not have admin permissions to remove data "
                               "from the FlatIron server. ")
+
+    def flush(self):
+        """
+        Sends all the backlog files on the flatiron
+        """
+        repo = self.one.alyx.rest('data-repository', 'list', name='')
+        fr = self.one.alyx.rest('files', 'list', data_repository=DMZ_REPOSITORY)
+        print(len(fr))

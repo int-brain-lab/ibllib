@@ -27,7 +27,8 @@ for index, rec in df_map.iterrows():
                                      'phi': rec.phi, 'theta': rec.theta, 'depth': rec.depth_um})
     mlapdv = brain_atlas.xyz2ccf(ins.xyz)
     plt = mlab.plot3d(mlapdv[:, 1], mlapdv[:, 2], mlapdv[:, 0],
-                      line_width=3, color=(0., 0., 1.), tube_radius=20)
+                      line_width=3, color=(1, .6, .6), tube_radius=15)
     plt_trj.append(plt)
 
-rendering.rotating_video(output_video, fig)
+##
+rendering.rotating_video(output_video, fig, fps=24, secs=16)
