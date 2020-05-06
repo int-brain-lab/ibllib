@@ -1,4 +1,4 @@
-import ibllib.ephys.bpodqc as bpodqc
+import ibllib.qc.bpodqc_extractors as bpodqc
 import ibllib.ephys.ephysqc as ephysqc
 from oneibl.one import ONE
 

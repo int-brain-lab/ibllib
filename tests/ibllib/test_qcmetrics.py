@@ -3,7 +3,7 @@ import unittest
 from functools import partial
 import numpy as np
 
-from ibllib.ephys import qcmetrics
+from ibllib.qc import bpodqc_metrics as qcmetrics
 
 
 class TestBpodTask(unittest.TestCase):

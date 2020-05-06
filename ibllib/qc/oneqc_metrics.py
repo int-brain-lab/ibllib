@@ -7,9 +7,9 @@ import pandas as pd
 import seaborn as sns
 
 from brainbox.behavior.wheel import traces_by_trial, cm_to_rad
-import ibllib.ephys.bpodqc as bpodqc
+import ibllib.qc.bpodqc_extractors as bpodqc
 from ibllib.io.extractors.training_wheel import get_wheel_position
-from ibllib.ephys.oneutils import search_lab_ephys_sessions, _to_eid, random_ephys_session
+from ibllib.qc.oneutils import search_lab_ephys_sessions, _to_eid, random_ephys_session
 from oneibl.one import ONE
 from alf.io import is_details_dict
 
@@ -22,6 +22,8 @@ one = ONE()
 def _load_df_from_details(details=None, func=None):
     """
     Applies a session level loader_func(eid) from session details dict from Alyx
+    Example:
+    df = _load_df_from_details(details, func=load_stimOff_itiIn_delays)
     """
     if details is None or func is None:
         print("One or more required inputs are None.")
@@ -209,7 +211,7 @@ def load_stimon_gocue_delays(eid, data=None, pass_crit=False):
     """ 1. StimOn and GoCue and should be within a 10 ms of each other on 99% of trials
     Variable name: stimOn_goCue_delays
     Metric: stimOn_times - goCue_times (from ONE)
-    Criterion: (M<10 ms for 99%) of trials AND (M > 0 ms for 99% of trials)
+    Criteria: (M<10 ms for 99%) of trials AND (M > 0 ms for 99% of trials)
     """
     metric = data["stimOn_times"] - data["goCue_times"]
     criteria = (metric < 0.01) & (metric > 0)

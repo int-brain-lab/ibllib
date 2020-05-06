@@ -1,25 +1,26 @@
+# TODO: Fix new extractor signature/saving files - Make class?
 import os
 from pathlib import Path, PureWindowsPath
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy import interpolate
 
 import ibllib.io.raw_data_loaders as raw
-import ibllib.plots as plots
-from ibllib.ephys.ephysqc import _qc_from_path
-from ibllib.ephys.oneutils import uuid_to_path
-from ibllib.io.extractors.training_trials import (get_choice,
-                                                  get_feedback_times,
-                                                  get_feedbackType,
-                                                  get_goCueOnset_times,
-                                                  get_goCueTrigger_times,
-                                                  get_intervals,
-                                                  get_port_events,
-                                                  get_response_times,
-                                                  get_stimOn_times,
-                                                  get_stimOnTrigger_times)
+from ibllib.qc.oneutils import uuid_to_path
+from ibllib.io.extractors.training_trials import (
+    get_choice,
+    get_feedback_times,
+    get_feedbackType,
+    get_goCueOnset_times,
+    get_goCueTrigger_times,
+    get_intervals,
+    get_port_events,
+    get_response_times,
+    get_stimOn_times,
+    get_stimOnTrigger_times,
+    get_rewardVolume,
+)
 from oneibl.one import ONE
 
 one = ONE()
@@ -105,11 +106,11 @@ def get_trial_type(session_path, save=False, data=False, settings=False):
 
     trial_type = []
     for tr in data:
-        if ~np.isnan(tr["behavior_data"]["States timestamps"]['reward'][0][0]):
+        if ~np.isnan(tr["behavior_data"]["States timestamps"]["reward"][0][0]):
             trial_type.append(1)
-        elif ~np.isnan(tr["behavior_data"]["States timestamps"]['error'][0][0]):
+        elif ~np.isnan(tr["behavior_data"]["States timestamps"]["error"][0][0]):
             trial_type.append(-1)
-        elif ~np.isnan(tr["behavior_data"]["States timestamps"]['no_go'][0][0]):
+        elif ~np.isnan(tr["behavior_data"]["States timestamps"]["no_go"][0][0]):
             trial_type.append(0)
         else:
             print("trial is not in {-1, 0, 1}")
@@ -483,6 +484,7 @@ def load_bpod_data(session_path, fpga_time=False):
         ),
         "errorCue_times": None,
         "valveOpen_times": None,
+        "rewardVolume": get_rewardVolume(session_path, save=False, data=data, settings=settings),
         "response_times": get_response_times(
             session_path, save=False, data=data, settings=settings
         ),
@@ -504,295 +506,22 @@ def load_bpod_data(session_path, fpga_time=False):
     valveOpen_times = out["feedback_times"].copy()
     errorCue_times[correct] = np.nan
     valveOpen_times[~correct] = np.nan
-    rewardVolume = np.zeros_like(correct)
-    rewardVolume[correct] = np.array([trial['reward_amount'] for trial in data])
     out.update(
-        {"errorCue_times": errorCue_times,
-         "valveOpen_times": valveOpen_times,
-         "correct": correct,
-         "rewardVolume": rewardVolume,
-         }
+        {"errorCue_times": errorCue_times, "valveOpen_times": valveOpen_times, "correct": correct}
     )
     # split intervals
     out["intervals_0"] = out["intervals"][:, 0]
     out["intervals_1"] = out["intervals"][:, 1]
-    _ = out.pop('intervals')
+    _ = out.pop("intervals")
     out["outcome"] = out["feedbackType"].copy()
-    out['outcome'][out['choice'] == 0] = 0
+    out["outcome"][out["choice"] == 0] = 0
     # Optional convert times to FPGA clock
     if fpga_time:
         bpod2fpga = get_bpod2fpga_times_func(session_path)
         for k in out:
-            if '_times' in k or 'intervals' in k:
+            if "_times" in k or "intervals" in k:
                 out[k] = bpod2fpga(out[k])
     return out
-
-
-@uuid_to_path(dl=True)
-def get_bpodqc_frame(session_path, qc_frame_only=False):
-    """loads/extracts data from bpod raw files and appends computed qc variables to data frame
-    optional returns only qc_frame"""
-    bpod = load_bpod_data(session_path)
-
-    GOCUE_STIMON_DELAY = 0.01  # -> 0.1
-    FEEDBACK_STIMFREEZE_DELAY = 0.01  # -> 0.1
-    VALVE_STIM_OFF_DELAY = 1
-    VALVE_STIM_OFF_JITTER = 0.1
-    ITI_IN_STIM_OFF_JITTER = 0.1
-    ERROR_STIM_OFF_DELAY = 2
-    ERROR_STIM_OFF_JITTER = 0.1  # -> 0.2
-    RESPONSE_FEEDBACK_DELAY = 0.0005
-
-# get from qccriteria.py (create!)
-    qc_frame = {
-        "nDatasetTypes": float,  # (Point 17)
-        "intervals": float,  # (Point 18)
-        "stimOnTrigger_times": float,  # (Point 19)
-        "stimOn_times": float,  # (Point 20)
-        "goCueTrigger_times": float,  # (Point 21)
-        "goCue_times": float,  # (Point 22)
-        "response_times": float,  # (Point 23)
-        "feedback_times": float,  # (Point 24)
-        "goCue_delays": float,  # (Point 25)
-        "errorCue_delays": float,  # (Point 26)
-        "stimOn_delays": float,  # (Point 27)
-        "stimOff_delays": float,  # (Point 28)
-        "stimFreeze_delays": float,  # (Point 29)
-        "stimOn_goCue_delays": float,  # (Point 1)
-        "response_feedback_delays": float,  # (Point 2)
-        "response_stimFreeze_delays": float,  # (Point 3)
-        "stimOff_itiIn_delays": float,  # (Point 4)
-        "wheel_freeze_during_quiescence": float,  # (Point 5)
-        "wheel_move_before_feedback": float,  # (Point 6)
-        "stimulus_move_before_goCue": float,  # (Point 7)
-        "positive_feedback_stimOff_delays": float,  # (Point 8)
-        "negative_feedback_stimOff_delays": float,  # (Point 9)
-        "valve_pre_trial": float,  # (Point 11)
-        "audio_pre_trial": float,  # (Point 12)
-        "trial_event_sequence_error": float,  # (Point 13)
-        "trial_event_sequence_correct": float,  # (Point 14)
-        "trial_length": float,  # (Point 15)
-    }
-
-    qc_frame = {
-        "n_feedback": np.int32(
-            ~np.isnan(bpod["valveOpen_times"]) + ~np.isnan(bpod["errorCue_times"])
-        ),
-        "stimOn_times_nan": ~np.isnan(bpod["stimOn_times"]),
-        "goCue_times_nan": ~np.isnan(bpod["goCue_times"]),
-        "stimOn_times_before_goCue_times": bpod["goCue_times"] - bpod["stimOn_times"] > 0,
-        "stimOn_times_goCue_times_delay": (
-            np.abs(bpod["goCue_times"] - bpod["stimOn_times"]) <= GOCUE_STIMON_DELAY
-        ),
-        "stim_freeze_before_feedback": bpod["feedback_times"] - bpod["stimFreeze_times"] > 0,
-        "stim_freeze_feedback_delay": (
-            np.abs(bpod["feedback_times"] - bpod["stimFreeze_times"]) <= FEEDBACK_STIMFREEZE_DELAY
-        ),
-        "stimOff_delay_valve": np.less(
-            np.abs(bpod["stimOff_times"] - bpod["valveOpen_times"] - VALVE_STIM_OFF_DELAY),
-            VALVE_STIM_OFF_JITTER,
-            out=np.ones(len(bpod["stimOn_times"]), dtype=np.bool),
-            where=~np.isnan(bpod["valveOpen_times"]),
-        ),
-        "iti_in_delay_stim_off": np.less(
-            np.abs(bpod["stimOff_times"] - bpod["itiIn_times"]),
-            ITI_IN_STIM_OFF_JITTER,
-            out=np.ones(len(bpod["stimOn_times"]), dtype=np.bool),
-            where=~np.isnan(bpod["errorCue_times"]),
-        ),  # FIXME: where= is wrong, no_go trials have a error tone but longer delay!
-        "stimOff_delay_noise": np.less(
-            np.abs(bpod["stimOff_times"] - bpod["errorCue_times"] - ERROR_STIM_OFF_DELAY),
-            ERROR_STIM_OFF_JITTER,
-            out=np.ones(len(bpod["stimOn_times"]), dtype=np.bool),
-            where=~np.isnan(bpod["errorCue_times"]),
-        ),
-        "response_times_nan": ~np.isnan(bpod["response_times"]),
-        "response_times_increase": np.diff(np.append([0], bpod["response_times"])) > 0,
-        "response_times_goCue_times_diff": bpod["response_times"] - bpod["goCue_times"] > 0,
-        "response_before_feedback": bpod["feedback_times"] - bpod["response_times"] > 0,
-        "response_feedback_delay": (
-            bpod["feedback_times"] - bpod["response_times"] < RESPONSE_FEEDBACK_DELAY
-        ),
-    }
-    bpodqc_frame = bpod.copy()
-    bpodqc_frame.update(qc_frame)
-    bpodqc_frame = pd.DataFrame.from_dict(bpodqc_frame)
-    return bpodqc_frame if not qc_frame_only else qc_frame
-
-
-# --------------------------------------------------------------------------- #
-@uuid_to_path(dl=True)
-def check_iti_stimOffTrig(session_path):
-    bpod = load_bpod_data(session_path)
-
-    iti_stimOff_diff = bpod["stimOffTrigger_times"] - bpod["itiIn_times"]
-    # 0.1 means that stimOff lasted more than 0.1 to go off.or BNC1 was not detected
-    # 2 sec means it was a no go trial and the trig was at the beginning of the no_go state
-    # that lasts for 2 sec after which itiState enters
-    return iti_stimOff_diff
-
-
-@uuid_to_path(dl=True)
-def check_feedback_stim_off_delay(session_path):
-    bpod = load_bpod_data(session_path)
-
-    valve_stim_off_diff = bpod["feedback_times"] - bpod["stimOffTrigger_times"]
-
-    return valve_stim_off_diff
-
-
-# --------------------------------------------------------------------------- #
-@uuid_to_path(dl=True)
-def count_qc_failures(session_path):
-    fpgaqc_frame = _qc_from_path(session_path, display=True)
-    bpodqc_frame = get_bpodqc_frame(session_path)
-    qc_fields = [
-        "n_feedback",
-        "stimOn_times_nan",
-        "goCue_times_nan",
-        "stimOn_times_before_goCue_times",
-        "stimOn_times_goCue_times_delay",
-        "stim_freeze_before_feedback",
-        "stim_freeze_feedback_delay",
-        "stimOff_delay_valve",
-        "iti_in_delay_stim_off",
-        "stimOff_delay_noise",
-        "response_times_nan",
-        "response_times_increase",
-        "response_times_goCue_times_diff",
-    ]
-    for k in qc_fields:
-        print("FPGA nFailed", k, ":", sum(np.bitwise_not(fpgaqc_frame[k])), len(fpgaqc_frame[k]))
-        print("BPOD nFailed", k, ":", sum(np.bitwise_not(bpodqc_frame[k])), len(bpodqc_frame[k]))
-
-
-@uuid_to_path(dl=True)
-def plot_bpod_session(session_path, ax=None):
-    if ax is None:
-        f, ax = plt.subplots()
-    bpodqc_frame = get_bpodqc_frame(session_path)
-    BNC1, BNC2 = get_bpod_fronts(session_path)
-    width = 0.5
-    ymax = 5
-    plots.squares(BNC1["times"], BNC1["polarities"] * 0.4 + 1, ax=ax, c="k")
-    plots.squares(BNC2["times"], BNC2["polarities"] * 0.4 + 2, ax=ax, c="k")
-    plots.vertical_lines(
-        bpodqc_frame["goCueTrigger_times"],
-        ymin=0,
-        ymax=ymax,
-        ax=ax,
-        label="goCueTrigger_times",
-        color="b",
-        alpha=0.5,
-        linewidth=width,
-    )
-    plots.vertical_lines(
-        bpodqc_frame["goCue_times"],
-        ymin=0,
-        ymax=ymax,
-        ax=ax,
-        label="goCue_times",
-        color="b",
-        linewidth=width,
-    )
-    plots.vertical_lines(
-        bpodqc_frame["intervals_0"],
-        ymin=0,
-        ymax=ymax,
-        ax=ax,
-        label="start_trial",
-        color="m",
-        linewidth=width,
-    )
-    plots.vertical_lines(
-        bpodqc_frame["errorCueTrigger_times"],
-        ymin=0,
-        ymax=ymax,
-        ax=ax,
-        label="errorCueTrigger_times",
-        color="r",
-        alpha=0.5,
-        linewidth=width,
-    )
-    plots.vertical_lines(
-        bpodqc_frame["errorCue_times"],
-        ymin=0,
-        ymax=ymax,
-        ax=ax,
-        label="errorCue_times",
-        color="r",
-        linewidth=width,
-    )
-    plots.vertical_lines(
-        bpodqc_frame["valveOpen_times"],
-        ymin=0,
-        ymax=ymax,
-        ax=ax,
-        label="valveOpen_times",
-        color="g",
-        linewidth=width,
-    )
-    plots.vertical_lines(
-        bpodqc_frame["stimFreezeTrigger_times"],
-        ymin=0,
-        ymax=ymax,
-        ax=ax,
-        label="stimFreezeTrigger_times",
-        color="k",
-        alpha=0.5,
-        linewidth=width,
-    )
-    plots.vertical_lines(
-        bpodqc_frame["stimFreeze_times"],
-        ymin=0,
-        ymax=ymax,
-        ax=ax,
-        label="stimFreeze_times",
-        color="y",
-        linewidth=width,
-    )
-    plots.vertical_lines(
-        bpodqc_frame["stimOffTrigger_times"],
-        ymin=0,
-        ymax=ymax,
-        ax=ax,
-        label="stimOffTrigger_times",
-        color="c",
-        alpha=0.5,
-        linewidth=width,
-    )
-    plots.vertical_lines(
-        bpodqc_frame["stimOff_times"],
-        ymin=0,
-        ymax=ymax,
-        ax=ax,
-        label="stimOff_times",
-        color="c",
-        linewidth=width,
-    )
-    plots.vertical_lines(
-        bpodqc_frame["stimOnTrigger_times"],
-        ymin=0,
-        ymax=ymax,
-        ax=ax,
-        label="stimOnTrigger_times",
-        color="tab:orange",
-        alpha=0.5,
-        linewidth=width,
-    )
-    plots.vertical_lines(
-        bpodqc_frame["stimOn_times"],
-        ymin=0,
-        ymax=ymax,
-        ax=ax,
-        label="stimOn_times",
-        color="tab:orange",
-        linewidth=width,
-    )
-    ax.legend()
-    ax.set_yticklabels(["", "f2ttl", "audio", ""])
-    ax.set_yticks([0, 1, 2, 3])
-    ax.set_ylim([0, 3])
 
 
 @uuid_to_path(dl=True)
@@ -808,7 +537,7 @@ def get_bpod2fpga_times_func(session_path):
     if eid is None:
         print(f"No session found with path = {session_path}")
         return
-    fpga_intervals = one.load(eid, dataset_types='trials.intervals')
+    fpga_intervals = one.load(eid, dataset_types="trials.intervals")
     if not fpga_intervals:
         print(f"tirals.intervals datasetType not found for session {eid}")
     else:
@@ -821,93 +550,8 @@ def get_bpod2fpga_times_func(session_path):
     return bpod2fpga
 
 
-@uuid_to_path(dl=True)
-def plot_session_trigger_response_diffs(session_path, ax=None):
-    trigger_diffs = get_session_trigger_response_delays(session_path)
-
-    sett = raw.load_settings(session_path)
-    eid = one.eid_from_path(session_path)
-    if ax is None:
-        f, ax = plt.subplots()
-    tit = f"{sett['SESSION_NAME']}: {eid}"
-    ax.title.set_text(tit)
-    ax.hist(trigger_diffs["goCue"], alpha=0.5, bins=50, label="goCue_diff")
-    ax.hist(trigger_diffs["errorCue"], alpha=0.5, bins=50, label="errorCue_diff")
-    ax.hist(trigger_diffs["stimOn"], alpha=0.5, bins=50, label="stimOn_diff")
-    ax.hist(trigger_diffs["stimOff"], alpha=0.5, bins=50, label="stimOff_diff")
-    ax.hist(trigger_diffs["stimFreeze"], alpha=0.5, bins=50, label="stimFreeze_diff")
-    ax.legend(loc="best")
-
-
-@uuid_to_path(dl=True)
-def get_session_trigger_response_delays(session_path):
-    bpod = load_bpod_data(session_path)
-    # get diff from triggers to detected events
-    goCue_diff = np.abs(bpod["goCueTrigger_times"] - bpod["goCue_times"])
-    errorCue_diff = np.abs(bpod["errorCueTrigger_times"] - bpod["errorCue_times"])
-    stimOn_diff = np.abs(bpod["stimOnTrigger_times"] - bpod["stimOn_times"])
-    stimOff_diff = np.abs(bpod["stimOffTrigger_times"] - bpod["stimOff_times"])
-    stimFreeze_diff = np.abs(bpod["stimFreezeTrigger_times"] - bpod["stimFreeze_times"])
-
-    return {
-        "goCue": goCue_diff,
-        "errorCue": errorCue_diff,
-        "stimOn": stimOn_diff,
-        "stimOff": stimOff_diff,
-        "stimFreeze": stimFreeze_diff,
-    }
-
-
-def _describe_trigger_diffs(trigger_diffs):
-    print(trigger_diffs.describe())
-    for k in trigger_diffs:
-        print(k, "nancount:", sum(np.isnan(trigger_diffs[k])))
-
-    return trigger_diffs
-
-
-@uuid_to_path(dl=True)
-def describe_sesion_trigger_response_diffs(session_path):
-    trigger_diffs = get_session_trigger_response_delays(session_path)
-    return _describe_trigger_diffs(trigger_diffs)
-
-
-def get_trigger_response_diffs(eid_or_path_list):
-    trigger_diffs = {
-        "goCue": np.array([]),
-        "errorCue": np.array([]),
-        "stimOn": np.array([]),
-        "stimOff": np.array([]),
-        "stimFreeze": np.array([]),
-    }
-    for sess in eid_or_path_list:
-        td = get_session_trigger_response_delays(sess)
-        for k in trigger_diffs:
-            trigger_diffs[k] = np.append(trigger_diffs[k], td[k])
-
-    df = pd.DataFrame.from_dict(trigger_diffs)
-
-    return df
-
-
-def describe_trigger_response_diffs(eid_or_path_list):
-    trigger_diffs = get_trigger_response_diffs(eid_or_path_list)
-    return _describe_trigger_diffs(trigger_diffs)
-
-
-def describe_lab_trigger_response_delays(labname):
-    eids, dets = one.search(
-        task_protocol="_iblrig_tasks_ephysChoiceWorld6.2.5",
-        lab=labname,
-        dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"],
-        details=True,
-    )
-    trigger_diffs = get_trigger_response_diffs(eids)
-    return _describe_trigger_diffs(trigger_diffs)
-
-
 if __name__ == "__main__":
-    # from ibllib.ephys.bpodqc import *
+    # from ibllib.qc.bpodqc import *
     subj_path = "/home/nico/Projects/IBL/github/iblapps/scratch/TestSubjects/"
     # Guido's 3B
     gsession_path = subj_path + "_iblrig_test_mouse/2020-02-11/001"
@@ -945,12 +589,11 @@ if __name__ == "__main__":
     # for eid in eids:
     #     plot_session_trigger_response_diffs(eid)
     lab = "churchlandlab"
-    eid = '0deb75fb-9088-42d9-b744-012fb8fc4afb'
+    eid = "0deb75fb-9088-42d9-b744-012fb8fc4afb"
 
     bla1, bla2 = get_bpod_fronts(eid)
     # for lab in labs:
     #     describe_lab_trigger_response_diffs(lab)
-    eid = '2e6e179c-fccc-4e8f-9448-ce5b6858a183'
-    describe_sesion_trigger_response_diffs(eid)
+    eid = "2e6e179c-fccc-4e8f-9448-ce5b6858a183"
 
 print(".")

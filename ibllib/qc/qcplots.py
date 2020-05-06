@@ -6,10 +6,9 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-import ibllib.ephys.bpodqc as bpodqc
-import ibllib.ephys.qcmetrics as qcmetrics
-import ibllib.ephys.oneutils as oneutils
-from ibllib.ephys.oneutils import search_lab_ephys_sessions, _to_eid, random_ephys_session
+import ibllib.qc.bpodqc_extractors as bpodqc
+import ibllib.qc.bpodqc_metrics as qcmetrics
+import ibllib.qc.oneutils as oneutils
 from oneibl.one import ONE
 from alf.io import is_details_dict
 
@@ -23,7 +22,7 @@ def plot_random_session_metrics(lab):
     if lab is None:
         print("Please input a lab")
         return
-    eid, det = random_ephys_session(lab)
+    eid, det = oneutils.random_ephys_session(lab)
     data = bpodqc.load_bpod_data(eid, fpga_time=False)
     metrics = qcmetrics.get_qcmetrics_frame(eid, data=data)
 
@@ -113,6 +112,116 @@ def plot_criteria(criteria, details, save_path=None):
             p.figure.savefig(save_path.joinpath(f"{t.replace('/', '-')}.png"))
 
 
+def boxplots_from_df(
+    df, ax=None, describe=False, title="", xlabel="Seconds (s)", xscale="symlog",
+):
+    if ax is None:
+        f, ax = plt.subplots()
+
+    if describe:
+        desc = df.describe()
+        print(json.dumps(json.loads(desc.to_json()), indent=1))
+    # Plot
+    p = sns.boxplot(data=df, ax=ax, orient="h")
+    p.set_title(title)
+    p.set_xlabel(xlabel)
+    p.set(xscale=xscale)
+
+
+def boxplot_metrics(eid, qcmetrics_frame=None):
+    if qcmetrics_frame is None:
+        qcmetrics_frame = get_qcmetrics_frame(eid)
+    df = pd.DataFrame.from_dict({k: qcmetrics_frame[k] for k in qcmetrics_frame if "delays" in k})
+    boxplots_from_df(df, describe=True)
+
+
+
+
+@uuid_to_path(dl=True)
+def plot_session_trigger_response_diffs(session_path, ax=None):
+    trigger_diffs = get_session_trigger_response_delays(session_path)
+
+    sett = raw.load_settings(session_path)
+    eid = one.eid_from_path(session_path)
+    if ax is None:
+        f, ax = plt.subplots()
+    tit = f"{sett['SESSION_NAME']}: {eid}"
+    ax.title.set_text(tit)
+    ax.hist(trigger_diffs["goCue"], alpha=0.5, bins=50, label="goCue_diff")
+    ax.hist(trigger_diffs["errorCue"], alpha=0.5, bins=50, label="errorCue_diff")
+    ax.hist(trigger_diffs["stimOn"], alpha=0.5, bins=50, label="stimOn_diff")
+    ax.hist(trigger_diffs["stimOff"], alpha=0.5, bins=50, label="stimOff_diff")
+    ax.hist(trigger_diffs["stimFreeze"], alpha=0.5, bins=50, label="stimFreeze_diff")
+    ax.legend(loc="best")
+
+
+@uuid_to_path(dl=True)
+def get_session_trigger_response_delays(session_path):
+    bpod = load_bpod_data(session_path)
+    # get diff from triggers to detected events
+    goCue_diff = np.abs(bpod["goCueTrigger_times"] - bpod["goCue_times"])
+    errorCue_diff = np.abs(bpod["errorCueTrigger_times"] - bpod["errorCue_times"])
+    stimOn_diff = np.abs(bpod["stimOnTrigger_times"] - bpod["stimOn_times"])
+    stimOff_diff = np.abs(bpod["stimOffTrigger_times"] - bpod["stimOff_times"])
+    stimFreeze_diff = np.abs(bpod["stimFreezeTrigger_times"] - bpod["stimFreeze_times"])
+
+    return {
+        "goCue": goCue_diff,
+        "errorCue": errorCue_diff,
+        "stimOn": stimOn_diff,
+        "stimOff": stimOff_diff,
+        "stimFreeze": stimFreeze_diff,
+    }
+
+
+def _describe_trigger_diffs(trigger_diffs):
+    print(trigger_diffs.describe())
+    for k in trigger_diffs:
+        print(k, "nancount:", sum(np.isnan(trigger_diffs[k])))
+
+    return trigger_diffs
+
+
+@uuid_to_path(dl=True)
+def describe_sesion_trigger_response_diffs(session_path):
+    trigger_diffs = get_session_trigger_response_delays(session_path)
+    return _describe_trigger_diffs(trigger_diffs)
+
+
+def get_trigger_response_diffs(eid_or_path_list):
+    trigger_diffs = {
+        "goCue": np.array([]),
+        "errorCue": np.array([]),
+        "stimOn": np.array([]),
+        "stimOff": np.array([]),
+        "stimFreeze": np.array([]),
+    }
+    for sess in eid_or_path_list:
+        td = get_session_trigger_response_delays(sess)
+        for k in trigger_diffs:
+            trigger_diffs[k] = np.append(trigger_diffs[k], td[k])
+
+    df = pd.DataFrame.from_dict(trigger_diffs)
+
+    return df
+
+
+def describe_trigger_response_diffs(eid_or_path_list):
+    trigger_diffs = get_trigger_response_diffs(eid_or_path_list)
+    return _describe_trigger_diffs(trigger_diffs)
+
+
+def describe_lab_trigger_response_delays(labname):
+    eids, dets = one.search(
+        task_protocol="_iblrig_tasks_ephysChoiceWorld6.2.5",
+        lab=labname,
+        dataset_types=["_iblrig_taskData.raw", "_iblrig_taskSettings.raw"],
+        details=True,
+    )
+    trigger_diffs = get_trigger_response_diffs(eids)
+    return _describe_trigger_diffs(trigger_diffs)
+
+
 if __name__ == "__main__":
     import pickle
     # eids, details = get_last_from_all_labs()
@@ -139,7 +248,7 @@ if __name__ == "__main__":
 
     df = rearrange_metrics(metrics)
     # plot_metrics(df, details)
-    # eid, det = random_ephys_session("churchlandlab")
+    # eid, det = oneutils.random_ephys_session("churchlandlab")
     # data = bpodqc.load_bpod_data(eid, fpga_time=False)
     # metrics = qcmetrics.get_qcmetrics_frame(eid, data=data)
     # criteria = qcmetrics.get_qccriteria_frame(eid, data=data)

@@ -1,7 +1,7 @@
 # Mock dataset
 import unittest
 
-from ibllib.ephys import bpodqc
+from ibllib.qc import bpodqc
 
 
 class TestBpodTask(unittest.TestCase):
