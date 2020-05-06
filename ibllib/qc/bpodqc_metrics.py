@@ -258,7 +258,7 @@ def load_wheel_move_before_feedback(eid, data=None, apply_criteria=False):
         pos = trial[1]
         if pos.size > 1:
             metric[i] = pos[-1] - pos[0]
-    metric = metric[data["choice"] != 0]  # XXX: Here!!! except no-go trials
+    metric = metric[data["choice"] != 0]  # XXX: Here!!! except no-go trials MAKE ALL OUTPUTS len(trials) w/ nans where it does not apply
     passed = metric != 0
     return passed if apply_criteria else metric
 
