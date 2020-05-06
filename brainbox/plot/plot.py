@@ -20,6 +20,7 @@ import time
 from warnings import warn
 
 import matplotlib.pyplot as plt
+import seaborn as sns
 import numpy as np
 
 # from matplotlib.ticker import StrMethodFormatter
@@ -720,3 +721,100 @@ def pres_ratio(ts, hist_win=10, ax=None):
     ax.set_title('Presence Ratio')
 
     return pr, spks_bins
+
+
+def driftmap_color(
+        clusters_depths, spikes_times,
+        spikes_amps, spikes_depths, spikes_clusters,
+        ax=None, axesoff=False, return_lims=False):
+
+    '''
+    Plots the driftmap of a session or a trial
+
+    The plot shows the spike times vs spike depths.
+    Each dot is a spike, whose color indicates the cluster
+    and opacity indicates the spike amplitude.
+
+    Parameters
+    -------------
+    clusters_depths: ndarray
+        depths of all clusters
+    spikes_times: ndarray
+        spike times of all clusters
+    spikes_amps: ndarray
+        amplitude of each spike
+    spikes_depths: ndarray
+        depth of each spike
+    spikes_clusters: ndarray
+        cluster idx of each spike
+    ax: matplotlib.axes.Axes object (optional)
+        The axis object to plot the driftmap on
+        (if `None`, a new figure and axis is created)
+
+    Return
+    ---
+    ax: matplotlib.axes.Axes object
+        The axis object with driftmap plotted
+    x_lim: list of two elements
+        range of x axis
+    y_lim: list of two elements
+        range of y axis
+    '''
+
+    color_bins = sns.color_palette("hls", 500)
+    new_color_bins = np.vstack(
+        np.transpose(np.reshape(color_bins, [5, 100, 3]), [1, 0, 2]))
+
+    # get the sorted idx of each depth, and create colors based on the idx
+
+    sorted_idx = np.argsort(np.argsort(clusters_depths))
+
+    colors = np.vstack(
+        [np.repeat(
+            new_color_bins[np.mod(idx, 500), :][np.newaxis, ...],
+            n_spikes, axis=0)
+            for (idx, n_spikes) in
+            zip(sorted_idx, np.unique(spikes_clusters,
+                                      return_counts=True)[1])])
+
+    max_amp = np.percentile(spikes_amps, 90)
+    min_amp = np.percentile(spikes_amps, 10)
+    opacity = np.divide(spikes_amps - min_amp, max_amp - min_amp)
+    opacity[opacity > 1] = 1
+    opacity[opacity < 0] = 0
+
+    colorvec = np.zeros([len(opacity), 4], dtype='float16')
+    colorvec[:, 3] = opacity.astype('float16')
+    colorvec[:, 0:3] = colors.astype('float16')
+
+    x = spikes_times.astype('float32')
+    y = spikes_depths.astype('float32')
+
+    args = dict(color=colorvec, edgecolors='none')
+
+    if ax is None:
+        fig = plt.Figure(dpi=200, frameon=False, figsize=[10, 10])
+        ax = plt.Axes(fig, [0.1, 0.1, 0.9, 0.9])
+        ax.set_xlabel('Time (sec)')
+        ax.set_ylabel('Distance from the probe tip (um)')
+        savefig = True
+        args.update(s=0.1)
+
+    ax.scatter(x, y, **args)
+    x_edge = (max(x) - min(x)) * 0.05
+    x_lim = [min(x) - x_edge, max(x) + x_edge]
+    y_lim = [min(y) - 50, max(y) + 100]
+    ax.set_xlim(x_lim[0], x_lim[1])
+    ax.set_ylim(y_lim[0], y_lim[1])
+
+    if axesoff:
+        ax.axis('off')
+
+    if savefig:
+        fig.add_axes(ax)
+        fig.savefig('driftmap.png')
+
+    if return_lims:
+        return ax, x_lim, y_lim
+    else:
+        return ax

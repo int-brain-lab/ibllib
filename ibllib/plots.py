@@ -81,13 +81,14 @@ class Density:
         :param ax: axis to plot in
         :return: None
         """
+        w = w.reshape(w.shape[0], -1)
         nech, ntr = w.shape
         tscale = np.array([0, nech - 1]) / fs * 1e3
         if ax is None:
             self.figure, ax = plt.subplots()
         else:
             self.figure = ax.get_figure()
-        extent = [-0.5, ntr + 0.5, tscale[1], tscale[0]]
+        extent = [-0.5, ntr - 0.5, tscale[1], tscale[0]]
         self.im = ax.imshow(w, aspect='auto', cmap=cmap, extent=extent, origin='upper', **kwargs)
         ax.set_ylabel('Time (ms)')
         ax.set_xlabel('Trace')
@@ -114,6 +115,7 @@ class Traces:
         :param ax: axis to plot in
         :return: None
         """
+        w = w.reshape(w.shape[0], -1)
         nech, ntr = w.shape
         tscale = np.arange(nech) / fs * 1e3
         sf = gain / dsp.rms(w.flatten()) / 2

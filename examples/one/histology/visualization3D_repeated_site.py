@@ -20,7 +20,7 @@ eids = ['aad23144-0e52-4eac-80c5-c4ee2decb198',
         '4153bd83-2168-4bd4-a15c-f7e82f3f73fb',
         '614e1937-4b24-4ad3-9055-c8253d089919',
         'ee5c418c-e7fa-431d-8796-b2033e000b75']
-probes = ['probe01', 'probe01', 'probe00', 'probe01', 'probe00', 'probe00', 'probe00']
+probes = ['probe01', 'probe01', 'probe00', 'probe01', 'probe00', 'probe01', 'probe00']
 
 # fetching data part
 brain_atlas = atlas.AllenAtlas(25)

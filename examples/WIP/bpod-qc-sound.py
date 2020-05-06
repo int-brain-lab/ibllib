@@ -1,4 +1,5 @@
 """
+TODO MILES CHANGE ALGORITHM
 Aim: Assess if spectrogram contains as many goCue as n trials
 
 Workflow:

@@ -6,6 +6,19 @@ import numpy as np
 import scipy
 
 
+def dephas(w, phase, axis=-1):
+    """
+    dephas a signal by a given angle in degrees
+    :param w:
+    :param phase: phase in degrees
+    :param axis:
+    :return:
+    """
+    ns = w.shape[axis]
+    W = freduce(np.fft.fft(w, axis=axis), axis=axis) * np.exp(- 1j * phase / 180 * np.pi)
+    return np.real(np.fft.ifft(fexpand(W, ns=ns, axis=axis), axis=axis))
+
+
 def fscale(ns, si=1, one_sided=False):
     """
     numpy.fft.fftfreq returns Nyquist as a negative frequency so we propose this instead
@@ -130,7 +143,7 @@ def _freq_vector(f, b, typ='lp'):
         return filc
 
 
-def shift(w, s, axis=0):
+def shift(w, s, axis=-1):
     """
     Shifts a signal in frequency domain, to allow for accurate non-integer shifts
     :param w: input signal
@@ -141,9 +154,29 @@ def shift(w, s, axis=0):
     ns = np.array(w.shape) * 0 + 1
     ns[axis] = w.shape[axis]
     dephas = np.zeros(ns)
-    dephas[1] = 1
-
+    np.put(dephas, 1, 1)
     W = freduce(scipy.fft.fft(w, axis=axis), axis=axis)
     dephas = freduce(scipy.fft.fft(dephas, axis=axis), axis=axis)
     dephas = np.exp(1j * np.angle(dephas) * s)
     return np.real(scipy.fft.ifft(fexpand(W * dephas, ns[axis], axis=axis), axis=axis))
+
+
+def fit_phase(w, si=1, fmin=0, fmax=None, axis=-1):
+    """
+    Performs a linear regression on the unwrapped phase of a wavelet to obtain a time-delay
+    :param w: wavelet (usually a cross-correlation)
+    :param si: sampling interval
+    :param fmin: sampling interval
+    :param fnax: sampling interval
+    :param axis:
+    :return: dt
+    """
+    if fmax is None:
+        fmax = 1 / si / 2
+    ns = w.shape[axis]
+    freqs = freduce(fscale(ns, si=si))
+    phi = np.unwrap(np.angle(freduce(np.fft.fft(w, axis=axis), axis=axis)))
+    indf = np.logical_and(fmin < freqs, freqs < fmax)
+    dt = - np.polyfit(freqs[indf],
+                      np.swapaxes(phi.compress(indf, axis=axis), axis, 0), 1)[0] / np.pi / 2
+    return dt
