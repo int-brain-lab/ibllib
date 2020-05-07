@@ -316,11 +316,3 @@ class FTPPatcher(Patcher):
     def _rm(self, flatiron_path, dry=True):
         raise PermissionError("This Patcher does not have admin permissions to remove data "
                               "from the FlatIron server. ")
-
-    def flush(self):
-        """
-        Sends all the backlog files on the flatiron
-        """
-        repo = self.one.alyx.rest('data-repository', 'list', name='')
-        fr = self.one.alyx.rest('files', 'list', data_repository=DMZ_REPOSITORY)
-        print(len(fr))
