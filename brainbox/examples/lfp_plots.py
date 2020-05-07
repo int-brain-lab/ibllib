@@ -56,22 +56,3 @@ ax4.set(xlim=[1, 140], ylabel='Coherence', xlabel='Frequency (Hz)',
         title='Channel %d and %d' % (random_ch[0], random_ch[1]))
 
 plt.tight_layout(pad=5)
-
-# %% Calculate spike triggered average
-
-# Read in spike data
-spikes = one.load_object(eid[0], 'spikes')
-clusters = one.load_object(eid[0], 'clusters')
-
-# Pick two random neurons
-random_neurons = np.random.choice(
-                    clusters.metrics.cluster_id[clusters.metrics.ks2_label == 'good'], 2)
-spiketrain = spikes.times[spikes.clusters == random_neurons[0]]
-sta, time = bb.lfp.spike_triggered_average(signal[random_ch[0], :], spiketrain)
-
-# %% Plot spike triggered LFP
-
-f, ax1 = plt.subplots(1, 1)
-
-ax1.plot(time, sta)
-ax1.set(ylabel='Spike triggered LFP average (uV)', xlabel='Time (ms)')
