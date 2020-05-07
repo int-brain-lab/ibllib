@@ -1,18 +1,21 @@
-import ibllib.qc.bpodqc_extractors as bpodqc
-import ibllib.ephys.ephysqc as ephysqc
+import ibllib.qc.bpodqc_metrics as bpodqc
+import ibllib.qc.oneqc_metrics as oneqc
 from oneibl.one import ONE
 
 one = ONE()
 
 eid = ''
 
-# get number of files extracted from eid
-...
-# Get bpod and ephys qc frames
-fpgaqc_frame = ephysqc._qc_from_path(session_path, display=False)
-bpodqc_frame = bpodqc.get_bpodqc_frame(session_path)
-# aggregate them
 
+def build_extended_qc_frame(eid, data=None):
+    # Get bpod and one qc frames
+    extended_qc = {}
+    one_frame = oneqc.get_oneqc_metrics_frame(eid)
+    bpod_frame = bpodqc.get_bpodqc_frame(eid)
+    # aggregate them
+    extended_qc.update(one_frame)
+    extended_qc.update(bpod_frame)
+    return extended_qc
 # ad-hoc aggregation for some variables
 extended_qc = {
     'feedback': np.sum(qc_frame.n_feedback != 0) / ntrials,
