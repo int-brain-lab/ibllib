@@ -46,7 +46,7 @@ def bpod_data_loader(func):
 
     @wraps(func)
     def wrapper(*args, **kwargs):
-        if not kwargs or kwargs["data"] is None:
+        if not kwargs or kwargs.get("data", None) is None:
             kwargs["data"] = bpodqc.load_bpod_data(args[0])
         return func(*args, **kwargs)
 
@@ -127,11 +127,14 @@ def get_qcmetrics_frame(eid, data=None, apply_criteria=False):
 def load_stimon_gocue_delays(eid, data=None, apply_criteria=False):
     """ 1. StimOn and GoCue and should be within a 10 ms of each other on 99% of trials
     Variable name: stimOn_goCue_delays
-    Metric: stimOn_times - goCue_times (from ONE)
+    Metric: stimOn_times - goCue_times
     Criteria: (M<10 ms for 99%) of trials AND (M > 0 ms for 99% of trials)
     """
-    metric = data["stimOn_times"] - data["goCue_times"]
-    passed = (metric < 0.01) & (metric > 0)
+    metric = data["goCue_times"] - data["stimOn_times"]
+    nans = np.isnan(metric)
+    passed = np.zeros_like(metric) * np.nan
+    passed[~nans] = (metric[~nans] < 0.01) & (metric[~nans] > 0)
+    assert len(data['intervals_0']) == len(metric) == len(passed)
     return passed if apply_criteria else metric
 
 
@@ -145,7 +148,10 @@ def load_response_feedback_delays(eid, data=None, apply_criteria=False):
         eid, "trials.response_times", "trials.feedback_times"
     )"""
     metric = data["feedback_times"] - data["response_times"]
-    passed = (metric < 0.01) & (metric > 0)
+    nans = np.isnan(metric)
+    passed = np.zeros_like(metric) * np.nan
+    passed[~nans] = ((metric[~nans] < 0.01) & (metric[~nans] > 0)).astype(np.float)
+    assert len(data['intervals_0']) == len(metric) == len(passed)
     return passed if apply_criteria else metric
 
 
@@ -165,10 +171,16 @@ def load_response_stimFreeze_delays(eid, data=None, apply_criteria=False):
     assert len(response) == len(stimFreeze)
     """
     metric = data["stimFreeze_times"] - data["response_times"]
-    passed = (metric < 0.1) & (metric > 0)
-    # Remove no_go trials (stimFreeze triggered differently in no_go trials)
-    passed_nonogo = passed[data["choice"] != 0]
-    return passed_nonogo if apply_criteria else metric
+    # Find NaNs (if any of the values are nan operation will be nan)
+    nans = np.isnan(metric)
+    passed = np.zeros_like(metric) * np.nan
+    # Test for valid values
+    passed[~nans] = ((metric[~nans] < 0.1) & (metric[~nans] > 0)).astype(np.float)
+    # Finally remove no_go trials (stimFreeze triggered differently in no_go trials)
+    # should account for all the nans
+    passed[data["choice"] == 0] = np.nan
+    assert len(data['intervals_0']) == len(metric) == len(passed)
+    return passed if apply_criteria else metric
 
 
 @bpod_data_loader
@@ -183,10 +195,12 @@ def load_stimOff_itiIn_delays(eid, data=None, apply_criteria=False):
         print(f"Length mismatch iniIn and stimOff: {len(itiIn)}, {len(stimOff)}")
     """
     metric = data["itiIn_times"] - data["stimOff_times"]
-    passed = (metric < 0.01) & (metric >= 0)
+    passed = ((metric < 0.01) & (metric >= 0)).astype(np.float)
     # Remove no_go trials (stimOff triggered differently in no_go trials)
-    passed_nonogo = passed[data["choice"] != 0]
-    return passed_nonogo if apply_criteria else metric
+    metric[data["choice"] == 0] = np.nan
+    passed[data["choice"] == 0] = np.nan
+    assert len(data['intervals_0']) == len(metric) == len(passed)
+    return passed if apply_criteria else metric
 
 
 @bpod_data_loader
@@ -195,6 +209,7 @@ def load_wheel_freeze_during_quiescence(eid, data=None, apply_criteria=False):
     amount of time (quiescent period; exact value in bpod['quiescence']) before go cue
     Variable name: wheel_freeze_during_quiescence
     Metric: abs(min(W - w_t0), max(W - w_t0)) where W is wheel pos over interval
+    np.max(Metric) to get highest displaceente in any direction
     interval = [goCueTrigger_time-quiescent_duration,goCueTrigger_time]
     Criterion: <2 degrees for 99% of trials
     """
@@ -229,9 +244,12 @@ def load_wheel_freeze_during_quiescence(eid, data=None, apply_criteria=False):
             origin = wheel_data["re_pos"][wheel_data["re_ts"] < t[0]][-1]
             # Find the absolute min and max relative to the last sample
             metric[i, :] = np.abs([np.min(pos - origin), np.max(pos - origin)])
+    # Reduce to the largest displacement found in any direction
+    metric = np.max(metric, axis=1)
     metric = 180 * metric / np.pi  # convert to degrees from radians
     criterion = 2  # Position shouldn't change more than 2 in either direction
-    passed = np.all(metric < criterion, axis=1)
+    passed = (metric < criterion).astype(np.float)
+    assert len(data['intervals_0']) == len(metric) == len(passed)
     return passed if apply_criteria else metric
 
 
@@ -258,8 +276,14 @@ def load_wheel_move_before_feedback(eid, data=None, apply_criteria=False):
         pos = trial[1]
         if pos.size > 1:
             metric[i] = pos[-1] - pos[0]
-    metric = metric[data["choice"] != 0]  # XXX: Here!!! except no-go trials MAKE ALL OUTPUTS len(trials) w/ nans where it does not apply
-    passed = metric != 0
+
+    # except no-go trials
+    metric[data["choice"] == 0] = np.nan
+    nans = np.isnan(metric)
+    passed = np.zeros_like(metric) * np.nan
+
+    passed[~nans] = (metric[~nans] != 0).astype(np.float)
+    assert len(data['intervals_0']) == len(metric) == len(passed)
     return passed if apply_criteria else metric
 
 
@@ -303,9 +327,11 @@ def load_wheel_move_during_closed_loop(eid, data=None, apply_criteria=False):
     s_mm = np.abs(thresh / gain)  # don't care about direction
     criterion = cm_to_rad(s_mm * 1e-1)  # convert abs displacement to radians (wheel pos is in rad)
     metric = metric - criterion  # difference should be close to 0
-    metric = metric[data["choice"] != 0]  # except no-go trials
     rad_per_deg = cm_to_rad(1 / gain * 1e-1)
-    passed = np.abs(metric) < rad_per_deg[data["choice"] != 0]  # less than 1 visual degree off
+    passed = (np.abs(metric) < rad_per_deg).astype(np.float)  # less than 1 visual degree off
+    metric[data["choice"] == 0] = np.nan  # except no-go trials
+    passed[data["choice"] == 0] = np.nan  # except no-go trials
+    assert len(data['intervals_0']) == len(metric) == len(passed)
     return passed if apply_criteria else metric
 
 
@@ -320,15 +346,18 @@ def load_stimulus_move_before_goCue(eid, data=None, apply_criteria=False):
     bpod2fpga = bpodqc.get_bpod2fpga_times_func(eid)
     BNC1_times = bpod2fpga(BNC1['times'])
     """
+    # XXX: Check this!
     BNC1, _ = bpodqc.get_bpod_fronts(eid)
     s = BNC1["times"]
     metric = np.array([])
     for i, c in zip(data["intervals_0"], data["goCue_times"]):
         metric = np.append(metric, np.count_nonzero(s[s > i] < (c - 0.02)))
 
-    passed = metric == 0
-    passed_nonogo = passed[data["choice"] != 0]
-    return passed_nonogo if apply_criteria else metric
+    passed = (metric == 0).astype(np.float)
+    # Remove no go trials
+    passed[data["choice"] == 0] = np.nan
+    assert len(data['intervals_0']) == len(metric) == len(passed)
+    return passed if apply_criteria else metric
 
 
 @bpod_data_loader
@@ -339,7 +368,11 @@ def load_positive_feedback_stimOff_delays(eid, data=None, apply_criteria=False):
     Criterion: <150 ms on 99% of correct trials
     """
     metric = np.abs(data["stimOff_times"] - data["feedback_times"] - 1)
-    passed = metric[data["correct"]] < 0.15
+    metric[~data["correct"]] = np.nan
+    nans = np.isnan(metric)
+    passed = np.zeros_like(metric) * np.nan
+    passed[~nans] = (metric[~nans] < 0.15).astype(np.float)
+    assert len(data['intervals_0']) == len(metric) == len(passed)
     return passed if apply_criteria else metric
 
 
@@ -351,7 +384,15 @@ def load_negative_feedback_stimOff_delays(eid, data=None, apply_criteria=False):
     Criterion: <150 ms on 99% of incorrect trials
     """
     metric = np.abs(data["stimOff_times"] - data["errorCue_times"] - 2)
-    passed = metric[data["outcome"] == -1] < 0.15
+    # Find NaNs (if any of the values are nan operation will be nan)
+    nans = np.isnan(metric)
+    passed = np.zeros_like(metric) * np.nan
+    # Apply criteria
+    passed[~nans] = (metric[~nans] < 0.15).astype(np.float)
+    # Remove no negative feedback trials
+    metric[~data["outcome"] == -1] = np.nan
+    passed[~data["outcome"] == -1] = np.nan
+    assert len(data['intervals_0']) == len(metric) == len(passed)
     return passed if apply_criteria else metric
 
 
@@ -373,11 +414,12 @@ def load_valve_pre_trial(eid, data=None, apply_criteria=False):
     Metric: Check if valve events exist between trialstart_time and (gocue_time-20ms)
     Criterion: 0 on 99% of trials
     """
-    metric = data["valveOpen_times"][data["correct"]] < (
-        data["goCue_times"][data["correct"]] - 0.02
-    )
-
-    passed = ~metric  # metric is False if valve in correct place
+    metric = data["valveOpen_times"]
+    nans = np.isnan(metric)
+    passed = np.zeros_like(metric) * np.nan
+    # Apply criteria
+    passed[~nans] = ~(metric[~nans] < (data["goCue_times"][~nans] - 0.02))
+    assert len(data['intervals_0']) == len(metric) == len(passed)
     return passed if apply_criteria else metric
 
 
@@ -393,7 +435,8 @@ def load_audio_pre_trial(eid, data=None, apply_criteria=False):
     metric = np.array([], dtype=np.bool)
     for i, c in zip(data["intervals_0"], data["goCue_times"]):
         metric = np.append(metric, np.any(s[s > i] < (c - 0.02)))
-    passed = ~metric
+    passed = (~metric).astype(np.float)
+    assert len(data['intervals_0']) == len(metric) == len(passed)
     return passed if apply_criteria else metric
 
 
@@ -425,7 +468,10 @@ def load_error_trial_event_sequence(eid, data=None, apply_criteria=False):
     metric = np.float64(metric)
     # Look only at incorrect or missed trials
     metric[data["correct"]] = np.nan
-    passed = metric
+    nans = np.isnan(metric)
+    passed = np.zeros_like(metric) * np.nan
+    passed[~nans] = metric[~nans]
+    assert len(data['intervals_0']) == len(metric) == len(passed)
     return passed if apply_criteria else metric
 
 
@@ -457,7 +503,10 @@ def load_correct_trial_event_sequence(eid, data=None, apply_criteria=False):
     metric = np.float64(metric)
     # Look only at correct trials
     metric[~data["correct"]] = np.nan
-    passed = metric
+    nans = np.isnan(metric)
+    passed = np.zeros_like(metric) * np.nan
+    passed[~nans] = metric[~nans]
+    assert len(data['intervals_0']) == len(metric) == len(passed)
     return passed if apply_criteria else metric
 
 
@@ -469,7 +518,10 @@ def load_trial_length(eid, data=None, apply_criteria=False):
     Criteria: M < 60.1 s AND M > 0 s both (true on 99% of trials)
     """
     metric = data["feedback_times"] - data["goCue_times"]
-    passed = (metric < 60.1) & (metric > 0)
+    nans = np.isnan(metric)
+    passed = np.zeros_like(metric) * np.nan
+    passed[~nans] = (metric[~nans] < 60.1) & (metric[~nans] > 0)
+    assert len(data['intervals_0']) == len(metric) == len(passed)
     return passed if apply_criteria else metric
 
 
@@ -493,7 +545,10 @@ def load_goCue_delays(eid, data=None, apply_criteria=False):
     Criterion: 99% <= 1.5ms
     """
     metric = data["goCue_times"] - data["goCueTrigger_times"]
-    passed = metric <= 0.0015
+    nans = np.isnan(metric)
+    passed = np.zeros_like(metric) * np.nan
+    passed[~nans] = metric[~nans] <= 0.0015
+    assert len(data['intervals_0']) == len(metric) == len(passed)
     return passed if apply_criteria else metric
 
 
@@ -505,8 +560,10 @@ def load_errorCue_delays(eid, data=None, apply_criteria=False):
     Criterion: 99% <= 1.5ms
     """
     metric = data["errorCue_times"] - data["errorCueTrigger_times"]
-    passed = metric.copy()
-    passed[~np.isnan(metric)] = metric[~np.isnan(metric)] <= 0.0015
+    nans = np.isnan(metric)
+    passed = np.zeros_like(metric) * np.nan
+    passed[~nans] = metric[~nans] <= 0.0015
+    assert len(data['intervals_0']) == len(metric) == len(passed)
     return passed if apply_criteria else metric
 
 
@@ -518,7 +575,10 @@ def load_stimOn_delays(eid, data=None, apply_criteria=False):
     Criterion: 99% <  150ms
     """
     metric = data["stimOn_times"] - data["stimOnTrigger_times"]
-    passed = (metric <= 0.15) & (metric > 0)
+    nans = np.isnan(metric)
+    passed = np.zeros_like(metric) * np.nan
+    passed[~nans] = (metric[~nans] <= 0.15) & (metric[~nans] > 0)
+    assert len(data['intervals_0']) == len(metric) == len(passed)
     return passed if apply_criteria else metric
 
 
@@ -530,7 +590,10 @@ def load_stimOff_delays(eid, data=None, apply_criteria=False):
     Criterion:99% <  150ms
     """
     metric = data["stimOff_times"] - data["stimOffTrigger_times"]
-    passed = metric <= 0.15
+    nans = np.isnan(metric)
+    passed = np.zeros_like(metric) * np.nan
+    passed[~nans] = metric[~nans] <= 0.15
+    assert len(data['intervals_0']) == len(metric) == len(passed)
     return passed if apply_criteria else metric
 
 
@@ -542,8 +605,9 @@ def load_stimFreeze_delays(eid, data=None, apply_criteria=False):
     Criterion: 99% <  150ms
     """
     metric = data["stimFreeze_times"] - data["stimFreezeTrigger_times"]
-    passed = metric.copy()
+    passed = np.zeros_like(metric) * np.nan
     passed[~np.isnan(metric)] = metric[~np.isnan(metric)] <= 0.15
+    assert len(data['intervals_0']) == len(metric) == len(passed)
     return passed if apply_criteria else metric
 
 
@@ -555,7 +619,9 @@ def load_reward_volumes(eid, data=None, apply_criteria=False):
     Criterion: 100%
     """
     metric = data["rewardVolume"]
-    passed = np.size(np.unique(metric)) <= 2 and np.all(metric < 3)
+    vals = len(np.unique(metric)) <= 2
+    passed = (vals & (metric < 3)).astype(float)
+    assert len(data['intervals_0']) == len(metric) == len(passed)
     return passed if apply_criteria else metric
 
 
@@ -579,68 +645,7 @@ class BpodqcMetrics(object):
 
 if __name__ == "__main__":
     eid, det = random_ephys_session("churchlandlab")
-    # eid = "2e6e179c-fccc-4e8f-9448-ce5b6858a183"
-    # det = {
-    #     "subject": "CSHL060",
-    #     "start_time": "2020-03-09T14:31:01",
-    #     "number": 2,
-    #     "lab": "churchlandlab",
-    #     "project": "ibl_neuropixel_brainwide_01",
-    #     "url":
-    # "https://alyx.internationalbrainlab.org/sessions/2e6e179c-fccc-4e8f-9448-ce5b6858a183",
-    #     "task_protocol": "_iblrig_tasks_ephysChoiceWorld6.4.0",
-    #     "local_path":
-    # "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL060/2020-03-09/002",
-    # }
-    # {
-    #     "subject": "CSHL052",
-    #     "start_time": "2020-02-21T13:24:45",
-    #     "number": 1,
-    #     "lab": "churchlandlab",
-    #     "project": "ibl_neuropixel_brainwide_01",
-    #     "url":
-    # "https://alyx.internationalbrainlab.org/sessions/4b00df29-3769-43be-bb40-128b1cba6d35",
-    #     "task_protocol": "_iblrig_tasks_ephysChoiceWorld6.2.5",
-    #     "local_path":
-    # "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL052/2020-02-21/001",
-    # }
     data = bpodqc.load_bpod_data(eid, fpga_time=False)
     metrics = get_qcmetrics_frame(eid, data=data, apply_criteria=False)
     criteria = get_qcmetrics_frame(eid, data=data, apply_criteria=True)
-    mean_criteria = {k: np.mean(v) for k, v in criteria.items()}
-    # trd = bpodqc.get_session_trigger_response_delays(eid)
-
-    # boxplot_metrics(eid)
-
-    # eid = "0deb75fb-9088-42d9-b744-012fb8fc4afb"
-    # eid = "af74b29d-a671-4c22-a5e8-1e3d27e362f3"
-    # # lab = 'zadorlab'
-    # # ed = search_lab_ephys_sessions(lab, ['trials.stimOn_times', 'trials.goCue_times'])
-
-    # # f, ax = plt.subplots()
-    # labs = one.list(None, "lab")
-    # eids = []
-    # details = []
-    # for lab in labs:
-    #     ed = search_lab_ephys_sessions(
-    #         lab,
-    #         dstypes=[
-    #             "_iblrig_taskData.raw",
-    #         ],
-    #         check_download=True,
-    #     )
-    #     if ed is not None:
-    #         eids.extend(ed[0])
-    #         details.extend(ed[1])
-    # df = _load_df_from_details(details, func=load_stimOff_itiIn_delays)
-    # boxplots_from_df(df, describe=True, title='itiIn - stimOff')
-    # plt.show()
-    # get_session_stimon_gocue_delays(eid)
-    # get_response_feddback_delays(eid)
-    # get_response_stimFreeze_delays(eid)  # FIXME:Have to fix timescales!!!!
-    # bpod = bpodqc.load_bpod_data(eid)
-    # response = one.load(eid, dataset_types=['trials.response_times'])[0]
-    # plt.plot(response, '-o', label='response_one')
-    # plt.plot(bpod['response_times'], '-o', label='response_bpod')
-    # plt.show()
-    # plt.legend(loc='best')
+    mean_criteria = {k: np.nanmean(v) for k, v in criteria.items()}
