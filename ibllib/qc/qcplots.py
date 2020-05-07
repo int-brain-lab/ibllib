@@ -18,6 +18,30 @@ plt.ion()
 one = ONE()
 
 
+def _load_df_from_details(details=None, func=None):
+    """
+    Applies a session level loader_func(eid) from session details dict from Alyx
+    Example:
+    df = _load_df_from_details(details, func=load_stimOff_itiIn_delays)
+    """
+    if details is None or func is None:
+        print("One or more required inputs are None.")
+        return
+    if is_details_dict(details):
+        details = [details]
+    data = []
+    labels = []
+    for i, det in enumerate(details):
+        eid = _to_eid(det)
+        data.append(func(eid))
+        labels.append(det["lab"] + str(i))
+
+    df = pd.DataFrame(data).transpose()
+    df.columns = labels
+
+    return df
+
+
 def plot_random_session_metrics(lab):
     if lab is None:
         print("Please input a lab")

@@ -1,60 +1,17 @@
-import json
-from functools import wraps
-
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-import seaborn as sns
 
-from brainbox.behavior.wheel import traces_by_trial, cm_to_rad
 import ibllib.qc.bpodqc_extractors as bpodqc
+from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
 from ibllib.io.extractors.training_wheel import get_wheel_position
-from ibllib.qc.oneutils import search_lab_ephys_sessions, _to_eid, random_ephys_session
+from ibllib.qc.bpodqc_extractors import bpod_data_loader
+from ibllib.qc.oneutils import random_ephys_session
 from oneibl.one import ONE
-from alf.io import is_details_dict
 
 one = ONE()
 
 
-def _load_df_from_details(details=None, func=None):
-    """
-    Applies a session level loader_func(eid) from session details dict from Alyx
-    Example:
-    df = _load_df_from_details(details, func=load_stimOff_itiIn_delays)
-    """
-    if details is None or func is None:
-        print("One or more required inputs are None.")
-        return
-    if is_details_dict(details):
-        details = [details]
-    data = []
-    labels = []
-    for i, det in enumerate(details):
-        eid = _to_eid(det)
-        data.append(func(eid))
-        labels.append(det["lab"] + str(i))
-
-    df = pd.DataFrame(data).transpose()
-    df.columns = labels
-
-    return df
-
-
-def bpod_data_loader(func):
-    """ Checks if data is None loads eid data in case
-    """
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if not kwargs or kwargs.get("data", None) is None:
-            kwargs["data"] = bpodqc.load_bpod_data(args[0])
-        return func(*args, **kwargs)
-
-    return wrapper
-
-
 @bpod_data_loader
-def get_qcmetrics_frame(eid, data=None, apply_criteria=False):
+def get_bpodqc_metrics_frame(eid, data=None, apply_criteria=False):
     """Plottable metrics based on timings"""
     qcmetrics_frame = {
         "_bpod_goCue_delays": load_goCue_delays(
@@ -646,6 +603,6 @@ class BpodqcMetrics(object):
 if __name__ == "__main__":
     eid, det = random_ephys_session("churchlandlab")
     data = bpodqc.load_bpod_data(eid, fpga_time=False)
-    metrics = get_qcmetrics_frame(eid, data=data, apply_criteria=False)
-    criteria = get_qcmetrics_frame(eid, data=data, apply_criteria=True)
+    metrics = get_bpodqc_metrics_frame(eid, data=data, apply_criteria=False)
+    criteria = get_bpodqc_metrics_frame(eid, data=data, apply_criteria=True)
     mean_criteria = {k: np.nanmean(v) for k, v in criteria.items()}

@@ -1,6 +1,7 @@
 # TODO: Fix new extractor signature/saving files - Make class?
 import os
 from pathlib import Path, PureWindowsPath
+from functools import wraps
 
 import numpy as np
 import pandas as pd
@@ -24,6 +25,19 @@ from ibllib.io.extractors.training_trials import (
 from oneibl.one import ONE
 
 one = ONE()
+
+
+def bpod_data_loader(func):
+    """ Checks if data is None loads eid data in case
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if not kwargs or kwargs.get("data", None) is None:
+            kwargs["data"] = load_bpod_data(args[0])
+        return func(*args, **kwargs)
+
+    return wrapper
 
 
 @uuid_to_path(dl=True)
