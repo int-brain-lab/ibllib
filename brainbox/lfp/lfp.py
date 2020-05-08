@@ -113,4 +113,3 @@ def coherence(signal_a, signal_b, fs=2500, segment_length=1, segment_overlap=0.5
     phase_lag = np.angle(Pxy)
 
     return freqs, coherence, phase_lag
-
