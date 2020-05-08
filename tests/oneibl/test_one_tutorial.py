@@ -40,7 +40,7 @@ import examples.one.histology.visualization3D_rotating_gif_selectedmice  # TODO 
 import examples.one.histology.visualization3D_subject_channels  # TODO check docstring
 import examples.one.histology.visualization3D_subject_histology
 import examples.one.histology.visualize_alyx_channels_coronal
-
+import examples.one.histology.visualize_alyx_traj_coronal_sagittal_raster
 
 # -- Brainbox examples
 # from brainbox.examples.titi import toto
