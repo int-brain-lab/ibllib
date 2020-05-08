@@ -28,15 +28,13 @@ one = ONE()
 
 
 def bpod_data_loader(func):
-    """ Checks if data is None loads eid data in case
+    """ If data is None loads data from eid
     """
-
     @wraps(func)
     def wrapper(*args, **kwargs):
         if not kwargs or kwargs.get("data", None) is None:
             kwargs["data"] = load_bpod_data(args[0])
         return func(*args, **kwargs)
-
     return wrapper
 
 
