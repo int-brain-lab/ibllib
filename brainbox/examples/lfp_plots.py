@@ -21,7 +21,6 @@ signal = np.rot90(signal)
 ts = one.load(eid[0], 'ephysData.raw.timestamps')
 
 # %% Calculate power spectrum and coherence between two random channels
-
 ps_freqs, ps = bb.lfp.power_spectrum(signal, fs=raw.fs, segment_length=1, segment_overlap=0.5)
 random_ch = np.random.choice(raw.nc, 2)
 coh_freqs, coh, phase_lag = bb.lfp.coherence(signal[random_ch[0], :],
@@ -32,7 +31,6 @@ coh_freqs, coh, phase_lag = bb.lfp.coherence(signal[random_ch[0], :],
 fig = plt.figure(figsize=(18, 12))
 gs = GridSpec(3, 2, figure=fig)
 cmap = sns.color_palette('cubehelix', 50)
-
 ax1 = fig.add_subplot(gs[:, 0])
 sns.heatmap(data=np.log10(ps[:, ps_freqs < 140]), cbar=True, ax=ax1, yticklabels=50,
             cmap=cmap, cbar_kws={'label': 'log10 power ($V^2$)'})
@@ -56,3 +54,4 @@ ax4.set(xlim=[1, 140], ylabel='Coherence', xlabel='Frequency (Hz)',
         title='Channel %d and %d' % (random_ch[0], random_ch[1]))
 
 plt.tight_layout(pad=5)
+

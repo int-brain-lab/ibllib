@@ -10,7 +10,7 @@ import math
 
 from ibllib.misc import pprint, print_progress
 
-logger_ = logging.getLogger('ibllib')
+_logger = logging.getLogger('ibllib')
 
 
 class _PaginatedResponse(Mapping):
@@ -91,7 +91,7 @@ def http_download_file(full_link_to_file, *, clobber=False, offline=False,
         cache_dir = str(Path.home().joinpath("Downloads"))
 
     # This is the local file name
-    file_name = cache_dir + os.sep + os.path.basename(full_link_to_file)
+    file_name = str(cache_dir) + os.sep + os.path.basename(full_link_to_file)
 
     # do not overwrite an existing file unless specified
     if not clobber and os.path.exists(file_name):
@@ -115,7 +115,12 @@ def http_download_file(full_link_to_file, *, clobber=False, offline=False,
     urllib.request.install_opener(opener)
 
     # Open the url and get the length
-    u = urllib.request.urlopen(full_link_to_file)
+    try:
+        u = urllib.request.urlopen(full_link_to_file)
+    except urllib.error.HTTPError as e:
+        _logger.error(f"{str(e)} {full_link_to_file}")
+        raise e
+
     file_size = int(u.getheader('Content-length'))
 
     print(f"Downloading: {file_name} Bytes: {file_size}")
@@ -199,21 +204,21 @@ class AlyxClient:
 
     def _generic_request(self, reqfunction, rest_query, data=None):
         # if the data is a dictionary, it has to be converted to json text
-        if isinstance(data, dict):
+        if isinstance(data, dict) or isinstance(data, list):
             data = json.dumps(data)
         # makes sure the base url is the one from the instance
         rest_query = rest_query.replace(self._base_url, '')
         if not rest_query.startswith('/'):
             rest_query = '/' + rest_query
-        logger_.debug(self._base_url + rest_query)
+        _logger.debug(self._base_url + rest_query)
         r = reqfunction(self._base_url + rest_query, stream=True, headers=self._headers, data=data)
         if r and r.status_code in (200, 201):
             return json.loads(r.text)
         elif r and r.status_code == 204:
             return
         else:
-            logger_.error(self._base_url + rest_query)
-            logger_.error(r.text)
+            _logger.error(self._base_url + rest_query)
+            _logger.error(r.text)
             raise(requests.HTTPError(r))
 
     def authenticate(self, username='', password='', base_url=''):
@@ -231,9 +236,10 @@ class AlyxClient:
         self._base_url = base_url
         rep = requests.post(base_url + '/auth-token',
                             data=dict(username=username, password=password))
-        self._token = rep.json()
+        # Assign token or raise exception on internal server error
+        self._token = rep.json() if rep.ok else rep.raise_for_status()
         if not (list(self._token.keys()) == ['token']):
-            logger_.error(rep)
+            _logger.error(rep)
             raise Exception('Alyx authentication error. Check your credentials')
         self._headers = {
             'Authorization': 'Token {}'.format(list(self._token.values())[0]),
@@ -267,6 +273,7 @@ class AlyxClient:
         :return: (dict/list) json interpreted dictionary from response
         """
         rep = self._generic_request(requests.get, rest_query)
+        _logger.debug(rest_query)
         if isinstance(rep, dict) and list(rep.keys()) == ['count', 'next', 'previous', 'results']:
             if len(rep['results']) < rep['count']:
                 rep = _PaginatedResponse(self, rep)
@@ -373,7 +380,7 @@ class AlyxClient:
                              '\n       ' + '\n       '.join(endpoint_scheme.keys()))
         # the actions below require an id in the URL, warn and help the user
         if action in ['read', 'update', 'partial_update', 'delete'] and not id:
-            logger_.warning('REST action "' + action + '" requires an ID in the URL: ' +
+            _logger.warning('REST action "' + action + '" requires an ID in the URL: ' +
                             endpoint_scheme[action]['url'])
             return
         # the actions below require a data dictionary, warn and help the user with fields list
@@ -381,7 +388,7 @@ class AlyxClient:
             pprint(endpoint_scheme[action]['fields'])
             for act in endpoint_scheme[action]['fields']:
                 print("'" + act['name'] + "': ...,")
-            logger_.warning('REST action "' + action + '" requires a data dict with above keys')
+            _logger.warning('REST action "' + action + '" requires a data dict with above keys')
             return
 
         if action == 'list':

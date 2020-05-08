@@ -287,8 +287,8 @@ class TestPipesMisc(unittest.TestCase):
         self.assertTrue(alyx_insertion[1]['model'] == '3A')
         self.assertTrue(alyx_insertion[1]['name']in ['probe00', 'probe01'])
         # Cleanup DB
-        one.alyx.rest('insertions', 'delete', id=alyx_insertion[0]['url'][-36:])
-        one.alyx.rest('insertions', 'delete', id=alyx_insertion[1]['url'][-36:])
+        one.alyx.rest('insertions', 'delete', id=alyx_insertion[0]['id'])
+        one.alyx.rest('insertions', 'delete', id=alyx_insertion[1]['id'])
         # Force probe insertion 3B
         misc.create_alyx_probe_insertions(
             eid,
@@ -303,8 +303,8 @@ class TestPipesMisc(unittest.TestCase):
         self.assertTrue(alyx_insertion[1]['model'] == '3B2')
         self.assertTrue(alyx_insertion[1]['name'] in ['probe00', 'probe01'])
         # Cleanup DB
-        one.alyx.rest('insertions', 'delete', id=alyx_insertion[0]['url'][-36:])
-        one.alyx.rest('insertions', 'delete', id=alyx_insertion[1]['url'][-36:])
+        one.alyx.rest('insertions', 'delete', id=alyx_insertion[0]['id'])
+        one.alyx.rest('insertions', 'delete', id=alyx_insertion[1]['id'])
 
     def tearDown(self):
         shutil.rmtree(self.root_test_folder, ignore_errors=True)

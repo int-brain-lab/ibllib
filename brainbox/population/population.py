@@ -386,6 +386,7 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
                         'n_groups': np.shape(np.unique(event_groups))[0],
                         'classifier': classifier, 'cross_validation': '%d-fold' % num_splits,
                         'iterations': iterations, 'shuffle': shuffle})
+
     else:
         results = dict({'accuracy': acc, 'f1': f1, 'auroc': auroc,
                         'predictions': pred, 'probabilities': prob,
@@ -393,6 +394,7 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
                         'n_groups': np.shape(np.unique(event_groups))[0],
                         'classifier': classifier, 'cross_validation': cross_validation,
                         'iterations': iterations, 'shuffle': shuffle})
+
 
     return results
 

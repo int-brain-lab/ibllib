@@ -18,8 +18,11 @@ Run the following to set-up the workspace to run the docstring examples:
 
 import time
 from warnings import warn
-import numpy as np
+
 import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+
 # from matplotlib.ticker import StrMethodFormatter
 import brainbox as bb
 from ibllib.io import spikeglx
@@ -71,10 +74,10 @@ def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cma
     '''
 
     # Get units.
-    if not(units is None):  # we're using a subset of all units
+    if not (units is None):  # we're using a subset of all units
         unit_list = list(units_b['depths'].keys())
         # For each unit in `unit_list`, remove unit from `units_b` if not in `units`.
-        [units_b['depths'].pop(unit) for unit in unit_list if not(int(unit) in units)]
+        [units_b['depths'].pop(unit) for unit in unit_list if not (int(unit) in units)]
     unit_list = list(units_b['depths'].keys())  # get new `unit_list` after removing unit
 
     # Calculate coefficients of variation for all units
@@ -116,7 +119,7 @@ def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cma
     return cv_vals, p_vals
 
 
-def feat_cutoff(feat, feat_name, spks_per_bin=20, sigma=5, min_num_bins=50, ax=None):
+def missed_spikes_est(feat, feat_name, spks_per_bin=20, sigma=5, min_num_bins=50, ax=None):
     '''
     Plots the pdf of an estimated symmetric spike feature distribution, with a vertical cutoff line
     that indicates the approximate fraction of spikes missing from the distribution, assuming the
@@ -153,12 +156,12 @@ def feat_cutoff(feat, feat_name, spks_per_bin=20, sigma=5, min_num_bins=50, ax=N
     1) Plot cutoff line indicating the fraction of spikes missing from a unit based on the recorded
     unit's spike amplitudes, assuming the distribution of the unit's spike amplitudes is symmetric.
         >>> feat = units_b['amps']['1']
-        >>> fraction_missing = bb.plot.feat_cutoff(feat, feat_name='amps', unit=1)
+        >>> fraction_missing = bb.plot.missed_spikes_est(feat, feat_name='amps', unit=1)
     '''
 
     # Calculate the feature distribution histogram and fraction of spikes missing.
     fraction_missing, pdf, cutoff_idx = \
-        bb.metrics.feat_cutoff(feat, spks_per_bin, sigma, min_num_bins)
+        bb.metrics.missed_spikes_est(feat, spks_per_bin, sigma, min_num_bins)
 
     # Plot.
     if ax is None:  # create two axes
@@ -429,7 +432,7 @@ def firing_rate(ts, hist_win=0.01, fr_win=0.5, n_bins=10, show_fr_cv=True, ax=No
 
     See Also
     --------
-    metrics.firing_rate_coeff_var
+    metrics.firing_rate_cv
     singecell.firing_rate
 
     Examples
@@ -442,18 +445,18 @@ def firing_rate(ts, hist_win=0.01, fr_win=0.5, n_bins=10, show_fr_cv=True, ax=No
 
     if ax is None:
         fig, ax = plt.subplots()
-    if not(show_fr_cv):  # compute just the firing rate
+    if not (show_fr_cv):  # compute just the firing rate
         fr = bb.singlecell.firing_rate(ts, hist_win=hist_win, fr_win=fr_win)
     else:  # compute firing rate and coefficients of variation
-        cv, cvs, fr = bb.metrics.firing_rate_coeff_var(ts, hist_win=hist_win, fr_win=fr_win,
-                                                       n_bins=n_bins)
+        cv, cvs, fr = bb.metrics.firing_rate_cv(ts, hist_win=hist_win, fr_win=fr_win,
+                                                n_bins=n_bins)
     x = np.arange(fr.size) * hist_win
     ax.plot(x, fr)
     ax.set_title('Firing Rate')
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Rate (s$^-1$)')
 
-    if not(show_fr_cv):
+    if not (show_fr_cv):
         return fr
     else:  # show coefficients of variation
         y_max = np.max(fr) * 1.05
@@ -610,9 +613,13 @@ def peri_event_time_histogram(
     return ax
 
 
-def driftmap(ts, feat, ax=None):
+def driftmap(ts, feat, ax=None, plot_style='bincount',
+             t_bin=0.01, d_bin=20, **kwargs):
     '''
-    Plots the driftmap of a spike feature array over time.
+    Plots the values of a spike feature array (y-axis) over time (x-axis).
+    Two arguments can be given for the plot_style of the drift map:
+    - 'scatter' : whereby each value is plotted as a marker (up to 100'000 data point)
+    - 'bincount' : whereby the values are binned (optimised to represent spike raster)
 
     Parameters
     ----------
@@ -622,6 +629,9 @@ def driftmap(ts, feat, ax=None):
         The spike timestamps from which to compute the firing rate.
     ax : axessubplot (optional)
         The axis handle to plot the histogram on. (if `None`, a new figure and axis is created)
+    t_bin: time bin used when plot_style='bincount'
+    d_bin: depth bin used when plot_style='bincount'
+    plot_style: 'scatter', 'bincount'
 
     Returns
     -------
@@ -653,7 +663,16 @@ def driftmap(ts, feat, ax=None):
     if ax is None:
         fig, ax = plt.subplots()
 
-    ax.plot(ts, feat, '.')
+    if plot_style == 'scatter' or len(ts) > 100000:
+        if 'color' not in kwargs.keys():
+            kwargs['color'] = 'k'
+        ax.plot(ts, feat, **kwargs)
+    else:
+        # compute raster map as a function of site depth
+        R, times, depths = bb.processing.bincount2D(ts, feat, t_bin, d_bin)
+        # plot raster map
+        ax.imshow(R, aspect='auto', cmap='binary', vmax=t_bin / 0.001 / 4,
+                  extent=np.r_[times[[0, -1]], depths[[0, -1]]], origin='lower')
 
     return cd, md
 
@@ -702,3 +721,100 @@ def pres_ratio(ts, hist_win=10, ax=None):
     ax.set_title('Presence Ratio')
 
     return pr, spks_bins
+
+
+def driftmap_color(
+        clusters_depths, spikes_times,
+        spikes_amps, spikes_depths, spikes_clusters,
+        ax=None, axesoff=False, return_lims=False):
+
+    '''
+    Plots the driftmap of a session or a trial
+
+    The plot shows the spike times vs spike depths.
+    Each dot is a spike, whose color indicates the cluster
+    and opacity indicates the spike amplitude.
+
+    Parameters
+    -------------
+    clusters_depths: ndarray
+        depths of all clusters
+    spikes_times: ndarray
+        spike times of all clusters
+    spikes_amps: ndarray
+        amplitude of each spike
+    spikes_depths: ndarray
+        depth of each spike
+    spikes_clusters: ndarray
+        cluster idx of each spike
+    ax: matplotlib.axes.Axes object (optional)
+        The axis object to plot the driftmap on
+        (if `None`, a new figure and axis is created)
+
+    Return
+    ---
+    ax: matplotlib.axes.Axes object
+        The axis object with driftmap plotted
+    x_lim: list of two elements
+        range of x axis
+    y_lim: list of two elements
+        range of y axis
+    '''
+
+    color_bins = sns.color_palette("hls", 500)
+    new_color_bins = np.vstack(
+        np.transpose(np.reshape(color_bins, [5, 100, 3]), [1, 0, 2]))
+
+    # get the sorted idx of each depth, and create colors based on the idx
+
+    sorted_idx = np.argsort(np.argsort(clusters_depths))
+
+    colors = np.vstack(
+        [np.repeat(
+            new_color_bins[np.mod(idx, 500), :][np.newaxis, ...],
+            n_spikes, axis=0)
+            for (idx, n_spikes) in
+            zip(sorted_idx, np.unique(spikes_clusters,
+                                      return_counts=True)[1])])
+
+    max_amp = np.percentile(spikes_amps, 90)
+    min_amp = np.percentile(spikes_amps, 10)
+    opacity = np.divide(spikes_amps - min_amp, max_amp - min_amp)
+    opacity[opacity > 1] = 1
+    opacity[opacity < 0] = 0
+
+    colorvec = np.zeros([len(opacity), 4], dtype='float16')
+    colorvec[:, 3] = opacity.astype('float16')
+    colorvec[:, 0:3] = colors.astype('float16')
+
+    x = spikes_times.astype('float32')
+    y = spikes_depths.astype('float32')
+
+    args = dict(color=colorvec, edgecolors='none')
+
+    if ax is None:
+        fig = plt.Figure(dpi=200, frameon=False, figsize=[10, 10])
+        ax = plt.Axes(fig, [0.1, 0.1, 0.9, 0.9])
+        ax.set_xlabel('Time (sec)')
+        ax.set_ylabel('Distance from the probe tip (um)')
+        savefig = True
+        args.update(s=0.1)
+
+    ax.scatter(x, y, **args)
+    x_edge = (max(x) - min(x)) * 0.05
+    x_lim = [min(x) - x_edge, max(x) + x_edge]
+    y_lim = [min(y) - 50, max(y) + 100]
+    ax.set_xlim(x_lim[0], x_lim[1])
+    ax.set_ylim(y_lim[0], y_lim[1])
+
+    if axesoff:
+        ax.axis('off')
+
+    if savefig:
+        fig.add_axes(ax)
+        fig.savefig('driftmap.png')
+
+    if return_lims:
+        return ax, x_lim, y_lim
+    else:
+        return ax

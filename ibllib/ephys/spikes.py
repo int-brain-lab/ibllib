@@ -133,8 +133,10 @@ def ks2_to_alf(ks_path, out_path, ampfactor=1, label=None, force=True):
     :param ks_path:
     :param out_path:
     :return:
+
+    TODO change/remove `ampfactor` after seeing how amplitudes are calculated by ks2
     """
-    ephysqc._spike_sorting_metrics_ks2(ks_path, save=True)
     m = ephysqc.phy_model_from_ks2_path(ks_path)
+    ephysqc.unit_metrics_ks2(ks_path, m, save=True)
     ac = alf.EphysAlfCreator(m)
     ac.convert(out_path, label=label, force=force, ampfactor=ampfactor)
