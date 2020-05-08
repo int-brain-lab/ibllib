@@ -274,17 +274,34 @@ class FTPPatcher(Patcher):
         # self.ftp.auth()
         self.ftp.prot_p()
         self.ftp.login(one._par.FTP_DATA_SERVER_LOGIN, one._par.FTP_DATA_SERVER_PWD)
+        # pre-fetch the repositories so as not to query them for every file registered
+        self.repositories = self.one.alyx.rest("data-repository", "list")
 
     def create_dataset(self, path, created_by='root', dry=False, repository=DMZ_REPOSITORY):
         # overrides the superclass just to remove the server repository argument
         response = super().create_dataset(path, created_by=created_by, dry=dry,
                                           repository=repository)
-        # makes sure the only file labeled as existing is the ibl_patcher one
+        # need to patch the file records to be consistent
         for ds in response:
-            for fr in ds['file_records']:
-                if fr['data_repository'] != repository:
-                    self.one.alyx.rest('files', 'partial_update', id=fr['id'],
-                                       data={'exists': False})
+            frs = ds['file_records']
+            fr_server = next(filter(lambda fr: 'flatiron' in fr['data_repository'], frs))
+            fr_ftp = next(filter(lambda fr: fr['data_repository'] == DMZ_REPOSITORY and
+                                 fr['relative_path'] == fr_server['relative_path'], frs))
+            reposerver = next(filter(lambda rep: rep['name'] == fr_server['data_repository'],
+                                     self.repositories))
+            relative_path = str(Path(reposerver['globus_path']).joinpath(
+                Path(fr_ftp['relative_path'])))[1:]
+            # 1) if there was already a file, the registration created a duplicate
+            fr_2del = list(filter(lambda fr: fr['data_repository'] == DMZ_REPOSITORY and
+                                             fr['relative_path'] == relative_path, frs))  # NOQA
+            if len(fr_2del) == 1:
+                self.one.alyx.rest('files', 'delete', id=fr_2del[0]['id'])
+            # 2) the patch ftp file needs to be prepended with the server repository path
+            self.one.alyx.rest('files', 'partial_update', id=fr_ftp['id'],
+                               data={'relative_path': relative_path, 'exists': True})
+            # 3) the server file is labeled as not existing
+            self.one.alyx.rest('files', 'partial_update', id=fr_server['id'],
+                               data={'exists': False})
         return response
 
     def _scp(self, local_path, remote_path, dry=True):
