@@ -38,13 +38,15 @@ def get_oneqc_metrics_frame(eid, data=None, apply_criteria=False):
         "trials.intervals",
         "trials.stimOnTrigger_times",
         "trials.stimOn_times",
-        "trials.goCueTriggeer_times",
+        "trials.goCueTrigger_times",
         "trials.goCue_times",
         "trials.response_times",
         "trials.feedback_times",
     ]
     for name in dstype_names:
-        qcmetrics_frame.update(load_dstype_qc_metrics(eid, name, data=data, apply_criteria=apply_criteria))
+        qcmetrics_frame.update(
+            load_dstype_qc_metrics(eid, name, data=data, apply_criteria=apply_criteria)
+        )
     return qcmetrics_frame
 
 
@@ -63,7 +65,9 @@ def load_nDatasetTypes(eid, data=None, apply_criteria=False):
 
 
 @bpod_data_loader
-def load_dstype_qc_metrics(eid, dstype_name: str, data=None, apply_criteria=False):
+def load_dstype_qc_metrics(
+    eid: str, dstype_name: str, data: dict = None, apply_criteria: bool = False
+) -> dict:
     """Returns dict to update to metrics or criteria frame
     Metrics:
         _length = number of trials in ONE dstype
@@ -71,7 +75,8 @@ def load_dstype_qc_metrics(eid, dstype_name: str, data=None, apply_criteria=Fals
     Criteria:
         length / bpod number of trials
         count / length of dstype
-    NB: Makes sense for dstypes that should have one value per trial and where nans are informative of failures
+    NB: Makes sense for dstypes that should have one value per trial and where nans
+    are informative of failures
     Other dstypes will have nans because of the contingency of the trial,
     e.g. if contralstLeft has a nan it means the contrast was on the right.
     """
@@ -89,7 +94,7 @@ def load_dstype_qc_metrics(eid, dstype_name: str, data=None, apply_criteria=Fals
     _count = np.sum(np.isnan(dset))
     # if criteria is applies output normalized len and count
     if apply_criteria:
-        _length = _length / len(data['intervals_0'])
+        _length = _length / len(data["intervals_0"])
         _count = 1 - _count / len(dset)
     # Add the values to output dict
     for k, v in zip(names, (_length, _count)):
@@ -99,7 +104,7 @@ def load_dstype_qc_metrics(eid, dstype_name: str, data=None, apply_criteria=Fals
 
 
 if __name__ == "__main__":
-    eid, det = random_ephys_session("churchlandlab")
+    eid, det = random_ephys_session()
     data = bpodqc.load_bpod_data(eid, fpga_time=False)
     metrics = get_oneqc_metrics_frame(eid, data=data, apply_criteria=False)
     criteria = get_oneqc_metrics_frame(eid, data=data, apply_criteria=True)
