@@ -149,7 +149,9 @@ def search_lab_ephys_sessions(
     return out_sessions, out_details if det else out_sessions
 
 
-def random_ephys_session(lab, complete=False):
+def random_ephys_session(lab=None, complete=False):
+    if lab is None:
+        lab = random_lab()
     if complete:
         dstypes = one.list()
     else:
