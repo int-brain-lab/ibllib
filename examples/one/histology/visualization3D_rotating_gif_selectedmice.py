@@ -17,8 +17,14 @@ from brainbox.core import Bunch
 one = ONE(base_url="https://alyx.internationalbrainlab.org")
 subjects = ['CSHL045', 'SWC_023', 'KS020']
 
-output_video = '/Users/gaelle/Desktop/first_test.webm'
-# output_video = '/Users/gaelle/Desktop/first_test.avi'
+output_video = '/Users/gaelle/Desktop/rotating_selectedmice.webm'
+EXAMPLE_OVERWRITE = True  # Put to False when wanting to save in the above location
+
+# ======== DO NOT EDIT BELOW (used for example testing) ====
+
+if EXAMPLE_OVERWRITE:
+    cachepath = Path(one._par.CACHE_DIR)
+    output_video = cachepath.joinpath('rotating_selectedmice.webm')
 
 fig = rendering.figure()
 for i_sub in range(0, len(subjects)):

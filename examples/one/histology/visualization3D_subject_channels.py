@@ -1,3 +1,6 @@
+"""
+Generates 3D rendering of all probe trajectories for a single subject.
+"""
 # Author: Olivier
 # environment installation guide https://github.com/int-brain-lab/iblenv
 # run "%qui qt" magic command from Ipython prompt for interactive mode
