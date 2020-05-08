@@ -1,5 +1,10 @@
 """
 Generates 3D rendering of all probe trajectories for a single subject.
+
+The trajectory plotted are (pair):
+- Channel locations based on the user picks (from histology)
+- Linear Interpolation based on the picks
+One color per pair.
 """
 # Author: Olivier
 # environment installation guide https://github.com/int-brain-lab/iblenv

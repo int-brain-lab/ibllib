@@ -663,7 +663,8 @@ def driftmap(ts, feat, ax=None, plot_style='bincount',
     if ax is None:
         fig, ax = plt.subplots()
 
-    if plot_style == 'scatter' or len(ts) > 100000:
+    if plot_style == 'scatter' and len(ts) < 100000:
+        print('here todo')
         if 'color' not in kwargs.keys():
             kwargs['color'] = 'k'
         ax.plot(ts, feat, **kwargs)

@@ -1,3 +1,11 @@
+"""
+Generates 3D rendering of all probe trajectories for a single subject.
+
+The trajectory plotted are:
+'Micro-manipulator': Green
+'Histology track': Red
+'Planned': Blue
+"""
 # Author: Olivier
 # environment installation guide https://github.com/int-brain-lab/iblenv
 # run "%qui qt" magic command from Ipython prompt for interactive mode

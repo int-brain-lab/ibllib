@@ -37,7 +37,9 @@ import examples.one.histology.visualization3D_alyx_traj_planned_histology
 # TODO import examples.one.histology.visualization3D_repeated_site
 # TODO import examples.one.histology.visualization3D_rotating_gif_firstpassmap_plan
 import examples.one.histology.visualization3D_rotating_gif_selectedmice  # TODO out path
-import examples.one.histology.visualization3D_subject_channels
+import examples.one.histology.visualization3D_subject_channels  # TODO check docstring
+import examples.one.histology.visualization3D_subject_histology
+import examples.one.histology.visualize_alyx_channels_coronal
 
 
 # -- Brainbox examples
