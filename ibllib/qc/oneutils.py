@@ -154,7 +154,7 @@ def random_ephys_session(lab, complete=False):
         dstypes = one.list()
     else:
         dstypes = []
-    sessions = search_lab_ephys_sessions(lab, dstypes=dstypes)
+    sessions = search_lab_ephys_sessions(lab, dstypes=dstypes, nlatest=None)
     if sessions is None:
         return
     eids, dets = sessions
