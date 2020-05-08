@@ -453,7 +453,7 @@ def load_bpod_data(session_path, fpga_time=False):
     data = raw.load_data(session_path)
     settings = raw.load_settings(session_path)
     stimOn_times, stimOff_times, stimFreeze_times = get_stimOnOffFreeze_times_from_BNC1(
-        session_path
+        session_path, save=False, data=data, settings=settings,
     )
 
     out = {
