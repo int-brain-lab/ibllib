@@ -170,19 +170,6 @@ def random_lab():
     return np.random.choice(labs)
 
 
-def get_details(eid, full=False):
-    """ Returns details of eid like from one.search, optional return full
-    session details.
-    """
-    # TODO: integrate into ONE, check for valid eid, make test
-    dets = one.alyx.rest("sessions", "read", eid)
-    if full:
-        return dets
-    det_fields = ["subject", "start_time", "number", "lab", "project",
-                  "url", "task_protocol", "local_path"]
-    return {k: v for k, v in dets.items() if k in det_fields}
-
-
 if __name__ == "__main__":
     sp = "/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_2240/2020-01-22/001"
     eid = "259927fd-7563-4b03-bc5d-17b4d0fa7a55"
