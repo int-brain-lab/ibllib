@@ -120,7 +120,7 @@ def from_path(session_path, force=False, save=True):
         tmax = data[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
         ephys_fpga.extract_all(session_path, save=save, tmax=tmax)
     if extractor_type == 'sync_ephys':
-        ephys_fpga.extract_sync(session_path, save=save)
+        ephys_fpga.extract_sync(session_path)
 
 
 def bulk(subjects_folder, dry=False, glob_flag='**/extract_me.flag'):
