@@ -1,14 +1,14 @@
 # TODO: Fix new extractor signature/saving files - Make class?
+import logging
 import os
-from pathlib import Path, PureWindowsPath
 from functools import wraps
+from pathlib import Path, PureWindowsPath
 
 import numpy as np
 import pandas as pd
 from scipy import interpolate
 
 import ibllib.io.raw_data_loaders as raw
-from ibllib.qc.oneutils import uuid_to_path
 from ibllib.io.extractors.training_trials import (
     get_choice,
     get_feedback_times,
@@ -18,11 +18,14 @@ from ibllib.io.extractors.training_trials import (
     get_intervals,
     get_port_events,
     get_response_times,
+    get_rewardVolume,
     get_stimOn_times,
     get_stimOnTrigger_times,
-    get_rewardVolume,
 )
+from ibllib.qc.oneutils import uuid_to_path
 from oneibl.one import ONE
+
+log = logging.getLogger("ibllib")
 
 one = ONE()
 
@@ -30,11 +33,13 @@ one = ONE()
 def bpod_data_loader(func):
     """ If data is None loads data from eid
     """
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         if not kwargs or kwargs.get("data", None) is None:
             kwargs["data"] = load_bpod_data(args[0])
         return func(*args, **kwargs)
+
     return wrapper
 
 
@@ -125,7 +130,7 @@ def get_trial_type(session_path, save=False, data=False, settings=False):
         elif ~np.isnan(tr["behavior_data"]["States timestamps"]["no_go"][0][0]):
             trial_type.append(0)
         else:
-            print("trial is not in {-1, 0, 1}")
+            log.warning("Trial is not in set {-1, 0, 1}, appending NaN to trialType")
             trial_type.append(np.nan)
 
     trial_type = np.array(trial_type)
@@ -449,7 +454,7 @@ def _get_trimmed_data_from_pregenerated_files(
 @uuid_to_path(dl=True)
 def load_bpod_data(session_path, fpga_time=False):
     """Extracts and loads ephys sessions from bpod data"""
-    print(session_path)
+    log.info(f"Loading session: {session_path}")
     data = raw.load_data(session_path)
     settings = raw.load_settings(session_path)
     stimOn_times, stimOff_times, stimFreeze_times = get_stimOnOffFreeze_times_from_BNC1(
@@ -547,11 +552,11 @@ def get_bpod2fpga_times_func(session_path):
     # Load _ibl_trials.intervals.npy
     eid = one.eid_from_path(session_path)
     if eid is None:
-        print(f"No session found with path = {session_path}")
+        log.warning(f"No session found with path = {session_path}")
         return
     fpga_intervals = one.load(eid, dataset_types="trials.intervals")
     if not fpga_intervals:
-        print(f"tirals.intervals datasetType not found for session {eid}")
+        log.warning(f"tirals.intervals datasetType not found for session {eid}")
     else:
         fpga_intervals = fpga_intervals[0]
     # align

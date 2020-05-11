@@ -1,4 +1,5 @@
 import json
+import logging
 
 import numpy as np
 
@@ -6,8 +7,9 @@ import ibllib.qc.bpodqc_metrics as bpodqc
 import ibllib.qc.oneqc_metrics as oneqc
 from alf.io import is_uuid_string
 from ibllib.qc.bpodqc_extractors import load_bpod_data
-from ibllib.qc.oneutils random_ephys_session
 from oneibl.one import ONE
+
+log = logging.getLogger('ibllib')
 
 # one = ONE(base_url="https://dev.alyx.internationalbrainlab.org")
 one = ONE()
@@ -15,8 +17,8 @@ one = ONE()
 # eid, det = random_ephys_session()
 
 eid = "4153bd83-2168-4bd4-a15c-f7e82f3f73fb"
-det = get_details(eid)
-details = get_details(eid, full=True)
+det = one.get_details(eid)
+details = one.get_details(eid, full=True)
 
 
 def build_extended_qc_frame(eid, data=None):
@@ -25,9 +27,9 @@ def build_extended_qc_frame(eid, data=None):
 
     # Get bpod and one qc frames
     extended_qc = {}
-    print(f"Session {eid}: Running QC on ONE DatasetTypes...")
+    log.info(f"Session {eid}: Running QC on ONE DatasetTypes...")
     one_frame = oneqc.get_oneqc_metrics_frame(eid, data=data, apply_criteria=True)
-    print(f"Session {eid}: Running QC on Bpod data...")
+    log.info(f"Session {eid}: Running QC on Bpod data...")
     bpod_frame = bpodqc.get_bpodqc_metrics_frame(eid, data=data, apply_criteria=True)
     # Make average bool pass
     # def average_frame(frame):
@@ -99,9 +101,9 @@ def remove_extended_qc_key(eid: str, key: str) -> dict:
     if current is None:
         return
     if current.get(key, None) is None:
-        print(f"{key}: Key not found in extended_qc session field")
+        log.warning(f"{key}: Key not found in extended_qc session field")
         return current
-    print(f"Removing {key}")
+    log.info(f"Removing {key}")
     current.pop(key)
     extended_qc = write_extended_qc(eid, current)
     return extended_qc
