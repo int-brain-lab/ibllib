@@ -4,8 +4,9 @@ import numpy as np
 
 import ibllib.qc.bpodqc_metrics as bpodqc
 import ibllib.qc.oneqc_metrics as oneqc
+from alf.io import is_uuid_string
 from ibllib.qc.bpodqc_extractors import load_bpod_data
-from ibllib.qc.oneutils import get_details, random_ephys_session
+from ibllib.qc.oneutils random_ephys_session
 from oneibl.one import ONE
 
 # one = ONE(base_url="https://dev.alyx.internationalbrainlab.org")
@@ -13,7 +14,7 @@ one = ONE()
 
 # eid, det = random_ephys_session()
 
-eid = '4153bd83-2168-4bd4-a15c-f7e82f3f73fb'
+eid = "4153bd83-2168-4bd4-a15c-f7e82f3f73fb"
 det = get_details(eid)
 details = get_details(eid, full=True)
 
@@ -54,7 +55,7 @@ def write_extended_qc(eid: str, eqc_data: dict) -> dict:
     patch_dict = {"extended_qc": json.dumps(eqc_data, indent=1)}
     # Upload new extended_qc to session
     session_details = one.alyx.rest("sessions", "partial_update", id=eid, data=patch_dict)
-    return json.loads(session_details['extended_qc'])
+    return json.loads(session_details["extended_qc"])
 
 
 def update_extended_qc(eid: str, eqc_data: dict) -> dict:
@@ -83,14 +84,14 @@ def update_extended_qc(eid: str, eqc_data: dict) -> dict:
 
 def read_extended_qc(eid: str) -> dict:
     """ Query the extended_qc field of session eid"""
-    eqc = one.alyx.rest("sessions", "read", eid)['extended_qc']
+    eqc = one.alyx.rest("sessions", "read", eid)["extended_qc"]
     if eqc is None:
         return
     return json.loads(eqc)
 
 
 def delete_extended_qc(eid: str) -> None:
-    _ = one.alyx.rest("sessions", "partial_update", id=eid, data={'extended_qc': None})
+    _ = one.alyx.rest("sessions", "partial_update", id=eid, data={"extended_qc": None})
 
 
 def remove_extended_qc_key(eid: str, key: str) -> dict:
@@ -112,6 +113,80 @@ def build_and_upload_extended_qc(eid, data=None):
 
     eqc_data = build_extended_qc_frame(eid, data=data)
     new_eqc_data = update_extended_qc(eid, eqc_data)
+
+
+class AlyxField(object):
+    def __init__(self, eid, endpoint, field):
+        self.eid: str = None
+        self.endpoint: str = None
+        self.field: str = None
+        self.data: dict = None
+
+    def _validate_attribs(self):
+        is_uuid_string(self.eid)
+        self.endpoint in one.alyx.rest()
+
+    def write(self, data) -> dict:
+        """write_extended_qc
+        Write data to WILL NOT CHECK IF DATA EXISTS
+        NOTE: Destructive write!
+
+        :param eid: Valid uuid sting for a given endpoint
+        :type eid: str
+        :param eqc_data: dict to upload
+        :type eqc_data: dict
+        :return: uploaded dict
+        :rtype: dict
+        """
+        # Prepare data to patch
+        patch_dict = {self.field: json.dumps(data, indent=1)}
+        # Upload new extended_qc to session
+        ret = one.alyx.rest(self.endpoint, "partial_update", id=self.eid, data=patch_dict)
+        return json.loads(ret[self.field])
+
+    def update_extended_qc(self) -> dict:
+        """update_extended_qc_on_session
+        Non destructive update of extended_qc field for session "eid"
+        Will update the extended_qc field of the session with the eqc_data dict inputted
+        If eqc_data has fields with the same name of existing fields it will squash the old
+        values (uses the dict.update() method)
+
+        :param eid: Valid uuid sting for a session
+        :type eid: str
+        :param data: dict with etended_qc frame to be uploaded
+        :type data: dict
+        :return: new patched extended_qc dict
+        :rtype: dict
+        """
+        # Load current extended_qc field
+        current = self.read()
+        # Patch current dict of extended_qc with new data
+        if current is not None:
+            current.update(self.data)
+        written_field = self.write()
+        return written_field
+
+    def read(self) -> dict:
+        """ Query the extended_qc field of session eid"""
+        read_field = one.alyx.rest(self.endpoint, "read", self.eid)[self.field]
+        if read_field is None:
+            return
+        return json.loads(read_field)
+
+    def delete(self) -> None:
+        _ = one.alyx.rest(self.endpoint, "partial_update", id=self.eid, data={self.field: None})
+
+    def remove_key_from_field(self, key) -> dict:
+        current = self.read()
+        if current is None:
+            return
+        if current.get(key, None) is None:
+            print(f"{key}: Key not found in endpoint {self.endpoint} field {self.field}")
+            return current
+        print(f"Removing {key}")
+        current.pop(key)
+        written = self.write(current)
+        return written
 
 
 if __name__ == "__main__":
@@ -153,8 +228,4 @@ if __name__ == "__main__":
         "_bpod_error_trial_event_sequence": None,
         "_bpod_correct_trial_event_sequence": None,
         "_bpod_trial_length": None,
-    }
-    data = {
-        "test_qc_field": 0.999827,
-        "_some_other_qc_field": 3.0
     }
