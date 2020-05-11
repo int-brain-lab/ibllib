@@ -4,7 +4,7 @@ import unittest
 from ibllib.qc import bpodqc
 
 
-class TestBpodTask(unittest.TestCase):
+class TestBpodQCExtractors(unittest.TestCase):
     """TODO: should be an integration test in iblscripts"""
     pass
 
