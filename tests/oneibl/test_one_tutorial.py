@@ -39,8 +39,9 @@ import examples.one.histology.visualization3D_alyx_traj_planned_histology
 import examples.one.histology.visualization3D_rotating_gif_selectedmice  # TODO out path
 import examples.one.histology.visualization3D_subject_channels  # TODO check docstring
 import examples.one.histology.visualization3D_subject_histology
-import examples.one.histology.visualize_alyx_channels_coronal
+import examples.one.histology.visualize_alyx_channels_coronal  # TODO Delete?
 import examples.one.histology.visualize_alyx_traj_coronal_sagittal_raster
+import examples.one.histology.visualize_session_coronal_tilted
 
 # -- Brainbox examples
 # from brainbox.examples.titi import toto

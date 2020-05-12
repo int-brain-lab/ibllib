@@ -8,7 +8,7 @@ the penetrations done in selected animals (a color is given per animal).
 # run "%qui qt" magic command from Ipython prompt for interactive mode
 import numpy as np
 from mayavi import mlab
-
+from pathlib import Path
 from atlaselectrophysiology import rendering
 import ibllib.atlas as atlas
 from oneibl.one import ONE
