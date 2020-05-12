@@ -1,10 +1,13 @@
 from functools import partial, wraps
 from pathlib import Path
+import logging
 
 import numpy as np
 
 from alf.io import is_details_dict, is_session_path, is_uuid_string
 from oneibl.one import ONE
+
+log = logging.getLogger("ibllib")
 
 one = ONE()
 
@@ -44,7 +47,7 @@ def uuid_to_path(func=None, dl=False, full=False, dry=False, force=False):
     @wraps(func)
     def wrapper(eid, *args, **kwargs):
         if eid is None:
-            print("Input eid or session_path is None")
+            log.warning("Input eid or session_path is None")
             return
         # Check if first arg is path or eid
         if is_uuid_string(str(eid)):
@@ -67,7 +70,7 @@ def _one_load_session_delays_between_events(eid, dstype1, dstype2):
     """
     event_times1, event_times2 = one.load(eid, dataset_types=[dstype1, dstype2])
     if all(np.isnan(event_times1)) or all(np.isnan(event_times2)):
-        print(
+        log.warning(
             f"{eid}\nall {dstype1} nan: {all(np.isnan(event_times1))}",
             f"\nall {dstype2} nan: {all(np.isnan(event_times2))}",
         )
@@ -91,13 +94,23 @@ def _to_eid(invar):
     elif isinstance(invar, str) and is_uuid_string(invar):
         return invar
     else:
-        print("Unknown input type: please input a valid path or details object")
+        log.warning("Unknown input type: please input a valid path or details object")
         return
 
 
 def search_lab_ephys_sessions(
     lab: str, dstypes: list = [], nlatest: int = 3, det: bool = True, check_download: bool = False
 ):
+    if isinstance(lab, list):
+        out = []
+        for l in lab:
+            out.append(
+                search_lab_ephys_sessions(
+                    lab=l, dstypes=dstypes, nlatest=nlatest, det=det, check_download=check_download
+                )
+            )
+            return out
+
     ephys_sessions0, session_details0 = one.search(
         task_protocol="_iblrig_tasks_ephysChoiceWorld6.4.0",
         dataset_types=dstypes,
@@ -116,14 +129,14 @@ def search_lab_ephys_sessions(
     session_details = list(session_details0) + list(session_details1)
     # Check if you found anything
     if ephys_sessions == []:
-        print(f"No sessions found for {lab}")
+        log.warning(f"No sessions found for {lab}")
         return
     if not check_download:
         return (
             ephys_sessions[:nlatest],
             session_details[:nlatest] if det else ephys_sessions[:nlatest],
         )
-    print(f"Processing {lab}")
+    log.info(f"Processing {lab}")
     out_sessions = []
     out_details = []
     for esess, edets in zip(ephys_sessions, session_details):
@@ -134,13 +147,13 @@ def search_lab_ephys_sessions(
             if "raw" in dsname:
                 continue
             if np.all(np.isnan(dsdata)):
-                print(f"Skipping {esess}, one or more dstypes are all NaNs")
+                log.info(f"Skipping {esess}, one or more dstypes are all NaNs")
                 skip_esess = True
         if skip_esess:
             continue
         # Check if all dstypes have the same length
         if not all(len(x) == len(dstypes_data[0]) for x in dstypes_data):
-            print(f"Skipping {esess}, one or more dstypes have different lengths")
+            log.info(f"Skipping {esess}, one or more dstypes have different lengths")
             continue
         out_sessions.append(esess)
         out_details.append(edets)
@@ -186,6 +199,7 @@ if __name__ == "__main__":
     # Test random dataset
     print(is_uuid_string(random_ephys_session(lab, complete=False)[0]))
     print(is_details_dict(random_ephys_session(lab, complete=False)[1]))
+    print(random_ephys_session(complete=True) is not None)
     print(random_ephys_session(lab, complete=True) is None)
     print(random_ephys_session("sakjdhka", complete=False) is None)
     # Test _to_eid
