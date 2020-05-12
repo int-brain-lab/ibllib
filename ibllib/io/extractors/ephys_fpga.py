@@ -464,7 +464,7 @@ def extract_sync(session_path, overwrite=False, ephys_files=None):
     Assumes ephys data is within a `raw_ephys_data` folder
 
     :param session_path: '/path/to/subject/yyyy-mm-dd/001'
-    :param overwrite: Bool on re-extraction, forces overwrite instead of loading existing sync files
+    :param overwrite: Bool on re-extraction, forces overwrite instead of loading existing files
     :return: list of sync dictionaries
     """
     session_path = Path(session_path)
