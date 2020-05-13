@@ -88,26 +88,41 @@ SEARCH_TERMS = {  # keynames are possible input arguments and values are actual 
 
 
 class ONE(OneAbstract):
-    def __init__(self, username=None, password=None, base_url=None, silent=False):
+    def __init__(self, auth=True, username=None, password=None, base_url=None, silent=False):
         # get parameters override if inputs provided
         self._par = oneibl.params.get(silent=silent)
         self._par = self._par.set('ALYX_LOGIN', username or self._par.ALYX_LOGIN)
         self._par = self._par.set('ALYX_URL', base_url or self._par.ALYX_URL)
         self._par = self._par.set('ALYX_PWD', password or self._par.ALYX_PWD)
+
+        self._alyxClient = None
+        if auth:
+            self.connect_to_alyx()
+
+        print(id(self))
+
+    def connect_to_alyx(self):
         # Init connection to the database
         try:
             self._alyxClient = wc.AlyxClient(username=self._par.ALYX_LOGIN,
                                              password=self._par.ALYX_PWD,
                                              base_url=self._par.ALYX_URL)
+            print('Connected to ' + self._par.ALYX_URL + ' as ' + self._par.ALYX_LOGIN,)
         except requests.exceptions.ConnectionError:
             raise ConnectionError("Can't connect to " + self._par.ALYX_URL + '. \n' +
                                   'IP addresses are filtered on IBL database servers. \n' +
                                   'Are you connecting from an IBL participating institution ?')
-        print('Connected to ' + self._par.ALYX_URL + ' as ' + self._par.ALYX_LOGIN,)
         # Init connection to Globus if needed
+        return
+
+    @property
+    def alyx_connected(self):
+        return self._alyxClient is not None
 
     @property
     def alyx(self):
+        if not self.alyx_connected:
+            self.connect_to_alyx()
         return self._alyxClient
 
     def help(self, dataset_type=None):
@@ -367,7 +382,7 @@ class ONE(OneAbstract):
         for ind, tab in enumerate(_ENDPOINTS):
             if tab == table:
                 field_name = table_field_names[_ENDPOINTS[tab]]
-                full_out.append(self._alyxClient.get('/' + _ENDPOINTS[tab]))
+                full_out.append(self.alyx.get('/' + _ENDPOINTS[tab]))
                 list_out.append([f[field_name] for f in full_out[-1]])
         if verbose:
             pprint(list_out)
