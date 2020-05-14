@@ -8,14 +8,12 @@ import numpy as np
 from phylib.io import alf
 from ibllib.ephys.sync_probes import apply_sync
 import ibllib.ephys.ephysqc as ephysqc
-from ibllib.misc import log2session_static
 from ibllib.io import spikeglx, raw_data_loaders
 from ibllib.io.extractors.ephys_fpga import glob_ephys_files
 
 _logger = logging.getLogger('ibllib')
 
 
-@log2session_static('ephys')
 def probes_description(ses_path, bin_exists=True):
     """
     Aggregate probes information into ALF files
@@ -72,7 +70,6 @@ def probes_description(ses_path, bin_exists=True):
         fid.write(json.dumps(trajs))
 
 
-@log2session_static('ephys')
 def sync_spike_sortings(ses_path):
     """
     Converts the KS2 outputs for each probe in ALF format. Creates:

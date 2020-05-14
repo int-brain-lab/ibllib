@@ -28,57 +28,57 @@ class TestExtractTrialData(unittest.TestCase):
 
     def test_get_feedbackType(self):
         # TRAINING SESSIONS
-        ft = ibllib.io.extractors.training_trials.get_feedbackType(
-            self.training_lt5['path'], save=False, data=False)
+        ft = ibllib.io.extractors.training_trials.FeedBackType(
+            self.training_lt5['path']).extract()[0]
         self.assertEqual(ft.size, self.training_lt5['ntrials'])
         # check if no 0's in feedbackTypes
         self.assertFalse(ft[ft == 0].size > 0)
         # -- version >= 5.0.0
-        ft = ibllib.io.extractors.training_trials.get_feedbackType(
-            self.training_ge5['path'], save=False, data=False)
+        ft = ibllib.io.extractors.training_trials.FeedBackType(
+            self.training_ge5['path']).extract()[0]
         self.assertEqual(ft.size, self.training_ge5['ntrials'])
         # check if no 0's in feedbackTypes
         self.assertFalse(ft[ft == 0].size > 0)
 
         # BIASED SESSIONS
-        ft = ibllib.io.extractors.biased_trials.get_feedbackType(
-            self.biased_lt5['path'], save=False, data=False)
+        ft = ibllib.io.extractors.biased_trials.FeedBackType(
+            self.biased_lt5['path']).extract()[0]
         self.assertEqual(ft.size, self.biased_lt5['ntrials'])
         # check if no 0's in feedbackTypes
         self.assertFalse(ft[ft == 0].size > 0)
         # -- version >= 5.0.0
-        ft = ibllib.io.extractors.biased_trials.get_feedbackType(
-            self.biased_ge5['path'], save=False, data=False)
+        ft = ibllib.io.extractors.biased_trials.FeedBackType(
+            self.biased_ge5['path']).extract()[0]
         self.assertEqual(ft.size, self.biased_ge5['ntrials'])
         # check if no 0's in feedbackTypes
         self.assertFalse(ft[ft == 0].size > 0)
 
     def test_get_contrastLR(self):
         # TRAINING SESSIONS
-        cl, cr = ibllib.io.extractors.training_trials.get_contrastLR(
-            self.training_lt5['path'])
+        cl, cr = ibllib.io.extractors.training_trials.ContrastLR(
+            self.training_lt5['path']).extract()[0]
         self.assertTrue(all([np.sign(x) >= 0 for x in cl if ~np.isnan(x)]))
         self.assertTrue(all([np.sign(x) >= 0 for x in cr if ~np.isnan(x)]))
         self.assertTrue(sum(np.isnan(cl)) + sum(np.isnan(cr)) == len(cl))
         self.assertTrue(sum(~np.isnan(cl)) + sum(~np.isnan(cr)) == len(cl))
         # -- version >= 5.0.0
-        cl, cr = ibllib.io.extractors.training_trials.get_contrastLR(
-            self.training_ge5['path'])
+        cl, cr = ibllib.io.extractors.training_trials.ContrastLR(
+            self.training_ge5['path']).extract()[0]
         self.assertTrue(all([np.sign(x) >= 0 for x in cl if ~np.isnan(x)]))
         self.assertTrue(all([np.sign(x) >= 0 for x in cr if ~np.isnan(x)]))
         self.assertTrue(sum(np.isnan(cl)) + sum(np.isnan(cr)) == len(cl))
         self.assertTrue(sum(~np.isnan(cl)) + sum(~np.isnan(cr)) == len(cl))
 
         # BIASED SESSIONS
-        cl, cr = ibllib.io.extractors.biased_trials.get_contrastLR(
-            self.biased_lt5['path'])
+        cl, cr = ibllib.io.extractors.biased_trials.ContrastLR(
+            self.biased_lt5['path']).extract()[0]
         self.assertTrue(all([np.sign(x) >= 0 for x in cl if ~np.isnan(x)]))
         self.assertTrue(all([np.sign(x) >= 0 for x in cr if ~np.isnan(x)]))
         self.assertTrue(sum(np.isnan(cl)) + sum(np.isnan(cr)) == len(cl))
         self.assertTrue(sum(~np.isnan(cl)) + sum(~np.isnan(cr)) == len(cl))
         # -- version >= 5.0.0
-        cl, cr = ibllib.io.extractors.biased_trials.get_contrastLR(
-            self.biased_ge5['path'])
+        cl, cr = ibllib.io.extractors.biased_trials.ContrastLR(
+            self.biased_ge5['path']).extract()[0]
         self.assertTrue(all([np.sign(x) >= 0 for x in cl if ~np.isnan(x)]))
         self.assertTrue(all([np.sign(x) >= 0 for x in cr if ~np.isnan(x)]))
         self.assertTrue(sum(np.isnan(cl)) + sum(np.isnan(cr)) == len(cl))
@@ -86,17 +86,17 @@ class TestExtractTrialData(unittest.TestCase):
 
     def test_get_probabilityLeft(self):
         # TRAINING SESSIONS
-        pl = ibllib.io.extractors.training_trials.get_probabilityLeft(
-            self.training_lt5['path'])
+        pl = ibllib.io.extractors.training_trials.ProbabilityLeft(
+            self.training_lt5['path']).extract()[0]
         self.assertTrue(isinstance(pl, np.ndarray))
         # -- version >= 5.0.0
-        pl = ibllib.io.extractors.training_trials.get_probabilityLeft(
-            self.training_ge5['path'])
+        pl = ibllib.io.extractors.training_trials.ProbabilityLeft(
+            self.training_ge5['path']).extract()[0]
         self.assertTrue(isinstance(pl, np.ndarray))
 
         # BIASED SESSIONS
-        pl = ibllib.io.extractors.biased_trials.get_probabilityLeft(
-            self.biased_lt5['path'])
+        pl = ibllib.io.extractors.biased_trials.ProbabilityLeft(
+            self.biased_lt5['path']).extract()[0]
         self.assertTrue(isinstance(pl, np.ndarray))
         # Test if only probs that are in prob set
         md = raw.load_settings(self.biased_lt5['path'])
@@ -105,8 +105,8 @@ class TestExtractTrialData(unittest.TestCase):
             probs.append(0.5)
             self.assertTrue(sum([x in probs for x in pl]) == len(pl))
         # -- version >= 5.0.0
-        pl = ibllib.io.extractors.biased_trials.get_probabilityLeft(
-            self.biased_ge5['path'])
+        pl = ibllib.io.extractors.biased_trials.ProbabilityLeft(
+            self.biased_ge5['path']).extract()[0]
         self.assertTrue(isinstance(pl, np.ndarray))
         # Test if only probs that are in prob set
         md = raw.load_settings(self.biased_ge5['path'])
@@ -116,8 +116,8 @@ class TestExtractTrialData(unittest.TestCase):
 
     def test_get_choice(self):
         # TRAINING SESSIONS
-        choice = ibllib.io.extractors.training_trials.get_choice(
-            self.training_lt5['path'])
+        choice = ibllib.io.extractors.training_trials.Choice(
+            session_path=self.training_lt5['path']).extract(save=False)[0]
         self.assertTrue(isinstance(choice, np.ndarray))
         data = raw.load_data(self.training_lt5['path'])
         trial_nogo = np.array(
@@ -126,8 +126,8 @@ class TestExtractTrialData(unittest.TestCase):
         if any(trial_nogo):
             self.assertTrue(all(choice[trial_nogo]) == 0)
         # -- version >= 5.0.0
-        choice = ibllib.io.extractors.training_trials.get_choice(
-            self.training_ge5['path'])
+        choice = ibllib.io.extractors.training_trials.Choice(
+            session_path=self.training_ge5['path']).extract(save=False)[0]
         self.assertTrue(isinstance(choice, np.ndarray))
         data = raw.load_data(self.training_ge5['path'])
         trial_nogo = np.array(
@@ -137,8 +137,8 @@ class TestExtractTrialData(unittest.TestCase):
             self.assertTrue(all(choice[trial_nogo]) == 0)
 
         # BIASED SESSIONS
-        choice = ibllib.io.extractors.biased_trials.get_choice(
-            self.biased_lt5['path'])
+        choice = ibllib.io.extractors.biased_trials.Choice(
+            session_path=self.biased_lt5['path']).extract(save=False)[0]
         self.assertTrue(isinstance(choice, np.ndarray))
         data = raw.load_data(self.biased_lt5['path'])
         trial_nogo = np.array(
@@ -147,8 +147,8 @@ class TestExtractTrialData(unittest.TestCase):
         if any(trial_nogo):
             self.assertTrue(all(choice[trial_nogo]) == 0)
         # -- version >= 5.0.0
-        choice = ibllib.io.extractors.biased_trials.get_choice(
-            self.biased_ge5['path'])
+        choice = ibllib.io.extractors.biased_trials.Choice(
+            session_path=self.biased_ge5['path']).extract(save=False)[0]
         self.assertTrue(isinstance(choice, np.ndarray))
         data = raw.load_data(self.biased_ge5['path'])
         trial_nogo = np.array(
@@ -160,14 +160,14 @@ class TestExtractTrialData(unittest.TestCase):
     def test_get_repNum(self):
         # TODO: Test its sawtooth
         # TRAINING SESSIONS
-        rn = ibllib.io.extractors.training_trials.get_repNum(
-            self.training_lt5['path'])
+        rn = ibllib.io.extractors.training_trials.RepNum(
+            self.training_lt5['path']).extract()[0]
         self.assertTrue(isinstance(rn, np.ndarray))
         for i in range(3):
             self.assertTrue(i in rn)
         # -- version >= 5.0.0
-        rn = ibllib.io.extractors.training_trials.get_repNum(
-            self.training_ge5['path'])
+        rn = ibllib.io.extractors.training_trials.RepNum(
+            self.training_ge5['path']).extract()[0]
         self.assertTrue(isinstance(rn, np.ndarray))
         for i in range(4):
             self.assertTrue(i in rn)
@@ -176,176 +176,142 @@ class TestExtractTrialData(unittest.TestCase):
 
     def test_get_rewardVolume(self):
         # TRAINING SESSIONS
-        rv = ibllib.io.extractors.training_trials.get_rewardVolume(
-            self.training_lt5['path'])
+        rv = ibllib.io.extractors.training_trials.RewardVolume(
+            self.training_lt5['path']).extract()[0]
         self.assertTrue(isinstance(rv, np.ndarray))
         # -- version >= 5.0.0
-        rv = ibllib.io.extractors.training_trials.get_rewardVolume(
-            self.training_ge5['path'])
+        rv = ibllib.io.extractors.training_trials.RewardVolume(
+            self.training_ge5['path']).extract()[0]
         self.assertTrue(isinstance(rv, np.ndarray))
 
         # BIASED SESSIONS
-        rv = ibllib.io.extractors.biased_trials.get_rewardVolume(
-            self.biased_lt5['path'])
+        rv = ibllib.io.extractors.biased_trials.RewardVolume(
+            self.biased_lt5['path']).extract()[0]
         self.assertTrue(isinstance(rv, np.ndarray))
         # Test if all non zero rewards are of the same value
         self.assertTrue(all([x == max(rv) for x in rv if x != 0]))
         # -- version >= 5.0.0
-        rv = ibllib.io.extractors.biased_trials.get_rewardVolume(
-            self.biased_ge5['path'])
+        rv = ibllib.io.extractors.biased_trials.RewardVolume(
+            self.biased_ge5['path']).extract()[0]
         self.assertTrue(isinstance(rv, np.ndarray))
         # Test if all non zero rewards are of the same value
         self.assertTrue(all([x == max(rv) for x in rv if x != 0]))
 
     def test_get_feedback_times_ge5(self):
         # TRAINING SESSIONS
-        ft = ibllib.io.extractors.training_trials.get_feedback_times_ge5(
-            self.training_ge5['path'])
+        ft = ibllib.io.extractors.training_trials.FeedbackTimes(
+            self.training_ge5['path']).extract()[0]
         self.assertTrue(isinstance(ft, np.ndarray))
 
         # BIASED SESSIONS
-        ft = ibllib.io.extractors.biased_trials.get_feedback_times_ge5(
-            self.biased_ge5['path'])
+        ft = ibllib.io.extractors.biased_trials.FeedbackTimes(
+            self.biased_ge5['path']).extract()[0]
         self.assertTrue(isinstance(ft, np.ndarray))
 
     def test_get_feedback_times_lt5(self):
         # TRAINING SESSIONS
-        ft = ibllib.io.extractors.training_trials.get_feedback_times_lt5(
-            self.training_lt5['path'])
+        ft = ibllib.io.extractors.training_trials.FeedbackTimes(
+            self.training_lt5['path']).extract()[0]
         self.assertTrue(isinstance(ft, np.ndarray))
 
         # BIASED SESSIONS
-        ft = ibllib.io.extractors.biased_trials.get_feedback_times_lt5(
-            self.biased_lt5['path'])
-        self.assertTrue(isinstance(ft, np.ndarray))
-
-    def test_get_feedback_times(self):
-        # TRAINING SESSIONS
-        ft = ibllib.io.extractors.training_trials.get_feedback_times(
-            self.training_ge5['path'])
-        self.assertTrue(isinstance(ft, np.ndarray))
-        ft = ibllib.io.extractors.training_trials.get_feedback_times(
-            self.training_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'})
-        self.assertTrue(isinstance(ft, np.ndarray))
-
-        # BIASED SESSIONS
-        ft = ibllib.io.extractors.biased_trials.get_feedback_times(
-            self.biased_ge5['path'])
-        self.assertTrue(isinstance(ft, np.ndarray))
-        ft = ibllib.io.extractors.biased_trials.get_feedback_times(
-            self.biased_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'})
+        ft = ibllib.io.extractors.biased_trials.FeedbackTimes(
+            self.biased_lt5['path']).extract()[0]
         self.assertTrue(isinstance(ft, np.ndarray))
 
     def test_get_stimOnTrigger_times(self):
         # TRAINING SESSIONS
-        sott = ibllib.io.extractors.training_trials.get_stimOnTrigger_times(
-            self.training_lt5['path'])
+        sott = ibllib.io.extractors.training_trials.StimOnTriggerTimes(
+            self.training_lt5['path']).extract()[0]
         self.assertTrue(isinstance(sott, np.ndarray))
         # -- version >= 5.0.0
-        sott = ibllib.io.extractors.training_trials.get_stimOnTrigger_times(
-            self.training_ge5['path'])
+        sott = ibllib.io.extractors.training_trials.StimOnTriggerTimes(
+            self.training_ge5['path']).extract()[0]
         self.assertTrue(isinstance(sott, np.ndarray))
         # BIASED SESSIONS
-        sott = ibllib.io.extractors.biased_trials.get_stimOnTrigger_times(
-            self.biased_lt5['path'])
+        sott = ibllib.io.extractors.biased_trials.StimOnTriggerTimes(
+            self.biased_lt5['path']).extract()[0]
         self.assertTrue(isinstance(sott, np.ndarray))
         # -- version >= 5.0.0
-        sott = ibllib.io.extractors.biased_trials.get_stimOnTrigger_times(
-            self.biased_ge5['path'])
+        sott = ibllib.io.extractors.biased_trials.StimOnTriggerTimes(
+            self.biased_ge5['path']).extract()[0]
         self.assertTrue(isinstance(sott, np.ndarray))
 
     def test_get_stimOn_times_lt5(self):
         # TRAINING SESSIONS
-        st = ibllib.io.extractors.training_trials.get_stimOn_times_lt5(
-            self.training_lt5['path'])
+        st = ibllib.io.extractors.training_trials.StimOnTimes(
+            self.training_lt5['path']).extract()[0]
         self.assertTrue(isinstance(st, np.ndarray))
 
         # BIASED SESSIONS
-        st = ibllib.io.extractors.biased_trials.get_stimOn_times_lt5(
-            self.biased_lt5['path'])
+        st = ibllib.io.extractors.biased_trials.StimOnTimes(
+            self.biased_lt5['path']).extract()[0]
         self.assertTrue(isinstance(st, np.ndarray))
 
     def test_get_stimOn_times_ge5(self):
         # TRAINING SESSIONS
-        st = ibllib.io.extractors.training_trials.get_stimOn_times_ge5(
-            self.training_ge5['path'])
+        st = ibllib.io.extractors.training_trials.StimOnTimes(
+            self.training_ge5['path']).extract()[0]
         self.assertTrue(isinstance(st, np.ndarray))
 
         # BIASED SESSIONS
-        st = ibllib.io.extractors.biased_trials.get_stimOn_times_ge5(
-            self.biased_ge5['path'])
-        self.assertTrue(isinstance(st, np.ndarray))
-
-    def test_get_stimOn_times(self):
-        # TRAINING SESSIONS
-        st = ibllib.io.extractors.training_trials.get_stimOn_times(
-            self.training_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'})
-        self.assertTrue(isinstance(st, np.ndarray))
-        st = ibllib.io.extractors.training_trials.get_stimOn_times(
-            self.training_ge5['path'])
-        self.assertTrue(isinstance(st, np.ndarray))
-
-        # BIASED SESSIONS
-        st = ibllib.io.extractors.biased_trials.get_stimOn_times(
-            self.biased_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'})
-        self.assertTrue(isinstance(st, np.ndarray))
-        st = ibllib.io.extractors.biased_trials.get_stimOn_times(
-            self.biased_ge5['path'])
+        st = ibllib.io.extractors.biased_trials.StimOnTimes(
+            self.biased_ge5['path']).extract()[0]
         self.assertTrue(isinstance(st, np.ndarray))
 
     def test_get_intervals(self):
         # TRAINING SESSIONS
-        di = ibllib.io.extractors.training_trials.get_intervals(
-            self.training_lt5['path'])
+        di = ibllib.io.extractors.training_trials.Intervals(
+            self.training_lt5['path']).extract()[0]
         self.assertTrue(isinstance(di, np.ndarray))
         self.assertFalse(np.isnan(di).all())
         # -- version >= 5.0.0
-        di = ibllib.io.extractors.training_trials.get_intervals(
-            self.training_ge5['path'])
+        di = ibllib.io.extractors.training_trials.Intervals(
+            self.training_ge5['path']).extract()[0]
         self.assertTrue(isinstance(di, np.ndarray))
         self.assertFalse(np.isnan(di).all())
 
         # BIASED SESSIONS
-        di = ibllib.io.extractors.biased_trials.get_intervals(
-            self.training_lt5['path'])
+        di = ibllib.io.extractors.biased_trials.Intervals(
+            self.training_lt5['path']).extract()[0]
         self.assertTrue(isinstance(di, np.ndarray))
         self.assertFalse(np.isnan(di).all())
         # -- version >= 5.0.0
-        di = ibllib.io.extractors.biased_trials.get_intervals(
-            self.training_ge5['path'])
+        di = ibllib.io.extractors.biased_trials.Intervals(
+            self.training_ge5['path']).extract()[0]
         self.assertTrue(isinstance(di, np.ndarray))
         self.assertFalse(np.isnan(di).all())
 
     def test_get_iti_duration(self):
         # TRAINING SESSIONS
-        iti = ibllib.io.extractors.training_trials.get_iti_duration(
-            self.training_lt5['path'])
+        iti = ibllib.io.extractors.training_trials.ItiDuration(
+            self.training_lt5['path']).extract()[0]
         self.assertTrue(isinstance(iti, np.ndarray))
         # -- version >= 5.0.0 iti always == 0.5 sec no extract
 
         # BIASED SESSIONS
-        iti = ibllib.io.extractors.biased_trials.get_iti_duration(
-            self.biased_lt5['path'])
+        iti = ibllib.io.extractors.biased_trials.ItiDuration(
+            self.biased_lt5['path']).extract()[0]
         self.assertTrue(isinstance(iti, np.ndarray))
         # -- version >= 5.0.0 iti always == 0.5 sec no extract
 
     def test_get_response_times(self):
         # TRAINING SESSIONS
-        rt = ibllib.io.extractors.training_trials.get_response_times(
-            self.training_lt5['path'])
+        rt = ibllib.io.extractors.training_trials.ResponseTimes(
+            self.training_lt5['path']).extract()[0]
         self.assertTrue(isinstance(rt, np.ndarray))
         # -- version >= 5.0.0
-        rt = ibllib.io.extractors.training_trials.get_response_times(
-            self.training_ge5['path'])
+        rt = ibllib.io.extractors.training_trials.ResponseTimes(
+            self.training_ge5['path']).extract()[0]
         self.assertTrue(isinstance(rt, np.ndarray))
 
         # BIASED SESSIONS
-        rt = ibllib.io.extractors.biased_trials.get_response_times(
-            self.biased_lt5['path'])
+        rt = ibllib.io.extractors.biased_trials.ResponseTimes(
+            self.biased_lt5['path']).extract()[0]
         self.assertTrue(isinstance(rt, np.ndarray))
         # -- version >= 5.0.0
-        rt = ibllib.io.extractors.biased_trials.get_response_times(
-            self.biased_ge5['path'])
+        rt = ibllib.io.extractors.biased_trials.ResponseTimes(
+            self.biased_ge5['path']).extract()[0]
         self.assertTrue(isinstance(rt, np.ndarray))
 
     def test_get_goCueTrigger_times(self):
@@ -355,8 +321,8 @@ class TestExtractTrialData(unittest.TestCase):
                         ['closed_loop'][0][0] for tr in data])
         self.assertTrue(isinstance(gct, np.ndarray))
         # -- version >= 5.0.0
-        gct = ibllib.io.extractors.training_trials.get_goCueTrigger_times(
-            self.training_ge5['path'])
+        gct = ibllib.io.extractors.training_trials.GoCueTriggerTimes(
+            self.training_ge5['path']).extract()[0]
         self.assertTrue(isinstance(gct, np.ndarray))
 
         # BIASED SESSIONS
@@ -365,74 +331,74 @@ class TestExtractTrialData(unittest.TestCase):
                         ['closed_loop'][0][0] for tr in data])
         self.assertTrue(isinstance(gct, np.ndarray))
         # -- version >= 5.0.0
-        gct = ibllib.io.extractors.biased_trials.get_goCueTrigger_times(
-            self.biased_ge5['path'])
+        gct = ibllib.io.extractors.biased_trials.GoCueTriggerTimes(
+            self.biased_ge5['path']).extract()[0]
         self.assertTrue(isinstance(gct, np.ndarray))
 
     def test_get_goCueOnset_times(self):
         # TRAINING SESSIONS
-        gcot = ibllib.io.extractors.training_trials.get_goCueOnset_times(
-            self.training_lt5['path'])
+        gcot = ibllib.io.extractors.training_trials.GoCueTimes(
+            self.training_lt5['path']).extract()[0]
         self.assertTrue(isinstance(gcot, np.ndarray))
         self.assertTrue(np.all(np.isnan(gcot)))
         self.assertTrue(gcot.size != 0 or gcot.size == 4)
         # -- version >= 5.0.0
-        gcot = ibllib.io.extractors.training_trials.get_goCueOnset_times(
-            self.training_ge5['path'])
+        gcot = ibllib.io.extractors.training_trials.GoCueTimes(
+            self.training_ge5['path']).extract()[0]
         self.assertTrue(isinstance(gcot, np.ndarray))
         self.assertFalse(np.any(np.isnan(gcot)))
         self.assertTrue(gcot.size != 0 or gcot.size == 12)
 
         # BIASED SESSIONS
-        gcot = ibllib.io.extractors.biased_trials.get_goCueOnset_times(
-            self.biased_lt5['path'])
+        gcot = ibllib.io.extractors.biased_trials.GoCueTimes(
+            self.biased_lt5['path']).extract()[0]
         self.assertTrue(isinstance(gcot, np.ndarray))
         self.assertFalse(np.any(np.isnan(gcot)))
         self.assertTrue(gcot.size != 0 or gcot.size == 4)
         # -- version >= 5.0.0
-        gcot = ibllib.io.extractors.biased_trials.get_goCueOnset_times(
-            self.biased_ge5['path'])
+        gcot = ibllib.io.extractors.biased_trials.GoCueTimes(
+            self.biased_ge5['path']).extract()[0]
         self.assertTrue(isinstance(gcot, np.ndarray))
         self.assertFalse(np.any(np.isnan(gcot)))
         self.assertTrue(gcot.size != 0 or gcot.size == 8)
 
     def test_get_included_trials_lt5(self):
         # TRAINING SESSIONS
-        it = ibllib.io.extractors.training_trials.get_included_trials_lt5(
-            self.training_lt5['path'])
+        it = ibllib.io.extractors.training_trials.IncludedTrials(
+            self.training_lt5['path']).extract()[0]
         self.assertTrue(isinstance(it, np.ndarray))
         # BIASED SESSIONS
-        it = ibllib.io.extractors.biased_trials.get_included_trials_lt5(
-            self.biased_lt5['path'])
+        it = ibllib.io.extractors.biased_trials.IncludedTrials(
+            self.biased_lt5['path']).extract()[0]
         self.assertTrue(isinstance(it, np.ndarray))
 
     def test_get_included_trials_ge5(self):
         # TRAINING SESSIONS
-        it = ibllib.io.extractors.training_trials.get_included_trials_ge5(
-            self.training_ge5['path'])
+        it = ibllib.io.extractors.training_trials.IncludedTrials(
+            self.training_ge5['path']).extract()[0]
         self.assertTrue(isinstance(it, np.ndarray))
         # BIASED SESSIONS
-        it = ibllib.io.extractors.biased_trials.get_included_trials_ge5(
-            self.biased_ge5['path'])
+        it = ibllib.io.extractors.biased_trials.IncludedTrials(
+            self.biased_ge5['path']).extract()[0]
         self.assertTrue(isinstance(it, np.ndarray))
 
     def test_get_included_trials(self):
         # TRAINING SESSIONS
-        it = ibllib.io.extractors.training_trials.get_included_trials(
-            self.training_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'})
+        it = ibllib.io.extractors.training_trials.IncludedTrials(
+            self.training_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'}).extract()[0]
         self.assertTrue(isinstance(it, np.ndarray))
         # -- version >= 5.0.0
-        it = ibllib.io.extractors.training_trials.get_included_trials(
-            self.training_ge5['path'])
+        it = ibllib.io.extractors.training_trials.IncludedTrials(
+            self.training_ge5['path']).extract()[0]
         self.assertTrue(isinstance(it, np.ndarray))
 
         # BIASED SESSIONS
-        it = ibllib.io.extractors.biased_trials.get_included_trials(
-            self.biased_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'})
+        it = ibllib.io.extractors.biased_trials.IncludedTrials(
+            self.biased_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'}).extract()[0]
         self.assertTrue(isinstance(it, np.ndarray))
         # -- version >= 5.0.0
-        it = ibllib.io.extractors.biased_trials.get_included_trials(
-            self.biased_ge5['path'])
+        it = ibllib.io.extractors.biased_trials.IncludedTrials(
+            self.biased_ge5['path']).extract()[0]
         self.assertTrue(isinstance(it, np.ndarray))
 
     def test_extract_all(self):
@@ -519,9 +485,6 @@ class TestExtractTrialData(unittest.TestCase):
         extract_session.from_path(self.biased_lt5['path'], force=True)
         trials = alf.io.load_object(self.biased_lt5['path'] / 'alf', object='_ibl_trials')
         self.assertTrue(alf.io.check_dimensions(trials) == 0)
-        # Make sure we get the log files
-        log_files = list(self.main_path.rglob('_ibl_log.info*.log'))
-        self.assertTrue(len(log_files) == 4)
 
     def tearDown(self):
         for f in self.main_path.rglob('_ibl_log.*.log'):

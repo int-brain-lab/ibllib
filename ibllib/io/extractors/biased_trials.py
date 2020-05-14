@@ -24,9 +24,9 @@ class ContrastLR(BaseBpodTrialsExtractor):
         return (contrastLeft, contrastRight)
 
 
-def extract_all(session_path, save=False, data=False, settings=False):
-    if not data:
-        data = raw.load_data(session_path)
+def extract_all(session_path, save=False, bpod_trials=False, settings=False):
+    if not bpod_trials:
+        bpod_trials = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
@@ -40,5 +40,5 @@ def extract_all(session_path, save=False, data=False, settings=False):
         base.append(ItiDuration)
 
     out, fil = run_extractor_classes(
-        base, save=save, session_path=session_path, bpod_trials=data, settings=settings)
+        base, save=save, session_path=session_path, bpod_trials=bpod_trials, settings=settings)
     return out, fil

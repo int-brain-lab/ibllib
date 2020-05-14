@@ -15,7 +15,7 @@ from ibllib.ephys import sync_probes
 from ibllib.io import spikeglx
 import ibllib.dsp as dsp
 import ibllib.io.extractors.ephys_fpga as fpga
-from ibllib.misc import print_progress, log2session_static
+from ibllib.misc import print_progress
 from phylib.io import model
 
 
@@ -103,7 +103,6 @@ def extract_rmsmap(fbin, out_folder=None, force=False):
     return out_time + out_freq
 
 
-@log2session_static('ephys')
 def raw_qc_session(session_path, dry=False, force=False):
     """
     Wrapper that exectutes QC from a session folder and outputs the results whithin the same folder

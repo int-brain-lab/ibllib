@@ -218,7 +218,7 @@ def get_expected_ttl_pulses(stim_order, stim_meta, ttl_signal_rf_map):
         if stim_meta['VISUAL_STIMULI'][str(stim_id)] == 'receptive_field_mapping':
             n_instances = np.sum((np.array(stim_order) == stim_id) * 1)
             if n_instances > 1:
-                raise ValueError('BaseBpodTrialsExtractor expects a single rf mapping presentation')
+                raise ValueError('Extractor expects a single rf mapping presentation')
             # number of TTL pulses expected in frame2ttl trace for rf mapping
             idxs_up, idxs_dn = get_rf_ttl_pulses(ttl_signal_rf_map)
             n_expected_ttl_pulses[i] = len(idxs_up) + len(idxs_dn)

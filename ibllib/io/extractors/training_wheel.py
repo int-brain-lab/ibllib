@@ -1,4 +1,3 @@
-import os
 import logging
 
 import numpy as np
@@ -9,7 +8,7 @@ import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
 import ibllib.exceptions as err
 
-logger_ = logging.getLogger('ibllib.alf')
+logger_ = logging.getLogger('ibllib')
 WHEEL_RADIUS_CM = 1  # we want the output in radians
 THRESHOLD_RAD_PER_SEC = 10
 THRESHOLD_CONSECUTIVE_SAMPLES = 0

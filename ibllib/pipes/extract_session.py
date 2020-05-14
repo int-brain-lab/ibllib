@@ -12,14 +12,13 @@ import json
 from pathlib import Path
 
 from alf.io import get_session_path
-from ibllib.misc import log2session_static
 from ibllib.io.extractors import (ephys_trials, ephys_fpga,
                                   biased_wheel, biased_trials,
                                   training_trials, training_wheel)
 from ibllib.io import raw_data_loaders as rawio
 import ibllib.io.flags as flags
 
-logger_ = logging.getLogger('ibllib.alf')
+logger_ = logging.getLogger('ibllib')
 
 
 def get_task_extractor_type(task_name):
@@ -86,7 +85,6 @@ def is_extracted(session_path):
         return False
 
 
-@log2session_static('extraction')
 def from_path(session_path, force=False, save=True):
     """
     Extract a session from full ALF path (ex: '/scratch/witten/ibl_witten_01/2018-12-18/001')
@@ -103,19 +101,19 @@ def from_path(session_path, force=False, save=True):
     if extractor_type == 'training':
         settings, data = rawio.load_bpod(session_path)
         logger_.info('training session on ' + settings['PYBPOD_BOARD'])
-        training_trials.extract_all(session_path, data=data, save=save)
-        training_wheel.extract_all(session_path, bp_data=data, save=save)
+        training_trials.extract_all(session_path, bpod_trials=data, save=save)
+        training_wheel.extract_all(session_path, bpod_trials=data, save=save)
         logger_.info('session extracted \n')  # timing info in log
     if extractor_type == 'biased':
         settings, data = rawio.load_bpod(session_path)
         logger_.info('biased session on ' + settings['PYBPOD_BOARD'])
-        biased_trials.extract_all(session_path, data=data, save=save)
-        biased_wheel.extract_all(session_path, bp_data=data, save=save)
+        biased_trials.extract_all(session_path, bpod_trials=data, save=save)
+        biased_wheel.extract_all(session_path, bpod_trials=data, save=save)
         logger_.info('session extracted \n')  # timing info in log
     if extractor_type == 'ephys':
         data = rawio.load_data(session_path)
         logger_.info('extract BPOD for ephys session')
-        ephys_trials.extract_all(session_path, data=data, save=save)
+        ephys_trials.extract_all(session_path, bpod_trials=data, save=save)
         logger_.info('extract FPGA information for ephys session')
         tmax = data[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
         ephys_fpga.extract_all(session_path, save=save, tmax=tmax)

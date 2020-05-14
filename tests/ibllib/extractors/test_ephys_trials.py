@@ -107,14 +107,14 @@ class TestEphysBehaviorExtraction(unittest.TestCase):
         data = raw.load_data(self.session_path)
         settings = raw.load_settings(self.session_path)
         pLeft0 = ephys_trials.ProbabilityLeft(
-            self.session_path, bpod_trials=data, settings=settings).extract(save=False)
+            self.session_path, bpod_trials=data, settings=settings).extract()[0]
         self.assertTrue(len(pLeft0) == len(data))
         # Test if only generative prob values in data
         self.assertTrue(all([x in [0.2, 0.5, 0.8] for x in np.unique(pLeft0)]))
         # Test if settings file has empty LEN_DATA result is same
         settings.update({"LEN_BLOCKS": None})
         pLeft1 = ephys_trials.ProbabilityLeft(
-            self.session_path, bpod_trials=data, settings=settings).extract(save=False)
+            self.session_path, bpod_trials=data, settings=settings).extract()[0]
         self.assertTrue(all(pLeft0 == pLeft1))
         # Test if only generative prob values in data
         self.assertTrue(all([x in [0.2, 0.5, 0.8] for x in np.unique(pLeft1)]))

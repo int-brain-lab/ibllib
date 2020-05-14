@@ -484,7 +484,7 @@ def extract_sync(session_path, overwrite=False, ephys_files=None):
             out_files, _ = alf.io._ls(bin_file.parent, object='_spikeglx_sync', glob=glob_filter)
         else:
             sr = ibllib.io.spikeglx.Reader(bin_file)
-            sync, out_files = _sync_to_alf(sr, bin_file.parent, save=True, parts=efi.label)[0]
+            sync, out_files = _sync_to_alf(sr, bin_file.parent, save=True, parts=efi.label)
         outputs.extend(out_files)
         syncs.extend([sync])
 

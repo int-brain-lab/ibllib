@@ -9,7 +9,6 @@ import alf.io
 from brainbox.core import Bunch
 from ibllib.exceptions import Neuropixel3BSyncFrontsNonMatching
 import ibllib.io.spikeglx as spikeglx
-from ibllib.misc import log2session_static
 from ibllib.io.extractors.ephys_fpga import _get_sync_fronts, get_ibl_sync_map
 
 _logger = logging.getLogger('ibllib')
@@ -33,7 +32,6 @@ def apply_sync(sync_file, times, forward=True):
     return fcn(times)
 
 
-@log2session_static('ephys')
 def sync(ses_path, **kwargs):
     """
     Wrapper for sync_probes.version3A and sync_probes.version3B that automatically determines

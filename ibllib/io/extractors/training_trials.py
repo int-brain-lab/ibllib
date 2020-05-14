@@ -6,7 +6,7 @@ import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
 from ibllib.misc import version
 
-logger_ = logging.getLogger('ibllib.alf')
+logger_ = logging.getLogger('ibllib')
 
 
 def get_port_events(trial: dict, name: str = '') -> list:
@@ -392,7 +392,7 @@ class ItiDuration(BaseBpodTrialsExtractor):
 
     def _extract(self):
         rt, _ = ResponseTimes(self.session_path, bpod_trials=self.bpod_trials,
-                             settings=self.settings).extract(save=False)
+                              settings=self.settings).extract(save=False)
         ends = np.array([t['behavior_data']['Trial end timestamp'] for t in self.bpod_trials])
         iti_dur = ends - rt
         return iti_dur
@@ -562,8 +562,8 @@ class CameraTimestamps(BaseBpodTrialsExtractor):
         # import matplotlib.pyplot as plt
         # plt.plot(np.diff(frame_times))
         """
-        if we find a video file, get the number of frames and extrapolate the times using the median
-        frame rate as the video stops after the bpod
+        if we find a video file, get the number of frames and extrapolate the times
+         using the median frame rate as the video stops after the bpod
         """
         video_file = list(self.session_path.joinpath(
             'raw_video_data').glob('_iblrig_leftCamera*.mp4'))
@@ -571,15 +571,16 @@ class CameraTimestamps(BaseBpodTrialsExtractor):
             cap = cv2.VideoCapture(str(video_file[0]))
             nframes = cap.get(cv2.CAP_PROP_FRAME_COUNT)
             if nframes > len(frame_times):
-                to_app = (np.arange(int(nframes - frame_times.size),) + 1) / frate + frame_times[-1]
+                to_app = (np.arange(int(nframes - frame_times.size),) + 1
+                          ) / frate + frame_times[-1]
                 frame_times = np.r_[frame_times, to_app]
         assert(np.all(np.diff(frame_times) > 0))  # negative diffs implies a big problem
         return frame_times
 
 
-def extract_all(session_path, save=False, data=False, settings=False):
-    if not data:
-        data = raw.load_data(session_path)
+def extract_all(session_path, save=False, bpod_trials=False, settings=False):
+    if not bpod_trials:
+        bpod_trials = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
@@ -595,5 +596,5 @@ def extract_all(session_path, save=False, data=False, settings=False):
         base.extend([IncludedTrials, ItiDuration])
 
     out, fil = run_extractor_classes(
-        base, save=save, session_path=session_path, bpod_trials=data, settings=settings)
+        base, save=save, session_path=session_path, bpod_trials=bpod_trials, settings=settings)
     return out, fil

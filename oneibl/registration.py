@@ -4,8 +4,8 @@ import datetime
 import logging
 from dateutil import parser as dateparser
 
+from ibllib.misc import version
 import ibllib.time
-from ibllib.misc import version, log2session
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io import flags, hashfile
 import alf.io
@@ -112,7 +112,6 @@ class RegistrationClient:
                 flag_file.parent.joinpath('create_me.flag').unlink()
             logger_.info('registered' + '\n')
 
-    @log2session('register')
     def register_session(self, ses_path, file_list=True):
         """
         Register session in Alyx
