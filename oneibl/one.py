@@ -1,17 +1,18 @@
-from pathlib import Path, PurePath
-import requests
 import logging
 import os
+from pathlib import Path, PurePath
+
+import requests
 import tqdm
 
-from ibllib.io import hashfile
-from ibllib.misc import pprint
-from ibllib.io.one import OneAbstract
-from alf.io import load_file_content, remove_uuid_file, is_uuid_string, AlfBunch, get_session_path
-
-import oneibl.webclient as wc
-from oneibl.dataclass import SessionDataInfo
 import oneibl.params
+import oneibl.webclient as wc
+from alf.io import (AlfBunch, get_session_path, is_uuid_string,
+                    load_file_content, remove_uuid_file)
+from ibllib.io import hashfile
+from ibllib.io.one import OneAbstract
+from ibllib.misc import pprint
+from oneibl.dataclass import SessionDataInfo
 
 _logger = logging.getLogger('ibllib')
 
@@ -94,17 +95,21 @@ class ONE(OneAbstract):
         self._par = self._par.set('ALYX_LOGIN', username or self._par.ALYX_LOGIN)
         self._par = self._par.set('ALYX_URL', base_url or self._par.ALYX_URL)
         self._par = self._par.set('ALYX_PWD', password or self._par.ALYX_PWD)
-        # Init connection to the database
-        try:
-            self._alyxClient = wc.AlyxClient(username=self._par.ALYX_LOGIN,
-                                             password=self._par.ALYX_PWD,
-                                             base_url=self._par.ALYX_URL)
-        except requests.exceptions.ConnectionError:
-            raise ConnectionError("Can't connect to " + self._par.ALYX_URL + '. \n' +
-                                  'IP addresses are filtered on IBL database servers. \n' +
-                                  'Are you connecting from an IBL participating institution ?')
-        print('Connected to ' + self._par.ALYX_URL + ' as ' + self._par.ALYX_LOGIN,)
-        # Init connection to Globus if needed
+
+        # By default set internal AlyxClient to be module singleton object
+        self._alyxClient = wc.alyx_client
+        # If any parameters are enteres create new ALyxClient object
+        if username or password or base_url:
+            try:
+                self._alyxClient = wc.AlyxClient(username=self._par.ALYX_LOGIN,
+                                                 password=self._par.ALYX_PWD,
+                                                 base_url=self._par.ALYX_URL)
+                print(f"Connected to {self._par.ALYX_URL} as {self._par.ALYX_LOGIN}",)
+            except requests.exceptions.ConnectionError:
+                raise ConnectionError(f"Can't connect to {self._par.ALYX_URL}.\n" +
+                                      "IP addresses are filtered on IBL database servers. \n" +
+                                      "Are you connecting from an IBL participating institution ?")
+            # Init connection to Globus if needed
 
     @property
     def alyx(self):
