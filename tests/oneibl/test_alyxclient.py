@@ -13,12 +13,30 @@ ac = wc.AlyxClient(
     username='test_user', password='TapetesBloc18',
     base_url='https://test.alyx.internationalbrainlab.org')
 
+# Get the singleton AlyxClient from webclient nodule
+sac = wc.alyx_client
+
 
 class TestDownloadHTTP(unittest.TestCase):
 
     def setUp(self):
         self.ac = ac
         self.test_data_uuid = '3ddd45be-7d24-4fc7-9dd3-a98717342af6'
+        self.sac = sac
+
+    def test_singleton_not_instance(self):
+        self.assertTrue(self.sac._obj_id != self.ac._obj_id)
+        # Test reimport
+        import oneibl.webclient as _wc
+        self.assertTrue(_wc.alyx_client._obj_id == self.sac._obj_id)
+        # Test new test instance
+        new_ac = wc.AlyxClient(
+            username='test_user',
+            password='TapetesBloc18',
+            base_url='https://test.alyx.internationalbrainlab.org'
+        )
+        self.assertTrue(new_ac._obj_id != self.ac._obj_id)
+        self.assertTrue(new_ac._obj_id != self.sac._obj_id)
 
     def test_paginated_request(self):
         rep = self.ac.rest('datasets', 'list')
