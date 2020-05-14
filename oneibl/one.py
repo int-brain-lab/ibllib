@@ -1,17 +1,18 @@
-from pathlib import Path, PurePath
-import requests
 import logging
 import os
+from pathlib import Path, PurePath
+
+import requests
 import tqdm
 
-from ibllib.io import hashfile
-from ibllib.misc import pprint
-from ibllib.io.one import OneAbstract
-from alf.io import load_file_content, remove_uuid_file, is_uuid_string, AlfBunch, get_session_path
-
-import oneibl.webclient as wc
-from oneibl.dataclass import SessionDataInfo
 import oneibl.params
+import oneibl.webclient as wc
+from alf.io import (AlfBunch, get_session_path, is_uuid_string,
+                    load_file_content, remove_uuid_file)
+from ibllib.io import hashfile
+from ibllib.io.one import OneAbstract
+from ibllib.misc import pprint
+from oneibl.dataclass import SessionDataInfo
 
 _logger = logging.getLogger('ibllib')
 
@@ -88,41 +89,30 @@ SEARCH_TERMS = {  # keynames are possible input arguments and values are actual 
 
 
 class ONE(OneAbstract):
-    def __init__(self, auth=True, username=None, password=None, base_url=None, silent=False):
+    def __init__(self, username=None, password=None, base_url=None, silent=False):
         # get parameters override if inputs provided
         self._par = oneibl.params.get(silent=silent)
         self._par = self._par.set('ALYX_LOGIN', username or self._par.ALYX_LOGIN)
         self._par = self._par.set('ALYX_URL', base_url or self._par.ALYX_URL)
         self._par = self._par.set('ALYX_PWD', password or self._par.ALYX_PWD)
 
-        self._alyxClient = None
-        if auth:
-            self.connect_to_alyx()
-
-        print(id(self))
-
-    def connect_to_alyx(self):
-        # Init connection to the database
-        try:
-            self._alyxClient = wc.AlyxClient(username=self._par.ALYX_LOGIN,
-                                             password=self._par.ALYX_PWD,
-                                             base_url=self._par.ALYX_URL)
-            print('Connected to ' + self._par.ALYX_URL + ' as ' + self._par.ALYX_LOGIN,)
-        except requests.exceptions.ConnectionError:
-            raise ConnectionError("Can't connect to " + self._par.ALYX_URL + '. \n' +
-                                  'IP addresses are filtered on IBL database servers. \n' +
-                                  'Are you connecting from an IBL participating institution ?')
-        # Init connection to Globus if needed
-        return
-
-    @property
-    def alyx_connected(self):
-        return self._alyxClient is not None
+        # By default set internal AlyxClient to be module singleton object
+        self._alyxClient = wc.alyx_client
+        # If any parameters are enteres create new ALyxClient object
+        if username or password or base_url:
+            try:
+                self._alyxClient = wc.AlyxClient(username=self._par.ALYX_LOGIN,
+                                                 password=self._par.ALYX_PWD,
+                                                 base_url=self._par.ALYX_URL)
+                print(f"Connected to {self._par.ALYX_URL} as {self._par.ALYX_LOGIN}",)
+            except requests.exceptions.ConnectionError:
+                raise ConnectionError(f"Can't connect to {self._par.ALYX_URL}.\n" +
+                                      "IP addresses are filtered on IBL database servers. \n" +
+                                      "Are you connecting from an IBL participating institution ?")
+            # Init connection to Globus if needed
 
     @property
     def alyx(self):
-        if not self.alyx_connected:
-            self.connect_to_alyx()
         return self._alyxClient
 
     def help(self, dataset_type=None):
@@ -615,7 +605,7 @@ class ONE(OneAbstract):
             return dets
         # If it's not full return the normal output like from a one.search
         det_fields = ["subject", "start_time", "number", "lab", "project",
-                    "url", "task_protocol", "local_path"]
+                      "url", "task_protocol", "local_path"]
         out = {k: v for k, v in dets.items() if k in det_fields}
         out.update({'local_path': self.path_from_eid(eid)})
         return out

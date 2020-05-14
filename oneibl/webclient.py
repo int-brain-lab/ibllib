@@ -1,13 +1,15 @@
-import logging
-import os
-from pathlib import Path
 import json
+import logging
+import math
+import os
 import re
 import urllib.request
-import requests
 from collections.abc import Mapping
-import math
+from pathlib import Path
 
+import requests
+
+import oneibl.params
 from ibllib.misc import pprint, print_progress
 
 _logger = logging.getLogger('ibllib')
@@ -201,6 +203,7 @@ class AlyxClient:
         self._rest_schemes = self.get('/docs')
         # the mixed accept application may cause errors sometimes, only necessary for the docs
         self._headers['Accept'] = 'application/json'
+        self._obj_id = id(self)
 
     def _generic_request(self, reqfunction, rest_query, data=None):
         # if the data is a dictionary, it has to be converted to json text
@@ -424,3 +427,18 @@ class AlyxClient:
         elif action == 'update':
             assert(endpoint_scheme[action]['action'] == 'put')
             return self.put('/' + endpoint + '/' + id.split('/')[-1], data=data)
+
+
+# Get default params from local file
+_par = oneibl.params.get(silent=False)
+# Try creating singleton AlyxClient object
+try:
+    alyx_client = AlyxClient(
+        base_url=_par.ALYX_URL, username=_par.ALYX_LOGIN, password=_par.ALYX_PWD
+    )
+    print(f"Connected to {_par.ALYX_URL} as {_par.ALYX_LOGIN}",)
+except requests.exceptions.ConnectionError:
+    raise ConnectionError(f"Can't connect to {_par.ALYX_URL}.\n" +
+                          "IP addresses are filtered on IBL database servers.\n" +
+                          "Are you connecting from an IBL participating institution?")
+# Init connection to Globus if needed
