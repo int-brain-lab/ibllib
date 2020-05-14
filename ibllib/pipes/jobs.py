@@ -43,13 +43,7 @@ class Job(abc.ABC):
     io_charge = 5  # integer percentage
     priority = 30  # integer percentage, 100 means highest priority
     ram = 4  # RAM needed to run (Go)
-    parents = None  # list of Job instances
-    inputs = None  # list of pathlib.Path
-    outputs = None  # list of pathlib.Path
-    session_path = None
-    status = None
     one = None  # one instance (optional)
-    jobid = None  # Alyx job uuid (optional)
 
     def __init__(self, session_path, parents=None, jobid=None, one=None):
         assert session_path
@@ -132,7 +126,6 @@ class Pipeline(abc.ABC):
     jobs = None
     label = ''
     one = None
-    session_path = None
 
     def __init__(self, session_path=None, one=None):
         if one is None:

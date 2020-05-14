@@ -25,7 +25,7 @@ class EphysTrials(jobs.Job):
     def _run(self):
         data = rawio.load_data(self.session_path)
         _logger.info('extract BPOD for ephys session')
-        ephys_trials.extract_all(self.session_path, data=data, save=True)
+        ephys_trials.extract_all(self.session_path, data=data, save=True, return_files=True)
         _logger.info('extract FPGA information for ephys session')
         tmax = data[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
         ephys_fpga.extract_all(self.session_path, save=True, tmax=tmax)

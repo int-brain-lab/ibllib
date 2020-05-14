@@ -437,16 +437,16 @@ class TestExtractTrialData(unittest.TestCase):
 
     def test_extract_all(self):
         # TRAINING SESSIONS
-        ibllib.io.extractors.training_trials.extract_all(
+        out, files = ibllib.io.extractors.training_trials.extract_all(
             self.training_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'}, save=True)
         # -- version >= 5.0.0
-        ibllib.io.extractors.training_trials.extract_all(
+        out, files = ibllib.io.extractors.training_trials.extract_all(
             self.training_ge5['path'], save=True)
         # BIASED SESSIONS
-        ibllib.io.extractors.biased_trials.extract_all(
+        out, files = ibllib.io.extractors.biased_trials.extract_all(
             self.biased_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'}, save=True)
         # -- version >= 5.0.0
-        ibllib.io.extractors.biased_trials.extract_all(
+        out, files = ibllib.io.extractors.biased_trials.extract_all(
             self.biased_ge5['path'], save=True)
 
     def test_encoder_positions_clock_reset(self):
