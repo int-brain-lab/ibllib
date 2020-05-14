@@ -430,7 +430,7 @@ class AlyxClient:
 
 
 # Get default params from local file
-_par = oneibl.params.get(silent=False)
+_par = oneibl.params.get(silent=True)
 # Try creating singleton AlyxClient object
 try:
     alyx_client = AlyxClient(
