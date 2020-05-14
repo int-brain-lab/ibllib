@@ -2,18 +2,41 @@ from pathlib import Path
 import abc
 import logging
 import io
+import importlib
 
 from graphviz import Digraph
 
 from oneibl.one import ONE
-from ibllib.io.extractors import (ephys_trials, ephys_fpga)
-from ibllib.io import raw_data_loaders as rawio
+from oneibl.registration import register_dataset
 from ibllib.io import params
 
 _logger = logging.getLogger('ibllib')
 
 
-class Task(abc.ABC):
+def alyx_setup_teardown(run):
+    """
+    Performs the job loading using Alyx
+    """
+    def wrapper(*args, **kwargs):
+        self = args[0]
+        # if jobid of one properties are not available, local run only
+        if self.one is None or self.jobid is None:
+            return run(*args, **kwargs)
+        # setup
+        self.one.alyx.rest('jobs', 'partial_update', id=self.jobid, data={'status': 'Started'})
+        # run
+        out = run(*args, **kwargs)
+        # teardown
+        if self.outputs:
+            register_dataset(self.outputs, one=self.one)
+        status = 'Complete' if self.status == 0 else 'Errored'
+        self.one.alyx.rest('jobs', 'partial_update', id=self.jobid,
+                           data={'status': status, 'log': self.log})
+        return out
+    return wrapper
+
+
+class Job(abc.ABC):
     log = ""
     cpu = 1
     gpu = 0
@@ -24,9 +47,14 @@ class Task(abc.ABC):
     inputs = None  # list of pathlib.Path
     outputs = None  # list of pathlib.Path
     session_path = None
+    status = None
+    one = None  # one instance (optional)
+    jobid = None  # Alyx job uuid (optional)
 
-    def __init__(self, session_path, parents=None):
-        assert session_path  # todo eid swap
+    def __init__(self, session_path, parents=None, jobid=None, one=None):
+        assert session_path
+        self.jobid = jobid
+        self.one = one
         self.session_path = session_path
         if parents:
             self.parents = parents
@@ -37,6 +65,7 @@ class Task(abc.ABC):
     def name(self):
         return self.__class__.__name__
 
+    @alyx_setup_teardown
     def run(self, status=0, **kwargs):
         """
         --- do not overload, see _run() below---
@@ -44,45 +73,35 @@ class Task(abc.ABC):
         -   error management
         -   logging to variable
         """
-        if status == -1:
-            return
+        # setup
+        self.setUp()
         # Setup the console handler with a StringIO object
         log_capture_string = io.StringIO()
         ch = logging.StreamHandler(log_capture_string)
         str_format = '%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
         ch.setFormatter(logging.Formatter(str_format))
         _logger.addHandler(ch)
+        # run
         try:
             self.outputs = self._run(**kwargs)
-            self.status = self.tearDown()
-            # afte the run, capture the log output
+            self.status = 0
         except Exception as e:
             _logger.error(f"{e}")
             self.status = -1
+        # after the run, capture the log output
         self.log = log_capture_string.getvalue()
         log_capture_string.close()
         _logger.removeHandler(ch)
+        # tear down
+        self.tearDown()
         return self.status
 
-    def register(self):
-        # TODO
-        # 1) register files
-        # 2) update the job status
-        pass
-
-    def setUp(self):
-        """
-        Function to overload to check if it is a re-run ?
-        :return:
-        """
-        pass
-
-    def tearDown(self):
-        """
-        Function to overload to check results
-        :return: 0 if successful, -1 if failed
-        """
-        return 0
+    def register(self, one=None, jobid=None):
+        assert one
+        assert jobid
+        if self.outputs:
+            register_dataset(self.outputs, one=one)
+        one.alyx.rest('jobs', 'patch', id=jobid, data={'status': self.status})
 
     def rerun(self):
         self.run(overwrite=True)
@@ -96,30 +115,19 @@ class Task(abc.ABC):
         """
         pass
 
+    def setUp(self):
+        """
+        Function to optionally overload to check inputs.
+        :return:
+        """
 
-class EphysPulses(Task):
-    cpu = 2
-    io_charge = 20  # this jobs reads raw ap files
-    priority = 90  # a lot of jobs depend on this one
-
-    def _run(self, overwrite=False):
-        syncs, out_files = ephys_fpga.extract_sync(self.session_path, overwrite=overwrite)
-        return out_files
-
-
-class EphysTrials(Task):
-    priority = 90
-
-    def _run(self):
-        data = rawio.load_data(self.session_path)
-        _logger.info('extract BPOD for ephys session')
-        ephys_trials.extract_all(self.session_path, data=data, save=True)
-        _logger.info('extract FPGA information for ephys session')
-        tmax = data[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
-        ephys_fpga.extract_all(self.session_path, save=True, tmax=tmax)
+    def tearDown(self):
+        """
+        Function to optionally overload to check results
+        :return: 0 if successful, -1 if failed
+        """
 
 
-#
 class Pipeline(abc.ABC):
     jobs = None
     label = ''
@@ -133,7 +141,7 @@ class Pipeline(abc.ABC):
         self.session_path = None
         self.eid = one.eid_from_path(session_path)
 
-    def make_graph(self, out_dir=None):
+    def make_graph(self, out_dir=None, show=True):
         if not out_dir:
             par = params.read('one_params')
             out_dir = par.CACHE_DIR
@@ -155,54 +163,62 @@ class Pipeline(abc.ABC):
         m.subgraph(e)
         m.attr(label=r'\n\Pre-processing\n')
         m.attr(fontsize='20')
-        m.view()
+        if show:
+            m.view()
+        return m
 
     def init_alyx_tasks(self):
         """Used only when creating a new pipeline"""
+        tasks_alyx = []
         for k in self.jobs:
             j = self.jobs[k]
+            # self.one.alyx.rest('tasks', 'create')
+            task_dict = {'name': j.name, 'priority': j.priority, 'io_charge': j.io_charge,
+                         'gpu': j.gpu, 'cpu': j.cpu, 'ram': j.ram, 'pipeline': self.label,
+                         'level': j.level}
+            if len(j.parents):
+                task_dict['parents'] = [p.name for p in j.parents]
             task = self.one.alyx.rest('tasks', 'list', name=j.name)
             if len(task) == 0:
-                # self.one.alyx.rest('tasks', 'create')
-                task_dict = {'name': j.name, 'priority': j.priority, 'io_charge': j.io_charge,
-                             'gpu': j.gpu, 'cpu': j.cpu, 'ram': j.ram, 'pipeline': self.label}
-                if len(j.parents):
-                    task_dict['parents'] = [p.name for p in j.parents]
-                self.one.alyx.rest('tasks', 'create', data=task_dict)
-                print(task_dict)
+                task = self.one.alyx.rest('tasks', 'create', data=task_dict)
+            else:
+                task = task[0]
+            tasks_alyx.append(task)
+        return tasks_alyx
 
-    def register_alyx_jobs(self):
-        """To be run on session creation"""
+    def register_alyx_jobs(self, rerun=False):
+        """
+        Instantiate the pipeline and create the tasks in Alyx, then create the jobs for the session
+        If the jobs already exist, they are left untouched. The re-run parameter will re-init the
+        job by emptying the log and set the status to Waiting
+        :param rerun:
+        :return:
+        """
         jobs_alyx = []
         for k in self.jobs:
             job = self.jobs[k]
             jalyx = self.one.alyx.rest('jobs', 'list', session=self.eid, task=job.name)
+            jdict = {'session': self.eid, 'task': job.name, 'status': 'Waiting', 'log': None}
             if len(jalyx) == 0:
-                jdict = {'session': self.eid, 'task': job.name}
                 jalyx = self.one.alyx.rest('jobs', 'create', data=jdict)
+            elif rerun:
+                jalyx = self.one.alyx.rest('jobs', 'partial_update', id=jalyx[0]['id'], data=jdict)
             else:
                 jalyx = jalyx[0]
             jobs_alyx.append(jalyx)
-
         return jobs_alyx
 
 
-class EphysExtractionPipeline(Pipeline):
-    label = 'Ephys'
-
-    def __init__(self, *args, **kwargs):
-        super(EphysExtractionPipeline, self).__init__(*args, **kwargs)
-        jobs = {}
-        jobs['EphysPulses'] = EphysPulses(session_path)
-        jobs['EphysTrials'] = EphysTrials(session_path, parents=[jobs['EphysPulses']])
-        self.session_path = session_path
-        self.jobs = jobs
-
-
-session_path = "/datadisk/Data/IntegrationTests/ephys/choice_world_init/KS022/2019-12-10/001"
-one = ONE(base_url='http://localhost:8000')
-ephys_pipe = EphysExtractionPipeline(session_path, one=one)
-
-# ephys_pipe.make_graph()
-ephys_pipe.init_alyx_tasks()
-# alyx_jobs = ephys_pipe.register_alyx_jobs()
+def run_alyx_job(jdict=None, session_path=None, one=None):
+    """
+    :param jdict:
+    :param session_path:
+    :param one:
+    :return:
+    """
+    modulename = jdict['pipeline']
+    module = importlib.import_module(modulename)
+    classe = getattr(module, jdict['task'])
+    job = classe(session_path, one=one, jobid=jdict['id'])
+    status = job.run(session_path)
+    return status
