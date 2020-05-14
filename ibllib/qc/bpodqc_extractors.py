@@ -612,5 +612,3 @@ if __name__ == "__main__":
     # for lab in labs:
     #     describe_lab_trigger_response_diffs(lab)
     eid = "2e6e179c-fccc-4e8f-9448-ce5b6858a183"
-
-print(".")

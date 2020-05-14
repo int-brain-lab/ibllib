@@ -1,10 +1,5 @@
 import unittest
-import numpy as np
-import requests
-from pathlib import Path
 
-import ibllib.io.hashfile
-from alf.io import remove_uuid_file
 from oneibl.one import ONE
 
 one = ONE(
@@ -97,7 +92,7 @@ class TestUtils(unittest.TestCase):
         det_from_eid = one.get_details(self.eids[0])
         full_det_from_eid = one.get_details(self.eids[0], full=True)
         # Test if all keys in returned dict are in expected keys
-        #Full dict output
+        # Full dict output
         self.assertTrue(
             all([x in full_det_from_eid for x in self.full_det_keys]),
             "Missing details key"

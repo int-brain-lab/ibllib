@@ -355,7 +355,9 @@ def qc_fpga_task(fpga_trials, alf_trials):
     # stimOff 2 secs after errorCue_times with jitter
     # noise off happens 2 secs after stimm, with 0.1 as acceptable jitter
     qc_trials['stimOff_delay_noise'] = np.less(
-        np.abs(fpga_trials['stimOff_times'] - fpga_trials['errorCue_times'] - ERROR_STIM_OFF_DELAY),
+        np.abs(
+            fpga_trials['stimOff_times'] - fpga_trials['errorCue_times'] - ERROR_STIM_OFF_DELAY
+        ),
         ERROR_STIM_OFF_JITTER, out=np.ones(ntrials, dtype=np.bool),
         where=~np.isnan(fpga_trials['errorCue_times']))
 

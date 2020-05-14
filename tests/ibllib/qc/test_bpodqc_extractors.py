@@ -1,7 +1,7 @@
 # Mock dataset
 import unittest
 
-from ibllib.qc import bpodqc
+from ibllib.qc import bpodqc_extractors as bpodqc
 
 
 class TestBpodQCExtractors(unittest.TestCase):

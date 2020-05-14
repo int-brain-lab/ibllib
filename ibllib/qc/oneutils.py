@@ -191,7 +191,8 @@ if __name__ == "__main__":
         "start_time": "2020-01-22T10:50:59",
         "number": 1,
         "lab": "mainenlab",
-        "url": "https://alyx.internationalbrainlab.org/sessions/259927fd-7563-4b03-bc5d-17b4d0fa7a55",
+        "url":
+            "https://alyx.internationalbrainlab.org/sessions/259927fd-7563-4b03-bc5d-17b4d0fa7a55",
         "task_protocol": "_iblrig_tasks_ephysChoiceWorld6.2.5",
         "local_path": "/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_2240/2020-01-22/001",
     }
