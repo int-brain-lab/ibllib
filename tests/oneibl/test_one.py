@@ -11,6 +11,26 @@ one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test
           password='TapetesBloc18')
 
 
+class TestSingletonInstance(unittest.TestCase):
+    def setUp(self):
+        self.one = one
+
+    def test_constructor_differnt_ac(self):
+        # Default behavior should instanciate ONE with the singleton client
+        # Create ONE with no inputs
+        one_default = ONE()
+        self.assertTrue(one_default.alyx._obj_id != self.one.alyx._obj_id)
+        import oneibl.webclient as wc
+        # Test it's the same client
+        self.assertTrue(one_default.alyx._obj_id == wc.alyx_client._obj_id)
+        # Remove real connection to the DB
+        del(one_default)
+        # Test constructor with partial inputs
+        one_partial_in = ONE(base_url='https://test.alyx.internationalbrainlab.org')
+        self.assertTrue(one_partial_in.alyx._obj_id != self.one.alyx._obj_id)
+        self.assertTrue(one_partial_in.alyx._obj_id != wc.alyx_client._obj_id)
+
+
 class TestSearch(unittest.TestCase):
 
     def setUp(self):
