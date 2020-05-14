@@ -104,12 +104,13 @@ class ONE(OneAbstract):
                 self._alyxClient = wc.AlyxClient(username=self._par.ALYX_LOGIN,
                                                  password=self._par.ALYX_PWD,
                                                  base_url=self._par.ALYX_URL)
-                print(f"Connected to {self._par.ALYX_URL} as {self._par.ALYX_LOGIN}",)
             except requests.exceptions.ConnectionError:
                 raise ConnectionError(f"Can't connect to {self._par.ALYX_URL}.\n" +
                                       "IP addresses are filtered on IBL database servers. \n" +
                                       "Are you connecting from an IBL participating institution ?")
             # Init connection to Globus if needed
+        # Display output when instantiating ONE
+        print(f"Connected to {self._par.ALYX_URL} as {self._par.ALYX_LOGIN}",)
 
     @property
     def alyx(self):

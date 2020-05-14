@@ -436,7 +436,6 @@ try:
     alyx_client = AlyxClient(
         base_url=_par.ALYX_URL, username=_par.ALYX_LOGIN, password=_par.ALYX_PWD
     )
-    print(f"Connected to {_par.ALYX_URL} as {_par.ALYX_LOGIN}",)
 except requests.exceptions.ConnectionError:
     raise ConnectionError(f"Can't connect to {_par.ALYX_URL}.\n" +
                           "IP addresses are filtered on IBL database servers.\n" +
