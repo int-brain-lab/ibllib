@@ -51,6 +51,10 @@ class Reader:
             return self.read(nsel=item[0], csel=item[1], sync=False)
 
     @property
+    def shape(self):
+        return self.ns, self.nc
+
+    @property
     def is_mtscomp(self):
         return 'cbin' in self.file_bin.suffix
 

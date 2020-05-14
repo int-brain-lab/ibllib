@@ -387,7 +387,7 @@ def register_track_files(path_tracks, one=None, overwrite=False):
             eid = one.search(subject=search_filter['subject'], date_range=search_filter['date'],
                              number=search_filter['experiment_number'])
             if len(eid) == 0:
-                raise Exception("No session found")
+                raise Exception(f"No session found {track_file.name}")
             insertion = {'session': eid[0],
                          'name': search_filter['name']}
             probe = one.alyx.rest('insertions', 'create', data=insertion)
