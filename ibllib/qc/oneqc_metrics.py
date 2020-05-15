@@ -12,7 +12,6 @@ plt.ion()
 one = ONE()
 
 
-@bpod_data_loader
 def get_oneqc_metrics_frame(eid, data=None, apply_criteria=False):
     """Full extended_qc_frame
     (one value per metric as proportion of trial level criteria that passed)"""
@@ -54,7 +53,6 @@ def get_oneqc_metrics_frame(eid, data=None, apply_criteria=False):
 # ONE qc is atm just counting nans (*_count) or comparing the dims to the bpod "ground truth" data
 #
 #  bpod_ntrials = len(raw.load_data(one.path_from_eid(eid)))
-@bpod_data_loader
 def load_nDatasetTypes(eid, data=None, apply_criteria=False):
     """ 17. Proportion of datasetTypes extracted
     Variable name: nDatasetTypes
@@ -64,7 +62,6 @@ def load_nDatasetTypes(eid, data=None, apply_criteria=False):
     return
 
 
-@bpod_data_loader
 def load_dstype_qc_metrics(
     eid: str, dstype_name: str, data: dict = None, apply_criteria: bool = False
 ) -> dict:
