@@ -11,7 +11,7 @@ from oneibl.one import ONE
 log = logging.getLogger("ibllib")
 
 # one = ONE(base_url="https://dev.alyx.internationalbrainlab.org")
-one = ONE()
+one = ONE(printout=False)
 
 # eid, det = random_ephys_session()
 

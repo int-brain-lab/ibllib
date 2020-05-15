@@ -7,7 +7,7 @@ from ibllib.qc.bpodqc_extractors import bpod_data_loader
 from ibllib.qc.oneutils import random_ephys_session
 from oneibl.one import ONE
 
-one = ONE()
+one = ONE(printout=False)
 
 
 @bpod_data_loader
