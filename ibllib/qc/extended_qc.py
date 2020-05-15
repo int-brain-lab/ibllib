@@ -46,9 +46,15 @@ def build_and_upload_extended_qc(eid, data=None):
 
     eqc_data = build_extended_qc_frame(eid, data=data)
     new_eqc_data = one.alyx.json_field_update(
-        endpoint="sessions", uuid=eid, field_name="etended_qc", data=eqc_data
+        endpoint="sessions", uuid=eid, field_name="extended_qc", data=eqc_data
     )
     return new_eqc_data
+
+
+def get_frame(eid):
+    return one.alyx.rest("sessions", "read", id=eid)["extended_qc"]
+
+
 
 
 if __name__ == "__main__":
