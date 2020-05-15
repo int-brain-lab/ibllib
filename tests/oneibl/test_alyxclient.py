@@ -39,7 +39,7 @@ class TestJsonFieldMethods(unittest.TestCase):
     def setUp(self):
         self.ac = ac
         self.eid1 = 'b1c968ad-4874-468d-b2e4-5ffa9b9964e9'
-        self.eid2 = '07311ff7-42ef-4edd-bf8e-8ab44a18fb03'
+        self.eid2 = '7d55465b-8e4f-49f6-a0c8-6dad0db6ab02'
         self.endpoint = "sessions"
         self.field_name = "extended_qc"
         self.data_dict = {'some': 0, 'data': 1}
