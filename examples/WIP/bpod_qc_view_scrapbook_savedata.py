@@ -1,6 +1,8 @@
 """
 Use the framework developed by Niccolo B. to review the quality
 of the task control.
+Download the raw data locally, and perform computations to
+retireve the QC data frame (values of metrics, and pass/fail).
 Save data locally per EID as computations take time.
 """
 # Author : Gaelle C.
