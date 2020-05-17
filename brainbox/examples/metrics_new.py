@@ -46,8 +46,7 @@ def gen_metrics_labels(eid,probe_name):
     units = list(units_b.amps.keys())
     lengths_samples = [len(v) for k, v in units_b.samples.items()]
     units_nonzeros=[i for i,d in enumerate(lengths_samples) if d>0]
-    n_units = np.max(spks_b.clusters) + 1
-    n_units_nonzeros = len(units_nonzeros)
+    n_units = len(units_nonzeros) #only compute metrics for units with no samples
     
     
     #if raw data available locally: 
@@ -81,16 +80,16 @@ def gen_metrics_labels(eid,probe_name):
     RefPViol = np.empty([len(units)])
     NoiseCutoff = np.empty([len(units)])
     MeanAmpTrue = np.empty([len(units)])
-    for unit in units:
-        if unit == units[0]:
+    for idx,unit in enumerate(units_nonzeros):
+        if unit == units_nonzeros[0]:
             t0 = time.perf_counter()  # used for computation time estimate
         
         ts = units_b['times'][unit]
         amps = units_b['amps'][unit]
         samples = units_b['samples'][unit]
         
-        RefPViol[int(unit)] = FP_RP(ts)
-        NoiseCutoff[int(unit)] = noise_cutoff(amps,quartile_length=.25)
+        RefPViol[idx] = FP_RP(ts)
+        NoiseCutoff[idx] = noise_cutoff(amps,quartile_length=.25)
         print(unit)
         if len(samples>50):
             print('running this')
@@ -98,20 +97,20 @@ def gen_metrics_labels(eid,probe_name):
                 MeanAmpTrue[int(unit)] = peak_to_peak_amp(ephys_file, samples, nsamps=2)
     
                 if (FP_RP(ts) and noise_cutoff(amps,quartile_length=.25)<20 and MeanAmpTrue[int(unit)]>50) : 
-                    label[int(unit)] = 1
+                    label[idx] = 1
                 else:
-                    label[int(unit)] = 0
+                    label[idx] = 0
             except:
                 if (FP_RP(ts) and noise_cutoff(amps,quartile_length=.25)<20) : 
-                    label[int(unit)] = 1
+                    label[idx] = 1
                 else:
-                    label[int(unit)] = 0
+                    label[idx] = 0
                 
         else: #no ephys file, do not include true mean amps
             if (FP_RP(ts) and noise_cutoff(amps,quartile_length=.25)<20) : 
-                label[int(unit)] = 1
+                label[idx]] = 1
             else:
-                label[int(unit)] = 0
+                label[idx] = 0
 
 
 
@@ -119,7 +118,7 @@ def gen_metrics_labels(eid,probe_name):
 
         # Cumulative drift of spike amplitudes, normalized by total number of spikes.
         try:
-            cum_amp_drift[int(unit)] = bb.metrics.cum_drift(amps)
+            cum_amp_drift[idx] = bb.metrics.cum_drift(amps)
         except Exception as err:
             print("Failed to compute 'cum_drift(amps)' for unit {}. Details: \n {}"
                   .format(unit, err))
@@ -127,7 +126,7 @@ def gen_metrics_labels(eid,probe_name):
 
         # Cumulative drift of spike depths, normalized by total number of spikes.
         try:
-            cum_depth_drift[int(unit)] = bb.metrics.cum_drift(depths)
+            cum_depth_drift[idx] = bb.metrics.cum_drift(depths)
         except Exception as err:
             print("Failed to compute 'cum_drift(depths)' for unit {}. Details: \n {}"
                   .format(unit, err))
@@ -135,7 +134,7 @@ def gen_metrics_labels(eid,probe_name):
 
         # Coefficient of variation of spike amplitudes.
         try:
-            cv_amp[int(unit)] = np.std(amps) / np.mean(amps)
+            cv_amp[idx] = np.std(amps) / np.mean(amps)
         except Exception as err:
             print("Failed to compute 'cv_amp' for unit {}. Details: \n {}".format(unit, err))
             units_missing_metrics.add(unit)
@@ -143,14 +142,14 @@ def gen_metrics_labels(eid,probe_name):
         # Coefficient of variation of computed instantaneous firing rate.
         try:
             fr = bb.singlecell.firing_rate(ts, hist_win=0.01, fr_win=0.25)
-            cv_fr[int(unit)] = np.std(fr) / np.mean(fr)
+            cv_fr[idx] = np.std(fr) / np.mean(fr)
         except Exception as err:
             print("Failed to compute 'cv_fr' for unit {}. Details: \n {}".format(unit, err))
             units_missing_metrics.add(unit)
 
         # Fraction of isi violations.
         try:
-            frac_isi_viol[int(unit)], _, _ = bb.metrics.isi_viol(ts, rp=0.002)
+            frac_isi_viol[idx], _, _ = bb.metrics.isi_viol(ts, rp=0.002)
         except Exception as err:
             print("Failed to compute 'frac_isi_viol' for unit {}. Details: \n {}"
                   .format(unit, err))
@@ -158,7 +157,7 @@ def gen_metrics_labels(eid,probe_name):
 
         # Estimated fraction of missing spikes.
         try:
-            frac_missing_spks[int(unit)], _, _ = bb.metrics.feat_cutoff(
+            frac_missing_spks[idx)], _, _ = bb.metrics.feat_cutoff(
                 amps, spks_per_bin=10, sigma=4, min_num_bins=50)
         except Exception as err:
             print("Failed to compute 'frac_missing_spks' for unit {}. Details: \n {}"
@@ -167,14 +166,14 @@ def gen_metrics_labels(eid,probe_name):
     
         # Estimated fraction of false positives.
         try:
-            fp_est[int(unit)] = bb.metrics.fp_est(ts, rp=0.002)
+            fp_est[idx] = bb.metrics.fp_est(ts, rp=0.002)
         except Exception as err:
             print("Failed to compute 'fp_est' for unit {}. Details: \n {}".format(unit, err))
             units_missing_metrics.add(unit)
 
         # Presence ratio
         try:
-            pres_ratio[int(unit)], _ = bb.metrics.pres_ratio(ts, hist_win=10)
+            pres_ratio[idx], _ = bb.metrics.pres_ratio(ts, hist_win=10)
         except Exception as err:
             print("Failed to compute 'pres_ratio' for unit {}. Details: \n {}".format(unit, err))
             units_missing_metrics.add(unit)
@@ -182,7 +181,7 @@ def gen_metrics_labels(eid,probe_name):
         # Presence ratio over the standard deviation of spike counts in each bin
         try:
             pr, pr_bins = bb.metrics.pres_ratio(ts, hist_win=10)
-            pres_ratio_std[int(unit)] = pr / np.std(pr_bins)
+            pres_ratio_std[idx] = pr / np.std(pr_bins)
         except Exception as err:
             print("Failed to compute 'pres_ratio_std' for unit {}. Details: \n {}"
                   .format(unit, err))
