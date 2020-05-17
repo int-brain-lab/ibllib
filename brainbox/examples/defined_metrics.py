@@ -115,7 +115,6 @@ def peak_to_peak_amp(ephys_file, samp_inds, nsamps):
     wfs=np.zeros((384,len(samples)))
     wfs_baseline=np.zeros((384,len(samples)))
     cnt=0
-    print(samples)
     for i in samples:
         
         wf = sr.data[int(i)]

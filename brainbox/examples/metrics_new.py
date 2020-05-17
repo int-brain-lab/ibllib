@@ -90,13 +90,14 @@ def gen_metrics_labels(eid,probe_name):
         ts = units_b['times'][str(unit)]
         amps = units_b['amps'][str(unit)]
         samples = units_b['samples'][str(unit)]
-        
+        depths = units_b['depths'][str(unit)]
+
         
         RefPViol[idx] = FP_RP(ts)
         NoiseCutoff[idx] = noise_cutoff(amps,quartile_length=.25)
         if len(samples>50):
             try:
-                MeanAmpTrue[int(unit)] = peak_to_peak_amp(ephys_file, samples, nsamps=2)
+                MeanAmpTrue[int(unit)] = peak_to_peak_amp(ephys_file, samples, nsamps=20)
     
                 if (FP_RP(ts) and noise_cutoff(amps,quartile_length=.25)<20 and MeanAmpTrue[int(unit)]>50) : 
                     label[idx] = 1
@@ -116,7 +117,6 @@ def gen_metrics_labels(eid,probe_name):
 
 
 
-        depths = units_b['depths'][unit]
 
         # Cumulative drift of spike amplitudes, normalized by total number of spikes.
         try:
@@ -321,16 +321,17 @@ def gen_metrics_labels(eid,probe_name):
         
      #now add df to csv 
     # df_csv.to_csv(Path(alf_probe_dir, 'clusters.metrics_validation.csv'))
-    metrics_read.to_csv(Path(alf_probe_dir,'clusters.metrics_validationß.csv'))
-        
-    numpass=int(sum(label))
-    print("Number of units that pass: ", numpass)
-
-    numpassRP=int(sum(RefPViol))
-    numpassAC=int(sum(NoiseCutoff[~np.isnan(NoiseCutoff)]<2.5))
-    ntot = len(label)
+    metrics_read.to_csv(Path(alf_probe_dir,'clusters.metrics.csv'))
     
-    print("Number of units that pass RP threshold: ", numpassRP)
-    print("Number of units that pass Amp Cutoff threshold: ", numpassAC)
-    print("Number of total units: ",ntot)
-    return numpass, numpassRP, numpassAC, ntot
+    try:    
+        numpass=int(sum(label))
+        print("Number of units that pass: ", numpass)
+    
+        numpassRP=int(sum(RefPViol))
+        numpassAC=int(sum(NoiseCutoff[~np.isnan(NoiseCutoff)]<2.5))
+        ntot = len(label)
+        
+        print("Number of units that pass RP threshold: ", numpassRP)
+        print("Number of units that pass Amp Cutoff threshold: ", numpassAC)
+        print("Number of total units: ",ntot)
+    
