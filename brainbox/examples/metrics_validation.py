@@ -11,7 +11,7 @@ import pandas as pd
 from pathlib import Path
 import numpy as np
 
-ks_dir = r'C:\Users\Steinmetz Lab User\Documents\Lab\SpikeSortingOutput\Hopkins_CortexLa\'
+ks_dir = r'C:\Users\Steinmetz Lab User\Documents\Lab\SpikeSortingOutput\Hopkins_CortexLab\'
 
 #load metrics labels
 labelsdf = pd.read_csv(Path(ks_dir,'label.tsv'),sep='\t')
