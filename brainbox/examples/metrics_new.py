@@ -84,15 +84,17 @@ def gen_metrics_labels(eid,probe_name):
         if unit == units_nonzeros[0]:
             t0 = time.perf_counter()  # used for computation time estimate
         
-        ts = units_b['times'][unit]
-        amps = units_b['amps'][unit]
-        samples = units_b['samples'][unit]
+        print('computing metrics for unit ' + str(unit) + '...' )
+
+        #load relevant data for unit
+        ts = units_b['times'][str(unit)]
+        amps = units_b['amps'][str(unit)]
+        samples = units_b['samples'][str(unit)]
+        
         
         RefPViol[idx] = FP_RP(ts)
         NoiseCutoff[idx] = noise_cutoff(amps,quartile_length=.25)
-        print(unit)
         if len(samples>50):
-            print('running this')
             try:
                 MeanAmpTrue[int(unit)] = peak_to_peak_amp(ephys_file, samples, nsamps=2)
     
@@ -108,7 +110,7 @@ def gen_metrics_labels(eid,probe_name):
                 
         else: #no ephys file, do not include true mean amps
             if (FP_RP(ts) and noise_cutoff(amps,quartile_length=.25)<20) : 
-                label[idx]] = 1
+                label[idx] = 1
             else:
                 label[idx] = 0
 
@@ -157,7 +159,7 @@ def gen_metrics_labels(eid,probe_name):
 
         # Estimated fraction of missing spikes.
         try:
-            frac_missing_spks[idx)], _, _ = bb.metrics.feat_cutoff(
+            frac_missing_spks[idx], _, _ = bb.metrics.feat_cutoff(
                 amps, spks_per_bin=10, sigma=4, min_num_bins=50)
         except Exception as err:
             print("Failed to compute 'frac_missing_spks' for unit {}. Details: \n {}"
