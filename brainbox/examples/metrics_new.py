@@ -218,11 +218,14 @@ def gen_metrics_labels(eid,probe_name):
 
     try:
         label_df = pd.DataFrame(label)
-        pd.DataFrame.insert(metrics_read,2,'label',label_df)  
+        pd.DataFrame.insert(metrics_read,1,'label',label_df)  
         # label_df.to_csv(Path(alf_probe_dir, 'clusters.metrics_validation.csv'),
                         # header=['label'],index=False)
-    except Exception as err:
-        print("Could not save 'label' to .csv. Details: \n {}".format(err))
+    except ValueError:
+        pd.DataFrame.drop(metrics_read,columns = 'label')
+        pd.DataFrame.insert(metrics_read,1,'label',label_df)  
+    except:
+        print("Could not save 'label' to .csv.")
   
 
     #read this csv file, append all metrics to it
@@ -296,24 +299,30 @@ def gen_metrics_labels(eid,probe_name):
     try:
         df_refp_viol = pd.DataFrame(RefPViol)
         # metrics_read['refp_viol'] = df_refp_viol
-        pd.DataFrame.insert(metrics_read,3,'refp_viol',df_refp_viol)  
-
+        pd.DataFrame.insert(metrics_read,2,'refp_viol',df_refp_viol)  
+    except ValueError:
+        pd.DataFrame.drop(metrics_read,columns = 'refp_viol')
+        pd.DataFrame.insert(metrics_read,2,'refp_viol', df_refp_viol)  
     except Exception as err:
         print("Could not save 'RefPViol' to .tsv. Details: \n {}".format(err))
         
     try:
         df_noise_cutoff = pd.DataFrame(NoiseCutoff)
         # metrics_read['noise_cutoff'] = df_noise_cutoff
-        pd.DataFrame.insert(metrics_read,4,'noise_cutoff',df_noise_cutoff)  
-
+        pd.DataFrame.insert(metrics_read,3,'noise_cutoff',df_noise_cutoff)  
+    except ValueError:
+        pd.DataFrame.drop(metrics_read,columns = 'noise_cutoff')
+        pd.DataFrame.insert(metrics_read,3,'noise_cutoff',df_noise_cutoff)  
     except Exception as err:
         print("Could not save 'NoiseCutoff' to .tsv. Details: \n {}".format(err))
         
     try:
         df_mean_amp_true = pd.DataFrame(MeanAmpTrue)
         # metrics_read['noise_cutoff'] = df_noise_cutoff
-        pd.DataFrame.insert(metrics_read,5,'mean_amp_true',df_mean_amp_true)  
-    
+        pd.DataFrame.insert(metrics_read,4,'mean_amp_true',df_mean_amp_true)  
+    except ValueError:
+        pd.DataFrame.drop(metrics_read,columns = 'mean_amp_true')
+        pd.DataFrame.insert(metrics_read,4,'mean_amp_true',df_mean_amp_true)  
     except Exception as err:
         print("Could not save 'Mean Amp True' to .tsv. Details: \n {}".format(err))
         
@@ -325,7 +334,7 @@ def gen_metrics_labels(eid,probe_name):
     
     try:    
         numpass=int(sum(label))
-        print("Number of units that pass: ", numpass)
+        print("\n Number of units that pass: ", numpass)
     
         numpassRP=int(sum(RefPViol))
         numpassAC=int(sum(NoiseCutoff[~np.isnan(NoiseCutoff)]<2.5))
@@ -333,5 +342,8 @@ def gen_metrics_labels(eid,probe_name):
         
         print("Number of units that pass RP threshold: ", numpassRP)
         print("Number of units that pass Amp Cutoff threshold: ", numpassAC)
-        print("Number of total units: ",ntot)
-    
+        print("Number of total units: ", ntot)
+    except Exception as err:
+        print ("Could not compute number of units that pass. Details \n {}".format(err))
+        
+    return metrics_read 

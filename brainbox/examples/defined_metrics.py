@@ -49,7 +49,7 @@ def FP_RP(ts):
     
     
 def noise_cutoff(amps,quartile_length=.25):
-        nbins = 500
+        nbins = 100
         end_low=5
         if(len(amps)>1):
             bins_list= np.linspace(0, np.max(amps), nbins)
@@ -90,47 +90,26 @@ def noise_cutoff(amps,quartile_length=.25):
     
 def peak_to_peak_amp(ephys_file, samp_inds, nsamps):
     
-#    ephys_file = Path(r'C:/Users/Steinmetz Lab User/Downloads/FlatIron/mainenlab/Subjects/ZM_2104/2019-09-19/001/raw_ephys_data/probe_right/_iblrig_ephysData.raw_g0_t0.imec.ap.cbin')
-
-# spikes, clusters = bb.load_spike_sorting(eid)
-
-
-
-#%%
-# samples = spikes[0]['samples']
-# clusters = spikes[0]['clusters']
-# #now take cluster 0
-# cluster_id = 1
-# inds = np.where(clusters==cluster_id)[0]
-# samp_inds = samples[inds]
-
-
-
-#read raw ephys file
+    #read raw ephys file
     sr = spikeglx.Reader(ephys_file)
     
-    #take a subset of n of these
+    #take a subset (nsamps) of the spike samples
     samples = np.random.choice(samp_inds,nsamps)
+    #initialize arrays
     amps=np.zeros(len(samples))
     wfs=np.zeros((384,len(samples)))
     wfs_baseline=np.zeros((384,len(samples)))
     cnt=0
-    for i in samples:
-        
+    for i in samples:        
         wf = sr.data[int(i)]
-        
-        wf_baseline = wf[:-1]-np.median(wf[:-1])
-    # plt.plot(wf[:-1])
-        plt.plot(wf_baseline)
+        wf_baseline = wf[:-1]-np.median(wf[:-1]) #subtract median baseline
+        # plt.plot(wf_baseline)
         wfs[:,cnt] = wf[:-1]
         wfs_baseline[:,cnt] = wf_baseline
         amps[cnt] = np.max(wf_baseline)-np.min(wf_baseline) 
         cnt+=1
     amps = np.max(wfs_baseline,axis=0)-np.min(wfs_baseline,axis=0)
     mean_amp = np.mean(amps)
-        # plt.plot(wfs[:-1])
-        # amp[cnt] = np.max(wfs[:-1])-np.min(wfs[:-1]) 
-        # cnt+=1
 
 
     return mean_amp
