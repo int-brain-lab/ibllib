@@ -188,12 +188,12 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
 
         def create_tree(root_dir, dico):
             root_dir.mkdir(exist_ok=True, parents=True)
-            for l in dico:
-                for k in l:
+            for ldir in dico:
+                for k in ldir:
                     if k == 'path' or k == 'label':
                         continue
-                    touchfile(l[k])
-                    Path(l[k]).with_suffix('.meta').touch()
+                    touchfile(ldir[k])
+                    Path(ldir[k]).with_suffix('.meta').touch()
 
         self.tmpdir = Path(tempfile.gettempdir()) / 'test_glob_ephys'
         self.tmpdir.mkdir(exist_ok=True)
@@ -224,7 +224,7 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
 
     def test_glob_ephys(self):
         def dict_equals(d1, d2):
-            return all([l in d1 for l in d2]) and all([l in d2 for l in d1])
+            return all([x in d1 for x in d2]) and all([x in d2 for x in d1])
         ef3b = spikeglx.glob_ephys_files(self.dir3b)
         ef3a = spikeglx.glob_ephys_files(self.dir3a)
         # test glob

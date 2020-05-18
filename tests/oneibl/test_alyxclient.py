@@ -48,14 +48,20 @@ class TestJsonFieldMethods(unittest.TestCase):
         self.eid2_eqc = self.ac.rest(self.endpoint, "read", id=self.eid2)[self.field_name]
 
     def _json_field_write(self):
-        written1 = self.ac.json_field_write(self.endpoint, self.eid1, self.field_name, self.data_dict)
-        written2 = self.ac.json_field_write(self.endpoint, self.eid2, self.field_name, self.data_dict)
+        written1 = self.ac.json_field_write(
+            self.endpoint, self.eid1, self.field_name, self.data_dict
+        )
+        written2 = self.ac.json_field_write(
+            self.endpoint, self.eid2, self.field_name, self.data_dict
+        )
         self.assertTrue(written1 == written2)
         self.assertTrue(written1 == self.data_dict)
         self.assertTrue(len(self.ac.rest(self.endpoint, 'list', extended_qc='some__lt,0.5')) == 2)
 
     def _json_field_update(self):
-        modified = self.ac.json_field_update(self.endpoint, self.eid1,self.field_name, {'some': 0.6})
+        modified = self.ac.json_field_update(
+            self.endpoint, self.eid1, self.field_name, {'some': 0.6}
+        )
         self.assertTrue('data' in modified)
         self.assertTrue('some' in modified)
         self.assertTrue(len(self.ac.rest(self.endpoint, 'list', extended_qc='some__lt,0.5')) == 1)

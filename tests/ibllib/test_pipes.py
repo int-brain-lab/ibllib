@@ -285,7 +285,7 @@ class TestPipesMisc(unittest.TestCase):
         self.assertTrue(alyx_insertion[0]['model'] == '3A')
         self.assertTrue(alyx_insertion[0]['name'] in ['probe00', 'probe01'])
         self.assertTrue(alyx_insertion[1]['model'] == '3A')
-        self.assertTrue(alyx_insertion[1]['name']in ['probe00', 'probe01'])
+        self.assertTrue(alyx_insertion[1]['name'] in ['probe00', 'probe01'])
         # Cleanup DB
         one.alyx.rest('insertions', 'delete', id=alyx_insertion[0]['id'])
         one.alyx.rest('insertions', 'delete', id=alyx_insertion[1]['id'])
