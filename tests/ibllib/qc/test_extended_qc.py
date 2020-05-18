@@ -2,9 +2,13 @@
 import unittest
 
 from ibllib.qc import extended_qc as eqc
+from oneibl.one import ONE
+
 
 one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
           password='TapetesBloc18')
+
+
 class TestExtendedQC(unittest.TestCase):
     """
     """
@@ -16,8 +20,6 @@ class TestExtendedQC(unittest.TestCase):
     def test_build_extended_qc_frame(self):
         pass
 
-
-one.alyx.rest('sessions', 'list', project='ibl_neuropixel_brainwide_01', extended_qc='_bpod_stimOff_itiIn_delays__lt,0.99')
 
 if __name__ == "__main__":
     unittest.main(exit=False)
