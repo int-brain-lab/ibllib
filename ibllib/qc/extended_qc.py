@@ -1,4 +1,3 @@
-import json
 import logging
 
 import numpy as np
@@ -45,16 +44,18 @@ def build_and_upload_extended_qc(eid, data=None):
         data = load_bpod_data(eid)
 
     eqc_data = build_extended_qc_frame(eid, data=data)
-    new_eqc_data = one.alyx.json_field_update(
-        endpoint="sessions", uuid=eid, field_name="extended_qc", data=eqc_data
-    )
+    new_eqc_data = update_extended_qc(eid, eqc_data)
     return new_eqc_data
 
 
-def get_frame(eid):
+def read_extended_qc(eid):
     return one.alyx.rest("sessions", "read", id=eid)["extended_qc"]
 
 
+def update_extended_qc(eid: str, data: dict):
+    return one.alyx.json_field_update(
+        endpoint="sessions", uuid=eid, field_name="extended_qc", data=data
+    )
 
 
 if __name__ == "__main__":
