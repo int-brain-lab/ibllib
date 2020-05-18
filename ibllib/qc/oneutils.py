@@ -1,3 +1,4 @@
+import json
 from functools import partial, wraps
 from pathlib import Path
 import logging
@@ -181,6 +182,17 @@ def random_ephys_session(lab=None, complete=False):
 def random_lab():
     labs = one.list(None, "lab")
     return np.random.choice(labs)
+
+
+def check_parse_json(invar):
+    if isinstance(invar, dict):
+        return invar
+    elif isinstance(invar, str):
+        try:
+            return json.loads(invar)
+        except ValueError as e:
+            log.warning(e, "\njson field content is not dict or string")
+            return None
 
 
 if __name__ == "__main__":
