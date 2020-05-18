@@ -1,7 +1,6 @@
 # TODO: Fix new extractor signature/saving files - Make class?
 import logging
 import os
-from functools import wraps
 from pathlib import Path, PureWindowsPath
 
 import numpy as np
@@ -30,20 +29,6 @@ log = logging.getLogger("ibllib")
 one = ONE(printout=False)
 
 
-def bpod_data_loader(func):
-    """ If data is None loads data from eid
-    """
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if not kwargs or kwargs.get("data", None) is None:
-            kwargs["data"] = load_bpod_data(args[0])
-        return func(*args, **kwargs)
-
-    return wrapper
-
-
-# @uuid_to_path(dl=True)
 def get_bpod_fronts(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
@@ -511,6 +496,8 @@ def load_bpod_data(session_path, fpga_time=False):
         "itiIn_times": get_itiIn_times(session_path, save=False, data=data, settings=settings),
         "intervals_0": None,
         "intervals_1": None,
+        # XXX: First (all?) audio input times for each trial for load_audio_pre_trial metric
+        # XXX: f2ttl times in trials for load_stimulus_move_before_goCue
     }
     out.update(
         _get_trimmed_data_from_pregenerated_files(
