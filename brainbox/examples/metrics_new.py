@@ -50,8 +50,17 @@ def gen_metrics_labels(eid,probe_name):
     #for cases where raw data is available locally: 
     ephys_file_dir = os.path.join(ses_path, 'raw_ephys_data', probe_name)
     ephys_file = os.path.join(ses_path, 'raw_ephys_data', probe_name,'_iblrig_ephysData.raw_g0_t0.imec.ap.cbin')
-  
-    uidx=0
+    #create params.py file
+    params_file = os.path.join(ks_dir,'params.py')
+    if os.path.exists(ephys_file) and not os.path.exists(params_file):
+        f = open(params_file,"w+")
+        f.write('dat_path = ' + 'r"' + ephys_file + '"\n' +  '''n_channels_dat = 385
+        dtype = 'int16'
+        offset = 0
+        sample_rate = 30000
+        hp_filtered = False
+        uidx=0''' )
+        f.close()
                 
     # Initialize metrics
     cum_amp_drift = np.full((n_units,), np.nan)
