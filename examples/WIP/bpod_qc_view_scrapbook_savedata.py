@@ -1,8 +1,12 @@
 """
 Use the framework developed by Niccolo B. to review the quality
 of the task control.
+
 Download the raw data locally, and perform computations to
-retireve the QC data frame (values of metrics, and pass/fail).
+retrieve the QC data frame (values of metrics, and pass/fail).
+Some sessions do not work with this scheme (exceptions), and
+are listed to be skipped from computations.
+
 Save data locally per EID as computations take time.
 """
 # Author : Gaelle C.
@@ -23,7 +27,8 @@ iblrig = [s['name'] for s in locations if "_iblrig_" in s['name']]
 ephys_rig = [s for s in iblrig if "_ephys_" in s]
 
 # -- Var init
-dtypes = ['ephysData.raw.lf', 'ephysData.raw.meta', 'ephysData.raw.ch']
+# dtypes = ['ephysData.raw.lf', 'ephysData.raw.meta', 'ephysData.raw.ch']
+dtypes = ['_iblrig_taskData.raw']
 
 # Exception eids:
 list_eid_reject = [
@@ -31,13 +36,25 @@ list_eid_reject = [
     '614e1937-4b24-4ad3-9055-c8253d089919',  # KeyError: 'hide_stim'
     'd564619d-43d8-40bf-8525-50b09da2ecb7',  # KeyError: 'hide_stim'
     '68baa22a-232f-4b8f-b491-018c6375bab2',  # KeyError: 'hide_stim'
-
+    '5999ecbd-803e-4d24-bc1d-54ff42b16fd0',  # os.PathLike NoneType
+    'd99dd5bc-607a-4429-b61c-acb7d2c3c66b',  # KeyError: 'hide_stim'
 
     # -- '_iblrig_angelaki_ephys_0' -- (17 eids total, 4 failures)
     '279fa50f-223c-43ac-ac0c-89753c77949e',  # KeyError: 'hide_stim'
     '4c53f746-7763-478d-b251-5315c26c4b5f',  # KeyError: 'hide_stim'
     'badc7140-b917-44a2-aa48-0e44f357baee',  # KeyError: 'hide_stim'
     '147d9be2-ab3a-4dd6-a9b8-fdf6fc129d84',  # KeyError: 'hide_stim'
+    '4f463dec-ce7f-4f89-a750-864fc710a877',  # KeyError: 'hide_stim'
+    '8275b304-1fe6-4349-93e5-74a01e7127dd',  # KeyError: 'hide_stim'
+    '6e74f892-04fb-4136-93fb-4505f872d4c4',  # KeyError: 'hide_stim'
+    '028314c1-cca1-4d82-bdc0-9e8d725f32a3',  # KeyError: 'hide_stim'
+    '2fdc9b86-a1c6-483a-acbf-1dd97e264ef8',  # KeyError: 'hide_stim'
+    'fb5831ac-d15b-437b-98fe-47d03d7edc15',  # KeyError: 'hide_stim'
+    '576de022-4a2b-4423-8f7f-53f83b1b896e',  # KeyError: 'hide_stim'
+    'bc776ebe-cec8-40c6-b1e1-58adc04df14d',  # KeyError: 'hide_stim'
+    'b5a749ec-e099-4e39-90bb-69ba5cb9e461',  # KeyError: 'hide_stim'
+    'fdd79794-88ea-4a9c-910b-524c150dec48',  # KeyError: 'hide_stim'
+    'b73a16d7-555d-4c51-91a0-611d0ed0a975',  # KeyError: 'hide_stim'
 
     # -- '_iblrig_danlab_ephys_0' -- (37 eids total, 0 failures)
 
@@ -74,8 +91,6 @@ cachepath = Path(one._par.CACHE_DIR)
 
 # Plots for 1 rig at a time
 for i_ephysrig in range(0, len(ephys_rig)):
-    print(f'Rig {i_ephysrig + 1} / {len(ephys_rig)}')
-
     rig_location = ephys_rig[i_ephysrig]
 
     # Save folder
@@ -84,10 +99,13 @@ for i_ephysrig in range(0, len(ephys_rig)):
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
+    # list files in save folder
+    files_exist = os.listdir(outdir)
+
     # Get session eIDs, for 1 rig
     eIDs, ses_det = one.search(
         location=rig_location,
-        # dataset_types=dtypes,
+        dataset_types=dtypes,
         task_protocol='_iblrig_tasks_ephysChoiceWorld',
         details=True)
 
@@ -96,9 +114,15 @@ for i_ephysrig in range(0, len(ephys_rig)):
     for i_eid in range(0, len(eIDs)):
 
         eid = eIDs[i_eid]
-        if eid not in list_eid_reject:
+        outname = f'{eid}__dataqc.npz'
+        outfile = Path.joinpath(outdir, outname)
+
+        if (eid not in list_eid_reject) and \
+                (outname not in os.listdir(outdir)):
             # Show session number and start compute time counter for session
-            print(f'Session {i_eid+1} / {len(eIDs)}')
+            print(f'Rig {i_ephysrig + 1} / {len(ephys_rig)} : {rig_location}'
+                  f' -- Sessions remaining: {len(eIDs)-len(os.listdir(outdir))-1}'
+                  f' -- {eid}')
             start = perf_counter()
 
             # Start compute
@@ -119,8 +143,6 @@ for i_ephysrig in range(0, len(ephys_rig)):
                 'bpod_pass': bpod_pass,
                 'ses_det': ses_det[i_eid]
             }
-
-            outfile = Path.joinpath(outdir, f'{eid}__dataqc.npz')
             np.savez(outfile, dataqc=app_token)  # overwrite any existing file
 
             # -- Plot session metrics and save fig # TODO plot func not working yet
