@@ -11,6 +11,7 @@ Example:
   # run gen_metrics_labels
 >>>from brainbox.examples.metrics_new import gen_metrics_labels
 >>>gen_metrics_labels(eid,probe_name)
+
 """
 
 
@@ -21,15 +22,12 @@ from pathlib import Path
 import numpy as np
 import alf.io as aio
 import matplotlib.pyplot as plt
-
 import brainbox as bb
 from brainbox.examples import max_acceptable_isi_viol_2, defined_metrics
-# from max_acceptable_isi_viol_2 import max_acceptable_cont_2
 from brainbox.examples.max_acceptable_isi_viol_2 import max_acceptable_cont_2
 from phylib.stats import correlograms
 import pandas as pd
 from brainbox.metrics import metrics
-
 from brainbox.examples.defined_metrics import FP_RP, noise_cutoff, peak_to_peak_amp
 
 
@@ -49,18 +47,10 @@ def gen_metrics_labels(eid,probe_name):
     n_units = len(units_nonzeros) #only compute metrics for units with no samples
     
     
-    #if raw data available locally: 
-    try:
-        # ephys_file_dir = r'C:\Users\Steinmetz Lab User\Downloads\FlatIron\zadorlab\Subjects\CSK-scan-008\2019-12-11\001\raw_ephys_data\probe01'
-        
-        ephys_file_dir = os.path.join(ses_path, 'raw_ephys_data', probe_name)
-        # rms_amps, rms_times = (aio.load_object(ephys_file_dir, '_iblqc_ephysTimeRmsAP')).values()
-        ephys_file = os.path.join(ses_path, 'raw_ephys_data', probe_name,'_iblrig_ephysData.raw_g0_t0.imec.ap.cbin')
-    except Exception:
-        print('raw ephys data was not found; some metrics will not be computed')
-
-    # alf_probe_dir = r'C:\Users\Steinmetz Lab User\Downloads\FlatIron\zadorlab\Subjects\CSK-scan-008\2019-12-11\001\alf\probe01'  
-   
+    #for cases where raw data is available locally: 
+    ephys_file_dir = os.path.join(ses_path, 'raw_ephys_data', probe_name)
+    ephys_file = os.path.join(ses_path, 'raw_ephys_data', probe_name,'_iblrig_ephysData.raw_g0_t0.imec.ap.cbin')
+  
     uidx=0
                 
     # Initialize metrics
@@ -80,6 +70,7 @@ def gen_metrics_labels(eid,probe_name):
     RefPViol = np.empty([len(units)])
     NoiseCutoff = np.empty([len(units)])
     MeanAmpTrue = np.empty([len(units)])
+    
     for idx,unit in enumerate(units_nonzeros):
         if unit == units_nonzeros[0]:
             t0 = time.perf_counter()  # used for computation time estimate
@@ -95,7 +86,9 @@ def gen_metrics_labels(eid,probe_name):
         
         RefPViol[idx] = FP_RP(ts)
         NoiseCutoff[idx] = noise_cutoff(amps,quartile_length=.25)
-        if len(samples>50):
+        
+        #create 'label' based on RPviol,NoiseCutoff, and MeanAmp
+        if len(samples>50): #only compute mean amplitude for units with more than 50 samples
             try:
                 MeanAmpTrue[int(unit)] = peak_to_peak_amp(ephys_file, samples, nsamps=20)
     
@@ -117,7 +110,8 @@ def gen_metrics_labels(eid,probe_name):
 
 
 
-
+        #now compute additional metrics that label does not depend on: 
+            
         # Cumulative drift of spike amplitudes, normalized by total number of spikes.
         try:
             cum_amp_drift[idx] = bb.metrics.cum_drift(amps)
@@ -189,47 +183,18 @@ def gen_metrics_labels(eid,probe_name):
                   .format(unit, err))
             units_missing_metrics.add(unit)
 
-        # The mean peak-to-peak value over the background noise of the channel of max amplitude.
-        # if ephys_file_path:
-        #     try:
-        #         ch = clstrs_b['channels'][int(unit)]  # channel of max amplitude
-        #         ptp_sigma[int(unit)] = bb.metrics.ptp_over_noise(
-        #             ephys_file_path, ts, ch, t=2.0, sr=30000, n_ch_probe=385,
-        #             dtype='int16', car=False)
-        #     except Exception as err:
-        #         print("Failed to compute 'ptp_sigma' for unit {}. Details: \n {}"
-        #               .format(unit, err))
-        #         units_missing_metrics.add(unit)
 
-        # if unit == units[0]:  # give time estimate
-        #     dt = time.perf_counter() - t0
-        #     print('\nComputing metrics. Estimated time is {:.2f} mins\n'
-        #           .format(len(units) * dt / 60))
-
-    # Extract to a .csv file #
-    # --------------------- #
-#test code
-# metrics_read = pd.read_csv(Path(alf_probe_dir,'clusters.metrics.csv'))
-# xx = np.arange(0,704,1)
-# metrics_read['extracolumn'] = xx
-
-    
+    #append metrics to the current clusters.metrics
     metrics_read = pd.read_csv(Path(alf_probe_dir,'clusters.metrics.csv'))
 
     try:
         label_df = pd.DataFrame(label)
         pd.DataFrame.insert(metrics_read,1,'label',label_df)  
-        # label_df.to_csv(Path(alf_probe_dir, 'clusters.metrics_validation.csv'),
-                        # header=['label'],index=False)
     except ValueError:
         pd.DataFrame.drop(metrics_read,columns = 'label')
         pd.DataFrame.insert(metrics_read,1,'label',label_df)  
     except:
         print("Could not save 'label' to .csv.")
-  
-
-    #read this csv file, append all metrics to it
-    # df_csv = pd.read_csv(Path(alf_probe_dir, 'clusters.metrics_validation.csv'))
 
     try:
         df_cum_amp_drift = pd.DataFrame(cum_amp_drift.round(2))
@@ -285,20 +250,9 @@ def gen_metrics_labels(eid,probe_name):
     except Exception as err:
         print("Could not save 'pres_ratio_std' to .tsv. Details: \n {}".format(err))
     
-    # if ephys_file_path:
-    #     try:
-    #         df_ptp_sigma = pd.DataFrame(ptp_sigma.round(2))
-    #         df_ptp_sigma.to_csv(Path(ks_dir, 'ptp_sigma.tsv'),
-    #                                 sep='\t', header=['cum_amp_drift'])
-    #     except Exception as err:
-    #         print("Could not save 'cum_amp_drift' to .tsv. Details: \n {}".format(err))
-    
             
-            
-        
     try:
         df_refp_viol = pd.DataFrame(RefPViol)
-        # metrics_read['refp_viol'] = df_refp_viol
         pd.DataFrame.insert(metrics_read,2,'refp_viol',df_refp_viol)  
     except ValueError:
         pd.DataFrame.drop(metrics_read,columns = 'refp_viol')
@@ -308,7 +262,6 @@ def gen_metrics_labels(eid,probe_name):
         
     try:
         df_noise_cutoff = pd.DataFrame(NoiseCutoff)
-        # metrics_read['noise_cutoff'] = df_noise_cutoff
         pd.DataFrame.insert(metrics_read,3,'noise_cutoff',df_noise_cutoff)  
     except ValueError:
         pd.DataFrame.drop(metrics_read,columns = 'noise_cutoff')
@@ -318,7 +271,6 @@ def gen_metrics_labels(eid,probe_name):
         
     try:
         df_mean_amp_true = pd.DataFrame(MeanAmpTrue)
-        # metrics_read['noise_cutoff'] = df_noise_cutoff
         pd.DataFrame.insert(metrics_read,4,'mean_amp_true',df_mean_amp_true)  
     except ValueError:
         pd.DataFrame.drop(metrics_read,columns = 'mean_amp_true')
@@ -328,8 +280,7 @@ def gen_metrics_labels(eid,probe_name):
         
         
         
-     #now add df to csv 
-    # df_csv.to_csv(Path(alf_probe_dir, 'clusters.metrics_validation.csv'))
+    #now add df to csv 
     metrics_read.to_csv(Path(alf_probe_dir,'clusters.metrics.csv'))
     
     try:    
