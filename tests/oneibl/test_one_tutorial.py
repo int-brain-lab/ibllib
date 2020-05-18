@@ -43,6 +43,12 @@ import examples.one.histology.visualize_alyx_channels_coronal  # TODO Delete?
 import examples.one.histology.visualize_alyx_traj_coronal_sagittal_raster
 import examples.one.histology.visualize_session_coronal_tilted
 
+# TODO error in : import examples.one.histology.visualize_track_file_coronal_GUIoption
+# TODO error in: import examples.one.histology.visualize_track_file_coronal_sagittal_slice
+#  Incompatible library version:
+#  libopencv_freetype.4.1.dylib requires version 24.0.0 or later, but libfreetype.6.dylib provides version 23.0.0
+
+
 # -- Brainbox examples
 # from brainbox.examples.titi import toto
 
