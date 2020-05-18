@@ -13,22 +13,18 @@ ac = wc.AlyxClient(
     username='test_user', password='TapetesBloc18',
     base_url='https://test.alyx.internationalbrainlab.org')
 
-# Get the singleton AlyxClient from webclient nodule
-sac = wc.alyx_client
 
-
-class TestDownloadHTTP(unittest.TestCase):
-
+class TestSingletonPattern(unittest.TestCase):
     def setUp(self):
         self.ac = ac
-        self.test_data_uuid = '3ddd45be-7d24-4fc7-9dd3-a98717342af6'
-        self.sac = sac
+        # Get the singleton AlyxClient from webclient nodule
+        self.singleton_ac = wc.alyx_client
 
     def test_singleton_not_instance(self):
-        self.assertTrue(self.sac._obj_id != self.ac._obj_id)
+        self.assertTrue(self.singleton_ac._obj_id != self.ac._obj_id)
         # Test reimport
         import oneibl.webclient as _wc
-        self.assertTrue(_wc.alyx_client._obj_id == self.sac._obj_id)
+        self.assertTrue(_wc.alyx_client._obj_id == self.singleton_ac._obj_id)
         # Test new test instance
         new_ac = wc.AlyxClient(
             username='test_user',
@@ -36,7 +32,67 @@ class TestDownloadHTTP(unittest.TestCase):
             base_url='https://test.alyx.internationalbrainlab.org'
         )
         self.assertTrue(new_ac._obj_id != self.ac._obj_id)
-        self.assertTrue(new_ac._obj_id != self.sac._obj_id)
+        self.assertTrue(new_ac._obj_id != self.singleton_ac._obj_id)
+
+
+class TestJsonFieldMethods(unittest.TestCase):
+    def setUp(self):
+        self.ac = ac
+        sessions = self.ac.rest("sessions", "list")
+        self.eid1 = sessions[0]['url'][-36:]
+        self.eid2 = sessions[-1]['url'][-36:]
+        self.endpoint = "sessions"
+        self.field_name = "extended_qc"
+        self.data_dict = {'some': 0, 'data': 1}
+        self.eid1_eqc = self.ac.rest(self.endpoint, "read", id=self.eid1)[self.field_name]
+        self.eid2_eqc = self.ac.rest(self.endpoint, "read", id=self.eid2)[self.field_name]
+
+    def _json_field_write(self):
+        written1 = self.ac.json_field_write(self.endpoint, self.eid1, self.field_name, self.data_dict)
+        written2 = self.ac.json_field_write(self.endpoint, self.eid2, self.field_name, self.data_dict)
+        self.assertTrue(written1 == written2)
+        self.assertTrue(written1 == self.data_dict)
+        self.assertTrue(len(self.ac.rest(self.endpoint, 'list', extended_qc='some__lt,0.5')) == 2)
+
+    def _json_field_update(self):
+        modified = self.ac.json_field_update(self.endpoint, self.eid1,self.field_name, {'some': 0.6})
+        self.assertTrue('data' in modified)
+        self.assertTrue('some' in modified)
+        self.assertTrue(len(self.ac.rest(self.endpoint, 'list', extended_qc='some__lt,0.5')) == 1)
+
+    def _json_field_remove_key(self):
+        pre_delete = self.ac.rest(self.endpoint, 'list', extended_qc='data__gte,0.5')
+        self.assertTrue(len(pre_delete) == 2)
+        deleted = self.ac.json_field_remove_key(self.endpoint, self.eid2, self.field_name, 'data')
+        self.assertTrue('data' not in deleted)
+        post_delete = self.ac.rest(self.endpoint, 'list', extended_qc='data__gte,0.5')
+        self.assertTrue(len(post_delete) == 1)
+
+    def _json_field_delete(self):
+        deleted = self.ac.json_field_delete(self.endpoint, self.eid2, self.field_name)
+        self.assertTrue(deleted is None)
+        self.assertTrue(len(self.ac.rest(self.endpoint, 'list', extended_qc='data__gte,0.5')) == 1)
+
+    def test_json_methods(self):
+        self._json_field_write()
+        self._json_field_update()
+        self._json_field_remove_key()
+        self._json_field_delete()
+
+    def tearDown(self):
+        # Delete any dict created by this test
+        for x in self.ac.rest(self.endpoint, 'list', extended_qc='some__lt,0.5'):
+            self.ac.json_field_delete(self.endpoint, x['url'][-36:], self.field_name)
+        # Restore whatever was there in the first place
+        self.ac.json_field_write(self.endpoint, self.eid1, self.field_name, self.eid1_eqc)
+        self.ac.json_field_write(self.endpoint, self.eid2, self.field_name, self.eid2_eqc)
+
+
+class TestDownloadHTTP(unittest.TestCase):
+
+    def setUp(self):
+        self.ac = ac
+        self.test_data_uuid = '3ddd45be-7d24-4fc7-9dd3-a98717342af6'
 
     def test_paginated_request(self):
         rep = self.ac.rest('datasets', 'list')

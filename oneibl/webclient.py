@@ -10,6 +10,7 @@ from pathlib import Path
 import requests
 
 import oneibl.params
+from alf.io import is_uuid_string
 from ibllib.misc import pprint, print_progress
 
 _logger = logging.getLogger('ibllib')
@@ -427,6 +428,146 @@ class AlyxClient:
         elif action == 'update':
             assert(endpoint_scheme[action]['action'] == 'put')
             return self.put('/' + endpoint + '/' + id.split('/')[-1], data=data)
+
+    # JSON field interface convenience methods
+    def _check_inputs(self, endpoint: str, uuid: str) -> None:
+        # make sure the queryied endpoint exists, if not throw an informative error
+        if endpoint not in self._rest_schemes.keys():
+            av = [k for k in self._rest_schemes.keys() if not k.startswith('_') and k]
+            raise ValueError('REST endpoint "' + endpoint + '" does not exist. Available ' +
+                             'endpoints are \n       ' + '\n       '.join(av))
+        # make sure the uuid is a valid UUID4
+        if is_uuid_string(uuid) is False:
+            raise ValueError(f"{uuid} is not a valid uuid")
+        return
+
+    def json_field_write(
+        self,
+        endpoint: str = None,
+        uuid: str = None,
+        field_name: str = None,
+        data: dict = None
+    ) -> dict:
+        """json_field_write [summary]
+        Write data to WILL NOT CHECK IF DATA EXISTS
+        NOTE: Destructive write!
+
+        :param endpoint: Valid alyx endpoint, defaults to None
+        :type endpoint: str, optional
+        :param uuid: Valid uuid sting for a given endpoint, defaults to None
+        :type uuid: str, optional
+        :param field_name: Valid json field name, defaults to None
+        :type field_name: str, optional
+        :param data: data to write to json field, defaults to None
+        :type data: dict, optional
+        :return: Written data dict
+        :rtype: dict
+        """
+        self._check_inputs(endpoint, uuid)
+        # Prepare data to patch
+        patch_dict = {field_name: data}
+        # Upload new extended_qc to session
+        ret = self.rest(endpoint, "partial_update", id=uuid, data=patch_dict)
+        return ret[field_name]
+
+    def json_field_update(
+        self,
+        endpoint: str = None,
+        uuid: str = None,
+        field_name: str = None,
+        data: dict = None
+    ) -> dict:
+        """json_field_update
+        Non destructive update of json field of endpoint for object
+        Will update the field_name of the object with pk = uuid of given endpoint
+        If data has keys with the same name of existing keys it will squash the old
+        values (uses the dict.update() method)
+
+        Example:
+        one.alyx.json_field_update("sessions", "eid_str", "extended_qc" {"key": value})
+
+        :param endpoint: endpoint to hit
+        :type endpoint: str
+        :param uuid: valid uuid of object
+        :type uuid: str
+        :param field_name: name of the json field
+        :type field_name: str
+        :param data: dictionary with fields to be updated
+        :type data: dict
+        :return: new patched json field contents
+        :rtype: dict
+        """
+        self._check_inputs(endpoint, uuid)
+        # Load current json field contents
+        current = self.rest(endpoint, "read", id=uuid)[field_name]
+        if current is None:
+            current = {}
+
+        if not isinstance(current, dict):
+            _logger.warning(
+                f"Current json field {field_name} does not contains a dict, aborting update"
+            )
+            return current
+
+        # Patch current dict with new data
+        current.update(data)
+        # Prepare data to patch
+        patch_dict = {field_name: current}
+        # Upload new extended_qc to session
+        ret = self.rest(endpoint, "partial_update", id=uuid, data=patch_dict)
+        return ret[field_name]
+
+    def json_field_remove_key(
+        self,
+        endpoint: str = None,
+        uuid: str = None,
+        field_name: str = None,
+        key: str = None
+    ) -> dict:
+        """json_field_remove_key
+        Will remove inputted key from json field dict and reupload it to Alyx.
+        Needs endpoint, uuid and json field name
+
+        :param endpoint: endpoint to hit, defaults to None
+        :type endpoint: str, optional
+        :param uuid: valid uuid of endpoint object, defaults to None
+        :type uuid: str, optional
+        :param field_name: json field name of object, defaults to None
+        :type field_name: str, optional
+        :param key: key name of dictionary inside object, defaults to None
+        :type key: str, optional
+        :return: returns new content of json field
+        :rtype: dict
+        """
+        self._check_inputs(endpoint, uuid)
+        current = self.rest(endpoint, "read", id=uuid)[field_name]
+        # If no contents, cannot remove key, return
+        if current is None:
+            return current
+        # if contents are not dict, cannot remove key, return contents
+        if isinstance(current, str):
+            _logger.warning(f"Cannot remove key {key} content of json field is of type str")
+            return current
+        # If key not present in contents of json field cannot remove key, return contents
+        if current.get(key, None) is None:
+            _logger.warning(
+                f"{key}: Key not found in endpoint {endpoint} field {field_name}"
+            )
+            return current
+        _logger.info(f"Removing key from dict: '{key}'")
+        current.pop(key)
+        # Re-write contents without removed key
+        written = self.json_field_write(
+            endpoint=endpoint, uuid=uuid, field_name=field_name, data=current
+        )
+        return written
+
+    def json_field_delete(
+        self, endpoint: str = None, uuid: str = None, field_name: str = None
+    ) -> None:
+        self._check_inputs(endpoint, uuid)
+        _ = self.rest(endpoint, "partial_update", id=uuid, data={field_name: None})
+        return _[field_name]
 
 
 # Get default params from local file
