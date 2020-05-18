@@ -1,7 +1,6 @@
 import logging
 
-from ibllib.io.extractors import ephys_fpga, ephys_trials
-import ibllib.io.raw_data_loaders as rawio
+from ibllib.io.extractors import ephys_fpga
 from ibllib.pipes import jobs
 
 _logger = logging.getLogger('ibllib')
@@ -23,12 +22,8 @@ class EphysTrials(jobs.Job):
     level = 1
 
     def _run(self):
-        data = rawio.load_data(self.session_path)
-        _logger.info('extract BPOD for ephys session')
-        ephys_trials.extract_all(self.session_path, data=data, save=True, return_files=True)
-        _logger.info('extract FPGA information for ephys session')
-        tmax = data[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
-        ephys_fpga.extract_all(self.session_path, save=True, tmax=tmax)
+        dsets, out_files = ephys_fpga.extract_all(self.session_path, save=True)
+        return out_files
 
 
 class EphysExtractionPipeline(jobs.Pipeline):

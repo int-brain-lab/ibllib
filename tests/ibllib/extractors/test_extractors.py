@@ -385,7 +385,7 @@ class TestExtractTrialData(unittest.TestCase):
     def test_get_included_trials(self):
         # TRAINING SESSIONS
         it = ibllib.io.extractors.training_trials.IncludedTrials(
-            self.training_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'}).extract()[0]
+            self.training_lt5['path']).extract(settings={'IBLRIG_VERSION_TAG': '4.9.9'})[0]
         self.assertTrue(isinstance(it, np.ndarray))
         # -- version >= 5.0.0
         it = ibllib.io.extractors.training_trials.IncludedTrials(
@@ -394,7 +394,7 @@ class TestExtractTrialData(unittest.TestCase):
 
         # BIASED SESSIONS
         it = ibllib.io.extractors.biased_trials.IncludedTrials(
-            self.biased_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'}).extract()[0]
+            self.biased_lt5['path']).extract(settings={'IBLRIG_VERSION_TAG': '4.9.9'})[0]
         self.assertTrue(isinstance(it, np.ndarray))
         # -- version >= 5.0.0
         it = ibllib.io.extractors.biased_trials.IncludedTrials(

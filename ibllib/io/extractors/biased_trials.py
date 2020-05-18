@@ -21,7 +21,7 @@ class ContrastLR(BaseBpodTrialsExtractor):
             t['position']) < 0 else np.nan for t in self.bpod_trials])
         contrastRight = np.array([t['contrast'] if np.sign(
             t['position']) > 0 else np.nan for t in self.bpod_trials])
-        return (contrastLeft, contrastRight)
+        return contrastLeft, contrastRight
 
 
 def extract_all(session_path, save=False, bpod_trials=False, settings=False):

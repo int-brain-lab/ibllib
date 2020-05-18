@@ -158,7 +158,7 @@ def validate_ttl_test(ses_path, display=False):
     for k in sync_map:
         fronts = fpga._get_sync_fronts(rawsync, sync_map[k])
         sync[k] = fronts['times'][fronts['polarities'] == 1]
-    wheel = fpga.extract_wheel_sync(rawsync, chmap=sync_map, save=False)
+    wheel = fpga.extract_wheel_sync(rawsync, chmap=sync_map)
 
     frame_rates = {'right_camera': np.round(1 / np.median(np.diff(sync.right_camera))),
                    'left_camera': np.round(1 / np.median(np.diff(sync.left_camera))),
@@ -187,7 +187,7 @@ def validate_ttl_test(ses_path, display=False):
                        str_ok="PASS: Bpod", str_ko="FAILED: Bpod")
     try:
         # note: tried to depend as little as possible on the extraction code but for the valve...
-        behaviour = fpga.extract_behaviour_sync(rawsync, save=False, chmap=sync_map)
+        behaviour = fpga.extract_behaviour_sync(rawsync, chmap=sync_map)
         res = behaviour.valve_open.size > 1
     except AssertionError:
         res = False

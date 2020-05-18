@@ -9,7 +9,6 @@ from phylib.io import alf
 from ibllib.ephys.sync_probes import apply_sync
 import ibllib.ephys.ephysqc as ephysqc
 from ibllib.io import spikeglx, raw_data_loaders
-from ibllib.io.extractors.ephys_fpga import glob_ephys_files
 
 _logger = logging.getLogger('ibllib')
 
@@ -25,7 +24,7 @@ def probes_description(ses_path, bin_exists=True):
     """
 
     ses_path = Path(ses_path)
-    ephys_files = glob_ephys_files(ses_path, bin_exists=bin_exists)
+    ephys_files = spikeglx.glob_ephys_files(ses_path, bin_exists=bin_exists)
     subdirs, labels, efiles_sorted = zip(
         *sorted([(ep.ap.parent, ep.label, ep) for ep in ephys_files if ep.get('ap')]))
 
@@ -90,7 +89,7 @@ def sync_spike_sortings(ses_path):
         return s2v['ap'][0]
 
     ses_path = Path(ses_path)
-    ephys_files = glob_ephys_files(ses_path)
+    ephys_files = spikeglx.glob_ephys_files(ses_path)
     subdirs, labels, efiles_sorted, srates = zip(
         *sorted([(ep.ap.parent, ep.label, ep, _sr(ep.ap)) for ep in ephys_files if ep.get('ap')]))
 

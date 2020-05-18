@@ -234,16 +234,6 @@ class WheelPosition(BaseBpodTrialsExtractor):
 
     Positions:
     Radians mathematical convention
-
-    :param session_path: absolute path of session folder
-    :type session_path: str
-    :param data: dictionary containing the contents pybppod jsonable file read with raw.load_data
-    :type data: dict, optional
-    :param save: wether to save the corresponding alf file
-                 to the alf folder, defaults to False
-    :type save: bool, optional
-    :return: Numpy structured array.
-    :rtype: numpy.ndarray
     """
     save_names = ('_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy')
     var_names = ('timestamps', 'position')
@@ -253,4 +243,4 @@ class WheelPosition(BaseBpodTrialsExtractor):
 
 
 def extract_all(session_path, bpod_trials=None, save=False):
-    return WheelPosition(session_path=session_path, bpod_trials=bpod_trials).extract(save=save)
+    return WheelPosition(session_path=session_path).extract(save=save, bpod_trials=bpod_trials)

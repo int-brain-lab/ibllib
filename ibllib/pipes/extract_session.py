@@ -12,9 +12,7 @@ import json
 from pathlib import Path
 
 from alf.io import get_session_path
-from ibllib.io.extractors import (ephys_trials, ephys_fpga,
-                                  biased_wheel, biased_trials,
-                                  training_trials, training_wheel)
+from ibllib.io.extractors import (biased_wheel, biased_trials, training_trials, training_wheel)
 from ibllib.io import raw_data_loaders as rawio
 import ibllib.io.flags as flags
 
@@ -110,15 +108,6 @@ def from_path(session_path, force=False, save=True):
         biased_trials.extract_all(session_path, bpod_trials=data, save=save)
         biased_wheel.extract_all(session_path, bpod_trials=data, save=save)
         logger_.info('session extracted \n')  # timing info in log
-    if extractor_type == 'ephys':
-        data = rawio.load_data(session_path)
-        logger_.info('extract BPOD for ephys session')
-        ephys_trials.extract_all(session_path, bpod_trials=data, save=save)
-        logger_.info('extract FPGA information for ephys session')
-        tmax = data[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
-        ephys_fpga.extract_all(session_path, save=save, tmax=tmax)
-    if extractor_type == 'sync_ephys':
-        ephys_fpga.extract_sync(session_path)
 
 
 def bulk(subjects_folder, dry=False, glob_flag='**/extract_me.flag'):

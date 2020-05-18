@@ -391,8 +391,8 @@ class ItiDuration(BaseBpodTrialsExtractor):
     var_names = 'iti_dur'
 
     def _extract(self):
-        rt, _ = ResponseTimes(self.session_path, bpod_trials=self.bpod_trials,
-                              settings=self.settings).extract(save=False)
+        rt, _ = ResponseTimes(self.session_path).extract(
+            save=False, bpod_trials=self.bpod_trials, settings=self.settings)
         ends = np.array([t['behavior_data']['Trial end timestamp'] for t in self.bpod_trials])
         iti_dur = ends - rt
         return iti_dur
