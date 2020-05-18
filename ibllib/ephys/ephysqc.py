@@ -252,7 +252,7 @@ def unit_metrics_ks2(ks2_path=None, m=None, save=True):
 
     if save:
         #  the file name contains the label of the probe (directory name in this case)
-        r.to_csv(ks2_path.joinpath(f'cluster_metrics.csv'))
+        r.to_csv(ks2_path.joinpath('cluster_metrics.csv'))
 
     return r
 

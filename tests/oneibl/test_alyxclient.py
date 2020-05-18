@@ -38,24 +38,33 @@ class TestSingletonPattern(unittest.TestCase):
 class TestJsonFieldMethods(unittest.TestCase):
     def setUp(self):
         self.ac = ac
-        self.eid1 = 'b1c968ad-4874-468d-b2e4-5ffa9b9964e9'
-        self.eid2 = '7d55465b-8e4f-49f6-a0c8-6dad0db6ab02'
+        sessions = self.ac.rest("sessions", "list")
+        self.eid1 = sessions[0]['url'][-36:]
+        self.eid2 = sessions[-1]['url'][-36:]
         self.endpoint = "sessions"
         self.field_name = "extended_qc"
         self.data_dict = {'some': 0, 'data': 1}
+        self.eid1_eqc = self.ac.rest(self.endpoint, "read", id=self.eid1)[self.field_name]
+        self.eid2_eqc = self.ac.rest(self.endpoint, "read", id=self.eid2)[self.field_name]
 
     def _json_field_write(self):
-        written1 = self.ac.json_field_write(self.endpoint, self.eid1, self.field_name, self.data_dict)
-        written2 = self.ac.json_field_write(self.endpoint, self.eid2, self.field_name, self.data_dict)
+        written1 = self.ac.json_field_write(
+            self.endpoint, self.eid1, self.field_name, self.data_dict
+        )
+        written2 = self.ac.json_field_write(
+            self.endpoint, self.eid2, self.field_name, self.data_dict
+        )
         self.assertTrue(written1 == written2)
         self.assertTrue(written1 == self.data_dict)
-        self.assertTrue(len(ac.rest(self.endpoint, 'list', extended_qc='some__lt,0.5')) == 2)
+        self.assertTrue(len(self.ac.rest(self.endpoint, 'list', extended_qc='some__lt,0.5')) == 2)
 
     def _json_field_update(self):
-        modified = self.ac.json_field_update(self.endpoint, self.eid1,self.field_name, {'some': 0.6})
+        modified = self.ac.json_field_update(
+            self.endpoint, self.eid1, self.field_name, {'some': 0.6}
+        )
         self.assertTrue('data' in modified)
         self.assertTrue('some' in modified)
-        self.assertTrue(len(ac.rest(self.endpoint, 'list', extended_qc='some__lt,0.5')) == 1)
+        self.assertTrue(len(self.ac.rest(self.endpoint, 'list', extended_qc='some__lt,0.5')) == 1)
 
     def _json_field_remove_key(self):
         pre_delete = self.ac.rest(self.endpoint, 'list', extended_qc='data__gte,0.5')
@@ -75,6 +84,14 @@ class TestJsonFieldMethods(unittest.TestCase):
         self._json_field_update()
         self._json_field_remove_key()
         self._json_field_delete()
+
+    def tearDown(self):
+        # Delete any dict created by this test
+        for x in self.ac.rest(self.endpoint, 'list', extended_qc='some__lt,0.5'):
+            self.ac.json_field_delete(self.endpoint, x['url'][-36:], self.field_name)
+        # Restore whatever was there in the first place
+        self.ac.json_field_write(self.endpoint, self.eid1, self.field_name, self.eid1_eqc)
+        self.ac.json_field_write(self.endpoint, self.eid2, self.field_name, self.eid2_eqc)
 
 
 class TestDownloadHTTP(unittest.TestCase):
