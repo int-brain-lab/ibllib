@@ -2,19 +2,34 @@ import logging
 
 from ibllib.io.extractors import ephys_fpga
 from ibllib.pipes import jobs
+from ibllib.ephys import ephysqc
 
 _logger = logging.getLogger('ibllib')
 
 
 class EphysPulses(jobs.Job):
     cpu = 2
-    io_charge = 20  # this jobs reads raw ap files
+    io_charge = 30  # this jobs reads raw ap files
     priority = 90  # a lot of jobs depend on this one
     level = 0  # this job doesn't depend on anything
 
     def _run(self, overwrite=False):
         syncs, out_files = ephys_fpga.extract_sync(self.session_path, overwrite=overwrite)
         return out_files
+
+
+class RawEphysQC(jobs.Job):
+    """
+    Computes raw electrophysiology QC
+    """
+    cpu = 2
+    io_charge = 30  # this jobs reads raw ap files
+    priority = 10  # a lot of jobs depend on this one
+    level = 0  # this job doesn't depend on anything
+
+    def _run(self, overwrite=False):
+        qc_files = ephysqc.raw_qc_session(self.session_path, overwrite=overwrite)
+        return qc_files
 
 
 class EphysTrials(jobs.Job):
@@ -33,7 +48,9 @@ class EphysExtractionPipeline(jobs.Pipeline):
         super(EphysExtractionPipeline, self).__init__(session_path, **kwargs)
         jobs = {}
         self.session_path = session_path
+        # level 0
         jobs['EphysPulses'] = EphysPulses(self.session_path)
+        jobs['EphysRawQC'] = RawEphysQC(self.session_path)
         jobs['EphysTrials'] = EphysTrials(self.session_path, parents=[jobs['EphysPulses']])
 
         self.jobs = jobs

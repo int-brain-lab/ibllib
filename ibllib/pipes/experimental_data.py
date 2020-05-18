@@ -12,7 +12,7 @@ import json
 import alf.io
 from ibllib.io import flags, raw_data_loaders, spikeglx
 from ibllib.pipes import extract_session
-from ibllib.ephys import ephysqc, sync_probes, spikes
+from ibllib.ephys import sync_probes, spikes
 from oneibl.registration import RegistrationClient
 from oneibl.one import ONE
 
@@ -122,34 +122,6 @@ def audio_training(root_data_folder, dry=False, max_sessions=False):
         audio.extract_sound(session_path, save=True, delete=True)
         flag.unlink()
         session_path.joinpath('register_me.flag').touch()
-
-
-# 20_extract_ephys
-def extract_ephys(root_data_folder, dry=False, max_sessions=10):
-    """
-    Extracts ephys session only
-    """
-    extract_session.bulk(root_data_folder, dry=dry, glob_flag='**/extract_ephys.flag')
-
-
-# 21_raw_ephys_qc
-def raw_ephys_qc(root_data_folder, dry=False, max_sessions=10, force=False):
-    """
-    Computes raw electrophysiology QC
-    """
-    qcflags = Path(root_data_folder).rglob('raw_ephys_qc.flag')
-    c = 0
-    for qcflag in qcflags:
-        session_path = qcflag.parent
-        c += 1
-        if c >= max_sessions:
-            return
-        if dry:
-            print(qcflag.parent)
-            continue
-        qc_files = ephysqc.raw_qc_session(session_path, dry=dry, force=force)
-        qcflag.unlink()
-        flags.write_flag_file(session_path.joinpath('register_me.flag'), file_list=qc_files)
 
 
 # 22_audio_ephys

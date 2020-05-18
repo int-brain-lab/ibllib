@@ -75,12 +75,15 @@ class Job(abc.ABC):
         str_format = '%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
         ch.setFormatter(logging.Formatter(str_format))
         _logger.addHandler(ch)
+        _logger.info(f"Starting job {self.__class__}")
         # run
         try:
             self.outputs = self._run(**kwargs)
             self.status = 0
+            _logger.info(f"Job {self.__class__} complete")
         except Exception as e:
             _logger.error(f"{e}")
+            _logger.info(f"Job {self.__class__} errored")
             self.status = -1
         # after the run, capture the log output
         self.log = log_capture_string.getvalue()
@@ -90,12 +93,11 @@ class Job(abc.ABC):
         self.tearDown()
         return self.status
 
-    def register(self, one=None, jobid=None):
+    def register_datasets(self, one=None, jobid=None):
         assert one
         assert jobid
         if self.outputs:
             register_dataset(self.outputs, one=one)
-        one.alyx.rest('jobs', 'patch', id=jobid, data={'status': self.status})
 
     def rerun(self):
         self.run(overwrite=True)
@@ -214,4 +216,11 @@ def run_alyx_job(jdict=None, session_path=None, one=None):
     classe = getattr(module, jdict['task'])
     job = classe(session_path, one=one, jobid=jdict['id'])
     status = job.run(session_path)
-    return status
+    # only registers successful runs
+    if status == 0:
+        registered_dsets = job.register_datasets(one=one, jobid=jdict['id'])
+        one.alyx.rest('jobs', 'partial_update', id=jdict['id'], data={'status': 'Complete'})
+    elif status == -1:
+        registered_dsets = []
+        one.alyx.rest('jobs', 'partial_update', id=jdict['id'], data={'status': 'Errored'})
+    return status, registered_dsets

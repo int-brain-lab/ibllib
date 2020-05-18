@@ -66,18 +66,18 @@ def rmsmap(fbin):
     return win
 
 
-def extract_rmsmap(fbin, out_folder=None, force=False):
+def extract_rmsmap(fbin, out_folder=None, overwrite=False):
     """
     Wrapper for rmsmap that outputs _ibl_ephysRmsMap and _ibl_ephysSpectra ALF files
 
     :param fbin: binary file in spike glx format (will look for attached metatdata)
     :param out_folder: folder in which to store output ALF files. Default uses the folder in which
      the `fbin` file lives.
-    :param force: do not re-extract if all ALF files already exist
+    :param overwrite: do not re-extract if all ALF files already exist
     :param label: string or list of strings that will be appended to the filename before extension
     :return: None
     """
-    _logger.info(str(fbin))
+    _logger.info(f"Computing QC for {fbin}")
     sglx = spikeglx.Reader(fbin)
     # check if output ALF files exist already:
     if out_folder is None:
@@ -87,9 +87,11 @@ def extract_rmsmap(fbin, out_folder=None, force=False):
     alf_object_time = f'_iblqc_ephysTimeRms{sglx.type.upper()}'
     alf_object_freq = f'_iblqc_ephysSpectralDensity{sglx.type.upper()}'
     if alf.io.exists(out_folder, alf_object_time) and \
-            alf.io.exists(out_folder, alf_object_freq) and not force:
-        _logger.warning(f'{fbin.name} QC already exists, skipping. Use force option to override')
-        return
+            alf.io.exists(out_folder, alf_object_freq) and not overwrite:
+        _logger.warning(f'{fbin.name} QC already exists, skipping. Use overwrite option.')
+        out_time = alf.io._ls(out_folder, alf_object_time)[0]
+        out_freq = alf.io._ls(out_folder, alf_object_freq)[0]
+        return out_time + out_freq
     # crunch numbers
     rms = rmsmap(fbin)
     # output ALF files, single precision with the optional label as suffix before extension
@@ -103,25 +105,22 @@ def extract_rmsmap(fbin, out_folder=None, force=False):
     return out_time + out_freq
 
 
-def raw_qc_session(session_path, dry=False, force=False):
+def raw_qc_session(session_path, overwrite=False):
     """
     Wrapper that exectutes QC from a session folder and outputs the results whithin the same folder
     as the original raw data.
     :param session_path: path of the session (Subject/yyyy-mm-dd/number
-    :param dry: bool (False) Dry run if True
-    :param force: bool (False) Force means overwriting an existing QC file
+    :param overwrite: bool (False) Force means overwriting an existing QC file
     :return: None
     """
     efiles = spikeglx.glob_ephys_files(session_path)
+    qc_files = []
     for efile in efiles:
         if efile.get('ap') and efile.ap.exists():
-            print(efile.get('ap'))
-            if not dry:
-                extract_rmsmap(efile.ap, out_folder=None, force=force)
+            qc_files.extend(extract_rmsmap(efile.ap, out_folder=None, overwrite=overwrite))
         if efile.get('lf') and efile.lf.exists():
-            print(efile.get('lf'))
-            if not dry:
-                extract_rmsmap(efile.lf, out_folder=None, force=force)
+            qc_files.extend(extract_rmsmap(efile.lf, out_folder=None, overwrite=overwrite))
+    return qc_files
 
 
 def validate_ttl_test(ses_path, display=False):
