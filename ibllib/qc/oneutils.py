@@ -9,7 +9,7 @@ from oneibl.one import ONE
 
 log = logging.getLogger("ibllib")
 
-one = ONE()
+one = ONE(printout=False)
 
 
 # Decorators

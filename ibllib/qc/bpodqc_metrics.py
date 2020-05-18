@@ -7,7 +7,7 @@ from ibllib.qc.bpodqc_extractors import bpod_data_loader
 from ibllib.qc.oneutils import random_ephys_session
 from oneibl.one import ONE
 
-one = ONE()
+one = ONE(printout=False)
 
 
 @bpod_data_loader
@@ -80,8 +80,7 @@ def get_bpodqc_metrics_frame(eid, data=None, apply_criteria=False):
 
 # SINGLE METRICS
 # ---------------------------------------------------------------------------- #
-@bpod_data_loader
-def load_stimOn_goCue_delays(eid, data=None, apply_criteria=False):
+def load_stimOn_goCue_delays(eid, data, apply_criteria=False):
     """ 1. StimOn and GoCue and should be within a 10 ms of each other on 99% of trials
     Variable name: stimOn_goCue_delays
     Metric: stimOn_times - goCue_times
@@ -95,8 +94,7 @@ def load_stimOn_goCue_delays(eid, data=None, apply_criteria=False):
     return passed if apply_criteria else metric
 
 
-@bpod_data_loader
-def load_response_feedback_delays(eid, data=None, apply_criteria=False):
+def load_response_feedback_delays(eid, data, apply_criteria=False):
     """ 2. response_time and feedback_time
     Variable name: response_feedback_delays
     Metric: Feedback_time - response_time
@@ -112,8 +110,7 @@ def load_response_feedback_delays(eid, data=None, apply_criteria=False):
     return passed if apply_criteria else metric
 
 
-@bpod_data_loader
-def load_response_stimFreeze_delays(eid, data=None, apply_criteria=False):
+def load_response_stimFreeze_delays(eid, data, apply_criteria=False):
     """ 3. Stim freeze and response time
     Variable name: response_stimFreeze_delays
     Metric: stim_freeze - response_time
@@ -140,8 +137,7 @@ def load_response_stimFreeze_delays(eid, data=None, apply_criteria=False):
     return passed if apply_criteria else metric
 
 
-@bpod_data_loader
-def load_stimOff_itiIn_delays(eid, data=None, apply_criteria=False):
+def load_stimOff_itiIn_delays(eid, data, apply_criteria=False):
     """ 4. Start of iti_in should be within a very small tolerance of the stim off
     Variable name: stimOff_itiIn_delays
     Metric: iti_in - stim_off
@@ -160,7 +156,6 @@ def load_stimOff_itiIn_delays(eid, data=None, apply_criteria=False):
     return passed if apply_criteria else metric
 
 
-@bpod_data_loader
 def load_wheel_freeze_during_quiescence(eid, data=None, apply_criteria=False):
     """ 5. Wheel should not move more than 2 ticks each direction for at least 0.2 + 0.2-0.6
     amount of time (quiescent period; exact value in bpod['quiescence']) before go cue
@@ -173,13 +168,10 @@ def load_wheel_freeze_during_quiescence(eid, data=None, apply_criteria=False):
     """
     # Load Bpod wheel data
     wheel_data = get_wheel_position(one.path_from_eid(eid))
-    # Load quiescent period lengths
-    task_data = one.load_object(eid, "_iblrig_taskData.raw")
-    quiescent_periods = np.array([t["quiescent_period"] for t in task_data["raw"]])
     assert np.all(np.diff(wheel_data["re_ts"]) > 0)
-    assert quiescent_periods.size == data["goCueTrigger_times"].size
+    assert data['quiescence'].size == data["goCueTrigger_times"].size
     # Get tuple of wheel times and positions over each trial's quiescence period
-    qevt_start_times = data["goCueTrigger_times"] - quiescent_periods
+    qevt_start_times = data["goCueTrigger_times"] - data['quiescence']
     traces = traces_by_trial(
         wheel_data["re_ts"],
         wheel_data["re_pos"],
@@ -187,13 +179,13 @@ def load_wheel_freeze_during_quiescence(eid, data=None, apply_criteria=False):
         end=data["goCueTrigger_times"],
     )
 
-    # metric = np.zeros_like(quiescent_periods)
+    # metric = np.zeros_like(data['quiescence'])
     # for i, trial in enumerate(traces):
     #     pos = trial[1]
     #     if pos.size > 1:
     #         metric[i] = np.abs(pos.max() - pos.min())
     # -OR-
-    metric = np.zeros((len(quiescent_periods), 2))  # (n_trials, n_directions)
+    metric = np.zeros((len(data['quiescence']), 2))  # (n_trials, n_directions)
     for i, trial in enumerate(traces):
         t, pos = trial
         # Get the last position before the period began
@@ -211,8 +203,7 @@ def load_wheel_freeze_during_quiescence(eid, data=None, apply_criteria=False):
     return passed if apply_criteria else metric
 
 
-@bpod_data_loader
-def load_wheel_move_before_feedback(eid, data=None, apply_criteria=False):
+def load_wheel_move_before_feedback(eid, data, apply_criteria=False):
     """ 6. Wheel should move within 100ms of feedback
     Variable name: wheel_move_before_feedback
     Metric: (w_t - 0.05) - (w_t + 0.05) where t = feedback_time
@@ -245,8 +236,7 @@ def load_wheel_move_before_feedback(eid, data=None, apply_criteria=False):
     return passed if apply_criteria else metric
 
 
-@bpod_data_loader
-def load_wheel_move_during_closed_loop(eid, data=None, apply_criteria=False):
+def load_wheel_move_during_closed_loop(eid, data, apply_criteria=False):
     """ Wheel should move a sufficient amount during the closed-loop period
     Variable name: wheel_move_during_closed_loop
     Metric: abs(w_resp - w_t0) - threshold_displacement, where w_resp = position at response
@@ -256,9 +246,6 @@ def load_wheel_move_during_closed_loop(eid, data=None, apply_criteria=False):
     """
     # Load Bpod wheel data
     wheel_data = get_wheel_position(one.path_from_eid(eid))
-    # Load gain and thresholds for each trial
-    task_data = one.load_object(eid, "_iblrig_taskData.raw")
-    trial_pars = np.array([(t["stim_gain"], t["position"]) for t in task_data["raw"]])
     assert np.all(np.diff(wheel_data["re_ts"]) > 0)
 
     # Get tuple of wheel times and positions over each trial's closed-loop period
@@ -278,9 +265,10 @@ def load_wheel_move_during_closed_loop(eid, data=None, apply_criteria=False):
         if pos.size > 0:
             metric[i] = np.abs(pos - origin).max()
 
-    # trial_pars = (gain, threshold)
-    gain = trial_pars[:, 0]  # visual deg azimuth / mm, may change over session
-    thresh = trial_pars[:, 1]  # visual deg azimuth, should be constant
+    # Load gain and thresholds for each trial
+    gain = one.alyx.rest("sessions", "read", id=eid)['json']['STIM_GAIN']
+    gain = np.array([gain] * len(data['position']))
+    thresh = data['position']
     # abs displacement, s, in mm required to move 35 visual degrees
     s_mm = np.abs(thresh / gain)  # don't care about direction
     criterion = cm_to_rad(s_mm * 1e-1)  # convert abs displacement to radians (wheel pos is in rad)
@@ -293,8 +281,7 @@ def load_wheel_move_during_closed_loop(eid, data=None, apply_criteria=False):
     return passed if apply_criteria else metric
 
 
-@bpod_data_loader
-def load_stimulus_move_before_goCue(eid, data=None, apply_criteria=False):
+def load_stimulus_move_before_goCue(eid, data, apply_criteria=False):
     """ 7. No stimulus movements between trialstart_time and gocue_time-20 ms
     Variable name: stimulus_move_before_goCue
     Metric: count of any stimulus change events between trialstart_time and (gocue_time-20ms)
@@ -305,7 +292,7 @@ def load_stimulus_move_before_goCue(eid, data=None, apply_criteria=False):
     BNC1_times = bpod2fpga(BNC1['times'])
     """
     # XXX: Check this!
-    BNC1, _ = bpodqc.get_bpod_fronts(eid)
+    BNC1, _ = bpodqc.get_bpod_fronts(one.path_from_eid(eid))
     s = BNC1["times"]
     metric = np.array([])
     for i, c in zip(data["intervals_0"], data["goCue_times"]):
@@ -318,8 +305,7 @@ def load_stimulus_move_before_goCue(eid, data=None, apply_criteria=False):
     return passed if apply_criteria else metric
 
 
-@bpod_data_loader
-def load_positive_feedback_stimOff_delays(eid, data=None, apply_criteria=False):
+def load_positive_feedback_stimOff_delays(eid, data, apply_criteria=False):
     """ 8. Delay between valve and stim off should be 1s
     Variable name: positive_feedback_stimOff_delays
     Metric: abs((stimoff_time - feedback_time) - 1s)
@@ -334,8 +320,7 @@ def load_positive_feedback_stimOff_delays(eid, data=None, apply_criteria=False):
     return passed if apply_criteria else metric
 
 
-@bpod_data_loader
-def load_negative_feedback_stimOff_delays(eid, data=None, apply_criteria=False):
+def load_negative_feedback_stimOff_delays(eid, data, apply_criteria=False):
     """ 9.Delay between noise and stim off should be 2 second
     Variable name: negative_feedback_stimOff_delays
     Metric: abs((stimoff_time - feedback_time) - 2s)
@@ -365,8 +350,7 @@ def load_negative_feedback_stimOff_delays(eid, data=None, apply_criteria=False):
 #     pass
 
 
-@bpod_data_loader
-def load_valve_pre_trial(eid, data=None, apply_criteria=False):
+def load_valve_pre_trial(eid, data, apply_criteria=False):
     """ 11. No valve outputs between trialstart_time and gocue_time-20 ms
     Variable name: valve_pre_trial
     Metric: Check if valve events exist between trialstart_time and (gocue_time-20ms)
@@ -381,14 +365,13 @@ def load_valve_pre_trial(eid, data=None, apply_criteria=False):
     return passed if apply_criteria else metric
 
 
-@bpod_data_loader
-def load_audio_pre_trial(eid, data=None, apply_criteria=False):
+def load_audio_pre_trial(eid, data, apply_criteria=False):
     """ 12. No audio outputs between trialstart_time and gocue_time-20 ms
     Variable name: audio_pre_trial
     Metric: Check if audio events exist between trialstart_time and (gocue_time-20ms)
     Criterion: 0 on 99% of trials
     """
-    _, BNC2 = bpodqc.get_bpod_fronts(eid)
+    _, BNC2 = bpodqc.get_bpod_fronts(one.path_from_eid(eid))
     s = BNC2["times"]
     metric = np.array([], dtype=np.bool)
     for i, c in zip(data["intervals_0"], data["goCue_times"]):
@@ -399,8 +382,7 @@ def load_audio_pre_trial(eid, data=None, apply_criteria=False):
 
 
 # Sequence of events:
-@bpod_data_loader
-def load_error_trial_event_sequence(eid, data=None, apply_criteria=False):
+def load_error_trial_event_sequence(eid, data, apply_criteria=False):
     """ 13. on incorrect / miss trials : 2 audio events, 2 Bpod events (trial start, ITI)
     Variable name: error_trial_event_sequence
     Metric: Bpod (trial start) > audio (go cue) > audio (wrong) > Bpod (ITI)
@@ -433,8 +415,7 @@ def load_error_trial_event_sequence(eid, data=None, apply_criteria=False):
     return passed if apply_criteria else metric
 
 
-@bpod_data_loader
-def load_correct_trial_event_sequence(eid, data=None, apply_criteria=False):
+def load_correct_trial_event_sequence(eid, data, apply_criteria=False):
     """ 14. on correct trials : 1 audio events, 3 Bpod events (valve open, trial start, ITI)
     (ITI task version dependent on ephys)
     Variable name: correct_trial_event_sequence
@@ -468,8 +449,7 @@ def load_correct_trial_event_sequence(eid, data=None, apply_criteria=False):
     return passed if apply_criteria else metric
 
 
-@bpod_data_loader
-def load_trial_length(eid, data=None, apply_criteria=False):
+def load_trial_length(eid, data, apply_criteria=False):
     """ 15. Time between goCue and feedback <= 60s
     Variable name: trial_length
     Metric: (feedback_time - gocue_time)
@@ -495,8 +475,7 @@ def load_trial_length(eid, data=None, apply_criteria=False):
 
 
 # Trigger response checks
-@bpod_data_loader
-def load_goCue_delays(eid, data=None, apply_criteria=False):
+def load_goCue_delays(eid, data, apply_criteria=False):
     """ 25.Trigger response difference
     Variable name: goCue_delays
     Metric: goCue_times - goCueTrigger_times
@@ -510,8 +489,7 @@ def load_goCue_delays(eid, data=None, apply_criteria=False):
     return passed if apply_criteria else metric
 
 
-@bpod_data_loader
-def load_errorCue_delays(eid, data=None, apply_criteria=False):
+def load_errorCue_delays(eid, data, apply_criteria=False):
     """ 26.Trigger response difference
     Variable name: errorCue_delays
     Metric: errorCue_times - errorCueTrigger_times
@@ -525,8 +503,7 @@ def load_errorCue_delays(eid, data=None, apply_criteria=False):
     return passed if apply_criteria else metric
 
 
-@bpod_data_loader
-def load_stimOn_delays(eid, data=None, apply_criteria=False):
+def load_stimOn_delays(eid, data, apply_criteria=False):
     """ 27. Trigger response difference
     Variable name: stimOn_delays
     Metric: stimOn_times - stiomOnTrigger_times
@@ -540,8 +517,7 @@ def load_stimOn_delays(eid, data=None, apply_criteria=False):
     return passed if apply_criteria else metric
 
 
-@bpod_data_loader
-def load_stimOff_delays(eid, data=None, apply_criteria=False):
+def load_stimOff_delays(eid, data, apply_criteria=False):
     """ 28.Trigger response difference
     Variable name: stimOff_delays
     Metric: stimOff_times - stimOffTrigger_times
@@ -555,8 +531,7 @@ def load_stimOff_delays(eid, data=None, apply_criteria=False):
     return passed if apply_criteria else metric
 
 
-@bpod_data_loader
-def load_stimFreeze_delays(eid, data=None, apply_criteria=False):
+def load_stimFreeze_delays(eid, data, apply_criteria=False):
     """ 29.Trigger response difference
     Variable name: stimFreeze_delays
     Metric: stimFreeze_times - stimFreezeTrigger_times
@@ -569,8 +544,7 @@ def load_stimFreeze_delays(eid, data=None, apply_criteria=False):
     return passed if apply_criteria else metric
 
 
-@bpod_data_loader
-def load_reward_volumes(eid, data=None, apply_criteria=False):
+def load_reward_volumes(eid, data, apply_criteria=False):
     """ xx.Reward volume tests
     Variable name: rewardVolume
     Metric: len(set(rewardVolume)) <= 2 & np.all(rewardVolume <= 3)

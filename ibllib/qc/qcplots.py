@@ -15,7 +15,7 @@ from alf.io import is_details_dict
 plt.ion()
 
 
-one = ONE()
+one = ONE(printout=False)
 
 
 def _load_df_from_details(details=None, func=None):

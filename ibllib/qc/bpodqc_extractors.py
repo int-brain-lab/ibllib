@@ -27,7 +27,7 @@ from oneibl.one import ONE
 
 log = logging.getLogger("ibllib")
 
-one = ONE()
+one = ONE(printout=False)
 
 
 def bpod_data_loader(func):
@@ -43,7 +43,7 @@ def bpod_data_loader(func):
     return wrapper
 
 
-@uuid_to_path(dl=True)
+# @uuid_to_path(dl=True)
 def get_bpod_fronts(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
@@ -110,7 +110,7 @@ def get_bpod_fronts(session_path, save=False, data=False, settings=False):
 
 
 # --------------------------------------------------------------------------- #
-@uuid_to_path(dl=True)
+# @uuid_to_path(dl=True)
 def get_trial_type(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
@@ -142,7 +142,7 @@ def get_trial_type(session_path, save=False, data=False, settings=False):
     return trial_type
 
 
-@uuid_to_path(dl=True)
+# @uuid_to_path(dl=True)
 def get_itiIn_times(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
@@ -164,7 +164,7 @@ def get_itiIn_times(session_path, save=False, data=False, settings=False):
     return itiIn_times
 
 
-@uuid_to_path(dl=True)
+# @uuid_to_path(dl=True)
 def get_stimFreezeTrigger_times(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
@@ -218,7 +218,7 @@ def get_stimFreezeTrigger_times(session_path, save=False, data=False, settings=F
     return stimFreezeTrigger
 
 
-@uuid_to_path(dl=True)
+# @uuid_to_path(dl=True)
 def get_stimOffTrigger_times(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
@@ -248,7 +248,7 @@ def get_stimOffTrigger_times(session_path, save=False, data=False, settings=Fals
     return stimOffTrigger_times
 
 
-@uuid_to_path(dl=True)
+# @uuid_to_path(dl=True)
 def get_stimOff_times_from_state(session_path, save=False, data=False, settings=False):
     """ Will return NaN is trigger state == 0.1 secs
     """
@@ -280,7 +280,7 @@ def get_stimOff_times_from_state(session_path, save=False, data=False, settings=
     return stimOff_times
 
 
-@uuid_to_path(dl=True)
+# @uuid_to_path(dl=True)
 def get_stimOnOffFreeze_times_from_BNC1(session_path, save=False, data=False, settings=False):
     """Get stim onset offset and freeze using the FPGA specifications"""
     if not data:
@@ -328,7 +328,7 @@ def get_stimOnOffFreeze_times_from_BNC1(session_path, save=False, data=False, se
     return stimOn_times, stimOff_times, stimFreeze_times
 
 
-@uuid_to_path(dl=True)
+# @uuid_to_path(dl=True)
 def get_bonsai_screen_data(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
@@ -344,7 +344,7 @@ def get_bonsai_screen_data(session_path, save=False, data=False, settings=False)
     return screen_data
 
 
-@uuid_to_path(dl=True)
+# @uuid_to_path(dl=True)
 def get_bonsai_sync_square_update_times(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
@@ -363,7 +363,7 @@ def get_bonsai_sync_square_update_times(session_path, save=False, data=False, se
     return
 
 
-@uuid_to_path(dl=True)
+# @uuid_to_path(dl=True)
 def get_errorCueTrigger_times(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
@@ -387,7 +387,7 @@ def get_errorCueTrigger_times(session_path, save=False, data=False, settings=Fal
     return errorCueTrigger_times
 
 
-@uuid_to_path(dl=True)
+# @uuid_to_path(dl=True)
 def _get_trimmed_data_from_pregenerated_files(
     session_path, save=False, data=False, settings=False
 ):
@@ -541,7 +541,7 @@ def load_bpod_data(session_path, fpga_time=False):
     return out
 
 
-@uuid_to_path(dl=True)
+# @uuid_to_path(dl=True)
 def get_bpod2fpga_times_func(session_path):
     session_path = Path(session_path)
 

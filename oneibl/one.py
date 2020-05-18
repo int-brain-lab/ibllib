@@ -89,7 +89,7 @@ SEARCH_TERMS = {  # keynames are possible input arguments and values are actual 
 
 
 class ONE(OneAbstract):
-    def __init__(self, username=None, password=None, base_url=None, silent=False):
+    def __init__(self, username=None, password=None, base_url=None, silent=False, printout=True):
         # get parameters override if inputs provided
         self._par = oneibl.params.get(silent=silent)
         self._par = self._par.set('ALYX_LOGIN', username or self._par.ALYX_LOGIN)
@@ -110,7 +110,8 @@ class ONE(OneAbstract):
                                       "Are you connecting from an IBL participating institution ?")
             # Init connection to Globus if needed
         # Display output when instantiating ONE
-        print(f"Connected to {self._par.ALYX_URL} as {self._par.ALYX_LOGIN}",)
+        if printout:
+            print(f"Connected to {self._par.ALYX_URL} as {self._par.ALYX_LOGIN}",)
 
     @property
     def alyx(self):

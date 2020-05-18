@@ -510,9 +510,9 @@ class AlyxClient:
             return current
 
         # Patch current dict with new data
-        current.update(self.data)
+        current.update(data)
         # Prepare data to patch
-        patch_dict = {field_name: data}
+        patch_dict = {field_name: current}
         # Upload new extended_qc to session
         ret = self.rest(endpoint, "partial_update", id=uuid, data=patch_dict)
         return ret[field_name]
@@ -554,7 +554,7 @@ class AlyxClient:
                 f"{key}: Key not found in endpoint {endpoint} field {field_name}"
             )
             return current
-        _logger.info(f"Removing {key}")
+        _logger.info(f"Removing key from dict: '{key}'")
         current.pop(key)
         # Re-write contents without removed key
         written = self.json_field_write(
@@ -567,7 +567,7 @@ class AlyxClient:
     ) -> None:
         self._check_inputs(endpoint, uuid)
         _ = self.rest(endpoint, "partial_update", id=uuid, data={field_name: None})
-        return
+        return _[field_name]
 
 
 # Get default params from local file
