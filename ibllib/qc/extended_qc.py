@@ -6,11 +6,11 @@ import ibllib.qc.bpodqc_metrics as bpodqc
 import ibllib.qc.oneqc_metrics as oneqc
 from ibllib.qc.bpodqc_extractors import load_bpod_data
 from oneibl.one import ONE
+from alf.io import is_uuid_string
 
 log = logging.getLogger("ibllib")
 
 # one = ONE(base_url="https://dev.alyx.internationalbrainlab.org")
-one = ONE(printout=False)
 
 # eid, det = random_ephys_session()
 
@@ -19,43 +19,51 @@ one = ONE(printout=False)
 # details = one.get_details(eid, full=True)
 
 
-def build_extended_qc_frame(eid, data=None):
-    if data is None:
-        data = load_bpod_data(eid)
+class ExtendedQC(object):
 
-    # Get bpod and one qc frames
-    extended_qc = {}
-    log.info(f"Session {eid}: Running QC on ONE DatasetTypes...")
-    one_frame = oneqc.get_oneqc_metrics_frame(eid, data=data, apply_criteria=True)
-    log.info(f"Session {eid}: Running QC on Bpod data...")
-    bpod_frame = bpodqc.get_bpodqc_metrics_frame(eid, data=data, apply_criteria=True)
-    # Make average bool pass
-    # def average_frame(frame):
-    #     return {k: np.nanmean(v) for k, v in frame.items()}
-    average_bpod_frame = (lambda frame: {k: np.nanmean(v) for k, v in frame.items()})(bpod_frame)
-    # aggregate them
-    extended_qc.update(one_frame)
-    extended_qc.update(average_bpod_frame)
-    return extended_qc
+    def __init__(self, one=None, eid=None):
+        self.one = one or ONE(printout=False)
+        self.eid = eid if is_uuid_string(eid) else None
+        self.data = None
+        self.frame = None
+
+    def load_data(self):
+        self.data = self.data or load_bpod_data(self.eid)
+
+    def build_extended_qc_frame(self):
+        if self.data is None:
+            log.warning(f"Please load the data")
+            return
+        # Get bpod and one qc frames
+        extended_qc = {}
+        log.info(f"Session {self.eid}: Running QC on ONE DatasetTypes...")
+        one_frame = oneqc.get_oneqc_metrics_frame(self.eid, data=self.data, apply_criteria=True)
+        log.info(f"Session {self.eid}: Running QC on Bpod data...")
+        bpod_frame = bpodqc.get_bpodqc_metrics_frame(eid, data=data, apply_criteria=True)
+        # Make average bool pass
+        # def average_frame(frame):
+        #     return {k: np.nanmean(v) for k, v in frame.items()}
+        average_bpod_frame = (lambda frame: {k: np.nanmean(v) for k, v in frame.items()})(bpod_frame)
+        # aggregate them
+        extended_qc.update(one_frame)
+        extended_qc.update(average_bpod_frame)
+        return extended_qc
+
+    def upload_extended_qc(self):
+        if self.frame is None:
+            log.warning(f"Frame not built yet")
+            return
+        new_eqc_data = update_extended_qc(eid, eqc_data)
+        return new_eqc_data
+
+    def read_extended_qc(self):
+        return one.alyx.rest("sessions", "read", id=self.eid)["extended_qc"]
 
 
-def build_and_upload_extended_qc(eid, data=None):
-    if data is None:
-        data = load_bpod_data(eid)
-
-    eqc_data = build_extended_qc_frame(eid, data=data)
-    new_eqc_data = update_extended_qc(eid, eqc_data)
-    return new_eqc_data
-
-
-def read_extended_qc(eid):
-    return one.alyx.rest("sessions", "read", id=eid)["extended_qc"]
-
-
-def update_extended_qc(eid: str, data: dict):
-    return one.alyx.json_field_update(
-        endpoint="sessions", uuid=eid, field_name="extended_qc", data=data
-    )
+    def update_extended_qc(self):
+        return one.alyx.json_field_update(
+            endpoint="sessions", uuid=selfeid, field_name="extended_qc", data=self.frame
+        )
 
 
 if __name__ == "__main__":

@@ -21,12 +21,11 @@ from ibllib.io.extractors.training_trials import (
     get_stimOn_times,
     get_stimOnTrigger_times,
 )
+from ibllib.io.extractors.training_wheel import get_wheel_position
 from ibllib.qc.oneutils import uuid_to_path
 from oneibl.one import ONE
 
 log = logging.getLogger("ibllib")
-
-one = ONE(printout=False)
 
 
 def get_bpod_fronts(session_path, save=False, data=False, settings=False):
@@ -437,11 +436,11 @@ def _get_trimmed_data_from_pregenerated_files(
 
 
 @uuid_to_path(dl=True)
-def load_bpod_data(session_path, fpga_time=False):
+def load_bpod_data(session_path, raw_data=None, raw_settings=None, fpga_time=False):
     """Extracts and loads ephys sessions from bpod data"""
     log.info(f"Loading session: {session_path}")
-    data = raw.load_data(session_path)
-    settings = raw.load_settings(session_path)
+    data = raw_data or raw.load_data(session_path)
+    settings = raw_settings or raw.load_settings(session_path)
     stimOn_times, stimOff_times, stimFreeze_times = get_stimOnOffFreeze_times_from_BNC1(
         session_path, save=False, data=data, settings=settings,
     )
@@ -537,15 +536,12 @@ def get_bpod2fpga_times_func(session_path):
     settings = raw.load_settings(session_path)
     bpod_intervals = get_intervals(session_path, save=False, data=data, settings=settings)
     # Load _ibl_trials.intervals.npy
-    eid = one.eid_from_path(session_path)
-    if eid is None:
-        log.warning(f"No session found with path = {session_path}")
-        return
-    fpga_intervals = one.load(eid, dataset_types="trials.intervals")
-    if not fpga_intervals:
-        log.warning(f"tirals.intervals datasetType not found for session {eid}")
+    fpath = session_path / "alf" / "_ibl_trials.intervals.npy"
+    if fpath.exists():
+        fpga_intervals = np.load(fpath)
     else:
-        fpga_intervals = fpga_intervals[0]
+        log.warning(f"tirals.intervals datasetType not found in {fpath}")
+        return
     # align
     bpod_tstarts, fpga_tstarts = raw.sync_trials_robust(bpod_intervals[:, 0], fpga_intervals[:, 0])
     # Generate interp func
@@ -554,11 +550,30 @@ def get_bpod2fpga_times_func(session_path):
     return bpod2fpga
 
 
+class BpodQCExtractor(object):
+    def __init__(self, session_path):
+        self.session_path = session_path
+        self.load_trial_data()
+        self.extract_trial_table()
+
+    def load_trial_data(self):
+        self.raw_data = raw.load_data(self.session_path)
+        self.details = raw.load_settings(self.session_path)
+        self.BNC1, self.BNC2 = get_bpod_fronts(self.session_path)
+        self.wheel_data = get_wheel_position(self.session_path)
+
+    def extract_trial_table(self):
+        self.trial_table = load_bpod_data(
+            self.session_path, raw_data=self.raw_data, raw_settings=self.details, fpga_time=False
+        )
+
+
 if __name__ == "__main__":
     # from ibllib.qc.bpodqc import *
     subj_path = "/home/nico/Projects/IBL/github/iblapps/scratch/TestSubjects/"
     # Guido's 3B
     gsession_path = subj_path + "_iblrig_test_mouse/2020-02-11/001"
+    bla = BpodQCExtractor(gsession_path)
     # Alex's 3A
     asession_path = subj_path + "_iblrig_test_mouse/2020-02-18/006"
     a2session_path = subj_path + "_iblrig_test_mouse/2020-02-21/011"
@@ -581,6 +596,7 @@ if __name__ == "__main__":
     # plot_session_trigger_response_diffs(eid)
     # one.search_terms()
     # eids, dets = one.search(task_protocol="ephysChoiceWorld6.2.5", lab="mainenlab", details=True)
+    one = ONE(printout=False)
     labs = one.list(None, "lab")
     # for lab in labs:
     #     eids, dets = one.search(

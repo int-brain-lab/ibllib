@@ -4,66 +4,90 @@ import numpy as np
 import ibllib.qc.bpodqc_extractors as bpodqc
 from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
 from ibllib.io.extractors.training_wheel import get_wheel_position
-from ibllib.qc.bpodqc_extractors import load_bpod_data
+from ibllib.qc.bpodqc_extractors import load_bpod_data, BpodQCExtractor
 from ibllib.qc.oneutils import random_ephys_session, check_parse_json
 from oneibl.one import ONE
 
-log = logging.getLogger('ibllib')
-one = ONE(printout=False)
+log = logging.getLogger("ibllib")
 
 
-def get_bpodqc_metrics_frame(eid, data=None, apply_criteria=False):
+class BpodQCMetricsFrame(object):
+
+    def __init__(self, eid, one=False, data=None):
+        self.one = one or ONE(printout=False)
+        self.eid = eid or None
+        self.session_path = self.one.path_from_eid(eid)
+        self.data = BpodQCExtractor(self.session_path)
+
+        self.metrics = get_bpodqc_metrics_frame()
+
+# XXX: change apply_criteria pattern, always return (metrics, passed)
+# XXX: change apply_criteria pattern, always return (metrics, passed)
+# XXX: change apply_criteria pattern, always return (metrics, passed)
+# XXX: change apply_criteria pattern, always return (metrics, passed)
+# XXX: change apply_criteria pattern, always return (metrics, passed)
+# XXX: change apply_criteria pattern, always return (metrics, passed)
+# XXX: change apply_criteria pattern, always return (metrics, passed)
+# XXX: change apply_criteria pattern, always return (metrics, passed)
+# XXX: change apply_criteria pattern, always return (metrics, passed)
+# XXX: change apply_criteria pattern, always return (metrics, passed)
+def get_bpodqc_metrics_frame(data=None, apply_criteria=False):
+    one = ONE(printout=False)
     """Plottable metrics based on timings"""
     session_path = one.path_from_eid(eid)
     BNC1, BNC2 = bpodqc.get_bpod_fronts(session_path)
 
-    gain = check_parse_json(one.alyx.rest("sessions", "read", id=eid)['json'])['STIM_GAIN']
+    gain = check_parse_json(one.alyx.rest("sessions", "read", id=eid)["json"])["STIM_GAIN"]
 
     if data is None:
         data = load_bpod_data(session_path)
     qcmetrics_frame = {
-        "_bpod_goCue_delays":
-            load_goCue_delays(data, apply_criteria=apply_criteria),
-        "_bpod_errorCue_delays":
-            load_errorCue_delays(data, apply_criteria=apply_criteria),
-        "_bpod_stimOn_delays":
-            load_stimOn_delays(data, apply_criteria=apply_criteria),
-        "_bpod_stimOff_delays":
-            load_stimOff_delays(data, apply_criteria=apply_criteria),
-        "_bpod_stimFreeze_delays":
-            load_stimFreeze_delays(data, apply_criteria=apply_criteria),
-        "_bpod_stimOn_goCue_delays":
-            load_stimOn_goCue_delays(data, apply_criteria=apply_criteria),
-        "_bpod_response_feedback_delays":
-            load_response_feedback_delays(data, apply_criteria=apply_criteria),
-        "_bpod_response_stimFreeze_delays":
-            load_response_stimFreeze_delays(data, apply_criteria=apply_criteria),
-        "_bpod_stimOff_itiIn_delays":
-            load_stimOff_itiIn_delays(data, apply_criteria=apply_criteria),
-        "_bpod_positive_feedback_stimOff_delays":
-            load_positive_feedback_stimOff_delays(data, apply_criteria=apply_criteria),
-        "_bpod_negative_feedback_stimOff_delays":
-            load_negative_feedback_stimOff_delays(data, apply_criteria=apply_criteria),
-        "_bpod_valve_pre_trial":
-            load_valve_pre_trial(data, apply_criteria=apply_criteria),
-        "_bpod_error_trial_event_sequence":
-            load_error_trial_event_sequence(data, apply_criteria=apply_criteria),
-        "_bpod_correct_trial_event_sequence":
-            load_correct_trial_event_sequence(data, apply_criteria=apply_criteria),
-        "_bpod_trial_length":
-            load_trial_length(data, apply_criteria=apply_criteria),
+        "_bpod_goCue_delays": load_goCue_delays(data, apply_criteria=apply_criteria),
+        "_bpod_errorCue_delays": load_errorCue_delays(data, apply_criteria=apply_criteria),
+        "_bpod_stimOn_delays": load_stimOn_delays(data, apply_criteria=apply_criteria),
+        "_bpod_stimOff_delays": load_stimOff_delays(data, apply_criteria=apply_criteria),
+        "_bpod_stimFreeze_delays": load_stimFreeze_delays(data, apply_criteria=apply_criteria),
+        "_bpod_stimOn_goCue_delays": load_stimOn_goCue_delays(data, apply_criteria=apply_criteria),
+        "_bpod_response_feedback_delays": load_response_feedback_delays(
+            data, apply_criteria=apply_criteria
+        ),
+        "_bpod_response_stimFreeze_delays": load_response_stimFreeze_delays(
+            data, apply_criteria=apply_criteria
+        ),
+        "_bpod_stimOff_itiIn_delays": load_stimOff_itiIn_delays(
+            data, apply_criteria=apply_criteria
+        ),
+        "_bpod_positive_feedback_stimOff_delays": load_positive_feedback_stimOff_delays(
+            data, apply_criteria=apply_criteria
+        ),
+        "_bpod_negative_feedback_stimOff_delays": load_negative_feedback_stimOff_delays(
+            data, apply_criteria=apply_criteria
+        ),
+        "_bpod_valve_pre_trial": load_valve_pre_trial(data, apply_criteria=apply_criteria),
+        "_bpod_error_trial_event_sequence": load_error_trial_event_sequence(
+            data, apply_criteria=apply_criteria
+        ),
+        "_bpod_correct_trial_event_sequence": load_correct_trial_event_sequence(
+            data, apply_criteria=apply_criteria
+        ),
+        "_bpod_trial_length": load_trial_length(data, apply_criteria=apply_criteria),
         # Wheel data loading
-        "_bpod_wheel_freeze_during_quiescence":
-            load_wheel_freeze_during_quiescence(data, session_path=session_path, apply_criteria=apply_criteria),
-        "_bpod_wheel_move_before_feedback":
-            load_wheel_move_before_feedback(data, session_path=session_path, apply_criteria=apply_criteria),
-        "_bpod_wheel_move_during_closed_loop":
-            load_wheel_move_during_closed_loop(data, session_path=session_path, gain=gain, apply_criteria=apply_criteria),
+        "_bpod_wheel_freeze_during_quiescence": load_wheel_freeze_during_quiescence(
+            data, session_path=session_path, apply_criteria=apply_criteria
+        ),
+        "_bpod_wheel_move_before_feedback": load_wheel_move_before_feedback(
+            data, session_path=session_path, apply_criteria=apply_criteria
+        ),
+        "_bpod_wheel_move_during_closed_loop": load_wheel_move_during_closed_loop(
+            data, session_path=session_path, gain=gain, apply_criteria=apply_criteria
+        ),
         # Bpod fronts loading
-        "_bpod_stimulus_move_before_goCue":
-            load_stimulus_move_before_goCue(data, BNC1=BNC1, apply_criteria=apply_criteria),
-        "_bpod_audio_pre_trial":
-            load_audio_pre_trial(data, BNC2=BNC2, apply_criteria=apply_criteria),
+        "_bpod_stimulus_move_before_goCue": load_stimulus_move_before_goCue(
+            data, BNC1=BNC1, apply_criteria=apply_criteria
+        ),
+        "_bpod_audio_pre_trial": load_audio_pre_trial(
+            data, BNC2=BNC2, apply_criteria=apply_criteria
+        ),
     }
     return qcmetrics_frame
 
@@ -147,9 +171,9 @@ def load_wheel_freeze_during_quiescence(data, session_path=None, apply_criteria=
     # Load Bpod wheel data
     wheel_data = get_wheel_position(session_path)
     assert np.all(np.diff(wheel_data["re_ts"]) > 0)
-    assert data['quiescence'].size == data["goCueTrigger_times"].size
+    assert data["quiescence"].size == data["goCueTrigger_times"].size
     # Get tuple of wheel times and positions over each trial's quiescence period
-    qevt_start_times = data["goCueTrigger_times"] - data['quiescence']
+    qevt_start_times = data["goCueTrigger_times"] - data["quiescence"]
     traces = traces_by_trial(
         wheel_data["re_ts"],
         wheel_data["re_pos"],
@@ -163,7 +187,7 @@ def load_wheel_freeze_during_quiescence(data, session_path=None, apply_criteria=
     #     if pos.size > 1:
     #         metric[i] = np.abs(pos.max() - pos.min())
     # -OR-
-    metric = np.zeros((len(data['quiescence']), 2))  # (n_trials, n_directions)
+    metric = np.zeros((len(data["quiescence"]), 2))  # (n_trials, n_directions)
     for i, trial in enumerate(traces):
         t, pos = trial
         # Get the last position before the period began
@@ -254,8 +278,8 @@ def load_wheel_move_during_closed_loop(data, session_path=None, gain=None, apply
             metric[i] = np.abs(pos - origin).max()
 
     # Load gain and thresholds for each trial
-    gain = np.array([gain] * len(data['position']))
-    thresh = data['position']
+    gain = np.array([gain] * len(data["position"]))
+    thresh = data["position"]
     # abs displacement, s, in mm required to move 35 visual degrees
     s_mm = np.abs(thresh / gain)  # don't care about direction
     criterion = cm_to_rad(s_mm * 1e-1)  # convert abs displacement to radians (wheel pos is in rad)
@@ -542,12 +566,24 @@ def load_audio_pre_trial(data, BNC2=None, apply_criteria=False):
     return passed if apply_criteria else metric
 
 
-class BpodqcMetrics(object):
-    def __init__(self, eid):
+class BpodQCMetrics(object):
+    def __init__(self, eid, one=None, data=None):
         self.eid = eid
-        self.data = bpodqc.load_bpod_data(eid, fpga_time=False)
+        self.one = one or ONE(printout=False)
+        self.session_path = self.one.path_from_eid(eid)
+        self.data = data
+
+        self.metrics = None
+        self.passed = None
+
+    def load_raw_data(self):
+        self.trial_data = bpodqc.load_bpod_data(self.eid, fpga_time=False)
+        self.BNC1, self.BNC2 = bpodqc.get_bpod_fronts(self.session_path)
+        self.gain = check_parse_json(self.one.alyx.rest("sessions", "read", id=eid)["json"])["STIM_GAIN"]
 
     def compute_metrics(self):
+
+        self.metrics = None
         return
 
     def apply_criteria(self):
