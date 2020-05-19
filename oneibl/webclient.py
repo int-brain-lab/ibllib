@@ -186,10 +186,13 @@ class UniqueSingletons(type):
                 return inst[cls].get('instance')
 
         new_instance = super(UniqueSingletons, cls).__call__(*args, **kwargs)
+        # Optional rerun of constructor
+        # new_instance.__init__(*args, **kwargs)
         new_instance_record = {
             cls: {'args': (args, kwargs), 'instance': new_instance}
         }
         UniqueSingletons._instances.append(new_instance_record)
+
         return new_instance
 
 

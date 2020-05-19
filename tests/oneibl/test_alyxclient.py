@@ -25,10 +25,15 @@ class TestSingletonPattern(unittest.TestCase):
             username='test_user',
             password='TapetesBloc18',
             base_url='https://testdev.alyx.internationalbrainlab.org')
+        self.sameac2 = wc.AlyxClient(
+            username='test_user',
+            password='TapetesBloc18',
+            base_url='https://test.alyx.internationalbrainlab.org')
 
     def test_multiple_singletons(self):
         self.assertTrue(id(self.ac) == id(self.sameac))
         self.assertTrue(id(self.ac) != id(self.differentac))
+        self.assertTrue(id(self.ac) == id(self.sameac2))
 
 
 class TestJsonFieldMethods(unittest.TestCase):
