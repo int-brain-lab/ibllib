@@ -96,19 +96,17 @@ class ONE(OneAbstract):
         self._par = self._par.set('ALYX_URL', base_url or self._par.ALYX_URL)
         self._par = self._par.set('ALYX_PWD', password or self._par.ALYX_PWD)
 
-        # By default set internal AlyxClient to be module singleton object
-        self._alyxClient = wc.alyx_client
-        # If any parameters are enteres create new ALyxClient object
-        if username or password or base_url:
-            try:
-                self._alyxClient = wc.AlyxClient(username=self._par.ALYX_LOGIN,
-                                                 password=self._par.ALYX_PWD,
-                                                 base_url=self._par.ALYX_URL)
-            except requests.exceptions.ConnectionError:
-                raise ConnectionError(f"Can't connect to {self._par.ALYX_URL}.\n" +
-                                      "IP addresses are filtered on IBL database servers. \n" +
-                                      "Are you connecting from an IBL participating institution ?")
-            # Init connection to Globus if needed
+        try:
+            self._alyxClient = wc.AlyxClient(username=self._par.ALYX_LOGIN,
+                                             password=self._par.ALYX_PWD,
+                                             base_url=self._par.ALYX_URL)
+        except requests.exceptions.ConnectionError:
+            raise ConnectionError(
+                f"Can't connect to {self._par.ALYX_URL}.\n" +
+                "IP addresses are filtered on IBL database servers. \n" +
+                "Are you connecting from an IBL participating institution ?"
+            )
+        # Init connection to Globus if needed
         # Display output when instantiating ONE
         if printout:
             print(f"Connected to {self._par.ALYX_URL} as {self._par.ALYX_LOGIN}",)

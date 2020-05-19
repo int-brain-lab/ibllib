@@ -17,22 +17,18 @@ ac = wc.AlyxClient(
 class TestSingletonPattern(unittest.TestCase):
     def setUp(self):
         self.ac = ac
-        # Get the singleton AlyxClient from webclient nodule
-        self.singleton_ac = wc.alyx_client
-
-    def test_singleton_not_instance(self):
-        self.assertTrue(self.singleton_ac._obj_id != self.ac._obj_id)
-        # Test reimport
-        import oneibl.webclient as _wc
-        self.assertTrue(_wc.alyx_client._obj_id == self.singleton_ac._obj_id)
-        # Test new test instance
-        new_ac = wc.AlyxClient(
+        self.sameac = wc.AlyxClient(
             username='test_user',
             password='TapetesBloc18',
-            base_url='https://test.alyx.internationalbrainlab.org'
-        )
-        self.assertTrue(new_ac._obj_id != self.ac._obj_id)
-        self.assertTrue(new_ac._obj_id != self.singleton_ac._obj_id)
+            base_url='https://test.alyx.internationalbrainlab.org')
+        self.differentac = wc.AlyxClient(
+            username='test_user',
+            password='TapetesBloc18',
+            base_url='https://testdev.alyx.internationalbrainlab.org')
+
+    def test_multiple_singletons(self):
+        self.assertTrue(id(self.ac) == id(self.sameac))
+        self.assertTrue(id(self.ac) != id(self.differentac))
 
 
 class TestJsonFieldMethods(unittest.TestCase):
