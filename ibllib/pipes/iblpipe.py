@@ -266,8 +266,8 @@ def run_task(name, session_dir, dependencies=()):
     return 0
 
 
-def _count(l):
-    return (l)
+def _count(invar):
+    return (invar)
 
 
 class Pipeline:

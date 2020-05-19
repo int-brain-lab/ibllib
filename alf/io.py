@@ -425,7 +425,7 @@ def _regexp_session_path(path_object, separator):
     """
     Subfunction to be able to test cross-platform
     """
-    return re.search(rf'/\d\d\d\d-\d\d-\d\d/\d\d\d',
+    return re.search(r'/\d\d\d\d-\d\d-\d\d/\d\d\d',
                      str(path_object).replace(separator, '/'), flags=0)
 
 

@@ -1,17 +1,18 @@
-from pathlib import Path, PurePath
-import requests
 import logging
 import os
+from pathlib import Path, PurePath
+
+import requests
 import tqdm
 
-from ibllib.io import hashfile
-from ibllib.misc import pprint
-from ibllib.io.one import OneAbstract
-from alf.io import load_file_content, remove_uuid_file, is_uuid_string, AlfBunch, get_session_path
-
-import oneibl.webclient as wc
-from oneibl.dataclass import SessionDataInfo
 import oneibl.params
+import oneibl.webclient as wc
+from alf.io import (AlfBunch, get_session_path, is_uuid_string,
+                    load_file_content, remove_uuid_file)
+from ibllib.io import hashfile
+from ibllib.io.one import OneAbstract
+from ibllib.misc import pprint
+from oneibl.dataclass import SessionDataInfo
 
 _logger = logging.getLogger('ibllib')
 
@@ -88,23 +89,27 @@ SEARCH_TERMS = {  # keynames are possible input arguments and values are actual 
 
 
 class ONE(OneAbstract):
-    def __init__(self, username=None, password=None, base_url=None, silent=False):
+    def __init__(self, username=None, password=None, base_url=None, silent=False, printout=True):
         # get parameters override if inputs provided
         self._par = oneibl.params.get(silent=silent)
         self._par = self._par.set('ALYX_LOGIN', username or self._par.ALYX_LOGIN)
         self._par = self._par.set('ALYX_URL', base_url or self._par.ALYX_URL)
         self._par = self._par.set('ALYX_PWD', password or self._par.ALYX_PWD)
-        # Init connection to the database
+
         try:
             self._alyxClient = wc.AlyxClient(username=self._par.ALYX_LOGIN,
                                              password=self._par.ALYX_PWD,
                                              base_url=self._par.ALYX_URL)
         except requests.exceptions.ConnectionError:
-            raise ConnectionError("Can't connect to " + self._par.ALYX_URL + '. \n' +
-                                  'IP addresses are filtered on IBL database servers. \n' +
-                                  'Are you connecting from an IBL participating institution ?')
-        print('Connected to ' + self._par.ALYX_URL + ' as ' + self._par.ALYX_LOGIN,)
+            raise ConnectionError(
+                f"Can't connect to {self._par.ALYX_URL}.\n" +
+                "IP addresses are filtered on IBL database servers. \n" +
+                "Are you connecting from an IBL participating institution ?"
+            )
         # Init connection to Globus if needed
+        # Display output when instantiating ONE
+        if printout:
+            print(f"Connected to {self._par.ALYX_URL} as {self._par.ALYX_LOGIN}",)
 
     @property
     def alyx(self):
@@ -367,7 +372,7 @@ class ONE(OneAbstract):
         for ind, tab in enumerate(_ENDPOINTS):
             if tab == table:
                 field_name = table_field_names[_ENDPOINTS[tab]]
-                full_out.append(self._alyxClient.get('/' + _ENDPOINTS[tab]))
+                full_out.append(self.alyx.get('/' + _ENDPOINTS[tab]))
                 list_out.append([f[field_name] for f in full_out[-1]])
         if verbose:
             pprint(list_out)
@@ -579,6 +584,31 @@ class ONE(OneAbstract):
                            number=session_path.parts[-1])
         # Return the uuid if any
         return uuid[0] if uuid else None
+
+    def get_details(self, eid, full=False):
+        """ Returns details of eid like from one.search, optional return full
+        session details.
+        """
+        # If eid is a list of eIDs recurse through list and return the results
+        if isinstance(eid, list):
+            details_list = []
+            for p in eid:
+                details_list.append(self.get_details(p, full=full))
+            return details_list
+        # If not valid return None
+        if not is_uuid_string(eid):
+            print(eid, " is not a valid eID/UUID string")
+            return
+        # load all details
+        dets = self.alyx.rest("sessions", "read", eid)
+        if full:
+            return dets
+        # If it's not full return the normal output like from a one.search
+        det_fields = ["subject", "start_time", "number", "lab", "project",
+                      "url", "task_protocol", "local_path"]
+        out = {k: v for k, v in dets.items() if k in det_fields}
+        out.update({'local_path': self.path_from_eid(eid)})
+        return out
 
 
 def _validate_date_range(date_range):

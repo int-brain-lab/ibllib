@@ -14,6 +14,87 @@ ac = wc.AlyxClient(
     base_url='https://test.alyx.internationalbrainlab.org')
 
 
+class TestSingletonPattern(unittest.TestCase):
+    def setUp(self):
+        self.ac = ac
+        self.sameac = wc.AlyxClient(
+            username='test_user',
+            password='TapetesBloc18',
+            base_url='https://test.alyx.internationalbrainlab.org')
+        self.differentac = wc.AlyxClient(
+            username='test_user',
+            password='TapetesBloc18',
+            base_url='https://testdev.alyx.internationalbrainlab.org')
+        self.sameac2 = wc.AlyxClient(
+            username='test_user',
+            password='TapetesBloc18',
+            base_url='https://test.alyx.internationalbrainlab.org')
+
+    def test_multiple_singletons(self):
+        self.assertTrue(id(self.ac) == id(self.sameac))
+        self.assertTrue(id(self.ac) != id(self.differentac))
+        self.assertTrue(id(self.ac) == id(self.sameac2))
+
+
+class TestJsonFieldMethods(unittest.TestCase):
+    def setUp(self):
+        self.ac = ac
+        sessions = self.ac.rest("sessions", "list")
+        self.eid1 = sessions[0]['url'][-36:]
+        self.eid2 = sessions[-1]['url'][-36:]
+        self.endpoint = "sessions"
+        self.field_name = "extended_qc"
+        self.data_dict = {'some': 0, 'data': 1}
+        self.eid1_eqc = self.ac.rest(self.endpoint, "read", id=self.eid1)[self.field_name]
+        self.eid2_eqc = self.ac.rest(self.endpoint, "read", id=self.eid2)[self.field_name]
+
+    def _json_field_write(self):
+        written1 = self.ac.json_field_write(
+            self.endpoint, self.eid1, self.field_name, self.data_dict
+        )
+        written2 = self.ac.json_field_write(
+            self.endpoint, self.eid2, self.field_name, self.data_dict
+        )
+        self.assertTrue(written1 == written2)
+        self.assertTrue(written1 == self.data_dict)
+        self.assertTrue(len(self.ac.rest(self.endpoint, 'list', extended_qc='some__lt,0.5')) == 2)
+
+    def _json_field_update(self):
+        modified = self.ac.json_field_update(
+            self.endpoint, self.eid1, self.field_name, {'some': 0.6}
+        )
+        self.assertTrue('data' in modified)
+        self.assertTrue('some' in modified)
+        self.assertTrue(len(self.ac.rest(self.endpoint, 'list', extended_qc='some__lt,0.5')) == 1)
+
+    def _json_field_remove_key(self):
+        pre_delete = self.ac.rest(self.endpoint, 'list', extended_qc='data__gte,0.5')
+        self.assertTrue(len(pre_delete) == 2)
+        deleted = self.ac.json_field_remove_key(self.endpoint, self.eid2, self.field_name, 'data')
+        self.assertTrue('data' not in deleted)
+        post_delete = self.ac.rest(self.endpoint, 'list', extended_qc='data__gte,0.5')
+        self.assertTrue(len(post_delete) == 1)
+
+    def _json_field_delete(self):
+        deleted = self.ac.json_field_delete(self.endpoint, self.eid2, self.field_name)
+        self.assertTrue(deleted is None)
+        self.assertTrue(len(self.ac.rest(self.endpoint, 'list', extended_qc='data__gte,0.5')) == 1)
+
+    def test_json_methods(self):
+        self._json_field_write()
+        self._json_field_update()
+        self._json_field_remove_key()
+        self._json_field_delete()
+
+    def tearDown(self):
+        # Delete any dict created by this test
+        for x in self.ac.rest(self.endpoint, 'list', extended_qc='some__lt,0.5'):
+            self.ac.json_field_delete(self.endpoint, x['url'][-36:], self.field_name)
+        # Restore whatever was there in the first place
+        self.ac.json_field_write(self.endpoint, self.eid1, self.field_name, self.eid1_eqc)
+        self.ac.json_field_write(self.endpoint, self.eid2, self.field_name, self.eid2_eqc)
+
+
 class TestDownloadHTTP(unittest.TestCase):
 
     def setUp(self):
