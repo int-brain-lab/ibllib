@@ -177,18 +177,20 @@ def dataset_record_to_url(dataset_record):
 
 
 class UniqueSingletons(type):
-    _instances: dict = {}
+    _instances: list = []
 
     def __call__(cls, *args, **kwargs):
         # print('args', args, '\nkwargs', kwargs)
-        if cls in cls._instances and cls._instances.get(cls, None).get('args') == (args, kwargs):
-            return cls._instances[cls].get('instance')
-        else:
-            cls._instances[cls] = {
-                'args': (args, kwargs),
-                'instance': super(UniqueSingletons, cls).__call__(*args, **kwargs)
-            }
-            return cls._instances[cls].get('instance')
+        for inst in UniqueSingletons._instances:
+            if cls in inst and inst.get(cls, None).get('args') == (args, kwargs):
+                return inst[cls].get('instance')
+
+        new_instance = super(UniqueSingletons, cls).__call__(*args, **kwargs)
+        new_instance_record = {
+            cls: {'args': (args, kwargs), 'instance': new_instance}
+        }
+        UniqueSingletons._instances.append(new_instance_record)
+        return new_instance
 
 
 class AlyxClient(metaclass=UniqueSingletons):
