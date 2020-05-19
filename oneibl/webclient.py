@@ -9,7 +9,6 @@ from pathlib import Path
 
 import requests
 
-import oneibl.params
 from alf.io import is_uuid_string
 from ibllib.misc import pprint, print_progress
 
@@ -177,12 +176,27 @@ def dataset_record_to_url(dataset_record):
     return urls
 
 
-class AlyxClient:
+class UniqueSingletons(type):
+    _instances: dict = {}
+
+    def __call__(cls, *args, **kwargs):
+        # print('args', args, '\nkwargs', kwargs)
+        if cls in cls._instances and cls._instances.get(cls, None).get('args') == (args, kwargs):
+            return cls._instances[cls].get('instance')
+        else:
+            cls._instances[cls] = {
+                'args': (args, kwargs),
+                'instance': super(UniqueSingletons, cls).__call__(*args, **kwargs)
+            }
+            return cls._instances[cls].get('instance')
+
+
+class AlyxClient(metaclass=UniqueSingletons):
     """
     Class that implements simple GET/POST wrappers for the Alyx REST API
     http://alyx.readthedocs.io/en/latest/api.html
     """
-    _token = ''
+    _token = ''  # These class params are not being used!!
     _headers = ''
     _rest_schemes = ''
 
@@ -568,17 +582,3 @@ class AlyxClient:
         self._check_inputs(endpoint, uuid)
         _ = self.rest(endpoint, "partial_update", id=uuid, data={field_name: None})
         return _[field_name]
-
-
-# Get default params from local file
-_par = oneibl.params.get(silent=True)
-# Try creating singleton AlyxClient object
-try:
-    alyx_client = AlyxClient(
-        base_url=_par.ALYX_URL, username=_par.ALYX_LOGIN, password=_par.ALYX_PWD
-    )
-except requests.exceptions.ConnectionError:
-    raise ConnectionError(f"Can't connect to {_par.ALYX_URL}.\n" +
-                          "IP addresses are filtered on IBL database servers.\n" +
-                          "Are you connecting from an IBL participating institution?")
-# Init connection to Globus if needed

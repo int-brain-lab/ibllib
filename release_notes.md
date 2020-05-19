@@ -1,5 +1,5 @@
 ### Release Notes 1.4.15dev - (18/05/2020 - (EDIT THIS HADER BEFORE RELEASE)
--   Implemented AlyxClient as singleton for all ONE instances
+-   Metaclass implementation of UniqueSingletons for AlyxClient
 -   Added JSON methods to AlyxClient
 -   Added get_details method to ONE to retrieve search function deteils after the fact
 -   Refactored one tests, separated utility functions like get_details, path_from_eid, eid_from_path, ...
