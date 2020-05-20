@@ -44,6 +44,8 @@ class Job(abc.ABC):
     priority = 30  # integer percentage, 100 means highest priority
     ram = 4  # RAM needed to run (Go)
     one = None  # one instance (optional)
+    level = 0
+    outputs = None
 
     def __init__(self, session_path, parents=None, jobid=None, one=None):
         assert session_path
@@ -60,7 +62,7 @@ class Job(abc.ABC):
         return self.__class__.__name__
 
     @alyx_setup_teardown
-    def run(self, status=0, **kwargs):
+    def run(self, **kwargs):
         """
         --- do not overload, see _run() below---
         wraps the _run() method with
@@ -97,7 +99,7 @@ class Job(abc.ABC):
         assert one
         assert jobid
         if self.outputs:
-            register_dataset(self.outputs, one=one)
+            return register_dataset(self.outputs, one=one)
 
     def rerun(self):
         self.run(overwrite=True)
@@ -107,7 +109,9 @@ class Job(abc.ABC):
         """
         This is the method to implement
         :param overwrite: (bool) if the output already exists,
-        :return: out_files: a list of files (pathlib.Path) to be registered
+        :return: out_files: files to be registered. Could be a list of files (pathlib.Path),
+        a single file (pathlib.Path) or None
+        If the function returns None, the job will be labeled as "empty" status in the database
         """
         pass
 
@@ -211,16 +215,20 @@ def run_alyx_job(jdict=None, session_path=None, one=None):
     :param one:
     :return:
     """
+    registered_dsets = []
     modulename = jdict['pipeline']
     module = importlib.import_module(modulename)
     classe = getattr(module, jdict['task'])
     job = classe(session_path, one=one, jobid=jdict['id'])
-    status = job.run(session_path)
+    status = job.run()
     # only registers successful runs
     if status == 0:
-        registered_dsets = job.register_datasets(one=one, jobid=jdict['id'])
-        one.alyx.rest('jobs', 'partial_update', id=jdict['id'], data={'status': 'Complete'})
+        # on a successful run, if there is no data to register, set status to Empty
+        if job.outputs is None:
+            one.alyx.rest('jobs', 'partial_update', id=jdict['id'], data={'status': 'Empty'})
+        else:  # otherwise register data and set status to Complete
+            registered_dsets = job.register_datasets(one=one, jobid=jdict['id'])
+            one.alyx.rest('jobs', 'partial_update', id=jdict['id'], data={'status': 'Complete'})
     elif status == -1:
-        registered_dsets = []
         one.alyx.rest('jobs', 'partial_update', id=jdict['id'], data={'status': 'Errored'})
     return status, registered_dsets
