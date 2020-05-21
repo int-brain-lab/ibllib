@@ -117,10 +117,12 @@ class Job(abc.ABC):
         This is the method to implement
         :param overwrite: (bool) if the output already exists,
         :return: out_files: files to be registered. Could be a list of files (pathlib.Path),
-        a single file (pathlib.Path) or None
-        If the function returns None, the job will be labeled as "empty" status in the database
+        a single file (pathlib.Path) an empty list [] or None.
+        Whithin the pipeline, there is a distinction between a job that returns an empty list
+         and a job that returns None. If the function returns None, the job will be labeled as
+          "empty" status in the database, otherwise, the job has an expected behaviour of not
+          returning any dataset.
         """
-        pass
 
     def setUp(self):
         """
@@ -131,7 +133,7 @@ class Job(abc.ABC):
     def tearDown(self):
         """
         Function to optionally overload to check results
-        :return: 0 if successful, -1 if failed
+        :return:
         """
 
 
@@ -218,6 +220,7 @@ class Pipeline(abc.ABC):
         """
         Get all the session related jobs from alyx and run them
         :return: jalyx: list of REST dictionaries of the job endpoints
+        :return: job_deck: list of REST dictionaries of the jobs endpoints
         :return: all_datasets: list of REST dictionaries of the dataset endpoints
         """
         job_deck = self.one.alyx.rest('jobs', 'list', session=self.eid)

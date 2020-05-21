@@ -11,10 +11,14 @@ def compress(file_in, file_out, command, remove_original=True):
     using a supbprocess
     audio compression for ephys:
     `"ffmpeg -i {file_in} -c:a flac -nostats {file_out}"`
+    video compression for ephys:
+    `"('ffmpeg -i {file_in} -codec:v libx264 -preset slow -crf 17 '
+                   '-nostats -loglevel 0 -codec:a copy {file_out}')"`
 
     :param file_in: full file path of input
     :param file_out: full file path of output
     :param command: string ready to be formatted with `file_in` and `file_out`
+    return: file_out
     """
 
     file_in = Path(file_in)

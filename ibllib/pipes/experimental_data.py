@@ -9,10 +9,8 @@ from pathlib import Path, PureWindowsPath
 import subprocess
 import json
 
-import alf.io
-from ibllib.io import flags, raw_data_loaders, spikeglx
+from ibllib.io import flags, raw_data_loaders
 from ibllib.pipes import extract_session
-from ibllib.ephys import sync_probes, spikes
 from oneibl.registration import RegistrationClient
 from oneibl.one import ONE
 
@@ -122,82 +120,3 @@ def audio_training(root_data_folder, dry=False, max_sessions=False):
         audio.extract_sound(session_path, save=True, delete=True)
         flag.unlink()
         session_path.joinpath('register_me.flag').touch()
-
-
-# 22_audio_ephys
-def compress_audio(root_data_folder, dry=False, max_sessions=20):
-    command = 'ffmpeg -i {file_name}.wav -c:a flac -nostats {file_name}.flac'
-    _compress(root_data_folder, command, 'audio_ephys.flag', dry=dry, max_sessions=max_sessions)
-
-
-# 23_compress ephys
-def compress_ephys(root_data_folder, dry=False, max_sessions=5):
-    """
-    Compress ephys files looking for `compress_ephys.flag` whithin the probes folder
-    Original bin file will be removed
-    The registration flag created contains targeted file names at the root of the session
-    """
-    qcflags = Path(root_data_folder).rglob('compress_ephys.flag')
-    c = 0
-    for qcflag in qcflags:
-        probe_path = qcflag.parent
-        c += 1
-        if c > max_sessions:
-            return
-        if dry:
-            print(qcflag.parent)
-            continue
-        # no rglob: only the folder in which the flag is located gets searched
-        ephys_files = spikeglx.glob_ephys_files(probe_path, recursive=False)
-        out_files = []
-        for ef in ephys_files:
-            for typ in ['ap', 'lf', 'nidq']:
-                bin_file = ef.get(typ)
-                if not bin_file:
-                    continue
-                sr = spikeglx.Reader(bin_file)
-                if not sr.is_mtscomp:
-                    out_files.append(sr.compress_file(keep_original=False))
-        qcflag.unlink()
-        if out_files:
-            session_path = alf.io.get_session_path(probe_path) or probe_path.parents[1]
-            file_list = [str(f.relative_to(session_path)) for f in out_files]
-            flags.write_flag_file(session_path.joinpath('register_me.flag'), file_list=file_list)
-
-
-# 26_sync_merge_ephys
-def sync_merge_ephys(root_data_folder, dry=False):
-    """
-    Post spike-sorting processing:
-    - synchronization of probes
-    - ks2 to ALF conversion for each probes in alf/probeXX folder
-    - computes spike sorting QC
-    - creates probes object in alf folder
-    To start the job for a session, all electrophysiology ap files from session need to be
-    associated with a `sync_merge_ephys.flag` file
-    Outputs individual probes
-    """
-    syncflags = list(Path(root_data_folder).rglob('sync_merge_ephys.flag'))
-    session_paths = list(set([f.parents[2] for f in syncflags]))
-    for session_path in session_paths:
-        print(session_path)
-        if dry:
-            continue
-        # first remove the flags
-        [f.unlink() for f in syncflags if f.parents[2] == session_path]
-        # first sync the probes
-        sync_probes.sync(session_path)
-        # then convert ks2 to ALF and resync spike sorting data
-        spikes.sync_spike_sortings(session_path)
-        # outputs the probes object in the ALF folder
-        spikes.probes_description(session_path)
-        # wrap up by removing flags and creating register_me flag
-        flags.write_flag_file(session_path.joinpath('register_me.flag'))
-
-
-# 27_compress_ephys_videos
-def compress_ephys_video(root_data_folder, dry=False, max_sessions=None):
-    command = ('ffmpeg -i {file_name}.avi -codec:v libx264 -preset slow -crf 17 '
-               '-nostats -loglevel 0 -codec:a copy {file_name}.mp4')
-    _compress(root_data_folder, command, 'compress_video_ephys.flag',
-              dry=dry, max_sessions=max_sessions)

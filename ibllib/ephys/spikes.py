@@ -67,6 +67,7 @@ def probes_description(ses_path, bin_exists=True):
     probe_trajectory_file = alf_path.joinpath('probes.trajectory.json')
     with open(probe_trajectory_file, 'w+') as fid:
         fid.write(json.dumps(trajs))
+    return [probe_trajectory_file, probe_description_file]
 
 
 def sync_spike_sortings(ses_path):
@@ -94,6 +95,7 @@ def sync_spike_sortings(ses_path):
         *sorted([(ep.ap.parent, ep.label, ep, _sr(ep.ap)) for ep in ephys_files if ep.get('ap')]))
 
     _logger.info('converting  spike-sorting outputs to ALF')
+    out_files = []
     for subdir, label, ef, sr in zip(subdirs, labels, efiles_sorted, srates):
         if not subdir.joinpath('spike_times.npy').exists():
             _logger.warning(f"No KS2 spike sorting found in {subdir}, skipping probe !")
@@ -121,6 +123,10 @@ def sync_spike_sortings(ses_path):
         spike_samples = np.load(ses_path.joinpath(probe_out_path, 'spikes.samples.npy'))
         interp_times = apply_sync(sync_file, spike_samples / sr, forward=True)
         np.save(st_file, interp_times)
+        # get the list of output files
+        out_files.extend([f for f in ses_path.joinpath(probe_out_path).glob("*.*") if
+                          f.name.startswith(('channels.', 'clusters.', 'spikes.', 'templates.'))])
+    return out_files
 
 
 def ks2_to_alf(ks_path, out_path, ampfactor=1, label=None, force=True):

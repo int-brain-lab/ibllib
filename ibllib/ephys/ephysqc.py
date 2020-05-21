@@ -202,9 +202,9 @@ def validate_ttl_test(ses_path, display=False):
 
     # second step is to test that we can make the sync. Assertions are whithin the synch code
     if sync.get('imec_sync') is not None:
-        sync_result = sync_probes.version3B(ses_path, display=display)
+        sync_result, _ = sync_probes.version3B(ses_path, display=display)
     else:
-        sync_result = sync_probes.version3A(ses_path, display=display)
+        sync_result, _ = sync_probes.version3A(ses_path, display=display)
 
     ok &= _single_test(assertion=sync_result, str_ok="PASS: synchronisation",
                        str_ko="FAILED: probe synchronizations threshold exceeded")

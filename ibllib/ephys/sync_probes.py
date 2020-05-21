@@ -41,9 +41,9 @@ def sync(ses_path, **kwargs):
     """
     version = spikeglx.get_neuropixel_version_from_folder(ses_path)
     if version == '3A':
-        version3A(ses_path, **kwargs)
+        return version3A(ses_path, **kwargs)
     elif version == '3B':
-        version3B(ses_path, **kwargs)
+        return version3B(ses_path, **kwargs)
 
 
 def version3A(ses_path, display=True, type='smooth', tol=2.1):
@@ -61,8 +61,8 @@ def version3A(ses_path, display=True, type='smooth', tol=2.1):
     if nprobes == 1:
         timestamps = np.array([[0., 0.], [1., 1.]])
         sr = _get_sr(ephys_files[0])
-        _save_timestamps_npy(ephys_files[0], timestamps, sr)
-        return True
+        out_files = _save_timestamps_npy(ephys_files[0], timestamps, sr)
+        return True, out_files
 
     def get_sync_fronts(auxiliary_name):
         d = Bunch({'times': [], 'nsync': np.zeros(nprobes, )})
@@ -80,6 +80,7 @@ def version3A(ses_path, display=True, type='smooth', tol=2.1):
             d.nsync[ind] = len(sync.channels)
             d['times'].append(sync['times'][isync])
         return d
+
     d = get_sync_fronts('frame2ttl')
     if not d:
         _logger.warning('Ephys sync: frame2ttl not detected on both probes, using camera sync')
@@ -106,8 +107,8 @@ def version3A(ses_path, display=True, type='smooth', tol=2.1):
             timestamps, qc = sync_probe_front_times(d.times[:, ind], d.times[:, iref], sr,
                                                     display=display, type=type, tol=tol)
             qc_all &= qc
-        _save_timestamps_npy(ephys_file, timestamps, sr)
-    return qc_all
+        out_files = _save_timestamps_npy(ephys_file, timestamps, sr)
+    return qc_all, out_files
 
 
 def version3B(ses_path, display=True, type=None, tol=2.5):
@@ -150,8 +151,8 @@ def version3B(ses_path, display=True, type=None, tol=2.5):
         timestamps, qc = sync_probe_front_times(sync_probe.times, sync_nidq.times, sr,
                                                 display=display, type=type_probe, tol=tol)
         qc_all &= qc
-        _save_timestamps_npy(ef, timestamps, sr)
-    return qc_all
+        out_files = _save_timestamps_npy(ef, timestamps, sr)
+    return qc_all, out_files
 
 
 def sync_probe_front_times(t, tref, sr, display=False, type='smooth', tol=2.0):
@@ -247,6 +248,7 @@ def _save_timestamps_npy(ephys_file, tself_tref, sr):
     timestamps = np.copy(tself_tref)
     timestamps[:, 0] *= np.float64(sr)
     np.save(file_ts, timestamps)
+    return [file_sync, file_ts]
 
 
 def _check_diff_3b(sync):
