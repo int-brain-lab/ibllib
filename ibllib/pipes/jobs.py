@@ -6,9 +6,11 @@ import importlib
 
 from graphviz import Digraph
 
+from ibllib.misc import version
+from ibllib.io import params
 from oneibl.one import ONE
 from oneibl.registration import register_dataset
-from ibllib.io import params
+
 
 _logger = logging.getLogger('ibllib')
 
@@ -46,6 +48,7 @@ class Job(abc.ABC):
     one = None  # one instance (optional)
     level = 0
     outputs = None
+    version = version.ibllib()
 
     def __init__(self, session_path, parents=None, jobid=None, one=None):
         assert session_path
@@ -99,7 +102,11 @@ class Job(abc.ABC):
         assert one
         assert jobid
         if self.outputs:
-            return register_dataset(self.outputs, one=one)
+            if isinstance(self.outputs, list):
+                versions = [self.version for _ in self.outputs]
+            else:
+                versions = [self.version]
+            return register_dataset(self.outputs, one=one, versions=versions)
 
     def rerun(self):
         self.run(overwrite=True)
@@ -207,28 +214,69 @@ class Pipeline(abc.ABC):
             jobs_alyx.append(jalyx)
         return jobs_alyx
 
+    def run(self, status__in=['Waiting']):
+        """
+        Get all the session related jobs from alyx and run them
+        :return: jalyx: list of REST dictionaries of the job endpoints
+        :return: all_datasets: list of REST dictionaries of the dataset endpoints
+        """
+        job_deck = self.one.alyx.rest('jobs', 'list', session=self.eid)
+        all_datasets = []
+        for i, j in enumerate(job_deck):
+            if j['status'] not in status__in:
+                continue
+            # here we update the status in-place to avoid another hit to the database
+            job_deck[i], dsets = _run_alyx_job(jdict=j, session_path=self.session_path,
+                                               one=self.one, job_deck=job_deck)
+            if dsets is not None:
+                all_datasets.extend(dsets)
+        return job_deck, all_datasets
 
-def run_alyx_job(jdict=None, session_path=None, one=None):
+    def rerun_failed(self):
+        return self.run(status__in=['Waiting', 'Started', 'Errored', 'Empty'])
+
+    def rerun(self):
+        return self.run(status__in=['Waiting', 'Started', 'Errored', 'Empty', 'Complete'])
+
+
+def _run_alyx_job(jdict=None, session_path=None, one=None, job_deck=None):
     """
+    Runs a single Alyx job and registers output datasets
     :param jdict:
     :param session_path:
     :param one:
+    :param job_deck: optional list of job dictionaries belonging to the session. Needed
+    to check dependency status if the jdict has a parent field. If jdict has a parent and
+    job_deck is not entered, will query the database
     :return:
     """
     registered_dsets = []
+    if len(jdict['parents']):
+        # here we need to check parents status, get the job_deck if not available
+        if not job_deck:
+            job_deck = one.alyx.rest('jobs', 'list', session=jdict['session'])
+        # check the dependencies
+        if not all(list(map(lambda x: x['status'] == 'Complete',
+                            filter(lambda x: x['id'] in jdict['parents'], job_deck)))):
+            _logger.warning(f"{jdict['task']} has unmet dependencies")
+            return jdict, registered_dsets
+    # creates the job from the module name in the database
     modulename = jdict['pipeline']
     module = importlib.import_module(modulename)
     classe = getattr(module, jdict['task'])
     job = classe(session_path, one=one, jobid=jdict['id'])
+    # sets the status flag to started before running
+    one.alyx.rest('jobs', 'partial_update', id=jdict['id'], data={'status': 'Started'})
     status = job.run()
     # only registers successful runs
     if status == 0:
         # on a successful run, if there is no data to register, set status to Empty
         if job.outputs is None:
-            one.alyx.rest('jobs', 'partial_update', id=jdict['id'], data={'status': 'Empty'})
+            j = one.alyx.rest('jobs', 'partial_update', id=jdict['id'], data={'status': 'Empty'})
         else:  # otherwise register data and set status to Complete
             registered_dsets = job.register_datasets(one=one, jobid=jdict['id'])
-            one.alyx.rest('jobs', 'partial_update', id=jdict['id'], data={'status': 'Complete'})
+            j = one.alyx.rest('jobs', 'partial_update', id=jdict['id'],
+                              data={'status': 'Complete'})
     elif status == -1:
-        one.alyx.rest('jobs', 'partial_update', id=jdict['id'], data={'status': 'Errored'})
-    return status, registered_dsets
+        j = one.alyx.rest('jobs', 'partial_update', id=jdict['id'], data={'status': 'Errored'})
+    return j, registered_dsets

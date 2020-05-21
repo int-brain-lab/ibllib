@@ -52,6 +52,19 @@ class EphysAudio(jobs.Job):
         return output_files
 
 
+class SpikeSorting(jobs.Job):
+    """
+    Computes raw electrophysiology QC
+    """
+    gpu = 1
+    io_charge = 70  # this jobs reads raw ap files
+    priority = 60
+    level = 0  # this job doesn't depend on anything
+
+    def _run(self, overwrite=False):
+        pass
+
+
 #  level 1
 class EphysTrials(jobs.Job):
     priority = 90
@@ -73,6 +86,7 @@ class EphysExtractionPipeline(jobs.Pipeline):
         jobs['EphysPulses'] = EphysPulses(self.session_path)
         jobs['EphysRawQC'] = RawEphysQC(self.session_path)
         jobs['EphysAudio'] = EphysAudio(self.session_path)
+        jobs['SpikeSorting'] = SpikeSorting(self.session_path)
         jobs['EphysTrials'] = EphysTrials(self.session_path, parents=[jobs['EphysPulses']])
 
         self.jobs = jobs

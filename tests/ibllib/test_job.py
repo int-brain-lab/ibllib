@@ -1,7 +1,8 @@
 import tempfile
 import unittest
-
 from pathlib import Path
+
+from ibllib.misc import version
 import ibllib.pipes.jobs
 from oneibl.one import ONE
 
@@ -15,9 +16,23 @@ ses_dict = {
     'users': ['test_user']
 }
 
+desired_statuses = {
+    'Job00': 'Complete',
+    'Job01_void': 'Empty',
+    'Job02_error': 'Errored',
+    'Job10': 'Complete',
+    'Job11': 'Waiting'
+}
+
+desired_datasets = ['spikes.times.npy', 'spikes.amps.npy', 'spikes.clusters.npy']
+desired_versions = {'spikes.times.npy': 'custom_job00',
+                    'spikes.amps.npy': version.ibllib(),
+                    'spikes.clusters.npy': version.ibllib()}
+
 
 #  job to output a single file (pathlib.Path)
 class Job00(ibllib.pipes.jobs.Job):
+    version = 'custom_job00'
 
     def _run(self, overwrite=False):
         out_files = self.session_path.joinpath('alf', 'spikes.times.npy')
@@ -26,15 +41,23 @@ class Job00(ibllib.pipes.jobs.Job):
 
 
 #  job that outputs nothing
-class Job01(ibllib.pipes.jobs.Job):
+class Job01_void(ibllib.pipes.jobs.Job):
 
     def _run(self, overwrite=False):
         out_files = None
         return out_files
 
 
+# job that raises an error
+class Job02_error(ibllib.pipes.jobs.Job):
+    level = 2
+
+    def _run(self, overwrite=False):
+        raise Exception("Something dumb happened")
+
+
 # job that outputs a list of files
-class Job02(ibllib.pipes.jobs.Job):
+class Job10(ibllib.pipes.jobs.Job):
     level = 1
 
     def _run(self, overwrite=False):
@@ -45,12 +68,13 @@ class Job02(ibllib.pipes.jobs.Job):
         return out_files
 
 
-# job that raises an error
-class Job03(ibllib.pipes.jobs.Job):
-    level = 2
+#  job to output a single file (pathlib.Path)
+class Job11(ibllib.pipes.jobs.Job):
 
     def _run(self, overwrite=False):
-        raise Exception("Something dumb happened")
+        out_files = self.session_path.joinpath('alf', 'spikes.samples.npy')
+        out_files.touch()
+        return out_files
 
 
 class SomePipeline(ibllib.pipes.jobs.Pipeline):
@@ -62,9 +86,10 @@ class SomePipeline(ibllib.pipes.jobs.Pipeline):
         self.session_path = session_path
         # level 0
         jobs['Job00'] = Job00(self.session_path)
-        jobs['Job01'] = Job01(self.session_path)
-        jobs['Job02'] = Job02(self.session_path, parents=[jobs['Job01']])
-        jobs['Job03'] = Job03(self.session_path, parents=[jobs['Job02'], jobs['Job01']])
+        jobs['Job01_void'] = Job01_void(self.session_path)
+        jobs['Job02_error'] = Job02_error(self.session_path)
+        jobs['Job10'] = Job10(self.session_path, parents=[jobs['Job00']])
+        jobs['Job11'] = Job11(self.session_path, parents=[jobs['Job02_error'], jobs['Job00']])
         self.jobs = jobs
 
 
@@ -111,25 +136,24 @@ class TestPipelineAlyx(unittest.TestCase):
         jobs = one.alyx.rest('jobs', 'list', session=eid, status='Waiting')
         self.assertTrue(len(jobs) == NJOBS)
 
-        # run them and make sure their statuses got updated
-        for jdict in jobs:
-            status, dsets = ibllib.pipes.jobs.run_alyx_job(
-                jdict=jdict, session_path=self.session_path, one=one)
-        all_jobs = one.alyx.rest('jobs', 'list', session=eid)
-        self.assertTrue(len(list(filter(lambda x: x['status'] != "Waiting", all_jobs))) == NJOBS)
-        self.assertTrue(len(list(filter(lambda x: x['status'] == "Errored", all_jobs))) == 1)
-        self.assertTrue(len(list(filter(lambda x: x['status'] == "Empty", all_jobs))) == 1)
-        self.assertTrue(len(list(filter(lambda x: x['status'] == "Complete", all_jobs))) == 2)
+        # run them and make sure their statuses got updated appropriately
+        job_deck, datasets = pipeline.run()
+        check_statuses = [desired_statuses[j['task']] == j['status'] for j in job_deck]
+        self.assertTrue(all(check_statuses))
+        self.assertTrue(set([d['name'] for d in datasets]) == set(desired_datasets))
+
+        # also checks that the datasets have been labeled with the proper version
+        dsets = one.alyx.rest('datasets', 'list', session=eid)
+        check_versions = [desired_versions[d['name']] == d['version'] for d in dsets]
+        self.assertTrue(all(check_versions))
 
         # make sure that re-running the make job by default doesn't change complete jobs
         pipeline.register_alyx_jobs()
-        all_jobs = one.alyx.rest('jobs', 'list', session=eid)
-        self.assertTrue(len(list(filter(lambda x: x['status'] != "Waiting", all_jobs))) == NJOBS)
+        job_deck = one.alyx.rest('jobs', 'list', session=eid)
+        check_statuses = [desired_statuses[j['task']] == j['status'] for j in job_deck]
+        self.assertTrue(all(check_statuses))
 
         # test the rerun option
-        pipeline.register_alyx_jobs(rerun=True)
-        all_jobs = one.alyx.rest('jobs', 'list', session=eid)
-        self.assertTrue(len(list(filter(lambda x: x['status'] == "Waiting", all_jobs))) == NJOBS)
-
-        # make sure datasets have been registered
-        self.assertTrue(len(one.alyx.rest('datasets', 'list', session=eid)) == 3)
+        job_deck, dsets = pipeline.rerun_failed()
+        check_statuses = [desired_statuses[j['task']] == j['status'] for j in job_deck]
+        self.assertTrue(all(check_statuses))
