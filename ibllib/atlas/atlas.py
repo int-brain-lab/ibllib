@@ -618,7 +618,7 @@ class AllenAtlas(BrainAtlas):
     using the IBL Bregma and coordinate system
     """
 
-    def __init__(self, res_um=25, par=None, scaling=np.array([1, 1, 1]), mock=False):
+    def __init__(self, res_um=25, par=None, scaling=np.array([1, 1, 1]), mock=False, hist_path=None):
         """
         :param res_um: 10, 25 or 50 um
         :param par: dictionary of parameters to override systems ones
@@ -631,6 +631,17 @@ class AllenAtlas(BrainAtlas):
         FLAT_IRON_ATLAS_REL_PATH = Path('histology', 'ATLAS', 'Needles', 'Allen')
         if mock:
             image, label = [np.zeros((528, 456, 320), dtype=np.bool) for _ in range(2)]
+        elif hist_path:
+            path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
+            file_label = path_atlas.joinpath(f'annotation_{res_um}.nrrd')
+            if not file_label.exists():
+                _download_atlas_flatiron(file_label, FLAT_IRON_ATLAS_REL_PATH, par)
+            image, _ = nrrd.read(hist_path, index_order='C')  # dv, ml, ap
+            label, _ = nrrd.read(file_label, index_order='C')  # dv, ml, ap
+            label = np.swapaxes(np.swapaxes(label, 2, 0), 1, 2)  # label[iap, iml, idv]
+            image = np.swapaxes(np.swapaxes(image, 2, 0), 1, 2)  # image[iap, iml, idv]
+            # Make sure histology image has the same dimensions as CCF
+            assert (image.shape == label.shape)
         else:
             path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
             file_image = path_atlas.joinpath(f'average_template_{res_um}.nrrd')
