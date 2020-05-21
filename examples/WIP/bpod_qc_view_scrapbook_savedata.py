@@ -11,7 +11,7 @@ Save data locally per EID as computations take time.
 """
 # Author : Gaelle C.
 import ibllib.qc.bpodqc_metrics as bpodqc
-from ibllib.qc.bpodqc_extractors import load_bpod_data
+from ibllib.qc.bpodqc_extractors import extract_bpod_trial_table
 from oneibl.one import ONE
 from time import perf_counter
 import numpy as np
@@ -126,7 +126,7 @@ for i_ephysrig in range(0, len(ephys_rig)):
             start = perf_counter()
 
             # Start compute
-            data = load_bpod_data(eid)
+            data = extract_bpod_trial_table(eid)
             bpod_frame = bpodqc.get_bpodqc_metrics_frame(eid, data=data, apply_criteria=False)
             bpod_pass = bpodqc.get_bpodqc_metrics_frame(eid, data=data, apply_criteria=True)
 

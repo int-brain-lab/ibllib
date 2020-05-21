@@ -436,9 +436,9 @@ def _get_trimmed_data_from_pregenerated_files(
 
 
 @uuid_to_path(dl=True)
-def load_bpod_data(session_path, raw_data=None, raw_settings=None, fpga_time=False):
+def extract_bpod_trial_table(session_path, raw_data=None, raw_settings=None, fpga_time=False):
     """Extracts and loads ephys sessions from bpod data"""
-    log.info(f"Loading session: {session_path}")
+    log.info(f"Extracting session: {session_path}")
     data = raw_data or raw.load_data(session_path)
     settings = raw_settings or raw.load_settings(session_path)
     stimOn_times, stimOff_times, stimFreeze_times = get_stimOnOffFreeze_times_from_BNC1(
@@ -553,17 +553,20 @@ def get_bpod2fpga_times_func(session_path):
 class BpodQCExtractor(object):
     def __init__(self, session_path):
         self.session_path = session_path
-        self.load_trial_data()
-        self.extract_trial_table()
+        self.load_raw_data()
+        self.extract_trial_data()
 
-    def load_trial_data(self):
+    def load_raw_data(self):
         self.raw_data = raw.load_data(self.session_path)
         self.details = raw.load_settings(self.session_path)
-        self.BNC1, self.BNC2 = get_bpod_fronts(self.session_path)
-        self.wheel_data = get_wheel_position(self.session_path)
+        self.BNC1, self.BNC2 = get_bpod_fronts(
+            self.session_path, data=self.raw_data, settings=self.details
+        )
+        self.wheel_data = get_wheel_position(self.session_path, bp_data=self.raw_data)
+        assert np.all(np.diff(self.wheel_data["re_ts"]) > 0)
 
-    def extract_trial_table(self):
-        self.trial_table = load_bpod_data(
+    def extract_trial_data(self):
+        self.trial_data = extract_bpod_trial_table(
             self.session_path, raw_data=self.raw_data, raw_settings=self.details, fpga_time=False
         )
 
@@ -579,7 +582,7 @@ if __name__ == "__main__":
     a2session_path = subj_path + "_iblrig_test_mouse/2020-02-21/011"
     eid = "af74b29d-a671-4c22-a5e8-1e3d27e362f3"
     session_path = gsession_path
-    # bpod = load_bpod_data(session_path)
+    # bpod = extract_bpod_trial_table(session_path)
     # fpgaqc_frame = _qc_from_path(session_path, display=False)
     # bpodqc_frame = get_bpodqc_frame(session_path)
 

@@ -47,7 +47,7 @@ def plot_random_session_metrics(lab):
         print("Please input a lab")
         return
     eid, det = oneutils.random_ephys_session(lab)
-    data = bpodqc.load_bpod_data(eid, fpga_time=False)
+    data = bpodqc.extract_bpod_trial_table(eid, fpga_time=False)
     metrics = qcmetrics.get_qcmetrics_frame(eid, data=data)
 
 
@@ -69,7 +69,7 @@ def get_metrics_from_list(eids):
     outmetrics = []
     outcriteria = []
     for eid in eids:
-        data = bpodqc.load_bpod_data(eid, fpga_time=False)
+        data = bpodqc.extract_bpod_trial_table(eid, fpga_time=False)
         metrics = qcmetrics.get_qcmetrics_frame(eid, data=data)
         criteria = qcmetrics.get_qccriteria_frame(eid, data=data)
         outdata.append(data)
@@ -181,7 +181,7 @@ def plot_session_trigger_response_diffs(session_path, ax=None):
 
 @uuid_to_path(dl=True)
 def get_session_trigger_response_delays(session_path):
-    bpod = load_bpod_data(session_path)
+    bpod = extract_bpod_trial_table(session_path)
     # get diff from triggers to detected events
     goCue_diff = np.abs(bpod["goCueTrigger_times"] - bpod["goCue_times"])
     errorCue_diff = np.abs(bpod["errorCueTrigger_times"] - bpod["errorCue_times"])
@@ -273,6 +273,6 @@ if __name__ == "__main__":
     df = rearrange_metrics(metrics)
     # plot_metrics(df, details)
     # eid, det = oneutils.random_ephys_session("churchlandlab")
-    # data = bpodqc.load_bpod_data(eid, fpga_time=False)
+    # data = bpodqc.extract_bpod_trial_table(eid, fpga_time=False)
     # metrics = qcmetrics.get_qcmetrics_frame(eid, data=data)
     # criteria = qcmetrics.get_qccriteria_frame(eid, data=data)

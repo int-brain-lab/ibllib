@@ -86,6 +86,7 @@ def load_data(session_path, time='absolute'):
     :rtype: list of dicts
     """
     if session_path is None:
+        logger_.warning("No data loaded: session_path is None")
         return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_taskData.raw*.jsonable"), None)

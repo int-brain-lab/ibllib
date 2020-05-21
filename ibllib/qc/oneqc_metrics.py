@@ -1,34 +1,37 @@
+import logging
 import numpy as np
 
-import ibllib.qc.bpodqc_extractors as bpodqc
+import ibllib.io.raw_data_loaders as raw
 from ibllib.qc.oneutils import random_ephys_session
 from oneibl.one import ONE
 
+log = logging.getLogger("ibllib")
 
-one = ONE()
+
+class ONEQC(object):
+    def __init__(self, eid, one=None, bpod_ntrials=None, lazy=True):
+        self.eid = eid
+        self.one = one or ONE()
+        self.bpod_ntrials = bpod_ntrials or np.nan
+
+        self.metrics = None
+        self.passed = None
+
+        if not lazy:
+            self.compute()
+
+    def compute(self):
+        log.info(f"Session {self.eid}: Running QC on ONE DatasetTypes...")
+        self.metrics, self.passed = get_oneqc_metrics_frame(
+            self.eid, self.bpod_ntrials, one=self.one
+        )
 
 
-def get_oneqc_metrics_frame(eid, data=None, apply_criteria=False):
-    """Full extended_qc_frame
-    (one value per metric as proportion of trial level criteria that passed)"""
-    qcmetrics_frame = {
-        "_one_nDatasetTypes": None,  # (Point 17)
-        "_one_intervals_length": None,  # (Point 18)
-        "_one_intervals_count": None,
-        "_one_stimOnTrigger_times_length": None,  # (Point 19)
-        "_one_stimOnTrigger_times_count": None,
-        "_one_stimOn_times_length": None,  # (Point 20)
-        "_one_stimOn_times_count": None,
-        "_one_goCueTrigger_times_length": None,  # (Point 21)
-        "_one_goCueTrigger_times_count": None,
-        "_one_goCue_times_length": None,  # (Point 22)
-        "_one_goCue_times_count": None,
-        "_one_response_times_length": None,  # (Point 23)
-        "_one_response_times_count": None,
-        "_one_feedback_times_length": None,  # (Point 24)
-        "_one_feedback_times_count": None,
-    }
-
+def get_oneqc_metrics_frame(eid, bpod_ntrials, one=None):
+    one = one or ONE(printout=False)
+    """(one value per metric as proportion of trial level criteria that passed)"""
+    qcmetrics_frame = {}
+    qcmetrics_frame.update(load_nDatasetTypes(eid))
     dstype_names = [
         "trials.intervals",
         "trials.stimOnTrigger_times",
@@ -39,27 +42,34 @@ def get_oneqc_metrics_frame(eid, data=None, apply_criteria=False):
         "trials.feedback_times",
     ]
     for name in dstype_names:
-        qcmetrics_frame.update(
-            load_dstype_qc_metrics(eid, name, data=data, apply_criteria=apply_criteria)
-        )
-    return qcmetrics_frame
+        qcmetrics_frame.update(load_dstype_qc_metrics(eid, name, bpod_ntrials, one))
+
+    # Split metrics and passed frames
+    metrics = {}
+    passed = {}
+    for k in qcmetrics_frame:
+        metrics[k], passed[k] = qcmetrics_frame[k]
+
+    return (metrics, passed)
 
 
 # ---------------------------------------------------------------------------- #
-# ONE qc is atm just counting nans (*_count) or comparing the dims to the bpod "ground truth" data
+# ONE qc is atm just counting nans (*_count) or
+# comparing the dims to the bpod "ground truth" data (*_length)
 #
 #  bpod_ntrials = len(raw.load_data(one.path_from_eid(eid)))
-def load_nDatasetTypes(eid, data=None, apply_criteria=False):
+def load_nDatasetTypes(eid):
     """ 17. Proportion of datasetTypes extracted
     Variable name: nDatasetTypes
     Metric: len(one.load(eid, offline=True, download_only=True)) / nExpetedDatasetTypes
     (hardcoded per task?)
     """
-    return
+    out = {"_one_nDatasetTypes": (None, None)}
+    return out
 
 
 def load_dstype_qc_metrics(
-    eid: str, dstype_name: str, data: dict = None, apply_criteria: bool = False
+    eid: str, dstype_name: str, bpod_ntrials: int = None, one: object = None,
 ) -> dict:
     """Returns dict to update to metrics or criteria frame
     Metrics:
@@ -78,17 +88,18 @@ def load_dstype_qc_metrics(
     names = [f"_one_{name}_length", f"_one_{name}_count"]
     # Create output dict
     out = dict.fromkeys(names)
+    out = {k: (None, None) for k in out}
     # Load dset data from ONE
     dset = one.load(eid, dataset_types=dstype_name)[0]
     if dset is None:
         return out
     # Define length and count as metric
-    _length = len(dset)
+    # Define criteria is applies output normalized len and count
     _count = np.sum(np.isnan(dset))
-    # if criteria is applies output normalized len and count
-    if apply_criteria:
-        _length = _length / len(data["intervals_0"])
-        _count = 1 - _count / len(dset)
+    _length = len(dset)
+    _count = (_count, 1 - _count / _length)  # len(dset)
+    _length = (_length, _length / bpod_ntrials)
+
     # Add the values to output dict
     for k, v in zip(names, (_length, _count)):
         out[k] = v
@@ -97,7 +108,11 @@ def load_dstype_qc_metrics(
 
 
 if __name__ == "__main__":
+    one = ONE()
     eid, det = random_ephys_session()
-    data = bpodqc.load_bpod_data(eid, fpga_time=False)
-    metrics = get_oneqc_metrics_frame(eid, data=data, apply_criteria=False)
-    criteria = get_oneqc_metrics_frame(eid, data=data, apply_criteria=True)
+    session_path = one.path_from_eid(eid)
+    data = raw.load_data(session_path)
+    # metrics, passed = get_oneqc_metrics_frame(eid, len(data))
+    # metrics, passed = get_oneqc_metrics_frame(eid, np.inf)
+    met_obj = ONEQC(eid, one=one, bpod_ntrials=len(data), lazy=False)
+    ""
