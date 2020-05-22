@@ -6,21 +6,20 @@ from pathlib import Path, PureWindowsPath
 import numpy as np
 import pandas as pd
 from scipy import interpolate
+from pkg_resources import parse_version
 
 import ibllib.io.raw_data_loaders as raw
-from ibllib.io.extractors.training_trials import (
-    get_choice,
-    get_feedback_times,
-    get_feedbackType,
-    get_goCueOnset_times,
-    get_goCueTrigger_times,
-    get_intervals,
-    get_port_events,
-    get_response_times,
-    get_rewardVolume,
-    get_stimOn_times,
-    get_stimOnTrigger_times,
-)
+from ibllib.io.extractors.training_trials import (get_choice,
+                                                  get_feedback_times,
+                                                  get_feedbackType,
+                                                  get_goCueOnset_times,
+                                                  get_goCueTrigger_times,
+                                                  get_intervals,
+                                                  get_port_events,
+                                                  get_response_times,
+                                                  get_rewardVolume,
+                                                  get_stimOn_times,
+                                                  get_stimOnTrigger_times)
 from ibllib.io.extractors.training_wheel import get_wheel_position
 from ibllib.qc.oneutils import uuid_to_path
 from oneibl.one import ONE
@@ -137,6 +136,9 @@ def get_itiIn_times(session_path, save=False, data=False, settings=False):
     elif settings["IBLRIG_VERSION_TAG"] == "":
         settings.update({"IBLRIG_VERSION_TAG": "100.0.0"})
 
+    if not parse_version(settings["IBLRIG_VERSION_TAG"]) >= parse_version("5.0.0"):
+        return np.ones(len(data)) * np.nan
+
     itiIn_times = np.array(
         [tr["behavior_data"]["States timestamps"]["exit_state"][0][0] for tr in data]
     )
@@ -158,6 +160,9 @@ def get_stimFreezeTrigger_times(session_path, save=False, data=False, settings=F
         settings = {"IBLRIG_VERSION_TAG": "100.0.0"}
     elif settings["IBLRIG_VERSION_TAG"] == "":
         settings.update({"IBLRIG_VERSION_TAG": "100.0.0"})
+
+    if not parse_version(settings["IBLRIG_VERSION_TAG"]) >= parse_version("6.2.5"):
+        return np.ones(len(data)) * np.nan
 
     freeze_reward = np.array(
         [
@@ -213,8 +218,15 @@ def get_stimOffTrigger_times(session_path, save=False, data=False, settings=Fals
     elif settings["IBLRIG_VERSION_TAG"] == "":
         settings.update({"IBLRIG_VERSION_TAG": "100.0.0"})
 
+    if parse_version(settings["IBLRIG_VERSION_TAG"]) >= parse_version("6.2.5"):
+        stim_off_trigger_state = "hide_stim"
+    elif parse_version(settings["IBLRIG_VERSION_TAG"]) >= parse_version("5.0.0"):
+        stim_off_trigger_state = "exit_state"
+    else:
+        stim_off_trigger_state = "trial_start"
+
     stimOffTrigger_times = np.array(
-        [tr["behavior_data"]["States timestamps"]["hide_stim"][0][0] for tr in data]
+        [tr["behavior_data"]["States timestamps"][stim_off_trigger_state][0][0] for tr in data]
     )
     no_goTrigger_times = np.array(
         [tr["behavior_data"]["States timestamps"]["no_go"][0][0] for tr in data]
@@ -246,11 +258,18 @@ def get_stimOff_times_from_state(session_path, save=False, data=False, settings=
     elif settings["IBLRIG_VERSION_TAG"] == "":
         settings.update({"IBLRIG_VERSION_TAG": "100.0.0"})
 
-    hide_stim_state = np.array(
-        [tr["behavior_data"]["States timestamps"]["hide_stim"][0] for tr in data]
+    if parse_version(settings["IBLRIG_VERSION_TAG"]) >= parse_version("6.2.5"):
+        stim_off_trigger_state = "hide_stim"
+    elif parse_version(settings["IBLRIG_VERSION_TAG"]) >= parse_version("5.0.0"):
+        stim_off_trigger_state = "exit_state"
+    else:
+        stim_off_trigger_state = "trial_start"
+
+    stim_off_trigger_state_values = np.array(
+        [tr["behavior_data"]["States timestamps"][stim_off_trigger_state][0] for tr in data]
     )
     stimOff_times = np.array([])
-    for s in hide_stim_state:
+    for s in stim_off_trigger_state_values:
         x = s[0] - s[1]
         if np.isnan(x) or np.abs(x) > 0.0999:
             stimOff_times = np.append(stimOff_times, np.nan)
@@ -312,7 +331,7 @@ def get_stimOnOffFreeze_times_from_BNC1(session_path, save=False, data=False, se
     return stimOn_times, stimOff_times, stimFreeze_times
 
 
-# @uuid_to_path(dl=True)
+# TODO: UNUSED!! USE IT!
 def get_bonsai_screen_data(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
@@ -328,7 +347,7 @@ def get_bonsai_screen_data(session_path, save=False, data=False, settings=False)
     return screen_data
 
 
-# @uuid_to_path(dl=True)
+# TODO: UNUSED!! USE IT!
 def get_bonsai_sync_square_update_times(session_path, save=False, data=False, settings=False):
     if not data:
         data = raw.load_data(session_path)
@@ -551,10 +570,11 @@ def get_bpod2fpga_times_func(session_path):
 
 
 class BpodQCExtractor(object):
-    def __init__(self, session_path):
+    def __init__(self, session_path, lazy=True):
         self.session_path = session_path
         self.load_raw_data()
-        self.extract_trial_data()
+        if not lazy:
+            self.extract_trial_data()
 
     def load_raw_data(self):
         self.raw_data = raw.load_data(self.session_path)
@@ -576,7 +596,11 @@ if __name__ == "__main__":
     subj_path = "/home/nico/Projects/IBL/github/iblapps/scratch/TestSubjects/"
     # Guido's 3B
     gsession_path = subj_path + "_iblrig_test_mouse/2020-02-11/001"
-    bla = BpodQCExtractor(gsession_path)
+    test_db_eid = "b1c968ad-4874-468d-b2e4-5ffa9b9964e9"
+    one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
+              password='TapetesBloc18')
+    sesspath = one.path_from_eid(test_db_eid)
+    bla = BpodQCExtractor(sesspath)
     # Alex's 3A
     asession_path = subj_path + "_iblrig_test_mouse/2020-02-18/006"
     a2session_path = subj_path + "_iblrig_test_mouse/2020-02-21/011"
