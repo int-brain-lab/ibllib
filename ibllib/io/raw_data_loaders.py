@@ -91,6 +91,7 @@ def load_data(session_path, time='absolute'):
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_taskData.raw*.jsonable"), None)
     if not path:
+        logger_.warning("No data loaded: could notf ind raw data file")
         return None
     data = jsonable.read(path)
     if time == 'absolute':
@@ -110,10 +111,12 @@ def load_settings(session_path):
     :rtype: dict
     """
     if session_path is None:
+        logger_.warning("No data loaded: session_path is None")
         return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_taskSettings.raw*.json"), None)
     if not path:
+        logger_.warning("No data loaded: could notf ind raw data file")
         return None
     with open(path, 'r') as f:
         settings = json.load(f)

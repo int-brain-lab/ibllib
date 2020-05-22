@@ -24,25 +24,26 @@ log = logging.getLogger("ibllib")
 
 class ExtendedQC(object):
     def __init__(self, one=None, eid=None, lazy=True):
-        self.one = one or ONE(printout=False)
+        self.one = one or ONE()
         self.eid = eid if is_uuid_string(eid) else None
 
-        self.bpodqc = BpodQC(eid, one=self.one, lazy=lazy)
-        self.oneqc = ONEQC(
-            self.eid, one=self.one, bpod_ntrials=self.bpodqc.bpod_ntrials, lazy=lazy
-        )
+        self.bpodqc = None
+        self.oneqc = None
         self.frame = None
 
         if not lazy:
+            self.compute_all_qc()
             self.build_extended_qc_frame()
 
-    def compute_qc(self):
-        self.bpodqc.compute()
-        self.oneqc.compute()
+    def compute_all_qc(self):
+        self.bpodqc = BpodQC(self.eid, one=self.one, lazy=False)
+        self.oneqc = ONEQC(
+            self.eid, one=self.one, bpod_ntrials=self.bpodqc.bpod_ntrials, lazy=False
+        )
 
     def build_extended_qc_frame(self):
-        if self.bpodqc.passed is None:
-            self.compute_qc()
+        if self.bpodqc is None:
+            self.compute_all_qc()
         # Get bpod and one qc frames
         extended_qc = {}
         # Make average bool pass for bpodqc.metrics frame
@@ -61,9 +62,14 @@ class ExtendedQC(object):
         return self.one.alyx.rest("sessions", "read", id=self.eid)["extended_qc"]
 
     def update_extended_qc(self):
-        return self.one.alyx.json_field_update(
+        if self.frame is None:
+            log.warning("ExtendedQC frame is not built yet, nothing to update")
+            return
+
+        out = self.one.alyx.json_field_update(
             endpoint="sessions", uuid=self.eid, field_name="extended_qc", data=self.frame
         )
+        return out
 
 
 if __name__ == "__main__":

@@ -570,13 +570,14 @@ def get_bpod2fpga_times_func(session_path):
 
 
 class BpodQCExtractor(object):
-    def __init__(self, session_path, lazy=True):
+    def __init__(self, session_path, lazy=False):
         self.session_path = session_path
         self.load_raw_data()
         if not lazy:
             self.extract_trial_data()
 
     def load_raw_data(self):
+        log.info(f"Loading raw data from {self.session_path}")
         self.raw_data = raw.load_data(self.session_path)
         self.details = raw.load_settings(self.session_path)
         self.BNC1, self.BNC2 = get_bpod_fronts(
@@ -589,6 +590,7 @@ class BpodQCExtractor(object):
         assert np.all(np.diff(self.wheel_data["re_ts"]) > 0)
 
     def extract_trial_data(self):
+        log.info("Extracting trial data table...")
         self.trial_data = extract_bpod_trial_data(
             self.session_path, raw_data=self.raw_data, raw_settings=self.details, fpga_time=False
         )

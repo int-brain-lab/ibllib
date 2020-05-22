@@ -1,20 +1,22 @@
 import logging
+from pathlib import Path
+
 import numpy as np
 
-import ibllib.qc.bpodqc_extractors as bpodqc
+from alf.io import is_session_path, is_uuid_string
 from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
 from ibllib.qc.bpodqc_extractors import BpodQCExtractor
-from ibllib.qc.oneutils import random_ephys_session, check_parse_json
+from ibllib.qc.oneutils import random_ephys_session
 from oneibl.one import ONE
 
 log = logging.getLogger("ibllib")
 
 
 class BpodQC(object):
-    def __init__(self, eid, one=None, lazy=True):
+    def __init__(self, session_path_or_eid, one=None, lazy=False):
         self.one = one or ONE()
-        self.eid = eid
-        self.session_path = self.one.path_from_eid(eid)
+        self.eid = session_path_or_eid
+        self.session_path = self._eid_or_path()
 
         # Data
         self.extractor = None
@@ -28,16 +30,30 @@ class BpodQC(object):
             self.load_data()
             self.compute()
 
-    def load_data(self):
-        log.info(f"Loading data from {self.session_path}")
-        self.extractor = BpodQCExtractor(self.session_path)
+    def _eid_or_path(self):
+        if is_uuid_string(str(self.eid)):
+            log.info(f"Looking for local data of session {self.eid}")
+            session_path = self.one.path_from_eid(self.eid)
+            if session_path is None:
+                log.error(
+                    f"No data found locally for eid {self.eid} in session path {session_path}"
+                )
+        elif is_session_path(self.eid):
+            session_path = self.eid
+        else:
+            log.error("Cannot run BpodQC: Plese insert a valid session path or eid")
+        return session_path
+
+    def load_data(self, lazy=False):
+        self.extractor = BpodQCExtractor(self.session_path, lazy=lazy)
         self.wheel_gain = self.extractor.details["STIM_GAIN"]
         self.bpod_ntrials = len(self.extractor.raw_data)
+        return
 
     def compute(self):
         if self.extractor is None:
             self.load_data()
-        log.info(f"Session {self.eid}: Running QC on Bpod data...")
+        log.info(f"Session {self.session_path}: Running QC on Bpod data...")
         self.metrics, self.passed = get_bpodqc_metrics_frame(
             self.extractor.trial_data,
             self.extractor.wheel_data,
@@ -562,7 +578,7 @@ if __name__ == "__main__":
     # metrics = get_bpodqc_metrics_frame(eid, trial_data=trial_data)
     # criteria = get_bpodqc_metrics_frame(eid, trial_data=trial_data, apply_criteria=True)
     # mean_criteria = {k: np.nanmean(v) for k, v in criteria.items()}
-    bpod_metrics = BpodQC(eid)
+    bpod_metrics = BpodQC(eid, lazy=False)
 
     profiler.stop()
 

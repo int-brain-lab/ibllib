@@ -9,10 +9,11 @@ log = logging.getLogger("ibllib")
 
 
 class ONEQC(object):
-    def __init__(self, eid, one=None, bpod_ntrials=None, lazy=True):
-        self.eid = eid
+    def __init__(self, eid, one=None, bpod_ntrials=None, lazy=False):
         self.one = one or ONE()
-        self.bpod_ntrials = bpod_ntrials or np.nan
+        self.eid = eid
+        self.details = self.one.get_details(self.eid, full=True)
+        self.bpod_ntrials = bpod_ntrials or self.details["n_trials"]
 
         self.metrics = None
         self.passed = None
