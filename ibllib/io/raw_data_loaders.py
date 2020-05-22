@@ -91,7 +91,7 @@ def load_data(session_path, time='absolute'):
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_taskData.raw*.jsonable"), None)
     if not path:
-        logger_.warning("No data loaded: could notf ind raw data file")
+        logger_.warning("No data loaded: could not find raw data file")
         return None
     data = jsonable.read(path)
     if time == 'absolute':
@@ -116,7 +116,7 @@ def load_settings(session_path):
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_taskSettings.raw*.json"), None)
     if not path:
-        logger_.warning("No data loaded: could notf ind raw data file")
+        logger_.warning("No data loaded: could not find raw settings file")
         return None
     with open(path, 'r') as f:
         settings = json.load(f)
@@ -276,6 +276,7 @@ def load_encoder_positions(session_path, settings=False):
         if line.startswith('Position'):
             settings = {'IBLRIG_VERSION_TAG': '0.0.0'}
     if not path:
+        logger_.warning("No data loaded: could not find raw encoderPositions file")
         return None
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
         return _load_encoder_positions_file_ge5(path)

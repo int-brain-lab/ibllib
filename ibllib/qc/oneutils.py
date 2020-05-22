@@ -13,6 +13,21 @@ log = logging.getLogger("ibllib")
 one = ONE(printout=False)
 
 
+def download_bpodqc_raw_data(eid, one=None):
+    one = one or ONE()
+    dstypes = [
+        "_iblrig_taskData.raw",
+        "_iblrig_taskSettings.raw",
+        "_iblrig_encoderPositions.raw",
+        "_iblrig_encoderEvents.raw",
+        "_iblrig_stimPositionScreen.raw",
+        "_iblrig_syncSquareUpdate.raw",
+        "_iblrig_encoderTrialInfo.raw",
+        "_iblrig_ambientSensorData.raw",
+    ]
+    one.load(eid, dataset_types=dstypes, download_only=True)
+
+
 # Decorators
 def _dl_raw_behavior(session_path, full=False, dry=False, force=False):
     """ Helper function to download raw behavioral data from session_path based functions
@@ -21,10 +36,10 @@ def _dl_raw_behavior(session_path, full=False, dry=False, force=False):
     min_dsts = [
         "_iblrig_taskData.raw",
         "_iblrig_taskSettings.raw",
+        "_iblrig_encoderPositions.raw",
+        "_iblrig_encoderEvents.raw",
         "_iblrig_stimPositionScreen.raw",
         "_iblrig_syncSquareUpdate.raw",
-        "_iblrig_encoderEvents.raw",
-        "_iblrig_encoderPositions.raw",
         "_iblrig_encoderTrialInfo.raw",
         "_iblrig_ambientSensorData.raw",
     ]
@@ -172,7 +187,7 @@ def random_ephys_session(lab=None, complete=False):
         dstypes = []
     sessions = search_lab_ephys_sessions(lab, dstypes=dstypes, nlatest=None)
     if sessions is None:
-        return
+        return (None, None)
     eids, dets = sessions
     out = np.random.choice(dets)
     print(out)
@@ -203,8 +218,7 @@ if __name__ == "__main__":
         "start_time": "2020-01-22T10:50:59",
         "number": 1,
         "lab": "mainenlab",
-        "url":
-            "https://alyx.internationalbrainlab.org/sessions/259927fd-7563-4b03-bc5d-17b4d0fa7a55",
+        "url": "https://alyx.internationalbrainlab.org/sessions/259927fd-7563-4b03-bc5d-17b4d0fa7a55",
         "task_protocol": "_iblrig_tasks_ephysChoiceWorld6.2.5",
         "local_path": "/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_2240/2020-01-22/001",
     }

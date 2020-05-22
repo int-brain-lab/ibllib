@@ -13,10 +13,15 @@ log = logging.getLogger("ibllib")
 
 
 class BpodQC(object):
-    def __init__(self, session_path_or_eid, one=None, lazy=False):
+    def __init__(self, session_path_or_eid, one=None, ensure_data=True, lazy=False):
         self.one = one or ONE()
-        self.eid = session_path_or_eid
-        self.session_path = self._eid_or_path()
+        self.eid = None
+        self.session_path = None
+        self.ensure_data = ensure_data
+        self.lazy = lazy
+        self._set_eid_or_path(session_path_or_eid)
+        if self.ensure_data:
+            self._ensure_required_data()
 
         # Data
         self.extractor = None
@@ -26,23 +31,48 @@ class BpodQC(object):
         self.metrics = None
         self.passed = None
 
-        if not lazy:
+        if not self.lazy:
             self.load_data()
             self.compute()
 
-    def _eid_or_path(self):
-        if is_uuid_string(str(self.eid)):
-            log.info(f"Looking for local data of session {self.eid}")
-            session_path = self.one.path_from_eid(self.eid)
-            if session_path is None:
-                log.error(
-                    f"No data found locally for eid {self.eid} in session path {session_path}"
+    def _ensure_required_data(self):
+        dstypes = [
+            "_iblrig_taskData.raw",
+            "_iblrig_taskSettings.raw",
+            "_iblrig_encoderPositions.raw",
+            "_iblrig_encoderEvents.raw",
+            "_iblrig_stimPositionScreen.raw",
+            "_iblrig_syncSquareUpdate.raw",
+            "_iblrig_encoderTrialInfo.raw",
+            "_iblrig_ambientSensorData.raw",
+        ]
+        if (self.session_path is None) or (not Path(self.session_path).exists()):
+            log.info(f"Downloading data for session {self.eid}")
+            self.one.load(self.eid, dataset_types=dstypes, download_only=True)
+            self.session_path = self.one.path_from_eid(self.eid)
+            if self.session_path is None:
+                self.lazy = True
+                log.error("Data not found on server, can't calculate QC.")
+        else:
+            glob_sp = list(x.name for x in Path(self.session_path).rglob("*.raw.*") if x.is_file())
+            if not all([x in glob_sp for x in dstypes]):
+                log.warning(
+                    f"Not all data for session {self.eid} in path {self.session_path} could be found."
                 )
-        elif is_session_path(self.eid):
-            session_path = self.eid
+                log.info("Attempting download...")
+                self.one.load(self.eid, dataset_types=dstypes, download_only=True)
+
+    def _set_eid_or_path(self, session_path_or_eid):
+        if session_path_or_eid is None:
+            log.error("Cannot run BpodQC: Plese insert a valid session path or eid")
+        if is_uuid_string(str(session_path_or_eid)):
+            self.eid = session_path_or_eid
+            # Try to setsession_path if data is found locally
+            self.session_path = self.one.path_from_eid(self.eid)
+        elif is_session_path(session_path_or_eid):
+            self.session_path = session_path_or_eid
         else:
             log.error("Cannot run BpodQC: Plese insert a valid session path or eid")
-        return session_path
 
     def load_data(self, lazy=False):
         self.extractor = BpodQCExtractor(self.session_path, lazy=lazy)
@@ -568,9 +598,9 @@ def load_audio_pre_trial(trial_data, BNC2=None):
 if __name__ == "__main__":
     from pyinstrument import Profiler
 
-    eid, det = random_ephys_session("churchlandlab")
+    eid, det = random_ephys_session()
     # trial_data = bpodqc.extract_bpod_trial_table(eid, fpga_time=False)
-
+    eid = "ed997f98-424b-4f1d-a736-2d1eb0f35dbb"
     profiler = Profiler()
     profiler.start()
 
@@ -578,7 +608,7 @@ if __name__ == "__main__":
     # metrics = get_bpodqc_metrics_frame(eid, trial_data=trial_data)
     # criteria = get_bpodqc_metrics_frame(eid, trial_data=trial_data, apply_criteria=True)
     # mean_criteria = {k: np.nanmean(v) for k, v in criteria.items()}
-    bpod_metrics = BpodQC(eid, lazy=False)
+    bpod_metrics = BpodQC(eid, ensure_data=True, lazy=False)
 
     profiler.stop()
 
