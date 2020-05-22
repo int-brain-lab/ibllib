@@ -47,7 +47,7 @@ def plot_random_session_metrics(lab):
         print("Please input a lab")
         return
     eid, det = oneutils.random_ephys_session(lab)
-    data = bpodqc.extract_bpod_trial_table(eid, fpga_time=False)
+    data = bpodqc.extract_bpod_trial_data(eid, fpga_time=False)
     metrics = qcmetrics.get_qcmetrics_frame(eid, data=data)
 
 
@@ -69,7 +69,7 @@ def get_metrics_from_list(eids):
     outmetrics = []
     outcriteria = []
     for eid in eids:
-        data = bpodqc.extract_bpod_trial_table(eid, fpga_time=False)
+        data = bpodqc.extract_bpod_trial_data(eid, fpga_time=False)
         metrics = qcmetrics.get_qcmetrics_frame(eid, data=data)
         criteria = qcmetrics.get_qccriteria_frame(eid, data=data)
         outdata.append(data)

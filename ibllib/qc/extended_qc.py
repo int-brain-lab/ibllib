@@ -4,7 +4,6 @@ import numpy as np
 
 import ibllib.qc.bpodqc_metrics as bpodqc
 import ibllib.qc.oneqc_metrics as oneqc
-from ibllib.qc.bpodqc_extractors import extract_bpod_trial_table
 from ibllib.qc.oneutils import random_ephys_session
 from oneibl.one import ONE
 from alf.io import is_uuid_string

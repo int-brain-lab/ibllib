@@ -455,7 +455,7 @@ def _get_trimmed_data_from_pregenerated_files(
 
 
 @uuid_to_path(dl=True)
-def extract_bpod_trial_table(session_path, raw_data=None, raw_settings=None, fpga_time=False):
+def extract_bpod_trial_data(session_path, raw_data=None, raw_settings=None, fpga_time=False):
     """Extracts and loads ephys sessions from bpod data"""
     log.info(f"Extracting session: {session_path}")
     data = raw_data or raw.load_data(session_path)
@@ -582,11 +582,14 @@ class BpodQCExtractor(object):
         self.BNC1, self.BNC2 = get_bpod_fronts(
             self.session_path, data=self.raw_data, settings=self.details
         )
+        # NOTE: wheel_position is actually an extractor needs _iblrig_encoderPositions.raw
+        # to be there but not as input... FIXME: we should have the extractor use the data
+        # without assuming it's there
         self.wheel_data = get_wheel_position(self.session_path, bp_data=self.raw_data)
         assert np.all(np.diff(self.wheel_data["re_ts"]) > 0)
 
     def extract_trial_data(self):
-        self.trial_data = extract_bpod_trial_table(
+        self.trial_data = extract_bpod_trial_data(
             self.session_path, raw_data=self.raw_data, raw_settings=self.details, fpga_time=False
         )
 
@@ -606,7 +609,7 @@ if __name__ == "__main__":
     a2session_path = subj_path + "_iblrig_test_mouse/2020-02-21/011"
     eid = "af74b29d-a671-4c22-a5e8-1e3d27e362f3"
     session_path = gsession_path
-    # bpod = extract_bpod_trial_table(session_path)
+    # bpod = extract_bpod_trial_data(session_path)
     # fpgaqc_frame = _qc_from_path(session_path, display=False)
     # bpodqc_frame = get_bpodqc_frame(session_path)
 
