@@ -106,14 +106,3 @@ def load_dstype_qc_metrics(
         out[k] = v
 
     return out
-
-
-if __name__ == "__main__":
-    one = ONE()
-    eid, det = random_ephys_session()
-    session_path = one.path_from_eid(eid)
-    data = raw.load_data(session_path)
-    # metrics, passed = get_oneqc_metrics_frame(eid, len(data))
-    # metrics, passed = get_oneqc_metrics_frame(eid, np.inf)
-    met_obj = ONEQC(eid, one=one, bpod_ntrials=len(data), lazy=False)
-    ""

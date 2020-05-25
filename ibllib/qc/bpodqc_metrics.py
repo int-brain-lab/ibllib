@@ -593,23 +593,3 @@ def load_audio_pre_trial(trial_data, BNC2=None):
     passed = (~metric).astype(np.float)
     assert len(trial_data["intervals_0"]) == len(metric) == len(passed)
     return metric, passed
-
-
-if __name__ == "__main__":
-    from pyinstrument import Profiler
-
-    eid, det = random_ephys_session()
-    # trial_data = bpodqc.extract_bpod_trial_table(eid, fpga_time=False)
-    eid = "ed997f98-424b-4f1d-a736-2d1eb0f35dbb"
-    profiler = Profiler()
-    profiler.start()
-
-    # code you want to profile
-    # metrics = get_bpodqc_metrics_frame(eid, trial_data=trial_data)
-    # criteria = get_bpodqc_metrics_frame(eid, trial_data=trial_data, apply_criteria=True)
-    # mean_criteria = {k: np.nanmean(v) for k, v in criteria.items()}
-    bpod_metrics = BpodQC(eid, ensure_data=True, lazy=False)
-
-    profiler.stop()
-
-    print(profiler.output_text(unicode=True, color=True))
