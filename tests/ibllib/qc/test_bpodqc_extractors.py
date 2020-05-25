@@ -16,6 +16,11 @@ dstypes = [
     "_iblrig_taskData.raw",
     "_iblrig_taskSettings.raw",
     "_iblrig_encoderPositions.raw",
+    "_iblrig_encoderEvents.raw",
+    "_iblrig_stimPositionScreen.raw",
+    "_iblrig_syncSquareUpdate.raw",
+    "_iblrig_encoderTrialInfo.raw",
+    "_iblrig_ambientSensorData.raw",
 ]
 
 
