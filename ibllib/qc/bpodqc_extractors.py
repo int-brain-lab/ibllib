@@ -21,7 +21,6 @@ from ibllib.io.extractors.training_trials import (get_choice,
                                                   get_stimOn_times,
                                                   get_stimOnTrigger_times)
 from ibllib.io.extractors.training_wheel import get_wheel_position
-from ibllib.qc.oneutils import uuid_to_path
 from oneibl.one import ONE
 
 log = logging.getLogger("ibllib")
@@ -446,7 +445,6 @@ def _get_trimmed_data_from_pregenerated_files(
     }
 
 
-@uuid_to_path(dl=True)
 def extract_bpod_trial_data(session_path, raw_data=None, raw_settings=None, fpga_time=False):
     """Extracts and loads ephys sessions from bpod data"""
     log.info(f"Extracting session: {session_path}")
