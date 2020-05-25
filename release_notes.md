@@ -1,8 +1,9 @@
-### Release Notes 1.4.15dev - (18/05/2020 - (EDIT THIS HADER BEFORE RELEASE)
+### Release Notes 1.4.15dev - (25/05/2020 - (EDIT THIS HADER BEFORE RELEASE)
 -   Metaclass implementation of UniqueSingletons for AlyxClient
 -   Added JSON methods to AlyxClient
 -   Added get_details method to ONE to retrieve search function deteils after the fact
 -   Refactored one tests, separated utility functions like get_details, path_from_eid, eid_from_path, ...
+-   Added Bpod and ONE QC features, basic plotting, examples and tests to ibllib/qc
 
 ### Release Notes 1.4.14 - TBD
 -   Added permutation test, comparing a metric on two sets of datasets, by shuffling labels and seeing how plausible the observed actual difference is
