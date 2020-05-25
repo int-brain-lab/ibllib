@@ -6,7 +6,6 @@ import numpy as np
 from alf.io import is_session_path, is_uuid_string
 from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
 from ibllib.qc.bpodqc_extractors import BpodQCExtractor
-from ibllib.qc.oneutils import random_ephys_session
 from oneibl.one import ONE
 
 log = logging.getLogger("ibllib")

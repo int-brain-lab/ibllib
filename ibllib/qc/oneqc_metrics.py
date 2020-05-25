@@ -1,8 +1,6 @@
 import logging
 import numpy as np
 
-import ibllib.io.raw_data_loaders as raw
-from ibllib.qc.oneutils import random_ephys_session
 from oneibl.one import ONE
 
 log = logging.getLogger("ibllib")

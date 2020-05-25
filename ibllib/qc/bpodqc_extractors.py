@@ -21,7 +21,6 @@ from ibllib.io.extractors.training_trials import (get_choice,
                                                   get_stimOn_times,
                                                   get_stimOnTrigger_times)
 from ibllib.io.extractors.training_wheel import get_wheel_position
-from oneibl.one import ONE
 
 log = logging.getLogger("ibllib")
 

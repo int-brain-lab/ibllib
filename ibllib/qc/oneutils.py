@@ -119,10 +119,14 @@ def search_lab_ephys_sessions(
 ):
     if isinstance(lab, list):
         out = []
-        for l in lab:
+        for il in lab:
             out.append(
                 search_lab_ephys_sessions(
-                    lab=l, dstypes=dstypes, nlatest=nlatest, det=det, check_download=check_download
+                    lab=il,
+                    dstypes=dstypes,
+                    nlatest=nlatest,
+                    det=det,
+                    check_download=check_download,
                 )
             )
             return out
@@ -208,42 +212,3 @@ def check_parse_json(invar):
         except ValueError as e:
             log.warning(e, "\njson field content is not dict or string")
             return None
-
-
-if __name__ == "__main__":
-    sp = "/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_2240/2020-01-22/001"
-    eid = "259927fd-7563-4b03-bc5d-17b4d0fa7a55"
-    det = {
-        "subject": "ZM_2240",
-        "start_time": "2020-01-22T10:50:59",
-        "number": 1,
-        "lab": "mainenlab",
-        "url":
-            "https://alyx.internationalbrainlab.org/sessions/259927fd-7563-4b03-bc5d-17b4d0fa7a55",
-        "task_protocol": "_iblrig_tasks_ephysChoiceWorld6.2.5",
-        "local_path": "/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_2240/2020-01-22/001",
-    }
-    lab = "mainenlab"
-    # Test random dataset
-    print(is_uuid_string(random_ephys_session(lab, complete=False)[0]))
-    print(is_details_dict(random_ephys_session(lab, complete=False)[1]))
-    print(random_ephys_session(complete=True) is not None)
-    print(random_ephys_session(lab, complete=True) is None)
-    print(random_ephys_session("sakjdhka", complete=False) is None)
-    # Test _to_eid
-    # All == eid
-    print(_to_eid(eid) == eid)
-    print(_to_eid([eid, eid]) == [eid, eid])
-    print(_to_eid((eid, eid)) == [eid, eid])
-    print(_to_eid(sp) == eid)
-    print(_to_eid([sp, sp]) == [eid, eid])
-    print(_to_eid((sp, sp)) == [eid, eid])
-    print(_to_eid(det) == eid)
-    print(_to_eid([det, det]) == [eid, eid])
-    print(_to_eid((det, det)) == [eid, eid])
-    # All None
-    print(_to_eid(123) is None)
-    print(_to_eid("sda") is None)
-    print(_to_eid({1: 2}) is None)
-    print(_to_eid([1, 2]) == [None, None])
-    print(_to_eid((1, 2)) == [None, None])

@@ -2,7 +2,6 @@ import logging
 
 import numpy as np
 
-from ibllib.qc.oneutils import random_ephys_session
 from oneibl.one import ONE
 from alf.io import is_uuid_string
 
