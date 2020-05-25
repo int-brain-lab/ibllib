@@ -71,6 +71,10 @@ class BaseBpodTrialsExtractor(BaseExtractor):
 
     def extract(self, bpod_trials=None, settings=None, **kwargs):
         """
+        :param: bpod_trials (optional) bpod trials from jsonable in a dictionary
+        :param: settings (optional) bpod iblrig settings json file in a dictionary
+        :param: save (bool) write output ALF files, defaults to False
+        :param: path_out (pathlib.Path) output path (defaults to `{session_path}/alf`)
         :return: numpy.ndarray or list of ndarrays, list of filenames
         :rtype: dtype('float64')
         """

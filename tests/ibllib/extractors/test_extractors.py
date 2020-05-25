@@ -472,17 +472,17 @@ class TestExtractTrialData(unittest.TestCase):
 
     def test_size_outputs(self):
         # check the output dimensions
-        from ibllib.pipes import extract_session
-        extract_session.from_path(self.training_ge5['path'])
+        from ibllib.pipes.training_preprocessing import extract_training
+        extract_training(self.training_ge5['path'])
         trials = alf.io.load_object(self.training_ge5['path'] / 'alf', object='_ibl_trials')
         self.assertTrue(alf.io.check_dimensions(trials) == 0)
-        extract_session.from_path(self.training_lt5['path'], force=True)
+        extract_training(self.training_lt5['path'])
         trials = alf.io.load_object(self.training_lt5['path'] / 'alf', object='_ibl_trials')
         self.assertTrue(alf.io.check_dimensions(trials) == 0)
-        extract_session.from_path(self.biased_ge5['path'])
+        extract_training(self.biased_ge5['path'])
         trials = alf.io.load_object(self.biased_ge5['path'] / 'alf', object='_ibl_trials')
         self.assertTrue(alf.io.check_dimensions(trials) == 0)
-        extract_session.from_path(self.biased_lt5['path'], force=True)
+        extract_training(self.biased_lt5['path'])
         trials = alf.io.load_object(self.biased_lt5['path'] / 'alf', object='_ibl_trials')
         self.assertTrue(alf.io.check_dimensions(trials) == 0)
 

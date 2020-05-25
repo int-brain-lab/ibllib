@@ -38,3 +38,30 @@ def compress(file_in, file_out, command, remove_original=True):
         if remove_original:
             file_in.unlink()
         return process.returncode, file_out
+
+
+def iblrig_video_compression(session_path, command):
+    """
+    :param session_path:
+    :param command:
+    for ephys:
+    >>> command = ('ffmpeg -i {file_in} -codec:v libx264 -preset slow -crf 17 '
+    >>>            '-nostats -loglevel 0 -codec:a copy {file_out}')
+    for training:
+    >>> command = ('ffmpeg -i {file_in} -codec:v libx264 -preset slow -crf 29 '
+    >>>            '-nostats -loglevel 0 -codec:a copy {file_out}')
+    :return: list of compressed files
+    """
+    output_files = []
+    rig_avi_files = session_path.joinpath("raw_video_data").rglob('_iblrig_*.avi')
+    # first compress everything (the rationale is not to delete anything if there is a crash)
+    for file_in in rig_avi_files:
+        print(file_in)
+        file_out = file_in.with_suffix('.mp4')
+        status, fout = compress(file_in=file_in, file_out=file_out,
+                                command=command, remove_original=False)
+        output_files.append(fout)
+    # then remove everything
+    for file_in in rig_avi_files:
+        file_in.unlink()
+    return output_files

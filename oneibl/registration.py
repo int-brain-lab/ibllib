@@ -265,8 +265,8 @@ class RegistrationClient:
 
 
 def _alyx_procedure_from_task(task_protocol):
-    import ibllib.pipes.extract_session
-    task_str = ibllib.pipes.extract_session.get_task_extractor_type(task_protocol)
+    import ibllib.pipes.training_preprocessing  # this is to avoid circular imports
+    task_str = ibllib.pipes.training_preprocessing.get_task_extractor_type(task_protocol)
     lookup = {'biased': 'Behavior training/tasks',
               'habituation': 'Behavior training/tasks',
               'training': 'Behavior training/tasks',

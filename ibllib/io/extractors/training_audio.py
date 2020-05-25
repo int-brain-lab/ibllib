@@ -105,7 +105,7 @@ def extract_sound(ses_path, save=True, force=False, delete=False):
 
     :param ses_path: ALF full session path: (/mysubject001/YYYY-MM-DD/001)
     :param delete: if True, removes the wav file after processing
-    :return: None
+    :return: list of output files
     """
     ses_path = Path(ses_path)
     wav_file = ses_path / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
@@ -153,6 +153,7 @@ def extract_sound(ses_path, save=True, force=False, delete=False):
         np.save(file=files_out['times'], arr=tscale[:, None].astype(np.single))
     if delete:
         wav_file.unlink()
+    return [files_out[k] for k in files_out]
 
 
 def _fix_wav_file(wav_file):

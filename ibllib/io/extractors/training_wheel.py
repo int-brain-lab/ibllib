@@ -242,5 +242,6 @@ class WheelPosition(BaseBpodTrialsExtractor):
         return get_wheel_position(self.session_path, self.bpod_trials)
 
 
-def extract_all(session_path, bpod_trials=None, save=False):
-    return WheelPosition(session_path=session_path).extract(save=save, bpod_trials=bpod_trials)
+def extract_all(session_path, bpod_trials=None, settings=None, save=False):
+    return WheelPosition(session_path=session_path).extract(
+        save=save, bpod_trials=bpod_trials, settings=settings)
