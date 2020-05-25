@@ -6,6 +6,7 @@ import numpy as np
 from ibllib.qc import bpodqc_metrics as qcmetrics
 from ibllib.qc import BpodQC
 from oneibl.one import ONE
+from ibllib.qc.oneutils import download_bpodqc_raw_data
 
 one = ONE(
     base_url="https://test.alyx.internationalbrainlab.org",
@@ -17,6 +18,11 @@ dstypes = [
     "_iblrig_taskData.raw",
     "_iblrig_taskSettings.raw",
     "_iblrig_encoderPositions.raw",
+    "_iblrig_encoderEvents.raw",
+    "_iblrig_stimPositionScreen.raw",
+    "_iblrig_syncSquareUpdate.raw",
+    "_iblrig_encoderTrialInfo.raw",
+    "_iblrig_ambientSensorData.raw",
 ]
 
 
@@ -29,6 +35,8 @@ class TestBpodQCMetricsObject(unittest.TestCase):
         self.session_path = self.one.path_from_eid(self.eid)
 
     def test_BpodQC_lazy(self):
+        # Make sure the data exists locally
+        self.one.load(self.eid, dataset_types=dstypes, download_only=True)
         # Make from eid
         bpodqc = BpodQC(self.eid, one=self.one, lazy=True)
         # Make from session_path
@@ -47,6 +55,8 @@ class TestBpodQCMetricsObject(unittest.TestCase):
         self.assertTrue(bpodqc.passed is not None)
 
     def test_BpodQC(self):
+        # Make sure the data exists locally
+        download_bpodqc_raw_data(self.eid, one=self.one)
         bpodqc = BpodQC(self.eid, one=self.one, lazy=False)
         self.assertTrue(bpodqc is not None)
 
