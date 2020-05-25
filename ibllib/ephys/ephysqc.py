@@ -149,6 +149,9 @@ def validate_ttl_test(ses_path, display=False):
     ses_path = Path(ses_path)
     if not ses_path.exists():
         return False
+
+    # get the synchronization fronts (from the raw binary if necessary)
+    fpga.extract_sync(session_path=ses_path, overwrite=False)
     rawsync, sync_map = fpga._get_main_probe_sync(ses_path)
     last_time = rawsync['times'][-1]
 
@@ -306,7 +309,7 @@ def qc_fpga_task(fpga_trials, alf_trials):
     start should not be NaNs and increasing. This is not a QC but an assertion.
     """
     status = True
-    for k in ['goCueTrigger_times_bpod', 'response_times', 'stimOn_times', 'response_times_bpod',
+    for k in ['response_times', 'stimOn_times', 'response_times',
               'goCueTrigger_times', 'goCue_times', 'feedback_times']:
         if k.endswith('_bpod'):
             tstart = alf_trials['intervals_bpod'][:, 0]

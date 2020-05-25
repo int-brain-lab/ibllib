@@ -9,7 +9,7 @@ from scipy.io import wavfile
 
 from ibllib import dsp
 import ibllib.io.raw_data_loaders as ioraw
-import ibllib.io.extractors.training_trials
+from ibllib.io.extractors.training_trials import GoCueTimes
 
 logger_ = logging.getLogger('ibllib')
 
@@ -143,8 +143,7 @@ def extract_sound(ses_path, save=True, force=False, delete=False):
     data = ioraw.load_data(ses_path)
     if data is None:  # if no session data, we're done
         return
-    tgocue = np.array(ibllib.io.extractors.training_trials.get_goCueOnset_times(
-        None, save=False, data=data))
+    tgocue, _ = GoCueTimes(ses_path).extract(save=False, bpod_trials=data)
     ilast = min(len(tgocue), len(detect))
     dt = tgocue[:ilast] - detect[: ilast]
     # only save if dt is consistent for the whole session

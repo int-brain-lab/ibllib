@@ -289,6 +289,8 @@ def bpod_fpga_sync(bpod_intervals=None, ephys_intervals=None):
         if ibpod.size == 0:
             raise err.SyncBpodFpgaException('Can not sync BPOD and FPGA - no matching sync pulses '
                                             'found.')
+        bpod_intervals = bpod_intervals[ibpod, :]
+        ephys_intervals = ephys_intervals[ifpga, :]
     else:
         ibpod, ifpga = [np.arange(bpod_intervals.shape[0]) for _ in np.arange(2)]
     tlen = (np.diff(bpod_intervals) - np.diff(ephys_intervals))[:-1] - ITI_DURATION
@@ -550,9 +552,13 @@ class FpgaTrials(BaseExtractor):
 
     def _extract(self, sync=None, chmap=None):
         # extract the behaviour data from bpod
+        if sync is None or chmap is None:
+            _sync, _chmap = _get_main_probe_sync(self.session_path, bin_exists=False)
+            sync = sync or _sync
+            chmap = chmap or _chmap
         bpod_raw = raw_data_loaders.load_data(self.session_path)
         tmax = bpod_raw[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
-        bpod_trials, _ = biased_trials.extract_all(session_path=self.session_path, save=True,
+        bpod_trials, _ = biased_trials.extract_all(session_path=self.session_path, save=False,
                                                    bpod_trials=bpod_raw)
         bpod_trials['intervals_bpod'] = np.copy(bpod_trials['intervals'])
         fpga_trials = extract_behaviour_sync(sync=sync, chmap=chmap, tmax=tmax)
