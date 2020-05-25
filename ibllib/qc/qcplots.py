@@ -1,15 +1,12 @@
 import json
-from functools import wraps
 from pathlib import Path
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import seaborn as sns
 
-from ibllib.qc import BpodQC, ExtendedQC
+from ibllib.qc import BpodQC
 import ibllib.qc.oneutils as oneutils
 from oneibl.one import ONE
-from alf.io import is_details_dict
 
 
 def boxplot_metrics(
@@ -38,7 +35,6 @@ def barplot_passed(
 ):
     a4_dims = (11.7, 8.27)
     fig, ax = plt.subplots(figsize=a4_dims)
-    mng = plt.get_current_fig_manager()
     p = sns.barplot(ax=ax, data=df, orient="h")
     p.set_title(title)
     p.set_xlabel(xlabel)
@@ -58,7 +54,6 @@ if __name__ == "__main__":
     bpodqc = BpodQC(eid, one=one, ensure_data=True, lazy=False)
 
     session_name = "/".join(bpodqc.session_path.parts[-3:])
-
 
     df_metric = pd.DataFrame.from_dict(bpodqc.metrics)
     df_passed = pd.DataFrame.from_dict(bpodqc.passed)

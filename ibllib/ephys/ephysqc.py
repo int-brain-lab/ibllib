@@ -344,7 +344,9 @@ def qc_fpga_task(fpga_trials, alf_trials):
 
     # stimOff 1 sec after valve, with 0.1 as acceptable jitter
     qc_trials['stimOff_delay_valve'] = np.less(
-        np.abs(fpga_trials['stimOff_times'] - fpga_trials['valveOpen_times'] - VALVE_STIM_OFF_DELAY),
+        np.abs(
+            fpga_trials['stimOff_times'] - fpga_trials['valveOpen_times'] - VALVE_STIM_OFF_DELAY
+        ),
         VALVE_STIM_OFF_JITTER, out=np.ones(ntrials, dtype=np.bool),
         where=~np.isnan(fpga_trials['valveOpen_times']))
 

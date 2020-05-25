@@ -2,14 +2,11 @@ import logging
 
 import numpy as np
 
-import ibllib.qc.bpodqc_metrics as bpodqc
-import ibllib.qc.oneqc_metrics as oneqc
 from ibllib.qc.oneutils import random_ephys_session
 from oneibl.one import ONE
 from alf.io import is_uuid_string
 
-from ibllib.qc import BpodQC
-from ibllib.qc import ONEQC
+from ibllib.qc import BpodQC, ONEQC
 
 log = logging.getLogger("ibllib")
 

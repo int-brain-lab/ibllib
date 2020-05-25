@@ -13,7 +13,7 @@ log = logging.getLogger("ibllib")
 
 
 class BpodQC(object):
-    def __init__(self, session_path_or_eid, one=None, ensure_data=True, lazy=False):
+    def __init__(self, session_path_or_eid, one=None, ensure_data=False, lazy=False):
         self.one = one or ONE()
         self.eid = None
         self.session_path = None
@@ -57,7 +57,7 @@ class BpodQC(object):
             glob_sp = list(x.name for x in Path(self.session_path).rglob("*.raw.*") if x.is_file())
             if not all([x in glob_sp for x in dstypes]):
                 log.warning(
-                    f"Not all data for session {self.eid} in path {self.session_path} could be found."
+                    f"Missing some datasets for session {self.eid} in path {self.session_path}"
                 )
                 log.info("Attempting download...")
                 self.one.load(self.eid, dataset_types=dstypes, download_only=True)

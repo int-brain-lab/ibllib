@@ -1,4 +1,4 @@
-from ibllib.qc import BpodQC, BpodQCExtractor, ONEQC, ExtendedQC
+from ibllib.qc import BpodQC, ExtendedQC
 from ibllib.qc import oneutils
 from oneibl.one import ONE
 import ibllib.qc.qcplots as qcplots

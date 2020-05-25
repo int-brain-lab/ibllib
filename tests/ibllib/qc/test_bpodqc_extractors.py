@@ -32,7 +32,7 @@ class TestBpodQCExtractors(unittest.TestCase):
     def _BpodQCExtractor_load_lazy(self):
         # Wrong path
         with self.assertRaises(TypeError):
-            extractor = BpodQCExtractor('/random/path')
+            BpodQCExtractor('/random/path')
         # Should load raw_data, details, BNC1, BNC2 and wheel_data not trial_data
         self.extractor = BpodQCExtractor(self.session_path, lazy=True)
         with self.assertRaises(AttributeError):
@@ -50,6 +50,7 @@ class TestBpodQCExtractors(unittest.TestCase):
     def _BpodQCExtractor_load_extract(self):
         # Test lazy
         extractor = BpodQCExtractor(self.session_path, lazy=False)
+        self.assertTrue(extractor is not None)
 
     def test_object(self):
         self._BpodQCExtractor_load_lazy()
