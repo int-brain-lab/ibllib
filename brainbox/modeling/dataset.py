@@ -5,10 +5,6 @@ International Brain Laboratory, 2019
 """
 
 import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
-from IPython import embed as shell
-sns.set_palette("gist_gray")
 
 
 class DataSet:

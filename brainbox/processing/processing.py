@@ -9,6 +9,81 @@ from scipy import interpolate
 from brainbox import core
 
 
+def trials_to_df(trials, cont, startvar='stimOn_times', endvar='feedback_times',
+                 trnumvar=None, t_before=0.3, t_after=0.3):
+    """
+    Takes list of per-trial dicts, and additional continuous timeseries with timestamps, and merges
+    the two into a trialwise pandas dataframe. Only the sections of `cont` that fall within each
+    trial are included in each trial entry in the dataframe.
+
+    Parameters
+    ----------
+
+    trials: list of dicts
+        Ordered list of trial information stored in dicts. Each key in the dicts will become a
+        column in the dataframe.
+    cont: dict
+        Dict in which each key is a variable name and each value is a nSamples x 2 numpy array.
+        First column of each arr should be measurements, second column should be timestamps for
+        each measurement (not necessarily evenly sampled). Timestamps must be sorted.
+    startvar: str
+        Name of key in elements of `trials` which correspond to starting time of the trial in
+        continuous observations, e.g. stimulus onset time or go cue time in absolute seconds
+        since session start.
+    endvar: str
+        Key for elements of trials indicating time at which trial ended, e.g. feedback time
+    trnumvar: str or None
+        Key in dicts indicating trial number. Will be used as index of dataframe if passed,
+        otherwise defaults to None (rows will be automatically numbered).
+    t_before: float
+        Time (in seconds) before trial start to include in trialwise continuous observations.
+        t=0 will be set to t_start - t_before. Defaults to 300ms
+    t_after: float
+        Time (in seconds) after trial end to include in observations. Defaults to 300ms.
+
+    Returns
+    -------
+    trialsdf : pandas.DataFrame
+        DataFrame in which columns are variables observed at each trial, and rows are individual
+        trials. Index is optionally the real trial number within a session.
+
+    """
+    ################
+    # Check inputs #
+    ################
+    keynames = trials[0].keys()
+    if not all([keynames == tr.keys() for tr in trials]):
+        raise KeyError("Not all dicts within trials list have the same keys.")
+
+    if not all([type(cnt) is np.ndarray for cnt in cont.values()]):
+        raise TypeError("Not all values in cont are numpy arrays")
+
+    if not all([cnt.shape[1] == 2 for cnt in cont.values()]):
+        raise IndexError("Values of cont are not of shape nsamples x 2")
+
+    #################
+    # Main Function #
+    #################
+    contnames = cont.keys()  # Get out variable names to use
+    trbounds = np.array([(tr[startvar] - t_before, tr[endvar] + t_after) for tr in trials])
+    varendlast = np.zeros(len(contnames))  # Initialize counter variable (used for speed)
+    for i, (start, end) in enumerate(trbounds):
+        for j, var in enumerate(contnames):
+            # Within the timestamps for a given variable, find the indices corresponding to
+            # the start and end of the current trial. Pull out those values and timestamps, and
+            # offset to the start of the trial.
+            varstartind = np.searchsorted(cont[var][varendlast[j]:, 1], start) + varendlast
+            varendind = np.searchsorted(cont[var][varendlast[j]:, 1], end, right=True) + varendlast
+            varendlast[j] = varendind
+            trvals = cont[var][varstartind:varendind + 1]
+            trvals[:, 1] = trvals[:, 1] - start  # Offset to (trial start - t_before)
+            trials[i][var] = trvals
+    if trnumvar is None:
+        return pd.DataFrame(trials)
+    else:
+        return pd.DataFrame(trials).set_index(trnumvar)
+
+
 def sync(dt, times=None, values=None, timeseries=None, offsets=None, interp='zero',
          fillval=np.nan):
     """
