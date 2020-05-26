@@ -85,6 +85,15 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
 
 
 def get_wheel_position(session_path, bp_data=None, display=False):
+    """
+    Gets wheel timestamps and position. Position is in radian (constant above for radius is 1)
+    mathematical convention.
+    :param session_path:
+    :param bp_data (optional): bpod trials read from jsonable file
+    :param display (optional): (bool)
+    :return: timestamps (np.array)
+    :return: positions (np.array)
+    """
     status = 0
     if not bp_data:
         bp_data = raw.load_data(session_path)
@@ -218,8 +227,7 @@ def get_wheel_position(session_path, bp_data=None, display=False):
         ax.plot(data['re_ts'], data['re_pos'] / WHEEL_RADIUS_CM, '.-', label='Output Trace')
         ax.legend()
         # plt.hist(np.diff(data['re_ts']), 400, range=[0, 0.01])
-
-    return data
+    return data['re_ts'], data['re_pos']
 
 
 class WheelPosition(BaseBpodTrialsExtractor):

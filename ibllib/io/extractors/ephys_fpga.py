@@ -329,11 +329,12 @@ def extract_camera_sync(sync, chmap=None):
 def extract_wheel_sync(sync, chmap=None):
     """
     Extract wheel positions and times from sync fronts dictionary for all 16 chans
-
+    Output position is in radians, mathematical convention
     :param sync: dictionary 'times', 'polarities' of fronts detected on sync trace
     :param chmap: dictionary containing channel indices. Default to constant.
         chmap = {'rotary_encoder_0': 13, 'rotary_encoder_1': 14}
-    :return: dictionary containing wheel data, 'wheel_ts', 're_ts'
+    :return: timestamps (np.array)
+    :return: positions (np.array)
     """
     wheel = {}
     channela = _get_sync_fronts(sync, chmap['rotary_encoder_0'])
@@ -341,7 +342,7 @@ def extract_wheel_sync(sync, chmap=None):
     wheel['re_ts'], wheel['re_pos'] = _rotary_encoder_positions_from_fronts(
         channela['times'], channela['polarities'], channelb['times'], channelb['polarities'],
         ticks=WHEEL_TICKS, radius=1, coding='x4')
-    return wheel
+    return wheel['re_ts'], wheel['re_pos']
 
 
 def extract_behaviour_sync(sync, chmap=None, display=False, tmax=np.inf):
@@ -523,8 +524,7 @@ class WheelPositions(BaseExtractor):
     var_names = ['wheel_timestamps', 'wheel_position']
 
     def _extract(self, sync=None, chmap=None):
-        wheel = extract_wheel_sync(sync=sync, chmap=chmap)
-        return wheel['re_ts'], wheel['re_pos']
+        return extract_wheel_sync(sync=sync, chmap=chmap)
 
 
 class CameraTimestamps(BaseExtractor):
