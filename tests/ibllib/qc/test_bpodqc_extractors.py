@@ -46,7 +46,7 @@ class TestBpodQCExtractors(unittest.TestCase):
         self.assertTrue(all(np.isnan(self.extractor.BNC2['times'])))
         self.assertTrue(self.extractor.details is not None)
         self.assertTrue(self.extractor.raw_data is not None)
-        self.assertTrue(isinstance(self.extractor.wheel_data, np.ndarray))
+        self.assertTrue(isinstance(self.extractor.wheel_data, dict))
 
     def _BpodQCExtractor_extract(self):
         self.extractor.extract_trial_data()

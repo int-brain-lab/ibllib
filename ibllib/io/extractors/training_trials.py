@@ -1,6 +1,7 @@
 import logging
 import cv2
 import numpy as np
+from pkg_resources import parse_version
 
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
@@ -420,6 +421,25 @@ class GoCueTriggerTimes(BaseBpodTrialsExtractor):
         return goCue
 
 
+class TrialType(BaseBpodTrialsExtractor):
+    save_names = '_ibl_trials.type.npy'
+    var_name = 'trial_type'
+
+    def _extract(self):
+        trial_type = []
+        for tr in self.bpod_trials:
+            if ~np.isnan(tr["behavior_data"]["States timestamps"]["reward"][0][0]):
+                trial_type.append(1)
+            elif ~np.isnan(tr["behavior_data"]["States timestamps"]["error"][0][0]):
+                trial_type.append(-1)
+            elif ~np.isnan(tr["behavior_data"]["States timestamps"]["no_go"][0][0]):
+                trial_type.append(0)
+            else:
+                logger_.warning("Trial is not in set {-1, 0, 1}, appending NaN to trialType")
+                trial_type.append(np.nan)
+        return np.array(trial_type)
+
+
 class GoCueTimes(BaseBpodTrialsExtractor):
     """
     Get trigger times of goCue from state machine.
@@ -468,25 +488,162 @@ class IncludedTrials(BaseBpodTrialsExtractor):
     def _extract(self):
         if version.ge(self.settings['IBLRIG_VERSION_TAG'], '5.0.0'):
             trials_included = self.get_included_trials_ge5(
-                self.session_path, data=self.bpod_trials, settings=self.settings)
+                data=self.bpod_trials, settings=self.settings)
         else:
-            trials_included = self.get_included_trials_lt5(
-                self.session_path, data=self.bpod_trials)
+            trials_included = self.get_included_trials_lt5(data=self.bpod_trials)
         return trials_included
 
     @staticmethod
-    def get_included_trials_lt5(session_path, data=False):
+    def get_included_trials_lt5(data=False):
         trials_included = np.array([True for t in data])
         return trials_included
 
     @staticmethod
-    def get_included_trials_ge5(session_path, data=False, settings=False):
+    def get_included_trials_ge5(data=False, settings=False):
         trials_included = np.array([True for t in data])
         if ('SUBJECT_DISENGAGED_TRIGGERED' in settings.keys() and settings[
                 'SUBJECT_DISENGAGED_TRIGGERED'] is not False):
             idx = settings['SUBJECT_DISENGAGED_TRIALNUM'] - 1
             trials_included[idx:] = False
         return trials_included
+
+
+class ItiInTimes(BaseBpodTrialsExtractor):
+    save_names = '_ibl_trials.itiIn_times.npy'
+    var_names = 'itiIn_times'
+
+    def _extract(self):
+        if parse_version(self.settings["IBLRIG_VERSION_TAG"]) < parse_version("5.0.0"):
+            iti_in = np.ones(len(self.bpod_trials)) * np.nan
+        else:
+            iti_in = np.array(
+                [tr["behavior_data"]["States timestamps"]
+                 ["exit_state"][0][0] for tr in self.bpod_trials]
+            )
+        return iti_in
+
+
+class ErrorCueTriggerTimes(BaseBpodTrialsExtractor):
+    save_names = '_ibl_trials.errorCueTrigger_times.npy'
+    var_names = 'errorCueTrigger_times'
+
+    def _extract(self):
+        errorCueTrigger_times = np.zeros(len(self.bpod_trials)) * np.nan
+        for i, tr in enumerate(self.bpod_trials):
+            nogo = tr["behavior_data"]["States timestamps"]["no_go"][0][0]
+            error = tr["behavior_data"]["States timestamps"]["error"][0][0]
+            if np.all(~np.isnan(nogo)):
+                errorCueTrigger_times[i] = nogo
+            elif np.all(~np.isnan(error)):
+                errorCueTrigger_times[i] = error
+        return errorCueTrigger_times
+
+
+class StimFreezeTriggerTimes(BaseBpodTrialsExtractor):
+    save_names = '_ibl_trials.stimFreeze_times.npy'
+    var_names = 'stimFreezeTrigger_times'
+
+    def _extract(self):
+        if parse_version(self.settings["IBLRIG_VERSION_TAG"]) < parse_version("6.2.5"):
+            return np.ones(len(self.bpod_trials)) * np.nan
+        freeze_reward = np.array(
+            [
+                True
+                if np.all(~np.isnan(tr["behavior_data"]["States timestamps"]["freeze_reward"][0]))
+                else False
+                for tr in self.bpod_trials
+            ]
+        )
+        freeze_error = np.array(
+            [
+                True
+                if np.all(~np.isnan(tr["behavior_data"]["States timestamps"]["freeze_error"][0]))
+                else False
+                for tr in self.bpod_trials
+            ]
+        )
+        no_go = np.array(
+            [
+                True
+                if np.all(~np.isnan(tr["behavior_data"]["States timestamps"]["no_go"][0]))
+                else False
+                for tr in self.bpod_trials
+            ]
+        )
+        assert (np.sum(freeze_error) + np.sum(freeze_reward) +
+                np.sum(no_go) == len(self.bpod_trials))
+        stimFreezeTrigger = np.array([])
+        for r, e, n, tr in zip(freeze_reward, freeze_error, no_go, self.bpod_trials):
+            if n:
+                stimFreezeTrigger = np.append(stimFreezeTrigger, np.nan)
+                continue
+            state = "freeze_reward" if r else "freeze_error"
+            stimFreezeTrigger = np.append(
+                stimFreezeTrigger, tr["behavior_data"]["States timestamps"][state][0][0]
+            )
+        return stimFreezeTrigger
+
+
+class StimOffTriggerTimes(BaseBpodTrialsExtractor):
+    save_names = '_ibl_trials.stimOffTrigger_times.npy'
+    var_names = 'stimOffTrigger_times'
+
+    def _extract(self):
+        if parse_version(self.settings["IBLRIG_VERSION_TAG"]) >= parse_version("6.2.5"):
+            stim_off_trigger_state = "hide_stim"
+        elif parse_version(self.settings["IBLRIG_VERSION_TAG"]) >= parse_version("5.0.0"):
+            stim_off_trigger_state = "exit_state"
+        else:
+            stim_off_trigger_state = "trial_start"
+
+        stimOffTrigger_times = np.array(
+            [tr["behavior_data"]["States timestamps"][stim_off_trigger_state][0][0]
+             for tr in self.bpod_trials]
+        )
+        no_goTrigger_times = np.array(
+            [tr["behavior_data"]["States timestamps"]["no_go"][0][0] for tr in self.bpod_trials]
+        )
+        # Stim off trigs are either in their own state or in the no_go state if the
+        # mouse did not move
+        assert all(~np.isnan(no_goTrigger_times) == np.isnan(stimOffTrigger_times))
+        stimOffTrigger_times[~np.isnan(no_goTrigger_times)] = no_goTrigger_times[
+            ~np.isnan(no_goTrigger_times)
+        ]
+        return stimOffTrigger_times
+
+
+class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
+    """
+    Extracts stim on / off and freeze times from Bpod BNC1 detected fronts
+    """
+    save_names = ["_ibl_trials.stimOn_times.npy", "_ibl_trials.stimOff_times.npy",
+                  "_ibl_trials.stimFreeze_times.npy"]
+    var_names = ['stimOn_times', 'stimOff_times', 'stimFreeze_times']
+
+    def _extract(self):
+        choice = Choice(self.session_path).extract(
+            bpod_trials=self.bpod_trials, settings=self.settings, save=False)
+        f2TTL = [get_port_events(tr, name="BNC1") for tr in self.bpod_trials]
+        stimOn_times = np.array([])
+        stimOff_times = np.array([])
+        stimFreeze_times = np.array([])
+        for tr in f2TTL:
+            if tr and len(tr) >= 2:
+                # 2nd order criteria:
+                # stimOn -> Closest one to stimOnTrigger?
+                # stimOff -> Closest one to stimOffTrigger?
+                # stimFreeze -> Closest one to stimFreezeTrigger?
+                stimOn_times = np.append(stimOn_times, tr[0])
+                stimOff_times = np.append(stimOff_times, tr[-1])
+                stimFreeze_times = np.append(stimFreeze_times, tr[-2])
+            else:
+                stimOn_times = np.append(stimOn_times, np.nan)
+                stimOff_times = np.append(stimOff_times, np.nan)
+                stimFreeze_times = np.append(stimFreeze_times, np.nan)
+
+        # In no_go trials no stimFreeze happens jsut stim Off
+        stimFreeze_times[choice == 0] = np.nan
+        return stimOn_times, stimOff_times, stimFreeze_times
 
 
 class CameraTimestamps(BaseBpodTrialsExtractor):

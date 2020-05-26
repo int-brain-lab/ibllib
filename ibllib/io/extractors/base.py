@@ -98,7 +98,7 @@ def run_extractor_classes(classes, session_path=None, **kwargs):
     :param save: True/False
     :param path_out: (defaults to alf path)
     :param kwargs: extractor arguments (session_path...)
-    :return: arrays, files
+    :return: dictionary of arrays, list of files
     """
     files = []
     outputs = OrderedDict({})

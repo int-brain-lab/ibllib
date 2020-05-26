@@ -165,26 +165,6 @@ class TestBpodQCMetrics(unittest.TestCase):
         expected = (n - 1) / n
         self.assertEqual(np.nanmean(passed), expected, "failed to detect dodgy timestamp")
 
-    @unittest.skip("not implemented")
-    def test_load_wheel_freeze_during_quiescence(self):
-        pass
-
-    @unittest.skip("not implemented")
-    def test_load_wheel_move_before_feedback(self):
-        pass
-
-    @unittest.skip("not implemented")
-    def test_load_wheel_move_during_closed_loop(self):
-        pass
-
-    @unittest.skip("not implemented")
-    def test_load_stimulus_move_before_goCue(self):
-        pass
-
-    @unittest.skip("not implemented")
-    def test_load_audio_pre_trial(self):
-        pass
-
     def test_load_positive_feedback_stimOff_delays(self):
         metric, passed = qcmetrics.load_positive_feedback_stimOff_delays(self.data)
         self.assertTrue(

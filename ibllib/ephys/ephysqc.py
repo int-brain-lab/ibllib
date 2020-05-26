@@ -13,9 +13,9 @@ import alf.io
 from brainbox.core import Bunch
 from brainbox.metrics import quick_unit_metrics
 from ibllib.ephys import sync_probes
-from ibllib.io import spikeglx
+from ibllib.io import spikeglx, raw_data_loaders
 import ibllib.dsp as dsp
-import ibllib.io.extractors.ephys_fpga as fpga
+from ibllib.io.extractors import ephys_fpga, training_wheel
 from ibllib.misc import print_progress
 from phylib.io import model
 
@@ -152,16 +152,16 @@ def validate_ttl_test(ses_path, display=False):
         return False
 
     # get the synchronization fronts (from the raw binary if necessary)
-    fpga.extract_sync(session_path=ses_path, overwrite=False)
-    rawsync, sync_map = fpga._get_main_probe_sync(ses_path)
+    ephys_fpga.extract_sync(session_path=ses_path, overwrite=False)
+    rawsync, sync_map = ephys_fpga._get_main_probe_sync(ses_path)
     last_time = rawsync['times'][-1]
 
     # get upgoing fronts for each
     sync = Bunch({})
     for k in sync_map:
-        fronts = fpga._get_sync_fronts(rawsync, sync_map[k])
+        fronts = ephys_fpga._get_sync_fronts(rawsync, sync_map[k])
         sync[k] = fronts['times'][fronts['polarities'] == 1]
-    wheel = fpga.extract_wheel_sync(rawsync, chmap=sync_map)
+    wheel = ephys_fpga.extract_wheel_sync(rawsync, chmap=sync_map)
 
     frame_rates = {'right_camera': np.round(1 / np.median(np.diff(sync.right_camera))),
                    'left_camera': np.round(1 / np.median(np.diff(sync.left_camera))),
@@ -190,7 +190,7 @@ def validate_ttl_test(ses_path, display=False):
                        str_ok="PASS: Bpod", str_ko="FAILED: Bpod")
     try:
         # note: tried to depend as little as possible on the extraction code but for the valve...
-        behaviour = fpga.extract_behaviour_sync(rawsync, chmap=sync_map)
+        behaviour = ephys_fpga.extract_behaviour_sync(rawsync, chmap=sync_map)
         res = behaviour.valve_open.size > 1
     except AssertionError:
         res = False
@@ -395,16 +395,16 @@ def _qc_from_path(sess_path, display=True):
     temp_alf_folder = sess_path.joinpath('fpga_test', 'alf')
     temp_alf_folder.mkdir(parents=True, exist_ok=True)
 
-    raw_trials = raw.load_data(sess_path)
+    raw_trials = raw_data_loaders.load_data(sess_path)
     tmax = raw_trials[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
 
-    sync, chmap = fpga._get_main_probe_sync(sess_path, bin_exists=False)
-    _ = ephys_trials.extract_all(sess_path, output_path=temp_alf_folder, save=True)
+    sync, chmap = ephys_fpga._get_main_probe_sync(sess_path, bin_exists=False)
+    _ = ephys_fpga.extract_all(sess_path, output_path=temp_alf_folder, save=True)
     # check that the output is complete
-    fpga_trials = fpga.extract_behaviour_sync(sync, output_path=temp_alf_folder, tmax=tmax,
-                                              chmap=chmap, save=True, display=display)
+    fpga_trials = ephys_fpga.extract_behaviour_sync(sync, output_path=temp_alf_folder, tmax=tmax,
+                                                    chmap=chmap, save=True, display=display)
     # align with the bpod
-    bpod2fpga = fpga.align_with_bpod(temp_alf_folder.parent)
+    bpod2fpga = ephys_fpga.align_with_bpod(temp_alf_folder.parent)
     alf_trials = alf.io.load_object(temp_alf_folder, '_ibl_trials')
     shutil.rmtree(temp_alf_folder)
     # do the QC
@@ -413,7 +413,7 @@ def _qc_from_path(sess_path, display=True):
     # do the wheel part
     if WHEEL:
         bpod_wheel = training_wheel.get_wheel_data(sess_path, save=False)
-        fpga_wheel = fpga.extract_wheel_sync(sync, chmap=chmap, save=False)
+        fpga_wheel = ephys_fpga.extract_wheel_sync(sync, chmap=chmap, save=False)
 
         if display:
             import matplotlib.pyplot as plt

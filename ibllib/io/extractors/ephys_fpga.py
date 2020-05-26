@@ -499,28 +499,54 @@ def _get_main_probe_sync(session_path, bin_exists=False):
     return sync, sync_chmap
 
 
-class ProbabilityLeft(BaseBpodTrialsExtractor):
-    save_names = '_ibl_trials.probabilityLeft.npy'
-    var_names = 'probabilityLeft'
+def _get_pregenerated_events(bpod_trials, settings):
+    num = settings.get("PRELOADED_SESSION_NUM", None)
+    if num is None:
+        num = settings.get("PREGENERATED_SESSION_NUM", None)
+    if num is None:
+        fn = settings.get('SESSION_LOADED_FILE_PATH', None)
+        fn = PureWindowsPath(fn).name
+        num = ''.join([d for d in fn if d.isdigit()])
+        if num == '':
+            raise ValueError("Can't extract left probability behaviour.")
+    # Load the pregenerated file
+    ntrials = len(bpod_trials)
+    sessions_folder = Path(raw_data_loaders.__file__).parent.joinpath(
+        "extractors", "ephys_sessions")
+    fname = f"session_{num}_ephys_pcqs.npy"
+    pcqsp = np.load(sessions_folder.joinpath(fname))
+    pos = pcqsp[:, 0]
+    con = pcqsp[:, 1]
+    pos = pos[: ntrials]
+    con = con[: ntrials]
+    contrastRight = con.copy()
+    contrastLeft = con.copy()
+    contrastRight[pos < 0] = np.nan
+    contrastLeft[pos > 0] = np.nan
+    qui = pcqsp[:, 2]
+    qui = qui[: ntrials]
+    phase = pcqsp[:, 3]
+    phase = phase[: ntrials]
+    pLeft = pcqsp[:, 4]
+    pLeft = pLeft[: ntrials]
+    return {"position": pos, "contrast": con, "quiescence": qui, "phase": phase,
+            "prob_left": pLeft, 'contrast_right': contrastRight, 'contrast_left': contrastLeft}
+
+
+class ProbaContrasts(BaseBpodTrialsExtractor):
+    """
+    Bpod pre-generated values for probabilityLeft, contrastLR, phase, quiescence
+    """
+    save_names = ('_ibl_trials.probabilityLeft.npy', '_ibl_trials.contrastLeft.npy',
+                  '_ibl_trials.contrastRight.npy')
+    var_names = ('probabilityLeft', 'contrastLeft', 'contrastRight')
 
     def _extract(self):
-        num = self.settings.get("PRELOADED_SESSION_NUM", None)
-        if num is None:
-            num = self.settings.get("PREGENERATED_SESSION_NUM", None)
-        if num is None:
-            fn = self.settings.get('SESSION_LOADED_FILE_PATH', None)
-            fn = PureWindowsPath(fn).name
-            num = ''.join([d for d in fn if d.isdigit()])
-            if num == '':
-                raise ValueError("Can't extract left probability behaviour.")
-        # Load the pregenerated file
-        sessions_folder = Path(raw_data_loaders.__file__).parent.joinpath(
-            'extractors', 'ephys_sessions')
-        fname = f"session_{num}_ephys_pcqs.npy"
-        pcqsp = np.load(sessions_folder.joinpath(fname))
-        pLeft = pcqsp[:, 4]
-        pLeft = pLeft[: len(self.bpod_trials)]
-        return pLeft
+        """Extracts positions, contrasts, quiescent delay, stimulus phase and probability left
+        from pregenerated session files.
+        Optional: saves alf contrastLR and probabilityLeft npy files"""
+        pe = _get_pregenerated_events(self.bpod_trials, self.settings)
+        return pe['prob_left'], pe['contrast_left'], pe['contrast_right']
 
 
 class WheelPositions(BaseExtractor):
@@ -570,12 +596,12 @@ class FpgaTrials(BaseExtractor):
         ibpod, ifpga, fcn_bpod2fpga = bpod_fpga_sync(
             bpod_trials['intervals_bpod'], fpga_trials['intervals'])
         # those fields get directly in the output
-        bpod_fields = ['feedbackType', 'contrastLeft', 'contrastRight', 'probabilityLeft',
-                       'choice', 'rewardVolume', 'intervals_bpod']
+        bpod_fields = ['feedbackType', 'choice', 'rewardVolume', 'intervals_bpod']
         # those fields have to be resynced
         bpod_rsync_fields = ['intervals', 'response_times', 'goCueTrigger_times']
         # ephys fields to save in the output
-        fpga_fields = ['stimOn_times', 'stimOff_times', 'goCue_times', 'feedback_times']
+        fpga_fields = ['stimOn_times', 'stimOff_times', 'goCue_times', 'feedback_times',
+                       'contrastLeft', 'contrastRight', 'probabilityLeft']
         out = OrderedDict()
         out.update({k: bpod_trials[k][ibpod] for k in bpod_fields})
         out.update({k: fcn_bpod2fpga(bpod_trials[k][ibpod]) for k in bpod_rsync_fields})

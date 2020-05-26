@@ -105,18 +105,15 @@ class TestEphysBehaviorExtraction(unittest.TestCase):
     def test_get_probabilityLeft(self):
         data = raw.load_data(self.session_path)
         settings = raw.load_settings(self.session_path)
-        pLeft0 = ephys_fpga.ProbabilityLeft(
+        pLeft0, _, _ = ephys_fpga.ProbaContrasts(
             self.session_path).extract(bpod_trials=data, settings=settings)[0]
         self.assertTrue(len(pLeft0) == len(data))
         # Test if only generative prob values in data
         self.assertTrue(all([x in [0.2, 0.5, 0.8] for x in np.unique(pLeft0)]))
         # Test if settings file has empty LEN_DATA result is same
         settings.update({"LEN_BLOCKS": None})
-        pLeft1 = ephys_fpga.ProbabilityLeft(
+        pLeft1, _, _ = ephys_fpga.ProbaContrasts(
             self.session_path).extract(bpod_trials=data, settings=settings)[0]
         self.assertTrue(all(pLeft0 == pLeft1))
         # Test if only generative prob values in data
         self.assertTrue(all([x in [0.2, 0.5, 0.8] for x in np.unique(pLeft1)]))
-
-    def tearDown(self):
-        pass
