@@ -49,8 +49,8 @@ class EphysAudio(jobs.Job):
         if file_in is None:
             return
         file_out = file_in.with_suffix('.flac')
-        status, output_files = ffmpeg.compress(file_in=file_in, file_out=file_out, command=command)
-        return output_files
+        status, output_file = ffmpeg.compress(file_in=file_in, file_out=file_out, command=command)
+        return [output_file]
 
 
 class SpikeSorting_KS2_Matlab(jobs.Job):

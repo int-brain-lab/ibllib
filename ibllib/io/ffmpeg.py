@@ -53,10 +53,10 @@ def iblrig_video_compression(session_path, command):
     :return: list of compressed files
     """
     output_files = []
-    rig_avi_files = session_path.joinpath("raw_video_data").rglob('_iblrig_*.avi')
+    rig_avi_files = list(session_path.joinpath("raw_video_data").rglob('_iblrig_*.avi'))
     # first compress everything (the rationale is not to delete anything if there is a crash)
     for file_in in rig_avi_files:
-        print(file_in)
+        _logger.info(f" compressing {file_in}")
         file_out = file_in.with_suffix('.mp4')
         status, fout = compress(file_in=file_in, file_out=file_out,
                                 command=command, remove_original=False)
