@@ -38,5 +38,5 @@ def load_wheel_reaction_times(eid):
         wheel = {'re_ts': wheel['timestamps'], 're_pos': wheel['position']}
         moves = extract_wheel_moves(wheel)
     assert trials and moves, 'unable to load trials and wheelMoves data'
-    firstMove_times, = extract_first_movement_times(moves, trials, MIN_QT)
+    firstMove_times, is_final_movement, ids = extract_first_movement_times(moves, trials, MIN_QT)
     return firstMove_times - trials['goCue_times']

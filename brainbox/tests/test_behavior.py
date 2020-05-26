@@ -3,6 +3,7 @@ import unittest
 import numpy as np
 import pickle
 import brainbox.behavior.wheel as wheel
+import brainbox.behavior.behavior as bhv
 
 
 class TestWheel(unittest.TestCase):

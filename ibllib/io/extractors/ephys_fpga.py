@@ -1,4 +1,5 @@
 import logging
+from collections import Sized
 from pathlib import Path
 import uuid
 
@@ -498,7 +499,7 @@ def extract_first_movement_times(wheel_moves, trials, min_qt=None, output_path=N
     if min_qt is None:
         min_qt = MIN_QT
         _logger.info('minimum quiescent period assumed to be %.0fms', MIN_QT*1e3)
-    elif len(min_qt) > len(trials['goCue_times']):
+    elif isinstance(min_qt, Sized) and len(min_qt) > len(trials['goCue_times']):
         min_qt = np.array(min_qt[0:trials['goCue_times'].size])
 
     # Initialize as nans
