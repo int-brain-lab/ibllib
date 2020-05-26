@@ -158,7 +158,7 @@ def load_response_feedback_delays(trial_data):
     """ response_time and feedback_time
     Variable name: response_feedback_delays
     Metric: Feedback_time - response_time
-    Criterion: (M <10 ms for 99% of trials) AND ( M > 0 ms for 100% of trials)
+    Criterion: M < 10 ms AND M > 0 ms) for 99% of trials
     """
     metric = trial_data["feedback_times"] - trial_data["response_times"]
     nans = np.isnan(metric)
@@ -172,7 +172,7 @@ def load_response_stimFreeze_delays(trial_data):
     """ Stim freeze and response time
     Variable name: response_stimFreeze_delays
     Metric: stim_freeze - response_time
-    Criterion: (M<100 ms for 99% of trials) AND (M > 0 ms for 100% of trials)
+    Criterion: M < 100 ms AND M > 0 ms for 99% of trials
     """
     metric = trial_data["stimFreeze_times"] - trial_data["response_times"]
     # Find NaNs (if any of the values are nan operation will be nan)
@@ -191,7 +191,7 @@ def load_stimOff_itiIn_delays(trial_data):
     """ Start of iti_in should be within a very small tolerance of the stim off
     Variable name: stimOff_itiIn_delays
     Metric: iti_in - stim_off
-    Criterion: (M<10 ms for 99% of trials) AND (M > 0 ms for 99% of trials)
+    Criterion: M < 10 ms AND M > 0 ms for 99% of trials
     """
     metric = trial_data["itiIn_times"] - trial_data["stimOff_times"]
     passed = ((metric < 0.01) & (metric >= 0)).astype(np.float)
@@ -518,7 +518,7 @@ def load_stimOff_delays(trial_data):
     """ Trigger response difference
     Variable name: stimOff_delays
     Metric: stimOff_times - stimOffTrigger_times
-    Criterion:99% <  150ms AND > 0
+    Criterion:99% < 150ms AND > 0
     """
     metric = trial_data["stimOff_times"] - trial_data["stimOffTrigger_times"]
     nans = np.isnan(metric)
