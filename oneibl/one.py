@@ -1,6 +1,7 @@
 import logging
 import os
 from pathlib import Path, PurePath
+import concurrent.futures
 
 import requests
 import tqdm
@@ -14,8 +15,10 @@ from ibllib.io.one import OneAbstract
 from ibllib.misc import pprint
 from oneibl.dataclass import SessionDataInfo
 
+
 _logger = logging.getLogger('ibllib')
 
+NTHREADS = 4  # number of download threads
 
 _ENDPOINTS = {  # keynames are possible input arguments and values are actual endpoints
     'data': 'dataset-types',
@@ -313,16 +316,23 @@ class ONE(OneAbstract):
         dataset_types = [dataset_types] if isinstance(dataset_types, str) else dataset_types
         if not dataset_types or dataset_types == ['__all__']:
             dclass_output = True
+        # this performs the filtering
         dc = SessionDataInfo.from_session_details(ses, dataset_types=dataset_types, eid=eid_str)
         # loop over each dataset and download if necessary
-        for ind in range(len(dc)):
-            if dc.url[ind] and not dry_run:
-                relpath = PurePath(dc.url[ind].replace(self._par.HTTP_DATA_SERVER, '.')).parents[0]
-                cache_dir_file = PurePath(cache_dir, relpath)
-                Path(cache_dir_file).mkdir(parents=True, exist_ok=True)
-                dc.local_path[ind] = self._download_file(
-                    dc.url[ind], str(cache_dir_file), clobber=clobber, offline=offline,
-                    keep_uuid=keep_uuid, file_size=dc.file_size[ind], hash=dc.hash[ind])
+        with concurrent.futures.ThreadPoolExecutor(max_workers=NTHREADS) as executor:
+            futures = []
+            for ind in range(len(dc)):
+                if dc.url[ind] is None or dry_run:
+                    futures.append(None)
+                else:
+                    futures.append(executor.submit(
+                        self.download_dataset, dc.url[ind], clobber=clobber, offline=offline,
+                        keep_uuid=keep_uuid, file_size=dc.file_size[ind], hash=dc.hash[ind]))
+            concurrent.futures.wait(list(filter(lambda x: x is not None, futures)))
+            for ind, future in enumerate(futures):
+                if future is None:
+                    continue
+                dc.local_path[ind] = future.result()
         # load the files content in variables if requested
         if not download_only:
             for ind, fil in enumerate(dc.local_path):
@@ -486,9 +496,52 @@ class ONE(OneAbstract):
             cache_dir = str(PurePath(Path.home(), "Downloads", "FlatIron"))
         return cache_dir
 
+    def download_datasets(self, dsets, **kwargs):
+        """
+        Download several datsets through a list of alyx REST dictionaries
+        :param dset: list of dataset dictionaries from an Alyx REST query OR list of URL strings
+        :return: local file path
+        """
+        out_files = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=NTHREADS) as executor:
+            futures = [executor.submit(self.download_dataset, dset, file_size=dset['file_size'],
+                                       hash=dset['hash'], **kwargs) for dset in dsets]
+            concurrent.futures.wait(futures)
+            for future in futures:
+                out_files.append(future.result())
+        return out_files
+
+    def download_dataset(self, dset, **kwargs):
+        """
+        Download a dataset from an alyx REST dictionary
+        :param dset: single dataset dictionary from an Alyx REST query OR URL string
+        :return: local file path
+        """
+        if isinstance(dset, str):
+            url = dset
+        else:
+            url = next((fr['data_url'] for fr in dset['file_records'] if fr['data_url']), None)
+        if not url:
+            return
+        relpath = Path(url.replace(self._par.HTTP_DATA_SERVER, '.')).parents[0]
+        cache_dir = Path(self._par.CACHE_DIR, relpath)
+        return self._download_file(url=url, cache_dir=str(cache_dir), **kwargs)
+
     def _download_file(self, url, cache_dir, clobber=False, offline=False, keep_uuid=False,
                        file_size=None, hash=None):
-        local_path = cache_dir + os.sep + os.path.basename(url)
+        """
+        Downloads a single file from an HTTP webserver
+        :param url:
+        :param cache_dir:
+        :param clobber: (bool: False) overwrites local dataset if any
+        :param offline:
+        :param keep_uuid:
+        :param file_size:
+        :param hash:
+        :return:
+        """
+        Path(cache_dir).mkdir(parents=True, exist_ok=True)
+        local_path = str(cache_dir) + os.sep + os.path.basename(url)
         if not keep_uuid:
             local_path = remove_uuid_file(local_path, dry=True)
         if Path(local_path).exists():
