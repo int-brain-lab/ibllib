@@ -141,7 +141,7 @@ def get_bpodqc_metrics_frame(trial_data, wheel_data, wheel_gain, BNC1, BNC2):
 # SINGLE METRICS
 # ---------------------------------------------------------------------------- #
 def load_stimOn_goCue_delays(trial_data):
-    """ 1. StimOn and GoCue and should be within a 10 ms of each other on 99% of trials
+    """ StimOn and GoCue and should be within a 10 ms of each other on 99% of trials
     Variable name: stimOn_goCue_delays
     Metric: stimOn_times - goCue_times
     Criteria: (M<10 ms for 99%) of trials AND (M > 0 ms for 99% of trials)
@@ -155,7 +155,7 @@ def load_stimOn_goCue_delays(trial_data):
 
 
 def load_response_feedback_delays(trial_data):
-    """ 2. response_time and feedback_time
+    """ response_time and feedback_time
     Variable name: response_feedback_delays
     Metric: Feedback_time - response_time
     Criterion: (M <10 ms for 99% of trials) AND ( M > 0 ms for 100% of trials)
@@ -169,7 +169,7 @@ def load_response_feedback_delays(trial_data):
 
 
 def load_response_stimFreeze_delays(trial_data):
-    """ 3. Stim freeze and response time
+    """ Stim freeze and response time
     Variable name: response_stimFreeze_delays
     Metric: stim_freeze - response_time
     Criterion: (M<100 ms for 99% of trials) AND (M > 0 ms for 100% of trials)
@@ -188,7 +188,7 @@ def load_response_stimFreeze_delays(trial_data):
 
 
 def load_stimOff_itiIn_delays(trial_data):
-    """ 4. Start of iti_in should be within a very small tolerance of the stim off
+    """ Start of iti_in should be within a very small tolerance of the stim off
     Variable name: stimOff_itiIn_delays
     Metric: iti_in - stim_off
     Criterion: (M<10 ms for 99% of trials) AND (M > 0 ms for 99% of trials)
@@ -203,7 +203,7 @@ def load_stimOff_itiIn_delays(trial_data):
 
 
 def load_wheel_freeze_during_quiescence(trial_data, wheel_data):
-    """ 5. Wheel should not move more than 2 ticks each direction for at least 0.2 + 0.2-0.6
+    """ Wheel should not move more than 2 ticks each direction for at least 0.2 + 0.2-0.6
     amount of time (quiescent period; exact value in bpod['quiescence']) before go cue
     Variable name: wheel_freeze_during_quiescence
     Metric: abs(min(W - w_t0), max(W - w_t0)) where W is wheel pos over interval
@@ -247,7 +247,7 @@ def load_wheel_freeze_during_quiescence(trial_data, wheel_data):
 
 
 def load_wheel_move_before_feedback(trial_data, wheel_data):
-    """ 6. Wheel should move within 100ms of feedback
+    """ Wheel should move within 100ms of feedback
     Variable name: wheel_move_before_feedback
     Metric: (w_t - 0.05) - (w_t + 0.05) where t = feedback_time
     Criterion: != 0 for 99% of non-NoGo trials
@@ -321,7 +321,7 @@ def load_wheel_move_during_closed_loop(trial_data, wheel_data, wheel_gain):
 
 
 def load_positive_feedback_stimOff_delays(trial_data):
-    """ 8. Delay between valve and stim off should be 1s
+    """ Delay between valve and stim off should be 1s
     Variable name: positive_feedback_stimOff_delays
     Metric: abs((stimoff_time - feedback_time) - 1s)
     Criterion: <150 ms on 99% of correct trials
@@ -336,7 +336,7 @@ def load_positive_feedback_stimOff_delays(trial_data):
 
 
 def load_negative_feedback_stimOff_delays(trial_data):
-    """ 9.Delay between noise and stim off should be 2 second
+    """ Delay between noise and stim off should be 2 second
     Variable name: negative_feedback_stimOff_delays
     Metric: abs((stimoff_time - feedback_time) - 2s)
     Criterion: <150 ms on 99% of incorrect trials
@@ -355,7 +355,7 @@ def load_negative_feedback_stimOff_delays(trial_data):
 
 
 # def load_0(trial_data, session_path=None):
-#     """ 10. Number of Bonsai command to change screen should match
+#     """ Number of Bonsai command to change screen should match
 #     Number of state change of frame2ttl
 #     Variable name: syncSquare
 #     Metric: (count of bonsai screen updates) - (count of frame2ttl)
@@ -365,7 +365,7 @@ def load_negative_feedback_stimOff_delays(trial_data):
 
 
 def load_valve_pre_trial(trial_data):
-    """ 11. No valve outputs between trialstart_time and gocue_time-20 ms
+    """ No valve outputs between trialstart_time and gocue_time-20 ms
     Variable name: valve_pre_trial
     Metric: Check if valve events exist between trialstart_time and (gocue_time-20ms)
     Criterion: 0 on 99% of trials
@@ -381,7 +381,7 @@ def load_valve_pre_trial(trial_data):
 
 # Sequence of events:
 def load_error_trial_event_sequence(trial_data):
-    """ 13. on incorrect / miss trials : 2 audio events, 2 Bpod events (trial start, ITI)
+    """ on incorrect / miss trials : 2 audio events, 2 Bpod events (trial start, ITI)
     Variable name: error_trial_event_sequence
     Metric: Bpod (trial start) > audio (go cue) > audio (wrong) > Bpod (ITI)
     Criterion: All three boolean comparisons true on 99% of trials
@@ -414,7 +414,7 @@ def load_error_trial_event_sequence(trial_data):
 
 
 def load_correct_trial_event_sequence(trial_data):
-    """ 14. on correct trials : 1 audio events, 3 Bpod events (valve open, trial start, ITI)
+    """ On correct trials : 1 audio events, 3 Bpod events (valve open, trial start, ITI)
     (ITI task version dependent on ephys)
     Variable name: correct_trial_event_sequence
     Metric: Bpod (trial start) > audio (go cue) > Bpod (valve) > Bpod (ITI)
@@ -448,7 +448,7 @@ def load_correct_trial_event_sequence(trial_data):
 
 
 def load_trial_length(trial_data):
-    """ 15. Time between goCue and feedback <= 60s
+    """ Time between goCue and feedback <= 60s
     Variable name: trial_length
     Metric: (feedback_time - gocue_time)
     Criteria: M < 60.1 s AND M > 0 s both (true on 99% of trials)
@@ -462,7 +462,7 @@ def load_trial_length(trial_data):
 
 
 # def load_1(trial_data, session_path=None):
-#     """ 16. Between go tone and feedback, frame2ttl should be changing at ~60Hz
+#     """ Between go tone and feedback, frame2ttl should be changing at ~60Hz
 #     if wheel moves (exact frequency depending on velocity)
 #     Variable name:
 #     Metric:
@@ -473,38 +473,38 @@ def load_trial_length(trial_data):
 
 # Trigger response checks
 def load_goCue_delays(trial_data):
-    """ 25.Trigger response difference
+    """ Trigger response difference
     Variable name: goCue_delays
     Metric: goCue_times - goCueTrigger_times
-    Criterion: 99% <= 1.5ms
+    Criterion: 99% <= 1.5ms AND > 0
     """
     metric = trial_data["goCue_times"] - trial_data["goCueTrigger_times"]
     nans = np.isnan(metric)
     passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = metric[~nans] <= 0.0015
+    passed[~nans] = (metric[~nans] <= 0.0015) & (metric[~nans] > 0)
     assert len(trial_data["intervals_0"]) == len(metric) == len(passed)
     return metric, passed
 
 
 def load_errorCue_delays(trial_data):
-    """ 26.Trigger response difference
+    """ Trigger response difference
     Variable name: errorCue_delays
     Metric: errorCue_times - errorCueTrigger_times
-    Criterion: 99% <= 1.5ms
+    Criterion: 99% <= 1.5ms AND > 0
     """
     metric = trial_data["errorCue_times"] - trial_data["errorCueTrigger_times"]
     nans = np.isnan(metric)
     passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = metric[~nans] <= 0.0015
+    passed[~nans] = (metric[~nans] <= 0.0015) & (metric[~nans] > 0)
     assert len(trial_data["intervals_0"]) == len(metric) == len(passed)
     return metric, passed
 
 
 def load_stimOn_delays(trial_data):
-    """ 27. Trigger response difference
+    """ Trigger response difference
     Variable name: stimOn_delays
     Metric: stimOn_times - stiomOnTrigger_times
-    Criterion: 99% <  150ms
+    Criterion: 99% <  150ms AND > 0
     """
     metric = trial_data["stimOn_times"] - trial_data["stimOnTrigger_times"]
     nans = np.isnan(metric)
@@ -515,34 +515,35 @@ def load_stimOn_delays(trial_data):
 
 
 def load_stimOff_delays(trial_data):
-    """ 28.Trigger response difference
+    """ Trigger response difference
     Variable name: stimOff_delays
     Metric: stimOff_times - stimOffTrigger_times
-    Criterion:99% <  150ms
+    Criterion:99% <  150ms AND > 0
     """
     metric = trial_data["stimOff_times"] - trial_data["stimOffTrigger_times"]
     nans = np.isnan(metric)
     passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = metric[~nans] <= 0.15
+    passed[~nans] = (metric[~nans] <= 0.15) & (metric[~nans] > 0)
     assert len(trial_data["intervals_0"]) == len(metric) == len(passed)
     return metric, passed
 
 
 def load_stimFreeze_delays(trial_data):
-    """ 29.Trigger response difference
+    """ Trigger response difference
     Variable name: stimFreeze_delays
     Metric: stimFreeze_times - stimFreezeTrigger_times
-    Criterion: 99% <  150ms
+    Criterion: 99% <  150ms AND > 0
     """
     metric = trial_data["stimFreeze_times"] - trial_data["stimFreezeTrigger_times"]
+    nans = np.isnan(metric)
     passed = np.zeros_like(metric) * np.nan
-    passed[~np.isnan(metric)] = metric[~np.isnan(metric)] <= 0.15
+    passed[~nans] = (metric[~nans] <= 0.15) & (metric[~nans] > 0)
     assert len(trial_data["intervals_0"]) == len(metric) == len(passed)
     return metric, passed
 
 
 def load_reward_volumes(trial_data):
-    """ xx.Reward volume tests
+    """ Reward volume tests
     Variable name: rewardVolume
     Metric: len(set(rewardVolume)) <= 2 & np.all(rewardVolume <= 3)
     Criterion: 100%
@@ -556,7 +557,7 @@ def load_reward_volumes(trial_data):
 
 
 def load_stimulus_move_before_goCue(trial_data, BNC1=None):
-    """ 7. No stimulus movements between trialstart_time and gocue_time-20 ms
+    """ No stimulus movements between trialstart_time and gocue_time-20 ms
     Variable name: stimulus_move_before_goCue
     Metric: count of any stimulus change events between trialstart_time and (gocue_time-20ms)
     Criterion: 0 on 99% of trials
@@ -577,7 +578,7 @@ def load_stimulus_move_before_goCue(trial_data, BNC1=None):
 
 
 def load_audio_pre_trial(trial_data, BNC2=None):
-    """ 12. No audio outputs between trialstart_time and gocue_time-20 ms
+    """ No audio outputs between trialstart_time and gocue_time-20 ms
     Variable name: audio_pre_trial
     Metric: Check if audio events exist between trialstart_time and (gocue_time-20ms)
     Criterion: 0 on 99% of trials
