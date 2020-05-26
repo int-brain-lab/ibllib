@@ -114,7 +114,7 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
     return Bunch(sync)
 
 
-def _bpod_events_extraction(bpod_t, bpod_fronts):
+def _assign_events_bpod(bpod_t, bpod_polarities):
     """
     From detected fronts on the bpod sync traces, outputs the synchronisation events
     related to trial start and valve opening
@@ -123,11 +123,11 @@ def _bpod_events_extraction(bpod_t, bpod_fronts):
     :return: numpy arrays of times t_trial_start, t_valve_open and t_iti_in
     """
     TRIAL_START_TTL_LEN = 2.33e-4
-    VALVE_OPEN_TTL_LEN = 0.4
+    ITI_TTL_LEN = 0.4
     # make sure that there are no 2 consecutive fall or consecutive rise events
-    assert(np.all(np.abs(np.diff(bpod_fronts)) == 2))
+    assert(np.all(np.abs(np.diff(bpod_polarities)) == 2))
     # make sure that the first event is a rise
-    assert(bpod_fronts[0] == 1)
+    assert(bpod_polarities[0] == 1)
     # take only even time differences: ie. from rising to falling fronts
     dt = np.diff(bpod_t)[::2]
     # detect start trials event assuming length is 0.23 ms except the first trial
@@ -139,11 +139,11 @@ def _bpod_events_extraction(bpod_t, bpod_fronts):
     t_trial_start = t_trial_start[:-1]
     # valve open events are between 50ms to 300 ms
     i_valve_open = np.where(np.logical_and(dt > TRIAL_START_TTL_LEN,
-                                           dt < VALVE_OPEN_TTL_LEN))[0] * 2
+                                           dt < ITI_TTL_LEN))[0] * 2
     i_valve_open = np.delete(i_valve_open, np.where(i_valve_open < 2))
     t_valve_open = bpod_t[i_valve_open]
     # ITI events are above 400 ms
-    i_iti_in = np.where(dt > VALVE_OPEN_TTL_LEN)[0] * 2
+    i_iti_in = np.where(dt > ITI_TTL_LEN)[0] * 2
     i_iti_in = np.delete(i_iti_in, np.where(i_valve_open < 2))
     i_iti_in = bpod_t[i_iti_in]
     # # some debug plots when needed
@@ -201,7 +201,7 @@ def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, rad
         return t, p
 
 
-def _audio_events_extraction(audio_t, audio_fronts):
+def _assign_events_audio(audio_t, audio_polarities):
     """
     From detected fronts on the audio sync traces, outputs the synchronisation events
     related to tone in
@@ -211,7 +211,7 @@ def _audio_events_extraction(audio_t, audio_fronts):
     :return: numpy arrays t_ready_tone_in, t_error_tone_in
     """
     # make sure that there are no 2 consecutive fall or consecutive rise events
-    assert(np.all(np.abs(np.diff(audio_fronts)) == 2))
+    assert(np.all(np.abs(np.diff(audio_polarities)) == 2))
     # take only even time differences: ie. from rising to falling fronts
     dt = np.diff(audio_t)[::2]
     # detect ready tone by length below 110 ms
@@ -221,6 +221,10 @@ def _audio_events_extraction(audio_t, audio_fronts):
     i_error_tone_in = np.where(np.logical_and(0.4 < dt, dt < 1.2))[0] * 2
     t_error_tone_in = audio_t[i_error_tone_in]
     return t_ready_tone_in, t_error_tone_in
+
+
+def _frame2ttl_events_extraction(f2ttl_t, f2ttl_fronts):
+    pass
 
 
 def _assign_events_to_trial(t_trial_start, t_event, take='last'):
@@ -339,31 +343,30 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
     frame2ttl = _get_sync_fronts(sync, chmap['frame2ttl'], tmax=tmax)
     audio = _get_sync_fronts(sync, chmap['audio'], tmax=tmax)
     # extract events from the fronts for each trace
-    t_trial_start, t_valve_open, t_iti_in = _bpod_events_extraction(
+    t_trial_start, t_valve_open, t_iti_in = _assign_events_bpod(
         bpod['times'], bpod['polarities'])
-    t_ready_tone_in, t_error_tone_in = _audio_events_extraction(
+    t_ready_tone_in, t_error_tone_in = _assign_events_audio(
         audio['times'], audio['polarities'])
     # stim off time is the first frame2ttl rise/fall after the trial start
     # does not apply for 1st trial
     ind = np.searchsorted(frame2ttl['times'], t_iti_in, side='left')
     t_stim_off = frame2ttl['times'][np.minimum(ind, frame2ttl.times.size - 1)]
-    t_stim_freeze = frame2ttl['times'][np.maximum(ind - 1, 0)]
+    t_stim_freeze = frame2ttl['times'][np.minimum(ind, frame2ttl.times.size - 2)]
+    # t_stim_freeze = frame2ttl['times'][np.maximum(ind - 1, 0)]
     # stimOn_times: first fram2ttl change after trial start
     trials = Bunch({
-        'ready_tone_in': _assign_events_to_trial(t_trial_start, t_ready_tone_in, take='first'),
-        'error_tone_in': _assign_events_to_trial(t_trial_start, t_error_tone_in),
-        'valve_open': _assign_events_to_trial(t_trial_start, t_valve_open),
-        'stim_freeze': _assign_events_to_trial(t_trial_start, t_stim_freeze),
+        'goCue_times': _assign_events_to_trial(t_trial_start, t_ready_tone_in, take='first'),
+        'errorCue_times': _assign_events_to_trial(t_trial_start, t_error_tone_in),
+        'valveOpen_times': _assign_events_to_trial(t_trial_start, t_valve_open),
+        'stimFreeze_times': _assign_events_to_trial(t_trial_start, t_stim_freeze),
         'stimOn_times': _assign_events_to_trial(t_trial_start, frame2ttl['times'], take='first'),
         'stimOff_times': _assign_events_to_trial(t_trial_start, t_stim_off),
-        'iti_in': _assign_events_to_trial(t_trial_start, t_iti_in)
+        'itiIn_times': _assign_events_to_trial(t_trial_start, t_iti_in)
     })
-    # goCue_times corresponds to the tone_in event
-    trials['goCue_times'] = np.copy(trials['ready_tone_in'])
     # feedback times are valve open on good trials and error tone in on error trials
-    trials['feedback_times'] = np.copy(trials['valve_open'])
-    ind_err = np.isnan(trials['valve_open'])
-    trials['feedback_times'][ind_err] = trials['error_tone_in'][ind_err]
+    trials['feedback_times'] = np.copy(trials['valveOpen_times'])
+    ind_err = np.isnan(trials['valveOpen_times'])
+    trials['feedback_times'][ind_err] = trials['errorCue_times'][ind_err]
     trials['intervals'] = np.c_[t_trial_start, trials['iti_in']]
 
     if display:
@@ -384,21 +387,22 @@ def extract_behaviour_sync(sync, output_path=None, save=False, chmap=None, displ
         plots.squares(r0['times'], r0['polarities'] * 0.4 + 4,
                       ax=ax, color='k')
         plots.vertical_lines(t_ready_tone_in, ymin=0, ymax=ymax,
-                             ax=ax, label='ready tone in', color='b', linewidth=width)
+                             ax=ax, label='goCue_times', color='b', linewidth=width)
         plots.vertical_lines(t_trial_start, ymin=0, ymax=ymax,
                              ax=ax, label='start_trial', color='m', linewidth=width)
         plots.vertical_lines(t_error_tone_in, ymin=0, ymax=ymax,
                              ax=ax, label='error tone', color='r', linewidth=width)
         plots.vertical_lines(t_valve_open, ymin=0, ymax=ymax,
-                             ax=ax, label='valve open', color='g', linewidth=width)
+                             ax=ax, label='valveOpen_times', color='g', linewidth=width)
         plots.vertical_lines(t_stim_freeze, ymin=0, ymax=ymax,
-                             ax=ax, label='stim freeze', color='y', linewidth=width)
+                             ax=ax, label='stimFreeze_times', color='y', linewidth=width)
         plots.vertical_lines(t_stim_off, ymin=0, ymax=ymax,
                              ax=ax, label='stim off', color='c', linewidth=width)
         plots.vertical_lines(trials['stimOn_times'], ymin=0, ymax=ymax,
-                             ax=ax, label='stim on', color='tab:orange', linewidth=width)
+                             ax=ax, label='stimOn_times', color='tab:orange', linewidth=width)
         ax.legend()
         ax.set_yticklabels(['', 'bpod', 'f2ttl', 'audio', 're_0', ''])
+        ax.set_yticks([0, 1, 2, 3, 4, 5])
         ax.set_ylim([0, 5])
 
     if save and output_path:
@@ -453,7 +457,7 @@ def align_with_bpod(session_path):
             continue
         np.save(output_path.joinpath(f'_ibl_trials.{k[:-5]}.npy'), trials[k] + dt)
     return interpolate.interp1d(trials['intervals_bpod'][:, 0],
-                                trials['intervals'][:, 0], fill_value="extrapolate")
+                                trials['intervals'][:, 0], fill_value="extrapolate")  # XXX: THIS!
 
 
 def extract_sync(session_path, save=False, force=False, ephys_files=None):
@@ -549,3 +553,8 @@ def extract_all(session_path, save=False, tmax=None, bin_exists=True):
     extract_camera_sync(sync, alf_path, save=save, chmap=sync_chmap)
     extract_behaviour_sync(sync, alf_path, save=save, chmap=sync_chmap, tmax=tmax)
     align_with_bpod(session_path)  # checks consistency and compute dt with bpod
+
+
+if __name__ == "__main__":
+    session_path = '/home/nico/Projects/IBL/scratch/TestSubjects/_iblrig_test_mouse/2020-02-11/001'
+    extract_all(session_path, save=False, tmax=None)

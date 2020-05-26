@@ -392,7 +392,7 @@ def get_stimOn_times_ge5(session_path, data=False):
     # Get the stim_on_state that triggers the onset of the stim
     stim_on_state = np.array([tr['behavior_data']['States timestamps']
                              ['stim_on'][0] for tr in data])
-
+    # XXX: stimOn times is NaN if stim not detected within stim_on state, get from BNC1 first pulse
     stimOn_times = np.array([])
     for sync, on, off in zip(
             stim_sync_all, stim_on_state[:, 0], stim_on_state[:, 1]):
@@ -566,7 +566,7 @@ def get_response_times(session_path, save=False, data=False, settings=False):
 
     :param session_path: Absolute path of session folder
     :type session_path: str
-    :param save: wether to save the corresponding alf file
+    :param save: whether to save the corresponding alf file
                  to the alf folder, defaults to False
     :param save: bool, optional
     :return: numpy.ndarray

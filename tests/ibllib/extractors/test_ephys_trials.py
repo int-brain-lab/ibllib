@@ -43,8 +43,8 @@ class TestEphysSyncExtraction(unittest.TestCase):
                                 179.41063333, 179.41073333, 181.70343333, 181.85343333,
                                 183.12896667, 183.12906667])
 
-        t_trial_start, t_valve_open, _ = ephys_fpga._bpod_events_extraction(bpod_times_,
-                                                                            bpod_fronts_)
+        t_trial_start, t_valve_open, _ = ephys_fpga._assign_events_bpod(bpod_times_,
+                                                                        bpod_fronts_)
         self.assertTrue(np.all(np.isclose(t_trial_start, t_trial_start_)))
         self.assertTrue(np.all(np.isclose(t_valve_open, t_valve_open_)))
 

@@ -141,3 +141,7 @@ class TestRegistration(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.td.cleanup()
+
+
+if __name__ == '__main__':
+    unittest.main(exit=False)
