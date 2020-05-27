@@ -39,14 +39,15 @@ class TestSingletonPattern(unittest.TestCase):
 class TestJsonFieldMethods(unittest.TestCase):
     def setUp(self):
         self.ac = ac
-        sessions = self.ac.rest("sessions", "list")
-        self.eid1 = sessions[0]['url'][-36:]
-        self.eid2 = sessions[-1]['url'][-36:]
+        self.eid1 = '242f2929-faaf-4e7c-ae3f-4a935c6d8da5'
+        self.eid2 = 'dfe99506-b873-45db-bc93-731f9362e304'
         self.endpoint = "sessions"
         self.field_name = "extended_qc"
         self.data_dict = {'some': 0, 'data': 1}
-        self.eid1_eqc = self.ac.rest(self.endpoint, "read", id=self.eid1)[self.field_name]
-        self.eid2_eqc = self.ac.rest(self.endpoint, "read", id=self.eid2)[self.field_name]
+        self.ac.json_field_delete(self.endpoint, self.eid1, self.field_name)
+        self.ac.json_field_delete(self.endpoint, self.eid2, self.field_name)
+        self.eid1_eqc = None
+        self.eid2_eqc = None
 
     def _json_field_write(self):
         written1 = self.ac.json_field_write(

@@ -1,35 +1,18 @@
-#!/usr/bin/env python
-# -*- coding:utf-8 -*-
-"""
-Training wheel extractor from Pybpod output.
-"""
-import os
 import logging
 
 import numpy as np
 from scipy import interpolate
 
+from ibllib.io.extractors.base import BaseBpodTrialsExtractor
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
 import ibllib.exceptions as err
 
-logger_ = logging.getLogger('ibllib.alf')
+logger_ = logging.getLogger('ibllib')
 WHEEL_RADIUS_CM = 1  # we want the output in radians
 THRESHOLD_RAD_PER_SEC = 10
 THRESHOLD_CONSECUTIVE_SAMPLES = 0
 EPS = 7. / 3 - 4. / 3 - 1
-
-
-def check_alf_folder(session_path):
-    """
-    Check if alf folder exists, creates it if it doesn't.
-
-    :param session_path: absolute path of session folder
-    :type session_path: str
-    """
-    alf_folder = os.path.join(session_path, 'alf')
-    if not os.path.exists(alf_folder):
-        os.mkdir(alf_folder)
 
 
 def get_trial_start_times(session_path, data=None):
@@ -101,28 +84,15 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
     return interpolate.interp1d(re, bp, fill_value="extrapolate")
 
 
-def get_wheel_position(session_path, bp_data=None, save=False, display=False):
+def get_wheel_position(session_path, bp_data=None, display=False):
     """
-    Get wheel data from raw files and converts positions into radians mathematical convention
-     (anti-clockwise = +) and timestamps into seconds relative to Bpod clock.
-    **Optional:** saves _ibl_wheel.times.npy and _ibl_wheel.position.npy
-
-    Times:
-    Gets Rotary Encoder timestamps (us) for each position and converts to times.
-    Synchronize with Bpod and outputs
-
-    Positions:
-    Radians mathematical convention
-
-    :param session_path: absolute path of session folder
-    :type session_path: str
-    :param data: dictionary containing the contents pybppod jsonable file read with raw.load_data
-    :type data: dict, optional
-    :param save: wether to save the corresponding alf file
-                 to the alf folder, defaults to False
-    :type save: bool, optional
-    :return: Numpy structured array.
-    :rtype: numpy.ndarray
+    Gets wheel timestamps and position. Position is in radian (constant above for radius is 1)
+    mathematical convention.
+    :param session_path:
+    :param bp_data (optional): bpod trials read from jsonable file
+    :param display (optional): (bool)
+    :return: timestamps (np.array)
+    :return: positions (np.array)
     """
     status = 0
     if not bp_data:
@@ -257,16 +227,29 @@ def get_wheel_position(session_path, bp_data=None, save=False, display=False):
         ax.plot(data['re_ts'], data['re_pos'] / WHEEL_RADIUS_CM, '.-', label='Output Trace')
         ax.legend()
         # plt.hist(np.diff(data['re_ts']), 400, range=[0, 0.01])
-
-    check_alf_folder(session_path)
-    if raw.save_bool(save, '_ibl_wheel.timestamps.npy'):
-        tpath = os.path.join(session_path, 'alf', '_ibl_wheel.timestamps.npy')
-        np.save(tpath, data['re_ts'])
-    if raw.save_bool(save, '_ibl_wheel.position.npy'):
-        ppath = os.path.join(session_path, 'alf', '_ibl_wheel.position.npy')
-        np.save(ppath, data['re_pos'])
-    return data
+    return data['re_ts'], data['re_pos']
 
 
-def extract_all(session_path, bp_data=None, save=False):
-    return get_wheel_position(session_path, bp_data=bp_data, save=save)
+class WheelPosition(BaseBpodTrialsExtractor):
+    """
+    Get wheel data from raw files and converts positions into radians mathematical convention
+     (anti-clockwise = +) and timestamps into seconds relative to Bpod clock.
+    **Optional:** saves _ibl_wheel.times.npy and _ibl_wheel.position.npy
+
+    Times:
+    Gets Rotary Encoder timestamps (us) for each position and converts to times.
+    Synchronize with Bpod and outputs
+
+    Positions:
+    Radians mathematical convention
+    """
+    save_names = ('_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy')
+    var_names = ('timestamps', 'position')
+
+    def _extract(self):
+        return get_wheel_position(self.session_path, self.bpod_trials)
+
+
+def extract_all(session_path, bpod_trials=None, settings=None, save=False):
+    return WheelPosition(session_path=session_path).extract(
+        save=save, bpod_trials=bpod_trials, settings=settings)

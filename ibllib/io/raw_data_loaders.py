@@ -457,13 +457,12 @@ def _groom_wheel_data_ge5(data, label='file ', path=''):
 
 
 def save_bool(save, dataset_type):
-    logger = logging.getLogger('ibllib.alf')
     if isinstance(save, bool):
         out = save
     elif isinstance(save, list):
         out = (dataset_type in save) or (Path(dataset_type).stem in save)
     if out:
-        logger.debug('extracting' + dataset_type)
+        logger_.debug('extracting' + dataset_type)
     return out
 
 

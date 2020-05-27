@@ -8,14 +8,11 @@ import numpy as np
 from phylib.io import alf
 from ibllib.ephys.sync_probes import apply_sync
 import ibllib.ephys.ephysqc as ephysqc
-from ibllib.misc import log2session_static
 from ibllib.io import spikeglx, raw_data_loaders
-from ibllib.io.extractors.ephys_fpga import glob_ephys_files
 
 _logger = logging.getLogger('ibllib')
 
 
-@log2session_static('ephys')
 def probes_description(ses_path, bin_exists=True):
     """
     Aggregate probes information into ALF files
@@ -27,7 +24,7 @@ def probes_description(ses_path, bin_exists=True):
     """
 
     ses_path = Path(ses_path)
-    ephys_files = glob_ephys_files(ses_path, bin_exists=bin_exists)
+    ephys_files = spikeglx.glob_ephys_files(ses_path, bin_exists=bin_exists)
     subdirs, labels, efiles_sorted = zip(
         *sorted([(ep.ap.parent, ep.label, ep) for ep in ephys_files if ep.get('ap')]))
 
@@ -70,9 +67,9 @@ def probes_description(ses_path, bin_exists=True):
     probe_trajectory_file = alf_path.joinpath('probes.trajectory.json')
     with open(probe_trajectory_file, 'w+') as fid:
         fid.write(json.dumps(trajs))
+    return [probe_trajectory_file, probe_description_file]
 
 
-@log2session_static('ephys')
 def sync_spike_sortings(ses_path):
     """
     Converts the KS2 outputs for each probe in ALF format. Creates:
@@ -93,11 +90,12 @@ def sync_spike_sortings(ses_path):
         return s2v['ap'][0]
 
     ses_path = Path(ses_path)
-    ephys_files = glob_ephys_files(ses_path)
+    ephys_files = spikeglx.glob_ephys_files(ses_path)
     subdirs, labels, efiles_sorted, srates = zip(
         *sorted([(ep.ap.parent, ep.label, ep, _sr(ep.ap)) for ep in ephys_files if ep.get('ap')]))
 
     _logger.info('converting  spike-sorting outputs to ALF')
+    out_files = []
     for subdir, label, ef, sr in zip(subdirs, labels, efiles_sorted, srates):
         if not subdir.joinpath('spike_times.npy').exists():
             _logger.warning(f"No KS2 spike sorting found in {subdir}, skipping probe !")
@@ -125,6 +123,10 @@ def sync_spike_sortings(ses_path):
         spike_samples = np.load(ses_path.joinpath(probe_out_path, 'spikes.samples.npy'))
         interp_times = apply_sync(sync_file, spike_samples / sr, forward=True)
         np.save(st_file, interp_times)
+        # get the list of output files
+        out_files.extend([f for f in ses_path.joinpath(probe_out_path).glob("*.*") if
+                          f.name.startswith(('channels.', 'clusters.', 'spikes.', 'templates.'))])
+    return out_files
 
 
 def ks2_to_alf(ks_path, out_path, ampfactor=1, label=None, force=True):

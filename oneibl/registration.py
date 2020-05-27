@@ -4,8 +4,8 @@ import datetime
 import logging
 from dateutil import parser as dateparser
 
+from ibllib.misc import version
 import ibllib.time
-from ibllib.misc import version, log2session
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io import flags, hashfile
 import alf.io
@@ -26,7 +26,7 @@ REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
 
 
 def register_dataset(file_list, one=None, created_by='root', repository=None, server_only=False,
-                     dry=False):
+                     versions=False, dry=False):
     """
     Registers a set of files belonging to a session only on the server
     :param file_list: (list of pathlib.Path or pathlib.Path)
@@ -42,6 +42,11 @@ def register_dataset(file_list, one=None, created_by='root', repository=None, se
         file_list = [Path(file_list)]
     assert len(set([alf.io.get_session_path(f) for f in file_list])) == 1
     assert all([Path(f).exists() for f in file_list])
+    if not versions:
+        versions = [version.ibllib() for _ in file_list]
+    else:
+        assert isinstance(versions, list) and len(versions) == len(file_list)
+
     session_path = alf.io.get_session_path(file_list[0])
     # first register the file
     r = {'created_by': created_by,
@@ -51,7 +56,7 @@ def register_dataset(file_list, one=None, created_by='root', repository=None, se
          'server_only': server_only,
          'hashes': [hashfile.md5(p) for p in file_list],
          'filesizes': [p.stat().st_size for p in file_list],
-         'versions': [version.ibllib() for _ in file_list]}
+         'versions': versions}
     if not dry:
         if one is None:
             one = ONE()
@@ -112,7 +117,6 @@ class RegistrationClient:
                 flag_file.parent.joinpath('create_me.flag').unlink()
             logger_.info('registered' + '\n')
 
-    @log2session('register')
     def register_session(self, ses_path, file_list=True):
         """
         Register session in Alyx
@@ -261,8 +265,8 @@ class RegistrationClient:
 
 
 def _alyx_procedure_from_task(task_protocol):
-    import ibllib.pipes.extract_session
-    task_str = ibllib.pipes.extract_session.get_task_extractor_type(task_protocol)
+    import ibllib.pipes.training_preprocessing  # this is to avoid circular imports
+    task_str = ibllib.pipes.training_preprocessing.get_task_extractor_type(task_protocol)
     lookup = {'biased': 'Behavior training/tasks',
               'habituation': 'Behavior training/tasks',
               'training': 'Behavior training/tasks',
