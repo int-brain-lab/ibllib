@@ -9,7 +9,7 @@ from pathlib import Path
 from shutil import ignore_patterns as ig
 
 import ibllib.io.flags as flags
-from ibllib.pipes import extract_session
+import ibllib.pipes.training_preprocessing
 
 log = logging.getLogger('ibllib')
 log.setLevel(logging.INFO)
@@ -46,7 +46,7 @@ def main(local_folder: str, remote_folder: str, force: bool = False) -> None:
             shutil.copytree(src, dst, ignore=ig(str(src_flag_file.name)))
         # finally if folder was created delete the src flag_file and create compress_me.flag
         if dst.exists():
-            task_type = extract_session.get_task_extractor_type(Path(src))
+            task_type = ibllib.pipes.training_preprocessing.get_task_extractor_type(Path(src))
             _create_flags_for_task(dst, task_type)
             log.info(
                 f"Copied to {remote_folder}: Session {src_flag_file.parent}")

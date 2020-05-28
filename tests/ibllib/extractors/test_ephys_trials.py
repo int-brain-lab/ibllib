@@ -3,7 +3,6 @@ import unittest
 import numpy as np
 
 import ibllib.io.extractors.ephys_fpga as ephys_fpga
-import ibllib.io.extractors.ephys_trials as ephys_trials
 import ibllib.io.raw_data_loaders as raw
 
 
@@ -43,8 +42,8 @@ class TestEphysSyncExtraction(unittest.TestCase):
                                 179.41063333, 179.41073333, 181.70343333, 181.85343333,
                                 183.12896667, 183.12906667])
 
-        t_trial_start, t_valve_open, _ = ephys_fpga._bpod_events_extraction(bpod_times_,
-                                                                            bpod_fronts_)
+        t_trial_start, t_valve_open, _ = ephys_fpga._assign_events_bpod(bpod_times_,
+                                                                        bpod_fronts_)
         self.assertTrue(np.all(np.isclose(t_trial_start, t_trial_start_)))
         self.assertTrue(np.all(np.isclose(t_valve_open, t_valve_open_)))
 
@@ -106,20 +105,15 @@ class TestEphysBehaviorExtraction(unittest.TestCase):
     def test_get_probabilityLeft(self):
         data = raw.load_data(self.session_path)
         settings = raw.load_settings(self.session_path)
-        pLeft0 = ephys_trials.get_probabilityLeft(
-            self.session_path, save=False, data=data, settings=False
-        )
+        pLeft0, _, _ = ephys_fpga.ProbaContrasts(
+            self.session_path).extract(bpod_trials=data, settings=settings)[0]
         self.assertTrue(len(pLeft0) == len(data))
         # Test if only generative prob values in data
         self.assertTrue(all([x in [0.2, 0.5, 0.8] for x in np.unique(pLeft0)]))
         # Test if settings file has empty LEN_DATA result is same
         settings.update({"LEN_BLOCKS": None})
-        pLeft1 = ephys_trials.get_probabilityLeft(
-            self.session_path, save=False, data=False, settings=settings
-        )
+        pLeft1, _, _ = ephys_fpga.ProbaContrasts(
+            self.session_path).extract(bpod_trials=data, settings=settings)[0]
         self.assertTrue(all(pLeft0 == pLeft1))
         # Test if only generative prob values in data
         self.assertTrue(all([x in [0.2, 0.5, 0.8] for x in np.unique(pLeft1)]))
-
-    def tearDown(self):
-        pass

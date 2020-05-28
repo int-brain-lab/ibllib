@@ -318,29 +318,24 @@ def samples_to_cm(positions, wheel_diameter=WHEEL_DIAMETER, resolution=ENC_RES):
     return positions / resolution * pi * wheel_diameter
 
 
-def traces_by_trial(t, pos, trials, start='stimOn_times', end='feedback_times'):
+def traces_by_trial(t, pos, start=None, end=None):
     """
     Returns list of tuples of positions and velocity for samples between stimulus onset and
     feedback.
     :param t: numpy array of timestamps
     :param pos: numpy array of wheel positions (could also be velocities or accelerations)
-    :param trials: dict of trials ALFs
     :param start: trails key to use as the start index for splitting
     :param end: trails key to use as the end index for splitting
     :return: list of traces between each start and end event
     """
-    if start == 'intervals' and (end is None or end == 'interval'):
-        start = trials['intervals'][:, 0]
-        end = trials['intervals'][:, 1]
-    traces = np.vstack((pos, t))
+    if start is None:
+        start = t[0]
+    if end is None:
+        end = t[-1]
+    traces = np.c_[t, pos]
 
     def to_mask(a, b):
-        (t > a) & (t < b)
-    #  to_dict = lambda a, b, c: position: a
-    cuts = [traces[:, to_mask(s, e)] for s, e in zip(trials[start], trials[end])]
-    # ans = map(to_mask, zip(trials[start], trials[end]))
-    # for s, e in zip(trials[start], trials[end]):
-    #     mask = (wheel['times'] > s) & (wheel['times'] < e)
-    #     cuts = traces[:, mask]
+        return np.logical_and(t > a, t < b)
 
-    return [(cuts[n][0, :], cuts[n][1, :], cuts[n][2, :]) for n in range(len(cuts))]
+    cuts = [traces[to_mask(s, e), ] for s, e in zip(start, end)]
+    return [(cuts[n][:, 0], cuts[n][:, 1]) for n in range(len(cuts))]

@@ -86,10 +86,12 @@ def load_data(session_path, time='absolute'):
     :rtype: list of dicts
     """
     if session_path is None:
+        logger_.warning("No data loaded: session_path is None")
         return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_taskData.raw*.jsonable"), None)
     if not path:
+        logger_.warning("No data loaded: could not find raw data file")
         return None
     data = jsonable.read(path)
     if time == 'absolute':
@@ -109,10 +111,12 @@ def load_settings(session_path):
     :rtype: dict
     """
     if session_path is None:
+        logger_.warning("No data loaded: session_path is None")
         return
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_taskSettings.raw*.json"), None)
     if not path:
+        logger_.warning("No data loaded: could not find raw settings file")
         return None
     with open(path, 'r') as f:
         settings = json.load(f)
@@ -272,6 +276,7 @@ def load_encoder_positions(session_path, settings=False):
         if line.startswith('Position'):
             settings = {'IBLRIG_VERSION_TAG': '0.0.0'}
     if not path:
+        logger_.warning("No data loaded: could not find raw encoderPositions file")
         return None
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
         return _load_encoder_positions_file_ge5(path)
@@ -452,13 +457,12 @@ def _groom_wheel_data_ge5(data, label='file ', path=''):
 
 
 def save_bool(save, dataset_type):
-    logger = logging.getLogger('ibllib.alf')
     if isinstance(save, bool):
         out = save
     elif isinstance(save, list):
         out = (dataset_type in save) or (Path(dataset_type).stem in save)
     if out:
-        logger.debug('extracting' + dataset_type)
+        logger_.debug('extracting' + dataset_type)
     return out
 
 

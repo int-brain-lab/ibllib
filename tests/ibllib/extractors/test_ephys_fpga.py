@@ -60,11 +60,11 @@ class TestSyncExtraction(unittest.TestCase):
             bin_file = ses_path.joinpath(fn).with_suffix('.bin')
             nidq = spikeglx._mock_spikeglx_file(bin_file, self.workdir / fn,
                                                 ns=ns, nc=nc, sync_depth=sync_depth)
-            syncs = ephys_fpga.extract_sync(tdir, save=True)
+            syncs, files = ephys_fpga.extract_sync(tdir)
             self.assertTrue(np.all(syncs[0].channels[slice(0, None, 2)] ==
                                    np.arange(0, nidq['sync_depth'])))
             with self.assertLogs(level='INFO') as log:
-                syncs = ephys_fpga.extract_sync(tdir)
+                ephys_fpga.extract_sync(tdir)
                 self.assertEqual(len(log.output), 1)
                 self.assertIn('SGLX sync found', log.output[0])
 

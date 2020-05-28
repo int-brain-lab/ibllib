@@ -1,10 +1,14 @@
-### Release Notes 1.4.15dev - (18/05/2020 - (EDIT THIS HADER BEFORE RELEASE)
--   Metaclass implementation of UniqueSingletons for AlyxClient
--   Added JSON methods to AlyxClient
--   Added get_details method to ONE to retrieve search function deteils after the fact
--   Refactored one tests, separated utility functions like get_details, path_from_eid, eid_from_path, ...
+### Release Notes 1.5.0dev - (25/05/2020 - (EDIT THIS HEADER BEFORE RELEASE)
+-  Ephys extraction:
+    -   spike amplitudes in Volts
+    -   added waveforms samples dataset to use Phy from Flatiron datasets
+-  ONE performance:
+    -   Metaclass implementation of UniqueSingletons for AlyxClient
+    -   Multi-threaded downloads
+    -   Added JSON fields methods to AlyxClient
+-   QCs: Bpod and ONE QC features, basic plotting, examples
 
-### Release Notes 1.4.14 - TBD
+### Release Notes 1.4.14 - 2020-03-09
 -   Added permutation test, comparing a metric on two sets of datasets, by shuffling labels and seeing how plausible the observed actual difference is
 Sped up calculation of firing_rate
 -   ephys extraction: updated extracted metrics, including a new contamination estimate and drift metrics.

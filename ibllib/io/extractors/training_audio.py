@@ -8,9 +8,8 @@ from scipy import signal
 from scipy.io import wavfile
 
 from ibllib import dsp
-from ibllib.misc import log2session_static
 import ibllib.io.raw_data_loaders as ioraw
-import ibllib.io.extractors.training_trials
+from ibllib.io.extractors.training_trials import GoCueTimes
 
 logger_ = logging.getLogger('ibllib')
 
@@ -99,7 +98,6 @@ def welchogram(fs, wav, nswin=NS_WIN, overlap=OVERLAP, nperseg=NS_WELCH):
     return tscale, fscale, W, detect
 
 
-@log2session_static('extraction')
 def extract_sound(ses_path, save=True, force=False, delete=False):
     """
     Simple audio features extraction for ambient sound characterization.
@@ -107,7 +105,7 @@ def extract_sound(ses_path, save=True, force=False, delete=False):
 
     :param ses_path: ALF full session path: (/mysubject001/YYYY-MM-DD/001)
     :param delete: if True, removes the wav file after processing
-    :return: None
+    :return: list of output files
     """
     ses_path = Path(ses_path)
     wav_file = ses_path / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
@@ -145,8 +143,7 @@ def extract_sound(ses_path, save=True, force=False, delete=False):
     data = ioraw.load_data(ses_path)
     if data is None:  # if no session data, we're done
         return
-    tgocue = np.array(ibllib.io.extractors.training_trials.get_goCueOnset_times(
-        None, save=False, data=data))
+    tgocue, _ = GoCueTimes(ses_path).extract(save=False, bpod_trials=data)
     ilast = min(len(tgocue), len(detect))
     dt = tgocue[:ilast] - detect[: ilast]
     # only save if dt is consistent for the whole session
@@ -155,6 +152,7 @@ def extract_sound(ses_path, save=True, force=False, delete=False):
         np.save(file=files_out['times'], arr=tscale[:, None].astype(np.single))
     if delete:
         wav_file.unlink()
+    return [files_out[k] for k in files_out]
 
 
 def _fix_wav_file(wav_file):

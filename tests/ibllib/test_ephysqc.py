@@ -15,13 +15,12 @@ class TestFpgaTask(unittest.TestCase):
             'intervals': np.array([[0, 9.5], [10, 19.5]]),
             'stimOn_times': np.array([2, 12]),
             'goCue_times': np.array([2.0001, 12.0001]),
-            'ready_tone_in': np.array([2.0001, 12.0001]),
-            'stim_freeze': np.array([4., 14.]),
+            'stimFreeze_times': np.array([4., 14.]),
             'feedback_times': np.array([4.0001, 14.0001]),
-            'error_tone_in': np.array([4.0001, np.nan]),
-            'valve_open': np.array([np.nan, 14.0001]),
+            'errorCue_times': np.array([4.0001, np.nan]),
+            'valveOpen_times': np.array([np.nan, 14.0001]),
             'stimOff_times': np.array([6.0001, 15.0001]),
-            'iti_in': np.array([6.0011, 15.000]),
+            'itiIn_times': np.array([6.0011, 15.000]),
         }
 
         alf_trials = {
