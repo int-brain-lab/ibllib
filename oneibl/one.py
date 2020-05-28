@@ -326,8 +326,9 @@ class ONE(OneAbstract):
                     futures.append(None)
                 else:
                     futures.append(executor.submit(
-                        self.download_dataset, dc.url[ind], clobber=clobber, offline=offline,
-                        keep_uuid=keep_uuid, file_size=dc.file_size[ind], hash=dc.hash[ind]))
+                        self.download_dataset, dc.url[ind], cache_dir=cache_dir, clobber=clobber,
+                        offline=offline, keep_uuid=keep_uuid, file_size=dc.file_size[ind],
+                        hash=dc.hash[ind]))
             concurrent.futures.wait(list(filter(lambda x: x is not None, futures)))
             for ind, future in enumerate(futures):
                 if future is None:
@@ -511,10 +512,11 @@ class ONE(OneAbstract):
                 out_files.append(future.result())
         return out_files
 
-    def download_dataset(self, dset, **kwargs):
+    def download_dataset(self, dset, cache_dir=None, **kwargs):
         """
         Download a dataset from an alyx REST dictionary
         :param dset: single dataset dictionary from an Alyx REST query OR URL string
+        :param cache_dir (optional): root directory to save the data in (home/downloads by default)
         :return: local file path
         """
         if isinstance(dset, str):
@@ -524,10 +526,10 @@ class ONE(OneAbstract):
         if not url:
             return
         relpath = Path(url.replace(self._par.HTTP_DATA_SERVER, '.')).parents[0]
-        cache_dir = Path(self._par.CACHE_DIR, relpath)
-        return self._download_file(url=url, cache_dir=str(cache_dir), **kwargs)
+        target_dir = Path(self._get_cache_dir(cache_dir), relpath)
+        return self._download_file(url=url, target_dir=target_dir, **kwargs)
 
-    def _download_file(self, url, cache_dir, clobber=False, offline=False, keep_uuid=False,
+    def _download_file(self, url, target_dir, clobber=False, offline=False, keep_uuid=False,
                        file_size=None, hash=None):
         """
         Downloads a single file from an HTTP webserver
@@ -540,8 +542,8 @@ class ONE(OneAbstract):
         :param hash:
         :return:
         """
-        Path(cache_dir).mkdir(parents=True, exist_ok=True)
-        local_path = str(cache_dir) + os.sep + os.path.basename(url)
+        Path(target_dir).mkdir(parents=True, exist_ok=True)
+        local_path = str(target_dir) + os.sep + os.path.basename(url)
         if not keep_uuid:
             local_path = remove_uuid_file(local_path, dry=True)
         if Path(local_path).exists():
@@ -558,7 +560,7 @@ class ONE(OneAbstract):
             local_path = wc.http_download_file(url,
                                                username=self._par.HTTP_DATA_SERVER_LOGIN,
                                                password=self._par.HTTP_DATA_SERVER_PWD,
-                                               cache_dir=str(cache_dir),
+                                               cache_dir=str(target_dir),
                                                clobber=clobber,
                                                offline=offline)
         if keep_uuid:
