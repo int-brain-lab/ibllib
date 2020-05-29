@@ -45,7 +45,7 @@ class TestsParams(unittest.TestCase):
                            'I': 'titi',
                            'num': 15,
                            'liste': [1, 'turlu'],
-                           'apath': '/gna/gna/gna',
+                           'apath': str(Path('/gna/gna/gna')),
                            'E': 'tete2',
                            }
         par2 = params.read('toto', default=default)
@@ -75,7 +75,7 @@ class TestsParams(unittest.TestCase):
 class TestsRawDataLoaders(unittest.TestCase):
 
     def setUp(self):
-        self.tempfile = tempfile.NamedTemporaryFile()
+        self.tempfile = tempfile.NamedTemporaryFile(delete=False)
 
     def testFlagFileRead(self):
         # empty file should return True
@@ -135,18 +135,19 @@ class TestsRawDataLoaders(unittest.TestCase):
         self.assertEqual(flags.read_flag_file(self.tempfile.name), True)
 
     def test_load_encoder_trial_info(self):
-        self.session = Path('tests/ibllib/extractors/data/session_biased_ge5')
-        data = raw.load_encoder_trial_info(str(self.session))
+        self.session = Path(__file__).parent.joinpath('extractors', 'data', 'session_biased_ge5')
+        data = raw.load_encoder_trial_info(self.session)
         self.assertTrue(data is not None)
 
     def tearDown(self):
         self.tempfile.close()
+        os.unlink(self.tempfile.name)
 
 
 class TestsJsonable(unittest.TestCase):
 
     def testReadWrite(self):
-        tfile = tempfile.NamedTemporaryFile()
+        tfile = tempfile.NamedTemporaryFile(delete=False)
         data = [{'a': 'thisisa', 'b': 1, 'c': [1, 2, 3]},
                 {'a': 'thisisb', 'b': 2, 'c': [2, 3, 4]}]
         jsonable.write(tfile.name, data)
@@ -156,7 +157,7 @@ class TestsJsonable(unittest.TestCase):
         data3 = jsonable.read(tfile.name)
         self.assertEqual(data + data, data3)
         tfile.close()
-
+        os.unlink(tfile.name)
 
 class TestSpikeGLX_glob_ephys(unittest.TestCase):
     """
@@ -403,7 +404,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
         else:
             s = sr.read_sync()
             self.assertTrue(s.shape[1] == 17)
-        self.tdir.cleanup()
+        #self.tdir.cleanup()
 
     def testGetSerialNumber(self):
         self.meta_files.sort()

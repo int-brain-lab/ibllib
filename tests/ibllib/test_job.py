@@ -6,7 +6,7 @@ from ibllib.misc import version
 import ibllib.pipes.jobs
 from oneibl.one import ONE
 
-one = ONE(base_url='https://testdev.alyx.internationalbrainlab.org',  # FIXME change the testdev
+one = ONE(base_url='https://test.alyx.internationalbrainlab.org',  # FIXME change the testdev
           username='test_user', password='TapetesBloc18')
 
 ses_dict = {
