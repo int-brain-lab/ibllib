@@ -22,7 +22,7 @@ ephys_rig = [s for s in iblrig if "_ephys_" in s]
 cachepath = Path(one._par.CACHE_DIR)
 
 
-# Plots for 1 rig at a time
+#  for 1 rig at a time
 
 for i_ephysrig in range(0, len(ephys_rig)):
     rig_location = ephys_rig[i_ephysrig]
@@ -42,7 +42,6 @@ for i_ephysrig in range(0, len(ephys_rig)):
 
     # Init var
     bm_app = pd.DataFrame()
-    bp_app = pd.DataFrame()
 
     for i_file in range(0, len(datafiles)):
         # Load data
@@ -51,37 +50,37 @@ for i_ephysrig in range(0, len(ephys_rig)):
         data = {key: varload[key].item() for key in varload}
 
         # Concatenate data across sessions for metrics
-        bpod_metrics = pd.DataFrame.from_dict(data['dataqc']['bpod_metrics'])
+
+        dict_met_key = dict()
+        for key, value in data['dataqc']['bpod_metrics'].items():
+            key_add = f'_metric__{key}'
+            dict_met_key[key_add] = value
+        bpod_metrics = pd.DataFrame.from_dict(dict_met_key)
+
         bpod_metrics['eid'] = data['dataqc']['eid']
         bpod_metrics['session'] = i_file
+        bpod_metrics['rig_location'] = rig_location
+
         # Take in value from session details
         for key, value in data['dataqc']['ses_det'].items():
-            bpod_metrics[key] = value
+            key_add = f'_sd__{key}'
+            bpod_metrics[key_add] = value
 
-        bm_app = pd.concat([bm_app, bpod_metrics]).copy()
-        # Do similar for metric pass information
-        bpod_pass = pd.DataFrame.from_dict(data['dataqc']['bpod_pass'])
-        bp_app = pd.concat([bp_app, bpod_pass]).copy()
+        # Take in value from pass
+        dict_pass_key = dict()
+        for key, value in data['dataqc']['bpod_pass'].items():
+            key_add = f'_pass__{key}'
+            dict_pass_key[key_add] = value
+        bpod_pass = pd.DataFrame.from_dict(dict_pass_key)
+
+        # Append
+        var_app = pd.concat([bpod_metrics, bpod_pass], axis=1).copy()
+        bm_app = pd.concat([bm_app, var_app], axis=0).copy()
 
     bm_app.reset_index(inplace=True)
-    bp_app.reset_index(inplace=True)
 
     # Append and save table
     app_token = {
-        'bm_app': bm_app,
-        'bp_app': bp_app
+        'dataframe': bm_app
     }
     np.savez(outfile, dataqc=app_token)
-
-    # Plot session metrics
-    # i_key = 0  # init iteration value
-    # for key, value in bpod_metrics.items():
-    #     plt.figure(i_key)  # TODO hacky way to plot on same figure
-    #     plt.plot(i_file*np.ones(shape=np.size(value)), value,
-    #              '.', alpha=.1, color='b')
-    #
-    #
-    #     plt.title(f'Rig {rig_location}, QC {key}', fontsize=9)
-    #     i_key = i_key+1
-
-

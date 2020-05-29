@@ -1,6 +1,5 @@
 """
-STEP2 - Save pandas data frame locally.
-A frame contains all data for a rig.
+STEP3 - Load frames, concatenate across rigs, plot.
 """
 # Author : Gaelle C.
 from oneibl.one import ONE
@@ -9,6 +8,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sns
 
 one = ONE()
 # Get list of all locations (some are labs, some are rigs)
@@ -20,9 +20,14 @@ ephys_rig = [s for s in iblrig if "_ephys_" in s]
 
 # Saving path
 cachepath = Path(one._par.CACHE_DIR)
+outdir = cachepath.joinpath('BPOD_Plot')
+# Create target Directory if don't exist
+if not os.path.exists(outdir):
+    os.makedirs(outdir)
 
-
-# Plots for 1 rig at a time
+# Make giant dataframe with data from all rigs
+# Init var
+bm_app = pd.DataFrame()
 
 for i_ephysrig in range(0, len(ephys_rig)):
     rig_location = ephys_rig[i_ephysrig]
@@ -34,18 +39,44 @@ for i_ephysrig in range(0, len(ephys_rig)):
     varload = np.load(datafile, allow_pickle=True)
     data = {key: varload[key].item() for key in varload}
 
-    data_bm = pd.DataFrame.from_dict(data['dataqc']['bm_app'])
-    data_bp = pd.DataFrame.from_dict(data['dataqc']['bp_app'])
+    dataframe = pd.DataFrame.from_dict(data['dataqc']['dataframe'])
 
+    # Append
+    bm_app = pd.concat([bm_app, dataframe], axis=0).copy()
+
+bm_app.reset_index(inplace=True)
+
+# Find metric key in dataframe
+metric_name = [key for key in dataframe.keys() if '_metric__' in key.lower()]
+
+for i_metric in range(0, len(metric_name)):
     # Plot session metrics
-    # i_key = 0  # init iteration value
-    # for key, value in bpod_metrics.items():
-    #     plt.figure(i_key)  # TODO hacky way to plot on same figure
-    #     plt.plot(i_file*np.ones(shape=np.size(value)), value,
-    #              '.', alpha=.1, color='b')
-    #
-    #
-    #     plt.title(f'Rig {rig_location}, QC {key}', fontsize=9)
-    #     i_key = i_key+1
+    fig, axes = plt.subplots(1, 2)
+    name_pass = f'_pass__{metric_name[i_metric][9:]}'
+
+    sns.scatterplot(x=metric_name[i_metric],
+                    y="eid",
+                    hue=bm_app["rig_location"].astype('category'),
+                    data=bm_app,
+                    marker=".", alpha=0.3, edgecolor="none",
+                    ax=axes[0])
 
 
+    sns.scatterplot(x=metric_name[i_metric],
+                    y="eid",
+                    hue=bm_app[name_pass].astype('category'),
+                    data=bm_app,
+                    marker=".", alpha=0.3, edgecolor="none",
+                    ax=axes[1])
+
+    axes[1].set_yticks([])
+    axes[1].xaxis.set_ticklabels([])
+
+
+    # Save fig
+    outname = f'{metric_name[i_metric]}.png'
+    outfile = Path.joinpath(outdir, outname)
+    plt.savefig(outfile)
+
+    # Close fig
+    plt.close(fig)
