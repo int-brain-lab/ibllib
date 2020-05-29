@@ -52,26 +52,29 @@ metric_name = [key for key in dataframe.keys() if '_metric__' in key.lower()]
 for i_metric in range(0, len(metric_name)):
     # Plot session metrics
     fig, axes = plt.subplots(1, 2)
+
     name_pass = f'_pass__{metric_name[i_metric][9:]}'
+    bm_app[name_pass] = bm_app[name_pass].astype('category')
+    bm_app["rig_location"] = bm_app["rig_location"].astype('category')
 
     sns.scatterplot(x=metric_name[i_metric],
                     y="eid",
-                    hue=bm_app["rig_location"].astype('category'),
+                    hue="rig_location",
                     data=bm_app,
                     marker=".", alpha=0.3, edgecolor="none",
                     ax=axes[0])
-
+    axes[0].set_yticks([])
+    axes[0].get_legend().remove()
 
     sns.scatterplot(x=metric_name[i_metric],
                     y="eid",
-                    hue=bm_app[name_pass].astype('category'),
+                    hue=name_pass,
                     data=bm_app,
                     marker=".", alpha=0.3, edgecolor="none",
                     ax=axes[1])
 
     axes[1].set_yticks([])
-    axes[1].xaxis.set_ticklabels([])
-
+    axes[1].xaxis.set_label_text("")
 
     # Save fig
     outname = f'{metric_name[i_metric]}.png'
@@ -80,3 +83,22 @@ for i_metric in range(0, len(metric_name)):
 
     # Close fig
     plt.close(fig)
+
+# ===== TEST ======
+for i_metric in range(0, len(metric_name)):
+
+    name_pass = f'_pass__{metric_name[i_metric][9:]}'
+
+    ax = sns.catplot(x=metric_name[i_metric],
+                    y=name_pass,
+                    row="rig_location",
+                    kind="box",
+                    data=bm_app)
+    ax.xaxis.set_label_text("")
+    # Save fig
+    outname = f'{metric_name[i_metric]}_distribution.png'
+    outfile = Path.joinpath(outdir, outname)
+    plt.savefig(outfile)
+
+    # Close fig
+    plt.close()
