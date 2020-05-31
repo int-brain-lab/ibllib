@@ -1,9 +1,10 @@
 import json
 import logging
 from pathlib import Path
+from collections import OrderedDict
 
 from alf.io import get_session_path
-import ibllib.pipes.jobs as jobs
+from ibllib.pipes import tasks
 from ibllib.io import ffmpeg, raw_data_loaders as rawio
 from ibllib.io.extractors import (training_trials, biased_trials, training_wheel, biased_wheel,
                                   training_audio)
@@ -13,7 +14,7 @@ _logger = logging.getLogger('ibllib')
 
 
 #  level 0
-class TrainingTrials(jobs.Job):
+class TrainingTrials(tasks.Task):
     priority = 90
     level = 0
 
@@ -25,7 +26,7 @@ class TrainingTrials(jobs.Job):
         return output_files
 
 
-class TrainingVideoCompress(jobs.Job):
+class TrainingVideoCompress(tasks.Task):
 
     def _run(self):
         # avi to mp4 compression
@@ -35,7 +36,7 @@ class TrainingVideoCompress(jobs.Job):
         return output_files
 
 
-class TrainingAudio(jobs.Job):
+class TrainingAudio(tasks.Task):
     """
     Computes raw electrophysiology QC
     """
@@ -48,7 +49,7 @@ class TrainingAudio(jobs.Job):
 
 
 # level 1
-class TrainingDLC(jobs.Job):
+class TrainingDLC(tasks.Task):
     gpu = 1
     cpu = 4
     io_charge = 90
@@ -59,21 +60,21 @@ class TrainingDLC(jobs.Job):
         pass
 
 
-class TrainingExtractionPipeline(jobs.Pipeline):
+class TrainingExtractionPipeline(tasks.Pipeline):
     label = __name__
 
     def __init__(self, session_path, **kwargs):
         super(TrainingExtractionPipeline, self).__init__(session_path, **kwargs)
-        jobs = {}
+        tasks = OrderedDict()
         self.session_path = session_path
         # level 0
-        jobs['TrainingTrials'] = TrainingTrials(self.session_path)
-        jobs['TrainingVideoCompress'] = TrainingVideoCompress(self.session_path)
-        jobs['TrainingAudio'] = TrainingAudio(self.session_path)
+        tasks['TrainingTrials'] = TrainingTrials(self.session_path)
+        tasks['TrainingVideoCompress'] = TrainingVideoCompress(self.session_path)
+        tasks['TrainingAudio'] = TrainingAudio(self.session_path)
         # level 1
-        jobs['TrainingDLC'] = TrainingDLC(
-            self.session_path, parents=[jobs['TrainingVideoCompress']])
-        self.jobs = jobs
+        tasks['TrainingDLC'] = TrainingDLC(
+            self.session_path, parents=[tasks['TrainingVideoCompress']])
+        self.jobs = tasks
 
 
 def get_task_extractor_type(task_name):

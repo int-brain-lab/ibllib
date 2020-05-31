@@ -88,11 +88,12 @@ def load_ephys_session(eid, one=None, dataset_types=None):
         'spikes.times',
         'probes.description'
     :param eid: experiment UUID or pathlib.Path of the local session
-    :param one:
+    :param one: one instance
     :param dataset_types: additional spikes/clusters objects to add to the standard default list
     :return: spikes, clusters, trials (dict of bunch, 1 bunch per probe)
     """
-    spikes, clusters = load_spike_sorting(eid, one=None, dataset_types=dataset_types)
+    assert one
+    spikes, clusters = load_spike_sorting(eid, one=one, dataset_types=dataset_types)
     if isinstance(eid, Path):
         trials = alf.io.load_object(eid.joinpath('alf'), object='trials')
     else:
