@@ -73,7 +73,7 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
                 return None
             with open(ks2log) as fid:
                 line = fid.readline()
-            self.version = re.compile("[a-f0-9]{36}").findall(line)
+            self.version = re.compile("[a-f0-9]{36}").findall(line)[0]
             return []  # the job will be labeled as complete with empty string
 
 
@@ -177,4 +177,4 @@ class EphysExtractionPipeline(tasks.Pipeline):
         tasks['EphysTrials'] = EphysTrials(self.session_path, parents=[tasks['EphysPulses']])
         tasks['EphysMtscomp'] = EphysMtscomp(self.session_path, parents=[tasks['SpikeSorting']])
         tasks['EphysDLC'] = EphysMtscomp(self.session_path, parents=[tasks['EphysVideoCompress']])
-        self.jobs = tasks
+        self.tasks = tasks
