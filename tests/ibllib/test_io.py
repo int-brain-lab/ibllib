@@ -159,6 +159,7 @@ class TestsJsonable(unittest.TestCase):
         tfile.close()
         os.unlink(tfile.name)
 
+
 class TestSpikeGLX_glob_ephys(unittest.TestCase):
     """
     Creates mock acquisition folders architecture (omitting metadata files):
@@ -404,7 +405,6 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
         else:
             s = sr.read_sync()
             self.assertTrue(s.shape[1] == 17)
-        #self.tdir.cleanup()
 
     def testGetSerialNumber(self):
         self.meta_files.sort()

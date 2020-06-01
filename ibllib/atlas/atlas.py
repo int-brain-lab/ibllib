@@ -618,7 +618,8 @@ class AllenAtlas(BrainAtlas):
     using the IBL Bregma and coordinate system
     """
 
-    def __init__(self, res_um=25, par=None, scaling=np.array([1, 1, 1]), mock=False, hist_path=None):
+    def __init__(self, res_um=25, par=None, scaling=np.array([1, 1, 1]), mock=False,
+                 hist_path=None):
         """
         :param res_um: 10, 25 or 50 um
         :param par: dictionary of parameters to override systems ones
