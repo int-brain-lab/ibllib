@@ -276,15 +276,17 @@ def _run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None):
     # sets the status flag to started before running
     one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data={'status': 'Started'})
     status = task.run()
+    patch_data = {'time_elapsed_secs': task.time_elapsed_secs, 'log': task.log,
+                  'version': task.version}
     # only registers successful runs
     if status == 0:
         # on a successful run, if there is no data to register, set status to Empty
         if task.outputs is None:
-            t = one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data={'status': 'Empty'})
+            patch_data['status'] = 'Empty'
         else:  # otherwise register data and set status to Complete
             registered_dsets = task.register_datasets(one=one, jobid=tdict['id'])
-            t = one.alyx.rest('tasks', 'partial_update', id=tdict['id'],
-                              data={'status': 'Complete'})
+            patch_data['status'] = 'Complete'
     elif status == -1:
-        t = one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data={'status': 'Errored'})
+        patch_data['status'] = 'Errored'
+    t = one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data=patch_data)
     return t, registered_dsets
