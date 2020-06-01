@@ -12,9 +12,7 @@ from brainbox import core
 def trials_to_df(trials, cont, startvar='stimOn_times', endvar='feedback_times',
                  trnumvar=None, t_before=0.3, t_after=0.3):
     """
-    Takes list of per-trial dicts, and additional continuous timeseries with timestamps, and merges
-    the two into a trialwise pandas dataframe. Only the sections of `cont` that fall within each
-    trial are included in each trial entry in the dataframe.
+    Function for synchronizing a set of continuous, time-stamped observations to trial-wise data
 
     Parameters
     ----------
@@ -40,6 +38,9 @@ def trials_to_df(trials, cont, startvar='stimOn_times', endvar='feedback_times',
         t=0 will be set to t_start - t_before. Defaults to 300ms
     t_after: float
         Time (in seconds) after trial end to include in observations. Defaults to 300ms.
+    renamebounds: bool
+        Whether to rename the start and end times to 'trial_start' and 'trial_end' for
+        standardization purpose. Defaults to False.
 
     Returns
     -------
@@ -66,22 +67,24 @@ def trials_to_df(trials, cont, startvar='stimOn_times', endvar='feedback_times',
     #################
     contnames = cont.keys()  # Get out variable names to use
     trbounds = np.array([(tr[startvar] - t_before, tr[endvar] + t_after) for tr in trials])
-    varendlast = np.zeros(len(contnames))  # Initialize counter variable (used for speed)
+    endlast = np.zeros(len(contnames), dtype=int)  # Initialize counter variable (used for speed)
     for i, (start, end) in enumerate(trbounds):
+        trials[i]['trial_start'] = start
+        trials[i]['trial_end'] = end
         for j, var in enumerate(contnames):
             # Within the timestamps for a given variable, find the indices corresponding to
             # the start and end of the current trial. Pull out those values and timestamps, and
             # offset to the start of the trial.
-            varstartind = np.searchsorted(cont[var][varendlast[j]:, 1], start) + varendlast
-            varendind = np.searchsorted(cont[var][varendlast[j]:, 1], end, right=True) + varendlast
-            varendlast[j] = varendind
+            varstartind = np.searchsorted(cont[var][endlast[j]:, 1], start) + endlast[j]
+            varendind = np.searchsorted(cont[var][endlast[j]:, 1], end, side='right') + endlast[j]
+            endlast[j] = varendind
             trvals = cont[var][varstartind:varendind + 1]
             trvals[:, 1] = trvals[:, 1] - start  # Offset to (trial start - t_before)
             trials[i][var] = trvals
-    if trnumvar is None:
-        return pd.DataFrame(trials)
-    else:
-        return pd.DataFrame(trials).set_index(trnumvar)
+    trialsdf = pd.DataFrame(trials)
+    if trnumvar is not None:
+        trialsdf.set_index(trnumvar, inplace=True)
+    return trialsdf
 
 
 def sync(dt, times=None, values=None, timeseries=None, offsets=None, interp='zero',
