@@ -13,7 +13,7 @@ from oneibl.one import ONE
 import brainbox.io.one as bbone
 
 # === Parameters section (edit) ===
-eid = 'aad23144-0e52-4eac-80c5-c4ee2decb198'
+eid = '614e1937-4b24-4ad3-9055-c8253d089919'
 probe_label = 'probe01'
 FULL_BLOWN_GUI = True  # set to False for simple matplotlib view
 

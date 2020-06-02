@@ -186,18 +186,20 @@ class Reader:
     def decompress_file(self, keep_original=True, **kwargs):
         """
         Decompresses a mtscomp file
-        :param keep_original: defaults True. If False, the original compressed file is deleted
-         and the current spikeglx.Reader object is modified in place
+        :param keep_original: defaults True. If False, the original compressed file (input)
+        is deleted and the current spikeglx.Reader object is modified in place
+        NB: This is not equivalent to overwrite (which replaces the output file)
         :return: pathlib.Path of the decompressed *.bin file
         """
-        file_out = self.file_bin.with_suffix('.bin')
+        if 'out' not in kwargs:
+            kwargs['out'] = self.file_bin.with_suffix('.bin')
         assert self.is_mtscomp
-        mtscomp.decompress(self.file_bin, self.file_bin.with_suffix('.ch'), out=file_out, **kwargs)
+        mtscomp.decompress(self.file_bin, self.file_bin.with_suffix('.ch'), **kwargs)
         if not keep_original:
             self.file_bin.unlink()
             self.file_bin.with_suffix('.ch').unlink()
-            self.file_bin = file_out
-        return file_out
+            self.file_bin = kwargs['out']
+        return kwargs['out']
 
     def verify_hash(self):
         """
