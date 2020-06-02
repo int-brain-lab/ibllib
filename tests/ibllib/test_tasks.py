@@ -7,13 +7,13 @@ from ibllib.misc import version
 import ibllib.pipes.tasks
 from oneibl.one import ONE
 
-# one = ONE(base_url='https://testdev.alyx.internationalbrainlab.org',  # FIXME change the testdev
-#           username='test_user', password='TapetesBloc18')
+one = ONE(base_url='https://testdev.alyx.internationalbrainlab.org',
+          username='test_user', password='TapetesBloc18')
 SUBJECT_NAME = 'algernon'
 USER_NAME = 'test_user'
-one = ONE(base_url='http://localhost:8000')
-SUBJECT_NAME = 'CSP014'
-USER_NAME = 'olivier'
+# one = ONE(base_url='http://localhost:8000')
+# SUBJECT_NAME = 'CSP014'
+# USER_NAME = 'olivier'
 
 ses_dict = {
     'subject': SUBJECT_NAME,
