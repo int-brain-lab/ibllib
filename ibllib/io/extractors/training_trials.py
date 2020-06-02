@@ -216,128 +216,6 @@ class FeedbackTimes(BaseBpodTrialsExtractor):
         return np.array(merge)
 
 
-class StimOnTriggerTimes(BaseBpodTrialsExtractor):
-    save_names = '_ibl_trials.stimOnTrigger_times.npy'
-    var_names = 'stimOnTrigger_times'
-
-    def _extract(self):
-        # Get the stim_on_state that triggers the onset of the stim
-        stim_on_state = np.array([tr['behavior_data']['States timestamps']
-                                 ['stim_on'][0] for tr in self.bpod_trials])
-        return stim_on_state[:, 0].T
-
-
-class StimOnTimes(BaseBpodTrialsExtractor):
-    save_names = '_ibl_trials.stimOn_times.npy'
-    var_names = 'stimOn_times'
-
-    def _extract(self):
-        """
-        Find the time of the statemachine command to turn on hte stim
-        (state stim_on start or rotary_encoder_event2)
-        Find the next frame change from the photodiodeafter that TS.
-        Screen is not displaying anything until then.
-        (Frame changes are in BNC1High and BNC1Low)
-        """
-        # Version check
-        if version.ge(self.settings['IBLRIG_VERSION_TAG'], '5.0.0'):
-            stimOn_times = self.get_stimOn_times_ge5(self.session_path, data=self.bpod_trials)
-        else:
-            stimOn_times = self.get_stimOn_times_lt5(self.session_path, data=self.bpod_trials)
-        return np.array(stimOn_times)
-
-    @staticmethod
-    def get_stimOn_times_ge5(session_path, data=False):
-        """
-        Find first and last stim_sync pulse of the trial.
-        stimOn_times should be the first after the stim_on state.
-        (Stim updates are in BNC1High and BNC1Low - frame2TTL device)
-        Check that all trials have frame changes.
-        Find length of stim_on_state [start, stop].
-        If either check fails the HW device failed to detect the stim_sync square change
-        Substitute that trial's missing or incorrect value with a NaN.
-        return stimOn_times
-        """
-        if not data:
-            data = raw.load_data(session_path)
-        # Get all stim_sync events detected
-        stim_sync_all = [raw.get_port_events(
-            tr['behavior_data']['Events timestamps'], 'BNC1') for tr in data]
-        stim_sync_all = [np.array(x) for x in stim_sync_all]
-        # Get the stim_on_state that triggers the onset of the stim
-        stim_on_state = np.array([tr['behavior_data']['States timestamps']
-                                 ['stim_on'][0] for tr in data])
-
-        stimOn_times = np.array([])
-        for sync, on, off in zip(
-                stim_sync_all, stim_on_state[:, 0], stim_on_state[:, 1]):
-            pulse = sync[np.where(np.bitwise_and((sync > on), (sync <= off)))]
-            if pulse.size == 0:
-                stimOn_times = np.append(stimOn_times, np.nan)
-            else:
-                stimOn_times = np.append(stimOn_times, pulse)
-
-        nmissing = np.sum(np.isnan(stimOn_times))
-        # Check if all stim_syncs have failed to be detected
-        if np.all(np.isnan(stimOn_times)):
-            logger_.error(f'{session_path}: Missing ALL BNC1 stimulus ({nmissing} trials')
-
-        # Check if any stim_sync has failed be detected for every trial
-        if np.any(np.isnan(stimOn_times)):
-            logger_.warning(f'{session_path}: Missing BNC1 stimulus on {nmissing} trials')
-
-        return stimOn_times
-
-    @staticmethod
-    def get_stimOn_times_lt5(session_path, data=False):
-        """
-        Find the time of the statemachine command to turn on hte stim
-        (state stim_on start or rotary_encoder_event2)
-        Find the next frame change from the photodiodeafter that TS.
-        Screen is not displaying anything until then.
-        (Frame changes are in BNC1High and BNC1Low)
-        """
-        if not data:
-            data = raw.load_data(session_path)
-        stim_on = []
-        bnc_h = []
-        bnc_l = []
-        for tr in data:
-            stim_on.append(tr['behavior_data']['States timestamps']['stim_on'][0][0])
-            if 'BNC1High' in tr['behavior_data']['Events timestamps'].keys():
-                bnc_h.append(np.array(tr['behavior_data']
-                                      ['Events timestamps']['BNC1High']))
-            else:
-                bnc_h.append(np.array([np.NINF]))
-            if 'BNC1Low' in tr['behavior_data']['Events timestamps'].keys():
-                bnc_l.append(np.array(tr['behavior_data']
-                                      ['Events timestamps']['BNC1Low']))
-            else:
-                bnc_l.append(np.array([np.NINF]))
-
-        stim_on = np.array(stim_on)
-        bnc_h = np.array(bnc_h)
-        bnc_l = np.array(bnc_l)
-
-        count_missing = 0
-        stimOn_times = np.zeros_like(stim_on)
-        for i in range(len(stim_on)):
-            hl = np.sort(np.concatenate([bnc_h[i], bnc_l[i]]))
-            stot = hl[hl > stim_on[i]]
-            if np.size(stot) == 0:
-                stot = np.array([np.nan])
-                count_missing += 1
-            stimOn_times[i] = stot[0]
-
-        if np.all(np.isnan(stimOn_times)):
-            logger_.error(f'{session_path}: Missing ALL BNC1 stimulus ({count_missing} trials')
-
-        if count_missing > 0:
-            logger_.warning(f'{session_path}: Missing BNC1 stimulus on {count_missing} trials')
-
-        return np.array(stimOn_times)
-
-
 class Intervals(BaseBpodTrialsExtractor):
     """
     Trial start to trial end. Trial end includes 1 or 2 seconds after feedback,
@@ -599,14 +477,135 @@ class StimOffTriggerTimes(BaseBpodTrialsExtractor):
         )
         # Stim off trigs are either in their own state or in the no_go state if the
         # mouse did not move, if the stim_off_trigger_state always exist (exit_state or trial_start)
-        # no NaNs will happen
-        if stim_off_trigger_state == "hide_stim":
-            assert all(~np.isnan(no_goTrigger_times) == np.isnan(stimOffTrigger_times))
+        # no NaNs will happen, NaNs might happen in at last trial if session was stopped after response
+        # if stim_off_trigger_state == "hide_stim":
+        #     assert all(~np.isnan(no_goTrigger_times) == np.isnan(stimOffTrigger_times))
         # Patch with the no_go states trig times
         stimOffTrigger_times[~np.isnan(no_goTrigger_times)] = no_goTrigger_times[
             ~np.isnan(no_goTrigger_times)
         ]
         return stimOffTrigger_times
+
+
+class StimOnTriggerTimes(BaseBpodTrialsExtractor):
+    save_names = '_ibl_trials.stimOnTrigger_times.npy'
+    var_names = 'stimOnTrigger_times'
+
+    def _extract(self):
+        # Get the stim_on_state that triggers the onset of the stim
+        stim_on_state = np.array([tr['behavior_data']['States timestamps']
+                                 ['stim_on'][0] for tr in self.bpod_trials])
+        return stim_on_state[:, 0].T
+
+
+class StimOnTimes(BaseBpodTrialsExtractor):
+    save_names = '_ibl_trials.stimOn_times.npy'
+    var_names = 'stimOn_times'
+
+    def _extract(self):
+        """
+        Find the time of the statemachine command to turn on hte stim
+        (state stim_on start or rotary_encoder_event2)
+        Find the next frame change from the photodiodeafter that TS.
+        Screen is not displaying anything until then.
+        (Frame changes are in BNC1High and BNC1Low)
+        """
+        # Version check
+        if version.ge(self.settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+            stimOn_times = self.get_stimOn_times_ge5(self.session_path, data=self.bpod_trials)
+        else:
+            stimOn_times = self.get_stimOn_times_lt5(self.session_path, data=self.bpod_trials)
+        return np.array(stimOn_times)
+
+    @staticmethod
+    def get_stimOn_times_ge5(session_path, data=False):
+        """
+        Find first and last stim_sync pulse of the trial.
+        stimOn_times should be the first after the stim_on state.
+        (Stim updates are in BNC1High and BNC1Low - frame2TTL device)
+        Check that all trials have frame changes.
+        Find length of stim_on_state [start, stop].
+        If either check fails the HW device failed to detect the stim_sync square change
+        Substitute that trial's missing or incorrect value with a NaN.
+        return stimOn_times
+        """
+        if not data:
+            data = raw.load_data(session_path)
+        # Get all stim_sync events detected
+        stim_sync_all = [raw.get_port_events(tr, 'BNC1') for tr in data]
+        stim_sync_all = [np.array(x) for x in stim_sync_all]
+        # Get the stim_on_state that triggers the onset of the stim
+        stim_on_state = np.array([tr['behavior_data']['States timestamps']
+                                 ['stim_on'][0] for tr in data])
+
+        stimOn_times = np.array([])
+        for sync, on, off in zip(
+                stim_sync_all, stim_on_state[:, 0], stim_on_state[:, 1]):
+            pulse = sync[np.where(np.bitwise_and((sync > on), (sync <= off)))]
+            if pulse.size == 0:
+                stimOn_times = np.append(stimOn_times, np.nan)
+            else:
+                stimOn_times = np.append(stimOn_times, pulse)
+
+        nmissing = np.sum(np.isnan(stimOn_times))
+        # Check if all stim_syncs have failed to be detected
+        if np.all(np.isnan(stimOn_times)):
+            logger_.error(f'{session_path}: Missing ALL BNC1 stimulus ({nmissing} trials')
+
+        # Check if any stim_sync has failed be detected for every trial
+        if np.any(np.isnan(stimOn_times)):
+            logger_.warning(f'{session_path}: Missing BNC1 stimulus on {nmissing} trials')
+
+        return stimOn_times
+
+    @staticmethod
+    def get_stimOn_times_lt5(session_path, data=False):
+        """
+        Find the time of the statemachine command to turn on hte stim
+        (state stim_on start or rotary_encoder_event2)
+        Find the next frame change from the photodiodeafter that TS.
+        Screen is not displaying anything until then.
+        (Frame changes are in BNC1High and BNC1Low)
+        """
+        if not data:
+            data = raw.load_data(session_path)
+        stim_on = []
+        bnc_h = []
+        bnc_l = []
+        for tr in data:
+            stim_on.append(tr['behavior_data']['States timestamps']['stim_on'][0][0])
+            if 'BNC1High' in tr['behavior_data']['Events timestamps'].keys():
+                bnc_h.append(np.array(tr['behavior_data']
+                                      ['Events timestamps']['BNC1High']))
+            else:
+                bnc_h.append(np.array([np.NINF]))
+            if 'BNC1Low' in tr['behavior_data']['Events timestamps'].keys():
+                bnc_l.append(np.array(tr['behavior_data']
+                                      ['Events timestamps']['BNC1Low']))
+            else:
+                bnc_l.append(np.array([np.NINF]))
+
+        stim_on = np.array(stim_on)
+        bnc_h = np.array(bnc_h)
+        bnc_l = np.array(bnc_l)
+
+        count_missing = 0
+        stimOn_times = np.zeros_like(stim_on)
+        for i in range(len(stim_on)):
+            hl = np.sort(np.concatenate([bnc_h[i], bnc_l[i]]))
+            stot = hl[hl > stim_on[i]]
+            if np.size(stot) == 0:
+                stot = np.array([np.nan])
+                count_missing += 1
+            stimOn_times[i] = stot[0]
+
+        if np.all(np.isnan(stimOn_times)):
+            logger_.error(f'{session_path}: Missing ALL BNC1 stimulus ({count_missing} trials')
+
+        if count_missing > 0:
+            logger_.warning(f'{session_path}: Missing BNC1 stimulus on {count_missing} trials')
+
+        return np.array(stimOn_times)
 
 
 class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
@@ -619,17 +618,14 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
 
     def _extract(self):
         choice = Choice(self.session_path).extract(
-            bpod_trials=self.bpod_trials, settings=self.settings, save=False)
-        f2TTL = [get_port_events(tr, name="BNC1") for tr in self.bpod_trials]
+            bpod_trials=self.bpod_trials, settings=self.settings, save=False
+        )[0]
+        f2TTL = [raw.get_port_events(tr, name="BNC1") for tr in self.bpod_trials]
         stimOn_times = np.array([])
         stimOff_times = np.array([])
         stimFreeze_times = np.array([])
         for tr in f2TTL:
             if tr and len(tr) >= 2:
-                # 2nd order criteria:
-                # stimOn -> Closest one to stimOnTrigger?
-                # stimOff -> Closest one to stimOffTrigger?
-                # stimFreeze -> Closest one to stimFreezeTrigger?
                 stimOn_times = np.append(stimOn_times, tr[0])
                 stimOff_times = np.append(stimOff_times, tr[-1])
                 stimFreeze_times = np.append(stimFreeze_times, tr[-2])
@@ -640,6 +636,12 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
 
         # In no_go trials no stimFreeze happens jsut stim Off
         stimFreeze_times[choice == 0] = np.nan
+        # Check for trigger times
+        # 2nd order criteria:
+        # stimOn -> Closest one to stimOnTrigger?
+        # stimOff -> Closest one to stimOffTrigger?
+        # stimFreeze -> Closest one to stimFreezeTrigger?
+
         return stimOn_times, stimOff_times, stimFreeze_times
 
 
