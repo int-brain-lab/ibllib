@@ -391,7 +391,7 @@ def extract_behaviour_sync(sync, chmap=None, display=False, tmax=np.inf):
     trials['feedback_times'] = np.copy(trials['valveOpen_times'])
     ind_err = np.isnan(trials['valveOpen_times'])
     trials['feedback_times'][ind_err] = trials['errorCue_times'][ind_err]
-    trials['intervals'] = np.c_[t_trial_start, trials['iti_in']]
+    trials['intervals'] = np.c_[t_trial_start, trials['itiIn_times']]
 
     if display:
         width = 0.5
@@ -568,14 +568,14 @@ class CameraTimestamps(BaseExtractor):
 
 
 class FpgaTrials(BaseExtractor):
-    save_names = ('_ibl_trials.feedbackType.npy', '_ibl_trials.contrastLeft.npy',
-                  '_ibl_trials.contrastRight.npy', '_ibl_trials.probabilityLeft.npy',
+    save_names = ('_ibl_trials.probabilityLeft.npy', '_ibl_trials.contrastLeft.npy',
+                  '_ibl_trials.contrastRight.npy', '_ibl_trials.feedbackType.npy',
                   '_ibl_trials.choice.npy', '_ibl_trials.rewardVolume.npy',
                   '_ibl_trials.intervals_bpod.npy', '_ibl_trials.intervals.npy',
                   '_ibl_trials.response_times.npy', '_ibl_trials.goCueTrigger_times.npy',
                   '_ibl_trials.stimOn_times.npy', '_ibl_trials.stimOff_times.npy',
                   '_ibl_trials.goCue_times.npy', '_ibl_trials.feedback_times.npy')
-    var_names = ('feedbackType', 'contrastLeft', 'contrastRight', 'probabilityLeft', 'choice',
+    var_names = ('probabilityLeft', 'contrastLeft', 'contrastRight', 'feedbackType', 'choice',
                  'rewardVolume', 'intervals_bpod', 'intervals', 'response_times',
                  'goCueTrigger_times', 'stimOn_times', 'stimOff_times', 'goCue_times',
                  'feedback_times')
@@ -588,8 +588,8 @@ class FpgaTrials(BaseExtractor):
             chmap = chmap or _chmap
         bpod_raw = raw_data_loaders.load_data(self.session_path)
         tmax = bpod_raw[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
-        bpod_trials, _ = biased_trials.extract_all(session_path=self.session_path, save=False,
-                                                   bpod_trials=bpod_raw)
+        bpod_trials, _ = biased_trials.extract_all(
+            session_path=self.session_path, save=False, bpod_trials=bpod_raw)
         bpod_trials['intervals_bpod'] = np.copy(bpod_trials['intervals'])
         fpga_trials = extract_behaviour_sync(sync=sync, chmap=chmap, tmax=tmax)
         # checks consistency and compute dt with bpod
@@ -600,9 +600,11 @@ class FpgaTrials(BaseExtractor):
         # those fields have to be resynced
         bpod_rsync_fields = ['intervals', 'response_times', 'goCueTrigger_times']
         # ephys fields to save in the output
-        fpga_fields = ['stimOn_times', 'stimOff_times', 'goCue_times', 'feedback_times',
-                       'contrastLeft', 'contrastRight', 'probabilityLeft']
+        fpga_fields = ['stimOn_times', 'stimOff_times', 'goCue_times', 'feedback_times']
+        # get ('probabilityLeft', 'contrastLeft', 'contrastRight') from the custom ephys extractors
+        pclcr, _ = ProbaContrasts(self.session_path).extract(bpod_trials=bpod_raw, save=False)
         out = OrderedDict()
+        out.update({k: pclcr[i] for i, k in enumerate(ProbaContrasts.var_names)})
         out.update({k: bpod_trials[k][ibpod] for k in bpod_fields})
         out.update({k: fcn_bpod2fpga(bpod_trials[k][ibpod]) for k in bpod_rsync_fields})
         out.update({k: fpga_trials[k][ifpga] for k in fpga_fields})
