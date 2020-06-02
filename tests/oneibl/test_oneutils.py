@@ -1,5 +1,5 @@
 import unittest
-
+from pathlib import Path
 from oneibl.one import ONE
 
 one = ONE(
@@ -21,8 +21,8 @@ class TestUtils(unittest.TestCase):
         self.partial_eid_paths = [
             None,
             None,
-            "FlatIron/mainenlab/Subjects/ZM_1743/2019-06-04/001",
-            "FlatIron/cortexlab/Subjects/KS005/2019-04-04/004",
+            Path("FlatIron/mainenlab/Subjects/ZM_1743/2019-06-04/001"),
+            Path("FlatIron/cortexlab/Subjects/KS005/2019-04-04/004"),
         ]
         self.det_keys = [
             "subject",

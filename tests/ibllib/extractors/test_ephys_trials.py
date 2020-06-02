@@ -1,5 +1,5 @@
 import unittest
-
+from pathlib import Path
 import numpy as np
 
 import ibllib.io.extractors.ephys_fpga as ephys_fpga
@@ -100,7 +100,7 @@ class TestEphysSyncExtraction(unittest.TestCase):
 
 class TestEphysBehaviorExtraction(unittest.TestCase):
     def setUp(self):
-        self.session_path = "tests/ibllib/extractors/data/session_ephys"
+        self.session_path = Path(__file__).parent.joinpath('data', 'session_ephys')
 
     def test_get_probabilityLeft(self):
         data = raw.load_data(self.session_path)
