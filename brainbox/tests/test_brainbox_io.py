@@ -6,6 +6,10 @@ import shutil
 
 import numpy as np
 from brainbox.io import one as bbone
+from oneibl.one import ONE
+
+one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
+          username='test_user', password='TapetesBloc18')
 
 
 class TestIO_ALF(unittest.TestCase):
@@ -48,7 +52,7 @@ class TestIO_ALF(unittest.TestCase):
 
     def test_load_ephys(self):
         # straight test
-        spikes, clusters, trials = bbone.load_ephys_session(self.session_path)
+        spikes, clusters, trials = bbone.load_ephys_session(self.session_path, one=one)
         self.assertTrue(list(spikes.keys()) == self.probes)
         self.assertTrue(list(clusters.keys()) == self.probes)
 

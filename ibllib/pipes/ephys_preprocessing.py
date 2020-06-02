@@ -1,16 +1,17 @@
 import re
 import logging
+from collections import OrderedDict
 
 from ibllib.io import ffmpeg, spikeglx
 from ibllib.io.extractors import ephys_fpga
-from ibllib.pipes import jobs
+from ibllib.pipes import tasks
 from ibllib.ephys import ephysqc, sync_probes, spikes
 
 _logger = logging.getLogger('ibllib')
 
 
 #  level 0
-class EphysPulses(jobs.Job):
+class EphysPulses(tasks.Task):
     cpu = 2
     io_charge = 30  # this jobs reads raw ap files
     priority = 90  # a lot of jobs depend on this one
@@ -21,7 +22,7 @@ class EphysPulses(jobs.Job):
         return out_files
 
 
-class RawEphysQC(jobs.Job):
+class RawEphysQC(tasks.Task):
     """
     Computes raw electrophysiology QC
     """
@@ -35,7 +36,7 @@ class RawEphysQC(jobs.Job):
         return qc_files
 
 
-class EphysAudio(jobs.Job):
+class EphysAudio(tasks.Task):
     """
     Computes raw electrophysiology QC
     """
@@ -53,7 +54,7 @@ class EphysAudio(jobs.Job):
         return [output_file]
 
 
-class SpikeSorting_KS2_Matlab(jobs.Job):
+class SpikeSorting_KS2_Matlab(tasks.Task):
     """
     Computes raw electrophysiology QC
     """
@@ -72,11 +73,11 @@ class SpikeSorting_KS2_Matlab(jobs.Job):
                 return None
             with open(ks2log) as fid:
                 line = fid.readline()
-            self.version = re.compile("[a-f0-9]{36}").findall(line)
+            self.version = re.compile("[a-f0-9]{36}").findall(line)[0]
             return []  # the job will be labeled as complete with empty string
 
 
-class EphysVideoCompress(jobs.Job):
+class EphysVideoCompress(tasks.Task):
     priority = 90
     level = 1
 
@@ -89,7 +90,7 @@ class EphysVideoCompress(jobs.Job):
 
 
 #  level 1
-class EphysTrials(jobs.Job):
+class EphysTrials(tasks.Task):
     priority = 90
     level = 1
 
@@ -98,7 +99,7 @@ class EphysTrials(jobs.Job):
         return out_files
 
 
-class EphysSyncSpikeSorting(jobs.Job):
+class EphysSyncSpikeSorting(tasks.Task):
     priority = 90
     level = 1
 
@@ -122,7 +123,7 @@ class EphysSyncSpikeSorting(jobs.Job):
         return sync_files + alf_files + probe_files
 
 
-class EphysMtscomp(jobs.Job):
+class EphysMtscomp(tasks.Task):
     priority = 60
     level = 1
 
@@ -146,7 +147,7 @@ class EphysMtscomp(jobs.Job):
         return out_files
 
 
-class EphysDLC(jobs.Job):
+class EphysDLC(tasks.Task):
     gpu = 1
     cpu = 4
     io_charge = 90
@@ -157,23 +158,23 @@ class EphysDLC(jobs.Job):
         pass
 
 
-class EphysExtractionPipeline(jobs.Pipeline):
+class EphysExtractionPipeline(tasks.Pipeline):
     label = __name__
 
     def __init__(self, session_path, **kwargs):
         super(EphysExtractionPipeline, self).__init__(session_path, **kwargs)
-        jobs = {}
+        tasks = OrderedDict()
         self.session_path = session_path
         # level 0
-        jobs['EphysPulses'] = EphysPulses(self.session_path)
-        jobs['EphysRawQC'] = RawEphysQC(self.session_path)
-        jobs['EphysAudio'] = EphysAudio(self.session_path)
-        jobs['SpikeSorting'] = SpikeSorting_KS2_Matlab(self.session_path)
-        jobs['EphysVideoCompress'] = EphysVideoCompress(self.session_path)
+        tasks['EphysPulses'] = EphysPulses(self.session_path)
+        tasks['EphysRawQC'] = RawEphysQC(self.session_path)
+        tasks['EphysAudio'] = EphysAudio(self.session_path)
+        tasks['SpikeSorting'] = SpikeSorting_KS2_Matlab(self.session_path)
+        tasks['EphysVideoCompress'] = EphysVideoCompress(self.session_path)
         # level 1
-        jobs['EphysSyncSpikeSorting'] = EphysSyncSpikeSorting(self.session_path, parents=[
-            jobs['SpikeSorting'], jobs['EphysPulses']])
-        jobs['EphysTrials'] = EphysTrials(self.session_path, parents=[jobs['EphysPulses']])
-        jobs['EphysMtscomp'] = EphysMtscomp(self.session_path, parents=[jobs['SpikeSorting']])
-        jobs['EphysDLC'] = EphysMtscomp(self.session_path, parents=[jobs['EphysVideoCompress']])
-        self.jobs = jobs
+        tasks['EphysSyncSpikeSorting'] = EphysSyncSpikeSorting(self.session_path, parents=[
+            tasks['SpikeSorting'], tasks['EphysPulses']])
+        tasks['EphysTrials'] = EphysTrials(self.session_path, parents=[tasks['EphysPulses']])
+        tasks['EphysMtscomp'] = EphysMtscomp(self.session_path, parents=[tasks['SpikeSorting']])
+        tasks['EphysDLC'] = EphysMtscomp(self.session_path, parents=[tasks['EphysVideoCompress']])
+        self.tasks = tasks

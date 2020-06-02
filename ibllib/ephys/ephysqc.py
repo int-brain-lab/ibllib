@@ -257,25 +257,21 @@ def unit_metrics_ks2(ks2_path=None, m=None, save=True):
 
 
 def phy_model_from_ks2_path(ks2_path):
-    params_file = ks2_path.joinpath('params.py')
-    if params_file.exists():
-        m = model.load_model(params_file)
+    meta_file = next(ks2_path.rglob('*.ap.meta'), None)
+    if meta_file and meta_file.exists():
+        meta = spikeglx.read_meta_data(meta_file)
+        fs = spikeglx._get_fs_from_meta(meta)
+        nch = (spikeglx._get_nchannels_from_meta(meta) -
+               len(spikeglx._get_sync_trace_indices_from_meta(meta)))
     else:
-        meta_file = next(ks2_path.rglob('*.ap.meta'), None)
-        if meta_file and meta_file.exists():
-            meta = spikeglx.read_meta_data(meta_file)
-            fs = spikeglx._get_fs_from_meta(meta)
-            nch = (spikeglx._get_nchannels_from_meta(meta) -
-                   len(spikeglx._get_sync_trace_indices_from_meta(meta)))
-        else:
-            fs = 30000
-            nch = 384
-        m = model.TemplateModel(dir_path=ks2_path,
-                                dat_path=[],
-                                sample_rate=fs,
-                                n_channels_dat=nch)
+        fs = 30000
+        nch = 384
+    bin_file = next(ks2_path.rglob('*.ap.*bin'), None)
+    m = model.TemplateModel(dir_path=ks2_path,
+                            dat_path=bin_file,  # this assumes the raw data is in the same folder
+                            sample_rate=fs,
+                            n_channels_dat=nch)
     m.depths = m.get_depths()
-
     return m
 
 
