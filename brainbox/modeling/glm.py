@@ -10,9 +10,12 @@ International Brain Lab, 2020
 from warnings import warn
 import numpy as np
 import pandas as pd
-# from brainbox.processing import bincount2D
+from brainbox.processing import bincount2D
+from sklearn.linear_model import PoissonRegressor  # unique to sklearn 0.24 dev release for now
 import scipy.sparse as sp
 import numba as nb
+from numpy.matlib import repmat
+from tqdm import tqdm
 
 
 class NeuralGLM:
@@ -71,16 +74,19 @@ class NeuralGLM:
 
         # Filter out cells which don't meet the criteria for minimum spiking, while doing trial
         # assignment
-        self.binf = lambda t: np.ciel(t / binwidth).astype(int)  # Useful step counter fn
+        self.vartypes = vartypes
+        self.binf = lambda t: np.ceil(t / binwidth).astype(int)  # Useful step counter fn
+        trialsdf = trialsdf.copy()
         clu_ids = np.unique(spk_clu)
         trialspiking = np.zeros((spk_clu.max() + 1, len(trialsdf.index)))
-        trbounds = trialsdf[['trial_start', 'trial_end']].values
-        st_endlast = 0
-        trialspiking = np.zeros((len(trialsdf.index), len(clu_ids) + 1), dtype=bool)
-        trialsdf['spikes'] = np.nan
-        trialsdf['clu'] = np.nan
+        trbounds = trialsdf[['trial_start', 'trial_end']]
+        trialspiking = np.zeros((trialsdf.index.max() + 1, clu_ids.max() + 1), dtype=bool)
         trialsdf['duration'] = np.nan
-        for i, (start, end) in enumerate(trbounds):
+        spks = {}
+        clu = {}
+        st_endlast = 0
+        timingvars = [col for col in trialsdf.columns if vartypes[col] == 'timing']
+        for i, (start, end) in trbounds.iterrows():
             if any(np.isnan((start, end))):
                 warn(f"NaN values found in trial start or end at trial number {i}. "
                      "Discarding trial.")
@@ -91,11 +97,19 @@ class NeuralGLM:
             st_endlast = st_endind
             trial_clu = np.unique(spk_clu[st_startind:st_endind])
             trialspiking[i, trial_clu] = True
-            trialsdf.loc[i, 'spikes'] = spk_times[st_startind:st_endind] - start
-            trialsdf.loc[i, 'clu'] = spk_clu[st_startind:st_endind]
-            trialsdf.loc[i, 'duration'] = end - start
+            spks[i] = spk_times[st_startind:st_endind] - start
+            clu[i] = spk_clu[st_startind:st_endind]
+            for col in timingvars:
+                trialsdf.at[i, col] = trialsdf.at[i, col] - start
+            trialsdf.at[i, 'duration'] = end - start
+        self.spikes = spks
+        self.clu = clu
         self.clu_ids = np.argwhere(np.sum(trialspiking, axis=0) > mintrials)
+        self.binwidth = binwidth
         self.covar = {}
+        self.trialsdf = trialsdf
+        self.edim = 0
+        self.compiled = False
         return
 
     def add_covariate_timing(self, covlabel, eventname, bases,
@@ -130,6 +144,11 @@ class NeuralGLM:
         desc : str, optional
             Additional information about the covariate, if desired. by default ''
         """
+        if covlabel in self.covar:
+            raise AttributeError(f'Covariate {covlabel} already exists in model.')
+        if self.compiled:
+            warn('Design matrix was already compiled once. Be sure to compile again if adding'
+                 ' additional covariates.')
         if deltaval is None:
             gainmod = False
         elif isinstance(deltaval, pd.Series):
@@ -151,14 +170,32 @@ class NeuralGLM:
                 vec[stiminds[i]] = deltaval[i]
             else:
                 vec[stiminds[i]] = 1
-            stimvecs.append(vec)
+            stimvecs.append(vec.reshape(-1, 1))
         regressor = pd.Series(stimvecs, index=self.trialsdf.index)
         self.add_covariate(covlabel, regressor, bases, offset, cond, desc)
+        self.edim += bases.shape[1]
         return
 
     def add_covariate_boxcar(self, covlabel, boxstart, boxend,
                              cond=None, height=None, desc=''):
+        if covlabel in self.covar:
+            raise AttributeError(f'Covariate {covlabel} already exists in model.')
+        if self.compiled:
+            warn('Design matrix was already compiled once. Be sure to compile again if adding'
+                 ' additional covariates.')
+        if boxstart not in self.trialsdf.columns or boxend not in self.trialsdf.columns:
+            raise KeyError('boxstart or boxend not found in trialsdf columns.')
+        if self.vartypes[boxstart] != 'timing':
+            raise TypeError(f'Column {boxstart} in trialsdf is not registered as a timing. '
+                            'boxstart and boxend need to refer to timining events in trialsdf '
+                            'if they are strings.')
+        if self.vartypes[boxend] != 'timing':
+            raise TypeError(f'Column {boxend} in trialsdf is not registered as a timing. '
+                            'boxstart and boxend need to refer to timining events in trialsdf '
+                            'if they are strings.')
+
         if isinstance(height, str):
+
             if height in self.trialsdf.columns:
                 height = self.trialsdf[height]
             else:
@@ -174,10 +211,11 @@ class NeuralGLM:
         stimvecs = []
         for i in self.trialsdf.index:
             bxcar = np.zeros(vecsizes[i])
-            bxcar[stind:endind + 1] = height[i]
+            bxcar[stind[i]:endind[i] + 1] = height[i]
             stimvecs.append(bxcar)
         regressor = pd.Series(stimvecs, index=self.trialsdf.index)
         self.add_covariate(covlabel, regressor, None, cond, desc)
+        self.edim += 1
         return
 
     def add_covariate_raw(self, covlabel, rawcolname,
@@ -214,6 +252,11 @@ class NeuralGLM:
         desc : str, optional
             Description of the covariate for reference purposes, by default '' (empty)
         """
+        if covlabel in self.covar:
+            raise AttributeError(f'Covariate {covlabel} already exists in model.')
+        if self.compiled:
+            warn('Design matrix was already compiled once. Be sure to compile again if adding'
+                 ' additional covariates.')
         # Test for mismatch in length of regressor vs trials
         mismatch = np.zeros(len(self.trialsdf.index), dtype=bool)
         for i in self.trialsdf.index:
@@ -224,7 +267,7 @@ class NeuralGLM:
 
         if np.any(mismatch):
             raise ValueError('Length mismatch between regressor and trial on trials'
-                             f'{*np.argwhere(mismatch)}.')
+                             f'{*np.argwhere(mismatch),}.')
 
         # Initialize containers for the covariate dicts
         if not hasattr(self, 'currcol'):
@@ -236,7 +279,7 @@ class NeuralGLM:
 
         cov = {'description': desc,
                'bases': bases,
-               'valid_trials': cond,
+               'valid_trials': cond if cond else self.trialsdf.index,
                'offset': offset,
                'regressor': regressor,
                'dmcol_idx': np.arange(self.currcol, self.currcol + bases.shape[1])
@@ -249,29 +292,74 @@ class NeuralGLM:
         self.covar[covlabel] = cov
         return
 
-    def compile_design_matrix(self):
+    def bin_spike_trains(self):
+        spkarrs = []
+        arrdiffs = []
+        for i in self.trialsdf.index:
+            duration = self.trialsdf.loc[i, 'duration']
+            durmod = duration % self.binwidth
+            if durmod > (self.binwidth / 2):
+                duration = duration - (self.binwidth / 2)
+            spks = self.spikes[i]
+            clu = self.clu[i]
+            arr = bincount2D(spks, clu,
+                             xbin=self.binwidth, ybin=self.clu_ids, xlim=[0, duration])[0]
+            arrdiffs.append(arr.shape[1] - self.binf(duration))
+            spkarrs.append(arr.T)
+        y = np.vstack(spkarrs)
+        if hasattr(self, 'dm'):
+            assert y.shape[0] == self.dm.shape[0], "Oh shit. Indexing error."
+        self.binnedspikes = y
+        return
+
+    def compile_design_matrix(self, dense=True):
         covars = self.covar
         # Go trial by trial and compose smaller design matrices
-        sparseDMs = []
+        miniDMs = []
         for i, trial in self.trialsdf.iterrows():
-            nT = self.binf(trial.trial_end - trial.trial_start)
+            nT = self.binf(trial.duration)
             miniX = np.zeros((nT, self.edim))
-            for cov in covars:
+            for cov in covars.values():
                 sidx = cov['dmcol_idx']
                 # Optionally use cond to filter out which trials to apply certain regressors,
                 if i not in cov['valid_trials']:
                     continue
-                stim = cov['regressor']
+                stim = cov['regressor'][i]
                 # Convolve Kernel or basis function with stimulus or regressor
                 if cov['bases'] is None:
                     miniX[:, sidx] = stim
                 else:
                     miniX[:, sidx] = denseconv(stim, cov['bases'])
-            # Sparsify convolved result and store in sparseDMs
-            sparseDMs.append(sp.lil_matrix(miniX))
-        sparseX = sp.vstack(sparseDMs)
-        self.dm = sparseX
+            # Sparsify convolved result and store in miniDMs
+            if dense:
+                miniDMs.append(miniX)
+            else:
+                miniDMs.append(sp.lil_matrix(miniX))
+        if dense:
+            dm = np.vstack(miniDMs)
+        else:
+            dm = sp.vstack(miniDMs).to_csc()
+
+        if hasattr(self, 'binnedspikes'):
+            assert self.binnedspikes.shape[0] == dm.shape[0], "Oh shit. Indexing error."
+        self.dm = dm
+        self.compiled = True
         return
+
+    def fit(self, alpha=1):
+        if not self.compiled:
+            raise AttributeError('Design matrix has not been compiled yet. Please run '
+                                 'neuroglm.compile_design_matrix() before fitting.')
+        coefs = pd.Series(index=self.clu_ids, name='coefficients', dtype=object)
+        intercepts = pd.Series(index=self.clu_ids, name='intercepts', dtype=object)
+        for i, cell in tqdm(enumerate(self.clu_ids), "Fitting units: "):
+            binned = self.binnedspikes[:, i]
+            fitobj = PoissonRegressor(alpha=alpha, max_iter=300).fit(self.dm, binned)
+            coefs.at[i] = fitobj.coefs_
+            intercepts.at[i] = fitobj.intercept_
+        self.coefs = coefs
+        self.intercepts = intercepts
+        return coefs, intercepts
 
 
 def convbasis(stim, bases, offset=0):
@@ -295,13 +383,37 @@ def denseconv(X, bases):
     TB, M = bases.shape
     indices = np.ones((dx, M))
     sI = np.sum(indices, axis=1)
-    BX = np.zeros((T, np.sum(sI)))
+    BX = np.zeros((T, int(np.sum(sI))))
     sI = np.cumsum(sI)
     k = 0
     for kCov in range(dx):
-        A = np.zeros((T + TB - 1, np.sum(indices[kCov, :])))
+        A = np.zeros((T + TB - 1, int(np.sum(indices[kCov, :]))))
         for i, j in enumerate(np.argwhere(indices[kCov, :]).flat):
             A[:, i] = np.convolve(X[:, kCov], bases[:, j])
         BX[:, k: sI[kCov]] = A[: T, :]
         k = sI[kCov]
     return BX
+
+
+def raised_cosine(duration, nbases, binfun):
+    nbins = binfun(duration)
+    ttb = repmat(np.arange(1, nbins + 1).reshape(-1, 1), 1, nbases)
+    dbcenter = nbins / nbases
+    cwidth = 4 * dbcenter
+    bcenters = 0.5 * dbcenter + dbcenter * np.arange(0, nbases)
+    x = ttb - repmat(bcenters.reshape(1, -1), nbins, 1)
+    bases = (np.abs(x / cwidth) < 0.5) * (np.cos(x * np.pi * 2 / cwidth) * 0.5 + 0.5)
+    return bases
+
+
+def full_rcos(duration, nbases, binfun, n_before=1):
+    if not isinstance(n_before, int):
+        n_before = int(n_before)
+    nbins = binfun(duration)
+    ttb = repmat(np.arange(1, nbins + 1).reshape(-1, 1), 1, nbases)
+    dbcenter = nbins / (nbases - 2)
+    cwidth = 4 * dbcenter
+    bcenters = 0.5 * dbcenter + dbcenter * np.arange(-n_before, nbases - n_before)
+    x = ttb - repmat(bcenters.reshape(1, -1), nbins, 1)
+    bases = (np.abs(x / cwidth) < 0.5) * (np.cos(x * np.pi * 2 / cwidth) * 0.5 + 0.5)
+    return bases
