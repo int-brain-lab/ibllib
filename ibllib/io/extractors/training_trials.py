@@ -10,16 +10,6 @@ from ibllib.misc import version
 logger_ = logging.getLogger('ibllib')
 
 
-def get_port_events(trial: dict, name: str = '') -> list:
-    out: list = []
-    for k in trial['behavior_data']['Events timestamps']:
-        if name in k:
-            out.extend(trial['behavior_data']['Events timestamps'][k])
-    out = sorted(out)
-
-    return out
-
-
 class FeedBackType(BaseBpodTrialsExtractor):
     """
     Get the feedback that was delivered to subject.
@@ -456,7 +446,7 @@ class GoCueTimes(BaseBpodTrialsExtractor):
     def _extract(self):
         go_cue_times = np.zeros([len(self.bpod_trials), ])
         for ind, tr in enumerate(self.bpod_trials):
-            if get_port_events(tr, 'BNC2'):
+            if raw.get_port_events(tr, 'BNC2'):
                 bnchigh = tr['behavior_data']['Events timestamps'].get('BNC2High', None)
                 if bnchigh:
                     go_cue_times[ind] = bnchigh[0]

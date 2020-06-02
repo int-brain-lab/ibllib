@@ -466,18 +466,6 @@ def save_bool(save, dataset_type):
     return out
 
 
-def get_port_events(events: dict, name: str = '') -> list:
-    """Return all timestamps from bpod raw data
-    trial['behavior_data']['Events timestamps'] that match name"""
-    out: list = []
-    for k in events:
-        if name in k:
-            out.extend(events[k])
-    out = sorted(out)
-
-    return out
-
-
 def sync_trials_robust(t0, t1, diff_threshold=0.001, drift_threshold_ppm=200, max_shift=5,
                        return_index=False):
     """
@@ -523,3 +511,96 @@ def sync_trials_robust(t0, t1, diff_threshold=0.001, drift_threshold_ppm=200, ma
         return t0[ind0], t1[ind1], ind0, ind1
     else:
         return t0[ind0], t1[ind1]
+
+
+def load_bpod_fronts(session_path: str, data: dict = False) -> list:
+    """load_bpod_fronts
+    Loads BNC1 and BNC2 bpod channels times and polarities from session_path
+
+    :param session_path: a valid session_path
+    :type session_path: str
+    :param data: pre-loaded raw data dict, defaults to False
+    :type data: dict, optional
+    :return: List of dicts BNC1 and BNC2 {"times": np.array, "polarities":np.array}
+    :rtype: list
+    """
+    if not data:
+        data = load_data(session_path)
+
+    BNC1_fronts = np.array([[np.nan, np.nan]])
+    BNC2_fronts = np.array([[np.nan, np.nan]])
+    for tr in data:
+        BNC1_fronts = np.append(
+            BNC1_fronts,
+            np.array(
+                [
+                    [x, 1]
+                    for x in tr["behavior_data"]["Events timestamps"].get("BNC1High", [np.nan])
+                ]
+            ),
+            axis=0,
+        )
+        BNC1_fronts = np.append(
+            BNC1_fronts,
+            np.array(
+                [
+                    [x, -1]
+                    for x in tr["behavior_data"]["Events timestamps"].get("BNC1Low", [np.nan])
+                ]
+            ),
+            axis=0,
+        )
+        BNC2_fronts = np.append(
+            BNC2_fronts,
+            np.array(
+                [
+                    [x, 1]
+                    for x in tr["behavior_data"]["Events timestamps"].get("BNC2High", [np.nan])
+                ]
+            ),
+            axis=0,
+        )
+        BNC2_fronts = np.append(
+            BNC2_fronts,
+            np.array(
+                [
+                    [x, -1]
+                    for x in tr["behavior_data"]["Events timestamps"].get("BNC2Low", [np.nan])
+                ]
+            ),
+            axis=0,
+        )
+
+    BNC1_fronts = BNC1_fronts[1:, :]
+    BNC1_fronts = BNC1_fronts[BNC1_fronts[:, 0].argsort()]
+    BNC2_fronts = BNC2_fronts[1:, :]
+    BNC2_fronts = BNC2_fronts[BNC2_fronts[:, 0].argsort()]
+
+    BNC1 = {"times": BNC1_fronts[:, 0], "polarities": BNC1_fronts[:, 1]}
+    BNC2 = {"times": BNC2_fronts[:, 0], "polarities": BNC2_fronts[:, 1]}
+
+    return [BNC1, BNC2]
+
+
+def get_port_events(trial: dict, name: str = '') -> list:
+    """get_port_events
+    Return all event timestamps from bpod raw data trial that match 'name'
+    --> looks in trial['behavior_data']['Events timestamps']
+
+    :param trial: raw trial dict
+    :type trial: dict
+    :param name: name of event, defaults to ''
+    :type name: str, optional
+    :return: Sorted list of event timestamps
+    :rtype: list
+    TODO: add polarities?
+    """
+    out: list = []
+    events = trial['behavior_data']['Events timestamps']
+    for k in events:
+        if name in k:
+            out.extend(events[k])
+    out = sorted(out)
+
+    return out
+
