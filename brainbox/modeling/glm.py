@@ -75,6 +75,7 @@ class NeuralGLM:
         # Filter out cells which don't meet the criteria for minimum spiking, while doing trial
         # assignment
         self.vartypes = vartypes
+        self.vartypes['duration'] = 'value'
         self.binf = lambda t: np.ceil(t / binwidth).astype(int)  # Useful step counter fn
         trialsdf = trialsdf.copy()
         clu_ids = np.unique(spk_clu)
@@ -279,7 +280,7 @@ class NeuralGLM:
 
         cov = {'description': desc,
                'bases': bases,
-               'valid_trials': cond if cond else self.trialsdf.index,
+               'valid_trials': cond if cond is not None else self.trialsdf.index,
                'offset': offset,
                'regressor': regressor,
                'dmcol_idx': np.arange(self.currcol, self.currcol + bases.shape[1])
@@ -329,7 +330,7 @@ class NeuralGLM:
                 if cov['bases'] is None:
                     miniX[:, sidx] = stim
                 else:
-                    miniX[:, sidx] = denseconv(stim, cov['bases'])
+                    miniX[:, sidx] = convbasis(stim, cov['bases'], self.binf(cov['offset']))
             # Sparsify convolved result and store in miniDMs
             if dense:
                 miniDMs.append(miniX)
@@ -350,16 +351,33 @@ class NeuralGLM:
         if not self.compiled:
             raise AttributeError('Design matrix has not been compiled yet. Please run '
                                  'neuroglm.compile_design_matrix() before fitting.')
-        coefs = pd.Series(index=self.clu_ids, name='coefficients', dtype=object)
-        intercepts = pd.Series(index=self.clu_ids, name='intercepts', dtype=object)
+        coefs = pd.Series(index=self.clu_ids.flat, name='coefficients', dtype=object)
+        intercepts = pd.Series(index=self.clu_ids.flat, name='intercepts', dtype=object)
         for i, cell in tqdm(enumerate(self.clu_ids), "Fitting units: "):
             binned = self.binnedspikes[:, i]
             fitobj = PoissonRegressor(alpha=alpha, max_iter=300).fit(self.dm, binned)
-            coefs.at[i] = fitobj.coefs_
-            intercepts.at[i] = fitobj.intercept_
+            coefs.at[cell[0]] = fitobj.coef_
+            intercepts.at[cell[0]] = fitobj.intercept_
         self.coefs = coefs
         self.intercepts = intercepts
         return coefs, intercepts
+
+    def combine_weights(self):
+        outputs = {}
+        for var in self.covar.keys():
+            winds = self.covar[var]['dmcol_idx']
+            bases = self.covar[var]['bases']
+            weights = self.coefs.apply(lambda w: np.sum(w[winds] * bases, axis=1))
+            offset = self.covar[var]['offset']
+            tlen = bases.shape[0] * self.binwidth
+            tstamps = np.linspace(0 + offset, tlen + offset, bases.shape[0])
+            outputs[var] = {}
+            outputs[var]['t'] = tstamps
+            outputs[var]['weights'] = pd.DataFrame(weights.values.tolist(),
+                                                   index=weights.index,
+                                                   columns=tstamps)
+        self.combined_weights = outputs
+        return outputs
 
 
 def convbasis(stim, bases, offset=0):
@@ -368,7 +386,7 @@ def convbasis(stim, bases, offset=0):
     elif offset > 0:
         stim = np.pad(stim, ((offset, 0), (0, 0)))
 
-    X = denseconv(stim, bases, np.ones((stim.shape[1], bases.shape[1]), dtype=bool))
+    X = denseconv(stim, bases)
 
     if offset < 0:
         X = X[-offset:, :]
