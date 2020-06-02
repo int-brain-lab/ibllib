@@ -82,7 +82,7 @@ for i_ephysrig in range(0, len(ephys_rig)):
 
             # -- Start compute, run over exceptions
             try:
-                bpodqc = BpodQC(eid or session_path, one=one, ensure_data=True, lazy=False)
+                bpodqc = BpodQC(eid, one=one, ensure_data=True, lazy=False)
                 passed_df = pd.DataFrame.from_dict(bpodqc.passed)
                 metrics_df = pd.DataFrame.from_dict(bpodqc.metrics)
 

@@ -90,10 +90,10 @@ for i_metric in range(0, len(metric_name)):
     name_pass = f'_pass__{metric_name[i_metric][9:]}'
 
     ax = sns.catplot(x=metric_name[i_metric],
-                    y=name_pass,
-                    row="rig_location",
-                    kind="box",
-                    data=bm_app)
+                     y=name_pass,
+                     row="rig_location",
+                     kind="box",
+                     data=bm_app)
     ax.xaxis.set_label_text("")
     # Save fig
     outname = f'{metric_name[i_metric]}_distribution.png'
