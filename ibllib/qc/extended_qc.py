@@ -51,6 +51,10 @@ class ExtendedQC(object):
         # aggregate them
         extended_qc.update(self.oneqc.passed)
         extended_qc.update(average_bpod_frame)
+        # Ensure None instead of NaNs
+        for k, v in extended_qc.items():
+            if v is not None and np.isnan(v):
+                extended_qc[k] = None
 
         self.frame = extended_qc
 
