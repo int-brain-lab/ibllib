@@ -259,6 +259,27 @@ class TestExtractTrialData(unittest.TestCase):
             self.biased_ge5['path']).extract()[0]
         self.assertTrue(isinstance(st, np.ndarray))
 
+    def test_stimOnOffFreeze_times(self):
+        # TRAINING SESSIONS
+        st = ibllib.io.extractors.training_trials.StimOnOffFreezeTimes(
+            self.training_lt5['path']).extract()[0]
+        self.assertTrue(isinstance(st[0], np.ndarray))
+
+        # BIASED SESSIONS
+        st = ibllib.io.extractors.biased_trials.StimOnOffFreezeTimes(
+            self.biased_lt5['path']).extract()[0]
+        self.assertTrue(isinstance(st[0], np.ndarray))
+
+        # TRAINING SESSIONS
+        st = ibllib.io.extractors.training_trials.StimOnOffFreezeTimes(
+            self.training_ge5['path']).extract()[0]
+        self.assertTrue(isinstance(st[0], np.ndarray))
+
+        # BIASED SESSIONS
+        st = ibllib.io.extractors.biased_trials.StimOnOffFreezeTimes(
+            self.biased_ge5['path']).extract()[0]
+        self.assertTrue(isinstance(st[0], np.ndarray))
+
     def test_get_intervals(self):
         # TRAINING SESSIONS
         di = ibllib.io.extractors.training_trials.Intervals(
