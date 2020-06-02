@@ -600,12 +600,19 @@ class StimOffTriggerTimes(BaseBpodTrialsExtractor):
             [tr["behavior_data"]["States timestamps"][stim_off_trigger_state][0][0]
              for tr in self.bpod_trials]
         )
+        # If pre version 5.0.0 no specific nogo Off trigger was given, just return trial_starts
+        if stim_off_trigger_state == "trial_start":
+            return stimOffTrigger_times
+
         no_goTrigger_times = np.array(
             [tr["behavior_data"]["States timestamps"]["no_go"][0][0] for tr in self.bpod_trials]
         )
         # Stim off trigs are either in their own state or in the no_go state if the
-        # mouse did not move
-        assert all(~np.isnan(no_goTrigger_times) == np.isnan(stimOffTrigger_times))
+        # mouse did not move, if the stim_off_trigger_state always exist (exit_state or trial_start)
+        # no NaNs will happen
+        if stim_off_trigger_state == "hide_stim":
+            assert all(~np.isnan(no_goTrigger_times) == np.isnan(stimOffTrigger_times))
+        # Patch with the no_go states trig times
         stimOffTrigger_times[~np.isnan(no_goTrigger_times)] = no_goTrigger_times[
             ~np.isnan(no_goTrigger_times)
         ]
