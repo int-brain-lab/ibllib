@@ -44,8 +44,11 @@ ids = np.load(path_fixtures.joinpath(f'session_{ses_nb}_passive_stimIDs.npy'))
 sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
 fpga_sync = ephys_fpga._get_sync_fronts(sync, sync_map['frame2ttl'])
 
-# get Frame2ttl signal
+# get Frame2ttl / audio / valve signal
 fttl = ephys_fpga._get_sync_fronts(sync, sync_map['frame2ttl'])
+audio = ephys_fpga._get_sync_fronts(sync, sync_map['audio'])
+valve = ephys_fpga._get_sync_fronts(sync, sync_map['bpod'])
+# todo check that bpod does not output any other signal than valve in this task protocol
 
 # load RF matrix
 RF_file = Path.joinpath(session_path, 'raw_passive_data', '_iblrig_RFMapStim.raw.bin')
