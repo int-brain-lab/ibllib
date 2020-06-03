@@ -2,10 +2,8 @@ from ibllib.io.extractors.ephys_fpga import \
     extract_first_movement_times, extract_wheel_moves, MIN_QT
 from oneibl.one import ONE
 
-one = ONE()
 
-
-def load_wheel_reaction_times(eid):
+def load_wheel_reaction_times(eid, one=None):
     """
     Return the calculated reaction times for session.  Reaction times are defined as the time
     between the go cue (onset tone) and the onset of the first substantial wheel movement.   A
@@ -20,12 +18,17 @@ def load_wheel_reaction_times(eid):
     ----------
     eid : str
         Session UUID
+    one : oneibl.ONE
+        An instance of ONE for loading data.  If None a new one is instantiated using the defaults.
 
     Returns
     ----------
     array-like
         reaction times
     """
+    if one is None:
+        one = ONE()
+        
     trials = one.load_object(eid, 'trials')
     # If already extracted, load and return
     if trials and 'firstMovement_times' in trials:

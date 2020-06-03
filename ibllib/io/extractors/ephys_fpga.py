@@ -341,19 +341,20 @@ def extract_wheel_moves(wheel, output_path=None, save=False, display=False):
 
     # Check the values and units of wheel position
     res = np.array([wh.ENC_RES, wh.ENC_RES / 2, wh.ENC_RES / 4])
-    min_change_rad = 2 * np.pi / res
-    min_change_cm = wh.WHEEL_DIAMETER * np.pi / res
-    pos_diff = np.abs(np.ediff1d(wheel['re_pos']))
-    if pos_diff.min() < min_change_cm.min():
+    # min change in rad and cm for each decoding type
+    # [rad_X4, rad_X2, rad_X1, cm_X4, cm_X2, cm_X1]
+    min_change = np.concatenate([2 * np.pi / res, wh.WHEEL_DIAMETER * np.pi / res])
+    pos_diff = np.abs(np.ediff1d(wheel['re_pos'])).min()
+    # find min change closest to min pos_diff
+    idx = np.argmin(np.abs(min_change - pos_diff))
+    if idx < len(res):
         # Assume values are in radians
         units = 'rad'
-        encoding = np.argmin(np.abs(min_change_rad - pos_diff.min()))
-        #  min_change = min_change_rad[encoding]
+        encoding = idx
     else:
         units = 'cm'
-        encoding = np.argmin(np.abs(min_change_cm - pos_diff.min()))
-        #  min_change = min_change_cm[encoding]
-    enc_names = {0: '4X', 1: '2X', 2: '1X'}
+        encoding = idx - len(res)
+    enc_names = {0: 'X4', 1: 'X2', 2: 'X1'}
     _logger.info('Wheel in %s units using %s encoding', units, enc_names[int(encoding)])
     # The below assertion is violated by Bpod wheel data
     #  assert np.allclose(pos_diff, min_change, rtol=1e-05), 'wheel position skips'

@@ -16,8 +16,8 @@ __all__ = ['cm_to_deg',
            'movements',
            'samples_to_cm',
            'traces_by_trial',
-           'velocity',
-           'velocity_smoothed']
+           'velocity_smoothed',
+           'within_ranges']
 
 # Define some constants
 ENC_RES = 1024 * 4  # Rotary encoder resolution, assumes X4 encoding
@@ -128,7 +128,8 @@ def last_movement_onset(t, vel, event_time):
     """
     Find the time at which movement started, given an event timestamp that occurred during the
     movement.  Movement start is defined as the first sample after the velocity has been zero
-    for at least 50ms
+    for at least 50ms.  Wheel inputs should be evenly sampled.
+    
     :param t: numpy array of wheel timestamps in seconds
     :param vel: numpy array of wheel velocities
     :param event_time: timestamp anywhere during movement of interest, e.g. peak velocity
@@ -313,6 +314,15 @@ def cm_to_deg(positions, wheel_diameter=WHEEL_DIAMETER):
     :param positions: array of wheel positions in cm
     :param wheel_diameter: the diameter of the wheel in cm
     :return: array of wheel positions in degrees turned
+
+    # Example: Convert linear cm to degrees
+    >>> cm_to_deg(3.142 * WHEEL_DIAMETER)
+    360.04667846020925
+
+    # Example: Get positions in deg from cm for 5cm diameter wheel
+    >>> import numpy as np
+    >>> cm_to_deg(np.array([0.0270526 , 0.04057891, 0.05410521, 0.06763151]), wheel_diameter=5)
+    array([0.61999992, 0.93000011, 1.24000007, 1.55000003])
     """
     return positions / (wheel_diameter * pi) * 360
 
@@ -323,6 +333,15 @@ def cm_to_rad(positions, wheel_diameter=WHEEL_DIAMETER):
     :param positions: array of wheel positions in cm
     :param wheel_diameter: the diameter of the wheel in cm
     :return: array of wheel angle in radians
+    
+    # Example: Convert linear cm to radians
+    >>> cm_to_rad(1)
+    0.3225806451612903
+
+    # Example: Get positions in rad from cm for 5cm diameter wheel
+    >>> import numpy as np
+    >>> cm_to_rad(np.array([0.0270526 , 0.04057891, 0.05410521, 0.06763151]), wheel_diameter=5)
+    array([0.01082104, 0.01623156, 0.02164208, 0.0270526 ])
     """
     return positions * (2 / wheel_diameter)
 
@@ -335,6 +354,16 @@ def samples_to_cm(positions, wheel_diameter=WHEEL_DIAMETER, resolution=ENC_RES):
     :param wheel_diameter: the diameter of the wheel in cm
     :param resolution: resolution of the rotary encoder
     :return: array of wheel angle in radians
+    
+    # Example: Get resolution in linear cm
+    >>> samples_to_cm(1)
+    0.004755340442445488
+
+    # Example: Get positions in linear cm for 4X, 360 ppr encoder
+    >>> import numpy as np
+    >>> samples_to_cm(np.array([2, 3, 4, 5, 6, 7, 6, 5, 4]), resolution=360*4)
+    array([0.0270526 , 0.04057891, 0.05410521, 0.06763151, 0.08115781,
+           0.09468411, 0.08115781, 0.06763151, 0.05410521])
     """
     return positions / resolution * pi * wheel_diameter
 
@@ -354,21 +383,19 @@ def within_ranges(x, ranges, labels=None, mode='vector'):
     Detects which points of the input vector lie within one of the ranges specified in the ranges.
     Returns an array the size of x with a 1 if the corresponding point is within a range.
 
-    The function uses a stable sort algorithm (timsort) to find the edges within the input
-    array.  Edge behaviour is inclusive.
+    The function uses a stable sort algorithm (timsort) to find the edges within the input array.
+    Edge behaviour is inclusive.
 
     Ranges are [(start0, stop0), (start1, stop1), etc.] or n-by-2 numpy array.
-    The ranges may be optionally assigned a row in 'matrix' mode or a numerical label in
-    'vector' mode. Labels must have a length of n.  Overlapping ranges have a value that is
-    the sum of the relevant range labels (ones in 'matrix' mode).
+    The ranges may be optionally assigned a row in 'matrix' mode or a numerical label in 'vector'
+    mode. Labels must have a length of n.  Overlapping ranges have a value that is the sum of the
+    relevant range labels (ones in 'matrix' mode).
 
     If mode is 'matrix' (default) it will give a matrix output where each range is assigned a
-    particular row index with 1 if the
-    point
-    belongs to that range label.  Multiple ranges can be assigned to a particular row, e.g. [0,
-    0,1] would give a 2-by-N matrix with the first two ranges in the first row.  Points within more than one range are given a value > 1
-    If mode is 'vector' it will give a vector, specifying the range
-    of each point.
+    particular row index with 1 if the point belongs to that range label.  Multiple ranges can be
+    assigned to a particular row, e.g. [0, 0,1] would give a 2-by-N matrix with the first two
+    ranges in the first row.  Points within more than one range are given a value > 1
+    If mode is 'vector' it will give a vector, specifying the range of each point.
 
     Parameters
     ----------
@@ -403,14 +430,16 @@ def within_ranges(x, ranges, labels=None, mode='vector'):
     -------
     >>> import numpy as np
     >>> within_ranges(np.arange(11), [(1, 2), (5, 8)])
-    np.array([1, 1, 0, 0, 1, 1, 1, 1, 0, 0], dtype='int32')
+    array([0, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0])
     >>> ranges = np.array([[1, 2], [5, 8]])
     >>> within_ranges(np.arange(10) + 1, ranges, labels=np.array([0,1]), mode='matrix')
-    np.array([[1, 1, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 1, 1, 1, 1, 0, 0]], dtype='int32')
+    array([[1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+           [0, 0, 0, 0, 1, 1, 1, 1, 0, 0]])
     >>> within_ranges(np.arange(11), [(1,2), (5,8), (4,6)], labels=[0,1,1], mode='matrix')
-    np.array([[0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 1, 2, 2, 1, 1, 0, 0]], dtype='int32')
+    array([[0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+           [0, 0, 0, 0, 1, 2, 2, 1, 1, 0, 0]])
     >>> within_ranges(np.arange(10) + 1, ranges, np.array([3,1]), mode='vector')
-    np.array([3, 3, 0, 0, 1, 1, 1, 1, 0, 0], dtype='int32')
+    array([3, 3, 0, 0, 1, 1, 1, 1, 0, 0])
     """
     # Flatten
     x = x.ravel()
@@ -486,7 +515,7 @@ def within_ranges(x, ranges, labels=None, mode='vector'):
         raise ValueError('unknown mode type, options are "matrix" and "vector"')
 
 
-def traces_by_trial(t, pos, trials, start='stimOn_times', end='feedback_times'):
+def traces_by_trial_old(t, pos, trials, start='stimOn_times', end='feedback_times'):
     """
     Returns list of tuples of positions and velocity for samples between stimulus onset and
     feedback.
@@ -507,3 +536,29 @@ def traces_by_trial(t, pos, trials, start='stimOn_times', end='feedback_times'):
     
     cuts = [traces[:, to_mask(s, e)] for s, e in zip(trials[start], trials[end])]
     return [(cuts[n][0, :], cuts[n][1, :], cuts[n][2, :]) for n in range(len(cuts))]
+
+
+def traces_by_trial(t, pos, trials, start='stimOn_times', end='feedback_times'):
+    """
+    Returns list of tuples of positions and velocity for samples between stimulus onset and
+    feedback.
+    :param t: numpy array of timestamps
+    :param pos: numpy array of wheel positions (could also be velocities or accelerations)
+    :param trials: dict of trials ALFs
+    :param start: trails key to use as the start index for splitting
+    :param end: trails key to use as the end index for splitting
+    :return: list of traces between each start and end event
+    """
+    if start == 'intervals' and (end is None or end == 'interval'):
+        edges = trials['intervals']
+    else:
+        edges = np.c_[trials[start], trials[end]]
+    
+    n_trials = edges.shape[0]
+    mask = within_ranges(t, labels=np.arange(n_trials), ranges=edges, mode='matrix').astype(bool)
+    return [(t[cut], pos[cut]) for cut in mask]
+
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
