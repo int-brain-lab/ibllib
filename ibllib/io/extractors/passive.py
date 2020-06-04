@@ -3,6 +3,7 @@ functions used in passive_script
 """
 # Author: Gaelle C, Matt W
 import numpy as np
+import ibllib.io.raw_data_loaders as rawio
 
 
 def get_spacer_times(spacer_template, jitter, ttl_signal, t_quiet):
@@ -47,3 +48,20 @@ def get_spacer_times(spacer_template, jitter, ttl_signal, t_quiet):
         spacer_times[i, 0] = t - (spacer_length / 2) - t_quiet
         spacer_times[i, 1] = t + (spacer_length / 2) + t_quiet
     return spacer_times, conv_dttl
+
+
+def reshape_RF(RF_file, meta):
+    frame_array = np.fromfile(RF_file, dtype='uint8')
+    y_pix, x_pix, _ = meta['VISUAL_STIM_1']['stim_file_shape']
+    frames = np.transpose(
+        np.reshape(frame_array, [y_pix, x_pix, -1], order='F'), [2, 1, 0])
+    # todo test on reshape ?
+    # todo find n ttl expected and return
+    return frames
+
+
+def ephysCW_end(session_path):
+    # return time (second) at which ephysCW ends
+    bpod_raw = rawio.load_data(session_path)
+    t_end_ephys = bpod_raw[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
+    return t_end_ephys

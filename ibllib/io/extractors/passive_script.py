@@ -26,6 +26,7 @@ from ibllib.io.extractors import ephys_fpga
 
 # hardcoded var
 FRAME_FS = 60  # Sampling freq of the ipad screen, in Hertz
+FS_FPGA = 30000  # Sampling freq of the neural recording system screen, in Hertz
 
 # load data
 one = ONE()
@@ -67,17 +68,21 @@ audio = ephys_fpga._get_sync_fronts(sync, sync_map['audio'])
 valve = ephys_fpga._get_sync_fronts(sync, sync_map['bpod'])
 # todo check that bpod does not output any other signal than valve in this task protocol
 
+# load stimulus sequence
+stim_order = np.array(meta['STIM_ORDER'])
+
 # load RF matrix and reshape
 RF_file = Path.joinpath(session_path, 'raw_passive_data', '_iblrig_RFMapStim.raw.bin')
-frame_array = np.fromfile(RF_file, dtype='uint8')
-# Reshape matrix, todo make test for reshape
-y_pix, x_pix, _ = meta['VISUAL_STIM_1']['stim_file_shape']
-frames = np.transpose(
-    np.reshape(frame_array, [y_pix, x_pix, -1], order='F'), [2, 1, 0])
-# todo find n ttl expected
+frames = passive.reshape_RF(RF_file=RF_file, meta=meta)  # todo add n expected frame
 
-# load and get spacer information
-ttl_signal = fttl['times']
+# truncate f2ttl signal so as to contain only what comes after ephysCW
+t_end_ephys = passive.ephysCW_end(session_path=session_path)
+fttl_trunk = dict()
+fttl_trunk['times'] = fttl['times'][fttl['times'] > t_end_ephys]
+fttl_trunk['polarities'] = fttl['polarities'][fttl['times'] > t_end_ephys]
+
+# load and get spacer information, do convolution to find spacer timestamps
+ttl_signal = fttl_trunk['times']
 spacer_template = np.array(meta['VISUAL_STIM_0']['ttl_frame_nums'], dtype=np.float32) / FRAME_FS
 jitter = 3 / FRAME_FS  # allow for 3 screen refresh as jitter
 t_quiet = meta['VISUAL_STIM_0']['delay_around']
@@ -86,7 +91,6 @@ spacer_times, conv_dttl = passive.get_spacer_times(
     ttl_signal=ttl_signal, t_quiet=t_quiet)
 
 # Check correct number of spacer is found
-stim_order = np.array(meta['STIM_ORDER'])
 indx_0 = np.where(stim_order == 0)  # Hardcoded 0
 n_exp_spacer = np.size(indx_0)
 if n_exp_spacer != np.size(spacer_times) / 2:
@@ -94,13 +98,9 @@ if n_exp_spacer != np.size(spacer_times) / 2:
                      f'is different than the one found on the raw '
                      f'trace ({np.size(spacer_times)/2})')
 
-# load stimulus sequence
-# todo
-
 # split ids into relevant HW categories
 gabor_id = [s for s in ids if 'G' in s]
 valve_id = [s for s in ids if 'V' in s]
-
 matched = ['T', 'N']
 sound_id = [z for z in ids if z in matched]
 
@@ -115,29 +115,3 @@ if len_v_pr != len(valve_id):
 len_s_pr = 40 * 2
 if len_s_pr != len(sound_id):
     raise ValueError("N Sound stimulus in metadata incorrect")
-
-#  -- WIP/OLD CODE --
-# import json
-# json_file = '/Users/gaelle/Desktop/passive_stim_meta.json'
-# with open(json_file, 'w+') as f:
-#     string = json.dumps(meta_stim, indent=1)
-#     f.write(string)
-
-# # Re-create raw f2ttl signal
-# FS_FPGA = 30000  # Hz
-# inc_f = np.round(fttl['times'] * FS_FPGA)
-# inc_f = inc_f.astype(int)
-# vect_f = np.zeros((1, max(inc_f) + 1))
-# vect_f[0][inc_f] = fttl['polarities']
-# signal_f = np.cumsum(vect_f[0])
-#
-# # cut f2ttl signal so as to contain only what comes after ephysCW
-# bpod_raw = rawio.load_data(session_path)
-# t_end_ephys = bpod_raw[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
-# inc_t = np.round(t_end_ephys * FS_FPGA)
-# inc_t = inc_t.astype(int)
-# signal_f_passive = signal_f[inc_t:]
-#
-#
-# times = fttl['times']
-# ttl_signal = times[times > t_end_ephys]
