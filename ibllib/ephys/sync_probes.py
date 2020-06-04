@@ -134,6 +134,7 @@ def version3B(ses_path, display=True, type=None, tol=2.5):
     sync_nidq = _get_sync_fronts(nidq_file.sync, nidq_file.sync_map['imec_sync'])
 
     qc_all = True
+    out_files = []
     for ef in ephys_files:
         sync_probe = _get_sync_fronts(ef.sync, ef.sync_map['imec_sync'])
         sr = _get_sr(ef)
@@ -151,7 +152,7 @@ def version3B(ses_path, display=True, type=None, tol=2.5):
         timestamps, qc = sync_probe_front_times(sync_probe.times, sync_nidq.times, sr,
                                                 display=display, type=type_probe, tol=tol)
         qc_all &= qc
-        out_files = _save_timestamps_npy(ef, timestamps, sr)
+        out_files.extend(_save_timestamps_npy(ef, timestamps, sr))
     return qc_all, out_files
 
 
