@@ -1,7 +1,15 @@
 """
 Get passive CW session and data.
+
+STEPS:
+- Load fixture data
+- Find spacer (still do convolution?) + check number found
+- Cut out part about ephysCW
+- Get number of TTL switch (f2ttl, audio, valve) within each spacer
+- Associate TTL found for each stim type + check number found
+- Package and output data (alf format?)
 """
-# Author: Olivier W
+# Author: Olivier W, Gaelle C
 import alf.io
 from oneibl.one import ONE
 from pathlib import Path
@@ -56,10 +64,9 @@ frame_array = np.fromfile(RF_file, dtype='uint8')
 # todo reshape matrix, make test
 # frames = np.transpose(
 #     np.reshape(frame_array, [y_pix, x_pix, -1], order='F'), [2, 1, 0])
+# -- Convert values to 0,1,-1 for simplicity
+# -- Find number of passage from [128 0] and [128 255]  (converted to 0,1,-1)
+# -- number of rising TTL pulse expected in frame2ttl trace
 
-# STEPS:
-# - Find spacer (still do convolution?) + check number found
-# - Cut out part about ephysCW
-# - Get number of TTL switch (f2ttl, audio, valve) within each spacer
-# - Associate TTL found for each stim type + check number found
-# - Package and output data (alf format?)
+# load spacer information
+# todo
