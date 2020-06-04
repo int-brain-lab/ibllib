@@ -42,6 +42,9 @@ def _get_spike_counts_in_bins(spike_times, spike_clusters, intervals):
     # Check input
     assert intervals.ndim == 2
     assert intervals.shape[1] == 2
+    assert np.all(np.diff(spike_times) >= 0), "Spike times need to be sorted"
+
+    intervals_idx = np.searchsorted(spike_times, intervals)
 
     # For each neuron and each interval, the number of spikes in the interval.
     cluster_ids = np.unique(spike_clusters)
@@ -52,7 +55,7 @@ def _get_spike_counts_in_bins(spike_times, spike_clusters, intervals):
         t0, t1 = intervals[j, :]
         # Count the number of spikes in the window, for each neuron.
         x = np.bincount(
-            spike_clusters[(t0 <= spike_times) & (spike_times < t1)],
+            spike_clusters[intervals_idx[j, 0]:intervals_idx[j, 1]],
             minlength=cluster_ids.max() + 1)
         counts[:, j] = x[cluster_ids]
     return counts, cluster_ids
