@@ -135,6 +135,7 @@ meta['VISUAL_STIM_1']['ttl_num'] = 2 * RF_n_ttl_expected  # Hardcoded 1 for RF, 
 
 # 1. spont act
 passive.check_n_ttl_between(n_exp=meta['VISUAL_STIM_5']['ttl_num'],
+                            key_stim='VISUAL_STIM_5',
                             t_start_search=spacer_times[0, 1] + 0.2,
                             t_end_search=spacer_times[1, 0] - 0.2,
                             ttl=fttl_trunk)
@@ -142,13 +143,25 @@ passive.check_n_ttl_between(n_exp=meta['VISUAL_STIM_5']['ttl_num'],
 # 2. RF
 RF_times = \
     passive.check_n_ttl_between(n_exp=meta['VISUAL_STIM_1']['ttl_num'],
+                                key_stim='VISUAL_STIM_1',
                                 t_start_search=spacer_times[1, 1] + 0.2,
                                 t_end_search=spacer_times[2, 0] - 0.2,
                                 ttl=fttl_trunk)
 
 # 3. gabor
 gabor_times = \
-    passive.check_n_ttl_between(n_exp=meta['VISUAL_STIM_4']['ttl_num'],
-                                t_start_search=spacer_times[1, 1] + 0.2,
+    passive.check_n_ttl_between(n_exp=meta['VISUAL_STIM_4']['ttl_num'] * 2,  # *2 for rise/fall
+                                key_stim='VISUAL_STIM_4',
+                                t_start_search=spacer_times[2, 1] + 0.2,
                                 t_end_search=fttl_trunk['times'][-1],
                                 ttl=fttl_trunk)
+
+# # plot for debug
+# from ibllib.plots import squares
+# import matplotlib.pyplot as plt
+#
+# times, _ = passive.find_between(t_start_search=spacer_times[2, 1] + 0.2,
+#                                 t_end_search=fttl_trunk['times'][-1],
+#                                 ttl=fttl_trunk)
+# squares(fttl_trunk['times'], fttl_trunk['polarities'])
+# plt.plot(times, 0.5 * np.ones(len(times)), '.')

@@ -96,14 +96,21 @@ def find_between(ttl, t_start_search, t_end_search):
     id_ttl = np.where(np.logical_and(ttl['times'] > t_start_search,
                                      ttl['times'] < t_end_search))[0]
     times_between = ttl['times'][id_ttl]
-    return times_between
+    return times_between, id_ttl
 
 
-def check_n_ttl_between(n_exp, t_start_search, t_end_search, ttl):
-    times_between = find_between(ttl=ttl,
-                                 t_start_search=t_start_search,
-                                 t_end_search=t_end_search)
+def check_n_ttl_between(n_exp, key_stim, t_start_search, t_end_search, ttl):
+    times_between, id_ttl = find_between(ttl=ttl,
+                                         t_start_search=t_start_search,
+                                         t_end_search=t_end_search)
+    # check for polarity
+    pol = ttl['polarities'][id_ttl]
+    if key_stim in ['VISUAL_STIM_1', 'VISUAL_STIM_4']:
+        exp_start_pol = -1
+        if pol[0] != exp_start_pol:
+            times_between = times_between[1:]
+
     if len(times_between) != n_exp:
-        raise ValueError('Incorrect number of pulses found')
+        raise ValueError(f'Incorrect number of pulses found for {key_stim}')
     else:
         return times_between
