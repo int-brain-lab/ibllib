@@ -18,10 +18,13 @@ import numpy as np
 import ibllib.io.raw_data_loaders as rawio
 from ibllib.io.extractors import ephys_fpga
 
-# import ibllib.io.extractors.passive as passive
-# import importlib
-# importlib.reload(passive)
+# hardcoded var
+FRAME_FS = 60  # Sampling freq of the ipad screen, in Hertz
+file = '/Users/gaelle/Desktop/metadata_v1.npz'
+npzfile = np.load(file)
+meta = npzfile['metadata']
 
+# load data
 one = ONE()
 dataset_types = ['_spikeglx_sync.times',
                  '_spikeglx_sync.channels',
@@ -37,8 +40,6 @@ eid = one.search(subject='CSH_ZAD_022', date_range='2020-05-24', number=1)[0]
 local_paths = one.load(eid, dataset_types=dataset_types, download_only=True)
 
 session_path = alf.io.get_session_path(local_paths[0])
-
-# session_path = Path('/datadisk/FlatIron/zadorlab/Subjects/CSH_ZAD_022/2020-05-24/001')
 
 # load session fixtures
 settings = rawio.load_settings(session_path)
@@ -95,3 +96,9 @@ if len_s_pr != len(sound_id):
 
 # Find spacer in f2ttl, check number found is valid
 # todo convolution ?
+
+# import json
+# json_file = '/Users/gaelle/Desktop/passive_stim_meta.json'
+# with open(json_file, 'w+') as f:
+#     string = json.dumps(meta_stim, indent=1)
+#     f.write(string)
