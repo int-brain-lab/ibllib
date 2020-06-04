@@ -14,15 +14,13 @@ import alf.io
 from oneibl.one import ONE
 from pathlib import Path
 import numpy as np
+import json
 
 import ibllib.io.raw_data_loaders as rawio
 from ibllib.io.extractors import ephys_fpga
 
 # hardcoded var
 FRAME_FS = 60  # Sampling freq of the ipad screen, in Hertz
-file = '/Users/gaelle/Desktop/metadata_v1.npz'
-npzfile = np.load(file)
-meta = npzfile['metadata']
 
 # load data
 one = ONE()
@@ -49,22 +47,29 @@ pcs = np.load(path_fixtures.joinpath(f'session_{ses_nb}_passive_pcs.npy'))
 delays = np.load(path_fixtures.joinpath(f'session_{ses_nb}_passive_stimDelays.npy'))
 ids = np.load(path_fixtures.joinpath(f'session_{ses_nb}_passive_stimIDs.npy'))
 
+# load general metadata
+json_file = path_fixtures.joinpath('passive_stim_meta.json')
+with open(json_file, 'r') as f:
+    meta = json.load(f)
+
 # load ephys sync pulses
 sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
 fpga_sync = ephys_fpga._get_sync_fronts(sync, sync_map['frame2ttl'])
 
-# get Frame2ttl / audio / valve signal
+# load Frame2ttl / audio / valve signal
 fttl = ephys_fpga._get_sync_fronts(sync, sync_map['frame2ttl'])
 audio = ephys_fpga._get_sync_fronts(sync, sync_map['audio'])
 valve = ephys_fpga._get_sync_fronts(sync, sync_map['bpod'])
 # todo check that bpod does not output any other signal than valve in this task protocol
 
-# load RF matrix
+# load RF matrix and reshape
 RF_file = Path.joinpath(session_path, 'raw_passive_data', '_iblrig_RFMapStim.raw.bin')
 frame_array = np.fromfile(RF_file, dtype='uint8')
-# todo reshape matrix, make test for reshape, need shape info
-# frames = np.transpose(
-#     np.reshape(frame_array, [y_pix, x_pix, -1], order='F'), [2, 1, 0])
+# Reshape matrix, todo make test for reshape
+y_pix, x_pix, _ = meta['VISUAL_STIM_1']['stim_file_shape']
+frames = np.transpose(
+    np.reshape(frame_array, [y_pix, x_pix, -1], order='F'), [2, 1, 0])
+
 # -- Convert values to 0,1,-1 for simplicity
 # -- Find number of passage from [128 0] and [128 255]  (converted to 0,1,-1)
 # -- number of rising TTL pulse expected in frame2ttl trace
