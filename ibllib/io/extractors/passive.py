@@ -53,4 +53,13 @@ valve = ephys_fpga._get_sync_fronts(sync, sync_map['bpod'])
 # load RF matrix
 RF_file = Path.joinpath(session_path, 'raw_passive_data', '_iblrig_RFMapStim.raw.bin')
 frame_array = np.fromfile(RF_file, dtype='uint8')
-# need to reshape matrix - todo function reusing Matt's code
+# todo reshape matrix, make test
+# frames = np.transpose(
+#     np.reshape(frame_array, [y_pix, x_pix, -1], order='F'), [2, 1, 0])
+
+# STEPS:
+# - Find spacer (still do convolution?) + check number found
+# - Cut out part about ephysCW
+# - Get number of TTL switch (f2ttl, audio, valve) within each spacer
+# - Associate TTL found for each stim type + check number found
+# - Package and output data (alf format?)
