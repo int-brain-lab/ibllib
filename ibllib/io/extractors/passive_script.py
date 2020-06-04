@@ -15,7 +15,11 @@ from oneibl.one import ONE
 from pathlib import Path
 import numpy as np
 import json
-import ibllib.io.extractors.passive as passive
+# plot for debug
+# from ibllib.plots import squares
+# import matplotlib.pyplot as plt
+
+# import ibllib.io.extractors.passive as passive
 
 import ibllib.io.raw_data_loaders as rawio
 from ibllib.io.extractors import ephys_fpga
@@ -90,14 +94,64 @@ frames = np.transpose(
 #     length(id_raise) + ...
 #     length(id_fall);
 
+# Find spacer in f2ttl, check number found is valid
+
+# Re-create raw f2ttl signal
+FS_FPGA = 30000  # Hz
+inc_f = np.round(fttl['times'] * FS_FPGA)
+inc_f = inc_f.astype(int)
+vect_f = np.zeros((1, max(inc_f) + 1))
+vect_f[0][inc_f] = fttl['polarities']
+signal_f = np.cumsum(vect_f[0])
+
+# cut f2ttl signal so as to contain only what comes after ephysCW
+bpod_raw = rawio.load_data(session_path)
+t_end_ephys = bpod_raw[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
+inc_t = np.round(t_end_ephys * FS_FPGA)
+inc_t = inc_t.astype(int)
+signal_f_passive = signal_f[inc_t:]
+
+ttl_signal = signal_f_passive
 # load and get spacer information
 spacer_template = meta['VISUAL_STIM_0']['ttl_frame_nums']
 jitter = 1 / FRAME_FS * 3
-ttl_signal = fttl['polarities']
 t_quiet = meta['VISUAL_STIM_0']['delay_around']
-spacer_times, conv_dttl = passive.get_spacer_times(
-    spacer_template=spacer_template, jitter=jitter,
-    ttl_signal=ttl_signal, t_quiet=t_quiet)
+# spacer_times, conv_dttl = passive.get_spacer_times(
+#     spacer_template=spacer_template, jitter=jitter,
+#     ttl_signal=ttl_signal, t_quiet=t_quiet)
+
+# todo corr
+
+# === TODO PUT INTO FUNCTION HERE FOR DEBUGGING
+diff_spacer_template = np.diff(spacer_template)
+# add jitter;
+# remove extreme values
+spacer_model = jitter + diff_spacer_template[2:-2]
+# diff ttl signal to compare to spacer_model
+dttl = np.diff(ttl_signal)
+# remove diffs larger than max diff in model to clean up signal
+dttl[dttl > np.max(spacer_model)] = 0
+# convolve cleaned diff ttl signal w/ spacer model
+conv_dttl = np.correlate(dttl, spacer_model, mode='full')
+# find spacer location
+thresh = 3.0
+idxs_spacer_middle = np.where(
+    (conv_dttl[1:-2] < thresh) &
+    (conv_dttl[2:-1] > thresh) &
+    (conv_dttl[3:] < thresh))[0]
+# adjust indices for
+# - `np.where` call above
+# - length of spacer_model
+idxs_spacer_middle += 2 - int((np.floor(len(spacer_model) / 2)))
+# pull out spacer times (middle)
+ts_spacer_middle = ttl_signal[idxs_spacer_middle]
+# put beginning/end of spacer times into an array
+spacer_length = np.max(spacer_template)
+spacer_times = np.zeros(shape=(ts_spacer_middle.shape[0], 2))
+for i, t in enumerate(ts_spacer_middle):
+    spacer_times[i, 0] = t - (spacer_length / 2) - t_quiet
+    spacer_times[i, 1] = t + (spacer_length / 2) + t_quiet
+# =====
 
 # load stimulus sequence
 # todo
@@ -120,9 +174,6 @@ if len_v_pr != len(valve_id):
 len_s_pr = 40 * 2
 if len_s_pr != len(sound_id):
     raise ValueError("N Sound stimulus in metadata incorrect")
-
-# Find spacer in f2ttl, check number found is valid
-# todo convolution ?
 
 # import json
 # json_file = '/Users/gaelle/Desktop/passive_stim_meta.json'
