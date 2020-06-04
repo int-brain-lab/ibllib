@@ -74,6 +74,7 @@ frame_array = np.fromfile(RF_file, dtype='uint8')
 y_pix, x_pix, _ = meta['VISUAL_STIM_1']['stim_file_shape']
 frames = np.transpose(
     np.reshape(frame_array, [y_pix, x_pix, -1], order='F'), [2, 1, 0])
+# todo find n ttl expected
 
 # load and get spacer information
 ttl_signal = fttl['times']
@@ -106,6 +107,7 @@ len_s_pr = 40 * 2
 if len_s_pr != len(sound_id):
     raise ValueError("N Sound stimulus in metadata incorrect")
 
+#  -- WIP/OLD CODE --
 # import json
 # json_file = '/Users/gaelle/Desktop/passive_stim_meta.json'
 # with open(json_file, 'w+') as f:
