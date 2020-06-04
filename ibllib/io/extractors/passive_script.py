@@ -58,6 +58,9 @@ json_file = path_fixtures.joinpath('passive_stim_meta.json')
 with open(json_file, 'r') as f:
     meta = json.load(f)
 
+# load stimulus sequence
+stim_order = np.array(meta['STIM_ORDER'])
+
 # load ephys sync pulses
 sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
 fpga_sync = ephys_fpga._get_sync_fronts(sync, sync_map['frame2ttl'])
@@ -66,18 +69,13 @@ fpga_sync = ephys_fpga._get_sync_fronts(sync, sync_map['frame2ttl'])
 fttl = ephys_fpga._get_sync_fronts(sync, sync_map['frame2ttl'])
 audio = ephys_fpga._get_sync_fronts(sync, sync_map['audio'])
 valve = ephys_fpga._get_sync_fronts(sync, sync_map['bpod'])
-# todo check that bpod does not output any other signal than valve in this task protocol
 
-# load stimulus sequence
-stim_order = np.array(meta['STIM_ORDER'])
-
-# load RF matrix and reshape
-RF_file = Path.joinpath(session_path, 'raw_passive_data', '_iblrig_RFMapStim.raw.bin')
-frames = passive.reshape_RF(RF_file=RF_file, meta=meta)  # todo add n expected frame
-
-# truncate f2ttl signal so as to contain only what comes after ephysCW
+# truncate fttl signals so as to contain only what comes after ephysCW
 t_end_ephys = passive.ephysCW_end(session_path=session_path)
 fttl_trunk = passive.truncate_ttl_signal(ttl=fttl, time_cutoff=t_end_ephys)
+audio_trunk = passive.truncate_ttl_signal(ttl=audio, time_cutoff=t_end_ephys)
+valve_trunk = passive.truncate_ttl_signal(ttl=valve, time_cutoff=t_end_ephys)
+# todo check that bpod does not output any other signal than valve in this task protocol
 
 # load and get spacer information, do convolution to find spacer timestamps
 ttl_signal = fttl_trunk['times']
@@ -96,6 +94,13 @@ if n_exp_spacer != np.size(spacer_times) / 2:
                      f'is different than the one found on the raw '
                      f'trace ({np.size(spacer_times)/2})')
 
+# once spacer is found, truncate ttl signals so as to contain only what comes after ephysCW
+t_start_passive = spacer_times[0, 0]
+fttl_trunk = passive.truncate_ttl_signal(ttl=fttl, time_cutoff=t_start_passive)
+audio_trunk = passive.truncate_ttl_signal(ttl=audio, time_cutoff=t_start_passive)
+valve_trunk = passive.truncate_ttl_signal(ttl=valve, time_cutoff=t_start_passive)
+# todo check that bpod does not output any other signal than valve in this task protocol
+
 # split ids into relevant HW categories
 gabor_id = [s for s in ids if 'G' in s]
 valve_id = [s for s in ids if 'V' in s]
@@ -113,3 +118,13 @@ if len_v_pr != len(valve_id):
 len_s_pr = 40 * 2
 if len_s_pr != len(sound_id):
     raise ValueError("N Sound stimulus in metadata incorrect")
+
+# Test correct number is found in ttl data (audio / valve, f2ttl done separately)
+if len(valve_id) != np.size(valve_trunk['polarities']) / 2:
+    raise ValueError("N Valve stimulus in ttl data is incorrect")
+if len(sound_id) != np.size(audio_trunk['polarities']) / 2:
+    raise ValueError("N Sound stimulus in ttl data incorrect")
+
+# load RF matrix and reshape
+RF_file = Path.joinpath(session_path, 'raw_passive_data', '_iblrig_RFMapStim.raw.bin')
+frames = passive.reshape_RF(RF_file=RF_file, meta=meta)  # todo add n expected frame
