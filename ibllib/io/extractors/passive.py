@@ -61,7 +61,7 @@ valve = ephys_fpga._get_sync_fronts(sync, sync_map['bpod'])
 # load RF matrix
 RF_file = Path.joinpath(session_path, 'raw_passive_data', '_iblrig_RFMapStim.raw.bin')
 frame_array = np.fromfile(RF_file, dtype='uint8')
-# todo reshape matrix, make test
+# todo reshape matrix, make test for reshape, need shape info
 # frames = np.transpose(
 #     np.reshape(frame_array, [y_pix, x_pix, -1], order='F'), [2, 1, 0])
 # -- Convert values to 0,1,-1 for simplicity
@@ -82,7 +82,7 @@ matched = ['T', 'N']
 sound_id = [z for z in ids if z in matched]
 
 # Test correct number is found in metadata (hardcoded from protocol)
-# Todo is this necessary?
+# Todo is this necessary here? This should be done upon creation of the npy file
 len_g_pr = 20 + 20 * 4 * 2
 if len_g_pr != len(gabor_id):
     raise ValueError("N Gabor stimulus in metadata incorrect")
@@ -92,3 +92,6 @@ if len_v_pr != len(valve_id):
 len_s_pr = 40 * 2
 if len_s_pr != len(sound_id):
     raise ValueError("N Sound stimulus in metadata incorrect")
+
+# Find spacer in f2ttl, check number found is valid
+# todo convolution ?
