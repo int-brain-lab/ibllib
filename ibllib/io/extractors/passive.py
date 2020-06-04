@@ -70,3 +70,25 @@ frame_array = np.fromfile(RF_file, dtype='uint8')
 
 # load spacer information
 # todo
+
+# load stimulus sequence
+# todo
+
+# split ids into relevant HW categories
+gabor_id = [s for s in ids if 'G' in s]
+valve_id = [s for s in ids if 'V' in s]
+
+matched = ['T', 'N']
+sound_id = [z for z in ids if z in matched]
+
+# Test correct number is found in metadata (hardcoded from protocol)
+# Todo is this necessary?
+len_g_pr = 20 + 20 * 4 * 2
+if len_g_pr != len(gabor_id):
+    raise ValueError("N Gabor stimulus in metadata incorrect")
+len_v_pr = 40
+if len_v_pr != len(valve_id):
+    raise ValueError("N Valve stimulus in metadata incorrect")
+len_s_pr = 40 * 2
+if len_s_pr != len(sound_id):
+    raise ValueError("N Sound stimulus in metadata incorrect")
