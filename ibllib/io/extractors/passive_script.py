@@ -77,9 +77,7 @@ frames = passive.reshape_RF(RF_file=RF_file, meta=meta)  # todo add n expected f
 
 # truncate f2ttl signal so as to contain only what comes after ephysCW
 t_end_ephys = passive.ephysCW_end(session_path=session_path)
-fttl_trunk = dict()
-fttl_trunk['times'] = fttl['times'][fttl['times'] > t_end_ephys]
-fttl_trunk['polarities'] = fttl['polarities'][fttl['times'] > t_end_ephys]
+fttl_trunk = passive.truncate_ttl_signal(ttl=fttl, time_cutoff=t_end_ephys)
 
 # load and get spacer information, do convolution to find spacer timestamps
 ttl_signal = fttl_trunk['times']

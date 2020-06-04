@@ -65,3 +65,15 @@ def ephysCW_end(session_path):
     bpod_raw = rawio.load_data(session_path)
     t_end_ephys = bpod_raw[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
     return t_end_ephys
+
+
+def truncate_ttl_signal(ttl, time_cutoff):
+    '''
+    :param ttl: dict with 2 keys (polarities and times), values in times in (s)
+    :param time_cutoff: time of cutoff in (s)
+    :return: dict with 2 keys (polarities and times), values in times in (s)
+    '''
+    ttl_trunk = dict()
+    ttl_trunk['times'] = ttl['times'][ttl['times'] > time_cutoff]
+    ttl_trunk['polarities'] = ttl['polarities'][ttl['times'] > time_cutoff]
+    return ttl_trunk
