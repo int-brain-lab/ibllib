@@ -85,6 +85,15 @@ spacer_times, conv_dttl = passive.get_spacer_times(
     spacer_template=spacer_template, jitter=jitter,
     ttl_signal=ttl_signal, t_quiet=t_quiet)
 
+# Check correct number of spacer is found
+stim_order = np.array(meta['STIM_ORDER'])
+indx_0 = np.where(stim_order == 0)  # Hardcoded 0
+n_exp_spacer = np.size(indx_0)
+if n_exp_spacer != np.size(spacer_times) / 2:
+    raise ValueError(f'The number of expected spacer ({n_exp_spacer}) '
+                     f'is different than the one found on the raw '
+                     f'trace ({np.size(spacer_times)/2})')
+
 # load stimulus sequence
 # todo
 
