@@ -70,24 +70,21 @@ fttl = ephys_fpga._get_sync_fronts(sync, sync_map['frame2ttl'])
 audio = ephys_fpga._get_sync_fronts(sync, sync_map['audio'])
 valve = ephys_fpga._get_sync_fronts(sync, sync_map['bpod'])
 
-# truncate fttl signals so as to contain only what comes after ephysCW
+# truncate fttl signal so as to contain only what comes after ephysCW
 t_end_ephys = passive.ephysCW_end(session_path=session_path)
 fttl_trunk = passive.truncate_ttl_signal(ttl=fttl, time_cutoff=t_end_ephys)
-audio_trunk = passive.truncate_ttl_signal(ttl=audio, time_cutoff=t_end_ephys)
-valve_trunk = passive.truncate_ttl_signal(ttl=valve, time_cutoff=t_end_ephys)
-# todo check that bpod does not output any other signal than valve in this task protocol
 
-# load and get spacer information, do convolution to find spacer timestamps
+# load and get spacer information, do corr to find spacer timestamps
 ttl_signal = fttl_trunk['times']
 spacer_template = np.array(meta['VISUAL_STIM_0']['ttl_frame_nums'], dtype=np.float32) / FRAME_FS
 jitter = 3 / FRAME_FS  # allow for 3 screen refresh as jitter
 t_quiet = meta['VISUAL_STIM_0']['delay_around']
-spacer_times, conv_dttl = passive.get_spacer_times(
+spacer_times, _ = passive.get_spacer_times(
     spacer_template=spacer_template, jitter=jitter,
     ttl_signal=ttl_signal, t_quiet=t_quiet)
 
 # Check correct number of spacer is found
-indx_0 = np.where(stim_order == 0)  # Hardcoded 0
+indx_0 = np.where(stim_order == 0)  # Hardcoded 0 for spacer
 n_exp_spacer = np.size(indx_0)
 if n_exp_spacer != np.size(spacer_times) / 2:
     raise ValueError(f'The number of expected spacer ({n_exp_spacer}) '
@@ -99,7 +96,6 @@ t_start_passive = spacer_times[0, 0]
 fttl_trunk = passive.truncate_ttl_signal(ttl=fttl, time_cutoff=t_start_passive)
 audio_trunk = passive.truncate_ttl_signal(ttl=audio, time_cutoff=t_start_passive)
 valve_trunk = passive.truncate_ttl_signal(ttl=valve, time_cutoff=t_start_passive)
-# todo check that bpod does not output any other signal than valve in this task protocol
 
 # split ids into relevant HW categories
 gabor_id = [s for s in ids if 'G' in s]
@@ -127,4 +123,4 @@ if len(sound_id) != np.size(audio_trunk['polarities']) / 2:
 
 # load RF matrix and reshape
 RF_file = Path.joinpath(session_path, 'raw_passive_data', '_iblrig_RFMapStim.raw.bin')
-frames = passive.reshape_RF(RF_file=RF_file, meta=meta)  # todo add n expected frame
+RF_frames, RF_ttl_trace, RF_n_ttl_expected = passive.reshape_RF(RF_file=RF_file, meta=meta)

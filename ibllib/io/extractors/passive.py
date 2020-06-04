@@ -55,9 +55,22 @@ def reshape_RF(RF_file, meta):
     y_pix, x_pix, _ = meta['VISUAL_STIM_1']['stim_file_shape']
     frames = np.transpose(
         np.reshape(frame_array, [y_pix, x_pix, -1], order='F'), [2, 1, 0])
+    ttl_trace = frames[:, 0, 0]
     # todo test on reshape ?
     # todo find n ttl expected and return
-    return frames
+    # Convert values to 0,1,-1 for simplicity
+    ttl_01 = np.zeros(np.size(ttl_trace))
+    ttl_01[np.where(ttl_trace == 0)] = -1
+    ttl_01[np.where(ttl_trace == 255)] = 1
+
+    # Find number of passage from [128 0] and [128 255]  (converted to 0,1,-1)
+    d_ttl_01 = np.diff(ttl_01)
+    id_raise = np.where(np.logical_and(ttl_01 == 0, np.append(d_ttl_01, 0) == 1))[0]
+    id_fall = np.where(np.logical_and(ttl_01 == 0, np.append(d_ttl_01, 0) == -1))[0]
+
+    n_ttl_expected = len(id_raise) + len(id_fall)
+
+    return frames, ttl_trace, n_ttl_expected
 
 
 def ephysCW_end(session_path):
