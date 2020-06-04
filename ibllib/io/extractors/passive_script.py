@@ -104,10 +104,13 @@ matched = ['T', 'N']
 sound_id = [z for z in ids if z in matched]
 
 # Test correct number is found in metadata (hardcoded from protocol)
-# Todo is this necessary here? This should be done upon creation of the npy file
+# Note: This could be done upon creation of the npy file
 len_g_pr = 20 + 20 * 4 * 2
 if len_g_pr != len(gabor_id):
     raise ValueError("N Gabor stimulus in metadata incorrect")
+else:
+    meta['VISUAL_STIM_4'] = dict()
+    meta['VISUAL_STIM_4']['ttl_num'] = len(gabor_id)  # TODO put this into JSON ?
 len_v_pr = 40
 if len_v_pr != len(valve_id):
     raise ValueError("N Valve stimulus in metadata incorrect")
@@ -124,3 +127,28 @@ if len(sound_id) != np.size(audio_trunk['polarities']) / 2:
 # load RF matrix and reshape
 RF_file = Path.joinpath(session_path, 'raw_passive_data', '_iblrig_RFMapStim.raw.bin')
 RF_frames, RF_ttl_trace, RF_n_ttl_expected = passive.reshape_RF(RF_file=RF_file, meta=meta)
+meta['VISUAL_STIM_1']['ttl_num'] = 2 * RF_n_ttl_expected  # Hardcoded 1 for RF, *2 for rise/fall
+
+# Check that correct number of f2ttl switch is found for each visual stim type
+# Hardode as only 3 visual stim
+# Add some jitter to not catch Bonsai update
+
+# 1. spont act
+passive.check_n_ttl_between(n_exp=meta['VISUAL_STIM_5']['ttl_num'],
+                            t_start_search=spacer_times[0, 1] + 0.2,
+                            t_end_search=spacer_times[1, 0] - 0.2,
+                            ttl=fttl_trunk)
+
+# 2. RF
+RF_times = \
+    passive.check_n_ttl_between(n_exp=meta['VISUAL_STIM_1']['ttl_num'],
+                                t_start_search=spacer_times[1, 1] + 0.2,
+                                t_end_search=spacer_times[2, 0] - 0.2,
+                                ttl=fttl_trunk)
+
+# 3. gabor
+gabor_times = \
+    passive.check_n_ttl_between(n_exp=meta['VISUAL_STIM_4']['ttl_num'],
+                                t_start_search=spacer_times[1, 1] + 0.2,
+                                t_end_search=fttl_trunk['times'][-1],
+                                ttl=fttl_trunk)

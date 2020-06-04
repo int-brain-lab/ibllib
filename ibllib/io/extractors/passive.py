@@ -90,3 +90,20 @@ def truncate_ttl_signal(ttl, time_cutoff):
     ttl_trunk['times'] = ttl['times'][ttl['times'] > time_cutoff]
     ttl_trunk['polarities'] = ttl['polarities'][ttl['times'] > time_cutoff]
     return ttl_trunk
+
+
+def find_between(ttl, t_start_search, t_end_search):
+    id_ttl = np.where(np.logical_and(ttl['times'] > t_start_search,
+                                     ttl['times'] < t_end_search))[0]
+    times_between = ttl['times'][id_ttl]
+    return times_between
+
+
+def check_n_ttl_between(n_exp, t_start_search, t_end_search, ttl):
+    times_between = find_between(ttl=ttl,
+                                 t_start_search=t_start_search,
+                                 t_end_search=t_end_search)
+    if len(times_between) != n_exp:
+        raise ValueError('Incorrect number of pulses found')
+    else:
+        return times_between
