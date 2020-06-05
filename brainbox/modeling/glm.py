@@ -16,6 +16,7 @@ import scipy.sparse as sp
 import numba as nb
 from numpy.matlib import repmat
 from tqdm import tqdm
+from scipy.optimize import minimize
 
 
 class NeuralGLM:
@@ -347,20 +348,35 @@ class NeuralGLM:
         self.compiled = True
         return
 
-    def fit(self, alpha=1):
+    def fit(self, method='sklearn', alpha=1):
         if not self.compiled:
             raise AttributeError('Design matrix has not been compiled yet. Please run '
                                  'neuroglm.compile_design_matrix() before fitting.')
-        coefs = pd.Series(index=self.clu_ids.flat, name='coefficients', dtype=object)
-        intercepts = pd.Series(index=self.clu_ids.flat, name='intercepts', dtype=object)
-        for i, cell in tqdm(enumerate(self.clu_ids), "Fitting units: "):
-            binned = self.binnedspikes[:, i]
-            fitobj = PoissonRegressor(alpha=alpha, max_iter=300).fit(self.dm, binned)
-            coefs.at[cell[0]] = fitobj.coef_
-            intercepts.at[cell[0]] = fitobj.intercept_
-        self.coefs = coefs
-        self.intercepts = intercepts
-        return coefs, intercepts
+        if method == 'sklearn':
+            coefs = pd.Series(index=self.clu_ids.flat, name='coefficients', dtype=object)
+            intercepts = pd.Series(index=self.clu_ids.flat, name='intercepts', dtype=object)
+            for i, cell in tqdm(enumerate(self.clu_ids), "Fitting units: "):
+                binned = self.binnedspikes[:, i]
+                fitobj = PoissonRegressor(alpha=alpha, max_iter=300).fit(self.dm, binned)
+                coefs.at[cell[0]] = fitobj.coef_
+                intercepts.at[cell[0]] = fitobj.intercept_
+            self.coefs = coefs
+            self.intercepts = intercepts
+            return coefs, intercepts
+        elif method == 'minimize':
+            coefs = pd.Series(index=self.clu_ids.flat, name='coefficients', dtype=object)
+            intercepts = pd.Series(index=self.clu_ids.flat, name='intercepts', dtype=object)
+            biasdm = np.pad(self.dm.copy(), ((0, 0), (1, 0)), constant_values=1)
+            for i, cell in tqdm(enumerate(self.clu_ids), 'Fitting units:'):
+                binned = self.binnedspikes[:, i]
+                wi = np.linalg.lstsq(biasdm, binned, rcond=None)[0]
+                res = minimize(neglog, wi, (biasdm, binned),
+                               method='trust-ncg', jac=d_neglog, hess=dd_neglog)
+                coefs.at[cell[0]] = res.x[1:]
+                intercepts.at[cell[0]] = res.x[0]
+            self.coefs = coefs
+            self.intercepts = intercepts
+            return coefs, intercepts
 
     def combine_weights(self):
         outputs = {}
@@ -435,3 +451,36 @@ def full_rcos(duration, nbases, binfun, n_before=1):
     x = ttb - repmat(bcenters.reshape(1, -1), nbins, 1)
     bases = (np.abs(x / cwidth) < 0.5) * (np.cos(x * np.pi * 2 / cwidth) * 0.5 + 0.5)
     return bases
+
+
+def neglog(weights, x, y):
+    xproj = x @ weights
+    f = np.exp(xproj)
+    nzidx = f != 0
+    if np.any(y[~nzidx] != 0):
+        return np.inf
+    return -y[nzidx].reshape(1, -1) @ xproj[nzidx] + np.sum(f)
+
+
+def d_neglog(weights, x, y):
+    xproj = x @ weights
+    f = np.exp(xproj)
+    df = f
+    nzidx = (f != 0).reshape(-1)
+    if np.any(y[~nzidx] != 0):
+        return np.inf
+    return x[nzidx, :].T @ ((1 - y[nzidx] / f[nzidx]) * df[nzidx])
+
+
+def dd_neglog(weights, x, y):
+    xproj = x @ weights
+    f = np.exp(xproj)
+    df = f
+    ddf = df
+    nzidx = (f != 0).reshape(-1)
+    if np.any(y[~nzidx] != 0):
+        return np.inf
+    yf = y[nzidx] / f[nzidx]
+    p1 = ddf[nzidx] * (1 - yf) + (y[nzidx] * (df[nzidx] / f[nzidx])**2)
+    p2 = x[nzidx, :]
+    return (p1.reshape(-1, 1) * p2).T @ x[nzidx, :]
