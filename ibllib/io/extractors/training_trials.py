@@ -472,10 +472,10 @@ class GoCueTimes(BaseBpodTrialsExtractor):
         nmissing = np.sum(np.isnan(go_cue_times))
         # Check if all stim_syncs have failed to be detected
         if np.all(np.isnan(go_cue_times)):
-            logger_.error(f'{self.session_path}: Missing ALL BNC2 stimulus ({nmissing} trials')
-
+            logger_.warning(
+                f'{self.session_path}: Missing ALL !! BNC2 stimulus ({nmissing} trials')
         # Check if any stim_sync has failed be detected for every trial
-        if np.any(np.isnan(go_cue_times)):
+        elif np.any(np.isnan(go_cue_times)):
             logger_.warning(f'{self.session_path}: Missing BNC2 stimulus on {nmissing} trials')
 
         return go_cue_times

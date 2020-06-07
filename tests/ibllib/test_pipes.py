@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import ibllib.pipes.training_preprocessing as training
+import ibllib.io.raw_data_loaders as rawio
 from ibllib.pipes import misc
 from oneibl.one import ONE
 
@@ -27,7 +27,7 @@ class TestExtractors(unittest.TestCase):
             ('_iblrig_tasks_ephys_certification4.1.3', 'sync_ephys'),
         ]
         for to in task_out:
-            out = training.get_task_extractor_type(to[0])
+            out = rawio.get_task_extractor_type(to[0])
             self.assertEqual(out, to[1])
 
 

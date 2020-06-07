@@ -5,6 +5,7 @@ import io
 import importlib
 import time
 from _collections import OrderedDict
+import traceback
 
 from graphviz import Digraph
 
@@ -90,8 +91,8 @@ class Task(abc.ABC):
             self.outputs = self._run(**kwargs)
             self.status = 0
             _logger.info(f"Job {self.__class__} complete")
-        except Exception as e:
-            _logger.error(f"{e}")
+        except Exception:
+            _logger.error(traceback.format_exc())
             _logger.info(f"Job {self.__class__} errored")
             self.status = -1
         self.time_elapsed_secs = time.time() - start_time
@@ -187,6 +188,7 @@ class Pipeline(abc.ABC):
         :param rerun__status__in: by default no re-run. To re-run tasks if they already exist,
         specify a list of statuses string that will be re-run, those are the possible choices:
         ['Waiting', 'Started', 'Errored', 'Empty', 'Complete']
+        to always patch, the string '__all__' can also be provided
         :return: list of alyx tasks dictionaries (existing and or created)
         """
         rerun__status__in = rerun__status__in or []
@@ -194,7 +196,8 @@ class Pipeline(abc.ABC):
         if self.one is None:
             _logger.warning("No ONE instance found for Alyx connection, set the one property")
             return
-        tasks_alyx = self.one.alyx.rest('tasks', 'list', session=self.eid)
+        tasks_alyx_pre = self.one.alyx.rest('tasks', 'list', session=self.eid, graph=self.name)
+        tasks_alyx = []
         # creates all the tasks by iterating through the ordered dict
         for k, t in self.tasks.items():
             # get the parents alyx ids to reference in the database
@@ -207,14 +210,14 @@ class Pipeline(abc.ABC):
                          'io_charge': t.io_charge, 'gpu': t.gpu, 'cpu': t.cpu,
                          'ram': t.ram, 'module': self.label, 'parents': parents_ids,
                          'level': t.level, 'time_out_sec': t.time_out_secs, 'session': self.eid,
-                         'status': 'Waiting', 'log': None, 'name': t.name}
+                         'status': 'Waiting', 'log': None, 'name': t.name, 'graph': self.name}
             # if the task already exists, patch it otherwise, create it
-            talyx = next(filter(lambda x: x["name"] == t.name, tasks_alyx), [])
+            talyx = next(filter(lambda x: x["name"] == t.name, tasks_alyx_pre), [])
             if len(talyx) == 0:
                 talyx = self.one.alyx.rest('tasks', 'create', data=task_dict)
-            elif talyx['status'] in rerun__status__in:
+            elif rerun__status__in == '__all__' or talyx['status'] in rerun__status__in:
                 talyx = self.one.alyx.rest(
-                    'tasks', 'partial_update', id=talyx[0]['id'], data=task_dict)
+                    'tasks', 'partial_update', id=talyx['id'], data=task_dict)
             tasks_alyx.append(talyx)
         return tasks_alyx
 
@@ -245,6 +248,10 @@ class Pipeline(abc.ABC):
 
     def rerun(self):
         return self.run(status__in=['Waiting', 'Started', 'Errored', 'Empty', 'Complete'])
+
+    @property
+    def name(self):
+        return self.__class__.__name__
 
 
 def _run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None):
