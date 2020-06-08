@@ -3,8 +3,8 @@ Get passive CW session and data.
 
 STEPS:
 - Load fixture data
-- Find spacer (still do convolution?) + check number found
 - Cut out part about ephysCW
+- Find spacer + check number found
 - Get number of TTL switch (f2ttl, audio, valve) within each spacer
 - Associate TTL found for each stim type + check number found
 - Package and output data (alf format?)
@@ -15,14 +15,9 @@ from oneibl.one import ONE
 from pathlib import Path
 import numpy as np
 import json
-# plot for debug
-# from ibllib.plots import squares
-# import matplotlib.pyplot as plt
-
 import ibllib.io.extractors.passive as passive
-
-import ibllib.io.raw_data_loaders as rawio
 from ibllib.io.extractors import ephys_fpga
+import ibllib.io.raw_data_loaders as rawio
 
 # hardcoded var
 FRAME_FS = 60  # Sampling freq of the ipad screen, in Hertz
@@ -58,6 +53,20 @@ json_file = path_fixtures.joinpath('passive_stim_meta.json')
 with open(json_file, 'r') as f:
     meta = json.load(f)
 
+# assign key to stimuli
+sp_key = passive.key_vis_stim(text_append='VISUAL_STIM_',
+                              dict_vis=meta['VISUAL_STIMULI'],
+                              value_search='SPACER')
+rf_key = passive.key_vis_stim(text_append='VISUAL_STIM_',
+                              dict_vis=meta['VISUAL_STIMULI'],
+                              value_search='receptive_field_mapping')
+ts_key = passive.key_vis_stim(text_append='VISUAL_STIM_',
+                              dict_vis=meta['VISUAL_STIMULI'],
+                              value_search='task_stimuli')
+sa_key = passive.key_vis_stim(text_append='VISUAL_STIM_',
+                              dict_vis=meta['VISUAL_STIMULI'],
+                              value_search='spontaneous_activity')
+
 # load stimulus sequence
 stim_order = np.array(meta['STIM_ORDER'])
 
@@ -76,9 +85,9 @@ fttl_trunk = passive.truncate_ttl_signal(ttl=fttl, time_cutoff=t_end_ephys)
 
 # load and get spacer information, do corr to find spacer timestamps
 ttl_signal = fttl_trunk['times']
-spacer_template = np.array(meta['VISUAL_STIM_0']['ttl_frame_nums'], dtype=np.float32) / FRAME_FS
+spacer_template = np.array(meta[sp_key]['ttl_frame_nums'], dtype=np.float32) / FRAME_FS
 jitter = 3 / FRAME_FS  # allow for 3 screen refresh as jitter
-t_quiet = meta['VISUAL_STIM_0']['delay_around']
+t_quiet = meta[sp_key]['delay_around']
 spacer_times, _ = passive.get_spacer_times(
     spacer_template=spacer_template, jitter=jitter,
     ttl_signal=ttl_signal, t_quiet=t_quiet)
@@ -109,8 +118,8 @@ len_g_pr = 20 + 20 * 4 * 2
 if len_g_pr != len(gabor_id):
     raise ValueError("N Gabor stimulus in metadata incorrect")
 else:
-    meta['VISUAL_STIM_4'] = dict()
-    meta['VISUAL_STIM_4']['ttl_num'] = len(gabor_id)  # TODO put this into JSON ?
+    meta[ts_key] = dict()
+    meta[ts_key]['ttl_num'] = len(gabor_id)  # TODO put this into JSON ?
 len_v_pr = 40
 if len_v_pr != len(valve_id):
     raise ValueError("N Valve stimulus in metadata incorrect")
@@ -127,34 +136,36 @@ if len(sound_id) != np.size(audio_trunk['polarities']) / 2:
 # load RF matrix and reshape
 RF_file = Path.joinpath(session_path, 'raw_passive_data', '_iblrig_RFMapStim.raw.bin')
 RF_frames, RF_ttl_trace, RF_n_ttl_expected = passive.reshape_RF(RF_file=RF_file, meta=meta)
-meta['VISUAL_STIM_1']['ttl_num'] = 2 * RF_n_ttl_expected  # Hardcoded 1 for RF, *2 for rise/fall
+meta[rf_key]['ttl_num'] = 2 * RF_n_ttl_expected  # *2 for rise/fall
 
 # Check that correct number of f2ttl switch is found for each visual stim type
-# Hardode as only 3 visual stim
-# Add some jitter to not catch Bonsai update
+# Hardcode as only 3 visual stim
+# Add some jitter (0.2s) to not catch Bonsai update
 
 # 1. spont act
-passive.check_n_ttl_between(n_exp=meta['VISUAL_STIM_5']['ttl_num'],
-                            key_stim='VISUAL_STIM_5',
+passive.check_n_ttl_between(n_exp=meta[sa_key]['ttl_num'],
+                            key_stim=sa_key,
                             t_start_search=spacer_times[0, 1] + 0.2,
                             t_end_search=spacer_times[1, 0] - 0.2,
                             ttl=fttl_trunk)
 
 # 2. RF
 RF_times = \
-    passive.check_n_ttl_between(n_exp=meta['VISUAL_STIM_1']['ttl_num'],
-                                key_stim='VISUAL_STIM_1',
+    passive.check_n_ttl_between(n_exp=meta[rf_key]['ttl_num'],
+                                key_stim=rf_key,
                                 t_start_search=spacer_times[1, 1] + 0.2,
                                 t_end_search=spacer_times[2, 0] - 0.2,
                                 ttl=fttl_trunk)
 
 # 3. gabor
 gabor_times = \
-    passive.check_n_ttl_between(n_exp=meta['VISUAL_STIM_4']['ttl_num'] * 2,  # *2 for rise/fall
-                                key_stim='VISUAL_STIM_4',
+    passive.check_n_ttl_between(n_exp=meta[ts_key]['ttl_num'] * 2,  # *2 for rise/fall
+                                key_stim=ts_key,
                                 t_start_search=spacer_times[2, 1] + 0.2,
                                 t_end_search=fttl_trunk['times'][-1],
                                 ttl=fttl_trunk)
+
+# todo interpolate times for RF before outputting dataset
 
 # # plot for debug
 # from ibllib.plots import squares

@@ -114,3 +114,78 @@ def check_n_ttl_between(n_exp, key_stim, t_start_search, t_end_search, ttl):
         raise ValueError(f'Incorrect number of pulses found for {key_stim}')
     else:
         return times_between
+
+def key_value_search(dict_vis, value_search):
+    found_key = [key for (key, value) in dict_vis.items() if value == value_search]
+    if len(found_key) != 1:
+        raise ValueError(f'{len(found_key)} keys have been found, whilst it should be 1.')
+    else:
+        return found_key[0]
+
+
+def key_vis_stim(text_append, dict_vis, value_search):
+    key_value = key_value_search(dict_vis, value_search)
+    key_out = f'{text_append}{key_value}'
+    return key_out
+
+
+def interpolate_rf_mapping_stimulus(ttl_signal, times, frames, t_bin):
+    """
+    Interpolate stimulus presentation times to screen refresh rate to match `frames`
+    :param ttl_signal:
+    :type ttl_signal: array-like
+    :param times: array of stimulus switch times
+    :type times: array-like
+    :param frames: (time, y_pix, x_pix) array of stim frames
+    :type frames: array-like
+    :param t_bin: screen refresh rate
+    :type t_bin: float
+    :return: tuple of (stim_times, stim_frames)
+    """
+
+    beg_extrap_val = -10001
+    end_extrap_val = -10000
+
+    idxs_up, idxs_dn = get_rf_ttl_pulses(ttl_signal)
+    X = np.sort(np.concatenate([idxs_up, idxs_dn]))
+    Xq = np.arange(frames.shape[0])
+    # make left and right extrapolations distinctive to easily find later
+    Tq = np.interp(Xq, X, times, left=beg_extrap_val, right=end_extrap_val)
+    # uniform spacing outside boundaries of ttl signal
+    # first values
+    n_beg = len(np.where(Tq == beg_extrap_val)[0])
+    if 0 < n_beg < Tq.shape[0]:
+        Tq[:n_beg] = times[0] - np.arange(n_beg, 0, -1) * t_bin
+    # end values
+    n_end = len(np.where(Tq == end_extrap_val)[0])
+    if 0 < n_end < Tq.shape[0]:
+        Tq[-n_end:] = times[-1] + np.arange(1, n_end + 1) * t_bin
+    return Tq, frames
+
+
+# -- test functions
+
+def test_key_value_search():
+    dict_vis = dict()
+    dict_vis['0'] = 'zero'
+    dict_vis['1'] = 'one'
+    value_search = 'zero'
+    key_out = key_value_search(dict_vis=dict_vis,
+                               value_search=value_search)
+    print(key_out)
+    if key_out != '0':
+        raise ValueError
+
+
+def test_key_vis_stim():
+    text_append = 'test'
+    dict_vis = dict()
+    dict_vis['0'] = 'zero'
+    dict_vis['1'] = 'one'
+    value_search = 'zero'
+    key_out = key_vis_stim(text_append=text_append,
+                           dict_vis=dict_vis,
+                           value_search=value_search)
+    print(key_out)
+    if key_out != 'test0':
+        raise ValueError
