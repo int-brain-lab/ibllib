@@ -295,6 +295,11 @@ class NeuralGLM:
         return
 
     def bin_spike_trains(self):
+        """
+        Bins spike times passed to class at instantiation. Will not bin spike trains which did
+        not meet the criteria for minimum number of spiking trials. Must be run before the
+        NeuralGLM.fit() method is called.
+        """
         spkarrs = []
         arrdiffs = []
         for i in self.trialsdf.index:
@@ -315,6 +320,17 @@ class NeuralGLM:
         return
 
     def compile_design_matrix(self, dense=True):
+        """
+        Compiles design matrix for the current experiment based on the covariates which were added
+        with the various NeuralGLM.add_covariate methods available. Can optionally compile a sparse
+        design matrix using the scipy.sparse package, however that method may take longer depending
+        on the degree of sparseness.
+
+        Parameters
+        ----------
+        dense : bool, optional
+            Whether or not to compute a dense design matrix or a sparse one, by default True
+        """
         covars = self.covar
         # Go trial by trial and compose smaller design matrices
         miniDMs = []
@@ -344,11 +360,37 @@ class NeuralGLM:
 
         if hasattr(self, 'binnedspikes'):
             assert self.binnedspikes.shape[0] == dm.shape[0], "Oh shit. Indexing error."
-        self.dm = dm
+        self.dm = np.roll(dm, -1, axis=0)  # Fix weird +1 offset bug in design matrix
         self.compiled = True
         return
 
     def fit(self, method='sklearn', alpha=1):
+        """
+        Fit the current set of binned spikes as a function of the current design matrix. Requires
+        NeuralGLM.bin_spike_trains and NeuralGLM.compile_design_matrix to be run first. Will store
+        the fit weights to an internal variable. To access these fit weights in a pandas DataFrame
+        use the NeuralGLM.combine_weights method.
+
+        Parameters
+        ----------
+        method : str, optional
+            'sklearn' or 'minimize', describes the fitting method used to obtain weights.
+            Scikit-learn uses weight normalization and regularization and will return significantly
+            different results from 'minimize', which simply minimizes the negative log likelihood
+            of the data given the covariates, by default 'sklearn'
+        alpha : float, optional
+            Regularization strength for scikit-learn implementation of GLM fitting, where 0 is
+            effectively unregularized (but normalized!) weights. Does not function in the minimize
+            option, by default 1
+
+        Returns
+        -------
+        coefs : list
+            List of coefficients fit. Not recommended to use these for interpretation. Use
+            the .combine_weights() method instead.
+        intercepts : list
+            List of intercepts (bias terms) fit. Not recommended to use these for interpretation.
+        """
         if not self.compiled:
             raise AttributeError('Design matrix has not been compiled yet. Please run '
                                  'neuroglm.compile_design_matrix() before fitting.')
@@ -379,6 +421,17 @@ class NeuralGLM:
             return coefs, intercepts
 
     def combine_weights(self):
+        """
+        Combined fit coefficients and intercepts to produce kernels where appropriate, which
+        describe activity.
+
+        Returns
+        -------
+        pandas.DataFrame
+            DataFrame in which each row is the fit weights for a given spiking unit. Columns are
+            individual covariates added during the construction process. Indices are the cluster
+            IDs for each of the cells that were fit (NOT a simple range(start, stop) index.)
+        """
         outputs = {}
         for var in self.covar.keys():
             winds = self.covar[var]['dmcol_idx']
