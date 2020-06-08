@@ -135,8 +135,11 @@ if len(sound_id) != np.size(audio_trunk['polarities']) / 2:
 
 # load RF matrix and reshape
 RF_file = Path.joinpath(session_path, 'raw_passive_data', '_iblrig_RFMapStim.raw.bin')
-RF_frames, RF_ttl_trace, RF_n_ttl_expected = passive.reshape_RF(RF_file=RF_file, meta=meta)
-meta[rf_key]['ttl_num'] = 2 * RF_n_ttl_expected  # *2 for rise/fall
+RF_frames, RF_ttl_trace = passive.reshape_RF(
+    RF_file=RF_file, meta_stim=meta[rf_key])
+rf_id_up, rf_id_dw, RF_n_ttl_expected = \
+    passive.get_id_raisefall_from_analogttl(RF_ttl_trace)
+meta[rf_key]['ttl_num'] = RF_n_ttl_expected
 
 # Check that correct number of f2ttl switch is found for each visual stim type
 # Hardcode as only 3 visual stim
@@ -157,6 +160,17 @@ RF_times = \
                                 t_end_search=spacer_times[2, 0] - 0.2,
                                 ttl=fttl_trunk)
 
+# take only 1 out of 2 values (only care about value when stim change,
+# not when ttl goes back to level after first ttl pulse)
+RF_times_1 = RF_times[0::2]
+# Interpolate times for RF before outputting dataset
+times_interp_RF =\
+    passive.interpolate_rf_mapping_stimulus(idxs_up=rf_id_up,
+                                            idxs_dn=rf_id_dw,
+                                            times=RF_times_1,
+                                            frames=RF_frames,
+                                            t_bin=1 / FRAME_FS)
+
 # 3. gabor
 gabor_times = \
     passive.check_n_ttl_between(n_exp=meta[ts_key]['ttl_num'] * 2,  # *2 for rise/fall
@@ -165,14 +179,21 @@ gabor_times = \
                                 t_end_search=fttl_trunk['times'][-1],
                                 ttl=fttl_trunk)
 
-# todo interpolate times for RF before outputting dataset
 
 # # plot for debug
 # from ibllib.plots import squares
 # import matplotlib.pyplot as plt
-#
+
+# # -- Gabor --
 # times, _ = passive.find_between(t_start_search=spacer_times[2, 1] + 0.2,
 #                                 t_end_search=fttl_trunk['times'][-1],
+#                                 ttl=fttl_trunk)
+# squares(fttl_trunk['times'], fttl_trunk['polarities'])
+# plt.plot(times, 0.5 * np.ones(len(times)), '.')
+
+# # -- RF --
+# times, _ = passive.find_between(t_start_search=spacer_times[1, 1] + 0.2,
+#                                 t_end_search=spacer_times[2, 0] - 0.2,
 #                                 ttl=fttl_trunk)
 # squares(fttl_trunk['times'], fttl_trunk['polarities'])
 # plt.plot(times, 0.5 * np.ones(len(times)), '.')

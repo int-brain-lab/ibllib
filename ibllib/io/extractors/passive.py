@@ -50,27 +50,31 @@ def get_spacer_times(spacer_template, jitter, ttl_signal, t_quiet):
     return spacer_times, conv_dttl
 
 
-def reshape_RF(RF_file, meta):
+def get_id_raisefall_from_analogttl(ttl_01):
+    # Check values are 0, 1, -1
+    if not np.all(np.isin(np.unique(ttl_01), [-1, 0, 1])):
+        raise ValueError("Values in input must be 0, 1, -1")
+    else:
+        # Find number of passage from [0 1] and [0 -1]
+        d_ttl_01 = np.diff(ttl_01)
+        id_up = np.where(np.logical_and(ttl_01 == 0, np.append(d_ttl_01, 0) == 1))[0]
+        id_dw = np.where(np.logical_and(ttl_01 == 0, np.append(d_ttl_01, 0) == -1))[0]
+        n_ttl_expected = 2 * (len(id_up) + len(id_dw))  # *2 for rise/fall of ttl pulse
+        return id_up, id_dw, n_ttl_expected
+
+
+def reshape_RF(RF_file, meta_stim):
     frame_array = np.fromfile(RF_file, dtype='uint8')
-    y_pix, x_pix, _ = meta['VISUAL_STIM_1']['stim_file_shape']
+    y_pix, x_pix, _ = meta_stim['stim_file_shape']
     frames = np.transpose(
         np.reshape(frame_array, [y_pix, x_pix, -1], order='F'), [2, 1, 0])
     ttl_trace = frames[:, 0, 0]
-    # todo test on reshape ?
-    # todo find n ttl expected and return
     # Convert values to 0,1,-1 for simplicity
-    ttl_01 = np.zeros(np.size(ttl_trace))
-    ttl_01[np.where(ttl_trace == 0)] = -1
-    ttl_01[np.where(ttl_trace == 255)] = 1
+    ttl_analogtrace_01 = np.zeros(np.size(ttl_trace))
+    ttl_analogtrace_01[np.where(ttl_trace == 0)] = -1
+    ttl_analogtrace_01[np.where(ttl_trace == 255)] = 1
 
-    # Find number of passage from [128 0] and [128 255]  (converted to 0,1,-1)
-    d_ttl_01 = np.diff(ttl_01)
-    id_raise = np.where(np.logical_and(ttl_01 == 0, np.append(d_ttl_01, 0) == 1))[0]
-    id_fall = np.where(np.logical_and(ttl_01 == 0, np.append(d_ttl_01, 0) == -1))[0]
-
-    n_ttl_expected = len(id_raise) + len(id_fall)
-
-    return frames, ttl_trace, n_ttl_expected
+    return frames, ttl_analogtrace_01
 
 
 def ephysCW_end(session_path):
@@ -115,6 +119,7 @@ def check_n_ttl_between(n_exp, key_stim, t_start_search, t_end_search, ttl):
     else:
         return times_between
 
+
 def key_value_search(dict_vis, value_search):
     found_key = [key for (key, value) in dict_vis.items() if value == value_search]
     if len(found_key) != 1:
@@ -129,11 +134,11 @@ def key_vis_stim(text_append, dict_vis, value_search):
     return key_out
 
 
-def interpolate_rf_mapping_stimulus(ttl_signal, times, frames, t_bin):
+def interpolate_rf_mapping_stimulus(idxs_up, idxs_dn, times, frames, t_bin):
     """
     Interpolate stimulus presentation times to screen refresh rate to match `frames`
-    :param ttl_signal:
-    :type ttl_signal: array-like
+    :param ttl_01:
+    :type ttl_01: array-like
     :param times: array of stimulus switch times
     :type times: array-like
     :param frames: (time, y_pix, x_pix) array of stim frames
@@ -146,7 +151,6 @@ def interpolate_rf_mapping_stimulus(ttl_signal, times, frames, t_bin):
     beg_extrap_val = -10001
     end_extrap_val = -10000
 
-    idxs_up, idxs_dn = get_rf_ttl_pulses(ttl_signal)
     X = np.sort(np.concatenate([idxs_up, idxs_dn]))
     Xq = np.arange(frames.shape[0])
     # make left and right extrapolations distinctive to easily find later
@@ -160,7 +164,7 @@ def interpolate_rf_mapping_stimulus(ttl_signal, times, frames, t_bin):
     n_end = len(np.where(Tq == end_extrap_val)[0])
     if 0 < n_end < Tq.shape[0]:
         Tq[-n_end:] = times[-1] + np.arange(1, n_end + 1) * t_bin
-    return Tq, frames
+    return Tq
 
 
 # -- test functions
