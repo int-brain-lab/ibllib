@@ -51,8 +51,8 @@ def register_dataset(file_list, one=None, created_by='root', repository=None, se
     session_path = alf.io.get_session_path(file_list[0])
     # first register the file
     r = {'created_by': created_by,
-         'path': str(session_path.relative_to((session_path.parents[2]))),
-         'filenames': [str(p.relative_to(session_path)) for p in file_list],
+         'path': session_path.relative_to((session_path.parents[2])).as_posix(),
+         'filenames': [p.relative_to(session_path).as_posix() for p in file_list],
          'name': repository,
          'server_only': server_only,
          'hashes': [hashfile.md5(p) for p in file_list],
