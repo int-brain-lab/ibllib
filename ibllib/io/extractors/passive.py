@@ -99,7 +99,7 @@ def truncate_ttl_signal(ttl, time_cutoff):
 def find_between(ttl, t_start_search, t_end_search):
     id_ttl = np.where(np.logical_and(ttl['times'] > t_start_search,
                                      ttl['times'] < t_end_search))[0]
-    times_between = ttl['times'][id_ttl]
+    times_between = np.sort(ttl['times'][id_ttl])  # Ensure values are sorted (ascend)
     return times_between, id_ttl
 
 
