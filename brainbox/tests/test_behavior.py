@@ -78,9 +78,11 @@ class TestWheel(unittest.TestCase):
         
     def test_traces_by_trial(self):
         t, pos = self.test_data[0][0]
-        traces = wheel.traces_by_trial(t, pos, self.trials)
+        start = self.trials['stimOn_times']
+        end = self.trials['feedback_times']
+        traces = wheel.traces_by_trial(t, pos, start=start, end=end)
         # Check correct number of tuples returned
-        self.assertEqual(len(traces), self.trials['stimOn_times'].size)
+        self.assertEqual(len(traces), start.size)
         expected_ids = (
             [144, 60143],
             [74944, 84943],
@@ -89,16 +91,19 @@ class TestWheel(unittest.TestCase):
             [163944, 187943]
         )
         
-        for trace, id in zip(traces, expected_ids):
+        for trace, ind in zip(traces, expected_ids):
             trace_t, trace_pos = trace
-            np.testing.assert_array_equal(trace_t[[0,-1]], t[id])
-            np.testing.assert_array_equal(trace_pos[[0, -1]], pos[id])
+            np.testing.assert_array_equal(trace_t[[0, -1]], t[ind])
+            np.testing.assert_array_equal(trace_pos[[0, -1]], pos[ind])
+
+    def test_direction_changes(self):
+        t, pos = self.test_data[0][0]
+        on, off, *_ = self.test_data[0][1]
+        vel, _ = wheel.velocity_smoothed(pos, 1000)
+        times, indices = wheel.direction_changes(t, vel, np.c_[on, off])
         
-        # Check intervals input
-        traces = wheel.traces_by_trial(t, pos, self.trials, start='intervals', end=None)
-        self.assertEqual(len(traces), self.trials['intervals'].shape[0])
-        # Check first only
-        expected_ids = [0, 61943]
-        trace_t, trace_pos = traces[0]
-        np.testing.assert_array_equal(trace_t[[0, -1]], t[expected_ids])
-        np.testing.assert_array_equal(trace_pos[[0, -1]], pos[expected_ids])
+        self.assertTrue(len(times) == len(indices) == 14, 'incorrect number of arrays returned')
+        # Check first arrays
+        np.testing.assert_allclose(times[0], [21.86593334, 22.12693334, 22.20193334, 22.66093334])
+        np.testing.assert_array_equal(indices[0], [21809, 22070, 22145, 22604])
+        
