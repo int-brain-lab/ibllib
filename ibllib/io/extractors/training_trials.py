@@ -476,8 +476,10 @@ class StimOffTriggerTimes(BaseBpodTrialsExtractor):
             [tr["behavior_data"]["States timestamps"]["no_go"][0][0] for tr in self.bpod_trials]
         )
         # Stim off trigs are either in their own state or in the no_go state if the
-        # mouse did not move, if the stim_off_trigger_state always exist (exit_state or trial_start)
-        # no NaNs will happen, NaNs might happen in at last trial if session was stopped after response
+        # mouse did not move, if the stim_off_trigger_state always exist
+        # (exit_state or trial_start)
+        # no NaNs will happen, NaNs might happen in at last trial if
+        # session was stopped after response
         # if stim_off_trigger_state == "hide_stim":
         #     assert all(~np.isnan(no_goTrigger_times) == np.isnan(stimOffTrigger_times))
         # Patch with the no_go states trig times
@@ -621,6 +623,7 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
             bpod_trials=self.bpod_trials, settings=self.settings, save=False
         )[0]
         f2TTL = [raw.get_port_events(tr, name="BNC1") for tr in self.bpod_trials]
+
         stimOn_times = np.array([])
         stimOff_times = np.array([])
         stimFreeze_times = np.array([])

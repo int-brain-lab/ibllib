@@ -660,4 +660,3 @@ def get_port_events(trial: dict, name: str = '') -> list:
     out = sorted(out)
 
     return out
-
