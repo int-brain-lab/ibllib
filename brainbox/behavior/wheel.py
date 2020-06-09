@@ -9,6 +9,7 @@ from scipy.linalg import hankel
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 from typing import TypeVar, Type, Sequence, Optional, Union
+# from ibllib.io.extractors.ephys_fpga import WHEEL_TICKS  # FIXME Circular dependencies
 
 __all__ = ['cm_to_deg',
            'cm_to_rad',

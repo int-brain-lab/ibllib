@@ -122,12 +122,11 @@ def check_dimensions(dico):
     # the dictionary may contain only excluded attributes, in this case return success
     if not shapes:
         return int(0)
-    lmax = max([len(s) for s in shapes])
-    for l in range(lmax):
-        sh = np.array([s[l] if (len(s) - 1 >= l) else 1 for s in shapes])
-        if not np.unique(sh[sh != 1]).size <= 1:
-            return int(1)
-    return int(0)
+    first_shapes = [sh[0] for sh in shapes]
+    if set(first_shapes).issubset(set([max(first_shapes), 1])):
+        return int(0)
+    else:
+        return int(1)
 
 
 def read_ts(filename):
@@ -350,7 +349,7 @@ def remove_uuid_file(file_path, dry=False):
     name_parts.pop(-2)
     new_path = file_path.parent.joinpath('.'.join(name_parts))
     if not dry and file_path.exists():
-        file_path.rename(new_path)
+        file_path.replace(new_path)
     return new_path
 
 
@@ -426,5 +425,21 @@ def _regexp_session_path(path_object, separator):
     """
     Subfunction to be able to test cross-platform
     """
-    return re.search(rf'/\d\d\d\d-\d\d-\d\d/\d\d\d',
+    return re.search(r'/\d\d\d\d-\d\d-\d\d/\d\d\d',
                      str(path_object).replace(separator, '/'), flags=0)
+
+
+def is_details_dict(dict_obj):
+    if dict_obj is None:
+        return False
+    keys = [
+        'subject',
+        'start_time',
+        'number',
+        'lab',
+        'project',
+        'url',
+        'task_protocol',
+        'local_path'
+    ]
+    return set(dict_obj.keys()) == set(keys)

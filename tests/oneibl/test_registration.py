@@ -3,6 +3,8 @@ import tempfile
 from pathlib import Path
 import json
 
+import numpy as np
+
 from ibllib.misc import version
 from oneibl import one, registration
 
@@ -16,6 +18,27 @@ r = {'created_by': 'olivier',
      'hashes': [md5_0],
      'filesizes': [1234],
      'versions': [version.ibllib()]}
+
+MOCK_SESSION_SETTINGS = {
+    'SESSION_DATE': '2018-04-01',
+    'SESSION_DATETIME': '2018-04-01T12:48:26.795526',
+    'PYBPOD_CREATOR': ['test_user',
+                       'f092c2d5-c98a-45a1-be7c-df05f129a93c',
+                       'local'],
+    'SESSION_NUMBER': '002',
+    'SUBJECT_NAME': 'clns0730',
+    'PYBPOD_BOARD': '_iblrig_mainenlab_behavior_1',
+    'PYBPOD_PROTOCOL': '_iblrig_tasks_ephysChoiceWorld',
+    'IBLRIG_VERSION_TAG': '5.4.1',
+    'SUBJECT_WEIGHT': 22,
+}
+
+MOCK_SESSION_DICT = {
+    'subject': 'clns0730',
+    'start_time': '2018-04-01T12:48:26.795526',
+    'number': 2,
+    'users': ['test_user']
+}
 
 
 class TestRegistrationEndpoint(unittest.TestCase):
@@ -61,54 +84,64 @@ class TestRegistrationEndpoint(unittest.TestCase):
         one.alyx.rest('datasets', 'delete', id=dataset['id'])
 
 
-class TestRegistrationSession(unittest.TestCase):
+class TestRegistration(unittest.TestCase):
+
+    def setUp(self) -> None:
+        # makes sure tests start without session created
+        eid = one.search(subjects='clns0730', date_range='2018-04-01')
+        if len(eid):
+            one.alyx.rest('sessions', 'delete', id=eid[0])
+        self.td = tempfile.TemporaryDirectory()
+        self.session_path = Path(self.td.name).joinpath('clns0730', '2018-04-01', '002')
+        self.alf_path = self.session_path.joinpath('alf')
+        self.alf_path.mkdir(parents=True)
+        np.save(self.alf_path.joinpath('spikes.times.npy'), np.random.random(500))
+        np.save(self.alf_path.joinpath('spikes.amps.npy'), np.random.random(500))
+
+    def test_registration_datasets(self):
+        # creates the session on Alyx first
+        ses = one.alyx.rest('sessions', 'create', data=MOCK_SESSION_DICT)
+        # registers a single file
+        st_file = self.alf_path.joinpath('spikes.times.npy')
+        registration.register_dataset(file_list=st_file, one=one)
+        dsets = one.alyx.rest('datasets', 'list', session=ses['url'][-36:])
+        self.assertTrue(len(dsets) == 1)
+        # registers a list of files
+        flist = list(self.alf_path.glob('*.npy'))
+        registration.register_dataset(file_list=flist, one=one)
+        dsets = one.alyx.rest('datasets', 'list', session=ses['url'][-36:])
+        self.assertTrue(len(dsets) == 2)
 
     def test_registration_session(self):
-        settings = {
-            'SESSION_DATE': '2018-04-01',
-            'SESSION_DATETIME': '2018-04-01T12:48:26.795526',
-            'PYBPOD_CREATOR': ['test_user',
-                               'f092c2d5-c98a-45a1-be7c-df05f129a93c',
-                               'local'],
-            'SESSION_NUMBER': '002',
-            'SUBJECT_NAME': 'clns0730',
-            'PYBPOD_BOARD': '_iblrig_mainenlab_behavior_1',
-            'PYBPOD_PROTOCOL': '_iblrig_tasks_ephysChoiceWorld',
-            'IBLRIG_VERSION_TAG': '5.4.1',
-            'SUBJECT_WEIGHT': 22,
-        }
-        with tempfile.TemporaryDirectory() as td:
-            # creates the local session
-            session_path = Path(td).joinpath('clns0730', '2018-04-01', '002')
-            alf_path = session_path.joinpath('alf')
-            alf_path.mkdir(parents=True)
-            alf_path.joinpath('spikes.times.npy').touch()
-            alf_path.joinpath('spikes.amps.npy').touch()
-            behavior_path = session_path.joinpath('raw_behavior_data')
-            behavior_path.mkdir()
-            settings_file = behavior_path.joinpath('_iblrig_taskSettings.raw.json')
-            eid = one.search(subjects='clns0730', date_range=['2018-04-01', '2018-04-01'])
-            if len(eid):
-                one.alyx.rest('sessions', 'delete', id=eid[0])
-            with open(settings_file, 'w') as fid:
-                json.dump(settings, fid)
-            rc = registration.RegistrationClient(one=one)
-            rc.register_session(session_path)
-            eid = one.search(subjects='clns0730', date_range=['2018-04-01', '2018-04-01'])[0]
-            datasets = one.alyx.get('/datasets?subject=clns0730&date=2018-04-01')
-            for ds in datasets:
-                self.assertTrue(ds['hash'] is not None)
-                self.assertTrue(ds['file_size'] is not None)
-                self.assertTrue(ds['version'] == version.ibllib())
-            # checks the procedure of the session
-            ses_info = one.alyx.rest('sessions', 'read', id=eid)
-            self.assertTrue(ses_info['procedures'] == ['Ephys recording with acute probe(s)'])
-            one.alyx.rest('sessions', 'delete', id=eid)
-            # re-register the session as behaviour this time
-            settings['PYBPOD_PROTOCOL'] = '_iblrig_tasks_trainingChoiceWorld6.3.1'
-            with open(settings_file, 'w') as fid:
-                json.dump(settings, fid)
-            rc.register_session(session_path)
-            eid = one.search(subjects='clns0730', date_range=['2018-04-01', '2018-04-01'])[0]
-            ses_info = one.alyx.rest('sessions', 'read', id=eid)
-            self.assertTrue(ses_info['procedures'] == ['Behavior training/tasks'])
+        behavior_path = self.session_path.joinpath('raw_behavior_data')
+        behavior_path.mkdir()
+        settings_file = behavior_path.joinpath('_iblrig_taskSettings.raw.json')
+        with open(settings_file, 'w') as fid:
+            json.dump(MOCK_SESSION_SETTINGS, fid)
+        rc = registration.RegistrationClient(one=one)
+        rc.register_session(self.session_path)
+        eid = one.search(subjects='clns0730', date_range=['2018-04-01', '2018-04-01'])[0]
+        datasets = one.alyx.get('/datasets?subject=clns0730&date=2018-04-01')
+        for ds in datasets:
+            self.assertTrue(ds['hash'] is not None)
+            self.assertTrue(ds['file_size'] is not None)
+            self.assertTrue(ds['version'] == version.ibllib())
+        # checks the procedure of the session
+        ses_info = one.alyx.rest('sessions', 'read', id=eid)
+        self.assertTrue(ses_info['procedures'] == ['Ephys recording with acute probe(s)'])
+        one.alyx.rest('sessions', 'delete', id=eid)
+        # re-register the session as behaviour this time
+        MOCK_SESSION_SETTINGS['PYBPOD_PROTOCOL'] = '_iblrig_tasks_trainingChoiceWorld6.3.1'
+        with open(settings_file, 'w') as fid:
+            json.dump(MOCK_SESSION_SETTINGS, fid)
+        rc.register_session(self.session_path)
+        eid = one.search(subjects='clns0730', date_range=['2018-04-01', '2018-04-01'])[0]
+        ses_info = one.alyx.rest('sessions', 'read', id=eid)
+        self.assertTrue(ses_info['procedures'] == ['Behavior training/tasks'])
+
+    def tearDown(self) -> None:
+        self.td.cleanup()
+
+
+if __name__ == '__main__':
+    unittest.main(exit=False)

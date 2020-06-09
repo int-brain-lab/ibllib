@@ -1,20 +1,24 @@
-from pathlib import Path, PurePath
-import requests
 import logging
 import os
+from pathlib import Path, PurePath
+import concurrent.futures
+
+import requests
 import tqdm
 
-from ibllib.io import hashfile
-from ibllib.misc import pprint
-from ibllib.io.one import OneAbstract
-from alf.io import load_file_content, remove_uuid_file, is_uuid_string, AlfBunch, get_session_path
-
-import oneibl.webclient as wc
-from oneibl.dataclass import SessionDataInfo
 import oneibl.params
+import oneibl.webclient as wc
+from alf.io import (AlfBunch, get_session_path, is_uuid_string,
+                    load_file_content, remove_uuid_file)
+from ibllib.io import hashfile
+from ibllib.io.one import OneAbstract
+from ibllib.misc import pprint
+from oneibl.dataclass import SessionDataInfo
+
 
 _logger = logging.getLogger('ibllib')
 
+NTHREADS = 4  # number of download threads
 
 _ENDPOINTS = {  # keynames are possible input arguments and values are actual endpoints
     'data': 'dataset-types',
@@ -82,28 +86,33 @@ SEARCH_TERMS = {  # keynames are possible input arguments and values are actual 
     'location': 'location',
     'lab_location': 'location',
     'performance_lte': 'performance_lte',
-    'performance_gte': 'performance_gte'
+    'performance_gte': 'performance_gte',
+    'project': 'project',
 }
 
 
 class ONE(OneAbstract):
-    def __init__(self, username=None, password=None, base_url=None, silent=False):
+    def __init__(self, username=None, password=None, base_url=None, silent=False, printout=True):
         # get parameters override if inputs provided
         self._par = oneibl.params.get(silent=silent)
         self._par = self._par.set('ALYX_LOGIN', username or self._par.ALYX_LOGIN)
         self._par = self._par.set('ALYX_URL', base_url or self._par.ALYX_URL)
         self._par = self._par.set('ALYX_PWD', password or self._par.ALYX_PWD)
-        # Init connection to the database
+
         try:
             self._alyxClient = wc.AlyxClient(username=self._par.ALYX_LOGIN,
                                              password=self._par.ALYX_PWD,
                                              base_url=self._par.ALYX_URL)
         except requests.exceptions.ConnectionError:
-            raise ConnectionError("Can't connect to " + self._par.ALYX_URL + '. \n' +
-                                  'IP addresses are filtered on IBL database servers. \n' +
-                                  'Are you connecting from an IBL participating institution ?')
-        print('Connected to ' + self._par.ALYX_URL + ' as ' + self._par.ALYX_LOGIN,)
+            raise ConnectionError(
+                f"Can't connect to {self._par.ALYX_URL}.\n" +
+                "IP addresses are filtered on IBL database servers. \n" +
+                "Are you connecting from an IBL participating institution ?"
+            )
         # Init connection to Globus if needed
+        # Display output when instantiating ONE
+        if printout:
+            print(f"Connected to {self._par.ALYX_URL} as {self._par.ALYX_LOGIN}",)
 
     @property
     def alyx(self):
@@ -307,16 +316,24 @@ class ONE(OneAbstract):
         dataset_types = [dataset_types] if isinstance(dataset_types, str) else dataset_types
         if not dataset_types or dataset_types == ['__all__']:
             dclass_output = True
+        # this performs the filtering
         dc = SessionDataInfo.from_session_details(ses, dataset_types=dataset_types, eid=eid_str)
         # loop over each dataset and download if necessary
-        for ind in range(len(dc)):
-            if dc.url[ind] and not dry_run:
-                relpath = PurePath(dc.url[ind].replace(self._par.HTTP_DATA_SERVER, '.')).parents[0]
-                cache_dir_file = PurePath(cache_dir, relpath)
-                Path(cache_dir_file).mkdir(parents=True, exist_ok=True)
-                dc.local_path[ind] = self._download_file(
-                    dc.url[ind], str(cache_dir_file), clobber=clobber, offline=offline,
-                    keep_uuid=keep_uuid, file_size=dc.file_size[ind], hash=dc.hash[ind])
+        with concurrent.futures.ThreadPoolExecutor(max_workers=NTHREADS) as executor:
+            futures = []
+            for ind in range(len(dc)):
+                if dc.url[ind] is None or dry_run:
+                    futures.append(None)
+                else:
+                    futures.append(executor.submit(
+                        self.download_dataset, dc.url[ind], cache_dir=cache_dir, clobber=clobber,
+                        offline=offline, keep_uuid=keep_uuid, file_size=dc.file_size[ind],
+                        hash=dc.hash[ind]))
+            concurrent.futures.wait(list(filter(lambda x: x is not None, futures)))
+            for ind, future in enumerate(futures):
+                if future is None:
+                    continue
+                dc.local_path[ind] = future.result()
         # load the files content in variables if requested
         if not download_only:
             for ind, fil in enumerate(dc.local_path):
@@ -366,7 +383,7 @@ class ONE(OneAbstract):
         for ind, tab in enumerate(_ENDPOINTS):
             if tab == table:
                 field_name = table_field_names[_ENDPOINTS[tab]]
-                full_out.append(self._alyxClient.get('/' + _ENDPOINTS[tab]))
+                full_out.append(self.alyx.get('/' + _ENDPOINTS[tab]))
                 list_out.append([f[field_name] for f in full_out[-1]])
         if verbose:
             pprint(list_out)
@@ -480,9 +497,53 @@ class ONE(OneAbstract):
             cache_dir = str(PurePath(Path.home(), "Downloads", "FlatIron"))
         return cache_dir
 
-    def _download_file(self, url, cache_dir, clobber=False, offline=False, keep_uuid=False,
+    def download_datasets(self, dsets, **kwargs):
+        """
+        Download several datsets through a list of alyx REST dictionaries
+        :param dset: list of dataset dictionaries from an Alyx REST query OR list of URL strings
+        :return: local file path
+        """
+        out_files = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=NTHREADS) as executor:
+            futures = [executor.submit(self.download_dataset, dset, file_size=dset['file_size'],
+                                       hash=dset['hash'], **kwargs) for dset in dsets]
+            concurrent.futures.wait(futures)
+            for future in futures:
+                out_files.append(future.result())
+        return out_files
+
+    def download_dataset(self, dset, cache_dir=None, **kwargs):
+        """
+        Download a dataset from an alyx REST dictionary
+        :param dset: single dataset dictionary from an Alyx REST query OR URL string
+        :param cache_dir (optional): root directory to save the data in (home/downloads by default)
+        :return: local file path
+        """
+        if isinstance(dset, str):
+            url = dset
+        else:
+            url = next((fr['data_url'] for fr in dset['file_records'] if fr['data_url']), None)
+        if not url:
+            return
+        relpath = Path(url.replace(self._par.HTTP_DATA_SERVER, '.')).parents[0]
+        target_dir = Path(self._get_cache_dir(cache_dir), relpath)
+        return self._download_file(url=url, target_dir=target_dir, **kwargs)
+
+    def _download_file(self, url, target_dir, clobber=False, offline=False, keep_uuid=False,
                        file_size=None, hash=None):
-        local_path = cache_dir + os.sep + os.path.basename(url)
+        """
+        Downloads a single file from an HTTP webserver
+        :param url:
+        :param cache_dir:
+        :param clobber: (bool: False) overwrites local dataset if any
+        :param offline:
+        :param keep_uuid:
+        :param file_size:
+        :param hash:
+        :return:
+        """
+        Path(target_dir).mkdir(parents=True, exist_ok=True)
+        local_path = str(target_dir) + os.sep + os.path.basename(url)
         if not keep_uuid:
             local_path = remove_uuid_file(local_path, dry=True)
         if Path(local_path).exists():
@@ -499,7 +560,7 @@ class ONE(OneAbstract):
             local_path = wc.http_download_file(url,
                                                username=self._par.HTTP_DATA_SERVER_LOGIN,
                                                password=self._par.HTTP_DATA_SERVER_PWD,
-                                               cache_dir=str(cache_dir),
+                                               cache_dir=str(target_dir),
                                                clobber=clobber,
                                                offline=offline)
         if keep_uuid:
@@ -578,6 +639,31 @@ class ONE(OneAbstract):
                            number=session_path.parts[-1])
         # Return the uuid if any
         return uuid[0] if uuid else None
+
+    def get_details(self, eid, full=False):
+        """ Returns details of eid like from one.search, optional return full
+        session details.
+        """
+        # If eid is a list of eIDs recurse through list and return the results
+        if isinstance(eid, list):
+            details_list = []
+            for p in eid:
+                details_list.append(self.get_details(p, full=full))
+            return details_list
+        # If not valid return None
+        if not is_uuid_string(eid):
+            print(eid, " is not a valid eID/UUID string")
+            return
+        # load all details
+        dets = self.alyx.rest("sessions", "read", eid)
+        if full:
+            return dets
+        # If it's not full return the normal output like from a one.search
+        det_fields = ["subject", "start_time", "number", "lab", "project",
+                      "url", "task_protocol", "local_path"]
+        out = {k: v for k, v in dets.items() if k in det_fields}
+        out.update({'local_path': self.path_from_eid(eid)})
+        return out
 
 
 def _validate_date_range(date_range):

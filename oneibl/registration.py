@@ -4,12 +4,13 @@ import datetime
 import logging
 from dateutil import parser as dateparser
 
+import alf.io
+from oneibl.one import ONE
+from ibllib.misc import version
 import ibllib.time
-from ibllib.misc import version, log2session
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io import flags, hashfile
 
-from oneibl.one import ONE
 
 logger_ = logging.getLogger('ibllib.alf')
 REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
@@ -23,6 +24,46 @@ REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
                               'raw_ephys_data/**/_spikeglx_*.*',
                               'raw_ephys_data/**/_iblqc_*.*',
                               ]
+
+
+def register_dataset(file_list, one=None, created_by='root', repository=None, server_only=False,
+                     versions=False, dry=False):
+    """
+    Registers a set of files belonging to a session only on the server
+    :param file_list: (list of pathlib.Path or pathlib.Path)
+    :param one: optional (oneibl.ONE), current one object, will create an instance if not provided
+    :param created_by: (string) name of user in Alyx (defaults to 'root')
+    :param repository: optional: (string) name of the repository in Alyx
+    :param server_only: optional: (bool) if True only creates on the Flatiron (defaults to False)
+    :param versions: optional (list of strings): versions tags (defaults to ibllib version)
+    :param dry: (bool) False by default
+    :return:
+    """
+    if not isinstance(file_list, list):
+        file_list = [Path(file_list)]
+    assert len(set([alf.io.get_session_path(f) for f in file_list])) == 1
+    assert all([Path(f).exists() for f in file_list])
+    if not versions:
+        versions = [version.ibllib() for _ in file_list]
+    else:
+        assert isinstance(versions, list) and len(versions) == len(file_list)
+
+    session_path = alf.io.get_session_path(file_list[0])
+    # first register the file
+    r = {'created_by': created_by,
+         'path': str(session_path.relative_to((session_path.parents[2]))),
+         'filenames': [str(p.relative_to(session_path)) for p in file_list],
+         'name': repository,
+         'server_only': server_only,
+         'hashes': [hashfile.md5(p) for p in file_list],
+         'filesizes': [p.stat().st_size for p in file_list],
+         'versions': versions}
+    if not dry:
+        if one is None:
+            one = ONE()
+        return one.alyx.rest('register-file', 'create', data=r)
+    else:
+        print(r)
 
 
 class RegistrationClient:
@@ -77,7 +118,6 @@ class RegistrationClient:
                 flag_file.parent.joinpath('create_me.flag').unlink()
             logger_.info('registered' + '\n')
 
-    @log2session('register')
     def register_session(self, ses_path, file_list=True):
         """
         Register session in Alyx
@@ -146,7 +186,7 @@ class RegistrationClient:
                     'end_time': ibllib.time.date2isostr(end_time) if end_time else None,
                     'n_correct_trials': n_correct_trials,
                     'n_trials': n_trials,
-                    'json': json.dumps(md, indent=1),
+                    'json': md,
                     }
             session = self.one.alyx.rest('sessions', 'create', data=ses_)
             if md['SUBJECT_WEIGHT']:
@@ -226,8 +266,7 @@ class RegistrationClient:
 
 
 def _alyx_procedure_from_task(task_protocol):
-    import ibllib.pipes.extract_session
-    task_str = ibllib.pipes.extract_session.get_task_extractor_type(task_protocol)
+    task_str = raw.get_task_extractor_type(task_protocol)
     lookup = {'biased': 'Behavior training/tasks',
               'habituation': 'Behavior training/tasks',
               'training': 'Behavior training/tasks',

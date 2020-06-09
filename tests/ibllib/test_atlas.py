@@ -2,12 +2,33 @@ import unittest
 
 import numpy as np
 
-from ibllib.atlas import BrainCoordinates, sph2cart, cart2sph, Trajectory, Insertion
+from ibllib.atlas import (BrainCoordinates, cart2sph, sph2cart, Trajectory,
+                          Insertion, ALLEN_CCF_LANDMARKS_MLAPDV_UM, AllenAtlas)
+
+
+def _create_mock_atlas():
+    """
+    Instantiates a mock atlas.BrainAtlas for testing purposes mimicking Allen Atlas
+    using the IBL Bregma and coordinate system
+    """
+    ba = AllenAtlas(res_um=25, mock=True)
+    X, Y = np.meshgrid(ba.bc.xscale, ba.bc.yscale)
+    top = X ** 2 + Y ** 2
+    ba.top = (top - np.min(top)) / (np.max(top) - np.min(top)) * .001
+    return ba
+
+
+class TestCoordinateConversions(unittest.TestCase):
+
+    def test_allen_ba(self):
+        ba = _create_mock_atlas()
+        self.assertTrue(np.allclose(ba.bc.xyz2i(np.array([0, 0, 0]), round=False),
+                                    ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / 25))
 
 
 class TestInsertion(unittest.TestCase):
 
-    def test_init(self):
+    def test_init_from_dict(self):
         d = {
             'label': 'probe00',
             'x': 544.0,
@@ -24,6 +45,27 @@ class TestInsertion(unittest.TestCase):
         # test methods tip/entry/xyz
         dd = np.sum(np.sqrt(np.diff(ins.xyz, axis=0) ** 2)) - d['depth'] / 1e6
         self.assertLess(abs(dd), 0.01)
+
+    def test_init_from_track(self):
+        brain_atlas = _create_mock_atlas()
+        xyz_track = np.array([[0.003139, -0.00405, -0.000793],
+                              [0.003089, -0.00405, -0.001043],
+                              [0.003014, -0.004025, -0.001268],
+                              [0.003014, -0.00405, -0.001393],
+                              [0.002939, -0.00405, -0.001643],
+                              [0.002914, -0.004025, -0.001918],
+                              [0.002989, -0.0041, -0.002168],
+                              [0.002914, -0.004075, -0.002318],
+                              [0.002939, -0.0041, -0.002368],
+                              [0.002914, -0.0041, -0.002443],
+                              [0.002839, -0.0041, -0.002743],
+                              [0.002764, -0.0041, -0.003068],
+                              [0.002589, -0.004125, -0.003768],
+                              [0.002489, -0.004275, -0.004893],
+                              [0.002439, -0.004375, -0.005093],
+                              [0.002364, -0.0044, -0.005418]])
+        insertion = Insertion.from_track(xyz_track, brain_atlas)
+        self.assertTrue(abs(insertion.theta - 10.58704241) < 1e6)
 
 
 class TestTrajectory(unittest.TestCase):

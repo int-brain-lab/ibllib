@@ -8,6 +8,8 @@ import numpy as np
 
 import ibllib.io.spikeglx as spikeglx
 from ibllib.io.extractors import ephys_fpga
+from ibllib.io.extractors.training_wheel import extract_wheel_moves
+from ibllib.io.extractors.training_trials import FirstMovementTimes
 import brainbox.behavior.wheel as wh
 
 
@@ -63,11 +65,11 @@ class TestSyncExtraction(unittest.TestCase):
             bin_file = ses_path.joinpath(fn).with_suffix('.bin')
             nidq = spikeglx._mock_spikeglx_file(bin_file, self.workdir / fn,
                                                 ns=ns, nc=nc, sync_depth=sync_depth)
-            syncs = ephys_fpga.extract_sync(tdir, save=True)
+            syncs, files = ephys_fpga.extract_sync(tdir)
             self.assertTrue(np.all(syncs[0].channels[slice(0, None, 2)] ==
                                    np.arange(0, nidq['sync_depth'])))
             with self.assertLogs(level='INFO') as log:
-                syncs = ephys_fpga.extract_sync(tdir)
+                ephys_fpga.extract_sync(tdir)
                 self.assertEqual(len(log.output), 1)
                 self.assertIn('SGLX sync found', log.output[0])
 
@@ -144,41 +146,42 @@ class TestWheelMovesExtraction(unittest.TestCase):
     def test_extract_wheel_moves(self):
         test_data = self.test_data[1]
         # Wrangle data into expected form
-        wheel = {'re_ts': test_data[0][0], 're_pos': test_data[0][1]}
+        re_ts = test_data[0][0]
+        re_pos = test_data[0][1]
 
         logger = logging.getLogger('ibllib')
         with self.assertLogs(logger, level='INFO') as cm:
-            wheel_moves = ephys_fpga.extract_wheel_moves(wheel)
+            wheel_moves = extract_wheel_moves(re_ts, re_pos)
             self.assertEqual(['INFO:ibllib:Wheel in cm units using X2 encoding'], cm.output)
 
         n = 56  # expected number of movements
         self.assertTupleEqual(wheel_moves['intervals'].shape, (n, 2), 
                               'failed to return the correct number of intervals')
-        self.assertEqual(wheel_moves['amps'].size, n)
-        self.assertEqual(wheel_moves['peakVels'].size, n)
+        self.assertEqual(wheel_moves['peakAmplitude'].size, n)
+        self.assertEqual(wheel_moves['peakVelocity_times'].size, n)
 
         # Check the first 3 intervals
         ints = np.array(
             [[24.78462599, 25.22562599],
-            [29.58762599, 31.15062599],
-            [31.64262599, 31.81662599]])
+             [29.58762599, 31.15062599],
+             [31.64262599, 31.81662599]])
         actual = wheel_moves['intervals'][:3, ]
         self.assertIsNone(np.testing.assert_allclose(actual, ints), 'unexpected intervals')
 
         # Check amplitudes
-        actual = wheel_moves['amps'][-3:]
+        actual = wheel_moves['peakAmplitude'][-3:]
         expected = [0.50255486, -1.70103154, 1.00740789]
         self.assertIsNone(np.testing.assert_allclose(actual, expected), 'unexpected amplitudes')
 
         # Check peak velocities
-        actual = wheel_moves['peakVels'][-3:]
+        actual = wheel_moves['peakVelocity_times'][-3:]
         expected = [175.13662599, 176.65762599, 178.57262599]
         self.assertIsNone(np.testing.assert_allclose(actual, expected), 'peak times')
 
         # Test extraction in rad
-        wheel['re_pos'] = wh.cm_to_rad(wheel['re_pos'])
+        re_pos = wh.cm_to_rad(re_pos)
         with self.assertLogs(logger, level='INFO') as cm:
-            wheel_moves = ephys_fpga.extract_wheel_moves(wheel)
+            wheel_moves = ephys_fpga.extract_wheel_moves(re_ts, re_pos)
             self.assertEqual(['INFO:ibllib:Wheel in rad units using X2 encoding'], cm.output)
 
         # Check the first 3 intervals.  As position thresholds are adjusted by units and
@@ -206,16 +209,15 @@ class TestWheelMovesExtraction(unittest.TestCase):
                     ta, pa, tb, pb, ticks=1024, coding=encoding.lower(), radius=r)
                 expected = 'INFO:ibllib:Wheel in {} units using {} encoding'.format(unit, encoding)
                 with self.assertLogs(logger, level='INFO') as cm:
-                    ephys_fpga.extract_wheel_moves({'re_ts': t, 're_pos': p})
+                    ephys_fpga.extract_wheel_moves(t, p)
                     self.assertEqual([expected], cm.output)
 
     def test_extract_first_movement_times(self):
         test_data = self.test_data[1]
-        # Wrangle data into expected form
-        wheel = {'re_ts': test_data[0][0], 're_pos': test_data[0][1]}
-        wheel_moves = ephys_fpga.extract_wheel_moves(wheel)
-        first, is_final, id = ephys_fpga.extract_first_movement_times(wheel_moves, self.trials)
+        wheel_moves = ephys_fpga.extract_wheel_moves(test_data[0][0], test_data[0][1])
+        first, is_final, ind = \
+            FirstMovementTimes.extract_first_movement_times(wheel_moves, self.trials)
 
         np.testing.assert_allclose(first, [162.48462599, 105.62562599, np.nan])
         np.testing.assert_array_equal(is_final, [False, True, False])
-        np.testing.assert_array_equal(id, [46, 18])
+        np.testing.assert_array_equal(ind, [46, 18])

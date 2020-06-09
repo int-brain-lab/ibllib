@@ -1,5 +1,5 @@
-from ibllib.io.extractors.ephys_fpga import \
-    extract_first_movement_times, extract_wheel_moves, MIN_QT
+from ibllib.io.extractors.training_wheel import extract_wheel_moves
+from ibllib.io.extractors.training_trials import FirstMovementTimes
 from oneibl.one import ONE
 
 
@@ -38,8 +38,8 @@ def load_wheel_reaction_times(eid, one=None):
     # Re-extract wheel moves if necessary
     if not moves or 'peakAmplitude' not in moves:
         wheel = one.load_object(eid, 'wheel')
-        wheel = {'re_ts': wheel['timestamps'], 're_pos': wheel['position']}
-        moves = extract_wheel_moves(wheel)
+        moves = extract_wheel_moves(wheel['timestamps'], wheel['position'])
     assert trials and moves, 'unable to load trials and wheelMoves data'
-    firstMove_times, is_final_movement, ids = extract_first_movement_times(moves, trials, MIN_QT)
+    firstMove_times, is_final_movement, ids = \
+        FirstMovementTimes.extract_first_movement_times(moves, trials)
     return firstMove_times - trials['goCue_times']

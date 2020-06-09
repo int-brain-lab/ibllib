@@ -1,114 +1,45 @@
-#!/usr/bin/env python
-# -*- coding:utf-8 -*-
-# @Author: Niccolò Bonacchi
-# @Date: Tuesday, February 12th 2019, 11:49:54 am
-import os
-
+from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
 import numpy as np
 
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.training_trials import (  # noqa; noqa
-    check_alf_folder, get_camera_timestamps, get_choice, get_feedback_times,
-    get_feedback_times_ge5, get_feedback_times_lt5, get_feedbackType,
-    get_goCueOnset_times, get_goCueTrigger_times, get_included_trials,
-    get_included_trials_ge5, get_included_trials_lt5, get_intervals,
-    get_iti_duration, get_probabilityLeft, get_response_times,
-    get_rewardVolume, get_stimOn_times, get_stimOn_times_ge5,
-    get_stimOn_times_lt5, get_stimOnTrigger_times)
+    CameraTimestamps, Choice, FeedbackTimes, FeedbackType, GoCueTimes, GoCueTriggerTimes,
+    IncludedTrials, Intervals, ItiDuration, ProbabilityLeft, ResponseTimes, RewardVolume,
+    StimOnTimes, StimOnTriggerTimes, FirstMovementTimes)
 from ibllib.misc import version
 
 
-def get_contrastLR(session_path, save=False, data=False, settings=False):
+class ContrastLR(BaseBpodTrialsExtractor):
     """
-    Get left and right contrasts from raw datafile. Optionally, saves
-    _ibl_trials.contrastLeft.npy and _ibl_trials.contrastRight.npy to alf folder.
-
-    Uses signed_contrast to create left and right contrast vectors.
-
-    :param session_path: absolute path of session folder
-    :type session_path: str
-    :param save: whether to save the corresponding alf file
-                 to the alf folder, defaults to False
-    :type save: bool, optional
-    :return: numpy.ndarray
-    :rtype: dtype('float64')
+    Get left and right contrasts from raw datafile.
     """
-    if not data:
-        data = raw.load_data(session_path)
+    save_names = ('_ibl_trials.contrastLeft.npy', '_ibl_trials.contrastRight.npy')
+    var_names = ('contrastLeft', 'contrastRight')
+
+    def _extract(self):
+        contrastLeft = np.array([t['contrast'] if np.sign(
+            t['position']) < 0 else np.nan for t in self.bpod_trials])
+        contrastRight = np.array([t['contrast'] if np.sign(
+            t['position']) > 0 else np.nan for t in self.bpod_trials])
+        return contrastLeft, contrastRight
+
+
+def extract_all(session_path, save=False, bpod_trials=False, settings=False):
+    if not bpod_trials:
+        bpod_trials = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
-
-    contrastLeft = np.array([t['contrast'] if np.sign(
-        t['position']) < 0 else np.nan for t in data])
-    contrastRight = np.array([t['contrast'] if np.sign(
-        t['position']) > 0 else np.nan for t in data])
-    # save if needed
-    check_alf_folder(session_path)
-    if raw.save_bool(save, '_ibl_trials.contrastLeft.npy'):
-        lpath = os.path.join(session_path, 'alf', '_ibl_trials.contrastLeft.npy')
-        np.save(lpath, contrastLeft)
-
-    if raw.save_bool(save, '_ibl_trials.contrastRight.npy'):
-        rpath = os.path.join(session_path, 'alf', '_ibl_trials.contrastRight.npy')
-        np.save(rpath, contrastRight)
-
-    return (contrastLeft, contrastRight)
-
-
-def extract_all(session_path, save=False, data=False, settings=False):
-    if not data:
-        data = raw.load_data(session_path)
-    if not settings:
-        settings = raw.load_settings(session_path)
-    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
-        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
-
-    # Common to all versions
-    feedbackType = get_feedbackType(session_path, save=save, data=data, settings=settings)
-    contrastLeft, contrastRight = get_contrastLR(
-        session_path, save=save, data=data, settings=settings)
-    probabilityLeft = get_probabilityLeft(
-        session_path, save=save, data=data, settings=settings)
-    choice = get_choice(session_path, save=save, data=data, settings=settings)
-    rewardVolume = get_rewardVolume(session_path, save=save, data=data, settings=settings)
-    feedback_times = get_feedback_times(session_path, save=save, data=data, settings=settings)
-    stimOn_times = get_stimOn_times(session_path, save=save, data=data, settings=settings)
-    intervals = get_intervals(session_path, save=save, data=data, settings=settings)
-    response_times = get_response_times(session_path, save=save, data=data, settings=settings)
-    go_cue_trig_times = get_goCueTrigger_times(
-        session_path, save=save, data=data, settings=settings)
-    go_cue_times = get_goCueOnset_times(session_path, save=save, data=data, settings=settings)
-    camera_timestamps = get_camera_timestamps(
-        session_path, save=save, data=data, settings=settings)
-    out = {'feedbackType': feedbackType,
-           'contrastLeft': contrastLeft,
-           'contrastRight': contrastRight,
-           'probabilityLeft': probabilityLeft,
-           'session_path': session_path,
-           'choice': choice,
-           'rewardVolume': rewardVolume,
-           'feedback_times': feedback_times,
-           'stimOn_times': stimOn_times,
-           'intervals': intervals,
-           'response_times': response_times,
-           'camera_timestamps': camera_timestamps,
-           'goCue_times': go_cue_times,
-           'goCueTrigger_times': go_cue_trig_times}
-
+    base = [FeedbackType, ContrastLR, ProbabilityLeft, Choice, RewardVolume,
+            FeedbackTimes, StimOnTimes, Intervals, ResponseTimes, GoCueTriggerTimes,
+            GoCueTimes, FirstMovementTimes, CameraTimestamps]
     # Version specific extractions
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
-        out['stimOnTrigger_times'] = get_stimOnTrigger_times(
-            session_path, save=save, data=data, settings=settings)
-        out['included'] = get_included_trials(
-            session_path, save=save, data=data, settings=settings)
+        base.extend([StimOnTriggerTimes, IncludedTrials])
     else:
-        out['iti_dur'] = get_iti_duration(session_path, save=save, data=data, settings=settings)
-    return out
+        base.append(ItiDuration)
 
-
-if __name__ == "__main__":
-    sess = '/home/nico/Projects/IBL/IBL-github/iblrig/scratch/test_iblrig_data/Subjects/ZM_1085/2019-02-12/002'  # noqa
-    alf_data = extract_all(sess)
-    print('.')
+    out, fil = run_extractor_classes(
+        base, save=save, session_path=session_path, bpod_trials=bpod_trials, settings=settings)
+    return out, fil
