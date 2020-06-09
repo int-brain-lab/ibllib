@@ -25,8 +25,13 @@ class EphysAlignment:
             self.track_init = np.copy(self.track_extent)
             self.feature_init = np.copy(self.track_extent)
 
+        sampling_trk = np.arange(self.track_extent[0],
+                                 self.track_extent[-1] - 10 * 1e-6, 10 * 1e-6)
+        self.xyz_samples = histology.interpolate_along_track(self.xyz_track,
+                                                             sampling_trk - sampling_trk[0])
+
         self.region, self.region_label, self.region_colour, self.region_id\
-            = self.get_histology_regions()
+            = self.get_histology_regions(self.xyz_samples, sampling_trk)
 
     def get_insertion_track(self, xyz_picks):
         """
@@ -180,9 +185,14 @@ class EphysAlignment:
                               track) * 1e6)
         return region, region_label
 
-    def get_histology_regions(self):
+    @staticmethod
+    def get_histology_regions(xyz_coords, depth_coords):
         """
-        Find all brain regions and their boundaries along the depth of extrapolated xyz_track
+        Find all brain regions and their boundaries along the depth of probe or track
+        :param xyz_coords: 3D coordinates of points along probe or track
+        :type xyz_coords: np.array((n_points, 3)) n_points: no. of points
+        :param depth_coords: depth along probe or track where each xyz_coord is located
+        :type depth_coords: np.array((n_points))
         :return region: coordinates bounding each brain region
         :type region: np.array((n_bound, 2)) n_bound: no. of histology boundaries
         :return region_label: label for each brain region and coordinate of where to place label
@@ -192,11 +202,7 @@ class EphysAlignment:
         :return region_id: allen atlas id for each brain region along track
         :type region_id: np.array((n_bound))
         """
-        sampling_trk = np.arange(self.track_extent[0],
-                                 self.track_extent[-1] - 10 * 1e-6, 10 * 1e-6)
-        xyz_samples = histology.interpolate_along_track(self.xyz_track,
-                                                        sampling_trk - sampling_trk[0])
-        region_ids = brain_atlas.get_labels(xyz_samples)
+        region_ids = brain_atlas.get_labels(xyz_coords)
         region_info = brain_atlas.regions.get(region_ids)
         boundaries = np.where(np.diff(region_info.id))[0]
         region = np.empty((boundaries.size + 1, 2))
@@ -213,7 +219,7 @@ class EphysAlignment:
             _region_colour = region_info.rgb[_region[1]]
             _region_label = region_info.acronym[_region[1]]
             _region_id = region_info.id[_region[1]]
-            _region = sampling_trk[_region]
+            _region = depth_coords[_region]
             _region_mean = np.mean(_region)
             region[bound, :] = _region
             region_colour[bound, :] = _region_colour

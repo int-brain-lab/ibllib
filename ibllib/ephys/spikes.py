@@ -125,7 +125,8 @@ def sync_spike_sortings(ses_path):
         np.save(st_file, interp_times)
         # get the list of output files
         out_files.extend([f for f in ses_path.joinpath(probe_out_path).glob("*.*") if
-                          f.name.startswith(('channels.', 'clusters.', 'spikes.', 'templates.'))])
+                          f.name.startswith(('channels.', 'clusters.', 'spikes.', 'templates.',
+                                             '_kilosort_', '_phy_spikes_subset'))])
     return out_files
 
 

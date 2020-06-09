@@ -4,12 +4,13 @@ import datetime
 import logging
 from dateutil import parser as dateparser
 
+import alf.io
+from oneibl.one import ONE
 from ibllib.misc import version
 import ibllib.time
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io import flags, hashfile
-import alf.io
-from oneibl.one import ONE
+
 
 logger_ = logging.getLogger('ibllib.alf')
 REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
@@ -265,8 +266,7 @@ class RegistrationClient:
 
 
 def _alyx_procedure_from_task(task_protocol):
-    import ibllib.pipes.training_preprocessing  # this is to avoid circular imports
-    task_str = ibllib.pipes.training_preprocessing.get_task_extractor_type(task_protocol)
+    task_str = raw.get_task_extractor_type(task_protocol)
     lookup = {'biased': 'Behavior training/tasks',
               'habituation': 'Behavior training/tasks',
               'training': 'Behavior training/tasks',
