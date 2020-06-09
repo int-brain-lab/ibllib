@@ -5,7 +5,7 @@ import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.training_trials import (  # noqa; noqa
     CameraTimestamps, Choice, FeedbackTimes, FeedBackType, GoCueTimes, GoCueTriggerTimes,
     IncludedTrials, Intervals, ItiDuration, ProbabilityLeft, ResponseTimes, RewardVolume,
-    StimOnTimes, StimOnTriggerTimes)
+    StimOnTimes, StimOnTriggerTimes, StimOnOffFreezeTimes)
 from ibllib.misc import version
 
 
