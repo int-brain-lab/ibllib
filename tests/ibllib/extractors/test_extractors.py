@@ -279,6 +279,33 @@ class TestExtractTrialData(unittest.TestCase):
             self.biased_ge5['path']).extract()[0]
         self.assertTrue(isinstance(st[0], np.ndarray))
 
+    @unittest.skip("not there yet")
+    def test_stimOn_extractor_values(self):
+        # Training lt5
+        st_old = ibllib.io.extractors.training_trials.StimOnTimes(
+            self.training_lt5['path']).extract()[0]
+        st_new = ibllib.io.extractors.training_trials.StimOnOffFreezeTimes(
+            self.training_lt5['path']).extract()[0]
+        self.assertTrue(np.all(st_old == st_new[0]))
+        # Training ge5
+        st_old = ibllib.io.extractors.training_trials.StimOnTimes(
+            self.training_ge5['path']).extract()[0]
+        st_new = ibllib.io.extractors.training_trials.StimOnOffFreezeTimes(
+            self.training_ge5['path']).extract()[0]
+        self.assertTrue(np.all(st_old == st_new[0]))
+        # Biased lt5
+        st_old = ibllib.io.extractors.biased_trials.StimOnTimes(
+            self.biased_lt5['path']).extract()[0]
+        st_new = ibllib.io.extractors.biased_trials.StimOnOffFreezeTimes(
+            self.biased_lt5['path']).extract()[0]
+        self.assertTrue(np.all(st_old == st_new[0]))
+        # Biased ge5
+        st_old = ibllib.io.extractors.biased_trials.StimOnTimes(
+            self.biased_ge5['path']).extract()[0]
+        st_new = ibllib.io.extractors.biased_trials.StimOnOffFreezeTimes(
+            self.biased_ge5['path']).extract()[0]
+        self.assertTrue(np.all(st_old == st_new[0]))
+
     def test_get_intervals(self):
         # TRAINING SESSIONS
         di = extractors.training_trials.Intervals(
