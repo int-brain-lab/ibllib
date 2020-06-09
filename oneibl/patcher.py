@@ -1,6 +1,6 @@
 import abc
 import ftplib
-from pathlib import Path
+from pathlib import Path, PurePosixPath, WindowsPath
 import subprocess
 import logging
 
@@ -75,10 +75,15 @@ class Patcher(abc.ABC):
         dset = self.one.alyx.rest('datasets', "read", id=dset_id)
         fr = next(fr for fr in dset['file_records'] if 'flatiron' in fr['data_repository'])
         remote_path = Path(fr['data_repository_path']).joinpath(fr['relative_path'])
-        remote_path = alf.io.add_uuid_string(remote_path, dset_id)
-        if remote_path.is_absolute():
-            remote_path = remote_path.relative_to(remote_path.root)
-        status = self._scp(path, Path(FLATIRON_MOUNT) / remote_path, dry=dry)[0]
+        remote_path = alf.io.add_uuid_string(remote_path, dset_id).as_posix()
+        if remote_path.startswith('/'):
+            full_remote_path = PurePosixPath(FLATIRON_MOUNT + remote_path)
+        else:
+            full_remote_path = PurePosixPath(FLATIRON_MOUNT, remote_path)
+        if isinstance(path, WindowsPath):
+            # On Windows replace drive map with Globus uri, e.g. C:/ -> /~/C/
+            path = '/~/' + path.as_posix().replace(':', '')
+        status = self._scp(path, full_remote_path, dry=dry)[0]
         return status
 
     def register_dataset(self, file_list, **kwargs):
@@ -186,7 +191,7 @@ class GlobusPatcher(Patcher):
         super().__init__(one=one)
 
     def _scp(self, local_path, remote_path, dry=True):
-        remote_path = Path('/').joinpath(remote_path.relative_to(Path(FLATIRON_MOUNT)))
+        remote_path = PurePosixPath('/').joinpath(remote_path.relative_to(PurePosixPath(FLATIRON_MOUNT)))
         _logger.info(f"Globus copy {local_path} to {remote_path}")
         if not dry:
             if isinstance(self.globus_transfer, globus_sdk.transfer.data.TransferData):
