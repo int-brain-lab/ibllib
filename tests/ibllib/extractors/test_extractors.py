@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 
 import alf.io
-from ibllib.io import extractors, raw_data_loaders as raw
+from ibllib.io import extractors
+from ibllib.io import raw_data_loaders as raw
 
 
 class TestExtractTrialData(unittest.TestCase):
