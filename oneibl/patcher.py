@@ -191,7 +191,9 @@ class GlobusPatcher(Patcher):
         super().__init__(one=one)
 
     def _scp(self, local_path, remote_path, dry=True):
-        remote_path = PurePosixPath('/').joinpath(remote_path.relative_to(PurePosixPath(FLATIRON_MOUNT)))
+        remote_path = PurePosixPath('/').joinpath(
+            remote_path.relative_to(PurePosixPath(FLATIRON_MOUNT))
+        )
         _logger.info(f"Globus copy {local_path} to {remote_path}")
         if not dry:
             if isinstance(self.globus_transfer, globus_sdk.transfer.data.TransferData):
