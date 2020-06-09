@@ -282,27 +282,27 @@ class TestExtractTrialData(unittest.TestCase):
     @unittest.skip("not there yet")
     def test_stimOn_extractor_values(self):
         # Training lt5
-        st_old = ibllib.io.extractors.training_trials.StimOnTimes(
+        st_old = extractors.training_trials.StimOnTimes(
             self.training_lt5['path']).extract()[0]
-        st_new = ibllib.io.extractors.training_trials.StimOnOffFreezeTimes(
+        st_new = extractors.training_trials.StimOnOffFreezeTimes(
             self.training_lt5['path']).extract()[0]
         self.assertTrue(np.all(st_old == st_new[0]))
         # Training ge5
-        st_old = ibllib.io.extractors.training_trials.StimOnTimes(
+        st_old = extractors.training_trials.StimOnTimes(
             self.training_ge5['path']).extract()[0]
-        st_new = ibllib.io.extractors.training_trials.StimOnOffFreezeTimes(
+        st_new = extractors.training_trials.StimOnOffFreezeTimes(
             self.training_ge5['path']).extract()[0]
         self.assertTrue(np.all(st_old == st_new[0]))
         # Biased lt5
-        st_old = ibllib.io.extractors.biased_trials.StimOnTimes(
+        st_old = extractors.biased_trials.StimOnTimes(
             self.biased_lt5['path']).extract()[0]
-        st_new = ibllib.io.extractors.biased_trials.StimOnOffFreezeTimes(
+        st_new = extractors.biased_trials.StimOnOffFreezeTimes(
             self.biased_lt5['path']).extract()[0]
         self.assertTrue(np.all(st_old == st_new[0]))
         # Biased ge5
-        st_old = ibllib.io.extractors.biased_trials.StimOnTimes(
+        st_old = extractors.biased_trials.StimOnTimes(
             self.biased_ge5['path']).extract()[0]
-        st_new = ibllib.io.extractors.biased_trials.StimOnOffFreezeTimes(
+        st_new = extractors.biased_trials.StimOnOffFreezeTimes(
             self.biased_ge5['path']).extract()[0]
         self.assertTrue(np.all(st_old == st_new[0]))
 

@@ -2,10 +2,9 @@ import logging
 
 import numpy as np
 
-from oneibl.one import ONE
 from alf.io import is_uuid_string
-
-from ibllib.qc import BpodQC, ONEQC
+from ibllib.qc import ONEQC, BpodQC
+from oneibl.one import ONE
 
 log = logging.getLogger("ibllib")
 

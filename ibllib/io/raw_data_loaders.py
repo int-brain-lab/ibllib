@@ -8,17 +8,17 @@ Raw Data Loader functions for PyBpod rig
 Module contains one loader function per raw datafile
 """
 import json
-import wave
 import logging
+import wave
+from datetime import datetime
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
-from datetime import datetime
 
-
+from alf.io import get_session_path
 from ibllib.io import jsonable
 from ibllib.misc import version
-from alf.io import get_session_path
 
 _logger = logging.getLogger('ibllib')
 
