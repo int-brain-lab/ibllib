@@ -492,7 +492,7 @@ def within_ranges(x: np.ndarray, ranges: Array, labels: Optional[Array] = None,
     if labels is None:
         # In 'matrix' mode default row index is 0
         labels = np.zeros((n_ranges,), dtype='uint32')
-        if mode is 'vector':  # Otherwise default numerical label is 1
+        if mode == 'vector':  # Otherwise default numerical label is 1
             labels += 1
     assert len(labels) >= n_ranges, 'range labels do not match number of ranges'
     n_labels = np.unique(labels).size
@@ -514,7 +514,7 @@ def within_ranges(x: np.ndarray, ranges: Array, labels: Optional[Array] = None,
 
     # Make delta array containing 1 for every start and -1 for every stop
     # with one row for each range label
-    if mode is 'matrix':
+    if mode == 'matrix':
         delta_shape = (n_labels, n_points + 2 * n_ranges)
         delta = np.zeros(delta_shape, dtype='int8')
 
@@ -532,7 +532,7 @@ def within_ranges(x: np.ndarray, ranges: Array, labels: Optional[Array] = None,
         reordered[:, idx] = summed.reshape(delta_shape[0], -1)
         return reordered[:, np.arange(n_ranges, n_points + n_ranges)]
 
-    elif mode is 'vector':
+    elif mode == 'vector':
         delta_shape = (n_points + 2 * n_ranges,)
         r_delta = np.zeros(delta_shape, dtype='int32')
         r_delta[np.arange(n_ranges)] = labels
