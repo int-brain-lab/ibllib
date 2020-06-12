@@ -134,16 +134,16 @@ def key_vis_stim(text_append, dict_vis, value_search):
     return key_out
 
 
-def interpolate_rf_mapping_stimulus(idxs_up, idxs_dn, times, frames, t_bin):
+def interpolate_rf_mapping_stimulus(idxs_up, idxs_dn, times, Xq, t_bin):
     """
     Interpolate stimulus presentation times to screen refresh rate to match `frames`
     :param ttl_01:
     :type ttl_01: array-like
     :param times: array of stimulus switch times
     :type times: array-like
-    :param frames: (time, y_pix, x_pix) array of stim frames
+    :param Xq: number of times (found in frames)
     :type frames: array-like
-    :param t_bin: screen refresh rate
+    :param t_bin: period of screen refresh rate
     :type t_bin: float
     :return: tuple of (stim_times, stim_frames)
     """
@@ -152,7 +152,6 @@ def interpolate_rf_mapping_stimulus(idxs_up, idxs_dn, times, frames, t_bin):
     end_extrap_val = -10000
 
     X = np.sort(np.concatenate([idxs_up, idxs_dn]))
-    Xq = np.arange(frames.shape[0])
     # make left and right extrapolations distinctive to easily find later
     Tq = np.interp(Xq, X, times, left=beg_extrap_val, right=end_extrap_val)
     # uniform spacing outside boundaries of ttl signal
@@ -192,4 +191,19 @@ def test_key_vis_stim():
                            value_search=value_search)
     print(key_out)
     if key_out != 'test0':
+        raise ValueError
+
+
+def test_interpolate_rf_mapping_stimulus():
+    idxs_up = np.array([0, 4, 8])
+    idxs_dn = np.array([1, 5, 9])
+    times = np.array([0, 1, 4, 5, 8, 9])
+    Xq = np.arange(15)
+    t_bin = 1  # Use 1 so can compare directly Xq and Tq
+    Tq = interpolate_rf_mapping_stimulus(idxs_up=idxs_up,
+                                         idxs_dn=idxs_dn,
+                                         times=times,
+                                         Xq=Xq,
+                                         t_bin=t_bin)
+    if not np.array_equal(Tq, Xq):
         raise ValueError

@@ -168,7 +168,7 @@ times_interp_RF =\
     passive.interpolate_rf_mapping_stimulus(idxs_up=rf_id_up,
                                             idxs_dn=rf_id_dw,
                                             times=RF_times_1,
-                                            frames=RF_frames,
+                                            Xq=np.arange(RF_frames.shape[0]),
                                             t_bin=1 / FRAME_FS)
 
 # 3. gabor
