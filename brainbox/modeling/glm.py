@@ -17,6 +17,7 @@ import numba as nb
 from numpy.matlib import repmat
 from tqdm import tqdm
 from scipy.optimize import minimize
+from scipy.special import xlogy
 
 
 class NeuralGLM:
@@ -77,7 +78,6 @@ class NeuralGLM:
         # assignment
         self.vartypes = vartypes
         self.vartypes['duration'] = 'value'
-        self.binf = lambda t: np.ceil(t / binwidth).astype(int)  # Useful step counter fn
         trialsdf = trialsdf.copy()
         clu_ids = np.unique(spk_clu)
         trialspiking = np.zeros((spk_clu.max() + 1, len(trialsdf.index)))
@@ -307,6 +307,10 @@ class NeuralGLM:
             durmod = duration % self.binwidth
             if durmod > (self.binwidth / 2):
                 duration = duration - (self.binwidth / 2)
+            if len(self.spikes[i]) == 0:
+                arr = np.zeros((self.binf(duration), len(self.clu_ids)))
+                spkarrs.append(arr)
+                continue
             spks = self.spikes[i]
             clu = self.clu[i]
             arr = bincount2D(spks, clu,
@@ -360,7 +364,8 @@ class NeuralGLM:
 
         if hasattr(self, 'binnedspikes'):
             assert self.binnedspikes.shape[0] == dm.shape[0], "Oh shit. Indexing error."
-        self.dm = np.roll(dm, -1, axis=0)  # Fix weird +1 offset bug in design matrix
+        self.dm = dm
+        # self.dm = np.roll(dm, -1, axis=0)  # Fix weird +1 offset bug in design matrix
         self.compiled = True
         return
 
@@ -394,6 +399,7 @@ class NeuralGLM:
         if not self.compiled:
             raise AttributeError('Design matrix has not been compiled yet. Please run '
                                  'neuroglm.compile_design_matrix() before fitting.')
+        # TODO: Make this optionally parallel across multiple cores of CPU
         if method == 'sklearn':
             coefs = pd.Series(index=self.clu_ids.flat, name='coefficients', dtype=object)
             intercepts = pd.Series(index=self.clu_ids.flat, name='intercepts', dtype=object)
@@ -447,6 +453,52 @@ class NeuralGLM:
                                                    columns=tstamps)
         self.combined_weights = outputs
         return outputs
+
+    def score(self):
+        """
+        Compute the squared deviance of the model, i.e. how much variance beyond the null model
+        (a poisson process with the same mean, defined by the intercept, at every time step) the
+        model which was fit explains.
+        For a detailed explanation see https://bookdown.org/egarpor/PM-UC3M/glm-deviance.html`
+
+        Returns
+        -------
+        pandas.Series
+            A series in which the index are cluster IDs and each entry is the D^2 for the model fit
+            to that cluster
+        """
+        if not hasattr(self, 'coefs'):
+            raise AttributeError('Fit was not run. Please run fit first.')
+        scores = pd.Series(index=self.coefs.index)
+        for cell in self.coefs.index:
+            cell_idx = np.argwhere(self.clu_ids == cell)[0, 0]
+            wt = self.coefs.loc[cell].reshape(-1, 1)
+            bias = self.intercepts.loc[cell]
+            y = self.binnedspikes[:, cell_idx]
+            pred = np.exp(self.dm @ wt + bias)
+            null_pred = np.exp(np.ones_like(pred) * bias)
+            full_deviance = 2 * np.sum(xlogy(y, y / pred.flat) - y + pred.flat)
+            null_deviance = 2 * np.sum(xlogy(y, y / null_pred.flat) - y + null_pred.flat)
+            d_sq = 1 - (full_deviance / null_deviance)
+            scores.at[cell] = d_sq
+        return scores
+
+    def binf(self, t):
+        """
+        Bin function for a given timestep. Returns the number of bins after trial start a given t
+        would occur at.
+
+        Parameters
+        ----------
+        t : float
+            Seconds after trial start
+
+        Returns
+        -------
+        int
+            Number of bins corresponding to t using the binwidth of the model.
+        """
+        return np.ceil(t / self.binwidth).astype(int)
 
 
 def convbasis(stim, bases, offset=0):
