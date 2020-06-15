@@ -125,7 +125,18 @@ class Patcher(abc.ABC):
         return response
 
     def delete_dataset(self, dset_id, dry=False):
-        dset = self.one.alyx.rest('datasets', "read", id=dset_id)
+        """
+        Deletes a single dataset from the Flatiron and Alyx database.
+        This does not remove the dataset from local servers.
+        :param dset_id:
+        :param dry:
+        :return:
+        """
+        if isinstance(dset_id, dict):
+            dset = dset_id
+            dset_id = dset['url'][-36:]
+        else:
+            dset = self.one.alyx.rest('datasets', "read", id=dset_id)
         assert dset
         for fr in dset['file_records']:
             if 'flatiron' in fr['data_repository']:
@@ -133,7 +144,7 @@ class Patcher(abc.ABC):
                                                               fr['relative_path'])
                 flatiron_path = alf.io.add_uuid_string(flatiron_path, dset_id)
                 status = self._rm(flatiron_path, dry=dry)[0]
-                if status == 0:
+                if status == 0 and not dry:
                     self.one.alyx.rest('datasets', 'delete', id=dset_id)
 
     def delete_session_datasets(self, eid, dry=True):
