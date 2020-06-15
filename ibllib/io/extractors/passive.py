@@ -8,6 +8,7 @@ import ibllib.io.raw_data_loaders as rawio
 
 def get_spacer_times(spacer_template, jitter, ttl_signal, t_quiet):
     """
+    Find timestamps of spacer signal.
     :param spacer_template: list of indices where ttl signal changes
     :type spacer_template: array-like
     :param jitter: jitter (in seconds) for matching ttl_signal with spacer_template
@@ -51,6 +52,11 @@ def get_spacer_times(spacer_template, jitter, ttl_signal, t_quiet):
 
 
 def get_id_raisefall_from_analogttl(ttl_01):
+    """
+    Get index of raise/fall from analog continuous TTL signal  (0-1 values)
+    :param ttl_01: analog continuous TTL signal  (0-1 values)
+    :return: index up (0>1), index down (1>0), number of ttl transition
+    """
     # Check values are 0, 1, -1
     if not np.all(np.isin(np.unique(ttl_01), [-1, 0, 1])):
         raise ValueError("Values in input must be 0, 1, -1")
@@ -64,6 +70,13 @@ def get_id_raisefall_from_analogttl(ttl_01):
 
 
 def reshape_RF(RF_file, meta_stim):
+    """
+    Reshape Receptive Field (RF) matrix. Take data associated to corner
+    where frame2ttl placed to create TTL trace.
+    :param RF_file: vector to be reshaped, containing RF info
+    :param meta_stim: variable containing metadata information on RF
+    :return: frames (reshaped RF), analog trace (0-1 values)
+    """
     frame_array = np.fromfile(RF_file, dtype='uint8')
     y_pix, x_pix, _ = meta_stim['stim_file_shape']
     frames = np.transpose(
@@ -73,12 +86,15 @@ def reshape_RF(RF_file, meta_stim):
     ttl_analogtrace_01 = np.zeros(np.size(ttl_trace))
     ttl_analogtrace_01[np.where(ttl_trace == 0)] = -1
     ttl_analogtrace_01[np.where(ttl_trace == 255)] = 1
-
     return frames, ttl_analogtrace_01
 
 
 def ephysCW_end(session_path):
-    # return time (second) at which ephysCW ends
+    """
+    Return time (second) at which ephysCW ends
+    :param session_path: path to session
+    :return: time (s) at which ephysCW ends
+    """
     bpod_raw = rawio.load_data(session_path)
     t_end_ephys = bpod_raw[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
     return t_end_ephys
@@ -97,6 +113,13 @@ def truncate_ttl_signal(ttl, time_cutoff):
 
 
 def find_between(ttl, t_start_search, t_end_search):
+    """
+    Find times and index of TTL pulses happening in between 2 timestamps (s).
+    :param ttl: dict containing times (s) of rising/falling pulses
+    :param t_start_search: time (s) of start search (non inclusive)
+    :param t_end_search: time (s) of end search (non inclusive)
+    :return: times (s) and index
+    """
     id_ttl = np.where(np.logical_and(ttl['times'] > t_start_search,
                                      ttl['times'] < t_end_search))[0]
     times_between = np.sort(ttl['times'][id_ttl])  # Ensure values are sorted (ascend)
@@ -104,12 +127,21 @@ def find_between(ttl, t_start_search, t_end_search):
 
 
 def check_n_ttl_between(n_exp, key_stim, t_start_search, t_end_search, ttl):
+    """
+    Check number of TTL pulses found in between 2 timestamps.
+    :param n_exp: number of TTL expected
+    :param key_stim: key (visual stim. label)
+    :param t_start_search: time (s) of start search (non inclusive)
+    :param t_end_search: time (s) of end search (non inclusive)
+    :param ttl: dict containing times (s) of rising/falling pulses
+    :return:
+    """
     times_between, id_ttl = find_between(ttl=ttl,
                                          t_start_search=t_start_search,
                                          t_end_search=t_end_search)
     # check for polarity
     pol = ttl['polarities'][id_ttl]
-    if key_stim in ['VISUAL_STIM_1', 'VISUAL_STIM_4']:
+    if key_stim in ['VISUAL_STIM_1', 'VISUAL_STIM_4']:  # todo Hardcoded
         exp_start_pol = -1
         if pol[0] != exp_start_pol:
             times_between = times_between[1:]
@@ -121,6 +153,12 @@ def check_n_ttl_between(n_exp, key_stim, t_start_search, t_end_search, ttl):
 
 
 def key_value_search(dict_vis, value_search):
+    """
+    Search key for value in dict key.
+    :param dict_vis: dictionary of labels
+    :param value_search: string to find in dict key
+    :return: key found
+    """
     found_key = [key for (key, value) in dict_vis.items() if value == value_search]
     if len(found_key) != 1:
         raise ValueError(f'{len(found_key)} keys have been found, whilst it should be 1.')
@@ -129,6 +167,13 @@ def key_value_search(dict_vis, value_search):
 
 
 def key_vis_stim(text_append, dict_vis, value_search):
+    """
+    Appends key to string once key is found.
+    :param text_append:
+    :param dict_vis: dictionary of labels
+    :param value_search: string to find in dict key
+    :return: key in dict with appended string
+    """
     key_value = key_value_search(dict_vis, value_search)
     key_out = f'{text_append}{key_value}'
     return key_out
