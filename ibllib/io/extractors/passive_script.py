@@ -199,7 +199,7 @@ gabor_times = \
 # plt.plot(times, 0.5 * np.ones(len(times)), '.')
 
 # # Plot time diff gabor
-# gabor_times, _ = \
+# gabor_times = \
 #     passive.get_times_between(t_start_search=spacer_times[2, 1] + 0.2,
 #                               t_end_search=fttl_trunk['times'][-1],
 #                               ttl=fttl_trunk,
@@ -207,8 +207,11 @@ gabor_times = \
 # cs_delays = np.cumsum(delays)
 # diff_delays = np.diff(cs_delays[gabor_index])[1:]
 # gb_diff_ts = np.diff(gabor_times)[1::2]
-# plt.plot([0,3], [0,3], linewidth=2.0)
-# plt.plot(diff_delays, gb_diff_ts, '.')
+# plt.plot([0, 3], [0, 3], linewidth=2.0)
+# # plt.plot(diff_delays, gb_diff_ts, '.')
 # plt.xlabel('saved delays diff [s]')
 # plt.ylabel('measured times diff [s]')
 # pearson_r = np.corrcoef(diff_delays, gb_diff_ts)[1, 0]
+# # scatter plot
+# plt.scatter(diff_delays, gb_diff_ts, c=gabor_times[1:-1:2], s=10)
+# plt.colorbar()
