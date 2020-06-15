@@ -176,5 +176,5 @@ class EphysExtractionPipeline(tasks.Pipeline):
             tasks['SpikeSorting'], tasks['EphysPulses']])
         tasks['EphysTrials'] = EphysTrials(self.session_path, parents=[tasks['EphysPulses']])
         tasks['EphysMtscomp'] = EphysMtscomp(self.session_path, parents=[tasks['SpikeSorting']])
-        tasks['EphysDLC'] = EphysMtscomp(self.session_path, parents=[tasks['EphysVideoCompress']])
+        tasks['EphysDLC'] = EphysDLC(self.session_path, parents=[tasks['EphysVideoCompress']])
         self.tasks = tasks
