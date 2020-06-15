@@ -126,6 +126,38 @@ def find_between(ttl, t_start_search, t_end_search):
     return times_between, id_ttl
 
 
+def check_polarity(pol, key_stim, times_between):
+    """
+    Check polarity of stimulus, and remove values as necessary
+    :param pol: polarity values (-1 or 1)
+    :param key_stim: key (visual stim. label)
+    :param times_between: times (s) of TTL pulses found (N adjusted)
+    :return:
+    """
+    if key_stim in ['VISUAL_STIM_1', 'VISUAL_STIM_4']:  # todo Hardcoded
+        exp_start_pol = -1
+        if pol[0] != exp_start_pol:
+            times_between = times_between[1:]
+    return times_between
+
+
+def get_times_between(ttl, t_start_search, t_end_search, key_stim):
+    """
+    Get times of TTL pulse in between 2 timestamps
+    :param ttl: dict containing times (s) of rising/falling pulses
+    :param t_start_search: time (s) of start search (non inclusive)
+    :param t_end_search: time (s) of end search (non inclusive)
+    :return: times_between: times (s) of TTL pulses found (N adjusted)
+    """
+    times_between, id_ttl = find_between(ttl=ttl,
+                                         t_start_search=t_start_search,
+                                         t_end_search=t_end_search)
+    # check for polarity
+    pol = ttl['polarities'][id_ttl]
+    times_between = check_polarity(pol=pol, key_stim=key_stim, times_between=times_between)
+    return times_between
+
+
 def check_n_ttl_between(n_exp, key_stim, t_start_search, t_end_search, ttl):
     """
     Check number of TTL pulses found in between 2 timestamps.
@@ -134,17 +166,10 @@ def check_n_ttl_between(n_exp, key_stim, t_start_search, t_end_search, ttl):
     :param t_start_search: time (s) of start search (non inclusive)
     :param t_end_search: time (s) of end search (non inclusive)
     :param ttl: dict containing times (s) of rising/falling pulses
-    :return:
+    :return: times_between: times (s) of TTL pulses found (N adjusted)
     """
-    times_between, id_ttl = find_between(ttl=ttl,
-                                         t_start_search=t_start_search,
-                                         t_end_search=t_end_search)
-    # check for polarity
-    pol = ttl['polarities'][id_ttl]
-    if key_stim in ['VISUAL_STIM_1', 'VISUAL_STIM_4']:  # todo Hardcoded
-        exp_start_pol = -1
-        if pol[0] != exp_start_pol:
-            times_between = times_between[1:]
+    times_between = get_times_between(ttl=ttl, t_start_search=t_start_search,
+                                      t_end_search=t_end_search, key_stim=key_stim)
 
     if len(times_between) != n_exp:
         raise ValueError(f'Incorrect number of pulses found for {key_stim}')

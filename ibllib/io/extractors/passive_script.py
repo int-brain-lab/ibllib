@@ -199,6 +199,11 @@ gabor_times = \
 # plt.plot(times, 0.5 * np.ones(len(times)), '.')
 
 # # Plot time diff gabor
+# gabor_times, _ = \
+#     passive.get_times_between(t_start_search=spacer_times[2, 1] + 0.2,
+#                               t_end_search=fttl_trunk['times'][-1],
+#                               ttl=fttl_trunk,
+#                               key_stim=ts_key)
 # cs_delays = np.cumsum(delays)
 # diff_delays = np.diff(cs_delays[gabor_index])[1:]
 # gb_diff_ts = np.diff(gabor_times)[1::2]
