@@ -140,7 +140,9 @@ def check_polarity(pol, key_stim, times_between):
 
 def get_times_between(ttl, t_start_search, t_end_search, key_stim):
     """
-    Get times of TTL pulse in between 2 timestamps
+    Combine 2 functions:
+    - Get times of TTL pulse in between 2 timestamps and check for polarity.
+    - Adjust N timestamps returns if polarity wrong.
     :param ttl: dict containing times (s) of rising/falling pulses
     :param t_start_search: time (s) of start search (non inclusive)
     :param t_end_search: time (s) of end search (non inclusive)
@@ -167,7 +169,7 @@ def check_n_ttl_between(n_exp, key_stim, t_start_search, t_end_search, ttl):
     """
     times_between = get_times_between(ttl=ttl, t_start_search=t_start_search,
                                       t_end_search=t_end_search, key_stim=key_stim)
-
+    # Todo insert case here for dealing with missing gabor TTL pulse
     if len(times_between) != n_exp:
         raise ValueError(f'Incorrect number of pulses found for {key_stim}')
     else:
