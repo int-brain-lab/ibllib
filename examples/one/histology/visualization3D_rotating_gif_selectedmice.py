@@ -9,6 +9,8 @@ the penetrations done in selected animals (a color is given per animal).
 import numpy as np
 from mayavi import mlab
 from pathlib import Path
+
+import ibllib.plots
 from atlaselectrophysiology import rendering
 import ibllib.atlas as atlas
 from oneibl.one import ONE
@@ -42,7 +44,7 @@ for i_sub in range(0, len(subjects)):
         'trajectory_id': np.array([ch['trajectory_estimate'] for ch in channels_rest])
     })
 
-    color = rendering.color_cycle(i_sub)
+    color = ibllib.plots.color_cycle(i_sub)
 
     for m, probe_id in enumerate(np.unique(channels['trajectory_id'])):
         traj_dict = one.alyx.rest('trajectories', 'read', id=probe_id)

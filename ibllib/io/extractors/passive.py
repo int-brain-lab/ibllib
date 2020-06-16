@@ -101,15 +101,12 @@ def ephysCW_end(session_path):
 
 
 def truncate_ttl_signal(ttl, time_cutoff):
-    '''
+    """
     :param ttl: dict with 2 keys (polarities and times), values in times in (s)
     :param time_cutoff: time of cutoff in (s)
     :return: dict with 2 keys (polarities and times), values in times in (s)
-    '''
-    ttl_trunk = dict()
-    ttl_trunk['times'] = ttl['times'][ttl['times'] > time_cutoff]
-    ttl_trunk['polarities'] = ttl['polarities'][ttl['times'] > time_cutoff]
-    return ttl_trunk
+    """
+    return {k: ttl[k][ttl['times'] > time_cutoff] for k in ttl}
 
 
 def find_between(ttl, t_start_search, t_end_search):
