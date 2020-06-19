@@ -12,7 +12,7 @@ import ibllib.io.raw_data_loaders as raw
 from ibllib.io import flags, hashfile
 
 
-logger_ = logging.getLogger('ibllib.alf')
+_logger = logging.getLogger('ibllib.alf')
 REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
                               'logs/**/_ibl_log.*.log',
                               'raw_behavior_data/**/_iblrig_*.*',
@@ -27,7 +27,7 @@ REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
 
 
 def register_dataset(file_list, one=None, created_by='root', repository=None, server_only=False,
-                     versions=False, dry=False):
+                     versions=False, dry=False, verbose=False):
     """
     Registers a set of files belonging to a session only on the server
     :param file_list: (list of pathlib.Path or pathlib.Path)
@@ -37,6 +37,7 @@ def register_dataset(file_list, one=None, created_by='root', repository=None, se
     :param server_only: optional: (bool) if True only creates on the Flatiron (defaults to False)
     :param versions: optional (list of strings): versions tags (defaults to ibllib version)
     :param dry: (bool) False by default
+    :param verbose: (bool) logs
     :return:
     """
     if not isinstance(file_list, list):
@@ -61,9 +62,10 @@ def register_dataset(file_list, one=None, created_by='root', repository=None, se
     if not dry:
         if one is None:
             one = ONE()
-        return one.alyx.rest('register-file', 'create', data=r)
-    else:
-        print(r)
+        response = one.alyx.rest('register-file', 'create', data=r)
+        for p in file_list:
+            _logger.info(f"ALYX REGISTERED DATA: {p}")
+        return response
 
 
 class RegistrationClient:
@@ -91,7 +93,7 @@ class RegistrationClient:
             if dry:
                 print(flag_file)
                 continue
-            logger_.info('creating session for ' + str(flag_file.parent))
+            _logger.info('creating session for ' + str(flag_file.parent))
             # providing a false flag stops the registration after session creation
             self.register_session(flag_file.parent, file_list=False)
             flag_file.unlink()
@@ -110,13 +112,13 @@ class RegistrationClient:
                 print(flag_file)
                 continue
             file_list = flags.read_flag_file(flag_file)
-            logger_.info('registering ' + str(flag_file.parent))
+            _logger.info('registering ' + str(flag_file.parent))
             self.register_session(flag_file.parent, file_list=file_list)
             flags.write_flag_file(flag_file.parent.joinpath('flatiron.flag'), file_list=file_list)
             flag_file.unlink()
             if flag_file.parent.joinpath('create_me.flag').exists():
                 flag_file.parent.joinpath('create_me.flag').unlink()
-            logger_.info('registered' + '\n')
+            _logger.info('registered' + '\n')
 
     def register_session(self, ses_path, file_list=True):
         """
@@ -135,9 +137,9 @@ class RegistrationClient:
         if not settings_json_file:
             settings_json_file = list(ses_path.glob('**/_iblrig_taskSettings.raw*.json'))
             if not settings_json_file:
-                logger_.error(['could not find _iblrig_taskSettings.raw.json. Abort.'])
+                _logger.error(['could not find _iblrig_taskSettings.raw.json. Abort.'])
                 return
-            logger_.warning([f'Settings found in a strange place: {settings_json_file}'])
+            _logger.warning([f'Settings found in a strange place: {settings_json_file}'])
         else:
             settings_json_file = settings_json_file[0]
         md = _read_settings_json_compatibility_enforced(settings_json_file)
@@ -145,7 +147,7 @@ class RegistrationClient:
         try:
             subject = self.one.alyx.rest('subjects?nickname=' + md['SUBJECT_NAME'], 'list')[0]
         except IndexError as e:
-            logger_.error(f"Subject: {md['SUBJECT_NAME']} doesn't exist in Alyx. ABORT.")
+            _logger.error(f"Subject: {md['SUBJECT_NAME']} doesn't exist in Alyx. ABORT.")
             raise e
 
         # look for a session from the same subject, same number on the same day
@@ -156,7 +158,7 @@ class RegistrationClient:
         try:
             user = self.one.alyx.rest('users', 'read', id=md["PYBPOD_CREATOR"][0])
         except Exception as e:
-            logger_.error(f"User: {md['PYBPOD_CREATOR'][0]} doesn't exist in Alyx. ABORT")
+            _logger.error(f"User: {md['PYBPOD_CREATOR'][0]} doesn't exist in Alyx. ABORT")
             raise e
 
         username = user['username'] if user else subject['responsible_user']
@@ -199,7 +201,7 @@ class RegistrationClient:
         else:  # TODO: if session exists and no json partial_upgrade it
             session = self.one.alyx.rest('sessions', 'read', id=session_id[0])
 
-        logger_.info(session['url'] + ' ')
+        _logger.info(session['url'] + ' ')
         # create associated water administration if not found
         if not session['wateradmin_session_related'] and ses_data:
             wa_ = {
@@ -221,30 +223,30 @@ class RegistrationClient:
         file_sizes = []
         for fn in _glob_session(ses_path):
             if fn.suffix in ['.flag', '.error', '.avi']:
-                logger_.debug('Excluded: ', str(fn))
+                _logger.debug('Excluded: ', str(fn))
                 continue
             if not self._match_filename_dtypes(fn):
-                logger_.warning('No matching dataset type for: ' + str(fn))
+                _logger.warning('No matching dataset type for: ' + str(fn))
                 continue
             if fn.suffix not in self.file_extensions:
-                logger_.warning('No matching dataformat (ie. file extension) for: ' + str(fn))
+                _logger.warning('No matching dataformat (ie. file extension) for: ' + str(fn))
                 continue
             if not _register_bool(fn.name, file_list):
-                logger_.debug('Not in filelist: ' + str(fn))
+                _logger.debug('Not in filelist: ' + str(fn))
                 continue
             try:
                 assert (str(gen_rel_path) in str(fn))
             except AssertionError as e:
                 strerr = 'ALF folder mismatch: data is in wrong subject/date/number folder. \n'
                 strerr += ' Expected ' + str(gen_rel_path) + ' actual was ' + str(fn)
-                logger_.error(strerr)
+                _logger.error(strerr)
                 raise e
             # extract the relative path of the file
             rel_path = Path(str(fn)[str(fn).find(str(gen_rel_path)):])
             F.append(str(rel_path.relative_to(gen_rel_path)))
             file_sizes.append(fn.stat().st_size)
             md5s.append(hashfile.md5(fn) if fn.stat().st_size < 1024 ** 3 else None)
-            logger_.info('Registering ' + str(fn))
+            _logger.info('Registering ' + str(fn))
 
         r_ = {'created_by': username,
               'path': str(gen_rel_path),
@@ -292,7 +294,7 @@ def _read_settings_json_compatibility_enforced(json_file):
     if 'IBLRIG_VERSION_TAG' not in md.keys():
         md['IBLRIG_VERSION_TAG'] = '3.2.3'
     if not md['IBLRIG_VERSION_TAG']:
-        logger_.warning("You appear to be on an untagged version...")
+        _logger.warning("You appear to be on an untagged version...")
         return md
     # 2018-12-05 Version 3.2.3 fixes (permanent fixes in IBL_RIG from 3.2.4 on)
     if version.le(md['IBLRIG_VERSION_TAG'], '3.2.3'):
@@ -340,7 +342,7 @@ def _get_session_times(fn, md, ses_data):
             break
         c += 1
     if c:
-        logger_.warning((f'Trial end timestamps of last {c} trials above 6 hours '
+        _logger.warning((f'Trial end timestamps of last {c} trials above 6 hours '
                         f'(most likely corrupt): ') + str(fn))
     end_time = start_time + datetime.timedelta(seconds=ses_duration_secs)
     return start_time, end_time
