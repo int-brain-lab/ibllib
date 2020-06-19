@@ -55,7 +55,6 @@ class Task(abc.ABC):
     version = version.ibllib()
 
     def __init__(self, session_path, parents=None, taskid=None, one=None):
-        assert session_path
         self.taskid = taskid
         self.one = one
         self.session_path = session_path
@@ -145,13 +144,19 @@ class Task(abc.ABC):
 
 
 class Pipeline(abc.ABC):
+    """
+    Pipeline class: collection of related and potentially interdependent tasks
+    """
     tasks = OrderedDict()
     one = None
 
-    def __init__(self, session_path=None, one=None):
+    def __init__(self, session_path=None, one=None, eid=None):
+        assert session_path or eid
         self.one = one
-        self.session_path = session_path
-        self.eid = one.eid_from_path(session_path) if self.one else None
+        self.eid = eid
+        if session_path:
+            self.session_path = session_path
+            self.eid = one.eid_from_path(session_path) if self.one else None
         self.label = self.__module__ + '.' + type(self).__name__
 
     def make_graph(self, out_dir=None, show=True):
@@ -228,6 +233,7 @@ class Pipeline(abc.ABC):
         :return: job_deck: list of REST dictionaries of the jobs endpoints
         :return: all_datasets: list of REST dictionaries of the dataset endpoints
         """
+        assert self.session_path, "Pipeline object has to be declared with a session path to run"
         if self.one is None:
             _logger.warning("No ONE instance found for Alyx connection, set the one property")
             return

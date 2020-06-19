@@ -161,7 +161,7 @@ class EphysDLC(tasks.Task):
 class EphysExtractionPipeline(tasks.Pipeline):
     label = __name__
 
-    def __init__(self, session_path, **kwargs):
+    def __init__(self, session_path=None, **kwargs):
         super(EphysExtractionPipeline, self).__init__(session_path, **kwargs)
         tasks = OrderedDict()
         self.session_path = session_path
