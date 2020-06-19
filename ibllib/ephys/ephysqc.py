@@ -24,6 +24,7 @@ _logger = logging.getLogger('ibllib')
 
 RMS_WIN_LENGTH_SECS = 3
 WELCH_WIN_LENGTH_SAMPLES = 1024
+NCH_WAVEFORMS = 32  # number of channels to be saved in templates.waveforms and channels.waveforms
 
 
 def rmsmap(fbin):
@@ -270,7 +271,8 @@ def phy_model_from_ks2_path(ks2_path):
     m = model.TemplateModel(dir_path=ks2_path,
                             dat_path=bin_file,  # this assumes the raw data is in the same folder
                             sample_rate=fs,
-                            n_channels_dat=nch)
+                            n_channels_dat=nch,
+                            n_closest_channels=NCH_WAVEFORMS)
     m.depths = m.get_depths()
     return m
 

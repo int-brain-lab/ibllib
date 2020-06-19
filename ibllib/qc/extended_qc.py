@@ -2,10 +2,9 @@ import logging
 
 import numpy as np
 
-from oneibl.one import ONE
 from alf.io import is_uuid_string
-
-from ibllib.qc import BpodQC, ONEQC
+from ibllib.qc import ONEQC, BpodQC
+from oneibl.one import ONE
 
 log = logging.getLogger("ibllib")
 
@@ -51,6 +50,10 @@ class ExtendedQC(object):
         # aggregate them
         extended_qc.update(self.oneqc.passed)
         extended_qc.update(average_bpod_frame)
+        # Ensure None instead of NaNs
+        for k, v in extended_qc.items():
+            if v is not None and np.isnan(v):
+                extended_qc[k] = None
 
         self.frame = extended_qc
 

@@ -1,12 +1,13 @@
 # Mock dataset
 import unittest
 from functools import partial
+
 import numpy as np
 
-from ibllib.qc import bpodqc_metrics as qcmetrics
 from ibllib.qc import BpodQC
-from oneibl.one import ONE
+from ibllib.qc import bpodqc_metrics as qcmetrics
 from ibllib.qc.oneutils import download_bpodqc_raw_data
+from oneibl.one import ONE
 
 one = ONE(
     base_url="https://test.alyx.internationalbrainlab.org",
@@ -294,6 +295,26 @@ class TestBpodQCMetrics(unittest.TestCase):
         self.data["rewardVolume"][id] = 4.0
         metric, passed = qcmetrics.load_reward_volumes(self.data)
         self.assertTrue(np.nanmean(passed) == 0.2, "failed to detect incorrect reward volume")
+
+    @unittest.skip("not implemented")
+    def test_load_wheel_freeze_during_quiescence(self):
+        pass
+
+    @unittest.skip("not implemented")
+    def test_load_wheel_move_before_feedback(self):
+        pass
+
+    @unittest.skip("not implemented")
+    def test_load_wheel_move_during_closed_loop(self):
+        pass
+
+    @unittest.skip("not implemented")
+    def test_load_stimulus_move_before_goCue(self):
+        pass
+
+    @unittest.skip("not implemented")
+    def test_load_audio_pre_trial(self):
+        pass
 
 
 if __name__ == "__main__":
