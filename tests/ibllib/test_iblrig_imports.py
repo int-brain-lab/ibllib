@@ -13,7 +13,6 @@ class TestIBLRigImports(unittest.TestCase):
         import ibllib.io.params as lib_params
         import ibllib.io.raw_data_loaders as raw
         import ibllib.pipes.misc as misc
-        import ibllib.plots.pprint as pprint
         import oneibl.params
         from ibllib.dsp.smooth import rolling_window as smooth
         from ibllib.graphic import numinput, popup, strinput
@@ -27,3 +26,6 @@ class TestIBLRigImports(unittest.TestCase):
 
     def tearDown(self):
         pass
+
+if __name__ == "__main__":
+    unittest.main(exit=False)
