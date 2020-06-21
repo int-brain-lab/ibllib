@@ -52,4 +52,12 @@ Docstrings Reference
 
    05_developers
 
+IBLLIB tutorials
+------------------------------------
+
+.. toctree::
+   :maxdepth: 1
+
+   06_tutorials
+
 * :ref:`genindex`

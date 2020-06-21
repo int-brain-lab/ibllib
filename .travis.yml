@@ -3,20 +3,32 @@ python:
   - "3.6"
 # command to install dependencies
 install:
+  - sudo apt-get install pandoc
   - pip install -r requirements.txt
   - pip install -e .
   # phylib will be a proper pip dependency once it's more stable
   - pip install git+https://github.com/cortex-lab/phylib
+  - pip install -r docs/requirements-docs.txt
 
 before_script:
   - echo "exec('from oneibl.one import ONE; ONE(silent=True)')" | python
   - sed -i 's|null|"'$IBLFLATIRONPASS'"|g' /home/travis/.one_params
   # command to run tests
 script:
-  - bash ./run_tests
-  - flake8 .
+  - make -C docs/ html
+  - touch docs/_build/html/.nojekyll
+  #- bash ./run_tests
+  #- flake8 .
 # only build master and develop (PRs are built for all branches)
 branches:
   only:
-  - master
-  - develop
+  - docsMayo
+deploy:
+  - provider: pages:git
+    verbose: true
+    token: $GITHUB_TOKEN
+    edge: true
+    local_dir: ./docs/_build/html/
+    keep_history: true
+    on:
+      branch: docsMayo

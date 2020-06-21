@@ -48,7 +48,7 @@ release = ''
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ['sphinx.ext.autodoc', 'sphinx.ext.autosummary']
+extensions = ['sphinx.ext.autodoc', 'sphinx.ext.autosummary', 'sphinx.ext.mathjax', 'recommonmark']
 autosummary_generate = True
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -91,7 +91,7 @@ html_theme = 'sphinx_rtd_theme'
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+#html_static_path = ['_static']
 
 # Custom sidebar templates, must be a dictionary that maps document names
 # to template names.
@@ -168,3 +168,32 @@ source_parsers = {
     '.md': 'recommonmark.parser.CommonMarkParser',
 }
 source_suffix = ['.rst', '.md']
+plot_formats = [('png', 512)]
+
+_root = os.path.abspath(os.path.join(os.path.dirname(__file__)))
+_scripts_path = os.path.join(_root, 'scripts')
+if _scripts_path not in sys.path:
+    sys.path.insert(1, _scripts_path)
+
+from convert import process_notebooks
+nb_tutorials_path = os.path.join(_root, 'tutorials')
+#template_path = os.path.join(_root, 'tutorials', 'astropy.tpl')
+rst_output_path = os.path.join(_root, 'rst-tutorials')
+
+#processkwargs = dict(output_path=rst_output_path, template_file=template_path)
+#if os.environ.get('NBCONVERT_KERNEL'):  # this allows access from "make html"
+#    processkwargs['kernel_name'] = os.environ.get('NBCONVERT_KERNEL')
+#
+#if os.environ.get('NBFILE'):  # this allows only building a single tutorial file
+#    nb_tutorials_path = os.path.abspath(os.environ.get('NBFILE'))
+
+process_notebooks(nb_tutorials_path, output_path=rst_output_path, overwrite=True)
+
+
+# Add any paths that contain custom static files (such as style sheets) here,
+# relative to this directory. They are copied after the builtin static files,
+# so a file named "default.css" will overwrite the builtin "default.css".
+#_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+html_static_path = ['tutorials', '_static']
+html_static_path = [os.path.join(_root, x)
+                    for x in html_static_path]
