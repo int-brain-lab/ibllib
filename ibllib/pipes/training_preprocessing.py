@@ -3,8 +3,7 @@ from collections import OrderedDict
 
 from ibllib.pipes import tasks
 from ibllib.io import ffmpeg, raw_data_loaders as rawio
-from ibllib.io.extractors import (training_trials, biased_trials, training_wheel, biased_wheel,
-                                  training_audio)
+from ibllib.io.extractors import (training_trials, biased_trials, training_wheel, training_audio)
 
 
 _logger = logging.getLogger('ibllib')
@@ -76,7 +75,8 @@ class TrainingExtractionPipeline(tasks.Pipeline):
 
 def extract_training(session_path, save=True):
     """
-    Extracts a training session from its path
+    Extracts a training session from its path.  NB: Wheel must be extracted first in order to
+    extract trials.firstMovement_times.
     :param session_path:
     :param save:
     :return: trials: Bunch/dict of trials
@@ -88,15 +88,15 @@ def extract_training(session_path, save=True):
     settings, bpod_trials = rawio.load_bpod(session_path)
     if extractor_type == 'training':
         _logger.info('training session on ' + settings['PYBPOD_BOARD'])
-        trials, files_trials = training_trials.extract_all(
-            session_path, bpod_trials=bpod_trials, settings=settings, save=save)
         wheel, files_wheel = training_wheel.extract_all(
+            session_path, bpod_trials=bpod_trials, settings=settings, save=save)
+        trials, files_trials = training_trials.extract_all(
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
     elif extractor_type == 'biased':
         _logger.info('biased session on ' + settings['PYBPOD_BOARD'])
-        trials, files_trials = biased_trials.extract_all(
+        wheel, files_wheel = training_wheel.extract_all(
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
-        wheel, files_wheel = biased_wheel.extract_all(
+        trials, files_trials = biased_trials.extract_all(
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
     else:
         raise ValueError(f"No extractor for task {extractor_type}")

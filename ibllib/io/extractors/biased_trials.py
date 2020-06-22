@@ -3,9 +3,9 @@ import numpy as np
 
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.training_trials import (  # noqa; noqa
-    CameraTimestamps, Choice, FeedbackTimes, FeedBackType, GoCueTimes, GoCueTriggerTimes,
+    CameraTimestamps, Choice, FeedbackTimes, FeedbackType, GoCueTimes, GoCueTriggerTimes,
     IncludedTrials, Intervals, ItiDuration, ProbabilityLeft, ResponseTimes, RewardVolume,
-    StimOnTimes, StimOnTriggerTimes, StimOnOffFreezeTimes)
+    StimOnTimes, StimOnTriggerTimes, FirstMovementTimes)
 from ibllib.misc import version
 
 
@@ -31,8 +31,9 @@ def extract_all(session_path, save=False, bpod_trials=False, settings=False):
         settings = raw.load_settings(session_path)
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
-    base = [FeedBackType, ContrastLR, ProbabilityLeft, Choice, RewardVolume, FeedbackTimes,
-            StimOnTimes, Intervals, ResponseTimes, GoCueTriggerTimes, GoCueTimes, CameraTimestamps]
+    base = [FeedbackType, ContrastLR, ProbabilityLeft, Choice, RewardVolume,
+            FeedbackTimes, StimOnTimes, Intervals, ResponseTimes, GoCueTriggerTimes,
+            GoCueTimes, FirstMovementTimes, CameraTimestamps]
     # Version specific extractions
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
         base.extend([StimOnTriggerTimes, IncludedTrials])

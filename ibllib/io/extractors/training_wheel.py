@@ -7,8 +7,9 @@ from ibllib.io.extractors.base import BaseBpodTrialsExtractor
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
 import ibllib.exceptions as err
+import brainbox.behavior.wheel as wh
 
-logger_ = logging.getLogger('ibllib')
+_logger = logging.getLogger('ibllib')
 WHEEL_RADIUS_CM = 1  # we want the output in radians
 THRESHOLD_RAD_PER_SEC = 10
 THRESHOLD_CONSECUTIVE_SAMPLES = 0
@@ -28,8 +29,7 @@ def get_trial_start_times(session_path, data=None):
 def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
     if not bpod_data:
         bpod_data = raw.load_data(session_path)
-    if not re_events:
-        evt = raw.load_encoder_events(session_path)
+    evt = re_events or raw.load_encoder_events(session_path)
     # we work with stim_on (2) and closed_loop (3) states for the synchronization with bpod
     tre = evt.re_ts.values / 1e6  # convert to seconds
     # the first trial on the rotary encoder is a dud
@@ -46,7 +46,7 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
                                          " synchronization. Wheel data not extracted")
     # bpod bug that spits out events in ms instead of us
     if np.diff(bpod['closed_loop'][[-1, 0]])[0] / np.diff(rote['closed_loop'][[-1, 0]])[0] > 900:
-        logger_.error("Rotary encoder stores values in ms instead of us. Wheel timing inaccurate")
+        _logger.error("Rotary encoder stores values in ms instead of us. Wheel timing inaccurate")
         rote['stim_on'] *= 1e3
         rote['closed_loop'] *= 1e3
     # just use the closed loop for synchronization
@@ -99,7 +99,7 @@ def get_wheel_position(session_path, bp_data=None, display=False):
         bp_data = raw.load_data(session_path)
     df = raw.load_encoder_positions(session_path)
     if df is None:
-        logger_.error('No wheel data for ' + str(session_path))
+        _logger.error('No wheel data for ' + str(session_path))
         return None
     data = structarr(['re_ts', 're_pos', 'bns_ts'],
                      shape=(df.shape[0],), formats=['f8', 'f8', np.object])
@@ -151,8 +151,8 @@ def get_wheel_position(session_path, bp_data=None, display=False):
                 # at which point we are running out of possible bugs and calling it
             tr_dc[ind] = data['re_pos'][ind - 1]
         if iwarn:  # if a warning flag was caught in the loop throw a single warning
-            logger_.warning('Rotary encoder reset events discrepancy. Doing my best to merge.')
-            logger_.debug('Offending inds: ' + str(iwarn) + ' times: ' + str(data['re_ts'][iwarn]))
+            _logger.warning('Rotary encoder reset events discrepancy. Doing my best to merge.')
+            _logger.debug('Offending inds: ' + str(iwarn) + ' times: ' + str(data['re_ts'][iwarn]))
         # exit status 0 is fine, 1 something went wrong
         return tr_dc, len(iwarn) != 0
 
@@ -230,7 +230,67 @@ def get_wheel_position(session_path, bp_data=None, display=False):
     return data['re_ts'], data['re_pos']
 
 
-class WheelPosition(BaseBpodTrialsExtractor):
+def extract_wheel_moves(re_ts, re_pos, display=False):
+    """
+    Extract wheel positions and times from sync fronts dictionary
+    :param re_ts: numpy array of rotary encoder timestamps
+    :param re_pos: numpy array of rotary encoder positions
+    :param display: bool: show the wheel position and velocity for full session with detected
+    movements highlighted
+    :return: wheel_moves dictionary
+    """
+    if len(re_ts.shape) == 1:
+        assert re_ts.size == re_pos.size, 'wheel data dimension mismatch'
+        assert np.all(
+            np.diff(re_ts) > 0), 'wheel timestamps not monotonically increasing'
+    else:
+        _logger.debug('2D wheel timestamps')
+
+    # Check the values and units of wheel position
+    res = np.array([wh.ENC_RES, wh.ENC_RES / 2, wh.ENC_RES / 4])
+    # min change in rad and cm for each decoding type
+    # [rad_X4, rad_X2, rad_X1, cm_X4, cm_X2, cm_X1]
+    min_change = np.concatenate([2 * np.pi / res, wh.WHEEL_DIAMETER * np.pi / res])
+    pos_diff = np.abs(np.ediff1d(re_pos)).min()
+    
+    # find min change closest to min pos_diff
+    idx = np.argmin(np.abs(min_change - pos_diff))
+    if idx < len(res):
+        # Assume values are in radians
+        units = 'rad'
+        encoding = idx
+    else:
+        units = 'cm'
+        encoding = idx - len(res)
+    enc_names = {0: 'X4', 1: 'X2', 2: 'X1'}
+    _logger.info('Wheel in %s units using %s encoding', units, enc_names[int(encoding)])
+
+    # The below assertion is violated by Bpod wheel data
+    #  assert np.allclose(pos_diff, min_change, rtol=1e-05), 'wheel position skips'
+
+    # Convert the pos threshold defaults from samples to correct unit
+    thresholds = wh.samples_to_cm(np.array([8, 1.5]), resolution=res[encoding])
+    if units == 'rad':
+        thresholds = wh.cm_to_rad(thresholds)
+    kwargs = {'pos_thresh': thresholds[0],
+              'pos_thresh_onset': thresholds[1],
+              'make_plots': display}
+
+    # Interpolate and get onsets
+    pos, t = wh.interpolate_position(re_ts, re_pos, freq=1000)
+    on, off, amp, peak_vel = wh.movements(t, pos, freq=1000, **kwargs)
+    assert on.size == off.size, 'onset/offset number mismatch'
+    assert np.all(np.diff(on) > 0) and np.all(
+        np.diff(off) > 0), 'onsets/offsets not monotonically increasing'
+    assert np.all((off - on) > 0), 'not all offsets occur after onset'
+
+    # Put into dict
+    wheel_moves = {
+        'intervals': np.c_[on, off], 'peakAmplitude': amp, 'peakVelocity_times': peak_vel}
+    return wheel_moves
+
+
+class Wheel(BaseBpodTrialsExtractor):
     """
     Get wheel data from raw files and converts positions into radians mathematical convention
      (anti-clockwise = +) and timestamps into seconds relative to Bpod clock.
@@ -243,13 +303,17 @@ class WheelPosition(BaseBpodTrialsExtractor):
     Positions:
     Radians mathematical convention
     """
-    save_names = ('_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy')
-    var_names = ('timestamps', 'position')
+    save_names = ('_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
+                  '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy')
+    var_names = ('wheel_timestamps', 'wheel_position',
+                 'wheel_moves_intervals', 'wheel_moves_peak_amplitude')
 
     def _extract(self):
-        return get_wheel_position(self.session_path, self.bpod_trials)
+        ts, pos = get_wheel_position(self.session_path, self.bpod_trials)
+        moves = extract_wheel_moves(ts, pos)
+        return ts, pos, moves['intervals'], moves['peakAmplitude']
 
 
 def extract_all(session_path, bpod_trials=None, settings=None, save=False):
-    return WheelPosition(session_path=session_path).extract(
+    return Wheel(session_path=session_path).extract(
         save=save, bpod_trials=bpod_trials, settings=settings)

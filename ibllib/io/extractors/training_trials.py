@@ -2,15 +2,19 @@ import logging
 import cv2
 import numpy as np
 from pkg_resources import parse_version
+from collections import Sized
+from pathlib import Path
 
+import alf.io
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
 from ibllib.misc import version
 
-logger_ = logging.getLogger('ibllib')
+
+_logger = logging.getLogger('ibllib')
 
 
-class FeedBackType(BaseBpodTrialsExtractor):
+class FeedbackType(BaseBpodTrialsExtractor):
     """
     Get the feedback that was delivered to subject.
     **Optional:** saves _ibl_trials.feedbackType.npy
@@ -62,7 +66,7 @@ class ContrastLR(BaseBpodTrialsExtractor):
         contrastRight = np.array([t['contrast']['value'] if np.sign(
             t['position']) > 0 else np.nan for t in self.bpod_trials])
 
-        return (contrastLeft, contrastRight)
+        return contrastLeft, contrastRight
 
 
 class ProbabilityLeft(BaseBpodTrialsExtractor):
@@ -200,7 +204,7 @@ class FeedbackTimes(BaseBpodTrialsExtractor):
             # get the error sound only if the reward is nan
             err_sound_times[ind] = st[-1] if st.size >= 2 and np.isnan(rw_times[ind]) else np.nan
         if missed_bnc2 == len(data):
-            logger_.warning('No BNC2 for feedback times, filling error trials NaNs')
+            _logger.warning('No BNC2 for feedback times, filling error trials NaNs')
         merge *= np.nan
         merge[~np.isnan(rw_times)] = rw_times[~np.isnan(rw_times)]
         merge[~np.isnan(err_sound_times)] = err_sound_times[~np.isnan(err_sound_times)]
@@ -303,7 +307,7 @@ class TrialType(BaseBpodTrialsExtractor):
             elif ~np.isnan(tr["behavior_data"]["States timestamps"]["no_go"][0][0]):
                 trial_type.append(0)
             else:
-                logger_.warning("Trial is not in set {-1, 0, 1}, appending NaN to trialType")
+                _logger.warning("Trial is not in set {-1, 0, 1}, appending NaN to trialType")
                 trial_type.append(np.nan)
         return np.array(trial_type)
 
@@ -340,11 +344,11 @@ class GoCueTimes(BaseBpodTrialsExtractor):
         nmissing = np.sum(np.isnan(go_cue_times))
         # Check if all stim_syncs have failed to be detected
         if np.all(np.isnan(go_cue_times)):
-            logger_.warning(
+            _logger.warning(
                 f'{self.session_path}: Missing ALL !! BNC2 stimulus ({nmissing} trials')
         # Check if any stim_sync has failed be detected for every trial
         elif np.any(np.isnan(go_cue_times)):
-            logger_.warning(f'{self.session_path}: Missing BNC2 stimulus on {nmissing} trials')
+            _logger.warning(f'{self.session_path}: Missing BNC2 stimulus on {nmissing} trials')
 
         return go_cue_times
 
@@ -552,11 +556,11 @@ class StimOnTimes(BaseBpodTrialsExtractor):
         nmissing = np.sum(np.isnan(stimOn_times))
         # Check if all stim_syncs have failed to be detected
         if np.all(np.isnan(stimOn_times)):
-            logger_.error(f'{session_path}: Missing ALL BNC1 stimulus ({nmissing} trials')
+            _logger.error(f'{session_path}: Missing ALL BNC1 stimulus ({nmissing} trials')
 
         # Check if any stim_sync has failed be detected for every trial
         if np.any(np.isnan(stimOn_times)):
-            logger_.warning(f'{session_path}: Missing BNC1 stimulus on {nmissing} trials')
+            _logger.warning(f'{session_path}: Missing BNC1 stimulus on {nmissing} trials')
 
         return stimOn_times
 
@@ -602,10 +606,10 @@ class StimOnTimes(BaseBpodTrialsExtractor):
             stimOn_times[i] = stot[0]
 
         if np.all(np.isnan(stimOn_times)):
-            logger_.error(f'{session_path}: Missing ALL BNC1 stimulus ({count_missing} trials')
+            _logger.error(f'{session_path}: Missing ALL BNC1 stimulus ({count_missing} trials')
 
         if count_missing > 0:
-            logger_.warning(f'{session_path}: Missing BNC1 stimulus on {count_missing} trials')
+            _logger.warning(f'{session_path}: Missing BNC1 stimulus on {count_missing} trials')
 
         return np.array(stimOn_times)
 
@@ -646,6 +650,84 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
         # stimFreeze -> Closest one to stimFreezeTrigger?
 
         return stimOn_times, stimOff_times, stimFreeze_times
+
+
+class FirstMovementTimes(BaseBpodTrialsExtractor):
+    """
+    Extracts firstMovement_times and requires the wheel data, wheelMoves object, goCue_times and 
+    feedback_times.
+    """
+    save_names = '_ibl_trials.firstMovement_times.npy'
+    var_names = 'firstMovement_times'
+    
+    def _extract(self, trials=None, wheel_moves=None):
+        try:  # get the lower bound of the quiescence period
+            min_qt = self.settings['QUIESCENT_PERIOD']
+        except KeyError:
+            min_qt = None
+
+        if not trials:
+            assert self.bpod_trials, 'neither trials nor bpod_trials are set'
+            _logger.info('extracting trial times from raw Bpod data')
+            goCue_times, _ = GoCueTimes(self.session_path).extract(
+                save=False, bpod_trials=self.bpod_trials, settings=self.settings)
+            feedback_times, _ = FeedbackTimes(self.session_path).extract(
+                save=False, bpod_trials=self.bpod_trials, settings=self.settings)
+            trials = {'goCue_times': goCue_times, 'feedback_times': feedback_times}
+
+        if not wheel_moves:
+            _logger.info('loading wheelMoves from files')
+            alf_path = Path(self.session_path) / 'alf'
+            wheel_moves = alf.io.load_object(alf_path, '_ibl_wheelMoves')
+        first_moves, *_ = self.extract_first_movement_times(wheel_moves, trials, min_qt=min_qt)
+        return first_moves
+
+    @staticmethod
+    def extract_first_movement_times(wheel_moves, trials, min_qt=None):
+        """
+        Extracts the time of the first sufficiently large wheel movement for each trial.
+        To be counted, the movement must occur between go cue / stim on and before feedback /
+        response time.  The movement onset is sometimes just before the cue (occurring in the
+        gap between quiescence end and cue start, or during the quiescence period but sub-
+        threshold).  The movement is sufficiently large if it is greater than or equal to THRESH
+        :param wheel_moves: dictionary of detected wheel movement onsets and peak amplitudes for
+        use in extracting each trial's time of first movement.
+        :param trials: dictionary of trial data
+        :param min_qt: the minimum quiescence period, if None a default is used
+        :return: numpy array of first movement times, bool array indicating whether movement
+        crossed response threshold, and array of indices for wheel_moves arrays
+        """
+        THRESH = .1  # peak amp should be at least .1 rad; ~1/3rd of the distance to threshold
+        MIN_QT = .2  # default minimum enforced quiescence period
+        
+        # Determine minimum quiescent period
+        if min_qt is None:
+            min_qt = MIN_QT
+            _logger.info('minimum quiescent period assumed to be %.0fms', MIN_QT*1e3)
+        elif isinstance(min_qt, Sized) and len(min_qt) > len(trials['goCue_times']):
+            min_qt = np.array(min_qt[0:trials['goCue_times'].size])
+    
+        # Initialize as nans
+        first_move_onsets = np.full(trials['goCue_times'].shape, np.nan)
+        ids = np.full(trials['goCue_times'].shape, int(-1))
+        is_final_movement = np.zeros(trials['goCue_times'].shape, bool)
+        flinch = abs(wheel_moves['peakAmplitude']) < THRESH
+        all_move_onsets = wheel_moves['intervals'][:, 0]
+        # Iterate over trials, extracting onsets approx. within closed-loop period
+        for i, (t1, t2) in enumerate(zip(trials['goCue_times'] - min_qt,
+                                         trials['feedback_times'])):
+            if ~np.isnan(t2 - t1):  # If both timestamps defined
+                mask = (all_move_onsets > t1) & (all_move_onsets < t2)
+                if np.any(mask):  # If any onsets for this trial
+                    trial_onset_ids, = np.where(mask)
+                    if np.any(~flinch[mask]):  # If any trial moves were sufficiently large
+                        ids[i] = trial_onset_ids[~flinch[mask]][0]  # Find first large move id
+                        first_move_onsets[i] = all_move_onsets[ids[i]]  # Save first large onset
+                        is_final_movement[i] = ids[i] == trial_onset_ids[-1]  # Final move of trial
+            else:  # Log missing timestamps
+                _logger.warning('no reliable times for trial id %i', i + 1)
+    
+        return first_move_onsets, is_final_movement, ids[ids != -1]
 
 
 class CameraTimestamps(BaseBpodTrialsExtractor):
@@ -694,7 +776,7 @@ class CameraTimestamps(BaseBpodTrialsExtractor):
             n_frames += pin.size
 
         if n_out_of_sync > 0:
-            logger_.warning(f"{n_out_of_sync} trials with frame times not within 10% of the"
+            _logger.warning(f"{n_out_of_sync} trials with frame times not within 10% of the"
                             f" expected sampling rate")
 
         t_first_frame = np.array([c[0] for c in cam_times])
@@ -745,9 +827,9 @@ def extract_all(session_path, save=False, bpod_trials=False, settings=False):
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
 
-    base = [FeedBackType, ContrastLR, ProbabilityLeft, Choice, RepNum, RewardVolume,
+    base = [FeedbackType, ContrastLR, ProbabilityLeft, Choice, RepNum, RewardVolume,
             FeedbackTimes, StimOnTimes, Intervals, ResponseTimes, GoCueTriggerTimes,
-            GoCueTimes]
+            GoCueTimes, FirstMovementTimes]
     # Version check
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
         base.extend([StimOnTriggerTimes, CameraTimestamps])

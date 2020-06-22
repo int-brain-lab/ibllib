@@ -17,6 +17,8 @@ from ibllib.io import spikeglx, raw_data_loaders
 import ibllib.dsp as dsp
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor, BaseExtractor, run_extractor_classes
 from ibllib.io.extractors import biased_trials
+from ibllib.io.extractors.training_wheel import extract_wheel_moves
+from ibllib.io.extractors.training_trials import FirstMovementTimes
 
 
 _logger = logging.getLogger('ibllib')
@@ -549,12 +551,16 @@ class ProbaContrasts(BaseBpodTrialsExtractor):
         return pe['prob_left'], pe['contrast_left'], pe['contrast_right']
 
 
-class WheelPositions(BaseExtractor):
-    save_names = ['_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy']
-    var_names = ['wheel_timestamps', 'wheel_position']
+class Wheel(BaseExtractor):
+    save_names = ('_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
+                  '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy')
+    var_names = ('wheel_timestamps', 'wheel_position',
+                 'wheelMoves_intervals', 'wheelMoves_peakAmplitude')
 
     def _extract(self, sync=None, chmap=None):
-        return extract_wheel_sync(sync=sync, chmap=chmap)
+        ts, pos = extract_wheel_sync(sync=sync, chmap=chmap)
+        moves = extract_wheel_moves(ts, pos)
+        return ts, pos, moves['intervals'], moves['peakAmplitude']
 
 
 class CameraTimestamps(BaseExtractor):
@@ -574,11 +580,12 @@ class FpgaTrials(BaseExtractor):
                   '_ibl_trials.intervals_bpod.npy', '_ibl_trials.intervals.npy',
                   '_ibl_trials.response_times.npy', '_ibl_trials.goCueTrigger_times.npy',
                   '_ibl_trials.stimOn_times.npy', '_ibl_trials.stimOff_times.npy',
-                  '_ibl_trials.goCue_times.npy', '_ibl_trials.feedback_times.npy')
+                  '_ibl_trials.goCue_times.npy', '_ibl_trials.feedback_times.npy',
+                  '_ibl_trials.firstMovement_times.npy')
     var_names = ('probabilityLeft', 'contrastLeft', 'contrastRight', 'feedbackType', 'choice',
                  'rewardVolume', 'intervals_bpod', 'intervals', 'response_times',
                  'goCueTrigger_times', 'stimOn_times', 'stimOff_times', 'goCue_times',
-                 'feedback_times')
+                 'feedback_times', 'firstMovement_times')
 
     def _extract(self, sync=None, chmap=None):
         # extract the behaviour data from bpod
@@ -603,11 +610,24 @@ class FpgaTrials(BaseExtractor):
         fpga_fields = ['stimOn_times', 'stimOff_times', 'goCue_times', 'feedback_times']
         # get ('probabilityLeft', 'contrastLeft', 'contrastRight') from the custom ephys extractors
         pclcr, _ = ProbaContrasts(self.session_path).extract(bpod_trials=bpod_raw, save=False)
+        # Get first movement times using wheel moves data
+        first_move_onsets = None
+        try:
+            wheel_moves = alf.io.load_object(self.session_path / 'alf', '_ibl_wheelMoves')
+            first_move_onsets, *_ = FirstMovementTimes(self.session_path)\
+                .extract(wheel_moves=wheel_moves, trials=fpga_trials, save=False)
+        except FileNotFoundError:
+            _logger.error('failed to load wheelMoves object for firstMovement extraction')
+        except Exception:
+            _logger.exception('failed to extract firstMovement times')
+
         out = OrderedDict()
         out.update({k: pclcr[i] for i, k in enumerate(ProbaContrasts.var_names)})
         out.update({k: bpod_trials[k][ibpod] for k in bpod_fields})
         out.update({k: fcn_bpod2fpga(bpod_trials[k][ibpod]) for k in bpod_rsync_fields})
         out.update({k: fpga_trials[k][ifpga] for k in fpga_fields})
+        out.update({'firstMovement_times': first_move_onsets})
+
         assert self.var_names == tuple(out.keys())
         return [out[k] for k in out]
 
@@ -626,6 +646,6 @@ def extract_all(session_path, save=False, bin_exists=False):
     """
     sync, chmap = _get_main_probe_sync(session_path, bin_exists=bin_exists)
     outputs, files = run_extractor_classes(
-        [WheelPositions, CameraTimestamps, FpgaTrials], session_path=session_path,
+        [Wheel, CameraTimestamps, FpgaTrials], session_path=session_path,
         save=save, sync=sync, chmap=chmap)
     return outputs, files
