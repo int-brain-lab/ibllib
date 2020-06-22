@@ -2,60 +2,25 @@
 
 ## Python-specific Dependencies
 
-Python-specific dependency : **Python 3.6 or higher**.
-
-### Install Anaconda/Miniconda onto your machine
-Download and install  the  Anaconda  python  distribution from here (chosing the right OS): https://www.anaconda.com/download/#download
-_Note_ : Download the latest version.
-
+Python-specific dependency : **Python 3.7 or higher**.
 
 ## Initialisation
 
-Before you begin, make sure you have installed ibllib properly on your system as per the previous instructions.
-Make sure your computer is connected to an IBL accredited network.
-
 The following steps will indicate how to :
 1. setup a virtual environment using Anaconda
-2. install requirements and packages
-3. define ONE connection settings
-4. test for the installation
-All of that can be done using shell terminal command lines.
+2. define ONE connection settings
+3. Optional: test for the installation
 
 ### Environment and ibllib setup
-
-#### Using virtualenv
-
-In a shell terminal, type the following commands:
-
-```
-cd ibllib/
-virtualenv iblenv --python=python3.7
-source ./venv/bin/activate
-pip install ibllib
-```
-
-#### Using Anaconda (recommended for Windows users)
-
-In a shell terminal, type the following commands:
-
-```
-cd ibllib/
-conda env create --name ibllib -f ibllib_conda.yaml
-pip install ibllib
-```
-
-#### Troubleshooting environment issues
-
-Our recipes have been tested for creating environments from scratch for Mac/Linux and Windows.
-Solving package dependencies can be challenging especially when trying to setup a scientific environment on top of an older environment.
-If you experience any problem it is recommended to start from a blank environment, and or update to the latest conda version.
-
+The IBL has a unified set of dependencies for various applications, ibllib being one of those.
+The steps to setup the unified environment are here.
+https://github.com/int-brain-lab/iblenv
 
 ### Instantiate One class: Define connection settings
 
 The first step is to instantiate the **One class**: behind the scenes, the constructor connects to the IBL cloud database and gets credentials.
 
-The connections settings are defined in a JSON parameter file (named *.one_params*).
+The connections settings are defined in a JSON parameter file (named *.one_params*). The file is created when you first run `ONE.setup()`
 -   In Linux, the file is in `~/.one_params`.
 -   In Windows, the file is in the Roaming App directory `C:\Users\CurrentUser\AppData\Roaming\.one_params`.
 -   In Mac OS, the file is in the user directory `/Users/CurrentUser/.one_params`.
@@ -102,7 +67,6 @@ HTTP_DATA_SERVER_PWD	# Request Password for HTTP from IBL admins
 
 #### 2. Edit the JSON *.one_params* file manually
 **_Note_**: In Mac OS/Linux, use the command `nano` in a terminal.
-
 
 Once the connections settings are defined, there is no need to setup the class One again if willing to connect with the credentials saved in the JSON *.one_params* file.
 
