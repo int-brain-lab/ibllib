@@ -13,8 +13,8 @@ The following steps will indicate how to :
 
 ### Environment and ibllib setup
 The IBL has a unified set of dependencies for various applications, ibllib being one of those.
-The steps to setup the unified environment are here.
-https://github.com/int-brain-lab/iblenv
+The steps to setup the unified environment are here:  
+[https://github.com/int-brain-lab/iblenv](https://github.com/int-brain-lab/iblenv)
 
 ### Instantiate One class: Define connection settings
 
