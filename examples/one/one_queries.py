@@ -1,6 +1,9 @@
 from oneibl.one import ONE
 
 one = ONE()
+# query session for several subjects
+subjects = ['DY_003', 'DY_006']
+ses = one.alyx.rest('sessions', 'list', django=f"subject__nickname__in,{subjects}")
 
 # query sessions that have histology available
 ses = one.alyx.rest('sessions', 'list', histology=True)
