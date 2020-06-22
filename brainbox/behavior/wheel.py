@@ -134,7 +134,7 @@ def last_movement_onset(t, vel, event_time):
     Find the time at which movement started, given an event timestamp that occurred during the
     movement.  Movement start is defined as the first sample after the velocity has been zero
     for at least 50ms.  Wheel inputs should be evenly sampled.
-    
+
     :param t: numpy array of wheel timestamps in seconds
     :param vel: numpy array of wheel velocities
     :param event_time: timestamp anywhere during movement of interest, e.g. peak velocity
@@ -340,7 +340,7 @@ def cm_to_rad(positions, wheel_diameter=WHEEL_DIAMETER):
     :param positions: array of wheel positions in cm
     :param wheel_diameter: the diameter of the wheel in cm
     :return: array of wheel angle in radians
-    
+
     # Example: Convert linear cm to radians
     >>> cm_to_rad(1)
     0.3225806451612903
@@ -361,7 +361,7 @@ def samples_to_cm(positions, wheel_diameter=WHEEL_DIAMETER, resolution=ENC_RES):
     :param wheel_diameter: the diameter of the wheel in cm
     :param resolution: resolution of the rotary encoder
     :return: array of wheel angle in radians
-    
+
     # Example: Get resolution in linear cm
     >>> samples_to_cm(1)
     0.004755340442445488
@@ -449,13 +449,13 @@ def within_ranges(x: np.ndarray, ranges: Array, labels: Optional[Array] = None,
     dtype : str, numeric or boolean type
         The data type of the returned array.  If type is bool, the labels in vector mode will be
         ignored.  Default is int8.
-    
-    
+
+
     Returns
     -------
     A vector of size like x where zeros indicate that the points do not lie within ranges (
     'vector' mode) or a matrix where out.shape[0] == x.size and out.shape[1] == max(labels) + 1.
-    
+
     Examples
     -------
     # Assert that points in ranges are mutually exclusive
@@ -508,7 +508,7 @@ def within_ranges(x: np.ndarray, ranges: Array, labels: Optional[Array] = None,
 
     # This order means it will be inclusive
     to_sort = np.concatenate((ranges[:, 0], x, ranges[:, 1]))
-    # worst case O(n*log(n)) but will be better than  this as most of the array is ordered; 
+    # worst case O(n*log(n)) but will be better than  this as most of the array is ordered;
     # memory overhead ~n/2
     idx = np.argsort(to_sort, kind='stable')
 
@@ -558,12 +558,12 @@ def traces_by_trial(t, *args, start=None, end=None, separate=True):
     Returns list of tuples of positions and velocity for samples between stimulus onset and
     feedback.
     :param t: numpy array of timestamps
-    :param args: optional numpy arrays of the same length as timestamps, such as positions, 
+    :param args: optional numpy arrays of the same length as timestamps, such as positions,
     velocities or accelerations
     :param start: start timestamp or array thereof
     :param end: end timestamp or array thereof
-    :param separate: when True, the output is returned as tuples list of the form [(t, args[0], 
-    args[1]), ...], when False, the output is a list of n-by-m ndarrays where n = number of 
+    :param separate: when True, the output is returned as tuples list of the form [(t, args[0],
+    args[1]), ...], when False, the output is a list of n-by-m ndarrays where n = number of
     positional args and m = len(t)
     :return: list of sliced arrays where length == len(start)
     """
