@@ -6,6 +6,7 @@ import pickle
 import numpy as np
 from mayavi import mlab
 
+import ibllib.plots
 from oneibl.one import ONE
 from brainbox.core import Bunch
 import ibllib.atlas as atlas
@@ -47,7 +48,7 @@ fig = rendering.figure(grid=False)  # set grid=True for ugly axes
 for m in np.arange(len(ins.eid)):
     print(ins.session[m]['subject'], ins.session[m]['start_time'][:10],
           ins.session[m]['number'], ins.probe_label[m])
-    color = rendering.color_cycle(m)
+    color = ibllib.plots.color_cycle(m)
     mlapdv = brain_atlas.xyz2ccf(ins.insertion[m].xyz)
     # display the trajectories
     mlab.plot3d(mlapdv[:, 1], mlapdv[:, 2], mlapdv[:, 0],

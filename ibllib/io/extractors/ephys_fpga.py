@@ -120,12 +120,13 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
         return Bunch(sync)
 
 
-def _assign_events_bpod(bpod_t, bpod_polarities):
+def _assign_events_bpod(bpod_t, bpod_polarities, ignore_first_valve=True):
     """
     From detected fronts on the bpod sync traces, outputs the synchronisation events
     related to trial start and valve opening
     :param bpod_t: numpy vector containing times of fronts
     :param bpod_fronts: numpy vector containing polarity of fronts (1 rise, -1 fall)
+    :param ignore_first_valve (True): removes detected valve events at indices le 2
     :return: numpy arrays of times t_trial_start, t_valve_open and t_iti_in
     """
     TRIAL_START_TTL_LEN = 2.33e-4
@@ -146,7 +147,8 @@ def _assign_events_bpod(bpod_t, bpod_polarities):
     # valve open events are between 50ms to 300 ms
     i_valve_open = np.where(np.logical_and(dt > TRIAL_START_TTL_LEN,
                                            dt < ITI_TTL_LEN))[0] * 2
-    i_valve_open = np.delete(i_valve_open, np.where(i_valve_open < 2))
+    if ignore_first_valve:
+        i_valve_open = np.delete(i_valve_open, np.where(i_valve_open < 2))
     t_valve_open = bpod_t[i_valve_open]
     # ITI events are above 400 ms
     i_iti_in = np.where(dt > ITI_TTL_LEN)[0] * 2
@@ -207,14 +209,16 @@ def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, rad
         return t, p
 
 
-def _assign_events_audio(audio_t, audio_polarities):
+def _assign_events_audio(audio_t, audio_polarities, return_indices=False):
     """
     From detected fronts on the audio sync traces, outputs the synchronisation events
     related to tone in
 
     :param audio_t: numpy vector containing times of fronts
     :param audio_fronts: numpy vector containing polarity of fronts (1 rise, -1 fall)
+    :param return_indices (False): returns indices of tones
     :return: numpy arrays t_ready_tone_in, t_error_tone_in
+    :return: numpy arrays ind_ready_tone_in, ind_error_tone_in if return_indices=True
     """
     # make sure that there are no 2 consecutive fall or consecutive rise events
     assert(np.all(np.abs(np.diff(audio_polarities)) == 2))
@@ -226,7 +230,10 @@ def _assign_events_audio(audio_t, audio_polarities):
     # error tones are events lasting from 400ms to 600ms
     i_error_tone_in = np.where(np.logical_and(0.4 < dt, dt < 1.2))[0] * 2
     t_error_tone_in = audio_t[i_error_tone_in]
-    return t_ready_tone_in, t_error_tone_in
+    if return_indices:
+        return t_ready_tone_in, t_error_tone_in, i_ready_tone_in, i_error_tone_in
+    else:
+        return t_ready_tone_in, t_error_tone_in
 
 
 def _frame2ttl_events_extraction(f2ttl_t, f2ttl_fronts):
@@ -270,8 +277,10 @@ def _assign_events_to_trial(t_trial_start, t_event, take='last'):
     return t_event_nans
 
 
-def _get_sync_fronts(sync, channel_nb, tmax=np.inf):
-    selection = np.logical_and(sync['channels'] == channel_nb, sync['times'] <= tmax)
+def _get_sync_fronts(sync, channel_nb, tmin=None, tmax=None):
+    selection = sync['channels'] == channel_nb
+    selection = np.logical_and(selection, sync['times'] <= tmax) if tmax else selection
+    selection = np.logical_and(selection, sync['times'] >= tmin) if tmin else selection
     return Bunch({'times': sync['times'][selection],
                   'polarities': sync['polarities'][selection]})
 
