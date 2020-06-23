@@ -178,14 +178,16 @@ tdelays[fixture['ids'] == 'G'] += 0.3  # gabor patch
 # tdelays += 0.3
 
 
-cs_delays = np.cumsum(tdelays)[igabor]
+gabor_fixtures = np.cumsum(tdelays)[igabor]
+valve_fixtures = np.cumsum(tdelays)[np.where(fixture['ids'] == 'V')[0]]
 gb_diff_ts = np.diff(t_gabor[0::2])
-pearson_r = np.corrcoef(np.diff(cs_delays), gb_diff_ts)[1, 0]
+pearson_r = np.corrcoef(np.diff(gabor_fixtures), gb_diff_ts)[1, 0]
 assert pearson_r > 0.95
 
 DEBUG_PLOTS = True
 if DEBUG_PLOTS:
     # plots for debug
+    t0 = np.median(t_valve_open - valve_fixtures)
     from ibllib.plots import squares, vertical_lines, color_cycle
     import matplotlib.pyplot as plt
     pl, ax = plt.subplots(2, 1)
@@ -195,9 +197,12 @@ if DEBUG_PLOTS:
 
     vertical_lines(np.r_[t_start_passive, t_starts, t_ends], ymin=-1, ymax=4, color=color_cycle(0),
                    ax=ax[0], label='spacers')
-    vertical_lines(cs_delays + t_gabor[0] - cs_delays[0], ymin=-1, ymax=4, color=color_cycle(1),
+    vertical_lines(gabor_fixtures + t0, ymin=-1, ymax=4, color=color_cycle(1),
                    ax=ax[0], label='fixtures gabor')
     vertical_lines(t_valve_open, ymin=-1, ymax=4, color=color_cycle(2), ax=ax[0], label='valve')
+    vertical_lines(valve_fixtures + t0, ymin=-1, ymax=4, color=color_cycle(2), ax=ax[0],
+                   linestyle='--', label='fixtures valve')
+
     ax[0].legend()
 
     ax[1].plot([0, 3], [0, 3], linewidth=2.0)
@@ -205,5 +210,6 @@ if DEBUG_PLOTS:
     plt.xlabel('saved delays diff [s]')
     plt.ylabel('measured times diff [s]')
     # scatter plot
-    plt.scatter(np.diff(cs_delays), gb_diff_ts, c=(fixture['ids'][igabor - 1] == 'G')[:-1], s=10)
+    plt.scatter(np.diff(gabor_fixtures), gb_diff_ts,
+                c=(fixture['ids'][igabor - 1] == 'G')[:-1], s=10)
     plt.colorbar()
