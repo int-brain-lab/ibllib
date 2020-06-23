@@ -4,8 +4,7 @@ import numpy as np
 
 import alf.io
 from ibllib.io import spikeglx
-from ibllib.io.extractors.training_wheel import extract_wheel_moves
-from ibllib.io.extractors.training_trials import FirstMovementTimes
+from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
 from oneibl.one import ONE
 
 from brainbox.core import Bunch
@@ -265,6 +264,5 @@ def load_wheel_reaction_times(eid, one=None):
         wheel = one.load_object(eid, 'wheel')
         moves = extract_wheel_moves(wheel['timestamps'], wheel['position'])
     assert trials and moves, 'unable to load trials and wheelMoves data'
-    firstMove_times, is_final_movement, ids = \
-        FirstMovementTimes.extract_first_movement_times(moves, trials)
+    firstMove_times, is_final_movement, ids = extract_first_movement_times(moves, trials)
     return firstMove_times - trials['goCue_times']
