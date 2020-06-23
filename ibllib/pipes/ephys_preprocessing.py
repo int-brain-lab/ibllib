@@ -81,11 +81,13 @@ class EphysVideoCompress(tasks.Task):
     priority = 90
     level = 1
 
-    def _run(self):
+    def _run(self, **kwargs):
         # avi to mp4 compression
         command = ('ffmpeg -i {file_in} -codec:v libx264 -preset slow -crf 17 '
                    '-nostats -loglevel 0 -codec:a copy {file_out}')
         output_files = ffmpeg.iblrig_video_compression(self.session_path, command)
+        if len(output_files) == 0:
+            self.session_path.joinpath('')
         return output_files
 
 
@@ -141,7 +143,9 @@ class EphysMtscomp(tasks.Task):
                 if not bin_file:
                     continue
                 sr = spikeglx.Reader(bin_file)
-                if not sr.is_mtscomp:
+                if sr.is_mtscomp:
+                    out_files.append(bin_file)
+                else:
                     _logger.info(f"Compressing binary file {bin_file}")
                     out_files.append(sr.compress_file(keep_original=False))
         return out_files
@@ -161,7 +165,7 @@ class EphysDLC(tasks.Task):
 class EphysExtractionPipeline(tasks.Pipeline):
     label = __name__
 
-    def __init__(self, session_path, **kwargs):
+    def __init__(self, session_path=None, **kwargs):
         super(EphysExtractionPipeline, self).__init__(session_path, **kwargs)
         tasks = OrderedDict()
         self.session_path = session_path

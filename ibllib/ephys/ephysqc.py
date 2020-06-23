@@ -177,7 +177,7 @@ def validate_ttl_test(ses_path, display=False):
 
     # check that the wheel has a minimum rate of activity on both channels
     re_test = abs(1 - sync.rotary_encoder_1.size / sync.rotary_encoder_0.size) < 0.1
-    re_test &= len(wheel['re_pos']) / last_time > 5
+    re_test &= len(wheel[1]) / last_time > 5
     ok &= _single_test(assertion=re_test,
                        str_ok="PASS: Rotary encoder", str_ko="FAILED: Rotary encoder")
     # check that the frame 2 ttls has a minimum rate of activity
@@ -192,7 +192,7 @@ def validate_ttl_test(ses_path, display=False):
     try:
         # note: tried to depend as little as possible on the extraction code but for the valve...
         behaviour = ephys_fpga.extract_behaviour_sync(rawsync, chmap=sync_map)
-        res = behaviour.valve_open.size > 1
+        res = behaviour.valveOpen_times.size > 1
     except AssertionError:
         res = False
     # check that the reward valve is actionned at least once

@@ -3,7 +3,6 @@ import unittest
 import numpy as np
 import pickle
 import brainbox.behavior.wheel as wheel
-import brainbox.behavior.behavior as bhv
 
 
 class TestWheel(unittest.TestCase):
@@ -18,7 +17,7 @@ class TestWheel(unittest.TestCase):
         seconds of (reasonably) evenly sampled wheel data from a 1024 ppr device with X4
         encoding, in raw samples.  test_data[0] = ((t, pos), (onsets, offsets, amps, peak_vel))
 
-        The second set - test_data[1] - comes from ibllib FPGA and contains around 180 seconds 
+        The second set - test_data[1] - comes from ibllib FPGA and contains around 180 seconds
         of unevenly sampled wheel data from a 1024 ppr device with X2 encoding, in linear cm units.
         test_data[1] = ((t, pos), (onsets, offsets, amps, peak_vel))
         """
@@ -28,7 +27,7 @@ class TestWheel(unittest.TestCase):
         else:
             with open(pickle_file, 'rb') as f:
                 self.test_data = pickle.load(f)
-                
+
         # Trial timestamps for trial_data[0]
         self.trials = {
             'stimOn_times': np.array([0.2, 75, 100, 120, 164]),
@@ -75,7 +74,7 @@ class TestWheel(unittest.TestCase):
         self.assertTrue(np.allclose(amp, expected[2], atol=1.e-5), msg='Unexpected move amps')
         self.assertTrue(np.allclose(peak_vel, expected[3], atol=1.e-2),
                         msg='Unexpected peak velocities')
-        
+
     def test_traces_by_trial(self):
         t, pos = self.test_data[0][0]
         start = self.trials['stimOn_times']
@@ -90,7 +89,7 @@ class TestWheel(unittest.TestCase):
             [119944, 129943],
             [163944, 187943]
         )
-        
+
         for trace, ind in zip(traces, expected_ids):
             trace_t, trace_pos = trace
             np.testing.assert_array_equal(trace_t[[0, -1]], t[ind])
@@ -101,9 +100,8 @@ class TestWheel(unittest.TestCase):
         on, off, *_ = self.test_data[0][1]
         vel, _ = wheel.velocity_smoothed(pos, 1000)
         times, indices = wheel.direction_changes(t, vel, np.c_[on, off])
-        
+
         self.assertTrue(len(times) == len(indices) == 14, 'incorrect number of arrays returned')
         # Check first arrays
         np.testing.assert_allclose(times[0], [21.86593334, 22.12693334, 22.20193334, 22.66093334])
         np.testing.assert_array_equal(indices[0], [21809, 22070, 22145, 22604])
-        

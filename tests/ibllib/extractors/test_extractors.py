@@ -54,7 +54,6 @@ class TestExtractTrialData(unittest.TestCase):
         self.logger = logging.getLogger('ibllib')
         # Save some dummy wheel moves data for trial firstMovement_times extraction
 
-
     def test_get_feedbackType(self):
         # TRAINING SESSIONS
         ft = extractors.training_trials.FeedbackType(

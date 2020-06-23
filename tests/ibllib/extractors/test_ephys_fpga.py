@@ -7,9 +7,9 @@ import logging
 import numpy as np
 
 import ibllib.io.spikeglx as spikeglx
+from ibllib.io.extractors.training_wheel import extract_first_movement_times
 from ibllib.io.extractors import ephys_fpga
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
-from ibllib.io.extractors.training_trials import FirstMovementTimes
 import brainbox.behavior.wheel as wh
 
 
@@ -136,7 +136,7 @@ class TestWheelMovesExtraction(unittest.TestCase):
         else:
             with open(pickle_file, 'rb') as f:
                 self.test_data = pickle.load(f)
-        
+
         # Some trial times for trial_data[1]
         self.trials = {
             'goCue_times': np.array([162.5, 105.6, 55]),
@@ -155,7 +155,7 @@ class TestWheelMovesExtraction(unittest.TestCase):
             self.assertEqual(['INFO:ibllib:Wheel in cm units using X2 encoding'], cm.output)
 
         n = 56  # expected number of movements
-        self.assertTupleEqual(wheel_moves['intervals'].shape, (n, 2), 
+        self.assertTupleEqual(wheel_moves['intervals'].shape, (n, 2),
                               'failed to return the correct number of intervals')
         self.assertEqual(wheel_moves['peakAmplitude'].size, n)
         self.assertEqual(wheel_moves['peakVelocity_times'].size, n)
@@ -188,7 +188,7 @@ class TestWheelMovesExtraction(unittest.TestCase):
         # encoding, we should expect the intervals to be identical to above
         actual = wheel_moves['intervals'][:3, ]
         self.assertIsNone(np.testing.assert_allclose(actual, ints), 'unexpected intervals')
-        
+
     def test_movement_log(self):
         """
         Integration test for inferring the units and decoding type for wheel data input for
@@ -203,7 +203,7 @@ class TestWheelMovesExtraction(unittest.TestCase):
         for unit in ['cm', 'rad']:
             for i in (1, 2, 4):
                 encoding = 'X' + str(i)
-                r = 3.1 if unit is 'cm' else 1
+                r = 3.1 if unit == 'cm' else 1
                 # print(encoding, unit)
                 t, p = ephys_fpga._rotary_encoder_positions_from_fronts(
                     ta, pa, tb, pb, ticks=1024, coding=encoding.lower(), radius=r)
@@ -215,8 +215,7 @@ class TestWheelMovesExtraction(unittest.TestCase):
     def test_extract_first_movement_times(self):
         test_data = self.test_data[1]
         wheel_moves = ephys_fpga.extract_wheel_moves(test_data[0][0], test_data[0][1])
-        first, is_final, ind = \
-            FirstMovementTimes.extract_first_movement_times(wheel_moves, self.trials)
+        first, is_final, ind = extract_first_movement_times(wheel_moves, self.trials)
 
         np.testing.assert_allclose(first, [162.48462599, 105.62562599, np.nan])
         np.testing.assert_array_equal(is_final, [False, True, False])
