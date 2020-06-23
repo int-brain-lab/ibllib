@@ -23,3 +23,6 @@ ses = one.alyx.rest('sessions', 'list', django='~project__name__icontains,matlab
 # query sessions that do not contain a given dataset type
 ses = one.alyx.rest('sessions', 'list',
                     django='~data_dataset_session_related__dataset_type__name__icontains,wheel')
+
+# query probe insertions for a given task protocol
+one.alyx.rest('insertions', 'list', django='session__task_protocol__icontains,choiceworld')
