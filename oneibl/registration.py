@@ -3,6 +3,7 @@ import json
 import datetime
 import logging
 from dateutil import parser as dateparser
+import re
 
 import alf.io
 from oneibl.one import ONE
@@ -13,8 +14,8 @@ from ibllib.io import flags, hashfile
 
 
 _logger = logging.getLogger('ibllib.alf')
+EXCLUDED_EXTENSIONS = ['.flag', '.error', '.avi']
 REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
-                              'logs/**/_ibl_log.*.log',
                               'raw_behavior_data/**/_iblrig_*.*',
                               'raw_passive_data/**/_iblrig_*.*',
                               'raw_behavior_data/**/_iblmic_*.*',
@@ -26,8 +27,18 @@ REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
                               ]
 
 
+def _check_filename_for_registration(full_file, patterns):
+    for pat in patterns:
+        reg = pat.replace('.', r'\.').replace('_', r'\_').replace('*', r'.*')
+        if Path(full_file).suffix in EXCLUDED_EXTENSIONS:
+            return False
+        elif re.match(reg, Path(full_file).name, re.IGNORECASE):
+            return True
+    return False
+
+
 def register_dataset(file_list, one=None, created_by='root', repository=None, server_only=False,
-                     versions=False, dry=False, verbose=False):
+                     versions=False, dry=False, max_md5_size=None):
     """
     Registers a set of files belonging to a session only on the server
     :param file_list: (list of pathlib.Path or pathlib.Path)
@@ -38,9 +49,13 @@ def register_dataset(file_list, one=None, created_by='root', repository=None, se
     :param versions: optional (list of strings): versions tags (defaults to ibllib version)
     :param dry: (bool) False by default
     :param verbose: (bool) logs
+    :param max_md5_size: (int) maximum file in bytes to compute md5 sum (always compute if Npne)
+    defaults to None
     :return:
     """
-    if not isinstance(file_list, list):
+    if file_list is None or file_list == '' or file_list == []:
+        return
+    elif not isinstance(file_list, list):
         file_list = [Path(file_list)]
     assert len(set([alf.io.get_session_path(f) for f in file_list])) == 1
     assert all([Path(f).exists() for f in file_list])
@@ -49,6 +64,14 @@ def register_dataset(file_list, one=None, created_by='root', repository=None, se
     else:
         assert isinstance(versions, list) and len(versions) == len(file_list)
 
+    # computing the md5 can be very long, so this is an option to skip if the file is bigger
+    # than a certain threshold
+    if max_md5_size:
+        hashes = [hashfile.md5(p) if
+                  p.stat().st_size < max_md5_size else None for p in file_list]
+    else:
+        hashes = [hashfile.md5(p) for p in file_list]
+
     session_path = alf.io.get_session_path(file_list[0])
     # first register the file
     r = {'created_by': created_by,
@@ -56,7 +79,7 @@ def register_dataset(file_list, one=None, created_by='root', repository=None, se
          'filenames': [p.relative_to(session_path).as_posix() for p in file_list],
          'name': repository,
          'server_only': server_only,
-         'hashes': [hashfile.md5(p) for p in file_list],
+         'hashes': hashes,
          'filesizes': [p.stat().st_size for p in file_list],
          'versions': versions}
     if not dry:
@@ -68,6 +91,44 @@ def register_dataset(file_list, one=None, created_by='root', repository=None, se
         return response
 
 
+def register_session_raw_data(session_path, one=None, overwrite=False, verbose=True, dry=False):
+    """
+    Registers all files corresponding to raw data files to Alyx. It will select files that
+    match Alyx registration patterns.
+    :param session_path:
+    :param one: one instance to work with
+    :param overwrite: (False) if set to True, will patch the datasets. It will take very long.
+    If set to False (default) will skip all already registered data.
+    :param verbose: prints the output to the log
+    :param dry: do not register files, returns the list of files to be registered
+    :return: list of file to register
+    :return: Alyx response: dictionary of registered files
+    """
+    session_path = Path(session_path)
+    # query the database for existing datasets on the session and allowed dataset types
+    dsets = one.alyx.rest('datasets', 'list', session=one.eid_from_path(session_path))
+    already_registered = [
+        session_path.joinpath(Path(ds['collection'] or '').joinpath(ds['name'])) for ds in dsets]
+    dtypes = one.alyx.rest('dataset-types', 'list')
+    registration_patterns = [dt['filename_pattern'] for dt in dtypes if dt['filename_pattern']]
+    # glob all the files
+    glob_patterns = [pat for pat in REGISTRATION_GLOB_PATTERNS if pat.startswith('raw')]
+    files_2_register = []
+    for gp in glob_patterns:
+        f2r = list(session_path.glob(gp))
+        files_2_register.extend(f2r)
+    # filter 1/2 filter out datasets that do not match any dataset type
+    files_2_register = list(filter(lambda f: _check_filename_for_registration(
+        f, registration_patterns), files_2_register))
+    # filter 2/2 unless overwrite is True, filter out the datasets that already exists
+    if not overwrite:
+        files_2_register = list(filter(lambda f: f not in already_registered, files_2_register))
+    response = None
+    if not dry:
+        response = register_dataset(files_2_register, one=one, versions=None, verbose=verbose)
+    return files_2_register, response
+
+
 class RegistrationClient:
     """
     Object that keeps the ONE instance and provides method to create sessions and register data.
@@ -77,6 +138,8 @@ class RegistrationClient:
         if not one:
             self.one = ONE()
         self.dtypes = self.one.alyx.rest('dataset-types', 'list')
+        self.registration_patterns = [
+            dt['filename_pattern'] for dt in self.dtypes if dt['filename_pattern']]
         self.file_extensions = [df['file_extension'] for df in
                                 self.one.alyx.rest('data-formats', 'list')]
 
@@ -222,10 +285,10 @@ class RegistrationClient:
         md5s = []
         file_sizes = []
         for fn in _glob_session(ses_path):
-            if fn.suffix in ['.flag', '.error', '.avi']:
+            if fn.suffix in EXCLUDED_EXTENSIONS:
                 _logger.debug('Excluded: ', str(fn))
                 continue
-            if not self._match_filename_dtypes(fn):
+            if not _check_filename_for_registration(fn, self.registration_patterns):
                 _logger.warning('No matching dataset type for: ' + str(fn))
                 continue
             if fn.suffix not in self.file_extensions:
@@ -256,15 +319,6 @@ class RegistrationClient:
               'versions': [version.ibllib() for _ in F]
               }
         self.one.alyx.post('/register-file', data=r_)
-
-    def _match_filename_dtypes(self, full_file):
-        import re
-        patterns = [dt['filename_pattern'] for dt in self.dtypes if dt['filename_pattern']]
-        for pat in patterns:
-            reg = pat.replace('.', r'\.').replace('_', r'\_').replace('*', r'.*')
-            if re.match(reg, Path(full_file).name, re.IGNORECASE):
-                return True
-        return False
 
 
 def _alyx_procedure_from_task(task_protocol):

@@ -6,6 +6,7 @@ from ibllib.io import ffmpeg, spikeglx
 from ibllib.io.extractors import ephys_fpga
 from ibllib.pipes import tasks
 from ibllib.ephys import ephysqc, sync_probes, spikes
+from ibllib.pipes.training_preprocessing import TrainingRegisterRaw as EphysRegisterRaw
 
 _logger = logging.getLogger('ibllib')
 
@@ -170,6 +171,7 @@ class EphysExtractionPipeline(tasks.Pipeline):
         tasks = OrderedDict()
         self.session_path = session_path
         # level 0
+        tasks['EphysRegisterRaw'] = EphysRegisterRaw(self.session_path)
         tasks['EphysPulses'] = EphysPulses(self.session_path)
         tasks['EphysRawQC'] = RawEphysQC(self.session_path)
         tasks['EphysAudio'] = EphysAudio(self.session_path)

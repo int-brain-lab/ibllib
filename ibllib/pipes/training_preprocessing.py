@@ -4,12 +4,20 @@ from collections import OrderedDict
 from ibllib.pipes import tasks
 from ibllib.io import ffmpeg, raw_data_loaders as rawio
 from ibllib.io.extractors import (training_trials, biased_trials, training_wheel, training_audio)
-
+from oneibl.registration import register_session_raw_data
 
 _logger = logging.getLogger('ibllib')
 
 
 #  level 0
+class TrainingRegisterRaw(tasks.Task):
+    priority = 100
+
+    def _run(self, overwrite=False):
+        out_files, _ = register_session_raw_data(self.session_path, one=self.one, dry=True)
+        return out_files
+
+
 class TrainingTrials(tasks.Task):
     priority = 90
     level = 0
@@ -64,6 +72,7 @@ class TrainingExtractionPipeline(tasks.Pipeline):
         tasks = OrderedDict()
         self.session_path = session_path
         # level 0
+        tasks['TrainingRegisterRaw'] = TrainingRegisterRaw(self.session_path)
         tasks['TrainingTrials'] = TrainingTrials(self.session_path)
         tasks['TrainingVideoCompress'] = TrainingVideoCompress(self.session_path)
         tasks['TrainingAudio'] = TrainingAudio(self.session_path)
