@@ -24,7 +24,7 @@ conda activate iblenv
 **Mac OS:**
 ```
 conda create -n iblenv python=3.8 anaconda
-source activate iblenv
+conda activate iblenv
 ```
 
 
