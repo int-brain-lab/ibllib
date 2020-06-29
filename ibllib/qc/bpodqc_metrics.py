@@ -300,12 +300,11 @@ def load_wheel_move_during_closed_loop(trial_data, wheel_data, wheel_gain):
     # For each trial find the absolute displacement
     for i, trial in enumerate(traces):
         t, pos = trial
-        if not t.size or pos.size:
+        if pos.size == 0:
             metric[i] = np.nan
-            continue
-        # Find the position of the preceding sample and subtract it
-        origin = wheel_data["re_pos"][wheel_data["re_ts"] <= t[0]][-1]
-        if pos.size > 0:
+        else:
+            # Find the position of the preceding sample and subtract it
+            origin = wheel_data["re_pos"][wheel_data["re_ts"] <= t[0]][-1]
             metric[i] = np.abs(pos - origin).max()
 
     # Load wheel_gain and thresholds for each trial
