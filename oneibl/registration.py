@@ -91,7 +91,7 @@ def register_dataset(file_list, one=None, created_by='root', repository=None, se
         return response
 
 
-def register_session_raw_data(session_path, one=None, overwrite=False, verbose=True, dry=False):
+def register_session_raw_data(session_path, one=None, overwrite=False, dry=False, **kwargs):
     """
     Registers all files corresponding to raw data files to Alyx. It will select files that
     match Alyx registration patterns.
@@ -99,7 +99,6 @@ def register_session_raw_data(session_path, one=None, overwrite=False, verbose=T
     :param one: one instance to work with
     :param overwrite: (False) if set to True, will patch the datasets. It will take very long.
     If set to False (default) will skip all already registered data.
-    :param verbose: prints the output to the log
     :param dry: do not register files, returns the list of files to be registered
     :return: list of file to register
     :return: Alyx response: dictionary of registered files
@@ -123,9 +122,7 @@ def register_session_raw_data(session_path, one=None, overwrite=False, verbose=T
     # filter 2/2 unless overwrite is True, filter out the datasets that already exists
     if not overwrite:
         files_2_register = list(filter(lambda f: f not in already_registered, files_2_register))
-    response = None
-    if not dry:
-        response = register_dataset(files_2_register, one=one, versions=None, verbose=verbose)
+    response = register_dataset(files_2_register, one=one, versions=None, dry=dry, **kwargs)
     return files_2_register, response
 
 
@@ -143,23 +140,31 @@ class RegistrationClient:
         self.file_extensions = [df['file_extension'] for df in
                                 self.one.alyx.rest('data-formats', 'list')]
 
-    def create_sessions(self, root_data_folder, dry=False):
+    def create_sessions(self, root_data_folder, glob_pattern='**/create_me.flag', dry=False):
         """
         Create sessions looking recursively for flag files
 
         :param root_data_folder: folder to look for create_me.flag
         :param dry: bool. Dry run if True
+        :param glob_pattern: bool. Dry run if True
         :return: None
         """
-        flag_files = Path(root_data_folder).glob('**/create_me.flag')
+        flag_files = Path(root_data_folder).glob(glob_pattern)
         for flag_file in flag_files:
             if dry:
                 print(flag_file)
                 continue
             _logger.info('creating session for ' + str(flag_file.parent))
             # providing a false flag stops the registration after session creation
-            self.register_session(flag_file.parent, file_list=False)
+            self.create_session(flag_file.parent)
             flag_file.unlink()
+        return [ff.parent for ff in flag_files]
+
+    def create_session(self, session_path):
+        """
+        create_session(session_path)
+        """
+        return self.register_session(session_path, file_list=False)
 
     def register_sync(self, root_data_folder, dry=False):
         """

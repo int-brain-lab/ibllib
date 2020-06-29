@@ -22,7 +22,6 @@ Python Installation and Tutorial
    :maxdepth: 1
 
    02_installation_python
-   02_installation_dev_python
    02_tutorial_python
 
 Matlab Installation and Tutorial

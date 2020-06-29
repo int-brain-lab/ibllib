@@ -191,6 +191,8 @@ class Pipeline(abc.ABC):
         :return: list of alyx tasks dictionaries (existing and or created)
         """
         rerun__status__in = rerun__status__in or []
+        if rerun__status__in == '__all__':
+            rerun__status__in = ['Waiting', 'Started', 'Errored', 'Empty', 'Complete']
         assert self.eid
         if self.one is None:
             _logger.warning("No ONE instance found for Alyx connection, set the one property")
@@ -225,7 +227,7 @@ class Pipeline(abc.ABC):
         Get all the session related jobs from alyx and run them
         :param status__in: lists of status strings to run in
         ['Waiting', 'Started', 'Errored', 'Empty', 'Complete']
-        :param kwargs: arguments passed downstream to _run_alyx_task
+        :param kwargs: arguments passed downstream to run_alyx_task
         :return: jalyx: list of REST dictionaries of the job endpoints
         :return: job_deck: list of REST dictionaries of the jobs endpoints
         :return: all_datasets: list of REST dictionaries of the dataset endpoints
@@ -240,8 +242,8 @@ class Pipeline(abc.ABC):
             if j['status'] not in status__in:
                 continue
             # here we update the status in-place to avoid another hit to the database
-            task_deck[i], dsets = _run_alyx_task(tdict=j, session_path=self.session_path,
-                                                 one=self.one, job_deck=task_deck, **kwargs)
+            task_deck[i], dsets = run_alyx_task(tdict=j, session_path=self.session_path,
+                                                one=self.one, job_deck=task_deck, **kwargs)
             if dsets is not None:
                 all_datasets.extend(dsets)
         return task_deck, all_datasets
@@ -257,7 +259,7 @@ class Pipeline(abc.ABC):
         return self.__class__.__name__
 
 
-def _run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None, max_md5_size=None):
+def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None, max_md5_size=None):
     """
     Runs a single Alyx job and registers output datasets
     :param tdict:
