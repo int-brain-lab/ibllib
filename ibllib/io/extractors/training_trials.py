@@ -629,7 +629,11 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
         stimOff_times = np.array([])
         stimFreeze_times = np.array([])
         for tr in f2TTL:
-            if tr and len(tr) >= 2:
+            if tr and len(tr) == 2:
+                stimOn_times = np.append(stimOn_times, tr[0])
+                stimOff_times = np.append(stimOff_times, tr[-1])
+                stimFreeze_times = np.append(stimFreeze_times, np.nan)
+            elif tr and len(tr) >= 3:
                 stimOn_times = np.append(stimOn_times, tr[0])
                 stimOff_times = np.append(stimOff_times, tr[-1])
                 stimFreeze_times = np.append(stimFreeze_times, tr[-2])
