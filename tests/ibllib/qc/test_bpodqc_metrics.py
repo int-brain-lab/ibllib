@@ -296,6 +296,24 @@ class TestBpodQCMetrics(unittest.TestCase):
         metric, passed = qcmetrics.load_reward_volumes(self.data)
         self.assertTrue(np.nanmean(passed) == 0.2, "failed to detect incorrect reward volume")
 
+    def test_load_audio_pre_trial(self):
+        # Create Sound sync fake data that is OK
+        BNC2_OK = {
+            "times": self.data["goCue_times"] + 1e-1,
+            "polarities": np.array([1, -1, 1, -1, 1]),
+        }
+        # Create Sound sync fake data that is NOT OK
+        BNC2_NOK = {
+            "times": self.data["goCue_times"] - 1e-1,
+            "polarities": np.array([1, -1, 1, -1, 1]),
+        }
+        metric, passed = qcmetrics.load_audio_pre_trial(self.data, BNC2=BNC2_OK)
+        self.assertTrue(~np.all(metric))
+        self.assertTrue(np.all(passed))
+        metric, passed = qcmetrics.load_audio_pre_trial(self.data, BNC2=BNC2_NOK)
+        self.assertTrue(np.all(metric))
+        self.assertTrue(~np.all(passed))
+
     @unittest.skip("not implemented")
     def test_load_wheel_freeze_during_quiescence(self):
         pass
@@ -310,10 +328,6 @@ class TestBpodQCMetrics(unittest.TestCase):
 
     @unittest.skip("not implemented")
     def test_load_stimulus_move_before_goCue(self):
-        pass
-
-    @unittest.skip("not implemented")
-    def test_load_audio_pre_trial(self):
         pass
 
 
