@@ -5,6 +5,7 @@ from pathlib import Path, PurePath
 
 import requests
 import tqdm
+import pyarrow.parquet as pq
 
 import oneibl.params
 import oneibl.webclient as wc
@@ -108,7 +109,12 @@ class ONE(OneAbstract):
                 "IP addresses are filtered on IBL database servers. \n" +
                 "Are you connecting from an IBL participating institution ?"
             )
-        # Init connection to Globus if needed
+        # init the cache file
+        self._cache_file = Path(self._par.CACHE_DIR).joinpath('.one_cache.parquet')
+        if self._cache_file.exists():
+            self._cache = pq.read_table(self._cache_file).to_pydict()
+        else:
+            self._cache = None
         # Display output when instantiating ONE
         if printout:
             print(f"Connected to {self._par.ALYX_URL} as {self._par.ALYX_LOGIN}",)
@@ -305,7 +311,7 @@ class ONE(OneAbstract):
         eid_str = eid[-36:]
         # get session json information as a dictionary from the alyx API
         try:
-            ses = self.alyx.get('/sessions/' + eid_str)
+            ses = self.alyx.rest('sessions', 'read', id=eid_str)
         except requests.HTTPError:
             raise requests.HTTPError('Session ' + eid_str + ' does not exist')
         # ses = ses[0]
