@@ -414,14 +414,10 @@ def extract_behaviour_sync(sync, chmap=None, display=False, tmax=np.inf):
         else:
             ax = display
         r0 = _get_sync_fronts(sync, chmap['rotary_encoder_0'])
-        plots.squares(bpod['times'], bpod['polarities'] * 0.4 + 1,
-                      ax=ax, color='k')
-        plots.squares(frame2ttl['times'], frame2ttl['polarities'] * 0.4 + 2,
-                      ax=ax, color='k')
-        plots.squares(audio['times'], audio['polarities'] * 0.4 + 3,
-                      ax=ax, color='k')
-        plots.squares(r0['times'], r0['polarities'] * 0.4 + 4,
-                      ax=ax, color='k')
+        plots.squares(bpod['times'], bpod['polarities'] * 0.4 + 1, ax=ax, color='k')
+        plots.squares(frame2ttl['times'], frame2ttl['polarities'] * 0.4 + 2, ax=ax, color='k')
+        plots.squares(audio['times'], audio['polarities'] * 0.4 + 3, ax=ax, color='k')
+        plots.squares(r0['times'], r0['polarities'] * 0.4 + 4, ax=ax, color='k')
         plots.vertical_lines(t_ready_tone_in, ymin=0, ymax=ymax,
                              ax=ax, label='goCue_times', color='b', linewidth=width)
         plots.vertical_lines(t_trial_start, ymin=0, ymax=ymax,
@@ -436,6 +432,12 @@ def extract_behaviour_sync(sync, chmap=None, display=False, tmax=np.inf):
                              ax=ax, label='stim off', color='c', linewidth=width)
         plots.vertical_lines(trials['stimOn_times'], ymin=0, ymax=ymax,
                              ax=ax, label='stimOn_times', color='tab:orange', linewidth=width)
+        c = _get_sync_fronts(sync, chmap['left_camera'])
+        plots.squares(c['times'], c['polarities'] * 0.4 + 5, ax=ax, color='k')
+        c = _get_sync_fronts(sync, chmap['right_camera'])
+        plots.squares(c['times'], c['polarities'] * 0.4 + 6, ax=ax, color='k')
+        c = _get_sync_fronts(sync, chmap['body_camera'])
+        plots.squares(c['times'], c['polarities'] * 0.4 + 7, ax=ax, color='k')
         ax.legend()
         ax.set_yticklabels(['', 'bpod', 'f2ttl', 'audio', 're_0', ''])
         ax.set_yticks([0, 1, 2, 3, 4, 5])
