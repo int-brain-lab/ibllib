@@ -9,7 +9,7 @@ class TestTask(unittest.TestCase):
 
     def setUp(self):
         # Test data is a dictionary of spike times and clusters and event times and groups
-        pickle_file = Path(__file__).parent.joinpath('ephys_test.p')
+        pickle_file = Path(__file__).parent.joinpath('fixtures', 'ephys_test.p')
         if not pickle_file.exists():
             self.test_data = None
         else:
