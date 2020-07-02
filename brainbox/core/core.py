@@ -1,8 +1,7 @@
-'''
+"""
 Creates core data types and functions which support all of brainbox.
-'''
+"""
 from pathlib import Path
-
 import numpy as np
 import pandas as pd
 
