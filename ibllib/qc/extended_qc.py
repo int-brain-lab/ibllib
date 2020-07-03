@@ -79,9 +79,11 @@ class ExtendedQC(object):
                     "ERROR": 0.75,
                     "WARNING": 0.95,
                     "PASS": 0.99 }
-        :return: criteria,
+        :return: criteria, out_var_test_status, out_var_sess_status
         """
         # Set default value
+        out_var_sess_status = []
+
         if len(criteria) == 0:
 
             criteria = {"CRITICAL": 0,
@@ -97,7 +99,8 @@ class ExtendedQC(object):
 
         values_f = np.array(list(self.frame.values()))
         # Replace NoneType by Nan for later logic comparison
-        values_f[np.where(values_f == None)] = np.nan
+        indx_remove_test = np.where(values_f == None)
+        values_f[indx_remove_test] = np.nan
 
         keys_f = np.array(list(self.frame.keys()))
 
@@ -106,21 +109,27 @@ class ExtendedQC(object):
             # Get lower threshold
             threshold_lower = criteria[keys_crit[i_key]]
             # Get upper threshold and find index of corresponding values
-            if i_key == len(keys_crit)-1:
+            if i_key == len(keys_crit) - 1:
                 threshold_upper = 1
                 indx = np.where(np.logical_and(
                     values_f >= threshold_lower, values_f <= threshold_upper))[0]
             else:
-                threshold_upper = criteria[keys_crit[i_key+1]]
+                threshold_upper = criteria[keys_crit[i_key + 1]]
                 indx = np.where(np.logical_and(
                     values_f >= threshold_lower, values_f < threshold_upper))[0]
             # Get name of test corresponding to index and save in out var
             out_var_test_status[keys_crit[i_key]] = keys_f[indx]
 
+            # Assign session status
+            # Note: The order of criteria importance has to be respected for this to run correctly
+            if len(out_var_sess_status) == 0 and len(out_var_test_status[keys_crit[i_key]]) != 0:
+                out_var_sess_status = keys_crit[i_key]
+
         # Check each test is assigned only to one status
+        assigned = np.concatenate(list(out_var_test_status.values()), axis=0)
+        # Compare with keys_f, removing the None type first
+        key_compare = np.delete(keys_f, indx_remove_test)
+        if not np.array_equal(np.sort(assigned), np.sort(key_compare)):
+            raise ValueError("One test has to be assigned to one status - this is not the case.")
 
-        # Session status
-
-        return criteria, out_var_test_status,
-
-
+        return criteria, out_var_test_status, out_var_sess_status
