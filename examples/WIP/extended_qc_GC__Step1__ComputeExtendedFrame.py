@@ -21,6 +21,7 @@ ephys_rig = [s for s in iblrig if "_ephys_" in s]
 dtypes = ['_iblrig_taskData.raw']
 
 # Plots for 1 rig at a time
+all_dataframe = pd.DataFrame()
 for i_ephysrig in range(0, len(ephys_rig)):
     rig_location = ephys_rig[i_ephysrig]
 
@@ -44,3 +45,4 @@ for i_ephysrig in range(0, len(ephys_rig)):
         sess_dataframe = pd.DataFrame(data=d, index=[0])
 
         rig_dataframe = pd.concat([rig_dataframe, sess_dataframe], axis=0).copy()
+    all_dataframe = pd.concat([all_dataframe, rig_dataframe], axis=0).copy()
