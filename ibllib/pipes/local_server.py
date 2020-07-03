@@ -102,8 +102,8 @@ def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, **kwargs):
         # cache the result
         if last_session != tdict['session']:
             ses = one.alyx.rest('sessions', 'list', django=f"pk,{tdict['session']}")[0]
-            session_path = subjects_path.joinpath(Path(ses['subject'], ses['start_time'][:10],
-                                                       str(ses['number']).zfill(3)))
+            session_path = Path(subjects_path).joinpath(
+                Path(ses['subject'], ses['start_time'][:10], str(ses['number']).zfill(3)))
             last_session = tdict['session']
         if dry:
             print(session_path, tdict['name'])
