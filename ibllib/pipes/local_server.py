@@ -15,7 +15,7 @@ def _get_lab(one):
         globus_id = fid.read()
     lab = one.alyx.rest('labs', 'list', django=f"repositories__globus_endpoint_id,{globus_id}")
     if len(lab):
-        return lab['name']
+        return lab[0]['name']
 
 
 def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
