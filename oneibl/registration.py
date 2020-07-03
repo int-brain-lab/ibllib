@@ -37,7 +37,7 @@ def _check_filename_for_registration(full_file, patterns):
     return False
 
 
-def register_dataset(file_list, one=None, created_by='root', repository=None, server_only=False,
+def register_dataset(file_list, one=None, created_by=None, repository=None, server_only=False,
                      versions=False, dry=False, max_md5_size=None):
     """
     Registers a set of files belonging to a session only on the server
@@ -53,6 +53,8 @@ def register_dataset(file_list, one=None, created_by='root', repository=None, se
     defaults to None
     :return:
     """
+    if created_by is None:
+        created_by = one._par.ALYX_LOGIN
     if file_list is None or file_list == '' or file_list == []:
         return
     elif not isinstance(file_list, list):
