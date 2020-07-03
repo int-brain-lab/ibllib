@@ -49,16 +49,20 @@ def compute_session_status(frame, criteria=None):
     # Get values and key to compute test / session status
 
     values_f = np.array(list(frame.values()), dtype=np.float)
-    # Replace NoneType by Nan for later logic comparison
+    # Remove Nans
     indx_remove_test = np.where(np.isnan(values_f))
+    values_f = np.delete(values_f, indx_remove_test)
+
+    keys_f = np.array(list(frame.keys()))
+    keys_f = np.delete(keys_f, indx_remove_test)
 
     # Check range of values
     if np.logical_or(
-            np.any(np.delete(values_f, indx_remove_test) > MAX_BOUND),
-            np.any(np.delete(values_f, indx_remove_test) < MIN_BOUND)):
+            np.any(values_f > MAX_BOUND),
+            np.any(values_f < MIN_BOUND)):
         raise ValueError("Values out of bound")
 
-    keys_f = np.array(list(frame.keys()))
+
 
     # Find tests that fall under a given criterion
     for i_key in range(0, len(keys_crit)):
@@ -84,8 +88,7 @@ def compute_session_status(frame, criteria=None):
     # Check each test is assigned only to one status
     assigned = np.concatenate(list(out_var_test_status.values()), axis=0)
     # Compare with keys_f, removing the Nan type first
-    key_compare = np.delete(keys_f, indx_remove_test)
-    if not np.array_equal(np.sort(assigned), np.sort(key_compare)):
+    if not np.array_equal(np.sort(assigned), np.sort(keys_f)):
         raise ValueError("One test has to be assigned to one status - this is not the case.")
 
     return criteria, out_var_test_status, out_var_sess_status
