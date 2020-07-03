@@ -30,6 +30,18 @@ class TestExtendedQC(unittest.TestCase):
         # eqc.build_extended_qc_frame()
         # self.assertTrue(isinstance(eqc.frame, dict))
 
+    def test_compute_session_status(self):
+        frame = {
+            "test1": 1,
+            "test2": 0.5,
+            "test3": 0.99
+        }
+        # Should return CRITICAL
+
+        # TODO instanciate class necessary for testing small frame?
+        # eqc = ExtendedQC(one=self.one, eid=self.eid, lazy=True)
+        # compute_session_status(frame)
+
 
 if __name__ == "__main__":
     unittest.main(exit=False)

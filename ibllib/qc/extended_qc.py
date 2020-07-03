@@ -82,6 +82,7 @@ class ExtendedQC(object):
         :return: criteria, out_var_test_status, out_var_sess_status
         """
         # Set default value
+        MAX_BOUND = 1
         out_var_sess_status = []
 
         if len(criteria) == 0:
@@ -97,10 +98,13 @@ class ExtendedQC(object):
 
         # Get values and key to compute test / session status
 
-        values_f = np.array(list(self.frame.values()))
+        values_f = np.array(list(self.frame.values()), dtype=np.float)
         # Replace NoneType by Nan for later logic comparison
-        indx_remove_test = np.where(values_f == None)
-        values_f[indx_remove_test] = np.nan
+        indx_remove_test = np.where(np.isnan(values_f))
+
+        # Values cannot be > 1
+        if np.any(np.delete(values_f, indx_remove_test) > MAX_BOUND):
+            raise ValueError("Values > MAX_BOUND")
 
         keys_f = np.array(list(self.frame.keys()))
 
