@@ -62,8 +62,6 @@ def compute_session_status(frame, criteria=None):
             np.any(values_f < MIN_BOUND)):
         raise ValueError("Values out of bound")
 
-
-
     # Find tests that fall under a given criterion
     for i_key in range(0, len(keys_crit)):
         # Get lower threshold
