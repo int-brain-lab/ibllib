@@ -69,3 +69,58 @@ class ExtendedQC(object):
             endpoint="sessions", uuid=self.eid, field_name="extended_qc", data=self.frame
         )
         return out
+
+    def compute_session_status(self, criteria=[]):
+        """
+        :param criteria: dictionary defining lower bounds (values) of categories (keys),
+        written in ascending orders of importance (most critical first). Max bound: <=1.
+        e.g. ERROR is >= 0.75, <0.95 in default:
+        criteria = {"CRITICAL": 0,
+                    "ERROR": 0.75,
+                    "WARNING": 0.95,
+                    "PASS": 0.99 }
+        :return: criteria,
+        """
+        # Set default value
+        if len(criteria) == 0:
+
+            criteria = {"CRITICAL": 0,
+                        "ERROR": 0.75,
+                        "WARNING": 0.95,
+                        "PASS": 0.99
+                        }
+        keys_crit = list(criteria.keys())
+        # Prepare out variable with same format as criteria
+        out_var_test_status = dict.fromkeys(keys_crit)
+
+        # Get values and key to compute test / session status
+
+        values_f = np.array(list(self.frame.values()))
+        # Replace NoneType by Nan for later logic comparison
+        values_f[np.where(values_f == None)] = np.nan
+
+        keys_f = np.array(list(self.frame.keys()))
+
+        # Find tests that fall under a given criterion
+        for i_key in range(0, len(keys_crit)):
+            # Get lower threshold
+            threshold_lower = criteria[keys_crit[i_key]]
+            # Get upper threshold and find index of corresponding values
+            if i_key == len(keys_crit)-1:
+                threshold_upper = 1
+                indx = np.where(np.logical_and(
+                    values_f >= threshold_lower, values_f <= threshold_upper))[0]
+            else:
+                threshold_upper = criteria[keys_crit[i_key+1]]
+                indx = np.where(np.logical_and(
+                    values_f >= threshold_lower, values_f < threshold_upper))[0]
+            # Get name of test corresponding to index and save in out var
+            out_var_test_status[keys_crit[i_key]] = keys_f[indx]
+
+        # Check each test is assigned only to one status
+
+        # Session status
+
+        return criteria, out_var_test_status,
+
+
