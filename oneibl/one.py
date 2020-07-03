@@ -1,21 +1,27 @@
+import abc
+import concurrent.futures
 import logging
 import os
 from pathlib import Path, PurePath
 
 import requests
 import tqdm
+import pandas as pd
+import numpy as np
 
 import oneibl.params
 import oneibl.webclient as wc
 from alf.io import (AlfBunch, get_session_path, is_uuid_string,
                     load_file_content, remove_uuid_file)
 from ibllib.io import hashfile
-from ibllib.io.one import OneAbstract
 from ibllib.misc import pprint
 from oneibl.dataclass import SessionDataInfo
+from brainbox.io import parquet
+from brainbox.core import ismember, ismember2d
 
 _logger = logging.getLogger('ibllib')
 
+NTHREADS = 4  # number of download threads
 
 _ENDPOINTS = {  # keynames are possible input arguments and values are actual endpoints
     'data': 'dataset-types',
@@ -88,28 +94,150 @@ SEARCH_TERMS = {  # keynames are possible input arguments and values are actual 
 }
 
 
-class ONE(OneAbstract):
-    def __init__(self, username=None, password=None, base_url=None, silent=False, printout=True):
+def _ses2pandas(ses, dtypes=None):
+    """
+    :param ses: session dictionary from rest endpoint
+    :param dtypes: list of dataset types
+    :return:
+    """
+    # selection: get relevant dtypes only if there is an url associated
+    rec = list(filter(lambda x: x['url'], ses['data_dataset_session_related']))
+    if dtypes is not None:
+        rec = list(filter(lambda x: x['dataset_type'] in dtypes, rec))
+    include = ['id', 'hash', 'dataset_type', 'name', 'file_size', 'collection']
+    uuid_fields = ['id', 'eid']
+    join = {'subject': ses['subject'], 'lab': ses['lab'], 'eid': ses['url'][-36:],
+            'start_time': ses['start_time'], 'number': ses['number']}
+    col = parquet.rec2col(rec, include=include, uuid_fields=uuid_fields, join=join).to_df()
+
+    return col
+
+
+class OneAbstract(abc.ABC):
+
+    def __init__(self, username=None, password=None, base_url=None):
         # get parameters override if inputs provided
-        self._par = oneibl.params.get(silent=silent)
+        self._par = oneibl.params.get(silent=False)
         self._par = self._par.set('ALYX_LOGIN', username or self._par.ALYX_LOGIN)
         self._par = self._par.set('ALYX_URL', base_url or self._par.ALYX_URL)
         self._par = self._par.set('ALYX_PWD', password or self._par.ALYX_PWD)
+        # init the cache file
+        self._cache_file = Path(self._par.CACHE_DIR).joinpath('.one_cache.parquet')
+        if self._cache_file.exists():
+            self._cache = parquet.load(self._cache_file)
+        else:
+            self._cache = pd.DataFrame()
 
+    def _load(self, eid, dataset_types=None, dclass_output=False, download_only=False, **kwargs):
+        """
+        From a Session ID and dataset types, queries Alyx database, downloads the data
+        from Globus, and loads into numpy array. Single session only
+        """
+        if is_uuid_string(eid):
+            eid = '/sessions/' + eid
+        eid_str = eid[-36:]
+        # if no dataset_type is provided:
+        # a) force the output to be a dictionary that provides context to the data
+        # b) download all types that have a data url specified whithin the alf folder
+        dataset_types = [dataset_types] if isinstance(dataset_types, str) else dataset_types
+        if not dataset_types or dataset_types == ['__all__']:
+            dclass_output = True
+
+        dc = self._make_dataclass(eid_str, dataset_types, **kwargs)
+
+        # load the files content in variables if requested
+        if not download_only:
+            for ind, fil in enumerate(dc.local_path):
+                dc.data[ind] = load_file_content(fil)
+        # parse output arguments
+        if dclass_output:
+            return dc
+        # if required, parse the output as a list that matches dataset_types requested
+        list_out = []
+        for dt in dataset_types:
+            if dt not in dc.dataset_type:
+                _logger.warning('dataset ' + dt + ' not found for session: ' + eid_str)
+                list_out.append(None)
+                continue
+            for i, x, in enumerate(dc.dataset_type):
+                if dt == x:
+                    if dc.data[i] is not None:
+                        list_out.append(dc.data[i])
+                    else:
+                        list_out.append(dc.local_path[i])
+        return list_out
+
+    def _get_cache_dir(self, cache_dir):
+        if not cache_dir:
+            cache_dir = self._par.CACHE_DIR
+        # if empty in parameter file, do not allow and set default
+        if not cache_dir:
+            cache_dir = str(PurePath(Path.home(), "Downloads", "FlatIron"))
+        return cache_dir
+
+    @abc.abstractmethod
+    def _make_dataclass(self, eid, dataset_types=None):
+        pass
+
+    @abc.abstractmethod
+    def load(self, **kwargs):
+        pass
+
+    @abc.abstractmethod
+    def list(self, **kwargs):
+        pass
+
+    @abc.abstractmethod
+    def search(self, **kwargs):
+        pass
+
+
+def ONE(offline=False, **kwargs):
+    if offline:
+        return OneOffline(**kwargs)
+    else:
+        return OneAlyx(**kwargs)
+
+
+class OneOffline(OneAbstract):
+
+    def _make_dataclass(self, eid, dataset_types=None, cache_dir=None, **kwargs):
+        if self._cache.size == 0:
+            return SessionDataInfo()
+        # select the session
+        npeid = parquet.str2np(eid)[0]
+        df = self._cache[self._cache['eid_0'] == npeid[0]]
+        df = df[df['eid_1'] == npeid[1]]
+        # select datasets
+        df = df[ismember(df['dataset_type'], dataset_types)[0]]
+        return SessionDataInfo.from_pandas(df, self._get_cache_dir(cache_dir))
+
+    def load(self, eid, **kwargs):
+        return self._load(eid, **kwargs)
+
+    def list(self, **kwargs):
+        pass
+
+    def search(self, **kwargs):
+        pass
+
+
+class OneAlyx(OneAbstract):
+    def __init__(self, username=None, password=None, base_url=None):
+        # get parameters override if inputs provided
+        super(OneAlyx, self).__init__(username=username, password=password, base_url=base_url)
         try:
             self._alyxClient = wc.AlyxClient(username=self._par.ALYX_LOGIN,
                                              password=self._par.ALYX_PWD,
                                              base_url=self._par.ALYX_URL)
+            # Display output when instantiating ONE
+            print(f"Connected to {self._par.ALYX_URL} as {self._par.ALYX_LOGIN}", )
         except requests.exceptions.ConnectionError:
             raise ConnectionError(
                 f"Can't connect to {self._par.ALYX_URL}.\n" +
                 "IP addresses are filtered on IBL database servers. \n" +
                 "Are you connecting from an IBL participating institution ?"
             )
-        # Init connection to Globus if needed
-        # Display output when instantiating ONE
-        if printout:
-            print(f"Connected to {self._par.ALYX_URL} as {self._par.ALYX_LOGIN}",)
 
     @property
     def alyx(self):
@@ -290,60 +418,36 @@ class ONE(OneAbstract):
                     out.append(self._load(e, **kwargs)[0])
             return out
 
-    def _load(self, eid, dataset_types=None, dclass_output=False, dry_run=False, cache_dir=None,
-              download_only=False, clobber=False, offline=False, keep_uuid=False):
-        """
-        From a Session ID and dataset types, queries Alyx database, downloads the data
-        from Globus, and loads into numpy array. Single session only
-        """
+    def _make_dataclass(self, eid, dataset_types=None, cache_dir=None, dry_run=False,
+                        clobber=False, offline=False, keep_uuid=False):
         # if the input as an UUID, add the beginning of URL to it
         cache_dir = self._get_cache_dir(cache_dir)
-        if is_uuid_string(eid):
-            eid = '/sessions/' + eid
-        eid_str = eid[-36:]
         # get session json information as a dictionary from the alyx API
         try:
-            ses = self.alyx.get('/sessions/' + eid_str)
+            ses = self.alyx.rest('sessions', 'read', id=eid)
         except requests.HTTPError:
-            raise requests.HTTPError('Session ' + eid_str + ' does not exist')
-        # ses = ses[0]
-        # if no dataset_type is provided:
-        # a) force the output to be a dictionary that provides context to the data
-        # b) download all types that have a data url specified whithin the alf folder
-        dataset_types = [dataset_types] if isinstance(dataset_types, str) else dataset_types
-        if not dataset_types or dataset_types == ['__all__']:
-            dclass_output = True
-        dc = SessionDataInfo.from_session_details(ses, dataset_types=dataset_types, eid=eid_str)
+            raise requests.HTTPError('Session ' + eid + ' does not exist')
+        # filter by dataset types
+        dc = SessionDataInfo.from_session_details(ses, dataset_types=dataset_types, eid=eid)
         # loop over each dataset and download if necessary
-        for ind in range(len(dc)):
-            if dc.url[ind] and not dry_run:
-                relpath = PurePath(dc.url[ind].replace(self._par.HTTP_DATA_SERVER, '.')).parents[0]
-                cache_dir_file = PurePath(cache_dir, relpath)
-                Path(cache_dir_file).mkdir(parents=True, exist_ok=True)
-                dc.local_path[ind] = self._download_file(
-                    dc.url[ind], str(cache_dir_file), clobber=clobber, offline=offline,
-                    keep_uuid=keep_uuid, file_size=dc.file_size[ind], hash=dc.hash[ind])
-        # load the files content in variables if requested
-        if not download_only:
-            for ind, fil in enumerate(dc.local_path):
-                dc.data[ind] = load_file_content(fil)
-        # parse output arguments
-        if dclass_output:
-            return dc
-        # if required, parse the output as a list that matches dataset_types requested
-        list_out = []
-        for dt in dataset_types:
-            if dt not in dc.dataset_type:
-                _logger.warning('dataset ' + dt + ' not found for session: ' + eid_str)
-                list_out.append(None)
-                continue
-            for i, x, in enumerate(dc.dataset_type):
-                if dt == x:
-                    if dc.data[i] is not None:
-                        list_out.append(dc.data[i])
-                    else:
-                        list_out.append(dc.local_path[i])
-        return list_out
+        with concurrent.futures.ThreadPoolExecutor(max_workers=NTHREADS) as executor:
+            futures = []
+            for ind in range(len(dc)):
+                if dc.url[ind] is None or dry_run:
+                    futures.append(None)
+                else:
+                    futures.append(executor.submit(
+                        self.download_dataset, dc.url[ind], cache_dir=cache_dir, clobber=clobber,
+                        offline=offline, keep_uuid=keep_uuid, file_size=dc.file_size[ind],
+                        hash=dc.hash[ind]))
+            concurrent.futures.wait(list(filter(lambda x: x is not None, futures)))
+            for ind, future in enumerate(futures):
+                if future is None:
+                    continue
+                dc.local_path[ind] = future.result()
+        # filter by daataset types and update the cache
+        self._update_cache(ses, dataset_types=dataset_types)
+        return dc
 
     def _ls(self, table=None, verbose=False):
         """
@@ -478,17 +582,53 @@ class ONE(OneAbstract):
         else:
             return eids
 
-    def _get_cache_dir(self, cache_dir):
-        if not cache_dir:
-            cache_dir = self._par.CACHE_DIR
-        # if empty in parameter file, do not allow and set default
-        if not cache_dir:
-            cache_dir = str(PurePath(Path.home(), "Downloads", "FlatIron"))
-        return cache_dir
+    def download_datasets(self, dsets, **kwargs):
+        """
+        Download several datsets through a list of alyx REST dictionaries
+        :param dset: list of dataset dictionaries from an Alyx REST query OR list of URL strings
+        :return: local file path
+        """
+        out_files = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=NTHREADS) as executor:
+            futures = [executor.submit(self.download_dataset, dset, file_size=dset['file_size'],
+                                       hash=dset['hash'], **kwargs) for dset in dsets]
+            concurrent.futures.wait(futures)
+            for future in futures:
+                out_files.append(future.result())
+        return out_files
 
-    def _download_file(self, url, cache_dir, clobber=False, offline=False, keep_uuid=False,
+    def download_dataset(self, dset, cache_dir=None, **kwargs):
+        """
+        Download a dataset from an alyx REST dictionary
+        :param dset: single dataset dictionary from an Alyx REST query OR URL string
+        :param cache_dir (optional): root directory to save the data in (home/downloads by default)
+        :return: local file path
+        """
+        if isinstance(dset, str):
+            url = dset
+        else:
+            url = next((fr['data_url'] for fr in dset['file_records'] if fr['data_url']), None)
+        if not url:
+            return
+        relpath = Path(url.replace(self._par.HTTP_DATA_SERVER, '.')).parents[0]
+        target_dir = Path(self._get_cache_dir(cache_dir), relpath)
+        return self._download_file(url=url, target_dir=target_dir, **kwargs)
+
+    def _download_file(self, url, target_dir, clobber=False, offline=False, keep_uuid=False,
                        file_size=None, hash=None):
-        local_path = cache_dir + os.sep + os.path.basename(url)
+        """
+        Downloads a single file from an HTTP webserver
+        :param url:
+        :param cache_dir:
+        :param clobber: (bool: False) overwrites local dataset if any
+        :param offline:
+        :param keep_uuid:
+        :param file_size:
+        :param hash:
+        :return:
+        """
+        Path(target_dir).mkdir(parents=True, exist_ok=True)
+        local_path = str(target_dir) + os.sep + os.path.basename(url)
         if not keep_uuid:
             local_path = remove_uuid_file(local_path, dry=True)
         if Path(local_path).exists():
@@ -505,7 +645,7 @@ class ONE(OneAbstract):
             local_path = wc.http_download_file(url,
                                                username=self._par.HTTP_DATA_SERVER_LOGIN,
                                                password=self._par.HTTP_DATA_SERVER_PWD,
-                                               cache_dir=str(cache_dir),
+                                               cache_dir=str(target_dir),
                                                clobber=clobber,
                                                offline=offline)
         if keep_uuid:
@@ -540,29 +680,36 @@ class ONE(OneAbstract):
         """
         oneibl.params.setup()
 
-    def path_from_eid(self, eid: str, grep_str=None) -> Path:
+    def path_from_eid(self, eid: str) -> Path:
         # If eid is a list of eIDs recurse through list and return the results
         if isinstance(eid, list):
             path_list = []
             for p in eid:
-                path_list.append(self.path_from_eid(p, grep_str=grep_str))
+                path_list.append(self.path_from_eid(p))
             return path_list
         # If not valid return None
         if not is_uuid_string(eid):
             print(eid, " is not a valid eID/UUID string")
             return
-        # Load data, if no data present on disk return None
-        data = self._load(eid, download_only=True, offline=True)
-        if not data.local_path:
-            return None
-        # If user defined a grep list of specific files return paths to files
-        if grep_str is not None:
-            files = [x for x in data.local_path if grep_str in str(x)]
-            return files
-        # If none of the above happen return the session path of the first file you find
-        session_path = get_session_path(data.local_path[0])
 
-        return session_path
+        # first try avoid hitting the database
+        if self._cache.size > 0:
+            ic = parquet.find_first_2d(
+                self._cache[['eid_0', 'eid_1']].to_numpy(), parquet.str2np(eid))
+            if ic != -1:
+                ses = self._cache.iloc[ic]
+                return Path(self._par.CACHE_DIR).joinpath(
+                    ses['lab'], 'Subjects', ses['subject'], ses['start_time'][:10],
+                    str(ses['number']).zfill(3))
+
+        # if it wasn't successful, query Alyx
+        ses = self.alyx.rest('sessions', 'list', django=f'pk,{eid}')
+        if len(ses) == 0:
+            return None
+        else:
+            return Path(self._par.CACHE_DIR).joinpath(
+                ses[0]['lab'], 'Subjects', ses[0]['subject'], ses[0]['start_time'][:10],
+                str(ses[0]['number']).zfill(3))
 
     def eid_from_path(self, path_obj):
         # If path_obj is a list recurse through it and return a list
@@ -578,10 +725,21 @@ class ONE(OneAbstract):
         # if path does not have a date and a number return None
         if session_path is None:
             return None
-        # search for subj, date, number XXX: hits the DB
+
+        # try the cached info to possibly avoid hitting database
+        if self._cache.size > 0:
+            ind = ((self._cache['subject'] == session_path.parts[-3]) &
+                   (self._cache['start_time'].apply(lambda x: x[:10] == session_path.parts[-2])) &
+                   (self._cache['number']) == int(session_path.parts[-1]))
+            ind = np.where(ind.to_numpy())[0]
+            if ind.size > 0:
+                return parquet.np2str([self._cache[['eid_0', 'eid_1']].loc[ind[0]].to_numpy()])[0]
+
+        # if not search for subj, date, number XXX: hits the DB
         uuid = self.search(subjects=session_path.parts[-3],
                            date_range=session_path.parts[-2],
                            number=session_path.parts[-1])
+
         # Return the uuid if any
         return uuid[0] if uuid else None
 
@@ -609,6 +767,30 @@ class ONE(OneAbstract):
         out = {k: v for k, v in dets.items() if k in det_fields}
         out.update({'local_path': self.path_from_eid(eid)})
         return out
+
+    def _update_cache(self, ses, dataset_types):
+        """
+        :param ses: session details dictionary as per Alyx response
+        :param dataset_types:
+        :return: is_updated (bool): if the cache was updated or not
+        """
+        updated = False
+        pqt_dsets = _ses2pandas(ses, dtypes=dataset_types)
+        # if the cache is empty, no update
+        if self._cache.size == 0:
+            self._cache = pqt_dsets
+            return
+        elif pqt_dsets.size == 0:
+            return
+        else:
+            isin, _ = ismember2d(pqt_dsets[['id_0', 'id_1']].to_numpy(),
+                                 self._cache[['id_0', 'id_1']].to_numpy())
+            if not np.all(isin):
+                self._cache = self._cache.append(pqt_dsets.iloc[np.where(~isin)[0]])
+                updated = True
+        # only write to file if the cache changed
+        if updated:
+            parquet.save(self._cache_file, self._cache)
 
 
 def _validate_date_range(date_range):

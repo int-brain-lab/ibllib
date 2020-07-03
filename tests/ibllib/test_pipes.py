@@ -3,22 +3,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import ibllib.pipes.extract_session
-from ibllib.pipes import experimental_data, misc
+import ibllib.io.raw_data_loaders as rawio
+from ibllib.pipes import misc
 from oneibl.one import ONE
-
-
-class TestCompression(unittest.TestCase):
-
-    def setUp(self) -> None:
-        pass
-
-    def test_empty_flag_file(self):
-        with tempfile.TemporaryDirectory() as tdir:
-            flag = Path(tdir).joinpath('compress_video.flag')
-            flag.touch()
-            experimental_data.compress_video(tdir, dry=True)
-            self.assertFalse(flag.exists())
 
 
 class TestExtractors(unittest.TestCase):
@@ -40,7 +27,7 @@ class TestExtractors(unittest.TestCase):
             ('_iblrig_tasks_ephys_certification4.1.3', 'sync_ephys'),
         ]
         for to in task_out:
-            out = ibllib.pipes.extract_session.get_task_extractor_type(to[0])
+            out = rawio.get_task_extractor_type(to[0])
             self.assertEqual(out, to[1])
 
 

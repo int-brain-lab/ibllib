@@ -3,6 +3,7 @@ Quality control of raw Neuropixel electrophysiology data.
 """
 from pathlib import Path
 import logging
+import shutil
 
 import numpy as np
 import pandas as pd
@@ -12,10 +13,10 @@ import alf.io
 from brainbox.core import Bunch
 from brainbox.metrics import quick_unit_metrics
 from ibllib.ephys import sync_probes
-from ibllib.io import spikeglx
+from ibllib.io import spikeglx, raw_data_loaders
 import ibllib.dsp as dsp
-import ibllib.io.extractors.ephys_fpga as fpga
-from ibllib.misc import print_progress, log2session_static
+from ibllib.io.extractors import ephys_fpga, training_wheel
+from ibllib.misc import print_progress
 from phylib.io import model
 
 
@@ -23,6 +24,7 @@ _logger = logging.getLogger('ibllib')
 
 RMS_WIN_LENGTH_SECS = 3
 WELCH_WIN_LENGTH_SAMPLES = 1024
+NCH_WAVEFORMS = 32  # number of channels to be saved in templates.waveforms and channels.waveforms
 
 
 def rmsmap(fbin):
@@ -66,18 +68,18 @@ def rmsmap(fbin):
     return win
 
 
-def extract_rmsmap(fbin, out_folder=None, force=False):
+def extract_rmsmap(fbin, out_folder=None, overwrite=False):
     """
     Wrapper for rmsmap that outputs _ibl_ephysRmsMap and _ibl_ephysSpectra ALF files
 
     :param fbin: binary file in spike glx format (will look for attached metatdata)
     :param out_folder: folder in which to store output ALF files. Default uses the folder in which
      the `fbin` file lives.
-    :param force: do not re-extract if all ALF files already exist
+    :param overwrite: do not re-extract if all ALF files already exist
     :param label: string or list of strings that will be appended to the filename before extension
     :return: None
     """
-    _logger.info(str(fbin))
+    _logger.info(f"Computing QC for {fbin}")
     sglx = spikeglx.Reader(fbin)
     # check if output ALF files exist already:
     if out_folder is None:
@@ -87,9 +89,11 @@ def extract_rmsmap(fbin, out_folder=None, force=False):
     alf_object_time = f'_iblqc_ephysTimeRms{sglx.type.upper()}'
     alf_object_freq = f'_iblqc_ephysSpectralDensity{sglx.type.upper()}'
     if alf.io.exists(out_folder, alf_object_time) and \
-            alf.io.exists(out_folder, alf_object_freq) and not force:
-        _logger.warning(f'{fbin.name} QC already exists, skipping. Use force option to override')
-        return
+            alf.io.exists(out_folder, alf_object_freq) and not overwrite:
+        _logger.warning(f'{fbin.name} QC already exists, skipping. Use overwrite option.')
+        out_time = alf.io._ls(out_folder, alf_object_time)[0]
+        out_freq = alf.io._ls(out_folder, alf_object_freq)[0]
+        return out_time + out_freq
     # crunch numbers
     rms = rmsmap(fbin)
     # output ALF files, single precision with the optional label as suffix before extension
@@ -103,26 +107,22 @@ def extract_rmsmap(fbin, out_folder=None, force=False):
     return out_time + out_freq
 
 
-@log2session_static('ephys')
-def raw_qc_session(session_path, dry=False, force=False):
+def raw_qc_session(session_path, overwrite=False):
     """
     Wrapper that exectutes QC from a session folder and outputs the results whithin the same folder
     as the original raw data.
     :param session_path: path of the session (Subject/yyyy-mm-dd/number
-    :param dry: bool (False) Dry run if True
-    :param force: bool (False) Force means overwriting an existing QC file
+    :param overwrite: bool (False) Force means overwriting an existing QC file
     :return: None
     """
     efiles = spikeglx.glob_ephys_files(session_path)
+    qc_files = []
     for efile in efiles:
         if efile.get('ap') and efile.ap.exists():
-            print(efile.get('ap'))
-            if not dry:
-                extract_rmsmap(efile.ap, out_folder=None, force=force)
+            qc_files.extend(extract_rmsmap(efile.ap, out_folder=None, overwrite=overwrite))
         if efile.get('lf') and efile.lf.exists():
-            print(efile.get('lf'))
-            if not dry:
-                extract_rmsmap(efile.lf, out_folder=None, force=force)
+            qc_files.extend(extract_rmsmap(efile.lf, out_folder=None, overwrite=overwrite))
+    return qc_files
 
 
 def validate_ttl_test(ses_path, display=False):
@@ -151,15 +151,18 @@ def validate_ttl_test(ses_path, display=False):
     ses_path = Path(ses_path)
     if not ses_path.exists():
         return False
-    rawsync, sync_map = fpga._get_main_probe_sync(ses_path)
+
+    # get the synchronization fronts (from the raw binary if necessary)
+    ephys_fpga.extract_sync(session_path=ses_path, overwrite=False)
+    rawsync, sync_map = ephys_fpga._get_main_probe_sync(ses_path)
     last_time = rawsync['times'][-1]
 
     # get upgoing fronts for each
     sync = Bunch({})
     for k in sync_map:
-        fronts = fpga._get_sync_fronts(rawsync, sync_map[k])
+        fronts = ephys_fpga._get_sync_fronts(rawsync, sync_map[k])
         sync[k] = fronts['times'][fronts['polarities'] == 1]
-    wheel = fpga.extract_wheel_sync(rawsync, chmap=sync_map, save=False)
+    wheel = ephys_fpga.extract_wheel_sync(rawsync, chmap=sync_map)
 
     frame_rates = {'right_camera': np.round(1 / np.median(np.diff(sync.right_camera))),
                    'left_camera': np.round(1 / np.median(np.diff(sync.left_camera))),
@@ -174,7 +177,7 @@ def validate_ttl_test(ses_path, display=False):
 
     # check that the wheel has a minimum rate of activity on both channels
     re_test = abs(1 - sync.rotary_encoder_1.size / sync.rotary_encoder_0.size) < 0.1
-    re_test &= len(wheel['re_pos']) / last_time > 5
+    re_test &= len(wheel[1]) / last_time > 5
     ok &= _single_test(assertion=re_test,
                        str_ok="PASS: Rotary encoder", str_ko="FAILED: Rotary encoder")
     # check that the frame 2 ttls has a minimum rate of activity
@@ -188,8 +191,8 @@ def validate_ttl_test(ses_path, display=False):
                        str_ok="PASS: Bpod", str_ko="FAILED: Bpod")
     try:
         # note: tried to depend as little as possible on the extraction code but for the valve...
-        behaviour = fpga.extract_behaviour_sync(rawsync, save=False, chmap=sync_map)
-        res = behaviour.valve_open.size > 1
+        behaviour = ephys_fpga.extract_behaviour_sync(rawsync, chmap=sync_map)
+        res = behaviour.valveOpen_times.size > 1
     except AssertionError:
         res = False
     # check that the reward valve is actionned at least once
@@ -204,9 +207,9 @@ def validate_ttl_test(ses_path, display=False):
 
     # second step is to test that we can make the sync. Assertions are whithin the synch code
     if sync.get('imec_sync') is not None:
-        sync_result = sync_probes.version3B(ses_path, display=display)
+        sync_result, _ = sync_probes.version3B(ses_path, display=display)
     else:
-        sync_result = sync_probes.version3A(ses_path, display=display)
+        sync_result, _ = sync_probes.version3A(ses_path, display=display)
 
     ok &= _single_test(assertion=sync_result, str_ok="PASS: synchronisation",
                        str_ko="FAILED: probe synchronizations threshold exceeded")
@@ -255,25 +258,22 @@ def unit_metrics_ks2(ks2_path=None, m=None, save=True):
 
 
 def phy_model_from_ks2_path(ks2_path):
-    params_file = ks2_path.joinpath('params.py')
-    if params_file.exists():
-        m = model.load_model(params_file)
+    meta_file = next(ks2_path.rglob('*.ap.meta'), None)
+    if meta_file and meta_file.exists():
+        meta = spikeglx.read_meta_data(meta_file)
+        fs = spikeglx._get_fs_from_meta(meta)
+        nch = (spikeglx._get_nchannels_from_meta(meta) -
+               len(spikeglx._get_sync_trace_indices_from_meta(meta)))
     else:
-        meta_file = next(ks2_path.rglob('*.ap.meta'), None)
-        if meta_file and meta_file.exists():
-            meta = spikeglx.read_meta_data(meta_file)
-            fs = spikeglx._get_fs_from_meta(meta)
-            nch = (spikeglx._get_nchannels_from_meta(meta) -
-                   len(spikeglx._get_sync_trace_indices_from_meta(meta)))
-        else:
-            fs = 30000
-            nch = 384
-        m = model.TemplateModel(dir_path=ks2_path,
-                                dat_path=[],
-                                sample_rate=fs,
-                                n_channels_dat=nch)
+        fs = 30000
+        nch = 384
+    bin_file = next(ks2_path.rglob('*.ap.*bin'), None)
+    m = model.TemplateModel(dir_path=ks2_path,
+                            dat_path=bin_file,  # this assumes the raw data is in the same folder
+                            sample_rate=fs,
+                            n_channels_dat=nch,
+                            n_closest_channels=NCH_WAVEFORMS)
     m.depths = m.get_depths()
-
     return m
 
 
@@ -287,8 +287,8 @@ def qc_fpga_task(fpga_trials, alf_trials):
     :return: qc_session, qc_trials, True means QC passes while False indicates a failure
     """
 
-    GOCUE_STIMON_DELAY = 0.01
-    FEEDBACK_STIMFREEZE_DELAY = 0.01
+    GOCUE_STIMON_DELAY = 0.01  # -> 0.1
+    FEEDBACK_STIMFREEZE_DELAY = 0.01  # -> 0.1
     VALVE_STIM_OFF_DELAY = 1
     VALVE_STIM_OFF_JITTER = 0.1
     ITI_IN_STIM_OFF_JITTER = 0.1
@@ -308,7 +308,7 @@ def qc_fpga_task(fpga_trials, alf_trials):
     start should not be NaNs and increasing. This is not a QC but an assertion.
     """
     status = True
-    for k in ['goCueTrigger_times_bpod', 'response_times', 'stimOn_times', 'response_times_bpod',
+    for k in ['response_times', 'stimOn_times', 'response_times',
               'goCueTrigger_times', 'goCue_times', 'feedback_times']:
         if k.endswith('_bpod'):
             tstart = alf_trials['intervals_bpod'][:, 0]
@@ -323,8 +323,8 @@ def qc_fpga_task(fpga_trials, alf_trials):
     This part of the function uses only fpga_trials information
     """
     # check number of feedbacks: should always be one
-    qc_trials['n_feedback'] = (np.uint32(~np.isnan(fpga_trials['valve_open'])) +
-                               np.uint32(~np.isnan(fpga_trials['error_tone_in'])))
+    qc_trials['n_feedback'] = (np.uint32(~np.isnan(fpga_trials['valveOpen_times'])) +
+                               np.uint32(~np.isnan(fpga_trials['errorCue_times'])))
 
     # check for non-Nans
     qc_trials['stimOn_times_nan'] = ~np.isnan(fpga_trials['stimOn_times'])
@@ -336,25 +336,29 @@ def qc_fpga_task(fpga_trials, alf_trials):
 
     # stimFreeze before feedback
     qc_trials['stim_freeze_before_feedback'], qc_trials['stim_freeze_feedback_delay'] = \
-        strictly_after(fpga_trials['stim_freeze'], fpga_trials['feedback_times'],
+        strictly_after(fpga_trials['stimFreeze_times'], fpga_trials['feedback_times'],
                        FEEDBACK_STIMFREEZE_DELAY)
 
     # stimOff 1 sec after valve, with 0.1 as acceptable jitter
     qc_trials['stimOff_delay_valve'] = np.less(
-        np.abs(fpga_trials['stimOff_times'] - fpga_trials['valve_open'] - VALVE_STIM_OFF_DELAY),
+        np.abs(
+            fpga_trials['stimOff_times'] - fpga_trials['valveOpen_times'] - VALVE_STIM_OFF_DELAY
+        ),
         VALVE_STIM_OFF_JITTER, out=np.ones(ntrials, dtype=np.bool),
-        where=~np.isnan(fpga_trials['valve_open']))
+        where=~np.isnan(fpga_trials['valveOpen_times']))
 
     # iti_in whithin 0.01 sec of stimOff
     qc_trials['iti_in_delay_stim_off'] = \
-        np.abs(fpga_trials['stimOff_times'] - fpga_trials['iti_in']) < ITI_IN_STIM_OFF_JITTER
+        np.abs(fpga_trials['stimOff_times'] - fpga_trials['itiIn_times']) < ITI_IN_STIM_OFF_JITTER
 
-    # stimOff 2 secs after error_tone_in with jitter
+    # stimOff 2 secs after errorCue_times with jitter
     # noise off happens 2 secs after stimm, with 0.1 as acceptable jitter
     qc_trials['stimOff_delay_noise'] = np.less(
-        np.abs(fpga_trials['stimOff_times'] - fpga_trials['error_tone_in'] - ERROR_STIM_OFF_DELAY),
+        np.abs(
+            fpga_trials['stimOff_times'] - fpga_trials['errorCue_times'] - ERROR_STIM_OFF_DELAY
+        ),
         ERROR_STIM_OFF_JITTER, out=np.ones(ntrials, dtype=np.bool),
-        where=~np.isnan(fpga_trials['error_tone_in']))
+        where=~np.isnan(fpga_trials['errorCue_times']))
 
     """
     This part uses only alf_trials information
@@ -381,3 +385,46 @@ def qc_fpga_task(fpga_trials, alf_trials):
     qc_session = {k: np.all(qc_trials[k]) for k in qc_trials}
 
     return qc_session, qc_trials
+
+
+def _qc_from_path(sess_path, display=True):
+    WHEEL = False
+    sess_path = Path(sess_path)
+    temp_alf_folder = sess_path.joinpath('fpga_test', 'alf')
+    temp_alf_folder.mkdir(parents=True, exist_ok=True)
+
+    raw_trials = raw_data_loaders.load_data(sess_path)
+    tmax = raw_trials[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
+
+    sync, chmap = ephys_fpga._get_main_probe_sync(sess_path, bin_exists=False)
+    _ = ephys_fpga.extract_all(sess_path, output_path=temp_alf_folder, save=True)
+    # check that the output is complete
+    fpga_trials = ephys_fpga.extract_behaviour_sync(sync, output_path=temp_alf_folder, tmax=tmax,
+                                                    chmap=chmap, save=True, display=display)
+    # align with the bpod
+    bpod2fpga = ephys_fpga.align_with_bpod(temp_alf_folder.parent)
+    alf_trials = alf.io.load_object(temp_alf_folder, '_ibl_trials')
+    shutil.rmtree(temp_alf_folder)
+    # do the QC
+    qcs, qct = qc_fpga_task(fpga_trials, alf_trials)
+
+    # do the wheel part
+    if WHEEL:
+        bpod_wheel = training_wheel.get_wheel_data(sess_path, save=False)
+        fpga_wheel = ephys_fpga.extract_wheel_sync(sync, chmap=chmap, save=False)
+
+        if display:
+            import matplotlib.pyplot as plt
+            t0 = max(np.min(bpod2fpga(bpod_wheel['re_ts'])), np.min(fpga_wheel['re_ts']))
+            dy = np.interp(t0, fpga_wheel['re_ts'], fpga_wheel['re_pos']) - np.interp(
+                t0, bpod2fpga(bpod_wheel['re_ts']), bpod_wheel['re_pos'])
+
+            fix, axes = plt.subplots(nrows=2, sharex='all', sharey='all')
+            # axes[0].plot(t, pos), axes[0].title.set_text('Extracted')
+            axes[0].plot(bpod2fpga(bpod_wheel['re_ts']), bpod_wheel['re_pos'] + dy)
+            axes[0].plot(fpga_wheel['re_ts'], fpga_wheel['re_pos'])
+            axes[0].title.set_text('FPGA')
+            axes[1].plot(bpod2fpga(bpod_wheel['re_ts']), bpod_wheel['re_pos'] + dy)
+            axes[1].title.set_text('Bpod')
+
+    return alf.io.dataframe({**fpga_trials, **alf_trials, **qct})

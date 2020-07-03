@@ -8,18 +8,21 @@ from scipy.signal import convolve, gaussian
 from scipy.linalg import hankel
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
+from typing import TypeVar, Type, Sequence, Optional, Union
+# from ibllib.io.extractors.ephys_fpga import WHEEL_TICKS  # FIXME Circular dependencies
 
 __all__ = ['cm_to_deg',
            'cm_to_rad',
-           'convolve',
-           'hankel',
            'interpolate_position',
            'last_movement_onset',
            'movements',
            'samples_to_cm',
            'traces_by_trial',
-           'velocity',
-           'velocity_smoothed', ]
+           'velocity_smoothed',
+           'within_ranges']
+
+D = TypeVar('D', bound=np.generic)
+Array = Union[np.ndarray, Sequence]
 
 # Define some constants
 ENC_RES = 1024 * 4  # Rotary encoder resolution, assumes X4 encoding
@@ -41,7 +44,7 @@ def interpolate_position(re_ts, re_pos, freq=1000, kind='linear', fill_gaps=None
     kind : {'linear', 'cubic'}
         Type of interpolation. Defaults to linear interpolation.
     fill_gaps : float
-        Minimum gap length to fill. for gaps over this time (seconds),
+        Minimum gap length to fill. For gaps over this time (seconds),
         forward fill values before interpolation
     Returns
     -------
@@ -113,9 +116,9 @@ def velocity_smoothed(pos, freq, smooth_size=0.03):
         Array of acceleration values
     """
     # Define our smoothing window with an area of 1 so the units won't be changed
-    stdSamps = np.round(smooth_size * freq)  # Standard deviation relative to sampling frequency
-    N = stdSamps * 6  # Number of points in the Gaussian
-    gauss_std = (N - 1) / 6  # @fixme magic number everywhere!
+    std_samps = np.round(smooth_size * freq)  # Standard deviation relative to sampling frequency
+    N = std_samps * 6  # Number of points in the Gaussian covering +/-3 standard deviations
+    gauss_std = (N - 1) / 6
     win = gaussian(N, gauss_std)
     win = win / win.sum()  # Normalize amplitude
 
@@ -128,9 +131,10 @@ def velocity_smoothed(pos, freq, smooth_size=0.03):
 
 def last_movement_onset(t, vel, event_time):
     """
-    Find the time at which movement started, given an event timestamp that accured during the
+    Find the time at which movement started, given an event timestamp that occurred during the
     movement.  Movement start is defined as the first sample after the velocity has been zero
-    for at least 50ms
+    for at least 50ms.  Wheel inputs should be evenly sampled.
+
     :param t: numpy array of wheel timestamps in seconds
     :param vel: numpy array of wheel velocities
     :param event_time: timestamp anywhere during movement of interest, e.g. peak velocity
@@ -155,23 +159,42 @@ def last_movement_onset(t, vel, event_time):
 def movements(t, pos, freq=1000, pos_thresh=8, t_thresh=.2, min_gap=.1, pos_thresh_onset=1.5,
               min_dur=.05, make_plots=False):
     """
-    Return linearly interpolated wheel position.
-    :param t: An array of wheel timestamps in absolute seconds
-    :param pos: An array of evenly sampled wheel positions
-    :param freq: The sampling rate for linear interpolation
-    :param pos_thresh: The minimum required movement during the t_thresh window to be considered
-    part of a movement
-    :param t_thresh: The time window over which to check whether the pos_thresh has been crossed
-    :param min_gap: The minimum time between one movement's offset and another movement's onset
-    in order to be considered separate.  Movements with a gap smaller than this are 'stictched
-    together'
-    :param pos_thresh_onset: A lower threshold for finding precise onset times.  The first
-    position of each movement transition that is this much bigger than the starting position is
-    considered the onset
-    :param min_dur: The minimum duration of a valid movement.  Detected movements shorter than
-    this are ignored
-    :param make_plots: plot trace of position and velocity, showing detected onsets and offsets
-    :return: Tuple of onset and offset times, movement amplitudes and peak velocity times
+    Detect wheel movements.
+
+    Parameters
+    ----------
+    t : array_like
+        An array of evenly sampled wheel timestamps in absolute seconds
+    pos : array_like
+        An array of evenly sampled wheel positions
+    freq : int
+        The sampling rate of the wheel data
+    pos_thresh : float
+        The minimum required movement during the t_thresh window to be considered part of a
+        movement
+    t_thresh : float
+        The time window over which to check whether the pos_thresh has been crossed
+    min_gap : float
+        The minimum time between one movement's offset and another movement's onset in order to be
+        considered separate.  Movements with a gap smaller than this are 'stictched together'
+    pos_thresh_onset : float
+        A lower threshold for finding precise onset times.  The first position of each movement
+        transition that is this much bigger than the starting position is considered the onset
+    min_dur : float
+        The minimum duration of a valid movement.  Detected movements shorter than this are ignored
+    make_plots : boolean
+        Plot trace of position and velocity, showing detected onsets and offsets
+
+    Returns
+    -------
+    onsets : np.ndarray
+        Timestamps of detected movement onsets
+    offsets : np.ndarray
+        Timestamps of detected movement offsets
+    peak_amps : np.ndarray
+        The absolute maximum amplitude of each detected movement, relative to onset position
+    peak_vel_times : np.ndarray
+        Timestamps of peak velocity for each detected movement
     """
     # Wheel position must be evenly sampled.
     dt = np.diff(t)
@@ -253,7 +276,11 @@ def movements(t, pos, freq=1000, pos_thresh=8, t_thresh=.2, min_gap=.1, pos_thre
         offsets = offsets[np.append(~gap_too_small, True)]  # always keep last offset
         offset_samps = offset_samps[np.append(~gap_too_small, True)]
 
-    move_amps = pos[offset_samps] - pos[onset_samps]
+    # Calculate the peak amplitudes -
+    # the maximum absolute value of the difference from the onset position
+    peaks = (pos[m + np.abs(pos[m:n] - pos[m]).argmax()] - pos[m]
+             for m, n in zip(onset_samps, offset_samps))
+    peak_amps = np.fromiter(peaks, dtype=float, count=onsets.size)
     N = 10  # Number of points in the Gaussian
     STDEV = 1.8  # Equivalent to a width factor (alpha value) of 2.5
     gauss = gaussian(N, STDEV)  # A 10-point Gaussian window of a given s.d.
@@ -264,7 +291,7 @@ def movements(t, pos, freq=1000, pos_thresh=8, t_thresh=.2, min_gap=.1, pos_thre
 
     if make_plots:
         fig, axes = plt.subplots(nrows=2, sharex='all')
-        indicies = np.sort(np.hstack((onset_samps, offset_samps)))  # Points to split trace
+        indices = np.sort(np.hstack((onset_samps, offset_samps)))  # Points to split trace
         vel, acc = velocity_smoothed(pos, freq, 0.015)
 
         # Plot the wheel position and velocity
@@ -272,17 +299,19 @@ def movements(t, pos, freq=1000, pos_thresh=8, t_thresh=.2, min_gap=.1, pos_thre
             ax.plot(onsets, y[onset_samps], 'go')
             ax.plot(offsets, y[offset_samps], 'bo')
 
-            t_split = np.split(np.vstack((t, y)).T, indicies, axis=0)
+            t_split = np.split(np.vstack((t, y)).T, indices, axis=0)
             ax.add_collection(LineCollection(t_split[1::2], colors='r'))  # Moving
             ax.add_collection(LineCollection(t_split[0::2], colors='k'))  # Not moving
 
+        axes[1].autoscale()  # rescale after adding line collections
+        axes[0].autoscale()
         axes[0].set_ylabel('position')
         axes[1].set_ylabel('velocity')
         axes[1].set_xlabel('time')
         axes[0].legend(['onsets', 'offsets', 'in movement'])
         plt.show()
 
-    return onsets, offsets, move_amps, peak_vel_times
+    return onsets, offsets, peak_amps, peak_vel_times
 
 
 def cm_to_deg(positions, wheel_diameter=WHEEL_DIAMETER):
@@ -292,6 +321,15 @@ def cm_to_deg(positions, wheel_diameter=WHEEL_DIAMETER):
     :param positions: array of wheel positions in cm
     :param wheel_diameter: the diameter of the wheel in cm
     :return: array of wheel positions in degrees turned
+
+    # Example: Convert linear cm to degrees
+    >>> cm_to_deg(3.142 * WHEEL_DIAMETER)
+    360.04667846020925
+
+    # Example: Get positions in deg from cm for 5cm diameter wheel
+    >>> import numpy as np
+    >>> cm_to_deg(np.array([0.0270526 , 0.04057891, 0.05410521, 0.06763151]), wheel_diameter=5)
+    array([0.61999992, 0.93000011, 1.24000007, 1.55000003])
     """
     return positions / (wheel_diameter * pi) * 360
 
@@ -302,6 +340,15 @@ def cm_to_rad(positions, wheel_diameter=WHEEL_DIAMETER):
     :param positions: array of wheel positions in cm
     :param wheel_diameter: the diameter of the wheel in cm
     :return: array of wheel angle in radians
+
+    # Example: Convert linear cm to radians
+    >>> cm_to_rad(1)
+    0.3225806451612903
+
+    # Example: Get positions in rad from cm for 5cm diameter wheel
+    >>> import numpy as np
+    >>> cm_to_rad(np.array([0.0270526 , 0.04057891, 0.05410521, 0.06763151]), wheel_diameter=5)
+    array([0.01082104, 0.01623156, 0.02164208, 0.0270526 ])
     """
     return positions * (2 / wheel_diameter)
 
@@ -314,33 +361,226 @@ def samples_to_cm(positions, wheel_diameter=WHEEL_DIAMETER, resolution=ENC_RES):
     :param wheel_diameter: the diameter of the wheel in cm
     :param resolution: resolution of the rotary encoder
     :return: array of wheel angle in radians
+
+    # Example: Get resolution in linear cm
+    >>> samples_to_cm(1)
+    0.004755340442445488
+
+    # Example: Get positions in linear cm for 4X, 360 ppr encoder
+    >>> import numpy as np
+    >>> samples_to_cm(np.array([2, 3, 4, 5, 6, 7, 6, 5, 4]), resolution=360*4)
+    array([0.0270526 , 0.04057891, 0.05410521, 0.06763151, 0.08115781,
+           0.09468411, 0.08115781, 0.06763151, 0.05410521])
     """
     return positions / resolution * pi * wheel_diameter
 
 
-def traces_by_trial(t, pos, trials, start='stimOn_times', end='feedback_times'):
+def direction_changes(t, vel, intervals):
+    """
+    Find the direction changes for the given movement intervals.
+
+    Parameters
+    ----------
+    t : array_like
+        An array of evenly sampled wheel timestamps in absolute seconds
+    vel : array_like
+        An array of evenly sampled wheel positions
+    intervals : array_like
+        An n-by-2 array of wheel movement intervals
+
+    Returns
+    ----------
+    times : iterable
+        A list of numpy arrays of direction change timestamps, one array per interval
+    indices : iterable
+        A list of numpy arrays containing indices of direction changes; the size of times
+    """
+    indices = []
+    times = []
+    chg = np.insert(np.diff(np.sign(vel)) != 0, 0, 0)
+
+    for on, off in intervals.reshape(-1, 2):
+        mask = np.logical_and(t > on, t < off)
+        ind, = np.where(np.logical_and(mask, chg))
+        times.append(t[ind])
+        indices.append(ind)
+
+    return times, indices
+
+
+def within_ranges(x: np.ndarray, ranges: Array, labels: Optional[Array] = None,
+                  mode: str = 'vector', dtype: Type[D] = 'int8') -> np.ndarray:
+    """
+    Detects which points of the input vector lie within one of the ranges specified in the ranges.
+    Returns an array the size of x with a 1 if the corresponding point is within a range.
+
+    The function uses a stable sort algorithm (timsort) to find the edges within the input array.
+    Edge behaviour is inclusive.
+
+    Ranges are [(start0, stop0), (start1, stop1), etc.] or n-by-2 numpy array.
+    The ranges may be optionally assigned a row in 'matrix' mode or a numerical label in 'vector'
+    mode. Labels must have a length of n.  Overlapping ranges have a value that is the sum of the
+    relevant range labels (ones in 'matrix' mode).
+
+    If mode is 'matrix' (default) it will give a matrix output where each range is assigned a
+    particular row index with 1 if the point belongs to that range label.  Multiple ranges can be
+    assigned to a particular row, e.g. [0, 0,1] would give a 2-by-N matrix with the first two
+    ranges in the first row.  Points within more than one range are given a value > 1
+    If mode is 'vector' it will give a vector, specifying the range of each point.
+
+    Parameters
+    ----------
+    x : array_like
+        An array whose points are tested against the ranges.  multi-dimensional arrays are
+        flattened to 1D
+    ranges : array_like
+        A list of tuples or N-by-2 array of ranges to test, where N is the number of ranges,
+        i.e. [[start0, stop0],
+        [start1, stop1]]
+    labels : vector, list
+        If mode is 'vector'; a list of integer labels to demarcate which points lie within each
+        range.  In 'matrix' mode; a list of column indices (ranges can share indices).
+        The number of labels should match the number of ranges.  If None, ones are used for all
+        ranges.
+    mode : {'matrix', 'vector'}
+        The type of output to return.  If 'matrix' (default), an N-by-M matrix is returned where N
+        is the size of x and M corresponds to the max index in labels, e.g. with labels=[0,1,2],
+        the output matrix would have 3 columns.  If 'vector' a vector the size of x is returned.
+    dtype : str, numeric or boolean type
+        The data type of the returned array.  If type is bool, the labels in vector mode will be
+        ignored.  Default is int8.
+
+
+    Returns
+    -------
+    A vector of size like x where zeros indicate that the points do not lie within ranges (
+    'vector' mode) or a matrix where out.shape[0] == x.size and out.shape[1] == max(labels) + 1.
+
+    Examples
+    -------
+    # Assert that points in ranges are mutually exclusive
+    np.all(within_ranges(x, ranges) <= 1)
+
+    Tests
+    -------
+    >>> import numpy as np
+    >>> within_ranges(np.arange(11), [(1, 2), (5, 8)])
+    array([0, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0], dtype=int8)
+    >>> ranges = np.array([[1, 2], [5, 8]])
+    >>> within_ranges(np.arange(10) + 1, ranges, labels=np.array([0,1]), mode='matrix')
+    array([[1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+           [0, 0, 0, 0, 1, 1, 1, 1, 0, 0]], dtype=int8)
+    >>> within_ranges(np.arange(11), [(1,2), (5,8), (4,6)], labels=[0,1,1], mode='matrix')
+    array([[0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+           [0, 0, 0, 0, 1, 2, 2, 1, 1, 0, 0]], dtype=int8)
+    >>> within_ranges(np.arange(10) + 1, ranges, np.array([3,1]), mode='vector')
+    array([3, 3, 0, 0, 1, 1, 1, 1, 0, 0], dtype=int8)
+    >>> within_ranges(np.arange(11), [(1,2), (5,8), (4,6)], dtype=bool)
+    array([False,  True,  True, False,  True,  True,  True,  True,  True,
+           False, False])
+    """
+    # Flatten
+    x = x.ravel()
+
+    # Ensure ranges are numpy
+    ranges = np.array(ranges)
+
+    # Get size info
+    n_points = x.size
+    n_ranges = ranges.shape[0]
+
+    if labels is None:
+        # In 'matrix' mode default row index is 0
+        labels = np.zeros((n_ranges,), dtype='uint32')
+        if mode == 'vector':  # Otherwise default numerical label is 1
+            labels += 1
+    assert len(labels) >= n_ranges, 'range labels do not match number of ranges'
+    n_labels = np.unique(labels).size
+
+    # If no ranges given, short circuit function and return zeros
+    if n_ranges == 0:
+        return np.zeros_like(x, dtype=dtype)
+
+    # Check end comes after start in each case
+    assert np.all(np.diff(ranges, axis=1) > 0), 'ranges ends must all be greater than starts'
+
+    # Make array containing points, starts and finishes
+
+    # This order means it will be inclusive
+    to_sort = np.concatenate((ranges[:, 0], x, ranges[:, 1]))
+    # worst case O(n*log(n)) but will be better than  this as most of the array is ordered;
+    # memory overhead ~n/2
+    idx = np.argsort(to_sort, kind='stable')
+
+    # Make delta array containing 1 for every start and -1 for every stop
+    # with one row for each range label
+    if mode == 'matrix':
+        delta_shape = (n_labels, n_points + 2 * n_ranges)
+        delta = np.zeros(delta_shape, dtype='int8')
+
+        delta[labels, np.arange(n_ranges)] = 1
+        delta[labels, n_points + n_ranges + np.arange(n_ranges)] = -1
+
+        # Arrange in order
+        delta_sorted = delta[:, idx]
+
+        # Take cumulative sums
+        summed = np.cumsum(delta_sorted, axis=1)
+
+        # Reorder back to original order
+        reordered = np.zeros(delta_shape, dtype=dtype)
+        reordered[:, idx] = summed.reshape(delta_shape[0], -1)
+        return reordered[:, np.arange(n_ranges, n_points + n_ranges)]
+
+    elif mode == 'vector':
+        delta_shape = (n_points + 2 * n_ranges,)
+        r_delta = np.zeros(delta_shape, dtype='int32')
+        r_delta[np.arange(n_ranges)] = labels
+        r_delta[n_points + n_ranges + np.arange(n_ranges)] = -labels
+
+        # Arrange in order
+        r_delta_sorted = r_delta[idx]
+
+        # Take cumulative sum
+        r_summed = np.cumsum(r_delta_sorted)
+
+        # Reorder back to original
+        r_reordered = np.zeros_like(r_summed, dtype=dtype)
+        r_reordered[idx] = r_summed
+
+        return r_reordered[np.arange(n_ranges, n_points + n_ranges)]
+    else:
+        raise ValueError('unknown mode type, options are "matrix" and "vector"')
+
+
+def traces_by_trial(t, *args, start=None, end=None, separate=True):
     """
     Returns list of tuples of positions and velocity for samples between stimulus onset and
     feedback.
     :param t: numpy array of timestamps
-    :param pos: numpy array of wheel positions (could also be velocities or accelerations)
-    :param trials: dict of trials ALFs
-    :param start: trails key to use as the start index for splitting
-    :param end: trails key to use as the end index for splitting
-    :return: list of traces between each start and end event
+    :param args: optional numpy arrays of the same length as timestamps, such as positions,
+    velocities or accelerations
+    :param start: start timestamp or array thereof
+    :param end: end timestamp or array thereof
+    :param separate: when True, the output is returned as tuples list of the form [(t, args[0],
+    args[1]), ...], when False, the output is a list of n-by-m ndarrays where n = number of
+    positional args and m = len(t)
+    :return: list of sliced arrays where length == len(start)
     """
-    if start == 'intervals' and (end is None or end == 'interval'):
-        start = trials['intervals'][:, 0]
-        end = trials['intervals'][:, 1]
-    traces = np.vstack((pos, t))
+    if start is None:
+        start = t[0]
+    if end is None:
+        end = t[-1]
+    traces = np.stack((t, *args))
+    assert len(start) == len(end), 'number of start timestamps must equal end timestamps'
 
     def to_mask(a, b):
-        (t > a) & (t < b)
-    #  to_dict = lambda a, b, c: position: a
-    cuts = [traces[:, to_mask(s, e)] for s, e in zip(trials[start], trials[end])]
-    # ans = map(to_mask, zip(trials[start], trials[end]))
-    # for s, e in zip(trials[start], trials[end]):
-    #     mask = (wheel['times'] > s) & (wheel['times'] < e)
-    #     cuts = traces[:, mask]
+        return np.logical_and(t > a, t < b)
 
-    return [(cuts[n][0, :], cuts[n][1, :], cuts[n][2, :]) for n in range(len(cuts))]
+    cuts = [traces[:, to_mask(s, e)] for s, e in zip(start, end)]
+    return [(cuts[n][0, :], cuts[n][1, :]) for n in range(len(cuts))] if separate else cuts
+
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()

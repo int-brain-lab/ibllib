@@ -28,9 +28,8 @@ affine_matrix : str
 Returns
 -------
 none
-
-@author: stevenwest
 '''
+# Author: Steven West (main), Olivier Winter, Gaelle Chapuis
 
 import sys
 import math
@@ -42,7 +41,7 @@ import json
 from json import JSONEncoder
 
 
-# override deault method of JSONEncoder to implement custom NumPy JSON serialization.
+# override default method of JSONEncoder to implement custom NumPy JSON serialization.
 # see https://pynative.com/python-serialize-numpy-ndarray-into-json/
 class NumpyArrayEncoder(JSONEncoder):
     def default(self, obj):
