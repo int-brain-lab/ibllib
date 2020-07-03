@@ -37,9 +37,10 @@ for i_ephysrig in range(0, len(ephys_rig)):
         ext = ExtendedQC(eid=eid, one=one, lazy=False)
         criteria, out_var_test_status, out_var_sess_status = compute_session_status(ext.frame)
 
-        sess_dataframe = pd.DataFrame()
-        sess_dataframe['sess_status'] = out_var_sess_status
-        sess_dataframe['eid'] = eid
-        sess_dataframe['rig_location'] = rig_location
+        d = {'sess_status': out_var_sess_status,
+             'eid': eid,
+             'rig_location': rig_location
+             }
+        sess_dataframe = pd.DataFrame(data=d, index=[0])
 
         rig_dataframe = pd.concat([rig_dataframe, sess_dataframe], axis=0).copy()
