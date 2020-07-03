@@ -22,7 +22,23 @@ ephys_rig = [s for s in iblrig if "_ephys_" in s]
 # dtypes = ['ephysData.raw.lf', 'ephysData.raw.meta', 'ephysData.raw.ch']
 dtypes = ['_iblrig_taskData.raw']
 
-# Plots for 1 rig at a time
+# Saving path
+cachepath = Path(one._par.CACHE_DIR)
+
+# Load list of reject eids
+list_file = cachepath.joinpath('EXTQC_eid_reject_list.npz')
+if list_file in os.listdir(cachepath):
+    varload = np.load(list_file, allow_pickle=True)
+    list_eid_reject = list(varload['list_eid'])
+else:
+    list_eid_reject = list()
+
+# Save folder
+outdir = cachepath.joinpath('EXT_V1')
+# Create target Directory if don't exist
+if not os.path.exists(outdir):
+    os.makedirs(outdir)
+
 all_dataframe = pd.DataFrame()
 for i_ephysrig in range(0, len(ephys_rig)):
     rig_location = ephys_rig[i_ephysrig]
@@ -34,26 +50,46 @@ for i_ephysrig in range(0, len(ephys_rig)):
         task_protocol='_iblrig_tasks_ephysChoiceWorld',
         details=True)
 
-    rig_dataframe = pd.DataFrame()
     for i_eid in range(0, len(eIDs)):
         eid = eIDs[i_eid]
-        ext = ExtendedQC(eid=eid, one=one, lazy=False)
-        criteria, out_var_test_status, out_var_sess_status = compute_session_status(ext.frame)
+        outname = f'{eid}__extqc.npz'
+        outfile = Path.joinpath(outdir, outname)
 
-        d = {'sess_status': out_var_sess_status,
-             'eid': eid,
-             'rig_location': rig_location
-             }
-        sess_dataframe = pd.DataFrame(data=d, index=[0])
+        if (eid not in list_eid_reject) and \
+                (outname not in os.listdir(outdir)):
+            # Show session number and start compute time counter for session
+            print(f'Rig {i_ephysrig + 1} / {len(ephys_rig)} : {rig_location}'
+                  f' -- Sessions remaining: {len(eIDs)-len(os.listdir(outdir))-1}'
+                  f' -- {eid}')
 
-        rig_dataframe = pd.concat([rig_dataframe, sess_dataframe], axis=0).copy()
-    all_dataframe = pd.concat([all_dataframe, rig_dataframe], axis=0).copy()
+            try:
+                ext = ExtendedQC(eid=eid, one=one, lazy=False)
+                criteria, out_var_test_status, out_var_sess_status = \
+                    compute_session_status(ext.frame)
 
-# Saving path
-cachepath = Path(one._par.CACHE_DIR)
+                d = {'sess_status': out_var_sess_status,
+                     'eid': eid,
+                     'rig_location': rig_location
+                     }
+                sess_dataframe = pd.DataFrame(data=d, index=[0])
+
+                # Append and save table
+                app_token = {
+                    'sess_details': sess_dataframe,
+                    'test_details': out_var_test_status,
+                    'dataframe': ext.frame
+                }
+                np.savez(Path.joinpath(outdir, f'{eid}__sess_det.npz'), dataqc=app_token)
+
+                all_dataframe = pd.concat([all_dataframe, sess_dataframe], axis=0).copy()
+
+            except Exception:
+                list_eid_reject.append(eid)
+                np.savez(list_file, list_eid=list_eid_reject)
+                pass
 
 # Save folder
-outdir = cachepath.joinpath('EXT_V1')
+outdir = cachepath.joinpath('EXT_All')
 # Create target Directory if don't exist
 if not os.path.exists(outdir):
     os.makedirs(outdir)
