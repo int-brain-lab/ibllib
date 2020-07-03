@@ -4,9 +4,11 @@ Compute extended QC to get session status.
 # Author : Gaelle C.
 from ibllib.qc.extended_qc import compute_session_status
 from ibllib.qc import ExtendedQC
-
 from oneibl.one import ONE
 import pandas as pd
+from pathlib import Path
+import os
+import numpy as np
 
 one = ONE()
 # Get list of all locations (some are labs, some are rigs)
@@ -46,3 +48,20 @@ for i_ephysrig in range(0, len(ephys_rig)):
 
         rig_dataframe = pd.concat([rig_dataframe, sess_dataframe], axis=0).copy()
     all_dataframe = pd.concat([all_dataframe, rig_dataframe], axis=0).copy()
+
+# Saving path
+cachepath = Path(one._par.CACHE_DIR)
+
+# Save folder
+outdir = cachepath.joinpath('EXT_V1')
+# Create target Directory if don't exist
+if not os.path.exists(outdir):
+    os.makedirs(outdir)
+outname = 'Ext_QC_All.npz'
+outfile = Path.joinpath(outdir, outname)
+
+# Append and save table
+app_token = {
+    'dataframe': all_dataframe
+}
+np.savez(outfile, dataqc=app_token)
