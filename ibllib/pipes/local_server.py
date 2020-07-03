@@ -82,7 +82,7 @@ def job_runner(subjects_path, lab=None, dry=False, one=None, count=5):
     tasks_runner(subjects_path, tasks, one=one, count=count, dry=dry)
 
 
-def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, **kwargs):
+def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, count=5, **kwargs):
     """
     Function to run a list of tasks (task dictionary from Alyx query) on a local server
     :param subjects_path:
@@ -95,9 +95,12 @@ def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, **kwargs):
     if one is None:
         one = ONE()
 
+    c = 0
     last_session = None
     all_datasets = []
     for tdict in tasks_dict:
+        if c >= count:
+            break
         # reconstruct the session local path. As many jobs belong to the same session
         # cache the result
         if last_session != tdict['session']:
@@ -112,4 +115,5 @@ def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, **kwargs):
                                               one=one, **kwargs)
             if dsets:
                 all_datasets.extend(dsets)
+        c += 1
     return all_datasets
