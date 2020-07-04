@@ -84,7 +84,7 @@ class EphysVideoCompress(tasks.Task):
 
     def _run(self, **kwargs):
         # avi to mp4 compression
-        command = ('ffmpeg -i {file_in} -codec:v libx264 -preset slow -crf 17 '
+        command = ('ffmpeg -i {file_in} -y -codec:v libx264 -preset slow -crf 17 '
                    '-nostats -loglevel 0 -codec:a copy {file_out}')
         output_files = ffmpeg.iblrig_video_compression(self.session_path, command)
         if len(output_files) == 0:
