@@ -46,7 +46,7 @@ class EphysAudio(tasks.Task):
     level = 0  # this job doesn't depend on anything
 
     def _run(self, overwrite=False):
-        command = 'ffmpeg -i {file_in} -c:a flac -nostats {file_out}'
+        command = 'ffmpeg -i {file_in} -y -c:a flac -nostats {file_out}'
         file_in = next(self.session_path.rglob('_iblrig_micData.raw.wav'), None)
         if file_in is None:
             return
