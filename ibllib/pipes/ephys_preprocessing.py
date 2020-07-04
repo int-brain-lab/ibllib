@@ -79,7 +79,7 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
 
 
 class EphysVideoCompress(tasks.Task):
-    priority = 90
+    priority = 40
     level = 1
 
     def _run(self, **kwargs):
