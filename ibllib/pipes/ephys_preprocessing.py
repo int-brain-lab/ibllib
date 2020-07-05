@@ -46,7 +46,7 @@ class EphysAudio(tasks.Task):
     level = 0  # this job doesn't depend on anything
 
     def _run(self, overwrite=False):
-        command = 'ffmpeg -i {file_in} -c:a flac -nostats {file_out}'
+        command = 'ffmpeg -i {file_in} -y -c:a flac -nostats {file_out}'
         file_in = next(self.session_path.rglob('_iblrig_micData.raw.wav'), None)
         if file_in is None:
             return
@@ -79,12 +79,12 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
 
 
 class EphysVideoCompress(tasks.Task):
-    priority = 90
+    priority = 40
     level = 1
 
     def _run(self, **kwargs):
         # avi to mp4 compression
-        command = ('ffmpeg -i {file_in} -codec:v libx264 -preset slow -crf 17 '
+        command = ('ffmpeg -i {file_in} -y -codec:v libx264 -preset slow -crf 17 '
                    '-nostats -loglevel 0 -codec:a copy {file_out}')
         output_files = ffmpeg.iblrig_video_compression(self.session_path, command)
         if len(output_files) == 0:
