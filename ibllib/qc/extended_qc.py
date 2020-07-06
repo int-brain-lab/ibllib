@@ -35,7 +35,7 @@ def compute_session_status(frame, criteria=None):
     CRITERIA = {"CRITICAL": 0,
                 "ERROR": 0.75,
                 "WARNING": 0.95,
-                "PASS": 0.99
+                "PASS": 0.99  # todo add category "NONE" for None values
                 }
 
     out_var_sess_status = []
