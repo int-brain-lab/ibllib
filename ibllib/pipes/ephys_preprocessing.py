@@ -127,8 +127,8 @@ class EphysSyncSpikeSorting(tasks.Task):
 
 
 class EphysMtscomp(tasks.Task):
-    priority = 60
-    level = 1
+    priority = 50  # ideally after spike sorting
+    level = 0
 
     def _run(self):
         """
@@ -177,10 +177,10 @@ class EphysExtractionPipeline(tasks.Pipeline):
         tasks['EphysAudio'] = EphysAudio(self.session_path)
         tasks['SpikeSorting'] = SpikeSorting_KS2_Matlab(self.session_path)
         tasks['EphysVideoCompress'] = EphysVideoCompress(self.session_path)
+        tasks['EphysMtscomp'] = EphysMtscomp(self.session_path)
         # level 1
         tasks['EphysSyncSpikeSorting'] = EphysSyncSpikeSorting(self.session_path, parents=[
             tasks['SpikeSorting'], tasks['EphysPulses']])
         tasks['EphysTrials'] = EphysTrials(self.session_path, parents=[tasks['EphysPulses']])
-        tasks['EphysMtscomp'] = EphysMtscomp(self.session_path, parents=[tasks['SpikeSorting']])
         tasks['EphysDLC'] = EphysDLC(self.session_path, parents=[tasks['EphysVideoCompress']])
         self.tasks = tasks
