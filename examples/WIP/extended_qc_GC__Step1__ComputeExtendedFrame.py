@@ -96,8 +96,26 @@ if not os.path.exists(outdir):
 outname = 'Ext_QC_All.npz'
 outfile = Path.joinpath(outdir, outname)
 
+if outfile in os.listdir(outdir):
+    varload = np.load(outfile, allow_pickle=True)
+    data = {key: varload[key].item() for key in varload}
+    dataframe = pd.DataFrame.from_dict(data['dataqc']['dataframe'])
+    all_dataframe = pd.concat([all_dataframe, dataframe], axis=0).copy()
+
 # Append and save table
 app_token = {
     'dataframe': all_dataframe
 }
 np.savez(outfile, dataqc=app_token)
+
+# # Plot
+# import seaborn as sns
+# # Fig 1 (status overall)
+# ax = sns.countplot(x="sess_status", data=all_dataframe,
+#                    palette=sns.color_palette("husl", 8))
+# # Fig 2 (status per rig)
+# chart = sns.countplot(x="rig_location", hue="sess_status",
+#                       data=all_dataframe, palette=sns.color_palette("husl", 8),
+#                       hue_order=["CRITICAL", "ERROR", "WARNING", "PASS"])
+# chart.set_xticklabels(chart.get_xticklabels(), rotation=45, horizontalalignment='right')
+#
