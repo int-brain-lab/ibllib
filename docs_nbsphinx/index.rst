@@ -6,7 +6,7 @@
 Welcome to IBL code library documentation!
 ==========================================
 
-Overview
+Overview of Data Architecture
 ------------------------------------
 
 .. toctree::
@@ -15,25 +15,31 @@ Overview
    01_overview
 
 
-Python Installation and Tutorial
+Installation
+------------------------------------
+
+.. toctree::a
+   :maxdepth: 2
+
+   02_installation
+
+
+Using ONE to access IBL Data
 ------------------------------------
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
 
-   02_installation_python
-   02_installation_dev_python
-   02_tutorial_python
+   03_one
 
-Matlab Installation and Tutorial
+
+Using Datajoint to access IBL Data
 ------------------------------------
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
 
-   03_installation_matlab
-   03_tutorial_matlab
-.. one comment here to test
+   04_datajoint
 
 Reference Information on ALF and ONE
 ------------------------------------
@@ -59,5 +65,14 @@ IBLLIB tutorials
    :maxdepth: 1
 
    06_tutorials
+
+
+
+.. toctree::
+   :maxdepth: 1
+
+   03_installation_matlab
+   03_tutorial_matlab
+.. one comment here to test
 
 * :ref:`genindex`

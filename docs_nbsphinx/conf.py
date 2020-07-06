@@ -17,12 +17,15 @@ import os
 import sys
 from pathlib import Path
 import matplotlib
+import recommonmark
+from recommonmark.transform import AutoStructify
 matplotlib.use('agg')
 
 for f in Path(os.path.abspath('.')).joinpath('ibllib').rglob('__init__.py'):
     sys.path.insert(0, str(f.parent))
 
 sys.path.append(os.path.join(os.path.dirname(__name__), '..'))
+
 
 print('Python %s on %s' % (sys.version, sys.platform))
 print(sys.path)
@@ -51,10 +54,12 @@ release = ''
 extensions = ['sphinx.ext.autodoc',
               'sphinx.ext.autosummary',
               'sphinx.ext.mathjax',
-              'recommonmark',
               'sphinx.ext.githubpages',
               'sphinx_copybutton',
-              'nbsphinx']
+              'nbsphinx',
+              'myst_parser']
+              #'sphinx_rtd_theme']
+               #'recommonmark',
 
 autosummary_generate = True
 # Add any paths that contain templates here, relative to this directory.
@@ -69,17 +74,20 @@ master_doc = 'index'
 # Usually you set "language" from the command line for these cases.
 language = None
 
-nbsphinx_execute = 'always'
+nbsphinx_execute = 'auto'
 # Kernel to use for execution
 nbsphinx_kernel_name = 'python3'
 # Cancel compile on errors in notebooks
-nbsphinx_allow_errors = False
+nbsphinx_allow_errors = True
+
+nbsphinx_output_prompt = 'Out[%s]:'
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path .
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '_templates',
-                    'documentation_contribution_guidelines.md', '.ipynb_checkpoints', 'templates']
+                    'documentation_contribution_guidelines.md', '.ipynb_checkpoints', 'templates',
+                    '*colab*']
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = 'sphinx'
@@ -91,8 +99,9 @@ pygments_style = 'sphinx'
 # a list of builtin themes.
 #
 # html_theme = 'default'
-# html_theme = 'nature'
+#html_theme = 'sphinx_material'
 html_theme = 'sphinx_rtd_theme'
+
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -104,6 +113,9 @@ html_theme = 'sphinx_rtd_theme'
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
+html_css_files = [
+    'css/style.css',
+]
 
 # Custom sidebar templates, must be a dictionary that maps document names
 # to template names.
@@ -175,10 +187,10 @@ texinfo_documents = [
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
 #
-source_suffix = ['.rst', '.md']
-source_parsers = {
-    '.md': 'recommonmark.parser.CommonMarkParser',
-}
+#source_suffix = ['.rst', '.md']
+#source_parsers = {
+#    '.md': 'recommonmark.parser.CommonMarkParser',
+#}
 
 plot_formats = [('png', 512)]
 
@@ -201,9 +213,20 @@ nbsphinx_prolog = r"""
 
 .. raw:: html
     
-    <a href="{{ nb_name }}"><button id="download">Download tutorial notebook</button></a>
-    <a href="https://github.com/mayofaulkner/ibllib/tree/master/docs/{{ nb_path }}/{{ nb_name }}"><button id="github">Github link</button></a>
-    <a href="https://colab.research.google.com/github/mayofaulkner/ibllib/blob/gh-pages/{{ nb_path }}/{{ colab_name }}"><button id="colab">Colab link</button></a>
+      <a href="{{ nb_name }}"><button id="download">Download tutorial notebook</button></a>
+      <a href="https://github.com/mayofaulkner/ibllib/tree/master/docs/{{ nb_path }}/{{ nb_name }}"><button id="github">Github link</button></a>
+      <a href="https://colab.research.google.com/github/mayofaulkner/ibllib/blob/gh-pages/{{ nb_path }}/{{ colab_name }}"><button id="colab">Colab link</button></a>
 
-    <div id="spacer"></div>
 """
+
+#app setup hook if you want to use recommonmark by itself
+#def setup(app):
+#    app.add_config_value('recommonmark_config', {
+#        #'url_resolver': lambda url: github_doc_root + url,
+#        'auto_toc_tree_section': 'Contents',
+#        'enable_math': False,
+#        'enable_inline_math': False,
+#        'enable_eval_rst': True,
+#    }, True)
+#    app.add_transform(AutoStructify)
+
