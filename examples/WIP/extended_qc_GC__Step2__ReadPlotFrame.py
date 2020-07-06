@@ -1,5 +1,5 @@
 """
-STEP3 - Load frames, concatenate across rigs, plot.
+STEP2 - Load frames, concatenate across rigs, plot.
 """
 # Author : Gaelle C.
 from oneibl.one import ONE
