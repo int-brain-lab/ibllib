@@ -365,6 +365,7 @@ def check_create_raw_session_flag(session_folder: str) -> None:
         ephys.unlink()
         video.unlink()
 
+
 def rename_ephys_files(session_folder: str) -> None:
     """rename_ephys_files is system agnostic (3A, 3B1, 3B2).
     Renames all ephys files to Alyx compatible filenames. Uses get_new_filename.
