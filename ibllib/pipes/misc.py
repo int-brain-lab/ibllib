@@ -359,7 +359,7 @@ def create_video_transfer_done_flag(session_folder: str) -> None:
 def check_create_raw_session_flag(session_folder: str) -> None:
     session_path = Path(session_folder)
     ephys = session_path.joinpath('ephys_data_transferred.flag')
-    video = list(session_path.glob('video_data_transferred.flag'))
+    video = session_path.joinpath('video_data_transferred.flag')
     if ephys.exists() and video.exists():
         flags.write_flag_file(session_path.joinpath('raw_session.flag'))
         ephys.unlink()
