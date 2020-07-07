@@ -265,8 +265,9 @@ class TestPipesMisc(unittest.TestCase):
         # Check it was created
         misc.check_create_raw_session_flag(self.local_session_path_3A)
         self.assertTrue(raw_session.exists())
-        ephys.unlink()
-        video.unlink()
+        # Check other flags deleted
+        self.assertFalse(ephys.exists())
+        self.assertFalse(video.exists())
         raw_session.unlink()
 
     def test_create_ephys_flags(self):
