@@ -13,7 +13,7 @@ one = ONE()
 # Select session
 eIDs, ses_det = one.search(
     subjects='CSHL046',
-    date_range='2020-06-18',
+    date_range='2020-06-20',
     task_protocol='_iblrig_tasks_ephysChoiceWorld',
     details=True)
 eid = eIDs[0]
@@ -29,3 +29,4 @@ criteria, out_var_test_status, out_var_sess_status = \
     compute_session_status(ext.frame)
 
 print(f'Session status: {out_var_sess_status}')
+print(f'Tests status: {out_var_test_status}')
