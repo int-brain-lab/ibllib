@@ -36,7 +36,7 @@ def behavior_exists(session_path: str) -> bool:  # testOK
     return False
 
 
-def check_transfer(src_session_path: str or Path, dst_session_path: str or Path):
+def check_transfer(src_session_path: str, dst_session_path: str):
     # missing fail test
     src_files = sorted([x for x in Path(src_session_path).rglob('*') if x.is_file()])
     dst_files = sorted([x for x in Path(dst_session_path).rglob('*') if x.is_file()])
@@ -45,7 +45,6 @@ def check_transfer(src_session_path: str or Path, dst_session_path: str or Path)
     for s, d in zip(src_files, dst_files):
         assert s.name == d.name, assert_msg
         assert s.stat().st_size == d.stat().st_size, assert_msg
-    return
 
 
 def rename_session(session_path: str) -> Path:
@@ -216,6 +215,8 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
             remote_session_path / 'raw_video_data',
             force=force)
         flag_file.unlink()
+        create_video_transfer_done_flag(remote_session_path)
+        check_create_raw_session_flag(remote_session_path)
 
 
 def confirm_ephys_remote_folder(local_folder=False, remote_folder=False,
@@ -285,7 +286,8 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False,
         if (remote_session_path / 'extract_me.flag').exists():
             (remote_session_path / 'extract_me.flag').unlink()
         # Create remote flags
-        create_ephys_flags(remote_session_path)
+        create_ephys_transfer_done_flag(remote_session_path)
+        check_create_raw_session_flag(remote_session_path)
 
 
 def create_alyx_probe_insertions(session_path: str,
@@ -334,7 +336,7 @@ def create_alyx_probe_insertions(session_path: str,
                 alyx_insertion = alyx_insertion[0]
 
 
-def create_ephys_flags(session_folder: str or Path):
+def create_ephys_flags(session_folder: str):
     session_path = Path(session_folder)
     flags.write_flag_file(session_path.joinpath('extract_ephys.flag'))
     flags.write_flag_file(session_path.joinpath('raw_ephys_qc.flag'))
@@ -343,6 +345,25 @@ def create_ephys_flags(session_folder: str or Path):
     flags.write_flag_file(probe00_path.joinpath('spike_sorting.flag'))
     flags.write_flag_file(probe01_path.joinpath('spike_sorting.flag'))
 
+
+def create_ephys_transfer_done_flag(session_folder: str) -> None:
+    session_path = Path(session_folder)
+    flags.write_flag_file(session_path.joinpath('ephys_data_transferred.flag'))
+
+
+def create_video_transfer_done_flag(session_folder: str) -> None:
+    session_path = Path(session_folder)
+    flags.write_flag_file(session_path.joinpath('video_data_transferred.flag'))
+
+
+def check_create_raw_session_flag(session_folder: str) -> None:
+    session_path = Path(session_folder)
+    ephys = session_path.joinpath('ephys_data_transferred.flag')
+    video = list(session_path.glob('video_data_transferred.flag'))
+    if ephys.exists() and video.exists():
+        flags.write_flag_file(session_path.joinpath('raw_session.flag'))
+        ephys.unlink()
+        video.unlink()
 
 def rename_ephys_files(session_folder: str) -> None:
     """rename_ephys_files is system agnostic (3A, 3B1, 3B2).
