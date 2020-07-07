@@ -9,6 +9,7 @@ import pandas as pd
 from pathlib import Path
 import os
 import numpy as np
+from ibllib.qc import oneutils
 
 one = ONE()
 # Get list of all locations (some are labs, some are rigs)
@@ -63,6 +64,9 @@ for i_ephysrig in range(0, len(ephys_rig)):
                   f' -- {eid}')
 
             try:
+                # -- Dowload data if necessary
+                oneutils.download_bpodqc_raw_data(eid, one=one)
+
                 ext = ExtendedQC(eid=eid, one=one, lazy=False)
                 criteria, out_var_test_status, out_var_sess_status = \
                     compute_session_status(ext.frame)
