@@ -45,9 +45,9 @@ def main(local_folder: str, remote_folder: str, force: bool = False) -> None:
             shutil.copytree(src, dst, ignore=ig(str(src_flag_file.name)))
         # finally if folder was created delete the src flag_file and create compress_me.flag
         if dst.exists():
-           flags.write_flag_file(dst.joinpath('raw_session.flag'))
-           log.info(f"Copied to {remote_folder}: Session {src_flag_file.parent}")
-           src_flag_file.unlink()
+            flags.write_flag_file(dst.joinpath('raw_session.flag'))
+            log.info(f"Copied to {remote_folder}: Session {src_flag_file.parent}")
+            src_flag_file.unlink()
 
         # Cleanup
         src_audio_file = src / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
