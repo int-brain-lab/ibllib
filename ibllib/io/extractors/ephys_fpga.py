@@ -1,24 +1,26 @@
+from collections import OrderedDict
 import logging
 from pathlib import Path, PureWindowsPath
 import uuid
-from collections import OrderedDict
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+from pkg_resources import parse_version
 from scipy import interpolate
 
-from brainbox.core import Bunch
-
 import alf.io
-
-import ibllib.exceptions as err
-import ibllib.plots as plots
-from ibllib.io import spikeglx, raw_data_loaders
+from brainbox.core import Bunch
 import ibllib.dsp as dsp
-from ibllib.io.extractors.base import BaseBpodTrialsExtractor, BaseExtractor, run_extractor_classes
+import ibllib.exceptions as err
+from ibllib.io import raw_data_loaders, spikeglx
 from ibllib.io.extractors import biased_trials
+from ibllib.io.extractors.base import (
+    BaseBpodTrialsExtractor,
+    BaseExtractor,
+    run_extractor_classes,
+)
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
-
+import ibllib.plots as plots
 
 _logger = logging.getLogger('ibllib')
 
@@ -539,6 +541,12 @@ def _get_pregenerated_events(bpod_trials, settings):
     phase = phase[: ntrials]
     pLeft = pcqsp[:, 4]
     pLeft = pLeft[: ntrials]
+
+    phase_path = sessions_folder.joinpath(f"session_{num}_stim_phase.npy")
+    is_patched_version = parse_version(settings.get('IBLRIG_VERSION_TAG', 0)) > parse_version('6.4.0')
+    if phase_path.exists() and is_patched_version:
+        phase = np.load(phase_path)[:ntrials]
+
     return {"position": pos, "contrast": con, "quiescence": qui, "phase": phase,
             "prob_left": pLeft, 'contrast_right': contrastRight, 'contrast_left': contrastLeft}
 
