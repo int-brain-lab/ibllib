@@ -79,7 +79,7 @@ class SessionDataInfo:
     @staticmethod
     def from_pandas(df, cache_dir):
         fcn_local_path = lambda rec: Path(cache_dir).joinpath(  # noqa
-            rec['lab'], 'Subjects', rec['subject'], rec['start_time'][:10],
+            rec['lab'], 'Subjects', rec['subject'], rec['start_time'].isoformat()[:10],
             str(rec['number']).zfill(3), rec['collection'], rec['name'])
         nrecs = df.shape[0]
         return SessionDataInfo(
