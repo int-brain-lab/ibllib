@@ -7,7 +7,7 @@ from ibllib.misc import version
 import ibllib.pipes.tasks
 from oneibl.one import ONE
 
-one = ONE(base_url='https://testdev.alyx.internationalbrainlab.org',
+one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
           username='test_user', password='TapetesBloc18')
 SUBJECT_NAME = 'algernon'
 USER_NAME = 'test_user'
@@ -27,7 +27,7 @@ desired_statuses = {
     'Task01_void': 'Empty',
     'Task02_error': 'Errored',
     'Task10': 'Complete',
-    'Task11': 'Waiting'
+    'Task11': 'Held'
 }
 
 desired_datasets = ['spikes.times.npy', 'spikes.amps.npy', 'spikes.clusters.npy']
@@ -56,7 +56,7 @@ class Task01_void(ibllib.pipes.tasks.Task):
 
 # job that raises an error
 class Task02_error(ibllib.pipes.tasks.Task):
-    level = 2
+    level = 0
 
     def _run(self, overwrite=False):
         raise Exception("Something dumb happened")
@@ -76,6 +76,7 @@ class Task10(ibllib.pipes.tasks.Task):
 
 #  job to output a single file (pathlib.Path)
 class Task11(ibllib.pipes.tasks.Task):
+    level = 1
 
     def _run(self, overwrite=False):
         out_files = self.session_path.joinpath('alf', 'spikes.samples.npy')
@@ -142,6 +143,7 @@ class TestPipelineAlyx(unittest.TestCase):
         # run them and make sure their statuses got updated appropriately
         task_deck, datasets = pipeline.run()
         check_statuses = [desired_statuses[t['name']] == t['status'] for t in task_deck]
+        # [(t['name'], t['status'], desired_statuses[t['name']]) for t in task_deck]
         self.assertTrue(all(check_statuses))
         self.assertTrue(set([d['name'] for d in datasets]) == set(desired_datasets))
 

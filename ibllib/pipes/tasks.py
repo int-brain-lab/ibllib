@@ -72,7 +72,7 @@ class Task(abc.ABC):
             self.outputs = self._run(**kwargs)
             self.status = 0
             _logger.info(f"Job {self.__class__} complete")
-        except Exception:
+        except BaseException:
             _logger.error(traceback.format_exc())
             _logger.info(f"Job {self.__class__} errored")
             self.status = -1
@@ -237,6 +237,7 @@ class Pipeline(abc.ABC):
             _logger.warning("No ONE instance found for Alyx connection, set the one property")
             return
         task_deck = self.one.alyx.rest('tasks', 'list', session=self.eid)
+        # [(t['name'], t['level']) for t in task_deck]
         all_datasets = []
         for i, j in enumerate(task_deck):
             if j['status'] not in status__in:
@@ -249,10 +250,10 @@ class Pipeline(abc.ABC):
         return task_deck, all_datasets
 
     def rerun_failed(self):
-        return self.run(status__in=['Waiting', 'Started', 'Errored', 'Empty'])
+        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty'])
 
     def rerun(self):
-        return self.run(status__in=['Waiting', 'Started', 'Errored', 'Empty', 'Complete'])
+        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete'])
 
     @property
     def name(self):
@@ -278,9 +279,16 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None, max_md
         if not job_deck:
             job_deck = one.alyx.rest('tasks', 'list', session=tdict['session'])
         # check the dependencies
-        if not all(list(map(lambda x: x['status'] == 'Complete',
-                            filter(lambda x: x['id'] in tdict['parents'], job_deck)))):
+        parent_tasks = filter(lambda x: x['id'] in tdict['parents'], job_deck)
+        parent_statuses = [j['status'] for j in parent_tasks]
+        # if any of the parent tasks is not complete, throw a warning
+        if any(map(lambda s: s != 'Complete', parent_statuses)):
             _logger.warning(f"{tdict['name']} has unmet dependencies")
+            # if parents are just waiting, don't do anything, but if they have a failed status
+            # set the current task status to Held
+            if any(map(lambda s: s in ['Errored', 'Held', 'Empty'], parent_statuses)):
+                tdict = one.alyx.rest('tasks', 'partial_update', id=tdict['id'],
+                                      data={'status': 'Held'})
             return tdict, registered_dsets
     # creates the job from the module name in the database
     exec_name = tdict['executable']

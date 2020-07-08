@@ -15,7 +15,7 @@ def _get_lab(one):
         globus_id = fid.read()
     lab = one.alyx.rest('labs', 'list', django=f"repositories__globus_endpoint_id,{globus_id}")
     if len(lab):
-        return lab['name']
+        return [la['name'] for la in lab]
 
 
 def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
@@ -77,12 +77,14 @@ def job_runner(subjects_path, lab=None, dry=False, one=None, count=5):
         one = ONE()
     if lab is None:
         lab = _get_lab(one)
-    assert lab  # if the lab is none, this will return empty tasks each time
-    tasks = one.alyx.rest('tasks', 'list', status='Waiting', lab=lab)
+    if lab is None:
+        return  # if the lab is none, this will return empty tasks each time
+    tasks = one.alyx.rest('tasks', 'list', status='Waiting',
+                          django=f'session__lab__name__in,{lab}')
     tasks_runner(subjects_path, tasks, one=one, count=count, dry=dry)
 
 
-def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, **kwargs):
+def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, count=5, **kwargs):
     """
     Function to run a list of tasks (task dictionary from Alyx query) on a local server
     :param subjects_path:
@@ -95,15 +97,18 @@ def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, **kwargs):
     if one is None:
         one = ONE()
 
+    c = 0
     last_session = None
     all_datasets = []
     for tdict in tasks_dict:
+        if c >= count:
+            break
         # reconstruct the session local path. As many jobs belong to the same session
         # cache the result
         if last_session != tdict['session']:
             ses = one.alyx.rest('sessions', 'list', django=f"pk,{tdict['session']}")[0]
-            session_path = subjects_path.joinpath(Path(ses['subject'], ses['start_time'][:10],
-                                                       str(ses['number']).zfill(3)))
+            session_path = Path(subjects_path).joinpath(
+                Path(ses['subject'], ses['start_time'][:10], str(ses['number']).zfill(3)))
             last_session = tdict['session']
         if dry:
             print(session_path, tdict['name'])
@@ -112,4 +117,5 @@ def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, **kwargs):
                                               one=one, **kwargs)
             if dsets:
                 all_datasets.extend(dsets)
+                c += 1
     return all_datasets

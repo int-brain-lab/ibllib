@@ -47,10 +47,10 @@ def iblrig_video_compression(session_path, command):
     :param session_path:
     :param command:
     for ephys:
-    >>> command = ('ffmpeg -i {file_in} -codec:v libx264 -preset slow -crf 17 '
+    >>> command = ('ffmpeg -i {file_in} -y -codec:v libx264 -preset slow -crf 17 '
     >>>            '-nostats -loglevel 0 -codec:a copy {file_out}')
     for training:
-    >>> command = ('ffmpeg -i {file_in} -codec:v libx264 -preset slow -crf 29 '
+    >>> command = ('ffmpeg -i {file_in} -y -codec:v libx264 -preset slow -crf 29 '
     >>>            '-nostats -loglevel 0 -codec:a copy {file_out}')
     :return: list of compressed files
     """
