@@ -27,6 +27,7 @@ def compute_session_status(frame, criteria=None):
                 "ERROR": 0.75,
                 "WARNING": 0.95,
                 "PASS": 0.99 }
+    A "NANVAL" key is added to the criteria post-hoc for Nan values founds.
     :return: criteria, out_var_test_status, out_var_sess_status
     """
     # Set default value
@@ -35,7 +36,7 @@ def compute_session_status(frame, criteria=None):
     CRITERIA = {"CRITICAL": 0,
                 "ERROR": 0.75,
                 "WARNING": 0.95,
-                "PASS": 0.99  # todo add category "NONE" for None values
+                "PASS": 0.99
                 }
 
     out_var_sess_status = []
@@ -54,6 +55,7 @@ def compute_session_status(frame, criteria=None):
     values_f = np.delete(values_f, indx_remove_test)
 
     keys_f = np.array(list(frame.keys()))
+    keys_nan = keys_f[indx_remove_test]
     keys_f = np.delete(keys_f, indx_remove_test)
 
     # Check range of values
@@ -88,6 +90,10 @@ def compute_session_status(frame, criteria=None):
     # Compare with keys_f, removing the Nan type first
     if not np.array_equal(np.sort(assigned), np.sort(keys_f)):
         raise ValueError("One test has to be assigned to one status - this is not the case.")
+
+    if indx_remove_test:
+        # Todo check if NANVAL key exists already and issue warning?
+        out_var_test_status['NANVAL'] = keys_nan
 
     return criteria, out_var_test_status, out_var_sess_status
 
