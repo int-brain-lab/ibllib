@@ -543,7 +543,8 @@ def _get_pregenerated_events(bpod_trials, settings):
     pLeft = pLeft[: ntrials]
 
     phase_path = sessions_folder.joinpath(f"session_{num}_stim_phase.npy")
-    is_patched_version = parse_version(settings.get('IBLRIG_VERSION_TAG', 0)) > parse_version('6.4.0')
+    is_patched_version = parse_version(
+        settings.get('IBLRIG_VERSION_TAG', 0)) > parse_version('6.4.0')
     if phase_path.exists() and is_patched_version:
         phase = np.load(phase_path)[:ntrials]
 
