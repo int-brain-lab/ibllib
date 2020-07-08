@@ -100,6 +100,7 @@ def _ses2pandas(ses, dtypes=None):
     :param dtypes: list of dataset types
     :return:
     """
+    from datetime import datetime
     # selection: get relevant dtypes only if there is an url associated
     rec = list(filter(lambda x: x['url'], ses['data_dataset_session_related']))
     if dtypes is not None:
@@ -107,7 +108,7 @@ def _ses2pandas(ses, dtypes=None):
     include = ['id', 'hash', 'dataset_type', 'name', 'file_size', 'collection']
     uuid_fields = ['id', 'eid']
     join = {'subject': ses['subject'], 'lab': ses['lab'], 'eid': ses['url'][-36:],
-            'start_time': ses['start_time'], 'number': ses['number']}
+            'start_time': np.datetime64(ses['start_time']), 'number': ses['number']}
     col = parquet.rec2col(rec, include=include, uuid_fields=uuid_fields, join=join).to_df()
 
     return col
@@ -115,12 +116,13 @@ def _ses2pandas(ses, dtypes=None):
 
 class OneAbstract(abc.ABC):
 
-    def __init__(self, username=None, password=None, base_url=None):
+    def __init__(self, username=None, password=None, base_url=None, cache_dir=None):
         # get parameters override if inputs provided
         self._par = oneibl.params.get(silent=False)
         self._par = self._par.set('ALYX_LOGIN', username or self._par.ALYX_LOGIN)
         self._par = self._par.set('ALYX_URL', base_url or self._par.ALYX_URL)
         self._par = self._par.set('ALYX_PWD', password or self._par.ALYX_PWD)
+        self._par = self._par.set('CACHE_DIR', cache_dir or self._par.CACHE_DIR)
         # init the cache file
         self._cache_file = Path(self._par.CACHE_DIR).joinpath('.one_cache.parquet')
         if self._cache_file.exists():
@@ -128,7 +130,8 @@ class OneAbstract(abc.ABC):
         else:
             self._cache = pd.DataFrame()
 
-    def _load(self, eid, dataset_types=None, dclass_output=False, download_only=False, **kwargs):
+    def _load(self, eid, dataset_types=None, dclass_output=False, download_only=False,
+              offline=False, **kwargs):
         """
         From a Session ID and dataset types, queries Alyx database, downloads the data
         from Globus, and loads into numpy array. Single session only
@@ -142,9 +145,10 @@ class OneAbstract(abc.ABC):
         dataset_types = [dataset_types] if isinstance(dataset_types, str) else dataset_types
         if not dataset_types or dataset_types == ['__all__']:
             dclass_output = True
-
-        dc = self._make_dataclass(eid_str, dataset_types, **kwargs)
-
+        if offline:
+            dc = self._make_dataclass_offline(eid_str, dataset_types, **kwargs)
+        else:
+            dc = self._make_dataclass(eid_str, dataset_types, **kwargs)
         # load the files content in variables if requested
         if not download_only:
             for ind, fil in enumerate(dc.local_path):
@@ -175,8 +179,19 @@ class OneAbstract(abc.ABC):
             cache_dir = str(PurePath(Path.home(), "Downloads", "FlatIron"))
         return cache_dir
 
+    def _make_dataclass_offline(self, eid, dataset_types=None, cache_dir=None, **kwargs):
+        if self._cache.size == 0:
+            return SessionDataInfo()
+        # select the session
+        npeid = parquet.str2np(eid)[0]
+        df = self._cache[self._cache['eid_0'] == npeid[0]]
+        df = df[df['eid_1'] == npeid[1]]
+        # select datasets
+        df = df[ismember(df['dataset_type'], dataset_types)[0]]
+        return SessionDataInfo.from_pandas(df, self._get_cache_dir(cache_dir))
+
     @abc.abstractmethod
-    def _make_dataclass(self, eid, dataset_types=None):
+    def _make_dataclass(self, eid, dataset_types=None, cache_dir=None, **kwargs):
         pass
 
     @abc.abstractmethod
@@ -201,16 +216,8 @@ def ONE(offline=False, **kwargs):
 
 class OneOffline(OneAbstract):
 
-    def _make_dataclass(self, eid, dataset_types=None, cache_dir=None, **kwargs):
-        if self._cache.size == 0:
-            return SessionDataInfo()
-        # select the session
-        npeid = parquet.str2np(eid)[0]
-        df = self._cache[self._cache['eid_0'] == npeid[0]]
-        df = df[df['eid_1'] == npeid[1]]
-        # select datasets
-        df = df[ismember(df['dataset_type'], dataset_types)[0]]
-        return SessionDataInfo.from_pandas(df, self._get_cache_dir(cache_dir))
+    def _make_dataclass(self, *args, **kwargs):
+        return self._make_dataclass_offline(*args, **kwargs)
 
     def load(self, eid, **kwargs):
         return self._load(eid, **kwargs)
@@ -774,23 +781,19 @@ class OneAlyx(OneAbstract):
         :param dataset_types:
         :return: is_updated (bool): if the cache was updated or not
         """
-        updated = False
         pqt_dsets = _ses2pandas(ses, dtypes=dataset_types)
-        # if the cache is empty, no update
-        if self._cache.size == 0:
+        # if the dataframe is empty, return
+        if pqt_dsets.size == 0:
+            return
+        elif self._cache.size == 0:
             self._cache = pqt_dsets
-            return
-        elif pqt_dsets.size == 0:
-            return
+            parquet.save(self._cache_file, self._cache)
         else:
             isin, _ = ismember2d(pqt_dsets[['id_0', 'id_1']].to_numpy(),
                                  self._cache[['id_0', 'id_1']].to_numpy())
             if not np.all(isin):
                 self._cache = self._cache.append(pqt_dsets.iloc[np.where(~isin)[0]])
-                updated = True
-        # only write to file if the cache changed
-        if updated:
-            parquet.save(self._cache_file, self._cache)
+                parquet.save(self._cache_file, self._cache)
 
 
 def _validate_date_range(date_range):
