@@ -100,7 +100,6 @@ def _ses2pandas(ses, dtypes=None):
     :param dtypes: list of dataset types
     :return:
     """
-    from datetime import datetime
     # selection: get relevant dtypes only if there is an url associated
     rec = list(filter(lambda x: x['url'], ses['data_dataset_session_related']))
     if dtypes is not None:
@@ -706,7 +705,7 @@ class OneAlyx(OneAbstract):
             if ic != -1:
                 ses = self._cache.iloc[ic]
                 return Path(self._par.CACHE_DIR).joinpath(
-                    ses['lab'], 'Subjects', ses['subject'], ses['start_time'][:10],
+                    ses['lab'], 'Subjects', ses['subject'], ses['start_time'].isoformat()[:10],
                     str(ses['number']).zfill(3))
 
         # if it wasn't successful, query Alyx
@@ -736,11 +735,12 @@ class OneAlyx(OneAbstract):
         # try the cached info to possibly avoid hitting database
         if self._cache.size > 0:
             ind = ((self._cache['subject'] == session_path.parts[-3]) &
-                   (self._cache['start_time'].apply(lambda x: x[:10] == session_path.parts[-2])) &
+                   (self._cache['start_time'].apply(
+                       lambda x: x.isoformat()[:10] == session_path.parts[-2])) &
                    (self._cache['number']) == int(session_path.parts[-1]))
             ind = np.where(ind.to_numpy())[0]
             if ind.size > 0:
-                return parquet.np2str([self._cache[['eid_0', 'eid_1']].loc[ind[0]].to_numpy()])[0]
+                return parquet.np2str(self._cache[['eid_0', 'eid_1']].loc[ind[0]].to_numpy())[0]
 
         # if not search for subj, date, number XXX: hits the DB
         uuid = self.search(subjects=session_path.parts[-3],
