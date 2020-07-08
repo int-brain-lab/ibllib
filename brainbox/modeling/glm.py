@@ -28,7 +28,7 @@ class NeuralGLM:
     """
 
     def __init__(self, trialsdf, spk_times, spk_clu, vartypes,
-                 binwidth=0.02, mintrials=100):
+                 train=0.8, binwidth=0.02, mintrials=100):
         """
         Construct GLM object using information about all trials, and the relevant spike times.
         Only ingests data, and further object methods must be called to describe kernels, gain
@@ -55,6 +55,9 @@ class NeuralGLM:
                 'timing' : A timestamp relative to trial start (e.g. stimulus onset)
                 'continuous' : A continuous covariate sampled throughout the trial (e.g. eye pos)
                 'value' : A single value for the given trial (e.g. contrast or difficulty)
+        train: float
+            Float in (0, 1] indicating proportion of data to use for training GLM vs testing
+            (using the NeuralGLM.score method). Trials to keep will be randomly sampled.
         binwidth: float
             Width, in seconds, of the bins which will be used to count spikes. Defaults to 20ms.
         bintrials: int
@@ -73,17 +76,24 @@ class NeuralGLM:
             raise ValueError("Invalid values were passed in vartypes")
         if not len(spk_times) == len(spk_clu):
             raise IndexError("Spike times and cluster IDs are not same length")
+        if not isinstance(train, float):
+            raise TypeError('train must be a float between 0 and 1')
+        if not ((train > 0) & (train < 1)):
+            raise ValueError('train must be between 0 and 1')
 
         # Filter out cells which don't meet the criteria for minimum spiking, while doing trial
         # assignment
         self.vartypes = vartypes
         self.vartypes['duration'] = 'value'
-        trialsdf = trialsdf.copy()
+        trialsdf = trialsdf.copy()  # Make sure we don't modify the original dataframe
         clu_ids = np.unique(spk_clu)
-        trialspiking = np.zeros((spk_clu.max() + 1, len(trialsdf.index)))
-        trbounds = trialsdf[['trial_start', 'trial_end']]
+        trbounds = trialsdf[['trial_start', 'trial_end']]  # Get the start/end of trials
+        # Initialize a Cells x Trials bool array to easily see how many trials a clu spiked
         trialspiking = np.zeros((trialsdf.index.max() + 1, clu_ids.max() + 1), dtype=bool)
+        # Empty trial duration value to use later
         trialsdf['duration'] = np.nan
+        # Iterate through each trial, and store the relevant spikes for that trial into a dict
+        # Along with the cluster labels. This makes binning spikes and accessing spikes easier.
         spks = {}
         clu = {}
         st_endlast = 0
@@ -104,12 +114,24 @@ class NeuralGLM:
             for col in timingvars:
                 trialsdf.at[i, col] = trialsdf.at[i, col] - start
             trialsdf.at[i, 'duration'] = end - start
+
+        # Break the data into test and train sections for cross-validation
+        if train == 1:
+            traininds = trialsdf.index
+            testinds = trialsdf.index
+        else:
+            trainlen = int(np.floor(len(trialsdf) * train))
+            traininds = sorted(np.random.choice(trialsdf.index, trainlen, replace=False))
+            testinds = trialsdf.index[~trialsdf.index.isin(traininds)]
+
         self.spikes = spks
         self.clu = clu
         self.clu_ids = np.argwhere(np.sum(trialspiking, axis=0) > mintrials)
         self.binwidth = binwidth
         self.covar = {}
         self.trialsdf = trialsdf
+        self.traininds = traininds
+        self.testinds = testinds
         self.edim = 0
         self.compiled = False
         return
@@ -189,12 +211,10 @@ class NeuralGLM:
             raise KeyError('boxstart or boxend not found in trialsdf columns.')
         if self.vartypes[boxstart] != 'timing':
             raise TypeError(f'Column {boxstart} in trialsdf is not registered as a timing. '
-                            'boxstart and boxend need to refer to timining events in trialsdf '
-                            'if they are strings.')
+                            'boxstart and boxend need to refer to timining events in trialsdf.')
         if self.vartypes[boxend] != 'timing':
             raise TypeError(f'Column {boxend} in trialsdf is not registered as a timing. '
-                            'boxstart and boxend need to refer to timining events in trialsdf '
-                            'if they are strings.')
+                            'boxstart and boxend need to refer to timining events in trialsdf.')
 
         if isinstance(height, str):
 
@@ -338,9 +358,11 @@ class NeuralGLM:
         covars = self.covar
         # Go trial by trial and compose smaller design matrices
         miniDMs = []
+        rowtrials = []
         for i, trial in self.trialsdf.iterrows():
             nT = self.binf(trial.duration)
             miniX = np.zeros((nT, self.edim))
+            rowlabs = np.ones((nT, 1), dtype=int) * i
             for cov in covars.values():
                 sidx = cov['dmcol_idx']
                 # Optionally use cond to filter out which trials to apply certain regressors,
@@ -357,19 +379,22 @@ class NeuralGLM:
                 miniDMs.append(miniX)
             else:
                 miniDMs.append(sp.lil_matrix(miniX))
+            rowtrials.append(rowlabs)
         if dense:
             dm = np.vstack(miniDMs)
+
         else:
             dm = sp.vstack(miniDMs).to_csc()
-
+        trlabels = np.vstack(rowtrials)
         if hasattr(self, 'binnedspikes'):
             assert self.binnedspikes.shape[0] == dm.shape[0], "Oh shit. Indexing error."
         self.dm = dm
+        self.trlabels = trlabels
         # self.dm = np.roll(dm, -1, axis=0)  # Fix weird +1 offset bug in design matrix
         self.compiled = True
         return
 
-    def fit(self, method='sklearn', alpha=1):
+    def fit(self, method='sklearn', alpha=0):
         """
         Fit the current set of binned spikes as a function of the current design matrix. Requires
         NeuralGLM.bin_spike_trains and NeuralGLM.compile_design_matrix to be run first. Will store
@@ -385,7 +410,7 @@ class NeuralGLM:
             of the data given the covariates, by default 'sklearn'
         alpha : float, optional
             Regularization strength for scikit-learn implementation of GLM fitting, where 0 is
-            effectively unregularized (but normalized!) weights. Does not function in the minimize
+            effectively unregularized weights. Does not function in the minimize
             option, by default 1
 
         Returns
@@ -400,30 +425,47 @@ class NeuralGLM:
             raise AttributeError('Design matrix has not been compiled yet. Please run '
                                  'neuroglm.compile_design_matrix() before fitting.')
         # TODO: Make this optionally parallel across multiple cores of CPU
+        # Initialize pd Series to store output coefficients and intercepts for fits
+        coefs = pd.Series(index=self.clu_ids.flat, name='coefficients', dtype=object)
+        intercepts = pd.Series(index=self.clu_ids.flat, name='intercepts', dtype=object)
+        variances = pd.Series(index=self.clu_ids.flat, name='variances', dtype=object)
+        biasdm = np.pad(self.dm.copy(), ((0, 0), (1, 0)), constant_values=1)
+        trainmask = np.isin(self.trlabels, self.traininds).flatten()  # Mask for training data
+        trainbinned = self.binnedspikes[trainmask]
+        print(f'Condition of design matrix is {np.linalg.cond(self.dm[trainmask])}')
+
         if method == 'sklearn':
-            coefs = pd.Series(index=self.clu_ids.flat, name='coefficients', dtype=object)
-            intercepts = pd.Series(index=self.clu_ids.flat, name='intercepts', dtype=object)
+            traindm = self.dm[trainmask]
             for i, cell in tqdm(enumerate(self.clu_ids), "Fitting units: "):
-                binned = self.binnedspikes[:, i]
-                fitobj = PoissonRegressor(alpha=alpha, max_iter=300).fit(self.dm, binned)
+                binned = trainbinned[:, i]
+                fitobj = PoissonRegressor(alpha=alpha, max_iter=300).fit(traindm,
+                                                                         binned)
+                wts = np.concatenate([[fitobj.intercept_], fitobj.coef_], axis=0)
+                wvar = np.diag(np.linalg.inv(dd_neglog(wts, biasdm[trainmask], binned)))
                 coefs.at[cell[0]] = fitobj.coef_
                 intercepts.at[cell[0]] = fitobj.intercept_
             self.coefs = coefs
             self.intercepts = intercepts
             return coefs, intercepts
         elif method == 'minimize':
-            coefs = pd.Series(index=self.clu_ids.flat, name='coefficients', dtype=object)
-            intercepts = pd.Series(index=self.clu_ids.flat, name='intercepts', dtype=object)
-            biasdm = np.pad(self.dm.copy(), ((0, 0), (1, 0)), constant_values=1)
+            traindm = biasdm[trainmask]
             for i, cell in tqdm(enumerate(self.clu_ids), 'Fitting units:'):
-                binned = self.binnedspikes[:, i]
-                wi = np.linalg.lstsq(biasdm, binned, rcond=None)[0]
-                res = minimize(neglog, wi, (biasdm, binned),
+                binned = trainbinned[:, i]
+                wi = np.linalg.lstsq(traindm, binned, rcond=None)[0]
+                res = minimize(neglog, wi, (traindm, binned),
                                method='trust-ncg', jac=d_neglog, hess=dd_neglog)
+                hess = dd_neglog(res.x, traindm, binned)
+                try:
+                    wvar = np.diag(np.linalg.inv(hess))
+                except np.linalg.LinAlgError:
+                    wvar = np.ones_like(res.x) * 1e6
                 coefs.at[cell[0]] = res.x[1:]
                 intercepts.at[cell[0]] = res.x[0]
+                variances.at[cell[0]] = wvar
             self.coefs = coefs
             self.intercepts = intercepts
+            self.variances = variances
+            self.fitmethod = method
             return coefs, intercepts
 
     def combine_weights(self):
@@ -446,11 +488,9 @@ class NeuralGLM:
             offset = self.covar[var]['offset']
             tlen = bases.shape[0] * self.binwidth
             tstamps = np.linspace(0 + offset, tlen + offset, bases.shape[0])
-            outputs[var] = {}
-            outputs[var]['t'] = tstamps
-            outputs[var]['weights'] = pd.DataFrame(weights.values.tolist(),
-                                                   index=weights.index,
-                                                   columns=tstamps)
+            outputs[var] = pd.DataFrame(weights.values.tolist(),
+                                        index=weights.index,
+                                        columns=tstamps)
         self.combined_weights = outputs
         return outputs
 
@@ -469,13 +509,16 @@ class NeuralGLM:
         """
         if not hasattr(self, 'coefs'):
             raise AttributeError('Fit was not run. Please run fit first.')
+
+        testmask = np.isin(self.trlabels, self.testinds).flatten()
+        testdm = self.dm[testmask, :]
         scores = pd.Series(index=self.coefs.index)
         for cell in self.coefs.index:
             cell_idx = np.argwhere(self.clu_ids == cell)[0, 0]
             wt = self.coefs.loc[cell].reshape(-1, 1)
             bias = self.intercepts.loc[cell]
-            y = self.binnedspikes[:, cell_idx]
-            pred = np.exp(self.dm @ wt + bias)
+            y = self.binnedspikes[testmask, cell_idx]
+            pred = np.exp(testdm @ wt + bias)
             null_pred = np.exp(np.ones_like(pred) * bias)
             full_deviance = 2 * np.sum(xlogy(y, y / pred.flat) - y + pred.flat)
             null_deviance = 2 * np.sum(xlogy(y, y / null_pred.flat) - y + null_pred.flat)
