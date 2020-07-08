@@ -15,7 +15,7 @@ def _get_lab(one):
         globus_id = fid.read()
     lab = one.alyx.rest('labs', 'list', django=f"repositories__globus_endpoint_id,{globus_id}")
     if len(lab):
-        return lab[0]['name']
+        return [la['name'] for la in lab]
 
 
 def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
@@ -77,8 +77,10 @@ def job_runner(subjects_path, lab=None, dry=False, one=None, count=5):
         one = ONE()
     if lab is None:
         lab = _get_lab(one)
-    assert lab  # if the lab is none, this will return empty tasks each time
-    tasks = one.alyx.rest('tasks', 'list', status='Waiting', lab=lab)
+    if lab is None:
+        return  # if the lab is none, this will return empty tasks each time
+    tasks = one.alyx.rest('tasks', 'list', status='Waiting',
+                          django=f'session__lab__name__in,{lab}')
     tasks_runner(subjects_path, tasks, one=one, count=count, dry=dry)
 
 
