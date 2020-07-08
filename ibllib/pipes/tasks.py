@@ -72,7 +72,7 @@ class Task(abc.ABC):
             self.outputs = self._run(**kwargs)
             self.status = 0
             _logger.info(f"Job {self.__class__} complete")
-        except Exception:
+        except BaseException:
             _logger.error(traceback.format_exc())
             _logger.info(f"Job {self.__class__} errored")
             self.status = -1
@@ -250,10 +250,10 @@ class Pipeline(abc.ABC):
         return task_deck, all_datasets
 
     def rerun_failed(self):
-        return self.run(status__in=['Waiting', 'Started', 'Errored', 'Empty'])
+        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty'])
 
     def rerun(self):
-        return self.run(status__in=['Waiting', 'Started', 'Errored', 'Empty', 'Complete'])
+        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete'])
 
     @property
     def name(self):
