@@ -84,11 +84,6 @@ class Task(abc.ABC):
         _logger.removeHandler(ch)
         # tear down
         self.tearDown()
-        # teardown
-        if use_alyx:
-            status = 'Complete' if self.status == 0 else 'Errored'
-            self.one.alyx.rest('tasks', 'partial_update', id=self.taskid,
-                               data={'status': status, 'log': self.log})
         return self.status
 
     def register_datasets(self, one=None, jobid=None, **kwargs):
@@ -306,8 +301,11 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None, max_md
         if task.outputs is None:
             patch_data['status'] = 'Empty'
         else:  # otherwise register data and set status to Complete
-            registered_dsets = task.register_datasets(
-                one=one, jobid=tdict['id'], max_md5_size=max_md5_size)
+            try:
+                registered_dsets = task.register_datasets(
+                    one=one, jobid=tdict['id'], max_md5_size=max_md5_size)
+            except BaseException:
+                patch_data['status'] = 'Errored'
             patch_data['status'] = 'Complete'
     elif status == -1:
         patch_data['status'] = 'Errored'
