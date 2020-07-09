@@ -54,12 +54,15 @@ for i_sess in range(0, len(datafileos)):
 
 # Plot
 metric_name = [key for key in all_dataframe.keys() if '_bpod_' in key.lower()]
+# Color palette
+pal = sns.color_palette("husl", 8)
+pal.insert(4, (0.0, 0.0, 0.0))
 
 for i_metric in range(0, len(metric_name)):
     metric = metric_name[i_metric]
     chart = sns.countplot(x="rig_location", hue=metric,
-                          data=all_dataframe, palette=sns.color_palette("husl", 8),
-                          hue_order=["CRITICAL", "ERROR", "WARNING", "PASS"])
+                          data=all_dataframe, palette=pal,
+                          hue_order=["CRITICAL", "ERROR", "WARNING", "PASS", "NANVAL"])
     chart.set_xticklabels(chart.get_xticklabels(), rotation=45, horizontalalignment='right')
     plt.tight_layout()
 
