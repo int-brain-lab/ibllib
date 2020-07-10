@@ -222,6 +222,54 @@ class TestPipesMisc(unittest.TestCase):
             '_spikeglx_ephysData_g0_t0.nidq.meta' in nidq_file_names
         )
 
+    def test_create_ephys_transfer_done_flag(self):
+        # Create ephys flag file for completed transfer
+        misc.create_ephys_transfer_done_flag(self.local_session_path_3A)
+        # Check it was created
+        ephys = Path(self.local_session_path_3A).joinpath('ephys_data_transferred.flag')
+        self.assertTrue(ephys.exists())
+        # Remove it
+        ephys.unlink()
+
+    def test_create_video_transfer_done_flag(self):
+        # Create video flag file for completed transfer
+        misc.create_video_transfer_done_flag(self.local_session_path_3A)
+        # Check it was created
+        video = Path(self.local_session_path_3A).joinpath('video_data_transferred.flag')
+        self.assertTrue(video.exists())
+        # Remove it
+        video.unlink()
+
+    def test_check_create_raw_session_flag(self):
+        raw_session = Path(self.local_session_path_3A).joinpath('raw_session.flag')
+        ephys = Path(self.local_session_path_3A).joinpath('ephys_data_transferred.flag')
+        video = Path(self.local_session_path_3A).joinpath('video_data_transferred.flag')
+        # Check not created
+        misc.check_create_raw_session_flag(self.local_session_path_3A)
+        self.assertFalse(raw_session.exists())
+        # Create only ephys flag
+        misc.create_ephys_transfer_done_flag(self.local_session_path_3A)
+        # Check not created
+        misc.check_create_raw_session_flag(self.local_session_path_3A)
+        self.assertFalse(raw_session.exists())
+        ephys.unlink()
+        # Create only video flag
+        misc.create_video_transfer_done_flag(self.local_session_path_3A)
+        # Check not created
+        misc.check_create_raw_session_flag(self.local_session_path_3A)
+        self.assertFalse(raw_session.exists())
+        video.unlink()
+        # Create ephys and video flag file for completed transfer
+        misc.create_ephys_transfer_done_flag(self.local_session_path_3A)
+        misc.create_video_transfer_done_flag(self.local_session_path_3A)
+        # Check it was created
+        misc.check_create_raw_session_flag(self.local_session_path_3A)
+        self.assertTrue(raw_session.exists())
+        # Check other flags deleted
+        self.assertFalse(ephys.exists())
+        self.assertFalse(video.exists())
+        raw_session.unlink()
+
     def test_create_ephys_flags(self):
         extract = self.local_session_path_3A.joinpath('extract_ephys.flag')
         qc = self.local_session_path_3A.joinpath('raw_ephys_qc.flag')
