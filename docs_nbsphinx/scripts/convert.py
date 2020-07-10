@@ -109,10 +109,10 @@ def process_notebooks(nbfile_or_path, verbosity=None,
 
                 if ext == '.ipynb':
                     nbc = NotebookConverter(full_path, **kwargs)
-                    nbc.append()
+                    #nbc.append()
 
     else:
         # It's a single file, so convert it
         nbc = NotebookConverter(nbfile_or_path, **kwargs)
-        nbc.append()
+        #nbc.append()
 

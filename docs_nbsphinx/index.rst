@@ -18,7 +18,7 @@ Overview of Data Architecture
 Installation
 ------------------------------------
 
-.. toctree::a
+.. toctree::
    :maxdepth: 2
 
    02_installation
@@ -41,38 +41,33 @@ Using Datajoint to access IBL Data
 
    04_datajoint
 
-Reference Information on ALF and ONE
+
+Tutorials
 ------------------------------------
 
 .. toctree::
    :maxdepth: 1
 
-   04_reference
+   05_tutorials
 
 
-Docstrings Reference
+Examples
 ------------------------------------
 
 .. toctree::
    :maxdepth: 1
 
-   05_developers
+   06_recipes
 
-IBLLIB tutorials
+
+
+Reference
 ------------------------------------
 
 .. toctree::
    :maxdepth: 1
 
-   06_tutorials
+   07_developers
 
-
-
-.. toctree::
-   :maxdepth: 1
-
-   03_installation_matlab
-   03_tutorial_matlab
-.. one comment here to test
 
 * :ref:`genindex`

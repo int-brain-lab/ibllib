@@ -6,3 +6,4 @@ jupyter-client
 ipykernel
 nbsphinx
 myst_parser
+pydotplus #for dj diagram

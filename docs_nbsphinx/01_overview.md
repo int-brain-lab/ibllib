@@ -9,7 +9,3 @@
 ## Getting started:
 Ipython notebook  [here](./_static/one_demo.html)
 
-IBL is developing a number of pyhton packages that interface with different parts of the data archictecture, these include
-among other 
-ibllib - functions containing ONE (communication with Alyx and flatiron), functions to faciliate use of 
-ibl-pipeline 

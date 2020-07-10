@@ -28,7 +28,7 @@ sys.path.append(os.path.join(os.path.dirname(__name__), '..'))
 
 
 print('Python %s on %s' % (sys.version, sys.platform))
-print(sys.path)
+#print(sys.path)
 
 # -- Project information -----------------------------------------------------
 
@@ -57,7 +57,8 @@ extensions = ['sphinx.ext.autodoc',
               'sphinx.ext.githubpages',
               'sphinx_copybutton',
               'nbsphinx',
-              'myst_parser']
+              'myst_parser',
+              'sphinx_material']
               #'sphinx_rtd_theme']
                #'recommonmark',
 
@@ -74,7 +75,8 @@ master_doc = 'index'
 # Usually you set "language" from the command line for these cases.
 language = None
 
-nbsphinx_execute = 'auto'
+# Only use nbsphinx for formatting the notebooks
+nbsphinx_execute = 'never'
 # Kernel to use for execution
 nbsphinx_kernel_name = 'python3'
 # Cancel compile on errors in notebooks
@@ -99,8 +101,8 @@ pygments_style = 'sphinx'
 # a list of builtin themes.
 #
 # html_theme = 'default'
-#html_theme = 'sphinx_material'
-html_theme = 'sphinx_rtd_theme'
+html_theme = 'sphinx_material'
+#html_theme = 'sphinx_rtd_theme'
 
 
 # Theme options are theme-specific and customize the look and feel of a theme
@@ -113,9 +115,7 @@ html_theme = 'sphinx_rtd_theme'
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
-html_css_files = [
-    'css/style.css',
-]
+html_css_files = ['css/style.css']
 
 # Custom sidebar templates, must be a dictionary that maps document names
 # to template names.
@@ -194,15 +194,6 @@ texinfo_documents = [
 
 plot_formats = [('png', 512)]
 
-_root = os.path.abspath(os.path.join(os.path.dirname(__file__)))
-_scripts_path = os.path.join(_root, 'scripts')
-if _scripts_path not in sys.path:
-    sys.path.insert(1, _scripts_path)
-#
-from convert import process_notebooks
-nb_tutorials_path = os.path.join(_root, 'notebooks')
-colab_template_path = os.path.join(_root, 'templates', 'colab_template.ipynb')
-process_notebooks(nb_tutorials_path, colab_template=colab_template_path, overwrite=True)
 
 
 ## Add extra thing at beginning of each ipynb

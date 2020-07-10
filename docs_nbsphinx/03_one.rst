@@ -1,5 +1,5 @@
-ONE Introduction
-================
+ONE
+===
 
 
 .. toctree::
@@ -12,3 +12,5 @@ ONE Introduction
    notebooks/one_advanced/one_advanced
    one_docs/one_reference
    one_docs/one_onelight
+   one_docs/one_matlab_installation
+   one_docs/one_matlab_tutorial

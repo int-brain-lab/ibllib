@@ -14,7 +14,7 @@ Type in Matlab prompt:
 one = One();  % this line of code will be the first line to write everytime you re-open Matlab
 ```
 
-**_Reminder_**: connection parameters inserted via `one.setup` will modify the JSON `.one_params` file [see installation notes here](03a_installation_matlab.html)
+**_Reminder_**: connection parameters inserted via `one.setup` will modify the JSON `.one_params` file [see installation notes here](one_matlab_installation)
 
 
 ### With different connection settings for single time use

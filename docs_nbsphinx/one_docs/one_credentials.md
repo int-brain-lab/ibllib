@@ -11,7 +11,7 @@ If you do not have access to these, please get in contact with a member of the I
 ```
 
 
-### Using the `one.setup()` method
+## Using the `one.setup()` method
 
 ONE contains a `setup` method that automatically creates the *.one_params* file in the correct directory and prompts you
 to enter your credentials. 
