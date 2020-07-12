@@ -1,4 +1,4 @@
-# IBLLIB Matlab Installation Guide
+# ONE Matlab Installation Guide
 
 
 ## Matlab-specific Dependencies

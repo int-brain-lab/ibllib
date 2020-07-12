@@ -1,8 +1,8 @@
 # Setting up Datajoint credentials
 
-Before you can start using Datajoint with IBL data, you will need to configure some Datajoint credentials. We need to 
-specify a database connection to tell Datajoint where to look for IBl data as well as grant access by providing a 
-username and password.
+Before you can start using Datajoint with IBL data on your local computer, you will need to configure some Datajoint 
+credentials. We need to specify a database connection to tell Datajoint where to look for IBl data as well as grant 
+access by providing a username and password.
 
 ```{important}
 To set up credentials you will need access to your Datajoint username and password. If you do not have access to these, 

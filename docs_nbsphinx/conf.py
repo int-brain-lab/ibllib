@@ -17,8 +17,6 @@ import os
 import sys
 from pathlib import Path
 import matplotlib
-import recommonmark
-from recommonmark.transform import AutoStructify
 matplotlib.use('agg')
 
 for f in Path(os.path.abspath('.')).joinpath('ibllib').rglob('__init__.py'):
@@ -33,7 +31,7 @@ print('Python %s on %s' % (sys.version, sys.platform))
 # -- Project information -----------------------------------------------------
 
 project = 'IBL Library'
-copyright = '2018, International Brain Laboratory'
+copyright = '2020, International Brain Laboratory'
 author = 'International Brain Laboratory'
 
 # The short X.Y version
@@ -57,14 +55,18 @@ extensions = ['sphinx.ext.autodoc',
               'sphinx.ext.githubpages',
               'sphinx_copybutton',
               'nbsphinx',
+              'nbsphinx_link',
               'myst_parser',
-              'sphinx_material']
-              #'sphinx_rtd_theme']
-               #'recommonmark',
+              'sphinx.ext.napoleon']
+              # 'sphinx_automodapi.automodapi'
+              # 'sphinx.ext.inheritance_diagram',
+              # 'sphinx_automodapi.automodapi',
+              # 'sphinx_rtd_theme',
+              # 'recommonmark']
 
-autosummary_generate = True
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
+
 # The master toctree document.
 master_doc = 'index'
 
@@ -75,21 +77,11 @@ master_doc = 'index'
 # Usually you set "language" from the command line for these cases.
 language = None
 
-# Only use nbsphinx for formatting the notebooks
-nbsphinx_execute = 'never'
-# Kernel to use for execution
-nbsphinx_kernel_name = 'python3'
-# Cancel compile on errors in notebooks
-nbsphinx_allow_errors = True
-
-nbsphinx_output_prompt = 'Out[%s]:'
-
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path .
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '_templates',
-                    'documentation_contribution_guidelines.md', '.ipynb_checkpoints', 'templates',
-                    '*colab*']
+exclude_patterns = ['_build', '_templates', 'documentation_contribution_guidelines.md',
+                    '.ipynb_checkpoints', 'templates', 'README.md', 'gh-pages']
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = 'sphinx'
@@ -99,10 +91,8 @@ pygments_style = 'sphinx'
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-#
-# html_theme = 'default'
-html_theme = 'sphinx_material'
-#html_theme = 'sphinx_rtd_theme'
+
+html_theme = 'sphinx_rtd_theme'
 
 
 # Theme options are theme-specific and customize the look and feel of a theme
@@ -125,7 +115,7 @@ html_css_files = ['css/style.css']
 # default: ``['localtoc.html', 'relations.html', 'sourcelink.html',
 # 'searchbox.html']``.
 #
-# html_sidebars = {}
+html_sidebars = {}
 
 
 # -- Options for HTMLHelp output ---------------------------------------------
@@ -184,40 +174,52 @@ texinfo_documents = [
      'Miscellaneous'),
 ]
 
-# The suffix(es) of source filenames.
-# You can specify multiple suffix as a list of string:
-#
-#source_suffix = ['.rst', '.md']
-#source_parsers = {
-#    '.md': 'recommonmark.parser.CommonMarkParser',
-#}
 
+# -- Options for autosummary and autodoc ------------------------------------
+autosummary_generate = True
+# Don't add module names to function docs
+add_module_names = False
+
+autodoc_default_options = {
+    'members': True,
+    'member-order': 'bysource',
+    'undoc-members': True,
+    'show-inheritance': False
+}
+
+
+# -- Options for nbsphinx ------------------------------------
+
+# Only use nbsphinx for formatting the notebooks i.e never execute
+nbsphinx_execute = 'never'
+# Cancel compile on errors in notebooks
+nbsphinx_allow_errors = False
+# Add cell execution out number
+nbsphinx_output_prompt = 'Out[%s]:'
+# Configuration for images
+nbsphinx_execute_arguments = [
+    "--InlineBackend.figure_formats={'svg', 'pdf'}",
+    "--InlineBackend.rc={'figure.dpi': 96}",
+]
 plot_formats = [('png', 512)]
 
-
-
-## Add extra thing at beginning of each ipynb
+# Add extra prolog to beginning of each .ipynb file
+# Add option to download notebook and link to github page
 nbsphinx_prolog = r"""
+
+{% if env.metadata[env.docname]['nbsphinx-link-target'] %}
+{% set nb_path = env.metadata[env.docname]['nbsphinx-link-target'] | dirname %}
+{% set nb_name = env.metadata[env.docname]['nbsphinx-link-target'] | basename %}
+{% else %}
 {% set nb_name = env.doc2path(env.docname, base=None) | basename %}
 {% set nb_path = env.doc2path(env.docname, base=None) | dirname %}
-{% set colab_name = 'colab_' + nb_name %}
+{% endif %}
 
 .. raw:: html
     
       <a href="{{ nb_name }}"><button id="download">Download tutorial notebook</button></a>
       <a href="https://github.com/mayofaulkner/ibllib/tree/master/docs/{{ nb_path }}/{{ nb_name }}"><button id="github">Github link</button></a>
-      <a href="https://colab.research.google.com/github/mayofaulkner/ibllib/blob/gh-pages/{{ nb_path }}/{{ colab_name }}"><button id="colab">Colab link</button></a>
 
 """
 
-#app setup hook if you want to use recommonmark by itself
-#def setup(app):
-#    app.add_config_value('recommonmark_config', {
-#        #'url_resolver': lambda url: github_doc_root + url,
-#        'auto_toc_tree_section': 'Contents',
-#        'enable_math': False,
-#        'enable_inline_math': False,
-#        'enable_eval_rst': True,
-#    }, True)
-#    app.add_transform(AutoStructify)
 

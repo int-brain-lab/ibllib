@@ -148,7 +148,7 @@ figure,
 imagesc(squeeze(wf(1,:,:)), 'Parent', subplot(2,1,1)), colormap('bone')
 plot(subplot(2,1,2), squeeze(wf(1,:,:)))
 ```
-![Alyx data structure](./_static/03b_tuto_matlab_cluster.png)
+![Alyx data structure](../_static/03b_tuto_matlab_cluster.png)
 
 
 Depending on the use case, it may be handier to wrap the arrays in a dataclass

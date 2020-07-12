@@ -55,17 +55,16 @@ Examples
 ------------------------------------
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
 
    06_recipes
 
 
-
-Reference
+API
 ------------------------------------
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
 
    07_developers
 
