@@ -1,0 +1,845 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>ONE Introductory Tutorial &mdash; IBL Library  documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script src="../../_static/language_data.js"></script>
+        <script src="../../_static/clipboard.min.js"></script>
+        <script src="../../_static/copybutton.js"></script>
+        <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/copybutton.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/css/style.css" type="text/css" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="ONE advanced queries" href="../one_advanced/one_advanced.html" />
+    <link rel="prev" title="ONE basic commands" href="../one_basics/one_basics.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> IBL Library
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../01_overview.html">IBL data structure</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../02_installation.html">Installation</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../../03_one.html">ONE</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../../one_docs/one_introduction.html">Introduction to ONE</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../one_docs/one_credentials.html">Setting up ONE credentials</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../one_basics/one_basics.html">ONE basic commands</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">ONE Introductory Tutorial</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../one_advanced/one_advanced.html">ONE advanced queries</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../one_docs/one_reference.html">ONE Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../one_docs/one_onelight.html">Accessing data with ONE light</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../one_docs/one_matlab_installation.html">ONE Matlab Installation Guide</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../one_docs/one_matlab_tutorial.html">ONE Tutorial Matlab</a></li>
+</ul>
+</li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../04_datajoint.html">Datajoint</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../05_tutorials.html">Tutorials</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../06_recipes.html">Examples</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../07_developers.html">Python Modules</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">IBL Library</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../../03_one.html">ONE</a> &raquo;</li>
+        
+      <li>ONE Introductory Tutorial</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../../_sources/notebooks/one_intro/one_intro.ipynb.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  
+<style>
+/* CSS for nbsphinx extension */
+
+/* remove conflicting styling from Sphinx themes */
+div.nbinput.container,
+div.nbinput.container div.prompt,
+div.nbinput.container div.input_area,
+div.nbinput.container div[class*=highlight],
+div.nbinput.container div[class*=highlight] pre,
+div.nboutput.container,
+div.nboutput.container div.prompt,
+div.nboutput.container div.output_area,
+div.nboutput.container div[class*=highlight],
+div.nboutput.container div[class*=highlight] pre {
+    background: none;
+    border: none;
+    padding: 0 0;
+    margin: 0;
+    box-shadow: none;
+}
+
+/* avoid gaps between output lines */
+div.nboutput.container div[class*=highlight] pre {
+    line-height: normal;
+}
+
+/* input/output containers */
+div.nbinput.container,
+div.nboutput.container {
+    display: -webkit-flex;
+    display: flex;
+    align-items: flex-start;
+    margin: 0;
+    width: 100%;
+}
+@media (max-width: 540px) {
+    div.nbinput.container,
+    div.nboutput.container {
+        flex-direction: column;
+    }
+}
+
+/* input container */
+div.nbinput.container {
+    padding-top: 5px;
+}
+
+/* last container */
+div.nblast.container {
+    padding-bottom: 5px;
+}
+
+/* input prompt */
+div.nbinput.container div.prompt pre {
+    color: #307FC1;
+}
+
+/* output prompt */
+div.nboutput.container div.prompt pre {
+    color: #BF5B3D;
+}
+
+/* all prompts */
+div.nbinput.container div.prompt,
+div.nboutput.container div.prompt {
+    width: 4.5ex;
+    padding-top: 5px;
+    position: relative;
+    user-select: none;
+}
+
+div.nbinput.container div.prompt > div,
+div.nboutput.container div.prompt > div {
+    position: absolute;
+    right: 0;
+    margin-right: 0.3ex;
+}
+
+@media (max-width: 540px) {
+    div.nbinput.container div.prompt,
+    div.nboutput.container div.prompt {
+        width: unset;
+        text-align: left;
+        padding: 0.4em;
+    }
+    div.nboutput.container div.prompt.empty {
+        padding: 0;
+    }
+
+    div.nbinput.container div.prompt > div,
+    div.nboutput.container div.prompt > div {
+        position: unset;
+    }
+}
+
+/* disable scrollbars on prompts */
+div.nbinput.container div.prompt pre,
+div.nboutput.container div.prompt pre {
+    overflow: hidden;
+}
+
+/* input/output area */
+div.nbinput.container div.input_area,
+div.nboutput.container div.output_area {
+    -webkit-flex: 1;
+    flex: 1;
+    overflow: auto;
+}
+@media (max-width: 540px) {
+    div.nbinput.container div.input_area,
+    div.nboutput.container div.output_area {
+        width: 100%;
+    }
+}
+
+/* input area */
+div.nbinput.container div.input_area {
+    border: 1px solid #e0e0e0;
+    border-radius: 2px;
+    background: #f5f5f5;
+}
+
+/* override MathJax center alignment in output cells */
+div.nboutput.container div[class*=MathJax] {
+    text-align: left !important;
+}
+
+/* override sphinx.ext.imgmath center alignment in output cells */
+div.nboutput.container div.math p {
+    text-align: left;
+}
+
+/* standard error */
+div.nboutput.container div.output_area.stderr {
+    background: #fdd;
+}
+
+/* ANSI colors */
+.ansi-black-fg { color: #3E424D; }
+.ansi-black-bg { background-color: #3E424D; }
+.ansi-black-intense-fg { color: #282C36; }
+.ansi-black-intense-bg { background-color: #282C36; }
+.ansi-red-fg { color: #E75C58; }
+.ansi-red-bg { background-color: #E75C58; }
+.ansi-red-intense-fg { color: #B22B31; }
+.ansi-red-intense-bg { background-color: #B22B31; }
+.ansi-green-fg { color: #00A250; }
+.ansi-green-bg { background-color: #00A250; }
+.ansi-green-intense-fg { color: #007427; }
+.ansi-green-intense-bg { background-color: #007427; }
+.ansi-yellow-fg { color: #DDB62B; }
+.ansi-yellow-bg { background-color: #DDB62B; }
+.ansi-yellow-intense-fg { color: #B27D12; }
+.ansi-yellow-intense-bg { background-color: #B27D12; }
+.ansi-blue-fg { color: #208FFB; }
+.ansi-blue-bg { background-color: #208FFB; }
+.ansi-blue-intense-fg { color: #0065CA; }
+.ansi-blue-intense-bg { background-color: #0065CA; }
+.ansi-magenta-fg { color: #D160C4; }
+.ansi-magenta-bg { background-color: #D160C4; }
+.ansi-magenta-intense-fg { color: #A03196; }
+.ansi-magenta-intense-bg { background-color: #A03196; }
+.ansi-cyan-fg { color: #60C6C8; }
+.ansi-cyan-bg { background-color: #60C6C8; }
+.ansi-cyan-intense-fg { color: #258F8F; }
+.ansi-cyan-intense-bg { background-color: #258F8F; }
+.ansi-white-fg { color: #C5C1B4; }
+.ansi-white-bg { background-color: #C5C1B4; }
+.ansi-white-intense-fg { color: #A1A6B2; }
+.ansi-white-intense-bg { background-color: #A1A6B2; }
+
+.ansi-default-inverse-fg { color: #FFFFFF; }
+.ansi-default-inverse-bg { background-color: #000000; }
+
+.ansi-bold { font-weight: bold; }
+.ansi-underline { text-decoration: underline; }
+
+
+div.nbinput.container div.input_area div[class*=highlight] > pre,
+div.nboutput.container div.output_area div[class*=highlight] > pre,
+div.nboutput.container div.output_area div[class*=highlight].math,
+div.nboutput.container div.output_area.rendered_html,
+div.nboutput.container div.output_area > div.output_javascript,
+div.nboutput.container div.output_area:not(.rendered_html) > img{
+    padding: 5px;
+}
+
+/* fix copybtn overflow problem in chromium (needed for 'sphinx_copybutton') */
+div.nbinput.container div.input_area > div[class^='highlight'],
+div.nboutput.container div.output_area > div[class^='highlight']{
+    overflow-y: hidden;
+}
+
+/* hide copybtn icon on prompts (needed for 'sphinx_copybutton') */
+.prompt a.copybtn {
+    display: none;
+}
+
+/* Some additional styling taken form the Jupyter notebook CSS */
+div.rendered_html table {
+  border: none;
+  border-collapse: collapse;
+  border-spacing: 0;
+  color: black;
+  font-size: 12px;
+  table-layout: fixed;
+}
+div.rendered_html thead {
+  border-bottom: 1px solid black;
+  vertical-align: bottom;
+}
+div.rendered_html tr,
+div.rendered_html th,
+div.rendered_html td {
+  text-align: right;
+  vertical-align: middle;
+  padding: 0.5em 0.5em;
+  line-height: normal;
+  white-space: normal;
+  max-width: none;
+  border: none;
+}
+div.rendered_html th {
+  font-weight: bold;
+}
+div.rendered_html tbody tr:nth-child(odd) {
+  background: #f5f5f5;
+}
+div.rendered_html tbody tr:hover {
+  background: rgba(66, 165, 245, 0.2);
+}
+
+/* CSS overrides for sphinx_rtd_theme */
+
+/* 24px margin */
+.nbinput.nblast.container,
+.nboutput.nblast.container {
+    margin-bottom: 19px;  /* padding has already 5px */
+}
+
+/* ... except between code cells! */
+.nblast.container + .nbinput.container {
+    margin-top: -19px;
+}
+
+.admonition > p:before {
+    margin-right: 4px;  /* make room for the exclamation icon */
+}
+
+/* Fix math alignment, see https://github.com/rtfd/sphinx_rtd_theme/pull/686 */
+.math {
+    text-align: unset;
+}
+</style>
+<a href="one_intro.ipynb"><button id="download">Download tutorial notebook</button></a>
+<a href="https://github.com/mayofaulkner/ibllib/tree/master/docs/notebooks\one_intro/one_intro.ipynb"><button id="github">Github link</button></a>
+<a href="https://colab.research.google.com/github/mayofaulkner/ibllib/blob/gh-pages/notebooks\one_intro/colab_one_intro.ipynb"><button id="colab">Colab link</button></a><div class="section" id="ONE-Introductory-Tutorial">
+<h1>ONE Introductory Tutorial<a class="headerlink" href="#ONE-Introductory-Tutorial" title="Permalink to this headline">¶</a></h1>
+<p>In this tutorial we will use ONE to load IBL behavioural data and perform some simple analysis to assess the performance of a chosen subject during the <a class="reference external" href="https://www.biorxiv.org/content/10.1101/2020.01.17.909838v2.full">IBL task</a>.</p>
+<p>This tutorial assumes that you have setup the <a class="reference internal" href="../../02_installation.html"><span class="doc">unified ibl environment</span></a> and authorised access to IBL data through your <a class="reference internal" href="../../one_docs/one_credentials.html"><span class="doc">ONE credentials</span></a>.</p>
+<p>Let’s get started by importing the ONE module and setting up a connection</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">oneibl.one</span> <span class="kn">import</span> <span class="n">ONE</span>
+<span class="n">one</span> <span class="o">=</span> <span class="n">ONE</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<p>We want to look at behavioural data for a subject in a given lab. We can see which labs are available by using,</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">one</span><span class="o">.</span><span class="n">list</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;labs&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>We will choose a subject from the cortex lab. To find which subjects are available we will use the <code class="docutils literal notranslate"><span class="pre">one.alyx.rest</span></code> command. See <a class="reference external" href="../one_advanced/one_advanced.html">here</a> for more information about this command.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">subj_info</span> <span class="o">=</span> <span class="n">one</span><span class="o">.</span><span class="n">alyx</span><span class="o">.</span><span class="n">rest</span><span class="p">(</span><span class="s1">&#39;subjects&#39;</span><span class="p">,</span> <span class="s1">&#39;list&#39;</span><span class="p">,</span> <span class="n">lab</span><span class="o">=</span><span class="s1">&#39;cortexlab&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>Let’s see how many subjects have been registered under the cortex lab and also examine the content of the first item in subj_info</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No. of subjects in cortex lab = </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">subj_info</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="n">subj_info</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+<p>Each entry in the list subj_info is a dictionary that contains the details about this subject, including among others details, the nickname, whether the subject is alive or dead and the gender of the subject. We are interested in finding out the possible subject nicknames so we can refine our search. We can quickly iterate over all items in the subj_info list and extract the subject nicknames</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">subject_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">subj</span><span class="p">[</span><span class="s1">&#39;nickname&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">subj</span> <span class="ow">in</span> <span class="n">subj_info</span><span class="p">]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">subject_names</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>Let’s choose subject KS022 for further analysis and find all the sessions for this subject using the <code class="docutils literal notranslate"><span class="pre">one.search</span></code> command</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">eids</span><span class="p">,</span> <span class="n">sess_info</span> <span class="o">=</span> <span class="n">one</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">subject</span><span class="o">=</span><span class="s1">&#39;KS022&#39;</span><span class="p">,</span> <span class="n">task_protocol</span><span class="o">=</span><span class="s1">&#39;training&#39;</span><span class="p">,</span> <span class="n">details</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="admonition note">
+<p class="admonition-title fa fa-exclamation-circle">Note</p>
+<p>We have restricted the task_protocol to find sessions that only have trainig data. We could also have restricted this field by <code class="docutils literal notranslate"><span class="pre">biased</span></code> or <code class="docutils literal notranslate"><span class="pre">ephys</span></code> to find sessions where the subject was in a more advanced stage of the <a class="reference external" href="https://figshare.com/articles/A_standardized_and_reproducible_method_to_measure_decision-making_in_mice_Appendix_2_IBL_protocol_for_mice_training/11634729/1">IBL training pipeline</a></p>
+</div>
+<p>By returning the session information for each eID we can extract the date and order our experimental sessions by date (or training days). Let’s first look at the content of the first element in <code class="docutils literal notranslate"><span class="pre">sess_info</span></code></p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">sess_info</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+<p>We can see this contains information about the date of the session and so we can quickly collect a list dates for all the training sessions</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">session_date</span> <span class="o">=</span> <span class="p">[</span><span class="n">sess</span><span class="p">[</span><span class="s1">&#39;start_time&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">sess</span> <span class="ow">in</span> <span class="n">sess_info</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+<p>The latest training session date is returned first. For convenienve let’s reverse the list so that the first training session day is at index 0, for consistency we must reverse the list of eids as well</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">session_date</span><span class="o">.</span><span class="n">reverse</span><span class="p">()</span>
+<span class="n">eids</span><span class="o">.</span><span class="n">reverse</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<p>We will start by looking at data for the first training day. Let’s list what datasets are available using <code class="docutils literal notranslate"><span class="pre">one.list</span></code></p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">eid_day1</span> <span class="o">=</span> <span class="n">eids</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">one</span><span class="o">.</span><span class="n">list</span><span class="p">(</span><span class="n">eid</span><span class="o">=</span><span class="n">eid_day1</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>In this tutorial we are interested in the in the <a class="reference external" href="https://docs.google.com/spreadsheets/d/1ieLXRPLLSgUKcLvFkrqizfZl5HjdfE6bQ2KLBCRmjQo/edit#gid=1097679410">trials dataset</a> that contains information about the performance of the subject during the task. We can define a list of all the individual data set types we want to load, for example</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">d_types</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;trials.choice&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;trials.contrastLeft&#39;</span><span class="p">]</span>
+<span class="n">_</span> <span class="o">=</span> <span class="n">one</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">eid</span><span class="o">=</span><span class="n">eid_day1</span><span class="p">,</span> <span class="n">dataset_types</span><span class="o">=</span><span class="n">d_types</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>Alternatively we can take advantage of the ALF file format and download all files that have the prefix trials.</p>
+<div class="admonition note">
+<p class="admonition-title fa fa-exclamation-circle">Note</p>
+<p>This would be called loading all attributes associated with the trials object. See <a class="reference external" href="../../04_reference#ALF">here</a> for more information on the ALF file naming convention that is used in the IBL.</p>
+</div>
+<p>For this we will use a slightly different loading function <code class="docutils literal notranslate"><span class="pre">one.load_object</span></code></p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">d_object</span> <span class="o">=</span> <span class="s1">&#39;trials&#39;</span>
+<span class="n">_</span> <span class="o">=</span> <span class="n">one</span><span class="o">.</span><span class="n">load_object</span><span class="p">(</span><span class="n">eid</span><span class="o">=</span><span class="n">eid_day1</span><span class="p">,</span> <span class="n">obj</span><span class="o">=</span> <span class="n">d_object</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>We can find the path where the data has been downloaded using</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">data_path</span> <span class="o">=</span> <span class="n">one</span><span class="o">.</span><span class="n">path_from_eid</span><span class="p">(</span><span class="n">eid_day1</span><span class="p">)</span>
+<span class="n">data_path</span>
+</pre></div>
+</div>
+</div>
+<p>The alf module in ibllib contains a useful set of functions that can be used to read in alf objects. Let’s import this module and load in all data associated with the trials object.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">alf.io</span> <span class="k">as</span> <span class="nn">aio</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+
+<span class="n">alf_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">&#39;alf&#39;</span><span class="p">)</span>
+
+<span class="n">trials_day1</span> <span class="o">=</span> <span class="n">aio</span><span class="o">.</span><span class="n">load_object</span><span class="p">(</span><span class="n">alf_path</span><span class="p">,</span> <span class="s1">&#39;_ibl_trials&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="admonition note">
+<p class="admonition-title fa fa-exclamation-circle">Note</p>
+<p>By using <code class="docutils literal notranslate"><span class="pre">trials_day1</span> <span class="pre">=</span> <span class="pre">one.load(eid=eid,</span> <span class="pre">data_types=dtypes)</span></code> we could have automatically loaded the trials object into memory after downloading the files. Here we have chosen to manually read in the data to introduce the useful functions such <code class="docutils literal notranslate"><span class="pre">one.path_from_eid</span></code> and <code class="docutils literal notranslate"><span class="pre">alf.io.load_object</span></code></p>
+</div>
+<p>Let’s look at the content of the trials object</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="nb">print</span><span class="p">(</span><span class="n">trials_day1</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+<p>We can find how many trials there were in the session by inspecting the length of one of the attributes</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">n_trials_day1</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">trials_day1</span><span class="o">.</span><span class="n">choice</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">n_trials_day1</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="admonition note">
+<p class="admonition-title fa fa-exclamation-circle">Note</p>
+<p>We chose to look at the first attribute of trials oject to find the no. of trials, but we could have looked at the length of any of the attributes and got the same results. This is another consequence of the ALF file format. All attributes associated with a given object will have the same number of rows.</p>
+</div>
+<p>Next, let’s look at the visual stimulus contrasts that were presented to the subject on day 1. For this we will inspect <code class="docutils literal notranslate"><span class="pre">trials.constrastLeft</span></code> dataset</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">trials_day1</span><span class="o">.</span><span class="n">contrastLeft</span>
+</pre></div>
+</div>
+</div>
+<p>We have three values 1 which indicates a 100 % visual stimulus contrast, 0.5 which corresponds to a 50 % visual contrast and whole load of nans…..</p>
+<p>If we inspect <code class="docutils literal notranslate"><span class="pre">trials.contrastRight</span></code> we will find that all the indices that contain nans in the <code class="docutils literal notranslate"><span class="pre">trials.contrastLeft</span></code> are filled in <code class="docutils literal notranslate"><span class="pre">trials.contrastRight</span></code>, and vice versa. nans in the <code class="docutils literal notranslate"><span class="pre">trials.contrastLeft</span></code> and <code class="docutils literal notranslate"><span class="pre">trials.contrastRight</span></code> datasets indicate that the contrast was show on the oppisite side.</p>
+<p>Lets combine <code class="docutils literal notranslate"><span class="pre">trials.contrastLeft</span></code> and <code class="docutils literal notranslate"><span class="pre">trials.contrastRight</span></code> into a new dataset called <code class="docutils literal notranslate"><span class="pre">trials.contrast</span></code>. By convetion in the IBL, contrasts that appear on the left are assigned a negative while those on the right are positive. Let’s also reflect this convention when forming our new dataset</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+<span class="n">trials_day1</span><span class="o">.</span><span class="n">contrast</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="n">n_trials_day1</span><span class="p">))</span>
+<span class="n">contrastRight_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">trials_day1</span><span class="o">.</span><span class="n">contrastRight</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">contrastLeft_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">trials_day1</span><span class="o">.</span><span class="n">contrastLeft</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
+
+<span class="n">trials_day1</span><span class="o">.</span><span class="n">contrast</span><span class="p">[</span><span class="n">contrastRight_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">trials_day1</span><span class="o">.</span><span class="n">contrastRight</span><span class="p">[</span><span class="n">contrastRight_idx</span><span class="p">]</span>
+<span class="n">trials_day1</span><span class="o">.</span><span class="n">contrast</span><span class="p">[</span><span class="n">contrastLeft_idx</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span> <span class="o">*</span> <span class="n">trials_day1</span><span class="o">.</span><span class="n">contrastLeft</span><span class="p">[</span><span class="n">contrastLeft_idx</span><span class="p">]</span>
+
+</pre></div>
+</div>
+</div>
+<p>We can inspect how many of each type of contrast was presented to the subject</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">contrasts</span><span class="p">,</span> <span class="n">n_contrasts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">trials_day1</span><span class="o">.</span><span class="n">contrast</span><span class="p">,</span> <span class="n">return_counts</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Visual stimulus contrasts on day 1 = </span><span class="si">{</span><span class="n">contrasts</span> <span class="o">*</span> <span class="mi">100</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No. of each contrast on day 1 = </span><span class="si">{</span><span class="n">n_contrasts</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>Finally let’s look at how the mouse performed on the first day of training. This information is stored in the <code class="docutils literal notranslate"><span class="pre">feedbackType</span></code> attribute of the <code class="docutils literal notranslate"><span class="pre">trials</span></code> object. A positive feedback (+1) means the mouse got the task correct, whereas a negavtive feedback (-1) means the mouse got the trial wrong. Let’s double check that these are the only values we see in <code class="docutils literal notranslate"><span class="pre">trials.feedbakType</span></code></p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">trials_day1</span><span class="o">.</span><span class="n">feedbackType</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>We can easily compute the performance of the mouse</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">correct</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">trials_day1</span><span class="o">.</span><span class="n">feedbackType</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span><span class="o">/</span> <span class="n">n_trials_day1</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Correct = </span><span class="si">{</span><span class="n">correct</span> <span class="o">*</span> <span class="mi">100</span><span class="si">}</span><span class="s2"> %&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>As expected on the first day of training the mouse has not yet grasped the concept of the task and performed at chance level. We can break down the performance at each contrast level and create a simple plot. In this plot let’s also express performance in terms of rightward choice.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+
+<span class="n">contrast_performance</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="n">contrasts</span><span class="o">.</span><span class="n">size</span><span class="p">))</span>
+<span class="k">for</span> <span class="n">ic</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">contrasts</span><span class="p">):</span>
+    <span class="n">contrast_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">trials_day1</span><span class="o">.</span><span class="n">contrast</span> <span class="o">==</span> <span class="n">c</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">c</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">contrast_performance</span><span class="p">[</span><span class="n">ic</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">trials_day1</span><span class="o">.</span><span class="n">feedbackType</span><span class="p">[</span><span class="n">contrast_idx</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+                                        <span class="o">/</span> <span class="n">contrast_idx</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">contrast_performance</span><span class="p">[</span><span class="n">ic</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">trials_day1</span><span class="o">.</span><span class="n">feedbackType</span><span class="p">[</span><span class="n">contrast_idx</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+                                    <span class="o">/</span> <span class="n">contrast_idx</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">contrasts</span> <span class="o">*</span> <span class="mi">100</span><span class="p">,</span> <span class="n">contrast_performance</span> <span class="o">*</span> <span class="mi">100</span><span class="p">,</span> <span class="s1">&#39;o-&#39;</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">ms</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span><span class="mi">100</span><span class="p">])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xticks</span><span class="p">([</span><span class="o">*</span><span class="p">(</span><span class="n">contrasts</span> <span class="o">*</span> <span class="mi">100</span><span class="p">)])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Signed contrast (%)&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Rightward choice (%)&#39;</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">contrast_performance</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>As the mice learns the task we expect its performance to improve. Let’s repeat the steps above and see how the same mouse performed on day 15 of trainng</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">eid_day15</span> <span class="o">=</span> <span class="n">eids</span><span class="p">[</span><span class="mi">14</span><span class="p">]</span>
+<span class="n">trials_day15</span> <span class="o">=</span> <span class="n">one</span><span class="o">.</span><span class="n">load_object</span><span class="p">(</span><span class="n">eid</span><span class="o">=</span><span class="n">eid_day15</span><span class="p">,</span> <span class="n">obj</span><span class="o">=</span><span class="n">d_object</span><span class="p">)</span>
+<span class="n">n_trials_day15</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">trials_day15</span><span class="o">.</span><span class="n">choice</span><span class="p">)</span>
+
+<span class="n">trials_day15</span><span class="o">.</span><span class="n">contrast</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="n">n_trials_day15</span><span class="p">))</span>
+<span class="n">contrastRight_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">trials_day15</span><span class="o">.</span><span class="n">contrastRight</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">contrastLeft_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">trials_day15</span><span class="o">.</span><span class="n">contrastLeft</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
+
+<span class="n">trials_day15</span><span class="o">.</span><span class="n">contrast</span><span class="p">[</span><span class="n">contrastRight_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">trials_day15</span><span class="o">.</span><span class="n">contrastRight</span><span class="p">[</span><span class="n">contrastRight_idx</span><span class="p">]</span>
+<span class="n">trials_day15</span><span class="o">.</span><span class="n">contrast</span><span class="p">[</span><span class="n">contrastLeft_idx</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span> <span class="o">*</span> <span class="n">trials_day15</span><span class="o">.</span><span class="n">contrastLeft</span><span class="p">[</span><span class="n">contrastLeft_idx</span><span class="p">]</span>
+
+<span class="n">contrasts</span><span class="p">,</span> <span class="n">n_contrasts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">trials_day15</span><span class="o">.</span><span class="n">contrast</span><span class="p">,</span> <span class="n">return_counts</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Visual stimulus contrasts on day 15 = </span><span class="si">{</span><span class="n">contrasts</span> <span class="o">*</span> <span class="mi">100</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No. of each contrast on day 15 = </span><span class="si">{</span><span class="n">n_contrasts</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>Notice how on day 15 the mouse has not only has trials with 100 % and 50 % visual stimuli contrast but also 25 % and 12.5 %. This follows the IBL training protocol where harder contrasts are introduced as the mouse becomes more expert at the task.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">correct</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">trials_day15</span><span class="o">.</span><span class="n">feedbackType</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span><span class="o">/</span> <span class="n">n_trials_day15</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Correct = </span><span class="si">{</span><span class="n">correct</span> <span class="o">*</span> <span class="mi">100</span><span class="si">}</span><span class="s2"> %&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>The performance has vastly improved compared to day 1 of training! Once again let’s break this down further into the performance at each contrast and creata a plot of rightward choice vs signed contrast</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">contrast_performance</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="n">contrasts</span><span class="o">.</span><span class="n">size</span><span class="p">))</span>
+<span class="k">for</span> <span class="n">ic</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">contrasts</span><span class="p">):</span>
+    <span class="n">contrast_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">trials_day15</span><span class="o">.</span><span class="n">contrast</span> <span class="o">==</span> <span class="n">c</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">c</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">contrast_performance</span><span class="p">[</span><span class="n">ic</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">trials_day15</span><span class="o">.</span><span class="n">feedbackType</span><span class="p">[</span><span class="n">contrast_idx</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+                                        <span class="o">/</span> <span class="n">contrast_idx</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">contrast_performance</span><span class="p">[</span><span class="n">ic</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">trials_day15</span><span class="o">.</span><span class="n">feedbackType</span><span class="p">[</span><span class="n">contrast_idx</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+                                    <span class="o">/</span> <span class="n">contrast_idx</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+
+
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">contrasts</span> <span class="o">*</span> <span class="mi">100</span><span class="p">,</span> <span class="n">contrast_performance</span> <span class="o">*</span> <span class="mi">100</span><span class="p">,</span> <span class="s1">&#39;o-&#39;</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">ms</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span><span class="mi">100</span><span class="p">])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xticks</span><span class="p">([</span><span class="o">*</span><span class="p">(</span><span class="n">contrasts</span> <span class="o">*</span> <span class="mi">100</span><span class="p">)])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Signed contrast (%)&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Rightward choice (%)&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xticks</span><span class="p">(</span><span class="n">rotation</span><span class="o">=</span><span class="mi">90</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">contrast_performance</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>You should now be familiar with the basics of how to search for and load data using ONE and how to do some simple analysis with data from the IBL task. To see how to replicate this tutorial using Datajoint, please see this <a class="reference external" href="../dj_intro/dj_intro.html">tutorial</a>.</p>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../one_advanced/one_advanced.html" class="btn btn-neutral float-right" title="ONE advanced queries" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="../one_basics/one_basics.html" class="btn btn-neutral float-left" title="ONE basic commands" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, International Brain Laboratory
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

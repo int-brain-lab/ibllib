@@ -1,0 +1,467 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Python Modules &mdash; IBL Library  documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+        <script src="_static/clipboard.min.js"></script>
+        <script src="_static/copybutton.js"></script>
+        <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="_static/copybutton.css" type="text/css" />
+  <link rel="stylesheet" href="_static/css/style.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="oneibl.dataclass" href="_autosummary/oneibl.dataclass.html" />
+    <link rel="prev" title="Title of your tutorial" href="notebooks_external/juyper/juyper.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> IBL Library
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="01_overview.html">IBL data structure</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="02_installation.html">Installation</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="03_one.html">ONE</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="04_datajoint.html">Datajoint</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="05_tutorials.html">Tutorials</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="06_recipes.html">Examples</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Python Modules</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#oneibl-module">oneibl module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/oneibl.dataclass.html">oneibl.dataclass</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/oneibl.globus.html">oneibl.globus</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/oneibl.one.html">oneibl.one</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/oneibl.onelight.html">oneibl.onelight</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/oneibl.params.html">oneibl.params</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/oneibl.patcher.html">oneibl.patcher</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/oneibl.registration.html">oneibl.registration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/oneibl.webclient.html">oneibl.webclient</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#alf-module">alf module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/alf.folders.html">alf.folders</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/alf.io.html">alf.io</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#ibllib-module">ibllib module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.atlas.atlas.html">ibllib.atlas.atlas</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.dsp.fourier.html">ibllib.dsp.fourier</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.dsp.utils.html">ibllib.dsp.utils</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.ephys.ephysqc.html">ibllib.ephys.ephysqc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.ephys.spikes.html">ibllib.ephys.spikes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.ephys.sync_probes.html">ibllib.ephys.sync_probes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.io.extractors.base.html">ibllib.io.extractors.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.io.extractors.biased_trials.html">ibllib.io.extractors.biased_trials</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.io.extractors.ephys_fpga.html">ibllib.io.extractors.ephys_fpga</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.io.extractors.training_audio.html">ibllib.io.extractors.training_audio</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.io.extractors.training_trials.html">ibllib.io.extractors.training_trials</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.io.extractors.training_wheel.html">ibllib.io.extractors.training_wheel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.io.flags.html">ibllib.io.flags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.io.params.html">ibllib.io.params</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.io.raw_data_loaders.html">ibllib.io.raw_data_loaders</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.io.spikeglx.html">ibllib.io.spikeglx</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.misc.misc.html">ibllib.misc.misc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.misc.version.html">ibllib.misc.version</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.pipes.ephys_alignment.html">ibllib.pipes.ephys_alignment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.pipes.ephys_preprocessing.html">ibllib.pipes.ephys_preprocessing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.pipes.histology.html">ibllib.pipes.histology</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.pipes.purge_rig_data.html">ibllib.pipes.purge_rig_data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.pipes.training_preprocessing.html">ibllib.pipes.training_preprocessing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.pipes.transfer_rig_data.html">ibllib.pipes.transfer_rig_data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.qc.bpodqc_extractors.html">ibllib.qc.bpodqc_extractors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.qc.bpodqc_metrics.html">ibllib.qc.bpodqc_metrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.qc.extended_qc.html">ibllib.qc.extended_qc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.qc.oneqc_metrics.html">ibllib.qc.oneqc_metrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.qc.oneutils.html">ibllib.qc.oneutils</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.qc.qcplots.html">ibllib.qc.qcplots</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.graphic.html">ibllib.graphic</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.plots.html">ibllib.plots</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/ibllib.time.html">ibllib.time</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">IBL Library</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>Python Modules</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/07_developers.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  
+<style>
+/* CSS overrides for sphinx_rtd_theme */
+
+/* 24px margin */
+.nbinput.nblast.container,
+.nboutput.nblast.container {
+    margin-bottom: 19px;  /* padding has already 5px */
+}
+
+/* ... except between code cells! */
+.nblast.container + .nbinput.container {
+    margin-top: -19px;
+}
+
+.admonition > p:before {
+    margin-right: 4px;  /* make room for the exclamation icon */
+}
+
+/* Fix math alignment, see https://github.com/rtfd/sphinx_rtd_theme/pull/686 */
+.math {
+    text-align: unset;
+}
+</style>
+<div class="section" id="python-modules">
+<h1>Python Modules<a class="headerlink" href="#python-modules" title="Permalink to this headline">¶</a></h1>
+<div class="toctree-wrapper compound">
+</div>
+<div class="section" id="oneibl-module">
+<h2>oneibl module<a class="headerlink" href="#oneibl-module" title="Permalink to this headline">¶</a></h2>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/oneibl.dataclass.html#module-oneibl.dataclass" title="oneibl.dataclass"><code class="xref py py-obj docutils literal notranslate"><span class="pre">oneibl.dataclass</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/oneibl.globus.html#module-oneibl.globus" title="oneibl.globus"><code class="xref py py-obj docutils literal notranslate"><span class="pre">oneibl.globus</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/oneibl.one.html#module-oneibl.one" title="oneibl.one"><code class="xref py py-obj docutils literal notranslate"><span class="pre">oneibl.one</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/oneibl.onelight.html#module-oneibl.onelight" title="oneibl.onelight"><code class="xref py py-obj docutils literal notranslate"><span class="pre">oneibl.onelight</span></code></a></p></td>
+<td><p>ONE light.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/oneibl.params.html#module-oneibl.params" title="oneibl.params"><code class="xref py py-obj docutils literal notranslate"><span class="pre">oneibl.params</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/oneibl.patcher.html#module-oneibl.patcher" title="oneibl.patcher"><code class="xref py py-obj docutils literal notranslate"><span class="pre">oneibl.patcher</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/oneibl.registration.html#module-oneibl.registration" title="oneibl.registration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">oneibl.registration</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/oneibl.webclient.html#module-oneibl.webclient" title="oneibl.webclient"><code class="xref py py-obj docutils literal notranslate"><span class="pre">oneibl.webclient</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="alf-module">
+<h2>alf module<a class="headerlink" href="#alf-module" title="Permalink to this headline">¶</a></h2>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/alf.folders.html#module-alf.folders" title="alf.folders"><code class="xref py py-obj docutils literal notranslate"><span class="pre">alf.folders</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/alf.io.html#module-alf.io" title="alf.io"><code class="xref py py-obj docutils literal notranslate"><span class="pre">alf.io</span></code></a></p></td>
+<td><p>Generic ALF I/O module.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="ibllib-module">
+<h2>ibllib module<a class="headerlink" href="#ibllib-module" title="Permalink to this headline">¶</a></h2>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/ibllib.atlas.atlas.html#module-ibllib.atlas.atlas" title="ibllib.atlas.atlas"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.atlas.atlas</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/ibllib.dsp.fourier.html#module-ibllib.dsp.fourier" title="ibllib.dsp.fourier"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.dsp.fourier</span></code></a></p></td>
+<td><p>Low-level functions to work in frequency domain for n-dim arrays</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/ibllib.dsp.utils.html#module-ibllib.dsp.utils" title="ibllib.dsp.utils"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.dsp.utils</span></code></a></p></td>
+<td><p>Window generator, front detections, rms</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/ibllib.ephys.ephysqc.html#module-ibllib.ephys.ephysqc" title="ibllib.ephys.ephysqc"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.ephys.ephysqc</span></code></a></p></td>
+<td><p>Quality control of raw Neuropixel electrophysiology data.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/ibllib.ephys.spikes.html#module-ibllib.ephys.spikes" title="ibllib.ephys.spikes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.ephys.spikes</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/ibllib.ephys.sync_probes.html#module-ibllib.ephys.sync_probes" title="ibllib.ephys.sync_probes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.ephys.sync_probes</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/ibllib.io.extractors.base.html#module-ibllib.io.extractors.base" title="ibllib.io.extractors.base"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.io.extractors.base</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/ibllib.io.extractors.biased_trials.html#module-ibllib.io.extractors.biased_trials" title="ibllib.io.extractors.biased_trials"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.io.extractors.biased_trials</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/ibllib.io.extractors.ephys_fpga.html#module-ibllib.io.extractors.ephys_fpga" title="ibllib.io.extractors.ephys_fpga"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.io.extractors.ephys_fpga</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/ibllib.io.extractors.training_audio.html#module-ibllib.io.extractors.training_audio" title="ibllib.io.extractors.training_audio"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.io.extractors.training_audio</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/ibllib.io.extractors.training_trials.html#module-ibllib.io.extractors.training_trials" title="ibllib.io.extractors.training_trials"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.io.extractors.training_trials</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/ibllib.io.extractors.training_wheel.html#module-ibllib.io.extractors.training_wheel" title="ibllib.io.extractors.training_wheel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.io.extractors.training_wheel</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/ibllib.io.flags.html#module-ibllib.io.flags" title="ibllib.io.flags"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.io.flags</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/ibllib.io.params.html#module-ibllib.io.params" title="ibllib.io.params"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.io.params</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/ibllib.io.raw_data_loaders.html#module-ibllib.io.raw_data_loaders" title="ibllib.io.raw_data_loaders"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.io.raw_data_loaders</span></code></a></p></td>
+<td><p>Raw Data Loader functions for PyBpod rig</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/ibllib.io.spikeglx.html#module-ibllib.io.spikeglx" title="ibllib.io.spikeglx"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.io.spikeglx</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/ibllib.misc.misc.html#module-ibllib.misc.misc" title="ibllib.misc.misc"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.misc.misc</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/ibllib.misc.version.html#module-ibllib.misc.version" title="ibllib.misc.version"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.misc.version</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/ibllib.pipes.ephys_alignment.html#module-ibllib.pipes.ephys_alignment" title="ibllib.pipes.ephys_alignment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.pipes.ephys_alignment</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/ibllib.pipes.ephys_preprocessing.html#module-ibllib.pipes.ephys_preprocessing" title="ibllib.pipes.ephys_preprocessing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.pipes.ephys_preprocessing</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/ibllib.pipes.histology.html#module-ibllib.pipes.histology" title="ibllib.pipes.histology"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.pipes.histology</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/ibllib.pipes.purge_rig_data.html#module-ibllib.pipes.purge_rig_data" title="ibllib.pipes.purge_rig_data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.pipes.purge_rig_data</span></code></a></p></td>
+<td><p>Purge data from RIG - Find all files by rglob - Find all sessions of the found files - Check Alyx if corresponding datasetTypes have been registered as existing sessions and files on Flatiron - Delete local raw file if found on Flatiron</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/ibllib.pipes.training_preprocessing.html#module-ibllib.pipes.training_preprocessing" title="ibllib.pipes.training_preprocessing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.pipes.training_preprocessing</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/ibllib.pipes.transfer_rig_data.html#module-ibllib.pipes.transfer_rig_data" title="ibllib.pipes.transfer_rig_data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.pipes.transfer_rig_data</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/ibllib.qc.bpodqc_extractors.html#module-ibllib.qc.bpodqc_extractors" title="ibllib.qc.bpodqc_extractors"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.qc.bpodqc_extractors</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/ibllib.qc.bpodqc_metrics.html#module-ibllib.qc.bpodqc_metrics" title="ibllib.qc.bpodqc_metrics"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.qc.bpodqc_metrics</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/ibllib.qc.extended_qc.html#module-ibllib.qc.extended_qc" title="ibllib.qc.extended_qc"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.qc.extended_qc</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/ibllib.qc.oneqc_metrics.html#module-ibllib.qc.oneqc_metrics" title="ibllib.qc.oneqc_metrics"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.qc.oneqc_metrics</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/ibllib.qc.oneutils.html#module-ibllib.qc.oneutils" title="ibllib.qc.oneutils"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.qc.oneutils</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/ibllib.qc.qcplots.html#module-ibllib.qc.qcplots" title="ibllib.qc.qcplots"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.qc.qcplots</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/ibllib.graphic.html#module-ibllib.graphic" title="ibllib.graphic"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.graphic</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/ibllib.plots.html#module-ibllib.plots" title="ibllib.plots"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.plots</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/ibllib.time.html#module-ibllib.time" title="ibllib.time"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ibllib.time</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="_autosummary/oneibl.dataclass.html" class="btn btn-neutral float-right" title="oneibl.dataclass" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="notebooks_external/juyper/juyper.html" class="btn btn-neutral float-left" title="Title of your tutorial" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, International Brain Laboratory
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

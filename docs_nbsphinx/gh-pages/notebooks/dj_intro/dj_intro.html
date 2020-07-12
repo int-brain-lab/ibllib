@@ -1,0 +1,708 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Datajoint Introductory Tutorial &mdash; IBL Library  documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script src="../../_static/language_data.js"></script>
+        <script src="../../_static/clipboard.min.js"></script>
+        <script src="../../_static/copybutton.js"></script>
+        <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/copybutton.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/css/style.css" type="text/css" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Tutorials" href="../../05_tutorials.html" />
+    <link rel="prev" title="Exploring the IBL Data Pipeline" href="../dj_basics/dj_basics.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> IBL Library
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../01_overview.html">IBL data structure</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../02_installation.html">Installation</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../03_one.html">ONE</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../../04_datajoint.html">Datajoint</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../../dj_docs/dj_introduction.html">Introduction to Datajoint</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../dj_docs/dj_credentials.html">Setting up Datajoint credentials</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dj_basics/dj_basics.html">Exploring the IBL Data Pipeline</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Datajoint Introductory Tutorial</a></li>
+</ul>
+</li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../05_tutorials.html">Tutorials</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../06_recipes.html">Examples</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../07_developers.html">Python Modules</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">IBL Library</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../../04_datajoint.html">Datajoint</a> &raquo;</li>
+        
+      <li>Datajoint Introductory Tutorial</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../../_sources/notebooks/dj_intro/dj_intro.ipynb.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  
+<style>
+/* CSS for nbsphinx extension */
+
+/* remove conflicting styling from Sphinx themes */
+div.nbinput.container,
+div.nbinput.container div.prompt,
+div.nbinput.container div.input_area,
+div.nbinput.container div[class*=highlight],
+div.nbinput.container div[class*=highlight] pre,
+div.nboutput.container,
+div.nboutput.container div.prompt,
+div.nboutput.container div.output_area,
+div.nboutput.container div[class*=highlight],
+div.nboutput.container div[class*=highlight] pre {
+    background: none;
+    border: none;
+    padding: 0 0;
+    margin: 0;
+    box-shadow: none;
+}
+
+/* avoid gaps between output lines */
+div.nboutput.container div[class*=highlight] pre {
+    line-height: normal;
+}
+
+/* input/output containers */
+div.nbinput.container,
+div.nboutput.container {
+    display: -webkit-flex;
+    display: flex;
+    align-items: flex-start;
+    margin: 0;
+    width: 100%;
+}
+@media (max-width: 540px) {
+    div.nbinput.container,
+    div.nboutput.container {
+        flex-direction: column;
+    }
+}
+
+/* input container */
+div.nbinput.container {
+    padding-top: 5px;
+}
+
+/* last container */
+div.nblast.container {
+    padding-bottom: 5px;
+}
+
+/* input prompt */
+div.nbinput.container div.prompt pre {
+    color: #307FC1;
+}
+
+/* output prompt */
+div.nboutput.container div.prompt pre {
+    color: #BF5B3D;
+}
+
+/* all prompts */
+div.nbinput.container div.prompt,
+div.nboutput.container div.prompt {
+    width: 4.5ex;
+    padding-top: 5px;
+    position: relative;
+    user-select: none;
+}
+
+div.nbinput.container div.prompt > div,
+div.nboutput.container div.prompt > div {
+    position: absolute;
+    right: 0;
+    margin-right: 0.3ex;
+}
+
+@media (max-width: 540px) {
+    div.nbinput.container div.prompt,
+    div.nboutput.container div.prompt {
+        width: unset;
+        text-align: left;
+        padding: 0.4em;
+    }
+    div.nboutput.container div.prompt.empty {
+        padding: 0;
+    }
+
+    div.nbinput.container div.prompt > div,
+    div.nboutput.container div.prompt > div {
+        position: unset;
+    }
+}
+
+/* disable scrollbars on prompts */
+div.nbinput.container div.prompt pre,
+div.nboutput.container div.prompt pre {
+    overflow: hidden;
+}
+
+/* input/output area */
+div.nbinput.container div.input_area,
+div.nboutput.container div.output_area {
+    -webkit-flex: 1;
+    flex: 1;
+    overflow: auto;
+}
+@media (max-width: 540px) {
+    div.nbinput.container div.input_area,
+    div.nboutput.container div.output_area {
+        width: 100%;
+    }
+}
+
+/* input area */
+div.nbinput.container div.input_area {
+    border: 1px solid #e0e0e0;
+    border-radius: 2px;
+    background: #f5f5f5;
+}
+
+/* override MathJax center alignment in output cells */
+div.nboutput.container div[class*=MathJax] {
+    text-align: left !important;
+}
+
+/* override sphinx.ext.imgmath center alignment in output cells */
+div.nboutput.container div.math p {
+    text-align: left;
+}
+
+/* standard error */
+div.nboutput.container div.output_area.stderr {
+    background: #fdd;
+}
+
+/* ANSI colors */
+.ansi-black-fg { color: #3E424D; }
+.ansi-black-bg { background-color: #3E424D; }
+.ansi-black-intense-fg { color: #282C36; }
+.ansi-black-intense-bg { background-color: #282C36; }
+.ansi-red-fg { color: #E75C58; }
+.ansi-red-bg { background-color: #E75C58; }
+.ansi-red-intense-fg { color: #B22B31; }
+.ansi-red-intense-bg { background-color: #B22B31; }
+.ansi-green-fg { color: #00A250; }
+.ansi-green-bg { background-color: #00A250; }
+.ansi-green-intense-fg { color: #007427; }
+.ansi-green-intense-bg { background-color: #007427; }
+.ansi-yellow-fg { color: #DDB62B; }
+.ansi-yellow-bg { background-color: #DDB62B; }
+.ansi-yellow-intense-fg { color: #B27D12; }
+.ansi-yellow-intense-bg { background-color: #B27D12; }
+.ansi-blue-fg { color: #208FFB; }
+.ansi-blue-bg { background-color: #208FFB; }
+.ansi-blue-intense-fg { color: #0065CA; }
+.ansi-blue-intense-bg { background-color: #0065CA; }
+.ansi-magenta-fg { color: #D160C4; }
+.ansi-magenta-bg { background-color: #D160C4; }
+.ansi-magenta-intense-fg { color: #A03196; }
+.ansi-magenta-intense-bg { background-color: #A03196; }
+.ansi-cyan-fg { color: #60C6C8; }
+.ansi-cyan-bg { background-color: #60C6C8; }
+.ansi-cyan-intense-fg { color: #258F8F; }
+.ansi-cyan-intense-bg { background-color: #258F8F; }
+.ansi-white-fg { color: #C5C1B4; }
+.ansi-white-bg { background-color: #C5C1B4; }
+.ansi-white-intense-fg { color: #A1A6B2; }
+.ansi-white-intense-bg { background-color: #A1A6B2; }
+
+.ansi-default-inverse-fg { color: #FFFFFF; }
+.ansi-default-inverse-bg { background-color: #000000; }
+
+.ansi-bold { font-weight: bold; }
+.ansi-underline { text-decoration: underline; }
+
+
+div.nbinput.container div.input_area div[class*=highlight] > pre,
+div.nboutput.container div.output_area div[class*=highlight] > pre,
+div.nboutput.container div.output_area div[class*=highlight].math,
+div.nboutput.container div.output_area.rendered_html,
+div.nboutput.container div.output_area > div.output_javascript,
+div.nboutput.container div.output_area:not(.rendered_html) > img{
+    padding: 5px;
+}
+
+/* fix copybtn overflow problem in chromium (needed for 'sphinx_copybutton') */
+div.nbinput.container div.input_area > div[class^='highlight'],
+div.nboutput.container div.output_area > div[class^='highlight']{
+    overflow-y: hidden;
+}
+
+/* hide copybtn icon on prompts (needed for 'sphinx_copybutton') */
+.prompt a.copybtn {
+    display: none;
+}
+
+/* Some additional styling taken form the Jupyter notebook CSS */
+div.rendered_html table {
+  border: none;
+  border-collapse: collapse;
+  border-spacing: 0;
+  color: black;
+  font-size: 12px;
+  table-layout: fixed;
+}
+div.rendered_html thead {
+  border-bottom: 1px solid black;
+  vertical-align: bottom;
+}
+div.rendered_html tr,
+div.rendered_html th,
+div.rendered_html td {
+  text-align: right;
+  vertical-align: middle;
+  padding: 0.5em 0.5em;
+  line-height: normal;
+  white-space: normal;
+  max-width: none;
+  border: none;
+}
+div.rendered_html th {
+  font-weight: bold;
+}
+div.rendered_html tbody tr:nth-child(odd) {
+  background: #f5f5f5;
+}
+div.rendered_html tbody tr:hover {
+  background: rgba(66, 165, 245, 0.2);
+}
+
+/* CSS overrides for sphinx_rtd_theme */
+
+/* 24px margin */
+.nbinput.nblast.container,
+.nboutput.nblast.container {
+    margin-bottom: 19px;  /* padding has already 5px */
+}
+
+/* ... except between code cells! */
+.nblast.container + .nbinput.container {
+    margin-top: -19px;
+}
+
+.admonition > p:before {
+    margin-right: 4px;  /* make room for the exclamation icon */
+}
+
+/* Fix math alignment, see https://github.com/rtfd/sphinx_rtd_theme/pull/686 */
+.math {
+    text-align: unset;
+}
+</style>
+<a href="dj_intro.ipynb"><button id="download">Download tutorial notebook</button></a>
+<a href="https://github.com/mayofaulkner/ibllib/tree/master/docs/notebooks\dj_intro/dj_intro.ipynb"><button id="github">Github link</button></a>
+<a href="https://colab.research.google.com/github/mayofaulkner/ibllib/blob/gh-pages/notebooks\dj_intro/colab_dj_intro.ipynb"><button id="colab">Colab link</button></a><div class="section" id="Datajoint-Introductory-Tutorial">
+<h1>Datajoint Introductory Tutorial<a class="headerlink" href="#Datajoint-Introductory-Tutorial" title="Permalink to this headline">¶</a></h1>
+<p>In this tutorial we will use datajoint to replicate the analysis we conducted in the <a class="reference external" href="../one_intro/one_intro.html">ONE tutorial</a></p>
+<p>This tutorial assumes that you have setup the unified ibl environment <a class="reference internal" href="../../02_installation.html"><span class="doc">IBL python environment</span></a> and set up your <a class="reference internal" href="../../dj_docs/dj_credentials.html"><span class="doc">Datajoint credentials</span></a>.</p>
+<p>First let’s import datajoint</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">datajoint</span> <span class="k">as</span> <span class="nn">dj</span>
+<span class="c1"># for the purposes of tutorial limit the table print output to 5</span>
+<span class="n">dj</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;display.limit&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">5</span>
+</pre></div>
+</div>
+</div>
+<p>We can access datajoint tables by importing schemas from the IBL-pipeline. Let’s import the <code class="docutils literal notranslate"><span class="pre">subject</span></code> schema</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">ibl_pipeline</span> <span class="kn">import</span> <span class="n">subject</span>
+</pre></div>
+</div>
+</div>
+<p>Within this schema there is a datajoint table called <code class="docutils literal notranslate"><span class="pre">Subject</span></code>. This holds all the information about subjects registered on Alyx under IBL projects. Let’s access this table and look at the first couple of entries</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">subjects</span> <span class="o">=</span> <span class="n">subject</span><span class="o">.</span><span class="n">Subject</span><span class="p">()</span>
+<span class="n">subjects</span>
+</pre></div>
+</div>
+</div>
+<p>Next, we will find the entry in the table for the same subject that we looked at in the ONE tutorial, KS022. To do this we will restrict the <code class="docutils literal notranslate"><span class="pre">Subject</span></code> table by the <code class="docutils literal notranslate"><span class="pre">subject</span> <span class="pre">nickname</span></code></p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">subjects</span> <span class="o">&amp;</span> <span class="s1">&#39;subject_nickname = &quot;KS022&quot;&#39;</span>
+</pre></div>
+</div>
+</div>
+<p>We now want to find information about the behavioural sessions. This information is stored in a table <code class="docutils literal notranslate"><span class="pre">Session</span></code> defined in the <code class="docutils literal notranslate"><span class="pre">acquisition</span></code> schema. Let’s import this schema, access the table and display the first few entries</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">ibl_pipeline</span> <span class="kn">import</span> <span class="n">acquisition</span>
+<span class="n">sessions</span> <span class="o">=</span> <span class="n">acquisition</span><span class="o">.</span><span class="n">Session</span><span class="p">()</span>
+<span class="n">sessions</span>
+</pre></div>
+</div>
+</div>
+<p>If we look at the primary keys (columns with black headings) in the <code class="docutils literal notranslate"><span class="pre">Subjects</span></code> and <code class="docutils literal notranslate"><span class="pre">Sessions</span></code> table, we will notice that both contain <code class="docutils literal notranslate"><span class="pre">subject_uuid</span></code> as a primary key. This means that these two tables can be joined using *****.</p>
+<p>We want to find information about all the sessions that KS022 did in the training phase of the IBL training pipeline. When combining the tables we will therefore restrict the <code class="docutils literal notranslate"><span class="pre">Subject</span></code> table by the <code class="docutils literal notranslate"><span class="pre">subject</span> <span class="pre">nickname</span></code> (as we did before) and the <code class="docutils literal notranslate"><span class="pre">Sessions</span></code> table by the <code class="docutils literal notranslate"><span class="pre">task</span> <span class="pre">protocol</span></code></p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="p">(</span><span class="n">subjects</span> <span class="o">&amp;</span> <span class="s1">&#39;subject_nickname = &quot;KS022&quot;&#39;</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">sessions</span> <span class="o">&amp;</span> <span class="s1">&#39;task_protocol LIKE &quot;%training%&quot;&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>There is a lot of information in this table and we are not interested in all of it for the purposes of our analysis. Let’s just use the <strong>proj</strong> method to restrict the data presented. We do not want any columns from the <code class="docutils literal notranslate"><span class="pre">Subject</span></code> table (apart from the primary keys) and only want <code class="docutils literal notranslate"><span class="pre">session_uuid</span></code> from the <code class="docutils literal notranslate"><span class="pre">Sesssions</span> <span class="pre">table</span></code>. So we can write,</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="p">(</span><span class="n">subjects</span> <span class="o">&amp;</span> <span class="s1">&#39;subject_nickname = &quot;KS022&quot;&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">proj</span><span class="p">()</span> <span class="o">*</span> <span class="p">(</span><span class="n">sessions</span> <span class="o">&amp;</span> <span class="s1">&#39;task_protocol LIKE &quot;%training%&quot;&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">proj</span><span class="p">(</span><span class="s1">&#39;session_uuid&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="admonition note">
+<p class="admonition-title fa fa-exclamation-circle">Note</p>
+<p>In the above expression we first used <strong>proj</strong> and then joined the tables using ** * <strong>. We could have also joined the tables first and then used</strong>proj**,</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span> <span class="p">((</span><span class="n">subjects</span> <span class="o">&amp;</span> <span class="s1">&#39;subject_nickname = &quot;KS022&quot;&#39;</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">sessions</span> <span class="o">&amp;</span> <span class="s1">&#39;task_protocol LIKE &quot;%training%&quot;&#39;</span><span class="p">)</span>
+<span class="p">)</span><span class="o">.</span><span class="n">proj</span><span class="p">(</span><span class="s1">&#39;session_uuid&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>If we look back to the <a class="reference external" href="../one_intro/one_intro.html">ONE tutorial</a> you will notice that we have the same number of training sessions and that <code class="docutils literal notranslate"><span class="pre">session_uuid</span></code> corresponds to what we previously defined as the eID</p>
+<p>Up until now we have been inspecting the content of the tables but do not actually have access to the content. This is because we have not actually read the data from the tables into memory yet. For this we would need to use the <strong>fetch</strong> command. Let’s fetch the <code class="docutils literal notranslate"><span class="pre">session</span> <span class="pre">uuid</span></code> information into a pandas dataframe</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">eids</span> <span class="o">=</span> <span class="p">((</span><span class="n">subjects</span> <span class="o">&amp;</span> <span class="s1">&#39;subject_nickname = &quot;KS022&quot;&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">proj</span><span class="p">()</span> <span class="o">*</span> <span class="p">(</span><span class="n">sessions</span> <span class="o">&amp;</span> <span class="s1">&#39;task_protocol LIKE &quot;%training%&quot;&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">proj</span><span class="p">(</span><span class="s1">&#39;session_uuid&#39;</span><span class="p">)</span>
+       <span class="p">)</span><span class="o">.</span><span class="n">fetch</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s1">&#39;frame&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">eids</span>
+</pre></div>
+</div>
+</div>
+<p>Now that we have access to our list of session eIDs, we can get trial information associated with these sessions. The output from the trials dataset is stored in a table called <code class="docutils literal notranslate"><span class="pre">PyschResults</span></code>. We can import this from the <code class="docutils literal notranslate"><span class="pre">analyses.behaviour</span></code> schema</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">ibl_pipeline.analyses</span> <span class="kn">import</span> <span class="n">behavior</span>
+<span class="n">trials</span> <span class="o">=</span> <span class="n">behavior</span><span class="o">.</span><span class="n">PsychResults</span><span class="p">()</span>
+<span class="n">trials</span>
+</pre></div>
+</div>
+</div>
+<p>Let’s get the trial information for the first day KS022 trained. We will restrict the <code class="docutils literal notranslate"><span class="pre">Sessions</span></code> table by the day 1 eID and combine this with the <code class="docutils literal notranslate"><span class="pre">trials</span></code> table</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">eid_day1</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">session_uuid</span><span class="o">=</span><span class="n">eids</span><span class="p">[</span><span class="s1">&#39;session_uuid&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span>
+<span class="n">trials_day1</span> <span class="o">=</span> <span class="p">((</span><span class="n">sessions</span> <span class="o">&amp;</span> <span class="n">eid_day1</span><span class="p">)</span><span class="o">.</span><span class="n">proj</span><span class="p">()</span> <span class="o">*</span> <span class="n">trials</span><span class="p">)</span><span class="o">.</span><span class="n">fetch</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s1">&#39;frame&#39;</span><span class="p">)</span>
+<span class="n">trials_day1</span>
+</pre></div>
+</div>
+</div>
+<p>Notice how a lot of the metrics that we manually computed from the trials dataset in the previous ONE tutorial have already been computed for us and are available in the <code class="docutils literal notranslate"><span class="pre">trials</span></code> table. This is one advantage of Datajoint, common computations such as performance can be computed when the data is ingested and stored in tables.</p>
+<p>We can find out which visual stimulus contrasts were presented to KS022 on day 1 and how many of each contrast by looking at the <code class="docutils literal notranslate"><span class="pre">signed_contrasts</span></code> and <code class="docutils literal notranslate"><span class="pre">n_trials_stim</span></code> attributes</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">contrasts</span> <span class="o">=</span> <span class="n">trials_day1</span><span class="p">[</span><span class="s1">&#39;signed_contrasts&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">n_contrasts</span> <span class="o">=</span> <span class="n">trials_day1</span><span class="p">[</span><span class="s1">&#39;n_trials_stim&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Visual stimulus contrasts on day 1 = </span><span class="si">{</span><span class="n">contrasts</span> <span class="o">*</span> <span class="mi">100</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No. of each contrast on day 1 = </span><span class="si">{</span><span class="n">n_contrasts</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>We can easily extract the performance by typing</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Correct = </span><span class="si">{</span> <span class="n">trials_day1</span><span class="p">[</span><span class="s1">&#39;performance&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="mi">100</span><span class="si">}</span><span class="s2"> %&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>We can plot the peformance at each contrast by looking at the <code class="docutils literal notranslate"><span class="pre">prob_choose_right</span></code> attribute. The results stored in Datajoint are already expressed in terms of rightward choice, so we don’t need worry about converting any computations</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">contrast_performance</span> <span class="o">=</span> <span class="n">trials_day1</span><span class="p">[</span><span class="s1">&#39;prob_choose_right&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">contrasts</span> <span class="o">*</span> <span class="mi">100</span><span class="p">,</span> <span class="n">contrast_performance</span> <span class="o">*</span> <span class="mi">100</span><span class="p">,</span> <span class="s1">&#39;o-&#39;</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">ms</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span><span class="mi">100</span><span class="p">])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xticks</span><span class="p">([</span><span class="o">*</span><span class="p">(</span><span class="n">contrasts</span> <span class="o">*</span> <span class="mi">100</span><span class="p">)])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Signed contrast (%)&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Rightward choice (%)&#39;</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">contrast_performance</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>Let’s now repeat this for day 15 of training</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">eid_day15</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">session_uuid</span><span class="o">=</span><span class="n">eids</span><span class="p">[</span><span class="s1">&#39;session_uuid&#39;</span><span class="p">][</span><span class="mi">14</span><span class="p">])</span>
+<span class="n">trials_day15</span> <span class="o">=</span> <span class="p">((</span><span class="n">sessions</span> <span class="o">&amp;</span> <span class="n">eid_day15</span><span class="p">)</span><span class="o">.</span><span class="n">proj</span><span class="p">()</span> <span class="o">*</span> <span class="n">trials</span><span class="p">)</span><span class="o">.</span><span class="n">fetch</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s1">&#39;frame&#39;</span><span class="p">)</span>
+<span class="n">contrasts</span> <span class="o">=</span> <span class="n">trials_day15</span><span class="p">[</span><span class="s1">&#39;signed_contrasts&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">n_contrasts</span> <span class="o">=</span> <span class="n">trials_day15</span><span class="p">[</span><span class="s1">&#39;n_trials_stim&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Visual stimulus contrasts on day 1 = </span><span class="si">{</span><span class="n">contrasts</span> <span class="o">*</span> <span class="mi">100</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No. of each contrast on day 1 = </span><span class="si">{</span><span class="n">n_contrasts</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Correct = </span><span class="si">{</span> <span class="n">trials_day15</span><span class="p">[</span><span class="s1">&#39;performance&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="mi">100</span><span class="si">}</span><span class="s2"> %&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="n">contrast_performance</span> <span class="o">=</span> <span class="n">trials_day15</span><span class="p">[</span><span class="s1">&#39;prob_choose_right&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">contrasts</span> <span class="o">*</span> <span class="mi">100</span><span class="p">,</span> <span class="n">contrast_performance</span> <span class="o">*</span> <span class="mi">100</span><span class="p">,</span> <span class="s1">&#39;o-&#39;</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">ms</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span><span class="mi">100</span><span class="p">])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xticks</span><span class="p">([</span><span class="o">*</span><span class="p">(</span><span class="n">contrasts</span> <span class="o">*</span> <span class="mi">100</span><span class="p">)])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Signed contrast (%)&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Rightward choice (%)&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xticks</span><span class="p">(</span><span class="n">rotation</span><span class="o">=</span><span class="mi">90</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">contrast_performance</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>If we compare the results with the ONE tutorial, we will find that we have replicated those results using Datajoint, congratulations!</p>
+<p>You should now be comfortable with the basics of exploring the Datajoint IBL pipeline. More Datajoint tutorials can be found in the <a class="reference external" href="https://github.com/int-brain-lab/IBL-pipeline/tree/master/notebooks/notebooks_tutorial">IBL-Pipeline github</a> or on the <a class="reference external" href="https://jupyter.internationalbrainlab.org/">Datajoint jupyter</a>.</p>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../../05_tutorials.html" class="btn btn-neutral float-right" title="Tutorials" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="../dj_basics/dj_basics.html" class="btn btn-neutral float-left" title="Exploring the IBL Data Pipeline" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, International Brain Laboratory
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

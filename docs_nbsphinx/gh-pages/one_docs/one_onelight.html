@@ -1,0 +1,278 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Accessing data with ONE light &mdash; IBL Library  documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+        <script src="../_static/clipboard.min.js"></script>
+        <script src="../_static/copybutton.js"></script>
+        <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/copybutton.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/style.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="ONE Matlab Installation Guide" href="one_matlab_installation.html" />
+    <link rel="prev" title="ONE Reference" href="one_reference.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home"> IBL Library
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../01_overview.html">IBL data structure</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../02_installation.html">Installation</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../03_one.html">ONE</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="one_introduction.html">Introduction to ONE</a></li>
+<li class="toctree-l2"><a class="reference internal" href="one_credentials.html">Setting up ONE credentials</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../notebooks/one_basics/one_basics.html">ONE basic commands</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../notebooks/one_intro/one_intro.html">ONE Introductory Tutorial</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../notebooks/one_advanced/one_advanced.html">ONE advanced queries</a></li>
+<li class="toctree-l2"><a class="reference internal" href="one_reference.html">ONE Reference</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Accessing data with ONE light</a></li>
+<li class="toctree-l2"><a class="reference internal" href="one_matlab_installation.html">ONE Matlab Installation Guide</a></li>
+<li class="toctree-l2"><a class="reference internal" href="one_matlab_tutorial.html">ONE Tutorial Matlab</a></li>
+</ul>
+</li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../04_datajoint.html">Datajoint</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../05_tutorials.html">Tutorials</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../06_recipes.html">Examples</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../07_developers.html">Python Modules</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">IBL Library</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../03_one.html">ONE</a> &raquo;</li>
+        
+      <li>Accessing data with ONE light</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/one_docs/one_onelight.md.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  
+<style>
+/* CSS overrides for sphinx_rtd_theme */
+
+/* 24px margin */
+.nbinput.nblast.container,
+.nboutput.nblast.container {
+    margin-bottom: 19px;  /* padding has already 5px */
+}
+
+/* ... except between code cells! */
+.nblast.container + .nbinput.container {
+    margin-top: -19px;
+}
+
+.admonition > p:before {
+    margin-right: 4px;  /* make room for the exclamation icon */
+}
+
+/* Fix math alignment, see https://github.com/rtfd/sphinx_rtd_theme/pull/686 */
+.math {
+    text-align: unset;
+}
+</style>
+<div class="section" id="accessing-data-with-one-light">
+<h1>Accessing data with ONE light<a class="headerlink" href="#accessing-data-with-one-light" title="Permalink to this headline">¶</a></h1>
+<p>ONE light is an implementation of ONE that can be used independently of the full IBL data architecture. Providing data
+is hierachically organised into sub-folders and file-names that match the ONE convention, ONE light can use the same
+<a class="reference internal" href="../notebooks/one_basics/one_basics.html"><span class="doc std std-doc">basic ONE commands</span></a> to search for and load data of interest. ONE light
+supports data that has been uploaded to a webserver, to figshare (a site offering free hosting of scientific data) or
+that is stored on a user’s local machine. For an example implementation of ONE Light and more information about how to
+use this interface to automatically upload data to figshare, please refer to this
+<a class="reference external" href="https://github.com/int-brain-lab/ibllib/tree/onelight/">page</a>.</p>
+<p>The behavioural data associated with the IBL paper: <a class="reference external" href="https://doi.org/10.1101/2020.01.17.909838">A standardized and reproducible method to measure decision-making
+in mice</a> has been made available through the ONE Light interface. To get
+started use ONE Light with this data, download <code class="docutils literal notranslate"><span class="pre">**ibl-behavior-data-Dec2019.zip**</span></code> onto your local computer from
+<a class="reference external" href="https://figshare.com/articles/A_standardized_and_reproducible_method_to_measure_decision-making_in_mice_Data/11636748">here</a>
+and follow this <a class="reference external" href="https://mybinder.org/v2/gh/int-brain-lab/paper-behavior-binder/master?filepath=one_example.ipynb">tutorial</a>.</p>
+<p>You can also check out this
+<a class="reference external" href="https://colab.research.google.com/drive/19BTZT1zsduLXdT9GGbVzIw1g3Lt38VfW?usp=sharing">google colab notebook</a> that uses
+ONE Light with the IBL behavioural data to replicate the figures presented in this
+<a class="reference external" href="https://doi.org/10.1101/2020.05.21.109678">paper</a>.</p>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="one_matlab_installation.html" class="btn btn-neutral float-right" title="ONE Matlab Installation Guide" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="one_reference.html" class="btn btn-neutral float-left" title="ONE Reference" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, International Brain Laboratory
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

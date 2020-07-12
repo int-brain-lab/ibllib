@@ -1,0 +1,282 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# ONE basic commands\n",
+    "\n",
+    "There are four main ONE methods that can be used to search for and download data. Here we provide an introduction to these commands using some simple example implementations. Before proceeding make sure that you have installed the [IBL python environment](../../02_installation.md) and set up your [ONE credentials](../../one_docs/one_credentials.md)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 1. Importing ONE\n",
+    "To use ONE, we must first import the module and instantiate the ONE class. This can be done using the following commands\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from oneibl.one import ONE\n",
+    "one = ONE()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "<div class=\"alert alert-info\">\n",
+    "\n",
+    "Note\n",
+    "\n",
+    "If you are trying to connect through your personal IP address you may recieve the following error\n",
+    "\n",
+    "```\n",
+    "ConnectionError: Can't connect to https://alyx.internationalbrainlab.org.\n",
+    "IP addresses are filtered on IBL database servers.\n",
+    "Are you connecting from an IBL participating institution ?\n",
+    "```\n",
+    "If so, make sure you VPN into an IBL institution network\n",
+    "\n",
+    "</div>\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 2. Searching for data\n",
+    "\n",
+    "Each experimental session is identified by a unique string known as an experiment ID (eID). To search for experiments, we can use the `one.search` command. This will return a list of eIDs that match the search criterion. \n",
+    "\n",
+    "The possible searchable fields can be listed using the method"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "one.search_terms()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Let's search for the experiments performed with the subject KS022 on the 10 December 2019"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "eid = one.search(subject='KS022', date_range=['2019-12-10', '2019-12-10'])[0]\n",
+    "print(f\"experiment ID = {eid}\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "To get more information about the returned sessions, we can add in a `details` flag"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "eids, ses_info = one.search(subject='KS022', date_range=['2019-12-10', '2019-12-10'], details=True)\n",
+    "eid = eids[0]\n",
+    "\n",
+    "from ibllib.misc import pprint\n",
+    "pprint(ses_info[0])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 3. Listing available data\n",
+    "\n",
+    "Once the eID of the session of interest is known, we can list the available datasets using the `one.list` command"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "one.list(eid)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "We can set the `details` flag to True to return more information about each dataset"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "data_details = one.list(eid, details=True)\n",
+    "data_details[0]"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "We can also use the `one.list` command to help us navigate the database by finding the list of possible keywords that we can use to refine our search for sessions. For example, to list the labs available, we can type"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "one.list(None, 'labs')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 4. Loading data\n",
+    "\n",
+    "Once we have information about the session eID and the list of available dataset types we can use the `one.load` function to download the data from FlatIron. Let's download the `clusters.amps` and `clusters.depths` datasets\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "dataset_types = ['clusters.amps', 'clusters.depths']\n",
+    "amps0, depths0, amps1, depths1 = one.load(eid, dataset_types=dataset_types)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "<div class=\"alert alert-info\">\n",
+    "\n",
+    "Note\n",
+    "\n",
+    "Loading `clusters.amps` and `clusters.depths` returned four variables. This is because there is electrophysiology data for two different probes for this session.\n",
+    "\n",
+    "</div>"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "To find out more details about what is being downloaded we can return a data class that contains information about each of the downloaded datasets. This can be added by setting the `dclass_output` argument to True. "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "data = one.load(eid, dataset_types=dataset_types, dclass_output=True)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "We have access to the following information"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "data.__dict__.keys()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "For example if we look at the local_path we will see that the data has come from two different probes, `probe00` and `probe01`"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "data.local_path"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "<div class=\"alert alert-info\">\n",
+    "\n",
+    "Tip\n",
+    "\n",
+    "To find out more information about the ONE functions and the arguments that can be parsed we can use the help command. For example we can type\n",
+    "\n",
+    "</div>"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "help(one.load)"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.7.7"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}
