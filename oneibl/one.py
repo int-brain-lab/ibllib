@@ -107,7 +107,8 @@ def _ses2pandas(ses, dtypes=None):
     include = ['id', 'hash', 'dataset_type', 'name', 'file_size', 'collection']
     uuid_fields = ['id', 'eid']
     join = {'subject': ses['subject'], 'lab': ses['lab'], 'eid': ses['url'][-36:],
-            'start_time': np.datetime64(ses['start_time']), 'number': ses['number']}
+            'start_time': np.datetime64(ses['start_time']), 'number': ses['number'],
+            'task_protocol': ses['task_protocol']}
     col = parquet.rec2col(rec, include=include, uuid_fields=uuid_fields, join=join).to_df()
 
     return col
