@@ -10,7 +10,7 @@ sys.path.insert(1, scripts_path)
 from execute_notebooks import process_notebooks  # noqa: E402
 
 nb_path = os.path.join(root, 'notebooks')
-nb_path_external = os.path.join(Path(root).parent, 'examples_test')
+nb_path_external = os.path.join(Path(root).parent, 'examples', 'one', 'notebooks')
 
 
 def make_documentation(execute, documentation, clean, github, message):
