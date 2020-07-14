@@ -1,9 +1,8 @@
-recommonmark
 nbconvert
 sphinx_rtd_theme
 sphinx
 jupyter-client
 ipykernel
 nbsphinx
+nbsphinx-link
 myst_parser
-pydotplus #for dj diagram

@@ -6,6 +6,6 @@ Below is a list of short examples
 .. toctree::
    :maxdepth: 1
 
-   notebooks_external/raster/raster
-   notebooks_external/juyper/juyper
+   notebooks_external/visualisation_coronal
+   notebooks_external/visualisation_3D
 

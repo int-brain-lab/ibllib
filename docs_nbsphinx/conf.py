@@ -26,7 +26,7 @@ sys.path.append(os.path.join(os.path.dirname(__name__), '..'))
 
 
 print('Python %s on %s' % (sys.version, sys.platform))
-#print(sys.path)
+# print(sys.path)
 
 # -- Project information -----------------------------------------------------
 
@@ -58,11 +58,6 @@ extensions = ['sphinx.ext.autodoc',
               'nbsphinx_link',
               'myst_parser',
               'sphinx.ext.napoleon']
-              # 'sphinx_automodapi.automodapi'
-              # 'sphinx.ext.inheritance_diagram',
-              # 'sphinx_automodapi.automodapi',
-              # 'sphinx_rtd_theme',
-              # 'recommonmark']
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -216,10 +211,9 @@ nbsphinx_prolog = r"""
 {% endif %}
 
 .. raw:: html
-    
+
       <a href="{{ nb_name }}"><button id="download">Download tutorial notebook</button></a>
-      <a href="https://github.com/mayofaulkner/ibllib/tree/master/docs/{{ nb_path }}/{{ nb_name }}"><button id="github">Github link</button></a>
+      <a href="https://github.com/mayofaulkner/ibllib/tree/docsMayo/docs_nbsphinx/{{ nb_path }}/
+      {{ nb_name }}"><button id="github">Github link</button></a>
 
 """
-
-

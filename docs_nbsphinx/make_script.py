@@ -7,10 +7,11 @@ from pathlib import Path
 root = os.path.abspath(os.path.join(os.path.dirname(__file__)))
 scripts_path = os.path.join(root, 'scripts')
 sys.path.insert(1, scripts_path)
-from execute_notebooks import process_notebooks
+from execute_notebooks import process_notebooks  # noqa: E402
 
 nb_path = os.path.join(root, 'notebooks')
 nb_path_external = os.path.join(Path(root).parent, 'examples_test')
+
 
 def make_documentation(execute, documentation, clean, github, message):
 
@@ -31,26 +32,26 @@ def make_documentation(execute, documentation, clean, github, message):
     process_notebooks(build_nb_path, execute=False, cleanup=True)
     process_notebooks(build_nb_external_path, execute=False, cleanup=True)
 
+    # Clean up notebooks in directory if also specified
     if clean:
-    # Clean up notebooks both in directory if also specified
         print("Cleaning up notebooks")
         process_notebooks(nb_path, execute=False, cleanup=True)
         process_notebooks(nb_path_external, execute=False, cleanup=True)
 
+    # If github is True push the latest documentation to gh-pages
     if github:
         # Need to figure out how to do this
         if not message:
-            message = "commit now"
-        subprocess.call(['scripts\gh_push.sh', message], shell=True)
-        #os.remove(os.path.join(root, 'gh-pages'))
+            message = "commit latest documentation"
+
+        subprocess.call(['scripts\gh_push.sh', message], shell=True)  # noqa: E605
+
 
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Make IBL documentation')
 
-    #parser.add_argument('-e', '--execute', default=True, required=False, action='store_true',
-    #                    help='Execute notebooks')
     parser.add_argument('-e', '--execute', default=False, action='store_true',
                         help='Execute notebooks')
     parser.add_argument('-d', '--documentation', default=False, action='store_true',

@@ -2,12 +2,12 @@ import os
 import json
 import time
 import numpy as np
-
 from nbconvert.preprocessors import (ExecutePreprocessor, CellExecutionError,
                                      ClearOutputPreprocessor)
 from nbconvert.exporters import RSTExporter
 from nbconvert.writers import FilesWriter
 import nbformat
+import shutil
 
 IPYTHON_VERSION = 4
 
@@ -41,6 +41,7 @@ class NotebookConverter(object):
         self.nb = os.path.basename(self.nb_path)
         self.nb_dir = os.path.dirname(self.nb_path)
         self.nb_name, _ = os.path.splitext(self.nb)
+        self.overwrite = overwrite
 
         # If no output path is specified save everything into directory containing notebook
         if output_path is not None:
@@ -63,8 +64,9 @@ class NotebookConverter(object):
         self.colab_nb_path = os.path.join(self.output_path, f'colab_{self.nb}')
 
         # If overwrite is True, write the executed notebook to the same name as the notebook
-        if overwrite:
+        if self.overwrite:
             self.executed_nb_path = os.path.join(self.output_path, self.nb)
+            self.temp_nb_path = os.path.join(self.output_path, f'executed_{self.nb}')
         else:
             self.executed_nb_path = os.path.join(self.output_path, f'executed_{self.nb}')
 
@@ -110,8 +112,15 @@ class NotebookConverter(object):
 
         if write:
             print(f"Writing executed notebook to {self.executed_nb_path}")
-            with open(self.executed_nb_path, 'w') as f:
-                nbformat.write(nb, f)
+            # Makes sure original notebook isn't left blank in case of error during writing
+            if self.overwrite:
+                with open(self.temp_nb_path, 'w', encoding='utf-8') as f:
+                    nbformat.write(nb, f)
+                shutil.copyfile(self.temp_nb_path, self.executed_nb_path)
+                os.remove(self.temp_nb_path)
+            else:
+                with open(self.executed_nb_path, 'w', encoding='utf-8') as f:
+                    nbformat.write(nb, f)
 
         return self.executed_nb_path
 
@@ -241,7 +250,11 @@ def process_notebooks(nbfile_or_path, execute=True, cleanup=False, rst=False, co
 
                 # skip checkpoints
                 if 'ipynb_checkpoints' in full_path:
-                    continue
+                    if cleanup:
+                        os.remove(full_path)
+                        continue
+                    else:
+                        continue
 
                 # if name starts with 'exec' and cleanup=True delete the notebook
                 if name.startswith('exec'):
