@@ -3,7 +3,7 @@ import logging
 import numpy as np
 
 from ibllib.io.extractors.training_trials import (
-    StimOnOffFreezeTimes, Choice, FeedBackType, Intervals, StimOnTriggerTimes, StimOnTimes,
+    StimOnOffFreezeTimes, Choice, FeedbackType, Intervals, StimOnTriggerTimes, StimOnTimes,
     StimOffTriggerTimes, StimFreezeTriggerTimes, GoCueTriggerTimes, GoCueTimes,
     ErrorCueTriggerTimes, RewardVolume, ResponseTimes, FeedbackTimes, ItiInTimes,
     run_extractor_classes
@@ -15,71 +15,6 @@ from ibllib.io.extractors.training_wheel import get_wheel_position
 _logger = logging.getLogger("ibllib")
 
 
-def get_bpod_fronts(session_path, save=False, data=False, settings=False):
-    if not data:
-        data = raw.load_data(session_path)
-    if not settings:
-        settings = raw.load_settings(session_path)
-    if settings is None:
-        settings = {"IBLRIG_VERSION_TAG": "100.0.0"}
-    elif settings["IBLRIG_VERSION_TAG"] == "":
-        settings.update({"IBLRIG_VERSION_TAG": "100.0.0"})
-
-    BNC1_fronts = np.array([[np.nan, np.nan]])
-    BNC2_fronts = np.array([[np.nan, np.nan]])
-    for tr in data:
-        BNC1_fronts = np.append(
-            BNC1_fronts,
-            np.array(
-                [
-                    [x, 1]
-                    for x in tr["behavior_data"]["Events timestamps"].get("BNC1High", [np.nan])
-                ]
-            ),
-            axis=0,
-        )
-        BNC1_fronts = np.append(
-            BNC1_fronts,
-            np.array(
-                [
-                    [x, -1]
-                    for x in tr["behavior_data"]["Events timestamps"].get("BNC1Low", [np.nan])
-                ]
-            ),
-            axis=0,
-        )
-        BNC2_fronts = np.append(
-            BNC2_fronts,
-            np.array(
-                [
-                    [x, 1]
-                    for x in tr["behavior_data"]["Events timestamps"].get("BNC2High", [np.nan])
-                ]
-            ),
-            axis=0,
-        )
-        BNC2_fronts = np.append(
-            BNC2_fronts,
-            np.array(
-                [
-                    [x, -1]
-                    for x in tr["behavior_data"]["Events timestamps"].get("BNC2Low", [np.nan])
-                ]
-            ),
-            axis=0,
-        )
-
-    BNC1_fronts = BNC1_fronts[1:, :]
-    BNC1_fronts = BNC1_fronts[BNC1_fronts[:, 0].argsort()]
-    BNC2_fronts = BNC2_fronts[1:, :]
-    BNC2_fronts = BNC2_fronts[BNC2_fronts[:, 0].argsort()]
-
-    BNC1 = {"times": BNC1_fronts[:, 0], "polarities": BNC1_fronts[:, 1]}
-    BNC2 = {"times": BNC2_fronts[:, 0], "polarities": BNC2_fronts[:, 1]}
-
-    return [BNC1, BNC2]
-
-
 # --------------------------------------------------------------------------- #
 def extract_bpod_trial_data(session_path, raw_bpod_trials=None, raw_settings=None):
     """Extracts and loads ephys sessions from bpod data"""
@@ -87,7 +22,7 @@ def extract_bpod_trial_data(session_path, raw_bpod_trials=None, raw_settings=Non
     raw_bpod_trials = raw_bpod_trials or raw.load_data(session_path)
     raw_settings = raw_settings or raw.load_settings(session_path)
     classes = (
-        StimOnOffFreezeTimes, Choice, FeedBackType, Intervals, StimOnTriggerTimes, StimOnTimes,
+        StimOnOffFreezeTimes, Choice, FeedbackType, Intervals, StimOnTriggerTimes, StimOnTimes,
         StimOffTriggerTimes, StimFreezeTriggerTimes, GoCueTriggerTimes, GoCueTimes,
         ErrorCueTriggerTimes, RewardVolume, ResponseTimes, FeedbackTimes, ItiInTimes,
         ProbaContrasts
@@ -124,9 +59,7 @@ class BpodQCExtractor(object):
         _logger.info(f"Loading raw data from {self.session_path}")
         self.raw_data = raw.load_data(self.session_path)
         self.details = raw.load_settings(self.session_path)
-        self.BNC1, self.BNC2 = get_bpod_fronts(
-            self.session_path, data=self.raw_data, settings=self.details
-        )
+        self.BNC1, self.BNC2 = raw.load_bpod_fronts(self.session_path, data=self.raw_data)
         # NOTE: wheel_position is actually an extractor needs _iblrig_encoderPositions.raw
         # to be there but not as input... FIXME: we should have the extractor use the data
         # without assuming it's there

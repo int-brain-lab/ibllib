@@ -1,7 +1,7 @@
+import concurrent.futures
 import logging
 import os
 from pathlib import Path, PurePath
-import concurrent.futures
 
 import requests
 import tqdm
@@ -14,7 +14,6 @@ from ibllib.io import hashfile
 from ibllib.io.one import OneAbstract
 from ibllib.misc import pprint
 from oneibl.dataclass import SessionDataInfo
-
 
 _logger = logging.getLogger('ibllib')
 

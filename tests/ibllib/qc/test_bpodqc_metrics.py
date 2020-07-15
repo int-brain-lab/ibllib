@@ -1,12 +1,13 @@
 # Mock dataset
 import unittest
 from functools import partial
+
 import numpy as np
 
-from ibllib.qc import bpodqc_metrics as qcmetrics
 from ibllib.qc import BpodQC
-from oneibl.one import ONE
+from ibllib.qc import bpodqc_metrics as qcmetrics
 from ibllib.qc.oneutils import download_bpodqc_raw_data
+from oneibl.one import ONE
 
 one = ONE(
     base_url="https://test.alyx.internationalbrainlab.org",
@@ -294,6 +295,40 @@ class TestBpodQCMetrics(unittest.TestCase):
         self.data["rewardVolume"][id] = 4.0
         metric, passed = qcmetrics.load_reward_volumes(self.data)
         self.assertTrue(np.nanmean(passed) == 0.2, "failed to detect incorrect reward volume")
+
+    def test_load_audio_pre_trial(self):
+        # Create Sound sync fake data that is OK
+        BNC2_OK = {
+            "times": self.data["goCue_times"] + 1e-1,
+            "polarities": np.array([1, -1, 1, -1, 1]),
+        }
+        # Create Sound sync fake data that is NOT OK
+        BNC2_NOK = {
+            "times": self.data["goCue_times"] - 1e-1,
+            "polarities": np.array([1, -1, 1, -1, 1]),
+        }
+        metric, passed = qcmetrics.load_audio_pre_trial(self.data, BNC2=BNC2_OK)
+        self.assertTrue(~np.all(metric))
+        self.assertTrue(np.all(passed))
+        metric, passed = qcmetrics.load_audio_pre_trial(self.data, BNC2=BNC2_NOK)
+        self.assertTrue(np.all(metric))
+        self.assertTrue(~np.all(passed))
+
+    @unittest.skip("not implemented")
+    def test_load_wheel_freeze_during_quiescence(self):
+        pass
+
+    @unittest.skip("not implemented")
+    def test_load_wheel_move_before_feedback(self):
+        pass
+
+    @unittest.skip("not implemented")
+    def test_load_wheel_move_during_closed_loop(self):
+        pass
+
+    @unittest.skip("not implemented")
+    def test_load_stimulus_move_before_goCue(self):
+        pass
 
 
 if __name__ == "__main__":

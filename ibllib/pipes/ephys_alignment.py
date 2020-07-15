@@ -28,7 +28,7 @@ class EphysAlignment:
         sampling_trk = np.arange(self.track_extent[0],
                                  self.track_extent[-1] - 10 * 1e-6, 10 * 1e-6)
         self.xyz_samples = histology.interpolate_along_track(self.xyz_track,
-                                                        sampling_trk - sampling_trk[0])
+                                                             sampling_trk - sampling_trk[0])
 
         self.region, self.region_label, self.region_colour, self.region_id\
             = self.get_histology_regions(self.xyz_samples, sampling_trk)

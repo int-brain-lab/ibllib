@@ -3,7 +3,7 @@ import numpy as np
 import requests
 from pathlib import Path
 
-import ibllib.io.hashfile
+import ibllib.io.hashfile as hashfile
 from alf.io import remove_uuid_file
 from oneibl.one import ONE
 
@@ -208,7 +208,7 @@ class TestLoad(unittest.TestCase):
         file = one.load(eid, dataset_types=['channels.localCoordinates'], download_only=True,
                         clobber=True)[0]
         fsize = file.stat().st_size
-        hash = ibllib.io.hashfile.md5(file)
+        hash = hashfile.md5(file)
         data_server = np.load(file)
         # overwrite the local file
         np.save(file, np.zeros([25, 0]))

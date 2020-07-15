@@ -5,6 +5,7 @@ import io
 import importlib
 import time
 from _collections import OrderedDict
+import traceback
 
 from graphviz import Digraph
 
@@ -14,29 +15,6 @@ from oneibl.registration import register_dataset
 
 
 _logger = logging.getLogger('ibllib')
-
-
-def alyx_setup_teardown(run):
-    """
-    Performs the job loading using Alyx
-    """
-    def wrapper(*args, **kwargs):
-        self = args[0]
-        # if taskid of one properties are not available, local run only
-        if self.one is None or self.taskid is None:
-            return run(*args, **kwargs)
-        # setup
-        self.one.alyx.rest('tasks', 'partial_update', id=self.taskid, data={'status': 'Started'})
-        # run
-        out = run(*args, **kwargs)
-        # teardown
-        if self.outputs:
-            register_dataset(self.outputs, one=self.one)
-        status = 'Complete' if self.status == 0 else 'Errored'
-        self.one.alyx.rest('tasks', 'partial_update', id=self.taskid,
-                           data={'status': status, 'log': self.log})
-        return out
-    return wrapper
 
 
 class Task(abc.ABC):
@@ -54,10 +32,10 @@ class Task(abc.ABC):
     version = version.ibllib()
 
     def __init__(self, session_path, parents=None, taskid=None, one=None):
-        assert session_path
         self.taskid = taskid
         self.one = one
         self.session_path = session_path
+        self.register_kwargs = {}
         if parents:
             self.parents = parents
         else:
@@ -67,7 +45,6 @@ class Task(abc.ABC):
     def name(self):
         return self.__class__.__name__
 
-    @alyx_setup_teardown
     def run(self, **kwargs):
         """
         --- do not overload, see _run() below---
@@ -75,6 +52,11 @@ class Task(abc.ABC):
         -   error management
         -   logging to variable
         """
+        # if taskid of one properties are not available, local run only without alyx
+        use_alyx = self.one is not None and self.taskid is not None
+        if use_alyx:
+            self.one.alyx.rest('tasks', 'partial_update',
+                               id=self.taskid, data={'status': 'Started'})
         # setup
         self.setUp()
         # Setup the console handler with a StringIO object
@@ -90,8 +72,8 @@ class Task(abc.ABC):
             self.outputs = self._run(**kwargs)
             self.status = 0
             _logger.info(f"Job {self.__class__} complete")
-        except Exception as e:
-            _logger.error(f"{e}")
+        except BaseException:
+            _logger.error(traceback.format_exc())
             _logger.info(f"Job {self.__class__} errored")
             self.status = -1
         self.time_elapsed_secs = time.time() - start_time
@@ -102,9 +84,21 @@ class Task(abc.ABC):
         _logger.removeHandler(ch)
         # tear down
         self.tearDown()
+        # teardown
+        if use_alyx:
+            status = 'Complete' if self.status == 0 else 'Errored'
+            self.one.alyx.rest('tasks', 'partial_update', id=self.taskid,
+                               data={'status': status, 'log': self.log})
         return self.status
 
-    def register_datasets(self, one=None, jobid=None):
+    def register_datasets(self, one=None, jobid=None, **kwargs):
+        """
+        Register output datasets form the task to Alyx
+        :param one:
+        :param jobid:
+        :param kwargs: directly passed to the register_dataset function
+        :return:
+        """
         assert one
         assert jobid
         if self.outputs:
@@ -112,7 +106,7 @@ class Task(abc.ABC):
                 versions = [self.version for _ in self.outputs]
             else:
                 versions = [self.version]
-            return register_dataset(self.outputs, one=one, versions=versions)
+            return register_dataset(self.outputs, one=one, versions=versions, **kwargs)
 
     def rerun(self):
         self.run(overwrite=True)
@@ -144,13 +138,19 @@ class Task(abc.ABC):
 
 
 class Pipeline(abc.ABC):
+    """
+    Pipeline class: collection of related and potentially interdependent tasks
+    """
     tasks = OrderedDict()
     one = None
 
-    def __init__(self, session_path=None, one=None):
+    def __init__(self, session_path=None, one=None, eid=None):
+        assert session_path or eid
         self.one = one
-        self.session_path = session_path
-        self.eid = one.eid_from_path(session_path) if self.one else None
+        self.eid = eid
+        if session_path:
+            self.session_path = session_path
+            self.eid = one.eid_from_path(session_path) if self.one else None
         self.label = self.__module__ + '.' + type(self).__name__
 
     def make_graph(self, out_dir=None, show=True):
@@ -187,14 +187,18 @@ class Pipeline(abc.ABC):
         :param rerun__status__in: by default no re-run. To re-run tasks if they already exist,
         specify a list of statuses string that will be re-run, those are the possible choices:
         ['Waiting', 'Started', 'Errored', 'Empty', 'Complete']
+        to always patch, the string '__all__' can also be provided
         :return: list of alyx tasks dictionaries (existing and or created)
         """
         rerun__status__in = rerun__status__in or []
+        if rerun__status__in == '__all__':
+            rerun__status__in = ['Waiting', 'Started', 'Errored', 'Empty', 'Complete']
         assert self.eid
         if self.one is None:
             _logger.warning("No ONE instance found for Alyx connection, set the one property")
             return
-        tasks_alyx = self.one.alyx.rest('tasks', 'list', session=self.eid)
+        tasks_alyx_pre = self.one.alyx.rest('tasks', 'list', session=self.eid, graph=self.name)
+        tasks_alyx = []
         # creates all the tasks by iterating through the ordered dict
         for k, t in self.tasks.items():
             # get the parents alyx ids to reference in the database
@@ -207,47 +211,56 @@ class Pipeline(abc.ABC):
                          'io_charge': t.io_charge, 'gpu': t.gpu, 'cpu': t.cpu,
                          'ram': t.ram, 'module': self.label, 'parents': parents_ids,
                          'level': t.level, 'time_out_sec': t.time_out_secs, 'session': self.eid,
-                         'status': 'Waiting', 'log': None, 'name': t.name}
+                         'status': 'Waiting', 'log': None, 'name': t.name, 'graph': self.name}
             # if the task already exists, patch it otherwise, create it
-            talyx = next(filter(lambda x: x["name"] == t.name, tasks_alyx), [])
+            talyx = next(filter(lambda x: x["name"] == t.name, tasks_alyx_pre), [])
             if len(talyx) == 0:
                 talyx = self.one.alyx.rest('tasks', 'create', data=task_dict)
-            elif talyx['status'] in rerun__status__in:
+            elif rerun__status__in == '__all__' or talyx['status'] in rerun__status__in:
                 talyx = self.one.alyx.rest(
-                    'tasks', 'partial_update', id=talyx[0]['id'], data=task_dict)
+                    'tasks', 'partial_update', id=talyx['id'], data=task_dict)
             tasks_alyx.append(talyx)
         return tasks_alyx
 
-    def run(self, status__in=['Waiting']):
+    def run(self, status__in=['Waiting'], **kwargs):
         """
         Get all the session related jobs from alyx and run them
+        :param status__in: lists of status strings to run in
+        ['Waiting', 'Started', 'Errored', 'Empty', 'Complete']
+        :param kwargs: arguments passed downstream to run_alyx_task
         :return: jalyx: list of REST dictionaries of the job endpoints
         :return: job_deck: list of REST dictionaries of the jobs endpoints
         :return: all_datasets: list of REST dictionaries of the dataset endpoints
         """
+        assert self.session_path, "Pipeline object has to be declared with a session path to run"
         if self.one is None:
             _logger.warning("No ONE instance found for Alyx connection, set the one property")
             return
         task_deck = self.one.alyx.rest('tasks', 'list', session=self.eid)
+        # [(t['name'], t['level']) for t in task_deck]
         all_datasets = []
         for i, j in enumerate(task_deck):
             if j['status'] not in status__in:
                 continue
             # here we update the status in-place to avoid another hit to the database
-            task_deck[i], dsets = _run_alyx_task(tdict=j, session_path=self.session_path,
-                                                 one=self.one, job_deck=task_deck)
+            task_deck[i], dsets = run_alyx_task(tdict=j, session_path=self.session_path,
+                                                one=self.one, job_deck=task_deck, **kwargs)
             if dsets is not None:
                 all_datasets.extend(dsets)
         return task_deck, all_datasets
 
     def rerun_failed(self):
-        return self.run(status__in=['Waiting', 'Started', 'Errored', 'Empty'])
+        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty'])
 
     def rerun(self):
-        return self.run(status__in=['Waiting', 'Started', 'Errored', 'Empty', 'Complete'])
+        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete'])
+
+    @property
+    def name(self):
+        return self.__class__.__name__
 
 
-def _run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None):
+def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None, max_md5_size=None):
     """
     Runs a single Alyx job and registers output datasets
     :param tdict:
@@ -256,6 +269,8 @@ def _run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None):
     :param job_deck: optional list of job dictionaries belonging to the session. Needed
     to check dependency status if the jdict has a parent field. If jdict has a parent and
     job_deck is not entered, will query the database
+    :param max_md5_size: in bytes, if specified, will not compute the md5 checksum above a given
+    filesize to save time
     :return:
     """
     registered_dsets = []
@@ -264,9 +279,16 @@ def _run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None):
         if not job_deck:
             job_deck = one.alyx.rest('tasks', 'list', session=tdict['session'])
         # check the dependencies
-        if not all(list(map(lambda x: x['status'] == 'Complete',
-                            filter(lambda x: x['id'] in tdict['parents'], job_deck)))):
+        parent_tasks = filter(lambda x: x['id'] in tdict['parents'], job_deck)
+        parent_statuses = [j['status'] for j in parent_tasks]
+        # if any of the parent tasks is not complete, throw a warning
+        if any(map(lambda s: s != 'Complete', parent_statuses)):
             _logger.warning(f"{tdict['name']} has unmet dependencies")
+            # if parents are just waiting, don't do anything, but if they have a failed status
+            # set the current task status to Held
+            if any(map(lambda s: s in ['Errored', 'Held', 'Empty'], parent_statuses)):
+                tdict = one.alyx.rest('tasks', 'partial_update', id=tdict['id'],
+                                      data={'status': 'Held'})
             return tdict, registered_dsets
     # creates the job from the module name in the database
     exec_name = tdict['executable']
@@ -284,7 +306,8 @@ def _run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None):
         if task.outputs is None:
             patch_data['status'] = 'Empty'
         else:  # otherwise register data and set status to Complete
-            registered_dsets = task.register_datasets(one=one, jobid=tdict['id'])
+            registered_dsets = task.register_datasets(
+                one=one, jobid=tdict['id'], max_md5_size=max_md5_size)
             patch_data['status'] = 'Complete'
     elif status == -1:
         patch_data['status'] = 'Errored'

@@ -1,4 +1,5 @@
 import logging
+
 import numpy as np
 
 from oneibl.one import ONE
@@ -63,6 +64,7 @@ def load_nDatasetTypes(eid):
     Metric: len(one.load(eid, offline=True, download_only=True)) / nExpetedDatasetTypes
     (hardcoded per task?)
     """
+    log.warning("QC test not implemented: nDatasetTypes")
     out = {"_one_nDatasetTypes": (None, None)}
     return out
 
@@ -91,6 +93,7 @@ def load_dstype_qc_metrics(
     # Load dset data from ONE
     dset = one.load(eid, dataset_types=dstype_name)[0]
     if dset is None:
+        log.warning(f"ONE datasetType not found: {dstype_name}")
         return out
     # Define length and count as metric
     # Define criteria is applies output normalized len and count

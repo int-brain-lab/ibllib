@@ -280,8 +280,8 @@ def load_wheel_move_during_closed_loop(trial_data, wheel_data, wheel_gain):
     """ Wheel should move a sufficient amount during the closed-loop period
     Variable name: wheel_move_during_closed_loop
     Metric: abs(w_resp - w_t0) - threshold_displacement, where w_resp = position at response
-      time, w_t0 = position at go cue time, threshold_displacement = displacement required to move
-      35 visual degrees
+        time, w_t0 = position at go cue time, threshold_displacement = displacement required to
+        move 35 visual degrees
     Criterion: displacement < 1 visual degree for 99% of non-NoGo trials
     """
     if wheel_gain is None:
@@ -300,9 +300,11 @@ def load_wheel_move_during_closed_loop(trial_data, wheel_data, wheel_gain):
     # For each trial find the absolute displacement
     for i, trial in enumerate(traces):
         t, pos = trial
-        # Find the position of the preceding sample and subtract it
-        origin = wheel_data["re_pos"][wheel_data["re_ts"] < t[0]][-1]
-        if pos.size > 0:
+        if pos.size == 0:
+            metric[i] = np.nan
+        else:
+            # Find the position of the preceding sample and subtract it
+            origin = wheel_data["re_pos"][wheel_data["re_ts"] <= t[0]][-1]
             metric[i] = np.abs(pos - origin).max()
 
     # Load wheel_gain and thresholds for each trial
