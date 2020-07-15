@@ -38,7 +38,7 @@ class TestExtendedQC(unittest.TestCase):
         }
         with self.assertRaises(ValueError) as exception:
             compute_session_status(frame)
-        self.assertEqual(exception.exception.msg, "Values out of bound")
+        self.assertEqual(str(exception.exception), "Values out of bound")
 
         # new frame
         frame = {
