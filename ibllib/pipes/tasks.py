@@ -86,7 +86,7 @@ class Task(abc.ABC):
         self.tearDown()
         return self.status
 
-    def register_datasets(self, one=None, jobid=None, **kwargs):
+    def register_datasets(self, one=None, **kwargs):
         """
         Register output datasets form the task to Alyx
         :param one:
@@ -95,7 +95,6 @@ class Task(abc.ABC):
         :return:
         """
         assert one
-        assert jobid
         if self.outputs:
             if isinstance(self.outputs, list):
                 versions = [self.version for _ in self.outputs]
@@ -302,8 +301,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None, max_md
             patch_data['status'] = 'Empty'
         else:  # otherwise register data and set status to Complete
             try:
-                registered_dsets = task.register_datasets(
-                    one=one, jobid=tdict['id'], max_md5_size=max_md5_size)
+                registered_dsets = task.register_datasets(one=one, max_md5_size=max_md5_size)
             except BaseException:
                 patch_data['status'] = 'Errored'
             patch_data['status'] = 'Complete'
