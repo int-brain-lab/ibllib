@@ -1,8 +1,8 @@
-'''
+"""
 Module for generating single unit metrics for phy.
 
 Ensure you are on 'ibllib@brainbox'.
-'''
+"""
 
 import time
 from pathlib import Path
@@ -11,8 +11,9 @@ import pandas as pd
 import brainbox as bb
 import alf.io as aio
 
+
 def gen_metrics(alf_dir, ks_dir, ephys_file_path=None):
-    '''
+    """
     Tries to generate single unit metrics for all units metric-by-metric and save the metrics
     as .tsv files, and displays an error if unable to create one of the metric .tsv files,
     before continuing to the next one.
@@ -44,16 +45,16 @@ def gen_metrics(alf_dir, ks_dir, ephys_file_path=None):
     the ephys file should be in `ks_dir`.
         >>> from gen_phy_metrics import gen_metrics
         >>> gen_metrics(alf_dir, ks_dir, ephys_file_path=ks_dir)
-    '''
+    """
 
     # Setup #
     # ----- #
 
     # Extract alf objects from `alf_dir` and get units info
     alf_dir = Path(alf_dir)
-    if not(Path.exists(alf_dir)):
+    if not (Path.exists(alf_dir)):
         raise FileNotFoundError('The given alf directory {} does not exist!'.format(alf_dir))
-    
+
     spks_b = aio.load_object(alf_dir, 'spikes')
     clstrs_b = aio.load_object(alf_dir, 'clusters')
     units_b = bb.processing.get_units_bunch(spks_b)
@@ -66,7 +67,7 @@ def gen_metrics(alf_dir, ks_dir, ephys_file_path=None):
     cv_amp = np.full((n_units,), np.nan)
     cv_fr = np.full((n_units,), np.nan)
     frac_isi_viol = np.full((n_units,), np.nan)
-    frac_missing_spks = np.full((n_units,), np.nan)
+    fn_est = np.full((n_units,), np.nan)
     fp_est = np.full((n_units,), np.nan)
     pres_ratio = np.full((n_units,), np.nan)
     pres_ratio_std = np.full((n_units,), np.nan)
@@ -84,8 +85,9 @@ def gen_metrics(alf_dir, ks_dir, ephys_file_path=None):
 
         # Need timestamps, amps, depths
         ts = units_b['times'][unit]
-        amps = units_b['times'][unit]
-        depths = units_b['times'][unit]
+        #Bug was below: amps and depths were defined as units_b['times'][unit]!
+        amps = units_b['amps'][unit]
+        depths = units_b['depths'][unit]
 
         # Cumulative drift of spike amplitudes, normalized by total number of spikes.
         try:
@@ -128,18 +130,18 @@ def gen_metrics(alf_dir, ks_dir, ephys_file_path=None):
 
         # Estimated fraction of missing spikes.
         try:
-            frac_missing_spks[int(unit)], _, _ = bb.metrics.feat_cutoff(
+            fn_est[int(unit)], _, _ = bb.metrics.missed_spikes_est(
                 amps, spks_per_bin=10, sigma=4, min_num_bins=50)
         except Exception as err:
-            print("Failed to compute 'frac_missing_spks' for unit {}. Details: \n {}"
+            print("Failed to compute 'missed_spikes_est' for unit {}. Details: \n {}"
                   .format(unit, err))
             units_missing_metrics.add(unit)
-    
+
         # Estimated fraction of false positives.
         try:
-            fp_est[int(unit)] = bb.metrics.fp_est(ts, rp=0.002)
+            fp_est[int(unit)] = bb.metrics.contamination_est(ts, rp=0.002)
         except Exception as err:
-            print("Failed to compute 'fp_est' for unit {}. Details: \n {}".format(unit, err))
+            print("Failed to compute 'contamination_est' for unit {}. Details: \n {}".format(unit, err))
             units_missing_metrics.add(unit)
 
         # Presence ratio
@@ -148,7 +150,7 @@ def gen_metrics(alf_dir, ks_dir, ephys_file_path=None):
         except Exception as err:
             print("Failed to compute 'pres_ratio' for unit {}. Details: \n {}".format(unit, err))
             units_missing_metrics.add(unit)
-    
+
         # Presence ratio over the standard deviation of spike counts in each bin
         try:
             pr, pr_bins = bb.metrics.pres_ratio(ts, hist_win=10)
@@ -184,69 +186,68 @@ def gen_metrics(alf_dir, ks_dir, ephys_file_path=None):
                                 sep='\t', header=['cum_amp_drift'])
     except Exception as err:
         print("Could not save 'cum_amp_drift' to .tsv. Details: \n {}".format(err))
-    
+
     try:
         df_cum_depth_drift = pd.DataFrame(cum_depth_drift.round(2))
         df_cum_depth_drift.to_csv(Path(ks_dir, 'cum_depth_drift.tsv'),
-                                sep='\t', header=['cum_depth_drift'])
+                                  sep='\t', header=['cum_depth_drift'])
     except Exception as err:
         print("Could not save 'cum_depth_drift' to .tsv. Details: \n {}".format(err))
-    
+
     try:
         df_cv_amp = pd.DataFrame(cv_amp.round(2))
         df_cv_amp.to_csv(Path(ks_dir, 'cv_amp.tsv'),
-                                sep='\t', header=['cv_amp'])
+                         sep='\t', header=['cv_amp'])
     except Exception as err:
         print("Could not save 'cv_amp' to .tsv. Details: \n {}".format(err))
-    
+
     try:
         df_cv_fr = pd.DataFrame(cv_fr.round(2))
         df_cv_fr.to_csv(Path(ks_dir, 'cv_fr.tsv'),
-                                sep='\t', header=['cv_fr'])
+                        sep='\t', header=['cv_fr'])
     except Exception as err:
         print("Could not save 'cv_fr' to .tsv. Details: \n {}".format(err))
-    
+
     try:
         df_frac_isi_viol = pd.DataFrame(frac_isi_viol.round(2))
         df_frac_isi_viol.to_csv(Path(ks_dir, 'frac_isi_viol.tsv'),
                                 sep='\t', header=['frac_isi_viol'])
     except Exception as err:
         print("Could not save 'frac_isi_viol' to .tsv. Details: \n {}".format(err))
-    
+
     try:
-        df_frac_missing_spks = pd.DataFrame(frac_missing_spks.round(2))
-        df_frac_missing_spks.to_csv(Path(ks_dir, 'frac_missing_spks.tsv'),
-                                sep='\t', header=['frac_missing_spks'])
+        df_fn_est = pd.DataFrame(fn_est.round(2))
+        df_fn_est.to_csv(Path(ks_dir, '     missed_spikes_est.tsv'), sep='\t', header=['missed_spikes_est'])
     except Exception as err:
-        print("Could not save 'frac_missing_spks' to .tsv. Details: \n {}".format(err))
-    
+        print("Could not save 'missed_spikes_est' to .tsv. Details: \n {}".format(err))
+
     try:
         df_fp_est = pd.DataFrame(fp_est.round(2))
-        df_fp_est.to_csv(Path(ks_dir, 'fp_est.tsv'),
-                                sep='\t', header=['fp_est'])
+        df_fp_est.to_csv(Path(ks_dir, 'contamination_est.tsv'),
+                         sep='\t', header=['contamination_est'])
     except Exception as err:
-        print("Could not save 'fp_est' to .tsv. Details: \n {}".format(err))
-    
+        print("Could not save 'contamination_est' to .tsv. Details: \n {}".format(err))
+
     try:
         df_pres_ratio = pd.DataFrame(pres_ratio.round(2))
         df_pres_ratio.to_csv(Path(ks_dir, 'pres_ratio.tsv'),
-                                sep='\t', header=['pres_ratio'])
+                             sep='\t', header=['pres_ratio'])
     except Exception as err:
         print("Could not save 'pres_ratio' to .tsv. Details: \n {}".format(err))
-    
+
     try:
         df_pres_ratio_std = pd.DataFrame(pres_ratio_std.round(2))
         df_pres_ratio_std.to_csv(Path(ks_dir, 'pres_ratio_std.tsv'),
-                                sep='\t', header=['pres_ratio_std'])
+                                 sep='\t', header=['pres_ratio_std'])
     except Exception as err:
         print("Could not save 'pres_ratio_std' to .tsv. Details: \n {}".format(err))
-    
+
     if ephys_file_path:
         try:
             df_ptp_sigma = pd.DataFrame(ptp_sigma.round(2))
             df_ptp_sigma.to_csv(Path(ks_dir, 'ptp_sigma.tsv'),
-                                    sep='\t', header=['cum_amp_drift'])
+                                sep='\t', header=['ptp_sigma'])
         except Exception as err:
             print("Could not save 'cum_amp_drift' to .tsv. Details: \n {}".format(err))
-    
+
     return units_missing_metrics

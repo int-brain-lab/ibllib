@@ -1,3 +1,8 @@
-import examples.oneibl.tutorial_script
+"""
+Tutorial example
+"""
+# Author: Olivier
 
-print(examples.oneibl.tutorial_script)
+# ----- IMPORT EXAMPLES -----
+# -- Ibllib tutorial example page
+import examples.one.tutorial_script

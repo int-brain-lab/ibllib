@@ -3,17 +3,19 @@ import json
 import datetime
 import logging
 from dateutil import parser as dateparser
+import re
 
+import alf.io
+from oneibl.one import ONE
+from ibllib.misc import version
 import ibllib.time
-from ibllib.misc import version, log2session
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io import flags, hashfile
 
-from oneibl.one import ONE
 
-logger_ = logging.getLogger('ibllib.alf')
+_logger = logging.getLogger('ibllib.alf')
+EXCLUDED_EXTENSIONS = ['.flag', '.error', '.avi']
 REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
-                              'logs/**/_ibl_log.*.log',
                               'raw_behavior_data/**/_iblrig_*.*',
                               'raw_passive_data/**/_iblrig_*.*',
                               'raw_behavior_data/**/_iblmic_*.*',
@@ -25,6 +27,107 @@ REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
                               ]
 
 
+def _check_filename_for_registration(full_file, patterns):
+    for pat in patterns:
+        reg = pat.replace('.', r'\.').replace('_', r'\_').replace('*', r'.*')
+        if Path(full_file).suffix in EXCLUDED_EXTENSIONS:
+            return False
+        elif re.match(reg, Path(full_file).name, re.IGNORECASE):
+            return True
+    return False
+
+
+def register_dataset(file_list, one=None, created_by=None, repository=None, server_only=False,
+                     versions=False, dry=False, max_md5_size=None):
+    """
+    Registers a set of files belonging to a session only on the server
+    :param file_list: (list of pathlib.Path or pathlib.Path)
+    :param one: optional (oneibl.ONE), current one object, will create an instance if not provided
+    :param created_by: (string) name of user in Alyx (defaults to 'root')
+    :param repository: optional: (string) name of the repository in Alyx
+    :param server_only: optional: (bool) if True only creates on the Flatiron (defaults to False)
+    :param versions: optional (list of strings): versions tags (defaults to ibllib version)
+    :param dry: (bool) False by default
+    :param verbose: (bool) logs
+    :param max_md5_size: (int) maximum file in bytes to compute md5 sum (always compute if Npne)
+    defaults to None
+    :return:
+    """
+    if created_by is None:
+        created_by = one._par.ALYX_LOGIN
+    if file_list is None or file_list == '' or file_list == []:
+        return
+    elif not isinstance(file_list, list):
+        file_list = [Path(file_list)]
+    assert len(set([alf.io.get_session_path(f) for f in file_list])) == 1
+    assert all([Path(f).exists() for f in file_list])
+    if not versions:
+        versions = [version.ibllib() for _ in file_list]
+    else:
+        assert isinstance(versions, list) and len(versions) == len(file_list)
+
+    # computing the md5 can be very long, so this is an option to skip if the file is bigger
+    # than a certain threshold
+    if max_md5_size:
+        hashes = [hashfile.md5(p) if
+                  p.stat().st_size < max_md5_size else None for p in file_list]
+    else:
+        hashes = [hashfile.md5(p) for p in file_list]
+
+    session_path = alf.io.get_session_path(file_list[0])
+    # first register the file
+    r = {'created_by': created_by,
+         'path': session_path.relative_to((session_path.parents[2])).as_posix(),
+         'filenames': [p.relative_to(session_path).as_posix() for p in file_list],
+         'name': repository,
+         'server_only': server_only,
+         'hashes': hashes,
+         'filesizes': [p.stat().st_size for p in file_list],
+         'versions': versions}
+    if not dry:
+        if one is None:
+            one = ONE()
+        response = one.alyx.rest('register-file', 'create', data=r)
+        for p in file_list:
+            _logger.info(f"ALYX REGISTERED DATA: {p}")
+        return response
+
+
+def register_session_raw_data(session_path, one=None, overwrite=False, dry=False, **kwargs):
+    """
+    Registers all files corresponding to raw data files to Alyx. It will select files that
+    match Alyx registration patterns.
+    :param session_path:
+    :param one: one instance to work with
+    :param overwrite: (False) if set to True, will patch the datasets. It will take very long.
+    If set to False (default) will skip all already registered data.
+    :param dry: do not register files, returns the list of files to be registered
+    :return: list of file to register
+    :return: Alyx response: dictionary of registered files
+    """
+    session_path = Path(session_path)
+    # query the database for existing datasets on the session and allowed dataset types
+    dsets = one.alyx.rest('datasets', 'list', session=one.eid_from_path(session_path))
+    already_registered = [
+        session_path.joinpath(Path(ds['collection'] or '').joinpath(ds['name'])) for ds in dsets]
+    dtypes = one.alyx.rest('dataset-types', 'list')
+    registration_patterns = [dt['filename_pattern'] for dt in dtypes if dt['filename_pattern']]
+    # glob all the files
+    glob_patterns = [pat for pat in REGISTRATION_GLOB_PATTERNS if pat.startswith('raw')]
+    files_2_register = []
+    for gp in glob_patterns:
+        f2r = list(session_path.glob(gp))
+        files_2_register.extend(f2r)
+    # filter 1/2 filter out datasets that do not match any dataset type
+    files_2_register = list(filter(lambda f: _check_filename_for_registration(
+        f, registration_patterns), files_2_register))
+    # filter 2/2 unless overwrite is True, filter out the datasets that already exists
+    if not overwrite:
+        files_2_register = list(filter(lambda f: f not in already_registered, files_2_register))
+    response = register_dataset(files_2_register, one=one, versions=None, dry=dry, **kwargs)
+    return files_2_register, response
+
+
 class RegistrationClient:
     """
     Object that keeps the ONE instance and provides method to create sessions and register data.
@@ -34,26 +137,36 @@ class RegistrationClient:
         if not one:
             self.one = ONE()
         self.dtypes = self.one.alyx.rest('dataset-types', 'list')
+        self.registration_patterns = [
+            dt['filename_pattern'] for dt in self.dtypes if dt['filename_pattern']]
         self.file_extensions = [df['file_extension'] for df in
                                 self.one.alyx.rest('data-formats', 'list')]
 
-    def create_sessions(self, root_data_folder, dry=False):
+    def create_sessions(self, root_data_folder, glob_pattern='**/create_me.flag', dry=False):
         """
         Create sessions looking recursively for flag files
 
         :param root_data_folder: folder to look for create_me.flag
         :param dry: bool. Dry run if True
+        :param glob_pattern: bool. Dry run if True
         :return: None
         """
-        flag_files = Path(root_data_folder).glob('**/create_me.flag')
+        flag_files = Path(root_data_folder).glob(glob_pattern)
         for flag_file in flag_files:
             if dry:
                 print(flag_file)
                 continue
-            logger_.info('creating session for ' + str(flag_file.parent))
+            _logger.info('creating session for ' + str(flag_file.parent))
             # providing a false flag stops the registration after session creation
-            self.register_session(flag_file.parent, file_list=False)
+            self.create_session(flag_file.parent)
             flag_file.unlink()
+        return [ff.parent for ff in flag_files]
+
+    def create_session(self, session_path):
+        """
+        create_session(session_path)
+        """
+        return self.register_session(session_path, file_list=False)
 
     def register_sync(self, root_data_folder, dry=False):
         """
@@ -69,15 +182,14 @@ class RegistrationClient:
                 print(flag_file)
                 continue
             file_list = flags.read_flag_file(flag_file)
-            logger_.info('registering ' + str(flag_file.parent))
+            _logger.info('registering ' + str(flag_file.parent))
             self.register_session(flag_file.parent, file_list=file_list)
             flags.write_flag_file(flag_file.parent.joinpath('flatiron.flag'), file_list=file_list)
             flag_file.unlink()
             if flag_file.parent.joinpath('create_me.flag').exists():
                 flag_file.parent.joinpath('create_me.flag').unlink()
-            logger_.info('registered' + '\n')
+            _logger.info('registered' + '\n')
 
-    @log2session('register')
     def register_session(self, ses_path, file_list=True):
         """
         Register session in Alyx
@@ -95,9 +207,9 @@ class RegistrationClient:
         if not settings_json_file:
             settings_json_file = list(ses_path.glob('**/_iblrig_taskSettings.raw*.json'))
             if not settings_json_file:
-                logger_.error(['could not find _iblrig_taskSettings.raw.json. Abort.'])
+                _logger.error(['could not find _iblrig_taskSettings.raw.json. Abort.'])
                 return
-            logger_.warning([f'Settings found in a strange place: {settings_json_file}'])
+            _logger.warning([f'Settings found in a strange place: {settings_json_file}'])
         else:
             settings_json_file = settings_json_file[0]
         md = _read_settings_json_compatibility_enforced(settings_json_file)
@@ -105,7 +217,7 @@ class RegistrationClient:
         try:
             subject = self.one.alyx.rest('subjects?nickname=' + md['SUBJECT_NAME'], 'list')[0]
         except IndexError as e:
-            logger_.error(f"Subject: {md['SUBJECT_NAME']} doesn't exist in Alyx. ABORT.")
+            _logger.error(f"Subject: {md['SUBJECT_NAME']} doesn't exist in Alyx. ABORT.")
             raise e
 
         # look for a session from the same subject, same number on the same day
@@ -116,7 +228,7 @@ class RegistrationClient:
         try:
             user = self.one.alyx.rest('users', 'read', id=md["PYBPOD_CREATOR"][0])
         except Exception as e:
-            logger_.error(f"User: {md['PYBPOD_CREATOR'][0]} doesn't exist in Alyx. ABORT")
+            _logger.error(f"User: {md['PYBPOD_CREATOR'][0]} doesn't exist in Alyx. ABORT")
             raise e
 
         username = user['username'] if user else subject['responsible_user']
@@ -146,7 +258,7 @@ class RegistrationClient:
                     'end_time': ibllib.time.date2isostr(end_time) if end_time else None,
                     'n_correct_trials': n_correct_trials,
                     'n_trials': n_trials,
-                    'json': json.dumps(md, indent=1),
+                    'json': md,
                     }
             session = self.one.alyx.rest('sessions', 'create', data=ses_)
             if md['SUBJECT_WEIGHT']:
@@ -159,7 +271,7 @@ class RegistrationClient:
         else:  # TODO: if session exists and no json partial_upgrade it
             session = self.one.alyx.rest('sessions', 'read', id=session_id[0])
 
-        logger_.info(session['url'] + ' ')
+        _logger.info(session['url'] + ' ')
         # create associated water administration if not found
         if not session['wateradmin_session_related'] and ses_data:
             wa_ = {
@@ -180,31 +292,31 @@ class RegistrationClient:
         md5s = []
         file_sizes = []
         for fn in _glob_session(ses_path):
-            if fn.suffix in ['.flag', '.error', '.avi']:
-                logger_.debug('Excluded: ', str(fn))
+            if fn.suffix in EXCLUDED_EXTENSIONS:
+                _logger.debug('Excluded: ', str(fn))
                 continue
-            if not self._match_filename_dtypes(fn):
-                logger_.warning('No matching dataset type for: ' + str(fn))
+            if not _check_filename_for_registration(fn, self.registration_patterns):
+                _logger.warning('No matching dataset type for: ' + str(fn))
                 continue
             if fn.suffix not in self.file_extensions:
-                logger_.warning('No matching dataformat (ie. file extension) for: ' + str(fn))
+                _logger.warning('No matching dataformat (ie. file extension) for: ' + str(fn))
                 continue
             if not _register_bool(fn.name, file_list):
-                logger_.debug('Not in filelist: ' + str(fn))
+                _logger.debug('Not in filelist: ' + str(fn))
                 continue
             try:
                 assert (str(gen_rel_path) in str(fn))
             except AssertionError as e:
                 strerr = 'ALF folder mismatch: data is in wrong subject/date/number folder. \n'
                 strerr += ' Expected ' + str(gen_rel_path) + ' actual was ' + str(fn)
-                logger_.error(strerr)
+                _logger.error(strerr)
                 raise e
             # extract the relative path of the file
             rel_path = Path(str(fn)[str(fn).find(str(gen_rel_path)):])
             F.append(str(rel_path.relative_to(gen_rel_path)))
             file_sizes.append(fn.stat().st_size)
             md5s.append(hashfile.md5(fn) if fn.stat().st_size < 1024 ** 3 else None)
-            logger_.info('Registering ' + str(fn))
+            _logger.info('Registering ' + str(fn))
 
         r_ = {'created_by': username,
               'path': str(gen_rel_path),
@@ -215,19 +327,9 @@ class RegistrationClient:
               }
         self.one.alyx.post('/register-file', data=r_)
 
-    def _match_filename_dtypes(self, full_file):
-        import re
-        patterns = [dt['filename_pattern'] for dt in self.dtypes if dt['filename_pattern']]
-        for pat in patterns:
-            reg = pat.replace('.', r'\.').replace('_', r'\_').replace('*', r'.*')
-            if re.match(reg, Path(full_file).name, re.IGNORECASE):
-                return True
-        return False
-
 
 def _alyx_procedure_from_task(task_protocol):
-    import ibllib.pipes.extract_session
-    task_str = ibllib.pipes.extract_session.get_task_extractor_type(task_protocol)
+    task_str = raw.get_task_extractor_type(task_protocol)
     lookup = {'biased': 'Behavior training/tasks',
               'habituation': 'Behavior training/tasks',
               'training': 'Behavior training/tasks',
@@ -253,7 +355,7 @@ def _read_settings_json_compatibility_enforced(json_file):
     if 'IBLRIG_VERSION_TAG' not in md.keys():
         md['IBLRIG_VERSION_TAG'] = '3.2.3'
     if not md['IBLRIG_VERSION_TAG']:
-        logger_.warning("You appear to be on an untagged version...")
+        _logger.warning("You appear to be on an untagged version...")
         return md
     # 2018-12-05 Version 3.2.3 fixes (permanent fixes in IBL_RIG from 3.2.4 on)
     if version.le(md['IBLRIG_VERSION_TAG'], '3.2.3'):
@@ -301,7 +403,7 @@ def _get_session_times(fn, md, ses_data):
             break
         c += 1
     if c:
-        logger_.warning((f'Trial end timestamps of last {c} trials above 6 hours '
+        _logger.warning((f'Trial end timestamps of last {c} trials above 6 hours '
                         f'(most likely corrupt): ') + str(fn))
     end_time = start_time + datetime.timedelta(seconds=ses_duration_secs)
     return start_time, end_time

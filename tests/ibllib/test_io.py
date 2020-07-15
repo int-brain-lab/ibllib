@@ -45,7 +45,7 @@ class TestsParams(unittest.TestCase):
                            'I': 'titi',
                            'num': 15,
                            'liste': [1, 'turlu'],
-                           'apath': '/gna/gna/gna',
+                           'apath': str(Path('/gna/gna/gna')),
                            'E': 'tete2',
                            }
         par2 = params.read('toto', default=default)
@@ -75,7 +75,7 @@ class TestsParams(unittest.TestCase):
 class TestsRawDataLoaders(unittest.TestCase):
 
     def setUp(self):
-        self.tempfile = tempfile.NamedTemporaryFile()
+        self.tempfile = tempfile.NamedTemporaryFile(delete=False)
 
     def testFlagFileRead(self):
         # empty file should return True
@@ -135,18 +135,19 @@ class TestsRawDataLoaders(unittest.TestCase):
         self.assertEqual(flags.read_flag_file(self.tempfile.name), True)
 
     def test_load_encoder_trial_info(self):
-        self.session = Path('tests/ibllib/extractors/data/session_biased_ge5')
-        data = raw.load_encoder_trial_info(str(self.session))
+        self.session = Path(__file__).parent.joinpath('extractors', 'data', 'session_biased_ge5')
+        data = raw.load_encoder_trial_info(self.session)
         self.assertTrue(data is not None)
 
     def tearDown(self):
         self.tempfile.close()
+        os.unlink(self.tempfile.name)
 
 
 class TestsJsonable(unittest.TestCase):
 
     def testReadWrite(self):
-        tfile = tempfile.NamedTemporaryFile()
+        tfile = tempfile.NamedTemporaryFile(delete=False)
         data = [{'a': 'thisisa', 'b': 1, 'c': [1, 2, 3]},
                 {'a': 'thisisb', 'b': 2, 'c': [2, 3, 4]}]
         jsonable.write(tfile.name, data)
@@ -156,6 +157,7 @@ class TestsJsonable(unittest.TestCase):
         data3 = jsonable.read(tfile.name)
         self.assertEqual(data + data, data3)
         tfile.close()
+        os.unlink(tfile.name)
 
 
 class TestSpikeGLX_glob_ephys(unittest.TestCase):
@@ -188,12 +190,12 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
 
         def create_tree(root_dir, dico):
             root_dir.mkdir(exist_ok=True, parents=True)
-            for l in dico:
-                for k in l:
+            for ldir in dico:
+                for k in ldir:
                     if k == 'path' or k == 'label':
                         continue
-                    touchfile(l[k])
-                    Path(l[k]).with_suffix('.meta').touch()
+                    touchfile(ldir[k])
+                    Path(ldir[k]).with_suffix('.meta').touch()
 
         self.tmpdir = Path(tempfile.gettempdir()) / 'test_glob_ephys'
         self.tmpdir.mkdir(exist_ok=True)
@@ -224,7 +226,7 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
 
     def test_glob_ephys(self):
         def dict_equals(d1, d2):
-            return all([l in d1 for l in d2]) and all([l in d2 for l in d1])
+            return all([x in d1 for x in d2]) and all([x in d2 for x in d1])
         ef3b = spikeglx.glob_ephys_files(self.dir3b)
         ef3a = spikeglx.glob_ephys_files(self.dir3a)
         # test glob
@@ -255,11 +257,22 @@ class TestsSpikeGLX_compress(unittest.TestCase):
             nc=385, sync_depth=16, random=True)['bin_file']
         self.sr = spikeglx.Reader(self.file_bin)
 
+    def test_read_slices(self):
+        sr = self.sr
+        s2mv = sr.channel_conversion_sample2v['ap'][0]
+        # test the slicing of reader object
+        self.assertTrue(np.all(np.isclose(sr._raw[5:500, :-1] * s2mv, sr[5:500, :-1])))
+        self.assertTrue(np.all(np.isclose(sr._raw[5:500, 5] * s2mv, sr[5:500, 5])))
+        self.assertTrue(np.all(np.isclose(sr._raw[5, :-1] * s2mv, sr[5, :-1])))
+        self.assertTrue(sr._raw[55, 5] * s2mv == sr[55, 5])
+        self.assertTrue(np.all(np.isclose(sr._raw[55] * s2mv, sr[55])))
+        self.assertTrue(np.all(np.isclose(sr._raw[5:500] * s2mv, sr[5:500])[:, :-1]))
+
     def test_compress(self):
 
         def compare_data(sr0, sr1):
             # test direct reading through memmap / mtscompreader
-            self.assertTrue(np.all(sr0.data[1200:1210, 12] == sr1.data[1200:1210, 12]))
+            self.assertTrue(np.all(sr0._raw[1200:1210, 12] == sr1._raw[1200:1210, 12]))
             # test reading through methods
             d0, s0 = sr0.read_samples(1200, 54245)
             d1, s1 = sr1.read_samples(1200, 54245)
@@ -392,7 +405,6 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
         else:
             s = sr.read_sync()
             self.assertTrue(s.shape[1] == 17)
-        self.tdir.cleanup()
 
     def testGetSerialNumber(self):
         self.meta_files.sort()

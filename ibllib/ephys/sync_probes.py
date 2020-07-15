@@ -7,8 +7,8 @@ from scipy.interpolate import interp1d
 
 import alf.io
 from brainbox.core import Bunch
+from ibllib.exceptions import Neuropixel3BSyncFrontsNonMatching
 import ibllib.io.spikeglx as spikeglx
-from ibllib.misc import log2session_static
 from ibllib.io.extractors.ephys_fpga import _get_sync_fronts, get_ibl_sync_map
 
 _logger = logging.getLogger('ibllib')
@@ -32,7 +32,6 @@ def apply_sync(sync_file, times, forward=True):
     return fcn(times)
 
 
-@log2session_static('ephys')
 def sync(ses_path, **kwargs):
     """
     Wrapper for sync_probes.version3A and sync_probes.version3B that automatically determines
@@ -42,9 +41,9 @@ def sync(ses_path, **kwargs):
     """
     version = spikeglx.get_neuropixel_version_from_folder(ses_path)
     if version == '3A':
-        version3A(ses_path, **kwargs)
+        return version3A(ses_path, **kwargs)
     elif version == '3B':
-        version3B(ses_path, **kwargs)
+        return version3B(ses_path, **kwargs)
 
 
 def version3A(ses_path, display=True, type='smooth', tol=2.1):
@@ -57,13 +56,13 @@ def version3A(ses_path, display=True, type='smooth', tol=2.1):
     :param type: linear, exact or smooth
     :return: bool True on a a successful sync
     """
-    ephys_files = spikeglx.glob_ephys_files(ses_path)
+    ephys_files = spikeglx.glob_ephys_files(ses_path, bin_exists=False)
     nprobes = len(ephys_files)
     if nprobes == 1:
         timestamps = np.array([[0., 0.], [1., 1.]])
         sr = _get_sr(ephys_files[0])
-        _save_timestamps_npy(ephys_files[0], timestamps, sr)
-        return True
+        out_files = _save_timestamps_npy(ephys_files[0], timestamps, sr)
+        return True, out_files
 
     def get_sync_fronts(auxiliary_name):
         d = Bunch({'times': [], 'nsync': np.zeros(nprobes, )})
@@ -81,6 +80,7 @@ def version3A(ses_path, display=True, type='smooth', tol=2.1):
             d.nsync[ind] = len(sync.channels)
             d['times'].append(sync['times'][isync])
         return d
+
     d = get_sync_fronts('frame2ttl')
     if not d:
         _logger.warning('Ephys sync: frame2ttl not detected on both probes, using camera sync')
@@ -107,8 +107,8 @@ def version3A(ses_path, display=True, type='smooth', tol=2.1):
             timestamps, qc = sync_probe_front_times(d.times[:, ind], d.times[:, iref], sr,
                                                     display=display, type=type, tol=tol)
             qc_all &= qc
-        _save_timestamps_npy(ephys_file, timestamps, sr)
-    return qc_all
+        out_files = _save_timestamps_npy(ephys_file, timestamps, sr)
+    return qc_all, out_files
 
 
 def version3B(ses_path, display=True, type=None, tol=2.5):
@@ -134,10 +134,14 @@ def version3B(ses_path, display=True, type=None, tol=2.5):
     sync_nidq = _get_sync_fronts(nidq_file.sync, nidq_file.sync_map['imec_sync'])
 
     qc_all = True
+    out_files = []
     for ef in ephys_files:
         sync_probe = _get_sync_fronts(ef.sync, ef.sync_map['imec_sync'])
         sr = _get_sr(ef)
-        assert(sync_nidq.times.size == sync_probe.times.size)
+        try:
+            assert(sync_nidq.times.size == sync_probe.times.size)
+        except AssertionError:
+            raise Neuropixel3BSyncFrontsNonMatching(f"{ses_path}")
         # if the qc of the diff finds anomalies, do not attempt to smooth the interp function
         qcdiff = _check_diff_3b(sync_probe)
         if not qcdiff:
@@ -148,8 +152,8 @@ def version3B(ses_path, display=True, type=None, tol=2.5):
         timestamps, qc = sync_probe_front_times(sync_probe.times, sync_nidq.times, sr,
                                                 display=display, type=type_probe, tol=tol)
         qc_all &= qc
-        _save_timestamps_npy(ef, timestamps, sr)
-    return qc_all
+        out_files.extend(_save_timestamps_npy(ef, timestamps, sr))
+    return qc_all, out_files
 
 
 def sync_probe_front_times(t, tref, sr, display=False, type='smooth', tol=2.0):
@@ -245,6 +249,7 @@ def _save_timestamps_npy(ephys_file, tself_tref, sr):
     timestamps = np.copy(tself_tref)
     timestamps[:, 0] *= np.float64(sr)
     np.save(file_ts, timestamps)
+    return [file_sync, file_ts]
 
 
 def _check_diff_3b(sync):

@@ -1,7 +1,23 @@
-### Release Notes 1.4.13 - 2020-02-07
+### Release Notes 1.5.0dev - (25/05/2020 - (EDIT THIS HEADER BEFORE RELEASE)
+-  Ephys extraction:
+    -   spike amplitudes in Volts
+    -   added waveforms samples dataset to use Phy from Flatiron datasets
+-  ONE performance:
+    -   Metaclass implementation of UniqueSingletons for AlyxClient
+    -   Multi-threaded downloads
+    -   Added JSON fields methods to AlyxClient
+-   QCs: Bpod and ONE QC features, basic plotting, examples
+
+### Release Notes 1.4.14 - 2020-03-09
+-   Added permutation test, comparing a metric on two sets of datasets, by shuffling labels and seeing how plausible the observed actual difference is
+Sped up calculation of firing_rate
+-   ephys extraction: updated extracted metrics, including a new contamination estimate and drift metrics.
+-   ibllib.io.spikeglx
+
+### Release Notes 1.4.13 - 2020-03-07
 -   Hotfix: rig transfer - create probes. One variable used before assignation. 
 
-### Release Notes 1.4.12 - 2020-02-06
+### Release Notes 1.4.12 - 2020-03-06
 -   ONE.load overwrites local file if filesizes different or hash mismatch
 -   ephys extraction:
     -   registration sets the session.procedure field to acute recording

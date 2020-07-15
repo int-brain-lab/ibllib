@@ -1,14 +1,16 @@
 import abc
 import ftplib
-from pathlib import Path
+from pathlib import Path, PurePosixPath, WindowsPath
 import subprocess
 import logging
 
 import globus_sdk
 
 from brainbox.core import Bunch
-from ibllib.io.hashfile import md5
 import alf.io
+from ibllib.io.hashfile import md5
+from oneibl.one import ONE
+from oneibl.registration import register_dataset
 from ibllib.misc import version
 
 _logger = logging.getLogger('ibllib')
@@ -19,6 +21,7 @@ FLATIRON_USER = 'datauser'
 FLATIRON_MOUNT = '/mnt/ibl'
 FTP_HOST = 'test.alyx.internationalbrainlab.org'
 FTP_PORT = 21
+DMZ_REPOSITORY = 'ibl_patcher'  # in alyx, the repository name containing the patched filerecords
 
 
 def _run_command(cmd, dry=True):
@@ -37,7 +40,7 @@ class Patcher(abc.ABC):
     def __init__(self, one=None):
         # one object
         if one is None:
-            self.one = one.ONE()
+            self.one = ONE()
         else:
             self.one = one
 
@@ -72,42 +75,30 @@ class Patcher(abc.ABC):
         dset = self.one.alyx.rest('datasets', "read", id=dset_id)
         fr = next(fr for fr in dset['file_records'] if 'flatiron' in fr['data_repository'])
         remote_path = Path(fr['data_repository_path']).joinpath(fr['relative_path'])
-        remote_path = alf.io.add_uuid_string(remote_path, dset_id)
-        if remote_path.is_absolute():
-            remote_path = remote_path.relative_to(remote_path.root)
-        status = self._scp(path, Path(FLATIRON_MOUNT) / remote_path, dry=dry)[0]
+        remote_path = alf.io.add_uuid_string(remote_path, dset_id).as_posix()
+        if remote_path.startswith('/'):
+            full_remote_path = PurePosixPath(FLATIRON_MOUNT + remote_path)
+        else:
+            full_remote_path = PurePosixPath(FLATIRON_MOUNT, remote_path)
+        if isinstance(path, WindowsPath):
+            # On Windows replace drive map with Globus uri, e.g. C:/ -> /~/C/
+            path = '/~/' + path.as_posix().replace(':', '')
+        status = self._scp(path, full_remote_path, dry=dry)[0]
         return status
 
-    def register_dataset(self, file_list, created_by='root', server_repository=None, dry=False):
+    def register_dataset(self, file_list, **kwargs):
         """
         Registers a set of files belonging to a session only on the server
-        :param session_path:
-        :param filenames:
-        :param created_by:
-        :param server_repository:
-        :param dry:
+        :param file_list: (list of pathlib.Path)
+        :param created_by: (string) name of user in Alyx (defaults to 'root')
+        :param repository: optional: (string) name of the server repository in Alyx
+        :param versions: optional (list of strings): versions tags (defaults to ibllib version)
+        :param dry: (bool) False by default
         :return:
         """
-        if not isinstance(file_list, list):
-            file_list = [Path(file_list)]
-        assert len(set([alf.io.get_session_path(f) for f in file_list])) == 1
-        assert all([Path(f).exists() for f in file_list])
-        session_path = alf.io.get_session_path(file_list[0])
-        # first register the file
-        r = {'created_by': created_by,
-             'path': str(session_path.relative_to((session_path.parents[2]))),
-             'filenames': [str(p.relative_to(session_path)) for p in file_list],
-             'name': server_repository,
-             'server_only': True,
-             'hashes': [md5(p) for p in file_list],
-             'filesizes': [p.stat().st_size for p in file_list],
-             'versions': [version.ibllib() for _ in file_list]}
-        if not dry:
-            return self.one.alyx.rest('register-file', 'create', data=r)
-        else:
-            print(r)
+        return register_dataset(file_list, one=self.one, server_only=True, **kwargs)
 
-    def create_dataset(self, file_list, server_repository=None, created_by='root', dry=False):
+    def create_dataset(self, file_list, repository=None, created_by='root', dry=False):
         """
         Creates a new dataset on FlatIron and uploads it from arbitrary location.
         Rules for creation/patching are the same that apply for registration via Alyx
@@ -117,23 +108,35 @@ class Patcher(abc.ABC):
         can also be a list of full file pathes belonging to the same session.
         :param server_repository: Alyx server repository name
         :param created_by: alyx username for the dataset (optional, defaults to root)
-        :return:
+        :return: the registrations response, a list of dataset records
         """
         # first register the file
         if not isinstance(file_list, list):
             file_list = [Path(file_list)]
         assert len(set([alf.io.get_session_path(f) for f in file_list])) == 1
         assert all([Path(f).exists() for f in file_list])
-        datasets = self.register_dataset(file_list, created_by=created_by,
-                                         server_repository=server_repository, dry=dry)
+        response = self.register_dataset(file_list, created_by=created_by,
+                                         repository=repository, dry=dry)
         if dry:
             return
         # from the dataset info, set flatIron flag to exists=True
-        for p, d in zip(file_list, datasets):
+        for p, d in zip(file_list, response):
             self._patch_dataset(p, dset_id=d['id'], dry=dry)
+        return response
 
     def delete_dataset(self, dset_id, dry=False):
-        dset = self.one.alyx.rest('datasets', "read", id=dset_id)
+        """
+        Deletes a single dataset from the Flatiron and Alyx database.
+        This does not remove the dataset from local servers.
+        :param dset_id:
+        :param dry:
+        :return:
+        """
+        if isinstance(dset_id, dict):
+            dset = dset_id
+            dset_id = dset['url'][-36:]
+        else:
+            dset = self.one.alyx.rest('datasets', "read", id=dset_id)
         assert dset
         for fr in dset['file_records']:
             if 'flatiron' in fr['data_repository']:
@@ -141,7 +144,7 @@ class Patcher(abc.ABC):
                                                               fr['relative_path'])
                 flatiron_path = alf.io.add_uuid_string(flatiron_path, dset_id)
                 status = self._rm(flatiron_path, dry=dry)[0]
-                if status == 0:
+                if status == 0 and not dry:
                     self.one.alyx.rest('datasets', 'delete', id=dset_id)
 
     def delete_session_datasets(self, eid, dry=True):
@@ -199,7 +202,9 @@ class GlobusPatcher(Patcher):
         super().__init__(one=one)
 
     def _scp(self, local_path, remote_path, dry=True):
-        remote_path = Path('/').joinpath(remote_path.relative_to(Path(FLATIRON_MOUNT)))
+        remote_path = PurePosixPath('/').joinpath(
+            remote_path.relative_to(PurePosixPath(FLATIRON_MOUNT))
+        )
         _logger.info(f"Globus copy {local_path} to {remote_path}")
         if not dry:
             if isinstance(self.globus_transfer, globus_sdk.transfer.data.TransferData):
@@ -287,19 +292,48 @@ class FTPPatcher(Patcher):
         # self.ftp.auth()
         self.ftp.prot_p()
         self.ftp.login(one._par.FTP_DATA_SERVER_LOGIN, one._par.FTP_DATA_SERVER_PWD)
+        # pre-fetch the repositories so as not to query them for every file registered
+        self.repositories = self.one.alyx.rest("data-repository", "list")
 
-    def create_dataset(self, path, created_by='root', dry=False, **kwargs):
+    def create_dataset(self, path, created_by='root', dry=False, repository=DMZ_REPOSITORY):
         # overrides the superclass just to remove the server repository argument
-        super().create_dataset(path, created_by=created_by, dry=dry)
+        response = super().create_dataset(path, created_by=created_by, dry=dry,
+                                          repository=repository)
+        # need to patch the file records to be consistent
+        for ds in response:
+            frs = ds['file_records']
+            fr_server = next(filter(lambda fr: 'flatiron' in fr['data_repository'], frs))
+            fr_ftp = next(filter(lambda fr: fr['data_repository'] == DMZ_REPOSITORY and
+                                 fr['relative_path'] == fr_server['relative_path'], frs))
+            reposerver = next(filter(lambda rep: rep['name'] == fr_server['data_repository'],
+                                     self.repositories))
+            relative_path = str(Path(reposerver['globus_path']).joinpath(
+                Path(fr_ftp['relative_path'])))[1:]
+            # 1) if there was already a file, the registration created a duplicate
+            fr_2del = list(filter(lambda fr: fr['data_repository'] == DMZ_REPOSITORY and
+                                             fr['relative_path'] == relative_path, frs))  # NOQA
+            if len(fr_2del) == 1:
+                self.one.alyx.rest('files', 'delete', id=fr_2del[0]['id'])
+            # 2) the patch ftp file needs to be prepended with the server repository path
+            self.one.alyx.rest('files', 'partial_update', id=fr_ftp['id'],
+                               data={'relative_path': relative_path, 'exists': True})
+            # 3) the server file is labeled as not existing
+            self.one.alyx.rest('files', 'partial_update', id=fr_server['id'],
+                               data={'exists': False})
+        return response
 
     def _scp(self, local_path, remote_path, dry=True):
         # remote_path = '/mnt/ibl/zadorlab/Subjects/flowers/2018-07-13/001
         remote_path = Path(Path(FLATIRON_MOUNT).root).joinpath(
             remote_path.relative_to(FLATIRON_MOUNT))
         # local_path
-        # remote_path.parent
         self.mktree(remote_path.parent)
+        # if the file already exists on the buffer, do not overwrite
+        if local_path.name in self.ftp.nlst():
+            _logger.info(f"FTP already on server {local_path}")
+            return 0, ''
         self.ftp.pwd()
+        _logger.info(f"FTP upload {local_path}")
         with open(local_path, 'rb') as fid:
             self.ftp.storbinary(f'STOR {local_path.name}', fid)
         return 0, ''
@@ -310,7 +344,7 @@ class FTPPatcher(Patcher):
             try:
                 self.ftp.cwd(str(remote_path))
             except ftplib.all_errors:
-                self.cdtree(Path(remote_path.parent))
+                self.mktree(Path(remote_path.parent))
                 self.ftp.mkd(str(remote_path))
                 self.ftp.cwd(str(remote_path))
 

@@ -2,14 +2,13 @@
 # -*- coding:utf-8 -*-
 # @Author: Niccolò Bonacchi
 # @Date: Wednesday, January 16th 2019, 2:03:59 pm
+import argparse
 import logging
 import shutil
-import argparse
 from pathlib import Path
 from shutil import ignore_patterns as ig
 
 import ibllib.io.flags as flags
-from ibllib.pipes import extract_session
 
 log = logging.getLogger('ibllib')
 log.setLevel(logging.INFO)
@@ -46,10 +45,8 @@ def main(local_folder: str, remote_folder: str, force: bool = False) -> None:
             shutil.copytree(src, dst, ignore=ig(str(src_flag_file.name)))
         # finally if folder was created delete the src flag_file and create compress_me.flag
         if dst.exists():
-            task_type = extract_session.get_task_extractor_type(Path(src))
-            _create_flags_for_task(dst, task_type)
-            log.info(
-                f"Copied to {remote_folder}: Session {src_flag_file.parent}")
+            flags.write_flag_file(dst.joinpath('raw_session.flag'))
+            log.info(f"Copied to {remote_folder}: Session {src_flag_file.parent}")
             src_flag_file.unlink()
 
         # Cleanup
@@ -65,24 +62,6 @@ def main(local_folder: str, remote_folder: str, force: bool = False) -> None:
         if src_video_file.exists() and \
                 src_video_file.stat().st_size == dst_video_file.stat().st_size:
             src_video_file.unlink()
-
-
-def _create_flags_for_task(dst, task_type):
-    # create_flags_for_session()
-    if task_type in ['habituation']:
-        flags.write_flag_file(dst.joinpath('extract_me.flag'))
-    if task_type in ['training', 'biased']:
-        flags.write_flag_file(dst.joinpath('extract_me.flag'))
-        flags.create_compress_video_flags(dst, flag_name='compress_video.flag')
-        flags.create_audio_flags(dst, 'audio_training.flag')
-    elif task_type in ['ephys', 'ephys_sync']:
-        # Ephys flags copied by transfer_ephys_session from ephyspc
-        flags.create_compress_video_flags(dst, flag_name='compress_video_ephys.flag')
-        flags.create_audio_flags(dst, 'audio_ephys.flag')
-    elif task_type in ['ephys_mock']:
-        flags.write_flag_file(dst.joinpath('extract_ephys.flag'))
-        flags.create_compress_video_flags(dst, flag_name='compress_video_ephys.flag')
-        flags.create_audio_flags(dst, 'audio_ephys.flag')
 
 
 if __name__ == "__main__":

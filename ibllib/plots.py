@@ -2,11 +2,13 @@
 # -*- coding:utf-8 -*-
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy
 
-from ibllib.dsp import rms
+import ibllib.dsp as dsp
 
 
-def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=0, **kwargs):
+def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=0, clip=2,
+           **kwargs):
     """
     Matplotlib display of wiggle traces
 
@@ -21,7 +23,7 @@ def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=
     """
     nech, ntr = w.shape
     tscale = np.arange(nech) / fs
-    sf = gain / np.sqrt(rms(w.flatten()))
+    sf = gain / np.sqrt(dsp.rms(w.flatten()))
 
     def insert_zeros(trace):
         # Insert zero locations in data trace and tt vector based on linear fit
@@ -51,11 +53,14 @@ def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=
     for ntr in range(ntr):
         if fill:
             trace, t_trace = insert_zeros(w[:, ntr] * sf)
+            if clip:
+                trace = np.maximum(np.minimum(trace, clip), -clip)
             ax.fill_betweenx(t_trace + t0, ntr, trace + ntr,
                              where=trace >= 0,
                              facecolor=color,
                              linewidth=linewidth)
-        ax.plot(w[:, ntr] * sf + ntr, tscale + t0, color, linewidth=linewidth, **kwargs)
+        wplot = np.minimum(np.maximum(w[:, ntr] * sf, -clip), clip)
+        ax.plot(wplot + ntr, tscale + t0, color, linewidth=linewidth, **kwargs)
 
     ax.set_xlim(-1, ntr + 1)
     ax.set_ylim(tscale[0] + t0, tscale[-1] + t0)
@@ -63,18 +68,81 @@ def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=
     ax.set_xlabel('Trace')
     ax.invert_yaxis()
 
+    return ax
 
-def traces(w, **kwargs):
-    """
-    Matplotlib display of traces
 
-    :param w: 2D array (numpy array dimension nsamples, ntraces)
-    :param fs: sampling frequency
-    :param gain: display gain
-    :param ax: matplotlib axes object
-    :return: None
-    """
-    wiggle(w, **kwargs, fill=False)
+class Density:
+    def __init__(self, w, fs=1, cmap='bone', ax=None, **kwargs):
+        """
+        Matplotlib display of traces as a density display
+
+        :param w: 2D array (numpy array dimension nsamples, ntraces)
+        :param fs: sampling frequency (Hz)
+        :param ax: axis to plot in
+        :return: None
+        """
+        w = w.reshape(w.shape[0], -1)
+        nech, ntr = w.shape
+        tscale = np.array([0, nech - 1]) / fs * 1e3
+        if ax is None:
+            self.figure, ax = plt.subplots()
+        else:
+            self.figure = ax.get_figure()
+        extent = [-0.5, ntr - 0.5, tscale[1], tscale[0]]
+        self.im = ax.imshow(w, aspect='auto', cmap=cmap, extent=extent, origin='upper', **kwargs)
+        ax.set_ylabel('Time (ms)')
+        ax.set_xlabel('Trace')
+        self.cid_key = self.figure.canvas.mpl_connect('key_press_event', self.on_key_press)
+        self.ax = ax
+
+    def on_key_press(self, event):
+        if event.key == 'ctrl+a':
+            self.im.set_data(self.im.get_array() * np.sqrt(2))
+        elif event.key == 'ctrl+z':
+            self.im.set_data(self.im.get_array() / np.sqrt(2))
+        else:
+            return
+        self.figure.canvas.draw()
+
+
+class Traces:
+    def __init__(self, w, fs=1, gain=0.71, color='k', ax=None, linewidth=0.5, t0=0, **kwargs):
+        """
+        Matplotlib display of traces as a density display
+
+        :param w: 2D array (numpy array dimension nsamples, ntraces)
+        :param fs: sampling frequency (Hz)
+        :param ax: axis to plot in
+        :return: None
+        """
+        w = w.reshape(w.shape[0], -1)
+        nech, ntr = w.shape
+        tscale = np.arange(nech) / fs * 1e3
+        sf = gain / dsp.rms(w.flatten()) / 2
+        if ax is None:
+            self.figure, ax = plt.subplots()
+        else:
+            self.figure = ax.get_figure()
+        self.plot = ax.plot(w * sf + np.arange(ntr), tscale + t0, color,
+                            linewidth=linewidth, **kwargs)
+        ax.set_xlim(-1, ntr + 1)
+        ax.set_ylim(tscale[0] + t0, tscale[-1] + t0)
+        ax.set_ylabel('Time (ms)')
+        ax.set_xlabel('Trace')
+        ax.invert_yaxis()
+        self.cid_key = self.figure.canvas.mpl_connect('key_press_event', self.on_key_press)
+        self.ax = ax
+
+    def on_key_press(self, event):
+        if event.key == 'ctrl+a':
+            for i, l in enumerate(self.plot):
+                l.set_xdata((l.get_xdata() - i) * np.sqrt(2) + i)
+        elif event.key == 'ctrl+z':
+            for i, l in enumerate(self.plot):
+                l.set_xdata((l.get_xdata() - i) / np.sqrt(2) + i)
+        else:
+            return
+        self.figure.canvas.draw()
 
 
 def squares(tscale, polarity, ax=None, yrange=[-1, 1], **kwargs):
@@ -119,7 +187,72 @@ def vertical_lines(x, ymin=0, ymax=1, ax=None, **kwargs):
     ax.plot(x.T.flatten(), y.T.flatten(), **kwargs)
 
 
+def spectrum(w, fs, smooth=None, unwrap=True, axis=0, **kwargs):
+    """
+    Display spectral density of a signal along a given dimension
+    spectrum(w, fs)
+    :param w: signal
+    :param fs: sampling frequency (Hz)
+    :param smooth: (None) frequency samples to smooth over
+    :param unwrap: (True) unwraps the phase specrum
+    :param axis: axis on which to compute the FFT
+    :param kwargs: plot arguments to be passed to matplotlib
+    :return: matplotlib axes
+    """
+    axis = 0
+    smooth = None
+    unwrap = True
+
+    ns = w.shape[axis]
+    fscale = dsp.fscale(ns, 1 / fs, one_sided=True)
+    W = scipy.fft.rfft(w, axis=axis)
+    amp = 20 * np.log10(np.abs(W))
+    phi = np.angle(W)
+
+    if unwrap:
+        phi = np.unwrap(phi)
+
+    if smooth:
+        nf = np.round(smooth / fscale[1] / 2) * 2 + 1
+        amp = dsp.smooth.mwa(amp, nf)
+        phi = dsp.smooth.mwa(phi, nf)
+
+    fig, ax = plt.subplots(2, 1, sharex=True)
+    ax[0].plot(fscale, amp, **kwargs)
+    ax[1].plot(fscale, phi, **kwargs)
+
+    ax[0].set_title('Spectral Density (dB rel to amplitude.Hz^-0.5)')
+    ax[0].set_ylabel('Amp (dB)')
+    ax[1].set_ylabel('Phase (rad)')
+    ax[1].set_xlabel('Frequency (Hz)')
+    return ax
+
+
+def color_cycle(ind=None):
+    """
+    Gets the matplotlib color-cycle as RGB numpy array of floats between 0 and 1
+    :return:
+    """
+    # import matplotlib as mpl
+    # c = np.uint32(np.array([int(c['color'][1:], 16) for c in mpl.rcParams['axes.prop_cycle']]))
+    # c = np.double(np.flip(np.reshape(c.view(np.uint8), (c.size, 4))[:, :3], 1)) / 255
+    c = np.array([[0.12156863, 0.46666667, 0.70588235],
+                  [1., 0.49803922, 0.05490196],
+                  [0.17254902, 0.62745098, 0.17254902],
+                  [0.83921569, 0.15294118, 0.15686275],
+                  [0.58039216, 0.40392157, 0.74117647],
+                  [0.54901961, 0.3372549, 0.29411765],
+                  [0.89019608, 0.46666667, 0.76078431],
+                  [0.49803922, 0.49803922, 0.49803922],
+                  [0.7372549, 0.74117647, 0.13333333],
+                  [0.09019608, 0.74509804, 0.81176471]])
+    if ind is None:
+        return c
+    else:
+        return tuple(c[ind % c.shape[0], :])
+
+
 if __name__ == "__main__":
     w = np.random.rand(500, 40) - 0.5
     wiggle(w, fs=30000)
-    traces(w, fs=30000, color='r')
+    Traces(w, fs=30000, color='r')
