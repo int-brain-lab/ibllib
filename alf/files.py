@@ -192,6 +192,22 @@ def filter_by(alf_path, **kwargs):
     return alf_files, [tuple(attr.values()) for attr in attributes]
 
 
+# def attributes_as_keys(parts):
+#     """
+#     parts = [('ibl', 'trials', 'goCue', 'times', 'bpod', 'raw', 'npy'), 
+#          (None, 'trials', 'pLeft', None, None, 'npy'), 
+#          ('ibl', 'trials', 'goCue', 'times', 'pbod', 'raw', 'csv')]
+#     :param parts: 
+#     :return: 
+#     """
+#     attributes = [p[2] if not p[3] else '_'.join(p[2:4]) for p in parts]
+#     seen = set()
+#     dupes = [x for x in attributes if ((x in seen) is (seen.add(x) is None))]
+#     for dup in dupes:
+#         if dup:
+            
+
+
 if __name__ == "__main__":
     import doctest
     doctest.testmod(optionflags=doctest.NORMALIZE_WHITESPACE | doctest.ELLIPSIS)
