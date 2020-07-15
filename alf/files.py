@@ -12,13 +12,16 @@ Created on Tue Sep 11 18:06:21 2018
 @author: Miles
 """
 import re
+import os
+from fnmatch import fnmatch
 
-ALF_EXP = (
-    r'(?P<namespace>(?:^_{1})\w+(?:_{1}))?'
+# to include underscores: r'(?P<namespace>(?:^_)\w+(?:_))?'
+ALF_EXP = re.compile(
+    r'^_?(?P<namespace>(?<=_)[a-zA-Z]+)?_?'
     r'(?P<object>\w+)\.'
-    r'(?P<attribute>[a-zA-Z]+)'
-    r'(?P<timescale>(?:_{1})\w+)*'
-    r'(?P<extra>[\.\w]+)*\.'
+    r'(?P<attribute>[a-zA-Z]+)_?'
+    r'(?P<timescale>(?:_?)\w+)*\.?'
+    r'(?P<extra>[.\w]+)*\.'
     r'(?P<extension>\w+$)')
 
 
@@ -40,7 +43,7 @@ def is_valid(filename):
     Returns:
         bool
     """
-    return re.match(ALF_EXP, filename) is not None
+    return ALF_EXP.match(filename) is not None
 
 
 def alf_parts(filename, as_dict=False):
@@ -49,7 +52,7 @@ def alf_parts(filename, as_dict=False):
 
     Examples:
         >>> alf_parts('_namespace_obj.times_timescale.extra.foo.ext')
-        ('_namespace_', 'obj', 'times', '_timescale', '.extra.foo', 'ext')
+        ('namespace', 'obj', 'times', 'timescale', 'extra.foo', 'ext')
         >>> alf_parts('spikes.clusters.npy', as_dict=True)
         {'namespace': None,
          'object': 'spikes',
@@ -58,9 +61,13 @@ def alf_parts(filename, as_dict=False):
          'extra': None,
          'extension': 'npy'}
         >>> alf_parts('spikes.times_ephysClock.npy')
-        (None, 'spikes', 'times', '_ephysClock', None, 'npy')
+        (None, 'spikes', 'times', 'ephysClock', None, 'npy')
         >>> alf_parts('_iblmic_audioSpectrogram.frequencies.npy')
-        ('_iblmic_', 'audioSpectrogram', 'frequencies', None, None, 'npy')
+        ('iblmic', 'audioSpectrogram', 'frequencies', None, None, 'npy')
+        >>> alf_parts('_spikeglx_ephysData_g0_t0.imec.wiring.json')
+        ('spikeglx', 'ephysData_g0_t0', 'imec', None, 'wiring', 'json')
+        >>> alf_parts('_ibl_trials.goCue_times_bpod.csv')
+        ('ibl', 'trials', 'goCue', 'times_bpod', None, 'csv')
 
     Args:
         filename (str): The name of the file
@@ -74,10 +81,115 @@ def alf_parts(filename, as_dict=False):
         extra (str): Any extra parts to the filename, or None if not present
         extension (str): The file extension
     """
-    m = re.match(ALF_EXP, filename)
+    m = ALF_EXP.match(filename)
     if not m:
         raise ValueError('Invalid ALF filename')
     return m.groupdict() if as_dict else m.groups()
+
+
+def to_alf(object, attribute, extension, namespace=None, timescale=None, extra=None):
+    """
+    Given a set of ALF file parts, return a valid ALF file name
+
+    Args:
+        object (str): The ALF object name
+        attribute (str): The ALF object attribute name
+        extension (str): The file extension
+        namespace (str): An optional namespace
+        timescale (str): An optional timescale
+        extra (str, tuple): One or more optional extra ALF attributes
+
+    Returns:
+        filename (str): a file name string built from the ALF parts
+
+    Examples:
+    >>> to_alf('spikes', 'times', 'ssv')
+    'spikes.times.ssv'
+    >>> to_alf('spikes', 'times', 'ssv', namespace='ibl')
+    '_ibl_spikes.times.ssv'
+    >>> to_alf('spikes', 'times', 'ssv', namespace='ibl', timescale='ephysClock')
+    '_ibl_spikes.times_ephysClock.ssv'
+    >>> to_alf('spikes', 'times', 'npy', namespace='ibl', timescale='ephysClock', extra='raw')
+    '_ibl_spikes.times_ephysClock.raw.npy'
+    >>> to_alf('wheel', 'timestamps', 'npy', 'ibl', 'bpod', ('raw', 'v12'))
+    '_ibl_wheel.timestamps_bpod.raw.v12.npy'
+    """
+    if not extra:
+        extra = ()
+    elif isinstance(extra, str):
+        extra = extra.split('.')
+    parts = (('_%s_' % namespace if namespace else '') + object,
+             attribute + ('_%s' % timescale if timescale else ''),
+             *extra,
+             extension)
+    return '.'.join(parts)
+
+
+def filter_by(alf_path, **kwargs):
+    """
+    Given a path and optional filters, returns all ALF files and their associated parts. The
+    filters constitute a logical AND.
+    
+    Args:
+        alf_path (str): A Path to a directory containing ALF files
+        object (str): filter by a given object (e.g. 'spikes')
+        attribute (str): filter by a given attribute (e.g. 'intervals')
+        extension (str): filter by extension (e.g. 'npy')
+        namespace (str): filter by a given namespace (e.g. 'ibl') or None for files without one
+        timescale (str): filter by a given timescale (e.g. 'bpod') or None for files without one
+        extra (str, list): filter by extra parameters (e.g. 'raw') or None for files without extra
+                           parts. NB: Wild cards not permitted here.
+        
+    Returns:
+        alf_files (list): list of ALF files and tuples of their parts
+        attributes (list of dicts): list of parsed file parts
+
+    Examples:
+        # Filter files with universal timescale
+        filter_by(alf_path, timescale=None)
+        
+        # Filter files by a given ALF object
+        filter_by(alf_path, object='wheel')
+        
+        # Filter using wildcard, e.g. 'wheel' and 'wheelMoves' ALF objects
+        filter_by(alf_path, object='wh*')
+        
+        # Filter all intervals that are in bpod time
+        filter_by(alf_path, attribute='intervals', timescale='bpod')
+    """
+    alf_files = [f for f in os.listdir(alf_path) if is_valid(f)]
+    attributes = [alf_parts(f, as_dict=True) for f in alf_files]
+
+    if kwargs:
+        # Validate keyword arguments against regex group names
+        invalid = kwargs.keys() - ALF_EXP.groupindex.keys()
+        if invalid:
+            raise TypeError("%s() got an unexpected keyword argument '%s'" 
+                            % (__name__, set(invalid).pop()))
+
+        # Ensure 'extra' input is a list; if str split on dot
+        if 'extra' in kwargs and isinstance(kwargs['extra'], str):
+            kwargs['extra'] = kwargs['extra'].split('.')
+
+        # Iterate over ALF files
+        for file, attr in zip(alf_files.copy(), attributes.copy()):
+            for k, v in kwargs.items():  # Iterate over attributes
+                if v is None or attr[k] is None:
+                    # If either is None, both should be None to match
+                    match = v is attr[k]
+                elif k == 'extra':
+                    # Check all provided extra fields match those in ALF
+                    match = all(elem in attr[k].split('.') for elem in v)
+                else:
+                    # Check given attribute matches, allowing wildcards
+                    match = fnmatch(attr[k], v)
+
+                if not match:  # Remove file from list and move on to next file
+                    alf_files.remove(file)
+                    attributes.remove(attr)
+                    break
+
+    return alf_files, [tuple(attr.values()) for attr in attributes]
 
 
 if __name__ == "__main__":
