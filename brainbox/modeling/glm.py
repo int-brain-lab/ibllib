@@ -7,7 +7,7 @@ https://github.com/pillowlab/neuroGLM
 Berk Gercek
 International Brain Lab, 2020
 """
-from warnings import warn
+from warnings import warn, catch_warnings
 import numpy as np
 import pandas as pd
 from brainbox.processing import bincount2D
@@ -76,9 +76,9 @@ class NeuralGLM:
             raise ValueError("Invalid values were passed in vartypes")
         if not len(spk_times) == len(spk_clu):
             raise IndexError("Spike times and cluster IDs are not same length")
-        if not isinstance(train, float):
+        if not isinstance(train, float) and not train == 1:
             raise TypeError('train must be a float between 0 and 1')
-        if not ((train > 0) & (train < 1)):
+        if not ((train > 0) & (train <= 1)):
             raise ValueError('train must be between 0 and 1')
 
         # Filter out cells which don't meet the criteria for minimum spiking, while doing trial
@@ -132,7 +132,6 @@ class NeuralGLM:
         self.trialsdf = trialsdf
         self.traininds = traininds
         self.testinds = testinds
-        self.edim = 0
         self.compiled = False
         return
 
@@ -197,7 +196,6 @@ class NeuralGLM:
             stimvecs.append(vec.reshape(-1, 1))
         regressor = pd.Series(stimvecs, index=self.trialsdf.index)
         self.add_covariate(covlabel, regressor, bases, offset, cond, desc)
-        self.edim += bases.shape[1]
         return
 
     def add_covariate_boxcar(self, covlabel, boxstart, boxend,
@@ -237,12 +235,37 @@ class NeuralGLM:
             stimvecs.append(bxcar)
         regressor = pd.Series(stimvecs, index=self.trialsdf.index)
         self.add_covariate(covlabel, regressor, None, cond, desc)
-        self.edim += 1
         return
 
-    def add_covariate_raw(self, covlabel, rawcolname,
-                          desc=''):
-        raise NotImplementedError('No support for raw covariates at this time. Coming soon™')
+    def add_covariate_raw(self, covlabel, raw,
+                          cond=None, desc=''):
+        stimlens = self.trialsdf.duration.apply(self.binf)
+        if isinstance(raw, str):
+            if raw not in self.trialsdf.columns:
+                raise KeyError(f'String {raw} not found in columns of trialsdf. Strings must'
+                               'refer to valid column names.')
+            covseries = self.trialsdf[raw]
+            if np.any(covseries.apply(len) != stimlens):
+                raise IndexError(f'Some array shapes in {raw} do not match binned duration.')
+            self.add_covariate(covlabel, covseries, None, cond=cond)
+
+        if callable(raw):
+            try:
+                covseries = self.trialsdf.apply(raw, axis=1)
+            except Exception:
+                raise TypeError('Function for raw covariate generation did not run properly.'
+                                'Make sure that the function passed takes in rows of trialsdf.')
+            if np.any(covseries.apply(len) != stimlens):
+                raise IndexError(f'Some array shapes in {raw} do not match binned duration.')
+            self.add_covariate(covlabel, covseries, None, cond=cond)
+
+        if isinstance(raw, pd.Series):
+            if np.any(raw.index != self.trialsdf.index):
+                raise IndexError('Indices of raw do not match indices of trialsdf.')
+            if np.any(raw.apply(len) != stimlens):
+                raise IndexError(f'Some array shapes in {raw} do not match binned duration.')
+            self.add_covariate(covlabel, raw, None, cond=cond)
+
 
     def add_covariate(self, covlabel, regressor, bases,
                       offset=0, cond=None, desc=''):
@@ -361,7 +384,7 @@ class NeuralGLM:
         rowtrials = []
         for i, trial in self.trialsdf.iterrows():
             nT = self.binf(trial.duration)
-            miniX = np.zeros((nT, self.edim))
+            miniX = np.zeros((nT, self.currcol))
             rowlabs = np.ones((nT, 1), dtype=int) * i
             for cov in covars.values():
                 sidx = cov['dmcol_idx']
@@ -373,6 +396,8 @@ class NeuralGLM:
                 if cov['bases'] is None:
                     miniX[:, sidx] = stim
                 else:
+                    if len(stim.shape) == 1:
+                        stim = stim.reshape(-1, 1)
                     miniX[:, sidx] = convbasis(stim, cov['bases'], self.binf(cov['offset']))
             # Sparsify convolved result and store in miniDMs
             if dense:
@@ -436,14 +461,21 @@ class NeuralGLM:
 
         if method == 'sklearn':
             traindm = self.dm[trainmask]
+            nonconverged = []
             for i, cell in tqdm(enumerate(self.clu_ids), "Fitting units: "):
                 binned = trainbinned[:, i]
-                fitobj = PoissonRegressor(alpha=alpha, max_iter=300).fit(traindm,
-                                                                         binned)
+                with catch_warnings(record=True) as w:
+                    fitobj = PoissonRegressor(alpha=alpha, max_iter=300).fit(traindm,
+                                                                             binned)
+                if len(w) != 0:
+                    nonconverged.append(cell[0])
                 wts = np.concatenate([[fitobj.intercept_], fitobj.coef_], axis=0)
                 wvar = np.diag(np.linalg.inv(dd_neglog(wts, biasdm[trainmask], binned)))
                 coefs.at[cell[0]] = fitobj.coef_
+                variances.at[cell[0]] = wvar
                 intercepts.at[cell[0]] = fitobj.intercept_
+            if len(nonconverged) != 0:
+                warn(f'Fitting did not converge for some units: {nonconverged}')
             self.coefs = coefs
             self.intercepts = intercepts
             return coefs, intercepts
@@ -482,6 +514,10 @@ class NeuralGLM:
         """
         outputs = {}
         for var in self.covar.keys():
+            if self.covar[var]['bases'] is None:
+                wind = self.covar[var]['dmcol_idx']
+                outputs[var] = self.coefs.apply(lambda w: w[wind])
+                continue
             winds = self.covar[var]['dmcol_idx']
             bases = self.covar[var]['bases']
             weights = self.coefs.apply(lambda w: np.sum(w[winds] * bases, axis=1))
@@ -546,7 +582,7 @@ class NeuralGLM:
 
 def convbasis(stim, bases, offset=0):
     if offset < 0:
-        stim = np.pad(stim, ((0, offset), (0, 0)))
+        stim = np.pad(stim, ((0, -offset), (0, 0)))
     elif offset > 0:
         stim = np.pad(stim, ((offset, 0), (0, 0)))
 
