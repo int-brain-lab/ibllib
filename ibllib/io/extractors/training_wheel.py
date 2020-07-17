@@ -102,7 +102,7 @@ def get_wheel_position(session_path, bp_data=None, display=False):
     df = raw.load_encoder_positions(session_path)
     if df is None:
         _logger.error('No wheel data for ' + str(session_path))
-        return None
+        return None, None
     data = structarr(['re_ts', 're_pos', 'bns_ts'],
                      shape=(df.shape[0],), formats=['f8', 'f8', np.object])
     data['re_ts'] = df.re_ts.values
