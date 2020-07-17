@@ -6,6 +6,8 @@ import numpy as np
 from alf.io import is_session_path, is_uuid_string
 from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
 from ibllib.qc.bpodqc_extractors import BpodQCExtractor
+from ibllib.io.extractors.training_wheel import WHEEL_RADIUS_CM
+from ibllib.io.extractors.ephys_fpga import WHEEL_TICKS
 from oneibl.one import ONE
 
 log = logging.getLogger("ibllib")
@@ -117,6 +119,7 @@ def get_bpodqc_metrics_frame(trial_data, wheel_data, wheel_gain, BNC1, BNC2):
         "_bpod_correct_trial_event_sequence": load_correct_trial_event_sequence(trial_data),
         "_bpod_trial_length": load_trial_length(trial_data),
         # Wheel trial_data loading
+        "_bpod_wheel_integrity": load_wheel_integrity(wheel_data),
         "_bpod_wheel_freeze_during_quiescence": load_wheel_freeze_during_quiescence(
             trial_data, wheel_data
         ),
@@ -135,7 +138,7 @@ def get_bpodqc_metrics_frame(trial_data, wheel_data, wheel_gain, BNC1, BNC2):
     passed = {}
     for k in qcmetrics_frame:
         metrics[k], passed[k] = qcmetrics_frame[k]
-    return (metrics, passed)
+    return metrics, passed
 
 
 # SINGLE METRICS
@@ -212,29 +215,24 @@ def load_wheel_freeze_during_quiescence(trial_data, wheel_data):
     Criterion: <2 degrees for 99% of trials
     """
     assert np.all(np.diff(wheel_data["re_ts"]) > 0)
-    assert trial_data["quiescence"].size == trial_data["goCueTrigger_times"].size
+    assert trial_data["quiescence"].size == trial_data["stimOnTrigger_times"].size
     # Get tuple of wheel times and positions over each trial's quiescence period
-    qevt_start_times = trial_data["goCueTrigger_times"] - trial_data["quiescence"]
+    qevt_start_times = trial_data["stimOnTrigger_times"] - trial_data["quiescence"]
     traces = traces_by_trial(
         wheel_data["re_ts"],
         wheel_data["re_pos"],
         start=qevt_start_times,
-        end=trial_data["goCueTrigger_times"],
+        end=trial_data["stimOnTrigger_times"]
     )
 
-    # metric = np.zeros_like(trial_data['quiescence'])
-    # for i, trial in enumerate(traces):
-    #     pos = trial[1]
-    #     if pos.size > 1:
-    #         metric[i] = np.abs(pos.max() - pos.min())
-    # -OR-
     metric = np.zeros((len(trial_data["quiescence"]), 2))  # (n_trials, n_directions)
     for i, trial in enumerate(traces):
         t, pos = trial
         # Get the last position before the period began
-        if pos.size > 1:
+        if pos.size > 0:
             # Find the position of the preceding sample and subtract it
-            origin = wheel_data["re_pos"][wheel_data["re_ts"] < t[0]][-1]
+            idx = np.abs(wheel_data["re_ts"] - t[0]).argmin() - 1
+            origin = wheel_data["re_pos"][idx if idx != -1 else 0]
             # Find the absolute min and max relative to the last sample
             metric[i, :] = np.abs([np.min(pos - origin), np.max(pos - origin)])
     # Reduce to the largest displacement found in any direction
@@ -285,7 +283,7 @@ def load_wheel_move_during_closed_loop(trial_data, wheel_data, wheel_gain):
     Criterion: displacement < 1 visual degree for 99% of non-NoGo trials
     """
     if wheel_gain is None:
-        log.warning("No wheel_gain input in function call, retruning None")
+        log.warning("No wheel_gain input in function call, returning None")
         return None
 
     # Get tuple of wheel times and positions over each trial's closed-loop period
@@ -300,11 +298,10 @@ def load_wheel_move_during_closed_loop(trial_data, wheel_data, wheel_gain):
     # For each trial find the absolute displacement
     for i, trial in enumerate(traces):
         t, pos = trial
-        if pos.size == 0:
-            metric[i] = np.nan
-        else:
+        if pos.size != 0:
             # Find the position of the preceding sample and subtract it
-            origin = wheel_data["re_pos"][wheel_data["re_ts"] <= t[0]][-1]
+            idx = np.abs(wheel_data["re_ts"] - t[0]).argmin() - 1
+            origin = wheel_data["re_pos"][idx]
             metric[i] = np.abs(pos - origin).max()
 
     # Load wheel_gain and thresholds for each trial
@@ -565,7 +562,7 @@ def load_stimulus_move_before_goCue(trial_data, BNC1=None):
     Criterion: 0 on 99% of trials
     """
     if BNC1 is None:
-        log.warning("No BNC1 input in function call, retruning None")
+        log.warning("No BNC1 input in function call, returning None")
         return None
     s = BNC1["times"]
     metric = np.array([])
@@ -594,4 +591,29 @@ def load_audio_pre_trial(trial_data, BNC2=None):
         metric = np.append(metric, np.any(s[s > i] < (c - 0.02)))
     passed = (~metric).astype(np.float)
     assert len(trial_data["intervals_0"]) == len(metric) == len(passed)
+    return metric, passed
+
+
+def load_wheel_integrity(wheel_data, re_encoding='X1', enc_res=None):
+    """
+    Variable name: wheel_integrity
+    Metric: (absolute difference of the positions - encoder resolution) + 1 if difference of
+    timestamps <= 0
+    Criterion: Close to zero for > 99% of samples
+    :param wheel_data: dict of wheel data with keys ('re_ts', 're_pos')
+    :param re_encoding: the encoding of the wheel data, X1, X2 or X4
+    :param enc_res: the rotary encoder resolution 
+    """
+    if isinstance(re_encoding, str):
+        re_encoding = int(re_encoding[-1])
+    if enc_res is None:
+        enc_res = WHEEL_TICKS / re_encoding
+    # The expected difference between samples in the extracted units
+    resolution = (2 * np.pi / enc_res) * re_encoding * WHEEL_RADIUS_CM
+    # We expect the difference of neighbouring positions to be close to the resolution
+    pos_check = np.abs(np.diff(wheel_data['re_pos'])) - resolution
+    # Timestamps should be strictly increasing
+    ts_check = np.diff(wheel_data['re_ts']) <= 0.
+    metric = pos_check + ts_check.astype(float)  # all values should be close to zero
+    passed = np.isclose(metric, np.zeros_like(metric))
     return metric, passed
