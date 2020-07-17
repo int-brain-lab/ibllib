@@ -2,7 +2,7 @@
 import unittest
 
 from ibllib.qc.extended_qc import compute_session_status
-from ibllib.qc import ExtendedQC
+from ibllib.qc.extended_qc import ExtendedQC
 from oneibl.one import ONE
 
 one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',

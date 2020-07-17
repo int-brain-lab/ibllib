@@ -1,11 +1,10 @@
-# Mock dataset
 import unittest
 from functools import partial
 from pathlib import Path
 
 import numpy as np
 
-from ibllib.qc import BpodQC
+from ibllib.qc.bpodqc_metrics import BpodQC
 from ibllib.qc import bpodqc_metrics as qcmetrics
 from ibllib.qc.oneutils import download_bpodqc_raw_data
 from oneibl.one import ONE
@@ -114,11 +113,6 @@ class TestBpodQCMetrics(unittest.TestCase):
         data["goCueTrigger_times"] = data["stimOn_times"] + 1e-3
         data["goCue_times"] = data["goCueTrigger_times"] + trigg_delay
 
-        # data["goCueTrigger_times"] = data["quiescence"] + 1e-3
-        # data["goCue_times"] = data["goCueTrigger_times"] + trigg_delay
-        # data['stimOn_times'] = data['goCue_times'] + 1e-3
-        # data['stimOn_times_training'] = data['stimOn_times']
-        # data['stimOnTrigger_times'] = data['stimOn_times'] - trigg_delay
         data["response_times"] = end_times - (
             resp_feeback_delay + 1e-1 + iti_length + (~correct + 1)
         )
@@ -459,7 +453,6 @@ class TestBpodQCMetrics(unittest.TestCase):
 
         metric, passed = qcmetrics.load_wheel_integrity(self.wheel, re_encoding='X1')
         self.assertFalse(passed[idx].any())
-
 
     @unittest.skip("not implemented")
     def test_load_stimulus_move_before_goCue(self):
