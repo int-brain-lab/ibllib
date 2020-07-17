@@ -3,24 +3,20 @@ from pathlib import Path
 
 import numpy as np
 
-from alf.io import is_session_path, is_uuid_string
 from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
 from ibllib.qc.bpodqc_extractors import BpodQCExtractor
 from ibllib.io.extractors.training_wheel import WHEEL_RADIUS_CM
 from ibllib.io.extractors.ephys_fpga import WHEEL_TICKS
-from oneibl.one import ONE
+from . import base
 
-log = logging.getLogger("ibllib")
+log = logging.getLogger('ibllib')
 
 
-class BpodQC(object):
+class BpodQC(base.QC):
     def __init__(self, session_path_or_eid, one=None, ensure_data=False, lazy=False):
-        self.one = one or ONE()
-        self.eid = None
-        self.session_path = None
+        super().__init__(session_path_or_eid, one, log=log)
         self.ensure_data = ensure_data
         self.lazy = lazy
-        self._set_eid_or_path(session_path_or_eid)
         if self.ensure_data:
             self._ensure_required_data()
 
@@ -48,32 +44,20 @@ class BpodQC(object):
             "_iblrig_ambientSensorData.raw",
         ]
         if (self.session_path is None) or (not Path(self.session_path).exists()):
-            log.info(f"Downloading data for session {self.eid}")
+            self.log.info(f"Downloading data for session {self.eid}")
             self.one.load(self.eid, dataset_types=dstypes, download_only=True)
             self.session_path = self.one.path_from_eid(self.eid)
             if self.session_path is None:
                 self.lazy = True
-                log.error("Data not found on server, can't calculate QC.")
+                self.log.error("Data not found on server, can't calculate QC.")
         else:
             glob_sp = list(x.name for x in Path(self.session_path).rglob("*.raw.*") if x.is_file())
             if not all([x in glob_sp for x in dstypes]):
-                log.warning(
+                self.log.warning(
                     f"Missing some datasets for session {self.eid} in path {self.session_path}"
                 )
-                log.info("Attempting download...")
+                self.log.info("Attempting download...")
                 self.one.load(self.eid, dataset_types=dstypes, download_only=True)
-
-    def _set_eid_or_path(self, session_path_or_eid):
-        if session_path_or_eid is None:
-            log.error("Cannot run BpodQC: Plese insert a valid session path or eid")
-        if is_uuid_string(str(session_path_or_eid)):
-            self.eid = session_path_or_eid
-            # Try to setsession_path if data is found locally
-            self.session_path = self.one.path_from_eid(self.eid)
-        elif is_session_path(session_path_or_eid):
-            self.session_path = session_path_or_eid
-        else:
-            log.error("Cannot run BpodQC: Plese insert a valid session path or eid")
 
     def load_data(self, lazy=False):
         self.extractor = BpodQCExtractor(self.session_path, lazy=lazy)
@@ -84,7 +68,7 @@ class BpodQC(object):
     def compute(self):
         if self.extractor is None:
             self.load_data()
-        log.info(f"Session {self.session_path}: Running QC on Bpod data...")
+        self.log.info(f"Session {self.session_path}: Running QC on Bpod data...")
         self.metrics, self.passed = get_bpodqc_metrics_frame(
             self.extractor.trial_data,
             self.extractor.wheel_data,
