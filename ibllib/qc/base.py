@@ -24,7 +24,7 @@ class QC(ABC):
         Subclasses may implement this for loading raw data
         """
         pass
-    
+
     def _set_eid_or_path(self, session_path_or_eid):
         if is_uuid_string(str(session_path_or_eid)):
             self.eid = session_path_or_eid
@@ -36,4 +36,3 @@ class QC(ABC):
         else:
             self.log.error("Cannot run QC: an experiment uuid or session path is requried")
             raise ValueError("'session' must be a valid session path or uuid")
-

@@ -137,8 +137,8 @@ class TestBpodQCMetrics(unittest.TestCase):
 
     @staticmethod
     def load_fake_wheel_data(trial_data, wheel_gain=4):
-        # Load a wheel fragment: a numpy array of the form [timestamps, positions], for a wheel 
-        # movement during one trial.  Wheel is X1 bpod RE in radians. 
+        # Load a wheel fragment: a numpy array of the form [timestamps, positions], for a wheel
+        # movement during one trial.  Wheel is X1 bpod RE in radians.
         wh_path = Path(__file__).parent.joinpath('..', 'fixtures', 'qc').resolve()
         wheel_frag = np.load(wh_path.joinpath('wheel.npy'))
         resolution = np.mean(np.abs(np.diff(wheel_frag[:, 1])))  # pos diff between samples
@@ -162,7 +162,7 @@ class TestBpodQCMetrics(unittest.TestCase):
         wheel_data = []  # List generated of wheel data fragments
 
         def add_frag(t, p):
-            """Add wheel data fragments to list, adjusting positions to be within one sample of 
+            """Add wheel data fragments to list, adjusting positions to be within one sample of
             one another"""
             last_samp = getattr(add_frag, 'last_samp', (0, 0))
             p += last_samp[1]
@@ -188,7 +188,7 @@ class TestBpodQCMetrics(unittest.TestCase):
                 t, p = qt_wheel_fill(goCue, trial_end, .1, resolution)
                 add_frag(t, p)
             else:
-                # Align wheel fragment with response time 
+                # Align wheel fragment with response time
                 response_time = trial_data['response_times'][i]
                 t = wheel_frag[:, 0] + response_time - wheel_frag[pos_thresh_idx, 0]
                 p = np.abs(wheel_frag[:, 1]) * trial_data['choice'][i]
@@ -197,7 +197,7 @@ class TestBpodQCMetrics(unittest.TestCase):
                 # Fill in random movements between end of response and trial end
                 t, p = qt_wheel_fill(t[-1] + 0.01, trial_end, p_step=resolution)
                 add_frag(t, p)
-        
+
         # Stitch wheel fragments and assert no skips
         wheel_data = np.concatenate(list(map(np.column_stack, wheel_data)))
         assert np.all(np.diff(wheel_data[:, 0]) > 0), "timestamps don't strictly increase"
@@ -388,7 +388,7 @@ class TestBpodQCMetrics(unittest.TestCase):
     def test_load_wheel_freeze_during_quiescence(self):
         metric, passed = qcmetrics.load_wheel_freeze_during_quiescence(self.data, self.wheel)
         self.assertTrue(np.all(passed))
-        
+
         # Make one trial move more
         n = 1  # Index of trial to manipulate
         t1 = self.data['intervals_0'][n]
@@ -419,7 +419,7 @@ class TestBpodQCMetrics(unittest.TestCase):
                               self.wheel['re_ts'] < self.data['feedback_times'][n] + 1)
         self.wheel['re_ts'] = self.wheel['re_ts'][mask]
         self.wheel['re_pos'] = self.wheel['re_pos'][mask]
-        
+
         metric, passed = qcmetrics.load_wheel_move_before_feedback(self.data, self.wheel)
         self.assertFalse(passed[n] or metric[n] != 0)
 
@@ -445,10 +445,10 @@ class TestBpodQCMetrics(unittest.TestCase):
     def test_load_wheel_integrity(self):
         metric, passed = qcmetrics.load_wheel_integrity(self.wheel, re_encoding='X1')
         self.assertTrue(np.all(passed))
-        
+
         # Insert some violations and verify that they're caught
         idx = np.random.randint(self.wheel['re_ts'].size, size=2)
-        self.wheel['re_ts'][idx[0]+1] -= 1
+        self.wheel['re_ts'][idx[0] + 1] -= 1
         self.wheel['re_pos'][idx[1]] -= 1
 
         metric, passed = qcmetrics.load_wheel_integrity(self.wheel, re_encoding='X1')

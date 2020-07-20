@@ -586,7 +586,7 @@ def load_wheel_integrity(wheel_data, re_encoding='X1', enc_res=None):
     Criterion: Close to zero for > 99% of samples
     :param wheel_data: dict of wheel data with keys ('re_ts', 're_pos')
     :param re_encoding: the encoding of the wheel data, X1, X2 or X4
-    :param enc_res: the rotary encoder resolution 
+    :param enc_res: the rotary encoder resolution
     """
     if isinstance(re_encoding, str):
         re_encoding = int(re_encoding[-1])

@@ -318,7 +318,7 @@ def bpod_fpga_sync(bpod_intervals=None, ephys_intervals=None, iti_duration=None)
     ppm = np.polyfit(bpod_intervals[:, 0], dt, 1)[0] * 1e6
     if ppm > BPOD_FPGA_DRIFT_THRESHOLD_PPM:
         _logger.warning(
-            'BPOD/FPGA synchronization shows values greater than %i ppm', 
+            'BPOD/FPGA synchronization shows values greater than %i ppm',
             BPOD_FPGA_DRIFT_THRESHOLD_PPM)
         # plt.plot(trials['intervals'][:, 0], dt, '*')
     # so far 2 datasets concerned: goCueTrigger_times_bpod  and response_times_bpod
