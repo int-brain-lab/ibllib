@@ -203,7 +203,7 @@ def _ls(alfpath, object, **kwargs):
         object = files.alf_parts(alfpath.name)[1]
         alfpath = alfpath.parent
         files_alf, attributes = files.filter_by(alfpath, object=object, **kwargs)
-        
+
     # raise error if no files found
     if not files_alf:
         err_str = 'object "%s" ' % object if object else 'ALF files'
@@ -220,17 +220,17 @@ def exists(alfpath, object, attributes=None, **kwargs):
     :param attributes: list or list of strings for wanted attributes
     :return: Bool. For multiple attributes, returns True only if all attributes are found
     """
-    
+
     # if the object is not found, return False
     try:
         _, attributes_found = _ls(alfpath, object, **kwargs)
     except FileNotFoundError:
         return False
-    
+
     # if object found and no attribute provided, True
     if not attributes:
         return True
-    
+
     # if attributes provided, test if all are found
     if isinstance(attributes, str):
         attributes = [attributes]

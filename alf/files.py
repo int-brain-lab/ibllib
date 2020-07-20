@@ -129,7 +129,7 @@ def filter_by(alf_path, **kwargs):
     """
     Given a path and optional filters, returns all ALF files and their associated parts. The
     filters constitute a logical AND.
-    
+
     Args:
         alf_path (str): A Path to a directory containing ALF files
         object (str): filter by a given object (e.g. 'spikes')
@@ -139,7 +139,7 @@ def filter_by(alf_path, **kwargs):
         timescale (str): filter by a given timescale (e.g. 'bpod') or None for files without one
         extra (str, list): filter by extra parameters (e.g. 'raw') or None for files without extra
                            parts. NB: Wild cards not permitted here.
-        
+
     Returns:
         alf_files (list): list of ALF files and tuples of their parts
         attributes (list of dicts): list of parsed file parts
@@ -147,13 +147,13 @@ def filter_by(alf_path, **kwargs):
     Examples:
         # Filter files with universal timescale
         filter_by(alf_path, timescale=None)
-        
+
         # Filter files by a given ALF object
         filter_by(alf_path, object='wheel')
-        
+
         # Filter using wildcard, e.g. 'wheel' and 'wheelMoves' ALF objects
         filter_by(alf_path, object='wh*')
-        
+
         # Filter all intervals that are in bpod time
         filter_by(alf_path, attribute='intervals', timescale='bpod')
     """
@@ -164,7 +164,7 @@ def filter_by(alf_path, **kwargs):
         # Validate keyword arguments against regex group names
         invalid = kwargs.keys() - ALF_EXP.groupindex.keys()
         if invalid:
-            raise TypeError("%s() got an unexpected keyword argument '%s'" 
+            raise TypeError("%s() got an unexpected keyword argument '%s'"
                             % (__name__, set(invalid).pop()))
 
         # Ensure 'extra' input is a list; if str split on dot
@@ -191,21 +191,19 @@ def filter_by(alf_path, **kwargs):
 
     return alf_files, [tuple(attr.values()) for attr in attributes]
 
-
 # def attributes_as_keys(parts):
 #     """
-#     parts = [('ibl', 'trials', 'goCue', 'times', 'bpod', 'raw', 'npy'), 
-#          (None, 'trials', 'pLeft', None, None, 'npy'), 
+#     parts = [('ibl', 'trials', 'goCue', 'times', 'bpod', 'raw', 'npy'),
+#          (None, 'trials', 'pLeft', None, None, 'npy'),
 #          ('ibl', 'trials', 'goCue', 'times', 'pbod', 'raw', 'csv')]
-#     :param parts: 
-#     :return: 
+#     :param parts:
+#     :return:
 #     """
 #     attributes = [p[2] if not p[3] else '_'.join(p[2:4]) for p in parts]
 #     seen = set()
 #     dupes = [x for x in attributes if ((x in seen) is (seen.add(x) is None))]
 #     for dup in dupes:
 #         if dup:
-            
 
 
 if __name__ == "__main__":
