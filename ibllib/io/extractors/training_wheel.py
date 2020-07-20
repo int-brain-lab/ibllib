@@ -243,17 +243,21 @@ def extract_wheel_moves(re_ts, re_pos, display=False):
     """
     if len(re_ts.shape) == 1:
         assert re_ts.size == re_pos.size, 'wheel data dimension mismatch'
-        assert np.all(
-            np.diff(re_ts) > 0), 'wheel timestamps not monotonically increasing'
+        assert np.all(np.diff(re_ts) > 0), 'wheel timestamps not strictly increasing'
     else:
         _logger.debug('2D wheel timestamps')
+        if len(re_pos.shape) > 1:  # Ensure 1D array of positions
+            re_pos = re_pos.flatten()
+        # Linearly interpolate the times
+        x = np.arange(re_pos.size)
+        re_ts = np.interp(x, re_ts[:, 0], re_ts[:, 1])
 
     # Check the values and units of wheel position
     res = np.array([wh.ENC_RES, wh.ENC_RES / 2, wh.ENC_RES / 4])
     # min change in rad and cm for each decoding type
     # [rad_X4, rad_X2, rad_X1, cm_X4, cm_X2, cm_X1]
     min_change = np.concatenate([2 * np.pi / res, wh.WHEEL_DIAMETER * np.pi / res])
-    pos_diff = np.abs(np.ediff1d(re_pos)).min()
+    pos_diff = np.median(np.abs(np.ediff1d(re_pos)))
 
     # find min change closest to min pos_diff
     idx = np.argmin(np.abs(min_change - pos_diff))

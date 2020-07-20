@@ -472,7 +472,7 @@ def sync_trials_robust(t0, t1, diff_threshold=0.001, drift_threshold_ppm=200, ma
     """
     Attempts to find matching timestamps in 2 time-series that have an offset, are drifting,
     and are most likely incomplete: sizes don't have to match, some pulses may be missing
-    in any serie.
+    in any series.
     Only works with irregular time series as it relies on the derivative to match sync.
     :param t0:
     :param t1:

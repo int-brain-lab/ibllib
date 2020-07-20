@@ -1,7 +1,6 @@
-# Mock dataset
 import unittest
 
-from ibllib.qc import ONEQC
+from ibllib.qc.oneqc_metrics import ONEQC
 from oneibl.one import ONE
 
 
