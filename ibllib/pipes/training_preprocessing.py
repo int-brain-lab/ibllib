@@ -107,6 +107,9 @@ def extract_training(session_path, save=True):
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
         trials, files_trials = biased_trials.extract_all(
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
+    elif extractor_type == 'habituation':
+        _logger.info('Skipped trial extraction for habituation session')
+        return None, None, None
     else:
         raise ValueError(f"No extractor for task {extractor_type}")
     _logger.info('session extracted \n')  # timing info in log
