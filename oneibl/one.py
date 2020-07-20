@@ -703,7 +703,7 @@ class OneAlyx(OneAbstract):
         if self._cache.size > 0:
             ic = parquet.find_first_2d(
                 self._cache[['eid_0', 'eid_1']].to_numpy(), parquet.str2np(eid))
-            if ic != -1:
+            if ic is not None:
                 ses = self._cache.iloc[ic]
                 return Path(self._par.CACHE_DIR).joinpath(
                     ses['lab'], 'Subjects', ses['subject'], ses['start_time'].isoformat()[:10],
