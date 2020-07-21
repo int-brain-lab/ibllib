@@ -9,7 +9,7 @@ import alf.io
 
 
 def _plot_spectra(outpath, typ, savefig=True):
-    spec = alf.io.load_object(outpath, '_iblqc_ephysSpectralDensity' + typ.upper())
+    spec = alf.io.load_object(outpath, 'ephysSpectralDensity' + typ.upper(), namespace='iblqc')
 
     sns.set_style("whitegrid")
     plt.figure(figsize=[9, 4.5])
@@ -29,7 +29,7 @@ def _plot_spectra(outpath, typ, savefig=True):
 
 
 def _plot_rmsmap(outfil, typ, savefig=True):
-    rmsmap = alf.io.load_object(outpath, '_iblqc_ephysTimeRms' + typ.upper())
+    rmsmap = alf.io.load_object(outpath, 'ephysTimeRms' + typ.upper(), namespace='iblqc')
     plt.figure(figsize=[12, 4.5])
     axim = plt.axes([0.2, 0.1, 0.7, 0.8])
     axrms = plt.axes([0.05, 0.1, 0.15, 0.8])

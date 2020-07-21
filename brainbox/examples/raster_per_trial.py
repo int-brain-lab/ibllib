@@ -9,7 +9,7 @@ alf_path = '.../ZM_1735/2019-08-01/001/alf'
 spikes = alf.io.load_object(alf_path, 'spikes')
 clusters = alf.io.load_object(alf_path, 'clusters')
 channels = alf.io.load_object(alf_path, 'channels')
-trials = alf.io.load_object(alf_path, '_ibl_trials')
+trials = alf.io.load_object(alf_path, 'trials')
 
 T_BIN = 0.01  # time bin in sec
 

@@ -459,15 +459,17 @@ def extract_sync(session_path, overwrite=False, ephys_files=None):
     syncs = []
     outputs = []
     for efi in ephys_files:
-        glob_filter = f'*{efi.label}*' if efi.label else '*'
         bin_file = efi.get('ap', efi.get('nidq', None))
         if not bin_file:
             continue
-        file_exists = alf.io.exists(bin_file.parent, object='_spikeglx_sync', glob=glob_filter)
+        alfname = dict(object='sync', namespace='spikeglx')
+        if efi.label:
+            alfname['extra'] = efi.label
+        file_exists = alf.io.exists(bin_file.parent, **alfname)
         if not overwrite and file_exists:
             _logger.warning(f'Skipping raw sync: SGLX sync found for probe {efi.label} !')
-            sync = alf.io.load_object(bin_file.parent, object='_spikeglx_sync', glob=glob_filter)
-            out_files, _ = alf.io._ls(bin_file.parent, object='_spikeglx_sync', glob=glob_filter)
+            sync = alf.io.load_object(bin_file.parent, **alfname)
+            out_files, _ = alf.io._ls(bin_file.parent, **alfname)
         else:
             sr = spikeglx.Reader(bin_file)
             sync, out_files = _sync_to_alf(sr, bin_file.parent, save=True, parts=efi.label)
@@ -483,7 +485,7 @@ def _get_all_probes_sync(session_path, bin_exists=True):
     version = spikeglx.get_neuropixel_version_from_files(ephys_files)
     # attach the sync information to each binary file found
     for ef in ephys_files:
-        ef['sync'] = alf.io.load_object(ef.path, '_spikeglx_sync', short_keys=True)
+        ef['sync'] = alf.io.load_object(ef.path, 'sync', namespace='spikeglx')
         ef['sync_map'] = get_ibl_sync_map(ef, version)
     return ephys_files
 

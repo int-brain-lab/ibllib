@@ -403,7 +403,7 @@ def _qc_from_path(sess_path, display=True):
                                                     chmap=chmap, save=True, display=display)
     # align with the bpod
     bpod2fpga = ephys_fpga.align_with_bpod(temp_alf_folder.parent)
-    alf_trials = alf.io.load_object(temp_alf_folder, '_ibl_trials')
+    alf_trials = alf.io.load_object(temp_alf_folder, 'trials')
     shutil.rmtree(temp_alf_folder)
     # do the QC
     qcs, qct = qc_fpga_task(fpga_trials, alf_trials)
