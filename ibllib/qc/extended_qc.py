@@ -1,20 +1,30 @@
+"""
+"Extended QC" comprises a set of data quality control tests for various parts of the pipeline.
+Currently the ExtendedQC object collects the following classes:
+
+- ONEQC:  Checks that a session's extracted ALF files conform to the ALF specification,
+          namely that objects have the correct shape and matching length.
+- BpodQC: Checks on data extracted from Bonsai/Bpod.  Amoung other things, checks tha delays
+          between trial events are within a tolerance specified by the proscribed task structure
+
+Example: Run full QC for a given session and view the results
+    eid = 'c94463ed-57da-4f02-8406-46f2f03924f3'
+    ext = ExtendedQC(eid, lazy=False)
+    ext.compute_all_qc()
+    print(ext.frame)
+
+TODO Integrate ephys QC
+"""
 import logging
 
 import numpy as np
 
 from alf.io import is_uuid_string
-from ibllib.qc import ONEQC, BpodQC
+from ibllib.qc.bpodqc_metrics import BpodQC
+from ibllib.qc.oneqc_metrics import ONEQC
 from oneibl.one import ONE
 
 log = logging.getLogger("ibllib")
-
-# one = ONE(base_url="https://dev.alyx.internationalbrainlab.org")
-
-# eid, det = random_ephys_session()
-
-# eid = "4153bd83-2168-4bd4-a15c-f7e82f3f73fb"
-# det = one.get_details(eid)
-# details = one.get_details(eid, full=True)
 
 
 def compute_session_status(frame, criteria=None):
@@ -99,7 +109,7 @@ def compute_session_status(frame, criteria=None):
 
 
 class ExtendedQC(object):
-    def __init__(self, one=None, eid=None, lazy=True):
+    def __init__(self, eid=None, one=None, lazy=True):
         self.one = one or ONE()
         self.eid = eid if is_uuid_string(eid) else None
 

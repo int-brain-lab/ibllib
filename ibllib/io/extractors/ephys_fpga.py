@@ -287,14 +287,15 @@ def _get_sync_fronts(sync, channel_nb, tmin=None, tmax=None):
                   'polarities': sync['polarities'][selection]})
 
 
-def bpod_fpga_sync(bpod_intervals=None, ephys_intervals=None):
+def bpod_fpga_sync(bpod_intervals=None, ephys_intervals=None, iti_duration=None):
     """
     Computes synchronization function from bpod to fpga
     :param bpod_intervals
     :param ephys_intervals
     :return: interpolation function
     """
-    ITI_DURATION = 0.5
+    if iti_duration is None:
+        iti_duration = 0.5
     # check consistency
     if bpod_intervals.size != ephys_intervals.size:
         # patching things up if the bpod and FPGA don't have the same recording span
@@ -309,14 +310,16 @@ def bpod_fpga_sync(bpod_intervals=None, ephys_intervals=None):
         ephys_intervals = ephys_intervals[ifpga, :]
     else:
         ibpod, ifpga = [np.arange(bpod_intervals.shape[0]) for _ in np.arange(2)]
-    tlen = (np.diff(bpod_intervals) - np.diff(ephys_intervals))[:-1] - ITI_DURATION
-    assert(np.all(np.abs(tlen[np.invert(np.isnan(tlen))])[:-1] < 5 * 1e-3))
+    tlen = (np.diff(bpod_intervals) - np.diff(ephys_intervals))[:-1] - iti_duration
+    assert np.all(np.abs(tlen[np.invert(np.isnan(tlen))])[:-1] < 5 * 1e-3)
     # dt is the delta to apply to bpod times in order to be on the ephys clock
     dt = bpod_intervals[:, 0] - ephys_intervals[:, 0]
     # compute the clock drift bpod versus dt
     ppm = np.polyfit(bpod_intervals[:, 0], dt, 1)[0] * 1e6
     if ppm > BPOD_FPGA_DRIFT_THRESHOLD_PPM:
-        _logger.warning('BPOD/FPGA synchronization shows values greater than 150 ppm')
+        _logger.warning(
+            'BPOD/FPGA synchronization shows values greater than %i ppm',
+            BPOD_FPGA_DRIFT_THRESHOLD_PPM)
         # plt.plot(trials['intervals'][:, 0], dt, '*')
     # so far 2 datasets concerned: goCueTrigger_times_bpod  and response_times_bpod
     fcn_bpod2fpga = interpolate.interp1d(bpod_intervals[:, 0], ephys_intervals[:, 0],
