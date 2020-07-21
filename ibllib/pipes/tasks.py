@@ -77,7 +77,8 @@ class Task(abc.ABC):
             _logger.info(f"Job {self.__class__} errored")
             self.status = -1
         self.time_elapsed_secs = time.time() - start_time
-        _logger.info(f"outputs: {self.outputs}")
+        nout = len(self.outputs) if self.outputs is not None else None
+        _logger.info(f"N outputs: {nout}")
         _logger.info(f"--- {self.time_elapsed_secs} seconds run-time ---")
         # after the run, capture the log output
         self.log = log_capture_string.getvalue()
