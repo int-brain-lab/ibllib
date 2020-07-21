@@ -4,6 +4,12 @@ Module for identifying and parsing ALF file names.
 An ALF file has the following components (those in brackets are optional):
     (_namespace_)object.attribute(_timescale)(.extra.parts).ext
 
+Note the following:
+    Object attributes may not contain an underscore unless followed by 'times' or 'intervals'.
+    A namespace must not contain extra underscores (i.e. `name_space` and `__namespace__` are not
+    valid)
+    ALF files must always have an extension
+
 For more information, see the following documentation:
     https://docs.internationalbrainlab.org/en/latest/04_reference.html#alf
 
@@ -16,12 +22,13 @@ import os
 from fnmatch import fnmatch
 
 # to include underscores: r'(?P<namespace>(?:^_)\w+(?:_))?'
+# to treat _times and _intervals as timescale: (?P<attribute>[a-zA-Z]+)_?
 ALF_EXP = re.compile(
-    r'^_?(?P<namespace>(?<=_)[a-zA-Z]+)?_?'
+    r'^_?(?P<namespace>(?<=_)[a-zA-Z0-9]+)?_?'
     r'(?P<object>\w+)\.'
-    r'(?P<attribute>[a-zA-Z]+)_?'
+    r'(?P<attribute>[a-zA-Z0-9]+(?:_times(?=[_\b.])|_intervals(?=[_\b.]))?)_?'
     r'(?P<timescale>(?:_?)\w+)*\.?'
-    r'(?P<extra>[.\w]+)*\.'
+    r'(?P<extra>[.\w-]+)*\.'
     r'(?P<extension>\w+$)')
 
 
@@ -32,7 +39,9 @@ def is_valid(filename):
     Examples:
         >>> is_valid('trials.feedbackType.npy')
         True
-        >>> is_valid('spike_trian.npy')
+        >>> is_valid('_ns_obj.attr1.2622b17c-9408-4910-99cb-abf16d9225b9.metadata.json')
+        True
+        >>> is_valid('spike_train.npy')
         False
         >>> is_valid('channels._phy_ids.csv')
         False
@@ -66,8 +75,10 @@ def alf_parts(filename, as_dict=False):
         ('iblmic', 'audioSpectrogram', 'frequencies', None, None, 'npy')
         >>> alf_parts('_spikeglx_ephysData_g0_t0.imec.wiring.json')
         ('spikeglx', 'ephysData_g0_t0', 'imec', None, 'wiring', 'json')
+        >>> alf_parts('_spikeglx_ephysData_g0_t0.imec0.lf.bin')
+        ('spikeglx', 'ephysData_g0_t0', 'imec0', None, 'lf', 'bin')
         >>> alf_parts('_ibl_trials.goCue_times_bpod.csv')
-        ('ibl', 'trials', 'goCue', 'times_bpod', None, 'csv')
+        ('ibl', 'trials', 'goCue_times', 'bpod', None, 'csv')
 
     Args:
         filename (str): The name of the file
@@ -89,7 +100,8 @@ def alf_parts(filename, as_dict=False):
 
 def to_alf(object, attribute, extension, namespace=None, timescale=None, extra=None):
     """
-    Given a set of ALF file parts, return a valid ALF file name
+    Given a set of ALF file parts, return a valid ALF file name.  Essential periods and
+    underscores are added by the function.
 
     Args:
         object (str): The ALF object name
@@ -114,10 +126,26 @@ def to_alf(object, attribute, extension, namespace=None, timescale=None, extra=N
     >>> to_alf('wheel', 'timestamps', 'npy', 'ibl', 'bpod', ('raw', 'v12'))
     '_ibl_wheel.timestamps_bpod.raw.v12.npy'
     """
+    # Validate inputs
+    if not extension:
+        raise TypeError('An extension must be provided')
+    elif extension.startswith('.'):
+        extension = extension[1:]
+    if re.search('_(?!times$|intervals)', attribute):
+        raise ValueError('Object attributes must not contain underscores')
+    if any(pt is not None and '.' in pt for pt in
+           (object, attribute, namespace, extension, timescale)):
+        raise ValueError('ALF parts must not contain a period (`.`)')
+    if '_' in (namespace or ''):
+        raise ValueError('Namespace must not contain extra underscores')
+
+    # Optional extras may be provided as string or tuple of strings
     if not extra:
         extra = ()
     elif isinstance(extra, str):
         extra = extra.split('.')
+
+    # Construct ALF file
     parts = (('_%s_' % namespace if namespace else '') + object,
              attribute + ('_%s' % timescale if timescale else ''),
              *extra,
@@ -179,7 +207,7 @@ def filter_by(alf_path, **kwargs):
                     match = v is attr[k]
                 elif k == 'extra':
                     # Check all provided extra fields match those in ALF
-                    match = all(elem in attr[k].split('.') for elem in v)
+                    match = all(elem in attr[k].split('.') for elem in v if elem)
                 else:
                     # Check given attribute matches, allowing wildcards
                     match = fnmatch(attr[k], v)
@@ -190,20 +218,6 @@ def filter_by(alf_path, **kwargs):
                     break
 
     return alf_files, [tuple(attr.values()) for attr in attributes]
-
-# def attributes_as_keys(parts):
-#     """
-#     parts = [('ibl', 'trials', 'goCue', 'times', 'bpod', 'raw', 'npy'),
-#          (None, 'trials', 'pLeft', None, None, 'npy'),
-#          ('ibl', 'trials', 'goCue', 'times', 'pbod', 'raw', 'csv')]
-#     :param parts:
-#     :return:
-#     """
-#     attributes = [p[2] if not p[3] else '_'.join(p[2:4]) for p in parts]
-#     seen = set()
-#     dupes = [x for x in attributes if ((x in seen) is (seen.add(x) is None))]
-#     for dup in dupes:
-#         if dup:
 
 
 if __name__ == "__main__":

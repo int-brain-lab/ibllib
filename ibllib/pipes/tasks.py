@@ -72,7 +72,7 @@ class Task(abc.ABC):
             self.outputs = self._run(**kwargs)
             self.status = 0
             _logger.info(f"Job {self.__class__} complete")
-        except Exception:
+        except BaseException:
             _logger.error(traceback.format_exc())
             _logger.info(f"Job {self.__class__} errored")
             self.status = -1
@@ -84,14 +84,9 @@ class Task(abc.ABC):
         _logger.removeHandler(ch)
         # tear down
         self.tearDown()
-        # teardown
-        if use_alyx:
-            status = 'Complete' if self.status == 0 else 'Errored'
-            self.one.alyx.rest('tasks', 'partial_update', id=self.taskid,
-                               data={'status': status, 'log': self.log})
         return self.status
 
-    def register_datasets(self, one=None, jobid=None, **kwargs):
+    def register_datasets(self, one=None, **kwargs):
         """
         Register output datasets form the task to Alyx
         :param one:
@@ -100,7 +95,6 @@ class Task(abc.ABC):
         :return:
         """
         assert one
-        assert jobid
         if self.outputs:
             if isinstance(self.outputs, list):
                 versions = [self.version for _ in self.outputs]
@@ -250,10 +244,10 @@ class Pipeline(abc.ABC):
         return task_deck, all_datasets
 
     def rerun_failed(self):
-        return self.run(status__in=['Waiting', 'Started', 'Errored', 'Empty'])
+        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty'])
 
     def rerun(self):
-        return self.run(status__in=['Waiting', 'Started', 'Errored', 'Empty', 'Complete'])
+        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete'])
 
     @property
     def name(self):
@@ -306,8 +300,10 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None, max_md
         if task.outputs is None:
             patch_data['status'] = 'Empty'
         else:  # otherwise register data and set status to Complete
-            registered_dsets = task.register_datasets(
-                one=one, jobid=tdict['id'], max_md5_size=max_md5_size)
+            try:
+                registered_dsets = task.register_datasets(one=one, max_md5_size=max_md5_size)
+            except BaseException:
+                patch_data['status'] = 'Errored'
             patch_data['status'] = 'Complete'
     elif status == -1:
         patch_data['status'] = 'Errored'

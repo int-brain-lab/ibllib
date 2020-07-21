@@ -25,8 +25,8 @@ def check_wheel_angle(eid):
     D = one.load(eid, dataset_types=Dataset_types, clobber=False, download_only=True)
     session_path = Path(D[0]).parent
 
-    wheel = alf.io.load_object(session_path, '_ibl_wheel')
-    trials = alf.io.load_object(session_path, '_ibl_trials')
+    wheel = alf.io.load_object(session_path, 'wheel')
+    trials = alf.io.load_object(session_path, 'trials')
     reward_success = trials['feedback_times'][trials['feedbackType'] == 1]
     reward_failure = trials['feedback_times'][trials['feedbackType'] == -1]
 

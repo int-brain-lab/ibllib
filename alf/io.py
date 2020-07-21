@@ -139,17 +139,18 @@ def read_ts(filename):
         filename = Path(filename)
 
     # alf format is object.attribute.extension, for example '_ibl_wheel.position.npy'
-    _, obj, attr, *_, ext = files.alf_parts(filename)
+    _, obj, attr, *_, ext = files.alf_parts(filename.parts[-1])
 
     # looking for matching object with attribute timestamps: '_ibl_wheel.timestamps.npy'
-    time_file = files.filter_by(filename.parent, object=obj, attribute='timestamps', extension=ext)
+    (time_file,), _ = files.filter_by(filename.parent, object=obj,
+                                      attribute='timestamps', extension=ext)
 
     if not time_file:
         name = files.to_alf(obj, attr, ext)
         _logger.error(name + ' not found! no time-scale for' + str(filename))
         raise FileNotFoundError(name + ' not found! no time-scale for' + str(filename))
 
-    return np.load(time_file), np.load(filename)
+    return np.load(filename.parent / time_file), np.load(filename)
 
 
 def load_file_content(fil):
@@ -185,7 +186,7 @@ def load_file_content(fil):
     return Path(fil)
 
 
-def _ls(alfpath, object, **kwargs):
+def _ls(alfpath, object=None, **kwargs):
     """
     Given a path, an object and a filter, returns all files and associated attributes
     :param alfpath: containing folder
@@ -218,7 +219,7 @@ def exists(alfpath, object, attributes=None, **kwargs):
     :param alfpath: str or pathlib.Path of the folder to look into
     :param object: str ALF object name
     :param attributes: list or list of strings for wanted attributes
-    :return: Bool. For multiple attributes, returns True only if all attributes are found
+    :return: bool. For multiple attributes, returns True only if all attributes are found
     """
 
     # if the object is not found, return False
@@ -238,7 +239,7 @@ def exists(alfpath, object, attributes=None, **kwargs):
     return set(attributes).issubset(attributes_found)
 
 
-def load_object(alfpath, object=None, **kwargs):
+def load_object(alfpath, object=None, short_keys=False, **kwargs):
     """
     Reads all files (ie. attributes) sharing the same object.
     For example, if the file provided to the function is `spikes.times`, the function will
@@ -249,14 +250,28 @@ def load_object(alfpath, object=None, **kwargs):
 
     :param alfpath: any alf file pertaining to the object OR directory containing files
     :param object: if a directory is provided and object is None, all valid ALF files returned
+    :param short_keys: by default, the output dictionary keys will be compounds of attributes,
+     timescale and any eventual parts separated by a dot. Use True to shorten the keys to the
+     attribute and timescale.
     :return: a dictionary of all attributes pertaining to the object
 
-    example: spikes = ibllib.io.alf.load_object('/path/to/my/alffolder/', 'spikes')
-    FIXME Overwrites if two files with same object and attribute
+    Examples:
+        # Load `spikes` object
+        spikes = ibllib.io.alf.load_object('/path/to/my/alffolder/', 'spikes')
+
+        # Load `trials` object under the `ibl` namespace
+        trials = ibllib.io.alf.load_object(session_path, 'trials', namespace='ibl')
+
     """
-    # prepare the glob input argument if it's a list
+    if Path(alfpath).is_dir() and object is None:
+        raise ValueError('If a directory is provided, the object name should be provided too')
     files_alf, parts = _ls(alfpath, object, **kwargs)
-    attributes = [part[2] + '_' + part[3] if part[3] else part[2] for part in parts]
+    # Take attribute and timescale from parts list
+    attributes = [p[2] if not p[3] else '_'.join(p[2:4]) for p in parts]
+    if not short_keys:  # Include extra parts in the keys
+        attributes = [attr + ('.' + p[4] if p[4] else '') for attr, p in zip(attributes, parts)]
+    assert len(set(attributes)) == len(attributes), \
+        'multiple object files with the same attribute found, please restrict on namespace etc.'
     out = AlfBunch({})
     # load content for each file
     for fil, att in zip(files_alf, attributes):
@@ -283,7 +298,7 @@ def load_object(alfpath, object=None, **kwargs):
     return out
 
 
-def save_object_npy(alfpath, dico, object, parts=None, namespace=None):
+def save_object_npy(alfpath, dico, object, parts=None, namespace=None, timescale=None):
     """
     Saves a dictionary in alf format using object as object name and dictionary keys as attribute
     names. Dimensions have to be consistent.
@@ -293,8 +308,9 @@ def save_object_npy(alfpath, dico, object, parts=None, namespace=None):
     :param alfpath: path of the folder to save data to
     :param dico: dictionary to save to npy; keys correspond to ALF attributes
     :param object: name of the object to save
-    :param namespace: the optional namespace of the object
     :param parts: extra parts to the ALF name
+    :param namespace: the optional namespace of the object
+    :param timescale: the optional timescale of the object
     :return: List of written files
 
     example: ibllib.io.alf.save_object_npy('/path/to/my/alffolder/', spikes, 'spikes')
@@ -306,7 +322,8 @@ def save_object_npy(alfpath, dico, object, parts=None, namespace=None):
                          str([(k, v.shape) for k, v in dico.items()]))
     out_files = []
     for k, v in dico.items():
-        out_file = alfpath / files.to_alf(object, k, 'npy', extra=parts, namespace=namespace)
+        out_file = alfpath / files.to_alf(object, k, 'npy',
+                                          extra=parts, namespace=namespace, timescale=timescale)
         np.save(out_file, v)
         out_files.append(out_file)
     return out_files
@@ -316,8 +333,8 @@ def save_metadata(file_alf, dico):
     """
     Writes a meta data file matching a current alf file object.
     For example given an alf file
-    `clusters.ccf_location.ssv` this will write a dictionary in json format in
-    `clusters.ccf_location.metadata.json`
+    `clusters.ccfLocation.ssv` this will write a dictionary in json format in
+    `clusters.ccfLocation.metadata.json`
     Reserved keywords:
      - **columns**: column names for binary tables.
      - **row**: row names for binary tables.
@@ -327,6 +344,7 @@ def save_metadata(file_alf, dico):
     :param dico: dictionary containing meta-data.
     :return: None
     """
+    assert files.is_valid(file_alf.parts[-1]), 'ALF filename not valid'
     file_meta_data = file_alf.parent / (file_alf.stem + '.metadata.json')
     with open(file_meta_data, 'w+') as fid:
         fid.write(json.dumps(dico, indent=1))

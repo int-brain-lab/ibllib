@@ -393,7 +393,7 @@ if __name__ == '__main__':
     spikes = ioalf.load_object(session_path, 'spikes')
     clusters = ioalf.load_object(session_path, 'clusters')
     # channels = ioalf.load_object(session_path, 'channels')
-    trials = ioalf.load_object(session_path, '_ibl_trials')
+    trials = ioalf.load_object(session_path, 'trials')
 
     # bin spikes and get trial IDs associated with them
     binned_spikes, binned_trialIDs, _ = bin_spikes_trials(spikes, trials, bin_size=0.01)

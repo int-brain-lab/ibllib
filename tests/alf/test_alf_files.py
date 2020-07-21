@@ -32,18 +32,18 @@ class TestsAlfPartsFilters(unittest.TestCase):
             'wheel.timestamps.npy',
             'wheelMoves.intervals.npy',
             '_ibl_trials.intervals.npy']
-        self.assertListEqual(alf_files, expected, 'failed to filter with None attribute')
+        self.assertCountEqual(alf_files, expected, 'failed to filter with None attribute')
 
         # Test filtering by object; should return only 'wheel' ALF objects
         alf_files, parts = alf.files.filter_by(self.tmpdir, object='wheel')
         expected = ['wheel.position.npy', 'wheel.timestamps.npy']
-        self.assertListEqual(alf_files, expected, 'failed to filter by object')
+        self.assertCountEqual(alf_files, expected, 'failed to filter by object')
         self.assertEqual(len(alf_files), len(parts))
 
         # Test wildcards; should return 'wheel' and 'wheelMoves' ALF objects
         alf_files, _ = alf.files.filter_by(self.tmpdir, object='wh*')
         expected = ['wheel.position.npy', 'wheel.timestamps.npy', 'wheelMoves.intervals.npy']
-        self.assertListEqual(alf_files, expected, 'failed to filter with wildcard')
+        self.assertCountEqual(alf_files, expected, 'failed to filter with wildcard')
 
         # Test filtering by specific timescale; test parts returned
         alf_files, parts = alf.files.filter_by(self.tmpdir, timescale='bpod')
@@ -62,11 +62,11 @@ class TestsAlfPartsFilters(unittest.TestCase):
         # Test returning only ALF files
         alf_files, _ = alf.files.filter_by(self.tmpdir)
         self.assertCountEqual(alf_files, files[1:], 'failed to return ALF files')
-        
+
         # Test return empty
         out = alf.files.filter_by(self.tmpdir, object=None)
         self.assertEqual(out, ([], []))
-        
+
         # Test extras
         alf_files, _ = alf.files.filter_by(self.tmpdir, extra='v12')
         expected = ['_namespace_obj.attr_timescale.raw.v12.ext']
@@ -85,3 +85,7 @@ class TestsAlfPartsFilters(unittest.TestCase):
 
     def tearDown(self) -> None:
         shutil.rmtree(self.tmpdir)
+
+
+if __name__ == "__main__":
+    unittest.main(exit=False)
