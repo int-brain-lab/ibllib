@@ -3,7 +3,7 @@ import unittest
 
 import numpy as np
 
-from ibllib.qc import BpodQCExtractor
+from ibllib.qc.bpodqc_extractors import BpodQCExtractor
 from oneibl.one import ONE
 
 one = ONE(

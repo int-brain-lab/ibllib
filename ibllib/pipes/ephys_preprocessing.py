@@ -20,6 +20,8 @@ class EphysPulses(tasks.Task):
 
     def _run(self, overwrite=False):
         syncs, out_files = ephys_fpga.extract_sync(self.session_path, overwrite=overwrite)
+        for out_file in out_files:
+            _logger.info(f"extracted pulses for {out_file}")
         return out_files
 
 

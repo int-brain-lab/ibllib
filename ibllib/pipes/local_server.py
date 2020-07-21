@@ -82,27 +82,31 @@ def job_runner(subjects_path, lab=None, dry=False, one=None, count=5):
         return  # if the lab is none, this will return empty tasks each time
     tasks = one.alyx.rest('tasks', 'list', status='Waiting',
                           django=f'session__lab__name__in,{lab}')
-    tasks_runner(subjects_path, tasks, one=one, count=count, dry=dry)
+    tasks_runner(subjects_path, tasks, one=one, count=count, time_out=3600, dry=dry)
 
 
-def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, count=5, **kwargs):
+def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, count=5, time_out=None, **kwargs):
     """
     Function to run a list of tasks (task dictionary from Alyx query) on a local server
     :param subjects_path:
     :param tasks_dict:
     :param one:
     :param dry:
+    :param count: maximum number of tasks to run
+    :param time_out: between each task, if time elapsed is greater than time out, returns (seconds)
     :param kwargs:
     :return: list of dataset dictionaries
     """
     if one is None:
         one = ONE()
-
+    import time
+    tstart = time.time()
     c = 0
     last_session = None
     all_datasets = []
     for tdict in tasks_dict:
-        if c >= count:
+        # if the count is reached or if the time_out has been elapsed, break the loop and return
+        if c >= count or (time_out and time.time() - tstart > time_out):
             break
         # reconstruct the session local path. As many jobs belong to the same session
         # cache the result

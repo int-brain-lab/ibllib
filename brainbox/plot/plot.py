@@ -614,8 +614,8 @@ def peri_event_time_histogram(
 
 
 def driftmap(ts, feat, ax=None, plot_style='bincount',
-             t_bin=0.01, d_bin=20, **kwargs):
-    '''
+             t_bin=0.01, d_bin=20, weights=None, **kwargs):
+    """
     Plots the values of a spike feature array (y-axis) over time (x-axis).
     Two arguments can be given for the plot_style of the drift map:
     - 'scatter' : whereby each value is plotted as a marker (up to 100'000 data point)
@@ -655,10 +655,10 @@ def driftmap(ts, feat, ax=None, plot_style='bincount',
         >>> ts = units_b['times']['1']
         >>> depths = units_b['depths']['1']
         >>> cd, md = bb.plot.driftmap(ts, depths)
-    '''
-
-    cd = bb.metrics.cum_drift(feat)
-    md = bb.metrics.max_drift(feat)
+    """
+    iok = ~np.isnan(feat)
+    cd = bb.metrics.cum_drift(feat[iok])
+    md = bb.metrics.max_drift(feat[iok])
 
     if ax is None:
         fig, ax = plt.subplots()
@@ -670,10 +670,11 @@ def driftmap(ts, feat, ax=None, plot_style='bincount',
         ax.plot(ts, feat, **kwargs)
     else:
         # compute raster map as a function of site depth
-        R, times, depths = bb.processing.bincount2D(ts, feat, t_bin, d_bin)
+        R, times, depths = bb.processing.bincount2D(
+            ts[iok], feat[iok], t_bin, d_bin, weights=weights)
         # plot raster map
-        ax.imshow(R, aspect='auto', cmap='binary', vmax=t_bin / 0.001 / 4,
-                  extent=np.r_[times[[0, -1]], depths[[0, -1]]], origin='lower')
+        ax.imshow(R, aspect='auto', cmap='binary',
+                  extent=np.r_[times[[0, -1]], depths[[0, -1]]], origin='lower', **kwargs)
 
     return cd, md
 
