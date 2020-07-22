@@ -1,4 +1,4 @@
-### Release Notes 1.5.0 - 25/05/2020
+### Release Notes 1.5.1 - 25/05/2020
 -  Ephys extraction:
     -   spike amplitudes in Volts
     -   added waveforms samples dataset to use Phy from Flatiron datasets
