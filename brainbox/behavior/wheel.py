@@ -250,11 +250,7 @@ def movements(t, pos, freq=1000, pos_thresh=8, t_thresh=.2, min_gap=.1, pos_thre
             break
 
     has_onset = onsets_disp_arr > pos_thresh_onset
-    b, a = np.where(~np.fliplr(has_onset).T)
-    # A = np.asarray([np.min(b[a == i]) for i in np.unique(a)])
-    # A = np.vectorize(lambda i: np.min(b[a == i]))(np.unique(a))
-    first = (np.min(b[a == i]) for i in np.unique(a))
-    A = np.fromiter(first, dtype=int, count=np.unique(a).size)
+    A = np.argmin(np.fliplr(has_onset).T, axis=0)
     onset_lags = t_thresh_samps - A
     onset_samps = onset_samps + onset_lags - 1
     onsets = t[onset_samps]
