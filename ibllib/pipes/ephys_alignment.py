@@ -228,6 +228,119 @@ class EphysAlignment:
 
         return region, region_label, region_colour, region_id
 
+    @staticmethod
+    def get_nearest_boundary(xyz_coords, allen, extent=100, steps=4, parent=True):
+        """
+
+        Parameters
+        ----------
+        xyz_coords
+        allen
+        extent
+        steps
+        parent
+
+        Returns
+        -------
+
+        """
+
+        vector = atlas.Insertion.from_track(xyz_coords, brain_atlas=brain_atlas).trajectory.vector
+        nearest_bound = dict()
+        nearest_bound['dist'] = np.zeros((xyz_coords.shape[0]))
+        nearest_bound['id'] = np.zeros((xyz_coords.shape[0]))
+        nearest_bound['adj_id'] = np.zeros((xyz_coords.shape[0]))
+        nearest_bound['col'] = []
+
+        if parent:
+            nearest_bound['parent_dist'] = np.zeros((xyz_coords.shape[0]))
+            nearest_bound['parent_id'] = np.zeros((xyz_coords.shape[0]))
+            nearest_bound['parent_adj_id'] = np.zeros((xyz_coords.shape[0]))
+            nearest_bound['parent_col'] = []
+
+        for iP, point in enumerate(xyz_coords[:-1,:]):
+            d = np.dot(vector, point)
+            x_vals = np.sort(np.r_[np.linspace(point[0] - extent / 1e6, point[0] + extent / 1e6,
+                                               steps), point[0]])
+            y_vals = np.sort(np.r_[np.linspace(point[1] - extent / 1e6, point[1] + extent / 1e6,
+                                               steps), point[1]])
+
+            X, Y = np.meshgrid(x_vals, y_vals)
+            Z = (d - vector[0] * X - vector[1] * Y) / vector[2]
+            XYZ = np.c_[np.reshape(X, X.size), np.reshape(Y, Y.size), np.reshape(Z, Z.size)]
+            dist = np.sqrt(np.sum((XYZ - point) ** 2, axis=1))
+
+            #try:
+            brain_id = brain_atlas.regions.get(brain_atlas.get_labels(XYZ))['id']
+            #except Exception as err:
+            #    print(err)
+            #    continue
+
+            dist_sorted = np.argsort(dist)
+            brain_id_sorted = brain_id[dist_sorted]
+            nearest_bound['id'][iP] = brain_id_sorted[0]
+            nearest_bound['col'].append(allen['color_hex_triplet'][np.where(allen['id'] ==
+                                                                   brain_id_sorted[0])[0][0]])
+            bound_idx = np.where(brain_id_sorted != brain_id_sorted[0])[0]
+            if np.any(bound_idx):
+                nearest_bound['dist'][iP] = dist[dist_sorted[bound_idx[0]]] * 1e6
+                nearest_bound['adj_id'][iP] = brain_id_sorted[bound_idx[0]]
+            else:
+                nearest_bound['dist'][iP] = np.max(dist) * 1e6
+                nearest_bound['adj_id'][iP] = brain_id_sorted[0]
+
+            if parent:
+                # Now compute for the parents
+                brain_parent = np.array([allen['parent_structure_id'][np.where(allen['id'] == br)
+                                        [0][0]] for br in brain_id_sorted])
+                brain_parent[np.isnan(brain_parent)] = 0
+
+                nearest_bound['parent_id'][iP] = brain_parent[0]
+                nearest_bound['parent_col'].append(allen['color_hex_triplet']
+                                                   [np.where(allen['id'] ==
+                                                             brain_parent[0])[0][0]])
+
+                parent_idx = np.where(brain_parent != brain_parent[0])[0]
+                if np.any(parent_idx):
+                    nearest_bound['parent_dist'][iP] = dist[dist_sorted[parent_idx[0]]] * 1e6
+                    nearest_bound['parent_adj_id'][iP] = brain_parent[parent_idx[0]]
+                else:
+                    nearest_bound['parent_dist'][iP] = np.max(dist) * 1e6
+                    nearest_bound['parent_adj_id'][iP] = brain_parent[0]
+
+        return nearest_bound
+
+    @staticmethod
+    def arrange_into_regions(depth_coords, region_ids, distance, region_colours):
+        """
+
+        Parameters
+        ----------
+        depth_coords
+        region_ids
+        region_colours
+        distance
+
+        Returns
+        -------
+
+        """
+        boundaries = np.where(np.diff(region_ids))[0]
+        bound = np.r_[0, boundaries + 1, region_ids.shape[0]]
+        all_y = []
+        all_x = []
+        all_colour = []
+        for iB in np.arange(len(bound) - 1):
+            y = depth_coords[bound[iB]:(bound[iB + 1])]
+            y = np.r_[y[0], y, y[-1]]
+            x = distance[bound[iB]:(bound[iB + 1])]
+            x = np.r_[0, x, 0]
+            all_y.append(y)
+            all_x.append(x)
+            all_colour.append(region_colours[bound[iB]])
+
+        return all_x, all_y, all_colour
+
     def get_scale_factor(self, region):
         """
         Find how much each brain region has been scaled following interpolation
@@ -315,3 +428,4 @@ class EphysAlignment:
             slice_lines.append(xyz_per)
 
         return slice_lines
+
