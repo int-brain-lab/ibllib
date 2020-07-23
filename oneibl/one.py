@@ -642,9 +642,11 @@ class OneAlyx(OneAbstract):
             # overwrites the file if the expected filesize is different from the cached filesize
             if file_size and Path(local_path).stat().st_size != file_size:
                 clobber = True
+                _logger.warning(f" size mismatch, re-downloading {local_path}")
             # overwrites the file if the expected hash is different from the cached hash
             if hash and hashfile.md5(Path(local_path)) != hash:
                 clobber = True
+                _logger.warning(f" md5 hash mismatch, re-downloading {local_path}")
         # if there is no cached file, download
         else:
             clobber = True
