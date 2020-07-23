@@ -327,6 +327,7 @@ def extract_first_movement_times(wheel_moves, trials, min_qt=None):
     flinch = abs(wheel_moves['peakAmplitude']) < THRESH
     all_move_onsets = wheel_moves['intervals'][:, 0]
     # Iterate over trials, extracting onsets approx. within closed-loop period
+    cwarn = 0
     for i, (t1, t2) in enumerate(zip(trials['goCue_times'] - min_qt,
                                      trials['feedback_times'])):
         if ~np.isnan(t2 - t1):  # If both timestamps defined
@@ -338,7 +339,9 @@ def extract_first_movement_times(wheel_moves, trials, min_qt=None):
                     first_move_onsets[i] = all_move_onsets[ids[i]]  # Save first large onset
                     is_final_movement[i] = ids[i] == trial_onset_ids[-1]  # Final move of trial
         else:  # Log missing timestamps
-            _logger.warning('no reliable times for trial id %i', i + 1)
+            cwarn += 1
+    if cwarn:
+        _logger.warning(f'no reliable goCue/Feedback times (both needed) for {cwarn} trials')
 
     return first_move_onsets, is_final_movement, ids[ids != -1]
 

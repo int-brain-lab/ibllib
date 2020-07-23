@@ -35,7 +35,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
         one = ONE()
     rc = registration.RegistrationClient(one=one)
     flag_files = list(Path(root_path).glob('**/extract_me.flag'))
-    flag_files += list(Path(root_path).glob('**/extract_ephys.flag'))
+    flag_files += list(Path(root_path).glob('**/raw_session.flag'))
     all_datasets = []
     for flag_file in flag_files:
         session_path = flag_file.parent
