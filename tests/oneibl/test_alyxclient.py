@@ -21,10 +21,6 @@ class TestSingletonPattern(unittest.TestCase):
             username='test_user',
             password='TapetesBloc18',
             base_url='https://test.alyx.internationalbrainlab.org')
-        self.differentac = wc.AlyxClient(
-            username='test_user',
-            password='TapetesBloc18',
-            base_url='https://testdev.alyx.internationalbrainlab.org')
         self.sameac2 = wc.AlyxClient(
             username='test_user',
             password='TapetesBloc18',
@@ -32,7 +28,6 @@ class TestSingletonPattern(unittest.TestCase):
 
     def test_multiple_singletons(self):
         self.assertTrue(id(self.ac) == id(self.sameac))
-        self.assertTrue(id(self.ac) != id(self.differentac))
         self.assertTrue(id(self.ac) == id(self.sameac2))
 
 
