@@ -1,13 +1,14 @@
-# Mock dataset
 import unittest
 from functools import partial
+from pathlib import Path
 
 import numpy as np
 
-from ibllib.qc import BpodQC
+from ibllib.qc.bpodqc_metrics import BpodQC
 from ibllib.qc import bpodqc_metrics as qcmetrics
 from ibllib.qc.oneutils import download_bpodqc_raw_data
 from oneibl.one import ONE
+from brainbox.behavior.wheel import cm_to_rad
 
 one = ONE(
     base_url="https://test.alyx.internationalbrainlab.org",
@@ -68,6 +69,8 @@ class TestBpodQCMetrics(unittest.TestCase):
         # random eid will not be used if data is passed
         self.eid = "7be8fec4-406b-4e74-8548-d2885dcc3d5e"
         self.data = self.load_fake_bpod_data()
+        self.wheel_gain = 4
+        self.wheel = self.load_fake_wheel_data(self.data, wheel_gain=self.wheel_gain)
 
     @staticmethod
     def load_fake_bpod_data():
@@ -96,24 +99,20 @@ class TestBpodQCMetrics(unittest.TestCase):
 
         data = {
             "phase": np.random.uniform(low=0, high=2 * np.pi, size=(n,)),
-            "quiescence": start_times + quiescence_length,
+            "quiescence": quiescence_length,
             "choice": choice,
             "correct": correct,
             "intervals_0": start_times,
             "intervals_1": end_times,
             "itiIn_times": end_times - iti_length,
+            "position": np.ones_like(choice) * 35
         }
 
-        data["stimOnTrigger_times"] = data["quiescence"] + 1e-4
+        data["stimOnTrigger_times"] = start_times + data["quiescence"] + 1e-4
         data["stimOn_times"] = data["stimOnTrigger_times"] + 1e-1
         data["goCueTrigger_times"] = data["stimOn_times"] + 1e-3
         data["goCue_times"] = data["goCueTrigger_times"] + trigg_delay
 
-        # data["goCueTrigger_times"] = data["quiescence"] + 1e-3
-        # data["goCue_times"] = data["goCueTrigger_times"] + trigg_delay
-        # data['stimOn_times'] = data['goCue_times'] + 1e-3
-        # data['stimOn_times_training'] = data['stimOn_times']
-        # data['stimOnTrigger_times'] = data['stimOn_times'] - trigg_delay
         data["response_times"] = end_times - (
             resp_feeback_delay + 1e-1 + iti_length + (~correct + 1)
         )
@@ -135,6 +134,78 @@ class TestBpodQCMetrics(unittest.TestCase):
         data["rewardVolume"] = ~np.isnan(data["valveOpen_times"]) * 3.0
 
         return data
+
+    @staticmethod
+    def load_fake_wheel_data(trial_data, wheel_gain=4):
+        # Load a wheel fragment: a numpy array of the form [timestamps, positions], for a wheel
+        # movement during one trial.  Wheel is X1 bpod RE in radians.
+        wh_path = Path(__file__).parent.joinpath('..', 'fixtures', 'qc').resolve()
+        wheel_frag = np.load(wh_path.joinpath('wheel.npy'))
+        resolution = np.mean(np.abs(np.diff(wheel_frag[:, 1])))  # pos diff between samples
+        # abs displacement, s, in mm required to move 35 visual degrees
+        POS_THRESH = 35
+        s_mm = np.abs(POS_THRESH / wheel_gain)  # don't care about direction
+        # convert abs displacement to radians (wheel pos is in rad)
+        pos_thresh = cm_to_rad(s_mm * 1e-1)
+        # index of threshold cross
+        pos_thresh_idx = np.argmax(np.abs(wheel_frag[:, 1]) > pos_thresh)
+
+        def qt_wheel_fill(start, end, t_step=0.001, p_step=None):
+            if p_step is None:
+                p_step = 2 * np.pi / 1024
+            t = np.arange(start, end, t_step)
+            p = np.random.randint(-1, 2, len(t))
+            t = t[p != 0]
+            p = p[p != 0].cumsum() * p_step
+            return t, p
+
+        wheel_data = []  # List generated of wheel data fragments
+
+        def add_frag(t, p):
+            """Add wheel data fragments to list, adjusting positions to be within one sample of
+            one another"""
+            last_samp = getattr(add_frag, 'last_samp', (0, 0))
+            p += last_samp[1]
+            if np.abs(p[0] - last_samp[1]) == 0:
+                p += resolution
+            wheel_data.append((t, p))
+            add_frag.last_samp = (t[-1], p[-1])
+
+        for i in np.arange(len(trial_data['choice'])):
+            # Iterate over trials generating wheel samples for the necessary periods
+            # trial start to stim on; should be below quiescence threshold
+            stimOn_trig = trial_data['stimOnTrigger_times'][i]
+            trial_start = trial_data['intervals_0'][i]
+            t, p = qt_wheel_fill(trial_start, stimOn_trig, .5, resolution)
+            if len(t) > 0:  # Possible for no movement during quiescence
+                add_frag(t, p)
+
+            # stim on to trial end
+            trial_end = trial_data['intervals_1'][i]
+            if trial_data['choice'][i] == 0:
+                # Add random wheel movements for duration of trial
+                goCue = trial_data['goCue_times'][i]
+                t, p = qt_wheel_fill(goCue, trial_end, .1, resolution)
+                add_frag(t, p)
+            else:
+                # Align wheel fragment with response time
+                response_time = trial_data['response_times'][i]
+                t = wheel_frag[:, 0] + response_time - wheel_frag[pos_thresh_idx, 0]
+                p = np.abs(wheel_frag[:, 1]) * trial_data['choice'][i]
+                assert t[0] > add_frag.last_samp[0]
+                add_frag(t, p)
+                # Fill in random movements between end of response and trial end
+                t, p = qt_wheel_fill(t[-1] + 0.01, trial_end, p_step=resolution)
+                add_frag(t, p)
+
+        # Stitch wheel fragments and assert no skips
+        wheel_data = np.concatenate(list(map(np.column_stack, wheel_data)))
+        assert np.all(np.diff(wheel_data[:, 0]) > 0), "timestamps don't strictly increase"
+        np.testing.assert_allclose(np.abs(np.diff(wheel_data[:, 1])), resolution)
+        return {
+            're_ts': wheel_data[:, 0],
+            're_pos': wheel_data[:, 1]
+        }
 
     def test_load_stimOn_goCue_delays(self):
         metric, passed = qcmetrics.load_stimOn_goCue_delays(self.data)
@@ -296,24 +367,96 @@ class TestBpodQCMetrics(unittest.TestCase):
         metric, passed = qcmetrics.load_reward_volumes(self.data)
         self.assertTrue(np.nanmean(passed) == 0.2, "failed to detect incorrect reward volume")
 
-    @unittest.skip("not implemented")
+    def test_load_audio_pre_trial(self):
+        # Create Sound sync fake data that is OK
+        BNC2_OK = {
+            "times": self.data["goCue_times"] + 1e-1,
+            "polarities": np.array([1, -1, 1, -1, 1]),
+        }
+        # Create Sound sync fake data that is NOT OK
+        BNC2_NOK = {
+            "times": self.data["goCue_times"] - 1e-1,
+            "polarities": np.array([1, -1, 1, -1, 1]),
+        }
+        metric, passed = qcmetrics.load_audio_pre_trial(self.data, BNC2=BNC2_OK)
+        self.assertTrue(~np.all(metric))
+        self.assertTrue(np.all(passed))
+        metric, passed = qcmetrics.load_audio_pre_trial(self.data, BNC2=BNC2_NOK)
+        self.assertTrue(np.all(metric))
+        self.assertTrue(~np.all(passed))
+
     def test_load_wheel_freeze_during_quiescence(self):
-        pass
+        metric, passed = qcmetrics.load_wheel_freeze_during_quiescence(self.data, self.wheel)
+        self.assertTrue(np.all(passed))
 
-    @unittest.skip("not implemented")
+        # Make one trial move more
+        n = 1  # Index of trial to manipulate
+        t1 = self.data['intervals_0'][n]
+        t2 = self.data['stimOnTrigger_times'][n]
+        ts, pos = self.wheel.values()
+        wh_idx = np.argmax(ts > t1)
+        if ts[wh_idx] > self.data['stimOnTrigger_times'][n]:
+            # No sample during quiescence; insert one
+            self.wheel['re_ts'] = np.insert(ts, wh_idx, t2 - .001)
+            self.wheel['re_pos'] = np.insert(pos, wh_idx, np.inf)
+        else:  # Otherwise make one sample infinite
+            self.wheel['re_pos'][wh_idx] = np.inf
+        metric, passed = qcmetrics.load_wheel_freeze_during_quiescence(self.data, self.wheel)
+        self.assertFalse(passed[n])
+        self.assertTrue(metric[n] > 2)
+
     def test_load_wheel_move_before_feedback(self):
-        pass
+        metric, passed = qcmetrics.load_wheel_move_before_feedback(self.data, self.wheel)
+        nogo = self.data['choice'] == 0
+        self.assertTrue(np.all(passed[~nogo]))
+        self.assertTrue(np.isnan(metric[nogo]).all())
+        self.assertTrue(np.isnan(passed[nogo]).all())
 
-    @unittest.skip("not implemented")
+        # Remove wheel data around feedback for choice trial
+        assert self.data['choice'].any(), 'no choice trials in test data'
+        n = np.argmax(self.data['choice'] != 0)  # Index of choice trial
+        mask = np.logical_xor(self.wheel['re_ts'] > self.data['feedback_times'][n] - 1,
+                              self.wheel['re_ts'] < self.data['feedback_times'][n] + 1)
+        self.wheel['re_ts'] = self.wheel['re_ts'][mask]
+        self.wheel['re_pos'] = self.wheel['re_pos'][mask]
+
+        metric, passed = qcmetrics.load_wheel_move_before_feedback(self.data, self.wheel)
+        self.assertFalse(passed[n] or metric[n] != 0)
+
     def test_load_wheel_move_during_closed_loop(self):
-        pass
+        gain = self.wheel_gain or 4
+        metric, passed = qcmetrics.load_wheel_move_during_closed_loop(self.data, self.wheel, gain)
+        nogo = self.data['choice'] == 0
+        self.assertTrue(np.all(passed[~nogo]))
+        self.assertTrue(np.isnan(metric[nogo]).all())
+        self.assertTrue(np.isnan(passed[nogo]).all())
+
+        # Remove wheel data for choice trial
+        assert self.data['choice'].any(), 'no choice trials in test data'
+        n = np.argmax(self.data['choice'] != 0)  # Index of choice trial
+        mask = np.logical_xor(self.wheel['re_ts'] < self.data['goCue_times'][n],
+                              self.wheel['re_ts'] > self.data['response_times'][n])
+        self.wheel['re_ts'] = self.wheel['re_ts'][mask]
+        self.wheel['re_pos'] = self.wheel['re_pos'][mask]
+
+        metric, passed = qcmetrics.load_wheel_move_during_closed_loop(self.data, self.wheel, gain)
+        self.assertFalse(passed[n])
+
+    def test_load_wheel_integrity(self):
+        metric, passed = qcmetrics.load_wheel_integrity(self.wheel, re_encoding='X1')
+        self.assertTrue(np.all(passed))
+
+        # Insert some violations and verify that they're caught
+        idx = np.random.randint(self.wheel['re_ts'].size, size=2)
+        self.wheel['re_ts'][idx[0] + 1] -= 1
+        self.wheel['re_pos'][idx[1]] -= 1
+
+        metric, passed = qcmetrics.load_wheel_integrity(self.wheel, re_encoding='X1')
+        self.assertFalse(passed[idx].any())
 
     @unittest.skip("not implemented")
     def test_load_stimulus_move_before_goCue(self):
-        pass
-
-    @unittest.skip("not implemented")
-    def test_load_audio_pre_trial(self):
+        # TODO Nicco?
         pass
 
 

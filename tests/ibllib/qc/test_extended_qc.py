@@ -1,7 +1,8 @@
 # Mock dataset
 import unittest
 
-from ibllib.qc import ExtendedQC
+from ibllib.qc.extended_qc import compute_session_status
+from ibllib.qc.extended_qc import ExtendedQC
 from oneibl.one import ONE
 
 one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
@@ -29,6 +30,30 @@ class TestExtendedQC(unittest.TestCase):
         # self.assertTrue(eqc.oneqc is not None)
         # eqc.build_extended_qc_frame()
         # self.assertTrue(isinstance(eqc.frame, dict))
+
+    def test_compute_session_status(self):
+        # Test value error on input
+        frame = {
+            "test4": 4
+        }
+        with self.assertRaises(ValueError) as exception:
+            compute_session_status(frame)
+        self.assertEqual(str(exception.exception), "Values out of bound")
+
+        # new frame
+        frame = {
+            "test1": 1,
+            "test2": 0.5,
+            "test3": 0.99,
+        }
+        criteria = {"CRITICAL": 0,
+                    "ERROR": 0.75,
+                    "WARNING": 0.95,
+                    "PASS": 0.99
+                    }
+        _, out_var_test_status, out_var_sess_status = compute_session_status(frame, criteria)
+        assert(out_var_sess_status == "CRITICAL")
+        assert(out_var_test_status["CRITICAL"] == "test2")
 
 
 if __name__ == "__main__":

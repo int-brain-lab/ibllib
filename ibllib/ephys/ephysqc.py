@@ -24,6 +24,7 @@ _logger = logging.getLogger('ibllib')
 
 RMS_WIN_LENGTH_SECS = 3
 WELCH_WIN_LENGTH_SAMPLES = 1024
+NCH_WAVEFORMS = 32  # number of channels to be saved in templates.waveforms and channels.waveforms
 
 
 def rmsmap(fbin):
@@ -176,7 +177,7 @@ def validate_ttl_test(ses_path, display=False):
 
     # check that the wheel has a minimum rate of activity on both channels
     re_test = abs(1 - sync.rotary_encoder_1.size / sync.rotary_encoder_0.size) < 0.1
-    re_test &= len(wheel['re_pos']) / last_time > 5
+    re_test &= len(wheel[1]) / last_time > 5
     ok &= _single_test(assertion=re_test,
                        str_ok="PASS: Rotary encoder", str_ko="FAILED: Rotary encoder")
     # check that the frame 2 ttls has a minimum rate of activity
@@ -191,7 +192,7 @@ def validate_ttl_test(ses_path, display=False):
     try:
         # note: tried to depend as little as possible on the extraction code but for the valve...
         behaviour = ephys_fpga.extract_behaviour_sync(rawsync, chmap=sync_map)
-        res = behaviour.valve_open.size > 1
+        res = behaviour.valveOpen_times.size > 1
     except AssertionError:
         res = False
     # check that the reward valve is actionned at least once
@@ -270,7 +271,8 @@ def phy_model_from_ks2_path(ks2_path):
     m = model.TemplateModel(dir_path=ks2_path,
                             dat_path=bin_file,  # this assumes the raw data is in the same folder
                             sample_rate=fs,
-                            n_channels_dat=nch)
+                            n_channels_dat=nch,
+                            n_closest_channels=NCH_WAVEFORMS)
     m.depths = m.get_depths()
     return m
 

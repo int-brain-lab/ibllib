@@ -3,7 +3,7 @@ import logging
 import numpy as np
 
 from ibllib.io.extractors.training_trials import (
-    StimOnOffFreezeTimes, Choice, FeedBackType, Intervals, StimOnTriggerTimes, StimOnTimes,
+    StimOnOffFreezeTimes, Choice, FeedbackType, Intervals, StimOnTriggerTimes, StimOnTimes,
     StimOffTriggerTimes, StimFreezeTriggerTimes, GoCueTriggerTimes, GoCueTimes,
     ErrorCueTriggerTimes, RewardVolume, ResponseTimes, FeedbackTimes, ItiInTimes,
     run_extractor_classes
@@ -22,7 +22,7 @@ def extract_bpod_trial_data(session_path, raw_bpod_trials=None, raw_settings=Non
     raw_bpod_trials = raw_bpod_trials or raw.load_data(session_path)
     raw_settings = raw_settings or raw.load_settings(session_path)
     classes = (
-        StimOnOffFreezeTimes, Choice, FeedBackType, Intervals, StimOnTriggerTimes, StimOnTimes,
+        StimOnOffFreezeTimes, Choice, FeedbackType, Intervals, StimOnTriggerTimes, StimOnTimes,
         StimOffTriggerTimes, StimFreezeTriggerTimes, GoCueTriggerTimes, GoCueTimes,
         ErrorCueTriggerTimes, RewardVolume, ResponseTimes, FeedbackTimes, ItiInTimes,
         ProbaContrasts

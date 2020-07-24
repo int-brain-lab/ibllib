@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-from ibllib.qc import BpodQC
+from ibllib.qc.bpodqc_metrics import BpodQC
 import ibllib.qc.oneutils as oneutils
 from oneibl.one import ONE
 

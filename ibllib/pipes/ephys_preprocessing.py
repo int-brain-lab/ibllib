@@ -6,6 +6,7 @@ from ibllib.io import ffmpeg, spikeglx
 from ibllib.io.extractors import ephys_fpga
 from ibllib.pipes import tasks
 from ibllib.ephys import ephysqc, sync_probes, spikes
+from ibllib.pipes.training_preprocessing import TrainingRegisterRaw as EphysRegisterRaw
 
 _logger = logging.getLogger('ibllib')
 
@@ -19,6 +20,8 @@ class EphysPulses(tasks.Task):
 
     def _run(self, overwrite=False):
         syncs, out_files = ephys_fpga.extract_sync(self.session_path, overwrite=overwrite)
+        for out_file in out_files:
+            _logger.info(f"extracted pulses for {out_file}")
         return out_files
 
 
@@ -45,7 +48,7 @@ class EphysAudio(tasks.Task):
     level = 0  # this job doesn't depend on anything
 
     def _run(self, overwrite=False):
-        command = 'ffmpeg -i {file_in} -c:a flac -nostats {file_out}'
+        command = 'ffmpeg -i {file_in} -y -c:a flac -nostats {file_out}'
         file_in = next(self.session_path.rglob('_iblrig_micData.raw.wav'), None)
         if file_in is None:
             return
@@ -78,14 +81,16 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
 
 
 class EphysVideoCompress(tasks.Task):
-    priority = 90
+    priority = 40
     level = 1
 
-    def _run(self):
+    def _run(self, **kwargs):
         # avi to mp4 compression
-        command = ('ffmpeg -i {file_in} -codec:v libx264 -preset slow -crf 17 '
+        command = ('ffmpeg -i {file_in} -y -codec:v libx264 -preset slow -crf 17 '
                    '-nostats -loglevel 0 -codec:a copy {file_out}')
         output_files = ffmpeg.iblrig_video_compression(self.session_path, command)
+        if len(output_files) == 0:
+            self.session_path.joinpath('')
         return output_files
 
 
@@ -124,8 +129,8 @@ class EphysSyncSpikeSorting(tasks.Task):
 
 
 class EphysMtscomp(tasks.Task):
-    priority = 60
-    level = 1
+    priority = 50  # ideally after spike sorting
+    level = 0
 
     def _run(self):
         """
@@ -141,7 +146,9 @@ class EphysMtscomp(tasks.Task):
                 if not bin_file:
                     continue
                 sr = spikeglx.Reader(bin_file)
-                if not sr.is_mtscomp:
+                if sr.is_mtscomp:
+                    out_files.append(bin_file)
+                else:
                     _logger.info(f"Compressing binary file {bin_file}")
                     out_files.append(sr.compress_file(keep_original=False))
         return out_files
@@ -161,20 +168,21 @@ class EphysDLC(tasks.Task):
 class EphysExtractionPipeline(tasks.Pipeline):
     label = __name__
 
-    def __init__(self, session_path, **kwargs):
+    def __init__(self, session_path=None, **kwargs):
         super(EphysExtractionPipeline, self).__init__(session_path, **kwargs)
         tasks = OrderedDict()
         self.session_path = session_path
         # level 0
+        tasks['EphysRegisterRaw'] = EphysRegisterRaw(self.session_path)
         tasks['EphysPulses'] = EphysPulses(self.session_path)
         tasks['EphysRawQC'] = RawEphysQC(self.session_path)
         tasks['EphysAudio'] = EphysAudio(self.session_path)
         tasks['SpikeSorting'] = SpikeSorting_KS2_Matlab(self.session_path)
         tasks['EphysVideoCompress'] = EphysVideoCompress(self.session_path)
+        tasks['EphysMtscomp'] = EphysMtscomp(self.session_path)
         # level 1
         tasks['EphysSyncSpikeSorting'] = EphysSyncSpikeSorting(self.session_path, parents=[
             tasks['SpikeSorting'], tasks['EphysPulses']])
         tasks['EphysTrials'] = EphysTrials(self.session_path, parents=[tasks['EphysPulses']])
-        tasks['EphysMtscomp'] = EphysMtscomp(self.session_path, parents=[tasks['SpikeSorting']])
-        tasks['EphysDLC'] = EphysMtscomp(self.session_path, parents=[tasks['EphysVideoCompress']])
+        tasks['EphysDLC'] = EphysDLC(self.session_path, parents=[tasks['EphysVideoCompress']])
         self.tasks = tasks

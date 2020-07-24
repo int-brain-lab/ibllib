@@ -12,6 +12,7 @@ One color per pair.
 import numpy as np
 from mayavi import mlab
 
+import ibllib.plots
 from atlaselectrophysiology import rendering
 import ibllib.atlas as atlas
 from oneibl.one import ONE
@@ -41,7 +42,7 @@ for m, probe_id in enumerate(np.unique(channels['trajectory_id'])):
              f"{str(ses['number']).zfill(3)}/{traj_dict['probe_name']}")
     print(label)
 
-    color = rendering.color_cycle(m)
+    color = ibllib.plots.color_cycle(m)
     it = np.where(channels['trajectory_id'] == probe_id)[0]
     xyz = channels['xyz'][it]
     ins = atlas.Insertion.from_track(xyz, brain_atlas=ba)

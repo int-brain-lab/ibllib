@@ -11,10 +11,8 @@ class BaseExtractor(abc.ABC):
     Base extractor class
 
     :param session_path: Absolute path of session folder
-    :type session_path: str)
+    :type session_path: str
     """
-    bpod_trials = None
-    settings = None
     session_path = None
     save_names = None
     default_path = Path('alf')  # relative to session
@@ -65,9 +63,6 @@ class BaseBpodTrialsExtractor(BaseExtractor):
     """
     bpod_trials = None
     settings = None
-    session_path = None
-    save_names = None
-    default_path = Path('alf')  # relative to session
 
     def extract(self, bpod_trials=None, settings=None, **kwargs):
         """
@@ -114,5 +109,5 @@ def run_extractor_classes(classes, session_path=None, **kwargs):
         else:
             for i, k in enumerate(classe.var_names):
                 outputs[k] = out[i]
-    assert(len(files) == 0) or (len(files) == len(outputs.keys()))
+    assert (len(files) == 0) or (len(files) == len(outputs.keys()))
     return outputs, files

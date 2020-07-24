@@ -1,4 +1,9 @@
-### Release Notes 1.5.0dev - (25/05/2020 - (EDIT THIS HEADER BEFORE RELEASE)
+### Release Notes 1.5.2 - 23/07/2020
+-   Local server jobs:
+    -   fix wheel moves size mismatch extractor error
+    -   only look for raw_session.flag for ephys extraction to avoid race conditions
+
+### Release Notes 1.5.1 - 25/05/2020
 -  Ephys extraction:
     -   spike amplitudes in Volts
     -   added waveforms samples dataset to use Phy from Flatiron datasets

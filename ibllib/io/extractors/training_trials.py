@@ -7,10 +7,11 @@ import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
 from ibllib.misc import version
 
-logger_ = logging.getLogger('ibllib')
+
+_logger = logging.getLogger('ibllib')
 
 
-class FeedBackType(BaseBpodTrialsExtractor):
+class FeedbackType(BaseBpodTrialsExtractor):
     """
     Get the feedback that was delivered to subject.
     **Optional:** saves _ibl_trials.feedbackType.npy
@@ -62,7 +63,7 @@ class ContrastLR(BaseBpodTrialsExtractor):
         contrastRight = np.array([t['contrast']['value'] if np.sign(
             t['position']) > 0 else np.nan for t in self.bpod_trials])
 
-        return (contrastLeft, contrastRight)
+        return contrastLeft, contrastRight
 
 
 class ProbabilityLeft(BaseBpodTrialsExtractor):
@@ -200,7 +201,7 @@ class FeedbackTimes(BaseBpodTrialsExtractor):
             # get the error sound only if the reward is nan
             err_sound_times[ind] = st[-1] if st.size >= 2 and np.isnan(rw_times[ind]) else np.nan
         if missed_bnc2 == len(data):
-            logger_.warning('No BNC2 for feedback times, filling error trials NaNs')
+            _logger.warning('No BNC2 for feedback times, filling error trials NaNs')
         merge *= np.nan
         merge[~np.isnan(rw_times)] = rw_times[~np.isnan(rw_times)]
         merge[~np.isnan(err_sound_times)] = err_sound_times[~np.isnan(err_sound_times)]
@@ -303,7 +304,7 @@ class TrialType(BaseBpodTrialsExtractor):
             elif ~np.isnan(tr["behavior_data"]["States timestamps"]["no_go"][0][0]):
                 trial_type.append(0)
             else:
-                logger_.warning("Trial is not in set {-1, 0, 1}, appending NaN to trialType")
+                _logger.warning("Trial is not in set {-1, 0, 1}, appending NaN to trialType")
                 trial_type.append(np.nan)
         return np.array(trial_type)
 
@@ -340,11 +341,11 @@ class GoCueTimes(BaseBpodTrialsExtractor):
         nmissing = np.sum(np.isnan(go_cue_times))
         # Check if all stim_syncs have failed to be detected
         if np.all(np.isnan(go_cue_times)):
-            logger_.warning(
+            _logger.warning(
                 f'{self.session_path}: Missing ALL !! BNC2 stimulus ({nmissing} trials')
         # Check if any stim_sync has failed be detected for every trial
         elif np.any(np.isnan(go_cue_times)):
-            logger_.warning(f'{self.session_path}: Missing BNC2 stimulus on {nmissing} trials')
+            _logger.warning(f'{self.session_path}: Missing BNC2 stimulus on {nmissing} trials')
 
         return go_cue_times
 
@@ -552,11 +553,11 @@ class StimOnTimes(BaseBpodTrialsExtractor):
         nmissing = np.sum(np.isnan(stimOn_times))
         # Check if all stim_syncs have failed to be detected
         if np.all(np.isnan(stimOn_times)):
-            logger_.error(f'{session_path}: Missing ALL BNC1 stimulus ({nmissing} trials')
+            _logger.error(f'{session_path}: Missing ALL BNC1 stimulus ({nmissing} trials')
 
         # Check if any stim_sync has failed be detected for every trial
         if np.any(np.isnan(stimOn_times)):
-            logger_.warning(f'{session_path}: Missing BNC1 stimulus on {nmissing} trials')
+            _logger.warning(f'{session_path}: Missing BNC1 stimulus on {nmissing} trials')
 
         return stimOn_times
 
@@ -602,10 +603,10 @@ class StimOnTimes(BaseBpodTrialsExtractor):
             stimOn_times[i] = stot[0]
 
         if np.all(np.isnan(stimOn_times)):
-            logger_.error(f'{session_path}: Missing ALL BNC1 stimulus ({count_missing} trials')
+            _logger.error(f'{session_path}: Missing ALL BNC1 stimulus ({count_missing} trials')
 
         if count_missing > 0:
-            logger_.warning(f'{session_path}: Missing BNC1 stimulus on {count_missing} trials')
+            _logger.warning(f'{session_path}: Missing BNC1 stimulus on {count_missing} trials')
 
         return np.array(stimOn_times)
 
@@ -628,7 +629,11 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
         stimOff_times = np.array([])
         stimFreeze_times = np.array([])
         for tr in f2TTL:
-            if tr and len(tr) >= 2:
+            if tr and len(tr) == 2:
+                stimOn_times = np.append(stimOn_times, tr[0])
+                stimOff_times = np.append(stimOff_times, tr[-1])
+                stimFreeze_times = np.append(stimFreeze_times, np.nan)
+            elif tr and len(tr) >= 3:
                 stimOn_times = np.append(stimOn_times, tr[0])
                 stimOff_times = np.append(stimOff_times, tr[-1])
                 stimFreeze_times = np.append(stimFreeze_times, tr[-2])
@@ -694,7 +699,7 @@ class CameraTimestamps(BaseBpodTrialsExtractor):
             n_frames += pin.size
 
         if n_out_of_sync > 0:
-            logger_.warning(f"{n_out_of_sync} trials with frame times not within 10% of the"
+            _logger.warning(f"{n_out_of_sync} trials with frame times not within 10% of the"
                             f" expected sampling rate")
 
         t_first_frame = np.array([c[0] for c in cam_times])
@@ -745,7 +750,7 @@ def extract_all(session_path, save=False, bpod_trials=False, settings=False):
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
 
-    base = [FeedBackType, ContrastLR, ProbabilityLeft, Choice, RepNum, RewardVolume,
+    base = [FeedbackType, ContrastLR, ProbabilityLeft, Choice, RepNum, RewardVolume,
             FeedbackTimes, StimOnTimes, Intervals, ResponseTimes, GoCueTriggerTimes,
             GoCueTimes]
     # Version check

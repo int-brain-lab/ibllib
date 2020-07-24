@@ -1,23 +1,26 @@
+from collections import OrderedDict
 import logging
 from pathlib import Path, PureWindowsPath
 import uuid
-from collections import OrderedDict
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+from pkg_resources import parse_version
 from scipy import interpolate
 
-from brainbox.core import Bunch
-
 import alf.io
-
-import ibllib.exceptions as err
-import ibllib.plots as plots
-from ibllib.io import spikeglx, raw_data_loaders
+from brainbox.core import Bunch
 import ibllib.dsp as dsp
-from ibllib.io.extractors.base import BaseBpodTrialsExtractor, BaseExtractor, run_extractor_classes
+import ibllib.exceptions as err
+from ibllib.io import raw_data_loaders, spikeglx
 from ibllib.io.extractors import biased_trials
-
+from ibllib.io.extractors.base import (
+    BaseBpodTrialsExtractor,
+    BaseExtractor,
+    run_extractor_classes,
+)
+from ibllib.io.extractors.training_wheel import extract_wheel_moves
+import ibllib.plots as plots
 
 _logger = logging.getLogger('ibllib')
 
@@ -119,12 +122,13 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
         return Bunch(sync)
 
 
-def _assign_events_bpod(bpod_t, bpod_polarities):
+def _assign_events_bpod(bpod_t, bpod_polarities, ignore_first_valve=True):
     """
     From detected fronts on the bpod sync traces, outputs the synchronisation events
     related to trial start and valve opening
     :param bpod_t: numpy vector containing times of fronts
     :param bpod_fronts: numpy vector containing polarity of fronts (1 rise, -1 fall)
+    :param ignore_first_valve (True): removes detected valve events at indices le 2
     :return: numpy arrays of times t_trial_start, t_valve_open and t_iti_in
     """
     TRIAL_START_TTL_LEN = 2.33e-4
@@ -145,7 +149,8 @@ def _assign_events_bpod(bpod_t, bpod_polarities):
     # valve open events are between 50ms to 300 ms
     i_valve_open = np.where(np.logical_and(dt > TRIAL_START_TTL_LEN,
                                            dt < ITI_TTL_LEN))[0] * 2
-    i_valve_open = np.delete(i_valve_open, np.where(i_valve_open < 2))
+    if ignore_first_valve:
+        i_valve_open = np.delete(i_valve_open, np.where(i_valve_open < 2))
     t_valve_open = bpod_t[i_valve_open]
     # ITI events are above 400 ms
     i_iti_in = np.where(dt > ITI_TTL_LEN)[0] * 2
@@ -206,14 +211,16 @@ def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, rad
         return t, p
 
 
-def _assign_events_audio(audio_t, audio_polarities):
+def _assign_events_audio(audio_t, audio_polarities, return_indices=False):
     """
     From detected fronts on the audio sync traces, outputs the synchronisation events
     related to tone in
 
     :param audio_t: numpy vector containing times of fronts
     :param audio_fronts: numpy vector containing polarity of fronts (1 rise, -1 fall)
+    :param return_indices (False): returns indices of tones
     :return: numpy arrays t_ready_tone_in, t_error_tone_in
+    :return: numpy arrays ind_ready_tone_in, ind_error_tone_in if return_indices=True
     """
     # make sure that there are no 2 consecutive fall or consecutive rise events
     assert(np.all(np.abs(np.diff(audio_polarities)) == 2))
@@ -225,7 +232,10 @@ def _assign_events_audio(audio_t, audio_polarities):
     # error tones are events lasting from 400ms to 600ms
     i_error_tone_in = np.where(np.logical_and(0.4 < dt, dt < 1.2))[0] * 2
     t_error_tone_in = audio_t[i_error_tone_in]
-    return t_ready_tone_in, t_error_tone_in
+    if return_indices:
+        return t_ready_tone_in, t_error_tone_in, i_ready_tone_in, i_error_tone_in
+    else:
+        return t_ready_tone_in, t_error_tone_in
 
 
 def _frame2ttl_events_extraction(f2ttl_t, f2ttl_fronts):
@@ -269,20 +279,23 @@ def _assign_events_to_trial(t_trial_start, t_event, take='last'):
     return t_event_nans
 
 
-def _get_sync_fronts(sync, channel_nb, tmax=np.inf):
-    selection = np.logical_and(sync['channels'] == channel_nb, sync['times'] <= tmax)
+def _get_sync_fronts(sync, channel_nb, tmin=None, tmax=None):
+    selection = sync['channels'] == channel_nb
+    selection = np.logical_and(selection, sync['times'] <= tmax) if tmax else selection
+    selection = np.logical_and(selection, sync['times'] >= tmin) if tmin else selection
     return Bunch({'times': sync['times'][selection],
                   'polarities': sync['polarities'][selection]})
 
 
-def bpod_fpga_sync(bpod_intervals=None, ephys_intervals=None):
+def bpod_fpga_sync(bpod_intervals=None, ephys_intervals=None, iti_duration=None):
     """
     Computes synchronization function from bpod to fpga
     :param bpod_intervals
     :param ephys_intervals
     :return: interpolation function
     """
-    ITI_DURATION = 0.5
+    if iti_duration is None:
+        iti_duration = 0.5
     # check consistency
     if bpod_intervals.size != ephys_intervals.size:
         # patching things up if the bpod and FPGA don't have the same recording span
@@ -297,14 +310,16 @@ def bpod_fpga_sync(bpod_intervals=None, ephys_intervals=None):
         ephys_intervals = ephys_intervals[ifpga, :]
     else:
         ibpod, ifpga = [np.arange(bpod_intervals.shape[0]) for _ in np.arange(2)]
-    tlen = (np.diff(bpod_intervals) - np.diff(ephys_intervals))[:-1] - ITI_DURATION
-    assert(np.all(np.abs(tlen[np.invert(np.isnan(tlen))])[:-1] < 5 * 1e-3))
+    tlen = (np.diff(bpod_intervals) - np.diff(ephys_intervals))[:-1] - iti_duration
+    assert np.all(np.abs(tlen[np.invert(np.isnan(tlen))])[:-1] < 5 * 1e-3)
     # dt is the delta to apply to bpod times in order to be on the ephys clock
     dt = bpod_intervals[:, 0] - ephys_intervals[:, 0]
     # compute the clock drift bpod versus dt
     ppm = np.polyfit(bpod_intervals[:, 0], dt, 1)[0] * 1e6
     if ppm > BPOD_FPGA_DRIFT_THRESHOLD_PPM:
-        _logger.warning('BPOD/FPGA synchronization shows values greater than 150 ppm')
+        _logger.warning(
+            'BPOD/FPGA synchronization shows values greater than %i ppm',
+            BPOD_FPGA_DRIFT_THRESHOLD_PPM)
         # plt.plot(trials['intervals'][:, 0], dt, '*')
     # so far 2 datasets concerned: goCueTrigger_times_bpod  and response_times_bpod
     fcn_bpod2fpga = interpolate.interp1d(bpod_intervals[:, 0], ephys_intervals[:, 0],
@@ -529,6 +544,13 @@ def _get_pregenerated_events(bpod_trials, settings):
     phase = phase[: ntrials]
     pLeft = pcqsp[:, 4]
     pLeft = pLeft[: ntrials]
+
+    phase_path = sessions_folder.joinpath(f"session_{num}_stim_phase.npy")
+    is_patched_version = parse_version(
+        settings.get('IBLRIG_VERSION_TAG', 0)) > parse_version('6.4.0')
+    if phase_path.exists() and is_patched_version:
+        phase = np.load(phase_path)[:ntrials]
+
     return {"position": pos, "contrast": con, "quiescence": qui, "phase": phase,
             "prob_left": pLeft, 'contrast_right': contrastRight, 'contrast_left': contrastLeft}
 
@@ -549,14 +571,6 @@ class ProbaContrasts(BaseBpodTrialsExtractor):
         return pe['prob_left'], pe['contrast_left'], pe['contrast_right']
 
 
-class WheelPositions(BaseExtractor):
-    save_names = ['_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy']
-    var_names = ['wheel_timestamps', 'wheel_position']
-
-    def _extract(self, sync=None, chmap=None):
-        return extract_wheel_sync(sync=sync, chmap=chmap)
-
-
 class CameraTimestamps(BaseExtractor):
     save_names = ['_ibl_rightCamera.times.npy', '_ibl_leftCamera.times.npy',
                   '_ibl_bodyCamera.times.npy']
@@ -574,13 +588,18 @@ class FpgaTrials(BaseExtractor):
                   '_ibl_trials.intervals_bpod.npy', '_ibl_trials.intervals.npy',
                   '_ibl_trials.response_times.npy', '_ibl_trials.goCueTrigger_times.npy',
                   '_ibl_trials.stimOn_times.npy', '_ibl_trials.stimOff_times.npy',
-                  '_ibl_trials.goCue_times.npy', '_ibl_trials.feedback_times.npy')
+                  '_ibl_trials.goCue_times.npy', '_ibl_trials.feedback_times.npy',
+                  '_ibl_trials.firstMovement_times.npy', '_ibl_wheel.timestamps.npy',
+                  '_ibl_wheel.position.npy', '_ibl_wheelMoves.intervals.npy',
+                  '_ibl_wheelMoves.peakAmplitude.npy')
     var_names = ('probabilityLeft', 'contrastLeft', 'contrastRight', 'feedbackType', 'choice',
                  'rewardVolume', 'intervals_bpod', 'intervals', 'response_times',
                  'goCueTrigger_times', 'stimOn_times', 'stimOff_times', 'goCue_times',
-                 'feedback_times')
+                 'feedback_times', 'firstMovement_times', 'wheel_timestamps', 'wheel_position',
+                 'wheelMoves_intervals', 'wheelMoves_peakAmplitude')
 
     def _extract(self, sync=None, chmap=None):
+        # extracts trials
         # extract the behaviour data from bpod
         if sync is None or chmap is None:
             _sync, _chmap = _get_main_probe_sync(self.session_path, bin_exists=False)
@@ -603,16 +622,27 @@ class FpgaTrials(BaseExtractor):
         fpga_fields = ['stimOn_times', 'stimOff_times', 'goCue_times', 'feedback_times']
         # get ('probabilityLeft', 'contrastLeft', 'contrastRight') from the custom ephys extractors
         pclcr, _ = ProbaContrasts(self.session_path).extract(bpod_trials=bpod_raw, save=False)
+        # build trials output
         out = OrderedDict()
-        out.update({k: pclcr[i] for i, k in enumerate(ProbaContrasts.var_names)})
+        out.update({k: pclcr[i][ifpga] for i, k in enumerate(ProbaContrasts.var_names)})
         out.update({k: bpod_trials[k][ibpod] for k in bpod_fields})
         out.update({k: fcn_bpod2fpga(bpod_trials[k][ibpod]) for k in bpod_rsync_fields})
         out.update({k: fpga_trials[k][ifpga] for k in fpga_fields})
-        assert self.var_names == tuple(out.keys())
-        return [out[k] for k in out]
+
+        # extract the wheel data
+        from ibllib.io.extractors.training_wheel import extract_first_movement_times
+        ts, pos = extract_wheel_sync(sync=sync, chmap=chmap)
+        moves = extract_wheel_moves(ts, pos)
+        settings = raw_data_loaders.load_settings(session_path=self.session_path)
+        min_qt = settings.get('QUIESCENT_PERIOD', None)
+        first_move_onsets, *_ = extract_first_movement_times(moves, out, min_qt=min_qt)
+        out.update({'firstMovement_times': first_move_onsets})
+
+        assert tuple(filter(lambda x: 'wheel' not in x, self.var_names)) == tuple(out.keys())
+        return [out[k] for k in out] + [ts, pos, moves['intervals'], moves['peakAmplitude']]
 
 
-def extract_all(session_path, save=False, bin_exists=False):
+def extract_all(session_path, save=True, bin_exists=False):
     """
     For the IBL ephys task, reads ephys binary file and extract:
         -   sync
@@ -624,8 +654,9 @@ def extract_all(session_path, save=False, bin_exists=False):
     :param version: bpod version, defaults to None
     :return: outputs, files
     """
+    assert save  # fixme with wheel positions, this function can't work without saving the data
     sync, chmap = _get_main_probe_sync(session_path, bin_exists=bin_exists)
     outputs, files = run_extractor_classes(
-        [WheelPositions, CameraTimestamps, FpgaTrials], session_path=session_path,
+        [CameraTimestamps, FpgaTrials], session_path=session_path,
         save=save, sync=sync, chmap=chmap)
     return outputs, files

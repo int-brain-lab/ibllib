@@ -3,14 +3,21 @@ from collections import OrderedDict
 
 from ibllib.pipes import tasks
 from ibllib.io import ffmpeg, raw_data_loaders as rawio
-from ibllib.io.extractors import (training_trials, biased_trials, training_wheel, biased_wheel,
-                                  training_audio)
-
+from ibllib.io.extractors import (training_trials, biased_trials, training_wheel, training_audio)
+from oneibl.registration import register_session_raw_data
 
 _logger = logging.getLogger('ibllib')
 
 
 #  level 0
+class TrainingRegisterRaw(tasks.Task):
+    priority = 100
+
+    def _run(self, overwrite=False):
+        out_files, _ = register_session_raw_data(self.session_path, one=self.one, dry=True)
+        return out_files
+
+
 class TrainingTrials(tasks.Task):
     priority = 90
     level = 0
@@ -65,6 +72,7 @@ class TrainingExtractionPipeline(tasks.Pipeline):
         tasks = OrderedDict()
         self.session_path = session_path
         # level 0
+        tasks['TrainingRegisterRaw'] = TrainingRegisterRaw(self.session_path)
         tasks['TrainingTrials'] = TrainingTrials(self.session_path)
         tasks['TrainingVideoCompress'] = TrainingVideoCompress(self.session_path)
         tasks['TrainingAudio'] = TrainingAudio(self.session_path)
@@ -76,7 +84,8 @@ class TrainingExtractionPipeline(tasks.Pipeline):
 
 def extract_training(session_path, save=True):
     """
-    Extracts a training session from its path
+    Extracts a training session from its path.  NB: Wheel must be extracted first in order to
+    extract trials.firstMovement_times.
     :param session_path:
     :param save:
     :return: trials: Bunch/dict of trials
@@ -88,16 +97,19 @@ def extract_training(session_path, save=True):
     settings, bpod_trials = rawio.load_bpod(session_path)
     if extractor_type == 'training':
         _logger.info('training session on ' + settings['PYBPOD_BOARD'])
-        trials, files_trials = training_trials.extract_all(
-            session_path, bpod_trials=bpod_trials, settings=settings, save=save)
         wheel, files_wheel = training_wheel.extract_all(
+            session_path, bpod_trials=bpod_trials, settings=settings, save=save)
+        trials, files_trials = training_trials.extract_all(
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
     elif extractor_type == 'biased':
         _logger.info('biased session on ' + settings['PYBPOD_BOARD'])
+        wheel, files_wheel = training_wheel.extract_all(
+            session_path, bpod_trials=bpod_trials, settings=settings, save=save)
         trials, files_trials = biased_trials.extract_all(
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
-        wheel, files_wheel = biased_wheel.extract_all(
-            session_path, bpod_trials=bpod_trials, settings=settings, save=save)
+    elif extractor_type == 'habituation':
+        _logger.info('Skipped trial extraction for habituation session')
+        return None, None, None
     else:
         raise ValueError(f"No extractor for task {extractor_type}")
     _logger.info('session extracted \n')  # timing info in log
