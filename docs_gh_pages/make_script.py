@@ -47,7 +47,6 @@ def make_documentation(execute, documentation, clean, github, message):
         subprocess.call(['scripts\gh_push.sh', message], shell=True)  # noqa: E605
 
 
-
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Make IBL documentation')
