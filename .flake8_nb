@@ -1,0 +1,19 @@
+[flake8_nb]
+max-line-length = 99
+ignore = W504
+exclude =
+    .git,
+    __pycache__,
+    __init__.py,
+    scratch_*.py,
+    tutorial_script.py,
+    venv,
+    test_imports.py,
+    build,
+    dist,
+    brainbox/examples/,
+    tests/oneibl/test_one_tutorial.py,
+    examples/archive/,
+    .ipynb_checkpoints
+
+    

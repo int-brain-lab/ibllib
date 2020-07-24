@@ -1,0 +1,4 @@
+.highlight {
+    background: #ffffff !important;
+}
+

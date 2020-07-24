@@ -1,0 +1,10 @@
+sphinx_rtd_theme
+nbsphinx
+nbsphinx-link
+myst_parser
+sphinx >=3.1.2
+sphinx-copybutton
+ipyevents
+
+# Also need to run
+# jupyter nbextension enable --py --sys-prefix ipyevents
