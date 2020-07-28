@@ -19,7 +19,7 @@ session_path = Path(D.local_path[0]).parent
 spikes = ioalf.load_object(session_path, 'spikes')
 clusters = ioalf.load_object(session_path, 'clusters')
 channels = ioalf.load_object(session_path, 'channels')
-trials = ioalf.load_object(session_path, '_ibl_trials')
+trials = ioalf.load_object(session_path, 'trials')
 
 # compute raster map as a function of cluster number
 R, times, clusters = bincount2D(spikes['times'], spikes['clusters'], T_BIN)
