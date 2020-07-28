@@ -121,7 +121,7 @@ def extract_sound(ses_path, save=True, force=False, delete=False):
     # if they exist and the option Force is set to false, do not recompute and exit
     if all([files_out[f].exists() for f in files_out]) and not force:
         logger_.warning('Output exists. Skipping ' + str(wav_file) + ' Use force flag to override')
-        return
+        return [files_out[k] for k in files_out]
     # crunch the wav file
     fs, wav = wavfile.read(wav_file, mmap=False)
     if len(wav) == 0:
