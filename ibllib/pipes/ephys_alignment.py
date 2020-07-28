@@ -2,7 +2,6 @@ import scipy
 import numpy as np
 import ibllib.pipes.histology as histology
 import ibllib.atlas as atlas
-
 brain_atlas = atlas.AllenAtlas(25)
 TIP_SIZE_UM = 200
 
@@ -25,13 +24,14 @@ class EphysAlignment:
             self.track_init = np.copy(self.track_extent)
             self.feature_init = np.copy(self.track_extent)
 
-        sampling_trk = np.arange(self.track_extent[0],
-                                 self.track_extent[-1] - 10 * 1e-6, 10 * 1e-6)
+        self.sampling_trk = np.arange(self.track_extent[0],
+                                      self.track_extent[-1] - 10 * 1e-6, 10 * 1e-6)
         self.xyz_samples = histology.interpolate_along_track(self.xyz_track,
-                                                             sampling_trk - sampling_trk[0])
+                                                             self.sampling_trk -
+                                                             self.sampling_trk[0])
 
         self.region, self.region_label, self.region_colour, self.region_id\
-            = self.get_histology_regions(self.xyz_samples, sampling_trk)
+            = self.get_histology_regions(self.xyz_samples, self.sampling_trk)
 
     def get_insertion_track(self, xyz_picks):
         """
@@ -227,6 +227,135 @@ class EphysAlignment:
             region_label[bound, :] = (_region_mean, _region_label)
 
         return region, region_label, region_colour, region_id
+
+    @staticmethod
+    def get_nearest_boundary(xyz_coords, allen, extent=100, steps=8, parent=True):
+        """
+        Finds distance to closest neighbouring brain region along trajectory. For each point in
+        xyz_coords computes the plane passing through point and perpendicular to trajectory and
+        finds all brain regions that lie in that plane up to a given distance extent from specified
+        point. Additionally, if requested, computes distance between the parents of regions.
+        :param xyz_coords: 3D coordinates of points along probe or track
+        :type xyz_coords: np.array((n_points, 3)) n_points: no. of points
+        :param allen: dataframe containing allen info. Loaded from allen_structure_tree in
+        ibllib/atlas
+        :type allen: pandas Dataframe
+        :param extent: extent of plane in each direction from origin in (um)
+        :type extent: float
+        :param steps: no. of steps to discretise plane into
+        :type steps: int
+        :param parent: Whether to also compute nearest distance between parents of regions
+        :type parent: bool
+        :return nearest_bound: dict containing results
+        :type nearest_bound: dict
+        """
+
+        vector = atlas.Insertion.from_track(xyz_coords, brain_atlas=brain_atlas).trajectory.vector
+        nearest_bound = dict()
+        nearest_bound['dist'] = np.zeros((xyz_coords.shape[0]))
+        nearest_bound['id'] = np.zeros((xyz_coords.shape[0]))
+        # nearest_bound['adj_id'] = np.zeros((xyz_coords.shape[0]))
+        nearest_bound['col'] = []
+
+        if parent:
+            nearest_bound['parent_dist'] = np.zeros((xyz_coords.shape[0]))
+            nearest_bound['parent_id'] = np.zeros((xyz_coords.shape[0]))
+            # nearest_bound['parent_adj_id'] = np.zeros((xyz_coords.shape[0]))
+            nearest_bound['parent_col'] = []
+
+        for iP, point in enumerate(xyz_coords):
+            d = np.dot(vector, point)
+            x_vals = np.r_[np.linspace(point[0] - extent / 1e6, point[0] + extent / 1e6, steps),
+                           point[0]]
+            y_vals = np.r_[np.linspace(point[1] - extent / 1e6, point[1] + extent / 1e6, steps),
+                           point[1]]
+
+            X, Y = np.meshgrid(x_vals, y_vals)
+            Z = (d - vector[0] * X - vector[1] * Y) / vector[2]
+            XYZ = np.c_[np.reshape(X, X.size), np.reshape(Y, Y.size), np.reshape(Z, Z.size)]
+            dist = np.sqrt(np.sum((XYZ - point) ** 2, axis=1))
+
+            try:
+                brain_id = brain_atlas.regions.get(brain_atlas.get_labels(XYZ))['id']
+            except Exception as err:
+                print(err)
+                continue
+
+            dist_sorted = np.argsort(dist)
+            brain_id_sorted = brain_id[dist_sorted]
+            nearest_bound['id'][iP] = brain_id_sorted[0]
+            nearest_bound['col'].append(allen['color_hex_triplet'][np.where(allen['id'] ==
+                                                                   brain_id_sorted[0])[0][0]])
+            bound_idx = np.where(brain_id_sorted != brain_id_sorted[0])[0]
+            if np.any(bound_idx):
+                nearest_bound['dist'][iP] = dist[dist_sorted[bound_idx[0]]] * 1e6
+                # nearest_bound['adj_id'][iP] = brain_id_sorted[bound_idx[0]]
+            else:
+                nearest_bound['dist'][iP] = np.max(dist) * 1e6
+                # nearest_bound['adj_id'][iP] = brain_id_sorted[0]
+
+            if parent:
+                # Now compute for the parents
+                brain_parent = np.array([allen['parent_structure_id'][np.where(allen['id'] == br)
+                                        [0][0]] for br in brain_id_sorted])
+                brain_parent[np.isnan(brain_parent)] = 0
+
+                nearest_bound['parent_id'][iP] = brain_parent[0]
+                nearest_bound['parent_col'].append(allen['color_hex_triplet']
+                                                   [np.where(allen['id'] ==
+                                                             brain_parent[0])[0][0]])
+
+                parent_idx = np.where(brain_parent != brain_parent[0])[0]
+                if np.any(parent_idx):
+                    nearest_bound['parent_dist'][iP] = dist[dist_sorted[parent_idx[0]]] * 1e6
+                    # nearest_bound['parent_adj_id'][iP] = brain_parent[parent_idx[0]]
+                else:
+                    nearest_bound['parent_dist'][iP] = np.max(dist) * 1e6
+                    # nearest_bound['parent_adj_id'][iP] = brain_parent[0]
+
+        return nearest_bound
+
+    @staticmethod
+    def arrange_into_regions(depth_coords, region_ids, distance, region_colours):
+        """
+        Arrange output from get_nearest_boundary into a form that can be plot using pyqtgraph or
+        matplotlib
+        :param depth_coords: depth along probe or track where each point is located
+        :type depth_coords: np.array((n_points))
+        :param region_ids: brain region id at each depth along probe
+        :type regions_ids: np.array((n_points))
+        :param distance: distance to nearest boundary in plane at each point
+        :type distance: np.array((n_points))
+        :param region_colours: allen atlas hex colour for each region id
+        :type region_colours: list of strings len(n_points)
+        :return all_x: dist values for each region along probe track
+        :type all_x: list of np.array
+        :return all_y: depth values for each region along probe track
+        :type all_y: list of np.array
+        :return all_colour: colour assigned to each region along probe track
+        :type all_colour: list of str
+        """
+
+        boundaries = np.where(np.diff(region_ids))[0]
+        bound = np.r_[0, boundaries + 1, region_ids.shape[0]]
+        all_y = []
+        all_x = []
+        all_colour = []
+        for iB in np.arange(len(bound) - 1):
+            y = depth_coords[bound[iB]:(bound[iB + 1])]
+            y = np.r_[y[0], y, y[-1]]
+            x = distance[bound[iB]:(bound[iB + 1])]
+            x = np.r_[0, x, 0]
+            all_y.append(y)
+            all_x.append(x)
+            col = region_colours[bound[iB]]
+            if type(col) != str:
+                col = '#FFFFFF'
+            else:
+                col = '#' + col
+            all_colour.append(col)
+
+        return all_x, all_y, all_colour
 
     def get_scale_factor(self, region):
         """
