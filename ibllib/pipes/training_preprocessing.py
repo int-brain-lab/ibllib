@@ -49,7 +49,7 @@ class TrainingAudio(tasks.Task):
     level = 0  # this job doesn't depend on anything
 
     def _run(self, overwrite=False):
-        training_audio.extract_sound(self.session_path, save=True, delete=True)
+        return training_audio.extract_sound(self.session_path, save=True, delete=True)
 
 
 # level 1

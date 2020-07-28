@@ -52,10 +52,12 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
         session_type = rawio.get_session_extractor_type(session_path)
         if session_type in ['biased', 'habituation', 'training']:
             pipe = training_preprocessing.TrainingExtractionPipeline(session_path, one=one)
-        elif session_type in ['ephys']:
+        # only start extracting ephys on a raw_session.flag
+        elif session_type in ['ephys'] and flag_file.name == 'raw_session.flag':
             pipe = ephys_preprocessing.EphysExtractionPipeline(session_path, one=one)
         else:
             _logger.info(f"Session type {session_type} as no matching extractor {session_path}")
+            return
         if rerun:
             rerun__status__in = '__all__'
         else:
