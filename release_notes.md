@@ -1,3 +1,6 @@
+### Release Notes 1.5.4 - 29/07/2020 hotfix
+-   ibllib.pipes.training_preprocessing.TrainingAudio
+
 ### Release Notes 1.5.3 - 28/07/2020
 -   ibllib.pipes.training_preprocessing.TrainingAudio: returns files for registration and proper status. (Olivier)
 -   ibllib.atlas: compute nearest region from probe trajectory (Mayo)
