@@ -1,6 +1,8 @@
 import re
+from pathlib import Path
 import logging
 from collections import OrderedDict
+import subprocess
 
 from ibllib.io import ffmpeg, spikeglx
 from ibllib.io.extractors import ephys_fpga
@@ -66,17 +68,64 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
     priority = 60
     level = 0  # this job doesn't depend on anything
 
+    @staticmethod
+    def _fetch_ks2_commit_hash():
+        command2run = 'git --git-dir ~/Documents/MATLAB/Kilosort2/.git rev-parse --verify HEAD'
+        process = subprocess.Popen(command2run, shell=True, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE)
+        info, error = process.communicate()
+        if process.returncode != 0:
+            _logger.error(f"Can't fetch matlab ks2 commit hash, will still attempt to run \n"
+                          f"Error: {error.decode('utf-8')}")
+            return ''
+        return info.decode('utf-8').strip()
+
     def _run(self, overwrite=False):
+
+        import shutil
+        import mtscomp
+
         efiles = spikeglx.glob_ephys_files(self.session_path)
         apfiles = [ef.get('ap') for ef in efiles if 'ap' in ef.keys()]
-        for apfile in apfiles:
-            ks2log = apfile.parent.joinpath('spike_sorting_ks2.log')
-            if not ks2log.exists():
-                # this will label the job with "empty" status in the database
-                return None
-            with open(ks2log) as fid:
-                line = fid.readline()
-            self.version = re.compile("[a-f0-9]{36}").findall(line)[0]
+        for ap_file in apfiles:
+            ks2log = ap_file.parent.joinpath('spike_sorting_ks2.log')
+            if ks2log.exists():
+                _logger.info(f'Already ran: spike_sorting_ks2.log found for {ap_file}, skipping.')
+                return []  # this will label the job with ok status in the database
+
+            # get the scratch drive from the shell script
+            SHELL_SCRIPT = Path.home().joinpath(
+                "Documents/PYTHON/iblscripts/deploy/serverpc/kilosort2/task_ks2_matlab.sh")
+            with open(SHELL_SCRIPT) as fid:
+                lines = fid.readlines()
+            line = [line for line in lines if line.startswith('SCRATCH_DRIVE=')][0]
+            m = re.search(r"\=(.*?)(\#|\n)", line)[0]
+            scratch_drive = Path(m[1:-1].strip())
+            assert(scratch_drive.exists())
+
+            # clean up and create directory, this also checks write permissions
+            scratch_dir = scratch_drive.joinpath('temp')
+            if scratch_dir.exists():
+                shutil.rmtree(scratch_dir, ignore_errors=True)
+            scratch_dir.mkdir()
+
+            # decompresses using mtscomp
+            tmp_ap_file = scratch_dir.joinpath(ap_file.name)
+            mtscomp.decompress(cdata=ap_file, out=tmp_ap_file)
+
+            # run matlab spike sorting
+            command2run = f"{SHELL_SCRIPT} {scratch_dir} {scratch_dir.parent}"
+            process = subprocess.Popen(command2run, shell=True, stdout=subprocess.PIPE,
+                                       stderr=subprocess.PIPE, executable="/bin/bash")
+            info, error = process.communicate()
+
+            _logger.info(info.decode('utf-8').strip())
+            if process.returncode != 0:
+                raise RuntimeError(error.decode('utf-8'))
+
+            shutil.rmtree(scratch_dir, ignore_errors=True)
+
+            self.version = self._fetch_ks2_commit_hash()
             return []  # the job will be labeled as complete with empty string
 
 
