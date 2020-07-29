@@ -148,6 +148,7 @@ def extract_sound(ses_path, save=True, force=False, delete=False):
     dt = tgocue[:ilast] - detect[: ilast]
     # only save if dt is consistent for the whole session
     if np.std(dt) < 0.2 and save:
+        files_out['times'] = out_folder / '_iblmic_audioSpectrogram.times.npy'
         tscale += np.median(dt)
         np.save(file=files_out['times'], arr=tscale[:, None].astype(np.single))
     if delete:
