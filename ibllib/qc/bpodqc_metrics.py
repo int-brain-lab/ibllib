@@ -2,17 +2,18 @@ import logging
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
-from ibllib.qc.bpodqc_extractors import BpodQCExtractor
-from ibllib.io.extractors.training_wheel import WHEEL_RADIUS_CM
 from ibllib.io.extractors.ephys_fpga import WHEEL_TICKS
-from . import base
+from ibllib.io.extractors.training_wheel import WHEEL_RADIUS_CM
+from ibllib.qc.base import QC
+from ibllib.qc.bpodqc_extractors import BpodQCExtractor
 
 log = logging.getLogger('ibllib')
 
 
-class BpodQC(base.QC):
+class BpodQC(QC):
     def __init__(self, session_path_or_eid, one=None, ensure_data=False, lazy=False):
         super().__init__(session_path_or_eid, one, log=log)
         self.ensure_data = ensure_data
@@ -22,8 +23,11 @@ class BpodQC(base.QC):
 
         # Data
         self.extractor = None
+        # Utils
         self.wheel_gain = None
         self.bpod_ntrials = None
+        self.wheel_trial_idxs = None
+
         # Metrics and passed trials
         self.metrics = None
         self.passed = None
@@ -63,6 +67,12 @@ class BpodQC(base.QC):
         self.extractor = BpodQCExtractor(self.session_path, lazy=lazy)
         self.wheel_gain = self.extractor.details["STIM_GAIN"]
         self.bpod_ntrials = len(self.extractor.raw_data)
+        self.wheel_trial_idxs = BpodQC.hack_ts(
+            self.extractor.wheel_data['re_ts'],
+            self.extractor.trial_data['intervals_0'],
+            self.extractor.trial_data['intervals_1'],
+            idx=True
+        )
         return
 
     def compute(self):
@@ -77,6 +87,38 @@ class BpodQC(base.QC):
             self.extractor.BNC2,
         )
         return
+
+    @staticmethod
+    def hack_ts(ts_array, intervals_0, intervals_1, idx=False):
+        hacked_arr = []
+        hacked_arr_idxs = []
+        for start, end in zip(intervals_0, intervals_1):
+            trial = ts_array[(ts_array >= start) & (ts_array < end)]
+            trial_idx = np.where((ts_array >= start) & (ts_array < end))
+            hacked_arr.append(trial)
+            hacked_arr_idxs.extend(trial_idx)
+        return hacked_arr_idxs if idx else hacked_arr
+
+    @property
+    def metrics_df(self):
+        if not self.metrics:
+            log.error("Metrics frame not computed yet")
+            return
+        return BpodQC.frame_to_df(self.metrics)
+
+    @property
+    def passed_df(self):
+        if not self.passed:
+            log.error("Passed frame not computed yet")
+            return
+        return BpodQC.frame_to_df(self.passed)
+
+    @staticmethod
+    def frame_to_df(d: dict) -> pd.DataFrame:
+        dd = d.copy()
+        dd.pop('_bpod_wheel_integrity')
+        out_df = pd.DataFrame.from_dict(dd)
+        return out_df
 
 
 def get_bpodqc_metrics_frame(trial_data, wheel_data, wheel_gain, BNC1, BNC2):
@@ -578,7 +620,7 @@ def load_audio_pre_trial(trial_data, BNC2=None):
     return metric, passed
 
 
-def load_wheel_integrity(wheel_data, re_encoding='X1', enc_res=None):
+def load_wheel_integrity(wheel_data, re_encoding='X1', enc_res=None, trial_idxs=None):
     """
     Variable name: wheel_integrity
     Metric: (absolute difference of the positions - encoder resolution) + 1 if difference of
@@ -600,4 +642,8 @@ def load_wheel_integrity(wheel_data, re_encoding='X1', enc_res=None):
     ts_check = np.diff(wheel_data['re_ts']) <= 0.
     metric = pos_check + ts_check.astype(float)  # all values should be close to zero
     passed = np.isclose(metric, np.zeros_like(metric))
-    return metric, passed
+    if trial_idxs is None:
+        return metric, passed
+
+    for tr in trial_idxs:
+
