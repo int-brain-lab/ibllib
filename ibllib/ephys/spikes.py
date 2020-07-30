@@ -16,11 +16,12 @@ _logger = logging.getLogger('ibllib')
 def probes_description(ses_path, one=None, bin_exists=True):
     """
     Aggregate probes information into ALF files
+    Register alyx probe insertions and Micro-manipulator trajectories
     Input:
         raw_ephys_data/probeXX/
     Output:
         alf/probes.description.npy
-        alf/probes.trajecory.npy
+        alf/probes.trajectory.npy
     """
 
     eid = one.eid_from_path(ses_path)
@@ -29,7 +30,7 @@ def probes_description(ses_path, one=None, bin_exists=True):
     subdirs, labels, efiles_sorted = zip(
         *sorted([(ep.ap.parent, ep.label, ep) for ep in ephys_files if ep.get('ap')]))
 
-    """Ouputs the probes description file"""
+    # Ouputs the probes description file
     probe_description = []
     alyx_insertions = []
     for label, ef in zip(labels, efiles_sorted):
@@ -55,7 +56,7 @@ def probes_description(ses_path, one=None, bin_exists=True):
     with open(probe_description_file, 'w+') as fid:
         fid.write(json.dumps(probe_description))
 
-    """Ouputs the probes trajectory file"""
+    # Ouputs the probes trajectory file
     bpod_meta = raw_data_loaders.load_settings(ses_path)
     if not bpod_meta.get('PROBE_DATA'):
         _logger.error('No probe information in settings JSON. Skipping probes.trajectory')
@@ -85,7 +86,7 @@ def probes_description(ses_path, one=None, bin_exists=True):
         pid = next((ai['id'] for ai in alyx_insertions if ai['name'] == k), None)
         if pid:
             # here we don't update the micro-manipulator coordinates if the trajectory already
-            # exists as it may have been entered manually
+            # exists as it may have been entered manually through admin interface
             trj = one.alyx.rest('trajectories', 'list', probe_insertion=pid,
                                 provenance='Micro-manipulator')
             if len(trj) == 0:
@@ -128,7 +129,7 @@ def sync_spike_sortings(session_path):
     # ks2_dir: spike sorted results: "{session_path}/spike_sorters/ks2_matlab/probe00"
     for bin_data_dir, label, ef, sr in zip(bin_data_dirs, labels, efiles_sorted, srates):
         ks2_dir = session_path.joinpath('spike_sorters', 'ks2_matlab', label)
-        if not bin_data_dir.joinpath('spike_times.npy').exists():
+        if not ks2_dir.joinpath('spike_times.npy').exists():
             ks2_dir = bin_data_dir
         if not ks2_dir.joinpath('spike_times.npy').exists():
             _logger.warning(f"No KS2 spike sorting found in {bin_data_dir}, skipping probe !")
@@ -150,7 +151,7 @@ def sync_spike_sortings(session_path):
             shutil.rmtree(probe_out_path)
             continue
         # converts the folder to ALF
-        ks2_to_alf(bin_data_dir, probe_out_path, bin_file=ef,
+        ks2_to_alf(bin_data_dir, probe_out_path, bin_file=ef.ap,
                    ampfactor=_sample2v(ef.ap), label=None, force=True)
         # patch the spikes.times files manually
         st_file = session_path.joinpath(probe_out_path, 'spikes.times.npy')
