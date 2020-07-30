@@ -86,12 +86,12 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
         import mtscomp
 
         efiles = spikeglx.glob_ephys_files(self.session_path)
-        apfiles = [ef.get('ap') for ef in efiles if 'ap' in ef.keys()]
-        for ap_file in apfiles:
+        apfiles = [(ef.get('ap'), ef.get('label')) for ef in efiles if 'ap' in ef.keys()]
+        for ap_file, label in apfiles:
             ks2log = ap_file.parent.joinpath('spike_sorting_ks2.log')
             if ks2log.exists():
                 _logger.info(f'Already ran: spike_sorting_ks2.log found for {ap_file}, skipping.')
-                return []  # this will label the job with ok status in the database
+                continue  # this will label the job with ok status in the database
 
             # get the scratch drive from the shell script
             SHELL_SCRIPT = Path.home().joinpath(
@@ -104,29 +104,40 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
             assert(scratch_drive.exists())
 
             # clean up and create directory, this also checks write permissions
-            scratch_dir = scratch_drive.joinpath('temp')
+            # scratch dir has the following shape: ZM_3003_2020-07-29_001_probe00
+            scratch_dir = scratch_drive.joinpath(
+                '_'.join(list(self.session_path.parts[-3:]) + [label]))
             if scratch_dir.exists():
                 shutil.rmtree(scratch_dir, ignore_errors=True)
             scratch_dir.mkdir()
 
             # decompresses using mtscomp
-            tmp_ap_file = scratch_dir.joinpath(ap_file.name)
+            tmp_ap_file = scratch_dir.joinpath(ap_file.name).with_suffix('.bin')
             mtscomp.decompress(cdata=ap_file, out=tmp_ap_file)
 
-            # run matlab spike sorting
-            command2run = f"{SHELL_SCRIPT} {scratch_dir} {scratch_dir.parent}"
+            # run matlab spike sorting: with R2019a, it would be much easier to run with
+            # -batch option as matlab errors are redirected to stderr automatically
+            command2run = f"{SHELL_SCRIPT} {scratch_dir}"
+            _logger.info(command2run)
             process = subprocess.Popen(command2run, shell=True, stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE, executable="/bin/bash")
             info, error = process.communicate()
-
-            _logger.info(info.decode('utf-8').strip())
+            info_str = info.decode('utf-8').strip()
+            _logger.info(info_str)
             if process.returncode != 0:
                 raise RuntimeError(error.decode('utf-8'))
+            elif 'run_ks2_ibl.m failed' in info_str:
+                raise RuntimeError('Matlab error')
 
-            shutil.rmtree(scratch_dir, ignore_errors=True)
+            # clean up and copy: output to session/spike_sorters/ks2_matlab/probeXX
+            tmp_ap_file.unlink()  # remove the uncompressed temp binary file
+            scratch_dir.joinpath('temp_wh.dat').unlink()  # remove the memmapped pre-processed file
+            output_ks2_dir = self.session_path.joinpath('spike_sorters', 'ks2_matlab', label)
+            shutil.move(scratch_dir, output_ks2_dir)
+            shutil.rmtree(scratch_dir)
 
             self.version = self._fetch_ks2_commit_hash()
-            return []  # the job will be labeled as complete with empty string
+        return []  # the job will be labeled as complete with empty string
 
 
 class EphysVideoCompress(tasks.Task):
@@ -173,7 +184,7 @@ class EphysSyncSpikeSorting(tasks.Task):
         # then convert ks2 to ALF and resync spike sorting data
         alf_files = spikes.sync_spike_sortings(self.session_path)
         # outputs the probes object in the ALF folder
-        probe_files = spikes.probes_description(self.session_path)
+        probe_files = spikes.probes_description(self.session_path, one=self.one)
         return sync_files + alf_files + probe_files
 
 
