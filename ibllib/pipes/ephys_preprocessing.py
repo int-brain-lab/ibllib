@@ -96,7 +96,7 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
             if ap_file.parent.joinpath('spike_sorting_ks2.log').exists():
                 _logger.info(f'Already ran: spike_sorting_ks2.log found for {ap_file}, skipping.')
                 continue  # this will label the job with ok status in the database
-            if ks2_dir.parent.joinpath('spike_sorting_ks2.log').exists():
+            if ks2_dir.joinpath('spike_sorting_ks2.log').exists():
                 _logger.info(f'Already ran: spike_sorting_ks2.log found in {ks2_dir}, skipping.')
                 continue
             # get the scratch drive from the shell script
