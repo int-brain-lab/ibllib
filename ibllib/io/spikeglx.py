@@ -405,7 +405,7 @@ def _conversion_sample2v_from_meta(meta_data):
 
 def split_sync(sync_tr):
     """
-    The synchronization channelx are stored as single bits, this will split the int16 original
+    The synchronization channels are stored as single bits, this will split the int16 original
     channel into 16 single bits channels
 
     :param sync_tr: numpy vector: samples of synchronisation trace

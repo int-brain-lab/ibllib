@@ -16,7 +16,7 @@ datasets = one.load(eid, download_only=True)
 ses_path = datasets[0].local_path.parent #local path where the data has been downloaded
 
 spikes = alf.io.load_object(ses_path, 'spikes')
-trials = alf.io.load_object(ses_path, '_ibl_trials')
+trials = alf.io.load_object(ses_path, 'trials')
 
 # check which neurons are responsive
 #are_neurons_responsive(spike_times,spike_clusters,stimulus_intervals=None,spontaneous_period=None,p_value_threshold=.05):
