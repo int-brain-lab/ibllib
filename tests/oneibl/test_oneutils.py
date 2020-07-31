@@ -19,8 +19,8 @@ class TestUtils(unittest.TestCase):
             "aaf101c3-2581-450a-8abd-ddb8f557a5ad",
         ]
         self.partial_eid_paths = [
-            None,
-            None,
+            Path('/datadisk/FlatIron/mainenlab/Subjects/clns0730/2018-08-24/002'),
+            Path('/datadisk/FlatIron/zadorlab/Subjects/flowers/2018-07-13/001'),
             Path("FlatIron/mainenlab/Subjects/ZM_1743/2019-06-04/001"),
             Path("FlatIron/cortexlab/Subjects/KS005/2019-04-04/004"),
         ]
@@ -103,7 +103,7 @@ class TestUtils(unittest.TestCase):
             "Missing details key"
         )
         # Test local path append to details
-        self.assertTrue(det_from_eid['local_path'] is None)
+        self.assertTrue(det_from_eid['local_path'] is not None)
         # Test is known local_path is not None
         self.assertTrue(one.get_details(self.eids[2])['local_path'] is not None)
         # Test list input

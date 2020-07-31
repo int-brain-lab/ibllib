@@ -259,7 +259,9 @@ def unit_metrics_ks2(ks2_path=None, m=None, save=True):
     return r
 
 
-def phy_model_from_ks2_path(ks2_path):
+def phy_model_from_ks2_path(ks2_path, bin_file=None):
+    if not bin_file:
+        bin_file = next(ks2_path.rglob('*.ap.*bin'), None)
     meta_file = next(ks2_path.rglob('*.ap.meta'), None)
     if meta_file and meta_file.exists():
         meta = spikeglx.read_meta_data(meta_file)
@@ -269,7 +271,6 @@ def phy_model_from_ks2_path(ks2_path):
     else:
         fs = 30000
         nch = 384
-    bin_file = next(ks2_path.rglob('*.ap.*bin'), None)
     m = model.TemplateModel(dir_path=ks2_path,
                             dat_path=bin_file,  # this assumes the raw data is in the same folder
                             sample_rate=fs,

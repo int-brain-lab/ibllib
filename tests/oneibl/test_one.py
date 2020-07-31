@@ -2,23 +2,33 @@ import unittest
 import numpy as np
 import requests
 from pathlib import Path
+import tempfile
+import shutil
 
 import ibllib.io.hashfile as hashfile
 from alf.io import remove_uuid_file
-from oneibl.one import ONE
+from oneibl.one import ONE, SessionDataInfo
 
 one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
           password='TapetesBloc18')
 
 
+class TestOneOffline(unittest.TestCase):
+
+    def test_one_offline(self) -> None:
+        # init: create a temp directory and copy the fixtures
+        init_cache_file = Path(__file__).parent.joinpath('fixtures', '.one_cache.parquet')
+        with tempfile.TemporaryDirectory() as td:
+            cache_dir = Path(td)
+            shutil.copyfile(init_cache_file, cache_dir.joinpath(init_cache_file.name))
+
+            # test the constructor
+            self.assertTrue(one._cache.shape[1] == 14)
+
+
 class TestSearch(unittest.TestCase):
 
-    def setUp(self):
-        # Init connection to the database
-        self.One = one
-
     def test_search_simple(self):
-        one = self.One
         # Test users
         usr = ['olivier', 'nbonacchi']
         sl, sd = one.search(users=usr, details=True)
@@ -56,18 +66,11 @@ class TestList(unittest.TestCase):
 
     def test_list(self):
         # tests with a single input and a list input
-        EIDs = [self.eid,
-                [self.eid, self.eid2]]
-        for eid in EIDs:
-            dt = one.list(eid)  # returns dataset-type
-            dt = one.list(eid, details=True)
-            dt = one.list(eid, keyword='dataset-type')  # returns list
-            dt = one.list(eid, keyword='dataset-type', details=True)  # returns SessionDataInfo
-            for key in ('subject', 'users', 'lab', 'type', 'start_time', 'end_time'):
-                dt = one.list(eid, keyword=key)  # returns dataset-type
-                print(key, ': ', dt)
-            ses = one.list(eid, keyword='all')
-            usr, ses = one.list(eid, keyword='users', details=True)
+        eid = self.eid
+        dt = one.list(eid)  # returns dataset-type
+        self.assertTrue(isinstance(dt, list))
+        dt = one.list(eid, details=True)
+        self.assertTrue(isinstance(dt, SessionDataInfo))
 
     def test_list_error(self):
         a = 0
@@ -150,14 +153,14 @@ class TestLoad(unittest.TestCase):
         d = one.load(eid, dataset_types=dataset_types, dclass_output=True)
         ind = int(np.where(np.array(d.dataset_type) == 'clusters.channels')[0])
         self.assertTrue(np.all(d.data[ind] == t))
-        # Now load with another dset inbetween that doesn't exist
+        # Now load with another dset in between that doesn't exist
         t_, cr_, cl_ = one.load(eid, dataset_types=['clusters.channels', 'turlu',
                                                     'clusters.probes'])
         self.assertTrue(np.all(t == t_))
         self.assertTrue(np.all(cl == cl_))
         self.assertTrue(cr_ is None)
         # Now try in offline mode where the file already exists
-        t_ = one.load(eid, dataset_types=['clusters.channels'], offline=True)
+        t_ = one.load(eid, dataset_types=['clusters.channels'])
         self.assertTrue(np.all(t == t_))
 
         # load_dataset()
