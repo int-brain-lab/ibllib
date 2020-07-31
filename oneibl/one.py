@@ -109,8 +109,8 @@ def _ses2pandas(ses, dtypes=None):
     join = {'subject': ses['subject'], 'lab': ses['lab'], 'eid': ses['url'][-36:],
             'start_time': np.datetime64(ses['start_time']), 'number': ses['number'],
             'task_protocol': ses['task_protocol']}
-    col = parquet.rec2col(rec, include=include, uuid_fields=uuid_fields, join=join).to_df()
-
+    col = parquet.rec2col(rec, include=include, uuid_fields=uuid_fields, join=join,
+                          types={'file_size': np.double}).to_df()
     return col
 
 
@@ -813,13 +813,24 @@ class OneAlyx(OneAbstract):
             return
         elif self._cache.size == 0:
             self._cache = pqt_dsets
-            parquet.save(self._cache_file, self._cache)
         else:
-            isin, _ = ismember2d(pqt_dsets[['id_0', 'id_1']].to_numpy(),
-                                 self._cache[['id_0', 'id_1']].to_numpy())
+            # always update the matching records in case the data has been patched
+            isin, icache = ismember2d(pqt_dsets[['id_0', 'id_1']].to_numpy(),
+                                      self._cache[['id_0', 'id_1']].to_numpy())
+            # self._cache.dropna(how='all', inplace=True)
+            # self._cache = self._cache.astype(
+            # {'id_0': np.int64, 'id_1': np.int64, 'eid_0': np.int64, 'eid_1': np.int64})
+
+            # a = pqt_dsets.iloc[np.where(isin)[0]]
+            # b = self._cache.iloc[icache]
+            # for k in a.keys():
+            #     print(k, a[k].equals(b[k]), a[k].to_numpy(), b[k].to_numpy())
+            typs = [t for t, k in zip(self._cache.dtypes, self._cache.keys()) if 'id_' in k]
+            assert(all(map(lambda t: t == np.int64, typs)))
+            # new records get appended at the end
             if not np.all(isin):
                 self._cache = self._cache.append(pqt_dsets.iloc[np.where(~isin)[0]])
-                parquet.save(self._cache_file, self._cache)
+        parquet.save(self._cache_file, self._cache)
 
 
 def _validate_date_range(date_range):

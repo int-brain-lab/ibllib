@@ -49,7 +49,7 @@ def np2str(eids_np):
     return [str(u) for u in np2uuid(eids_np)]
 
 
-def rec2col(rec, join=None, include=None, exclude=None, uuid_fields=None):
+def rec2col(rec, join=None, include=None, exclude=None, uuid_fields=None, types=None):
     """
     Change a record list (usually from a REST API endpoint) to a column based dictionary
     (pandas dataframe).
@@ -62,6 +62,7 @@ def rec2col(rec, join=None, include=None, exclude=None, uuid_fields=None):
     keys specified here
     :param uuid_fields: if the field is an UUID, will split it into 2 distinct int64 columns for
     efficient lookups and intersections
+    :param types: for a given key, will force the type; example: types = {'file_size': np.double}
     :return: a Bunch
     """
     if isinstance(rec, dict):
@@ -69,7 +70,7 @@ def rec2col(rec, join=None, include=None, exclude=None, uuid_fields=None):
     if len(rec) == 0:
         return Bunch()
     if include is None:
-        include = rec.keys()
+        include = rec[0].keys() if isinstance(rec, list) else rec.keys()
     if exclude is None:
         exclude = []
     if uuid_fields is None:
@@ -86,6 +87,8 @@ def rec2col(rec, join=None, include=None, exclude=None, uuid_fields=None):
             npuuid = str2np(np.array([c[key] for c in rec]))
             col[f"{key}_0"] = npuuid[:, 0]
             col[f"{key}_1"] = npuuid[:, 1]
+        elif types and key in types:
+            col[key] = np.array([c[key] for c in rec]).astype(types[key])
         else:
             col[key] = np.array([c[key] for c in rec])
 
