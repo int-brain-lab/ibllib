@@ -86,14 +86,13 @@ def extract_rmsmap(fbin, out_folder=None, overwrite=False):
         out_folder = Path(fbin).parent
     else:
         out_folder = Path(out_folder)
-    alf_object_time = f'_iblqc_ephysTimeRms{sglx.type.upper()}'
-    alf_object_freq = f'_iblqc_ephysSpectralDensity{sglx.type.upper()}'
-    if alf.io.exists(out_folder, alf_object_time) and \
-            alf.io.exists(out_folder, alf_object_freq) and not overwrite:
+    alf_object_time = f'ephysTimeRms{sglx.type.upper()}'
+    alf_object_freq = f'ephysSpectralDensity{sglx.type.upper()}'
+    files_time = list(out_folder.glob(f"_iblqc_{alf_object_time}*"))
+    files_freq = list(out_folder.glob(f"_iblqc_{alf_object_freq}*"))
+    if (len(files_time) == 2 == len(files_freq)) and not overwrite:
         _logger.warning(f'{fbin.name} QC already exists, skipping. Use overwrite option.')
-        out_time = alf.io._ls(out_folder, alf_object_time)[0]
-        out_freq = alf.io._ls(out_folder, alf_object_freq)[0]
-        return out_time + out_freq
+        return files_time + files_freq
     # crunch numbers
     rms = rmsmap(fbin)
     # output ALF files, single precision with the optional label as suffix before extension
@@ -102,8 +101,11 @@ def extract_rmsmap(fbin, out_folder=None, overwrite=False):
     tdict = {'rms': rms['TRMS'].astype(np.single), 'timestamps': rms['tscale'].astype(np.single)}
     fdict = {'power': rms['spectral_density'].astype(np.single),
              'freqs': rms['fscale'].astype(np.single)}
-    out_time = alf.io.save_object_npy(out_folder, object=alf_object_time, dico=tdict)
-    out_freq = alf.io.save_object_npy(out_folder, object=alf_object_freq, dico=fdict)
+    tdict = alf.io.load_object(out_folder, alf_object_time)
+    out_time = alf.io.save_object_npy(
+        out_folder, object=alf_object_time, dico=tdict, namespace='iblqc')
+    out_freq = alf.io.save_object_npy(
+        out_folder, object=alf_object_freq, dico=fdict, namespace='iblqc')
     return out_time + out_freq
 
 
