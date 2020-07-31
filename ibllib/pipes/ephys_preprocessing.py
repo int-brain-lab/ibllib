@@ -139,7 +139,6 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
             tmp_ap_file.unlink()  # remove the uncompressed temp binary file
             scratch_dir.joinpath('temp_wh.dat').unlink()  # remove the memmapped pre-processed file
             shutil.move(scratch_dir, ks2_dir)
-            shutil.rmtree(scratch_dir)
 
             self.version = self._fetch_ks2_commit_hash()
         return []  # the job will be labeled as complete with empty string
