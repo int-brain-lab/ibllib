@@ -86,13 +86,19 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
         import mtscomp
 
         efiles = spikeglx.glob_ephys_files(self.session_path)
+
         apfiles = [(ef.get('ap'), ef.get('label')) for ef in efiles if 'ap' in ef.keys()]
         for ap_file, label in apfiles:
-            ks2log = ap_file.parent.joinpath('spike_sorting_ks2.log')
-            if ks2log.exists():
+            # check for pre-existing spike-sorting
+            # the spike sorting output can either be with the probe (<1.5.5) or in the
+            # session_path/spike_sorters/ks2_matlab/probeXX folder
+            ks2_dir = self.session_path.joinpath('spike_sorters', 'ks2_matlab', label)
+            if ap_file.parent.joinpath('spike_sorting_ks2.log').exists():
                 _logger.info(f'Already ran: spike_sorting_ks2.log found for {ap_file}, skipping.')
                 continue  # this will label the job with ok status in the database
-
+            if ks2_dir.parent.joinpath('spike_sorting_ks2.log').exists():
+                _logger.info(f'Already ran: spike_sorting_ks2.log found in {ks2_dir}, skipping.')
+                continue
             # get the scratch drive from the shell script
             SHELL_SCRIPT = Path.home().joinpath(
                 "Documents/PYTHON/iblscripts/deploy/serverpc/kilosort2/task_ks2_matlab.sh")
@@ -129,11 +135,10 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
             elif 'run_ks2_ibl.m failed' in info_str:
                 raise RuntimeError('Matlab error')
 
-            # clean up and copy: output to session/spike_sorters/ks2_matlab/probeXX
+            # clean up and copy: output to session/spike_sorters/ks2_matlab/probeXX (ks2_dir)
             tmp_ap_file.unlink()  # remove the uncompressed temp binary file
             scratch_dir.joinpath('temp_wh.dat').unlink()  # remove the memmapped pre-processed file
-            output_ks2_dir = self.session_path.joinpath('spike_sorters', 'ks2_matlab', label)
-            shutil.move(scratch_dir, output_ks2_dir)
+            shutil.move(scratch_dir, ks2_dir)
             shutil.rmtree(scratch_dir)
 
             self.version = self._fetch_ks2_commit_hash()
