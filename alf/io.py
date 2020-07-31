@@ -270,8 +270,8 @@ def load_object(alfpath, object=None, short_keys=False, **kwargs):
     attributes = [p[2] if not p[3] else '_'.join(p[2:4]) for p in parts]
     if not short_keys:  # Include extra parts in the keys
         attributes = [attr + ('.' + p[4] if p[4] else '') for attr, p in zip(attributes, parts)]
-    assert len(set(attributes)) == len(attributes), \
-        'multiple object files with the same attribute found, please restrict on namespace etc.'
+    assert len(set(attributes)) == len(attributes), (
+        f'multiple object {object} with the same attribute in {alfpath}, restrict parts/namespace')
     out = AlfBunch({})
     # load content for each file
     for fil, att in zip(files_alf, attributes):

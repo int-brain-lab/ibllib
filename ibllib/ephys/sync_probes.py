@@ -68,7 +68,8 @@ def version3A(ses_path, display=True, type='smooth', tol=2.1):
         d = Bunch({'times': [], 'nsync': np.zeros(nprobes, )})
         # auxiliary_name: frame2ttl or right_camera
         for ind, ephys_file in enumerate(ephys_files):
-            sync = alf.io.load_object(ephys_file.ap.parent, 'sync', namespace='spikeglx')
+            sync = alf.io.load_object(
+                ephys_file.ap.parent, 'sync', namespace='spikeglx', short_keys=True)
             sync_map = get_ibl_sync_map(ephys_file, '3A')
             # exits if sync label not found for current probe
             if auxiliary_name not in sync_map:
@@ -124,7 +125,7 @@ def version3B(ses_path, display=True, type=None, tol=2.5):
     DEFAULT_TYPE = 'smooth'
     ephys_files = spikeglx.glob_ephys_files(ses_path, bin_exists=False)
     for ef in ephys_files:
-        ef['sync'] = alf.io.load_object(ef.path, 'sync', namespace='spikeglx')
+        ef['sync'] = alf.io.load_object(ef.path, 'sync', namespace='spikeglx', short_keys=True)
         ef['sync_map'] = get_ibl_sync_map(ef, '3B')
     nidq_file = [ef for ef in ephys_files if ef.get('nidq')]
     ephys_files = [ef for ef in ephys_files if not ef.get('nidq')]
