@@ -651,7 +651,7 @@ class OneAlyx(OneAbstract):
         if not keep_uuid:
             local_path = remove_uuid_file(local_path, dry=True)
         if Path(local_path).exists():
-            # overwrites the file if the expected filesize is different from the cached filesize
+            # the local file hash doesn't match the dataset table cached hash
             hash_mismatch = hash and hashfile.md5(Path(local_path)) != hash
             file_size_mismatch = file_size and Path(local_path).stat().st_size != file_size
             if hash_mismatch or file_size_mismatch:
@@ -700,7 +700,13 @@ class OneAlyx(OneAbstract):
         """
         oneibl.params.setup()
 
-    def path_from_eid(self, eid: str) -> Path:
+    def path_from_eid(self, eid: str, use_cache=True) -> Path:
+        """
+        From an experiment id or a list of experiment ids, gets the local cache path
+        :param eid: eid (UUID) or list of UUIDs
+        :param use_cache: if set to False, will force database connection
+        :return: eid or list of eids
+        """
         # If eid is a list of eIDs recurse through list and return the results
         if isinstance(eid, list):
             path_list = []
@@ -713,7 +719,7 @@ class OneAlyx(OneAbstract):
             return
 
         # first try avoid hitting the database
-        if self._cache.size > 0:
+        if self._cache.size > 0 and use_cache:
             ic = parquet.find_first_2d(
                 self._cache[['eid_0', 'eid_1']].to_numpy(), parquet.str2np(eid))
             if ic is not None:
@@ -731,7 +737,13 @@ class OneAlyx(OneAbstract):
                 ses[0]['lab'], 'Subjects', ses[0]['subject'], ses[0]['start_time'][:10],
                 str(ses[0]['number']).zfill(3))
 
-    def eid_from_path(self, path_obj):
+    def eid_from_path(self, path_obj, use_cache=True):
+        """
+        From a local path, gets the experiment id
+        :param path_obj: local path or list of local paths
+        :param use_cache: if set to False, will force database connection
+        :return: eid or list of eids
+        """
         # If path_obj is a list recurse through it and return a list
         if isinstance(path_obj, list):
             path_obj = [Path(x) for x in path_obj]
@@ -747,7 +759,7 @@ class OneAlyx(OneAbstract):
             return None
 
         # try the cached info to possibly avoid hitting database
-        if self._cache.size > 0:
+        if self._cache.size > 0 and use_cache:
             ind = ((self._cache['subject'] == session_path.parts[-3]) &
                    (self._cache['start_time'].apply(
                        lambda x: x.isoformat()[:10] == session_path.parts[-2])) &
