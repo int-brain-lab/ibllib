@@ -621,6 +621,18 @@ class OneAlyx(OneAbstract):
         target_dir = Path(self._get_cache_dir(cache_dir), relpath)
         return self._download_file(url=url, target_dir=target_dir, **kwargs)
 
+    def _tag_mismatched_file_record(self, url):
+        fr = self.alyx.rest('files', 'list', dataset=Path(url).name.split('.')[-2],
+                            django='data_repository__globus_is_personal,False')
+        if len(fr) > 0:
+            json_field = fr[0]['json']
+            if json_field is None:
+                json_field = {'checksum_failed': True}
+            else:
+                json_field.update({'checksum_failed': True})
+            self.alyx.rest('files', 'partial_update', id=fr[0]['url'][-36:],
+                           data={'json': json_field})
+
     def _download_file(self, url, target_dir, clobber=False, offline=False, keep_uuid=False,
                        file_size=None, hash=None):
         """
@@ -640,13 +652,11 @@ class OneAlyx(OneAbstract):
             local_path = remove_uuid_file(local_path, dry=True)
         if Path(local_path).exists():
             # overwrites the file if the expected filesize is different from the cached filesize
-            if file_size and Path(local_path).stat().st_size != file_size:
+            hash_mismatch = hash and hashfile.md5(Path(local_path)) != hash
+            file_size_mismatch = file_size and Path(local_path).stat().st_size != file_size
+            if hash_mismatch or file_size_mismatch:
                 clobber = True
-                _logger.warning(f" size mismatch, re-downloading {local_path}")
-            # overwrites the file if the expected hash is different from the cached hash
-            if hash and hashfile.md5(Path(local_path)) != hash:
-                clobber = True
-                _logger.warning(f" md5 hash mismatch, re-downloading {local_path}")
+                _logger.warning(f" local md5 or size mismatch, re-downloading {local_path}")
         # if there is no cached file, download
         else:
             clobber = True
@@ -657,6 +667,7 @@ class OneAlyx(OneAbstract):
                                                cache_dir=str(target_dir),
                                                clobber=clobber,
                                                offline=offline)
+            # TODO check md5 after download # self._tag_mismatched_file_record(url)
         if keep_uuid:
             return local_path
         else:
