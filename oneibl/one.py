@@ -624,14 +624,14 @@ class OneAlyx(OneAbstract):
         return self._download_file(url=url, target_dir=target_dir, **kwargs)
 
     def _tag_mismatched_file_record(self, url):
-        fr = self.alyx.rest('files', 'list', dataset=Path(url).name.split('.')[-2],
-                            django='data_repository__globus_is_personal,False')
+        fr = self.alyx.rest('files', 'list', django=f"dataset,{Path(url).name.split('.')[-2]},"
+                                                    f"data_repository__globus_is_personal,False")
         if len(fr) > 0:
             json_field = fr[0]['json']
             if json_field is None:
-                json_field = {'checksum_failed': True}
+                json_field = {'mismatch_hash': True}
             else:
-                json_field.update({'checksum_failed': True})
+                json_field.update({'mismatch_hash': True})
             self.alyx.rest('files', 'partial_update', id=fr[0]['url'][-36:],
                            data={'json': json_field})
 
@@ -648,11 +648,12 @@ class OneAlyx(OneAbstract):
         :param hash:
         :return:
         """
+        check_hash_post_download = False
         Path(target_dir).mkdir(parents=True, exist_ok=True)
         local_path = str(target_dir) + os.sep + os.path.basename(url)
         if not keep_uuid:
             local_path = remove_uuid_file(local_path, dry=True)
-        if Path(local_path).exists():
+        if Path(local_path).exists() and not offline:
             # the local file hash doesn't match the dataset table cached hash
             hash_mismatch = hash and hashfile.md5(Path(local_path)) != hash
             file_size_mismatch = file_size and Path(local_path).stat().st_size != file_size
@@ -663,13 +664,16 @@ class OneAlyx(OneAbstract):
         else:
             clobber = True
         if clobber:
-            local_path = wc.http_download_file(url,
-                                               username=self._par.HTTP_DATA_SERVER_LOGIN,
-                                               password=self._par.HTTP_DATA_SERVER_PWD,
-                                               cache_dir=str(target_dir),
-                                               clobber=clobber,
-                                               offline=offline)
-            # TODO check md5 after download # self._tag_mismatched_file_record(url)
+            local_path, md5 = wc.http_download_file(
+                url, username=self._par.HTTP_DATA_SERVER_LOGIN,
+                password=self._par.HTTP_DATA_SERVER_PWD, cache_dir=str(target_dir),
+                clobber=clobber, offline=offline, return_md5=True)
+            # post download, if there is a mismatch between Alyx and the newly downloaded file size
+            # or hash flag the offending file record in Alyx for database maintenance
+            hash_mismatch = hash and md5 != hash
+            file_size_mismatch = file_size and Path(local_path).stat().st_size != file_size
+            if hash_mismatch or file_size_mismatch:
+                self._tag_mismatched_file_record(url)
         if keep_uuid:
             return local_path
         else:
@@ -823,8 +827,8 @@ class OneAlyx(OneAbstract):
             isin, icache = ismember2d(pqt_dsets[['id_0', 'id_1']].to_numpy(),
                                       self._cache[['id_0', 'id_1']].to_numpy())
             # check if the hash / filesize fields have changed on patching
-            heq = (self._cache['hash'].iloc[icache].to_numpy()
-                   == pqt_dsets['hash'].iloc[isin].to_numpy())
+            heq = (self._cache['hash'].iloc[icache].to_numpy() ==
+                   pqt_dsets['hash'].iloc[isin].to_numpy())
             feq = np.isclose(self._cache['file_size'].iloc[icache].to_numpy(),
                              pqt_dsets['file_size'].iloc[isin].to_numpy(),
                              rtol=0, atol=0, equal_nan=True)

@@ -36,8 +36,8 @@ class TestOneOffline(unittest.TestCase):
                       'ephysData.raw.meta',
                       'camera.times',
                       'ephysData.raw.wiring']
-            files = one.load(eid, dataset_types=dtypes, dclass_output=False, download_only=True,
-                             offline=False)
+            one.load(eid, dataset_types=dtypes, dclass_output=False,
+                     download_only=True, offline=False)
 
 
 class TestSearch(unittest.TestCase):
@@ -215,11 +215,7 @@ class TestLoad(unittest.TestCase):
         eid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
         self.assertRaises(requests.HTTPError, one.load, eid)
 
-    def test_load_offline(self):
-        a = one.load(self.eid, dataset_types='_ibl_lickPiezo.raw.npy', offline=True)
-        self.assertTrue(a == [None])
-
-    def test_load_newversion(self):
+    def test_download_hash(self):
         eid = self.eid
         # get the original file from the server
         file = one.load(eid, dataset_types=['channels.localCoordinates'], download_only=True,
@@ -241,6 +237,15 @@ class TestLoad(unittest.TestCase):
         data = one.load(eid, dataset_types=['channels.localCoordinates'])[0]
         self.assertTrue(data.shape == data_server.shape)
         self.assertTrue(np.all(np.equal(data, data_server)))
+        # here we corrupt the md5 hash on the database, the file will get downloaded again,
+        # but on checking the file one.load should have labeled the json field for database
+        # maintenance
+        one.alyx.rest('datasets', 'partial_update', id=dset[0]['url'][-36:],
+                      data={'file_size': fsize, 'hash': "5d1d13589934440a9947c2477b2e61ea"})
+        one.load(eid, dataset_types=['channels.localCoordinates'])[0]
+        fr = one.alyx.rest('files', 'list', django=f"dataset,{dset[0]['url'][-36:]},"
+                                                   f"data_repository__globus_is_personal,False")
+        self.assertTrue(fr[0]['json'] == {'mismatch_hash': True})
 
 
 class TestMisc(unittest.TestCase):
