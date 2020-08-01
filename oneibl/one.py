@@ -102,6 +102,8 @@ def _ses2pandas(ses, dtypes=None):
     """
     # selection: get relevant dtypes only if there is an url associated
     rec = list(filter(lambda x: x['url'], ses['data_dataset_session_related']))
+    if dtypes == ['__all__'] or dtypes == '__all__':
+        dtypes = None
     if dtypes is not None:
         rec = list(filter(lambda x: x['dataset_type'] in dtypes, rec))
     include = ['id', 'hash', 'dataset_type', 'name', 'file_size', 'collection']
@@ -807,30 +809,39 @@ class OneAlyx(OneAbstract):
         :param dataset_types:
         :return: is_updated (bool): if the cache was updated or not
         """
+        save = False
         pqt_dsets = _ses2pandas(ses, dtypes=dataset_types)
         # if the dataframe is empty, return
         if pqt_dsets.size == 0:
             return
+        # if the cache is empty create the cache variable
         elif self._cache.size == 0:
             self._cache = pqt_dsets
+            save = True
+        # the cache is not empty and there are datasets in the query
         else:
-            # always update the matching records in case the data has been patched
             isin, icache = ismember2d(pqt_dsets[['id_0', 'id_1']].to_numpy(),
                                       self._cache[['id_0', 'id_1']].to_numpy())
-            # self._cache.dropna(how='all', inplace=True)
-            # self._cache = self._cache.astype(
-            # {'id_0': np.int64, 'id_1': np.int64, 'eid_0': np.int64, 'eid_1': np.int64})
-
-            # a = pqt_dsets.iloc[np.where(isin)[0]]
-            # b = self._cache.iloc[icache]
-            # for k in a.keys():
-            #     print(k, a[k].equals(b[k]), a[k].to_numpy(), b[k].to_numpy())
-            typs = [t for t, k in zip(self._cache.dtypes, self._cache.keys()) if 'id_' in k]
-            assert(all(map(lambda t: t == np.int64, typs)))
-            # new records get appended at the end
+            # check if the hash / filesize fields have changed on patching
+            heq = (self._cache['hash'].iloc[icache].to_numpy()
+                   == pqt_dsets['hash'].iloc[isin].to_numpy())
+            feq = np.isclose(self._cache['file_size'].iloc[icache].to_numpy(),
+                             pqt_dsets['file_size'].iloc[isin].to_numpy(),
+                             rtol=0, atol=0, equal_nan=True)
+            eq = np.logical_and(heq, feq)
+            # update new hash / filesizes
+            if not np.all(eq):
+                self._cache.iloc[icache] = pqt_dsets.iloc[np.where(isin)[0]]
+                save = True
+            # append datasets that haven't been found
             if not np.all(isin):
                 self._cache = self._cache.append(pqt_dsets.iloc[np.where(~isin)[0]])
-        parquet.save(self._cache_file, self._cache)
+                save = True
+        if save:
+            # before saving makes sure pandas did not cast uuids in float
+            typs = [t for t, k in zip(self._cache.dtypes, self._cache.keys()) if 'id_' in k]
+            assert (all(map(lambda t: t == np.int64, typs)))
+            parquet.save(self._cache_file, self._cache)
 
 
 def _validate_date_range(date_range):

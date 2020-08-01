@@ -25,6 +25,20 @@ class TestOneOffline(unittest.TestCase):
             # test the constructor
             self.assertTrue(one._cache.shape[1] == 14)
 
+            # test the load with download false so it returns only file paths
+            eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
+            one.list(eid)
+            dtypes = ['_spikeglx_sync.channels',
+                      '_spikeglx_sync.polarities',
+                      '_spikeglx_sync.times',
+                      '_iblrig_taskData.raw',
+                      '_iblrig_taskSettings.raw',
+                      'ephysData.raw.meta',
+                      'camera.times',
+                      'ephysData.raw.wiring']
+            files = one.load(eid, dataset_types=dtypes, dclass_output=False, download_only=True,
+                             offline=False)
+
 
 class TestSearch(unittest.TestCase):
 
