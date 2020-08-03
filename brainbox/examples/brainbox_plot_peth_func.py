@@ -11,7 +11,7 @@ datasets = one.load(eid, download_only=True)
 ses_path = datasets[0].local_path.parent  # local path where the data has been downloaded
 
 spikes = alf.io.load_object(ses_path, 'spikes')
-trials = alf.io.load_object(ses_path, '_ibl_trials')
+trials = alf.io.load_object(ses_path, 'trials')
 
 # For a simple peth plot without a raster, all we need to input is spike times, clusters, event
 # times, and the identity of the cluster we want to plot, e.g. in this case cluster 121

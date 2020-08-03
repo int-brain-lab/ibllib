@@ -1,3 +1,8 @@
+### Release Notes 1.5.5
+-   ONE offline mode and cache dataset table to speed up reloading of large datasets (Olivier)
+-   ALF io naming conventions on loading objects (Miles)
+-   KS2 Matlab ephys pipeline tasks (Olivier)
+
 ### Release Notes 1.5.4 - 29/07/2020 hotfix
 -   ibllib.pipes.training_preprocessing.TrainingAudio
 

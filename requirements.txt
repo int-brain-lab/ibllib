@@ -8,6 +8,7 @@ jupyter>=1.0
 jupyterlab>=1.0
 matplotlib>=3.0.3
 mtscomp>=1.0.1
+numba
 numpy>=1.16.4
 opencv-python
 pandas>=0.24.2

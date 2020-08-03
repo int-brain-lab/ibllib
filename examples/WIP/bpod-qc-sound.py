@@ -45,7 +45,8 @@ for i_eIDs in range(0, len(eIDs)):
     n_trial = len(c)
 
     # -- Get spectrogram
-    TF = alf.io.load_object(session_path.joinpath('raw_behavior_data'), '_iblmic_audioSpectrogram')
+    TF = alf.io.load_object(session_path.joinpath('raw_behavior_data'), 'audioSpectrogram',
+                            namespace='iblmic')
 
     # -- Detect goCue
     # Assume quietness before goCue isplayed > use diff to detect onset
