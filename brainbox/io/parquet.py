@@ -40,9 +40,12 @@ def str2np(eids_str):
 
 
 def np2uuid(eids_np):
-    if isinstance(eids_np, pd.DataFrame):
+    if isinstance(eids_np, pd.DataFrame) | isinstance(eids_np, pd.Series):
         eids_np = eids_np.to_numpy()
-    return [uuid.UUID(bytes=npu.tobytes()) for npu in eids_np]
+    if eids_np.ndim >= 2:
+        return [uuid.UUID(bytes=npu.tobytes()) for npu in eids_np]
+    else:
+        return eids_np.tobytes()
 
 
 def np2str(eids_np):
