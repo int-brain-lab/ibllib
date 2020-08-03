@@ -128,6 +128,7 @@ class OneAbstract(abc.ABC):
         # init the cache file
         self._cache_file = Path(self._par.CACHE_DIR).joinpath('.one_cache.parquet')
         if self._cache_file.exists():
+            # we need to keep this part fast enough for transient objects
             self._cache = parquet.load(self._cache_file)
         else:
             self._cache = pd.DataFrame()
@@ -835,16 +836,19 @@ class OneAlyx(OneAbstract):
             eq = np.logical_and(heq, feq)
             # update new hash / filesizes
             if not np.all(eq):
-                self._cache.iloc[icache] = pqt_dsets.iloc[np.where(isin)[0]]
+                self._cache.iloc[icache].loc[:, ['file_size', 'hash']] =\
+                    pqt_dsets.iloc[np.where(isin)[0]].loc[:, ['file_size', 'hash']]
                 save = True
             # append datasets that haven't been found
             if not np.all(isin):
                 self._cache = self._cache.append(pqt_dsets.iloc[np.where(~isin)[0]])
+                self._cache = self._cache.reindex()
                 save = True
         if save:
             # before saving makes sure pandas did not cast uuids in float
             typs = [t for t, k in zip(self._cache.dtypes, self._cache.keys()) if 'id_' in k]
             assert (all(map(lambda t: t == np.int64, typs)))
+            # if this gets too big, look into saving only when destroying the ONE object
             parquet.save(self._cache_file, self._cache)
 
 
