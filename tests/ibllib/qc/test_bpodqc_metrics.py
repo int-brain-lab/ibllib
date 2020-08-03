@@ -61,6 +61,11 @@ class TestBpodQCMetricsObject(unittest.TestCase):
         download_bpodqc_raw_data(self.eid, one=self.one)
         bpodqc = BpodQC(self.eid, one=self.one, lazy=False)
         self.assertTrue(bpodqc is not None)
+        # make sure metrics and passed output is "square" for plotters
+        ntrials = len(bpodqc.extractor.trial_data['intervals_0'])
+        self.assertTrue(
+            np.all([len(v) == ntrials for k, v in bpodqc.metrics.items()])
+        )
 
 
 class TestBpodQCMetrics(unittest.TestCase):
