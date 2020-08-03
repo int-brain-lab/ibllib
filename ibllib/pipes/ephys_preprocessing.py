@@ -129,11 +129,11 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
                                        stderr=subprocess.PIPE, executable="/bin/bash")
             info, error = process.communicate()
             info_str = info.decode('utf-8').strip()
-            _logger.info(info_str)
             if process.returncode != 0:
                 raise RuntimeError(error.decode('utf-8'))
             elif 'run_ks2_ibl.m failed' in info_str:
-                raise RuntimeError('Matlab error')
+                raise RuntimeError('Matlab error ks2 log below:')
+                _logger.info(info_str)
 
             # clean up and copy: output to session/spike_sorters/ks2_matlab/probeXX (ks2_dir)
             tmp_ap_file.unlink()  # remove the uncompressed temp binary file
@@ -241,10 +241,11 @@ class EphysExtractionPipeline(tasks.Pipeline):
         tasks['EphysPulses'] = EphysPulses(self.session_path)
         tasks['EphysRawQC'] = RawEphysQC(self.session_path)
         tasks['EphysAudio'] = EphysAudio(self.session_path)
-        tasks['SpikeSorting'] = SpikeSorting_KS2_Matlab(self.session_path)
         tasks['EphysVideoCompress'] = EphysVideoCompress(self.session_path)
         tasks['EphysMtscomp'] = EphysMtscomp(self.session_path)
         # level 1
+        tasks['SpikeSorting'] = SpikeSorting_KS2_Matlab(self.session_path,
+                                                        parents=[tasks['EphysMtscomp']])
         tasks['EphysSyncSpikeSorting'] = EphysSyncSpikeSorting(self.session_path, parents=[
             tasks['SpikeSorting'], tasks['EphysPulses']])
         tasks['EphysTrials'] = EphysTrials(self.session_path, parents=[tasks['EphysPulses']])
