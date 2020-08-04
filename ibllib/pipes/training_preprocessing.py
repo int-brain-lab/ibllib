@@ -113,4 +113,4 @@ def extract_training(session_path, save=True):
     else:
         raise ValueError(f"No extractor for task {extractor_type}")
     _logger.info('session extracted \n')  # timing info in log
-    return trials, wheel, files_trials + files_wheel
+    return trials, wheel, (files_trials + files_wheel) if save else None

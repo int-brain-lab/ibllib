@@ -519,7 +519,7 @@ def _get_pregenerated_events(bpod_trials, settings):
     if num is None:
         num = settings.get("PREGENERATED_SESSION_NUM", None)
     if num is None:
-        fn = settings.get('SESSION_LOADED_FILE_PATH', None)
+        fn = settings.get('SESSION_LOADED_FILE_PATH', '')
         fn = PureWindowsPath(fn).name
         num = ''.join([d for d in fn if d.isdigit()])
         if num == '':
