@@ -459,7 +459,6 @@ class TestBpodQCMetrics(unittest.TestCase):
         metric, passed = qcmetrics.load_wheel_integrity(self.wheel, re_encoding='X1')
         self.assertFalse(passed[idx].any())
 
-    # @unittest.skip("not implemented")
     def test_load_stimulus_move_before_goCue(self):
         no_bnc = qcmetrics.load_stimulus_move_before_goCue(self.data, BNC1=None)
         self.assertTrue(no_bnc is None)
