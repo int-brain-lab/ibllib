@@ -10,7 +10,7 @@ from ibllib.io.extractors.training_wheel import WHEEL_RADIUS_CM
 from ibllib.qc.base import QC
 from ibllib.qc.bpodqc_extractors import BpodQCExtractor
 
-log = logging.getLogger('ibllib')
+log = logging.getLogger("ibllib")
 
 
 class BpodQC(QC):
@@ -68,10 +68,10 @@ class BpodQC(QC):
         self.wheel_gain = self.extractor.details["STIM_GAIN"]
         self.bpod_ntrials = len(self.extractor.raw_data)
         self.wheel_trial_idxs = BpodQC.hack_ts(
-            self.extractor.wheel_data['re_ts'],
-            self.extractor.trial_data['intervals_0'],
-            self.extractor.trial_data['intervals_1'],
-            idx=True
+            self.extractor.wheel_data["re_ts"],
+            self.extractor.trial_data["intervals_0"],
+            self.extractor.trial_data["intervals_1"],
+            idx=True,
         )
         return
 
@@ -98,6 +98,8 @@ class BpodQC(QC):
             trial_idx = np.where((ts_array >= start) & (ts_array < end))
             hacked_arr.append(trial)
             hacked_arr_idxs.extend(trial_idx)
+        if np.max(hacked_arr_idxs[-1]) == len(ts_array):
+            hacked_arr_idxs[-1] = np.setdiff1d(hacked_arr_idxs[-1], np.max(hacked_arr_idxs[-1]))
         return hacked_arr_idxs if idx else hacked_arr
 
     @property
@@ -117,7 +119,7 @@ class BpodQC(QC):
     @staticmethod
     def frame_to_df(d: dict) -> pd.DataFrame:
         dd = d.copy()
-        dd.pop('_bpod_wheel_integrity')
+        dd.pop("_bpod_wheel_integrity")
         out_df = pd.DataFrame.from_dict(dd)
         return out_df
 
@@ -249,7 +251,7 @@ def load_wheel_freeze_during_quiescence(trial_data, wheel_data):
         wheel_data["re_ts"],
         wheel_data["re_pos"],
         start=qevt_start_times,
-        end=trial_data["stimOnTrigger_times"]
+        end=trial_data["stimOnTrigger_times"],
     )
 
     metric = np.zeros((len(trial_data["quiescence"]), 2))  # (n_trials, n_directions)
@@ -602,7 +604,7 @@ def load_audio_pre_trial(trial_data, BNC2=None):
     return metric, passed
 
 
-def load_wheel_integrity(wheel_data, re_encoding='X1', enc_res=None, trial_idxs=None):
+def load_wheel_integrity(wheel_data, re_encoding="X1", enc_res=None, trial_idxs=None):
     """
     Variable name: wheel_integrity
     Metric: (absolute difference of the positions - encoder resolution) + 1 if difference of
@@ -621,23 +623,28 @@ def load_wheel_integrity(wheel_data, re_encoding='X1', enc_res=None, trial_idxs=
     # We expect the difference of neighbouring positions to be close to the resolution
     # XXX: not necessarily, are we sure the only change allowed is of one tick?
     # what happens for "very fast" inputs? but should always be a multiple of it
-    pos_check = np.abs(np.diff(wheel_data['re_pos'])) - resolution
+    pos_check = np.abs(np.diff(wheel_data["re_pos"])) - resolution
     # Timestamps should be strictly increasing
     # XXX: Why not an assert?
-    ts_check = np.diff(wheel_data['re_ts']) <= 0.
+    ts_check = np.diff(wheel_data["re_ts"]) <= 0.0
     # XXX: adding a bool to a metric is weird, metric here looks like the passed
-    #Metric should be absolute diff of position, the rest is a criterion.
+    # Metric should be absolute diff of position, the rest is a criterion.
     metric = pos_check + ts_check.astype(float)  # all values should be close to zero
     passed = np.isclose(metric, np.zeros_like(metric))
     if trial_idxs is None:
         return metric, passed
 
+    # hack metric and passed
     trial_metric = []
     trial_passed = []
+    if np.max(trial_idxs[-1]) == len(metric):
+            trial_idxs[-1] = np.setdiff1d(trial_idxs[-1], np.max(trial_idxs[-1]))
     for tr in trial_idxs:
         # one value per trial
         trial_metric.append(np.nanmean(metric[tr]))
         trial_passed.append(np.nanmean(passed[tr]))
+
+    return trial_metric, trial_passed
 
 
 # np.isclose(np.array([1,2,3]), np.array([1.1,2.1,3.1]),  )
