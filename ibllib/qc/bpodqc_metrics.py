@@ -577,7 +577,7 @@ def load_stimulus_move_before_goCue(trial_data, BNC1=None):
     s = BNC1["times"]
     metric = np.array([])
     for i, c in zip(trial_data["intervals_0"], trial_data["goCue_times"]):
-        metric = np.append(metric, np.count_nonzero(s[s > i] < (c - 0.02)))
+        metric = np.append(metric, np.count_nonzero(s[s >= i] < (c - 0.02)))
 
     passed = (metric == 0).astype(np.float)
     # Remove no go trials
