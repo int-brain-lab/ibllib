@@ -638,7 +638,8 @@ def load_wheel_integrity(wheel_data, re_encoding="X1", enc_res=None, trial_idxs=
     trial_metric = []
     trial_passed = []
     if np.max(trial_idxs[-1]) == len(metric):
-            trial_idxs[-1] = np.setdiff1d(trial_idxs[-1], np.max(trial_idxs[-1]))
+        trial_idxs[-1] = np.setdiff1d(trial_idxs[-1], np.max(trial_idxs[-1]))
+
     for tr in trial_idxs:
         # one value per trial
         trial_metric.append(np.nanmean(metric[tr]))

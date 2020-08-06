@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-# from ibllib.qc.bpodqc_metrics import BpodQC
+from ibllib.qc.bpodqc_metrics import BpodQC
 import ibllib.qc.oneutils as oneutils
 from oneibl.one import ONE
 
@@ -65,7 +65,7 @@ def barplot_passed(
 
 if __name__ == "__main__":
     one = ONE(printout=False)
-    # Load data
+    # # Load data
     eid, det = oneutils.random_ephys_session()
     # Run QC
     bpodqc = BpodQC(eid, one=one, ensure_data=True, lazy=False)
