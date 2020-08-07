@@ -61,6 +61,11 @@ class TestBpodQCMetricsObject(unittest.TestCase):
         download_bpodqc_raw_data(self.eid, one=self.one)
         bpodqc = BpodQC(self.eid, one=self.one, lazy=False)
         self.assertTrue(bpodqc is not None)
+        # make sure metrics and passed output is "square" for plotters
+        ntrials = len(bpodqc.extractor.trial_data['intervals_0'])
+        self.assertTrue(
+            np.all([len(v) == ntrials for k, v in bpodqc.metrics.items()])
+        )
 
 
 class TestBpodQCMetrics(unittest.TestCase):
@@ -454,10 +459,17 @@ class TestBpodQCMetrics(unittest.TestCase):
         metric, passed = qcmetrics.load_wheel_integrity(self.wheel, re_encoding='X1')
         self.assertFalse(passed[idx].any())
 
-    @unittest.skip("not implemented")
     def test_load_stimulus_move_before_goCue(self):
-        # TODO Nicco?
-        pass
+        no_bnc = qcmetrics.load_stimulus_move_before_goCue(self.data, BNC1=None)
+        self.assertTrue(no_bnc is None)
+        BNC1_pass = {'times': self.data['goCue_times'] + 0.2}
+        BNC1_fail = {'times': self.data['goCue_times'] - 0.2}
+        metric, passed = qcmetrics.load_stimulus_move_before_goCue(self.data, BNC1=BNC1_pass)
+        self.assertTrue(np.all(metric == 0))
+        self.assertTrue(np.nanmean(passed) == 1)
+        metric, passed = qcmetrics.load_stimulus_move_before_goCue(self.data, BNC1=BNC1_fail)
+        self.assertTrue(np.all(metric == 1))
+        self.assertTrue(np.nanmean(passed) == 0)
 
 
 if __name__ == "__main__":

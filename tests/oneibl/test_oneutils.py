@@ -19,8 +19,8 @@ class TestUtils(unittest.TestCase):
             "aaf101c3-2581-450a-8abd-ddb8f557a5ad",
         ]
         self.partial_eid_paths = [
-            Path('/datadisk/FlatIron/mainenlab/Subjects/clns0730/2018-08-24/002'),
-            Path('/datadisk/FlatIron/zadorlab/Subjects/flowers/2018-07-13/001'),
+            Path('FlatIron/mainenlab/Subjects/clns0730/2018-08-24/002'),
+            Path('FlatIron/zadorlab/Subjects/flowers/2018-07-13/001'),
             Path("FlatIron/mainenlab/Subjects/ZM_1743/2019-06-04/001"),
             Path("FlatIron/cortexlab/Subjects/KS005/2019-04-04/004"),
         ]
