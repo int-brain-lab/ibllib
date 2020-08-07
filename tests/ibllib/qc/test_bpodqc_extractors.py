@@ -35,6 +35,8 @@ class TestBpodQCExtractors(unittest.TestCase):
         self.training_eid = "8dd0fcb0-1151-4c97-ae35-2e2421695ad7"
         # Make sure the data exists locally
         self.one.load(self.eid, dataset_types=dstypes, download_only=True)
+        # self.one.load(self.biased_eid, dataset_types=dstypes, download_only=True)
+        self.one.load(self.training_eid, dataset_types=dstypes, download_only=True)
         self.session_path = self.one.path_from_eid(self.eid)
         self.biased_session_path = self.one.path_from_eid(self.biased_eid)
         self.training_session_path = self.one.path_from_eid(self.training_eid)
