@@ -6,20 +6,20 @@ from ibllib.io.extractors.training_trials import (
     StimOnOffFreezeTimes, Choice, FeedbackType, Intervals, StimOnTriggerTimes, StimOnTimes,
     StimOffTriggerTimes, StimFreezeTriggerTimes, GoCueTriggerTimes, GoCueTimes,
     ErrorCueTriggerTimes, RewardVolume, ResponseTimes, FeedbackTimes, ItiInTimes,
-    run_extractor_classes
+    ProbabilityLeft, ContrastLR, run_extractor_classes
 )
 from ibllib.io.extractors.ephys_fpga import ProbaContrasts, _get_pregenerated_events
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.training_wheel import get_wheel_position
-from ibllib.pipes.training_preprocessing import extract_training
 
 _logger = logging.getLogger("ibllib")
 
 
 class BpodQCExtractor(object):
-    def __init__(self, session_path, lazy=False):
+    def __init__(self, session_path, lazy=False, load_raw=True):
         self.session_path = session_path
-        self.load_raw_data()
+        if load_raw is True or not lazy:
+            self.load_raw_data()
         if not lazy:
             self.trial_data = self.extract_trial_data()
 
@@ -38,8 +38,6 @@ class BpodQCExtractor(object):
     def extract_trial_data(self):
         """Extracts and loads ephys sessions from bpod data"""
         _logger.info(f"Extracting session: {self.session_path}")
-        raw_bpod_trials = self.raw_data or raw.load_data(self.session_path)
-        raw_settings = self.details or raw.load_settings(self.session_path)
         extractor_type = raw.get_session_extractor_type(self.session_path)
         classes = [
             StimOnOffFreezeTimes, Choice, FeedbackType, Intervals, StimOnTriggerTimes,
@@ -48,13 +46,18 @@ class BpodQCExtractor(object):
             ItiInTimes]
         if extractor_type == 'ephys':
             classes.append(ProbaContrasts)
-        out, _ = run_extractor_classes(classes, save=False, session_path=self.session_path,
-                                       bpod_trials=raw_bpod_trials, settings=raw_settings)
-        if extractor_type == 'ephys':
-            out.update(_get_pregenerated_events(raw_bpod_trials, raw_settings))
+        # elif extractor_type == 'biased':
+        #     classes.extend([ProbabilityLeft, ContrastLR])
+        #     # FIXME ContrastLR fails on old sessions (contrast is a float, not a dict)
         else:
-            out['quiescence'] = np.array([t['quiescent_period'] for t in raw_bpod_trials])
-            out['position'] = np.array([t['position'] for t in raw_bpod_trials])
+            classes.append(ProbabilityLeft)
+        out, _ = run_extractor_classes(classes, save=False, session_path=self.session_path,
+                                       bpod_trials=self.raw_data, settings=self.details)
+        if extractor_type == 'ephys':
+            out.update(_get_pregenerated_events(self.raw_data, self.details))
+        else:
+            out['quiescence'] = np.array([t['quiescent_period'] for t in self.raw_data])
+            out['position'] = np.array([t['position'] for t in self.raw_data])
         # get valve_time and errorCue_times from feedback_times
         correct = out['feedbackType'] > 0
         errorCue_times = out["feedback_times"].copy()
