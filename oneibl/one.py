@@ -118,9 +118,9 @@ def _ses2pandas(ses, dtypes=None):
 
 class OneAbstract(abc.ABC):
 
-    def __init__(self, username=None, password=None, base_url=None, cache_dir=None):
+    def __init__(self, username=None, password=None, base_url=None, cache_dir=None, silent=None):
         # get parameters override if inputs provided
-        self._par = oneibl.params.get(silent=False)
+        self._par = oneibl.params.get(silent=silent)
         self._par = self._par.set('ALYX_LOGIN', username or self._par.ALYX_LOGIN)
         self._par = self._par.set('ALYX_URL', base_url or self._par.ALYX_URL)
         self._par = self._par.set('ALYX_PWD', password or self._par.ALYX_PWD)
@@ -233,9 +233,9 @@ class OneOffline(OneAbstract):
 
 
 class OneAlyx(OneAbstract):
-    def __init__(self, username=None, password=None, base_url=None):
+    def __init__(self, **kwargs):
         # get parameters override if inputs provided
-        super(OneAlyx, self).__init__(username=username, password=password, base_url=base_url)
+        super(OneAlyx, self).__init__(**kwargs)
         try:
             self._alyxClient = wc.AlyxClient(username=self._par.ALYX_LOGIN,
                                              password=self._par.ALYX_PWD,
@@ -649,7 +649,6 @@ class OneAlyx(OneAbstract):
         :param hash:
         :return:
         """
-        check_hash_post_download = False
         Path(target_dir).mkdir(parents=True, exist_ok=True)
         local_path = str(target_dir) + os.sep + os.path.basename(url)
         if not keep_uuid:

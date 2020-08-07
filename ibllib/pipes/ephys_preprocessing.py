@@ -3,6 +3,9 @@ from pathlib import Path
 import logging
 from collections import OrderedDict
 import subprocess
+import shutil
+
+import mtscomp
 
 from ibllib.io import ffmpeg, spikeglx
 from ibllib.io.extractors import ephys_fpga
@@ -81,9 +84,6 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
         return info.decode('utf-8').strip()
 
     def _run(self, overwrite=False):
-
-        import shutil
-        import mtscomp
 
         efiles = spikeglx.glob_ephys_files(self.session_path)
 
