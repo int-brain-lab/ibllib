@@ -57,6 +57,25 @@ class TestSmooth(unittest.TestCase):
 
 class TestFFT(unittest.TestCase):
 
+    def test_spectral_convolution(self):
+        sig = np.random.randn(20, 500)
+        w = np.hanning(25)
+        c = ft.convolve(sig, w)
+        s = np.convolve(sig[0, :], w)
+        self.assertTrue(np.all(np.isclose(s, c[0, :-1])))
+
+        c = ft.convolve(sig, w, mode='same')
+        s = np.convolve(sig[0, :], w, mode='same')
+        self.assertTrue(np.all(np.isclose(c[0, :], s)))
+
+        c = ft.convolve(sig, w[:-1], mode='same')
+        s = np.convolve(sig[0, :], w[:-1], mode='same')
+        self.assertTrue(np.all(np.isclose(c[0, :], s)))
+
+    def test_nech_optim(self):
+        self.assertTrue(ft.ns_optim_fft(2048) == 2048)
+        self.assertTrue(ft.ns_optim_fft(65532) == 65536)
+
     def test_imports(self):
         import ibllib.dsp as dsp
         self.assertTrue(len([dsp.lp,
