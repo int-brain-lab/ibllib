@@ -69,7 +69,7 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
     gpu = 1
     io_charge = 70  # this jobs reads raw ap files
     priority = 60
-    level = 0  # this job doesn't depend on anything
+    level = 1  # this job doesn't depend on anything
 
     @staticmethod
     def _fetch_ks2_commit_hash():
@@ -170,7 +170,7 @@ class EphysTrials(tasks.Task):
 
 class EphysSyncSpikeSorting(tasks.Task):
     priority = 90
-    level = 1
+    level = 2
 
     def _run(self):
         """
@@ -246,8 +246,9 @@ class EphysExtractionPipeline(tasks.Pipeline):
         # level 1
         tasks['SpikeSorting'] = SpikeSorting_KS2_Matlab(self.session_path,
                                                         parents=[tasks['EphysMtscomp']])
-        tasks['EphysSyncSpikeSorting'] = EphysSyncSpikeSorting(self.session_path, parents=[
-            tasks['SpikeSorting'], tasks['EphysPulses']])
         tasks['EphysTrials'] = EphysTrials(self.session_path, parents=[tasks['EphysPulses']])
         tasks['EphysDLC'] = EphysDLC(self.session_path, parents=[tasks['EphysVideoCompress']])
+        # level 2
+        tasks['EphysSyncSpikeSorting'] = EphysSyncSpikeSorting(self.session_path, parents=[
+            tasks['SpikeSorting'], tasks['EphysPulses']])
         self.tasks = tasks

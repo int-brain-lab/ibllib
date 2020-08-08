@@ -772,7 +772,7 @@ class OneAlyx(OneAbstract):
                    (self._cache['number']) == int(session_path.parts[-1]))
             ind = np.where(ind.to_numpy())[0]
             if ind.size > 0:
-                return parquet.np2str(self._cache[['eid_0', 'eid_1']].iloc[ind[0]])[0]
+                return parquet.np2str(self._cache[['eid_0', 'eid_1']].iloc[ind[0]])
 
         # if not search for subj, date, number XXX: hits the DB
         uuid = self.search(subjects=session_path.parts[-3],

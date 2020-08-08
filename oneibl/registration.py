@@ -106,8 +106,9 @@ def register_session_raw_data(session_path, one=None, overwrite=False, dry=False
     :return: Alyx response: dictionary of registered files
     """
     session_path = Path(session_path)
+    eid = one.eid_from_path(session_path, use_cache=False)  # needs to make sure we're up to date
     # query the database for existing datasets on the session and allowed dataset types
-    dsets = one.alyx.rest('datasets', 'list', session=one.eid_from_path(session_path))
+    dsets = one.alyx.rest('datasets', 'list', session=eid)
     already_registered = [
         session_path.joinpath(Path(ds['collection'] or '').joinpath(ds['name'])) for ds in dsets]
     dtypes = one.alyx.rest('dataset-types', 'list')

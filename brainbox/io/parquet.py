@@ -45,11 +45,13 @@ def np2uuid(eids_np):
     if eids_np.ndim >= 2:
         return [uuid.UUID(bytes=npu.tobytes()) for npu in eids_np]
     else:
-        return eids_np.tobytes()
+        return uuid.UUID(bytes=eids_np.tobytes())
 
 
 def np2str(eids_np):
-    return [str(u) for u in np2uuid(eids_np)]
+    eids = np2uuid(eids_np)
+    eids = str(eids) if isinstance(eids, uuid.UUID) else [str(u) for u in np2uuid(eids_np)]
+    return eids
 
 
 def rec2col(rec, join=None, include=None, exclude=None, uuid_fields=None, types=None):
