@@ -1,10 +1,19 @@
 import unittest
 import numpy as np
-import numpy.matlib as mat
 import scipy.signal
 
 import ibllib.dsp.fourier as ft
-from ibllib.dsp import WindowGenerator, rms, rises, falls, fronts, smooth, shift, fit_phase
+from ibllib.dsp import WindowGenerator, rms, rises, falls, fronts, smooth, shift, fit_phase,\
+    fcn_cosine
+
+
+class TestDspMisc(unittest.TestCase):
+
+    def test_dsp_cosine_func(self):
+        x = np.linspace(0, 40)
+        fcn = fcn_cosine(bounds=[20, 30])
+        y = fcn(x)
+        self.assertTrue(y[0] == 0 and y[-1] == 1 and np.all(np.diff(y) >= 0))
 
 
 class TestPhaseRegression(unittest.TestCase):
@@ -31,7 +40,7 @@ class TestShift(unittest.TestCase):
     def test_shift_2d(self):
         ns = 500
         w = scipy.signal.ricker(ns, 10)
-        w = np.matlib.repmat(w, 100, 1).transpose()
+        w = np.tile(w, (100, 1)).transpose()
         self.assertTrue(np.all(np.isclose(shift(w, 1, axis=0), np.roll(w, 1, axis=0))))
         self.assertTrue(np.all(np.isclose(shift(w, 1, axis=1), np.roll(w, 1, axis=1))))
 
@@ -65,7 +74,7 @@ class TestFFT(unittest.TestCase):
         self.assertTrue(np.all(ft.freduce(fs) == fs[:-2]))
 
         # test 2D arrays along both dimensions
-        fs = mat.repmat(ft.fscale(500, 0.001), 4, 1)
+        fs = np.tile(ft.fscale(500, 0.001), (4, 1))
         self.assertTrue(ft.freduce(fs).shape == (4, 251))
         self.assertTrue(ft.freduce(np.transpose(fs), axis=0).shape == (251, 4))
 
@@ -91,7 +100,7 @@ class TestFFT(unittest.TestCase):
         R = np.real(np.fft.ifft(ft.fexpand(X, 12)))
         self.assertTrue(np.all((res - R) < 1e-6))
         # test with 2 dimensional input along first dimension
-        fs = np.transpose(mat.repmat(ft.fscale(500, 0.001, one_sided=True), 4, 1))
+        fs = np.transpose(np.tile(ft.fscale(500, 0.001, one_sided=True), (4, 1)))
         self.assertTrue(ft.fexpand(fs, 500, axis=0).shape == (500, 4))
 
     def test_fscale(self):
@@ -110,11 +119,11 @@ class TestFFT(unittest.TestCase):
         out1 = ft.lp(ts1, 1, [.1, .2])
         self.assertTrue(np.mean(ts1 - out1) < 0.001)
         # test 2D case along the last dimension
-        ts = mat.repmat(ts1, 11, 1)
+        ts = np.tile(ts1, (11, 1))
         out = ft.lp(ts, 1, [.1, .2])
         self.assertTrue(np.allclose(out, out1))
         # test 2D case along the first dimension
-        ts = mat.repmat(ts1[:, np.newaxis], 1, 11)
+        ts = np.tile(ts1[:, np.newaxis], (1, 11))
         out = ft.lp(ts, 1, [.1, .2], axis=0)
         self.assertTrue(np.allclose(np.transpose(out), out1))
         # test 1D time serie: subtracting lp filter removes DC

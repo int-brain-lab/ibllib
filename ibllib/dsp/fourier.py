@@ -4,6 +4,7 @@ Low-level functions to work in frequency domain for n-dim arrays
 
 import numpy as np
 import scipy
+from ibllib.dsp.utils import fcn_cosine
 
 
 def dephas(w, phase, axis=-1):
@@ -133,14 +134,11 @@ def _freq_vector(f, b, typ='lp'):
         :param b: 2 bounds array
         :return: amplitude modulated frequency vector
     """
-    filc = ((f <= b[0]).astype(float) +
-            np.bitwise_and(f > b[0], f < b[1]).astype(float) *
-            (0.5 * (1 + np.sin(np.pi * (f - ((b[0] + b[1]) / 2)) /
-             (b[0] - b[1])))))
+    filc = fcn_cosine(b)(f)
     if typ == 'hp':
-        return 1 - filc
-    elif typ == 'lp':
         return filc
+    elif typ == 'lp':
+        return 1 - filc
 
 
 def shift(w, s, axis=-1):
