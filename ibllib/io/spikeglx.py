@@ -405,7 +405,7 @@ def _conversion_sample2v_from_meta(meta_data):
 
 def split_sync(sync_tr):
     """
-    The synchronization channelx are stored as single bits, this will split the int16 original
+    The synchronization channels are stored as single bits, this will split the int16 original
     channel into 16 single bits channels
 
     :param sync_tr: numpy vector: samples of synchronisation trace
@@ -435,17 +435,17 @@ def glob_ephys_files(session_path, suffix='.meta', recursive=True, bin_exists=Tr
     Associated to the subfolders where they are
     the expected folder tree is:
     ├── 3A
-    │   ├── imec0
-    │   │   ├── sync_testing_g0_t0.imec0.ap.bin
-    │   │   └── sync_testing_g0_t0.imec0.lf.bin
-    │   └── imec1
-    │       ├── sync_testing_g0_t0.imec1.ap.bin
-    │       └── sync_testing_g0_t0.imec1.lf.bin
+    │        ├── imec0
+    │                ├── sync_testing_g0_t0.imec0.ap.bin
+    │        │        └── sync_testing_g0_t0.imec0.lf.bin
+    │        └── imec1
+    │            ├── sync_testing_g0_t0.imec1.ap.bin
+    │            └── sync_testing_g0_t0.imec1.lf.bin
     └── 3B
         ├── sync_testing_g0_t0.nidq.bin
         ├── imec0
-        │   ├── sync_testing_g0_t0.imec0.ap.bin
-        │   └── sync_testing_g0_t0.imec0.lf.bin
+        │        ├── sync_testing_g0_t0.imec0.ap.bin
+        │        └── sync_testing_g0_t0.imec0.lf.bin
         └── imec1
             ├── sync_testing_g0_t0.imec1.ap.bin
             └── sync_testing_g0_t0.imec1.lf.bin

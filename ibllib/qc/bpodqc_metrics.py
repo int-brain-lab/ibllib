@@ -2,17 +2,18 @@ import logging
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
-from ibllib.qc.bpodqc_extractors import BpodQCExtractor
-from ibllib.io.extractors.training_wheel import WHEEL_RADIUS_CM
 from ibllib.io.extractors.ephys_fpga import WHEEL_TICKS
-from . import base
+from ibllib.io.extractors.training_wheel import WHEEL_RADIUS_CM
+from ibllib.qc.base import QC
+from ibllib.qc.bpodqc_extractors import BpodQCExtractor
 
-log = logging.getLogger('ibllib')
+log = logging.getLogger("ibllib")
 
 
-class BpodQC(base.QC):
+class BpodQC(QC):
     def __init__(self, session_path_or_eid, one=None, ensure_data=False, lazy=False):
         super().__init__(session_path_or_eid, one, log=log)
         self.ensure_data = ensure_data
@@ -22,8 +23,11 @@ class BpodQC(base.QC):
 
         # Data
         self.extractor = None
+        # Utils
         self.wheel_gain = None
         self.bpod_ntrials = None
+        self.wheel_trial_idxs = None
+
         # Metrics and passed trials
         self.metrics = None
         self.passed = None
@@ -63,6 +67,12 @@ class BpodQC(base.QC):
         self.extractor = BpodQCExtractor(self.session_path, lazy=lazy)
         self.wheel_gain = self.extractor.details["STIM_GAIN"]
         self.bpod_ntrials = len(self.extractor.raw_data)
+        self.wheel_trial_idxs = BpodQC.hack_ts(
+            self.extractor.wheel_data["re_ts"],
+            self.extractor.trial_data["intervals_0"],
+            self.extractor.trial_data["intervals_1"],
+            idx=True,
+        )
         return
 
     def compute(self):
@@ -73,13 +83,48 @@ class BpodQC(base.QC):
             self.extractor.trial_data,
             self.extractor.wheel_data,
             self.extractor.details["STIM_GAIN"],
+            self.wheel_trial_idxs,
             self.extractor.BNC1,
             self.extractor.BNC2,
         )
         return
 
+    @staticmethod
+    def hack_ts(ts_array, intervals_0, intervals_1, idx=False):
+        hacked_arr = []
+        hacked_arr_idxs = []
+        for start, end in zip(intervals_0, intervals_1):
+            trial = ts_array[(ts_array >= start) & (ts_array < end)]
+            trial_idx = np.where((ts_array >= start) & (ts_array < end))
+            hacked_arr.append(trial)
+            hacked_arr_idxs.extend(trial_idx)
+        if np.max(hacked_arr_idxs[-1]) == len(ts_array):
+            hacked_arr_idxs[-1] = np.setdiff1d(hacked_arr_idxs[-1], np.max(hacked_arr_idxs[-1]))
+        return hacked_arr_idxs if idx else hacked_arr
 
-def get_bpodqc_metrics_frame(trial_data, wheel_data, wheel_gain, BNC1, BNC2):
+    @property
+    def metrics_df(self):
+        if not self.metrics:
+            log.error("Metrics frame not computed yet")
+            return
+        return BpodQC.frame_to_df(self.metrics)
+
+    @property
+    def passed_df(self):
+        if not self.passed:
+            log.error("Passed frame not computed yet")
+            return
+        return BpodQC.frame_to_df(self.passed)
+
+    @staticmethod
+    def frame_to_df(d: dict) -> pd.DataFrame:
+        dd = d.copy()
+        dd.pop("_bpod_wheel_integrity")
+        out_df = pd.DataFrame.from_dict(dd)
+        return out_df
+
+
+def get_bpodqc_metrics_frame(trial_data, wheel_data, wheel_gain, wheel_trial_idxs, BNC1, BNC2):
     """Plottable metrics based on timings"""
 
     qcmetrics_frame = {
@@ -103,7 +148,7 @@ def get_bpodqc_metrics_frame(trial_data, wheel_data, wheel_gain, BNC1, BNC2):
         "_bpod_correct_trial_event_sequence": load_correct_trial_event_sequence(trial_data),
         "_bpod_trial_length": load_trial_length(trial_data),
         # Wheel trial_data loading
-        "_bpod_wheel_integrity": load_wheel_integrity(wheel_data),
+        "_bpod_wheel_integrity": load_wheel_integrity(wheel_data, trial_idxs=wheel_trial_idxs),
         "_bpod_wheel_freeze_during_quiescence": load_wheel_freeze_during_quiescence(
             trial_data, wheel_data
         ),
@@ -206,7 +251,7 @@ def load_wheel_freeze_during_quiescence(trial_data, wheel_data):
         wheel_data["re_ts"],
         wheel_data["re_pos"],
         start=qevt_start_times,
-        end=trial_data["stimOnTrigger_times"]
+        end=trial_data["stimOnTrigger_times"],
     )
 
     metric = np.zeros((len(trial_data["quiescence"]), 2))  # (n_trials, n_directions)
@@ -337,16 +382,6 @@ def load_negative_feedback_stimOff_delays(trial_data):
     return metric, passed
 
 
-# def load_0(trial_data, session_path=None):
-#     """ Number of Bonsai command to change screen should match
-#     Number of state change of frame2ttl
-#     Variable name: syncSquare
-#     Metric: (count of bonsai screen updates) - (count of frame2ttl)
-#     Criterion: 0 on 99% of trials
-#     """
-#     pass
-
-
 def load_valve_pre_trial(trial_data):
     """ No valve outputs between trialstart_time and gocue_time-20 ms
     Variable name: valve_pre_trial
@@ -444,16 +479,6 @@ def load_trial_length(trial_data):
     return metric, passed
 
 
-# def load_1(trial_data, session_path=None):
-#     """ Between go tone and feedback, frame2ttl should be changing at ~60Hz
-#     if wheel moves (exact frequency depending on velocity)
-#     Variable name:
-#     Metric:
-#     Criterion:
-#     """
-#     pass
-
-
 # Trigger response checks
 def load_goCue_delays(trial_data):
     """ Trigger response difference
@@ -545,13 +570,14 @@ def load_stimulus_move_before_goCue(trial_data, BNC1=None):
     Metric: count of any stimulus change events between trialstart_time and (gocue_time-20ms)
     Criterion: 0 on 99% of trials
     """
+    # FIXME: quiescence sync causes stim ove?
     if BNC1 is None:
         log.warning("No BNC1 input in function call, returning None")
         return None
     s = BNC1["times"]
     metric = np.array([])
     for i, c in zip(trial_data["intervals_0"], trial_data["goCue_times"]):
-        metric = np.append(metric, np.count_nonzero(s[s > i] < (c - 0.02)))
+        metric = np.append(metric, np.count_nonzero(s[s >= i] < (c - 0.02)))
 
     passed = (metric == 0).astype(np.float)
     # Remove no go trials
@@ -578,7 +604,7 @@ def load_audio_pre_trial(trial_data, BNC2=None):
     return metric, passed
 
 
-def load_wheel_integrity(wheel_data, re_encoding='X1', enc_res=None):
+def load_wheel_integrity(wheel_data, re_encoding="X1", enc_res=None, trial_idxs=None):
     """
     Variable name: wheel_integrity
     Metric: (absolute difference of the positions - encoder resolution) + 1 if difference of
@@ -595,9 +621,32 @@ def load_wheel_integrity(wheel_data, re_encoding='X1', enc_res=None):
     # The expected difference between samples in the extracted units
     resolution = (2 * np.pi / enc_res) * re_encoding * WHEEL_RADIUS_CM
     # We expect the difference of neighbouring positions to be close to the resolution
-    pos_check = np.abs(np.diff(wheel_data['re_pos'])) - resolution
+    # XXX: not necessarily, are we sure the only change allowed is of one tick?
+    # what happens for "very fast" inputs? but should always be a multiple of it
+    pos_check = np.abs(np.diff(wheel_data["re_pos"])) - resolution
     # Timestamps should be strictly increasing
-    ts_check = np.diff(wheel_data['re_ts']) <= 0.
+    # XXX: Why not an assert?
+    ts_check = np.diff(wheel_data["re_ts"]) <= 0.0
+    # XXX: adding a bool to a metric is weird, metric here looks like the passed
+    # Metric should be absolute diff of position, the rest is a criterion.
     metric = pos_check + ts_check.astype(float)  # all values should be close to zero
     passed = np.isclose(metric, np.zeros_like(metric))
-    return metric, passed
+    if trial_idxs is None:
+        return metric, passed
+
+    # hack metric and passed
+    trial_metric = []
+    trial_passed = []
+    if np.max(trial_idxs[-1]) == len(metric):
+        trial_idxs[-1] = np.setdiff1d(trial_idxs[-1], np.max(trial_idxs[-1]))
+
+    for tr in trial_idxs:
+        # one value per trial
+        trial_metric.append(np.nanmean(metric[tr]))
+        trial_passed.append(np.nanmean(passed[tr]))
+
+    return trial_metric, trial_passed
+
+
+# np.isclose(np.array([1,2,3]), np.array([1.1,2.1,3.1]),  )
+# np.isclose()

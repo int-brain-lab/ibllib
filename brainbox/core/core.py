@@ -1,8 +1,7 @@
-'''
+"""
 Creates core data types and functions which support all of brainbox.
-'''
+"""
 from pathlib import Path
-
 import numpy as np
 import pandas as pd
 
@@ -116,3 +115,40 @@ def ismember(a, b):
     _, ibu, iau = np.intersect1d(b, aun, return_indices=True)
     locb = ibu[iuainv]
     return lia, locb
+
+
+def ismember2d(a0, a1):
+    """
+    Equivalent of np.isin but returns indices as in the matlab ismember function
+    returns an array containing logical 1 (true) where the data in A is B
+    also returns the location of members in b such as a[lia, :] == b[locb, :]
+    :param a0: 2d array
+    :param a1: 2d array
+    :return: isin, locb
+    """
+    # a[lia] == b[locb]
+    ia, ib = ismember(a0[:, 0], a1[:, 0])
+    for n in np.arange(1, a0.shape[1]):
+        iia, iib = ismember(a0[ia, n], a1[ib, n])
+        ib = ib[iib]
+        ia[np.where(ia)[0]] = iia
+    return ia, ib
+
+
+def intersect2d(a0, a1, assume_unique=False):
+    """
+    Performs intersection on multiple columns arrays a0 and a1
+    :param a0:
+    :param a1:
+    :return: intesection
+    :return: index of a0 such as intersection = a0[ia, :]
+    :return: index of b0 such as intersection = b0[ib, :]
+    """
+    _, i0, i1 = np.intersect1d(a0[:, 0], a1[:, 0],
+                               return_indices=True, assume_unique=assume_unique)
+    for n in np.arange(1, a0.shape[1]):
+        _, ii0, ii1 = np.intersect1d(a0[i0, n], a1[i1, n],
+                                     return_indices=True, assume_unique=assume_unique)
+        i0 = i0[ii0]
+        i1 = i1[ii1]
+    return a0[i0, :], i0, i1

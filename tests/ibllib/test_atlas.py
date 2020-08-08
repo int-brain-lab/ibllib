@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from ibllib.atlas import (BrainCoordinates, cart2sph, sph2cart, Trajectory,
+from ibllib.atlas import (BrainCoordinates, cart2sph, sph2cart, Trajectory, regions_from_allen_csv,
                           Insertion, ALLEN_CCF_LANDMARKS_MLAPDV_UM, AllenAtlas)
 
 
@@ -16,6 +16,20 @@ def _create_mock_atlas():
     top = X ** 2 + Y ** 2
     ba.top = (top - np.min(top)) / (np.max(top) - np.min(top)) * .001
     return ba
+
+
+class TestBrainRegions(unittest.TestCase):
+
+    def test_get(self):
+        brs = regions_from_allen_csv()
+        ctx = brs.get(688)
+        self.assertTrue(len(ctx.acronym) == 1 and ctx.acronym == 'CTX')
+
+    def test_ancestors_descendants(self):
+        # here we use the same brain region as in the alyx test
+        brs = regions_from_allen_csv()
+        self.assertTrue(brs.descendants(ids=688).id.size == 567)
+        self.assertTrue(brs.ancestors(ids=688).id.size == 4)
 
 
 class TestCoordinateConversions(unittest.TestCase):

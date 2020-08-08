@@ -10,10 +10,17 @@ from oneibl.one import ONE
 
 
 def boxplot_metrics(
-    df, ax=None, describe=False, title="", xlabel="Seconds (s)", xscale="symlog",
+    df,
+    ax=None,
+    describe=False,
+    title="",
+    xlabel="Seconds (s)",
+    xscale="symlog",
+    save_path=None,
 ):
     if ax is None:
-        f, ax = plt.subplots()
+        a4_dims = (11.7, 8.27)
+        fig, ax = plt.subplots(figsize=a4_dims)
 
     if describe:
         desc = df.describe()
@@ -23,6 +30,11 @@ def boxplot_metrics(
     p.set_title(title)
     p.set_xlabel(xlabel)
     p.set(xscale=xscale)
+    if save_path is not None:
+        save_path = Path(save_path)
+        if not save_path.exists() or title is None:
+            print(f"Folder {save_path} does not exist, not saving...")
+        p.figure.savefig(save_path.joinpath(f"{title.replace('/', '-')}.png"))
 
 
 def barplot_passed(
@@ -33,8 +45,13 @@ def barplot_passed(
     xlabel="Proportion of trials that pass criteria",
     save_path=None,
 ):
-    a4_dims = (11.7, 8.27)
-    fig, ax = plt.subplots(figsize=a4_dims)
+    if ax is None:
+        a4_dims = (11.7, 8.27)
+        fig, ax = plt.subplots(figsize=a4_dims)
+    if describe:
+        desc = df.describe()
+        print(json.dumps(json.loads(desc.to_json()), indent=1))
+
     p = sns.barplot(ax=ax, data=df, orient="h")
     p.set_title(title)
     p.set_xlabel(xlabel)
@@ -48,7 +65,7 @@ def barplot_passed(
 
 if __name__ == "__main__":
     one = ONE(printout=False)
-    # Load data
+    # # Load data
     eid, det = oneutils.random_ephys_session()
     # Run QC
     bpodqc = BpodQC(eid, one=one, ensure_data=True, lazy=False)
