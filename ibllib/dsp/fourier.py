@@ -212,3 +212,48 @@ def fit_phase(w, si=1, fmin=0, fmax=None, axis=-1):
     dt = - np.polyfit(freqs[indf],
                       np.swapaxes(phi.compress(indf, axis=axis), axis, 0), 1)[0] / np.pi / 2
     return dt
+
+
+def dft(x, xscale=None, kscale=None):
+    """
+    1D discrete fourier transform. Vectorized.
+    :param x: 1D numpy array to be transformed
+    :param xscale: time or spatial index of each sample
+    :param kscale: (optional) fourier coefficient. All if complex input, positive if real
+    :return: 1D complex numpy array
+    """
+    ns = x.shape[-1]
+    if xscale is None:
+        xscale = np.arange(ns)
+    if kscale is None:
+        nk = ns if np.any(np.iscomplex(x)) else np.ceil((ns + 1) / 2)
+        kscale = np.arange(nk)
+    return np.matmul((np.exp(- 1j * 2 * np.pi / ns * xscale * kscale[:, np.newaxis])), x)
+
+
+def dft2(x, rscale=None, cscale=None):
+    """
+    2D discrete fourier transform. Vectorized.
+    :param x: 2D numpy array
+    :param rscale: time or spatial index of each sample of axis 0
+    :param cscale: time or spatial index of each sample of axis 1
+    :return: 2D complex numpy array
+    """
+    # dft the last axis first
+    [nr, nc] = x.shape
+    if cscale is None:
+        cscale = np.arange(nc)
+    if rscale is None:
+        rscale = np.arange(nr)
+    X_ = np.zeros(x.shape, np.complex)
+    X = np.zeros(x.shape, np.complex)
+    kr = np.arange(nc)[:, np.newaxis]
+    exp = np.exp(- 1j * 2 * np.pi / nc * cscale * kr)
+    for c in np.arange(nr):
+        X_[c, :] = np.matmul(exp, x[c, :])
+    # dft the first axis
+    kc = np.arange(nr)[:, np.newaxis]
+    exp = np.exp(- 1j * 2 * np.pi / nr * rscale * kc)
+    for r in np.arange(nc):
+        X[:, r] = np.matmul(exp, X_[:, r].T).T
+    return X

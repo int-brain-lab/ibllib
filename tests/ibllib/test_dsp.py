@@ -149,6 +149,19 @@ class TestFFT(unittest.TestCase):
         out2 = ft.hp(ts1, 1, [.1, .2])
         self.assertTrue(np.allclose(out1, ts1 - out2))
 
+    def test_dft(self):
+        # test 1D complex
+        x = np.array([1, 2 - 1j, -1j, -1 + 2j])
+        X = ft.dft(x)
+        assert np.all(np.isclose(X, np.fft.fft(x)))
+        # test 1D real
+        x = np.random.randn(7)
+        X = ft.dft(x)
+        assert np.all(np.isclose(X, np.fft.rfft(x)))
+        # test 2D
+        x = np.random.randn(20, 17)
+        assert np.all(np.isclose(np.fft.fft2(x), ft.dft2(x)))
+
 
 class TestWindowGenerator(unittest.TestCase):
 
