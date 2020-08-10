@@ -158,6 +158,11 @@ class TestFFT(unittest.TestCase):
         x = np.random.randn(7)
         X = ft.dft(x)
         assert np.all(np.isclose(X, np.fft.rfft(x)))
+        # test along the 3 dimensions of a 3D array
+        x = np.random.rand(10, 11, 12)
+        for axis in np.arange(3):
+            X_ = np.fft.rfft(x, axis=axis)
+            assert np.all(np.isclose(X_, ft.dft(x, axis=axis)))
         # test 2D
         x = np.random.randn(20, 17)
         assert np.all(np.isclose(np.fft.fft2(x), ft.dft2(x)))

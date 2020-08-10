@@ -214,21 +214,34 @@ def fit_phase(w, si=1, fmin=0, fmax=None, axis=-1):
     return dt
 
 
-def dft(x, xscale=None, kscale=None):
+def dft(x, xscale=None, axis=-1, kscale=None):
     """
     1D discrete fourier transform. Vectorized.
     :param x: 1D numpy array to be transformed
     :param xscale: time or spatial index of each sample
+    :param axis: for multidimensional arrays, axis along which the ft is computed
     :param kscale: (optional) fourier coefficient. All if complex input, positive if real
     :return: 1D complex numpy array
     """
-    ns = x.shape[-1]
+    ns = x.shape[axis]
     if xscale is None:
         xscale = np.arange(ns)
     if kscale is None:
         nk = ns if np.any(np.iscomplex(x)) else np.ceil((ns + 1) / 2)
         kscale = np.arange(nk)
-    return np.matmul((np.exp(- 1j * 2 * np.pi / ns * xscale * kscale[:, np.newaxis])), x)
+    if axis != 0:
+        # the axis of the transform always needs to be the first
+        x = np.swapaxes(x, axis, 0)
+    shape = np.array(x.shape)
+    x = np.reshape(x, (ns, int(np.prod(x.shape) / ns)))
+    # compute fourier coefficients
+    exp = np.exp(- 1j * 2 * np.pi / ns * xscale * kscale[:, np.newaxis])
+    X = np.matmul(exp, x)
+    shape[0] = int(nk)
+    X = X.reshape(shape)
+    if axis != 0:
+        X = np.swapaxes(X, axis, 0)
+    return X
 
 
 def dft2(x, rscale=None, cscale=None):
