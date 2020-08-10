@@ -24,7 +24,7 @@ by appending them to the `06_recipes.rst` file.
 ## Making documentation
 Once you have made your changes to the documentation, the documentation can be built using the following command. This
 executes all .ipynb notebooks included in the documentation and uses nb-sphinx and sphinx to then generate the built 
-html version of the files. 
+html version of the files. (make sure you install the additional packages required specified in requirements-docs.txt)
 
 ```python
 cd ./docs-gh-pages
