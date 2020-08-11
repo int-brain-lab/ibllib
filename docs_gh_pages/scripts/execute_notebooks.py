@@ -8,7 +8,10 @@ from nbconvert.exporters import RSTExporter
 from nbconvert.writers import FilesWriter
 import nbformat
 import shutil
+import logging
+from pathlib import Path
 
+_logger = logging.getLogger('ibllib')
 IPYTHON_VERSION = 4
 
 
@@ -36,39 +39,38 @@ class NotebookConverter(object):
         kernel_name: str
             Kernel to use to run notebooks. If not specified defaults to 'python3'
         """
-
-        self.nb_path = os.path.abspath(nb_path)
-        self.nb = os.path.basename(self.nb_path)
-        self.nb_dir = os.path.dirname(self.nb_path)
-        self.nb_name, _ = os.path.splitext(self.nb)
+        self.nb_path = Path(nb_path).absolute()
+        self.nb = self.nb_path.parts[-1]
+        self.nb_dir = self.nb_path.parent
+        self.nb_name = self.nb_path.stem
         self.overwrite = overwrite
 
         # If no output path is specified save everything into directory containing notebook
         if output_path is not None:
-            self.output_path = os.path.abspath(output_path)
+            self.output_path = Path(output_path).absolute()
             os.makedirs(self.output_path, exist_ok=True)
         else:
             self.output_path = self.nb_dir
 
         # If a rst template is passed
         if rst_template is not None:
-            self.rst_template = os.path.abspath(rst_template)
+            self.rst_template = Path(rst_template).absolute()
         else:
             self.rst_template = None
 
         if colab_template is not None:
-            self.colab_template = os.path.abspath(colab_template)
+            self.colab_template = Path(rst_template).absolute(colab_template)
         else:
             self.colab_template = None
 
-        self.colab_nb_path = os.path.join(self.output_path, f'colab_{self.nb}')
+        self.colab_nb_path = self.output_path.joinpath(f'colab_{self.nb}')
 
         # If overwrite is True, write the executed notebook to the same name as the notebook
         if self.overwrite:
-            self.executed_nb_path = os.path.join(self.output_path, self.nb)
-            self.temp_nb_path = os.path.join(self.output_path, f'executed_{self.nb}')
+            self.executed_nb_path = self.output_path.joinpath(self.nb)
+            self.temp_nb_path = self.output_path.joinpath(f'executed_{self.nb}')
         else:
-            self.executed_nb_path = os.path.join(self.output_path, f'executed_{self.nb}')
+            self.executed_nb_path = self.output_path.joinpath(f'executed_{self.nb}')
 
         if kernel_name is not None:
             self.execute_kwargs = dict(timeout=900, kernel_name=kernel_name, allow_errors=False)
@@ -90,7 +92,7 @@ class NotebookConverter(object):
         """
 
         # Execute the notebook
-        print(f"Executing notebook {self.nb} in {self.nb_dir}")
+        _logger.info(f"Executing notebook {self.nb} in {self.nb_dir}")
         t0 = time.time()
 
         clear_executor = ClearOutputPreprocessor()
@@ -105,13 +107,13 @@ class NotebookConverter(object):
         try:
             executor.preprocess(nb, {'metadata': {'path': self.nb_dir}})
         except CellExecutionError as err:
-            print(f"Error executing notebook {self.nb}")
-            print(err)
+            _logger.error(f"Error executing notebook {self.nb}")
+            _logger.error(err)
 
-        print(f"Finished running notebook ({time.time() - t0})")
+        _logger.info(f"Finished running notebook ({time.time() - t0})")
 
         if write:
-            print(f"Writing executed notebook to {self.executed_nb_path}")
+            _logger.info(f"Writing executed notebook to {self.executed_nb_path}")
             # Makes sure original notebook isn't left blank in case of error during writing
             if self.overwrite:
                 with open(self.temp_nb_path, 'w', encoding='utf-8') as f:
@@ -146,7 +148,7 @@ class NotebookConverter(object):
         resources['output_files_dir'] = 'nboutput/'
 
         # Exports the notebook to RST
-        print("Exporting executed notebook to RST format")
+        _logger.info("Exporting executed notebook to RST format")
         exporter = RSTExporter()
 
         # If a RST template file has been specified use this template
@@ -172,7 +174,7 @@ class NotebookConverter(object):
         """
 
         if self.colab_template is None:
-            print("No colab template specified, skipping this step")
+            _logger.warning("No colab template specified, skipping this step")
             return
 
         else:
@@ -205,7 +207,10 @@ class NotebookConverter(object):
         """
         Unexecutes the notebook i.e. removes all output cells
         """
-        print(f"Cleaning up notebook {self.nb} in {self.nb_dir}")
+        _logger.info(f"Cleaning up notebook {self.nb} in {self.nb_dir}")
+        if not self.executed_nb_path.exists():
+            _logger.warning(f"{self.executed_nb_path} not found, nothing to clean")
+            return
 
         with open(self.executed_nb_path) as f:
             nb = nbformat.read(f, as_version=IPYTHON_VERSION)

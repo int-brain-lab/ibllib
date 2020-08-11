@@ -4,15 +4,15 @@ __pycache__
 # this fixes a dummy version on the public repository
 #git update-index --assume-unchanged python/openneurodata/oneibl/params_secret.py
 python/scratch
-.idea/*
+.idea
 .vscode/
 *checkpoint.ipynb
+.DS_Store
 build/
 venv/
 ibllibenv/
 dist/
 ibllib.egg-info/
-.DS_Store
 scratch/
 _autosummary/
-brainbox/docs/_build/
+_build/

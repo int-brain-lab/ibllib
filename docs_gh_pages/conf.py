@@ -13,20 +13,15 @@
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
 
-import os
 import sys
 from pathlib import Path
 import matplotlib
 matplotlib.use('agg')
 
-for f in Path(os.path.abspath('.')).joinpath('ibllib').rglob('__init__.py'):
-    sys.path.insert(0, str(f.parent))
-
-sys.path.append(os.path.join(os.path.dirname(__name__), '..'))
-
+sys.path.insert(0, Path.cwd().parent)
 
 print('Python %s on %s' % (sys.version, sys.platform))
-# print(sys.path)
+print(sys.path)
 
 # -- Project information -----------------------------------------------------
 
