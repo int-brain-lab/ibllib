@@ -163,9 +163,15 @@ class TestFFT(unittest.TestCase):
         for axis in np.arange(3):
             X_ = np.fft.rfft(x, axis=axis)
             assert np.all(np.isclose(X_, ft.dft(x, axis=axis)))
-        # test 2D
-        x = np.random.randn(20, 17)
-        assert np.all(np.isclose(np.fft.fft2(x), ft.dft2(x)))
+        # test 2D irregular grid
+        _n0, _n1, nt = (10, 11, 30)
+        x = np.random.rand(_n0 * _n1, nt)
+        X_ = np.fft.fft(np.fft.fft(x.reshape(_n0, _n1, nt), axis=0), axis=1)
+        r, c = [v.flatten() for v in np.meshgrid(np.arange(
+            _n0) / _n0, np.arange(_n1) / _n1, indexing='ij')]
+        nk, nl = (_n0, _n1)
+        X = ft.dft2(x, r, c, nk, nl)
+        assert np.all(np.isclose(X, X_))
 
 
 class TestWindowGenerator(unittest.TestCase):

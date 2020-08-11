@@ -229,6 +229,8 @@ def dft(x, xscale=None, axis=-1, kscale=None):
     if kscale is None:
         nk = ns if np.any(np.iscomplex(x)) else np.ceil((ns + 1) / 2)
         kscale = np.arange(nk)
+    else:
+        nk = kscale.size
     if axis != 0:
         # the axis of the transform always needs to be the first
         x = np.swapaxes(x, axis, 0)
@@ -244,29 +246,21 @@ def dft(x, xscale=None, axis=-1, kscale=None):
     return X
 
 
-def dft2(x, rscale=None, cscale=None):
+def dft2(x, r, c, nk, nl):
     """
-    2D discrete fourier transform. Vectorized.
-    :param x: 2D numpy array
-    :param rscale: time or spatial index of each sample of axis 0
-    :param cscale: time or spatial index of each sample of axis 1
-    :return: 2D complex numpy array
+    Irregularly sampled 2D dft by projecting into sines/cosines. Vectorized.
+    :param x: vector or 2d matrix of shape (nrc, nt)
+    :param r: vector (nrc) of normalized positions along the k dimension (axis 0)
+    :param c: vector (nrc) of normalized positions along the l dimension (axis 1)
+    :param nk: output size along axis 0
+    :param nl: output size along axis 1
+    :return: Matrix X (nk, nl, nt)
     """
-    # dft the last axis first
-    [nr, nc] = x.shape
-    if cscale is None:
-        cscale = np.arange(nc)
-    if rscale is None:
-        rscale = np.arange(nr)
-    X_ = np.zeros(x.shape, np.complex)
-    X = np.zeros(x.shape, np.complex)
-    kr = np.arange(nc)[:, np.newaxis]
-    exp = np.exp(- 1j * 2 * np.pi / nc * cscale * kr)
-    for c in np.arange(nr):
-        X_[c, :] = np.matmul(exp, x[c, :])
-    # dft the first axis
-    kc = np.arange(nr)[:, np.newaxis]
-    exp = np.exp(- 1j * 2 * np.pi / nr * rscale * kc)
-    for r in np.arange(nc):
-        X[:, r] = np.matmul(exp, X_[:, r].T).T
-    return X
+    # it would be interesting to compare performance with numba straight loops (easier to write)
+    # GPU/C implementation should implement straight loops
+    nt = x.shape[-1]
+    k, h = [v.flatten() for v in np.meshgrid(np.arange(nk), np.arange(nl), indexing='ij')]
+    # exp has dimension (kh, rc)
+    exp = np.exp(- 1j * 2 * np.pi * (r[:, np.newaxis] * k[np.newaxis, :] +
+                                     c[:, np.newaxis] * h[np.newaxis, :]))
+    return np.matmul(exp, x).reshape((nk, nl, nt))
