@@ -266,7 +266,6 @@ class NeuralGLM:
                 raise IndexError(f'Some array shapes in {raw} do not match binned duration.')
             self.add_covariate(covlabel, raw, None, cond=cond)
 
-
     def add_covariate(self, covlabel, regressor, bases,
                       offset=0, cond=None, desc=''):
         """
@@ -457,12 +456,12 @@ class NeuralGLM:
         biasdm = np.pad(self.dm.copy(), ((0, 0), (1, 0)), constant_values=1)
         trainmask = np.isin(self.trlabels, self.traininds).flatten()  # Mask for training data
         trainbinned = self.binnedspikes[trainmask]
-        print(f'Condition of design matrix is {np.linalg.cond(self.dm[trainmask])}')
+        # print(f'Condition of design matrix is {np.linalg.cond(self.dm[trainmask])}')
 
         if method == 'sklearn':
             traindm = self.dm[trainmask]
             nonconverged = []
-            for i, cell in tqdm(enumerate(self.clu_ids), "Fitting units: "):
+            for i, cell in enumerate(self.clu_ids):
                 binned = trainbinned[:, i]
                 with catch_warnings(record=True) as w:
                     fitobj = PoissonRegressor(alpha=alpha, max_iter=300).fit(traindm,
