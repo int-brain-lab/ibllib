@@ -315,6 +315,16 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
         self.workdir = Path(__file__).parent / 'fixtures' / 'io' / 'spikeglx'
         self.meta_files = list(Path.glob(self.workdir, '*.meta'))
 
+    def test_read_corrupt(self):
+        # nidq has 1 analog and 1 digital sync channels
+        self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
+        int2volts = 5 / 32768
+        nidq = spikeglx._mock_spikeglx_file(
+            Path(self.tdir.name).joinpath('sample3B_g0_t0.nidq.bin'),
+            self.workdir / 'sample3B_g0_t0.nidq.meta',
+            ns=32, nc=2, sync_depth=8, int2volts=int2volts, corrupt=True)
+        self.assert_read_glx(nidq)
+
     def test_read_nidq(self):
         # nidq has 1 analog and 1 digital sync channels
         self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
