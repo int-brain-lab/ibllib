@@ -171,7 +171,7 @@ alf_dir = Path.joinpath(session_path, 'alf')
 alf_probe_dir = Path.joinpath(alf_dir, probe)
 
 # get trials bunch
-trials = aio.load_object(alf_dir, '_ibl_trials')
+trials = aio.load_object(alf_dir, 'trials')
 
 # plot peth without raster (spike times, all cluster ids, event times, cluster id)
 bb.plot.peri_event_time_histogram(spks_b.times, spks_b.clusters, trials.goCue_times, 1)

@@ -49,7 +49,7 @@ class TrainingAudio(tasks.Task):
     level = 0  # this job doesn't depend on anything
 
     def _run(self, overwrite=False):
-        training_audio.extract_sound(self.session_path, save=True, delete=True)
+        return training_audio.extract_sound(self.session_path, save=True, delete=True)
 
 
 # level 1
@@ -107,6 +107,9 @@ def extract_training(session_path, save=True):
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
         trials, files_trials = biased_trials.extract_all(
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
+    elif extractor_type == 'habituation':
+        _logger.info('Skipped trial extraction for habituation session')
+        return None, None, None
     else:
         raise ValueError(f"No extractor for task {extractor_type}")
     _logger.info('session extracted \n')  # timing info in log

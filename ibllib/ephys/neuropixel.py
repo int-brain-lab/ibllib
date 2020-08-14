@@ -411,3 +411,10 @@ SITES_COORDINATES = np.array([
     [11., 3820.],
     [59., 3840.],
     [27., 3840.]])
+
+
+def rc2xy(row, col):
+    "converts the row/col indices from "
+    x = col * 16 + 11
+    y = (row * 20) + 20
+    return x, y

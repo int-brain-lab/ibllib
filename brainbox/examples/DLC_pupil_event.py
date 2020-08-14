@@ -187,7 +187,7 @@ if __name__ == "__main__":
         dclass_output=True)
     alf_path = Path(D.local_path[0]).parent.parent / 'alf'
 
-    trials = alf.io.load_object(alf_path, '_ibl_trials')
+    trials = alf.io.load_object(alf_path, 'trials')
     add_stim_off_times(trials)
 
     times = np.load(alf_path / '_ibl_leftCamera.times.npy')

@@ -3,11 +3,26 @@ import logging
 import numpy as np
 
 from ibllib.io.extractors.training_trials import (
-    StimOnOffFreezeTimes, Choice, FeedbackType, Intervals, StimOnTriggerTimes, StimOnTimes,
-    StimOffTriggerTimes, StimFreezeTriggerTimes, GoCueTriggerTimes, GoCueTimes,
-    ErrorCueTriggerTimes, RewardVolume, ResponseTimes, FeedbackTimes, ItiInTimes,
-    run_extractor_classes
+    StimOnOffFreezeTimes,
+    Choice,
+    FeedbackType,
+    Intervals,
+    StimOnTriggerTimes,
+    StimOnTimes,
+    StimOffTriggerTimes,
+    StimFreezeTriggerTimes,
+    GoCueTriggerTimes,
+    GoCueTimes,
+    ErrorCueTriggerTimes,
+    RewardVolume,
+    ResponseTimes,
+    FeedbackTimes,
+    ItiInTimes,
+    ContrastLR,
+    ProbabilityLeft,
+    run_extractor_classes,
 )
+from ibllib.io.extractors.training_trials import ContrastLR as biasedContrastLR
 from ibllib.io.extractors.ephys_fpga import ProbaContrasts, _get_pregenerated_events
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.training_wheel import get_wheel_position
@@ -15,23 +30,52 @@ from ibllib.io.extractors.training_wheel import get_wheel_position
 _logger = logging.getLogger("ibllib")
 
 
-# --------------------------------------------------------------------------- #
 def extract_bpod_trial_data(session_path, raw_bpod_trials=None, raw_settings=None):
     """Extracts and loads ephys sessions from bpod data"""
     _logger.info(f"Extracting session: {session_path}")
     raw_bpod_trials = raw_bpod_trials or raw.load_data(session_path)
     raw_settings = raw_settings or raw.load_settings(session_path)
-    classes = (
-        StimOnOffFreezeTimes, Choice, FeedbackType, Intervals, StimOnTriggerTimes, StimOnTimes,
-        StimOffTriggerTimes, StimFreezeTriggerTimes, GoCueTriggerTimes, GoCueTimes,
-        ErrorCueTriggerTimes, RewardVolume, ResponseTimes, FeedbackTimes, ItiInTimes,
-        ProbaContrasts
+    extractor_type = raw.get_session_extractor_type(session_path)
+    classes = [
+        StimOnOffFreezeTimes,
+        Choice,
+        FeedbackType,
+        Intervals,
+        StimOnTriggerTimes,
+        StimOnTimes,
+        StimOffTriggerTimes,
+        StimFreezeTriggerTimes,
+        GoCueTriggerTimes,
+        GoCueTimes,
+        ErrorCueTriggerTimes,
+        RewardVolume,
+        ResponseTimes,
+        FeedbackTimes,
+        ItiInTimes,
+    ]
+
+    # extractor types: ['biased', 'habituation', 'training', 'ephys', 'mock_ephys', 'sync_ephys']
+    if extractor_type == "ephys" or extractor_type == "mock_ephys":
+        classes.append(ProbaContrasts)
+    elif extractor_type == "biased":
+        classes.extend([biasedContrastLR, ProbabilityLeft])
+    elif extractor_type == "training":
+        classes.extend([ContrastLR, ProbabilityLeft])
+
+    out, _ = run_extractor_classes(
+        classes,
+        save=False,
+        session_path=session_path,
+        bpod_trials=raw_bpod_trials,
+        settings=raw_settings,
     )
-    out, _ = run_extractor_classes(classes, save=False, session_path=session_path,
-                                   bpod_trials=raw_bpod_trials, settings=raw_settings)
-    out.update(_get_pregenerated_events(raw_bpod_trials, raw_settings))
+    if extractor_type == "ephys":
+        out.update(_get_pregenerated_events(raw_bpod_trials, raw_settings))
+    else:
+        out["quiescence"] = np.array([t["quiescent_period"] for t in raw_bpod_trials])
+        out["position"] = np.array([t["position"] for t in raw_bpod_trials])
     # get valve_time and errorCue_times from feedback_times
-    correct = np.sign(out["position"]) + np.sign(out["choice"]) == 0
+    correct = out["feedbackType"] > 0
     errorCue_times = out["feedback_times"].copy()
     valveOpen_times = out["feedback_times"].copy()
     errorCue_times[correct] = np.nan
@@ -64,7 +108,7 @@ class BpodQCExtractor(object):
         # to be there but not as input... FIXME: we should have the extractor use the data
         # without assuming it's there
         ts, pos = get_wheel_position(self.session_path, bp_data=self.raw_data)
-        self.wheel_data = {'re_ts': ts, 're_pos': pos}
+        self.wheel_data = {"re_ts": ts, "re_pos": pos}
         assert np.all(np.diff(self.wheel_data["re_ts"]) > 0)
 
     def extract_trial_data(self):

@@ -77,6 +77,14 @@ class Task(abc.ABC):
             _logger.info(f"Job {self.__class__} errored")
             self.status = -1
         self.time_elapsed_secs = time.time() - start_time
+        # log the outputs-+
+        if isinstance(self.outputs, list):
+            nout = len(self.outputs)
+        elif self.outputs is None:
+            nout = 0
+        else:
+            nout = 1
+        _logger.info(f"N outputs: {nout}")
         _logger.info(f"--- {self.time_elapsed_secs} seconds run-time ---")
         # after the run, capture the log output
         self.log = log_capture_string.getvalue()
@@ -84,14 +92,9 @@ class Task(abc.ABC):
         _logger.removeHandler(ch)
         # tear down
         self.tearDown()
-        # teardown
-        if use_alyx:
-            status = 'Complete' if self.status == 0 else 'Errored'
-            self.one.alyx.rest('tasks', 'partial_update', id=self.taskid,
-                               data={'status': status, 'log': self.log})
         return self.status
 
-    def register_datasets(self, one=None, jobid=None, **kwargs):
+    def register_datasets(self, one=None, **kwargs):
         """
         Register output datasets form the task to Alyx
         :param one:
@@ -100,7 +103,6 @@ class Task(abc.ABC):
         :return:
         """
         assert one
-        assert jobid
         if self.outputs:
             if isinstance(self.outputs, list):
                 versions = [self.version for _ in self.outputs]
@@ -306,8 +308,10 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None, max_md
         if task.outputs is None:
             patch_data['status'] = 'Empty'
         else:  # otherwise register data and set status to Complete
-            registered_dsets = task.register_datasets(
-                one=one, jobid=tdict['id'], max_md5_size=max_md5_size)
+            try:
+                registered_dsets = task.register_datasets(one=one, max_md5_size=max_md5_size)
+            except BaseException:
+                patch_data['status'] = 'Errored'
             patch_data['status'] = 'Complete'
     elif status == -1:
         patch_data['status'] = 'Errored'

@@ -6,11 +6,12 @@ import pandas as pd
 import numpy as np
 import nrrd
 
-from brainbox.core import Bunch
+from brainbox.core import Bunch, ismember
 from ibllib.io import params
 from oneibl.webclient import http_download_file
 
 ALLEN_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5739, 5400, 332])}
+FILE_REGIONS = str(Path(__file__).parent.joinpath('allen_structure_tree.csv'))
 
 
 def cart2sph(x, y, z):
@@ -599,6 +600,8 @@ class BrainRegions:
     name: np.object
     acronym: np.object
     rgb: np.uint8
+    level: np.ndarray
+    parent: np.ndarray
 
     def get(self, ids) -> Bunch:
         """
@@ -606,10 +609,48 @@ class BrainRegions:
         """
         uid, uind = np.unique(ids, return_inverse=True)
         a, iself, _ = np.intersect1d(self.id, uid, assume_unique=False, return_indices=True)
-        return Bunch(id=self.id[iself[uind]],
-                     name=self.name[iself[uind]],
-                     acronym=self.acronym[iself[uind]],
-                     rgb=self.rgb[iself[uind]])
+        b = Bunch()
+        for k in self.__dataclass_fields__.keys():
+            b[k] = self.__getattribute__(k)[iself[uind]]
+        return b
+
+    def _navigate_tree(self, ids, direction='down'):
+        """
+        Private method to navigate the tree and get all related objects either up or down
+        :param ids:
+        :param direction:
+        :return: Bunch
+        """
+        indices = ismember(self.id, ids)[0]
+        count = np.sum(indices)
+        while True:
+            if direction == 'down':
+                indices |= ismember(self.parent, self.id[indices])[0]
+            elif direction == 'up':
+                indices |= ismember(self.id, self.parent[indices])[0]
+            else:
+                raise ValueError("direction should be either 'up' or 'down'")
+            if count == np.sum(indices):  # last iteration didn't find any match
+                break
+            else:
+                count = np.sum(indices)
+        return self.get(self.id[indices])
+
+    def descendants(self, ids):
+        """
+        Get descendants from one or an array of ids
+        :param ids: np.array or scalar representing the region primary key
+        :return: Bunch
+        """
+        return self._navigate_tree(ids, direction='down')
+
+    def ancestors(self, ids):
+        """
+        Get ancestors from one or an array of ids
+        :param ids: np.array or scalar representing the region primary key
+        :return: Bunch
+        """
+        return self._navigate_tree(ids, direction='up')
 
 
 class AllenAtlas(BrainAtlas):
@@ -628,7 +669,6 @@ class AllenAtlas(BrainAtlas):
         :return: atlas.BrainAtlas
         """
         par = params.read('one_params')
-        FILE_REGIONS = str(Path(__file__).parent.joinpath('allen_structure_tree.csv'))
         FLAT_IRON_ATLAS_REL_PATH = Path('histology', 'ATLAS', 'Needles', 'Allen')
         if mock:
             image, label = [np.zeros((528, 456, 320), dtype=np.bool) for _ in range(2)]
@@ -656,7 +696,7 @@ class AllenAtlas(BrainAtlas):
             label = np.swapaxes(np.swapaxes(label, 2, 0), 1, 2)  # label[iap, iml, idv]
             image = np.swapaxes(np.swapaxes(image, 2, 0), 1, 2)  # image[iap, iml, idv]
         # resulting volumes origin: x right, y front, z top
-        regions = _regions_from_allen_csv(FILE_REGIONS)
+        regions = regions_from_allen_csv(FILE_REGIONS)
         xyz2dims = np.array([1, 0, 2])
         dims2xyz = np.array([1, 0, 2])
         dxyz = res_um * 1e-6 * np.array([1, -1, -1]) * scaling
@@ -699,7 +739,7 @@ def _download_atlas_flatiron(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
                        password=par.HTTP_DATA_SERVER_PWD)
 
 
-def _regions_from_allen_csv(csv_file):
+def regions_from_allen_csv(csv_file=FILE_REGIONS):
     """
     Reads csv file containing the ALlen Ontology and instantiates a BrainRegions object
     :param csv_file:
@@ -711,7 +751,9 @@ def _regions_from_allen_csv(csv_file):
         lambda x: int(x, 16) if isinstance(x, str) else 256 ** 3 - 1))
     c = np.flip(np.reshape(c.view(np.uint8), (df_regions.id.size, 4))[:, :3], 1)
     # creates the BrainRegion instance
-    return BrainRegions(id=df_regions.id.values,
-                        name=df_regions.name.values,
-                        acronym=df_regions.acronym.values,
-                        rgb=c)
+    return BrainRegions(id=df_regions.id.to_numpy(),
+                        name=df_regions.name.to_numpy(),
+                        acronym=df_regions.acronym.to_numpy(),
+                        rgb=c,
+                        level=df_regions.depth.to_numpy(),
+                        parent=df_regions.parent_structure_id.to_numpy())

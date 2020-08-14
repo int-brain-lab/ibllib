@@ -146,7 +146,7 @@ if __name__ == "__main__":
     spikes = alf.io.load_object(alf_path, 'spikes')
     clusters = alf.io.load_object(alf_path, 'clusters')
     channels = alf.io.load_object(alf_path, 'channels')
-    trials = alf.io.load_object(alf_path, '_ibl_trials')
+    trials = alf.io.load_object(alf_path, 'trials')
     
     # Print number of clusters for each brain region
     locDict_bothProbes = clusters['brainAcronyms']['brainAcronyms'].to_dict()

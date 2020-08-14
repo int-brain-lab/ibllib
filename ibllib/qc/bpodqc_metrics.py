@@ -2,30 +2,32 @@ import logging
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
-from alf.io import is_session_path, is_uuid_string
 from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
+from ibllib.io.extractors.ephys_fpga import WHEEL_TICKS
+from ibllib.io.extractors.training_wheel import WHEEL_RADIUS_CM
+from ibllib.qc.base import QC
 from ibllib.qc.bpodqc_extractors import BpodQCExtractor
-from oneibl.one import ONE
 
 log = logging.getLogger("ibllib")
 
 
-class BpodQC(object):
+class BpodQC(QC):
     def __init__(self, session_path_or_eid, one=None, ensure_data=False, lazy=False):
-        self.one = one or ONE()
-        self.eid = None
-        self.session_path = None
+        super().__init__(session_path_or_eid, one, log=log)
         self.ensure_data = ensure_data
         self.lazy = lazy
-        self._set_eid_or_path(session_path_or_eid)
         if self.ensure_data:
             self._ensure_required_data()
 
         # Data
         self.extractor = None
+        # Utils
         self.wheel_gain = None
         self.bpod_ntrials = None
+        self.wheel_trial_idxs = None
+
         # Metrics and passed trials
         self.metrics = None
         self.passed = None
@@ -46,54 +48,83 @@ class BpodQC(object):
             "_iblrig_ambientSensorData.raw",
         ]
         if (self.session_path is None) or (not Path(self.session_path).exists()):
-            log.info(f"Downloading data for session {self.eid}")
+            self.log.info(f"Downloading data for session {self.eid}")
             self.one.load(self.eid, dataset_types=dstypes, download_only=True)
             self.session_path = self.one.path_from_eid(self.eid)
             if self.session_path is None:
                 self.lazy = True
-                log.error("Data not found on server, can't calculate QC.")
+                self.log.error("Data not found on server, can't calculate QC.")
         else:
             glob_sp = list(x.name for x in Path(self.session_path).rglob("*.raw.*") if x.is_file())
             if not all([x in glob_sp for x in dstypes]):
-                log.warning(
+                self.log.warning(
                     f"Missing some datasets for session {self.eid} in path {self.session_path}"
                 )
-                log.info("Attempting download...")
+                self.log.info("Attempting download...")
                 self.one.load(self.eid, dataset_types=dstypes, download_only=True)
-
-    def _set_eid_or_path(self, session_path_or_eid):
-        if session_path_or_eid is None:
-            log.error("Cannot run BpodQC: Plese insert a valid session path or eid")
-        if is_uuid_string(str(session_path_or_eid)):
-            self.eid = session_path_or_eid
-            # Try to setsession_path if data is found locally
-            self.session_path = self.one.path_from_eid(self.eid)
-        elif is_session_path(session_path_or_eid):
-            self.session_path = session_path_or_eid
-        else:
-            log.error("Cannot run BpodQC: Plese insert a valid session path or eid")
 
     def load_data(self, lazy=False):
         self.extractor = BpodQCExtractor(self.session_path, lazy=lazy)
         self.wheel_gain = self.extractor.details["STIM_GAIN"]
         self.bpod_ntrials = len(self.extractor.raw_data)
+        self.wheel_trial_idxs = BpodQC.hack_ts(
+            self.extractor.wheel_data["re_ts"],
+            self.extractor.trial_data["intervals_0"],
+            self.extractor.trial_data["intervals_1"],
+            idx=True,
+        )
         return
 
     def compute(self):
         if self.extractor is None:
             self.load_data()
-        log.info(f"Session {self.session_path}: Running QC on Bpod data...")
+        self.log.info(f"Session {self.session_path}: Running QC on Bpod data...")
         self.metrics, self.passed = get_bpodqc_metrics_frame(
             self.extractor.trial_data,
             self.extractor.wheel_data,
             self.extractor.details["STIM_GAIN"],
+            self.wheel_trial_idxs,
             self.extractor.BNC1,
             self.extractor.BNC2,
         )
         return
 
+    @staticmethod
+    def hack_ts(ts_array, intervals_0, intervals_1, idx=False):
+        hacked_arr = []
+        hacked_arr_idxs = []
+        for start, end in zip(intervals_0, intervals_1):
+            trial = ts_array[(ts_array >= start) & (ts_array < end)]
+            trial_idx = np.where((ts_array >= start) & (ts_array < end))
+            hacked_arr.append(trial)
+            hacked_arr_idxs.extend(trial_idx)
+        if np.max(hacked_arr_idxs[-1]) == len(ts_array):
+            hacked_arr_idxs[-1] = np.setdiff1d(hacked_arr_idxs[-1], np.max(hacked_arr_idxs[-1]))
+        return hacked_arr_idxs if idx else hacked_arr
 
-def get_bpodqc_metrics_frame(trial_data, wheel_data, wheel_gain, BNC1, BNC2):
+    @property
+    def metrics_df(self):
+        if not self.metrics:
+            log.error("Metrics frame not computed yet")
+            return
+        return BpodQC.frame_to_df(self.metrics)
+
+    @property
+    def passed_df(self):
+        if not self.passed:
+            log.error("Passed frame not computed yet")
+            return
+        return BpodQC.frame_to_df(self.passed)
+
+    @staticmethod
+    def frame_to_df(d: dict) -> pd.DataFrame:
+        dd = d.copy()
+        dd.pop("_bpod_wheel_integrity")
+        out_df = pd.DataFrame.from_dict(dd)
+        return out_df
+
+
+def get_bpodqc_metrics_frame(trial_data, wheel_data, wheel_gain, wheel_trial_idxs, BNC1, BNC2):
     """Plottable metrics based on timings"""
 
     qcmetrics_frame = {
@@ -117,6 +148,7 @@ def get_bpodqc_metrics_frame(trial_data, wheel_data, wheel_gain, BNC1, BNC2):
         "_bpod_correct_trial_event_sequence": load_correct_trial_event_sequence(trial_data),
         "_bpod_trial_length": load_trial_length(trial_data),
         # Wheel trial_data loading
+        "_bpod_wheel_integrity": load_wheel_integrity(wheel_data, trial_idxs=wheel_trial_idxs),
         "_bpod_wheel_freeze_during_quiescence": load_wheel_freeze_during_quiescence(
             trial_data, wheel_data
         ),
@@ -135,7 +167,7 @@ def get_bpodqc_metrics_frame(trial_data, wheel_data, wheel_gain, BNC1, BNC2):
     passed = {}
     for k in qcmetrics_frame:
         metrics[k], passed[k] = qcmetrics_frame[k]
-    return (metrics, passed)
+    return metrics, passed
 
 
 # SINGLE METRICS
@@ -212,29 +244,24 @@ def load_wheel_freeze_during_quiescence(trial_data, wheel_data):
     Criterion: <2 degrees for 99% of trials
     """
     assert np.all(np.diff(wheel_data["re_ts"]) > 0)
-    assert trial_data["quiescence"].size == trial_data["goCueTrigger_times"].size
+    assert trial_data["quiescence"].size == trial_data["stimOnTrigger_times"].size
     # Get tuple of wheel times and positions over each trial's quiescence period
-    qevt_start_times = trial_data["goCueTrigger_times"] - trial_data["quiescence"]
+    qevt_start_times = trial_data["stimOnTrigger_times"] - trial_data["quiescence"]
     traces = traces_by_trial(
         wheel_data["re_ts"],
         wheel_data["re_pos"],
         start=qevt_start_times,
-        end=trial_data["goCueTrigger_times"],
+        end=trial_data["stimOnTrigger_times"],
     )
 
-    # metric = np.zeros_like(trial_data['quiescence'])
-    # for i, trial in enumerate(traces):
-    #     pos = trial[1]
-    #     if pos.size > 1:
-    #         metric[i] = np.abs(pos.max() - pos.min())
-    # -OR-
     metric = np.zeros((len(trial_data["quiescence"]), 2))  # (n_trials, n_directions)
     for i, trial in enumerate(traces):
         t, pos = trial
         # Get the last position before the period began
-        if pos.size > 1:
+        if pos.size > 0:
             # Find the position of the preceding sample and subtract it
-            origin = wheel_data["re_pos"][wheel_data["re_ts"] < t[0]][-1]
+            idx = np.abs(wheel_data["re_ts"] - t[0]).argmin() - 1
+            origin = wheel_data["re_pos"][idx if idx != -1 else 0]
             # Find the absolute min and max relative to the last sample
             metric[i, :] = np.abs([np.min(pos - origin), np.max(pos - origin)])
     # Reduce to the largest displacement found in any direction
@@ -285,7 +312,7 @@ def load_wheel_move_during_closed_loop(trial_data, wheel_data, wheel_gain):
     Criterion: displacement < 1 visual degree for 99% of non-NoGo trials
     """
     if wheel_gain is None:
-        log.warning("No wheel_gain input in function call, retruning None")
+        log.warning("No wheel_gain input in function call, returning None")
         return None
 
     # Get tuple of wheel times and positions over each trial's closed-loop period
@@ -300,11 +327,10 @@ def load_wheel_move_during_closed_loop(trial_data, wheel_data, wheel_gain):
     # For each trial find the absolute displacement
     for i, trial in enumerate(traces):
         t, pos = trial
-        if pos.size == 0:
-            metric[i] = np.nan
-        else:
+        if pos.size != 0:
             # Find the position of the preceding sample and subtract it
-            origin = wheel_data["re_pos"][wheel_data["re_ts"] <= t[0]][-1]
+            idx = np.abs(wheel_data["re_ts"] - t[0]).argmin() - 1
+            origin = wheel_data["re_pos"][idx]
             metric[i] = np.abs(pos - origin).max()
 
     # Load wheel_gain and thresholds for each trial
@@ -354,16 +380,6 @@ def load_negative_feedback_stimOff_delays(trial_data):
     passed[~trial_data["outcome"] == -1] = np.nan
     assert len(trial_data["intervals_0"]) == len(metric) == len(passed)
     return metric, passed
-
-
-# def load_0(trial_data, session_path=None):
-#     """ Number of Bonsai command to change screen should match
-#     Number of state change of frame2ttl
-#     Variable name: syncSquare
-#     Metric: (count of bonsai screen updates) - (count of frame2ttl)
-#     Criterion: 0 on 99% of trials
-#     """
-#     pass
 
 
 def load_valve_pre_trial(trial_data):
@@ -463,16 +479,6 @@ def load_trial_length(trial_data):
     return metric, passed
 
 
-# def load_1(trial_data, session_path=None):
-#     """ Between go tone and feedback, frame2ttl should be changing at ~60Hz
-#     if wheel moves (exact frequency depending on velocity)
-#     Variable name:
-#     Metric:
-#     Criterion:
-#     """
-#     pass
-
-
 # Trigger response checks
 def load_goCue_delays(trial_data):
     """ Trigger response difference
@@ -564,13 +570,14 @@ def load_stimulus_move_before_goCue(trial_data, BNC1=None):
     Metric: count of any stimulus change events between trialstart_time and (gocue_time-20ms)
     Criterion: 0 on 99% of trials
     """
+    # FIXME: quiescence sync causes stim ove?
     if BNC1 is None:
-        log.warning("No BNC1 input in function call, retruning None")
+        log.warning("No BNC1 input in function call, returning None")
         return None
     s = BNC1["times"]
     metric = np.array([])
     for i, c in zip(trial_data["intervals_0"], trial_data["goCue_times"]):
-        metric = np.append(metric, np.count_nonzero(s[s > i] < (c - 0.02)))
+        metric = np.append(metric, np.count_nonzero(s[s >= i] < (c - 0.02)))
 
     passed = (metric == 0).astype(np.float)
     # Remove no go trials
@@ -595,3 +602,51 @@ def load_audio_pre_trial(trial_data, BNC2=None):
     passed = (~metric).astype(np.float)
     assert len(trial_data["intervals_0"]) == len(metric) == len(passed)
     return metric, passed
+
+
+def load_wheel_integrity(wheel_data, re_encoding="X1", enc_res=None, trial_idxs=None):
+    """
+    Variable name: wheel_integrity
+    Metric: (absolute difference of the positions - encoder resolution) + 1 if difference of
+    timestamps <= 0
+    Criterion: Close to zero for > 99% of samples
+    :param wheel_data: dict of wheel data with keys ('re_ts', 're_pos')
+    :param re_encoding: the encoding of the wheel data, X1, X2 or X4
+    :param enc_res: the rotary encoder resolution
+    """
+    if isinstance(re_encoding, str):
+        re_encoding = int(re_encoding[-1])
+    if enc_res is None:
+        enc_res = WHEEL_TICKS / re_encoding
+    # The expected difference between samples in the extracted units
+    resolution = (2 * np.pi / enc_res) * re_encoding * WHEEL_RADIUS_CM
+    # We expect the difference of neighbouring positions to be close to the resolution
+    # XXX: not necessarily, are we sure the only change allowed is of one tick?
+    # what happens for "very fast" inputs? but should always be a multiple of it
+    pos_check = np.abs(np.diff(wheel_data["re_pos"])) - resolution
+    # Timestamps should be strictly increasing
+    # XXX: Why not an assert?
+    ts_check = np.diff(wheel_data["re_ts"]) <= 0.0
+    # XXX: adding a bool to a metric is weird, metric here looks like the passed
+    # Metric should be absolute diff of position, the rest is a criterion.
+    metric = pos_check + ts_check.astype(float)  # all values should be close to zero
+    passed = np.isclose(metric, np.zeros_like(metric))
+    if trial_idxs is None:
+        return metric, passed
+
+    # hack metric and passed
+    trial_metric = []
+    trial_passed = []
+    if np.max(trial_idxs[-1]) == len(metric):
+        trial_idxs[-1] = np.setdiff1d(trial_idxs[-1], np.max(trial_idxs[-1]))
+
+    for tr in trial_idxs:
+        # one value per trial
+        trial_metric.append(np.nanmean(metric[tr]))
+        trial_passed.append(np.nanmean(passed[tr]))
+
+    return trial_metric, trial_passed
+
+
+# np.isclose(np.array([1,2,3]), np.array([1.1,2.1,3.1]),  )
+# np.isclose()

@@ -287,14 +287,15 @@ def _get_sync_fronts(sync, channel_nb, tmin=None, tmax=None):
                   'polarities': sync['polarities'][selection]})
 
 
-def bpod_fpga_sync(bpod_intervals=None, ephys_intervals=None):
+def bpod_fpga_sync(bpod_intervals=None, ephys_intervals=None, iti_duration=None):
     """
     Computes synchronization function from bpod to fpga
     :param bpod_intervals
     :param ephys_intervals
     :return: interpolation function
     """
-    ITI_DURATION = 0.5
+    if iti_duration is None:
+        iti_duration = 0.5
     # check consistency
     if bpod_intervals.size != ephys_intervals.size:
         # patching things up if the bpod and FPGA don't have the same recording span
@@ -309,14 +310,16 @@ def bpod_fpga_sync(bpod_intervals=None, ephys_intervals=None):
         ephys_intervals = ephys_intervals[ifpga, :]
     else:
         ibpod, ifpga = [np.arange(bpod_intervals.shape[0]) for _ in np.arange(2)]
-    tlen = (np.diff(bpod_intervals) - np.diff(ephys_intervals))[:-1] - ITI_DURATION
-    assert(np.all(np.abs(tlen[np.invert(np.isnan(tlen))])[:-1] < 5 * 1e-3))
+    tlen = (np.diff(bpod_intervals) - np.diff(ephys_intervals))[:-1] - iti_duration
+    assert np.all(np.abs(tlen[np.invert(np.isnan(tlen))])[:-1] < 5 * 1e-3)
     # dt is the delta to apply to bpod times in order to be on the ephys clock
     dt = bpod_intervals[:, 0] - ephys_intervals[:, 0]
     # compute the clock drift bpod versus dt
     ppm = np.polyfit(bpod_intervals[:, 0], dt, 1)[0] * 1e6
     if ppm > BPOD_FPGA_DRIFT_THRESHOLD_PPM:
-        _logger.warning('BPOD/FPGA synchronization shows values greater than 150 ppm')
+        _logger.warning(
+            'BPOD/FPGA synchronization shows values greater than %i ppm',
+            BPOD_FPGA_DRIFT_THRESHOLD_PPM)
         # plt.plot(trials['intervals'][:, 0], dt, '*')
     # so far 2 datasets concerned: goCueTrigger_times_bpod  and response_times_bpod
     fcn_bpod2fpga = interpolate.interp1d(bpod_intervals[:, 0], ephys_intervals[:, 0],
@@ -414,14 +417,10 @@ def extract_behaviour_sync(sync, chmap=None, display=False, tmax=np.inf):
         else:
             ax = display
         r0 = _get_sync_fronts(sync, chmap['rotary_encoder_0'])
-        plots.squares(bpod['times'], bpod['polarities'] * 0.4 + 1,
-                      ax=ax, color='k')
-        plots.squares(frame2ttl['times'], frame2ttl['polarities'] * 0.4 + 2,
-                      ax=ax, color='k')
-        plots.squares(audio['times'], audio['polarities'] * 0.4 + 3,
-                      ax=ax, color='k')
-        plots.squares(r0['times'], r0['polarities'] * 0.4 + 4,
-                      ax=ax, color='k')
+        plots.squares(bpod['times'], bpod['polarities'] * 0.4 + 1, ax=ax, color='k')
+        plots.squares(frame2ttl['times'], frame2ttl['polarities'] * 0.4 + 2, ax=ax, color='k')
+        plots.squares(audio['times'], audio['polarities'] * 0.4 + 3, ax=ax, color='k')
+        plots.squares(r0['times'], r0['polarities'] * 0.4 + 4, ax=ax, color='k')
         plots.vertical_lines(t_ready_tone_in, ymin=0, ymax=ymax,
                              ax=ax, label='goCue_times', color='b', linewidth=width)
         plots.vertical_lines(t_trial_start, ymin=0, ymax=ymax,
@@ -436,6 +435,12 @@ def extract_behaviour_sync(sync, chmap=None, display=False, tmax=np.inf):
                              ax=ax, label='stim off', color='c', linewidth=width)
         plots.vertical_lines(trials['stimOn_times'], ymin=0, ymax=ymax,
                              ax=ax, label='stimOn_times', color='tab:orange', linewidth=width)
+        c = _get_sync_fronts(sync, chmap['left_camera'])
+        plots.squares(c['times'], c['polarities'] * 0.4 + 5, ax=ax, color='k')
+        c = _get_sync_fronts(sync, chmap['right_camera'])
+        plots.squares(c['times'], c['polarities'] * 0.4 + 6, ax=ax, color='k')
+        c = _get_sync_fronts(sync, chmap['body_camera'])
+        plots.squares(c['times'], c['polarities'] * 0.4 + 7, ax=ax, color='k')
         ax.legend()
         ax.set_yticklabels(['', 'bpod', 'f2ttl', 'audio', 're_0', ''])
         ax.set_yticks([0, 1, 2, 3, 4, 5])
@@ -459,15 +464,17 @@ def extract_sync(session_path, overwrite=False, ephys_files=None):
     syncs = []
     outputs = []
     for efi in ephys_files:
-        glob_filter = f'*{efi.label}*' if efi.label else '*'
         bin_file = efi.get('ap', efi.get('nidq', None))
         if not bin_file:
             continue
-        file_exists = alf.io.exists(bin_file.parent, object='_spikeglx_sync', glob=glob_filter)
+        alfname = dict(object='sync', namespace='spikeglx')
+        if efi.label:
+            alfname['extra'] = efi.label
+        file_exists = alf.io.exists(bin_file.parent, **alfname)
         if not overwrite and file_exists:
             _logger.warning(f'Skipping raw sync: SGLX sync found for probe {efi.label} !')
-            sync = alf.io.load_object(bin_file.parent, object='_spikeglx_sync', glob=glob_filter)
-            out_files, _ = alf.io._ls(bin_file.parent, object='_spikeglx_sync', glob=glob_filter)
+            sync = alf.io.load_object(bin_file.parent, **alfname)
+            out_files, _ = alf.io._ls(bin_file.parent, **alfname)
         else:
             sr = spikeglx.Reader(bin_file)
             sync, out_files = _sync_to_alf(sr, bin_file.parent, save=True, parts=efi.label)
@@ -483,7 +490,7 @@ def _get_all_probes_sync(session_path, bin_exists=True):
     version = spikeglx.get_neuropixel_version_from_files(ephys_files)
     # attach the sync information to each binary file found
     for ef in ephys_files:
-        ef['sync'] = alf.io.load_object(ef.path, '_spikeglx_sync', short_keys=True)
+        ef['sync'] = alf.io.load_object(ef.path, 'sync', namespace='spikeglx', short_keys=True)
         ef['sync_map'] = get_ibl_sync_map(ef, version)
     return ephys_files
 
