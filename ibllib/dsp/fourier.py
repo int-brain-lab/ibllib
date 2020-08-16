@@ -261,6 +261,6 @@ def dft2(x, r, c, nk, nl):
     nt = x.shape[-1]
     k, h = [v.flatten() for v in np.meshgrid(np.arange(nk), np.arange(nl), indexing='ij')]
     # exp has dimension (kh, rc)
-    exp = np.exp(- 1j * 2 * np.pi * (r[:, np.newaxis] * k[np.newaxis, :] +
-                                     c[:, np.newaxis] * h[np.newaxis, :]))
+    exp = np.exp(- 1j * 2 * np.pi * (r[np.newaxis] * k[:, np.newaxis] +
+                                     c[np.newaxis] * h[:, np.newaxis]))
     return np.matmul(exp, x).reshape((nk, nl, nt))
