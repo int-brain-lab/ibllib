@@ -1,3 +1,9 @@
+### Release Notes 1.5.6
+Ephys extraction bugfixes:
+-   RawEphysQC: No object "ephysTimeRmsAP" found 
+-   EphysMtsComp,RawEphysQC, EphysPulses : ValueError: mmap length is greater than file size
+-   Ks2: ks2 job cleans-up temp dir
+
 ### Release Notes 1.5.5
 -   ONE offline mode and cache dataset table to speed up reloading of large datasets (Olivier)
 -   ALF io naming conventions on loading objects (Miles)
