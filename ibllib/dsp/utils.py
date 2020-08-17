@@ -6,6 +6,34 @@ import numpy as np
 from ibllib.misc import print_progress
 
 
+def _fcn_extrap(x, f, bounds):
+    """
+    Extrapolates a flat value before and after bounds
+    x: array to be filtered
+    f: function to be applied between bounds (cf. fcn_cosine below)
+    bounds: 2 elements list or np.array
+    """
+    y = f(x)
+    y[x < bounds[0]] = f(bounds[0])
+    y[x > bounds[1]] = f(bounds[1])
+    return y
+
+
+def fcn_cosine(bounds):
+    """
+    Returns a soft thresholding function with a cosine taper:
+    values <= bounds[0]: values
+    values < bounds[0] < bounds[1] : cosine taper
+    values < bounds[1]: bounds[1]
+    :param bounds:
+    :return: lambda function
+    """
+    def _cos(x):
+        return (1 - np.cos((x - bounds[0]) / (bounds[1] - bounds[0]) * np.pi)) / 2
+    func = lambda x: _fcn_extrap(x, _cos, bounds)  # noqa
+    return func
+
+
 def fronts(x, axis=-1, step=1):
     """
     Detects Rising and Falling edges of a voltage signal, returns indices and

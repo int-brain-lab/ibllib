@@ -41,7 +41,14 @@ class Reader:
             self._raw.open(self.file_bin, self.file_bin.with_suffix('.ch'))
         else:
             if self.nc * self.ns * 2 != self.nbytes:
-                _logger.warning(str(sglx_file) + " : meta data and filesize do not checkout")
+                ftsec = self.file_bin.stat().st_size / 2 / self.nc / self.fs
+                _logger.warning(f"{sglx_file} : meta data and filesize do not checkout\n"
+                                f"File size: expected {self.meta['fileSizeBytes']},"
+                                f" actual {self.file_bin.stat().st_size}\n"
+                                f"File duration: expected {self.meta['fileTimeSecs']},"
+                                f" actual {ftsec}\n"
+                                f"Will attempt to fudge the meta-data information.")
+                self.meta['fileTimeSecs'] = ftsec
             self._raw = np.memmap(sglx_file, dtype='int16', mode='r', shape=(self.ns, self.nc))
 
     def __getitem__(self, item):
@@ -492,7 +499,7 @@ def glob_ephys_files(session_path, suffix='.meta', recursive=True, bin_exists=Tr
 
 
 def _mock_spikeglx_file(mock_bin_file, meta_file, ns, nc, sync_depth,
-                        random=False, int2volts=0.6 / 32768):
+                        random=False, int2volts=0.6 / 32768, corrupt=False):
     """
     For testing purposes, create a binary file with sync pulses to test reading and extraction
     """
@@ -510,7 +517,10 @@ def _mock_spikeglx_file(mock_bin_file, meta_file, ns, nc, sync_depth,
         if line.startswith('fileSizeBytes'):
             line = f'fileSizeBytes={ns * nc * 2}\n'
         if line.startswith('fileTimeSecs'):
-            line = f'fileTimeSecs={ns / fs}\n'
+            if corrupt:
+                line = f'fileTimeSecs={ns / fs + 1.8324}\n'
+            else:
+                line = f'fileTimeSecs={ns / fs}\n'
         fid_target.write(line)
     fid_source.close()
     fid_target.close()
