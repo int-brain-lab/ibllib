@@ -1,3 +1,6 @@
+### Release Notes 1.5.7 Hotfix
+-   Ephys extraction ks2: mkdir for scratch more robust
+
 ### Release Notes 1.5.6
 Ephys extraction bugfixes:
 -   RawEphysQC: No object "ephysTimeRmsAP" found 
