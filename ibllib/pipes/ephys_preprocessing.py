@@ -117,7 +117,7 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
                 'ks2m', '_'.join(list(self.session_path.parts[-3:]) + [label]))
             if scratch_dir.exists():
                 shutil.rmtree(scratch_dir, ignore_errors=True)
-            scratch_dir.mkdir()
+            scratch_dir.mkdir(parents=True, exist_ok=True)
 
             # decompresses using mtscomp
             tmp_ap_file = scratch_dir.joinpath(ap_file.name).with_suffix('.bin')
