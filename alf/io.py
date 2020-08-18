@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 from brainbox.core import Bunch
+from brainbox.io import parquet
 from ibllib.io import jsonable
 from . import files
 
@@ -166,8 +167,8 @@ def load_file_content(fil):
     fil = Path(fil)
     if fil.stat().st_size == 0:
         return
-    if fil.suffix == '.npy':
-        return np.load(file=fil)
+    if fil.suffix == '.csv':
+        return pd.read_csv(fil)
     if fil.suffix == '.json':
         try:
             with open(fil) as _fil:
@@ -177,12 +178,14 @@ def load_file_content(fil):
             return None
     if fil.suffix == '.jsonable':
         return jsonable.read(fil)
-    if fil.suffix == '.tsv':
-        return pd.read_csv(fil, delimiter='\t')
-    if fil.suffix == '.csv':
-        return pd.read_csv(fil)
+    if fil.suffix == '.npy':
+        return np.load(file=fil)
+    if fil.suffix == '.pqt':
+        return parquet.load(fil)
     if fil.suffix == '.ssv':
         return pd.read_csv(fil, delimiter=' ')
+    if fil.suffix == '.tsv':
+        return pd.read_csv(fil, delimiter='\t')
     return Path(fil)
 
 
