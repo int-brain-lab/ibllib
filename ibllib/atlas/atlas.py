@@ -83,8 +83,11 @@ class BrainCoordinates:
     """Methods distance to indice"""
     @staticmethod
     def _round(i, round=True):
+        nanval = 0
         if round:
-            return np.round(i).astype(np.int)
+            ii = np.round(i).astype(np.int)
+            ii[np.isnan(i)] = nanval
+            return ii
         else:
             return i
 
@@ -194,22 +197,24 @@ class BrainAtlas:
         """
         Get the volume top surface, this is needed to compute probe insertions intersections
         """
-        l0 = self.label == 0
-        bottom = np.zeros(self.label.shape[:2])
-        top = np.zeros(self.label.shape[:2])
-        top[np.all(l0, axis=2)] = np.nan
-        bottom[np.all(l0, axis=2)] = np.nan
-        iz = 0
-        # not very elegant, but fast enough for our purposes
-        while True:
-            if iz >= l0.shape[2]:
-                break
-            top[np.bitwise_and(top == 0, ~l0[:, :, iz])] = iz
-            ireverse = l0.shape[2] - 1 - iz
-            bottom[np.bitwise_and(bottom == 0, ~l0[:, :, ireverse])] = ireverse
-            iz += 1
-        self.top = self.bc.i2z(top)
-        self.bottom = self.bc.i2z(bottom)
+        axz = self.xyz2dims[2]  # this is the dv axis
+        l0 = np.diff((self.label == 0).astype(np.int8) * 2, axis=axz)
+        _top = np.argmax(l0 == -2, axis=axz).astype(np.float)
+        _top[_top == 0] = np.nan
+        _bottom = self.bc.nz - np.argmax(np.flip(l0, axis=axz) == 2, axis=axz).astype(np.float) - 1
+        _bottom[_bottom == self.bc.nz - 1] = np.nan
+        self.top = self.bc.i2z(_top + 1)
+        self.bottom = self.bc.i2z(_bottom - 1)
+
+    def _lookup_inds(self, ixyz):
+        """
+        Performs a 3D lookup from volume indices ixyz to the image volume
+        :param ixyz: [n, 3] array of indices in the mlapdv order
+        :return: n array of label values
+        """
+        idims = np.split(ixyz[..., self.xyz2dims], [1, 2], axis=-1)
+        inds = np.ravel_multi_index(idims, self.bc.nxyz[self.xyz2dims])
+        return inds.squeeze()
 
     def _lookup(self, xyz):
         """
@@ -218,9 +223,7 @@ class BrainAtlas:
         :param xyz: [n, 3] array of coordinates
         :return: n array of label values
         """
-        idims = np.split(self.bc.xyz2i(xyz)[:, self.xyz2dims], [1, 2], axis=-1)
-        inds = np.ravel_multi_index(idims, self.bc.nxyz[self.xyz2dims])
-        return inds.squeeze()
+        return self._lookup_inds(self.bc.xyz2i(xyz))
 
     def get_labels(self, xyz):
         """
@@ -362,7 +365,7 @@ class BrainAtlas:
         """
         cslice = self.slice(ap_coordinate, axis=1, volume=volume)
         extent = np.r_[self.bc.xlim, np.flip(self.bc.zlim)] * 1e6
-        return self._plot_slice(np.swapaxes(cslice, 0, 1), extent=extent, **kwargs)
+        return self._plot_slice(cslice, extent=extent, **kwargs)
 
     def plot_hslice(self, dv_coordinate, volume='image', **kwargs):
         """
@@ -385,6 +388,17 @@ class BrainAtlas:
         sslice = self.slice(ml_coordinate, axis=0, volume=volume)
         extent = np.r_[self.bc.ylim, np.flip(self.bc.zlim)] * 1e6
         return self._plot_slice(np.swapaxes(sslice, 0, 1), extent=extent, **kwargs)
+
+    def plot_top(self, ax=None):
+        ix, iy = np.meshgrid(np.arange(self.bc.nx), np.arange(self.bc.ny))
+        iz = self.bc.z2i(self.top)
+        inds = self._lookup_inds(np.stack((ix, iy, iz), axis=-1))
+        if not ax:
+            ax = plt.gca()
+            ax.axis('equal')
+        ax.imshow(self._label2rgb(self.label.flat[inds]),
+                  extent=np.r_[self.bc.xlim, np.flip(self.bc.ylim)] * 1e6, origin='upper')
+        return ax
 
 
 @dataclass
@@ -672,33 +686,22 @@ class AllenAtlas(BrainAtlas):
         FLAT_IRON_ATLAS_REL_PATH = Path('histology', 'ATLAS', 'Needles', 'Allen')
         if mock:
             image, label = [np.zeros((528, 456, 320), dtype=np.bool) for _ in range(2)]
-        elif hist_path:
-            path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
-            file_label = path_atlas.joinpath(f'annotation_{res_um}.nrrd')
-            if not file_label.exists():
-                _download_atlas_flatiron(file_label, FLAT_IRON_ATLAS_REL_PATH, par)
-            image, _ = nrrd.read(hist_path, index_order='C')  # dv, ml, ap
-            label, _ = nrrd.read(file_label, index_order='C')  # dv, ml, ap
-            label = np.swapaxes(np.swapaxes(label, 2, 0), 1, 2)  # label[iap, iml, idv]
-            image = np.swapaxes(np.swapaxes(image, 2, 0), 1, 2)  # image[iap, iml, idv]
-            # Make sure histology image has the same dimensions as CCF
-            assert (image.shape == label.shape)
         else:
             path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
-            file_image = path_atlas.joinpath(f'average_template_{res_um}.nrrd')
+            file_image = hist_path or path_atlas.joinpath(f'average_template_{res_um}.nrrd')
             file_label = path_atlas.joinpath(f'annotation_{res_um}.nrrd')
             if not file_image.exists():
                 _download_atlas_flatiron(file_image, FLAT_IRON_ATLAS_REL_PATH, par)
             if not file_label.exists():
                 _download_atlas_flatiron(file_label, FLAT_IRON_ATLAS_REL_PATH, par)
-            image, _ = nrrd.read(file_image, index_order='C')  # dv, ml, ap
-            label, _ = nrrd.read(file_label, index_order='C')  # dv, ml, ap
-            label = np.swapaxes(np.swapaxes(label, 2, 0), 1, 2)  # label[iap, iml, idv]
-            image = np.swapaxes(np.swapaxes(image, 2, 0), 1, 2)  # image[iap, iml, idv]
-        # resulting volumes origin: x right, y front, z top
+            image, _ = nrrd.read(file_image, index_order='C')  # ml, dv, ap
+            label, _ = nrrd.read(file_label, index_order='C')  # ml, dv, ap
+            # we want the coronal slice to be the most contiguous
+            label = np.transpose(label, (1, 2, 0))  # label[idv, iap, iml]
+            image = np.transpose(image, (1, 2, 0))  # label[idv, iap, iml]
         regions = regions_from_allen_csv(FILE_REGIONS)
-        xyz2dims = np.array([1, 0, 2])
-        dims2xyz = np.array([1, 0, 2])
+        xyz2dims = np.array([2, 1, 0])  # this is the c-contiguous ordering
+        dims2xyz = np.array([2, 1, 0])
         dxyz = res_um * 1e-6 * np.array([1, -1, -1]) * scaling
         # we use Bregma as the origin
         ibregma = (ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / res_um)
@@ -706,14 +709,38 @@ class AllenAtlas(BrainAtlas):
         super().__init__(image, label, dxyz, regions, ibregma,
                          dims2xyz=dims2xyz, xyz2dims=xyz2dims)
 
-    def xyz2ccf(self, xyz):
+    def xyz2ccf(self, xyz, ccf_order='mlapdv'):
         """
         Converts coordinates to the CCF coordinates, which is assumed to be the cube indices
-        times the spacing so far.
-        :param xyz:
-        :return: mlapdv coordinates in um, origin is the front left top corner of the data volume
+        times the spacing.
+        :param xyz: mlapdv coordinates in um, origin Bregma
+        :param ccf_order: 'mlapdv' (ibl) or 'apdvml' (Allen mcc vertices)
+        :return: coordinates in um (mlapdv by default), origin is the front left top corner
+         of the data volume
         """
-        return self.bc.xyz2i(xyz) * np.float(self.res_um)
+        ordre = self._ccf_order(ccf_order)
+        ccf = self.bc.xyz2i(xyz, round=False) * np.float(self.res_um)
+        return ccf[..., ordre]
+
+    def ccf2xyz(self, ccf, ccf_order='mlapdv'):
+        """
+        Converts coordinates from the CCF coordinates, which is assumed to be the cube indices
+        times the spacing.
+        :param mlapdv coordinates in um, origin is the front left top corner of the data volume
+        :param ccf_order: 'mlapdv' (ibl) or 'apdvml' (Allen mcc vertices)
+        :return: xyz: mlapdv coordinates in um, origin Bregma
+        """
+        ordre = self._ccf_order(ccf_order)
+        return self.bc.i2xyz((ccf[..., ordre] / np.float(self.res_um)))
+
+    @staticmethod
+    def _ccf_order(ccf_order):
+        if ccf_order == 'mlapdv':
+            return [0, 1, 2]
+        elif ccf_order == 'apdvml':
+            return [2, 0, 1]
+        else:
+            ValueError("ccf_order needs to be either 'mlapdv' or 'apdvml'")
 
 
 def NeedlesAtlas(*args, **kwargs):
