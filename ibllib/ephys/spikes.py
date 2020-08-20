@@ -151,7 +151,7 @@ def sync_spike_sortings(session_path):
             shutil.rmtree(probe_out_path)
             continue
         # converts the folder to ALF
-        ks2_to_alf(bin_data_dir, probe_out_path, bin_file=ef.ap,
+        ks2_to_alf(ks2_dir, bin_data_dir, probe_out_path, bin_file=ef.ap,
                    ampfactor=_sample2v(ef.ap), label=None, force=True)
         # patch the spikes.times files manually
         st_file = session_path.joinpath(probe_out_path, 'spikes.times.npy')
@@ -165,14 +165,15 @@ def sync_spike_sortings(session_path):
     return out_files
 
 
-def ks2_to_alf(ks_path, out_path, bin_file=None, ampfactor=1, label=None, force=True):
+def ks2_to_alf(ks_path, bin_path, out_path, bin_file=None, ampfactor=1, label=None, force=True):
     """
     Convert Kilosort 2 output to ALF dataset for single probe data
     :param ks_path:
+    :param bin_path: path of raw data
     :param out_path:
     :return:
     """
-    m = ephysqc.phy_model_from_ks2_path(ks2_path=ks_path, bin_file=bin_file)
+    m = ephysqc.phy_model_from_ks2_path(ks2_path=ks_path, bin_path=bin_path, bin_file=bin_file)
     ephysqc.unit_metrics_ks2(ks_path, m, save=True)
     ac = alf.EphysAlfCreator(m)
     ac.convert(out_path, label=label, force=force, ampfactor=ampfactor)

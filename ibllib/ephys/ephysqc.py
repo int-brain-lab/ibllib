@@ -258,10 +258,10 @@ def unit_metrics_ks2(ks2_path=None, m=None, save=True):
     return r
 
 
-def phy_model_from_ks2_path(ks2_path, bin_file=None):
+def phy_model_from_ks2_path(ks2_path, bin_path, bin_file=None):
     if not bin_file:
-        bin_file = next(ks2_path.rglob('*.ap.*bin'), None)
-    meta_file = next(ks2_path.rglob('*.ap.meta'), None)
+        bin_file = next(bin_path.rglob('*.ap.*bin'), None)
+    meta_file = next(bin_path.rglob('*.ap.meta'), None)
     if meta_file and meta_file.exists():
         meta = spikeglx.read_meta_data(meta_file)
         fs = spikeglx._get_fs_from_meta(meta)
