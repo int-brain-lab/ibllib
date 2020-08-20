@@ -85,7 +85,7 @@ class BrainCoordinates:
     def _round(i, round=True):
         nanval = 0
         if round:
-            ii = np.round(i).astype(np.int)
+            ii = np.array(np.round(i)).astype(np.int)
             ii[np.isnan(i)] = nanval
             return ii
         else:
@@ -568,6 +568,7 @@ class Insertion:
         Given a Trajectory and a BrainAtlas object, computes the intersection of the trajectory
         and a surface (usually brain_atlas.top)
         :param brain_atlas:
+        :param surface: np.array 2d, shape [ny, nx]
         :param z: init position for the lookup
         :return: 3 element array x,y,z
         """
@@ -685,7 +686,7 @@ class AllenAtlas(BrainAtlas):
         par = params.read('one_params')
         FLAT_IRON_ATLAS_REL_PATH = Path('histology', 'ATLAS', 'Needles', 'Allen')
         if mock:
-            image, label = [np.zeros((528, 456, 320), dtype=np.bool) for _ in range(2)]
+            image, label = [np.zeros((320, 528, 456), dtype=np.bool) for _ in range(2)]
         else:
             path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
             file_image = hist_path or path_atlas.joinpath(f'average_template_{res_um}.nrrd')
