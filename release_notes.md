@@ -1,3 +1,9 @@
+### Release Notes 1.5.X atlas
+-   ibllib.atlas.AllenAtlas
+    -   alternative to pynrrd for caching the atlas on disk to avoid Windows bugs
+    -   re-ordered the volumes in c-order contiguous ml-ap-dv efficient coronal shapes
+    -   top/bottom surface extraction
+
 ### Release Notes 1.5.8 Hotfix
 -   Ephys extraction SyncSpikeSorting: specify different dir for ks2 ouput and raw ephys data
 
