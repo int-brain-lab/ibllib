@@ -454,6 +454,17 @@ class Trajectory:
         return (self.point + np.dot(point - self.point, self.vector) /
                 np.dot(self.vector, self.vector) * self.vector)
 
+    def mindist(self, xyz):
+        """
+        Computes the minimum distance to the trajectory line for one or a set of points
+        :param xyz: [..., 3]
+        :return: minimum distance [...]
+        """
+        # https://mathworld.wolfram.com/Point-LineDistance3-Dimensional.html
+        uv = np.sqrt(np.sum(self.vector ** 2))
+        return np.sqrt(np.sum((np.cross(xyz - (
+            self.point), xyz - (self.point + self.vector)) / uv) ** 2, axis=-1))
+
     def _eval(self, c, axis):
         # uses symmetric form of 3d line equation to get xyz coordinates given one coordinate
         if not isinstance(c, np.ndarray):

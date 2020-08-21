@@ -93,6 +93,11 @@ class TestInsertion(unittest.TestCase):
 
 class TestTrajectory(unittest.TestCase):
 
+    def test_project_mindist(self):
+        traj = Trajectory.fit(np.array([[0.3, 0.3, 0.4], [0, 0, 1]]))
+        min_dist = np.sqrt(np.sum(traj.project(np.array([0, 0, 0])) ** 2))
+        assert np.isclose(min_dist, traj.mindist(np.array([0, 0, 0])))
+
     def test_eval_trajectory(self):
         line = Trajectory.fit(np.array([[0.3, 0.3, 0.4], [0, 0, 1]]))
         # test integer
