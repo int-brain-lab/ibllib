@@ -280,7 +280,9 @@ class BrainAtlas:
         _, INDS = np.meshgrid(indx, np.int64(np.around(inds)))
         INDX, INDY = np.meshgrid(indx, indy)
         indsl = [[INDX, INDY, INDS][i] for i in np.argsort([wdim, hdim, ddim])[self.xyz2dims]]
-        if volume.lower() == 'annotation':
+        if isinstance(volume, np.ndarray):
+            tslice = volume[indsl[0], indsl[1], indsl[2]]
+        elif volume.lower() == 'annotation':
             tslice = self._label2rgb(self.label[indsl[0], indsl[1], indsl[2]])
         elif volume.lower() == 'image':
             tslice = self.image[indsl[0], indsl[1], indsl[2]]
@@ -355,6 +357,8 @@ class BrainAtlas:
             return self._label2rgb(im)
         elif volume == 'image':
             return self.image.take(index, axis=self.xyz2dims[axis])
+        elif isinstance(volume, np.ndarray):
+            return volume.take(index, axis=self.xyz2dims[axis])
 
     def plot_cslice(self, ap_coordinate, volume='image', **kwargs):
         """
@@ -451,19 +455,32 @@ class Trajectory:
         :param point: np.array(x, y, z) coordinates
         :return:
         """
-        return (self.point + np.dot(point - self.point, self.vector) /
+        # https://mathworld.wolfram.com/Point-LineDistance3-Dimensional.html
+        return (self.point + np.dot(point[:, np.newaxis] - self.point, self.vector) /
                 np.dot(self.vector, self.vector) * self.vector)
 
-    def mindist(self, xyz):
+    def mindist(self, xyz, bounds=None):
         """
-        Computes the minimum distance to the trajectory line for one or a set of points
+        Computes the minimum distance to the trajectory line for one or a set of points.
+        If bounds are provided, computes the minimum distance to the segment instead of an
+        infinite line.
         :param xyz: [..., 3]
+        :param bounds: defaults to None.  np.array [2, 3]: segment boundaries, inf line if None
         :return: minimum distance [...]
         """
-        # https://mathworld.wolfram.com/Point-LineDistance3-Dimensional.html
-        uv = np.sqrt(np.sum(self.vector ** 2))
-        return np.sqrt(np.sum((np.cross(xyz - (
-            self.point), xyz - (self.point + self.vector)) / uv) ** 2, axis=-1))
+        proj = self.project(xyz)
+        d = np.sqrt(np.sum((proj - xyz) ** 2, axis=-1))
+        if bounds is not None:
+            # project the boundaries and the points along the traj
+            b = np.dot(bounds, self.vector)
+            ob = np.argsort(b)
+            p = np.dot(xyz[:, np.newaxis], self.vector).squeeze()
+            # for points below and above boundaries, compute cartesian distance to the boundary
+            imin = p < np.min(b)
+            d[imin] = np.sqrt(np.sum((xyz[imin, :] - bounds[ob[0], :]) ** 2, axis=-1))
+            imax = p > np.max(b)
+            d[imax] = np.sqrt(np.sum((xyz[imax, :] - bounds[ob[1], :]) ** 2, axis=-1))
+        return d
 
     def _eval(self, c, axis):
         # uses symmetric form of 3d line equation to get xyz coordinates given one coordinate

@@ -94,9 +94,21 @@ class TestInsertion(unittest.TestCase):
 class TestTrajectory(unittest.TestCase):
 
     def test_project_mindist(self):
+        # test min dist
         traj = Trajectory.fit(np.array([[0.3, 0.3, 0.4], [0, 0, 1]]))
         min_dist = np.sqrt(np.sum(traj.project(np.array([0, 0, 0])) ** 2))
         assert np.isclose(min_dist, traj.mindist(np.array([0, 0, 0])))
+
+        # test projection, single point and vectorized
+        point = np.array([0, 0, 0])
+        proj = traj.project(point)
+        assert np.all(np.isclose(proj, 1 / 3)) and np.all(proj.shape == point.shape)
+
+        point = np.array([[0, 0, 0], [0, 0, 0]])
+        proj = traj.project(point)
+        assert np.all(np.isclose(proj, 1 / 3)) and np.all(proj.shape == point.shape)
+
+        ##
 
     def test_eval_trajectory(self):
         line = Trajectory.fit(np.array([[0.3, 0.3, 0.4], [0, 0, 1]]))

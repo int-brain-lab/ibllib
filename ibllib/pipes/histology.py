@@ -9,6 +9,8 @@ from oneibl.one import ONE
 import alf.io
 import ibllib.atlas as atlas
 from ibllib.ephys.spikes import probes_description as extract_probes
+from ibllib.dsp.utils import fcn_cosine
+from ibllib.ephys.neuropixel import TIP_SIZE_UM
 
 
 _logger = logging.getLogger('ibllib')
@@ -95,20 +97,6 @@ def get_micro_manipulator_data(subject, one=None, force_extract=False):
         probe['session'] = [ses] * len(probe.description)
         probes = probes.append(probe)
     return probes
-
-
-def plot_merged_result(probes, tracks, index=None):
-    pass
-    # fig, ax = plt.subplots(1, 2)
-    # # plot the atlas image
-    # brain_atlas.plot_cslice(np.mean(xyz[:, 1]) * 1e3, ax=ax[0])
-    # brain_atlas.plot_sslice(np.mean(xyz[:, 0]) * 1e3, ax=ax[1])
-    # # plot the full tracks
-    # ax[0].plot(xyz[:, 0] * 1e3, xyz[:, 2] * 1e3)
-    # ax[1].plot(xyz[:, 1] * 1e3, xyz[:, 2] * 1e3)
-    # # plot the sites
-    # ax[0].plot(xyz_channels[:, 0] * 1e3, xyz_channels[:, 2] * 1e3, 'y*')
-    # ax[1].plot(xyz_channels[:, 1] * 1e3, xyz_channels[:, 2] * 1e3, 'y*')
 
 
 def plot2d_all(trajectories, tracks):
@@ -403,3 +391,74 @@ def register_track_files(path_tracks, one=None, overwrite=False):
             _logger.error(str(track_file))
             raise e
         _logger.info(f"{ind + 1}/{ntracks}, {str(track_file)}")
+
+
+def coverage(trajs, ba=None):
+    """
+    Computes a coverage volume from
+    :param trajs: dictionary of trajectories from Alyx rest endpoint (one.alyx.rest...)
+    :param ba: ibllib.atlas.BrainAtlas instance
+    :return: 3D np.array the same size as the volume provided in the brain atlas
+    """
+    # in um. Coverage = 1 below the first value, 0 after the second, cosine taper in between
+    DIST_FCN = [100, 150]
+    ACTIVE_LENGTH_UM = 3.5 * 1e3
+    MAX_DIST_UM = DIST_FCN[1]  # max distance around the probe to be searched for
+    if ba is None:
+        ba = atlas.AllenAtlas()
+
+    def crawl_up_from_tip(ins, d):
+        return (ins.entry - ins.tip) * (d[:, np.newaxis] /
+                                        np.linalg.norm(ins.entry - ins.tip)) + ins.tip
+
+    full_coverage = np.zeros(ba.image.shape, dtype=np.float32).flatten()
+
+    for p in np.arange(len(trajs)):
+        if p % 20 == 0:
+            print(p / len(trajs))
+        traj = trajs[p]
+
+        ins = atlas.Insertion.from_dict(traj)
+        # those are the top and bottom coordinates of the active part of the shank extended
+        # to maxdist
+        d = (np.array([ACTIVE_LENGTH_UM + MAX_DIST_UM * np.sqrt(2),
+                       -MAX_DIST_UM * np.sqrt(2)]) + TIP_SIZE_UM)
+        top_bottom = crawl_up_from_tip(ins, d / 1e6)
+        # this is the axis that has the biggest deviation. Almost always z
+        axis = np.argmax(np.abs(np.diff(top_bottom, axis=0)))
+        if axis != 2:
+            raise NotImplementedError("This works only for 45 degree or vertical tracks so far")
+        # sample the active track path along this axis
+        tbi = ba.bc.xyz2i(top_bottom)
+        nz = tbi[1, axis] - tbi[0, axis] + 1
+        ishank = np.round(np.array(
+            [np.linspace(tbi[0, i], tbi[1, i], nz) for i in np.arange(3)]).T).astype(np.int32)
+
+        # creates a flattened "column" of candidate volume indices around the track
+        # around each sample get an horizontal square slice of nx *2 +1 and ny *2 +1 samples
+        # flatten the corresponding xyz indices and  compute the min distance to the track only
+        # for those
+        nx = int(np.floor(MAX_DIST_UM / 1e6 / np.abs(ba.bc.dxyz[0]) * np.sqrt(2) / 2)) * 2 + 1
+        ny = int(np.floor(MAX_DIST_UM / 1e6 / np.abs(ba.bc.dxyz[1]) * np.sqrt(2) / 2)) * 2 + 1
+        ixyz = np.stack([v.flatten() for v in np.meshgrid(
+            np.arange(-nx, nx + 1), np.arange(-ny, ny + 1), np.arange(nz))]).T
+        ixyz[:, 0] = ishank[ixyz[:, 2], 0] + ixyz[:, 0]
+        ixyz[:, 1] = ishank[ixyz[:, 2], 1] + ixyz[:, 1]
+        ixyz[:, 2] = ishank[ixyz[:, 2], 2]
+        # if any, remove indices that lie outside of the volume bounds
+        iok = np.logical_and(0 <= ixyz[:, 0], ixyz[:, 0] < ba.bc.nx)
+        iok &= np.logical_and(0 <= ixyz[:, 1], ixyz[:, 1] < ba.bc.ny)
+        iok &= np.logical_and(0 <= ixyz[:, 2], ixyz[:, 2] < ba.bc.nz)
+        ixyz = ixyz[iok, :]
+        # get the minimum distance to the trajectory, to which is applied the cosine taper
+        xyz = np.c_[ba.bc.xscale[ixyz[:, 0]], ba.bc.yscale[ixyz[:, 1]], ba.bc.zscale[ixyz[:, 2]]]
+        sites_bounds = crawl_up_from_tip(
+            ins, (np.array([ACTIVE_LENGTH_UM, 0]) + TIP_SIZE_UM) / 1e6)
+        mdist = ins.trajectory.mindist(xyz, bounds=sites_bounds)
+        coverage = 1 - fcn_cosine(np.array(DIST_FCN) / 1e6)(mdist)
+        # remap to the coverage volume
+        full_coverage[ba._lookup_inds(ixyz)] += coverage
+
+    full_coverage = full_coverage.reshape(ba.image.shape)
+    full_coverage[ba.label == 0] = np.nan
+    return full_coverage
