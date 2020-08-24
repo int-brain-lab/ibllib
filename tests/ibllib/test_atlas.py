@@ -100,15 +100,10 @@ class TestTrajectory(unittest.TestCase):
         assert np.isclose(min_dist, traj.mindist(np.array([0, 0, 0])))
 
         # test projection, single point and vectorized
-        point = np.array([0, 0, 0])
-        proj = traj.project(point)
-        assert np.all(np.isclose(proj, 1 / 3)) and np.all(proj.shape == point.shape)
-
-        point = np.array([[0, 0, 0], [0, 0, 0]])
-        proj = traj.project(point)
-        assert np.all(np.isclose(proj, 1 / 3)) and np.all(proj.shape == point.shape)
-
-        ##
+        point = np.array([0.06656238, 0.47127062, 0.17440139])
+        expected = [0.36483837, 0.36483837, 0.27032326]
+        assert np.all(np.isclose(traj.project(point), expected))
+        assert np.all(np.isclose(traj.project(np.tile(point, (2, 1))), np.tile(expected, (2, 1))))
 
     def test_eval_trajectory(self):
         line = Trajectory.fit(np.array([[0.3, 0.3, 0.4], [0, 0, 1]]))

@@ -352,13 +352,13 @@ class BrainAtlas:
         :return: 2d array or 3d RGB numpy int8 array
         """
         index = self.bc.xyz2i(np.array([coordinate] * 3))[axis]
-        if volume == 'annotation':
+        if isinstance(volume, np.ndarray):
+            return volume.take(index, axis=self.xyz2dims[axis])
+        elif volume == 'annotation':
             im = self.label.take(index, axis=self.xyz2dims[axis])
             return self._label2rgb(im)
         elif volume == 'image':
             return self.image.take(index, axis=self.xyz2dims[axis])
-        elif isinstance(volume, np.ndarray):
-            return volume.take(index, axis=self.xyz2dims[axis])
 
     def plot_cslice(self, ap_coordinate, volume='image', **kwargs):
         """
@@ -369,7 +369,7 @@ class BrainAtlas:
         """
         cslice = self.slice(ap_coordinate, axis=1, volume=volume)
         extent = np.r_[self.bc.xlim, np.flip(self.bc.zlim)] * 1e6
-        return self._plot_slice(cslice, extent=extent, **kwargs)
+        return self._plot_slice(cslice.T, extent=extent, **kwargs)
 
     def plot_hslice(self, dv_coordinate, volume='image', **kwargs):
         """
@@ -379,8 +379,8 @@ class BrainAtlas:
         :return: ax
         """
         hslice = self.slice(dv_coordinate, axis=2, volume=volume)
-        extent = np.r_[self.bc.ylim, self.bc.xlim] * 1e6
-        return self._plot_slice(np.swapaxes(hslice, 0, 1), extent=extent, **kwargs)
+        extent = np.r_[self.bc.xlim, self.bc.ylim] * 1e6
+        return self._plot_slice(hslice, extent=extent, **kwargs)
 
     def plot_sslice(self, ml_coordinate, volume='image', **kwargs):
         """
@@ -456,6 +456,8 @@ class Trajectory:
         :return:
         """
         # https://mathworld.wolfram.com/Point-LineDistance3-Dimensional.html
+        if point.ndim == 1:
+            return self.project(point[np.newaxis])[0]
         return (self.point + np.dot(point[:, np.newaxis] - self.point, self.vector) /
                 np.dot(self.vector, self.vector) * self.vector)
 
@@ -714,7 +716,7 @@ class AllenAtlas(BrainAtlas):
         par = params.read('one_params')
         FLAT_IRON_ATLAS_REL_PATH = Path('histology', 'ATLAS', 'Needles', 'Allen')
         if mock:
-            image, label = [np.zeros((320, 528, 456), dtype=np.bool) for _ in range(2)]
+            image, label = [np.zeros((528, 456, 320), dtype=np.bool) for _ in range(2)]
         else:
             path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
             file_image = hist_path or path_atlas.joinpath(f'average_template_{res_um}.nrrd')
@@ -726,11 +728,11 @@ class AllenAtlas(BrainAtlas):
             image, _ = nrrd.read(file_image, index_order='C')  # ml, dv, ap
             label, _ = nrrd.read(file_label, index_order='C')  # ml, dv, ap
             # we want the coronal slice to be the most contiguous
-            label = np.transpose(label, (1, 2, 0))  # label[idv, iap, iml]
-            image = np.transpose(image, (1, 2, 0))  # label[idv, iap, iml]
+            label = np.transpose(label, (2, 0, 1))  # label[iap, iml, idv]
+            image = np.transpose(image, (2, 0, 1))  # image[iap, iml, idv]
         regions = regions_from_allen_csv(FILE_REGIONS)
-        xyz2dims = np.array([2, 1, 0])  # this is the c-contiguous ordering
-        dims2xyz = np.array([2, 1, 0])
+        xyz2dims = np.array([1, 0, 2])  # this is the c-contiguous ordering
+        dims2xyz = np.array([1, 0, 2])
         dxyz = res_um * 1e-6 * np.array([1, -1, -1]) * scaling
         # we use Bregma as the origin
         ibregma = (ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / res_um)
