@@ -427,7 +427,9 @@ def coverage(trajs, ba=None):
         # this is the axis that has the biggest deviation. Almost always z
         axis = np.argmax(np.abs(np.diff(top_bottom, axis=0)))
         if axis != 2:
-            raise NotImplementedError("This works only for 45 degree or vertical tracks so far")
+            _logger.warning(f"This works only for 45 degree or vertical tracks so far, skipping"
+                            f" {ins}")
+            continue
         # sample the active track path along this axis
         tbi = ba.bc.xyz2i(top_bottom)
         nz = tbi[1, axis] - tbi[0, axis] + 1
