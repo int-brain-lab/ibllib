@@ -1,5 +1,7 @@
 import numpy as np
 
+TIP_SIZE_UM = 200
+
 SYNC_PIN_OUT = {'3A': {"pin01": 0,
                        "pin02": 1,
                        "pin03": 2,
