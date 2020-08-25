@@ -379,7 +379,7 @@ class BrainAtlas:
         :return: ax
         """
         hslice = self.slice(dv_coordinate, axis=2, volume=volume)
-        extent = np.r_[self.bc.xlim, self.bc.ylim] * 1e6
+        extent = np.r_[self.bc.xlim, np.flip(self.bc.ylim)] * 1e6
         return self._plot_slice(hslice, extent=extent, **kwargs)
 
     def plot_sslice(self, ml_coordinate, volume='image', **kwargs):
