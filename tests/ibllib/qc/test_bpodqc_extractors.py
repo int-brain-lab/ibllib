@@ -38,13 +38,13 @@ class TestBpodQCExtractors(unittest.TestCase):
         # Wrong path
         with self.assertRaises(TypeError):
             BpodQCExtractor('/random/path')
-        # Should load raw_data, details, BNC1, BNC2 and wheel_data not trial_data
+        # Should load raw_data, settings, BNC1, BNC2 and wheel_data not trial_data
         self.extractor = BpodQCExtractor(self.session_path, lazy=True)
         with self.assertRaises(AttributeError):
             self.extractor.trial_data
         self.assertTrue(np.all(np.isnan(self.extractor.BNC1['times'])))
         self.assertTrue(all(np.isnan(self.extractor.BNC2['times'])))
-        self.assertTrue(self.extractor.details is not None)
+        self.assertTrue(self.extractor.settings is not None)
         self.assertTrue(self.extractor.raw_data is not None)
         self.assertTrue(isinstance(self.extractor.wheel_data, dict))
 

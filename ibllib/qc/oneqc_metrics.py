@@ -77,7 +77,7 @@ class ONEQC(base.QC):
         NB: Makes sense for dstypes that should have one value per trial and where nans
         are informative of failures
         Other dstypes will have nans because of the contingency of the trial,
-        e.g. if contralstLeft has a nan it means the contrast was on the right.
+        e.g. if contrastLeft has a nan it means the contrast was on the right.
         """
         name = dstype_name.replace("trials.", "")
         # Add namespace and termination strings

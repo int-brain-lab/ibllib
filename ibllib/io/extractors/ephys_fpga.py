@@ -552,7 +552,7 @@ def _get_pregenerated_events(bpod_trials, settings):
         phase = np.load(phase_path)[:ntrials]
 
     return {"position": pos, "contrast": con, "quiescence": qui, "phase": phase,
-            "prob_left": pLeft, 'contrast_right': contrastRight, 'contrast_left': contrastLeft}
+            "probabilityLeft": pLeft, 'contrastRight': contrastRight, 'contrastLeft': contrastLeft}
 
 
 class ProbaContrasts(BaseBpodTrialsExtractor):
@@ -563,12 +563,12 @@ class ProbaContrasts(BaseBpodTrialsExtractor):
                   '_ibl_trials.contrastRight.npy')
     var_names = ('probabilityLeft', 'contrastLeft', 'contrastRight')
 
-    def _extract(self):
+    def _extract(self, **kwargs):
         """Extracts positions, contrasts, quiescent delay, stimulus phase and probability left
         from pregenerated session files.
         Optional: saves alf contrastLR and probabilityLeft npy files"""
         pe = _get_pregenerated_events(self.bpod_trials, self.settings)
-        return pe['prob_left'], pe['contrast_left'], pe['contrast_right']
+        return pe['probabilityLeft'], pe['contrastLeft'], pe['contrastRight']
 
 
 class CameraTimestamps(BaseExtractor):
@@ -598,7 +598,7 @@ class FpgaTrials(BaseExtractor):
                  'feedback_times', 'firstMovement_times', 'wheel_timestamps', 'wheel_position',
                  'wheelMoves_intervals', 'wheelMoves_peakAmplitude')
 
-    def _extract(self, sync=None, chmap=None):
+    def _extract(self, sync=None, chmap=None, **kwargs):
         # extracts trials
         # extract the behaviour data from bpod
         if sync is None or chmap is None:

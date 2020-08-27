@@ -364,7 +364,7 @@ class AlyxClient(metaclass=UniqueSingletons):
             alyx.client.rest('subjects', 'create', data=sub_dict)
             alyx.client.rest('subjects', 'read', id='nickname')
             alyx.client.rest('subjects', 'update', id='nickname', data=sub_dict)
-            alyx.client.rest('subjects', 'partial_update', id='nickname', data=sub_ict)
+            alyx.client.rest('subjects', 'partial_update', id='nickname', data=sub_dict)
             alyx.client.rest('subjects', 'delete', id='nickname')
 
         :param url: endpoint name
