@@ -4,14 +4,12 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-from ibllib.qc.bpodqc_metrics import BpodQC
+from ibllib.qc.task_metrics import TaskQC
 import ibllib.qc.oneutils as oneutils
 from oneibl.one import ONE
 
 
-def boxplot_metrics(
-    df, ax=None, describe=False, title="", xlabel="Seconds (s)", xscale="symlog",
-):
+def boxplot_metrics(df, ax=None, describe=False, title="", xlabel="Seconds (s)", xscale="symlog"):
     if ax is None:
         f, ax = plt.subplots()
 
@@ -51,7 +49,7 @@ if __name__ == "__main__":
     # Load data
     eid, det = oneutils.random_ephys_session()
     # Run QC
-    bpodqc = BpodQC(eid, one=one, ensure_data=True, lazy=False)
+    bpodqc = TaskQC(eid, one=one, download_data=True)
 
     session_name = "/".join(bpodqc.session_path.parts[-3:])
 

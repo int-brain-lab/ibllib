@@ -21,7 +21,7 @@ import logging
 import numpy as np
 
 from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
-from ibllib.qc.bpodqc_extractors import BpodQCExtractor
+from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.io.extractors.training_wheel import WHEEL_RADIUS_CM
 from ibllib.io.extractors.ephys_fpga import WHEEL_TICKS
 from . import base
@@ -29,7 +29,7 @@ from . import base
 log = logging.getLogger('ibllib')
 
 
-class BpodQC(base.QC):
+class TaskQC(base.QC):
     def __init__(self, session_path_or_eid, one=None, download_data=False):
         super().__init__(session_path_or_eid, one, log=log)
 
@@ -45,7 +45,7 @@ class BpodQC(base.QC):
                          "FAIL": 0}
 
     def load_data(self):
-        self.extractor = BpodQCExtractor(
+        self.extractor = TaskQCExtractor(
             self.session_path, one=self.one, ensure_data=self.download_data)
 
     def compute(self):
@@ -110,31 +110,31 @@ def get_bpodqc_metrics_frame(data, wheel_gain, BNC1, BNC2, re_encoding='X1'):
     """Plottable metrics based on timings"""
 
     qcmetrics_frame = {
-        "_bpod_goCue_delays": check_goCue_delays(data),
-        "_bpod_errorCue_delays": check_errorCue_delays(data),
-        "_bpod_stimOn_delays": check_stimOn_delays(data),
-        "_bpod_stimOff_delays": check_stimOff_delays(data),
-        "_bpod_stimFreeze_delays": check_stimFreeze_delays(data),
-        "_bpod_stimOn_goCue_delays": check_stimOn_goCue_delays(data),
-        "_bpod_response_feedback_delays": check_response_feedback_delays(data),
-        "_bpod_response_stimFreeze_delays": check_response_stimFreeze_delays(data),
-        "_bpod_stimOff_itiIn_delays": check_stimOff_itiIn_delays(data),
-        "_bpod_positive_feedback_stimOff_delays": check_positive_feedback_stimOff_delays(data),
-        "_bpod_negative_feedback_stimOff_delays": check_negative_feedback_stimOff_delays(data),
-        "_bpod_valve_pre_trial": check_valve_pre_trial(data),
-        "_bpod_error_trial_event_sequence": check_error_trial_event_sequence(data),
-        "_bpod_correct_trial_event_sequence": check_correct_trial_event_sequence(data),
-        "_bpod_trial_length": check_trial_length(data),
+        "_task_goCue_delays": check_goCue_delays(data),
+        "_task_errorCue_delays": check_errorCue_delays(data),
+        "_task_stimOn_delays": check_stimOn_delays(data),
+        "_task_stimOff_delays": check_stimOff_delays(data),
+        "_task_stimFreeze_delays": check_stimFreeze_delays(data),
+        "_task_stimOn_goCue_delays": check_stimOn_goCue_delays(data),
+        "_task_response_feedback_delays": check_response_feedback_delays(data),
+        "_task_response_stimFreeze_delays": check_response_stimFreeze_delays(data),
+        "_task_stimOff_itiIn_delays": check_stimOff_itiIn_delays(data),
+        "_task_positive_feedback_stimOff_delays": check_positive_feedback_stimOff_delays(data),
+        "_task_negative_feedback_stimOff_delays": check_negative_feedback_stimOff_delays(data),
+        "_task_valve_pre_trial": check_valve_pre_trial(data),
+        "_task_error_trial_event_sequence": check_error_trial_event_sequence(data),
+        "_task_correct_trial_event_sequence": check_correct_trial_event_sequence(data),
+        "_task_trial_length": check_trial_length(data),
         # Wheel trial_data loading
-        "_bpod_wheel_integrity": check_wheel_integrity(data, re_encoding),
-        "_bpod_wheel_freeze_during_quiescence": check_wheel_freeze_during_quiescence(data),
-        "_bpod_wheel_move_before_feedback": check_wheel_move_before_feedback(data),
-        "_bpod_wheel_move_during_closed_loop": check_wheel_move_during_closed_loop(
+        "_task_wheel_integrity": check_wheel_integrity(data, re_encoding),
+        "_task_wheel_freeze_during_quiescence": check_wheel_freeze_during_quiescence(data),
+        "_task_wheel_move_before_feedback": check_wheel_move_before_feedback(data),
+        "_task_wheel_move_during_closed_loop": check_wheel_move_during_closed_loop(
             data, wheel_gain
         ),
         # Bpod fronts loading
-        "_bpod_stimulus_move_before_goCue": check_stimulus_move_before_goCue(data, BNC1=BNC1),
-        "_bpod_audio_pre_trial": check_audio_pre_trial(data, BNC2=BNC2),
+        "_task_stimulus_move_before_goCue": check_stimulus_move_before_goCue(data, BNC1=BNC1),
+        "_task_audio_pre_trial": check_audio_pre_trial(data, BNC2=BNC2),
     }
     # Split metrics and passed frames
     metrics = {}
@@ -161,10 +161,11 @@ def check_stimOn_goCue_delays(data):
 
 
 def check_response_feedback_delays(data):
-    """ response_time and feedback_time
+    """ Checks that the delay between response_times and feedback_times is less than 10ms
     Variable name: response_feedback_delays
     Metric: Feedback_time - response_time
     Criterion: 0 < M < 10 ms for 99% of trials
+    Units: seconds
     """
     metric = data["feedback_times"] - data["response_times"]
     nans = np.isnan(metric)
@@ -384,7 +385,7 @@ def check_valve_pre_trial(data):
 
 # Sequence of events:
 def check_error_trial_event_sequence(data):
-    """ on incorrect / miss trials : 2 audio events, 2 Bpod events (trial start, ITI)
+    """ On incorrect / miss trials : 2 audio events, 2 Bpod events (trial start, ITI)
     Variable name: error_trial_event_sequence
     Metric: Bpod (trial start) > audio (go cue) > audio (wrong) > Bpod (ITI)
     Criterion: All three boolean comparisons true on 99% of trials

@@ -4,7 +4,7 @@ from collections import OrderedDict
 from ibllib.pipes import tasks
 from ibllib.io import ffmpeg, raw_data_loaders as rawio
 from ibllib.io.extractors import (training_trials, biased_trials, training_wheel, training_audio)
-from ibllib.qc.bpodqc_metrics import BpodQC
+from ibllib.qc.task_metrics import TaskQC
 from oneibl.registration import register_session_raw_data
 
 _logger = logging.getLogger('ibllib')
@@ -28,7 +28,7 @@ class TrainingTrials(tasks.Task):
         Extracts an iblrig training session
         """
         _, _, output_files = extract_training(self.session_path, save=True)
-        BpodQC('path/to/session', log=_logger).run(update=True)
+        TaskQC('path/to/session', log=_logger).run(update=True)
         return output_files
 
 

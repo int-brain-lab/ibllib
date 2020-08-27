@@ -4,8 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
-from ibllib.qc.bpodqc_metrics import BpodQC
-from ibllib.qc import bpodqc_metrics as qcmetrics
+from ibllib.qc.task_metrics import TaskQC
+from ibllib.qc import task_metrics as qcmetrics
 from ibllib.qc.oneutils import download_bpodqc_raw_data
 from oneibl.one import ONE
 from brainbox.behavior.wheel import cm_to_rad
@@ -28,7 +28,7 @@ dstypes = [
 ]
 
 
-class TestBpodQCMetricsObject(unittest.TestCase):
+class TestTaskMetricsObject(unittest.TestCase):
     def setUp(self):
         self.one = one
         self.eid = "b1c968ad-4874-468d-b2e4-5ffa9b9964e9"
@@ -36,13 +36,13 @@ class TestBpodQCMetricsObject(unittest.TestCase):
         self.one.load(self.eid, dataset_types=dstypes, download_only=True)
         self.session_path = self.one.path_from_eid(self.eid)
 
-    def test_BpodQC_lazy(self):
+    def test_TaskQC_lazy(self):
         # Make sure the data exists locally
         self.one.load(self.eid, dataset_types=dstypes, download_only=True)
         # Make from eid
-        bpodqc = BpodQC(self.eid, one=self.one, lazy=True)
+        bpodqc = TaskQC(self.eid, one=self.one)
         # Make from session_path
-        bpodqc = BpodQC(self.session_path, one=self.one, lazy=True)
+        bpodqc = TaskQC(self.session_path, one=self.one, lazy=True)
         # Load data
         bpodqc.load_data()
         self.assertTrue(bpodqc.extractor is not None)
@@ -57,13 +57,11 @@ class TestBpodQCMetricsObject(unittest.TestCase):
         self.assertTrue(bpodqc.passed is not None)
 
     def test_BpodQC(self):
-        # Make sure the data exists locally
-        download_bpodqc_raw_data(self.eid, one=self.one)
-        bpodqc = BpodQC(self.eid, one=self.one, lazy=False)
+        bpodqc = TaskQC(self.eid, one=self.one)
         self.assertTrue(bpodqc is not None)
 
 
-class TestBpodQCMetrics(unittest.TestCase):
+class TestTaskMetrics(unittest.TestCase):
     def setUp(self):
         self.load_fake_bpod_data()
         # random eid will not be used if data is passed

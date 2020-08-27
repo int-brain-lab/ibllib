@@ -14,7 +14,7 @@ from ibllib.io.extractors.ephys_fpga import _get_pregenerated_events, bpod_fpga_
 import ibllib.io.raw_data_loaders as raw
 
 
-class BpodQCExtractor(object):
+class TaskQCExtractor(object):
     def __init__(self, session_path, lazy=False, one=None, ensure_data=True):
         self.session_path = session_path
         self.one = one or ONE()

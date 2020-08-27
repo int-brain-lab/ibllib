@@ -3,7 +3,7 @@ import unittest
 
 import numpy as np
 
-from ibllib.qc.bpodqc_extractors import BpodQCExtractor
+from ibllib.qc.task_extractors import TaskQCExtractor
 from oneibl.one import ONE
 
 one = ONE(
@@ -37,9 +37,9 @@ class TestBpodQCExtractors(unittest.TestCase):
     def _BpodQCExtractor_load_lazy(self):
         # Wrong path
         with self.assertRaises(TypeError):
-            BpodQCExtractor('/random/path')
+            TaskQCExtractor('/random/path')
         # Should load raw_data, settings, BNC1, BNC2 and wheel_data not trial_data
-        self.extractor = BpodQCExtractor(self.session_path, lazy=True)
+        self.extractor = TaskQCExtractor(self.session_path, lazy=True)
         with self.assertRaises(AttributeError):
             self.extractor.trial_data
         self.assertTrue(np.all(np.isnan(self.extractor.BNC1['times'])))
@@ -54,7 +54,7 @@ class TestBpodQCExtractors(unittest.TestCase):
 
     def _BpodQCExtractor_load_extract(self):
         # Test lazy
-        extractor = BpodQCExtractor(self.session_path, lazy=False)
+        extractor = TaskQCExtractor(self.session_path, lazy=False)
         self.assertTrue(extractor is not None)
 
     def test_object(self):
