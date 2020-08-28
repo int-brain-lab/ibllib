@@ -297,12 +297,14 @@ def check_wheel_move_before_feedback(data):
 
 
 def check_wheel_move_during_closed_loop(data, wheel_gain):
-    """ Wheel should move a sufficient amount during the closed-loop period
+    """ Check that the wheel moves by at least 35 degrees during the closed-loop period
+    on trials where a feedback (error sound or valve) is delivered.
     Variable name: wheel_move_during_closed_loop
-    Metric: abs(w_resp - w_t0) - threshold_displacement, where w_resp = position at response
+    Metric: M = abs(w_resp - w_t0) - threshold_displacement, where w_resp = position at response
         time, w_t0 = position at go cue time, threshold_displacement = displacement required to
         move 35 visual degrees
-    Criterion: displacement < 1 visual degree for 99% of non-NoGo trials
+    Criterion: displacement < 1 visual degree
+    Units: degrees
     """
     if wheel_gain is None:
         log.warning("No wheel_gain input in function call, returning None")
@@ -342,15 +344,18 @@ def check_wheel_move_during_closed_loop(data, wheel_gain):
 
 
 def check_positive_feedback_stimOff_delays(data):
-    """ Delay between valve and stim off should be 1s
+    """ Check the time difference between the valve onset and the visual stimulus turning off
+    is around 1 ± 0.150 second.
     Variable name: positive_feedback_stimOff_delays
-    Metric: abs((stimoff_time - feedback_time) - 1s)
-    Criterion: M < 150 ms on 99% of correct trials
+    Metric: M = abs((stimoff_time - feedback_time) - 1s)
+    Criterion: -0.150 < M < 0.150 s
+
     """
     metric = np.abs(data["stimOff_times"] - data["feedback_times"] - 1)
     metric[~data["correct"]] = np.nan
     nans = np.isnan(metric)
     passed = np.zeros_like(metric) * np.nan
+    # TODO > -0.150 implement
     passed[~nans] = (metric[~nans] < 0.15).astype(np.float)
     assert len(data["intervals_0"]) == len(metric) == len(passed)
     return metric, passed
