@@ -157,10 +157,12 @@ def get_bpodqc_metrics_frame(data, wheel_gain, BNC1, BNC2, re_encoding='X1'):
 # SINGLE METRICS
 # ---------------------------------------------------------------------------- #
 def check_stimOn_goCue_delays(data):
-    """ StimOn and GoCue and should be within a 10 ms of each other on 99% of trials
+    """ Checks that the time difference between the onset of the visual stimulus
+    and the onset of the go cue tone is positive and less than 10ms.
     Variable name: stimOn_goCue_delays
-    Metric: stimOn_times - goCue_times
-    Criteria: 0 < M < 10 ms for 99% of trials
+    Metric: M = stimOn_times - goCue_times
+    Criteria: 0 < M < 0.010 s
+    Units: seconds [s]
     """
     metric = data["goCue_times"] - data["stimOn_times"]
     nans = np.isnan(metric)
@@ -171,11 +173,12 @@ def check_stimOn_goCue_delays(data):
 
 
 def check_response_feedback_delays(data):
-    """ Checks that the delay between response_times and feedback_times is less than 10ms
+    """ Checks that the time difference between the response and the feedback onset
+    (error sound or valve) is positive and less than 10ms.
     Variable name: response_feedback_delays
-    Metric: Feedback_time - response_time
-    Criterion: 0 < M < 10 ms for 99% of trials
-    Units: seconds
+    Metric: M = Feedback_time - response_time
+    Criterion: 0 < M < 0.010 s
+    Units: seconds [s]
     """
     metric = data["feedback_times"] - data["response_times"]
     nans = np.isnan(metric)
@@ -186,10 +189,11 @@ def check_response_feedback_delays(data):
 
 
 def check_response_stimFreeze_delays(data):
-    """ Stim freeze and response time
+    """ Checks that the time difference between the visual stimulus freezing and the
+    response is positive and less than 100ms.
     Variable name: response_stimFreeze_delays
-    Metric: stim_freeze - response_time
-    Criterion: 0 < M < 100 ms for 99% of trials
+    Metric: M = stimFreeze_times - response_times
+    Criterion: 0 < M < 0.100 s
     """
     metric = data["stimFreeze_times"] - data["response_times"]
     # Find NaNs (if any of the values are nan operation will be nan)
@@ -205,10 +209,11 @@ def check_response_stimFreeze_delays(data):
 
 
 def check_stimOff_itiIn_delays(data):
-    """ Start of iti_in should be within a very small tolerance of the stim off
+    """ Check that the start of the trial interval is within 10ms of the visual stimulus turning off.
     Variable name: stimOff_itiIn_delays
-    Metric: iti_in - stim_off
-    Criterion: 0 < M < 10 ms for 99% of trials
+    Metric: M = itiIn_times - stimOff_times
+    Criterion: 0 < M < 0.010 s
+    Units: seconds [s]
     """
     metric = data["itiIn_times"] - data["stimOff_times"]
     passed = valid = ~np.isnan(metric)
@@ -221,13 +226,14 @@ def check_stimOff_itiIn_delays(data):
 
 
 def check_wheel_freeze_during_quiescence(data):
-    """ Wheel should not move more than 2 ticks each direction for at least 0.2 + 0.2-0.6
-    amount of time (quiescent period; exact value in bpod['quiescence']) before go cue
+    """ Check that the wheel does not move more than 2 ticks each direction for at least 0.2 + 0.2-0.6
+    amount of time (quiescent period; exact value in bpod['quiescence']) before the go cue tone.
     Variable name: wheel_freeze_during_quiescence
-    Metric: abs(min(W - w_t0), max(W - w_t0)) where W is wheel pos over interval
-    np.max(Metric) to get highest displaceente in any direction
+    Metric: M = abs(min(W - w_t0), max(W - w_t0)) where W is wheel pos over interval
+    Do  np.max(M)  to get the highest displacement in any direction
     interval = [goCueTrigger_time-quiescent_duration,goCueTrigger_time]
-    Criterion: <2 degrees for 99% of trials
+    Criterion: M < 2 degrees
+    Units: degrees
     """
     assert np.all(np.diff(data["wheel_timestamps"]) > 0)
     assert data["quiescence"].size == data["stimOnTrigger_times"].size
@@ -260,10 +266,11 @@ def check_wheel_freeze_during_quiescence(data):
 
 
 def check_wheel_move_before_feedback(data):
-    """ Wheel should move within 100ms of feedback
+    """ Check that the wheel does not move within 100ms of the feedback onset (error sound or valve).
     Variable name: wheel_move_before_feedback
-    Metric: (w_t - 0.05) - (w_t + 0.05) where t = feedback_time
-    Criterion: != 0 for 99% of non-NoGo trials
+    Metric: (w_t - 0.05) - (w_t + 0.05) where t = feedback_times
+    Criterion: M != 0
+    Units: TODO
     """
     # Get tuple of wheel times and positions within 100ms of feedback
     traces = traces_by_trial(
