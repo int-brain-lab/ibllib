@@ -414,12 +414,12 @@ def check_error_trial_event_sequence(data):
     2 audio events (go cue sound and error sound) and 2 Bpod events (ITI)
     TODO : This test does not seem to check for the above?
     And that the sequence of event is as expected:
-    ITI (trial start) > audio (go cue) > audio (error) > ITI (trial end)
-
+    Bpod (trial start) > audio (go cue) > audio (error) > Bpod (ITI)
     Variable name: error_trial_event_sequence
-    Metric: Bpod (trial start) > audio (go cue) > audio (wrong) > Bpod (ITI)
-    Criterion: All three boolean comparisons true on 99% of trials
+    Metric: Bpod (trial start) > audio (go cue) > audio (error) > Bpod (ITI)
+    Criterion: All three boolean comparisons true
     TODO: figure out single metric to use ; output unclear
+    Units: boolean
     """
     a = np.less(
         data["intervals_0"],
@@ -448,12 +448,14 @@ def check_error_trial_event_sequence(data):
 
 
 def check_correct_trial_event_sequence(data):
-    """ On correct trials : 1 audio events, 3 Bpod events (valve open, trial start, ITI)
-    (ITI task version dependent on ephys)
+    """ Check that on correct trials, there are exactly :
+    1 audio events, 3 Bpod events (valve open, trial start, ITI)
+    TODO : This test does not seem to check for the above?
+    TODO explain comment: (ITI task version dependent on ephys)
     Variable name: correct_trial_event_sequence
     Metric: Bpod (trial start) > audio (go cue) > Bpod (valve) > Bpod (ITI)
-    Criterion: All three boolean comparisons true on 99% of trials
-    XXX: figure out single metric to use
+    Criterion: All three boolean comparisons true
+    TODO: figure out single metric to use ; output unclear
     """
     a = np.less(
         data["intervals_0"],
