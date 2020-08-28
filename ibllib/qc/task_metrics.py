@@ -484,10 +484,12 @@ def check_correct_trial_event_sequence(data):
 
 
 def check_trial_length(data):
-    """ Time between goCue and feedback <= 60s
+    """ Check that the time difference between the onset of the go cue sound
+    and the feedback (error sound or valve) is positive and smaller than 60.1 s.
     Variable name: trial_length
-    Metric: (feedback_time - gocue_time)
-    Criteria: M < 60.1 s AND M > 0 s both (true on 99% of trials)
+    Metric: M = feedback_times - goCue_times
+    Criteria: 0 < M < 60.1 s
+    Units: seconds [s]
     """
     metric = data["feedback_times"] - data["goCue_times"]
     nans = np.isnan(metric)
@@ -509,10 +511,12 @@ def check_trial_length(data):
 
 # Trigger response checks
 def check_goCue_delays(data):
-    """ Trigger response difference
+    """ Check that the time difference between the go cue sound being triggered and
+    effectively played is smaller than 1ms.
     Variable name: goCue_delays
     Metric: goCue_times - goCueTrigger_times
-    Criterion: 0 < M <= 1ms for 99% of trials
+    Criterion: 0 < M <= 0.001 s
+    Units: seconds [s]
     """
     metric = data["goCue_times"] - data["goCueTrigger_times"]
     nans = np.isnan(metric)
@@ -523,10 +527,12 @@ def check_goCue_delays(data):
 
 
 def check_errorCue_delays(data):
-    """ Trigger response difference
+    """ Check that the time difference between the error sound being triggered and
+    effectively played is smaller than 1ms.
     Variable name: errorCue_delays
     Metric: errorCue_times - errorCueTrigger_times
-    Criterion: 0 < M <= 1ms for 99% of trials
+    Criterion: 0 < M <= 0.001 s
+    Units: seconds [s]
     """
     metric = data["errorCue_times"] - data["errorCueTrigger_times"]
     nans = np.isnan(metric)
@@ -537,10 +543,12 @@ def check_errorCue_delays(data):
 
 
 def check_stimOn_delays(data):
-    """ Trigger response difference
+    """ Check that the time difference between the visual stimulus onset-command being triggered
+    and the stimulus effectively appearing on the screen is smaller than 150 ms.
     Variable name: stimOn_delays
-    Metric: stimOn_times - stiomOnTrigger_times
-    Criterion: 0 < M < 150ms for 99% of trials
+    Metric: stimOn_times - stimOnTrigger_times
+    Criterion: 0 < M < 0.150 s
+    Units: seconds [s]
     """
     metric = data["stimOn_times"] - data["stimOnTrigger_times"]
     nans = np.isnan(metric)
@@ -551,10 +559,13 @@ def check_stimOn_delays(data):
 
 
 def check_stimOff_delays(data):
-    """ Trigger response difference
+    """ Check that the time difference between the visual stimulus offset-command
+    being triggered and the visual stimulus effectively turning off on the screen
+    is smaller than 150 ms.
     Variable name: stimOff_delays
     Metric: stimOff_times - stimOffTrigger_times
-    Criterion: 0 < M < 150ms for 99% of trials
+    Criterion: 0 < M < 0.150 s
+    Units: seconds [s]
     """
     metric = data["stimOff_times"] - data["stimOffTrigger_times"]
     nans = np.isnan(metric)
@@ -565,10 +576,13 @@ def check_stimOff_delays(data):
 
 
 def check_stimFreeze_delays(data):
-    """ Trigger response difference
+    """ Check that the time difference between the visual stimulus freeze-command
+    being triggered and the visual stimulus effectively freezing on the screen
+    is smaller than 150 ms.
     Variable name: stimFreeze_delays
     Metric: stimFreeze_times - stimFreezeTrigger_times
-    Criterion: 0 < M < 150ms for 99% of trials
+    Criterion: 0 < M < 0.150 s
+    Units: seconds [s]
     """
     metric = data["stimFreeze_times"] - data["stimFreezeTrigger_times"]
     nans = np.isnan(metric)
