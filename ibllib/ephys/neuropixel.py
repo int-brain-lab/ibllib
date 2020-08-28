@@ -1,5 +1,7 @@
 import numpy as np
 
+TIP_SIZE_UM = 200
+
 SYNC_PIN_OUT = {'3A': {"pin01": 0,
                        "pin02": 1,
                        "pin03": 2,
@@ -417,4 +419,13 @@ def rc2xy(row, col):
     "converts the row/col indices from "
     x = col * 16 + 11
     y = (row * 20) + 20
-    return x, y
+    return {'x': x, 'y': y}
+
+
+def dense_layout():
+    """Dictionary containing local coordinates of a Neuropixel 3 dense layout"""
+    ch = {'ind': np.arange(384),
+          'col': np.tile(np.array([2, 0, 3, 1]), int(384 / 4)),
+          'row': np.floor(np.arange(384) / 2)}
+    ch.update(rc2xy(ch['row'], ch['col']))
+    return ch

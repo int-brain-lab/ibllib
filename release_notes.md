@@ -1,3 +1,21 @@
+### Release Notes 1.5.X atlas
+-   ibllib.atlas.AllenAtlas
+    -   alternative to pynrrd for caching the atlas on disk to avoid Windows bugs
+    -   re-ordered the volumes in c-order contiguous ml-ap-dv efficient coronal shapes
+    -   top/bottom surface extraction
+
+### Release Notes 1.5.8 Hotfix
+-   Ephys extraction SyncSpikeSorting: specify different dir for ks2 ouput and raw ephys data
+
+### Release Notes 1.5.7 Hotfix
+-   Ephys extraction ks2: mkdir for scratch more robust
+
+### Release Notes 1.5.6
+Ephys extraction bugfixes:
+-   RawEphysQC: No object "ephysTimeRmsAP" found 
+-   EphysMtsComp,RawEphysQC, EphysPulses : ValueError: mmap length is greater than file size
+-   Ks2: ks2 job cleans-up temp dir
+
 ### Release Notes 1.5.5
 -   ONE offline mode and cache dataset table to speed up reloading of large datasets (Olivier)
 -   ALF io naming conventions on loading objects (Miles)

@@ -699,8 +699,8 @@ class CameraTimestamps(BaseBpodTrialsExtractor):
             n_frames += pin.size
 
         if n_out_of_sync > 0:
-            _logger.warning(f"{n_out_of_sync} trials with frame times not within 10% of the"
-                            f" expected sampling rate")
+            _logger.warning(f"{n_out_of_sync} trials with bpod camera frame times not within"
+                            f" 10% of the expected sampling rate")
 
         t_first_frame = np.array([c[0] for c in cam_times])
         t_last_frame = np.array([c[-1] for c in cam_times])

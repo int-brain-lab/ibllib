@@ -110,12 +110,14 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
             assert(scratch_drive.exists())
 
             # clean up and create directory, this also checks write permissions
-            # scratch dir has the following shape: ZM_3003_2020-07-29_001_probe00
+            # scratch dir has the following shape: ks2m/ZM_3003_2020-07-29_001_probe00
+            # first makes sure the tmp dir is clean
+            shutil.rmtree(scratch_drive.joinpath('ks2m'), ignore_errors=True)
             scratch_dir = scratch_drive.joinpath(
-                '_'.join(list(self.session_path.parts[-3:]) + [label]))
+                'ks2m', '_'.join(list(self.session_path.parts[-3:]) + [label]))
             if scratch_dir.exists():
                 shutil.rmtree(scratch_dir, ignore_errors=True)
-            scratch_dir.mkdir()
+            scratch_dir.mkdir(parents=True, exist_ok=True)
 
             # decompresses using mtscomp
             tmp_ap_file = scratch_dir.joinpath(ap_file.name).with_suffix('.bin')
