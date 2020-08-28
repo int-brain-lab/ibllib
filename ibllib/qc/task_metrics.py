@@ -344,28 +344,29 @@ def check_wheel_move_during_closed_loop(data, wheel_gain):
 
 
 def check_positive_feedback_stimOff_delays(data):
-    """ Check the time difference between the valve onset and the visual stimulus turning off
-    is around 1 ± 0.150 second.
+    """ Check the the time difference between the valve onset and the visual stimulus turning off
+    is 1 ± 0.150 seconds.
     Variable name: positive_feedback_stimOff_delays
-    Metric: M = abs((stimoff_time - feedback_time) - 1s)
-    Criterion: -0.150 < M < 0.150 s
-
+    Metric: M = abs((stimOff_times - feedback_times) - 1s)
+    Criterion: M < 0.150 s
+    Units: seconds [s] (absolute value TODO Change to get diff value with sign?)
     """
     metric = np.abs(data["stimOff_times"] - data["feedback_times"] - 1)
     metric[~data["correct"]] = np.nan
     nans = np.isnan(metric)
     passed = np.zeros_like(metric) * np.nan
-    # TODO > -0.150 implement
     passed[~nans] = (metric[~nans] < 0.15).astype(np.float)
     assert len(data["intervals_0"]) == len(metric) == len(passed)
     return metric, passed
 
 
 def check_negative_feedback_stimOff_delays(data):
-    """ Delay between noise and stim off should be 2 second
+    """ Check the the time difference between the error sound and the visual stimulus
+    turning off is 2 ± 0.150 seconds.
     Variable name: negative_feedback_stimOff_delays
-    Metric: abs((stimoff_time - feedback_time) - 2s)
-    Criterion: M < 150 ms on 99% of incorrect trials
+    Metric: abs((stimOff_times - errorCue_times) - 2s)
+    Criterion: M < 0.150 s
+    Units: seconds [s] (absolute value TODO Change to get diff value with sign?)
     """
     metric = np.abs(data["stimOff_times"] - data["errorCue_times"] - 2)
     # Find NaNs (if any of the values are nan operation will be nan)
@@ -391,10 +392,12 @@ def check_negative_feedback_stimOff_delays(data):
 
 
 def check_valve_pre_trial(data):
-    """ No valve outputs between trialstart_time and gocue_time-20 ms
+    """ Check that there is no valve onset(s) between the start of the trial and
+    the go cue tone - 20 ms.
     Variable name: valve_pre_trial
-    Metric: Check if valve events exist between trialstart_time and (gocue_time-20ms)
-    Criterion: 0 on 99% of trials
+    Metric: M = number of valve event between trialstart_times and (goCue_times-20ms)
+    Criterion: M = 0
+    Units: -none-, integer
     """
     metric = data["valveOpen_times"]
     nans = np.isnan(metric)
@@ -407,11 +410,16 @@ def check_valve_pre_trial(data):
 
 # Sequence of events:
 def check_error_trial_event_sequence(data):
-    """ On incorrect / miss trials : 2 audio events, 2 Bpod events (trial start, ITI)
+    """ Check that on incorrect / miss trials, there are exactly:
+    2 audio events (go cue sound and error sound) and 2 Bpod events (ITI)
+    TODO : This test does not seem to check for the above?
+    And that the sequence of event is as expected:
+    ITI (trial start) > audio (go cue) > audio (error) > ITI (trial end)
+
     Variable name: error_trial_event_sequence
     Metric: Bpod (trial start) > audio (go cue) > audio (wrong) > Bpod (ITI)
     Criterion: All three boolean comparisons true on 99% of trials
-    XXX: figure out single metric to use
+    TODO: figure out single metric to use ; output unclear
     """
     a = np.less(
         data["intervals_0"],
