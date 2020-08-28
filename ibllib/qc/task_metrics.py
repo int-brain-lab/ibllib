@@ -391,23 +391,6 @@ def check_negative_feedback_stimOff_delays(data):
 #     pass
 
 
-def check_valve_pre_trial(data):
-    """ Check that there is no valve onset(s) between the start of the trial and
-    the go cue tone - 20 ms.
-    Variable name: valve_pre_trial
-    Metric: M = number of valve event between trialstart_times and (goCue_times-20ms)
-    Criterion: M = 0
-    Units: -none-, integer
-    """
-    metric = data["valveOpen_times"]
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
-    # Apply criteria
-    passed[~nans] = ~(metric[~nans] < (data["goCue_times"][~nans] - 0.02))
-    assert len(data["intervals_0"]) == len(metric) == len(passed)
-    return metric, passed
-
-
 # Sequence of events:
 def check_error_trial_event_sequence(data):
     """ Check that on incorrect / miss trials, there are exactly:
@@ -607,11 +590,29 @@ def check_reward_volumes(data):
     return metric, passed
 
 
+def check_valve_pre_trial(data):
+    """ Check that there is no valve onset(s) between the start of the trial and
+    the go cue sound onset - 20 ms.
+    Variable name: valve_pre_trial
+    Metric: M = number of valve event between trialstart_times and (goCue_times-20ms)
+    Criterion: M = 0
+    Units: -none-, integer
+    """
+    metric = data["valveOpen_times"]
+    nans = np.isnan(metric)
+    passed = np.zeros_like(metric) * np.nan
+    # Apply criteria
+    passed[~nans] = ~(metric[~nans] < (data["goCue_times"][~nans] - 0.02))
+    assert len(data["intervals_0"]) == len(metric) == len(passed)
+    return metric, passed
+
+
 def check_stimulus_move_before_goCue(data, BNC1=None):
-    """ No stimulus movements between trialstart_time and gocue_time-20 ms
+    """ Check that there are no visual stimulus change(s) between the start of the trial and the
+    go cue sound onset -20 ms.
     Variable name: stimulus_move_before_goCue
-    Metric: count of any stimulus change events between trialstart_time and (gocue_time-20ms)
-    Criterion: 0 on 99% of trials
+    Metric: M = number of visual stimulus change events between trialstart_time and (goCue_times-20ms)
+    Criterion: M = 0
     """
     if BNC1 is None:
         log.warning("No BNC1 input in function call, returning None")
@@ -629,9 +630,9 @@ def check_stimulus_move_before_goCue(data, BNC1=None):
 
 
 def check_audio_pre_trial(data, BNC2=None):
-    """ No audio outputs between trialstart_time and gocue_time-20 ms
-    Variable name: audio_pre_trial
-    Metric: Check if audio events exist between trialstart_time and (gocue_time-20ms)
+    """ Check that there are no audio outputs between the start of the trial and the
+    go cue sound onset -20 ms.
+    Metric: Check if audio events exist between trialstart_time and (goCue_times-20ms)
     Criterion: 0 on 99% of trials
     """
     if BNC2 is None:
@@ -648,13 +649,15 @@ def check_audio_pre_trial(data, BNC2=None):
 
 def check_wheel_integrity(data, re_encoding='X1', enc_res=None):
     """
+    TODO definition
     Variable name: wheel_integrity
-    Metric: (absolute difference of the positions - encoder resolution) + 1 if difference of
+    Metric: M = (absolute difference of the positions - encoder resolution) + 1 if difference of
     timestamps <= 0
-    Criterion: Close to zero for > 99% of samples
+    TODO define accurately: Criterion: Close to zero for > 99% of samples
     :param data: dict of wheel data with keys ('wheel_timestamps', 'wheel_position')
     :param re_encoding: the encoding of the wheel data, X1, X2 or X4
     :param enc_res: the rotary encoder resolution
+    TODO Units
     """
     if isinstance(re_encoding, str):
         re_encoding = int(re_encoding[-1])
