@@ -16,49 +16,36 @@ one = ONE(
     password="TapetesBloc18",
 )
 
-dstypes = [
-    "_iblrig_taskData.raw",
-    "_iblrig_taskSettings.raw",
-    "_iblrig_encoderPositions.raw",
-    "_iblrig_encoderEvents.raw",
-    "_iblrig_stimPositionScreen.raw",
-    "_iblrig_syncSquareUpdate.raw",
-    "_iblrig_encoderTrialInfo.raw",
-    "_iblrig_ambientSensorData.raw",
-]
-
 
 class TestTaskMetricsObject(unittest.TestCase):
     def setUp(self):
         self.one = one
         self.eid = "b1c968ad-4874-468d-b2e4-5ffa9b9964e9"
         # Make sure the data exists locally
-        self.one.load(self.eid, dataset_types=dstypes, download_only=True)
+        download_bpodqc_raw_data(self.eid, one=one)
         self.session_path = self.one.path_from_eid(self.eid)
 
-    def test_TaskQC_lazy(self):
-        # Make sure the data exists locally
-        self.one.load(self.eid, dataset_types=dstypes, download_only=True)
+    def test_TaskQC_constructor(self):
         # Make from eid
-        bpodqc = TaskQC(self.eid, one=self.one)
+        qc = TaskQC(self.eid, one=self.one)
         # Make from session_path
-        bpodqc = TaskQC(self.session_path, one=self.one, lazy=True)
+        qc = TaskQC(self.session_path, one=self.one)
         # Load data
-        bpodqc.load_data()
-        self.assertTrue(bpodqc.extractor is not None)
-        self.assertTrue(bpodqc.extractor.trial_data is not None)
-        self.assertTrue(bpodqc.wheel_gain is not None)
-        self.assertTrue(bpodqc.bpod_ntrials is not None)
+        qc.load_data()
+        self.assertTrue(qc.extractor is not None)
+        self.assertTrue(qc.extractor.trial_data is not None)
+        self.assertTrue(qc.wheel_gain is not None)
+        self.assertTrue(qc.bpod_ntrials is not None)
         # Compute metrics
-        self.assertTrue(bpodqc.metrics is None)
-        self.assertTrue(bpodqc.passed is None)
-        bpodqc.compute()
-        self.assertTrue(bpodqc.metrics is not None)
-        self.assertTrue(bpodqc.passed is not None)
+        self.assertTrue(qc.metrics is None)
+        self.assertTrue(qc.passed is None)
+        qc.compute()
+        self.assertTrue(qc.metrics is not None)
+        self.assertTrue(qc.passed is not None)
 
     def test_BpodQC(self):
-        bpodqc = TaskQC(self.eid, one=self.one)
-        self.assertTrue(bpodqc is not None)
+        qc = TaskQC(self.eid, one=self.one)
+        self.assertTrue(qc is not None)
 
 
 class TestTaskMetrics(unittest.TestCase):

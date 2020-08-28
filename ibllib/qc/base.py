@@ -80,7 +80,8 @@ class QC:
             r = self.one.alyx.rest('sessions', 'partial_update', id=self.eid, data={'qc': outcome})
             current_status = r['qc'].upper()
             assert current_status == outcome, 'Failed to update session QC'
-        return current_status
+        self.outcome = current_status
+        return self.outcome
 
     def update_extended_qc(self, data):
         """Update the extended_qc field in Alyx

@@ -3,18 +3,28 @@ This module runs a list of quality control metrics on the behaviour data.
 
 Examples:
     # Running on a rig computer and updating QC fields in Alyx:
-    from ibllib.qc.bpodqc_metrics import BpodQC
-    BpodQC('path/to/session').run(update=True)
+    from ibllib.qc.task_metrics import TaskQC
+    TaskQC('path/to/session').run(update=True)
 
     # Downloading the required data and inspecting the QC on a different computer:
-    from ibllib.qc.bpodqc_metrics import BpodQC
-    qc = BpodQC(eid, download_data=True)
+    from ibllib.qc.task_metrics import TaskQC
+    qc = TaskQC(eid, download_data=True)
     outcome, results = qc.run()
 
     # Inspecting individual test outcomes
-    from ibllib.qc.bpodqc_metrics import BpodQC
-    qc = BpodQC(eid, download_data=True)
+    from ibllib.qc.task_metrics import TaskQC
+    qc = TaskQC(eid, download_data=True)
     outcome, results, outcomes = qc.compute().compute_session_status()
+
+    # Running bpod QC on ephys session
+    from ibllib.qc.task_metrics import TaskQC
+    from ibllib.qc.task_extractors import TaskQCExtractor
+    qc = TaskQC(eid, download_data=True)
+    bpod = TaskQCExtractor(eid, lazy=True)
+    bpod.data = bpod.extract_data(bpod_only=True)  # Extract without FPGA
+    qc.extractor = bpod
+    bpod_qc = qc.run()
+
 """
 import logging
 
