@@ -593,10 +593,11 @@ def check_stimFreeze_delays(data):
 
 
 def check_reward_volumes(data):
-    """ Reward volume tests
+    """ TODO review definition - Check that the reward volume is between 1.5 and 3 uL.
+    TODO based on what is coded, is this a test at the session level then ?
     Variable name: rewardVolume
-    Metric: len(set(rewardVolume)) <= 2 & np.all(rewardVolume <= 3)
-    Criterion: 100%
+    TODO review definition - Metric: len(set(rewardVolume)) <= 2 & np.all(rewardVolume <= 3)
+    Criterion: 100% TODO why not doing at trial level?
     """
     metric = data["rewardVolume"]
     val = np.min(np.unique(np.nonzero(metric)))
