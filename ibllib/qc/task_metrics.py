@@ -229,7 +229,7 @@ def check_stimOff_itiIn_delays(data):
 
 
 def check_positive_feedback_stimOff_delays(data):
-    """ Check the the time difference between the valve onset and the visual stimulus turning off
+    """ Check that the time difference between the valve onset and the visual stimulus turning off
     is 1 ± 0.150 seconds.
     Variable name: positive_feedback_stimOff_delays
     Metric: M = abs((stimOff_times - feedback_times) - 1s)
@@ -246,7 +246,7 @@ def check_positive_feedback_stimOff_delays(data):
 
 
 def check_negative_feedback_stimOff_delays(data):
-    """ Check the the time difference between the error sound and the visual stimulus
+    """ Check that the time difference between the error sound and the visual stimulus
     turning off is 2 ± 0.150 seconds.
     Variable name: negative_feedback_stimOff_delays
     Metric: abs((stimOff_times - errorCue_times) - 2s)
