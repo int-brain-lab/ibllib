@@ -156,6 +156,9 @@ def get_bpodqc_metrics_frame(data, wheel_gain, BNC1, BNC2, re_encoding='X1'):
 
 # SINGLE METRICS
 # ---------------------------------------------------------------------------- #
+
+# === Delays between events checks ===
+
 def check_stimOn_goCue_delays(data):
     """ Checks that the time difference between the onset of the visual stimulus
     and the onset of the go cue tone is positive and less than 10ms.
@@ -225,45 +228,44 @@ def check_stimOff_itiIn_delays(data):
     return metric, passed
 
 
-def check_wheel_freeze_during_quiescence(data):
-    """ Check that the wheel does not move more than 2 ticks each direction for at least 0.2 + 0.2-0.6
-    amount of time (quiescent period; exact value in bpod['quiescence']) before the go cue tone.
-    Variable name: wheel_freeze_during_quiescence
-    Metric: M = abs(min(W - w_t0), max(W - w_t0)) where W is wheel pos over interval
-    Do  np.max(M)  to get the highest displacement in any direction
-    interval = [goCueTrigger_time-quiescent_duration,goCueTrigger_time]
-    Criterion: M < 2 degrees
-    Units: degrees
+def check_positive_feedback_stimOff_delays(data):
+    """ Check the the time difference between the valve onset and the visual stimulus turning off
+    is 1 ± 0.150 seconds.
+    Variable name: positive_feedback_stimOff_delays
+    Metric: M = abs((stimOff_times - feedback_times) - 1s)
+    Criterion: M < 0.150 s
+    Units: seconds [s] (absolute value TODO Change to get diff value with sign?)
     """
-    assert np.all(np.diff(data["wheel_timestamps"]) > 0)
-    assert data["quiescence"].size == data["stimOnTrigger_times"].size
-    # Get tuple of wheel times and positions over each trial's quiescence period
-    qevt_start_times = data["stimOnTrigger_times"] - data["quiescence"]
-    traces = traces_by_trial(
-        data["wheel_timestamps"],
-        data["wheel_position"],
-        start=qevt_start_times,
-        end=data["stimOnTrigger_times"]
-    )
-
-    metric = np.zeros((len(data["quiescence"]), 2))  # (n_trials, n_directions)
-    for i, trial in enumerate(traces):
-        t, pos = trial
-        # Get the last position before the period began
-        if pos.size > 0:
-            # Find the position of the preceding sample and subtract it
-            idx = np.abs(data["wheel_timestamps"] - t[0]).argmin() - 1
-            origin = data["wheel_position"][idx if idx != -1 else 0]
-            # Find the absolute min and max relative to the last sample
-            metric[i, :] = np.abs([np.min(pos - origin), np.max(pos - origin)])
-    # Reduce to the largest displacement found in any direction
-    metric = np.max(metric, axis=1)
-    metric = 180 * metric / np.pi  # convert to degrees from radians
-    criterion = 2  # Position shouldn't change more than 2 in either direction
-    passed = (metric < criterion).astype(np.float)
+    metric = np.abs(data["stimOff_times"] - data["feedback_times"] - 1)
+    metric[~data["correct"]] = np.nan
+    nans = np.isnan(metric)
+    passed = np.zeros_like(metric) * np.nan
+    passed[~nans] = (metric[~nans] < 0.15).astype(np.float)
     assert len(data["intervals_0"]) == len(metric) == len(passed)
     return metric, passed
 
+
+def check_negative_feedback_stimOff_delays(data):
+    """ Check the the time difference between the error sound and the visual stimulus
+    turning off is 2 ± 0.150 seconds.
+    Variable name: negative_feedback_stimOff_delays
+    Metric: abs((stimOff_times - errorCue_times) - 2s)
+    Criterion: M < 0.150 s
+    Units: seconds [s] (absolute value TODO Change to get diff value with sign?)
+    """
+    metric = np.abs(data["stimOff_times"] - data["errorCue_times"] - 2)
+    # Find NaNs (if any of the values are nan operation will be nan)
+    nans = np.isnan(metric)
+    passed = np.zeros_like(metric) * np.nan
+    # Apply criteria
+    passed[~nans] = (metric[~nans] < 0.15).astype(np.float)
+    # Remove no negative feedback trials
+    metric[~data["outcome"] == -1] = np.nan
+    passed[~data["outcome"] == -1] = np.nan
+    assert len(data["intervals_0"]) == len(metric) == len(passed)
+    return metric, passed
+
+# === Wheel movement during trial checks ===
 
 def check_wheel_move_before_feedback(data):
     """ Check that the wheel does not move within 100ms of the feedback onset (error sound or valve).
@@ -343,43 +345,44 @@ def check_wheel_move_during_closed_loop(data, wheel_gain):
     return metric, passed
 
 
-def check_positive_feedback_stimOff_delays(data):
-    """ Check the the time difference between the valve onset and the visual stimulus turning off
-    is 1 ± 0.150 seconds.
-    Variable name: positive_feedback_stimOff_delays
-    Metric: M = abs((stimOff_times - feedback_times) - 1s)
-    Criterion: M < 0.150 s
-    Units: seconds [s] (absolute value TODO Change to get diff value with sign?)
+def check_wheel_freeze_during_quiescence(data):
+    """ Check that the wheel does not move more than 2 ticks each direction for at least 0.2 + 0.2-0.6
+    amount of time (quiescent period; exact value in bpod['quiescence']) before the go cue tone.
+    Variable name: wheel_freeze_during_quiescence
+    Metric: M = abs(min(W - w_t0), max(W - w_t0)) where W is wheel pos over interval
+    Do  np.max(M)  to get the highest displacement in any direction
+    interval = [goCueTrigger_time-quiescent_duration,goCueTrigger_time]
+    Criterion: M < 2 degrees
+    Units: degrees
     """
-    metric = np.abs(data["stimOff_times"] - data["feedback_times"] - 1)
-    metric[~data["correct"]] = np.nan
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = (metric[~nans] < 0.15).astype(np.float)
+    assert np.all(np.diff(data["wheel_timestamps"]) > 0)
+    assert data["quiescence"].size == data["stimOnTrigger_times"].size
+    # Get tuple of wheel times and positions over each trial's quiescence period
+    qevt_start_times = data["stimOnTrigger_times"] - data["quiescence"]
+    traces = traces_by_trial(
+        data["wheel_timestamps"],
+        data["wheel_position"],
+        start=qevt_start_times,
+        end=data["stimOnTrigger_times"]
+    )
+
+    metric = np.zeros((len(data["quiescence"]), 2))  # (n_trials, n_directions)
+    for i, trial in enumerate(traces):
+        t, pos = trial
+        # Get the last position before the period began
+        if pos.size > 0:
+            # Find the position of the preceding sample and subtract it
+            idx = np.abs(data["wheel_timestamps"] - t[0]).argmin() - 1
+            origin = data["wheel_position"][idx if idx != -1 else 0]
+            # Find the absolute min and max relative to the last sample
+            metric[i, :] = np.abs([np.min(pos - origin), np.max(pos - origin)])
+    # Reduce to the largest displacement found in any direction
+    metric = np.max(metric, axis=1)
+    metric = 180 * metric / np.pi  # convert to degrees from radians
+    criterion = 2  # Position shouldn't change more than 2 in either direction
+    passed = (metric < criterion).astype(np.float)
     assert len(data["intervals_0"]) == len(metric) == len(passed)
     return metric, passed
-
-
-def check_negative_feedback_stimOff_delays(data):
-    """ Check the the time difference between the error sound and the visual stimulus
-    turning off is 2 ± 0.150 seconds.
-    Variable name: negative_feedback_stimOff_delays
-    Metric: abs((stimOff_times - errorCue_times) - 2s)
-    Criterion: M < 0.150 s
-    Units: seconds [s] (absolute value TODO Change to get diff value with sign?)
-    """
-    metric = np.abs(data["stimOff_times"] - data["errorCue_times"] - 2)
-    # Find NaNs (if any of the values are nan operation will be nan)
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
-    # Apply criteria
-    passed[~nans] = (metric[~nans] < 0.15).astype(np.float)
-    # Remove no negative feedback trials
-    metric[~data["outcome"] == -1] = np.nan
-    passed[~data["outcome"] == -1] = np.nan
-    assert len(data["intervals_0"]) == len(metric) == len(passed)
-    return metric, passed
-
 
 # def load_0(trial_data, session_path=None):
 #     """ Number of Bonsai command to change screen should match
@@ -390,8 +393,8 @@ def check_negative_feedback_stimOff_delays(data):
 #     """
 #     pass
 
+# === Sequence of events checks ===
 
-# Sequence of events:
 def check_error_trial_event_sequence(data):
     """ Check that on incorrect / miss trials, there are exactly:
     2 audio events (go cue sound and error sound) and 2 Bpod events (ITI)
@@ -492,7 +495,8 @@ def check_trial_length(data):
 #     pass
 
 
-# Trigger response checks
+# === Trigger-response delay checks ===
+
 def check_goCue_delays(data):
     """ Check that the time difference between the go cue sound being triggered and
     effectively played is smaller than 1ms.
@@ -575,6 +579,8 @@ def check_stimFreeze_delays(data):
     return metric, passed
 
 
+# === Data integrity checks ===
+
 def check_reward_volumes(data):
     """ TODO review definition - Check that the reward volume is between 1.5 and 3 uL.
     TODO based on what is coded, is this a test at the session level then ?
@@ -589,6 +595,34 @@ def check_reward_volumes(data):
     assert len(data["intervals_0"]) == len(metric) == len(passed)
     return metric, passed
 
+
+def check_wheel_integrity(data, re_encoding='X1', enc_res=None):
+    """
+    TODO definition
+    Variable name: wheel_integrity
+    Metric: M = (absolute difference of the positions - encoder resolution) + 1 if difference of
+    timestamps <= 0
+    TODO define accurately: Criterion: Close to zero for > 99% of samples
+    :param data: dict of wheel data with keys ('wheel_timestamps', 'wheel_position')
+    :param re_encoding: the encoding of the wheel data, X1, X2 or X4
+    :param enc_res: the rotary encoder resolution
+    TODO Units
+    """
+    if isinstance(re_encoding, str):
+        re_encoding = int(re_encoding[-1])
+    if enc_res is None:
+        enc_res = WHEEL_TICKS / re_encoding
+    # The expected difference between samples in the extracted units
+    resolution = (2 * np.pi / enc_res) * re_encoding * WHEEL_RADIUS_CM
+    # We expect the difference of neighbouring positions to be close to the resolution
+    pos_check = np.abs(np.diff(data['wheel_position'])) - resolution
+    # Timestamps should be strictly increasing
+    ts_check = np.diff(data['wheel_timestamps']) <= 0.
+    metric = pos_check + ts_check.astype(float)  # all values should be close to zero
+    passed = np.isclose(metric, np.zeros_like(metric))
+    return metric, passed
+
+# === Pre-trial checks ===
 
 def check_valve_pre_trial(data):
     """ Check that there is no valve onset(s) between the start of the trial and
@@ -644,31 +678,4 @@ def check_audio_pre_trial(data, BNC2=None):
         metric = np.append(metric, np.any(s[s > i] < (c - 0.02)))
     passed = (~metric).astype(np.float)
     assert len(data["intervals_0"]) == len(metric) == len(passed)
-    return metric, passed
-
-
-def check_wheel_integrity(data, re_encoding='X1', enc_res=None):
-    """
-    TODO definition
-    Variable name: wheel_integrity
-    Metric: M = (absolute difference of the positions - encoder resolution) + 1 if difference of
-    timestamps <= 0
-    TODO define accurately: Criterion: Close to zero for > 99% of samples
-    :param data: dict of wheel data with keys ('wheel_timestamps', 'wheel_position')
-    :param re_encoding: the encoding of the wheel data, X1, X2 or X4
-    :param enc_res: the rotary encoder resolution
-    TODO Units
-    """
-    if isinstance(re_encoding, str):
-        re_encoding = int(re_encoding[-1])
-    if enc_res is None:
-        enc_res = WHEEL_TICKS / re_encoding
-    # The expected difference between samples in the extracted units
-    resolution = (2 * np.pi / enc_res) * re_encoding * WHEEL_RADIUS_CM
-    # We expect the difference of neighbouring positions to be close to the resolution
-    pos_check = np.abs(np.diff(data['wheel_position'])) - resolution
-    # Timestamps should be strictly increasing
-    ts_check = np.diff(data['wheel_timestamps']) <= 0.
-    metric = pos_check + ts_check.astype(float)  # all values should be close to zero
-    passed = np.isclose(metric, np.zeros_like(metric))
     return metric, passed
