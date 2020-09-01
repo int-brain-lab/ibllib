@@ -20,6 +20,7 @@ class TaskQCExtractor(object):
         self.one = one or ONE()
         self.log = logging.getLogger("ibllib")
 
+        self.data = None
         self.wheel_data = None
         self.settings = None
         self.raw_data = None
@@ -61,7 +62,7 @@ class TaskQCExtractor(object):
                             'ephysData.raw.wiring'])
         self.log.info(f"Downloading data for session {eid}")
         files = self.one.load(eid, dataset_types=dstypes, download_only=True)
-        missing = [x is None for x in files]
+        missing = [True for _ in dstypes] if not files else [x is None for x in files]
         if self.session_path is None or all(missing):
             self.lazy = True
             self.log.error("Data not found on server, can't calculate QC.")
@@ -77,17 +78,17 @@ class TaskQCExtractor(object):
 
     def extract_data(self, partial=False, bpod_only=False):
         """Extracts and loads behaviour data for QC
-
+        NB: partial extraction only allowed for bpod only extraction
         :param partial: If True, returns only the required data that aren't usually saved to ALFs
         :param bpod_only: If False, FPGA data are extracted where available
         :return: dict of data required for the behaviour QC
         """
         self.log.info(f"Extracting session: {self.session_path}")
-        self.extractor_type = raw.get_session_extractor_type(self.session_path)
+        self.type = raw.get_session_extractor_type(self.session_path)
+        self.wheel_encoding = 'X4' if (self.type == 'ephys' and not bpod_only) else 'X1'
 
-        if partial and self.extractor_type == 'ephys' and not bpod_only:
+        if partial and self.type == 'ephys' and not bpod_only:
             partial = False  # Requires intervals for converting to FPGA time
-            self.wheel_encoding = 'X4'
 
         if not self.raw_data:
             self.load_raw_data()
@@ -99,13 +100,13 @@ class TaskQCExtractor(object):
 
         # Extract the data that are usually saved to file
         if not partial:
-            if self.extractor_type == 'ephys' and not bpod_only:
+            if self.type == 'ephys' and not bpod_only:
                 extractors.append(FpgaTrials)
             else:
                 extractors.extend([
                     Choice, FeedbackType, Intervals, StimOnTimes, GoCueTriggerTimes, Wheel,
                     GoCueTimes, RewardVolume, ResponseTimes, FeedbackTimes, ProbabilityLeft])
-                # if extractor_type == 'biased':
+                # if type == 'biased':
                 #     # FIXME ContrastLR fails on old sessions (contrast is a float, not a dict)
                 #     extractors.append(ContrastLR)
 
@@ -114,7 +115,7 @@ class TaskQCExtractor(object):
         data, _ = run_extractor_classes(extractors, session_path=self.session_path, **kwargs)
 
         # Extract some parameters
-        if self.extractor_type == 'ephys':
+        if self.type == 'ephys':
             # For ephys sessions extract quiescence and phase from pre-generated file
             data.update(_get_pregenerated_events(self.raw_data, self.settings))
 

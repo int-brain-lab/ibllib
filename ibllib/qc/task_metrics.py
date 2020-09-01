@@ -166,6 +166,8 @@ def check_stimOn_goCue_delays(data):
     Metric: M = stimOn_times - goCue_times
     Criteria: 0 < M < 0.010 s
     Units: seconds [s]
+
+    :param data: dict of trial data with keys ('goCue_times', 'stimOn_times', 'intervals_0')
     """
     metric = data["goCue_times"] - data["stimOn_times"]
     nans = np.isnan(metric)
@@ -182,6 +184,8 @@ def check_response_feedback_delays(data):
     Metric: M = Feedback_time - response_time
     Criterion: 0 < M < 0.010 s
     Units: seconds [s]
+
+    :param data: dict of trial data with keys ('feedback_times', 'response_times', 'intervals_0')
     """
     metric = data["feedback_times"] - data["response_times"]
     nans = np.isnan(metric)
@@ -195,8 +199,11 @@ def check_response_stimFreeze_delays(data):
     """ Checks that the time difference between the visual stimulus freezing and the
     response is positive and less than 100ms.
     Variable name: response_stimFreeze_delays
-    Metric: M = stimFreeze_times - response_times
+    Metric: M == (stimFreeze_times - response_times)
     Criterion: 0 < M < 0.100 s
+
+    :param data: dict of trial data with keys ('stimFreeze_times', 'response_times', 'intervals_0',
+    'choice')
     """
     metric = data["stimFreeze_times"] - data["response_times"]
     # Find NaNs (if any of the values are nan operation will be nan)
@@ -217,6 +224,9 @@ def check_stimOff_itiIn_delays(data):
     Metric: M = itiIn_times - stimOff_times
     Criterion: 0 < M < 0.010 s
     Units: seconds [s]
+
+    :param data: dict of trial data with keys ('stimOff_times', 'itiIn_times', 'intervals_0',
+    'choice')
     """
     metric = data["itiIn_times"] - data["stimOff_times"]
     passed = valid = ~np.isnan(metric)
@@ -235,12 +245,14 @@ def check_positive_feedback_stimOff_delays(data):
     Metric: M = abs((stimOff_times - feedback_times) - 1s)
     Criterion: M < 0.150 s
     Units: seconds [s] (absolute value TODO Change to get diff value with sign?)
+
+    :param data: dict of trial data with keys ('stimOff_times', 'feedback_times', 'intervals_0')
     """
-    metric = np.abs(data["stimOff_times"] - data["feedback_times"] - 1)
+    metric = data["stimOff_times"] - data["feedback_times"] - 1  # TODO Moved abs
     metric[~data["correct"]] = np.nan
     nans = np.isnan(metric)
     passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = (metric[~nans] < 0.15).astype(np.float)
+    passed[~nans] = (np.abs(metric[~nans]) < 0.15).astype(np.float)
     assert len(data["intervals_0"]) == len(metric) == len(passed)
     return metric, passed
 
@@ -252,6 +264,9 @@ def check_negative_feedback_stimOff_delays(data):
     Metric: abs((stimOff_times - errorCue_times) - 2s)
     Criterion: M < 0.150 s
     Units: seconds [s] (absolute value TODO Change to get diff value with sign?)
+
+    :param data: dict of trial data with keys ('stimOff_times', 'errorCue_times', 'outcome',
+    'intervals_0')
     """
     metric = np.abs(data["stimOff_times"] - data["errorCue_times"] - 2)
     # Find NaNs (if any of the values are nan operation will be nan)
@@ -265,6 +280,7 @@ def check_negative_feedback_stimOff_delays(data):
     assert len(data["intervals_0"]) == len(metric) == len(passed)
     return metric, passed
 
+
 # === Wheel movement during trial checks ===
 
 def check_wheel_move_before_feedback(data):
@@ -272,7 +288,10 @@ def check_wheel_move_before_feedback(data):
     Variable name: wheel_move_before_feedback
     Metric: (w_t - 0.05) - (w_t + 0.05) where t = feedback_times
     Criterion: M != 0
-    Units: TODO
+    Units: radians
+
+    :param data: dict of trial data with keys ('wheel_timestamps', 'wheel_position', 'choice',
+    'intervals_0', 'feedback_times')
     """
     # Get tuple of wheel times and positions within 100ms of feedback
     traces = traces_by_trial(
@@ -306,7 +325,11 @@ def check_wheel_move_during_closed_loop(data, wheel_gain):
         time, w_t0 = position at go cue time, threshold_displacement = displacement required to
         move 35 visual degrees
     Criterion: displacement < 1 visual degree
-    Units: degrees
+    Units: degrees angle of wheel turn
+
+    :param data: dict of trial data with keys ('wheel_timestamps', 'wheel_position', 'choice',
+    'intervals_0', 'goCueTrigger_times', 'response_times', 'feedback_times', 'position')
+    :param wheel_gain: the 'STIM_GAIN' task setting
     """
     if wheel_gain is None:
         log.warning("No wheel_gain input in function call, returning None")
@@ -353,7 +376,10 @@ def check_wheel_freeze_during_quiescence(data):
     Do  np.max(M)  to get the highest displacement in any direction
     interval = [goCueTrigger_time-quiescent_duration,goCueTrigger_time]
     Criterion: M < 2 degrees
-    Units: degrees
+    Units: degrees angle of wheel turn
+
+    :param data: dict of trial data with keys ('wheel_timestamps', 'wheel_position', 'quiescence',
+    'intervals_0', 'stimOnTrigger_times')
     """
     assert np.all(np.diff(data["wheel_timestamps"]) > 0)
     assert data["quiescence"].size == data["stimOnTrigger_times"].size
@@ -393,6 +419,7 @@ def check_wheel_freeze_during_quiescence(data):
 #     """
 #     pass
 
+
 # === Sequence of events checks ===
 
 def check_error_trial_event_sequence(data):
@@ -406,6 +433,9 @@ def check_error_trial_event_sequence(data):
     Criterion: All three boolean comparisons true
     TODO: figure out single metric to use ; output unclear
     Units: boolean
+
+    :param data: dict of trial data with keys ('errorCue_times', 'goCue_times', 'intervals_0',
+    'itiIn_times', 'correct')
     """
     a = np.less(
         data["intervals_0"],
@@ -442,6 +472,9 @@ def check_correct_trial_event_sequence(data):
     Metric: Bpod (trial start) > audio (go cue) > Bpod (valve) > Bpod (ITI)
     Criterion: All three boolean comparisons true
     TODO: figure out single metric to use ; output unclear
+
+    :param data: dict of trial data with keys ('valveOpen_times', 'goCue_times', 'intervals_0',
+    'itiIn_times', 'correct')
     """
     a = np.less(
         data["intervals_0"],
@@ -476,6 +509,8 @@ def check_trial_length(data):
     Metric: M = feedback_times - goCue_times
     Criteria: 0 < M < 60.1 s
     Units: seconds [s]
+
+    :param data: dict of trial data with keys ('feedback_times', 'goCue_times', 'intervals_0')
     """
     metric = data["feedback_times"] - data["goCue_times"]
     nans = np.isnan(metric)
@@ -504,6 +539,8 @@ def check_goCue_delays(data):
     Metric: goCue_times - goCueTrigger_times
     Criterion: 0 < M <= 0.001 s
     Units: seconds [s]
+
+    :param data: dict of trial data with keys ('goCue_times', 'goCueTrigger_times', 'intervals_0')
     """
     metric = data["goCue_times"] - data["goCueTrigger_times"]
     nans = np.isnan(metric)
@@ -520,6 +557,9 @@ def check_errorCue_delays(data):
     Metric: errorCue_times - errorCueTrigger_times
     Criterion: 0 < M <= 0.001 s
     Units: seconds [s]
+
+    :param data: dict of trial data with keys ('errorCue_times', 'errorCueTrigger_times',
+    'intervals_0')
     """
     metric = data["errorCue_times"] - data["errorCueTrigger_times"]
     nans = np.isnan(metric)
@@ -536,6 +576,9 @@ def check_stimOn_delays(data):
     Metric: stimOn_times - stimOnTrigger_times
     Criterion: 0 < M < 0.150 s
     Units: seconds [s]
+
+    :param data: dict of trial data with keys ('stimOn_times', 'stimOnTrigger_times',
+    'intervals_0')
     """
     metric = data["stimOn_times"] - data["stimOnTrigger_times"]
     nans = np.isnan(metric)
@@ -553,6 +596,9 @@ def check_stimOff_delays(data):
     Metric: stimOff_times - stimOffTrigger_times
     Criterion: 0 < M < 0.150 s
     Units: seconds [s]
+
+    :param data: dict of trial data with keys ('stimOff_times', 'stimOffTrigger_times',
+    'intervals_0')
     """
     metric = data["stimOff_times"] - data["stimOffTrigger_times"]
     nans = np.isnan(metric)
@@ -570,6 +616,9 @@ def check_stimFreeze_delays(data):
     Metric: stimFreeze_times - stimFreezeTrigger_times
     Criterion: 0 < M < 0.150 s
     Units: seconds [s]
+
+    :param data: dict of trial data with keys ('stimFreeze_times', 'stimFreezeTrigger_times',
+    'intervals_0')
     """
     metric = data["stimFreeze_times"] - data["stimFreezeTrigger_times"]
     nans = np.isnan(metric)
@@ -582,11 +631,13 @@ def check_stimFreeze_delays(data):
 # === Data integrity checks ===
 
 def check_reward_volumes(data):
-    """ TODO review definition - Check that the reward volume is between 1.5 and 3 uL.
-    TODO based on what is coded, is this a test at the session level then ?
+    """ Check that the reward volume is between 1.5 and 3 uL.
     Variable name: rewardVolume
-    TODO review definition - Metric: len(set(rewardVolume)) <= 2 & np.all(rewardVolume <= 3)
-    Criterion: 100% TODO why not doing at trial level?
+    Metric: M = reward volume
+    Criterion: 1.5 <= M <= 3
+    Units: uL
+
+    :param data: dict of trial data with keys ('rewardVolume', 'intervals_0')
     """
     metric = data["rewardVolume"]
     val = np.min(np.unique(np.nonzero(metric)))
@@ -596,17 +647,27 @@ def check_reward_volumes(data):
     return metric, passed
 
 
-def check_wheel_integrity(data, re_encoding='X1', enc_res=None):
+def check_reward_volume_set(data):
+    """ Check that there is only two reward volumes within a session, one of which is 0
+    len(set(rewardVolume)) <= 2 & np.all(rewardVolume <= 3)
+    :param data:
+    :return:
     """
-    TODO definition
+    # TODO
+    pass
+
+
+def check_wheel_integrity(data, re_encoding='X1', enc_res=None):
+    """ Check that the difference between wheel position samples is close to the encoder resolution
     Variable name: wheel_integrity
     Metric: M = (absolute difference of the positions - encoder resolution) + 1 if difference of
-    timestamps <= 0
-    TODO define accurately: Criterion: Close to zero for > 99% of samples
+    timestamps <= 0 [wheel samples] else 0
+    Criterion: M  ~= 0 (see numpy.isclose for details of the tolerance)
+    Units: arbitrary (radians, sometimes + 1)
+
     :param data: dict of wheel data with keys ('wheel_timestamps', 'wheel_position')
     :param re_encoding: the encoding of the wheel data, X1, X2 or X4
     :param enc_res: the rotary encoder resolution
-    TODO Units
     """
     if isinstance(re_encoding, str):
         re_encoding = int(re_encoding[-1])
@@ -622,15 +683,18 @@ def check_wheel_integrity(data, re_encoding='X1', enc_res=None):
     passed = np.isclose(metric, np.zeros_like(metric))
     return metric, passed
 
+
 # === Pre-trial checks ===
 
 def check_valve_pre_trial(data):
     """ Check that there is no valve onset(s) between the start of the trial and
     the go cue sound onset - 20 ms.
     Variable name: valve_pre_trial
-    Metric: M = number of valve event between trialstart_times and (goCue_times-20ms)
-    Criterion: M = 0
+    Metric: M = number of valve event between trial start times and (goCue_times - 20ms)
+    Criterion: M == 0
     Units: -none-, integer
+
+    :param data: dict of wheel data with keys ('valveOpen_times', 'goCue_times', 'intervals_0')
     """
     metric = data["valveOpen_times"]
     nans = np.isnan(metric)
@@ -643,10 +707,12 @@ def check_valve_pre_trial(data):
 
 def check_stimulus_move_before_goCue(data, BNC1=None):
     """ Check that there are no visual stimulus change(s) between the start of the trial and the
-    go cue sound onset -20 ms.
+    go cue sound onset - 20 ms.
     Variable name: stimulus_move_before_goCue
-    Metric: M = number of visual stimulus change events between trialstart_time and (goCue_times-20ms)
-    Criterion: M = 0
+    Metric: M = number of visual stimulus change events between trial start and goCue_times - 20ms
+    Criterion: M == 0
+
+    :param data: dict of trial data with keys ('goCue_times', 'intervals_0', 'choice')
     """
     if BNC1 is None:
         log.warning("No BNC1 input in function call, returning None")
@@ -668,9 +734,12 @@ def check_audio_pre_trial(data, BNC2=None):
     go cue sound onset -20 ms.
     Metric: Check if audio events exist between trialstart_time and (goCue_times-20ms)
     Criterion: 0 on 99% of trials
+
+    :param data: dict of trial data with keys ('goCue_times', 'intervals_0')
+    :param BNC2: the TTLs recorded form Bpod's BNC2 input
     """
     if BNC2 is None:
-        log.warning("No BNC2 input in function call, retruning None")
+        log.warning("No BNC2 input in function call, retuning None")
         return None
     s = BNC2["times"]
     metric = np.array([], dtype=np.bool)
