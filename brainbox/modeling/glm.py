@@ -112,7 +112,7 @@ class NeuralGLM:
             spks[i] = spk_times[st_startind:st_endind] - start
             clu[i] = spk_clu[st_startind:st_endind]
             for col in timingvars:
-                trialsdf.at[i, col] = trialsdf.at[i, col] - start
+                trialsdf.at[i, col] = np.round(trialsdf.at[i, col] - start, decimals=5)
             trialsdf.at[i, 'duration'] = end - start
 
         # Break the data into test and train sections for cross-validation
@@ -453,7 +453,7 @@ class NeuralGLM:
         coefs = pd.Series(index=self.clu_ids.flat, name='coefficients', dtype=object)
         intercepts = pd.Series(index=self.clu_ids.flat, name='intercepts', dtype=object)
         variances = pd.Series(index=self.clu_ids.flat, name='variances', dtype=object)
-        biasdm = np.pad(self.dm.copy(), ((0, 0), (1, 0)), constant_values=1)
+        biasdm = np.pad(self.dm.copy(), ((0, 0), (1, 0)), 'constant', constant_values=1)
         trainmask = np.isin(self.trlabels, self.traininds).flatten()  # Mask for training data
         trainbinned = self.binnedspikes[trainmask]
         # print(f'Condition of design matrix is {np.linalg.cond(self.dm[trainmask])}')
@@ -480,7 +480,7 @@ class NeuralGLM:
             return coefs, intercepts
         elif method == 'minimize':
             traindm = biasdm[trainmask]
-            for i, cell in tqdm(enumerate(self.clu_ids), 'Fitting units:'):
+            for i, cell in tqdm(enumerate(self.clu_ids), 'Fitting units:', leave=False):
                 binned = trainbinned[:, i]
                 wi = np.linalg.lstsq(traindm, binned, rcond=None)[0]
                 res = minimize(neglog, wi, (traindm, binned),
@@ -581,9 +581,9 @@ class NeuralGLM:
 
 def convbasis(stim, bases, offset=0):
     if offset < 0:
-        stim = np.pad(stim, ((0, -offset), (0, 0)))
+        stim = np.pad(stim, ((0, -offset), (0, 0)), 'constant')
     elif offset > 0:
-        stim = np.pad(stim, ((offset, 0), (0, 0)))
+        stim = np.pad(stim, ((offset, 0), (0, 0)), 'constant')
 
     X = denseconv(stim, bases)
 
