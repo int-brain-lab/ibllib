@@ -8,25 +8,24 @@ Examples:
 
     # Downloading the required data and inspecting the QC on a different computer:
     from ibllib.qc.task_metrics import TaskQC
-    qc = TaskQC(eid, download_data=True)
+    qc = TaskQC(eid)
     outcome, results = qc.run()
 
     # Inspecting individual test outcomes
     from ibllib.qc.task_metrics import TaskQC
-    qc = TaskQC(eid, download_data=True)
+    qc = TaskQC(eid)
     outcome, results, outcomes = qc.compute().compute_session_status()
 
     # Running bpod QC on ephys session
     from ibllib.qc.task_metrics import TaskQC
-    from ibllib.qc.task_extractors import TaskQCExtractor
-    qc = TaskQC(eid, download_data=True)
-    bpod = TaskQCExtractor(eid, lazy=True)
-    bpod.data = bpod.extract_data(bpod_only=True)  # Extract without FPGA
-    qc.extractor = bpod
+    qc = TaskQC(eid)
+    qc.load_data(bpod_only=True)  # Extract without FPGA
     bpod_qc = qc.run()
 
 """
 import logging
+import sys
+from inspect import getmembers, isfunction
 
 import numpy as np
 
@@ -40,11 +39,10 @@ log = logging.getLogger('ibllib')
 
 
 class TaskQC(base.QC):
-    def __init__(self, session_path_or_eid, one=None, download_data=False):
+    def __init__(self, session_path_or_eid, one=None):
         super().__init__(session_path_or_eid, one, log=log)
 
         # Data
-        self.download_data = download_data
         self.extractor = None
 
         # Metrics and passed trials
@@ -54,9 +52,9 @@ class TaskQC(base.QC):
                          "WARNING": 0.95,
                          "FAIL": 0}
 
-    def load_data(self):
+    def load_data(self, bpod_only=False, download_data=True):
         self.extractor = TaskQCExtractor(
-            self.session_path, one=self.one, ensure_data=self.download_data)
+            self.session_path, one=self.one, download_data=download_data, bpod_only=bpod_only)
 
     def compute(self):
         """Compute and store the QC metrics
@@ -69,10 +67,10 @@ class TaskQC(base.QC):
         self.log.info(f"Session {self.session_path}: Running QC on behavior data...")
         self.metrics, self.passed = get_bpodqc_metrics_frame(
             self.extractor.data,
-            self.extractor.settings["STIM_GAIN"],  # The wheel gain
-            self.extractor.BNC1,
-            self.extractor.BNC2,
-            self.extractor.wheel_encoding or 'X1'
+            wheel_gain=self.extractor.settings["STIM_GAIN"],  # The wheel gain
+            BNC1=self.extractor.BNC1,
+            BNC2=self.extractor.BNC2,
+            re_encoding=self.extractor.wheel_encoding or 'X1'
         )
         return
 
@@ -82,7 +80,7 @@ class TaskQC(base.QC):
         self.outcome, results, _ = self.compute_session_status()
         if update:
             self.update_extended_qc(results)
-            self.update(self.outcome, 'behavior')
+            self.update(self.outcome, 'task')
         return self.outcome, results
 
     def compute_session_status(self):
@@ -91,6 +89,8 @@ class TaskQC(base.QC):
         :return: A map of QC tests and the proportion of data points that passed them
         :return: A map of QC tests and their outcomes
         """
+        if self.passed is None:
+            raise AttributeError('passed is None; compute QC first')
         MAX_BOUND, MIN_BOUND = (1, 0)
         results = {k: np.nanmean(v) for k, v in self.passed.items()}
 
@@ -108,7 +108,8 @@ class TaskQC(base.QC):
                 passed = v >= np.fromiter(criteria.values(), dtype=float)
                 indices.append(int(np.argmax(passed)))
 
-        key_map = lambda x: 'NOT_SET' if x < 0 else list(criteria.keys())[x]
+        def key_map(x):
+            return 'NOT_SET' if x < 0 else list(criteria.keys())[x]
         # Criteria map is in order of severity so the max index is our overall QC outcome
         session_outcome = key_map(max(indices))
         outcomes = dict(zip(results.keys(), map(key_map, indices)))
@@ -116,41 +117,29 @@ class TaskQC(base.QC):
         return session_outcome, results, outcomes
 
 
-def get_bpodqc_metrics_frame(data, wheel_gain, BNC1, BNC2, re_encoding='X1'):
-    """Plottable metrics based on timings"""
+def get_bpodqc_metrics_frame(data, **kwargs):
+    """
+    Evaluates all the QC metric functions in this module (those starting with 'check') and
+    returns the results.  The optional kwargs listed below are passed to each QC metric function.
+    :param data: dict of extracted task data
+    :param re_encoding: the encoding of the wheel data, X1, X2 or X4
+    :param enc_res: the rotary encoder resolution
+    :param wheel_gain: the STIM_GAIN task parameter
+    :param BNC1: the fronts from Bpod's BNC1 input
+    :param BNC2: the fronts from Bpod's BNC2 input
+    :return metrics: dict of checks and their QC metrics
+    :return passed: dict of checks and a float array of which samples passed
+    """
+    def is_metric(x):
+        return isfunction(x) and x.__name__.startswith('check_')
+    checks = getmembers(sys.modules[__name__], is_metric)
+    qc_metrics_map = {'_task' + k[5:]: fn(data, **kwargs) for k, fn in checks}
 
-    qcmetrics_frame = {
-        "_task_goCue_delays": check_goCue_delays(data),
-        "_task_errorCue_delays": check_errorCue_delays(data),
-        "_task_stimOn_delays": check_stimOn_delays(data),
-        "_task_stimOff_delays": check_stimOff_delays(data),
-        "_task_stimFreeze_delays": check_stimFreeze_delays(data),
-        "_task_stimOn_goCue_delays": check_stimOn_goCue_delays(data),
-        "_task_response_feedback_delays": check_response_feedback_delays(data),
-        "_task_response_stimFreeze_delays": check_response_stimFreeze_delays(data),
-        "_task_stimOff_itiIn_delays": check_stimOff_itiIn_delays(data),
-        "_task_positive_feedback_stimOff_delays": check_positive_feedback_stimOff_delays(data),
-        "_task_negative_feedback_stimOff_delays": check_negative_feedback_stimOff_delays(data),
-        "_task_valve_pre_trial": check_valve_pre_trial(data),
-        "_task_error_trial_event_sequence": check_error_trial_event_sequence(data),
-        "_task_correct_trial_event_sequence": check_correct_trial_event_sequence(data),
-        "_task_trial_length": check_trial_length(data),
-        # Wheel trial_data loading
-        "_task_wheel_integrity": check_wheel_integrity(data, re_encoding),
-        "_task_wheel_freeze_during_quiescence": check_wheel_freeze_during_quiescence(data),
-        "_task_wheel_move_before_feedback": check_wheel_move_before_feedback(data),
-        "_task_wheel_move_during_closed_loop": check_wheel_move_during_closed_loop(
-            data, wheel_gain
-        ),
-        # Bpod fronts loading
-        "_task_stimulus_move_before_goCue": check_stimulus_move_before_goCue(data, BNC1=BNC1),
-        "_task_audio_pre_trial": check_audio_pre_trial(data, BNC2=BNC2),
-    }
     # Split metrics and passed frames
     metrics = {}
     passed = {}
-    for k in qcmetrics_frame:
-        metrics[k], passed[k] = qcmetrics_frame[k]
+    for k in qc_metrics_map:
+        metrics[k], passed[k] = qc_metrics_map[k]
     return metrics, passed
 
 
@@ -159,10 +148,10 @@ def get_bpodqc_metrics_frame(data, wheel_gain, BNC1, BNC2, re_encoding='X1'):
 
 # === Delays between events checks ===
 
-def check_stimOn_goCue_delays(data):
+def check_stimOn_goCue_delays(data, **_):
     """ Checks that the time difference between the onset of the visual stimulus
     and the onset of the go cue tone is positive and less than 10ms.
-    Variable name: stimOn_goCue_delays
+
     Metric: M = stimOn_times - goCue_times
     Criteria: 0 < M < 0.010 s
     Units: seconds [s]
@@ -177,10 +166,9 @@ def check_stimOn_goCue_delays(data):
     return metric, passed
 
 
-def check_response_feedback_delays(data):
+def check_response_feedback_delays(data, **_):
     """ Checks that the time difference between the response and the feedback onset
     (error sound or valve) is positive and less than 10ms.
-    Variable name: response_feedback_delays
     Metric: M = Feedback_time - response_time
     Criterion: 0 < M < 0.010 s
     Units: seconds [s]
@@ -195,12 +183,13 @@ def check_response_feedback_delays(data):
     return metric, passed
 
 
-def check_response_stimFreeze_delays(data):
+def check_response_stimFreeze_delays(data, **_):
     """ Checks that the time difference between the visual stimulus freezing and the
     response is positive and less than 100ms.
-    Variable name: response_stimFreeze_delays
-    Metric: M == (stimFreeze_times - response_times)
+
+    Metric: M = (stimFreeze_times - response_times)
     Criterion: 0 < M < 0.100 s
+    Units: seconds [s]
 
     :param data: dict of trial data with keys ('stimFreeze_times', 'response_times', 'intervals_0',
     'choice')
@@ -218,9 +207,9 @@ def check_response_stimFreeze_delays(data):
     return metric, passed
 
 
-def check_stimOff_itiIn_delays(data):
+def check_stimOff_itiIn_delays(data, **_):
     """ Check that the start of the trial interval is within 10ms of the visual stimulus turning off.
-    Variable name: stimOff_itiIn_delays
+
     Metric: M = itiIn_times - stimOff_times
     Criterion: 0 < M < 0.010 s
     Units: seconds [s]
@@ -238,17 +227,17 @@ def check_stimOff_itiIn_delays(data):
     return metric, passed
 
 
-def check_positive_feedback_stimOff_delays(data):
+def check_positive_feedback_stimOff_delays(data, **_):
     """ Check that the time difference between the valve onset and the visual stimulus turning off
     is 1 ± 0.150 seconds.
-    Variable name: positive_feedback_stimOff_delays
-    Metric: M = abs((stimOff_times - feedback_times) - 1s)
-    Criterion: M < 0.150 s
-    Units: seconds [s] (absolute value TODO Change to get diff value with sign?)
+
+    Metric: M = stimOff_times - feedback_times - 1s
+    Criterion: |M| < 0.150 s
+    Units: seconds [s]
 
     :param data: dict of trial data with keys ('stimOff_times', 'feedback_times', 'intervals_0')
     """
-    metric = data["stimOff_times"] - data["feedback_times"] - 1  # TODO Moved abs
+    metric = data["stimOff_times"] - data["feedback_times"] - 1
     metric[~data["correct"]] = np.nan
     nans = np.isnan(metric)
     passed = np.zeros_like(metric) * np.nan
@@ -257,23 +246,23 @@ def check_positive_feedback_stimOff_delays(data):
     return metric, passed
 
 
-def check_negative_feedback_stimOff_delays(data):
+def check_negative_feedback_stimOff_delays(data, **_):
     """ Check that the time difference between the error sound and the visual stimulus
     turning off is 2 ± 0.150 seconds.
-    Variable name: negative_feedback_stimOff_delays
-    Metric: abs((stimOff_times - errorCue_times) - 2s)
-    Criterion: M < 0.150 s
-    Units: seconds [s] (absolute value TODO Change to get diff value with sign?)
+
+    Metric: M = stimOff_times - errorCue_times - 2s
+    Criterion: |M| < 0.150 s
+    Units: seconds [s]
 
     :param data: dict of trial data with keys ('stimOff_times', 'errorCue_times', 'outcome',
     'intervals_0')
     """
-    metric = np.abs(data["stimOff_times"] - data["errorCue_times"] - 2)
+    metric = data["stimOff_times"] - data["errorCue_times"] - 2
     # Find NaNs (if any of the values are nan operation will be nan)
     nans = np.isnan(metric)
     passed = np.zeros_like(metric) * np.nan
     # Apply criteria
-    passed[~nans] = (metric[~nans] < 0.15).astype(np.float)
+    passed[~nans] = (np.abs(metric[~nans]) < 0.15).astype(np.float)
     # Remove no negative feedback trials
     metric[~data["outcome"] == -1] = np.nan
     passed[~data["outcome"] == -1] = np.nan
@@ -283,10 +272,10 @@ def check_negative_feedback_stimOff_delays(data):
 
 # === Wheel movement during trial checks ===
 
-def check_wheel_move_before_feedback(data):
+def check_wheel_move_before_feedback(data, **_):
     """ Check that the wheel does not move within 100ms of the feedback onset (error sound or valve).
-    Variable name: wheel_move_before_feedback
-    Metric: (w_t - 0.05) - (w_t + 0.05) where t = feedback_times
+
+    Metric: M = (w_t - 0.05) - (w_t + 0.05), where t = feedback_times
     Criterion: M != 0
     Units: radians
 
@@ -317,10 +306,10 @@ def check_wheel_move_before_feedback(data):
     return metric, passed
 
 
-def check_wheel_move_during_closed_loop(data, wheel_gain):
+def check_wheel_move_during_closed_loop(data, wheel_gain=None, **_):
     """ Check that the wheel moves by at least 35 degrees during the closed-loop period
     on trials where a feedback (error sound or valve) is delivered.
-    Variable name: wheel_move_during_closed_loop
+
     Metric: M = abs(w_resp - w_t0) - threshold_displacement, where w_resp = position at response
         time, w_t0 = position at go cue time, threshold_displacement = displacement required to
         move 35 visual degrees
@@ -368,13 +357,12 @@ def check_wheel_move_during_closed_loop(data, wheel_gain):
     return metric, passed
 
 
-def check_wheel_freeze_during_quiescence(data):
+def check_wheel_freeze_during_quiescence(data, **_):
     """ Check that the wheel does not move more than 2 ticks each direction for at least 0.2 + 0.2-0.6
     amount of time (quiescent period; exact value in bpod['quiescence']) before the go cue tone.
-    Variable name: wheel_freeze_during_quiescence
-    Metric: M = abs(min(W - w_t0), max(W - w_t0)) where W is wheel pos over interval
-    Do  np.max(M)  to get the highest displacement in any direction
-    interval = [goCueTrigger_time-quiescent_duration,goCueTrigger_time]
+
+    Metric: M = |max(W) - min(W)| where W is wheel pos over quiescence interval
+    interval = [goCueTrigger_time - quiescent_duration, goCueTrigger_time]
     Criterion: M < 2 degrees
     Units: degrees angle of wheel turn
 
@@ -422,13 +410,12 @@ def check_wheel_freeze_during_quiescence(data):
 
 # === Sequence of events checks ===
 
-def check_error_trial_event_sequence(data):
+def check_error_trial_event_sequence(data, **_):
     """ Check that on incorrect / miss trials, there are exactly:
     2 audio events (go cue sound and error sound) and 2 Bpod events (ITI)
     TODO : This test does not seem to check for the above?
     And that the sequence of event is as expected:
     Bpod (trial start) > audio (go cue) > audio (error) > Bpod (ITI)
-    Variable name: error_trial_event_sequence
     Metric: Bpod (trial start) > audio (go cue) > audio (error) > Bpod (ITI)
     Criterion: All three boolean comparisons true
     TODO: figure out single metric to use ; output unclear
@@ -463,12 +450,11 @@ def check_error_trial_event_sequence(data):
     return metric, passed
 
 
-def check_correct_trial_event_sequence(data):
+def check_correct_trial_event_sequence(data, **_):
     """ Check that on correct trials, there are exactly :
     1 audio events, 3 Bpod events (valve open, trial start, ITI)
     TODO : This test does not seem to check for the above?
     TODO explain comment: (ITI task version dependent on ephys)
-    Variable name: correct_trial_event_sequence
     Metric: Bpod (trial start) > audio (go cue) > Bpod (valve) > Bpod (ITI)
     Criterion: All three boolean comparisons true
     TODO: figure out single metric to use ; output unclear
@@ -502,10 +488,10 @@ def check_correct_trial_event_sequence(data):
     return metric, passed
 
 
-def check_trial_length(data):
+def check_trial_length(data, **_):
     """ Check that the time difference between the onset of the go cue sound
     and the feedback (error sound or valve) is positive and smaller than 60.1 s.
-    Variable name: trial_length
+
     Metric: M = feedback_times - goCue_times
     Criteria: 0 < M < 60.1 s
     Units: seconds [s]
@@ -532,11 +518,11 @@ def check_trial_length(data):
 
 # === Trigger-response delay checks ===
 
-def check_goCue_delays(data):
+def check_goCue_delays(data, **_):
     """ Check that the time difference between the go cue sound being triggered and
     effectively played is smaller than 1ms.
-    Variable name: goCue_delays
-    Metric: goCue_times - goCueTrigger_times
+
+    Metric: M = goCue_times - goCueTrigger_times
     Criterion: 0 < M <= 0.001 s
     Units: seconds [s]
 
@@ -550,11 +536,10 @@ def check_goCue_delays(data):
     return metric, passed
 
 
-def check_errorCue_delays(data):
+def check_errorCue_delays(data, **_):
     """ Check that the time difference between the error sound being triggered and
     effectively played is smaller than 1ms.
-    Variable name: errorCue_delays
-    Metric: errorCue_times - errorCueTrigger_times
+    Metric: M = errorCue_times - errorCueTrigger_times
     Criterion: 0 < M <= 0.001 s
     Units: seconds [s]
 
@@ -569,11 +554,11 @@ def check_errorCue_delays(data):
     return metric, passed
 
 
-def check_stimOn_delays(data):
+def check_stimOn_delays(data, **_):
     """ Check that the time difference between the visual stimulus onset-command being triggered
     and the stimulus effectively appearing on the screen is smaller than 150 ms.
-    Variable name: stimOn_delays
-    Metric: stimOn_times - stimOnTrigger_times
+
+    Metric: M = stimOn_times - stimOnTrigger_times
     Criterion: 0 < M < 0.150 s
     Units: seconds [s]
 
@@ -588,12 +573,12 @@ def check_stimOn_delays(data):
     return metric, passed
 
 
-def check_stimOff_delays(data):
+def check_stimOff_delays(data, **_):
     """ Check that the time difference between the visual stimulus offset-command
     being triggered and the visual stimulus effectively turning off on the screen
     is smaller than 150 ms.
-    Variable name: stimOff_delays
-    Metric: stimOff_times - stimOffTrigger_times
+
+    Metric: M = stimOff_times - stimOffTrigger_times
     Criterion: 0 < M < 0.150 s
     Units: seconds [s]
 
@@ -608,12 +593,12 @@ def check_stimOff_delays(data):
     return metric, passed
 
 
-def check_stimFreeze_delays(data):
+def check_stimFreeze_delays(data, **_):
     """ Check that the time difference between the visual stimulus freeze-command
     being triggered and the visual stimulus effectively freezing on the screen
     is smaller than 150 ms.
-    Variable name: stimFreeze_delays
-    Metric: stimFreeze_times - stimFreezeTrigger_times
+
+    Metric: M = stimFreeze_times - stimFreezeTrigger_times
     Criterion: 0 < M < 0.150 s
     Units: seconds [s]
 
@@ -630,36 +615,42 @@ def check_stimFreeze_delays(data):
 
 # === Data integrity checks ===
 
-def check_reward_volumes(data):
-    """ Check that the reward volume is between 1.5 and 3 uL.
-    Variable name: rewardVolume
+def check_reward_volumes(data, **_):
+    """ Check that the reward volume is between 1.5 and 3 uL for correct trials, 0 for incorrect.
+
     Metric: M = reward volume
-    Criterion: 1.5 <= M <= 3
+    Criterion: 1.5 <= M <= 3 if correct else M == 0
     Units: uL
 
-    :param data: dict of trial data with keys ('rewardVolume', 'intervals_0')
+    :param data: dict of trial data with keys ('rewardVolume', 'correct', 'intervals_0')
     """
-    metric = data["rewardVolume"]
-    val = np.min(np.unique(np.nonzero(metric)))
-    vals = np.ones(len(metric)) * val
-    passed = ((metric >= 1.5) & (metric == vals) & (metric <= 3)).astype(np.float)
-    assert len(data["intervals_0"]) == len(metric) == len(passed)
+    metric = data['rewardVolume']
+    correct = data['correct']
+    passed = np.zeros_like(metric, dtype=np.float)
+    # Check correct trials within correct range
+    passed[correct] = (1.5 <= metric[correct]) & (metric[correct] <= 3.)
+    # Check incorrect trials are 0
+    passed[~correct] = metric[~correct] == 0
+    assert len(data['intervals_0']) == len(metric) == len(passed)
     return metric, passed
 
 
-def check_reward_volume_set(data):
-    """ Check that there is only two reward volumes within a session, one of which is 0
-    len(set(rewardVolume)) <= 2 & np.all(rewardVolume <= 3)
-    :param data:
-    :return:
+def check_reward_volume_set(data, **_):
+    """ Check that there is only two reward volumes within a session, one of which is 0.
+
+    Metric: M = set(rewardVolume)
+    Criterion: (0 < len(M) <= 2) and 0 in M
+
+    :param data: dict of trial data with keys ('rewardVolume')
     """
-    # TODO
-    pass
+    metric = data["rewardVolume"]
+    passed = 0 < len(set(metric)) <= 2 and 0. in metric
+    return metric, passed
 
 
-def check_wheel_integrity(data, re_encoding='X1', enc_res=None):
+def check_wheel_integrity(data, re_encoding='X1', enc_res=None, **_):
     """ Check that the difference between wheel position samples is close to the encoder resolution
-    Variable name: wheel_integrity
+
     Metric: M = (absolute difference of the positions - encoder resolution) + 1 if difference of
     timestamps <= 0 [wheel samples] else 0
     Criterion: M  ~= 0 (see numpy.isclose for details of the tolerance)
@@ -686,10 +677,10 @@ def check_wheel_integrity(data, re_encoding='X1', enc_res=None):
 
 # === Pre-trial checks ===
 
-def check_valve_pre_trial(data):
+def check_valve_pre_trial(data, **_):
     """ Check that there is no valve onset(s) between the start of the trial and
     the go cue sound onset - 20 ms.
-    Variable name: valve_pre_trial
+
     Metric: M = number of valve event between trial start times and (goCue_times - 20ms)
     Criterion: M == 0
     Units: -none-, integer
@@ -705,12 +696,13 @@ def check_valve_pre_trial(data):
     return metric, passed
 
 
-def check_stimulus_move_before_goCue(data, BNC1=None):
+def check_stimulus_move_before_goCue(data, BNC1=None, **_):
     """ Check that there are no visual stimulus change(s) between the start of the trial and the
     go cue sound onset - 20 ms.
-    Variable name: stimulus_move_before_goCue
+
     Metric: M = number of visual stimulus change events between trial start and goCue_times - 20ms
     Criterion: M == 0
+    # TODO Units
 
     :param data: dict of trial data with keys ('goCue_times', 'intervals_0', 'choice')
     """
@@ -729,11 +721,12 @@ def check_stimulus_move_before_goCue(data, BNC1=None):
     return metric, passed
 
 
-def check_audio_pre_trial(data, BNC2=None):
+def check_audio_pre_trial(data, BNC2=None, **_):
     """ Check that there are no audio outputs between the start of the trial and the
-    go cue sound onset -20 ms.
+    go cue sound onset - 20 ms.
+
     Metric: Check if audio events exist between trialstart_time and (goCue_times-20ms)
-    Criterion: 0 on 99% of trials
+    Criterion: 0 on 99% of trials  # TODO Rewrite
 
     :param data: dict of trial data with keys ('goCue_times', 'intervals_0')
     :param BNC2: the TTLs recorded form Bpod's BNC2 input

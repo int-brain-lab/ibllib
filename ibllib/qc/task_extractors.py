@@ -6,7 +6,7 @@ from ibllib.io.extractors.training_trials import (
     StimOnOffFreezeTimes, Choice, FeedbackType, Intervals, StimOnTriggerTimes, StimOnTimes,
     StimOffTriggerTimes, StimFreezeTriggerTimes, GoCueTriggerTimes, GoCueTimes,
     ErrorCueTriggerTimes, RewardVolume, ResponseTimes, FeedbackTimes, ItiInTimes,
-    ProbabilityLeft, ContrastLR, run_extractor_classes
+    ProbabilityLeft, run_extractor_classes  # ContrastLR
 )
 from ibllib.io.extractors.training_wheel import Wheel
 from oneibl.one import ONE
@@ -15,7 +15,15 @@ import ibllib.io.raw_data_loaders as raw
 
 
 class TaskQCExtractor(object):
-    def __init__(self, session_path, lazy=False, one=None, ensure_data=True):
+    def __init__(self, session_path, lazy=False, one=None, download_data=False, bpod_only=False):
+        """
+        A class for extracting the task data required to perform task quality control
+        :param session_path: a valid session path
+        :param lazy: if True, the data are not extracted immediately
+        :param one: an instance of ONE, used to download the raw data if download_data is True
+        :param download_data: if True, any missing raw data is downloaded via ONE
+        :param bpod_only: extract from from raw Bpod data only, even for FPGA sessions
+        """
         self.session_path = session_path
         self.one = one or ONE()
         self.log = logging.getLogger("ibllib")
@@ -28,12 +36,12 @@ class TaskQCExtractor(object):
         self.type = None
         self.wheel_encoding = None
 
-        if ensure_data:
+        if download_data:
             self._ensure_required_data()
 
         if not lazy:
             self.load_raw_data()
-            self.data = self.extract_data()
+            self.extract_data(bpod_only=bpod_only)
 
     def _ensure_required_data(self):
         """
@@ -72,22 +80,30 @@ class TaskQCExtractor(object):
             )
 
     def load_raw_data(self):
+        """
+        Loads the BNC TTLs, raw task data and task settings
+        :return:
+        """
         self.log.info(f"Loading raw data from {self.session_path}")
         self.settings, self.raw_data = raw.load_bpod(self.session_path)
         self.BNC1, self.BNC2 = raw.load_bpod_fronts(self.session_path, data=self.raw_data)
 
     def extract_data(self, partial=False, bpod_only=False):
         """Extracts and loads behaviour data for QC
-        NB: partial extraction only allowed for bpod only extraction
-        :param partial: If True, returns only the required data that aren't usually saved to ALFs
+        NB: partial extraction when bpod_only is False requires intervals and intervals_bpod to
+        be assigned to the data attribute before calling this function.
+        :param partial: If True, extracts only the required data that aren't usually saved to ALFs
         :param bpod_only: If False, FPGA data are extracted where available
-        :return: dict of data required for the behaviour QC
+        :return:
         """
         self.log.info(f"Extracting session: {self.session_path}")
         self.type = raw.get_session_extractor_type(self.session_path)
         self.wheel_encoding = 'X4' if (self.type == 'ephys' and not bpod_only) else 'X1'
 
-        if partial and self.type == 'ephys' and not bpod_only:
+        # Partial extraction for FPGA sessions only worth it if intervals already extracted and
+        # assigned to the data attribute
+        data_assigned = self.data and {'intervals', 'intervals_bpod'}.issubset(self.data)
+        if partial and self.type == 'ephys' and not bpod_only and not data_assigned:
             partial = False  # Requires intervals for converting to FPGA time
 
         if not self.raw_data:
@@ -120,18 +136,12 @@ class TaskQCExtractor(object):
             data.update(_get_pregenerated_events(self.raw_data, self.settings))
 
             if not bpod_only:
-                # if partial:
-                    # FIXME not worth it
-                    # sync, chmap = _get_main_probe_sync(self.session_path, bin_exists=False)
-                    # state = self.raw_data[-1]['behavior_data']['States timestamps']['exit_state']
-                    # tmax = state[0][-1] + 60
-                    # fpga_trials = extract_behaviour_sync(sync=sync, chmap=chmap, tmax=tmax)
-                    # data['intervals'] = fpga_trials['intervals']
-                    # data['intervals_bpod'] = Intervals(self.session_path).extract(**kwargs)[0]
+                # If partial ephys extraction we will attempt to get intervals from data attribute
+                intervals_bpod = data.get('intervals_bpod') or self.data['intervals_bpod']
+                intervals = data.get('intervals') or self.data['intervals']
                 # We need to sync the extra extracted data to FPGA time
                 # 0.5s iti already removed during extraction so we set duration to 0 here
-                ibpod, _, bpod2fpga = bpod_fpga_sync(
-                    data['intervals_bpod'], data['intervals'], iti_duration=0)
+                ibpod, _, bpod2fpga = bpod_fpga_sync(intervals_bpod, intervals, iti_duration=0)
                 # These fields have to be re-synced
                 sync_fields = ['stimOnTrigger_times', 'stimOffTrigger_times', 'stimFreeze_times',
                                'stimFreezeTrigger_times', 'errorCueTrigger_times', 'itiIn_times']
@@ -142,10 +152,23 @@ class TaskQCExtractor(object):
             data['position'] = np.array([t['position'] for t in self.raw_data])
             self.wheel_encoding = 'X1'
 
-        return data if partial else self.rename_data(data)
+        # Update the data attribute with extracted data
+        if self.data:
+            self.data.update(data)
+            self.rename_data(self.data)
+        else:
+            self.data = data if partial else self.rename_data(data)
 
     @staticmethod
     def rename_data(data):
+        """Rename the extracted data dict for use with TaskQC
+        Splits 'intervals' into 'intervals_0' and 'intervals_1', as well splitting
+        'feedback_times' to 'errorCue_times' and 'valveOpen_times'.  Also adds 'outcome' and
+        'correct'.
+        NB: The data is not copied before making changes
+        :param data: A dict of task data returned by the task extractors
+        :return: the same dict after modifying the keys
+        """
         # get valve_time and errorCue_times from feedback_times
         correct = data['feedbackType'] > 0
         errorCue_times = data["feedback_times"].copy()
@@ -157,9 +180,10 @@ class TaskQCExtractor(object):
              "correct": correct}
         )
         # split intervals
-        data["intervals_0"] = data["intervals"][:, 0]
-        data["intervals_1"] = data["intervals"][:, 1]
-        _ = data.pop("intervals")
+        if 'intervals' in data:
+            data["intervals_0"] = data["intervals"][:, 0]
+            data["intervals_1"] = data["intervals"][:, 1]
+            # _ = data.pop("intervals")
         data["outcome"] = data["feedbackType"].copy()
         data["outcome"][data["choice"] == 0] = 0
         return data

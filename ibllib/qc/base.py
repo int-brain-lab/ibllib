@@ -80,6 +80,7 @@ class QC:
             r = self.one.alyx.rest('sessions', 'partial_update', id=self.eid, data={'qc': outcome})
             current_status = r['qc'].upper()
             assert current_status == outcome, 'Failed to update session QC'
+            self.log.info(f'QC field successfully updated to {outcome} for session {self.eid}')
         self.outcome = current_status
         return self.outcome
 
@@ -100,4 +101,5 @@ class QC:
         extended_qc.update(data)
         out = self.one.alyx.json_field_update(
             endpoint='sessions', uuid=self.eid, field_name='extended_qc', data=extended_qc)
+        self.log.info(f'Extended QC field successfully updated for session {self.eid}')
         return out

@@ -6,7 +6,7 @@ import numpy as np
 
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc import task_metrics as qcmetrics
-from ibllib.qc.oneutils import download_bpodqc_raw_data
+from ibllib.qc.oneutils import download_taskqc_raw_data
 from oneibl.one import ONE
 from brainbox.behavior.wheel import cm_to_rad
 
@@ -22,30 +22,67 @@ class TestTaskMetricsObject(unittest.TestCase):
         self.one = one
         self.eid = "b1c968ad-4874-468d-b2e4-5ffa9b9964e9"
         # Make sure the data exists locally
-        download_bpodqc_raw_data(self.eid, one=one)
+        download_taskqc_raw_data(self.eid, one=one)
         self.session_path = self.one.path_from_eid(self.eid)
+        self.qc = TaskQC(self.eid, one=self.one)
+        self.qc.load_data(bpod_only=True)  # Test session has no raw FPGA data
 
-    def test_TaskQC_constructor(self):
-        # Make from eid
-        qc = TaskQC(self.eid, one=self.one)
-        # Make from session_path
-        qc = TaskQC(self.session_path, one=self.one)
-        # Load data
-        qc.load_data()
-        self.assertTrue(qc.extractor is not None)
-        self.assertTrue(qc.extractor.trial_data is not None)
-        self.assertTrue(qc.wheel_gain is not None)
-        self.assertTrue(qc.bpod_ntrials is not None)
+    def test_compute(self):
         # Compute metrics
-        self.assertTrue(qc.metrics is None)
-        self.assertTrue(qc.passed is None)
-        qc.compute()
-        self.assertTrue(qc.metrics is not None)
-        self.assertTrue(qc.passed is not None)
+        self.assertTrue(self.qc.metrics is None)
+        self.assertTrue(self.qc.passed is None)
+        self.qc.compute()
+        self.assertTrue(self.qc.metrics is not None)
+        self.assertTrue(self.qc.passed is not None)
 
-    def test_BpodQC(self):
-        qc = TaskQC(self.eid, one=self.one)
-        self.assertTrue(qc is not None)
+    def test_run(self):
+        # Rest Alyx fields before test
+        reset = self.qc.update('NOT_SET')
+        assert reset == 'NOT_SET', 'failed to reset QC field for test'
+        extended = self.one.alyx.json_field_write('sessions', field_name='extended_qc',
+                                                  uuid=self.eid, data={})
+        assert not extended, 'failed to reset extended QC field for test'
+
+        # Test update as False
+        outcome, _ = self.qc.run(update=False)
+        self.assertEqual('FAIL', outcome)
+        extended = self.one.alyx.rest('sessions', 'read', id=self.eid)['extended_qc']
+        self.assertDictEqual({}, extended, 'unexpected update to extended qc')
+        outcome = self.one.alyx.rest('sessions', 'read', id=self.eid)['qc']
+        self.assertEqual('NOT_SET', outcome, 'unexpected update to qc')
+
+        # Test update as True
+        outcome, results = self.qc.run(update=True)
+        self.assertEqual('FAIL', outcome)
+        extended = self.one.alyx.rest('sessions', 'read', id=self.eid)['extended_qc']
+        expected = list(results.keys()) + ['task']
+        self.assertCountEqual(expected, extended.keys(), 'unexpected update to extended qc')
+        qc_field = self.one.alyx.rest('sessions', 'read', id=self.eid)['qc']
+        self.assertEqual(outcome, qc_field, 'unexpected update to qc')
+
+    def test_compute_session_status(self):
+        with self.assertRaises(AttributeError):
+            self.qc.compute_session_status()
+        self.qc.compute()
+        outcome, results, outcomes = self.qc.compute_session_status()
+        self.assertEqual('FAIL', outcome)
+
+        # Check each outcome matches...
+        # NOT_SET
+        not_set = [k for k, v in results.items() if np.isnan(v)]
+        self.assertTrue(all(outcomes[k] == 'NOT_SET' for k in not_set))
+        # PASS
+        passed = [k for k, v in results.items() if v >= self.qc.criteria['PASS']]
+        self.assertTrue(all(outcomes[k] == 'PASS' for k in passed))
+        # WARNING
+        wrn = [k for k, v in results.items()
+               if self.qc.criteria['WARNING'] <= v <= self.qc.criteria['PASS']]
+        self.assertTrue(all(outcomes[k] == 'WARNING' for k in wrn))
+        # FAIL
+        fail = [k for k, v in results.items() if v <= self.qc.criteria['FAIL']]
+        self.assertTrue(all(outcomes[k] == 'FAIL' for k in fail))
+
+
 
 
 class TestTaskMetrics(unittest.TestCase):
@@ -55,7 +92,8 @@ class TestTaskMetrics(unittest.TestCase):
         self.eid = "7be8fec4-406b-4e74-8548-d2885dcc3d5e"
         self.data = self.load_fake_bpod_data()
         self.wheel_gain = 4
-        self.wheel = self.load_fake_wheel_data(self.data, wheel_gain=self.wheel_gain)
+        wheel_data = self.load_fake_wheel_data(self.data, wheel_gain=self.wheel_gain)
+        self.data.update(wheel_data)
 
     @staticmethod
     def load_fake_bpod_data():
@@ -188,8 +226,8 @@ class TestTaskMetrics(unittest.TestCase):
         assert np.all(np.diff(wheel_data[:, 0]) > 0), "timestamps don't strictly increase"
         np.testing.assert_allclose(np.abs(np.diff(wheel_data[:, 1])), resolution)
         return {
-            're_ts': wheel_data[:, 0],
-            're_pos': wheel_data[:, 1]
+            'wheel_timestamps': wheel_data[:, 0],
+            'wheel_position': wheel_data[:, 1]
         }
 
     def test_check_stimOn_goCue_delays(self):
@@ -343,14 +381,27 @@ class TestTaskMetrics(unittest.TestCase):
 
     def test_check_reward_volumes(self):
         metric, passed = qcmetrics.check_reward_volumes(self.data)
-        self.assertTrue(
-            np.all([x in {0.0, 3.0} for x in metric]), "failed to return correct metric"
-        )
+        self.assertTrue(all(x in {0.0, 3.0} for x in metric), "failed to return correct metric")
+        self.assertTrue(np.all(passed))
         # Set incorrect volume
-        id = np.argmax(self.data["correct"])
-        self.data["rewardVolume"][id] = 4.0
+        id = np.array(np.argmax(self.data["correct"]), np.argmax(~self.data["correct"]))
+        self.data["rewardVolume"][id] = self.data["rewardVolume"][id] + 1
         metric, passed = qcmetrics.check_reward_volumes(self.data)
-        self.assertTrue(np.nanmean(passed) == 0.2, "failed to detect incorrect reward volume")
+        self.assertTrue(np.mean(passed) == 0.6, "failed to detect incorrect reward volumes")
+
+    def test_check_reward_volume_set(self):
+        metric, passed = qcmetrics.check_reward_volume_set(self.data)
+        self.assertTrue(all(x in {0.0, 3.0} for x in metric), "failed to return correct metric")
+        self.assertTrue(passed)
+        # Add a new volume to the set
+        id = np.argmax(self.data["correct"])
+        self.data["rewardVolume"][id] = 2.3
+        metric, passed = qcmetrics.check_reward_volume_set(self.data)
+        self.assertFalse(passed, "failed to detect incorrect reward volume set")
+        # Set 0 volumes to new value; set length still 2 but should fail anyway
+        self.data["rewardVolume"][~self.data["correct"]] = 2.3
+        metric, passed = qcmetrics.check_reward_volume_set(self.data)
+        self.assertFalse(passed, "failed to detect incorrect reward volume set")
 
     def test_check_audio_pre_trial(self):
         # Create Sound sync fake data that is OK
@@ -371,27 +422,27 @@ class TestTaskMetrics(unittest.TestCase):
         self.assertTrue(~np.all(passed))
 
     def test_check_wheel_freeze_during_quiescence(self):
-        metric, passed = qcmetrics.check_wheel_freeze_during_quiescence(self.data, self.wheel)
+        metric, passed = qcmetrics.check_wheel_freeze_during_quiescence(self.data)
         self.assertTrue(np.all(passed))
 
         # Make one trial move more
         n = 1  # Index of trial to manipulate
         t1 = self.data['intervals_0'][n]
         t2 = self.data['stimOnTrigger_times'][n]
-        ts, pos = self.wheel.values()
+        ts, pos = (self.data['wheel_timestamps'], self.data['wheel_position'])
         wh_idx = np.argmax(ts > t1)
         if ts[wh_idx] > self.data['stimOnTrigger_times'][n]:
             # No sample during quiescence; insert one
-            self.wheel['re_ts'] = np.insert(ts, wh_idx, t2 - .001)
-            self.wheel['re_pos'] = np.insert(pos, wh_idx, np.inf)
+            self.data['wheel_timestamps'] = np.insert(ts, wh_idx, t2 - .001)
+            self.data['wheel_position'] = np.insert(pos, wh_idx, np.inf)
         else:  # Otherwise make one sample infinite
-            self.wheel['re_pos'][wh_idx] = np.inf
-        metric, passed = qcmetrics.check_wheel_freeze_during_quiescence(self.data, self.wheel)
+            self.data['wheel_position'][wh_idx] = np.inf
+        metric, passed = qcmetrics.check_wheel_freeze_during_quiescence(self.data)
         self.assertFalse(passed[n])
         self.assertTrue(metric[n] > 2)
 
     def test_check_wheel_move_before_feedback(self):
-        metric, passed = qcmetrics.check_wheel_move_before_feedback(self.data, self.wheel)
+        metric, passed = qcmetrics.check_wheel_move_before_feedback(self.data)
         nogo = self.data['choice'] == 0
         self.assertTrue(np.all(passed[~nogo]))
         self.assertTrue(np.isnan(metric[nogo]).all())
@@ -400,17 +451,17 @@ class TestTaskMetrics(unittest.TestCase):
         # Remove wheel data around feedback for choice trial
         assert self.data['choice'].any(), 'no choice trials in test data'
         n = np.argmax(self.data['choice'] != 0)  # Index of choice trial
-        mask = np.logical_xor(self.wheel['re_ts'] > self.data['feedback_times'][n] - 1,
-                              self.wheel['re_ts'] < self.data['feedback_times'][n] + 1)
-        self.wheel['re_ts'] = self.wheel['re_ts'][mask]
-        self.wheel['re_pos'] = self.wheel['re_pos'][mask]
+        mask = np.logical_xor(self.data['wheel_timestamps'] > self.data['feedback_times'][n] - 1,
+                              self.data['wheel_timestamps'] < self.data['feedback_times'][n] + 1)
+        self.data['wheel_timestamps'] = self.data['wheel_timestamps'][mask]
+        self.data['wheel_position'] = self.data['wheel_position'][mask]
 
-        metric, passed = qcmetrics.check_wheel_move_before_feedback(self.data, self.wheel)
+        metric, passed = qcmetrics.check_wheel_move_before_feedback(self.data)
         self.assertFalse(passed[n] or metric[n] != 0)
 
     def test_check_wheel_move_during_closed_loop(self):
         gain = self.wheel_gain or 4
-        metric, passed = qcmetrics.check_wheel_move_during_closed_loop(self.data, self.wheel, gain)
+        metric, passed = qcmetrics.check_wheel_move_during_closed_loop(self.data, gain)
         nogo = self.data['choice'] == 0
         self.assertTrue(np.all(passed[~nogo]))
         self.assertTrue(np.isnan(metric[nogo]).all())
@@ -419,24 +470,24 @@ class TestTaskMetrics(unittest.TestCase):
         # Remove wheel data for choice trial
         assert self.data['choice'].any(), 'no choice trials in test data'
         n = np.argmax(self.data['choice'] != 0)  # Index of choice trial
-        mask = np.logical_xor(self.wheel['re_ts'] < self.data['goCue_times'][n],
-                              self.wheel['re_ts'] > self.data['response_times'][n])
-        self.wheel['re_ts'] = self.wheel['re_ts'][mask]
-        self.wheel['re_pos'] = self.wheel['re_pos'][mask]
+        mask = np.logical_xor(self.data['wheel_timestamps'] < self.data['goCue_times'][n],
+                              self.data['wheel_timestamps'] > self.data['response_times'][n])
+        self.data['wheel_timestamps'] = self.data['wheel_timestamps'][mask]
+        self.data['wheel_position'] = self.data['wheel_position'][mask]
 
-        metric, passed = qcmetrics.check_wheel_move_during_closed_loop(self.data, self.wheel, gain)
+        metric, passed = qcmetrics.check_wheel_move_during_closed_loop(self.data, gain)
         self.assertFalse(passed[n])
 
     def test_check_wheel_integrity(self):
-        metric, passed = qcmetrics.check_wheel_integrity(self.wheel, re_encoding='X1')
+        metric, passed = qcmetrics.check_wheel_integrity(self.data, re_encoding='X1')
         self.assertTrue(np.all(passed))
 
         # Insert some violations and verify that they're caught
-        idx = np.random.randint(self.wheel['re_ts'].size, size=2)
-        self.wheel['re_ts'][idx[0] + 1] -= 1
-        self.wheel['re_pos'][idx[1]] -= 1
+        idx = np.random.randint(self.data['wheel_timestamps'].size, size=2)
+        self.data['wheel_timestamps'][idx[0] + 1] -= 1
+        self.data['wheel_position'][idx[1]] -= 1
 
-        metric, passed = qcmetrics.check_wheel_integrity(self.wheel, re_encoding='X1')
+        metric, passed = qcmetrics.check_wheel_integrity(self.data, re_encoding='X1')
         self.assertFalse(passed[idx].any())
 
     @unittest.skip("not implemented")

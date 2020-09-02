@@ -654,7 +654,6 @@ def extract_all(session_path, save=True, bin_exists=False):
     :param version: bpod version, defaults to None
     :return: outputs, files
     """
-    assert save  # fixme with wheel positions, this function can't work without saving the data
     sync, chmap = _get_main_probe_sync(session_path, bin_exists=bin_exists)
     outputs, files = run_extractor_classes(
         [CameraTimestamps, FpgaTrials], session_path=session_path,
