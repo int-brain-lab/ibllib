@@ -176,6 +176,9 @@ class NeuralGLM:
             gainmod = False
         elif isinstance(deltaval, pd.Series):
             gainmod = True
+        elif isinstance(deltaval, str) and deltaval in self.trialsdf.columns:
+            gainmod = True
+            deltaval = self.trialsdf[deltaval]
         else:
             raise TypeError(f'deltaval must be None or pandas series. {type(deltaval)} '
                             'was passed instead.')
