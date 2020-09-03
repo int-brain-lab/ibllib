@@ -34,13 +34,14 @@ class TaskQCExtractor(object):
         self.BNC1 = self.BNC2 = None
         self.type = None
         self.wheel_encoding = None
+        self.bpod_only = bpod_only
 
         if download_data:
             self._ensure_required_data()
 
         if not lazy:
             self.load_raw_data()
-            self.extract_data(bpod_only=bpod_only)
+            self.extract_data()
 
     def _ensure_required_data(self):
         """
@@ -87,22 +88,21 @@ class TaskQCExtractor(object):
         self.settings, self.raw_data = raw.load_bpod(self.session_path)
         self.BNC1, self.BNC2 = raw.load_bpod_fronts(self.session_path, data=self.raw_data)
 
-    def extract_data(self, partial=False, bpod_only=False):
+    def extract_data(self, partial=False):
         """Extracts and loads behaviour data for QC
-        NB: partial extraction when bpod_only is False requires intervals and intervals_bpod to
-        be assigned to the data attribute before calling this function.
+        NB: partial extraction when bpod_only sttricbute is False requires intervals and
+        intervals_bpod to be assigned to the data attribute before calling this function.
         :param partial: If True, extracts only the required data that aren't usually saved to ALFs
-        :param bpod_only: If False, FPGA data are extracted where available
         :return:
         """
         self.log.info(f"Extracting session: {self.session_path}")
         self.type = raw.get_session_extractor_type(self.session_path)
-        self.wheel_encoding = 'X4' if (self.type == 'ephys' and not bpod_only) else 'X1'
+        self.wheel_encoding = 'X4' if (self.type == 'ephys' and not self.bpod_only) else 'X1'
 
         # Partial extraction for FPGA sessions only worth it if intervals already extracted and
         # assigned to the data attribute
         data_assigned = self.data and {'intervals', 'intervals_bpod'}.issubset(self.data)
-        if partial and self.type == 'ephys' and not bpod_only and not data_assigned:
+        if partial and self.type == 'ephys' and not self.bpod_only and not data_assigned:
             partial = False  # Requires intervals for converting to FPGA time
 
         if not self.raw_data:
@@ -115,7 +115,7 @@ class TaskQCExtractor(object):
 
         # Extract the data that are usually saved to file
         if not partial:
-            if self.type == 'ephys' and not bpod_only:
+            if self.type == 'ephys' and not self.bpod_only:
                 extractors.append(FpgaTrials)
             else:
                 extractors.extend([
@@ -134,7 +134,7 @@ class TaskQCExtractor(object):
             # For ephys sessions extract quiescence and phase from pre-generated file
             data.update(_get_pregenerated_events(self.raw_data, self.settings))
 
-            if not bpod_only:
+            if not self.bpod_only:
                 # Get the extracted intervals for sync.  For partial ephys extraction attempt to
                 # get intervals from data attribute.
                 intervals, intervals_bpod = [data[key] if key in data else self.data[key]

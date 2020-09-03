@@ -1,5 +1,6 @@
 import logging
 from abc import abstractmethod
+from pathlib import Path
 
 import numpy as np
 
@@ -50,7 +51,7 @@ class QC:
             # Try to set session_path if data is found locally
             self.session_path = self.one.path_from_eid(self.eid)
         elif is_session_path(session_path_or_eid):
-            self.session_path = session_path_or_eid
+            self.session_path = Path(session_path_or_eid)
             self.eid = self.one.eid_from_path(self.session_path)
             if not self.eid:
                 self.log.warning('Failed to determine eID from session path')
