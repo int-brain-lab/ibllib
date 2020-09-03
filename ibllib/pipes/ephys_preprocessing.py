@@ -106,7 +106,7 @@ class EphysTrials(tasks.Task):
         dsets, out_files = ephys_fpga.extract_all(self.session_path, save=True)
 
         # Run the task QC
-        qc = TaskQC(self.session_path, one=self.one)
+        qc = TaskQC(self.session_path, one=self.one, log=_logger)
         qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one)
         # Extract extra datasets required for QC
         qc.extractor.data = dsets

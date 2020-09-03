@@ -1,4 +1,4 @@
-from collections import Counter
+from collections import Counter, Sized
 from pathlib import Path
 from datetime import datetime
 
@@ -19,24 +19,35 @@ def plot_results(qc_obj, save_path=None):
         qc_obj.compute()
 
     outcome, results, outcomes = qc_obj.compute_session_status()
+    # TODO Add title if ephys and bpod only
+    # TODO Print not passed
+
+    map = {k: [] for k in set(outcomes.values())}
+    for k, v in outcomes.items():
+        map[v].append(k[6:])
+    for k, v in map.items():
+        print(f'The following checks were labelled {k}:')
+        print('\n'.join(v), '\n')
 
     n_trials = qc_obj.extractor.data['intervals_0'].size
-    d = qc_obj.one.get_details(qc_obj.eid)
-    ref = f"{datetime.fromisoformat(d['start_time']).date()}_{d['number']:d}_{d['subject']}"
+    det = qc_obj.one.get_details(qc_obj.eid)
+    ref = f"{datetime.fromisoformat(det['start_time']).date()}_{det['number']:d}_{det['subject']}"
 
     # Sort into each category
     counts = Counter(outcomes.values())
     fig = plt.Figure()
-    plt.bar(range(len(counts)), counts.values(), align='center')
+    plt.bar(range(len(counts)), counts.values(), align='center')  # FIXME No labels
     fig.suptitle = ref
 
     a4_dims = (11.7, 8.27)
     fig, (ax0, ax1) = plt.subplots(2, 1, figsize=a4_dims)
-    fig.suptitle = ref
+    fig.suptitle = ref  # FIXME Use session path if eid is None
 
     # Plot failed trial level metrics
     def get_trial_level_failed(d):
-        new_dict = {k[6:]: v for k, v in d.items() if outcomes[k] == 'FAIL' and len(v) == n_trials}
+        new_dict = {k[6:]: v for k, v in d.items()
+                    if outcomes[k] == 'FAIL' and isinstance(v, Sized) and len(v) == n_trials}
+        # hasattr(v, '__len__')
         return pd.DataFrame.from_dict(new_dict)
     sns.boxplot(data=get_trial_level_failed(qc_obj.metrics), orient='h', ax=ax0)
     ax0.set_yticklabels(ax0.get_yticklabels(), rotation=30)

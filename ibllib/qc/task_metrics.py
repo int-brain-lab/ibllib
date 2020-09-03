@@ -35,12 +35,12 @@ from ibllib.io.extractors.training_wheel import WHEEL_RADIUS_CM
 from ibllib.io.extractors.ephys_fpga import WHEEL_TICKS
 from . import base
 
-log = logging.getLogger('ibllib')
+_log = logging.getLogger('ibllib')
 
 
 class TaskQC(base.QC):
-    def __init__(self, session_path_or_eid, one=None):
-        super().__init__(session_path_or_eid, one, log=log)
+    def __init__(self, session_path_or_eid, one=None, log=None):
+        super().__init__(session_path_or_eid, one, log=log or _log)
 
         # Data
         self.extractor = None
@@ -321,7 +321,7 @@ def check_wheel_move_during_closed_loop(data, wheel_gain=None, **_):
     :param wheel_gain: the 'STIM_GAIN' task setting
     """
     if wheel_gain is None:
-        log.warning("No wheel_gain input in function call, returning None")
+        _log.warning("No wheel_gain input in function call, returning None")
         return None
 
     # Get tuple of wheel times and positions over each trial's closed-loop period
@@ -707,7 +707,7 @@ def check_stimulus_move_before_goCue(data, BNC1=None, **_):
     :param data: dict of trial data with keys ('goCue_times', 'intervals_0', 'choice')
     """
     if BNC1 is None:
-        log.warning("No BNC1 input in function call, returning None")
+        _log.warning("No BNC1 input in function call, returning None")
         return None
     s = BNC1["times"]
     metric = np.array([])
@@ -732,7 +732,7 @@ def check_audio_pre_trial(data, BNC2=None, **_):
     :param BNC2: the TTLs recorded form Bpod's BNC2 input
     """
     if BNC2 is None:
-        log.warning("No BNC2 input in function call, retuning None")
+        _log.warning("No BNC2 input in function call, retuning None")
         return None
     s = BNC2["times"]
     metric = np.array([], dtype=np.bool)

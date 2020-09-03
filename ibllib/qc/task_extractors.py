@@ -29,7 +29,6 @@ class TaskQCExtractor(object):
         self.log = logging.getLogger("ibllib")
 
         self.data = None
-        self.wheel_data = None
         self.settings = None
         self.raw_data = None
         self.BNC1 = self.BNC2 = None
@@ -136,9 +135,10 @@ class TaskQCExtractor(object):
             data.update(_get_pregenerated_events(self.raw_data, self.settings))
 
             if not bpod_only:
-                # If partial ephys extraction we will attempt to get intervals from data attribute
-                intervals_bpod = data.get('intervals_bpod') or self.data['intervals_bpod']
-                intervals = data.get('intervals') or self.data['intervals']
+                # Get the extracted intervals for sync.  For partial ephys extraction attempt to
+                # get intervals from data attribute.
+                intervals, intervals_bpod = [data[key] if key in data else self.data[key]
+                                             for key in ('intervals', 'intervals_bpod')]
                 # We need to sync the extra extracted data to FPGA time
                 # 0.5s iti already removed during extraction so we set duration to 0 here
                 ibpod, _, bpod2fpga = bpod_fpga_sync(intervals_bpod, intervals, iti_duration=0)
