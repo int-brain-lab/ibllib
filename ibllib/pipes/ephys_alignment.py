@@ -2,7 +2,7 @@ import scipy
 import numpy as np
 import ibllib.pipes.histology as histology
 import ibllib.atlas as atlas
-brain_atlas = atlas.AllenAtlas(25)
+#brain_atlas = atlas.AllenAtlas(25)
 TIP_SIZE_UM = 200
 
 
@@ -13,7 +13,12 @@ def _cumulative_distance(xyz):
 class EphysAlignment:
 
     def __init__(self, xyz_picks, chn_depths=None, track_prev=None,
-                 feature_prev=None):
+                 feature_prev=None, brain_atlas=None):
+
+        if not brain_atlas:
+            self.brain_atlas = atlas.AllenAtlas(25)
+        else:
+            self.brain_atlas = brain_atlas
 
         self.xyz_track, self.track_extent = self.get_insertion_track(xyz_picks)
         self.chn_depths = chn_depths
@@ -31,7 +36,7 @@ class EphysAlignment:
                                                              self.sampling_trk[0])
 
         self.region, self.region_label, self.region_colour, self.region_id\
-            = self.get_histology_regions(self.xyz_samples, self.sampling_trk)
+            = self.get_histology_regions(self.xyz_samples, self.sampling_trk, self.brain_atlas)
 
     def get_insertion_track(self, xyz_picks):
         """
@@ -50,9 +55,9 @@ class EphysAlignment:
         traj_exit = atlas.Trajectory.fit(xyz_picks[-1 * n_picks:, :])
         # Force the entry to be on the upper z lim of the atlas to account for cases where channels
         # may be located above the surface of the brain
-        entry = (traj_entry.eval_z(brain_atlas.bc.zlim))[0, :]
+        entry = (traj_entry.eval_z(self.brain_atlas.bc.zlim))[0, :]
         # The exit is just below the bottom surfacce of the brain
-        exit = atlas.Insertion.get_brain_exit(traj_exit, brain_atlas)
+        exit = atlas.Insertion.get_brain_exit(traj_exit, self.brain_atlas)
         exit[2] = exit[2] - 200 / 1e6
 
         xyz_track = np.r_[exit[np.newaxis, :], xyz_picks, entry[np.newaxis, :]]
@@ -186,7 +191,7 @@ class EphysAlignment:
         return region, region_label
 
     @staticmethod
-    def get_histology_regions(xyz_coords, depth_coords):
+    def get_histology_regions(xyz_coords, depth_coords, brain_atlas=None):
         """
         Find all brain regions and their boundaries along the depth of probe or track
         :param xyz_coords: 3D coordinates of points along probe or track
@@ -202,6 +207,9 @@ class EphysAlignment:
         :return region_id: allen atlas id for each brain region along track
         :type region_id: np.array((n_bound))
         """
+        if not brain_atlas:
+            brain_atlas = atlas.AllenAtlas(25)
+
         region_ids = brain_atlas.get_labels(xyz_coords)
         region_info = brain_atlas.regions.get(region_ids)
         boundaries = np.where(np.diff(region_info.id))[0]
@@ -229,7 +237,7 @@ class EphysAlignment:
         return region, region_label, region_colour, region_id
 
     @staticmethod
-    def get_nearest_boundary(xyz_coords, allen, extent=100, steps=8, parent=True):
+    def get_nearest_boundary(xyz_coords, allen, extent=100, steps=8, parent=True, brain_atlas=None):
         """
         Finds distance to closest neighbouring brain region along trajectory. For each point in
         xyz_coords computes the plane passing through point and perpendicular to trajectory and
@@ -249,6 +257,8 @@ class EphysAlignment:
         :return nearest_bound: dict containing results
         :type nearest_bound: dict
         """
+        if not brain_atlas:
+            brain_atlas = atlas.AllenAtlas(25)
 
         vector = atlas.Insertion.from_track(xyz_coords, brain_atlas=brain_atlas).trajectory.vector
         nearest_bound = dict()
@@ -416,7 +426,7 @@ class EphysAlignment:
         :return brain_regions: brain region object for each electrode
         :type dict
         """
-        brain_regions = brain_atlas.regions.get(brain_atlas.get_labels(xyz_channels))
+        brain_regions = self.brain_atlas.regions.get(self.brain_atlas.get_labels(xyz_channels))
         return brain_regions
 
     def get_perp_vector(self, feature, track):
