@@ -719,8 +719,14 @@ class AllenAtlas(BrainAtlas):
             image, label = [np.zeros((528, 456, 320), dtype=np.bool) for _ in range(2)]
         else:
             path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
-            file_image = hist_path or path_atlas.joinpath(f'average_template_{res_um}.npz')
-            file_label = path_atlas.joinpath(f'annotation_{res_um}.npz')
+            file_image = hist_path or path_atlas.joinpath(f'average_template_{res_um}.nrrd')
+            file_label = path_atlas.joinpath(f'annotation_{res_um}.nrrd')
+
+            if not file_image.exists():
+                file_image = path_atlas.joinpath(f'average_template_{res_um}.npz')
+            if not file_label.exists():
+                file_label = path_atlas.joinpath(f'annotation_{res_um}.npz')
+
             if not file_image.exists():
                 _download_atlas_flatiron(file_image, FLAT_IRON_ATLAS_REL_PATH, par)
             if not file_label.exists():
