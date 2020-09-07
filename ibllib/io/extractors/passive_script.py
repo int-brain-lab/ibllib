@@ -43,11 +43,12 @@ dataset_types = [
     "_iblrig_taskData.raw",
 ]
 
-eid = one.search(subject="CSH_ZAD_022", date_range="2020-05-24", number=1)[0]
 eid = "01864d6f-31e8-49c9-aadd-2e5021ea0ee7"  # not working
-eid = "193fe7a8-4eb5-4f3e-815a-0c45864ddd77"  # OK
 eid = "fff7d745-bbce-4756-a690-3431e2f3d108"  # number of expected spacers wrong
-eid, det = random_ephys_session()
+eid = "193fe7a8-4eb5-4f3e-815a-0c45864ddd77"  # OK
+eid = one.search(subject="CSH_ZAD_022", date_range="2020-05-24", number=1)[0]
+# eid, det = random_ephys_session()
+
 local_paths = one.load(eid, dataset_types=dataset_types, download_only=True)
 
 session_path = alf.io.get_session_path(local_paths[0])
