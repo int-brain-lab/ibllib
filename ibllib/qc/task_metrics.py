@@ -658,14 +658,12 @@ def check_wheel_integrity(data, re_encoding='X1', enc_res=None, **_):
 
     :param data: dict of wheel data with keys ('wheel_timestamps', 'wheel_position')
     :param re_encoding: the encoding of the wheel data, X1, X2 or X4
-    :param enc_res: the rotary encoder resolution
+    :param enc_res: the rotary encoder resolution (default 1024 ticks per revolution)
     """
     if isinstance(re_encoding, str):
         re_encoding = int(re_encoding[-1])
-    if enc_res is None:
-        enc_res = WHEEL_TICKS / re_encoding
     # The expected difference between samples in the extracted units
-    resolution = (2 * np.pi / enc_res) * re_encoding * WHEEL_RADIUS_CM
+    resolution = 1 / (enc_res or WHEEL_TICKS) * np.pi * 2 * WHEEL_RADIUS_CM / re_encoding
     # We expect the difference of neighbouring positions to be close to the resolution
     pos_check = np.abs(np.diff(data['wheel_position'])) - resolution
     # Timestamps should be strictly increasing
