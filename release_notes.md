@@ -1,3 +1,9 @@
+### Release Notes 1.5.9
+-   local server: catches error when subject is not registered in Alyx
+-   ibllib.atlas.AllenAtlas
+    -   re-ordered the volumes in c-order contiguous ml-ap-dv efficient coronal shapes
+    -   top/bottom surface extraction
+
 ### Release Notes 1.5.8 Hotfix
 -   Ephys extraction SyncSpikeSorting: specify different dir for ks2 ouput and raw ephys data
 

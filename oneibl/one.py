@@ -546,6 +546,7 @@ class OneAlyx(OneAbstract):
 
 
         """
+
         # small function to make sure string inputs are interpreted as lists
         def validate_input(inarg):
             if isinstance(inarg, str):
@@ -554,6 +555,7 @@ class OneAlyx(OneAbstract):
                 return [str(inarg)]
             else:
                 return inarg
+
         # loop over input arguments and build the url
         url = '/sessions?'
         for k in kwargs.keys():
@@ -620,6 +622,9 @@ class OneAlyx(OneAbstract):
             url = next((fr['data_url'] for fr in dset['file_records'] if fr['data_url']), None)
         if not url:
             return
+        assert url.startswith(self._par.HTTP_DATA_SERVER), \
+            ('remote protocol and/or hostname does not match HTTP_DATA_SERVER parameter:\n' +
+             f'"{url[:40]}..." should start with "{self._par.HTTP_DATA_SERVER}"')
         relpath = Path(url.replace(self._par.HTTP_DATA_SERVER, '.')).parents[0]
         target_dir = Path(self._get_cache_dir(cache_dir), relpath)
         return self._download_file(url=url, target_dir=target_dir, **kwargs)
@@ -835,7 +840,7 @@ class OneAlyx(OneAbstract):
             eq = np.logical_and(heq, feq)
             # update new hash / filesizes
             if not np.all(eq):
-                self._cache.iloc[icache].loc[:, ['file_size', 'hash']] =\
+                self._cache.iloc[icache].loc[:, ['file_size', 'hash']] = \
                     pqt_dsets.iloc[np.where(isin)[0]].loc[:, ['file_size', 'hash']]
                 save = True
             # append datasets that haven't been found

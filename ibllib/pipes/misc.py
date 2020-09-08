@@ -413,7 +413,8 @@ def get_new_filename(filename: str) -> str:  # testOK
                 gt = f'_g{g}_t{t}'
     else:
         if gt is None:
-            raise(NotImplementedError)
+            raise NotImplementedError(f"Can not parse {filename} as an ephys file with gX_tY where"
+                                      f"XY are single digits")
 
     # ext = 'bin' or 'meta'
     if '.bin' in filename:
