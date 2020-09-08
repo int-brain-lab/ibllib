@@ -72,7 +72,8 @@ class QC:
             qc.update('PASS')  # Update current QC field to 'PASS' if not set
         """
         outcome = outcome.upper()  # Ensure outcome is uppercase
-        assert outcome in CRITERIA, 'Invalid outcome; must be one of ' + ', '.join(CRITERIA.keys())
+        if outcome not in CRITERIA:
+            raise ValueError('Invalid outcome; must be one of ' + ', '.join(CRITERIA.keys()))
         assert self.eid, 'Unable to update Alyx; eID not set'
         if namespace:  # Record in extended qc
             self.update_extended_qc({namespace: outcome})

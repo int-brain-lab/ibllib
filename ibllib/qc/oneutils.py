@@ -71,7 +71,7 @@ def _dl_raw_behavior(session_path, full=False, dry=False, force=False):
 
 
 def uuid_to_path(func=None, dl=False, full=False, dry=False, force=False):
-    """ Check if first argument of func is eID, if valid return path with oprional download
+    """ Check if first argument of func is eID, if valid return path with optional download
     """
     if func is None:
         return partial(uuid_to_path, dl=dl, full=full, dry=dry, force=force)

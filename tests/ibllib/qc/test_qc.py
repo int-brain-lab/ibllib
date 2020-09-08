@@ -16,6 +16,11 @@ class TestQC(unittest.TestCase):
     def setUp(self) -> None:
         self.eid = 'b1c968ad-4874-468d-b2e4-5ffa9b9964e9'
         self.qc = QC(self.eid, one=one)
+        ses = one.alyx.rest('sessions', 'partial_update', id=self.eid, data={'qc': 'NOT_SET'})
+        assert ses['qc'] == 'NOT_SET', 'failed to reset qc field for test'
+        extended = one.alyx.json_field_write('sessions', field_name='extended_qc',
+                                             uuid=self.eid, data={})
+        assert not extended, 'failed to reset extended_qc field for test'
 
     def test__set_eid_or_path(self) -> None:
         """Test setting both the eid and session path when providing one or the other"""
@@ -63,9 +68,9 @@ class TestQC(unittest.TestCase):
         outcome = 'fail'  # Check handling of lower case
         namespace = 'task'
         current = self.qc.update(outcome, namespace=namespace)
-        self.assertEqual(outcome, current, 'Failed to update QC field')
+        self.assertEqual(outcome.upper(), current, 'Failed to update QC field')
         extended = one.alyx.rest('sessions', 'read', id=self.eid)['extended_qc']
-        updated = namespace in extended and extended[namespace] == outcome
+        updated = namespace in extended and extended[namespace] == outcome.upper()
         self.assertTrue(updated, 'failed to update extended_qc field')
 
         # Test setting lower outcome: update should not occur if overall outcome is more severe
@@ -74,14 +79,14 @@ class TestQC(unittest.TestCase):
         current = self.qc.update(outcome)
         self.assertNotEqual(outcome, current, 'QC field updated with less severe outcome')
         extended = one.alyx.rest('sessions', 'read', id=self.eid)['extended_qc']
-        updated = namespace in extended and extended[namespace] == outcome
+        updated = namespace in extended and extended[namespace] != outcome
         self.assertTrue(updated, 'failed to update extended_qc field')
 
         # Test setting lower outcome with override: update should still occur
         outcome = 'NOT_SET'  # Check handling of lower case
         namespace = 'task'
-        current = self.qc.update(outcome, override=True)
-        self.assertNotEqual(outcome, current, 'QC field updated with less severe outcome')
+        current = self.qc.update(outcome, override=True, namespace=namespace)
+        self.assertEqual(outcome, current, 'QC field updated with less severe outcome')
         extended = one.alyx.rest('sessions', 'read', id=self.eid)['extended_qc']
         updated = namespace in extended and extended[namespace] == outcome
         self.assertTrue(updated, 'failed to update extended_qc field')

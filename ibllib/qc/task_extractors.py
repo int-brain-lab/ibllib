@@ -10,7 +10,9 @@ from ibllib.io.extractors.training_trials import (
 )
 from ibllib.io.extractors.training_wheel import Wheel
 from oneibl.one import ONE
-from ibllib.io.extractors.ephys_fpga import _get_pregenerated_events, bpod_fpga_sync, FpgaTrials
+from ibllib.io.extractors.ephys_fpga import (
+    _get_pregenerated_events, _get_main_probe_sync, bpod_fpga_sync, FpgaTrials
+)
 import ibllib.io.raw_data_loaders as raw
 
 
@@ -31,7 +33,7 @@ class TaskQCExtractor(object):
         self.data = None
         self.settings = None
         self.raw_data = None
-        self.BNC1 = self.BNC2 = None
+        self.frame_ttls = self.audio_ttls = None
         self.type = None
         self.wheel_encoding = None
         self.bpod_only = bpod_only
@@ -81,12 +83,26 @@ class TaskQCExtractor(object):
 
     def load_raw_data(self):
         """
-        Loads the BNC TTLs, raw task data and task settings
+        Loads the TTLs, raw task data and task settings
         :return:
         """
         self.log.info(f"Loading raw data from {self.session_path}")
+        self.type = self.type or raw.get_session_extractor_type(self.session_path)
         self.settings, self.raw_data = raw.load_bpod(self.session_path)
-        self.BNC1, self.BNC2 = raw.load_bpod_fronts(self.session_path, data=self.raw_data)
+        # Fetch the TTLs for the photodiode and audio
+        if self.type != 'ephys' or self.bpod_only is True:  # Extract from Bpod
+            ttls = raw.load_bpod_fronts(self.session_path, data=self.raw_data)
+        else:  # Extract from FPGA
+            sync, chmap = _get_main_probe_sync(self.session_path)
+
+            def channel_events(name):
+                """Fetches the polarities and times for a given channel"""
+                keys = ('polarities', 'times')
+                mask = sync['channels'] == chmap[name]
+                return dict(zip(keys, (sync[k][mask] for k in keys)))
+
+            ttls = [channel_events(ch) for ch in ('frame2ttl', 'audio')]
+        self.frame_ttls, self.audio_ttls = ttls
 
     def extract_data(self, partial=False):
         """Extracts and loads behaviour data for QC
@@ -96,7 +112,7 @@ class TaskQCExtractor(object):
         :return:
         """
         self.log.info(f"Extracting session: {self.session_path}")
-        self.type = raw.get_session_extractor_type(self.session_path)
+        self.type = self.type or raw.get_session_extractor_type(self.session_path)
         self.wheel_encoding = 'X4' if (self.type == 'ephys' and not self.bpod_only) else 'X1'
 
         # Partial extraction for FPGA sessions only worth it if intervals already extracted and
@@ -162,8 +178,7 @@ class TaskQCExtractor(object):
     @staticmethod
     def rename_data(data):
         """Rename the extracted data dict for use with TaskQC
-        Splits 'intervals' into 'intervals_0' and 'intervals_1', as well splitting
-        'feedback_times' to 'errorCue_times' and 'valveOpen_times'.  Also adds 'outcome' and
+        Splits 'feedback_times' to 'errorCue_times' and 'valveOpen_times'.  Also adds 'outcome' and
         'correct'.
         NB: The data is not copied before making changes
         :param data: A dict of task data returned by the task extractors
@@ -176,14 +191,10 @@ class TaskQCExtractor(object):
         errorCue_times[correct] = np.nan
         valveOpen_times[~correct] = np.nan
         data.update(
-            {"errorCue_times": errorCue_times, "valveOpen_times": valveOpen_times,
+            {"errorCue_times": errorCue_times,
+             "valveOpen_times": valveOpen_times,
              "correct": correct}
         )
-        # split intervals
-        if 'intervals' in data:
-            data["intervals_0"] = data["intervals"][:, 0]
-            data["intervals_1"] = data["intervals"][:, 1]
-            # _ = data.pop("intervals")
         data["outcome"] = data["feedbackType"].copy()
         data["outcome"][data["choice"] == 0] = 0
         return data

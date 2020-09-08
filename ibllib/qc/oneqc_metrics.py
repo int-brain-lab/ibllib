@@ -9,6 +9,7 @@ class ONEQC(base.QC):
         super().__init__(eid, one)
         self.details = self.one.get_details(self.eid, full=True)
         self.bpod_ntrials = bpod_ntrials or self.details["n_trials"]
+        self.metrics = self.passed = None
 
         if not lazy:
             self.compute()

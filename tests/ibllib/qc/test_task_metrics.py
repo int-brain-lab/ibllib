@@ -36,8 +36,8 @@ class TestTaskMetricsObject(unittest.TestCase):
         self.assertTrue(self.qc.passed is not None)
 
     def test_run(self):
-        # Rest Alyx fields before test
-        reset = self.qc.update('NOT_SET')
+        # Reset Alyx fields before test
+        reset = self.qc.update('NOT_SET', override=True)
         assert reset == 'NOT_SET', 'failed to reset QC field for test'
         extended = self.one.alyx.json_field_write('sessions', field_name='extended_qc',
                                                   uuid=self.eid, data={})
@@ -83,8 +83,6 @@ class TestTaskMetricsObject(unittest.TestCase):
         self.assertTrue(all(outcomes[k] == 'FAIL' for k in fail))
 
 
-
-
 class TestTaskMetrics(unittest.TestCase):
     def setUp(self):
         self.load_fake_bpod_data()
@@ -125,8 +123,7 @@ class TestTaskMetrics(unittest.TestCase):
             "quiescence": quiescence_length,
             "choice": choice,
             "correct": correct,
-            "intervals_0": start_times,
-            "intervals_1": end_times,
+            "intervals": np.c_[start_times, end_times],
             "itiIn_times": end_times - iti_length,
             "position": np.ones_like(choice) * 35
         }
@@ -183,6 +180,7 @@ class TestTaskMetrics(unittest.TestCase):
             return t, p
 
         wheel_data = []  # List generated of wheel data fragments
+        movement_times = []  # List of generated first movement times
 
         def add_frag(t, p):
             """Add wheel data fragments to list, adjusting positions to be within one sample of
@@ -198,24 +196,26 @@ class TestTaskMetrics(unittest.TestCase):
             # Iterate over trials generating wheel samples for the necessary periods
             # trial start to stim on; should be below quiescence threshold
             stimOn_trig = trial_data['stimOnTrigger_times'][i]
-            trial_start = trial_data['intervals_0'][i]
+            trial_start = trial_data['intervals'][i, 0]
             t, p = qt_wheel_fill(trial_start, stimOn_trig, .5, resolution)
             if len(t) > 0:  # Possible for no movement during quiescence
                 add_frag(t, p)
 
             # stim on to trial end
-            trial_end = trial_data['intervals_1'][i]
+            trial_end = trial_data['intervals'][i, 1]
             if trial_data['choice'][i] == 0:
                 # Add random wheel movements for duration of trial
                 goCue = trial_data['goCue_times'][i]
                 t, p = qt_wheel_fill(goCue, trial_end, .1, resolution)
                 add_frag(t, p)
+                movement_times.append(t[0])
             else:
                 # Align wheel fragment with response time
                 response_time = trial_data['response_times'][i]
                 t = wheel_frag[:, 0] + response_time - wheel_frag[pos_thresh_idx, 0]
                 p = np.abs(wheel_frag[:, 1]) * trial_data['choice'][i]
                 assert t[0] > add_frag.last_samp[0]
+                movement_times.append(t[1])
                 add_frag(t, p)
                 # Fill in random movements between end of response and trial end
                 t, p = qt_wheel_fill(t[-1] + 0.01, trial_end, p_step=resolution)
@@ -225,9 +225,11 @@ class TestTaskMetrics(unittest.TestCase):
         wheel_data = np.concatenate(list(map(np.column_stack, wheel_data)))
         assert np.all(np.diff(wheel_data[:, 0]) > 0), "timestamps don't strictly increase"
         np.testing.assert_allclose(np.abs(np.diff(wheel_data[:, 1])), resolution)
+        assert len(movement_times) == trial_data['intervals'].shape[0]
         return {
             'wheel_timestamps': wheel_data[:, 0],
-            'wheel_position': wheel_data[:, 1]
+            'wheel_position': wheel_data[:, 1],
+            'firstMovement_times': np.array(movement_times)
         }
 
     def test_check_stimOn_goCue_delays(self):
@@ -275,7 +277,8 @@ class TestTaskMetrics(unittest.TestCase):
     def test_check_negative_feedback_stimOff_delays(self):
         err_trial = ~self.data["correct"] & self.data["outcome"] != 0
         metric, passed = qcmetrics.check_negative_feedback_stimOff_delays(self.data)
-        self.assertTrue(np.allclose(metric[err_trial], 1e-2), "failed to return correct metric")
+        values = np.abs(metric[err_trial])
+        self.assertTrue(np.allclose(values, 1e-2), "failed to return correct metric")
         # Set incorrect timestamp (stimOff occurs 1s after response)
         id = np.argmax(err_trial)
         self.data["stimOff_times"][id] = self.data["response_times"][id] + 1
@@ -283,24 +286,14 @@ class TestTaskMetrics(unittest.TestCase):
         expected = (err_trial.sum() - 1) / err_trial.sum()
         self.assertEqual(np.nanmean(passed), expected, "failed to detect dodgy timestamp")
 
-    def test_check_valve_pre_trial(self):
-        correct = self.data["correct"]
-        metric, passed = qcmetrics.check_valve_pre_trial(self.data)
-        self.assertTrue(np.all(metric), "failed to return correct metric")
-        # Set incorrect timestamp (valveOpen_times occurs before goCue)
-        idx = np.argmax(correct)
-        self.data["valveOpen_times"][idx] = self.data["goCue_times"][idx] - 0.021
-        metric, passed = qcmetrics.check_valve_pre_trial(self.data)
-        expected = (correct.sum() - 1) / correct.sum()
-        self.assertEqual(np.nanmean(passed), expected, "failed to detect dodgy timestamp")
-
     def test_check_error_trial_event_sequence(self):
         metric, passed = qcmetrics.check_error_trial_event_sequence(self.data)
-        self.assertTrue(np.all(metric), "failed to return correct metric")
+        self.assertTrue(np.all(metric == ~self.data['correct']), "failed to return correct metric")
+        self.assertTrue(np.all(passed))
         # Set incorrect timestamp (itiIn occurs before errorCue)
         err_trial = ~self.data["correct"]
         (id,) = np.where(err_trial)
-        self.data["intervals_0"][id[0]] = np.inf
+        self.data["intervals"][id[0], 0] = np.inf
         self.data["errorCue_times"][id[1]] = 0
         metric, passed = qcmetrics.check_error_trial_event_sequence(self.data)
         expected = (err_trial.sum() - 2) / err_trial.sum()
@@ -308,11 +301,12 @@ class TestTaskMetrics(unittest.TestCase):
 
     def test_check_correct_trial_event_sequence(self):
         metric, passed = qcmetrics.check_correct_trial_event_sequence(self.data)
-        self.assertTrue(np.all(metric), "failed to return correct metric")
+        self.assertTrue(np.all(metric == self.data['correct']), "failed to return correct metric")
+        self.assertTrue(np.all(passed))
         # Set incorrect timestamp
         correct = self.data["correct"]
         id = np.argmax(correct)
-        self.data["intervals_0"][id] = np.inf
+        self.data["intervals"][id, 0] = np.inf
         metric, passed = qcmetrics.check_correct_trial_event_sequence(self.data)
         expected = (correct.sum() - 1) / correct.sum()
         self.assertEqual(np.nanmean(passed), expected, "failed to detect dodgy timestamp")
@@ -384,7 +378,7 @@ class TestTaskMetrics(unittest.TestCase):
         self.assertTrue(all(x in {0.0, 3.0} for x in metric), "failed to return correct metric")
         self.assertTrue(np.all(passed))
         # Set incorrect volume
-        id = np.array(np.argmax(self.data["correct"]), np.argmax(~self.data["correct"]))
+        id = np.array([np.argmax(self.data["correct"]), np.argmax(~self.data["correct"])])
         self.data["rewardVolume"][id] = self.data["rewardVolume"][id] + 1
         metric, passed = qcmetrics.check_reward_volumes(self.data)
         self.assertTrue(np.mean(passed) == 0.6, "failed to detect incorrect reward volumes")
@@ -414,10 +408,10 @@ class TestTaskMetrics(unittest.TestCase):
             "times": self.data["goCue_times"] - 1e-1,
             "polarities": np.array([1, -1, 1, -1, 1]),
         }
-        metric, passed = qcmetrics.check_audio_pre_trial(self.data, BNC2=BNC2_OK)
+        metric, passed = qcmetrics.check_audio_pre_trial(self.data, audio=BNC2_OK)
         self.assertTrue(~np.all(metric))
         self.assertTrue(np.all(passed))
-        metric, passed = qcmetrics.check_audio_pre_trial(self.data, BNC2=BNC2_NOK)
+        metric, passed = qcmetrics.check_audio_pre_trial(self.data, audio=BNC2_NOK)
         self.assertTrue(np.all(metric))
         self.assertTrue(~np.all(passed))
 
@@ -427,7 +421,7 @@ class TestTaskMetrics(unittest.TestCase):
 
         # Make one trial move more
         n = 1  # Index of trial to manipulate
-        t1 = self.data['intervals_0'][n]
+        t1 = self.data['intervals'][n, 0]
         t2 = self.data['stimOnTrigger_times'][n]
         ts, pos = (self.data['wheel_timestamps'], self.data['wheel_position'])
         wh_idx = np.argmax(ts > t1)
@@ -490,10 +484,52 @@ class TestTaskMetrics(unittest.TestCase):
         metric, passed = qcmetrics.check_wheel_integrity(self.data, re_encoding='X1')
         self.assertFalse(passed[idx].any())
 
+    def test_check_n_trial_events(self):
+        metric, passed = qcmetrics.check_n_trial_events(self.data)
+        self.assertTrue(np.all(passed == 1.) and np.all(metric))
+
+        # Change errorCueTriggers
+        id = np.argmax(self.data['correct'])
+        self.data['errorCueTrigger_times'][id] = self.data['intervals'][id, 0] + np.random.rand()
+        _, passed = qcmetrics.check_n_trial_events(self.data)
+        self.assertFalse(passed[id])
+
+        # Change another event
+        id = id - 1 if id > 0 else id + 1
+        self.data['goCue_times'][id] = self.data['intervals'][id, 1] + np.random.rand()
+        _, passed = qcmetrics.check_n_trial_events(self.data)
+        self.assertFalse(passed[id])
+
+    def test_check_detected_wheel_moves(self):
+        metric, passed = qcmetrics.check_detected_wheel_moves(self.data)
+        self.assertTrue(np.all(self.data['firstMovement_times'] == metric))
+        self.assertTrue(np.all(passed))
+
+        # Change a movement time
+        id = np.argmax(self.data['choice'] != 0)
+        self.data['firstMovement_times'][id] = self.data['goCue_times'][id] - 0.3
+        _, passed = qcmetrics.check_detected_wheel_moves(self.data)
+        self.assertEqual(0.75, np.nanmean(passed))
+
+        # Change the min_qt
+        _, passed = qcmetrics.check_detected_wheel_moves(self.data, min_qt=0.3)
+        self.assertTrue(np.all(passed))
+
     @unittest.skip("not implemented")
     def test_check_stimulus_move_before_goCue(self):
-        # TODO Nicco?
-        pass
+        pass  # TODO Nicco?
+
+    @unittest.skip("not implemented")
+    def test_check_stimOff_itiIn_delays(self):
+        pass  # TODO Nicco?
+
+    @unittest.skip("not implemented")
+    def test_check_frame_frequency(self):
+        pass  # TODO Miles
+
+    @unittest.skip("not implemented")
+    def test_check_frame_updates(self):
+        pass  # TODO Nicco?
 
 
 if __name__ == "__main__":
