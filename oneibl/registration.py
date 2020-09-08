@@ -11,7 +11,7 @@ from ibllib.misc import version
 import ibllib.time
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io import flags, hashfile
-
+import ibllib.exceptions
 
 _logger = logging.getLogger('ibllib.alf')
 EXCLUDED_EXTENSIONS = ['.flag', '.error', '.avi']
@@ -217,9 +217,9 @@ class RegistrationClient:
         # query alyx endpoints for subject, error if not found
         try:
             subject = self.one.alyx.rest('subjects?nickname=' + md['SUBJECT_NAME'], 'list')[0]
-        except IndexError as e:
+        except IndexError:
             _logger.error(f"Subject: {md['SUBJECT_NAME']} doesn't exist in Alyx. ABORT.")
-            raise e
+            raise ibllib.exceptions.AlyxSubjectNotFound(md['SUBJECT_NAME'])
 
         # look for a session from the same subject, same number on the same day
         session_id, session = self.one.search(subjects=subject['nickname'],
