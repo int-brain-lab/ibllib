@@ -11,7 +11,6 @@ import ibllib.io.extractors.passive as passive
 from ibllib.io.extractors import ephys_fpga
 import ibllib.io.raw_data_loaders as rawio
 from ibllib.qc.oneutils import random_ephys_session
-
 # hardcoded var
 FRAME_FS = 60  # Sampling freq of the ipad screen, in Hertz
 FS_FPGA = 30000  # Sampling freq of the neural recording system screen, in Hertz
@@ -35,10 +34,17 @@ dataset_types = [
     "_iblrig_taskData.raw",
 ]
 
-eid = one.search(subject="CSH_ZAD_022", date_range="2020-05-24", number=1)[0]
 eid = "01864d6f-31e8-49c9-aadd-2e5021ea0ee7"  # not working
-eid = "fff7d745-bbce-4756-a690-3431e2f3d108"  # number of expected spacers wrong
-eid = "193fe7a8-4eb5-4f3e-815a-0c45864ddd77"  # OK
+# number of expected spacers wrong
+eid = "fff7d745-bbce-4756-a690-3431e2f3d108"
+eid = "849c9acb-8223-4e09-8cb1-95004b452baf"
+# AssertionError: multiple object sync with the same attribute in probe01, restrict parts/namespace
+eid = "c7a9f89c-2c1d-4302-94b8-effcbe4a85b3"
+# OK
+eid = "193fe7a8-4eb5-4f3e-815a-0c45864ddd77"  # HIGH
+# eid = one.search(subject="CSH_ZAD_022", date_range="2020-05-24", number=1)[0]
+eid = "a82800ce-f4e3-4464-9b80-4c3d6fade333"  # LOW
+
 # eid, det = random_ephys_session()
 
 local_paths = one.load(eid, dataset_types=dataset_types, download_only=True)
@@ -114,28 +120,45 @@ idx_end_stim = diff_idxs - 1
 # append the last stim end diff_idx[-1] + 1
 idx_end_stim = np.append(idx_end_stim, diff_idxs[-1] + 1)
 assert len(idx_end_stim) == sum(fixture['ids'] == 'G'), "wrong number of GaborEnd times"
-np.median(fttl['times'][diff_idxs])
+# np.median(np.diff(fttl['times'])[diff_idxs])
+
+passiveGabor_properties = fixture['pcs']
+passiveGabor_properties_metadata = ['position, contrast, phase']
+passiveGabor_intervals = np.array([None, fttl['times'][idx_end_stim]])
 
 
-plt.plot(np.diff(fttl['times']), '.')
+np.diff(fttl['times'][idx_end_stim-1:idx_end_stim])
 
-plt.axhline(0.4)
-plt.axvlines(fttl['times'][idx_end_stim])
+
+start_times = fttl['times'][idx_end_stim - 1]
+if fttl['times'][idx_end_stim[0]] - fttl['times'][idx_end_stim[0]-1]  > 0.3:
+    start_times[0] = fttl['times'][idx_end_stim[0]] - 0.3
+
+passiveValve.intervals
+
+
+fttl['times'][idx_end_stim]
+
+
+
+
 # Get valve intervals
 
 # Get Tone and Noise cue instervals
 
 # Get Gabor patches intervals
 
-
-
-
-
-
-
-
-from ibllib.plots import squares, vertical_lines, color_cycle
+# import matplotlib
+# matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from ibllib.plots import squares, vertical_lines, color_cycle
+
+
+plt.plot(np.diff(fttl['times']), '.')
+
+plt.axhline(0.4)
+# plt.axvline(fttl['times'][idx_end_stim])
+
 
 pl, ax = plt.subplots(1, 1)
 for i, lab in enumerate(["frame2ttl", "audio", "bpod"]):
@@ -160,7 +183,7 @@ vertical_lines(
 )
 
 ax.legend()
-
-plt.show()
+# plt.show()
+# %gui qt
 # print(det)
 print(eid)
