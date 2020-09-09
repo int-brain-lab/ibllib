@@ -11,6 +11,7 @@ import ibllib.io.extractors.passive as passive
 from ibllib.io.extractors import ephys_fpga
 import ibllib.io.raw_data_loaders as rawio
 from ibllib.qc.oneutils import random_ephys_session
+
 # hardcoded var
 FRAME_FS = 60  # Sampling freq of the ipad screen, in Hertz
 FS_FPGA = 30000  # Sampling freq of the neural recording system screen, in Hertz
@@ -64,20 +65,19 @@ fixture = {
 # load general metadata
 with open(path_fixtures.joinpath("passive_stim_meta.json"), "r") as f:
     meta = json.load(f)
-t_end_ephys = passive.ephysCW_end(session_path=session_path)
-# load stimulus sequence
-sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
+
 # fpga_sync = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"])
-fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=t_end_ephys)
-audio = ephys_fpga._get_sync_fronts(sync, sync_map["audio"], tmin=t_end_ephys)
-bpod = ephys_fpga._get_sync_fronts(sync, sync_map["bpod"], tmin=t_end_ephys)
 
-
-def get_spacers():
+def get_passive_spacers(session_path, sync=None, sync_map=None):
     """
     load and get spacer information, do corr to find spacer timestamps
     returns t_passive_starts, t_starts, t_ends
     """
+    if sync is None or sync_map is None:
+        sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
+
+    t_end_ephys = passive.ephysCW_end(session_path=session_path)
+    fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=t_end_ephys)
     spacer_template = (
         np.array(meta["VISUAL_STIM_0"]["ttl_frame_nums"], dtype=np.float32) / FRAME_FS
     )
@@ -100,46 +100,53 @@ def get_spacers():
     return spacer_times[0], spacer_times[1::2], spacer_times[2::2]
 
 
+# Load sessions sync channels and map
+sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
+
 # loop over stimuli , get start/end times and meta dictionary key
-t_start_passive, t_starts, t_ends = get_spacers()
+t_start_passive, t_starts, t_ends = get_passive_spacers(session_path, sync=sync, sync_map=sync_map)
 tspontaneous = [t_starts[0], t_ends[0]]
 trfm = [t_starts[1], t_ends[1]]
 treplay = [t_starts[2], t_ends[2]]
+
 
 # 3/3 Replay of task stimuli
 fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0])
 audio = ephys_fpga._get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
 bpod = ephys_fpga._get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
 
-np.diff(fttl['times'])
-# get idxs of where the diff is of a gabor presentation
-# This will ignore the first puls where the onset is hidden
+# get idxs of where the diff is of a gabor presentation.
+# This will get the start of a gabor patch presentation
+# and ignore the first pulse where the onset is hidden
+# 0.3 is the expected gabor length and 0.5 isthe expected delay length.
+# We use 0.4 to split the difference and to allow for maximum drift
+# At this stage we want to define what pulses are and not quality control them.
 diff_idxs = np.where(np.diff(fttl['times']) < 0.4)[0]
-# get the previous polarity change (which hsould be the end of previous stim presentation)
+# move one change back, i.e. get the OFFset of the previous stimulus
+# get the previous polarity change (which should be the end of previous stim presentation)
 idx_end_stim = diff_idxs - 1
-# append the last stim end diff_idx[-1] + 1
+# We've now lost the last stim presentation so get the last onset and move to it's offset
+# append it to the end indexes diff_idx[-1] + 1
 idx_end_stim = np.append(idx_end_stim, diff_idxs[-1] + 1)
 assert len(idx_end_stim) == sum(fixture['ids'] == 'G'), "wrong number of GaborEnd times"
 # np.median(np.diff(fttl['times'])[diff_idxs])
 
-passiveGabor_properties = fixture['pcs']
-passiveGabor_properties_metadata = ['position, contrast, phase']
-passiveGabor_intervals = np.array([None, fttl['times'][idx_end_stim]])
-
-
-np.diff(fttl['times'][idx_end_stim-1:idx_end_stim])
-
-
+# Get the start times from the end times
 start_times = fttl['times'][idx_end_stim - 1]
+# patch the first stim onset time that is wrong
 if fttl['times'][idx_end_stim[0]] - fttl['times'][idx_end_stim[0]-1]  > 0.3:
     start_times[0] = fttl['times'][idx_end_stim[0]] - 0.3
+# Move the end times to a var
+end_times = fttl['times'][idx_end_stim]
 
-passiveValve.intervals
+passiveGabor_properties = fixture['pcs']
+passiveGabor_properties_metadata = ['position, contrast, phase']
+# intervals dstype requires reshaping of start and end times
+passiveGabor_intervals = np.array([(x,y) for x, y in zip(start_times, end_times)])
 
-
-fttl['times'][idx_end_stim]
-
-
+# Check length of presentation of stim is  within 100msof expected
+np.allclose(np.array([y-x for x, y in passiveGabor_intervals]), 0.3, 0.1)
+# passiveValve.intervals
 
 
 # Get valve intervals
@@ -174,12 +181,20 @@ vertical_lines(
     label="spacers",
 )
 vertical_lines(
-    fttl['times'][idx_end_stim],
+    start_times,
     ymin=0,
     ymax=1,
     color=color_cycle(1),
     ax=ax,
-    label="Gabor end",
+    label="Gabor start times",
+)
+vertical_lines(
+    end_times,
+    ymin=0,
+    ymax=1,
+    color=color_cycle(2),
+    ax=ax,
+    label="Gabor end times",
 )
 
 ax.legend()
