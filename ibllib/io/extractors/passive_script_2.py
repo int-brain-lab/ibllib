@@ -52,21 +52,32 @@ local_paths = one.load(eid, dataset_types=dataset_types, download_only=True)
 
 session_path = alf.io.get_session_path(local_paths[0])
 
-# load session fixtures
-settings = rawio.load_settings(session_path)
-ses_nb = settings["SESSION_ORDER"][settings["SESSION_IDX"]]
-path_fixtures = Path(ephys_fpga.__file__).parent.joinpath("ephys_sessions")
-fixture = {
-    "pcs": np.load(path_fixtures.joinpath(f"session_{ses_nb}_passive_pcs.npy")),
-    "delays": np.load(path_fixtures.joinpath(f"session_{ses_nb}_passive_stimDelays.npy")),
-    "ids": np.load(path_fixtures.joinpath(f"session_{ses_nb}_passive_stimIDs.npy")),
-}
 
+# load session fixtures
+def load_passive_session_fixtures(session_path, meta=None):
+    settings = rawio.load_settings(session_path)
+    ses_nb = settings["SESSION_ORDER"][settings["SESSION_IDX"]]
+    path_fixtures = Path(ephys_fpga.__file__).parent.joinpath("ephys_sessions")
+
+    fixture = {
+        "pcs": np.load(path_fixtures.joinpath(f"session_{ses_nb}_passive_pcs.npy")),
+        "delays": np.load(path_fixtures.joinpath(f"session_{ses_nb}_passive_stimDelays.npy")),
+        "ids": np.load(path_fixtures.joinpath(f"session_{ses_nb}_passive_stimIDs.npy")),
+    }
+
+    return fixture
+
+
+def load_passive_stim_meta():
+    path_fixtures = Path(ephys_fpga.__file__).parent.joinpath("ephys_sessions")
+    with open(path_fixtures.joinpath("passive_stim_meta.json"), "r") as f:
+        meta = json.load(f)
+
+    return meta
 # load general metadata
-with open(path_fixtures.joinpath("passive_stim_meta.json"), "r") as f:
-    meta = json.load(f)
 
 # fpga_sync = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"])
+
 
 def get_passive_spacers(session_path, sync=None, sync_map=None):
     """
@@ -76,6 +87,7 @@ def get_passive_spacers(session_path, sync=None, sync_map=None):
     if sync is None or sync_map is None:
         sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
 
+    meta = load_passive_stim_meta()
     t_end_ephys = passive.ephysCW_end(session_path=session_path)
     fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=t_end_ephys)
     spacer_template = (
@@ -100,20 +112,23 @@ def get_passive_spacers(session_path, sync=None, sync_map=None):
     return spacer_times[0], spacer_times[1::2], spacer_times[2::2]
 
 
-# Load sessions sync channels and map
+# Load sessions sync channels, map adnd fixtures
 sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
+fixture = load_passive_session_fixtures(session_path)
 
-# loop over stimuli , get start/end times and meta dictionary key
+# Define start and end times of the 3 passive periodes
 t_start_passive, t_starts, t_ends = get_passive_spacers(session_path, sync=sync, sync_map=sync_map)
 tspontaneous = [t_starts[0], t_ends[0]]
 trfm = [t_starts[1], t_ends[1]]
 treplay = [t_starts[2], t_ends[2]]
+# TODO export this to a dstype
+
+
 
 
 # 3/3 Replay of task stimuli
 fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0])
 audio = ephys_fpga._get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
-bpod = ephys_fpga._get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
 
 # get idxs of where the diff is of a gabor presentation.
 # This will get the start of a gabor patch presentation
@@ -148,9 +163,9 @@ passiveGabor_intervals = np.array([(x,y) for x, y in zip(start_times, end_times)
 np.allclose(np.array([y-x for x, y in passiveGabor_intervals]), 0.3, 0.1)
 # passiveValve.intervals
 
-
-# Get valve intervals
-
+# Get valve intervals from bpod channel
+bpod = ephys_fpga._get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
+len(bpod['times']) == NVALVE * 2  # (40 * 2)
 # Get Tone and Noise cue instervals
 
 # Get Gabor patches intervals
