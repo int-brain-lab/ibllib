@@ -10,7 +10,7 @@ from oneibl.one import ONE
 
 log = logging.getLogger("ibllib")
 
-one = ONE(printout=False)
+one = ONE()
 
 
 def download_taskqc_raw_data(eid, one=None, fpga=False):

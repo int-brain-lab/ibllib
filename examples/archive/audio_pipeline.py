@@ -16,9 +16,10 @@ for wfile in Path(main_path).rglob('*.wav'):
     audio.extract_sound(ses_path, save=True)
 
 # step 2 plot the result - here for the last session only
-D = alf.io.load_object(ses_path / 'alf', '_ibl_audioSpectrogram')
+D = alf.io.load_object(ses_path / 'alf', 'audioSpectrogram')
 
-cues = alf.io.load_object(ses_path / 'alf', '_ibl_audioOnsetGoCue.times_microphone')
+cues = alf.io.load_object(ses_path / 'alf', 'audioOnsetGoCue',
+                          attribute='times', timescale='microphone')
 tlims = D['times_microphone'][[0, -1]].flatten()
 flims = D['frequencies'][0, [0, -1]].flatten()
 

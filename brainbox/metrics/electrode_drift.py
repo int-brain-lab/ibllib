@@ -4,14 +4,21 @@ from ibllib.dsp import smooth
 from brainbox.processing import bincount2D
 
 
-def estimate_drift(spike_times, spike_amps, spike_depths):
+def estimate_drift(spike_times, spike_amps, spike_depths, display=False):
+    """
+    Estimate drift for spike sorted data.
+    :param spike_times:
+    :param spike_amps:
+    :param spike_depths:
+    :param display:
+    :return:
+    """
     # binning parameters
     DT_SECS = 1  # output sampling rate of the depth estimation (seconds)
     DEPTH_BIN_UM = 2  # binning parameter for depth
     AMP_RES_V = 100 * 1e-6  # binning parameter for amplitudes
     NXCORR = 50  # positive and negative lag in depth samples to look for depth
     NT_SMOOTH = 9  # length of the Gaussian smoothing window in samples (DT_SECS rate)
-    DISPLAY = False
 
     # experimental: try the amp with a log scale
     na = int(np.ceil(np.nanmax(spike_amps) / AMP_RES_V))
@@ -30,7 +37,7 @@ def estimate_drift(spike_times, spike_amps, spike_depths):
     # compute the depth lag by xcorr
     # experimental: LP the fft for a better tracking ?
     atd_ = np.fft.fft(atd_hist, axis=-1)
-    xcorr = np.real(np.fft.ifft(atd_ * np.conj(atd_[:, 0, :])[:, np.newaxis, :]))
+    xcorr = np.real(np.fft.ifft(atd_ * np.conj(np.median(atd_, axis=1))[:, np.newaxis, :]))
     xcorr = np.sum(xcorr, axis=0)
     xcorr = np.c_[xcorr[:, -NXCORR:], xcorr[:, :NXCORR + 1]]
 
@@ -38,14 +45,11 @@ def estimate_drift(spike_times, spike_amps, spike_depths):
     raw_drift = (np.argmax(xcorr, axis=-1) - NXCORR) * DEPTH_BIN_UM
     drift = smooth.rolling_window(raw_drift, window_len=NT_SMOOTH, window='hanning')
 
-    if DISPLAY:
+    if display:
         import matplotlib.pyplot as plt
-        from ibllib.plots import Density
-        Density(atd_hist[5, :, :])
-        plt.figure()
-        plt.plot(xcorr.transpose())
-        plt.figure()
-        plt.plot(raw_drift - 50)
-        plt.plot(drift - 50)
+        from brainbox.plot import driftmap
+        _, axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [.15, .85]}, sharex=True)
+        axs[0].plot(DT_SECS * np.arange(drift.size), drift)
+        driftmap(spike_times, spike_depths, t_bin=0.1, d_bin=5, ax=axs[1])
 
     return drift

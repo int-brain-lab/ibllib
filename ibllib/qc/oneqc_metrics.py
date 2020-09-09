@@ -1,6 +1,6 @@
 import numpy as np
 
-from . import base
+from ibllib.qc import base
 from alf.io import is_uuid_string
 
 

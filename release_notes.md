@@ -1,3 +1,36 @@
+### Release Notes 1.5.9
+-   local server: catches error when subject is not registered in Alyx
+-   ibllib.atlas.AllenAtlas
+    -   re-ordered the volumes in c-order contiguous ml-ap-dv efficient coronal shapes
+    -   top/bottom surface extraction
+
+### Release Notes 1.5.8 Hotfix
+-   Ephys extraction SyncSpikeSorting: specify different dir for ks2 ouput and raw ephys data
+
+### Release Notes 1.5.7 Hotfix
+-   Ephys extraction ks2: mkdir for scratch more robust
+
+### Release Notes 1.5.6
+Ephys extraction bugfixes:
+-   RawEphysQC: No object "ephysTimeRmsAP" found 
+-   EphysMtsComp,RawEphysQC, EphysPulses : ValueError: mmap length is greater than file size
+-   Ks2: ks2 job cleans-up temp dir
+
+### Release Notes 1.5.5
+-   ONE offline mode and cache dataset table to speed up reloading of large datasets (Olivier)
+-   ALF io naming conventions on loading objects (Miles)
+-   KS2 Matlab ephys pipeline tasks (Olivier)
+-   Support for running QC on biased and training sessions (Nico)
+-   metrics_df and passed_df properties in BpodQC obj for qcplots (Nico)
+-   Added missing unittest to stim_move_before_goCue metric (Nico)
+
+### Release Notes 1.5.4 - 29/07/2020 hotfix
+-   ibllib.pipes.training_preprocessing.TrainingAudio
+
+### Release Notes 1.5.3 - 28/07/2020
+-   ibllib.pipes.training_preprocessing.TrainingAudio: returns files for registration and proper status. (Olivier)
+-   ibllib.atlas: compute nearest region from probe trajectory (Mayo)
+    
 ### Release Notes 1.5.2 - 23/07/2020
 -   Local server jobs:
     -   fix wheel moves size mismatch extractor error

@@ -6,6 +6,7 @@ import re
 import urllib.request
 from collections.abc import Mapping
 from pathlib import Path
+import hashlib
 
 import requests
 
@@ -69,7 +70,7 @@ def http_download_file_list(links_to_file_list, **kwargs):
 
 
 def http_download_file(full_link_to_file, *, clobber=False, offline=False,
-                       username='', password='', cache_dir=''):
+                       username='', password='', cache_dir='', return_md5=False):
     """
     :param full_link_to_file: http link to the file.
     :type full_link_to_file: str
@@ -85,6 +86,7 @@ def http_download_file(full_link_to_file, *, clobber=False, offline=False,
 
     :return: (str) a list of the local full path of the downloaded files.
     """
+    from ibllib.io import hashfile
     if not full_link_to_file:
         return ''
 
@@ -97,9 +99,9 @@ def http_download_file(full_link_to_file, *, clobber=False, offline=False,
 
     # do not overwrite an existing file unless specified
     if not clobber and os.path.exists(file_name):
-        return file_name
+        return (file_name, hashfile.md5(file_name)) if return_md5 else file_name
     elif offline:
-        return file_name
+        return (file_name, hashfile.md5(file_name)) if return_md5 else file_name
 
     # This should be the base url you wanted to access.
     baseurl = os.path.split(str(full_link_to_file))[0]
@@ -128,6 +130,8 @@ def http_download_file(full_link_to_file, *, clobber=False, offline=False,
     print(f"Downloading: {file_name} Bytes: {file_size}")
     file_size_dl = 0
     block_sz = 8192 * 64 * 8
+
+    md5 = hashlib.md5()
     f = open(file_name, 'wb')
     while True:
         buffer = u.read(block_sz)
@@ -135,10 +139,12 @@ def http_download_file(full_link_to_file, *, clobber=False, offline=False,
             break
         file_size_dl += len(buffer)
         f.write(buffer)
+        if return_md5:
+            md5.update(buffer)
         print_progress(file_size_dl, file_size, prefix='', suffix='')
     f.close()
 
-    return file_name
+    return (file_name, md5.hexdigest()) if return_md5 else file_name
 
 
 def file_record_to_url(file_records, urls=[]):

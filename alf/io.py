@@ -17,7 +17,9 @@ import numpy as np
 import pandas as pd
 
 from brainbox.core import Bunch
+from brainbox.io import parquet
 from ibllib.io import jsonable
+from . import files
 
 _logger = logging.getLogger('ibllib')
 
@@ -138,16 +140,18 @@ def read_ts(filename):
         filename = Path(filename)
 
     # alf format is object.attribute.extension, for example '_ibl_wheel.position.npy'
-    obj, attr, ext = filename.name.split('.')
+    _, obj, attr, *_, ext = files.alf_parts(filename.parts[-1])
 
     # looking for matching object with attribute timestamps: '_ibl_wheel.timestamps.npy'
-    time_file = filename.parent / '.'.join([obj, 'timestamps', ext])
+    (time_file,), _ = files.filter_by(filename.parent, object=obj,
+                                      attribute='timestamps', extension=ext)
 
-    if not time_file.exists():
-        _logger.error(time_file.name + ' not found !, no time-scale for' + str(filename))
-        raise FileNotFoundError(time_file.name + ' not found !, no time-scale for' + str(filename))
+    if not time_file:
+        name = files.to_alf(obj, attr, ext)
+        _logger.error(name + ' not found! no time-scale for' + str(filename))
+        raise FileNotFoundError(name + ' not found! no time-scale for' + str(filename))
 
-    return np.load(time_file), np.load(filename)
+    return np.load(filename.parent / time_file), np.load(filename)
 
 
 def load_file_content(fil):
@@ -163,8 +167,8 @@ def load_file_content(fil):
     fil = Path(fil)
     if fil.stat().st_size == 0:
         return
-    if fil.suffix == '.npy':
-        return np.load(file=fil)
+    if fil.suffix == '.csv':
+        return pd.read_csv(fil)
     if fil.suffix == '.json':
         try:
             with open(fil) as _fil:
@@ -174,88 +178,104 @@ def load_file_content(fil):
             return None
     if fil.suffix == '.jsonable':
         return jsonable.read(fil)
-    if fil.suffix == '.tsv':
-        return pd.read_csv(fil, delimiter='\t')
-    if fil.suffix == '.csv':
-        return pd.read_csv(fil)
+    if fil.suffix == '.npy':
+        return np.load(file=fil)
+    if fil.suffix == '.pqt':
+        return parquet.load(fil)
     if fil.suffix == '.ssv':
         return pd.read_csv(fil, delimiter=' ')
+    if fil.suffix == '.tsv':
+        return pd.read_csv(fil, delimiter='\t')
     return Path(fil)
 
 
-def _ls(alfpath, object, glob='.*'):
+def _ls(alfpath, object=None, **kwargs):
     """
     Given a path, an object and a filter, returns all files and associated attributes
     :param alfpath: containing folder
-    :param object: ALF object string
-    :param glob: File filter (optional)
+    :param object: ALF object string; wildcards permitted
     :return: lists of pathlib.Path for each file and list of corresponding attributes
     """
     alfpath = Path(alfpath)
     if alfpath.is_dir():
         if object is None:
-            raise ValueError('If a path is provided, the object name should be provided too')
+            # List all ALF files
+            files_alf, attributes = files.filter_by(alfpath)
+        else:
+            files_alf, attributes = files.filter_by(alfpath, object=object, **kwargs)
     else:
-        object = alfpath.name.split('.')[0]
+        object = files.alf_parts(alfpath.name)[1]
         alfpath = alfpath.parent
-    # look for files corresponding to the object, raise error if none found
-    files_alf = list(alfpath.glob(object + glob))
+        files_alf, attributes = files.filter_by(alfpath, object=object, **kwargs)
+
+    # raise error if no files found
     if not files_alf:
-        raise FileNotFoundError('No object ' + str(object) + ' found in ' + str(alfpath))
-    # in this case get the attributes and parts for each
-    attributes = ['.'.join(f.name.split('.')[1:-1]) for f in files_alf]
-    return files_alf, attributes
+        err_str = 'object "%s" ' % object if object else 'ALF files'
+        raise FileNotFoundError('No {} found in {}'.format(err_str, str(alfpath)))
+
+    return [alfpath.joinpath(f) for f in files_alf], attributes
 
 
-def exists(alfpath, object, attributes=None, glob='.*'):
+def exists(alfpath, object, attributes=None, **kwargs):
     """
     Test if ALF object and optionally specific attributes exist in the given path
     :param alfpath: str or pathlib.Path of the folder to look into
     :param object: str ALF object name
     :param attributes: list or list of strings for wanted attributes
-    :param glob: (".*") glob pattern to look for files or list of parts as per ALF specifications
-    :return: Bool. For multiple attributes, returns True only if all attributes are found
+    :return: bool. For multiple attributes, returns True only if all attributes are found
     """
-    # prepare the glob input argument if it's a list
-    if isinstance(glob, list):
-        glob = '*.' + '.'.join(glob) + '*'
+
     # if the object is not found, return False
     try:
-        _, attributes_found = _ls(alfpath, object, glob=glob)
+        _, attributes_found = _ls(alfpath, object, **kwargs)
     except FileNotFoundError:
         return False
+
     # if object found and no attribute provided, True
     if not attributes:
         return True
+
     # if attributes provided, test if all are found
     if isinstance(attributes, str):
         attributes = [attributes]
-    return set(attributes).issubset(set(attributes_found))
+    attributes_found = set(part[2] for part in attributes_found)
+    return set(attributes).issubset(attributes_found)
 
 
-def load_object(alfpath, object=None, glob='.*', short_keys=False):
+def load_object(alfpath, object=None, short_keys=False, **kwargs):
     """
     Reads all files (ie. attributes) sharing the same object.
     For example, if the file provided to the function is `spikes.times`, the function will
     load `spikes.time`, `spikes.clusters`, `spikes.depths`, `spike.amps` in a dictionary
     whose keys will be `time`, `clusters`, `depths`, `amps`
-    Full Reference here: https://github.com/cortex-lab/ALF
-    Simplified example: _namespace_object.attribute.part1.part2.extension
+    Full Reference here: https://docs.internationalbrainlab.org/en/latest/04_reference.html#alf
+    Simplified example: _namespace_object.attribute_timescale.part1.part2.extension
 
     :param alfpath: any alf file pertaining to the object OR directory containing files
-    :param object: if a directory is provided, need to specify the name of object to load
-    :param glob: a file filter string like one used in glob: "*.amps.*" for example
-    :param short_keys: by default, the output dictionary keys will be compounds of attributes and
-     any eventual parts separated by a dot. Use True to shorten the keys to the bare attribute.
+    :param object: if a directory is provided and object is None, all valid ALF files returned
+    :param short_keys: by default, the output dictionary keys will be compounds of attributes,
+     timescale and any eventual parts separated by a dot. Use True to shorten the keys to the
+     attribute and timescale.
     :return: a dictionary of all attributes pertaining to the object
 
-    example: spikes = ibllib.io.alf.load_object('/path/to/my/alffolder/', 'spikes')
+    Examples:
+        # Load `spikes` object
+        spikes = ibllib.io.alf.load_object('/path/to/my/alffolder/', 'spikes')
+
+        # Load `trials` object under the `ibl` namespace
+        trials = ibllib.io.alf.load_object(session_path, 'trials', namespace='ibl')
+
     """
-    # prepare the glob input argument if it's a list
-    if isinstance(glob, list):
-        glob = '*.' + '.'.join(glob) + '*'
-    files_alf, attributes = _ls(alfpath, object, glob=glob)
-    OUT = AlfBunch({})
+    if Path(alfpath).is_dir() and object is None:
+        raise ValueError('If a directory is provided, the object name should be provided too')
+    files_alf, parts = _ls(alfpath, object, **kwargs)
+    # Take attribute and timescale from parts list
+    attributes = [p[2] if not p[3] else '_'.join(p[2:4]) for p in parts]
+    if not short_keys:  # Include extra parts in the keys
+        attributes = [attr + ('.' + p[4] if p[4] else '') for attr, p in zip(attributes, parts)]
+    assert len(set(attributes)) == len(attributes), (
+        f'multiple object {object} with the same attribute in {alfpath}, restrict parts/namespace')
+    out = AlfBunch({})
     # load content for each file
     for fil, att in zip(files_alf, attributes):
         # if there is a corresponding metadata file, read it:
@@ -263,30 +283,25 @@ def load_object(alfpath, object=None, glob='.*', short_keys=False):
         # if this is the actual meta-data file, skip and it will be read later
         if meta_data_file == fil:
             continue
-        OUT[att] = load_file_content(fil)
+        out[att] = load_file_content(fil)
         if meta_data_file:
             meta = load_file_content(meta_data_file)
             # the columns keyword splits array along the last dimension
             if 'columns' in meta.keys():
-                OUT.update({v: OUT[att][::, k] for k, v in enumerate(meta['columns'])})
-                OUT.pop(att)
+                out.update({v: out[att][::, k] for k, v in enumerate(meta['columns'])})
+                out.pop(att)
                 meta.pop('columns')
             # if there is other stuff in the dictionary, save it, otherwise disregard
             if meta:
-                OUT[att + 'metadata'] = meta
-    status = check_dimensions(OUT)
+                out[att + 'metadata'] = meta
+    status = check_dimensions(out)
     if status != 0:
         _logger.warning('Inconsistent dimensions for object:' + object + '\n' +
-                        '\n'.join([f'{v.shape},    {k}' for k, v in OUT.items()]))
-    if short_keys:
-        keys = [k for k in OUT]
-        for k in keys:
-            if k != k.split('.')[0]:
-                OUT[k.split('.')[0]] = OUT.pop(k)
-    return OUT
+                        '\n'.join([f'{v.shape},    {k}' for k, v in out.items()]))
+    return out
 
 
-def save_object_npy(alfpath, dico, object, parts=''):
+def save_object_npy(alfpath, dico, object, parts=None, namespace=None, timescale=None):
     """
     Saves a dictionary in alf format using object as object name and dictionary keys as attribute
     names. Dimensions have to be consistent.
@@ -294,25 +309,24 @@ def save_object_npy(alfpath, dico, object, parts=''):
     Simplified example: _namespace_object.attribute.part1.part2.extension
 
     :param alfpath: path of the folder to save data to
-    :param dico: dictionary to save to npy
+    :param dico: dictionary to save to npy; keys correspond to ALF attributes
     :param object: name of the object to save
     :param parts: extra parts to the ALF name
+    :param namespace: the optional namespace of the object
+    :param timescale: the optional timescale of the object
     :return: List of written files
 
     example: ibllib.io.alf.save_object_npy('/path/to/my/alffolder/', spikes, 'spikes')
     """
     alfpath = Path(alfpath)
     status = check_dimensions(dico)
-    if isinstance(parts, list):
-        parts = '.' + '.'.join(parts)
-    elif parts:
-        parts = '.' + parts
     if status != 0:
         raise ValueError('Dimensions are not consistent to save all arrays in ALF format: ' +
                          str([(k, v.shape) for k, v in dico.items()]))
     out_files = []
     for k, v in dico.items():
-        out_file = alfpath / (object + '.' + k + parts + '.npy')
+        out_file = alfpath / files.to_alf(object, k, 'npy',
+                                          extra=parts, namespace=namespace, timescale=timescale)
         np.save(out_file, v)
         out_files.append(out_file)
     return out_files
@@ -322,8 +336,8 @@ def save_metadata(file_alf, dico):
     """
     Writes a meta data file matching a current alf file object.
     For example given an alf file
-    `clusters.ccf_location.ssv` this will write a dictionary in json format in
-    `clusters.ccf_location.metadata.json`
+    `clusters.ccfLocation.ssv` this will write a dictionary in json format in
+    `clusters.ccfLocation.metadata.json`
     Reserved keywords:
      - **columns**: column names for binary tables.
      - **row**: row names for binary tables.
@@ -333,6 +347,7 @@ def save_metadata(file_alf, dico):
     :param dico: dictionary containing meta-data.
     :return: None
     """
+    assert files.is_valid(file_alf.parts[-1]), 'ALF filename not valid'
     file_meta_data = file_alf.parent / (file_alf.stem + '.metadata.json')
     with open(file_meta_data, 'w+') as fid:
         fid.write(json.dumps(dico, indent=1))
