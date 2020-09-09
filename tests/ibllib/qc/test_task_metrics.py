@@ -4,83 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
-from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc import task_metrics as qcmetrics
-from ibllib.qc.oneutils import download_taskqc_raw_data
-from oneibl.one import ONE
 from brainbox.behavior.wheel import cm_to_rad
-
-one = ONE(
-    base_url="https://test.alyx.internationalbrainlab.org",
-    username="test_user",
-    password="TapetesBloc18",
-)
-
-
-class TestTaskMetricsObject(unittest.TestCase):
-    def setUp(self):
-        self.one = one
-        self.eid = "b1c968ad-4874-468d-b2e4-5ffa9b9964e9"
-        # Make sure the data exists locally
-        download_taskqc_raw_data(self.eid, one=one)
-        self.session_path = self.one.path_from_eid(self.eid)
-        self.qc = TaskQC(self.eid, one=self.one)
-        self.qc.load_data(bpod_only=True)  # Test session has no raw FPGA data
-
-    def test_compute(self):
-        # Compute metrics
-        self.assertTrue(self.qc.metrics is None)
-        self.assertTrue(self.qc.passed is None)
-        self.qc.compute()
-        self.assertTrue(self.qc.metrics is not None)
-        self.assertTrue(self.qc.passed is not None)
-
-    def test_run(self):
-        # Reset Alyx fields before test
-        reset = self.qc.update('NOT_SET', override=True)
-        assert reset == 'NOT_SET', 'failed to reset QC field for test'
-        extended = self.one.alyx.json_field_write('sessions', field_name='extended_qc',
-                                                  uuid=self.eid, data={})
-        assert not extended, 'failed to reset extended QC field for test'
-
-        # Test update as False
-        outcome, _ = self.qc.run(update=False)
-        self.assertEqual('FAIL', outcome)
-        extended = self.one.alyx.rest('sessions', 'read', id=self.eid)['extended_qc']
-        self.assertDictEqual({}, extended, 'unexpected update to extended qc')
-        outcome = self.one.alyx.rest('sessions', 'read', id=self.eid)['qc']
-        self.assertEqual('NOT_SET', outcome, 'unexpected update to qc')
-
-        # Test update as True
-        outcome, results = self.qc.run(update=True)
-        self.assertEqual('FAIL', outcome)
-        extended = self.one.alyx.rest('sessions', 'read', id=self.eid)['extended_qc']
-        expected = list(results.keys()) + ['task']
-        self.assertCountEqual(expected, extended.keys(), 'unexpected update to extended qc')
-        qc_field = self.one.alyx.rest('sessions', 'read', id=self.eid)['qc']
-        self.assertEqual(outcome, qc_field, 'unexpected update to qc')
-
-    def test_compute_session_status(self):
-        with self.assertRaises(AttributeError):
-            self.qc.compute_session_status()
-        self.qc.compute()
-        outcome, results, outcomes = self.qc.compute_session_status()
-        self.assertEqual('FAIL', outcome)
-
-        # Check each outcome matches...
-        # NOT_SET
-        not_set = [k for k, v in results.items() if np.isnan(v)]
-        self.assertTrue(all(outcomes[k] == 'NOT_SET' for k in not_set))
-        # PASS
-        passed = [k for k, v in results.items() if v >= self.qc.criteria['PASS']]
-        self.assertTrue(all(outcomes[k] == 'PASS' for k in passed))
-        # WARNING
-        wrn = [k for k, v in results.items()
-               if self.qc.criteria['WARNING'] <= v <= self.qc.criteria['PASS']]
-        self.assertTrue(all(outcomes[k] == 'WARNING' for k in wrn))
-        # FAIL
-        fail = [k for k, v in results.items() if v <= self.qc.criteria['FAIL']]
-        self.assertTrue(all(outcomes[k] == 'FAIL' for k in fail))
 
 
 class TestTaskMetrics(unittest.TestCase):
