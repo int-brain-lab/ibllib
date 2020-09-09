@@ -28,13 +28,18 @@ class TrainingTrials(tasks.Task):
         """
         Extracts an iblrig training session
         """
-        trials, (re_ts, re_pos, *_), output_files = extract_training(self.session_path, save=True)
-
+        trials, wheel, output_files = extract_training(self.session_path, save=True)
+        if trials is None:  # habituation returns empty trials
+            return
         # Run the task QC
         qc = TaskQC(self.session_path, one=self.one)
         qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one)
         qc.extractor.data = trials
-        qc.extractor.data.update({'wheel_timestamps': re_ts, 'wheel_position': re_pos})
+        # Update wheel data
+        ts, pos, *_, first_moves = wheel
+        qc.extractor.data.update(
+            {'wheel_timestamps': ts, 'wheel_position': pos, 'firstMovement_times': first_moves}
+        )
         qc.extractor.extract_data(partial=True)  # Extract the rest of the data
 
         # Aggregate and update Alyx QC fields
