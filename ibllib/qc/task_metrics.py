@@ -171,6 +171,7 @@ def check_stimOn_goCue_delays(data, **_):
 def check_response_feedback_delays(data, **_):
     """ Checks that the time difference between the response and the feedback onset
     (error sound or valve) is positive and less than 10ms.
+
     Metric: M = Feedback_time - response_time
     Criterion: 0 < M < 0.010 s
     Units: seconds [s]
@@ -543,39 +544,6 @@ def check_trial_length(data, **_):
     return metric, passed
 
 
-# def check_frame_frequency(data, photodiode=None, **_):
-#     """ Between go tone and feedback, frame2ttl should be changing at ~60Hz
-#     if wheel moves (exact frequency depending on velocity)
-#     Variable name:
-#     Metric:
-#     Criterion:
-#
-#     :param data: dict of trial data with keys ('goCue_times', 'intervals', 'choice')
-#     :param photodiode: the fronts from Bpod's BNC1 input or FPGA frame2ttl channel
-#     """
-    # from brainbox.behavior.wheel import interpolate_position, velocity_smoothed
-    # import matplotlib.pyplot as plt
-    # if photodiode is None:
-    #     _log.warning("No photodiode TTL input in function call, returning None")
-    #     return None
-    #
-    # F = 1000
-    # pos, t = interpolate_position(data['wheel_timestamps'], data['wheel_position'], freq=F)
-    # vel, _ = velocity = velocity_smoothed(pos, F)
-    # updates = 1 / np.diff(photodiode['times'])
-    # plt.plot(np.arange(updates.size), updates)
-    #
-    # window_len = 6  # Window length
-    # assert window_len < len(updates)
-    # w = np.hanning(window_len)
-    #
-    # s = np.r_[updates[window_len-1:0:-1], updates, updates[-2:-window_len-1:-1]]
-    # y = np.convolve(w / w.sum(), s, mode='valid')
-    # plt.plot(np.arange(y.size), y)
-    #
-    # t_diff = 1 / np.diff(data['wheel_timestamps'])
-
-
 # === Trigger-response delay checks ===
 
 def check_goCue_delays(data, **_):
@@ -731,19 +699,6 @@ def check_wheel_integrity(data, re_encoding='X1', enc_res=None, **_):
     metric = pos_check + ts_check.astype(float)  # all values should be close to zero
     passed = np.isclose(metric, np.zeros_like(metric))
     return metric, passed
-
-
-# def check_frame_updates(data, photodiode=None, **_):
-#     """ Number of Bonsai command to change screen should match
-#     Number of state change of frame2ttl
-#     Variable name: syncSquare
-#     Metric: (count of bonsai screen updates) - (count of frame2ttl)
-#     Criterion: 0
-#
-#     :param data: dict of trial data with keys ('goCue_times', 'intervals', 'choice')
-#     :param photodiode: the fronts from Bpod's BNC1 input or FPGA frame2ttl channel
-#     """
-#     pass # TODO Nicco
 
 
 # === Pre-stimulus checks ===
