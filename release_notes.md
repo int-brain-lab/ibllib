@@ -1,3 +1,8 @@
+### Release Notes 1.5.10
+-   QC base class
+-   Support for task QC on FPGA data
+-   TaskQC run during task extraction
+
 ### Release Notes 1.5.9
 -   local server: catches error when subject is not registered in Alyx
 -   ibllib.atlas.AllenAtlas
