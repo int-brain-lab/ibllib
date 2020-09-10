@@ -149,7 +149,7 @@ assert len(idx_end_stim) == sum(fixture['ids'] == 'G'), "wrong number of GaborEn
 # Get the start times from the end times
 start_times = fttl['times'][idx_end_stim - 1]
 # patch the first stim onset time that is wrong
-if fttl['times'][idx_end_stim[0]] - fttl['times'][idx_end_stim[0]-1]  > 0.3:
+if fttl['times'][idx_end_stim[0]] - fttl['times'][idx_end_stim[0] - 1] > 0.3:
     start_times[0] = fttl['times'][idx_end_stim[0]] - 0.3
 # Move the end times to a var
 end_times = fttl['times'][idx_end_stim]
@@ -157,15 +157,23 @@ end_times = fttl['times'][idx_end_stim]
 passiveGabor_properties = fixture['pcs']
 passiveGabor_properties_metadata = ['position, contrast, phase']
 # intervals dstype requires reshaping of start and end times
-passiveGabor_intervals = np.array([(x,y) for x, y in zip(start_times, end_times)])
+passiveGabor_intervals = np.array([(x, y) for x, y in zip(start_times, end_times)])
 
 # Check length of presentation of stim is  within 100msof expected
-np.allclose(np.array([y-x for x, y in passiveGabor_intervals]), 0.3, 0.1)
+np.allclose(np.array([y - x for x, y in passiveGabor_intervals]), 0.3, 0.1)
 # passiveValve.intervals
+
+
+
+
 
 # Get valve intervals from bpod channel
 bpod = ephys_fpga._get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
-len(bpod['times']) == NVALVE * 2  # (40 * 2)
+assert len(bpod['times']) == NVALVE * 2, "Wrong number of valve fronts detected"  # (40 * 2)
+
+passiveValve_intervals = bpod
+
+
 # Get Tone and Noise cue instervals
 
 # Get Gabor patches intervals

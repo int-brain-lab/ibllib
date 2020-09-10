@@ -18,7 +18,7 @@ import json
 import ibllib.io.extractors.passive as passive
 from ibllib.io.extractors import ephys_fpga
 import ibllib.io.raw_data_loaders as rawio
-from ibllib.qc.oneutils import random_ephys_session
+# from ibllib.qc.oneutils import random_ephys_session
 
 # hardcoded var
 FRAME_FS = 60  # Sampling freq of the ipad screen, in Hertz
@@ -265,5 +265,5 @@ if DEBUG_PLOTS:
     plt.colorbar()
 
 
-print(det)
+# print(det)
 print(eid)
