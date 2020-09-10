@@ -4,6 +4,8 @@ from collections import OrderedDict
 from ibllib.pipes import tasks
 from ibllib.io import ffmpeg, raw_data_loaders as rawio
 from ibllib.io.extractors import (training_trials, biased_trials, training_wheel, training_audio)
+from ibllib.qc.task_metrics import TaskQC
+from ibllib.qc.task_extractors import TaskQCExtractor
 from oneibl.registration import register_session_raw_data
 
 _logger = logging.getLogger('ibllib')
@@ -26,7 +28,23 @@ class TrainingTrials(tasks.Task):
         """
         Extracts an iblrig training session
         """
-        _, _, output_files = extract_training(self.session_path, save=True)
+        trials, wheel, output_files = extract_training(self.session_path, save=True)
+        if trials is None:  # habituation returns empty trials
+            return
+        # Run the task QC
+        qc = TaskQC(self.session_path, one=self.one)
+        qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one)
+        qc.extractor.data = trials
+        # Update wheel data
+        ts, pos, *_, first_moves = wheel
+        qc.extractor.data.update(
+            {'wheel_timestamps': ts, 'wheel_position': pos, 'firstMovement_times': first_moves}
+        )
+        qc.extractor.extract_data(partial=True)  # Extract the rest of the data
+
+        # Aggregate and update Alyx QC fields
+        qc.run(update=True)
+
         return output_files
 
 
@@ -113,4 +131,4 @@ def extract_training(session_path, save=True):
     else:
         raise ValueError(f"No extractor for task {extractor_type}")
     _logger.info('session extracted \n')  # timing info in log
-    return trials, wheel, files_trials + files_wheel
+    return trials, wheel, (files_trials + files_wheel) if save else None
