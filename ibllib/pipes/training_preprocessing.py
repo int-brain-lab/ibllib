@@ -52,8 +52,8 @@ class TrainingVideoCompress(tasks.Task):
 
     def _run(self):
         # avi to mp4 compression
-        command = ('ffmpeg -i {file_in} -codec:v libx264 -preset slow -crf 29 '
-                   '-nostats -loglevel 0 -codec:a copy {file_out}')
+        command = ('ffmpeg -i {file_in} -y -nostdin -codec:v libx264 -preset slow -crf 29 '
+                   '-nostats -codec:a copy {file_out}')
         output_files = ffmpeg.iblrig_video_compression(self.session_path, command)
         return output_files
 
