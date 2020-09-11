@@ -39,12 +39,18 @@ eid = "01864d6f-31e8-49c9-aadd-2e5021ea0ee7"  # not working
 # number of expected spacers wrong
 eid = "fff7d745-bbce-4756-a690-3431e2f3d108"
 eid = "849c9acb-8223-4e09-8cb1-95004b452baf"
+eid = "d1442e39-68de-41d0-9449-35e5cfe5a94f"
+eid = "e6adaabd-2bd8-4956-9c4d-53cf02d1c0e7"
 # AssertionError: multiple object sync with the same attribute in probe01, restrict parts/namespace
 eid = "c7a9f89c-2c1d-4302-94b8-effcbe4a85b3"
+
 # OK
-eid = "193fe7a8-4eb5-4f3e-815a-0c45864ddd77"  # HIGH
+# Gabor on HIGH
+eid = "193fe7a8-4eb5-4f3e-815a-0c45864ddd77"
 # eid = one.search(subject="CSH_ZAD_022", date_range="2020-05-24", number=1)[0]
-eid = "a82800ce-f4e3-4464-9b80-4c3d6fade333"  # LOW
+# Gabor on LOW
+eid = "a82800ce-f4e3-4464-9b80-4c3d6fade333"
+eid = "03cf52f6-fba6-4743-a42e-dd1ac3072343"
 
 # eid, det = random_ephys_session()
 
@@ -74,6 +80,8 @@ def load_passive_stim_meta():
         meta = json.load(f)
 
     return meta
+
+
 # load general metadata
 
 # fpga_sync = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"])
@@ -124,11 +132,8 @@ treplay = [t_starts[2], t_ends[2]]
 # TODO export this to a dstype
 
 
-
-
 # 3/3 Replay of task stimuli
 fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0])
-audio = ephys_fpga._get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
 
 # get idxs of where the diff is of a gabor presentation.
 # This will get the start of a gabor patch presentation
@@ -136,55 +141,83 @@ audio = ephys_fpga._get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
 # 0.3 is the expected gabor length and 0.5 isthe expected delay length.
 # We use 0.4 to split the difference and to allow for maximum drift
 # At this stage we want to define what pulses are and not quality control them.
-diff_idxs = np.where(np.diff(fttl['times']) < 0.4)[0]
+diff_idxs = np.where(np.diff(fttl["times"]) < 0.4)[0]
 # move one change back, i.e. get the OFFset of the previous stimulus
 # get the previous polarity change (which should be the end of previous stim presentation)
 idx_end_stim = diff_idxs - 1
 # We've now lost the last stim presentation so get the last onset and move to it's offset
 # append it to the end indexes diff_idx[-1] + 1
 idx_end_stim = np.append(idx_end_stim, diff_idxs[-1] + 1)
-assert len(idx_end_stim) == sum(fixture['ids'] == 'G'), "wrong number of GaborEnd times"
+assert len(idx_end_stim) == sum(fixture["ids"] == "G"), "wrong number of GaborEnd times"
 # np.median(np.diff(fttl['times'])[diff_idxs])
 
 # Get the start times from the end times
-start_times = fttl['times'][idx_end_stim - 1]
-# patch the first stim onset time that is wrong
-if fttl['times'][idx_end_stim[0]] - fttl['times'][idx_end_stim[0] - 1] > 0.3:
-    start_times[0] = fttl['times'][idx_end_stim[0]] - 0.3
-# Move the end times to a var
-end_times = fttl['times'][idx_end_stim]
+# Check if first end stim detected is the first sample
 
-passiveGabor_properties = fixture['pcs']
-passiveGabor_properties_metadata = ['position, contrast, phase']
+
+start_times = fttl["times"][idx_end_stim - 1]
+# If first stimOff detected is first sample first stimON is wrong
+# If first stimOff detected minus the fist stimON detected is > 0.3 (expected stim length)
+# first stimON is also wrong
+# in any of these cases extrapolate based upon the stim expected length
+if (idx_end_stim[0] == 0) or (
+    fttl["times"][idx_end_stim[0]] - fttl["times"][idx_end_stim[0] - 1] > 0.3
+):
+    start_times[0] = fttl["times"][idx_end_stim[0]] - 0.3
+# Move the end times to a var
+end_times = fttl["times"][idx_end_stim]
+
+# TODO export this to a dstype
+passiveGabor_properties = fixture["pcs"]
+passiveGabor_properties_metadata = ["position, contrast, phase"]
 # intervals dstype requires reshaping of start and end times
 passiveGabor_intervals = np.array([(x, y) for x, y in zip(start_times, end_times)])
 
 # Check length of presentation of stim is  within 100msof expected
-np.allclose(np.array([y - x for x, y in passiveGabor_intervals]), 0.3, 0.1)
+assert np.allclose(
+    [y - x for x, y in passiveGabor_intervals], 0.3, atol=0.1
+), "Stim length seems wrong"
+
+
 # passiveValve.intervals
-
-
-
-
-
 # Get valve intervals from bpod channel
 bpod = ephys_fpga._get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
-assert len(bpod['times']) == NVALVE * 2, "Wrong number of valve fronts detected"  # (40 * 2)
+# bpod channel should only contain valve output for passiveCW protocol
+# All high fronts == valve open times and low fronts == valve close times
+valveOn_times = bpod["times"][bpod["polarities"] > 0]
+valveOff_times = bpod["times"][bpod["polarities"] < 0]
 
-passiveValve_intervals = bpod
+assert len(valveOn_times) == NVALVE, "Wrong number of valve ONSET times"
+assert len(valveOff_times) == NVALVE, "Wrong number of valve OFFSET times"
+assert len(bpod["times"]) == NVALVE * 2, "Wrong number of valve FRONTS detected"  # (40 * 2)
+
+# check all values are within bpod tolerance of 100µs
+assert np.allclose(
+    valveOff_times - valveOn_times, valveOff_times[0] - valveOn_times[0], atol=0.0001
+), "Some valve outputs are longer or shorter than others"
 
 
-# Get Tone and Noise cue instervals
+# Get Tone and Noise cue intervals
+audio = ephys_fpga._get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
 
-# Get Gabor patches intervals
+# Get all sound onsets and offsets
+soundOn_times = audio['times'][audio['polarities'] > 0]
+soundOff_times = audio['times'][audio['polarities'] < 0]
+# Check they are the correct number
+assert len(soundOn_times) == NTONES + NNOISES, "Wrong number of sound ONSETS"
+assert len(soundOff_times) == NTONES + NNOISES, "Wrong number of sound OFFSETS"
 
-# import matplotlib
-# matplotlib.use('Agg')
+diff = soundOff_times - soundOn_times
+# If diff < 0.3 == tone
+# If diff > 0.3 == noise
+
+
+
 import matplotlib.pyplot as plt
 from ibllib.plots import squares, vertical_lines, color_cycle
 
 
-plt.plot(np.diff(fttl['times']), '.')
+plt.plot(np.diff(fttl["times"]), ".")
 
 plt.axhline(0.4)
 # plt.axvline(fttl['times'][idx_end_stim])
@@ -209,7 +242,7 @@ vertical_lines(
     ymax=1,
     color=color_cycle(1),
     ax=ax,
-    label="Gabor start times",
+    label="GaborOn_times",
 )
 vertical_lines(
     end_times,
@@ -217,7 +250,23 @@ vertical_lines(
     ymax=1,
     color=color_cycle(2),
     ax=ax,
-    label="Gabor end times",
+    label="GaborOff_times",
+)
+vertical_lines(
+    valveOn_times,
+    ymin=2,
+    ymax=3,
+    color=color_cycle(3),
+    ax=ax,
+    label="ValveOn_times",
+)
+vertical_lines(
+    valveOff_times,
+    ymin=2,
+    ymax=3,
+    color=color_cycle(4),
+    ax=ax,
+    label="ValveOff_times",
 )
 
 ax.legend()
