@@ -342,10 +342,10 @@ class GoCueTimes(BaseBpodTrialsExtractor):
         # Check if all stim_syncs have failed to be detected
         if np.all(np.isnan(go_cue_times)):
             _logger.warning(
-                f'{self.session_path}: Missing ALL !! BNC2 stimulus ({nmissing} trials')
+                f'{self.session_path}: Missing ALL !! BNC2 TTLs ({nmissing} trials)')
         # Check if any stim_sync has failed be detected for every trial
         elif np.any(np.isnan(go_cue_times)):
-            _logger.warning(f'{self.session_path}: Missing BNC2 stimulus on {nmissing} trials')
+            _logger.warning(f'{self.session_path}: Missing BNC2 TTLs on {nmissing} trials')
 
         return go_cue_times
 
@@ -553,11 +553,11 @@ class StimOnTimes(BaseBpodTrialsExtractor):
         nmissing = np.sum(np.isnan(stimOn_times))
         # Check if all stim_syncs have failed to be detected
         if np.all(np.isnan(stimOn_times)):
-            _logger.error(f'{session_path}: Missing ALL BNC1 stimulus ({nmissing} trials')
+            _logger.error(f'{session_path}: Missing ALL BNC1 TTLs ({nmissing} trials)')
 
         # Check if any stim_sync has failed be detected for every trial
         if np.any(np.isnan(stimOn_times)):
-            _logger.warning(f'{session_path}: Missing BNC1 stimulus on {nmissing} trials')
+            _logger.warning(f'{session_path}: Missing BNC1 TTLs on {nmissing} trials')
 
         return stimOn_times
 
@@ -603,10 +603,10 @@ class StimOnTimes(BaseBpodTrialsExtractor):
             stimOn_times[i] = stot[0]
 
         if np.all(np.isnan(stimOn_times)):
-            _logger.error(f'{session_path}: Missing ALL BNC1 stimulus ({count_missing} trials')
+            _logger.error(f'{session_path}: Missing ALL BNC1 TTLs ({count_missing} trials)')
 
         if count_missing > 0:
-            _logger.warning(f'{session_path}: Missing BNC1 stimulus on {count_missing} trials')
+            _logger.warning(f'{session_path}: Missing BNC1 TTLs on {count_missing} trials')
 
         return np.array(stimOn_times)
 

@@ -721,15 +721,19 @@ class AllenAtlas(BrainAtlas):
             path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
             file_image = hist_path or path_atlas.joinpath(f'average_template_{res_um}.nrrd')
             file_label = path_atlas.joinpath(f'annotation_{res_um}.nrrd')
+
+            if not file_image.exists():
+                file_image = path_atlas.joinpath(f'average_template_{res_um}.npz')
+            if not file_label.exists():
+                file_label = path_atlas.joinpath(f'annotation_{res_um}.npz')
+
             if not file_image.exists():
                 _download_atlas_flatiron(file_image, FLAT_IRON_ATLAS_REL_PATH, par)
             if not file_label.exists():
                 _download_atlas_flatiron(file_label, FLAT_IRON_ATLAS_REL_PATH, par)
-            image, _ = nrrd.read(file_image, index_order='C')  # ml, dv, ap
-            label, _ = nrrd.read(file_label, index_order='C')  # ml, dv, ap
-            # we want the coronal slice to be the most contiguous
-            label = np.transpose(label, (2, 0, 1))  # label[iap, iml, idv]
-            image = np.transpose(image, (2, 0, 1))  # image[iap, iml, idv]
+            # loads the files
+            image = self._read_volume(file_image)
+            label = self._read_volume(file_label)
         regions = regions_from_allen_csv(FILE_REGIONS)
         xyz2dims = np.array([1, 0, 2])  # this is the c-contiguous ordering
         dims2xyz = np.array([1, 0, 2])
@@ -739,6 +743,16 @@ class AllenAtlas(BrainAtlas):
         self.res_um = res_um
         super().__init__(image, label, dxyz, regions, ibregma,
                          dims2xyz=dims2xyz, xyz2dims=xyz2dims)
+
+    @staticmethod
+    def _read_volume(file_volume):
+        if file_volume.suffix == '.nrrd':
+            volume, _ = nrrd.read(file_volume, index_order='C')  # ml, dv, ap
+            # we want the coronal slice to be the most contiguous
+            volume = np.transpose(volume, (2, 0, 1))  # image[iap, iml, idv]
+        elif file_volume.suffix == '.npz':
+            volume = np.load(file_volume)['arr_0']
+        return volume
 
     def xyz2ccf(self, xyz, ccf_order='mlapdv'):
         """

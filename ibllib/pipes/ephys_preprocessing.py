@@ -12,6 +12,9 @@ from ibllib.io.extractors import ephys_fpga
 from ibllib.pipes import tasks
 from ibllib.ephys import ephysqc, sync_probes, spikes
 from ibllib.pipes.training_preprocessing import TrainingRegisterRaw as EphysRegisterRaw
+from ibllib.qc.task_metrics import TaskQC
+from ibllib.qc.task_extractors import TaskQCExtractor
+
 
 _logger = logging.getLogger('ibllib')
 
@@ -53,7 +56,7 @@ class EphysAudio(tasks.Task):
     level = 0  # this job doesn't depend on anything
 
     def _run(self, overwrite=False):
-        command = 'ffmpeg -i {file_in} -y -c:a flac -nostats {file_out}'
+        command = 'ffmpeg -i {file_in} -y -nostdin -c:a flac -nostats {file_out}'
         file_in = next(self.session_path.rglob('_iblrig_micData.raw.wav'), None)
         if file_in is None:
             return
@@ -152,8 +155,8 @@ class EphysVideoCompress(tasks.Task):
 
     def _run(self, **kwargs):
         # avi to mp4 compression
-        command = ('ffmpeg -i {file_in} -y -codec:v libx264 -preset slow -crf 17 '
-                   '-nostats -loglevel 0 -codec:a copy {file_out}')
+        command = ('ffmpeg -i {file_in} -y -nostdin -codec:v libx264 -preset slow -crf 17 '
+                   '-loglevel 0 -codec:a copy {file_out}')
         output_files = ffmpeg.iblrig_video_compression(self.session_path, command)
         if len(output_files) == 0:
             self.session_path.joinpath('')
@@ -167,6 +170,17 @@ class EphysTrials(tasks.Task):
 
     def _run(self):
         dsets, out_files = ephys_fpga.extract_all(self.session_path, save=True)
+
+        # Run the task QC
+        qc = TaskQC(self.session_path, one=self.one, log=_logger)
+        qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one)
+        # Extract extra datasets required for QC
+        qc.extractor.data = dsets
+        qc.extractor.extract_data(partial=True)
+
+        # Aggregate and update Alyx QC fields
+        qc.run(update=True)
+
         return out_files
 
 
