@@ -201,17 +201,28 @@ assert np.allclose(
 audio = ephys_fpga._get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
 
 # Get all sound onsets and offsets
-soundOn_times = audio['times'][audio['polarities'] > 0]
-soundOff_times = audio['times'][audio['polarities'] < 0]
+soundOn_times = audio["times"][audio["polarities"] > 0]
+soundOff_times = audio["times"][audio["polarities"] < 0]
 # Check they are the correct number
 assert len(soundOn_times) == NTONES + NNOISES, "Wrong number of sound ONSETS"
 assert len(soundOff_times) == NTONES + NNOISES, "Wrong number of sound OFFSETS"
 
 diff = soundOff_times - soundOn_times
-# If diff < 0.3 == tone
-# If diff > 0.3 == noise
+# Tone is ~100ms so check if diff < 0.3
+toneOn_times = soundOn_times[diff < 0.3]
+toneOff_times = soundOff_times[diff < 0.3]
+# Noise is ~500ms so check if diff > 0.3
+noiseOn_times = soundOn_times[diff > 0.3]
+noiseOff_times = soundOff_times[diff > 0.3]
 
+assert len(toneOn_times) == NTONES
+assert len(toneOff_times) == NTONES
+assert len(noiseOn_times) == NNOISES
+assert len(noiseOff_times) == NNOISES
 
+# Fixed delays from soundcard ~500µs
+np.allclose(toneOff_times - toneOn_times, 0.1, atol=0.0006)
+np.allclose(noiseOff_times - noiseOn_times, 0.5, atol=0.0005)
 
 import matplotlib.pyplot as plt
 from ibllib.plots import squares, vertical_lines, color_cycle
