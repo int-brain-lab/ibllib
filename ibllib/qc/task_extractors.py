@@ -8,6 +8,7 @@ from ibllib.io.extractors.training_trials import (
     ErrorCueTriggerTimes, RewardVolume, ResponseTimes, FeedbackTimes, ItiInTimes,
     ProbabilityLeft, run_extractor_classes  # ContrastLR
 )
+import ibllib.io.extractors.habituation_trials as habit
 from ibllib.io.extractors.training_wheel import Wheel
 from oneibl.one import ONE
 from ibllib.io.extractors.ephys_fpga import (
@@ -124,15 +125,25 @@ class TaskQCExtractor(object):
         if not self.raw_data:
             self.load_raw_data()
 
-        # Signals and parameters not usually saved to file, available for all task types
-        extractors = [
-            StimOnTriggerTimes, StimOffTriggerTimes, StimOnOffFreezeTimes,
-            StimFreezeTriggerTimes, ErrorCueTriggerTimes, ItiInTimes]
+        # Signals and parameters not usually saved to file
+        if self.type == 'habituation':
+            extractors = [
+                StimOnTriggerTimes, habit.StimOffTriggerTimes,
+                habit.StimCenterTriggerTimes, habit.StimCenterTimes, habit.ItiInTimes]
+        else:
+            extractors = [
+                StimOnTriggerTimes, StimOffTriggerTimes, StimOnOffFreezeTimes,
+                StimFreezeTriggerTimes, ErrorCueTriggerTimes, ItiInTimes]
 
         # Extract the data that are usually saved to file
         if not partial:
             if self.type == 'ephys' and not self.bpod_only:
                 extractors.append(FpgaTrials)
+            elif self.type == 'habituation':
+                extractors.extend([
+                    habit.ContrastLR, habit.ItiInTimes, habit.StimOffTimes,
+                    habit.RewardVolume, habit.FeedbackTimes, habit.StimOnTimes, habit.Intervals,
+                    habit.GoCueTriggerTimes, habit.GoCueTimes, habit.FeedbackType])
             else:
                 extractors.extend([
                     Choice, FeedbackType, Intervals, StimOnTimes, GoCueTriggerTimes, Wheel,
@@ -164,9 +175,9 @@ class TaskQCExtractor(object):
                 # build trials output
                 data.update({k: bpod2fpga(data[k][ibpod]) for k in sync_fields})
         else:
-            data['quiescence'] = np.array([t['quiescent_period'] for t in self.raw_data])
+            if self.type != 'habituation':
+                data['quiescence'] = np.array([t['quiescent_period'] for t in self.raw_data])
             data['position'] = np.array([t['position'] for t in self.raw_data])
-            self.wheel_encoding = 'X1'
 
         # Update the data attribute with extracted data
         if self.data:
@@ -195,6 +206,7 @@ class TaskQCExtractor(object):
              "valveOpen_times": valveOpen_times,
              "correct": correct}
         )
-        data["outcome"] = data["feedbackType"].copy()
-        data["outcome"][data["choice"] == 0] = 0
+        if 'choice' in data:
+            data["outcome"] = data["feedbackType"].copy()
+            data["outcome"][data["choice"] == 0] = 0
         return data
