@@ -118,6 +118,89 @@ class TaskQC(base.QC):
         return session_outcome, results, outcomes
 
 
+class HabituationQC(TaskQC):
+    def compute(self):
+        """Compute and store the QC metrics
+        Runs the QC on the session and stores a map of the metrics for each datapoint for each
+        test, and a map of which datapoints passed for each test
+        :return:
+        """
+        if self.extractor is None:
+            self.load_data()
+        self.log.info(f"Session {self.session_path}: Running QC on habituation data...")
+
+        # Initialize checks
+        data = self.extractor.data
+        metrics = passed = {}
+
+        # Check all reward volumes == 3.0ul
+        check = 'reward_volumes'
+        metrics[check] = data['rewardVolume']
+        passed[check] = metrics[check] == 3.0
+
+        # Check number of trials greater than previous session
+        # NB: Requires ONE
+        if not self.one:
+            self.log.warning('unable to determine session trials without ONE')
+        else:
+            det = self.one.get_details(self.eid)
+            range = det['start_time'][:10]
+            eids = self.one.search(subject=det['subject'], task_protocol='habituation')
+            # WARNING: Assumes eids are returned in descending date order
+            # [...]
+
+        # Check event orders: trial_start < stim on < stim center < feedback < stim off
+        """
+        FIXME: This fails for the following reason...
+        # Get all stim_sync events detected
+        stim_sync_all = [raw.get_port_events(tr, 'BNC1') for tr in data]
+        stim_sync_all = [np.array(x) for x in stim_sync_all]
+        assert all(len(x) == 3 for x in stim_sync_all), should be three frame updates per trial
+
+         # Get the stim_on_state that triggers the onset of the stim
+        stim_on_state = np.array([tr['behavior_data']['States timestamps']
+                                 ['stim_on'][0][0] for tr in data])
+        assert np.all(stim_on_state[0] < stim_sync_all[0]), 'on state should preceed all TTLs
+        """
+        check = 'trial_event_sequence'
+        nans = (
+                np.isnan(data["intervals"][:, 0])  |  # noqa
+                np.isnan(data["stimOn_times"])     |  # noqa
+                np.isnan(data["stimCenter_times"]) |
+                np.isnan(data["valveOpen_times"])  |  # noqa
+                np.isnan(data["stimOff_times"])
+        )
+        a = np.less(data["intervals"][:, 0], data["stimOn_times"], where=~nans)
+        b = np.less(data["stimOn_times"], data["stimCenter_times"], where=~nans)
+        c = np.less(data["stimCenter_times"], data["valveOpen_times"], where=~nans)
+        d = np.less(data["valveOpen_times"], data["stimOff_times"], where=~nans)
+
+        metrics[check] = a & b & c & d & ~nans
+        passed[check] = metrics[check].astype(np.float)
+
+        # Check that the time difference between the visual stimulus center-command being
+        # triggered and the stimulus effectively appearing in the center is smaller than 150 ms.
+        check = 'stimCenter_delays'
+        metric = data["stimCenter_times"] - data["stimCenterTrigger_times"]
+        nans = np.isnan(metric)
+        passed = np.zeros_like(metric) * np.nan
+        passed[~nans] = (metric[~nans] <= 0.15) & (metric[~nans] > 0)
+
+        passed[check] = passed
+        metrics[check] = metrics
+
+        # Phase check
+
+        # Checks common to training QC
+        checks = [check_goCue_delays, check_stimOn_goCue_delays,
+                  check_stimOn_delays, check_stimOff_delays]
+        for fcn in checks:
+            check = fcn.__name__[6:]
+            metrics[check], passed[check] = fcn(data)
+
+        self.metrics, self.passed = (metrics, passed)
+
+
 def get_bpodqc_metrics_frame(data, **kwargs):
     """
     Evaluates all the QC metric functions in this module (those starting with 'check') and
