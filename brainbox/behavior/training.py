@@ -1,5 +1,6 @@
 from oneibl.one import ONE
 import datetime
+import re
 import numpy as np
 from brainbox.core import Bunch
 import ibl_pipeline.utils.psychofit as psy
@@ -25,104 +26,105 @@ else:
     latest_sess = date
 
 
-sessions = one.alyx.rest('sessions', 'list', subject=subj, date_range=[sess_minus_week,
-                         latest_sess], dataset_types='trials.intervals')
+def get_subject_training_status(subj, details=False):
+    sessions = one.alyx.rest('sessions', 'list', subject=subj, date_range=[sess_minus_week,
+                             latest_sess], dataset_types='trials.intervals')
 
-# If not enough sessions in the last week, then just fetch them all
-if len(sessions) < 3:
-    sessions = one.alyx.rest('sessions', 'list', subject=subj)
+    # If not enough sessions in the last week, then just fetch them all
+    if len(sessions) < 3:
+        sessions = one.alyx.rest('sessions', 'list', subject=subj)
 
-trials = Bunch()
-n = 0
-task_protocol = []
-sess_dates = []
-while len(trials) < 3:
-    trials_ = one.load_object(sessions[n]['url'].split('/')[-1], 'trials')
-    if trials_:
-        task_protocol.append(re.search('tasks_(.*)Choice', sessions[n]['task_protocol']).group(1))
-        sess_dates.append(sessions[n]['start_time'][:10])
-        trials[sessions[n]['start_time'][:10]] = trials_
+    trials = Bunch()
+    n = 0
+    task_protocol = []
+    sess_dates = []
+    while len(trials) < 3:
+        trials_ = one.load_object(sessions[n]['url'].split('/')[-1], 'trials')
+        if trials_:
+            task_protocol.append(re.search('tasks_(.*)Choice', sessions[n]['task_protocol']).group(1))
+            sess_dates.append(sessions[n]['start_time'][:10])
+            trials[sessions[n]['start_time'][:10]] = trials_
 
-    n += 1
+        n += 1
 
-trials_all = Bunch()
-for k in trials_.keys():
-    trials_all[k] = np.concatenate(list(trials[kk][k] for kk in trials.keys()))
+    trials_all = Bunch()
+    for k in trials_.keys():
+        trials_all[k] = np.concatenate(list(trials[kk][k] for kk in trials.keys()))
 
+    if np.all(np.array(task_protocol) == 'training'):
 
-if np.all(np.array(task_protocol) == 'training'):
-
-    signed_contrast = get_signed_contrast(trials_all)
-    perf_easy = np.array([compute_performance_easy(trials[k]) for k in trials.keys()])
-    n_trials = np.array([compute_n_trials(trials[k]) for k in trials.keys()])
-    psych = compute_psychometric(trials_all, signed_contrast=signed_contrast)
-    rt = compute_median_reaction_time(trials_all, signed_contrast=signed_contrast)
-
-    if not np.any(signed_contrasts == 0):
-        status = 'in training'
-    else:
-        if criterion_1b(psych, n_trials, perf_easy, rt):
-            status = 'trained 1b'
-        elif criterion_1a(psych, n_trials, perf_easy):
-            status = 'trained 1a'
-        else:
-            status = 'in training'
-
-# Case when there are < 3 biasedChoiceWorld sessions after reaching trained_1b criterion
-if not ~np.all(np.array(task_protocol) == 'training') and \
-        np.any(np.array(task_protocol) == 'training'):
-    status = 'trained_1b'
-
-# Case when there is biasedChoiceWorld or ephysChoiceWorld in last three sessions
-if not np.any(np.array(task_protocol) == 'training'):
-    # Check to see if any have been done on the ephys rig
-    ephys_rig_sess = one.alyx.rest('sessions', 'list', subject=subj, date_range=[sess_dates[-1],
-                                   sess_dates[0]], django='json__PYBPOD_BOARD__icontains,ephys')
-
-    # We are still on training rig and so all sessions should be biased
-    if len(ephys_rig_sess) == 0:
-        assert(np.all(np.array(task_protocol) == 'biased'))
         signed_contrast = get_signed_contrast(trials_all)
         perf_easy = np.array([compute_performance_easy(trials[k]) for k in trials.keys()])
         n_trials = np.array([compute_n_trials(trials[k]) for k in trials.keys()])
-        psych_20 = compute_psychometric(trials_all, signed_contrast=signed_contrast, block=0.2)
-        psych_80 = compute_psychometric(trials_all, signed_contrast=signed_contrast, block=0.8)
+        psych = compute_psychometric(trials_all, signed_contrast=signed_contrast)
         rt = compute_median_reaction_time(trials_all, signed_contrast=signed_contrast)
 
-        if criterion_ephys(psych_20, psych_80, n_trials, perf_easy, rt):
-            status = 'ready4ephysrig'
+        if not np.any(signed_contrast == 0):
+            status = 'in training'
         else:
-            status = 'trained1b'
+            if criterion_1b(psych, n_trials, perf_easy, rt):
+                status = 'trained 1b'
+            elif criterion_1a(psych, n_trials, perf_easy):
+                status = 'trained 1a'
+            else:
+                status = 'in training'
 
-    if len(ephys_rig_sess) < 3:
+    # Case when there are < 3 biasedChoiceWorld sessions after reaching trained_1b criterion
+    if not ~np.all(np.array(task_protocol) == 'training') and \
+            np.any(np.array(task_protocol) == 'training'):
 
-        ephys_sess_dates = [sess['start_time'][:10] for sess in ephys_rig_sess]
-        assert(np.all(np.array([date in trials for date in ephys_sess_dates])))
-        perf_easy = np.array([compute_performance_easy(trials[k]) for k in ephys_sess_dates])
-        n_trials = np.array([compute_n_trials(trials[k]) for k in ephys_sess_dates])
+        status = 'trained_1b'
 
-        if criterion_delay(perf_easy, n_trials):
-            status = 'ready4delay'
-        else:
-            status = 'ready4ephysrig'
+    # Case when there is biasedChoiceWorld or ephysChoiceWorld in last three sessions
+    if not np.any(np.array(task_protocol) == 'training'):
+        # Check to see if any have been done on the ephys rig
+        ephys_rig_sess = one.alyx.rest('sessions', 'list', subject=subj, date_range=[sess_dates[-1],
+                                       sess_dates[0]], django='json__PYBPOD_BOARD__icontains,ephys')
 
-    if len(ephys_rig_sess) >= 3:
-        # See if any sessions have had
-        perf_easy = np.array([compute_performance_easy(trials[k]) for k in ephys_sess_dates])
-        n_trials = np.array([compute_n_trials(trials[k]) for k in ephys_sess_dates])
-        psych_20 = compute_psychometric(trials_all, signed_contrast=signed_contrast, block=0.2)
-        psych_80 = compute_psychometric(trials_all, signed_contrast=signed_contrast, block=0.8)
-        rt = compute_median_reaction_time(trials_all, signed_contrast=signed_contrast)
+        # We are still on training rig and so all sessions should be biased
+        if len(ephys_rig_sess) == 0:
+            assert(np.all(np.array(task_protocol) == 'biased'))
+            signed_contrast = get_signed_contrast(trials_all)
+            perf_easy = np.array([compute_performance_easy(trials[k]) for k in trials.keys()])
+            n_trials = np.array([compute_n_trials(trials[k]) for k in trials.keys()])
+            psych_20 = compute_psychometric(trials_all, signed_contrast=signed_contrast, block=0.2)
+            psych_80 = compute_psychometric(trials_all, signed_contrast=signed_contrast, block=0.8)
+            rt = compute_median_reaction_time(trials_all, signed_contrast=signed_contrast)
 
-        delay_sess = one.alyx.rest('sessions', 'list', subject=subj, date_range=[sess_dates[-1],
-                                   sess_dates[0]], django='json__SESSION_START_DELAY_SEC__gte,900')
+            if criterion_ephys(psych_20, psych_80, n_trials, perf_easy, rt):
+                status = 'ready4ephysrig'
+            else:
+                status = 'trained1b'
 
-        if len(delay_sess) > 0 and criterion_ephys(psych_20, psych_80, n_trials, perf_easy, rt):
-            status = 'ready4recording'
-        elif criterion_delay(perf_easy, n_trials):
-            status = 'ready4delay'
-        else:
-            status = 'ready4ephysrig'
+        if len(ephys_rig_sess) < 3:
+
+            ephys_sess_dates = [sess['start_time'][:10] for sess in ephys_rig_sess]
+            assert(np.all(np.array([date in trials for date in ephys_sess_dates])))
+            perf_easy = np.array([compute_performance_easy(trials[k]) for k in ephys_sess_dates])
+            n_trials = np.array([compute_n_trials(trials[k]) for k in ephys_sess_dates])
+
+            if criterion_delay(perf_easy, n_trials):
+                status = 'ready4delay'
+            else:
+                status = 'ready4ephysrig'
+
+        if len(ephys_rig_sess) >= 3:
+            # See if any sessions have had
+            perf_easy = np.array([compute_performance_easy(trials[k]) for k in ephys_sess_dates])
+            n_trials = np.array([compute_n_trials(trials[k]) for k in ephys_sess_dates])
+            psych_20 = compute_psychometric(trials_all, signed_contrast=signed_contrast, block=0.2)
+            psych_80 = compute_psychometric(trials_all, signed_contrast=signed_contrast, block=0.8)
+            rt = compute_median_reaction_time(trials_all, signed_contrast=signed_contrast)
+
+            delay_sess = one.alyx.rest('sessions', 'list', subject=subj, date_range=[sess_dates[-1],
+                                       sess_dates[0]], django='json__SESSION_START_DELAY_SEC__gte,900')
+
+            if len(delay_sess) > 0 and criterion_ephys(psych_20, psych_80, n_trials, perf_easy, rt):
+                status = 'ready4recording'
+            elif criterion_delay(perf_easy, n_trials):
+                status = 'ready4delay'
+            else:
+                status = 'ready4ephysrig'
 
 
 def get_signed_contrast(trials):
