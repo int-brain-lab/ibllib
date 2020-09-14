@@ -16,6 +16,18 @@ class TestPopulation(unittest.TestCase):
 
         self.assertTrue(np.allclose(c, c_expected))
 
+    def test_acorr_1(self):
+        spike_times = np.array([0, 10, 10, 20], dtype=np.float64)
+        bin_size = 1
+        winsize_bins = 2 * 3 + 1
+
+        c_expected = np.zeros(7, dtype=np.float64)
+        c_expected[3] = 1
+
+        c = acorr(spike_times, bin_size=bin_size, window_size=winsize_bins)
+
+        self.assertTrue(np.allclose(c, c_expected))
+
 
 class TestPeths(unittest.TestCase):
     def test_peths_synthetic(self):
