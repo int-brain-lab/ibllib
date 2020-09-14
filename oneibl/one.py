@@ -173,6 +173,47 @@ class OneAbstract(abc.ABC):
                         list_out.append(dc.data[i])
                     else:
                         list_out.append(dc.local_path[i])
+        return
+
+    def _load2(self, eid, dataset_types=None, dclass_output=False, download_only=False,
+              offline=False, **kwargs):
+        """
+        From a Session ID and dataset types, queries Alyx database, downloads the data
+        from Globus, and loads into numpy array. Single session only
+        """
+        if is_uuid_string(eid):
+            eid = '/sessions/' + eid
+        eid_str = eid[-36:]
+        # if no dataset_type is provided:
+        # a) force the output to be a dictionary that provides context to the data
+        # b) download all types that have a data url specified whithin the alf folder
+        dataset_types = [dataset_types] if isinstance(dataset_types, str) else dataset_types
+        if not dataset_types or dataset_types == ['__all__']:
+            dclass_output = True
+        if offline:
+            dc = self._make_dataclass_offline(eid_str, dataset_types, **kwargs)
+        else:
+            dc = self._make_dataclass(eid_str, dataset_types, **kwargs)
+        # load the files content in variables if requested
+        if not download_only:
+            for ind, fil in enumerate(dc.local_path):
+                dc.data[ind] = load_file_content(fil)
+        # parse output arguments
+        if dclass_output:
+            return dc
+        # if required, parse the output as a list that matches dataset_types requested
+        list_out = []
+        for dt in dataset_types:
+            if dt not in dc.dataset_type:
+                _logger.warning('dataset ' + dt + ' not found for session: ' + eid_str)
+                list_out.append(None)
+                continue
+            for i, x, in enumerate(dc.dataset_type):
+                if dt == x:
+                    if dc.data[i] is not None:
+                        list_out.append(dc.data[i])
+                    else:
+                        list_out.append(dc.local_path[i])
         return list_out
 
     def _get_cache_dir(self, cache_dir):
