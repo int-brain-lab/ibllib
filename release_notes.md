@@ -1,6 +1,14 @@
-### Release Notes 1.5.X atlas
+### Release Notes 1.5.11  Hotfix
+-   ffmpeg nostdin option as jobs were stopped in background on a server
+
+### Release Notes 1.5.10
+-   QC base class
+-   Support for task QC on FPGA data
+-   TaskQC run during task extraction
+
+### Release Notes 1.5.9
+-   local server: catches error when subject is not registered in Alyx
 -   ibllib.atlas.AllenAtlas
-    -   alternative to pynrrd for caching the atlas on disk to avoid Windows bugs
     -   re-ordered the volumes in c-order contiguous ml-ap-dv efficient coronal shapes
     -   top/bottom surface extraction
 

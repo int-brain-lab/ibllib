@@ -23,3 +23,7 @@ class Neuropixel3BSyncFrontsNonMatching(IblError):
     explanation = (" When the npy files containing sync pulses for probes do not match with nidq."
                    "In 3B, this indicates that either the binary files is corrupt,"
                    "either the extracted sync files are corrupt.")
+
+
+class AlyxSubjectNotFound(IblError):
+    explanation = 'The subject was not found in Alyx database'
