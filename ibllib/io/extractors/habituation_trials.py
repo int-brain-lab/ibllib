@@ -33,13 +33,11 @@ class StimCenterTimes(BaseBpodTrialsExtractor):
         """
         # Get all stim_sync events detected
         ttls = [raw.get_port_events(tr, 'BNC1') for tr in self.bpod_trials]
-        stim_center_trigg, _ = (StimCenterTriggerTimes(self.session_path)
-                                .extract(bpod_trials=self.bpod_trials, settings=self.settings))
+        stim_center_triggers, _ = (StimCenterTriggerTimes(self.session_path)
+                                .extract(self.bpod_trials, self.settings))
 
         # StimCenter times
-        stim_center_times = np.full(stim_center_trigg.shape, np.nan)
-        stim_center_triggers = (StimCenterTriggerTimes(self.session_path)
-                                .extract(self.bpod_trials, self.settings))
+        stim_center_times = np.full(stim_center_triggers.shape, np.nan)
         for i, (sync, last) in enumerate(zip(ttls, stim_center_triggers)):
             """We expect there to be 3 pulses per trial; if this is the case, stim center will 
             be the third pulse. If any pulses are missing, we can only be confident of the correct 
@@ -78,8 +76,8 @@ class ItiInTimes(BaseBpodTrialsExtractor):
 
 class HabituationTrials(BaseBpodTrialsExtractor):
     var_names = ('feedbackType', 'rewardVolume', 'stimOff_times', 'contrastLeft', 'contrastRight',
-                 'feedback_times', 'stimOn_times', 'intervals', 'goCue_times',
-                 'goCueTrigger_times')
+                 'feedback_times', 'stimOn_times', 'stimOnTrigger_times', 'intervals',
+                 'goCue_times', 'goCueTrigger_times')
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -97,7 +95,7 @@ class HabituationTrials(BaseBpodTrialsExtractor):
         if n_missing == len(ttls):
             _logger.error(f'{self.session_path}: Missing ALL BNC1 TTLs ({n_missing} trials)')
         elif n_missing > 0:  # Check if any stim_sync has failed be detected for every trial
-            _logger.warning(f'{self.session_path}: Missing BNC1 TTLs on {n_missing} trials')
+            _logger.warning(f'{self.session_path}: Missing BNC1 TTLs on {n_missing} trial(s)')
 
         # Extract datasets common to trainingChoiceWorld
         training = [ContrastLR, FeedbackTimes, Intervals, GoCueTimes, StimOnTriggerTimes]
@@ -105,10 +103,10 @@ class HabituationTrials(BaseBpodTrialsExtractor):
                                        bpod_trials=self.bpod_trials, settings=self.settings)
 
         # GoCueTriggerTimes is the same event as StimOnTriggerTimes
-        out['goCueTrigger_times'] = out['StimOnTriggerTimes'].copy()
+        out['goCueTrigger_times'] = out['stimOnTrigger_times'].copy()
 
         # StimOn times
-        stimOn_times = np.full(out['StimOnTriggerTimes'].shape, np.nan)
+        stimOn_times = np.full(out['stimOnTrigger_times'].shape, np.nan)
         stim_center_triggers, _ = (StimCenterTriggerTimes(self.session_path)
                                    .extract(self.bpod_trials, self.settings))
         for i, (sync, last) in enumerate(zip(ttls, stim_center_triggers)):
@@ -117,6 +115,7 @@ class HabituationTrials(BaseBpodTrialsExtractor):
             both pulses occur before the stim center trigger"""
             if len(sync) == 3 or (len(sync) == 2 and sum(pulse < last for pulse in sync) == 2):
                 stimOn_times[i] = sync[1]
+        out['stimOn_times'] = stimOn_times
 
         # RewardVolume
         trial_volume = [x['reward_amount'] for x in self.bpod_trials]
@@ -131,13 +130,15 @@ class HabituationTrials(BaseBpodTrialsExtractor):
         There should be exactly three TTLs per trial.  stimOff_times should be the first TTL pulse.
         If 1 or more pulses are missing, we can not be confident of assigning the correct one.
         """
-        out['stimOff_times'] = [off[0] if len(sync) == 3 else np.nan
-                                for sync, off in zip(ttls, stimOffTriggers)]
+        out['stimOff_times'] = np.array([sync[0] if len(sync) == 3 else np.nan
+                                         for sync, off in zip(ttls[1:], stimOffTriggers)])
 
         # FeedbackType is always positive
         out['feedbackType'] = np.ones(len(out['feedback_times']), dtype=np.int8)
 
-        return [out[k] for k in self.var_names]
+        # NB: We lose the last trial because the stim off event occurs at trial_num + 1
+        n_trials = out['stimOff_times'].size
+        return [out[k][:n_trials] for k in self.var_names]
 
 
 def extract_all(session_path, save=False, bpod_trials=False, settings=False):

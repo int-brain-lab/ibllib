@@ -25,9 +25,11 @@ Examples:
 """
 import logging
 import sys
+import datetime
 from inspect import getmembers, isfunction
 
 import numpy as np
+from scipy.stats import chisquare
 
 from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
 from ibllib.qc.task_extractors import TaskQCExtractor
@@ -131,7 +133,8 @@ class HabituationQC(TaskQC):
 
         # Initialize checks
         data = self.extractor.data
-        metrics = passed = {}
+        metrics = {}
+        passed = {}
 
         # Check all reward volumes == 3.0ul
         check = 'reward_volumes'
@@ -143,11 +146,21 @@ class HabituationQC(TaskQC):
         if not self.one:
             self.log.warning('unable to determine session trials without ONE')
         else:
-            det = self.one.get_details(self.eid)
-            range = det['start_time'][:10]
-            eids = self.one.search(subject=det['subject'], task_protocol='habituation')
-            # WARNING: Assumes eids are returned in descending date order
-            # [...]
+            assert self.session_path is not None
+            check = 'habituation_time'
+            subject, session_date = self.session_path.parts[-3:-1]
+            session_date = datetime.date.fromisoformat(session_date)
+            # det = self.one.get_details(self.eid)
+            _, det = self.one.search(subject=subject, task_protocol='habituation', details=True)
+            prev_n_trials = None
+            for d in det:
+                # WARNING: Assumes eids are returned in descending date order
+                if datetime.datetime.fromisoformat(d['start_time']).date() < session_date:
+                    prev_eid = d['url'][-36:]
+                    prev_n_trials = self.one.alyx.get('sessions', uuid=prev_eid)['n_trials']
+                    break
+            metric = np.array([prev_n_trials or 0, data['intervals'].shape[0]])
+            passed[check] = np.diff()  # TODO
 
         # Check event orders: trial_start < stim on < stim center < feedback < stim off
         """
@@ -183,13 +196,23 @@ class HabituationQC(TaskQC):
         check = 'stimCenter_delays'
         metric = data["stimCenter_times"] - data["stimCenterTrigger_times"]
         nans = np.isnan(metric)
-        passed = np.zeros_like(metric) * np.nan
-        passed[~nans] = (metric[~nans] <= 0.15) & (metric[~nans] > 0)
-
-        passed[check] = passed
-        metrics[check] = metrics
+        passed[check] = np.zeros_like(metric) * np.nan
+        passed[check][~nans] = (metric[~nans] <= 0.15) & (metric[~nans] > 0)
+        metrics[check] = metric
 
         # Phase check
+        check = 'phase'
+        metric = data[check]
+        nans = np.isnan(metric)
+        passed[check] = np.zeros_like(metric) * np.nan
+        passed[check][~nans] = (metric[~nans] <= 2 * np.pi) & (metric[~nans] >= 0)
+        metrics[check] = metric
+
+        check = 'phase_distribution'
+        metric, _ = np.histogram(data['phase'])
+        _, p = chisquare(metric)
+        passed[check] = p < 0.05
+        metrics[check] = metric
 
         # Checks common to training QC
         checks = [check_goCue_delays, check_stimOn_goCue_delays,
