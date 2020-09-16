@@ -127,9 +127,8 @@ class TaskQCExtractor(object):
 
         # Signals and parameters not usually saved to file
         if self.type == 'habituation':
-            extractors = [
-                StimOnTriggerTimes, habit.StimOffTriggerTimes,
-                habit.StimCenterTriggerTimes, habit.StimCenterTimes, habit.ItiInTimes]
+            extractors = [habit.StimCenterTimes, habit.StimCenterTriggerTimes,
+                          habit.ItiInTimes, habit.StimOffTriggerTimes]
         else:
             extractors = [
                 StimOnTriggerTimes, StimOffTriggerTimes, StimOnOffFreezeTimes,
@@ -140,10 +139,7 @@ class TaskQCExtractor(object):
             if self.type == 'ephys' and not self.bpod_only:
                 extractors.append(FpgaTrials)
             elif self.type == 'habituation':
-                extractors.extend([
-                    habit.ContrastLR, habit.ItiInTimes, habit.StimOffTimes,
-                    habit.RewardVolume, habit.FeedbackTimes, habit.StimOnTimes, habit.Intervals,
-                    habit.GoCueTriggerTimes, habit.GoCueTimes, habit.FeedbackType])
+                extractors.append(habit.HabituationTrials)
             else:
                 extractors.extend([
                     Choice, FeedbackType, Intervals, StimOnTimes, GoCueTriggerTimes, Wheel,
@@ -174,10 +170,17 @@ class TaskQCExtractor(object):
                                'stimFreezeTrigger_times', 'errorCueTrigger_times', 'itiIn_times']
                 # build trials output
                 data.update({k: bpod2fpga(data[k][ibpod]) for k in sync_fields})
-        else:
-            if self.type != 'habituation':
-                data['quiescence'] = np.array([t['quiescent_period'] for t in self.raw_data])
+        elif self.type == 'habituation':
             data['position'] = np.array([t['position'] for t in self.raw_data])
+            data['phase'] = np.array([t['stim_phase'] for t in self.raw_data])
+            # Nasty hack to trim last trial due to stim off events happening at trial num + 1
+            n_trials = data['stimOff_times'].size
+            data = {k: v[:n_trials] for k, v in data.items()}
+        else:
+            data['quiescence'] = np.array([t['quiescent_period'] for t in self.raw_data])
+            data['position'] = np.array([t['position'] for t in self.raw_data])
+            # FIXME Check this is valid for biased choiceWorld
+            data['phase'] = np.array([t['stim_phase'] for t in self.raw_data])
 
         # Update the data attribute with extracted data
         if self.data:
