@@ -529,6 +529,7 @@ def check_error_trial_event_sequence(data, **_):
         np.isnan(data["goCue_times"])     |  # noqa
         np.isnan(data["errorCue_times"])  |  # noqa
         np.isnan(data["itiIn_times"])
+        # TODO Add end_times
     )
 
     a = np.less(data["intervals"][:, 0], data["goCue_times"], where=~nans)
@@ -559,6 +560,7 @@ def check_correct_trial_event_sequence(data, **_):
         np.isnan(data["goCue_times"])     |  # noqa
         np.isnan(data["valveOpen_times"]) |
         np.isnan(data["itiIn_times"])
+        # TODO Add end_times
     )
 
     a = np.less(data["intervals"][:, 0], data["goCue_times"], where=~nans)
