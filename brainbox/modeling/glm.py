@@ -464,7 +464,7 @@ class NeuralGLM:
         if method == 'sklearn':
             traindm = self.dm[trainmask]
             nonconverged = []
-            for i, cell in enumerate(self.clu_ids):
+            for i, cell in tqdm(enumerate(self.clu_ids), 'Fitting units:', leave=False):
                 binned = trainbinned[:, i]
                 with catch_warnings(record=True) as w:
                     fitobj = PoissonRegressor(alpha=alpha, max_iter=300).fit(traindm,
@@ -474,13 +474,10 @@ class NeuralGLM:
                 wts = np.concatenate([[fitobj.intercept_], fitobj.coef_], axis=0)
                 wvar = np.diag(np.linalg.inv(dd_neglog(wts, biasdm[trainmask], binned)))
                 coefs.at[cell[0]] = fitobj.coef_
-                variances.at[cell[0]] = wvar
+                variances.at[cell[0]] = wvar[1:]
                 intercepts.at[cell[0]] = fitobj.intercept_
             if len(nonconverged) != 0:
                 warn(f'Fitting did not converge for some units: {nonconverged}')
-            self.coefs = coefs
-            self.intercepts = intercepts
-            return coefs, intercepts
         elif method == 'minimize':
             traindm = biasdm[trainmask]
             for i, cell in tqdm(enumerate(self.clu_ids), 'Fitting units:', leave=False):
@@ -495,12 +492,12 @@ class NeuralGLM:
                     wvar = np.ones_like(res.x) * 1e6
                 coefs.at[cell[0]] = res.x[1:]
                 intercepts.at[cell[0]] = res.x[0]
-                variances.at[cell[0]] = wvar
-            self.coefs = coefs
-            self.intercepts = intercepts
-            self.variances = variances
-            self.fitmethod = method
-            return coefs, intercepts
+                variances.at[cell[0]] = wvar[1:]
+        self.coefs = coefs
+        self.intercepts = intercepts
+        self.variances = variances
+        self.fitmethod = method
+        return coefs, intercepts
 
     def combine_weights(self):
         """
@@ -515,6 +512,7 @@ class NeuralGLM:
             IDs for each of the cells that were fit (NOT a simple range(start, stop) index.)
         """
         outputs = {}
+        varoutputs = {}
         for var in self.covar.keys():
             if self.covar[var]['bases'] is None:
                 wind = self.covar[var]['dmcol_idx']
@@ -523,13 +521,18 @@ class NeuralGLM:
             winds = self.covar[var]['dmcol_idx']
             bases = self.covar[var]['bases']
             weights = self.coefs.apply(lambda w: np.sum(w[winds] * bases, axis=1))
+            variances = self.variances.apply(lambda v: np.sum(v[winds] * bases, axis=1))
             offset = self.covar[var]['offset']
             tlen = bases.shape[0] * self.binwidth
             tstamps = np.linspace(0 + offset, tlen + offset, bases.shape[0])
             outputs[var] = pd.DataFrame(weights.values.tolist(),
                                         index=weights.index,
                                         columns=tstamps)
+            varoutputs[var] = pd.DataFrame(variances.values.tolist(),
+                                           index=weights.index,
+                                           columns=tstamps)
         self.combined_weights = outputs
+        self.combined_variances = varoutputs
         return outputs
 
     def score(self):
