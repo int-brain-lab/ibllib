@@ -1,3 +1,6 @@
+### Release Notes 1.5.11  Hotfix
+-   ffmpeg nostdin option as jobs were stopped in background on a server
+
 ### Release Notes 1.5.10
 -   QC base class
 -   Support for task QC on FPGA data

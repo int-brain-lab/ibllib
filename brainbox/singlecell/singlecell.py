@@ -24,7 +24,8 @@ def acorr(spike_times, bin_size=None, window_size=None):
     Returns an `(winsize_samples,)` array with the auto-correlogram.
 
     """
-    xc = xcorr(spike_times, np.zeros_like(spike_times), bin_size=bin_size, window_size=window_size)
+    xc = xcorr(spike_times, np.zeros_like(spike_times, dtype=np.int32),
+               bin_size=bin_size, window_size=window_size)
     return xc[0, 0, :]
 
 

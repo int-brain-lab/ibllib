@@ -1,6 +1,7 @@
 docs/_build
 __pycache__
 *.*~
+*.pyc
 # this fixes a dummy version on the public repository
 #git update-index --assume-unchanged python/openneurodata/oneibl/params_secret.py
 python/scratch
