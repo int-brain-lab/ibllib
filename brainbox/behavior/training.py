@@ -5,21 +5,26 @@ import numpy as np
 from brainbox.core import Bunch
 import logging
 import ibl_pipeline.utils.psychofit as psy
-one = ONE()
 
 logger = logging.getLogger('ibllib')
 
 
-def get_lab_training_status(lab, date=None, details=False):
+def get_lab_training_status(lab, date=None, details=True, one=None):
+    if not one:
+        one = ONE()
     subj_lab = one.alyx.rest('subjects', 'list', lab=lab, alive=True, water_restricted=True)
     subjects = [subj['nickname'] for subj in subj_lab]
     for subj in subjects:
-        get_subject_training_status(subj, date=date, details=details)
+        get_subject_training_status(subj, date=date, details=details, one=one)
 
 
-def get_subject_training_status(subj, date=None, details=False):
+def get_subject_training_status(subj, date=None, details=True, one=None):
+    if not one:
+        one = ONE()
 
-    trials, task_protocol, ephys_sess, n_delay = get_sessions(subj, date=date)
+    trials, task_protocol, ephys_sess, n_delay = get_sessions(subj, date=date, one=one)
+    if not trials:
+        return
     sess_dates = list(trials.keys())
     status, info = get_training_status(trials, task_protocol, ephys_sess, n_delay)
 
@@ -27,7 +32,7 @@ def get_subject_training_status(subj, date=None, details=False):
         if np.any(info.get('psych')):
             display_status(subj, sess_dates, status, perf_easy=info.perf_easy,
                            n_trials=info.n_trials, psych=info.psych, rt=info.rt)
-        elif np.any(info.ge('psych_20')):
+        elif np.any(info.get('psych_20')):
             display_status(subj, sess_dates, status, perf_easy=info.perf_easy,
                            n_trials=info.n_trials, psych_20=info.psych_20, psych_80=info.psych_80,
                            rt=info.rt)
@@ -35,27 +40,37 @@ def get_subject_training_status(subj, date=None, details=False):
         display_status(subj, sess_dates, status)
 
 
-def get_sessions(subj, date=None):
+def get_sessions(subj, date=None, one=None):
+    if not one:
+        one = ONE()
+
     if date is None:
         # compute from yesterday
         latest_sess = (datetime.date.today() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
-        sess_minus_week = (datetime.date.today() - datetime.timedelta(days=8)).strftime("%Y-%m-%d")
+        latest_minus_week = (datetime.date.today() -
+                             datetime.timedelta(days=8)).strftime("%Y-%m-%d")
     else:
         # compute from the date specified
-        latest_sess = datetime.datetime.strptime(date, '%Y-%m-%d')
-        sess_minus_week = (latest_sess - datetime.timedelta(days=7)).strftime("%Y-%m-%d")
+        specified_date = datetime.datetime.strptime(date, '%Y-%m-%d')
+        latest_minus_week = (specified_date - datetime.timedelta(days=7)).strftime("%Y-%m-%d")
         latest_sess = date
 
-    sessions = one.alyx.rest('sessions', 'list', subject=subj, date_range=[sess_minus_week,
+    sessions = one.alyx.rest('sessions', 'list', subject=subj, date_range=[latest_minus_week,
                              latest_sess], dataset_types='trials.intervals')
 
     # If not enough sessions in the last week, then just fetch them all
     if len(sessions) < 3:
+        specified_date_plus = (specified_date + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        django_query = 'start_time__lte,' + specified_date_plus
         sessions = one.alyx.rest('sessions', 'list', subject=subj,
-                                 dataset_types='trials.intervals')
+                                 dataset_types='trials.intervals', django=django_query)
+
+        # If still 0 sessions then return with warning
+        if len(sessions) == 0:
+            logger.warning(f"No training sessions detected for {subj}")
+            return [None] * 4
 
     trials = Bunch()
-    n = 0
     task_protocol = []
     sess_dates = []
     if len(sessions) < 3:
@@ -67,6 +82,7 @@ def get_sessions(subj, date=None):
                 sess_dates.append(sessions[n]['start_time'][:10])
                 trials[sessions[n]['start_time'][:10]] = trials_
     else:
+        n = 0
         while len(trials) < 3:
             trials_ = one.load_object(sessions[n]['url'].split('/')[-1], 'trials')
             if trials_:
@@ -78,9 +94,9 @@ def get_sessions(subj, date=None):
             n += 1
 
     if not np.any(np.array(task_protocol) == 'training'):
-        ephys_sess = len(one.alyx.rest('sessions', 'list', subject=subj,
-                                       date_range=[sess_dates[-1], sess_dates[0]],
-                                       django='json__PYBPOD_BOARD__icontains,ephys'))
+        ephys_sess = one.alyx.rest('sessions', 'list', subject=subj,
+                                   date_range=[sess_dates[-1], sess_dates[0]],
+                                   django='json__PYBPOD_BOARD__icontains,ephys')
         if len(ephys_sess) > 0:
             ephys_sess_dates = [sess['start_time'][:10] for sess in ephys_sess]
 
@@ -180,24 +196,27 @@ def display_status(subj, sess_dates, status, perf_easy=None, n_trials=None, psyc
         logger.info(f"\n{subj} : {status} \nSession dates=[{sess_dates[0]}, {sess_dates[1]}, "
                     f"{sess_dates[2]}]")
     elif psych_20 is None:
-        logger.info(f"\n{subj} : {status} \nSession dates=[{sess_dates[0]}, {sess_dates[1]}, "
-                    f"{sess_dates[2]}], Perf easy=[{np.around(perf_easy[0],2)}, "
-                    f"{np.around(perf_easy[1],2)}, {np.around(perf_easy[2],2)}], "
-                    f"N trials=[{n_trials[0]},{n_trials[1]}, {n_trials[2]}] "
+        logger.info(f"\n{subj} : {status} \nSession dates={[x for x in sess_dates]}, "
+                    f"Perf easy={[np.around(pe,2) for pe in perf_easy]}, "
+                    f"N trials={[nt for nt in n_trials]} "
                     f"\nPsych fit over last 3 sessions: "
                     f"bias={np.around(psych[0],2)}, thres={np.around(psych[1],2)}, "
-                    f"lapse_low={np.around(psych[2],2)}, lapse_high={np.around(psych[3],2)}")
+                    f"lapse_low={np.around(psych[2],2)}, lapse_high={np.around(psych[3],2)} "
+                    f"\nMedian reaction time at 0 contrast over last 3 sessions = "
+                    f"{np.around(rt,2)}")
+
     else:
-        logger.info(f"\n{subj} : {status} \nSession dates=[{sess_dates[0]}, {sess_dates[1]}, "
-                    f"{sess_dates[2]}], Perf easy=[{np.around(perf_easy[0],2)}, "
-                    f"{np.around(perf_easy[1],2)}, {np.around(perf_easy[2],2)}], "
-                    f"N trials=[{n_trials[0]},{n_trials[1]}, {n_trials[2]}] "
+        logger.info(f"\n{subj} : {status} \nSession dates={[x for x in sess_dates]}, "
+                    f"Perf easy={[np.around(pe,2) for pe in perf_easy]}, "
+                    f"N trials={[nt for nt in n_trials]} "
                     f"\nPsych fit over last 3 sessions (20): "
                     f"bias={np.around(psych_20[0],2)}, thres={np.around(psych_20[1],2)}, "
                     f"lapse_low={np.around(psych_20[2],2)}, lapse_high={np.around(psych_20[3],2)} "
                     f"\nPsych fit over last 3 sessions (80): bias={np.around(psych_80[0],2)}, "
                     f"thres={np.around(psych_80[1],2)}, lapse_low={np.around(psych_80[2],2)}, "
-                    f"lapse_high={np.around(psych_80[3],2)}")
+                    f"lapse_high={np.around(psych_80[3],2)} "
+                    f"\nMedian reaction time at 0 contrast over last 3 sessions = "
+                    f"{np.around(rt, 2)}")
 
 
 def concatenate_trials(trials):
@@ -239,7 +258,7 @@ def get_signed_contrast(trials):
 def compute_performance_easy(trials):
     signed_contrast = get_signed_contrast(trials)
     easy_trials = np.where(np.abs(signed_contrast) >= 50)[0]
-    return np.sum(trials.feedbackType[easy_trials] == 1)/easy_trials.shape[0]
+    return np.sum(trials.feedbackType[easy_trials] == 1) / easy_trials.shape[0]
 
 
 def compute_n_trials(trials):
@@ -258,8 +277,8 @@ def compute_psychometric(trials, signed_contrast=None, block=None):
     contrasts, n_contrasts = np.unique(signed_contrast[block_idx], return_counts=True)
     rightward = trials.choice == -1
     # Calculate the proportion rightward for each contrast type
-    prob_choose_right = np.vectorize(lambda x: np.mean(rightward[(x == signed_contrast)
-                                                                 & block_idx]))(contrasts)
+    prob_choose_right = np.vectorize(lambda x: np.mean(rightward[(x == signed_contrast) &
+                                                                 block_idx]))(contrasts)
 
     psych, _ = psy.mle_fit_psycho(
         np.vstack([contrasts, n_contrasts, prob_choose_right]),
@@ -274,26 +293,32 @@ def compute_psychometric(trials, signed_contrast=None, block=None):
 def compute_median_reaction_time(trials, stim_on_type='stimOn_times', signed_contrast=None):
     if signed_contrast is None:
         signed_contrast = get_signed_contrast(trials)
-    reaction_time = np.median((trials.response_times - trials[stim_on_type])[signed_contrast == 0])
+    zero_trials = (trials.response_times - trials[stim_on_type])[signed_contrast == 0]
+    if np.any(zero_trials):
+        reaction_time = np.median((trials.response_times - trials[stim_on_type])
+                                  [signed_contrast == 0])
+    else:
+        reaction_time = np.nan
+
     return reaction_time
 
 
 def criterion_1a(psych, n_trials, perf_easy):
-    criterion = abs(psych[0]) < 16 and psych[1] < 19 and psych[2] < 0.2 and psych[3] < 0.2 and \
-                np.all(n_trials > 200) and np.all(perf_easy > 0.8)
+    criterion = (abs(psych[0]) < 16 and psych[1] < 19 and psych[2] < 0.2 and psych[3] < 0.2 and
+                 np.all(n_trials > 200) and np.all(perf_easy > 0.8))
     return criterion
 
 
 def criterion_1b(psych, n_trials, perf_easy, rt):
-    criterion = abs(psych[0]) < 10 and psych[1] < 20 and psych[2] < 0.1 and psych[3] < 0.1 and \
-                np.all(n_trials > 400) and np.all(perf_easy > 0.9) and rt < 2
+    criterion = (abs(psych[0]) < 10 and psych[1] < 20 and psych[2] < 0.1 and psych[3] < 0.1 and
+                 np.all(n_trials > 400) and np.all(perf_easy > 0.9) and rt < 2)
     return criterion
 
 
 def criterion_ephys(psych_20, psych_80, n_trials, perf_easy, rt):
-    criterion = psych_20[2] < 0.1 and psych_20[3] < 0.1 and psych_80[2] < 0.1 and psych_80[3] and \
-                psych_80[0] - psych_20[0] > 5 and np.all(n_trials > 400) and \
-                np.all(perf_easy > 0.9) and rt < 2
+    criterion = (psych_20[2] < 0.1 and psych_20[3] < 0.1 and psych_80[2] < 0.1 and psych_80[3] and
+                 psych_80[0] - psych_20[0] > 5 and np.all(n_trials > 400) and
+                 np.all(perf_easy > 0.9) and rt < 2)
     return criterion
 
 
@@ -302,117 +327,26 @@ def criterion_delay(n_trials, perf_easy):
     return criterion
 
 
-sessions = one.alyx.rest('sessions', 'list', subject='SWC_054', date_range=['2020-08-21', '2020-09-04'])
 
-wanted_keys = ['choice', 'contrastLeft', 'contrastRight', 'feedbackType', 'probabilityLeft', 'response_times', 'stimOn_times']
-
-for n, _ in enumerate(sessions):
-    trials_orig = one.load_object(sessions[n]['url'].split('/')[-1], 'trials')
-    trials_ = Bunch(zip(wanted_keys, [trials_orig[k] for k in wanted_keys]))
-    if trials_:
-        trials_['task_protocol'] = re.search('tasks_(.*)Choice',
-                                       sessions[n]['task_protocol']).group(1)
-        task_protocol.append(re.search('tasks_(.*)Choice',
-                                       sessions[n]['task_protocol']).group(1))
-        sess_dates.append(sessions[n]['start_time'][:10])
-        trials[sessions[n]['start_time'][:10]] = trials_
-
-with open('trials_test.pickle', 'wb') as f:
-    pickle.dump(trials, f, protocol=pickle.HIGHEST_PROTOCOL)
-
-with open('trials_test.pickle', 'rb') as f:
-    trials_orig = pickle.load(f)
-
-def test_concatenate_and_computations():
-    sess_dates = ['2020-08-25', '2020-08-24', '2020-08-21']
-    trials_copy = copy.deepcopy(trials_orig)
-    trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
-    task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
-    trials_total = np.sum([len(trials[k]['contrastRight']) for k in trials.keys()])
-
-    trials_all = concatenate_trials(trials)
-    assert(len(trials_all.contrastRight) == trials_total)
-
-    perf_easy = np.array([compute_performance_easy(trials[k]) for k in trials.keys()])
-    n_trials = np.array([compute_n_trials(trials[k]) for k in trials.keys()])
-    psych = compute_psychometric(trials_all)
-    rt = compute_median_reaction_time(trials_all)
-    np.testing.assert_allclose(perf_easy, [0.91489362, 0.9, 0.90853659])
-    np.testing.assert_array_equal(n_trials, [617, 532, 719])
-    np.testing.assert_allclose(psych, [4.04487042, 21.6293942, 1.91451396e-02, 1.72669957e-01],
-                               rtol=1e-5)
-    assert(np.isclose(rt, 0.83655))
-
-
-def test_in_training():
-    sess_dates = ['2020-08-25', '2020-08-24', '2020-08-21']
-    trials_copy = copy.deepcopy(trials_orig)
-    trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
-    task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
-    assert(np.all(np.array(task_protocol) == 'training'))
-    status, info = get_training_status(trials, task_protocol, ephys_sess_dates=[], n_delay=0)
-    assert(status == 'in training')
-
-    # also test the computations in the first test
-    np.testing.assert_allclose(info.perf_easy, [0.91489362, 0.9, 0.90853659])
-    np.testing.assert_array_equal(info.n_trials, [617, 532, 719])
-    np.testing.assert_allclose(info.psych, [4.04487042, 21.6293942, 1.91451396e-02,
-                                            1.72669957e-01], rtol=1e-5)
-    assert(np.isclose(info.rt, 0.83655))
-
-def test_trained1a():
-    sess_dates = ['2020-08-26', '2020-08-25', '2020-08-24']
-    trials_copy = copy.deepcopy(trials_orig)
-    trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
-    task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
-    assert(np.all(np.array(task_protocol) == 'training'))
-    status, info = get_training_status(trials, task_protocol, ephys_sess_dates=[], n_delay=0)
-    assert(status == 'trained 1a')
-
-def test_trained1b():
-    sess_dates = ['2020-08-27', '2020-08-26', '2020-08-25']
-    trials_copy = copy.deepcopy(trials_orig)
-    trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
-    task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
-    assert(np.all(np.array(task_protocol) == 'training'))
-    status, info = get_training_status(trials, task_protocol, ephys_sess_dates=[], n_delay=0)
-    assert(status == 'trained 1b')
-
-def test_training_to_bias():
-    sess_dates = ['2020-08-31', '2020-08-28', '2020-08-27']
-    trials_copy = copy.deepcopy(trials_orig)
-    trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
-    task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
-    assert(~np.all(np.array(task_protocol) == 'training') and \
-            np.any(np.array(task_protocol) == 'training'))
-    status, info = get_training_status(trials, task_protocol, ephys_sess_dates=[], n_delay=0)
-    assert(status == 'trained 1b')
-
-def test_ready4ephys():
-    sess_dates = ['2020-09-01', '2020-08-31', '2020-08-28']
-    trials_copy = copy.deepcopy(trials_orig)
-    trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
-    task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
-    assert(np.all(np.array(task_protocol) == 'biased'))
-    status, info = get_training_status(trials, task_protocol, ephys_sess_dates=[], n_delay=0)
-    assert(status == 'ready4ephysrig')
-
-def test_ready4delay():
-    sess_dates = ['2020-09-03', '2020-09-02', '2020-08-31']
-    trials_copy = copy.deepcopy(trials_orig)
-    trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
-    task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
-    assert(np.all(np.array(task_protocol) == 'biased'))
-    status, info = get_training_status(trials, task_protocol, ephys_sess_dates=['2020-09-03'],
-                                       n_delay=0)
-    assert(status == 'ready4delay')
-
-def test_ready4recording():
-    sess_dates = ['2020-09-01', '2020-08-31', '2020-08-28']
-    trials_copy = copy.deepcopy(trials_orig)
-    trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
-    task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
-    assert(np.all(np.array(task_protocol) == 'biased'))
-    status, info = get_training_status(trials, task_protocol, ephys_sess_dates=sess_dates,
-                                       n_delay=1)
-    assert(status == 'ready4recording')
+# sessions = one.alyx.rest('sessions', 'list', subject='SWC_054', date_range=['2020-08-21',
+# '2020-09-04'])
+#
+# wanted_keys = ['choice', 'contrastLeft', 'contrastRight', 'feedbackType', 'probabilityLeft',
+# 'response_times', 'stimOn_times']
+#
+# for n, _ in enumerate(sessions):
+#    trials_orig = one.load_object(sessions[n]['url'].split('/')[-1], 'trials')
+#    trials_ = Bunch(zip(wanted_keys, [trials_orig[k] for k in wanted_keys]))
+#    if trials_:
+#        trials_['task_protocol'] = re.search('tasks_(.*)Choice',
+#                                       sessions[n]['task_protocol']).group(1)
+#        task_protocol.append(re.search('tasks_(.*)Choice',
+#                                       sessions[n]['task_protocol']).group(1))
+#        sess_dates.append(sessions[n]['start_time'][:10])
+#        trials[sessions[n]['start_time'][:10]] = trials_
+#
+# with open('trials_test.pickle', 'wb') as f:
+#    pickle.dump(trials, f, protocol=pickle.HIGHEST_PROTOCOL)
+#
+# with open('trials_test.pickle', 'rb') as f:
+#    trials_orig = pickle.load(f)
