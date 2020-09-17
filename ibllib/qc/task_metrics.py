@@ -145,13 +145,13 @@ def get_bpodqc_metrics_frame(data, **kwargs):
     for k in qc_metrics_map:
         metrics[k], passed[k] = qc_metrics_map[k]
 
-    # Add a check for trial level pass: did a given trial pass all checks
+    # Add a check for trial level pass: did a given trial pass all checks?
     n_trials = data['intervals'].shape[0]
     trial_level_passed = [m for m in passed.values()
                           if isinstance(m, Sized) and len(m) == n_trials]
     name = '_task_passed_trial_checks'
-    metrics[name] = reduce(np.logical_and, trial_level_passed) if trial_level_passed else None
-    passed[name] = metrics[name].astype(np.float) if metrics[name] else None
+    metrics[name] = reduce(np.logical_and, trial_level_passed or (None, None))
+    passed[name] = metrics[name].astype(np.float) if trial_level_passed else None
 
     return metrics, passed
 
