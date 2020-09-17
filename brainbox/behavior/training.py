@@ -272,7 +272,6 @@ def display_status(subj, sess_dates, status, perf_easy=None, n_trials=None, psyc
     indicates no zero contrast stimuli in training sessions)
     """
 
-
     if perf_easy is None:
         logger.info(f"\n{subj} : {status} \nSession dates=[{sess_dates[0]}, {sess_dates[1]}, "
                     f"{sess_dates[2]}]")
@@ -502,10 +501,7 @@ def criterion_ephys(psych_20, psych_80, n_trials, perf_easy, rt):
 
 def criterion_delay(n_trials, perf_easy):
     """
-    Returns bool indicating whether criterion for ready4delay is met. 
+    Returns bool indicating whether criterion for ready4delay is met.
     """
     criterion = np.any(n_trials > 400) and np.any(perf_easy > 0.9)
     return criterion
-
-
-

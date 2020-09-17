@@ -112,18 +112,11 @@ class TestWheel(unittest.TestCase):
 
 class TestTraining(unittest.TestCase):
     def setUp(self):
-        """ Load pickled test data
-        Test data is in the form ((inputs), (outputs)) where inputs is a tuple containing a
-        numpy array of timestamps and one of positions; outputs is a tuple of outputs from
-        the function under test, i.e. wheel.movements
-
-        The first set - test_data[0] - comes from Rigbox MATLAB and contains around 200
-        seconds of (reasonably) evenly sampled wheel data from a 1024 ppr device with X4
-        encoding, in raw samples.  test_data[0] = ((t, pos), (onsets, offsets, amps, peak_vel))
-
-        The second set - test_data[1] - comes from ibllib FPGA and contains around 180 seconds
-        of unevenly sampled wheel data from a 1024 ppr device with X2 encoding, in linear cm units.
-        test_data[1] = ((t, pos), (onsets, offsets, amps, peak_vel))
+        """
+        Test data contains training data from 10 consecutive sessions from subject SWC_054. It is
+        a dict of trials objects with each key indication a session date. By using data
+        combinations from different dates can test each of the different training criterion a
+        subject goes through in the IBL training pipeline
         """
         pickle_file = Path(__file__).parent.joinpath('fixtures', 'trials_test.pickle')
         if not pickle_file.exists():
@@ -136,7 +129,7 @@ class TestTraining(unittest.TestCase):
         sess_dates = ['2020-08-25', '2020-08-24', '2020-08-21']
         trials_copy = copy.deepcopy(self.trial_data)
         trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
-        task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
+        _ = [trials[k].pop('task_protocol') for k in trials.keys()]
         trials_total = np.sum([len(trials[k]['contrastRight']) for k in trials.keys()])
 
         trials_all = train.concatenate_trials(trials)
