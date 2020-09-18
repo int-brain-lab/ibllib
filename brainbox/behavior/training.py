@@ -460,8 +460,8 @@ def compute_median_reaction_time(trials, stim_on_type='stimOn_times', signed_con
         signed_contrast = get_signed_contrast(trials)
     zero_trials = (trials.response_times - trials[stim_on_type])[signed_contrast == 0]
     if np.any(zero_trials):
-        reaction_time = np.median((trials.response_times - trials[stim_on_type])
-                                  [signed_contrast == 0])
+        reaction_time = np.nanmedian((trials.response_times - trials[stim_on_type])
+                                     [signed_contrast == 0])
     else:
         reaction_time = np.nan
 

@@ -2,7 +2,6 @@ import scipy
 import numpy as np
 import ibllib.pipes.histology as histology
 import ibllib.atlas as atlas
-#brain_atlas = atlas.AllenAtlas(25)
 TIP_SIZE_UM = 200
 
 
@@ -237,7 +236,8 @@ class EphysAlignment:
         return region, region_label, region_colour, region_id
 
     @staticmethod
-    def get_nearest_boundary(xyz_coords, allen, extent=100, steps=8, parent=True, brain_atlas=None):
+    def get_nearest_boundary(xyz_coords, allen, extent=100, steps=8, parent=True,
+                             brain_atlas=None):
         """
         Finds distance to closest neighbouring brain region along trajectory. For each point in
         xyz_coords computes the plane passing through point and perpendicular to trajectory and
