@@ -2,15 +2,19 @@
 # -*- coding:utf-8 -*-
 # @Author: Niccolò Bonacchi
 # @Date: Monday, September 7th 2020, 11:51:17 am
-import alf.io
-from oneibl.one import ONE
-from pathlib import Path
-import numpy as np
 import json
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+import alf.io
 import ibllib.io.extractors.passive as passive
-from ibllib.io.extractors import ephys_fpga
 import ibllib.io.raw_data_loaders as rawio
+from ibllib.io.extractors import ephys_fpga
+from ibllib.plots import color_cycle, squares, vertical_lines
 from ibllib.qc.oneutils import random_ephys_session
+from oneibl.one import ONE
 
 # hardcoded var
 FRAME_FS = 60  # Sampling freq of the ipad screen, in Hertz
@@ -34,6 +38,9 @@ dataset_types = [
     "_iblrig_taskSettings.raw",
     "_iblrig_taskData.raw",
 ]
+
+eid = '02fbb6da-3034-47d6-a61b-7d06c796a830'  # Wrong num of soundOn_times
+# danlab/Subjects/DY_010/2020-01-29/001 BAD SoundCard?
 
 eid = "01864d6f-31e8-49c9-aadd-2e5021ea0ee7"  # not working
 # number of expected spacers wrong
@@ -64,8 +71,9 @@ eid = "03cf52f6-fba6-4743-a42e-dd1ac3072343"
 eid = "a8a8af78-16de-4841-ab07-fde4b5281a03"
 eid = "db4df448-e449-4a6f-a0e7-288711e7a75a"
 
-# eid, det = random_ephys_session()
-eid = "a9272cce-6914-4b45-a05f-9e925b4c472a"
+eid, det = random_ephys_session()
+eid = 'c7b0e1a3-4d4d-4a76-9339-e73d0ed5425b'  # wrong number of GaborEnd times
+
 
 local_paths = one.load(eid, dataset_types=dataset_types, download_only=True)
 
@@ -137,6 +145,14 @@ def get_passive_spacers(session_path, sync=None, sync_map=None):
 sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
 fixture = load_passive_session_fixtures(session_path)
 
+pl, ax = plt.subplots(1, 1)
+for i, device in enumerate(["frame2ttl", "audio", "bpod"]):
+    sy = ephys_fpga._get_sync_fronts(sync, sync_map[device], tmin=t_start_passive)
+    squares(sy["times"], sy["polarities"], yrange=[0.1 + i, 0.9 + i], color="k", ax=ax)
+
+
+
+
 # Define start and end times of the 3 passive periodes
 t_start_passive, t_starts, t_ends = get_passive_spacers(session_path, sync=sync, sync_map=sync_map)
 tspontaneous = [t_starts[0], t_ends[0]]
@@ -144,6 +160,14 @@ trfm = [t_starts[1], t_ends[1]]
 treplay = [t_starts[2], t_ends[2]]
 # TODO export this to a dstype
 
+vertical_lines(
+    np.r_[t_start_passive, t_starts, t_ends],
+    ymin=-1,
+    ymax=4,
+    color=color_cycle(0),
+    ax=ax,
+    label="spacers",
+)
 
 # 3/3 Replay of task stimuli
 fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0])
@@ -154,7 +178,12 @@ fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0])
 # 0.3 is the expected gabor length and 0.5 isthe expected delay length.
 # We use 0.4 to split the difference and to allow for maximum drift
 # At this stage we want to define what pulses are and not quality control them.
-diff_idxs = np.where(np.diff(fttl["times"]) < 0.4)[0]
+#FIXME: Like this v
+# find highest value of lower diffs
+# Find lower value of higher diffs
+# set threshold in the middle!!
+# every other where max < 1
+diff_idxs = np.where(np.diff(fttl["times"]) <= 0.4)[0]
 # move one change back, i.e. get the OFFset of the previous stimulus
 # get the previous polarity change (which should be the end of previous stim presentation)
 idx_end_stim = diff_idxs - 1
@@ -191,7 +220,22 @@ assert np.allclose(
     [y - x for x, y in passiveGabor_intervals], 0.3, atol=0.1
 ), "Stim length seems wrong"
 
-
+vertical_lines(
+    start_times,
+    ymin=0,
+    ymax=1,
+    color=color_cycle(1),
+    ax=ax,
+    label="GaborOn_times",
+)
+vertical_lines(
+    end_times,
+    ymin=0,
+    ymax=1,
+    color=color_cycle(2),
+    ax=ax,
+    label="GaborOff_times",
+)
 # passiveValve.intervals
 # Get valve intervals from bpod channel
 bpod = ephys_fpga._get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
@@ -241,39 +285,6 @@ np.allclose(noiseOff_times - noiseOn_times, 0.5, atol=0.0005)
 
 
 # Look at it
-import matplotlib.pyplot as plt
-from ibllib.plots import squares, vertical_lines, color_cycle
-
-
-pl, ax = plt.subplots(1, 1)
-for i, device in enumerate(["frame2ttl", "audio", "bpod"]):
-    sy = ephys_fpga._get_sync_fronts(sync, sync_map[device], tmin=t_start_passive)
-    squares(sy["times"], sy["polarities"], yrange=[0.1 + i, 0.9 + i], color="k", ax=ax)
-
-vertical_lines(
-    np.r_[t_start_passive, t_starts, t_ends],
-    ymin=-1,
-    ymax=4,
-    color=color_cycle(0),
-    ax=ax,
-    label="spacers",
-)
-vertical_lines(
-    start_times,
-    ymin=0,
-    ymax=1,
-    color=color_cycle(1),
-    ax=ax,
-    label="GaborOn_times",
-)
-vertical_lines(
-    end_times,
-    ymin=0,
-    ymax=1,
-    color=color_cycle(2),
-    ax=ax,
-    label="GaborOff_times",
-)
 vertical_lines(
     valveOn_times,
     ymin=2,
