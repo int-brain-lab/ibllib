@@ -41,18 +41,31 @@ eid = "fff7d745-bbce-4756-a690-3431e2f3d108"
 eid = "849c9acb-8223-4e09-8cb1-95004b452baf"
 eid = "d1442e39-68de-41d0-9449-35e5cfe5a94f"
 eid = "e6adaabd-2bd8-4956-9c4d-53cf02d1c0e7"
+eid = "a9272cce-6914-4b45-a05f-9e925b4c472a"
+
 # AssertionError: multiple object sync with the same attribute in probe01, restrict parts/namespace
 eid = "c7a9f89c-2c1d-4302-94b8-effcbe4a85b3"
+eid = "c7a9f89c-2c1d-4302-94b8-effcbe4a85b3"
+
+# Spikeglx.py error (pathlib None)
+eid = "4ddb8a95-788b-48d0-8a0a-66c7c796da96"
+eid = "c1fc4aac-4123-49e4-a05c-ee06deac7b5d"
+eid = "f8041c1e-5ef4-4ae6-afec-ed82d7a74dc1"
+
 
 # OK
 # Gabor on HIGH
 eid = "193fe7a8-4eb5-4f3e-815a-0c45864ddd77"
+eid = "8435e122-c0a4-4bea-a322-e08e8038478f"
 # eid = one.search(subject="CSH_ZAD_022", date_range="2020-05-24", number=1)[0]
 # Gabor on LOW
 eid = "a82800ce-f4e3-4464-9b80-4c3d6fade333"
 eid = "03cf52f6-fba6-4743-a42e-dd1ac3072343"
+eid = "a8a8af78-16de-4841-ab07-fde4b5281a03"
+eid = "db4df448-e449-4a6f-a0e7-288711e7a75a"
 
 # eid, det = random_ephys_session()
+eid = "a9272cce-6914-4b45-a05f-9e925b4c472a"
 
 local_paths = one.load(eid, dataset_types=dataset_types, download_only=True)
 
@@ -60,7 +73,7 @@ session_path = alf.io.get_session_path(local_paths[0])
 
 
 # load session fixtures
-def load_passive_session_fixtures(session_path, meta=None):
+def load_passive_session_fixtures(session_path):
     settings = rawio.load_settings(session_path)
     ses_nb = settings["SESSION_ORDER"][settings["SESSION_IDX"]]
     path_fixtures = Path(ephys_fpga.__file__).parent.joinpath("ephys_sessions")
@@ -186,6 +199,7 @@ bpod = ephys_fpga._get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
 # All high fronts == valve open times and low fronts == valve close times
 valveOn_times = bpod["times"][bpod["polarities"] > 0]
 valveOff_times = bpod["times"][bpod["polarities"] < 0]
+# TODO export this to a dstype
 
 assert len(valveOn_times) == NVALVE, "Wrong number of valve ONSET times"
 assert len(valveOff_times) == NVALVE, "Wrong number of valve OFFSET times"
@@ -214,6 +228,7 @@ toneOff_times = soundOff_times[diff < 0.3]
 # Noise is ~500ms so check if diff > 0.3
 noiseOn_times = soundOn_times[diff > 0.3]
 noiseOff_times = soundOff_times[diff > 0.3]
+# TODO export this to a dstype
 
 assert len(toneOn_times) == NTONES
 assert len(toneOff_times) == NTONES
@@ -224,19 +239,15 @@ assert len(noiseOff_times) == NNOISES
 np.allclose(toneOff_times - toneOn_times, 0.1, atol=0.0006)
 np.allclose(noiseOff_times - noiseOn_times, 0.5, atol=0.0005)
 
+
+# Look at it
 import matplotlib.pyplot as plt
 from ibllib.plots import squares, vertical_lines, color_cycle
 
 
-plt.plot(np.diff(fttl["times"]), ".")
-
-plt.axhline(0.4)
-# plt.axvline(fttl['times'][idx_end_stim])
-
-
 pl, ax = plt.subplots(1, 1)
-for i, lab in enumerate(["frame2ttl", "audio", "bpod"]):
-    sy = ephys_fpga._get_sync_fronts(sync, sync_map[lab], tmin=t_start_passive)
+for i, device in enumerate(["frame2ttl", "audio", "bpod"]):
+    sy = ephys_fpga._get_sync_fronts(sync, sync_map[device], tmin=t_start_passive)
     squares(sy["times"], sy["polarities"], yrange=[0.1 + i, 0.9 + i], color="k", ax=ax)
 
 vertical_lines(
@@ -278,6 +289,38 @@ vertical_lines(
     color=color_cycle(4),
     ax=ax,
     label="ValveOff_times",
+)
+vertical_lines(
+    toneOn_times,
+    ymin=1,
+    ymax=2,
+    color=color_cycle(5),
+    ax=ax,
+    label="toneOn_times",
+)
+vertical_lines(
+    toneOff_times,
+    ymin=1,
+    ymax=2,
+    color=color_cycle(6),
+    ax=ax,
+    label="toneOff_times",
+)
+vertical_lines(
+    noiseOn_times,
+    ymin=1,
+    ymax=2,
+    color=color_cycle(7),
+    ax=ax,
+    label="noiseOn_times",
+)
+vertical_lines(
+    noiseOff_times,
+    ymin=1,
+    ymax=2,
+    color=color_cycle(8),
+    ax=ax,
+    label="noiseOff_times",
 )
 
 ax.legend()
