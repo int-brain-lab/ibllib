@@ -10,8 +10,6 @@ from oneibl.one import ONE
 
 log = logging.getLogger("ibllib")
 
-one = ONE()
-
 
 def download_taskqc_raw_data(eid, one=None, fpga=False):
     """Download raw data required for performing task QC
@@ -45,9 +43,10 @@ def download_taskqc_raw_data(eid, one=None, fpga=False):
 
 
 # Decorators
-def _dl_raw_behavior(session_path, full=False, dry=False, force=False):
+def _dl_raw_behavior(session_path, full=False, dry=False, force=False, one=None):
     """ Helper function to download raw behavioral data from session_path based functions
     """
+    one = one or ONE()
     dsts = [x for x in one.list(None, "dataset_types") if "_iblrig_" in x]
     min_dsts = [
         "_iblrig_taskData.raw",
@@ -81,6 +80,7 @@ def uuid_to_path(func=None, dl=False, full=False, dry=False, force=False):
         if eid is None:
             log.warning("Input eid or session_path is None")
             return
+        one = kwargs.get('one') or ONE()
         # Check if first arg is path or eid
         if is_uuid_string(str(eid)):
             session_path = one.path_from_eid(eid)
@@ -95,11 +95,12 @@ def uuid_to_path(func=None, dl=False, full=False, dry=False, force=False):
 
 
 # Other utils
-def _one_load_session_delays_between_events(eid, dstype1, dstype2):
+def _one_load_session_delays_between_events(eid, dstype1, dstype2, one=None):
     """ Returns difference between times of 2 different dataset types
     Func is called with eid and dstypes in temporal order, returns delay between
     event1 and event 2, i.e. event_time2 - event_time1
     """
+    one = one or ONE()
     event_times1, event_times2 = one.load(eid, dataset_types=[dstype1, dstype2])
     if all(np.isnan(event_times1)) or all(np.isnan(event_times2)):
         log.warning(
@@ -111,10 +112,11 @@ def _one_load_session_delays_between_events(eid, dstype1, dstype2):
     return delay_between_events
 
 
-def _to_eid(invar):
+def _to_eid(invar, one=None):
     """ get eid from: details, path, or lists of details or paths
     """
     outvar = []
+    one = one or ONE()
     if isinstance(invar, list) or isinstance(invar, tuple):
         for i in invar:
             outvar.append(_to_eid(i))
@@ -131,8 +133,10 @@ def _to_eid(invar):
 
 
 def search_lab_ephys_sessions(
-    lab: str, dstypes: list = [], nlatest: int = 3, det: bool = True, check_download: bool = False
+    lab: str, dstypes: list = [], nlatest: int = 3, det: bool = True, check_download: bool = False,
+    one: object = None
 ):
+    one = one or ONE()
     if isinstance(lab, list):
         out = []
         for il in lab:
@@ -198,7 +202,8 @@ def search_lab_ephys_sessions(
     return out_sessions, out_details if det else out_sessions
 
 
-def random_ephys_session(lab=None, complete=False):
+def random_ephys_session(lab=None, complete=False, one=None):
+    one = one or ONE()
     if lab is None:
         lab = random_lab()
     if complete:
@@ -214,7 +219,8 @@ def random_ephys_session(lab=None, complete=False):
     return _to_eid(out), out
 
 
-def random_lab():
+def random_lab(one=None):
+    one = one or ONE()
     labs = one.list(None, "lab")
     return np.random.choice(labs)
 
