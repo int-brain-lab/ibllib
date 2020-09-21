@@ -9,12 +9,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import alf.io
+import alf.folders as folders
 import ibllib.io.extractors.passive as passive
 import ibllib.io.raw_data_loaders as rawio
 from ibllib.io.extractors import ephys_fpga
 from ibllib.plots import color_cycle, squares, vertical_lines
 from oneibl.one import ONE
 import random
+from pathlib import PosixPath
 
 
 # hardcoded var
@@ -40,6 +42,10 @@ dataset_types = [
     "_iblrig_taskData.raw",
 ]
 
+# eids = one.search(dataset_types=dataset_types)
+# for i, eid in enumerate(eids):
+#     one.load(eid, dataset_types=dataset_types, download_only=True)
+#     print(f"\n\n Finished downloading session: {i+1}/{len(eids)}\n\n")
 eids = [
     "c6db3304-c906-400c-aa0f-45dd3945b2ea",
     "88d24c31-52e4-49cc-9f32-6adbeb9eba87",
@@ -141,61 +147,116 @@ eids = [
     "d2f5a130-b981-4546-8858-c94ae1da75ff",
     "7939711b-8b4d-4251-b698-b97c1eaa846e",
 ]
-eid = "02fbb6da-3034-47d6-a61b-7d06c796a830"  # Wrong num of soundOn_times
-# danlab/Subjects/DY_010/2020-01-29/001 BAD SoundCard?
-
-eid = "01864d6f-31e8-49c9-aadd-2e5021ea0ee7"  # not working
-# number of expected spacers wrong
-eid = "fff7d745-bbce-4756-a690-3431e2f3d108"
-eid = "849c9acb-8223-4e09-8cb1-95004b452baf"
-eid = "d1442e39-68de-41d0-9449-35e5cfe5a94f"
-eid = "e6adaabd-2bd8-4956-9c4d-53cf02d1c0e7"
-eid = "a9272cce-6914-4b45-a05f-9e925b4c472a"
-eid = "34d20aff-10e5-4a07-8b08-64051a1dc6ac"
-
-# AssertionError: multiple object sync with the same attribute in probe01, restrict parts/namespace
-eid = "c7a9f89c-2c1d-4302-94b8-effcbe4a85b3"
-
-# Spikeglx.py error (pathlib None)
-# TypeError: expected str, bytes or os.PathLike object, not NoneType
-eid = "4ddb8a95-788b-48d0-8a0a-66c7c796da96"
-eid = "c1fc4aac-4123-49e4-a05c-ee06deac7b5d"
-eid = "f8041c1e-5ef4-4ae6-afec-ed82d7a74dc1"
-eid = "65f5c9b4-4440-48b9-b914-c593a5184a18"
-eid = "ee567f69-65c9-44d0-9ee0-6349ecd56473"
-
-# OK
-# Gabor on HIGH
-eid = "193fe7a8-4eb5-4f3e-815a-0c45864ddd77"
-eid = "8435e122-c0a4-4bea-a322-e08e8038478f"
-eid = "c7b0e1a3-4d4d-4a76-9339-e73d0ed5425b"
-eid = ""
-# eid = one.search(subject="CSH_ZAD_022", date_range="2020-05-24", number=1)[0]
-# Gabor on LOW
-eid = "a82800ce-f4e3-4464-9b80-4c3d6fade333"
-eid = "03cf52f6-fba6-4743-a42e-dd1ac3072343"
-eid = "a8a8af78-16de-4841-ab07-fde4b5281a03"
-eid = "db4df448-e449-4a6f-a0e7-288711e7a75a"
-eid = "b9003c82-6178-47ed-9ff2-75087a49c2f7"
-eid = "862ade13-53cd-4221-a3fa-dda8643641f2"
-eid = "572a95d1-39ca-42e1-8424-5c9ffcb2df87"
-eid = "1191f865-b10a-45c8-9c48-24a980fd9402"
-eid = "f10efe41-0dc0-44d0-8f26-5ff68dca23e9"
-eid = "fee6dd62-01d9-42d2-bcc1-5a7e27244edc"
-eid = "a66f1593-dafd-4982-9b66-f9554b6c86b5"
-eid = "d855576e-5b34-41bf-8e3b-2bea0cae1380"
-# eid, det = random_ephys_session(one=one)
-
-# eids = one.search(dataset_types=dataset_types)
-for i, eid in enumerate(eids):
-    one.load(eid, dataset_types=dataset_types, download_only=True)
-    print(f"\n\n Finished downloading session: {i+1}/{len(eids)}\n\n")
-
-eid = eids[random.randint(0, len(eids))]
-
-local_paths = one.load(eid, dataset_types=dataset_types, download_only=True)
-
-session_path = alf.io.get_session_path(local_paths[0])
+session_paths = [
+    '/home/nico/Downloads/FlatIron/hoferlab/Subjects/SWC_043/2020-09-20/001',
+    '/home/nico/Downloads/FlatIron/hoferlab/Subjects/SWC_043/2020-09-19/001',
+    '/home/nico/Downloads/FlatIron/hoferlab/Subjects/SWC_043/2020-09-18/001',
+    '/home/nico/Downloads/FlatIron/angelakilab/Subjects/CSP016/2020-09-18/001',
+    '/home/nico/Downloads/FlatIron/hoferlab/Subjects/SWC_043/2020-09-17/001',
+    '/home/nico/Downloads/FlatIron/angelakilab/Subjects/CSP016/2020-09-17/001',
+    '/home/nico/Downloads/FlatIron/angelakilab/Subjects/CSP016/2020-09-16/001',
+    '/home/nico/Downloads/FlatIron/hoferlab/Subjects/SWC_043/2020-09-15/001',
+    '/home/nico/Downloads/FlatIron/danlab/Subjects/DY_016/2020-09-15/001',
+    '/home/nico/Downloads/FlatIron/danlab/Subjects/DY_016/2020-09-14/001',
+    '/home/nico/Downloads/FlatIron/danlab/Subjects/DY_016/2020-09-13/001',
+    '/home/nico/Downloads/FlatIron/danlab/Subjects/DY_016/2020-09-12/001',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL024/2020-09-12/001',
+    '/home/nico/Downloads/FlatIron/danlab/Subjects/DY_016/2020-09-11/001',
+    '/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_039/2020-09-10/001',
+    '/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_045/2020-08-28/001',
+    '/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_045/2020-08-27/001',
+    '/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_045/2020-08-26/001',
+    '/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_045/2020-08-25/001',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL027/2020-08-20/001',
+    '/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-26/2020-08-20/001',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_019/2020-08-18/001',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_019/2020-08-16/001',
+    '/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-21/2020-08-14/005',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_019/2020-08-14/001',
+    '/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-21/2020-08-13/002',
+    '/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-21/2020-08-12/006',
+    '/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-21/2020-08-11/002',
+    '/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-21/2020-08-10/002',
+    '/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_3001/2020-08-07/001',
+    '/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_3001/2020-08-05/001',
+    '/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_038/2020-08-01/001',
+    '/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_038/2020-07-31/001',
+    '/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_038/2020-07-30/001',
+    '/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_3003/2020-07-30/001',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL029/2020-07-29/001',
+    '/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_3003/2020-07-29/001',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL029/2020-07-28/001',
+    '/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_3003/2020-07-28/001',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL029/2020-07-27/001',
+    '/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_3003/2020-07-27/001',
+    '/home/nico/Downloads/FlatIron/danlab/Subjects/DY_014/2020-07-19/001',
+    '/home/nico/Downloads/FlatIron/danlab/Subjects/DY_014/2020-07-18/001',
+    '/home/nico/Downloads/FlatIron/hoferlab/Subjects/SWC_042/2020-07-17/001',
+    '/home/nico/Downloads/FlatIron/danlab/Subjects/DY_014/2020-07-17/001',
+    '/home/nico/Downloads/FlatIron/danlab/Subjects/DY_014/2020-07-16/001',
+    '/home/nico/Downloads/FlatIron/hoferlab/Subjects/SWC_042/2020-07-15/001',
+    '/home/nico/Downloads/FlatIron/danlab/Subjects/DY_014/2020-07-15/001',
+    '/home/nico/Downloads/FlatIron/danlab/Subjects/DY_014/2020-07-14/001',
+    '/home/nico/Downloads/FlatIron/hoferlab/Subjects/SWC_042/2020-07-13/001',
+    '/home/nico/Downloads/FlatIron/danlab/Subjects/DY_014/2020-07-13/001',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_021/2020-06-16/001',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_024/2020-06-11/001',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_024/2020-06-09/001',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_024/2020-06-08/001',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_017/2020-06-07/001',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_017/2020-06-05/001',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_017/2020-06-04/002',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_017/2020-06-03/001',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_022/2020-05-28/001',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_022/2020-05-26/001',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_022/2020-05-25/002',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_022/2020-05-24/001',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_022/2020-05-23/001',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_022/2020-05-22/001',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_022/2020-05-21/001',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_022/2020-05-20/001',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_022/2020-05-19/001',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_011/2020-03-23/001',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_011/2020-03-22/001',
+    '/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-08/2020-03-20/001',
+    '/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-08/2020-03-19/001',
+    '/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-08/2020-03-18/001',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL_018/2020-03-16/002',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL060/2020-03-15/001',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL_019/2020-03-14/002',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL060/2020-03-14/003',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL_019/2020-03-13/001',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL060/2020-03-13/001',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL_019/2020-03-12/001',
+    '/home/nico/Downloads/FlatIron/danlab/Subjects/DY_013/2020-03-12/001',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL060/2020-03-12/001',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL060/2020-03-11/004',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL060/2020-03-10/001',
+    '/home/nico/Downloads/FlatIron/danlab/Subjects/DY_009/2020-03-09/001',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL059/2020-03-08/001',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL059/2020-03-07/002',
+    '/home/nico/Downloads/FlatIron/danlab/Subjects/DY_013/2020-03-07/001',
+    '/home/nico/Downloads/FlatIron/danlab/Subjects/DY_009/2020-03-07/001',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL059/2020-03-06/001',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL059/2020-03-05/001',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL059/2020-03-04/001',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL059/2020-03-03/001',
+    '/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL045/2020-02-28/001',
+    '/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-26/2020-08-21/001',
+    '/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-26/2020-08-19/001',
+    '/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-21/2020-08-19/001',
+    '/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_019/2020-08-19/001',
+    '/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-26/2020-08-18/001'
+]
+# eid = eids[random.randint(0, len(eids))]
+# session_paths = []
+# for i, eid in enumerate(eids):
+#     try:
+#         local_paths = one.load(eid, dataset_types=dataset_types, download_only=True)
+#         session_paths.append(alf.io.get_session_path(local_paths[0]))
+#         print(f"{i+1}/{len(eids)}")
+#     except BaseException as e:
+#         print(f"{i+1}/{len(eids)} - Failed session: {eid}")
 
 
 # load session fixtures
@@ -254,218 +315,237 @@ def get_passive_spacers(session_path, sync=None, sync_map=None):
     return spacer_times[0], spacer_times[1::2], spacer_times[2::2]
 
 
+
+
+
+
+
+
+
 # Load sessions sync channels, map adnd fixtures
 sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
 fixture = load_passive_session_fixtures(session_path)
+passiveGabor_properties = fixture["pcs"]
+passiveGabor_properties_metadata = ["position, contrast, phase"]
 
-# Plot all sync pulses
-pl, ax = plt.subplots(1, 1)
-for i, device in enumerate(["frame2ttl", "audio", "bpod"]):
-    sy = ephys_fpga._get_sync_fronts(sync, sync_map[device])  # , tmin=t_start_passive)
-    squares(sy["times"], sy["polarities"], yrange=[0.1 + i, 0.9 + i], color="k", ax=ax)
+
+
+
+
+
+
+
+
 
 # 1/3 Define start and end times of the 3 passive periods
-t_start_passive, t_starts, t_ends = get_passive_spacers(session_path, sync=sync, sync_map=sync_map)
-tspontaneous = [t_starts[0], t_ends[0]]
-trfm = [t_starts[1], t_ends[1]]
-treplay = [t_starts[2], t_ends[2]]
-# TODO export this to a dstype
+def extract_passive_periods(session_path, sync=None, sync_map=None):
+    if sync is None or sync_map is None:
+        sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
 
-# Update plot
-vertical_lines(
-    np.r_[t_start_passive, t_starts, t_ends],
-    ymin=-1,
-    ymax=4,
-    color=color_cycle(0),
-    ax=ax,
-    label="spacers",
-)
+    t_start_passive, t_starts, t_ends = get_passive_spacers(session_path, sync=sync, sync_map=sync_map)
+    tspontaneous = [t_starts[0], t_ends[0]]
+    trfm = [t_starts[1], t_ends[1]]
+    treplay = [t_starts[2], t_ends[2]]
+    # TODO export this to a dstype
+    return t_start_passive, tspontaneous, trfm, treplay
+
+
 
 # 2/3 RFMapping stimuli
 
+
 # 3/3 Replay of task stimuli
-fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0])
-# At this stage we want to define what pulses are and not quality control them.
-# Pulses are stricty altternating with intevals
-# find min max lengths for both (we don'tknow which are pulses and which are intervals yet)
-diff0 = (np.min(np.diff(fttl["times"])[::2]), np.max(np.diff(fttl["times"])[::2]))
-diff1 = (np.min(np.diff(fttl["times"])[1::2]), np.max(np.diff(fttl["times"])[1::2]))
-# Highest max is of the intervals
-if max(diff0 + diff1) in diff1:
-    thresh = diff1[0]
-elif max(diff0 + diff1) in diff0:
-    thresh = diff0[0]
-# Anything lower than the min length of intervals is a pulse
-idx_start_stims = np.where((np.diff(fttl["times"]) < thresh) & (np.diff(fttl["times"]) > 0.1))[0]
+def _extract_passiveGabor_intervals(fttl):
+    # At this stage we want to define what pulses are and not quality control them.
+    # Pulses are stricty altternating with intevals
+    # find min max lengths for both (we don'tknow which are pulses and which are intervals yet)
+    diff0 = (np.min(np.diff(fttl["times"])[::2]), np.max(np.diff(fttl["times"])[::2]))
+    diff1 = (np.min(np.diff(fttl["times"])[1::2]), np.max(np.diff(fttl["times"])[1::2]))
+    # Highest max is of the intervals
+    if max(diff0 + diff1) in diff1:
+        thresh = diff1[0]
+    elif max(diff0 + diff1) in diff0:
+        thresh = diff0[0]
+    # Anything lower than the min length of intervals is a pulse
+    idx_start_stims = np.where((np.diff(fttl["times"]) < thresh) & (np.diff(fttl["times"]) > 0.1))[0]
 
 
-idx_end_stims = idx_start_stims + 1
+    idx_end_stims = idx_start_stims + 1
 
-start_times = fttl["times"][idx_start_stims]
-end_times = fttl["times"][idx_end_stims]
-# missing the first stim
-first_stim_off_idx = idx_start_stims[0] - 1
-first_stim_on_idx = first_stim_off_idx - 1
-if first_stim_on_idx <= 0:
-    end_times = np.insert(end_times, 0, fttl["times"][first_stim_off_idx])
-    start_times = np.insert(start_times, 0, end_times[0] - 0.3)
+    start_times = fttl["times"][idx_start_stims]
+    end_times = fttl["times"][idx_end_stims]
+    # missing the first stim
+    first_stim_off_idx = idx_start_stims[0] - 1
+    first_stim_on_idx = first_stim_off_idx - 1
+    if first_stim_on_idx <= 0:
+        end_times = np.insert(end_times, 0, fttl["times"][first_stim_off_idx])
+        start_times = np.insert(start_times, 0, end_times[0] - 0.3)
 
+    # TODO export this to a dstype
+    # intervals dstype requires reshaping of start and end times
+    passiveGabor_intervals = np.array([(x, y) for x, y in zip(start_times, end_times)])
 
+    # Check length of presentation of stim is  within 150msof expected
+    assert np.allclose(
+        [y - x for x, y in passiveGabor_intervals], 0.3, atol=0.15
+    ), "Stim length seems wrong"
 
-
-
-# # # # move one change back, i.e. get the OFFset of the previous stimulus
-# # # # get the previous polarity change (which should be the end of previous stim presentation)
-# # # idx_end_stims = idx_start_stims - 1
-# # # # We've now lost the last stim presentation so get the last onset and move to it's offset
-# # # # append it to the end indexes diff_idx[-1] + 1
-# # # idx_end_stims = np.append(idx_end_stims, idx_start_stims[-1] + 1)
-# # # assert len(idx_end_stims) == sum(fixture["ids"] == "G"), "Wrong number of GaborEnd times"
-# # # # Get the start times from the end times
-# # # # Check if first end stim detected is the first sample
-# # # start_times = fttl["times"][idx_end_stims - 1]
-# # # # If first stimOff detected is first sample first stimON is wrong
-# # # # If first stimOff detected minus the fist stimON detected is > 0.3 (expected stim length)
-# # # # first stimON is also wrong
-# # # # in any of these cases extrapolate based upon the stim expected length
-# # # if (idx_end_stims[0] == 0) or (
-# # #     fttl["times"][idx_end_stims[0]] - fttl["times"][idx_end_stims[0] - 1] > 0.3
-# # # ):
-# # #     start_times[0] = fttl["times"][idx_end_stims[0]] - 0.3
-# # # # Move the end times to a var
-# # # end_times = fttl["times"][idx_end_stims]
-
-# TODO export this to a dstype
-passiveGabor_properties = fixture["pcs"]
-passiveGabor_properties_metadata = ["position, contrast, phase"]
-# intervals dstype requires reshaping of start and end times
-passiveGabor_intervals = np.array([(x, y) for x, y in zip(start_times, end_times)])
-
-# Check length of presentation of stim is  within 150msof expected
-assert np.allclose(
-    [y - x for x, y in passiveGabor_intervals], 0.3, atol=0.15
-), "Stim length seems wrong"
-
-# Update plot
-vertical_lines(
-    start_times,
-    ymin=0,
-    ymax=1,
-    color=color_cycle(1),
-    ax=ax,
-    label="GaborOn_times",
-)
-vertical_lines(
-    end_times,
-    ymin=0,
-    ymax=1,
-    color=color_cycle(2),
-    ax=ax,
-    label="GaborOff_times",
-)
-
-# passiveValve.intervals
-# Get valve intervals from bpod channel
-bpod = ephys_fpga._get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
-# bpod channel should only contain valve output for passiveCW protocol
-# All high fronts == valve open times and low fronts == valve close times
-valveOn_times = bpod["times"][bpod["polarities"] > 0]
-valveOff_times = bpod["times"][bpod["polarities"] < 0]
-# TODO export this to a dstype
-
-assert len(valveOn_times) == NVALVE, "Wrong number of valve ONSET times"
-assert len(valveOff_times) == NVALVE, "Wrong number of valve OFFSET times"
-assert len(bpod["times"]) == NVALVE * 2, "Wrong number of valve FRONTS detected"  # (40 * 2)
-
-# check all values are within bpod tolerance of 100µs
-assert np.allclose(
-    valveOff_times - valveOn_times, valveOff_times[0] - valveOn_times[0], atol=0.0001
-), "Some valve outputs are longer or shorter than others"
-
-# Update the plot
-vertical_lines(
-    valveOn_times,
-    ymin=2,
-    ymax=3,
-    color=color_cycle(3),
-    ax=ax,
-    label="ValveOn_times",
-)
-vertical_lines(
-    valveOff_times,
-    ymin=2,
-    ymax=3,
-    color=color_cycle(4),
-    ax=ax,
-    label="ValveOff_times",
-)
+    return passiveGabor_intervals
 
 
-# Get Tone and Noise cue intervals
-audio = ephys_fpga._get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
+def _extract_passiveValve_intervals(bpod):
+    # passiveValve.intervals
+    # Get valve intervals from bpod channel
+    # bpod channel should only contain valve output for passiveCW protocol
+    # All high fronts == valve open times and low fronts == valve close times
+    valveOn_times = bpod["times"][bpod["polarities"] > 0]
+    valveOff_times = bpod["times"][bpod["polarities"] < 0]
+    # TODO export this to a dstype
 
-# Get all sound onsets and offsets
-soundOn_times = audio["times"][audio["polarities"] > 0]
-soundOff_times = audio["times"][audio["polarities"] < 0]
-# Check they are the correct number
-assert len(soundOn_times) == NTONES + NNOISES, "Wrong number of sound ONSETS"
-assert len(soundOff_times) == NTONES + NNOISES, "Wrong number of sound OFFSETS"
+    assert len(valveOn_times) == NVALVE, "Wrong number of valve ONSET times"
+    assert len(valveOff_times) == NVALVE, "Wrong number of valve OFFSET times"
+    assert len(bpod["times"]) == NVALVE * 2, "Wrong number of valve FRONTS detected"  # (40 * 2)
 
-diff = soundOff_times - soundOn_times
-# Tone is ~100ms so check if diff < 0.3
-toneOn_times = soundOn_times[diff < 0.3]
-toneOff_times = soundOff_times[diff < 0.3]
-# Noise is ~500ms so check if diff > 0.3
-noiseOn_times = soundOn_times[diff > 0.3]
-noiseOff_times = soundOff_times[diff > 0.3]
-# TODO export this to a dstype
+    # check all values are within bpod tolerance of 100µs
+    assert np.allclose(
+        valveOff_times - valveOn_times, valveOff_times[0] - valveOn_times[0], atol=0.0001
+    ), "Some valve outputs are longer or shorter than others"
 
-assert len(toneOn_times) == NTONES
-assert len(toneOff_times) == NTONES
-assert len(noiseOn_times) == NNOISES
-assert len(noiseOff_times) == NNOISES
-
-# Fixed delays from soundcard ~500µs
-np.allclose(toneOff_times - toneOn_times, 0.1, atol=0.0006)
-np.allclose(noiseOff_times - noiseOn_times, 0.5, atol=0.0006)
+    return np([(x, y) for x, y in zip(valveOn_times, valveOff_times)])
 
 
-# Look at it
-vertical_lines(
-    toneOn_times,
-    ymin=1,
-    ymax=2,
-    color=color_cycle(5),
-    ax=ax,
-    label="toneOn_times",
-)
-vertical_lines(
-    toneOff_times,
-    ymin=1,
-    ymax=2,
-    color=color_cycle(6),
-    ax=ax,
-    label="toneOff_times",
-)
-vertical_lines(
-    noiseOn_times,
-    ymin=1,
-    ymax=2,
-    color=color_cycle(7),
-    ax=ax,
-    label="noiseOn_times",
-)
-vertical_lines(
-    noiseOff_times,
-    ymin=1,
-    ymax=2,
-    color=color_cycle(8),
-    ax=ax,
-    label="noiseOff_times",
-)
+def _extract_passiveSound_intervals(audio):
+    # Get Tone and Noise cue intervals
 
-ax.legend()
-# plt.show()
-# %gui qt
-# print(det)
-print(eid)
+    # Get all sound onsets and offsets
+    soundOn_times = audio["times"][audio["polarities"] > 0]
+    soundOff_times = audio["times"][audio["polarities"] < 0]
+    # Check they are the correct number
+    assert len(soundOn_times) == NTONES + NNOISES, "Wrong number of sound ONSETS"
+    assert len(soundOff_times) == NTONES + NNOISES, "Wrong number of sound OFFSETS"
+
+    diff = soundOff_times - soundOn_times
+    # Tone is ~100ms so check if diff < 0.3
+    toneOn_times = soundOn_times[diff < 0.3]
+    toneOff_times = soundOff_times[diff < 0.3]
+    # Noise is ~500ms so check if diff > 0.3
+    noiseOn_times = soundOn_times[diff > 0.3]
+    noiseOff_times = soundOff_times[diff > 0.3]
+    # TODO export this to a dstype
+
+    assert len(toneOn_times) == NTONES
+    assert len(toneOff_times) == NTONES
+    assert len(noiseOn_times) == NNOISES
+    assert len(noiseOff_times) == NNOISES
+
+    # Fixed delays from soundcard ~500µs
+    np.allclose(toneOff_times - toneOn_times, 0.1, atol=0.0006)
+    np.allclose(noiseOff_times - noiseOn_times, 0.5, atol=0.0006)
+
+
+def extract_replay(session_path, treplay, sync=None, sync_map=None):
+    if sync is None or sync_map is None:
+        sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
+
+    fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0])
+    passiveGabor_intervals = _extract_passiveGabor_intervals(fttl)
+
+    bpod = ephys_fpga._get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
+    passiveValve_intervals = _extract_passiveValve_intervals(bpod)
+
+    audio = ephys_fpga._get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
+    passiveTone_intervals, passive_Noise_intervals = _extract_passiveSound_intervals(audio)
+
+
+
+
+def plot_sync_channels(session_path, sync=None, sync_map=None):
+    # Plot all sync pulses
+    pl, ax = plt.subplots(1, 1)
+    for i, device in enumerate(["frame2ttl", "audio", "bpod"]):
+        sy = ephys_fpga._get_sync_fronts(sync, sync_map[device])  # , tmin=t_start_passive)
+        squares(sy["times"], sy["polarities"], yrange=[0.1 + i, 0.9 + i], color="k", ax=ax)
+    # Update plot
+    vertical_lines(
+        np.r_[t_start_passive, t_starts, t_ends],
+        ymin=-1,
+        ymax=4,
+        color=color_cycle(0),
+        ax=ax,
+        label="spacers",
+    )
+    # Update the plot
+    vertical_lines(
+        valveOn_times,
+        ymin=2,
+        ymax=3,
+        color=color_cycle(3),
+        ax=ax,
+        label="ValveOn_times",
+    )
+    vertical_lines(
+        valveOff_times,
+        ymin=2,
+        ymax=3,
+        color=color_cycle(4),
+        ax=ax,
+        label="ValveOff_times",
+    )
+
+    # Update plot
+    vertical_lines(
+        start_times,
+        ymin=0,
+        ymax=1,
+        color=color_cycle(1),
+        ax=ax,
+        label="GaborOn_times",
+    )
+    vertical_lines(
+        end_times,
+        ymin=0,
+        ymax=1,
+        color=color_cycle(2),
+        ax=ax,
+        label="GaborOff_times",
+    )
+    # Look at it
+    vertical_lines(
+        toneOn_times,
+        ymin=1,
+        ymax=2,
+        color=color_cycle(5),
+        ax=ax,
+        label="toneOn_times",
+    )
+    vertical_lines(
+        toneOff_times,
+        ymin=1,
+        ymax=2,
+        color=color_cycle(6),
+        ax=ax,
+        label="toneOff_times",
+    )
+    vertical_lines(
+        noiseOn_times,
+        ymin=1,
+        ymax=2,
+        color=color_cycle(7),
+        ax=ax,
+        label="noiseOn_times",
+    )
+    vertical_lines(
+        noiseOff_times,
+        ymin=1,
+        ymax=2,
+        color=color_cycle(8),
+        ax=ax,
+        label="noiseOff_times",
+    )
+
+    ax.legend()
+    # plt.show()
+
+if __name__ == "__main__":
+    print(eid)
+
