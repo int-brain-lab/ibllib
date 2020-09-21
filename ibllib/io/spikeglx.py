@@ -395,7 +395,7 @@ def _conversion_sample2v_from_meta(meta_data):
     if 'imroTbl' in meta_data.keys():  # binary from the probes: ap or lf
         sy_gain = np.ones(int(meta_data['snsApLfSy'][-1]), dtype=np.float32)
         # imroTbl has 384 entries regardless of no of channels saved, so need to index by n_ch
-        n_chn = int(meta_data['nSavedChans']) - 1
+        n_chn = _get_nchannels_from_meta(meta_data) - 1
         # the sync traces are not included in the gain values, so are included for broadcast ops
         gain = re.findall(r'([0-9]* [0-9]* [0-9]* [0-9]* [0-9]*)', meta_data['imroTbl'])[:n_chn]
         out = {'lf': np.hstack((np.array([1 / np.float32(g.split(' ')[-1]) for g in gain]) *
