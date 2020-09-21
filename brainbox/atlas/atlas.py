@@ -19,14 +19,12 @@ def _get_slice(coordinate, axis, fill_values):
     return im
 
 
-
-
 def plot_atlas(regions, values, AP=0, ML=-1, DV=-1, color_palette='Reds', axs=None,
                custom_region_list=None):
     
     # Check input
     assert regions.shape == values.shape
-    if custom_region_list not is None:
+    if custom_region_list is not None:
         assert len(custom_region_list) == ba.regions.id.shape        
     
     # Import Allen atlas
@@ -99,16 +97,3 @@ def plot_atlas(regions, values, AP=0, ML=-1, DV=-1, color_palette='Reds', axs=No
     plt.axis('off')
     axs[2].get_xaxis().set_visible(False)
     axs[2].get_yaxis().set_visible(False)
-    
-    
-    
-        
-    
-        
-        
-    
-    
-    
-    
-    
-
