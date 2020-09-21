@@ -44,6 +44,10 @@ CRITERIA = {"PASS": 0.99, "WARNING": 0.95, "FAIL": 0}
 
 
 class TaskQC(base.QC):
+    criteria = {"PASS": 0.99,
+                "WARNING": 0.95,
+                "FAIL": 0}
+
     def __init__(self, session_path_or_eid, one=None, log=None):
         super().__init__(session_path_or_eid, one, log=log or _log)
 
@@ -53,7 +57,10 @@ class TaskQC(base.QC):
         # Metrics and passed trials
         self.metrics = None
         self.passed = None
+<<<<<<< develop
         self.criteria = CRITERIA
+=======
+>>>>>>> no one on import
 
     def load_data(self, bpod_only=False, download_data=True):
         self.extractor = TaskQCExtractor(
