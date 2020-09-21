@@ -1,10 +1,10 @@
+import logging
 from oneibl.one import ONE
 import datetime
 import re
 import numpy as np
 from brainbox.core import Bunch
-import logging
-import ibl_pipeline.utils.psychofit as psy
+import brainbox.behavior.pyschofit as psy
 
 logger = logging.getLogger('ibllib')
 
@@ -121,7 +121,12 @@ def get_sessions(subj, date=None, one=None):
     if len(sessions) < 3:
         for n, _ in enumerate(sessions):
             trials_ = one.load_object(sessions[n]['url'].split('/')[-1], 'trials')
+
             if trials_:
+                trials_.probabilityLeft, = one.load(sessions[n]['url'].split('/')[-1],
+                                                    'trials.probabilityLeft')
+                trials_.response_times, = one.load(sessions[n]['url'].split('/')[-1],
+                                                   'trials.response_times')
                 task_protocol.append(re.search('tasks_(.*)Choice',
                                      sessions[n]['task_protocol']).group(1))
                 sess_dates.append(sessions[n]['start_time'][:10])
@@ -130,7 +135,12 @@ def get_sessions(subj, date=None, one=None):
         n = 0
         while len(trials) < 3:
             trials_ = one.load_object(sessions[n]['url'].split('/')[-1], 'trials')
+
             if trials_:
+                trials_.probabilityLeft, = one.load(sessions[n]['url'].split('/')[-1],
+                                                    'trials.probabilityLeft')
+                trials_.response_times, = one.load(sessions[n]['url'].split('/')[-1],
+                                                   'trials.response_times')
                 task_protocol.append(re.search('tasks_(.*)Choice',
                                      sessions[n]['task_protocol']).group(1))
                 sess_dates.append(sessions[n]['start_time'][:10])
