@@ -12,9 +12,9 @@ import ibllib.pipes.histology as histology
 import ibllib.atlas as atlas
 from oneibl.one import ONE
 from mayavi import mlab
-mlab.init_notebook()
 from atlaselectrophysiology import rendering
 
+mlab.init_notebook()
 # Instantiate brain atlas and one
 brain_atlas = atlas.AllenAtlas(25)
 one = ONE()
@@ -74,4 +74,3 @@ for iSess, sess_idx in enumerate(closest_traj[0:10]):
                            str(avg_dist[closest_traj[iSess]] * 1e6)))
 
 print(close_sessions)
-fig
