@@ -9,7 +9,7 @@ import pandas as pd
 from oneibl.one import ONE
 one = ONE()
 
-traj = one.alyx.rest('trajectories', 'list', provenance='Histology track',
+traj = one.alyx.rest('trajectories', 'list', provenance='Planned',
                      django='probe_insertion__session__project__name__'
                             'icontains,ibl_neuropixel_brainwide_01,'
                             'probe_insertion__session__qc__lt,50')
@@ -24,18 +24,18 @@ traj = one.alyx.rest('trajectories', 'list', provenance='Histology track',
 #     (10, 'PASS',),
 # ]
 
-x = [p['x'] for p in traj]
-y = [p['y'] for p in traj]
+ml = [p['x'] for p in traj]
+ap = [p['y'] for p in traj]
 
 
 # Read CSV containing all x / y positions to be done
 data = pd.read_csv("/Users/gaelle/Documents/Git/Scrapbook/Needles/Firstpassmap_x_y.csv")
-x_fm = data['ap_um']
-y_fm = data['ml_um']
+ap_fm = data['ap_um']
+ml_fm = data['ml_um']
 
 # Plot
 fig, ax = plt.subplots()
-ax.scatter(x_fm, y_fm, color='black', alpha=0.1)
-ax.scatter(x, y, color='green', alpha=0.4)
+ax.scatter(ap_fm, ml_fm, color='black', alpha=0.1)
+ax.scatter(ap, ml, color='green', alpha=0.4)
 
 ax.set_xlim(4000, -8000)  # decreasing x
