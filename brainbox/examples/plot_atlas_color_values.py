@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Sep 21 16:31:58 2020
-
-@author: guido
-"""
-
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
