@@ -151,15 +151,19 @@ class HabituationQC(TaskQC):
 
         # Check number of trials greater than previous session
         # NB: Requires ONE
+        check = 'habituation_time'
         if not self.one:
             self.log.warning('unable to determine session trials without ONE')
+            metrics[check] = passed[check] = None
         else:
             assert self.session_path is not None
-            check = 'habituation_time'
             subject, session_date = self.session_path.parts[-3:-1]
-            session_date = datetime.date.fromisoformat(session_date)
+            # session_date = datetime.date.fromisoformat(session_date)
             # det = self.one.get_details(self.eid)
-            _, det = self.one.search(subject=subject, task_protocol='habituation', details=True)
+            # _, det = self.one.search(subject=subject, task_protocol='habituation', details=True)
+            det = self.one.alyx.rest('sessions', 'list',
+                          django=f'start_time__lte,{session_date},task_protocol__contains,'
+                                 f'habituation,subject__nickname,{subject}')[0]
             prev_n_trials = None
             for d in det:
                 # WARNING: Assumes eids are returned in descending date order
@@ -171,18 +175,6 @@ class HabituationQC(TaskQC):
             passed[check] = np.diff()  # TODO
 
         # Check event orders: trial_start < stim on < stim center < feedback < stim off
-        """
-        FIXME: This fails for the following reason...
-        # Get all stim_sync events detected
-        stim_sync_all = [raw.get_port_events(tr, 'BNC1') for tr in data]
-        stim_sync_all = [np.array(x) for x in stim_sync_all]
-        assert all(len(x) == 3 for x in stim_sync_all), should be three frame updates per trial
-
-         # Get the stim_on_state that triggers the onset of the stim
-        stim_on_state = np.array([tr['behavior_data']['States timestamps']
-                                 ['stim_on'][0][0] for tr in data])
-        assert np.all(stim_on_state[0] < stim_sync_all[0]), 'on state should preceed all TTLs
-        """
         check = 'trial_event_sequence'
         nans = (
                 np.isnan(data["intervals"][:, 0])  |  # noqa
@@ -399,7 +391,7 @@ def check_negative_feedback_stimOff_delays(data, **_):
 # === Wheel movement during trial checks ===
 
 def check_wheel_move_before_feedback(data, **_):
-    """ Check that the wheel does not move within 100ms of the feedback onset (error sound or valve).
+    """ Check that the wheel does move within 100ms of the feedback onset (error sound or valve).
 
     Metric: M = (w_t - 0.05) - (w_t + 0.05), where t = feedback_times
     Criterion: M != 0
