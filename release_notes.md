@@ -1,3 +1,6 @@
+### Release Notes 1.5.12  Hotfix
+-   mtscomp registers ch file on run and re-runs
+
 ### Release Notes 1.5.11  Hotfix
 -   ffmpeg nostdin option as jobs were stopped in background on a server
 
