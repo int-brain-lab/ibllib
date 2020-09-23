@@ -67,6 +67,9 @@ def plot_atlas(regions, values, ML=-1, AP=0, DV=-1, color_palette='Reds',
         give them the same name in the custom_region_list
     """
     
+    # Import Allen atlas
+    ba = atlas.AllenAtlas(25)
+    
     # Check input
     assert regions.shape == values.shape
     if minmax is not None:
@@ -74,11 +77,8 @@ def plot_atlas(regions, values, ML=-1, AP=0, DV=-1, color_palette='Reds',
     if axs is not None:
         assert len(axs) == 3
     if custom_region_list is not None:
-        assert len(custom_region_list) == ba.regions.acronym.shape        
-    
-    # Import Allen atlas
-    ba = atlas.AllenAtlas(25)
-    
+        assert custom_region_list.shape == ba.regions.acronym.shape        
+        
     # Get region boundaries volume
     boundaries = np.diff(ba.label, axis=0, append=0)
     boundaries = boundaries + np.diff(ba.label, axis=1, append=0)
