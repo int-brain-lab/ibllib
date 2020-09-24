@@ -151,6 +151,7 @@ class TaskQCExtractor(object):
         # Run behaviour extractors
         kwargs = dict(save=False, bpod_trials=self.raw_data, settings=self.settings)
         data, _ = run_extractor_classes(extractors, session_path=self.session_path, **kwargs)
+        n_trials = data['intervals'].shape[0]
 
         # Extract some parameters
         if self.type == 'ephys':
@@ -174,13 +175,13 @@ class TaskQCExtractor(object):
             data['position'] = np.array([t['position'] for t in self.raw_data])
             data['phase'] = np.array([t['stim_phase'] for t in self.raw_data])
             # Nasty hack to trim last trial due to stim off events happening at trial num + 1
-            n_trials = data['stimOff_times'].size
             data = {k: v[:n_trials] for k, v in data.items()}
         else:
-            data['quiescence'] = np.array([t['quiescent_period'] for t in self.raw_data])
-            data['position'] = np.array([t['position'] for t in self.raw_data])
+            data['quiescence'] = \
+                np.array([t['quiescent_period'] for t in self.raw_data[:n_trials]])
+            data['position'] = np.array([t['position'] for t in self.raw_data[:n_trials]])
             # FIXME Check this is valid for biased choiceWorld
-            data['phase'] = np.array([t['stim_phase'] for t in self.raw_data])
+            data['phase'] = np.array([t['stim_phase'] for t in self.raw_data[:n_trials]])
 
         # Update the data attribute with extracted data
         if self.data:
