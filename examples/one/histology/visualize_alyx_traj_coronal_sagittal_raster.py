@@ -26,8 +26,14 @@ for i_probe in range(0, n_probe):
     # Get single probe trajectory
     probe_label = prob_des[0][i_probe].get('label')
 
-    traj = one.alyx.rest('trajectories', 'list', session=eid,
-                         provenance='Histology track', probe=probe_label)[0]
+    trajs = one.alyx.rest('trajectories', 'list', session=eid,
+                          provenance='Histology track', probe=probe_label)
+
+    if len(trajs) == 0:
+        print(f"No histology recorded for probe {probe_label}")
+        continue
+    else:
+        traj = trajs[0]
 
     ins = atlas.Insertion.from_dict(traj)
 
