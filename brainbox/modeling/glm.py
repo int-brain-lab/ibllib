@@ -11,13 +11,13 @@ from warnings import warn, catch_warnings
 import numpy as np
 import pandas as pd
 from brainbox.processing import bincount2D
-from sklearn.linear_model import PoissonRegressor  # unique to sklearn 0.24 dev release for now
+from sklearn.linear_model import PoissonRegressor
 import scipy.sparse as sp
 import numba as nb
 from numpy.matlib import repmat
-from tqdm import tqdm
 from scipy.optimize import minimize
 from scipy.special import xlogy
+from tqdm import tqdm
 
 
 class NeuralGLM:
@@ -60,7 +60,7 @@ class NeuralGLM:
             (using the NeuralGLM.score method). Trials to keep will be randomly sampled.
         binwidth: float
             Width, in seconds, of the bins which will be used to count spikes. Defaults to 20ms.
-        bintrials: int
+        mintrials: int
             Minimum number of trials in which neurons fired a spike in order to be fit. Defaults
             to 100 trials.
 
@@ -117,6 +117,7 @@ class NeuralGLM:
 
         # Break the data into test and train sections for cross-validation
         if train == 1:
+            print('Training fraction set to 1. Training on all data.')
             traininds = trialsdf.index
             testinds = trialsdf.index
         else:
@@ -560,9 +561,10 @@ class NeuralGLM:
             bias = self.intercepts.loc[cell]
             y = self.binnedspikes[testmask, cell_idx]
             pred = np.exp(testdm @ wt + bias)
-            null_pred = np.exp(np.ones_like(pred) * bias)
-            full_deviance = 2 * np.sum(xlogy(y, y / pred.flat) - y + pred.flat)
+            null_pred = np.ones_like(pred) * np.mean(y)
             null_deviance = 2 * np.sum(xlogy(y, y / null_pred.flat) - y + null_pred.flat)
+            with np.errstate(invalid='ignore', divide='ignore'):
+                full_deviance = 2 * np.sum(xlogy(y, y / pred.flat) - y + pred.flat)
             d_sq = 1 - (full_deviance / null_deviance)
             scores.at[cell] = d_sq
         return scores
