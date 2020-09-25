@@ -27,7 +27,7 @@ import logging
 import sys
 from inspect import getmembers, isfunction
 from functools import reduce
-from collections import Sized
+from collections.abc import Sized
 
 import numpy as np
 
