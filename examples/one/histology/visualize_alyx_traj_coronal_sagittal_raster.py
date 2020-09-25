@@ -1,6 +1,6 @@
-'''
+"""'''
 For a given eID, plot the probe(s) track(s) and the corresponding raster(s).
-'''
+"""
 # Author: Gaelle Chapuis
 
 import matplotlib.pyplot as plt
@@ -19,7 +19,8 @@ prob_des = one.load(eid, dataset_types=['probes.description'])
 n_probe = len(prob_des[0])
 
 # Get information for the session
-spikes, clusters, channels = bbone.load_spike_sorting_with_channel(eid, one=one)
+spikes, clusters, channels = bbone.load_spike_sorting_with_channel(
+    eid, one=one, dataset_types=['spikes.depths'])
 
 # Loop over probes
 for i_probe in range(0, n_probe):
