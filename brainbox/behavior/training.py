@@ -23,8 +23,7 @@ def get_lab_training_status(lab, date=None, details=True, one=None):
     :type details: bool
     :param one: instantiation of ONE class
     """
-    if not one:
-        one = ONE()
+    one = one or ONE()
     subj_lab = one.alyx.rest('subjects', 'list', lab=lab, alive=True, water_restricted=True)
     subjects = [subj['nickname'] for subj in subj_lab]
     for subj in subjects:
@@ -45,8 +44,7 @@ def get_subject_training_status(subj, date=None, details=True, one=None):
     :type details: bool
     :param one: instantiation of ONE class
     """
-    if not one:
-        one = ONE()
+    one = one or ONE()
 
     trials, task_protocol, ephys_sess, n_delay = get_sessions(subj, date=date, one=one)
     if not trials:
@@ -86,8 +84,7 @@ def get_sessions(subj, date=None, one=None):
         - n_delay - number of sessions on ephys rig that had delay prior to starting session
                     > 15min. Returns 0 is no sessions detected
     """
-    if not one:
-        one = ONE()
+    one = one or ONE()
 
     if date is None:
         # compute from yesterday
@@ -131,6 +128,7 @@ def get_sessions(subj, date=None, one=None):
                                      sessions[n]['task_protocol']).group(1))
                 sess_dates.append(sessions[n]['start_time'][:10])
                 trials[sessions[n]['start_time'][:10]] = trials_
+
     else:
         n = 0
         while len(trials) < 3:
@@ -232,7 +230,7 @@ def get_training_status(trials, task_protocol, ephys_sess_dates, n_delay):
                 status = 'trained 1b'
 
         elif len(ephys_sess_dates) < 3:
-            assert(np.all(np.array([date in trials for date in ephys_sess_dates])))
+            assert all(date in trials for date in ephys_sess_dates)
             perf_ephys_easy = np.array([compute_performance_easy(trials[k]) for k in
                                         ephys_sess_dates])
             n_ephys_trials = np.array([compute_n_trials(trials[k]) for k in ephys_sess_dates])
