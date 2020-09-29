@@ -5,7 +5,6 @@ International Brain Laboratory, 2019
 import numpy as np
 from parameter import Parameter
 from scipy.special import erf
-from IPython import embed as shell
 import seaborn as sns
 import matplotlib.pyplot as plt
 import statsmodels.stats.proportion as sm
@@ -109,7 +108,7 @@ class PsychometricFunction(Model):
 
         # CHECK IF ALL VARIABLE NAMES WE NEED ARE PRESENT
         for v in self.variable_names:
-            assert v in data.preproc_df.columns, ('preproc_df needs column %s' %v)
+            assert v in data.preproc_df.columns, ('preproc_df needs column %s' % v)
 
         return data
 
@@ -124,7 +123,7 @@ class PsychometricFunction(Model):
             fig, ax = plt.subplots()
             # only plot preprocessed data
             if plot_data:
-                assert hasattr(fittedoutput.data, 'preproc_df'), 'Call .preprocess() before .plot()'
+                assert hasattr(fittedoutput.data, 'preproc_df'), 'Call .preprocess() then .plot()'
 
                 df = fittedoutput.data.preproc_df
 

@@ -1,13 +1,7 @@
 """ by Luigi Acerbi, Shan Shen and Anne Urai
 International Brain Laboratory, 2019
 """
-
-import pandas as pd
-import numpy as np
 import scipy as sp
-from IPython import embed as shell
-import seaborn as sns
-import matplotlib.pyplot as plt
 
 
 class FittingMethod:
@@ -60,4 +54,3 @@ class MaximumLikelihoodEstimation(FittingMethod):
 # class PosteriorEstimation(FittingMethod):
 #     """ Maximum Likelihood Estimation
 #     """
-
