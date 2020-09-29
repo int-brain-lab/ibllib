@@ -144,8 +144,6 @@ def _assign_events_bpod(bpod_t, bpod_polarities, ignore_first_valve=True):
     t_trial_start = bpod_t[i_trial_start]
     # # the first trial we detect the first falling edge to which we subtract 0.1ms
     # t_trial_start[0] -= 1e-4
-    # the last trial is a dud and should be removed
-    t_trial_start = t_trial_start[:-1]
     # valve open events are between 50ms to 300 ms
     i_valve_open = np.where(np.logical_and(dt > TRIAL_START_TTL_LEN,
                                            dt < ITI_TTL_LEN))[0] * 2
@@ -392,9 +390,17 @@ def extract_behaviour_sync(sync, chmap=None, display=False, tmax=np.inf):
         bpod['times'], bpod['polarities'])
     t_ready_tone_in, t_error_tone_in = _assign_events_audio(
         audio['times'], audio['polarities'])
-    # stim freeze
-    ind = np.searchsorted(frame2ttl['times'], t_iti_in, side='left')
-    t_stim_freeze = frame2ttl['times'][np.minimum(ind, frame2ttl.times.size - 2)]
+
+    # stim freeze is the second to last frame2ttl rise/fall before the bpod iti state
+    ind = np.searchsorted(frame2ttl['times'], t_iti_in[t_iti_in > t_trial_start[0]], side='left')
+    t_stim_freeze = frame2ttl['times'][np.minimum(ind, frame2ttl['times'].size) - 2]
+    # stim off time is the last frame2ttl rise/fall before the bpod iti state
+    t_stim_off = _assign_events_to_trial(t_trial_start, frame2ttl['times'], take='last')
+    # t_stim_off[-1] = frame2ttl['times'][np.minimum(ind[-1], frame2ttl['times'].size) - 1]
+
+    # the last trial is a dud and should be removed
+    t_trial_start = t_trial_start[:-1]
+
     trials = Bunch({
         'goCue_times': _assign_events_to_trial(t_trial_start, t_ready_tone_in, take='first'),
         'errorCue_times': _assign_events_to_trial(t_trial_start, t_error_tone_in),

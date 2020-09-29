@@ -158,12 +158,32 @@ class HabituationQC(TaskQC):
         else:
             assert self.session_path is not None
             subject, session_date = self.session_path.parts[-3:-1]
+            ###
+
+            if date is None:
+                # compute from yesterday
+                latest_sess = (datetime.date.today() - datetime.timedelta(days=1)).strftime(
+                    "%Y-%m-%d")
+                latest_minus_week = (datetime.date.today() -
+                                     datetime.timedelta(days=8)).strftime("%Y-%m-%d")
+            else:
+                # compute from the date specified
+                specified_date = datetime.datetime.strptime(date, '%Y-%m-%d')
+                latest_minus_week = (specified_date - datetime.timedelta(days=7)).strftime(
+                    "%Y-%m-%d")
+                latest_sess = date
+
+            sessions = one.alyx.rest('sessions', 'list', subject=subj,
+                                     date_range=[latest_minus_week,
+                                                 latest_sess], dataset_types='trials.intervals')
+            ###
             # session_date = datetime.date.fromisoformat(session_date)
             # det = self.one.get_details(self.eid)
             # _, det = self.one.search(subject=subject, task_protocol='habituation', details=True)
-            det = self.one.alyx.rest('sessions', 'list',
-                          django=f'start_time__lte,{session_date},task_protocol__contains,'
-                                 f'habituation,subject__nickname,{subject}')[0]
+            query = (f'start_time__lte,{session_date},'
+                     f'task_protocol__contains,habituation,'
+                     f'subject__nickname,{subject}')
+            det = self.one.alyx.rest('sessions', 'list', django=query)[0]
             prev_n_trials = None
             for d in det:
                 # WARNING: Assumes eids are returned in descending date order
@@ -194,18 +214,15 @@ class HabituationQC(TaskQC):
         # Check that the time difference between the visual stimulus center-command being
         # triggered and the stimulus effectively appearing in the center is smaller than 150 ms.
         check = 'stimCenter_delays'
-        metric = data["stimCenter_times"] - data["stimCenterTrigger_times"]
-        nans = np.isnan(metric)
-        passed[check] = np.zeros_like(metric) * np.nan
-        passed[check][~nans] = (metric[~nans] <= 0.15) & (metric[~nans] > 0)
+        metric = np.nan_to_num(data["stimCenter_times"] - data["stimCenterTrigger_times"],
+                               nan=np.inf)
+        passed[check] = (metric <= 0.15) & (metric > 0)
         metrics[check] = metric
 
         # Phase check
         check = 'phase'
         metric = data[check]
-        nans = np.isnan(metric)
-        passed[check] = np.zeros_like(metric) * np.nan
-        passed[check][~nans] = (metric[~nans] <= 2 * np.pi) & (metric[~nans] >= 0)
+        passed[check] = (metric <= 2 * np.pi) & (metric >= 0)
         metrics[check] = metric
 
         check = 'phase_distribution'
@@ -275,10 +292,8 @@ def check_stimOn_goCue_delays(data, **_):
 
     :param data: dict of trial data with keys ('goCue_times', 'stimOn_times', 'intervals')
     """
-    metric = data["goCue_times"] - data["stimOn_times"]
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = (metric[~nans] < 0.01) & (metric[~nans] > 0)
+    metric = np.nan_to_num(data["goCue_times"] - data["stimOn_times"], nan=np.inf)
+    passed = (metric < 0.01) & (metric > 0)
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -293,10 +308,8 @@ def check_response_feedback_delays(data, **_):
 
     :param data: dict of trial data with keys ('feedback_times', 'response_times', 'intervals')
     """
-    metric = data["feedback_times"] - data["response_times"]
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = ((metric[~nans] < 0.01) & (metric[~nans] > 0)).astype(np.float)
+    metric = np.nan_to_num(data["feedback_times"] - data["response_times"], nan=np.inf)
+    passed = (metric < 0.01) & (metric > 0)
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -312,12 +325,9 @@ def check_response_stimFreeze_delays(data, **_):
     :param data: dict of trial data with keys ('stimFreeze_times', 'response_times', 'intervals',
     'choice')
     """
-    metric = data["stimFreeze_times"] - data["response_times"]
-    # Find NaNs (if any of the values are nan operation will be nan)
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
+    metric = np.nan_to_num(data["stimFreeze_times"] - data["response_times"], nan=np.inf)
     # Test for valid values
-    passed[~nans] = ((metric[~nans] < 0.1) & (metric[~nans] > 0)).astype(np.float)
+    passed = ((metric < 0.1) & (metric > 0)).astype(np.float)
     # Finally remove no_go trials (stimFreeze triggered differently in no_go trials)
     # should account for all the nans
     passed[data["choice"] == 0] = np.nan
@@ -335,12 +345,10 @@ def check_stimOff_itiIn_delays(data, **_):
     :param data: dict of trial data with keys ('stimOff_times', 'itiIn_times', 'intervals',
     'choice')
     """
-    metric = data["itiIn_times"] - data["stimOff_times"]
-    passed = valid = ~np.isnan(metric)
-    passed[valid] = ((metric[valid] < 0.01) & (metric[valid] >= 0)).astype(np.float)
+    metric = np.nan_to_num(data["itiIn_times"] - data["stimOff_times"], nan=np.inf)
+    passed = ((metric < 0.01) & (metric >= 0)).astype(np.float)
     # Remove no_go trials (stimOff triggered differently in no_go trials)
-    metric[data["choice"] == 0] = np.nan
-    passed[data["choice"] == 0] = np.nan
+    metric[data["choice"] == 0] = passed[data["choice"] == 0] = np.nan
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -353,13 +361,12 @@ def check_positive_feedback_stimOff_delays(data, **_):
     Criterion: |M| < 0.150 s
     Units: seconds [s]
 
-    :param data: dict of trial data with keys ('stimOff_times', 'feedback_times', 'intervals')
+    :param data: dict of trial data with keys ('stimOff_times', 'feedback_times', 'intervals',
+    'correct')
     """
-    metric = data["stimOff_times"] - data["feedback_times"] - 1
-    metric[~data["correct"]] = np.nan
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = (np.abs(metric[~nans]) < 0.15).astype(np.float)
+    metric = np.nan_to_num(data["stimOff_times"] - data["feedback_times"] - 1, nan=np.inf)
+    passed = (np.abs(metric) < 0.15).astype(np.float)
+    metric[~data["correct"]] = passed[~data["correct"]] = np.nan
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -372,18 +379,13 @@ def check_negative_feedback_stimOff_delays(data, **_):
     Criterion: |M| < 0.150 s
     Units: seconds [s]
 
-    :param data: dict of trial data with keys ('stimOff_times', 'errorCue_times', 'outcome',
-    'intervals')
+    :param data: dict of trial data with keys ('stimOff_times', 'errorCue_times', 'intervals')
     """
-    metric = data["stimOff_times"] - data["errorCue_times"] - 2
-    # Find NaNs (if any of the values are nan operation will be nan)
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
+    metric = np.nan_to_num(data["stimOff_times"] - data["errorCue_times"] - 2, nan=np.inf)
     # Apply criteria
-    passed[~nans] = (np.abs(metric[~nans]) < 0.15).astype(np.float)
-    # Remove no negative feedback trials
-    metric[~data["outcome"] == -1] = np.nan
-    passed[~data["outcome"] == -1] = np.nan
+    passed = (np.abs(metric) < 0.15).astype(np.float)
+    # Remove none negative feedback trials
+    metric[data["correct"]] = passed[data["correct"]] = np.nan
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -469,8 +471,7 @@ def check_wheel_move_during_closed_loop(data, wheel_gain=None, **_):
     metric = metric - criterion  # difference should be close to 0
     rad_per_deg = cm_to_rad(1 / wheel_gain * 1e-1)
     passed = (np.abs(metric) < rad_per_deg).astype(np.float)  # less than 1 visual degree off
-    metric[data["choice"] == 0] = np.nan  # except no-go trials
-    passed[data["choice"] == 0] = np.nan  # except no-go trials
+    metric[data["choice"] == 0] = passed[data["choice"] == 0] = np.nan  # except no-go trials
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -512,7 +513,7 @@ def check_wheel_freeze_during_quiescence(data, **_):
     metric = np.max(metric, axis=1)
     metric = 180 * metric / np.pi  # convert to degrees from radians
     criterion = 2  # Position shouldn't change more than 2 in either direction
-    passed = (metric < criterion).astype(np.float)
+    passed = metric < criterion
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -640,7 +641,7 @@ def check_n_trial_events(data, **_):
         metric[i] = (all([start < data[k][i] < end for k in events]) and
                      (np.isnan(err_trig[i]) if correct[i] else start < err_trig[i] < end))
 
-    passed = metric.astype(np.float)
+    passed = metric.astype(np.bool)
     assert intervals.shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -655,10 +656,8 @@ def check_trial_length(data, **_):
 
     :param data: dict of trial data with keys ('feedback_times', 'goCue_times', 'intervals')
     """
-    metric = data["feedback_times"] - data["goCue_times"]
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = (metric[~nans] < 60.1) & (metric[~nans] > 0)
+    metric = np.nan_to_num(data["feedback_times"] - data["goCue_times"], nan=np.inf)
+    passed = (metric < 60.1) & (metric > 0)
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -675,10 +674,8 @@ def check_goCue_delays(data, **_):
 
     :param data: dict of trial data with keys ('goCue_times', 'goCueTrigger_times', 'intervals')
     """
-    metric = data["goCue_times"] - data["goCueTrigger_times"]
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = (metric[~nans] <= 0.0015) & (metric[~nans] > 0)
+    metric = np.nan_to_num(data["goCue_times"] - data["goCueTrigger_times"], nan=np.inf)
+    passed = (metric <= 0.0015) & (metric > 0)
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -691,12 +688,11 @@ def check_errorCue_delays(data, **_):
     Units: seconds [s]
 
     :param data: dict of trial data with keys ('errorCue_times', 'errorCueTrigger_times',
-    'intervals')
+    'intervals', 'correct')
     """
-    metric = data["errorCue_times"] - data["errorCueTrigger_times"]
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = (metric[~nans] <= 0.0015) & (metric[~nans] > 0)
+    metric = np.nan_to_num(data["errorCue_times"] - data["errorCueTrigger_times"], nan=np.inf)
+    passed = ((metric <= 0.0015) & (metric > 0)).astype(np.float)
+    passed[~data["correct"]] = metric[~data["correct"]] = np.nan
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -712,10 +708,8 @@ def check_stimOn_delays(data, **_):
     :param data: dict of trial data with keys ('stimOn_times', 'stimOnTrigger_times',
     'intervals')
     """
-    metric = data["stimOn_times"] - data["stimOnTrigger_times"]
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = (metric[~nans] <= 0.15) & (metric[~nans] > 0)
+    metric = np.nan_to_num(data["stimOn_times"] - data["stimOnTrigger_times"], nan=np.inf)
+    passed = (metric <= 0.15) & (metric > 0)
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -732,10 +726,8 @@ def check_stimOff_delays(data, **_):
     :param data: dict of trial data with keys ('stimOff_times', 'stimOffTrigger_times',
     'intervals')
     """
-    metric = data["stimOff_times"] - data["stimOffTrigger_times"]
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = (metric[~nans] <= 0.15) & (metric[~nans] > 0)
+    metric = np.nan_to_num(data["stimOff_times"] - data["stimOffTrigger_times"], nan=np.inf)
+    passed = (metric <= 0.15) & (metric > 0)
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -752,10 +744,8 @@ def check_stimFreeze_delays(data, **_):
     :param data: dict of trial data with keys ('stimFreeze_times', 'stimFreezeTrigger_times',
     'intervals')
     """
-    metric = data["stimFreeze_times"] - data["stimFreezeTrigger_times"]
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = (metric[~nans] <= 0.15) & (metric[~nans] > 0)
+    metric = np.nan_to_num(data["stimFreeze_times"] - data["stimFreezeTrigger_times"], nan=np.inf)
+    passed = (metric <= 0.15) & (metric > 0)
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -773,7 +763,7 @@ def check_reward_volumes(data, **_):
     """
     metric = data['rewardVolume']
     correct = data['correct']
-    passed = np.zeros_like(metric, dtype=np.float)
+    passed = np.zeros_like(metric, dtype=np.bool)
     # Check correct trials within correct range
     passed[correct] = (1.5 <= metric[correct]) & (metric[correct] <= 3.)
     # Check incorrect trials are 0
@@ -871,6 +861,6 @@ def check_audio_pre_trial(data, audio=None, **_):
     metric = np.array([], dtype=np.int8)
     for i, c in zip(data["intervals"][:, 0], data["goCue_times"]):
         metric = np.append(metric, sum(s[s > i] < (c - 0.02)))
-    passed = (metric == 0).astype(np.float)
+    passed = metric == 0
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
