@@ -259,7 +259,7 @@ if __name__ == '__main__':
     # load objects
     spikes = ioalf.load_object(alf_path, 'spikes')
     clusters = ioalf.load_object(alf_path, 'clusters')
-    trials = ioalf.load_object(alf_path, '_ibl_trials')
+    trials = ioalf.load_object(alf_path, 'trials')
 
     # containers to store results
     align_events = ['stimOn', 'stimOff', 'feedback']

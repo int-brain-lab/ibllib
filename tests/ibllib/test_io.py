@@ -315,6 +315,16 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
         self.workdir = Path(__file__).parent / 'fixtures' / 'io' / 'spikeglx'
         self.meta_files = list(Path.glob(self.workdir, '*.meta'))
 
+    def test_read_corrupt(self):
+        # nidq has 1 analog and 1 digital sync channels
+        self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
+        int2volts = 5 / 32768
+        nidq = spikeglx._mock_spikeglx_file(
+            Path(self.tdir.name).joinpath('sample3B_g0_t0.nidq.bin'),
+            self.workdir / 'sample3B_g0_t0.nidq.meta',
+            ns=32, nc=2, sync_depth=8, int2volts=int2volts, corrupt=True)
+        self.assert_read_glx(nidq)
+
     def test_read_nidq(self):
         # nidq has 1 analog and 1 digital sync channels
         self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
@@ -408,7 +418,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
 
     def testGetSerialNumber(self):
         self.meta_files.sort()
-        expected = [641251510, 641251510, 641251510, 18005116811, 18005116811, None]
+        expected = [641251510, 641251510, 641251510, 17216703352, 18005116811, 18005116811, None]
         for meta_data_file, res in zip(self.meta_files, expected):
             md = spikeglx.read_meta_data(meta_data_file)
             self.assertEqual(md.serial, res)
@@ -426,6 +436,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
 
     def testReadChannelGainAPLF(self):
         for meta_data_file in self.meta_files:
+            print(meta_data_file)
             if meta_data_file.name.split('.')[-2] not in ['lf', 'ap']:
                 continue
             md = spikeglx.read_meta_data(meta_data_file)

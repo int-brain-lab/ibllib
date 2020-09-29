@@ -3,7 +3,19 @@ import unittest
 
 import numpy as np
 
-from ibllib.ephys import ephysqc
+from ibllib.ephys import ephysqc, neuropixel
+
+
+class TestNeuropixel(unittest.TestCase):
+
+    def test_layouts(self):
+        dense = neuropixel.dense_layout()
+        assert set(dense.keys()) == set(['x', 'y', 'row', 'col', 'ind'])
+        xu = np.unique(dense['x'])
+        yu = np.unique(dense['y'])
+        assert np.all(np.diff(xu) == 16)
+        assert np.all(np.diff(yu) == 20)
+        assert xu.size == 4 and yu.size == 384 / 2
 
 
 class TestFpgaTask(unittest.TestCase):

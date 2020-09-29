@@ -6,6 +6,8 @@ import oneibl.params
 import tempfile
 import shutil
 
+from ibllib.io import hashfile
+
 par = oneibl.params.get()
 
 # Init connection to the database
@@ -21,10 +23,6 @@ class TestSingletonPattern(unittest.TestCase):
             username='test_user',
             password='TapetesBloc18',
             base_url='https://test.alyx.internationalbrainlab.org')
-        self.differentac = wc.AlyxClient(
-            username='test_user',
-            password='TapetesBloc18',
-            base_url='https://testdev.alyx.internationalbrainlab.org')
         self.sameac2 = wc.AlyxClient(
             username='test_user',
             password='TapetesBloc18',
@@ -32,7 +30,6 @@ class TestSingletonPattern(unittest.TestCase):
 
     def test_multiple_singletons(self):
         self.assertTrue(id(self.ac) == id(self.sameac))
-        self.assertTrue(id(self.ac) != id(self.differentac))
         self.assertTrue(id(self.ac) == id(self.sameac2))
 
 
@@ -189,9 +186,12 @@ class TestDownloadHTTP(unittest.TestCase):
         # test downloading a single file
         full_link_to_file = r'http://ibl.flatironinstitute.org/mainenlab/Subjects/clns0730'\
                             '/2018-08-24/1/licks.times.51852a2f-c76e-4c0c-95cb-9c7ba54be0f9.npy'
-        file_name = wc.http_download_file(full_link_to_file, username=par.HTTP_DATA_SERVER_LOGIN,
-                                          password=par.HTTP_DATA_SERVER_PWD)
+        file_name, md5 = wc.http_download_file(full_link_to_file,
+                                               username=par.HTTP_DATA_SERVER_LOGIN,
+                                               password=par.HTTP_DATA_SERVER_PWD,
+                                               return_md5=True, clobber=True)
         a = np.load(file_name)
+        self.assertTrue(hashfile.md5(file_name) == md5)
         self.assertTrue(len(a) > 0)
 
         # test downloading a list of files

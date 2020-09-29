@@ -276,6 +276,8 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False,
         if not behavior_exists(remote_session_path):
             print(f"No behavior folder found in {remote_session_path}: skipping session...")
             return
+        # TODO: Check flagfiles on src.and dst + alf dir in session folder then remove
+        # Try catch? wher catch condition is force transfer maybe
         transfer_folder(
             session_path / 'raw_ephys_data',
             remote_session_path / 'raw_ephys_data',
@@ -411,7 +413,8 @@ def get_new_filename(filename: str) -> str:  # testOK
                 gt = f'_g{g}_t{t}'
     else:
         if gt is None:
-            raise(NotImplementedError)
+            raise NotImplementedError(f"Can not parse {filename} as an ephys file with gX_tY where"
+                                      f"XY are single digits")
 
     # ext = 'bin' or 'meta'
     if '.bin' in filename:

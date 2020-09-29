@@ -4,6 +4,41 @@ Low-level functions to work in frequency domain for n-dim arrays
 
 import numpy as np
 import scipy
+from ibllib.dsp.utils import fcn_cosine
+
+
+def convolve(x, w, mode='full'):
+    """
+    Frequency domain convolution along the last dimension (2d arrays)
+    Will broadcast if a matrix is convolved with a vector
+    :param x:
+    :param w:
+    :return: convolution
+    """
+    nsx = x.shape[-1]
+    nsw = w.shape[-1]
+    ns = ns_optim_fft(nsx + nsw)
+    x_ = np.concatenate((x, np.zeros([*x.shape[:-1], ns - nsx], dtype=x.dtype)), axis=-1)
+    w_ = np.concatenate((w, np.zeros([*w.shape[:-1], ns - nsw], dtype=w.dtype)), axis=-1)
+    xw = np.fft.irfft(np.fft.rfft(x_, axis=-1) * np.fft.rfft(w_, axis=-1), axis=-1)
+    xw = xw[..., :(nsx + nsw)]  # remove 0 padding
+    if mode == 'full':
+        return xw
+    elif mode == 'same':
+        first = int(np.floor(nsw / 2)) - ((nsw + 1) % 2)
+        last = int(np.ceil(nsw / 2)) + ((nsw + 1) % 2)
+        return xw[..., first:-last]
+
+
+def ns_optim_fft(ns):
+    """
+    Gets the next higher combination of factors of 2 and 3 than ns to compute efficient ffts
+    :param ns:
+    :return: nsoptim
+    """
+    p2, p3 = np.meshgrid(2 ** np.arange(25), 3 ** np.arange(15))
+    sz = np.unique((p2 * p3).flatten())
+    return sz[np.searchsorted(sz, ns)]
 
 
 def dephas(w, phase, axis=-1):
@@ -133,14 +168,11 @@ def _freq_vector(f, b, typ='lp'):
         :param b: 2 bounds array
         :return: amplitude modulated frequency vector
     """
-    filc = ((f <= b[0]).astype(float) +
-            np.bitwise_and(f > b[0], f < b[1]).astype(float) *
-            (0.5 * (1 + np.sin(np.pi * (f - ((b[0] + b[1]) / 2)) /
-             (b[0] - b[1])))))
+    filc = fcn_cosine(b)(f)
     if typ == 'hp':
-        return 1 - filc
-    elif typ == 'lp':
         return filc
+    elif typ == 'lp':
+        return 1 - filc
 
 
 def shift(w, s, axis=-1):
@@ -180,3 +212,55 @@ def fit_phase(w, si=1, fmin=0, fmax=None, axis=-1):
     dt = - np.polyfit(freqs[indf],
                       np.swapaxes(phi.compress(indf, axis=axis), axis, 0), 1)[0] / np.pi / 2
     return dt
+
+
+def dft(x, xscale=None, axis=-1, kscale=None):
+    """
+    1D discrete fourier transform. Vectorized.
+    :param x: 1D numpy array to be transformed
+    :param xscale: time or spatial index of each sample
+    :param axis: for multidimensional arrays, axis along which the ft is computed
+    :param kscale: (optional) fourier coefficient. All if complex input, positive if real
+    :return: 1D complex numpy array
+    """
+    ns = x.shape[axis]
+    if xscale is None:
+        xscale = np.arange(ns)
+    if kscale is None:
+        nk = ns if np.any(np.iscomplex(x)) else np.ceil((ns + 1) / 2)
+        kscale = np.arange(nk)
+    else:
+        nk = kscale.size
+    if axis != 0:
+        # the axis of the transform always needs to be the first
+        x = np.swapaxes(x, axis, 0)
+    shape = np.array(x.shape)
+    x = np.reshape(x, (ns, int(np.prod(x.shape) / ns)))
+    # compute fourier coefficients
+    exp = np.exp(- 1j * 2 * np.pi / ns * xscale * kscale[:, np.newaxis])
+    X = np.matmul(exp, x)
+    shape[0] = int(nk)
+    X = X.reshape(shape)
+    if axis != 0:
+        X = np.swapaxes(X, axis, 0)
+    return X
+
+
+def dft2(x, r, c, nk, nl):
+    """
+    Irregularly sampled 2D dft by projecting into sines/cosines. Vectorized.
+    :param x: vector or 2d matrix of shape (nrc, nt)
+    :param r: vector (nrc) of normalized positions along the k dimension (axis 0)
+    :param c: vector (nrc) of normalized positions along the l dimension (axis 1)
+    :param nk: output size along axis 0
+    :param nl: output size along axis 1
+    :return: Matrix X (nk, nl, nt)
+    """
+    # it would be interesting to compare performance with numba straight loops (easier to write)
+    # GPU/C implementation should implement straight loops
+    nt = x.shape[-1]
+    k, h = [v.flatten() for v in np.meshgrid(np.arange(nk), np.arange(nl), indexing='ij')]
+    # exp has dimension (kh, rc)
+    exp = np.exp(- 1j * 2 * np.pi * (r[np.newaxis] * k[:, np.newaxis] +
+                                     c[np.newaxis] * h[:, np.newaxis]))
+    return np.matmul(exp, x).reshape((nk, nl, nt))
