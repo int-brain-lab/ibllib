@@ -601,6 +601,7 @@ def convbasis(stim, bases, offset=0):
         X = X[: -(1 + offset), :]
     return X
 
+
 # Precompilation for speed
 @nb.njit
 def denseconv(X, bases):
