@@ -40,7 +40,6 @@ from ibllib.io.extractors.ephys_fpga import WHEEL_TICKS
 from . import base
 
 _log = logging.getLogger('ibllib')
-CRITERIA = {"PASS": 0.99, "WARNING": 0.95, "FAIL": 0}
 
 
 class TaskQC(base.QC):
@@ -57,10 +56,6 @@ class TaskQC(base.QC):
         # Metrics and passed trials
         self.metrics = None
         self.passed = None
-<<<<<<< develop
-        self.criteria = CRITERIA
-=======
->>>>>>> no one on import
 
     def load_data(self, bpod_only=False, download_data=True):
         self.extractor = TaskQCExtractor(
