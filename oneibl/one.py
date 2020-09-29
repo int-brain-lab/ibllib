@@ -120,7 +120,7 @@ class OneAbstract(abc.ABC):
 
     def __init__(self, username=None, password=None, base_url=None, cache_dir=None, silent=None):
         # get parameters override if inputs provided
-        self._par = oneibl.params.get(silent=False)
+        self._par = oneibl.params.get(silent=silent)
         self._par = self._par.set('ALYX_LOGIN', username or self._par.ALYX_LOGIN)
         self._par = self._par.set('ALYX_URL', base_url or self._par.ALYX_URL)
         self._par = self._par.set('ALYX_PWD', password or self._par.ALYX_PWD)
