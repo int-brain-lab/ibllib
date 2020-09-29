@@ -481,7 +481,6 @@ class TestHabituationQC(unittest.TestCase):
         :param n: the number of trials
         :return: a dict of simulated trial data
         """
-        n = 5  # number of trials
         trigg_delay = 1e-4  # an ideal delay between triggers and measured times
         iti_length = 0.5  # the so-called 'inter-trial interval'
         blank_length = 1.  # the time between trial start and stim on
@@ -495,7 +494,7 @@ class TestHabituationQC(unittest.TestCase):
 
         data = {
             "phase": np.random.uniform(low=0, high=2 * np.pi, size=(n,)),
-            "stimOnTigger_times": start_times + blank_length,
+            "stimOnTrigger_times": start_times + blank_length,
             "intervals": np.c_[start_times, end_times],
             "itiIn_times": end_times - iti_length,
             "position": np.random.choice([-1, 1], n, replace=True) * 35,
