@@ -287,14 +287,15 @@ def _get_sync_fronts(sync, channel_nb, tmin=None, tmax=None):
                   'polarities': sync['polarities'][selection]})
 
 
-def bpod_fpga_sync(bpod_intervals=None, ephys_intervals=None):
+def bpod_fpga_sync(bpod_intervals=None, ephys_intervals=None, iti_duration=None):
     """
     Computes synchronization function from bpod to fpga
     :param bpod_intervals
     :param ephys_intervals
     :return: interpolation function
     """
-    ITI_DURATION = 0.5
+    if iti_duration is None:
+        iti_duration = 0.5
     # check consistency
     if bpod_intervals.size != ephys_intervals.size:
         # patching things up if the bpod and FPGA don't have the same recording span
@@ -309,14 +310,16 @@ def bpod_fpga_sync(bpod_intervals=None, ephys_intervals=None):
         ephys_intervals = ephys_intervals[ifpga, :]
     else:
         ibpod, ifpga = [np.arange(bpod_intervals.shape[0]) for _ in np.arange(2)]
-    tlen = (np.diff(bpod_intervals) - np.diff(ephys_intervals))[:-1] - ITI_DURATION
-    assert(np.all(np.abs(tlen[np.invert(np.isnan(tlen))])[:-1] < 5 * 1e-3))
+    tlen = (np.diff(bpod_intervals) - np.diff(ephys_intervals))[:-1] - iti_duration
+    assert np.all(np.abs(tlen[np.invert(np.isnan(tlen))])[:-1] < 5 * 1e-3)
     # dt is the delta to apply to bpod times in order to be on the ephys clock
     dt = bpod_intervals[:, 0] - ephys_intervals[:, 0]
     # compute the clock drift bpod versus dt
     ppm = np.polyfit(bpod_intervals[:, 0], dt, 1)[0] * 1e6
     if ppm > BPOD_FPGA_DRIFT_THRESHOLD_PPM:
-        _logger.warning('BPOD/FPGA synchronization shows values greater than 150 ppm')
+        _logger.warning(
+            'BPOD/FPGA synchronization shows values greater than %i ppm',
+            BPOD_FPGA_DRIFT_THRESHOLD_PPM)
         # plt.plot(trials['intervals'][:, 0], dt, '*')
     # so far 2 datasets concerned: goCueTrigger_times_bpod  and response_times_bpod
     fcn_bpod2fpga = interpolate.interp1d(bpod_intervals[:, 0], ephys_intervals[:, 0],
@@ -461,15 +464,17 @@ def extract_sync(session_path, overwrite=False, ephys_files=None):
     syncs = []
     outputs = []
     for efi in ephys_files:
-        glob_filter = f'*{efi.label}*' if efi.label else '*'
         bin_file = efi.get('ap', efi.get('nidq', None))
         if not bin_file:
             continue
-        file_exists = alf.io.exists(bin_file.parent, object='_spikeglx_sync', glob=glob_filter)
+        alfname = dict(object='sync', namespace='spikeglx')
+        if efi.label:
+            alfname['extra'] = efi.label
+        file_exists = alf.io.exists(bin_file.parent, **alfname)
         if not overwrite and file_exists:
             _logger.warning(f'Skipping raw sync: SGLX sync found for probe {efi.label} !')
-            sync = alf.io.load_object(bin_file.parent, object='_spikeglx_sync', glob=glob_filter)
-            out_files, _ = alf.io._ls(bin_file.parent, object='_spikeglx_sync', glob=glob_filter)
+            sync = alf.io.load_object(bin_file.parent, **alfname)
+            out_files, _ = alf.io._ls(bin_file.parent, **alfname)
         else:
             sr = spikeglx.Reader(bin_file)
             sync, out_files = _sync_to_alf(sr, bin_file.parent, save=True, parts=efi.label)
@@ -485,7 +490,7 @@ def _get_all_probes_sync(session_path, bin_exists=True):
     version = spikeglx.get_neuropixel_version_from_files(ephys_files)
     # attach the sync information to each binary file found
     for ef in ephys_files:
-        ef['sync'] = alf.io.load_object(ef.path, '_spikeglx_sync', short_keys=True)
+        ef['sync'] = alf.io.load_object(ef.path, 'sync', namespace='spikeglx', short_keys=True)
         ef['sync_map'] = get_ibl_sync_map(ef, version)
     return ephys_files
 
@@ -518,7 +523,7 @@ def _get_pregenerated_events(bpod_trials, settings):
     if num is None:
         num = settings.get("PREGENERATED_SESSION_NUM", None)
     if num is None:
-        fn = settings.get('SESSION_LOADED_FILE_PATH', None)
+        fn = settings.get('SESSION_LOADED_FILE_PATH', '')
         fn = PureWindowsPath(fn).name
         num = ''.join([d for d in fn if d.isdigit()])
         if num == '':
@@ -551,7 +556,7 @@ def _get_pregenerated_events(bpod_trials, settings):
         phase = np.load(phase_path)[:ntrials]
 
     return {"position": pos, "contrast": con, "quiescence": qui, "phase": phase,
-            "prob_left": pLeft, 'contrast_right': contrastRight, 'contrast_left': contrastLeft}
+            "probabilityLeft": pLeft, 'contrastRight': contrastRight, 'contrastLeft': contrastLeft}
 
 
 class ProbaContrasts(BaseBpodTrialsExtractor):
@@ -562,12 +567,12 @@ class ProbaContrasts(BaseBpodTrialsExtractor):
                   '_ibl_trials.contrastRight.npy')
     var_names = ('probabilityLeft', 'contrastLeft', 'contrastRight')
 
-    def _extract(self):
+    def _extract(self, **kwargs):
         """Extracts positions, contrasts, quiescent delay, stimulus phase and probability left
         from pregenerated session files.
         Optional: saves alf contrastLR and probabilityLeft npy files"""
         pe = _get_pregenerated_events(self.bpod_trials, self.settings)
-        return pe['prob_left'], pe['contrast_left'], pe['contrast_right']
+        return pe['probabilityLeft'], pe['contrastLeft'], pe['contrastRight']
 
 
 class CameraTimestamps(BaseExtractor):
@@ -597,7 +602,7 @@ class FpgaTrials(BaseExtractor):
                  'feedback_times', 'firstMovement_times', 'wheel_timestamps', 'wheel_position',
                  'wheelMoves_intervals', 'wheelMoves_peakAmplitude')
 
-    def _extract(self, sync=None, chmap=None):
+    def _extract(self, sync=None, chmap=None, **kwargs):
         # extracts trials
         # extract the behaviour data from bpod
         if sync is None or chmap is None:
@@ -653,7 +658,6 @@ def extract_all(session_path, save=True, bin_exists=False):
     :param version: bpod version, defaults to None
     :return: outputs, files
     """
-    assert save  # fixme with wheel positions, this function can't work without saving the data
     sync, chmap = _get_main_probe_sync(session_path, bin_exists=bin_exists)
     outputs, files = run_extractor_classes(
         [CameraTimestamps, FpgaTrials], session_path=session_path,

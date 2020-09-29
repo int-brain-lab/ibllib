@@ -41,7 +41,14 @@ class Reader:
             self._raw.open(self.file_bin, self.file_bin.with_suffix('.ch'))
         else:
             if self.nc * self.ns * 2 != self.nbytes:
-                _logger.warning(str(sglx_file) + " : meta data and filesize do not checkout")
+                ftsec = self.file_bin.stat().st_size / 2 / self.nc / self.fs
+                _logger.warning(f"{sglx_file} : meta data and filesize do not checkout\n"
+                                f"File size: expected {self.meta['fileSizeBytes']},"
+                                f" actual {self.file_bin.stat().st_size}\n"
+                                f"File duration: expected {self.meta['fileTimeSecs']},"
+                                f" actual {ftsec}\n"
+                                f"Will attempt to fudge the meta-data information.")
+                self.meta['fileTimeSecs'] = ftsec
             self._raw = np.memmap(sglx_file, dtype='int16', mode='r', shape=(self.ns, self.nc))
 
     def __getitem__(self, item):
@@ -387,8 +394,10 @@ def _conversion_sample2v_from_meta(meta_data):
     # interprets the gain value from the metadata header:
     if 'imroTbl' in meta_data.keys():  # binary from the probes: ap or lf
         sy_gain = np.ones(int(meta_data['snsApLfSy'][-1]), dtype=np.float32)
+        # imroTbl has 384 entries regardless of no of channels saved, so need to index by n_ch
+        n_chn = _get_nchannels_from_meta(meta_data) - 1
         # the sync traces are not included in the gain values, so are included for broadcast ops
-        gain = re.findall(r'([0-9]* [0-9]* [0-9]* [0-9]* [0-9]*)', meta_data['imroTbl'])
+        gain = re.findall(r'([0-9]* [0-9]* [0-9]* [0-9]* [0-9]*)', meta_data['imroTbl'])[:n_chn]
         out = {'lf': np.hstack((np.array([1 / np.float32(g.split(' ')[-1]) for g in gain]) *
                                 int2volt, sy_gain)),
                'ap': np.hstack((np.array([1 / np.float32(g.split(' ')[-2]) for g in gain]) *
@@ -405,7 +414,7 @@ def _conversion_sample2v_from_meta(meta_data):
 
 def split_sync(sync_tr):
     """
-    The synchronization channelx are stored as single bits, this will split the int16 original
+    The synchronization channels are stored as single bits, this will split the int16 original
     channel into 16 single bits channels
 
     :param sync_tr: numpy vector: samples of synchronisation trace
@@ -435,17 +444,17 @@ def glob_ephys_files(session_path, suffix='.meta', recursive=True, bin_exists=Tr
     Associated to the subfolders where they are
     the expected folder tree is:
     ├── 3A
-    │   ├── imec0
-    │   │   ├── sync_testing_g0_t0.imec0.ap.bin
-    │   │   └── sync_testing_g0_t0.imec0.lf.bin
-    │   └── imec1
-    │       ├── sync_testing_g0_t0.imec1.ap.bin
-    │       └── sync_testing_g0_t0.imec1.lf.bin
+    │        ├── imec0
+    │                ├── sync_testing_g0_t0.imec0.ap.bin
+    │        │        └── sync_testing_g0_t0.imec0.lf.bin
+    │        └── imec1
+    │            ├── sync_testing_g0_t0.imec1.ap.bin
+    │            └── sync_testing_g0_t0.imec1.lf.bin
     └── 3B
         ├── sync_testing_g0_t0.nidq.bin
         ├── imec0
-        │   ├── sync_testing_g0_t0.imec0.ap.bin
-        │   └── sync_testing_g0_t0.imec0.lf.bin
+        │        ├── sync_testing_g0_t0.imec0.ap.bin
+        │        └── sync_testing_g0_t0.imec0.lf.bin
         └── imec1
             ├── sync_testing_g0_t0.imec1.ap.bin
             └── sync_testing_g0_t0.imec1.lf.bin
@@ -492,7 +501,7 @@ def glob_ephys_files(session_path, suffix='.meta', recursive=True, bin_exists=Tr
 
 
 def _mock_spikeglx_file(mock_bin_file, meta_file, ns, nc, sync_depth,
-                        random=False, int2volts=0.6 / 32768):
+                        random=False, int2volts=0.6 / 32768, corrupt=False):
     """
     For testing purposes, create a binary file with sync pulses to test reading and extraction
     """
@@ -510,7 +519,10 @@ def _mock_spikeglx_file(mock_bin_file, meta_file, ns, nc, sync_depth,
         if line.startswith('fileSizeBytes'):
             line = f'fileSizeBytes={ns * nc * 2}\n'
         if line.startswith('fileTimeSecs'):
-            line = f'fileTimeSecs={ns / fs}\n'
+            if corrupt:
+                line = f'fileTimeSecs={ns / fs + 1.8324}\n'
+            else:
+                line = f'fileTimeSecs={ns / fs}\n'
         fid_target.write(line)
     fid_source.close()
     fid_target.close()

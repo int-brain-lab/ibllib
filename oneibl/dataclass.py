@@ -78,6 +78,8 @@ class SessionDataInfo:
 
     @staticmethod
     def from_pandas(df, cache_dir):
+        if df.size == 0:
+            return SessionDataInfo()
         fcn_local_path = lambda rec: Path(cache_dir).joinpath(  # noqa
             rec['lab'], 'Subjects', rec['subject'], rec['start_time'].isoformat()[:10],
             str(rec['number']).zfill(3), rec['collection'], rec['name'])

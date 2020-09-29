@@ -11,7 +11,7 @@ class BaseExtractor(abc.ABC):
     Base extractor class
 
     :param session_path: Absolute path of session folder
-    :type session_path: str)
+    :type session_path: str
     """
     session_path = None
     save_names = None

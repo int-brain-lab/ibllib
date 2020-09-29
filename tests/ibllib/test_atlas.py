@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from ibllib.atlas import (BrainCoordinates, cart2sph, sph2cart, Trajectory,
+from ibllib.atlas import (BrainCoordinates, cart2sph, sph2cart, Trajectory, regions_from_allen_csv,
                           Insertion, ALLEN_CCF_LANDMARKS_MLAPDV_UM, AllenAtlas)
 
 
@@ -18,12 +18,35 @@ def _create_mock_atlas():
     return ba
 
 
+class TestBrainRegions(unittest.TestCase):
+
+    def test_get(self):
+        brs = regions_from_allen_csv()
+        ctx = brs.get(688)
+        self.assertTrue(len(ctx.acronym) == 1 and ctx.acronym == 'CTX')
+
+    def test_ancestors_descendants(self):
+        # here we use the same brain region as in the alyx test
+        brs = regions_from_allen_csv()
+        self.assertTrue(brs.descendants(ids=688).id.size == 567)
+        self.assertTrue(brs.ancestors(ids=688).id.size == 4)
+
+
 class TestCoordinateConversions(unittest.TestCase):
+    ba = _create_mock_atlas()
 
     def test_allen_ba(self):
-        ba = _create_mock_atlas()
-        self.assertTrue(np.allclose(ba.bc.xyz2i(np.array([0, 0, 0]), round=False),
+        self.assertTrue(np.allclose(self.ba.bc.xyz2i(np.array([0, 0, 0]), round=False),
                                     ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / 25))
+
+    def test_ccf_xyz(self):
+        assert np.all(np.abs(ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] -
+                             self.ba.xyz2ccf(np.array([[0, 0, 0]]))) < 12)
+        # check it works with a single coordinate
+        coords = (np.array([0, 0, 0]),  # tests a single coordinate
+                  np.array([[0, 0, 0], [-2000., 500, 200]]) / 1.e6)
+        for xyz in coords:
+            assert np.all(np.isclose(self.ba.ccf2xyz(self.ba.xyz2ccf(xyz)), xyz))
 
 
 class TestInsertion(unittest.TestCase):
@@ -69,6 +92,18 @@ class TestInsertion(unittest.TestCase):
 
 
 class TestTrajectory(unittest.TestCase):
+
+    def test_project_mindist(self):
+        # test min dist
+        traj = Trajectory.fit(np.array([[0.3, 0.3, 0.4], [0, 0, 1]]))
+        min_dist = np.sqrt(np.sum(traj.project(np.array([0, 0, 0])) ** 2))
+        assert np.isclose(min_dist, traj.mindist(np.array([0, 0, 0])))
+
+        # test projection, single point and vectorized
+        point = np.array([0.06656238, 0.47127062, 0.17440139])
+        expected = [0.36483837, 0.36483837, 0.27032326]
+        assert np.all(np.isclose(traj.project(point), expected))
+        assert np.all(np.isclose(traj.project(np.tile(point, (2, 1))), np.tile(expected, (2, 1))))
 
     def test_eval_trajectory(self):
         line = Trajectory.fit(np.array([[0.3, 0.3, 0.4], [0, 0, 1]]))

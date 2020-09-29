@@ -12,7 +12,7 @@ datasets = one.load(eid, download_only=True)
 ses_path = datasets[0].local_path.parent
 
 spikes = alf.io.load_object(ses_path, 'spikes')
-trials = alf.io.load_object(ses_path, '_ibl_trials')
+trials = alf.io.load_object(ses_path, 'trials')
 
 peth, bs = calculate_peths(spikes.times, spikes.clusters, [225, 52], trials.goCue_times)
 

@@ -1,4 +1,6 @@
 """
+3D rendering single subject
+===========================
 Generates 3D rendering of all probe trajectories for a single subject.
 
 The trajectory plotted are (pair):

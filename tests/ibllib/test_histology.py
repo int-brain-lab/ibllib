@@ -41,7 +41,6 @@ class TestHistology(unittest.TestCase):
         traj = atlas.Trajectory.fit(np.array([[0, 0, 0], [0, 0, 0.005]]))
         top = atlas.Insertion.get_brain_entry(traj, brain_atlas=brain_atlas)
         bottom = atlas.Insertion.get_brain_exit(traj, brain_atlas=brain_atlas)
-        brain_atlas.bc.nx
         ix, iy = (brain_atlas.bc.x2i(0), brain_atlas.bc.y2i(0))
         self.assertTrue(np.isclose(brain_atlas.top[iy, ix], top[2]))
         self.assertTrue(np.isclose(brain_atlas.bottom[iy, ix], bottom[2]))

@@ -21,7 +21,8 @@ one.load(eid, dataset_types=dataset_types, download_only=True)
 session_path = one.path_from_eid(eid)
 
 # -- Get spectrogram
-TF = alf.io.load_object(session_path.joinpath('raw_behavior_data'), '_iblmic_audioSpectrogram')
+TF = alf.io.load_object(session_path.joinpath('raw_behavior_data'),
+                        'audioSpectrogram', namespace='iblmic')
 
 # -- Plot spectrogram
 tlims = TF['times_mic'][[0, -1]].flatten()

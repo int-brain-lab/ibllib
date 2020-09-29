@@ -110,24 +110,24 @@ def extract_sound(ses_path, save=True, force=False, delete=False):
     ses_path = Path(ses_path)
     wav_file = ses_path / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
     out_folder = ses_path / 'raw_behavior_data'
-    if not wav_file.exists():
-        return None
     files_out = {'power': out_folder / '_iblmic_audioSpectrogram.power.npy',
                  'frequencies': out_folder / '_iblmic_audioSpectrogram.frequencies.npy',
                  'onset_times': out_folder / '_iblmic_audioOnsetGoCue.times_mic.npy',
                  'times_microphone': out_folder / '_iblmic_audioSpectrogram.times_mic.npy',
-                 'times': out_folder / '_iblmic_audioSpectrogram.times.npy'
                  }
     # if they exist and the option Force is set to false, do not recompute and exit
     if all([files_out[f].exists() for f in files_out]) and not force:
-        logger_.warning('Output exists. Skipping ' + str(wav_file) + ' Use force flag to override')
-        return
+        logger_.warning(f'Output exists. Skipping {wav_file}. Use force flag to override')
+        return [files_out[k] for k in files_out]
+    if not wav_file.exists():
+        logger_.warning(f"Wav file doesn't exist: {wav_file}")
+        return []
     # crunch the wav file
     fs, wav = wavfile.read(wav_file, mmap=False)
     if len(wav) == 0:
         status = _fix_wav_file(wav_file)
         if status != 0:
-            logger_.error(f"WAV Header Indicates empty file. Couldn't fix. Abort. {wav_file}")
+            logger_.error(f"WAV Header empty. Sox couldn't fix it, Abort. {wav_file}")
             return
         else:
             fs, wav = wavfile.read(wav_file, mmap=False)
@@ -148,6 +148,7 @@ def extract_sound(ses_path, save=True, force=False, delete=False):
     dt = tgocue[:ilast] - detect[: ilast]
     # only save if dt is consistent for the whole session
     if np.std(dt) < 0.2 and save:
+        files_out['times'] = out_folder / '_iblmic_audioSpectrogram.times.npy'
         tscale += np.median(dt)
         np.save(file=files_out['times'], arr=tscale[:, None].astype(np.single))
     if delete:

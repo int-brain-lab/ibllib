@@ -79,22 +79,39 @@ class TestsAlfPartsFilters(unittest.TestCase):
         a = {'riri': np.random.rand(100),
              'fifi': np.random.rand(100)}
         alf.io.save_object_npy(self.tmpdir, a, 'neuveux', parts='tutu')
-        alf.io.save_object_npy(self.tmpdir, a, 'neuveux', parts='toto')
-        alf.io.save_object_npy(self.tmpdir, a, 'neuveux', parts=['tutu', 'titi'])
-        b = alf.io.load_object(self.tmpdir, 'neuveux')
+        alf.io.save_object_npy(self.tmpdir, a, 'neuveux', parts='tutu', timescale='toto')
+        self.assertTrue(alf.io.exists(self.tmpdir, 'neuveux'))
+
+        b = alf.io.load_object(self.tmpdir, 'neuveux', short_keys=True)
+
+        # Should include timescale in keys
+        self.assertCountEqual(list(b.keys()), ['fifi', 'fifi_toto', 'riri', 'riri_toto'])
         for k in a:
-            self.assertTrue(np.all(a[k] == b[k + '.tutu.titi']))
-            self.assertTrue(np.all(a[k] == b[k + '.tutu']))
-            self.assertTrue(np.all(a[k] == b[k + '.toto']))
-        # also test file filters through glob argument
-        self.assertTrue(alf.io.exists(self.tmpdir, 'neuveux', glob='*.toto.*'))
-        c = alf.io.load_object(self.tmpdir, 'neuveux', glob='*.toto.*')
-        self.assertEqual(set(c.keys()), set([k for k in b.keys() if k.endswith('toto')]))
-        # test with the short keys
-        a = alf.io.load_object(self.tmpdir, 'neuveux', glob=['titi'])
-        self.assertTrue(set(a.keys()) == set(['riri.tutu.titi', 'fifi.tutu.titi']))
-        a = alf.io.load_object(self.tmpdir, 'neuveux', glob=['titi'], short_keys=True)
-        self.assertTrue(set(a.keys()) == set(['riri', 'fifi']))
+            self.assertTrue(np.all(a[k] == b[k]))
+
+        # Test load with extra filter
+        b = alf.io.load_object(self.tmpdir, 'neuveux', timescale='toto', short_keys=True)
+        self.assertCountEqual(list(b.keys()), ['fifi_toto', 'riri_toto'])
+        with self.assertRaises(FileNotFoundError):
+            alf.io.load_object(self.tmpdir, 'neuveux', timescale='toto', namespace='baz')
+
+        # also test file filters through wildcard
+        self.assertTrue(alf.io.exists(self.tmpdir, 'neu*'))
+        c = alf.io.load_object(self.tmpdir, 'neuveux', timescale='to*', short_keys=True)
+        self.assertEqual(set(c.keys()), set([k for k in c.keys() if k.endswith('toto')]))
+
+        # test with the long keys
+        b = alf.io.load_object(self.tmpdir, 'neuveux', short_keys=False)
+        expected = ['fifi.tutu', 'fifi_toto.tutu', 'riri.tutu', 'riri_toto.tutu']
+        self.assertCountEqual(list(b.keys()), expected)
+
+        # Test duplicate attributes
+        alf.io.save_object_npy(self.tmpdir, a, 'neuveux', parts=['tutu', 'titi'])
+        with self.assertRaises(AssertionError):
+            alf.io.load_object(self.tmpdir, 'neuveux', short_keys=True)
+        # Restricting by extra parts and using long keys should succeed
+        alf.io.load_object(self.tmpdir, 'neuveux', extra=['tutu', 'titi'])
+        alf.io.load_object(self.tmpdir, 'neuveux', short_keys=False)
 
     def tearDown(self) -> None:
         shutil.rmtree(self.tmpdir)
@@ -123,11 +140,14 @@ class TestsAlf(unittest.TestCase):
         # test with list of attributes
         self.assertTrue(alf.io.exists(self.tmpdir, 'neuveu', attributes=['riri', 'fifi']))
         self.assertFalse(alf.io.exists(self.tmpdir, 'neuveu', attributes=['riri', 'fifiasdf']))
-        # test with globing
-        self.assertTrue(alf.io.exists(self.tmpdir, 'object', glob='*part2*'))
-        self.assertTrue(alf.io.exists(self.tmpdir, 'object', glob=['part1', 'part2']))
+        # test with extras
+        self.assertTrue(alf.io.exists(self.tmpdir, 'object', extra='part2'))
+        self.assertTrue(alf.io.exists(self.tmpdir, 'object', extra=['part1', 'part2']))
+        self.assertTrue(alf.io.exists(self.tmpdir, 'neuveu', extra=None))
+        # test with wildcards
+        self.assertTrue(alf.io.exists(self.tmpdir, 'neu*', attributes='riri'))
         # globing with list: an empty part should return true as well
-        self.assertTrue(alf.io.exists(self.tmpdir, 'object', glob=['']))
+        self.assertTrue(alf.io.exists(self.tmpdir, 'object', extra=['']))
 
     def test_metadata_columns(self):
         # simple test with meta data to label columns
@@ -137,12 +157,12 @@ class TestsAlf(unittest.TestCase):
         np.save(file_alf, data)
         np.save(self.tmpdir / '_ns_object.gnagna.npy', data[:, -1])
         alf.io.save_metadata(file_alf, {'columns': cols})
-        dread = alf.io.load_object(self.tmpdir, '_ns_object')
+        dread = alf.io.load_object(self.tmpdir, 'object', namespace='ns', short_keys=False)
         self.assertTrue(np.all(dread['titi'] == data[:, 0]))
         self.assertTrue(np.all(dread['gnagna'] == data[:, -1]))
         # add another field to the metadata
         alf.io.save_metadata(file_alf, {'columns': cols, 'unit': 'potato'})
-        dread = alf.io.load_object(self.tmpdir, '_ns_object')
+        dread = alf.io.load_object(self.tmpdir, 'object', namespace='ns', short_keys=False)
         self.assertTrue(np.all(dread['titi'] == data[:, 0]))
         self.assertTrue(dread['attributemetadata']['unit'] == 'potato')
         self.assertTrue(np.all(dread['gnagna'] == data[:, -1]))
@@ -157,7 +177,7 @@ class TestsAlf(unittest.TestCase):
         file_meta = file_alf.parent / (file_alf.stem + '.metadata.json')
         with open(file_meta, 'w+') as fid:
             fid.write(json.dumps({'columns': cols}, indent=1))
-        dread = alf.io.load_object(self.tmpdir, '_ns_obj')
+        dread = alf.io.load_object(self.tmpdir, 'obj', namespace='ns', short_keys=False)
         self.assertTrue(np.all(dread['titi'] == data[:, 0]))
 
     def test_read_ts(self):
@@ -173,13 +193,13 @@ class TestsAlf(unittest.TestCase):
     def test_load_object(self):
         # first usage of load object is to provide one of the files belonging to the object
         obj = alf.io.load_object(self.object_files[0])
-        self.assertTrue(set(obj.keys()) == set(['riri', 'fifi', 'loulou']))
+        self.assertTrue(set(obj.keys()) == {'riri', 'fifi', 'loulou'})
         self.assertTrue(all([obj[o].shape == (5,) for o in obj]))
         # the second usage is to provide a directory and the object name
         obj = alf.io.load_object(self.tmpdir, 'neuveu')
-        self.assertTrue(set(obj.keys()) == set(['riri', 'fifi', 'loulou']))
+        self.assertTrue(set(obj.keys()) == {'riri', 'fifi', 'loulou'})
         self.assertTrue(all([obj[o].shape == (5,) for o in obj]))
-        # and this should throw a value error
+        # providing directory without object will return all ALF files
         with self.assertRaises(ValueError) as context:
             obj = alf.io.load_object(self.tmpdir)
         self.assertTrue('object name should be provided too' in str(context.exception))

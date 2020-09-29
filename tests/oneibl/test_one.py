@@ -7,7 +7,7 @@ import shutil
 
 import ibllib.io.hashfile as hashfile
 from alf.io import remove_uuid_file
-from oneibl.one import ONE
+from oneibl.one import ONE, SessionDataInfo
 
 one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
           password='TapetesBloc18')
@@ -22,14 +22,12 @@ class TestOneOffline(unittest.TestCase):
             cache_dir = Path(td)
             shutil.copyfile(init_cache_file, cache_dir.joinpath(init_cache_file.name))
 
-            # instantiate the one offline object
-            _one = ONE(offline=True, cache_dir=cache_dir)
-
             # test the constructor
-            self.assertTrue(one._cache.shape[1] == 13)
+            self.assertTrue(one._cache.shape[1] == 14)
 
             # test the load with download false so it returns only file paths
-            eid = '4b00df29-3769-43be-bb40-128b1cba6d35'
+            eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
+            one.list(eid)
             dtypes = ['_spikeglx_sync.channels',
                       '_spikeglx_sync.polarities',
                       '_spikeglx_sync.times',
@@ -38,28 +36,13 @@ class TestOneOffline(unittest.TestCase):
                       'ephysData.raw.meta',
                       'camera.times',
                       'ephysData.raw.wiring']
-            files = one.load(eid, dataset_types=dtypes, dclass_output=False, download_only=True,
-                             offline=True)
-            self.assertTrue(_one._cache.shape[0] == len(files))
-
-            # test the offline mode for those too
-            chem = one.path_from_eid(eid)
-            assert(one.eid_from_path(chem) == eid)
-
-            # the load method can also be called in offline mode
-            files = one.load(eid, dataset_types=dtypes, dclass_output=False, download_only=True,
-                             offline=True)
-            self.assertTrue(_one._cache.shape[0] == len(files))
+            one.load(eid, dataset_types=dtypes, dclass_output=False,
+                     download_only=True, offline=False)
 
 
 class TestSearch(unittest.TestCase):
 
-    def setUp(self):
-        # Init connection to the database
-        self.One = one
-
     def test_search_simple(self):
-        one = self.One
         # Test users
         usr = ['olivier', 'nbonacchi']
         sl, sd = one.search(users=usr, details=True)
@@ -97,18 +80,11 @@ class TestList(unittest.TestCase):
 
     def test_list(self):
         # tests with a single input and a list input
-        EIDs = [self.eid,
-                [self.eid, self.eid2]]
-        for eid in EIDs:
-            dt = one.list(eid)  # returns dataset-type
-            dt = one.list(eid, details=True)
-            dt = one.list(eid, keyword='dataset-type')  # returns list
-            dt = one.list(eid, keyword='dataset-type', details=True)  # returns SessionDataInfo
-            for key in ('subject', 'users', 'lab', 'type', 'start_time', 'end_time'):
-                dt = one.list(eid, keyword=key)  # returns dataset-type
-                print(key, ': ', dt)
-            ses = one.list(eid, keyword='all')
-            usr, ses = one.list(eid, keyword='users', details=True)
+        eid = self.eid
+        dt = one.list(eid)  # returns dataset-type
+        self.assertTrue(isinstance(dt, list))
+        dt = one.list(eid, details=True)
+        self.assertTrue(isinstance(dt, SessionDataInfo))
 
     def test_list_error(self):
         a = 0
@@ -191,14 +167,14 @@ class TestLoad(unittest.TestCase):
         d = one.load(eid, dataset_types=dataset_types, dclass_output=True)
         ind = int(np.where(np.array(d.dataset_type) == 'clusters.channels')[0])
         self.assertTrue(np.all(d.data[ind] == t))
-        # Now load with another dset inbetween that doesn't exist
+        # Now load with another dset in between that doesn't exist
         t_, cr_, cl_ = one.load(eid, dataset_types=['clusters.channels', 'turlu',
                                                     'clusters.probes'])
         self.assertTrue(np.all(t == t_))
         self.assertTrue(np.all(cl == cl_))
         self.assertTrue(cr_ is None)
         # Now try in offline mode where the file already exists
-        t_ = one.load(eid, dataset_types=['clusters.channels'], offline=True)
+        t_ = one.load(eid, dataset_types=['clusters.channels'])
         self.assertTrue(np.all(t == t_))
 
         # load_dataset()
@@ -239,11 +215,7 @@ class TestLoad(unittest.TestCase):
         eid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
         self.assertRaises(requests.HTTPError, one.load, eid)
 
-    def test_load_offline(self):
-        a = one.load(self.eid, dataset_types='_ibl_lickPiezo.raw.npy', offline=True)
-        self.assertTrue(a == [None])
-
-    def test_load_newversion(self):
+    def test_download_hash(self):
         eid = self.eid
         # get the original file from the server
         file = one.load(eid, dataset_types=['channels.localCoordinates'], download_only=True,
@@ -265,6 +237,15 @@ class TestLoad(unittest.TestCase):
         data = one.load(eid, dataset_types=['channels.localCoordinates'])[0]
         self.assertTrue(data.shape == data_server.shape)
         self.assertTrue(np.all(np.equal(data, data_server)))
+        # here we corrupt the md5 hash on the database, the file will get downloaded again,
+        # but on checking the file one.load should have labeled the json field for database
+        # maintenance
+        one.alyx.rest('datasets', 'partial_update', id=dset[0]['url'][-36:],
+                      data={'file_size': fsize, 'hash': "5d1d13589934440a9947c2477b2e61ea"})
+        one.load(eid, dataset_types=['channels.localCoordinates'])[0]
+        fr = one.alyx.rest('files', 'list', django=f"dataset,{dset[0]['url'][-36:]},"
+                                                   f"data_repository__globus_is_personal,False")
+        self.assertTrue(fr[0]['json'] == {'mismatch_hash': True})
 
 
 class TestMisc(unittest.TestCase):

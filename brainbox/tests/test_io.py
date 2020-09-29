@@ -6,10 +6,19 @@ import uuid
 import numpy as np
 
 from brainbox.core import intersect2d, ismember2d, ismember
-from brainbox.io.parquet import uuid2np, np2uuid, rec2col
+from brainbox.io.parquet import uuid2np, np2uuid, rec2col, np2str
 
 
 class TestParquet(unittest.TestCase):
+
+    def test_uuids_conversions(self):
+        str_uuid = 'a3df91c8-52a6-4afa-957b-3479a7d0897c'
+        one_np_uuid = np.array([-411333541468446813, 8973933150224022421])
+        two_np_uuid = np.tile(one_np_uuid, [2, 1])
+        # array gives a list
+        self.assertTrue(all(map(lambda x: x == str_uuid, np2str(two_np_uuid))))
+        # single uuid gives a string
+        self.assertTrue(np2str(one_np_uuid) == str_uuid)
 
     def test_rec2col(self):
         json_fixture = Path(__file__).parent.joinpath('fixtures', 'parquet_records.json')
@@ -29,6 +38,12 @@ class TestParquet(unittest.TestCase):
         # test empty
         arr_empty = rec2col([], include=include, uuid_fields=uuid_fields, join=join)
         self.assertTrue(arr_empty.to_df().size == 0)
+
+        # the empty float fields should be serialized as NaNs when coerced into double
+        [ds.update({'float_field': None}) for ds in datasets]
+        arr = rec2col(datasets, uuid_fields=uuid_fields, join=join,
+                      types={'float_field': np.double})
+        self.assertTrue(np.all(np.isnan(arr['float_field'])))
 
     def test_uuids_intersections(self):
         ntotal = 500
