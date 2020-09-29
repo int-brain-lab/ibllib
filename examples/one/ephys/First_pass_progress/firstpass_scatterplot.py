@@ -32,7 +32,7 @@ eids_traj = [p['session']['id'] for p in traj]
 print(f'N traj with QC : {len(eids_traj)}')
 
 # DATAJOINT query to combine with behavioral criterion
-data_all = acquisition.Session & [{'session_uuid': i_e} for i_e in eids_traj] & \
+data_all = acquisition.Session & [{'session_uuid': i_e} for i_e in eids_traj] &\
            (behavior_analysis.SessionTrainingStatus & 'good_enough_for_brainwide_map=1')
 data_eids = data_all.proj('session_uuid')
 df = data_eids.fetch(format='frame').reset_index()
