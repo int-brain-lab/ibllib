@@ -193,8 +193,7 @@ class TaskQCExtractor(object):
     @staticmethod
     def rename_data(data):
         """Rename the extracted data dict for use with TaskQC
-        Splits 'feedback_times' to 'errorCue_times' and 'valveOpen_times'.  Also adds 'outcome' and
-        'correct'.
+        Splits 'feedback_times' to 'errorCue_times' and 'valveOpen_times'.
         NB: The data is not copied before making changes
         :param data: A dict of task data returned by the task extractors
         :return: the same dict after modifying the keys
@@ -210,7 +209,4 @@ class TaskQCExtractor(object):
              "valveOpen_times": valveOpen_times,
              "correct": correct}
         )
-        if 'choice' in data:
-            data["outcome"] = data["feedbackType"].copy()
-            data["outcome"][data["choice"] == 0] = 0
         return data
