@@ -28,18 +28,42 @@ traj = one.alyx.rest('trajectories', 'list', provenance='Planned',
 #     (10, 'PASS',),
 # ]
 
-eids_traj = [p['session']['id'] for p in traj]
+eids_traj = np.unique([p['session']['id'] for p in traj])
 print(f'N traj with QC : {len(eids_traj)}')
 
 # DATAJOINT query to combine with behavioral criterion
-data_all = (acquisition.Session & [{'session_uuid': i_e} for i_e in eids_traj] &
-            (behavior_analysis.SessionTrainingStatus & 'good_enough_for_brainwide_map=1'))
-data_eids = data_all.proj('session_uuid')
-df = data_eids.fetch(format='frame').reset_index()
 
-eids_good = df['session_uuid'].values.tolist()
-eids_good = [str(_) for _ in eids_good]
-print(f'N traj good : {len(eids_good)}')
+
+def datadj_to_session_uids_unique(datadj):
+    data_uids = datadj.proj('session_uuid')
+    dataframe = data_uids.fetch(format='frame').reset_index()
+
+    uids_list = dataframe['session_uuid'].values.tolist()
+    uids_unique = np.unique([str(_) for _ in uids_list])
+    return uids_unique
+
+data_all = acquisition.Session & [{'session_uuid': i_e} for i_e in eids_traj]
+
+data_good = (acquisition.Session & [{'session_uuid': i_e} for i_e in eids_traj] &
+             (behavior_analysis.SessionTrainingStatus & 'good_enough_for_brainwide_map=1'))
+
+data_notpass = (acquisition.Session & [{'session_uuid': i_e} for i_e in eids_traj] &
+                (behavior_analysis.SessionTrainingStatus & 'good_enough_for_brainwide_map=0'))
+
+data_notcomputedbehav = (acquisition.Session & [{'session_uuid': i_e} for i_e in eids_traj]) -\
+                        behavior_analysis.SessionTrainingStatus
+
+eids_all = datadj_to_session_uids_unique(data_all)  # Sanity check, should be same number as per Alyx
+eids_good = datadj_to_session_uids_unique(data_good)
+eids_notpass = datadj_to_session_uids_unique(data_notpass)
+eids_notcomputedbehav = datadj_to_session_uids_unique(data_notcomputedbehav)
+
+print(f'N sess tot on DJ  : {len(eids_all)} \n'
+      f'N sess good behav : {len(eids_good)} \n'
+      f'N sess fail behav : {len(eids_notpass)} \n'
+      f'N sess behav not computed: {len(eids_notcomputedbehav)} \n'
+      f'TOTAL sessions on DJ : {len(eids_good)+len(eids_notpass)+len(eids_notcomputedbehav)}\n'
+      )
 
 # Get ml / ap of only those that are good
 traj_dict = {str(p['session']['id']): (p['x'], p['y']) for p in traj}
