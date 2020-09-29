@@ -211,7 +211,7 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
     return dic_clus
 
 
-def load_spike_sorting_with_channel(eid, one=None):
+def load_spike_sorting_with_channel(eid, one=None, dataset_types=None):
     '''
     For a given eid, get spikes, clusters and channels information, and merges clusters
     and channels information before returning all three variables.
@@ -220,7 +220,7 @@ def load_spike_sorting_with_channel(eid, one=None):
     :return: spikes, clusters, channels (dict of bunch, 1 bunch per probe)
     '''
     # --- Get spikes and clusters data
-    dic_spk_bunch, dic_clus = load_spike_sorting(eid, one=one)
+    dic_spk_bunch, dic_clus = load_spike_sorting(eid, one=one, dataset_types=dataset_types)
 
     # -- Get brain regions and assign to clusters
     channels = load_channel_locations(eid, one=one)
