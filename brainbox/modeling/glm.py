@@ -460,7 +460,7 @@ class NeuralGLM:
         biasdm = np.pad(self.dm.copy(), ((0, 0), (1, 0)), 'constant', constant_values=1)
         trainmask = np.isin(self.trlabels, self.traininds).flatten()  # Mask for training data
         trainbinned = self.binnedspikes[trainmask]
-        # print(f'Condition of design matrix is {np.linalg.cond(self.dm[trainmask])}')
+        print(f'Condition of design matrix is {np.linalg.cond(self.dm[trainmask])}')
 
         if method == 'sklearn':
             traindm = self.dm[trainmask]
