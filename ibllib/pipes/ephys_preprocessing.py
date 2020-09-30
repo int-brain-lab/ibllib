@@ -228,6 +228,7 @@ class EphysMtscomp(tasks.Task):
                 sr = spikeglx.Reader(bin_file)
                 if sr.is_mtscomp:
                     out_files.append(bin_file)
+                    out_files.append(bin_file.with_suffix('.ch'))
                 else:
                     _logger.info(f"Compressing binary file {bin_file}")
                     out_files.append(sr.compress_file(keep_original=False))
