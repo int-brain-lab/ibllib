@@ -238,10 +238,6 @@ def _assign_events_audio(audio_t, audio_polarities, return_indices=False):
         return t_ready_tone_in, t_error_tone_in
 
 
-def _frame2ttl_events_extraction(f2ttl_t, f2ttl_fronts):
-    pass
-
-
 def _assign_events_to_trial(t_trial_start, t_event, take='last'):
     """
     Assign events to a trial given trial start times and event times.
@@ -252,7 +248,8 @@ def _assign_events_to_trial(t_trial_start, t_event, take='last'):
 
     :param t_trial_start: numpy vector of trial start times
     :param t_event: numpy vector of event times to assign to trials
-    :param take: 'last' or 'first' (optional, default 'last'): index to take in case of duplicates
+    :param take: 'last' or 'first' or int (optional, default 'last'): index to take in case
+     of several events whithin the trial: example -2 will take the second to last event
     :return: numpy array of event times with the same shape of trial start.
     """
     # make sure the events are sorted
@@ -275,7 +272,16 @@ def _assign_events_to_trial(t_trial_start, t_event, take='last'):
     elif take == 'first':
         iall, iu = np.unique(ind, return_index=True)
         t_event_nans[iall] = t_event[iu]
-
+    else:  # if the index is arbitrary, needs to be numeric (could be negative if from the end)
+        iall = np.unique(ind)
+        # t_event[-11]
+        # t_event[10]
+        # t_event.size
+        minsize = take + 1 if take >= 0 else - take
+        for iu in iall:
+            match = t_event[iu == ind]
+            if len(match) >= minsize:
+                t_event_nans[iu] = match[take]
     return t_event_nans
 
 
@@ -386,20 +392,16 @@ def extract_behaviour_sync(sync, chmap=None, display=False, tmax=np.inf):
         bpod['times'], bpod['polarities'])
     t_ready_tone_in, t_error_tone_in = _assign_events_audio(
         audio['times'], audio['polarities'])
-    # stim off time is the first frame2ttl rise/fall after the trial start
-    # does not apply for 1st trial
+    # stim freeze
     ind = np.searchsorted(frame2ttl['times'], t_iti_in, side='left')
-    t_stim_off = frame2ttl['times'][np.minimum(ind, frame2ttl.times.size - 1)]
     t_stim_freeze = frame2ttl['times'][np.minimum(ind, frame2ttl.times.size - 2)]
-    # t_stim_freeze = frame2ttl['times'][np.maximum(ind - 1, 0)]
-    # stimOn_times: first fram2ttl change after trial start
     trials = Bunch({
         'goCue_times': _assign_events_to_trial(t_trial_start, t_ready_tone_in, take='first'),
         'errorCue_times': _assign_events_to_trial(t_trial_start, t_error_tone_in),
         'valveOpen_times': _assign_events_to_trial(t_trial_start, t_valve_open),
         'stimFreeze_times': _assign_events_to_trial(t_trial_start, t_stim_freeze),
         'stimOn_times': _assign_events_to_trial(t_trial_start, frame2ttl['times'], take='first'),
-        'stimOff_times': _assign_events_to_trial(t_trial_start, t_stim_off),
+        'stimOff_times': _assign_events_to_trial(t_trial_start, frame2ttl['times'], take='last'),
         'itiIn_times': _assign_events_to_trial(t_trial_start, t_iti_in)
     })
     # feedback times are valve open on good trials and error tone in on error trials
@@ -431,7 +433,7 @@ def extract_behaviour_sync(sync, chmap=None, display=False, tmax=np.inf):
                              ax=ax, label='valveOpen_times', color='g', linewidth=width)
         plots.vertical_lines(t_stim_freeze, ymin=0, ymax=ymax,
                              ax=ax, label='stimFreeze_times', color='y', linewidth=width)
-        plots.vertical_lines(t_stim_off, ymin=0, ymax=ymax,
+        plots.vertical_lines(trials['stimOff_times'], ymin=0, ymax=ymax,
                              ax=ax, label='stim off', color='c', linewidth=width)
         plots.vertical_lines(trials['stimOn_times'], ymin=0, ymax=ymax,
                              ax=ax, label='stimOn_times', color='tab:orange', linewidth=width)

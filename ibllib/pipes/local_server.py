@@ -1,9 +1,14 @@
 import logging
 from pathlib import Path
+import re
+import subprocess
+import pkg_resources
+from datetime import datetime
 
 from ibllib.pipes import ephys_preprocessing, training_preprocessing, tasks
 import ibllib.io.raw_data_loaders as rawio
 import ibllib.exceptions
+from ibllib.time import date2isostr
 
 import oneibl.registration as registration
 from oneibl.one import ONE
@@ -17,6 +22,40 @@ def _get_lab(one):
     lab = one.alyx.rest('labs', 'list', django=f"repositories__globus_endpoint_id,{globus_id}")
     if len(lab):
         return [la['name'] for la in lab]
+
+
+def report_health(one):
+    """
+    Get a few indicators and label the json field of the corresponding lab with them
+    """
+    def _run_command(cmd):
+        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE)
+        info, error = process.communicate()
+        if process.returncode != 0:
+            return None
+        else:
+            return info.decode('utf-8').strip()
+
+    def _get_volume_usage(vol, label=''):
+        cmd = f'df {vol}'
+        res = _run_command(cmd)
+        # size_list = ['/dev/sdc1', '1921802500', '1427128132', '494657984', '75%', '/datadisk']
+        size_list = re.split(' +', res.split('\n')[-1])
+        fac = 1024 ** 2
+        d = {'total': int(size_list[1]) / fac, 'used': int(size_list[2]) / fac,
+             'volume': size_list[5]}
+        return {f"{label}_{k}": d[k] for k in d}
+
+    status = {'ibllib_version': pkg_resources.get_distribution("ibllib").version,
+              'phylib_version': pkg_resources.get_distribution("phylib").version,
+              'local_time': date2isostr(datetime.now())}
+    status.update(_get_volume_usage('/mnt/s0/Data', 'raid'))
+    status.update(_get_volume_usage('/', 'system'))
+
+    lab_names = _get_lab(one)
+    for ln in lab_names:
+        one.alyx.json_field_update(endpoint='labs', uuid=ln, field_name='json', data=status)
 
 
 def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):

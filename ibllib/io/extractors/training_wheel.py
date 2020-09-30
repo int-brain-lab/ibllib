@@ -1,5 +1,5 @@
 import logging
-from collections import Sized
+from collections.abc import Sized
 
 import numpy as np
 from scipy import interpolate
