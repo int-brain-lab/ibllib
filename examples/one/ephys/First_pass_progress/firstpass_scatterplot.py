@@ -29,7 +29,7 @@ traj = one.alyx.rest('trajectories', 'list', provenance='Planned',
 # ]
 
 eids_traj = np.unique([p['session']['id'] for p in traj])
-print(f'N traj with QC : {len(eids_traj)}')
+print(f'N sess QC<Critical (Alyx database) : {len(eids_traj)}')
 
 # DATAJOINT query to combine with behavioral criterion
 
@@ -58,11 +58,11 @@ eids_good = datadj_to_session_uids_unique(data_good)
 eids_notpass = datadj_to_session_uids_unique(data_notpass)
 eids_notcomputedbehav = datadj_to_session_uids_unique(data_notcomputedbehav)
 
-print(f'N sess tot on DJ  : {len(eids_all)} \n'
-      f'N sess good behav : {len(eids_good)} \n'
-      f'N sess fail behav : {len(eids_notpass)} \n'
-      f'N sess behav not computed: {len(eids_notcomputedbehav)} \n'
-      f'TOTAL sessions on DJ : {len(eids_good)+len(eids_notpass)+len(eids_notcomputedbehav)}\n'
+print(f'N sess on DJ with similar eids than on Alyx (sanity check)  : {len(eids_all)} \n \n'
+      f'N sess good behav on DJ : {len(eids_good)} \n'
+      f'N sess fail behav on DJ : {len(eids_notpass)} \n'
+      f'N sess behav not computed on DJ : {len(eids_notcomputedbehav)} \n'
+      f'TOTAL sessions according to DJ queries above : {len(eids_good)+len(eids_notpass)+len(eids_notcomputedbehav)}\n'
       )
 
 # Get ml / ap of only those that are good
