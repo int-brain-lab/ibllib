@@ -232,6 +232,41 @@ def get_wheel_position(session_path, bp_data=None, display=False):
     return data['re_ts'], data['re_pos']
 
 
+def infer_wheel_units(pos):
+    """
+    Given an array of wheel positions, infer the rotary encoder resolution, encoding type and units
+
+    The encoding type varies across hardware (Bpod uses X1 while FPGA usually extracted as X4), and
+    older data were extracted in linear cm rather than radians.
+
+    :param pos: a 1D array of extracted wheel positions
+    :return units: the position units, assumed to be either 'rad' or 'cm'
+    :return resolution: the number of decoded fronts per 360 degree rotation
+    :return encoding: one of {'X1', 'X2', 'X4'}
+    """
+    if len(pos.shape) > 1:  # Ensure 1D array of positions
+        pos = pos.flatten()
+
+    # Check the values and units of wheel position
+    res = np.array([wh.ENC_RES, wh.ENC_RES / 2, wh.ENC_RES / 4])
+    # min change in rad and cm for each decoding type
+    # [rad_X4, rad_X2, rad_X1, cm_X4, cm_X2, cm_X1]
+    min_change = np.concatenate([2 * np.pi / res, wh.WHEEL_DIAMETER * np.pi / res])
+    pos_diff = np.median(np.abs(np.ediff1d(pos)))
+
+    # find min change closest to min pos_diff
+    idx = np.argmin(np.abs(min_change - pos_diff))
+    if idx < len(res):
+        # Assume values are in radians
+        units = 'rad'
+        encoding = idx
+    else:
+        units = 'cm'
+        encoding = idx - len(res)
+    enc_names = {0: 'X4', 1: 'X2', 2: 'X1'}
+    return units, int(res[encoding]), enc_names[int(encoding)]
+
+
 def extract_wheel_moves(re_ts, re_pos, display=False):
     """
     Extract wheel positions and times from sync fronts dictionary
@@ -251,30 +286,14 @@ def extract_wheel_moves(re_ts, re_pos, display=False):
         x = np.arange(re_pos.size)
         re_ts = np.interp(x, re_ts[:, 0], re_ts[:, 1])
 
-    # Check the values and units of wheel position
-    res = np.array([wh.ENC_RES, wh.ENC_RES / 2, wh.ENC_RES / 4])
-    # min change in rad and cm for each decoding type
-    # [rad_X4, rad_X2, rad_X1, cm_X4, cm_X2, cm_X1]
-    min_change = np.concatenate([2 * np.pi / res, wh.WHEEL_DIAMETER * np.pi / res])
-    pos_diff = np.median(np.abs(np.ediff1d(re_pos)))
-
-    # find min change closest to min pos_diff
-    idx = np.argmin(np.abs(min_change - pos_diff))
-    if idx < len(res):
-        # Assume values are in radians
-        units = 'rad'
-        encoding = idx
-    else:
-        units = 'cm'
-        encoding = idx - len(res)
-    enc_names = {0: 'X4', 1: 'X2', 2: 'X1'}
-    _logger.info('Wheel in %s units using %s encoding', units, enc_names[int(encoding)])
+    units, res, enc = infer_wheel_units(re_pos)
+    _logger.info('Wheel in %s units using %s encoding', units, enc)
 
     # The below assertion is violated by Bpod wheel data
     #  assert np.allclose(pos_diff, min_change, rtol=1e-05), 'wheel position skips'
 
     # Convert the pos threshold defaults from samples to correct unit
-    thresholds = wh.samples_to_cm(np.array([8, 1.5]), resolution=res[encoding])
+    thresholds = wh.samples_to_cm(np.array([8, 1.5]), resolution=res)
     if units == 'rad':
         thresholds = wh.cm_to_rad(thresholds)
     kwargs = {'pos_thresh': thresholds[0],
