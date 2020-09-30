@@ -8,32 +8,15 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 from ibllib import atlas
-     
-       
-def _get_slice(coordinate, axis, fill_values, ba):
-    """
-    Get a slice from the atlas
-    
-    Parameters
-    ----------
-    coordinate : float
-        Coordinate in the atlas in mm
-    axis : int
-        0 = saggital
-        1 = coronal
-        2 = horizontal
-    fill_values : 1D array
-        Values to fill the slice with
-    ba : ibllib.atlas.atlas.AllenAtlas
 
-    Returns
-    -------
-    im : 2D array
-        Slice through the atlas
-
+      
+def _label2values(imlabel, fill_values, ba):
     """
-    index = ba.bc.xyz2i(np.array([coordinate / 1000] * 3))[axis]
-    imlabel = ba.label.take(index, axis=ba.xyz2dims[axis])
+    Fills a slice from the label volume with values to display
+    :param imlabel: 2D np-array containing label ids (slice of the label volume)
+    :param fill_values: 1D np-array containing values to fill into the slice
+    :return: 2D np-array filled with values
+    """
     im_unique, ilabels, iim = np.unique(imlabel, return_index=True, return_inverse=True)
     _, ir_unique, _ = np.intersect1d(ba.regions.id, im_unique, return_indices=True)
     im = np.squeeze(np.reshape(fill_values[ir_unique[iim]], (*imlabel.shape, 1)))
@@ -100,18 +83,16 @@ def plot_atlas(regions, values, ML=-1, AP=0, DV=-1, color_palette='Reds',
     region_values[0] = np.min(values) - 1    
         
     # Get slices with fill values
-    slice_sag = _get_slice(ML, 0, region_values, ba)  # saggital
-    slice_cor = _get_slice(AP, 1, region_values, ba)  # coronal
-    slice_hor = _get_slice(DV, 2, region_values, ba)  # horizontal
-    
-    # Get slices with boundaries
-    bound_sag = boundaries.take(ba.bc.xyz2i(np.array([ML / 1000] * 3))[0],
-                                axis=ba.xyz2dims[0])  # saggital
-    bound_cor = boundaries.take(ba.bc.xyz2i(np.array([AP / 1000] * 3))[1],
-                                axis=ba.xyz2dims[1])  # coronal
-    bound_hor = boundaries.take(ba.bc.xyz2i(np.array([DV / 1000] * 3))[2],
-                                axis=ba.xyz2dims[2])  # horizontal
-    
+    slice_sag = ba.slice(ML / 1000, axis=0, volume=ba.label)  # saggital
+    slice_sag = _label2values(slice_sag, region_values, ba)
+    bound_sag = ba.slice(ML / 1000, axis=0, volume=boundaries)
+    slice_cor = ba.slice(AP / 1000, axis=1, volume=ba.label)  # coronal
+    slice_cor = _label2values(slice_cor, region_values, ba)
+    bound_cor = ba.slice(AP / 1000, axis=1, volume=boundaries)
+    slice_hor = ba.slice(DV / 1000, axis=2, volume=ba.label)  # horizontal
+    slice_hor = _label2values(slice_hor, region_values, ba)
+    bound_hor = ba.slice(DV / 1000, axis=2, volume=boundaries)
+            
     # Add boundaries to slices outside of the fill value region 
     slice_sag[bound_sag == 1] = np.max(values) + 1 
     slice_cor[bound_cor == 1] = np.max(values) + 1  
