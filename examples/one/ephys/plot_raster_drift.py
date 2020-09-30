@@ -17,11 +17,13 @@ dataset_types = ['spikes.times',
                  'spikes.amps',
                  'spikes.depths']
 
-eids = one.search(dataset_types=dataset_types,
-                  project='ibl_neuropixel_brainwide_01',
-                  task_protocol='_iblrig_tasks_ephysChoiceWorld')
+# eids = one.search(dataset_types=dataset_types,
+#                   project='ibl_neuropixel_brainwide_01',
+#                   task_protocol='_iblrig_tasks_ephysChoiceWorld')
+#
+# eid = eids[0]  # Test with little drift: '7cdb71fb-928d-4eea-988f-0b655081f21c'
 
-eid = eids[0]  # Test
+eid = '89f0d6ff-69f4-45bc-b89e-72868abb042a'  # Test with huge drift
 
 # Get dataset
 
