@@ -33,10 +33,13 @@ spike_times, spike_amps, spike_depths = \
 drift = estimate_drift(spike_times, spike_amps, spike_depths, display=False)
 
 # PLOT
-fig, axs = plt.subplots(2, 1)
-# Drift
-axs[0].plot(drift)
-# Raster plot -- Brainbox
+# Tight layout
+fig3 = plt.figure(constrained_layout=True)
+gs = fig3.add_gridspec(3, 3)
+f3_ax0 = fig3.add_subplot(gs[0, :])
+f3_ax0.plot(drift)
+f3_ax1 = fig3.add_subplot(gs[1:, :])
 bbplot.driftmap(spike_times,
                 spike_depths,
-                ax=axs[1], plot_style='bincount')
+                ax=f3_ax1, plot_style='bincount')
+f3_ax0.set_xlim(f3_ax1.get_xlim())
