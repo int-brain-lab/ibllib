@@ -32,12 +32,20 @@ class TestBrainRegions(unittest.TestCase):
         self.assertTrue(brs.ancestors(ids=688).id.size == 4)
 
 
-class TestCoordinateConversions(unittest.TestCase):
+class TestAtlasSlicesConversion(unittest.TestCase):
     ba = _create_mock_atlas()
 
     def test_allen_ba(self):
         self.assertTrue(np.allclose(self.ba.bc.xyz2i(np.array([0, 0, 0]), round=False),
                                     ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / 25))
+
+    def test_ccf_xyz(self):
+        nx, ny, nz = self.ba.bc.nxyz
+        self.assertTrue(self.ba.slice(axis=0, coordinate=0).shape == (ny, nz))
+        self.assertTrue(self.ba.slice(axis=1, coordinate=0).shape == (nx, nz))
+        with self.assertRaises(IndexError):
+            self.ba.slice(axis=1, coordinate=123)
+        self.assertTrue(self.ba.slice(axis=1, coordinate=21, mode='clip').shape == (nx, nz))
 
     def test_ccf_xyz(self):
         assert np.all(np.abs(ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] -
