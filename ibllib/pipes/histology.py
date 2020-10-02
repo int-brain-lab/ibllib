@@ -11,6 +11,7 @@ import ibllib.atlas as atlas
 from ibllib.ephys.spikes import probes_description as extract_probes
 from ibllib.dsp.utils import fcn_cosine
 from ibllib.ephys.neuropixel import TIP_SIZE_UM
+from ibllib.qc import base2
 
 
 _logger = logging.getLogger('ibllib')
@@ -228,14 +229,21 @@ def register_track(probe_id, picks=None, one=None, overwrite=False):
                  'coordinate_system': 'IBL-Allen',
                  }
         brain_locations = None
+        # Update the insertion qc to CRITICAL
+        hist_qc = base2.QC(probe_id, one=one, endpoint='insertions')
+        hist_qc.update_extended_qc({'_tracing_exists': 0})
+        hist_qc.update('CRITICAL', namespace='tracing')
+
         # Here need to change the track qc to critical and also extended qc to zero
     else:
         brain_locations, insertion_histology = get_brain_regions(picks)
         # 1) update the alyx models, first put the picked points in the insertion json
-        one.alyx.json_field_update()
-        one.alyx.rest('insertions', 'partial_update',
-                      id=probe_id,
-                      data={'json': {'xyz_picks': np.int32(picks * 1e6).tolist()}})
+        one.alyx.json_field_update(endpoint='insertions', uuid=probe_id, field_name='json',
+                                   data={'xyz_picks': np.int32(picks * 1e6).tolist()})
+
+        # Update the insertion qc to register tracing exits
+        hist_qc = base2.QC(probe_id, one=one, endpoint='insertions')
+        hist_qc.update_extended_qc({'_tracing_exists': 1})
         # 2) patch or create the trajectory coming from histology track
         tdict = create_trajectory_dict(probe_id, insertion_histology, provenance='Histology track')
 

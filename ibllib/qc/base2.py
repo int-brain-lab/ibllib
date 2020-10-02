@@ -23,13 +23,13 @@ class QC:
         self.one = one or ONE()
         self.log = log or logging.getLogger('ibllib')
         if endpoint == 'sessions':
-            self._set_eid_or_path(endpoint_id)
-            self.json=False
             self.endpoint = endpoint
+            self._set_eid_or_path(endpoint_id)
+            self.json = False
         else:
+            self.endpoint = endpoint
             self._confirm_endpoint_id(endpoint_id)
             self.json = True
-            self.endpoint = endpoint
 
         self.outcome = "NOT_SET"
 
@@ -66,6 +66,15 @@ class QC:
             self.log.error('Cannot run QC: an experiment uuid or session path is required')
             raise ValueError("'session' must be a valid session path or uuid")
 
+    def _confirm_endpoint_id(self, endpoint_id):
+        # Have as read for now since 'list' isn't working
+        target_obj = self.one.alyx.rest(self.endpoint, 'read', id=endpoint_id) or None
+        if target_obj:
+            self.eid = endpoint_id
+        else:
+            self.log.error('Cannot run QC: endpoint id is not recognised')
+            raise ValueError("'endpoint_id' must be a valid uuid")
+
     def update(self, outcome, namespace='experimenter', override=False):
         """Update the qc field in Alyx
         Updates the 'qc' field in Alyx if the new QC outcome is worse than the current value.
@@ -88,12 +97,12 @@ class QC:
             if self.json else self.one.alyx.rest(self.endpoint, 'read', id=self.eid)['qc']
 
         if CRITERIA[current_status] < CRITERIA[outcome] or override:
-            r = self.one.alyx.json_field_update(endpoint=self.endpoint, uuid=self.id,
+            r = self.one.alyx.json_field_update(endpoint=self.endpoint, uuid=self.eid,
                                                 field_name='json', data={'qc': outcome}) \
                 if self.json else self.one.alyx.rest(self.endpoint, 'partial_update', id=self.eid,
                                                      data={'qc': outcome})
 
-            current_status = r['json']['qc'].upper() if self.json else r['qc'].upper()
+            current_status = r['qc'].upper()
             assert current_status == outcome, 'Failed to update session QC'
             self.log.info(f'QC field successfully updated to {outcome} for {self.endpoint[:-1]} '
                           f'{self.eid}')
@@ -119,12 +128,14 @@ class QC:
             extended_qc.update(data)
             extended_qc_dict = {'extended_qc': extended_qc}
             out = self.one.alyx.json_field_update(
-                  endpoint='sessions', uuid=self.eid, field_name='json', data=extended_qc_dict)
+                  endpoint=self.endpoint, uuid=self.eid, field_name='json', data=extended_qc_dict)
         else:
-            extended_qc = self.one.alyx.rest('sessions', 'read', id=self.eid)['extended_qc'] or {}
+            extended_qc = self.one.alyx.rest(self.endpoint, 'read', id=self.eid)['extended_qc'] \
+                          or {}
             extended_qc.update(data)
             out = self.one.alyx.json_field_update(
-                  endpoint='sessions', uuid=self.eid, field_name='extended_qc', data=extended_qc)
+                  endpoint=self.endpoint, uuid=self.eid, field_name='extended_qc',
+                  data=extended_qc)
 
         self.log.info(f'Extended QC field successfully updated for {self.endpoint[:-1]} '
                       f'{self.eid}')
