@@ -94,7 +94,7 @@ class TestModels(unittest.TestCase):
         skl_nglm = deepcopy(nglm)
 
         # Test the 'minimize' fit method first
-        _, __ = nglm.fit(method='minimize')
+        nglm.fit(method='minimize')
         comb_weights = nglm.combine_weights()['stim'].loc[1]
         kerninterp = interp1d(np.linspace(0, self.kernlen, self.stimkern.shape[0]),
                               self.stimkern, fill_value='extrapolate')
@@ -105,12 +105,12 @@ class TestModels(unittest.TestCase):
         error_weights = recovered_stimk / recovered_stimk.sum()
         perc_errors = np.abs((recovered_stimk / subsamp) - 1)
         wmean_err = np.sum(error_weights * perc_errors)
-        self.assertTrue(wmean_err < 0.1,
+        self.assertTrue(wmean_err < 0.05,
                         r"Mean error in simple timing kernel recovery is over 10% in GLM with"
                         " direct objective function minimization.")
 
         # Test the sklearn method next
-        _, __ = skl_nglm.fit(method='sklearn')
+        skl_nglm.fit(method='sklearn')
         comb_weights = nglm.combine_weights()['stim'].loc[1]
         kerninterp = interp1d(np.linspace(0, self.kernlen, self.stimkern.shape[0]),
                               self.stimkern, fill_value='extrapolate')
@@ -121,7 +121,7 @@ class TestModels(unittest.TestCase):
         error_weights = recovered_stimk / recovered_stimk.sum()
         perc_errors = np.abs((recovered_stimk / subsamp) - 1)
         wmean_err = np.sum(error_weights * perc_errors)
-        self.assertTrue(wmean_err < 0.1,
+        self.assertTrue(wmean_err < 0.05,
                         r"Mean error in simple timing kernel recovery is over 10% in GLM with"
                         " sklearn deviance-based optimization.")
 

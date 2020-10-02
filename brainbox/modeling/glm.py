@@ -638,7 +638,11 @@ class NeuralGLM:
                                                                           retvar=False)
                     iscores.append(self._score_submodel(coefs, intercepts, testdm, testbinned))
                 submodel_scores[f'{i}cov'] = pd.concat(iscores).sort_index()
-            return submodel_scores
+            self.submodel_scores = submodel_scores
+            self.coefs = coefs
+            self.intercepts = intercepts
+            self.variances = variances
+            return
 
     def _score_submodel(self, weights, intercepts, dm, binned):
         """
@@ -731,7 +735,8 @@ class NeuralGLM:
         """
         if not hasattr(self, 'coefs'):
             raise AttributeError('Fit was not run. Please run fit first.')
-        # TODO: Make this intelligently handle the subset model case
+        if hasattr(self, 'submodel_scores'):
+            return self.submodel_scores
         testmask = np.isin(self.trlabels, self.testinds).flatten()
         testdm = self.dm[testmask, :]
         scores = pd.Series(index=self.coefs.index)
