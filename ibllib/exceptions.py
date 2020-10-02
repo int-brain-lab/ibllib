@@ -27,3 +27,15 @@ class Neuropixel3BSyncFrontsNonMatching(IblError):
 
 class AlyxSubjectNotFound(IblError):
     explanation = 'The subject was not found in Alyx database'
+
+
+class ALFMultipleObjectsFound(IblError):
+    explanation = 'The search object was not found in database'
+
+
+class ALFObjectNotFound(IblError):
+    explanation = 'The ALF object was not found in database'
+
+
+# class AlyxSubjectNotFound(IblError):
+#     explanation = 'The subject was not found in Alyx database'
