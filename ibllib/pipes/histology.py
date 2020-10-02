@@ -228,9 +228,11 @@ def register_track(probe_id, picks=None, one=None, overwrite=False):
                  'coordinate_system': 'IBL-Allen',
                  }
         brain_locations = None
+        # Here need to change the track qc to critical and also extended qc to zero
     else:
         brain_locations, insertion_histology = get_brain_regions(picks)
         # 1) update the alyx models, first put the picked points in the insertion json
+        one.alyx.json_field_update()
         one.alyx.rest('insertions', 'partial_update',
                       id=probe_id,
                       data={'json': {'xyz_picks': np.int32(picks * 1e6).tolist()}})
