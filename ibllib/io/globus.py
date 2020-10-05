@@ -142,6 +142,18 @@ def _remote_path(root, path=''):
     return path
 
 
+def _split_file_path(path):
+    assert not path.endswith('/')
+    if '/' in path:
+        i = path.rindex('/')
+        parent = path[:i]
+        filename = path[i + 1:]
+    else:
+        parent = ''
+        filename = path
+    return parent, filename
+
+
 class Globus:
     def __init__(self):
         self._tc = globus_transfer_client()
@@ -159,14 +171,7 @@ class Globus:
         return out
 
     def file_exists(self, endpoint, path, size=None):
-        assert not path.endswith('/')
-        if '/' in path:
-            i = path.rindex('/')
-            parent = path[:i]
-            filename = path[i + 1:]
-        else:
-            parent = ''
-            filename = path
+        parent, filename = _split_file_path(path)
         files = self.ls(endpoint, parent)
         if size is None:
             return filename in (fn for fn, size in files)
@@ -174,10 +179,23 @@ class Globus:
             assert size >= 0
             return (filename, size) in files
 
-    def files_exist(self, endpoint, dir_path, filenames):
+    def dir_contains_files(self, endpoint, dir_path, filenames):
         files = self.ls(endpoint, dir_path)
         existing = [fn for fn, size in files]
         out = []
         for filename in filenames:
             out.append(filename in existing)
         return out
+
+    def files_exist(self, endpoint, paths, sizes=None):
+        parents = sorted(set(_split_file_path(path)[0] for path in paths))
+        existing = []
+        for parent in parents:
+            filenames_sizes = self.ls(endpoint, parent)
+            existing.extend([(parent + '/' + fn, size) for fn, size in filenames_sizes])
+
+        if sizes is None:
+            existing = [fn for fn, size in existing]
+            return [path in existing for path in paths]
+        else:
+            return [(path, size) in existing for path, size in zip(paths, sizes)]
