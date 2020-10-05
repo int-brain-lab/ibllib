@@ -1,36 +1,18 @@
+import json
+import logging
+import os
+import os.path as op
 from pathlib import Path
 
 import globus_sdk as globus
 from ibllib.io import params
 
 
-def as_globus_path(path):
-    """
-    Convert a path into one suitable for the Globus TransferClient.
+logger = logging.getLogger(__name__)
 
-    :param path: A path str or Path instance
-    :return: A formatted path string
 
-    Examples:
-        # A Windows path
-        >>> as_globus_path('E:\\FlatIron\\integration')
-        >>> '/~/E/FlatIron/integration'
-
-        # A relative POSIX path
-        >>> as_globus_path('../data/integration')
-        >>> '/~/mnt/data/integration'
-
-        # A globus path
-        >>> as_globus_path('/~/E/FlatIron/integration')
-        >>> '/~/E/FlatIron/integration'
-    """
-    if str(path).startswith('/~/'):
-        return path
-    path = Path(path).resolve()
-    if path.drive:
-        path = path.as_posix().replace(':', '', 1)
-    return '/~/' + str(path)
-
+# ibllib util functions
+# ------------------------------------------------------------------------------------------------
 
 def _login(globus_client_id, refresh_tokens=False):
 
@@ -149,19 +131,53 @@ ENDPOINTS = {
 }
 
 
+def _remote_path(root, path=''):
+    if not root.endswith('/'):
+        root += '/'
+    if path.startswith('/'):
+        path = path[1:]
+    path = root + path
+    assert '//' not in path
+    assert path.startswith(root)
+    return path
+
+
 class Globus:
     def __init__(self):
         self._tc = globus_transfer_client()
 
     def ls(self, endpoint, path=''):
-        endpoint, root = ENDPOINTS.get(endpoint, endpoint)
-        if not root.endswith('/'):
-            root += '/'
-        if path.startswith('/'):
-            path = path[1:]
-        path = root + path
-        assert '//' not in path
+        endpoint, root = ENDPOINTS.get(endpoint, (endpoint, ''))
+        assert root
+        path = _remote_path(root, path)
         out = []
-        for entry in self._tc.operation_ls(endpoint, path=path):
-            out.append((entry['name'], entry['size'] if entry['type'] == 'file' else None))
+        try:
+            for entry in self._tc.operation_ls(endpoint, path=path):
+                out.append((entry['name'], entry['size'] if entry['type'] == 'file' else None))
+        except Exception as e:
+            logger.error(str(e))
+        return out
+
+    def file_exists(self, endpoint, path, size=None):
+        assert not path.endswith('/')
+        if '/' in path:
+            i = path.rindex('/')
+            parent = path[:i]
+            filename = path[i + 1:]
+        else:
+            parent = ''
+            filename = path
+        files = self.ls(endpoint, parent)
+        if size is None:
+            return filename in (fn for fn, size in files)
+        else:
+            assert size >= 0
+            return (filename, size) in files
+
+    def files_exist(self, endpoint, dir_path, filenames):
+        files = self.ls(endpoint, dir_path)
+        existing = [fn for fn, size in files]
+        out = []
+        for filename in filenames:
+            out.append(filename in existing)
         return out
