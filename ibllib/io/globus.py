@@ -3,6 +3,7 @@ import logging
 import os
 import os.path as op
 from pathlib import Path
+import tempfile
 
 import globus_sdk as globus
 from ibllib.io import params
@@ -132,12 +133,14 @@ ENDPOINTS = {
 
 
 def _remote_path(root, path=''):
+    root = str(root)
+    path = str(path)
     if not root.endswith('/'):
         root += '/'
     if path.startswith('/'):
         path = path[1:]
     path = root + path
-    assert '//' not in path
+    path = path.replace('//', '/')
     assert path.startswith(root)
     return path
 
@@ -212,3 +215,53 @@ class Globus:
         if sizes is None:
             sizes = [None] * len(paths)
         return [_filename_size_matches((path, size), existing) for (path, size) in zip(paths, sizes)]
+
+    def rm(self, endpoint, path):
+        """Delete a single file on an endpoint."""
+        endpoint, root = ENDPOINTS.get(endpoint, (endpoint, ''))
+        assert root
+        path = _remote_path(root, path)
+
+        ddata = globus.DeleteData(tc, endpoint, recursive=False)
+        ddata.add_item(root, path)
+        delete_result = tc.submit_delete(ddata)
+        task_id = delete_result["task_id"]
+        message = delete_result["message"]
+
+    def move_files(
+        self, source_endpoint, target_endpoint,
+        source_paths, target_paths,
+        source_dir='', target_dir=''):
+        """Move files from one endpoint to another."""
+        source_endpoint, source_root = ENDPOINTS.get(source_endpoint, (source_endpoint, ''))
+        target_endpoint, target_root = ENDPOINTS.get(target_endpoint, (target_endpoint, ''))
+
+        source_paths = [_remote_path(source_root, str(source_dir) + '/' + str(_)) for _ in source_paths]
+        target_paths = [_remote_path(target_root, str(target_dir) + '/' + str(_)) for _ in target_paths]
+
+        tdata = globus.TransferData(
+            self._tc, source_endpoint, target_endpoint, verify_checksum=True, sync_level='checksum',
+        )
+        for source_path, target_path in zip(source_paths, target_paths):
+            tdata.add_item(source_path, target_path)
+        response = self._tc.submit_transfer(tdata)
+        task_id = response.get('task_id', None)
+        message = response.get('message', None)
+
+    def add_text_file(self, endpoint, path, contents):
+        """Create a text file on a remote endpoint."""
+        local = ENDPOINTS.get('local', None)
+        if not local or not local[0]:
+            raise IOError(
+            "Can only add a text file on a remote endpoint "
+            "if the current computer is a Globus endpoint")
+        local_endpoint, local_root = local
+        assert local_endpoint
+        assert local_root
+        local_root = Path(local_root.replace('/~', ''))
+        assert local_root.exists()
+        fn = '_tmp_text_file.txt'
+        local_path = local_root / fn
+        local_path.write_text(contents)
+        self.move_files(local_endpoint, endpoint, [local_path], [path])
+        # os.remove(local_path)

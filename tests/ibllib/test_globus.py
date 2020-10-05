@@ -32,3 +32,7 @@ def test_globus_4(g):
     assert g.files_exist('test', files, [None, None, None]) == [True, True, False]
     assert g.files_exist('test', files, [0, 0, 0]) == [False, True, False]
     assert g.files_exist('test', files, [39, 39, 39]) == [True, False, False]
+
+
+def test_globus_5(g):
+    g.add_text_file('flatiron', 'test_file', 'hello world')
