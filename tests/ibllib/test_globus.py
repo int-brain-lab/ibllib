@@ -24,3 +24,11 @@ def test_globus_3(g):
 
     assert g.files_exist(
         'test', ['test/NOT_EXISTS.txt', 'test/README', 'toto']) == [False, True, False]
+
+
+def test_globus_4(g):
+    files = ['test/README', 'test/empty', 'NOT_EXISTS']
+
+    assert g.files_exist('test', files, [None, None, None]) == [True, True, False]
+    assert g.files_exist('test', files, [0, 0, 0]) == [False, True, False]
+    assert g.files_exist('test', files, [39, 39, 39]) == [True, False, False]

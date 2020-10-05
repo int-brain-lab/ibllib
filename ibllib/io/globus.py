@@ -154,11 +154,23 @@ def _split_file_path(path):
     return parent, filename
 
 
+def _filename_size_matches(path_size, existing):
+    path, size = path_size
+    if size is None:
+        return path in [fn for fn, sz in existing]
+    else:
+        assert size >= 0
+        return (path, size) in existing
+
+
 class Globus:
+    """Wrapper for managing files on Globus endpoints."""
+
     def __init__(self):
         self._tc = globus_transfer_client()
 
     def ls(self, endpoint, path=''):
+        """Return the list of (filename, filesize) in a given endpoint directory."""
         endpoint, root = ENDPOINTS.get(endpoint, (endpoint, ''))
         assert root
         path = _remote_path(root, path)
@@ -171,15 +183,15 @@ class Globus:
         return out
 
     def file_exists(self, endpoint, path, size=None):
+        """Return whether a given file exists on a given endpoint, optionally with a specified
+        file size."""
         parent, filename = _split_file_path(path)
-        files = self.ls(endpoint, parent)
-        if size is None:
-            return filename in (fn for fn, size in files)
-        else:
-            assert size >= 0
-            return (filename, size) in files
+        existing = self.ls(endpoint, parent)
+        return _filename_size_matches((path, size), existing)
 
     def dir_contains_files(self, endpoint, dir_path, filenames):
+        """Return whether a directory contains a list of filenames. Returns a list of boolean,
+        one for each input file."""
         files = self.ls(endpoint, dir_path)
         existing = [fn for fn, size in files]
         out = []
@@ -188,14 +200,15 @@ class Globus:
         return out
 
     def files_exist(self, endpoint, paths, sizes=None):
+        """Return whether a list of files exist on an endpoint, optionally with specified
+        file sizes."""
+        if not paths:
+            return []
         parents = sorted(set(_split_file_path(path)[0] for path in paths))
         existing = []
         for parent in parents:
             filenames_sizes = self.ls(endpoint, parent)
             existing.extend([(parent + '/' + fn, size) for fn, size in filenames_sizes])
-
         if sizes is None:
-            existing = [fn for fn, size in existing]
-            return [path in existing for path in paths]
-        else:
-            return [(path, size) in existing for path, size in zip(paths, sizes)]
+            sizes = [None] * len(paths)
+        return [_filename_size_matches((path, size), existing) for (path, size) in zip(paths, sizes)]
