@@ -1,9 +1,16 @@
+<<<<<<< HEAD
+=======
+import json
+import os
+import os.path as op
+>>>>>>> Start Globus wrapper and tests
 from pathlib import Path
 
 import globus_sdk as globus
 from ibllib.io import params
 
 
+<<<<<<< HEAD
 def as_globus_path(path):
     """
     Convert a path into one suitable for the Globus TransferClient.
@@ -31,6 +38,10 @@ def as_globus_path(path):
         path = path.as_posix().replace(':', '', 1)
     return '/~/' + str(path)
 
+=======
+# ibllib util functions
+# ------------------------------------------------------------------------------------------------
+>>>>>>> Start Globus wrapper and tests
 
 def _login(globus_client_id, refresh_tokens=False):
 
