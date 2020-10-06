@@ -191,7 +191,7 @@ class Globus:
         file size."""
         parent, filename = _split_file_path(path)
         existing = self.ls(endpoint, parent)
-        return _filename_size_matches((path, size), existing)
+        return _filename_size_matches((filename, size), existing)
 
     def dir_contains_files(self, endpoint, dir_path, filenames):
         """Return whether a directory contains a list of filenames. Returns a list of boolean,
