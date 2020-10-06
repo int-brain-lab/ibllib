@@ -247,14 +247,13 @@ class Globus:
     @blocking
     def move_files(
         self, source_endpoint, target_endpoint,
-        source_paths, target_paths,
-        source_dir='', target_dir=''):
+        source_paths, target_paths):
         """Move files from one endpoint to another."""
         source_endpoint, source_root = ENDPOINTS.get(source_endpoint, (source_endpoint, ''))
         target_endpoint, target_root = ENDPOINTS.get(target_endpoint, (target_endpoint, ''))
 
-        source_paths = [_remote_path(source_root, str(source_dir) + '/' + str(_)) for _ in source_paths]
-        target_paths = [_remote_path(target_root, str(target_dir) + '/' + str(_)) for _ in target_paths]
+        source_paths = [_remote_path(source_root, str(_)) for _ in source_paths]
+        target_paths = [_remote_path(target_root, str(_)) for _ in target_paths]
 
         tdata = globus.TransferData(
             self._tc, source_endpoint, target_endpoint, verify_checksum=True, sync_level='checksum',

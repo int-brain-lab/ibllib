@@ -41,3 +41,31 @@ def test_globus_5(g):
     assert g.file_exists('flatiron', 'test_file', size=11)
     g.rm('flatiron', 'test_file', blocking=True)
     assert not g.file_exists('flatiron', 'test_file', size=11)
+
+
+def test_globus_6(g):
+    assert g.files_exist(
+        'test',
+        ['test/_flatiron_test.txt',
+        'test/_flatiron_empty.txt']) == [False, False]
+
+    g.move_files(
+        'flatiron', 'test',
+        ['public/test.txt',
+         'public/empty'],
+        ['test/_flatiron_test.txt',
+         'test/_flatiron_empty.txt'],
+        blocking=True)
+
+    assert g.files_exist(
+        'test',
+        ['test/_flatiron_test.txt',
+         'test/_flatiron_empty.txt']) == [True, True]
+
+    g.rm('test', 'test/_flatiron_test.txt', blocking=True)
+    g.rm('test', 'test/_flatiron_empty.txt', blocking=True)
+
+    assert g.files_exist(
+        'test',
+        ['test/_flatiron_test.txt',
+         'test/_flatiron_empty.txt']) == [False, False]
