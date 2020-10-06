@@ -15,21 +15,25 @@ def check_for_saturation(eid):
 
     T_BIN = 0.2  # time bin in sec
     ACT_THR = 0.05  # maximal activity for saturated segment
+    print('Bin size: %s [ms]' % T_BIN)
+    print('Activity threshold: %s [fraction]' % ACT_THR)
+
     probes = ['probe00', 'probe01']
     probeDict = {'probe00': 'probe_left', 'probe01': 'probe_right'}
 
     one = ONE()
+    dataset_types = ['spikes.times', 'spikes.clusters']
+    D = one.load(eid, dataset_types=dataset_types, dclass_output=True)
+    alf_path = Path(D.local_path[0]).parent.parent
+    print(alf_path)
 
     for probe in probes:
-
-        dataset_types = ['spikes.times', 'spikes.clusters']
-
-        D = one.load(eid, dataset_types=dataset_types, dclass_output=True)
-        alf_path = Path(D.local_path[0]).parent.parent
         probe_path = alf_path / probe
-
         if not probe_path.exists():
             probe_path = alf_path / probeDict[probe]
+            if not probe_path.exists():
+                print("% s doesn't exist..." % probe)
+                continue
 
         spikes = alf.io.load_object(probe_path, 'spikes')
 
@@ -42,8 +46,6 @@ def check_for_saturation(eid):
         print(probe)
         print('Number of saturated bins: %s of %s' %
               (len(saturated_bins), len(times)))
-        print('Bin size: %s [ms]' % T_BIN)
-        print('Activity threshold: %s [per cent]' % ACT_THR)
 
         if len(saturated_bins) > 1:
             print('WARNING: Saturation present!')
