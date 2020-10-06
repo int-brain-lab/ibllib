@@ -2,7 +2,11 @@ from pathlib import Path
 import unittest
 import numpy as np
 import pickle
+import copy
+from brainbox.core import Bunch
 import brainbox.behavior.wheel as wheel
+import brainbox.behavior.training as train
+import brainbox.behavior.pyschofit as psy
 
 
 class TestWheel(unittest.TestCase):
@@ -105,3 +109,259 @@ class TestWheel(unittest.TestCase):
         # Check first arrays
         np.testing.assert_allclose(times[0], [21.86593334, 22.12693334, 22.20193334, 22.66093334])
         np.testing.assert_array_equal(indices[0], [21809, 22070, 22145, 22604])
+
+
+class TestTraining(unittest.TestCase):
+    def setUp(self):
+        """
+        Test data contains training data from 10 consecutive sessions from subject SWC_054. It is
+        a dict of trials objects with each key indication a session date. By using data
+        combinations from different dates can test each of the different training criterion a
+        subject goes through in the IBL training pipeline
+        """
+        pickle_file = Path(__file__).parent.joinpath('fixtures', 'trials_test.pickle')
+        if not pickle_file.exists():
+            self.trial_data = None
+        else:
+            with open(pickle_file, 'rb') as f:
+                self.trial_data = pickle.load(f)
+
+    def test_concatenate_and_computations(self):
+        sess_dates = ['2020-08-25', '2020-08-24', '2020-08-21']
+        trials_copy = copy.deepcopy(self.trial_data)
+        trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
+        _ = [trials[k].pop('task_protocol') for k in trials.keys()]
+        trials_total = np.sum([len(trials[k]['contrastRight']) for k in trials.keys()])
+
+        trials_all = train.concatenate_trials(trials)
+        assert (len(trials_all.contrastRight) == trials_total)
+
+        perf_easy = np.array([train.compute_performance_easy(trials[k]) for k in trials.keys()])
+        n_trials = np.array([train.compute_n_trials(trials[k]) for k in trials.keys()])
+        psych = train.compute_psychometric(trials_all)
+        rt = train.compute_median_reaction_time(trials_all)
+        np.testing.assert_allclose(perf_easy, [0.91489362, 0.9, 0.90853659])
+        np.testing.assert_array_equal(n_trials, [617, 532, 719])
+        np.testing.assert_allclose(psych, [4.04487042, 21.6293942, 1.91451396e-02, 1.72669957e-01],
+                                   rtol=1e-5)
+        assert (np.isclose(rt, 0.83655))
+
+    def test_in_training(self):
+        sess_dates = ['2020-08-25', '2020-08-24', '2020-08-21']
+        trials_copy = copy.deepcopy(self.trial_data)
+        trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
+        task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
+        assert (np.all(np.array(task_protocol) == 'training'))
+        status, info = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
+                                                 n_delay=0)
+        assert (status == 'in training')
+
+        # also test the computations in the first test
+        np.testing.assert_allclose(info.perf_easy, [0.91489362, 0.9, 0.90853659])
+        np.testing.assert_array_equal(info.n_trials, [617, 532, 719])
+        np.testing.assert_allclose(info.psych, [4.04487042, 21.6293942, 1.91451396e-02,
+                                                1.72669957e-01], rtol=1e-5)
+        assert (np.isclose(info.rt, 0.83655))
+
+    def test_trained_1a(self):
+        sess_dates = ['2020-08-26', '2020-08-25', '2020-08-24']
+        trials_copy = copy.deepcopy(self.trial_data)
+        trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
+        task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
+        assert (np.all(np.array(task_protocol) == 'training'))
+        status, info = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
+                                                 n_delay=0)
+        assert (status == 'trained 1a')
+
+    def test_trained_1b(self):
+        sess_dates = ['2020-08-27', '2020-08-26', '2020-08-25']
+        trials_copy = copy.deepcopy(self.trial_data)
+        trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
+        task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
+        assert (np.all(np.array(task_protocol) == 'training'))
+        status, info = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
+                                                 n_delay=0)
+        assert(status == 'trained 1b')
+
+    def test_training_to_bias(self):
+        sess_dates = ['2020-08-31', '2020-08-28', '2020-08-27']
+        trials_copy = copy.deepcopy(self.trial_data)
+        trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
+        task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
+        assert (~np.all(np.array(task_protocol) == 'training') and
+                np.any(np.array(task_protocol) == 'training'))
+        status, info = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
+                                                 n_delay=0)
+        assert (status == 'trained 1b')
+
+    def test_ready4ephys(self):
+        sess_dates = ['2020-09-01', '2020-08-31', '2020-08-28']
+        trials_copy = copy.deepcopy(self.trial_data)
+        trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
+        task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
+        assert (np.all(np.array(task_protocol) == 'biased'))
+        status, info = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
+                                                 n_delay=0)
+        assert (status == 'ready4ephysrig')
+
+    def test_ready4delay(self):
+        sess_dates = ['2020-09-03', '2020-09-02', '2020-08-31']
+        trials_copy = copy.deepcopy(self.trial_data)
+        trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
+        task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
+        assert (np.all(np.array(task_protocol) == 'biased'))
+        status, info = train.get_training_status(trials, task_protocol,
+                                                 ephys_sess_dates=['2020-09-03'], n_delay=0)
+        assert (status == 'ready4delay')
+
+    def test_ready4recording(self):
+        sess_dates = ['2020-09-01', '2020-08-31', '2020-08-28']
+        trials_copy = copy.deepcopy(self.trial_data)
+        trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
+        task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
+        assert (np.all(np.array(task_protocol) == 'biased'))
+        status, info = train.get_training_status(trials, task_protocol,
+                                                 ephys_sess_dates=sess_dates, n_delay=1)
+        assert (status == 'ready4recording')
+
+
+class PsychofitTest(unittest.TestCase):
+    def setUp(self) -> None:
+        """Data are 3 x n arrays"""
+        data = {'weibull50': np.vstack([
+            10 ** np.linspace(-4, -1, 8),
+            np.ones(8) * 80,
+            np.array([0.5125, 0.35, 0.5625, 0.5375, 0.8875, 0.8875, 0.9125, 0.8625])
+        ]), 'weibull': np.vstack([
+            10 ** np.linspace(-4, -1, 8),
+            np.ones(8) * 80,
+            np.array([0.125, 0.1125, 0.1375, 0.4, 0.8125, 0.9, 0.925, 0.875])
+        ]), 'erf_psycho_2gammas': np.vstack([
+            np.arange(-50, 50, 10),
+            np.ones(10) * 40,
+            np.array([0.175, 0.225, 0.35, 0.275, 0.725, 0.9, 0.925, 0.975, 1., 1.])
+        ]), 'erf_psycho': np.vstack([
+            np.arange(-50, 50, 10),
+            np.ones(10) * 40,
+            np.array([0.1, 0.125, 0.25, 0.15, 0.6, 0.65, 0.75, 0.9, 0.9, 0.85])
+        ])}
+        self.test_data = data
+        np.random.seed(0)
+
+    def test_weibull50(self):
+        xx = self.test_data['weibull50'][0, :]
+
+        # test parameters
+        alpha = 10 ** -2.5
+        beta = 2.
+        gamma = 0.1
+
+        # fake experimental data given those parameters
+        actual = psy.weibull50((alpha, beta, gamma), xx)
+        expected = np.array(
+            [0.5003998, 0.50286841, 0.5201905, 0.62446761, 0.87264857, 0.9, 0.9, 0.9]
+        )
+        self.assertTrue(np.allclose(expected, actual))
+
+        with self.assertRaises(ValueError):
+            psy.weibull50((alpha, beta), xx)
+
+    def test_weibull(self):
+        xx = self.test_data['weibull'][0, :]
+
+        # test parameters
+        alpha = 10 ** -2.5
+        beta = 2.
+        gamma = 0.1
+
+        # fake experimental data given those parameters
+        actual = psy.weibull((alpha, beta, gamma), xx)
+        expected = np.array(
+            [0.1007996, 0.10573682, 0.14038101, 0.34893523, 0.84529714, 0.9, 0.9, 0.9]
+        )
+        self.assertTrue(np.allclose(expected, actual))
+
+        with self.assertRaises(ValueError):
+            psy.weibull((alpha, beta), xx)
+
+    def test_erf_psycho(self):
+        xx = self.test_data['erf_psycho'][0, :]
+
+        # test parameters
+        bias = -10.
+        threshold = 20.
+        lapse = .1
+
+        # fake experimental data given those parameters
+        actual = psy.erf_psycho((bias, threshold, lapse), xx)
+        expected = np.array(
+            [0.10187109, 0.11355794, 0.16291968, 0.29180005, 0.5,
+             0.70819995, 0.83708032, 0.88644206, 0.89812891, 0.89983722]
+        )
+        self.assertTrue(np.allclose(expected, actual))
+
+        with self.assertRaises(ValueError):
+            psy.erf_psycho((bias, threshold, lapse, lapse), xx)
+
+    def test_erf_psycho_2gammas(self):
+        xx = self.test_data['erf_psycho_2gammas'][0, :]
+
+        # test parameters
+        bias = -10.
+        threshold = 20.
+        gamma1 = .2
+        gamma2 = 0.
+
+        # fake experimental data given those parameters
+        actual = psy.erf_psycho_2gammas((bias, threshold, gamma1, gamma2), xx)
+        expected = np.array(
+            [0.20187109, 0.21355794, 0.26291968, 0.39180005, 0.6,
+             0.80819995, 0.93708032, 0.98644206, 0.99812891, 0.99983722]
+        )
+        self.assertTrue(np.allclose(expected, actual))
+
+        with self.assertRaises(ValueError):
+            psy.erf_psycho_2gammas((bias, threshold, gamma1), xx)
+
+    def test_neg_likelihood(self):
+        data = self.test_data['erf_psycho']
+        with self.assertRaises(ValueError):
+            psy.neg_likelihood((10, 20, .05), data[1:, :])
+        with self.assertRaises(TypeError):
+            psy.neg_likelihood('(10, 20, .05)', data)
+
+        ll = psy.neg_likelihood((-20, 30, 2), data, P_model='erf_psycho',
+                                parmin=np.array((-10, 20, 0)), parmax=np.array((10, 10, .05)))
+        self.assertTrue(ll > 10000)
+
+    def test_mle_fit_psycho(self):
+        expected = {
+            'weibull50': (np.array([0.0034045, 3.9029162, .1119576]), -334.1149693046583),
+            'weibull': (np.array([0.00316341, 1.72552866, 0.1032307]), -261.235178611311),
+            'erf_psycho': (np.array([-9.78747259, 10., 0.15967605]), -193.0509031440323),
+            'erf_psycho_2gammas': (np.array([-11.45463779, 9.9999999, 0.24117732, 0.0270835]),
+                                   -147.02380025592902)
+        }
+        for model in self.test_data.keys():
+            pars, L = psy.mle_fit_psycho(self.test_data[model], P_model=model, nfits=10)
+            expected_pars, expected_L = expected[model]
+            self.assertTrue(np.allclose(expected_pars, pars, atol=1e-3),
+                            f'unexpected pars for {model}')
+            self.assertTrue(np.isclose(expected_L, L, atol=1e-3),
+                            f'unexpected likelihood for {model}')
+
+        # Test on of the models with function pars
+        params = {
+            'parmin': np.array([-5., 10., 0.]),
+            'parmax': np.array([5., 15., .1]),
+            'parstart': np.array([0., 11., 0.1]),
+            'nfits': 5
+        }
+        model = 'erf_psycho'
+        pars, L = psy.mle_fit_psycho(self.test_data[model], P_model=model, **params)
+        expected = [-5, 15, 0.1]
+        self.assertTrue(np.allclose(expected, pars, rtol=.01), f'unexpected pars for {model}')
+        self.assertTrue(np.isclose(-195.55603, L, atol=1e-5), f'unexpected likelihood for {model}')
+
+    def tearDown(self):
+        np.random.seed()

@@ -26,6 +26,8 @@ Examples:
 import logging
 import sys
 from inspect import getmembers, isfunction
+from functools import reduce
+from collections.abc import Sized
 
 import numpy as np
 
@@ -36,6 +38,7 @@ from ibllib.io.extractors.ephys_fpga import WHEEL_TICKS
 from . import base
 
 _log = logging.getLogger('ibllib')
+CRITERIA = {"PASS": 0.99, "WARNING": 0.95, "FAIL": 0}
 
 
 class TaskQC(base.QC):
@@ -48,9 +51,7 @@ class TaskQC(base.QC):
         # Metrics and passed trials
         self.metrics = None
         self.passed = None
-        self.criteria = {"PASS": 0.99,
-                         "WARNING": 0.95,
-                         "FAIL": 0}
+        self.criteria = CRITERIA
 
     def load_data(self, bpod_only=False, download_data=True):
         self.extractor = TaskQCExtractor(
@@ -142,6 +143,15 @@ def get_bpodqc_metrics_frame(data, **kwargs):
     passed = {}
     for k in qc_metrics_map:
         metrics[k], passed[k] = qc_metrics_map[k]
+
+    # Add a check for trial level pass: did a given trial pass all checks?
+    n_trials = data['intervals'].shape[0]
+    trial_level_passed = [m for m in passed.values()
+                          if isinstance(m, Sized) and len(m) == n_trials]
+    name = '_task_passed_trial_checks'
+    metrics[name] = reduce(np.logical_and, trial_level_passed or (None, None))
+    passed[name] = metrics[name].astype(np.float) if trial_level_passed else None
+
     return metrics, passed
 
 
@@ -434,7 +444,7 @@ def check_error_trial_event_sequence(data, **_):
     2 audio events (go cue sound and error sound) and 2 Bpod events (trial start, ITI), occurring
     in the correct order
 
-    Metric: M = Bpod (trial start) > audio (go cue) > audio (error) > Bpod (ITI)
+    Metric: M = Bpod (trial start) > audio (go cue) > audio (error) > Bpod (ITI) > Bpod (trial end)
     Criterion: M == True
     Units: -none-
 
@@ -445,14 +455,16 @@ def check_error_trial_event_sequence(data, **_):
         np.isnan(data["intervals"][:, 0]) |
         np.isnan(data["goCue_times"])     |  # noqa
         np.isnan(data["errorCue_times"])  |  # noqa
-        np.isnan(data["itiIn_times"])
+        np.isnan(data["itiIn_times"])     |  # noqa
+        np.isnan(data["intervals"][:, 1])
     )
 
     a = np.less(data["intervals"][:, 0], data["goCue_times"], where=~nans)
     b = np.less(data["goCue_times"], data["errorCue_times"], where=~nans)
     c = np.less(data["errorCue_times"], data["itiIn_times"], where=~nans)
+    d = np.less(data["itiIn_times"], data["intervals"][:, 1], where=~nans)
 
-    metric = a & b & c & ~nans
+    metric = a & b & c & d & ~nans
 
     passed = metric.astype(np.float)
     passed[data["correct"]] = np.nan  # Look only at incorrect trials
@@ -464,7 +476,7 @@ def check_correct_trial_event_sequence(data, **_):
     """ Check that on correct trials, there are exactly:
     1 audio events and 3 Bpod events (valve open, trial start, ITI), occurring in the correct order
 
-    Metric: M = Bpod (trial start) > audio (go cue) > Bpod (valve) > Bpod (ITI)
+    Metric: M = Bpod (trial start) > audio (go cue) > Bpod (valve) > Bpod (ITI) > Bpod (trial end)
     Criterion: M == True
     Units: -none-
 
@@ -475,13 +487,15 @@ def check_correct_trial_event_sequence(data, **_):
         np.isnan(data["intervals"][:, 0]) |
         np.isnan(data["goCue_times"])     |  # noqa
         np.isnan(data["valveOpen_times"]) |
-        np.isnan(data["itiIn_times"])
+        np.isnan(data["itiIn_times"])     |  # noqa
+        np.isnan(data["intervals"][:, 1])
     )
 
     a = np.less(data["intervals"][:, 0], data["goCue_times"], where=~nans)
     b = np.less(data["goCue_times"], data["valveOpen_times"], where=~nans)
     c = np.less(data["valveOpen_times"], data["itiIn_times"], where=~nans)
-    metric = a & b & c & ~nans
+    d = np.less(data["itiIn_times"], data["intervals"][:, 1], where=~nans)
+    metric = a & b & c & d & ~nans
 
     passed = metric.astype(np.float)
     passed[~data["correct"]] = np.nan  # Look only at correct trials
@@ -678,10 +692,14 @@ def check_reward_volume_set(data, **_):
 
 def check_wheel_integrity(data, re_encoding='X1', enc_res=None, **_):
     """ Check that the difference between wheel position samples is close to the encoder resolution
+    and that the wheel timestamps strictly increase.
 
-    Metric: M = (absolute difference of the positions - encoder resolution) + 1 if difference of
-    timestamps <= 0 [wheel samples] else 0
-    Criterion: M  ~= 0 (see numpy.isclose for details of the tolerance)
+    Note: At high velocities some samples are missed due to the scanning frequency of the DAQ.
+    This checks for more than 1 missing sample in a row (i.e. the difference between samples >= 2)
+
+    Metric: M = (absolute difference of the positions < 1.5 * encoder resolution)
+                 + 1 if (difference of timestamps <= 0) else 0
+    Criterion: M  ~= 0
     Units: arbitrary (radians, sometimes + 1)
 
     :param data: dict of wheel data with keys ('wheel_timestamps', 'wheel_position')
@@ -693,11 +711,11 @@ def check_wheel_integrity(data, re_encoding='X1', enc_res=None, **_):
     # The expected difference between samples in the extracted units
     resolution = 1 / (enc_res or WHEEL_TICKS) * np.pi * 2 * WHEEL_RADIUS_CM / re_encoding
     # We expect the difference of neighbouring positions to be close to the resolution
-    pos_check = np.abs(np.diff(data['wheel_position'])) - resolution
+    pos_check = np.abs(np.diff(data['wheel_position']))
     # Timestamps should be strictly increasing
     ts_check = np.diff(data['wheel_timestamps']) <= 0.
     metric = pos_check + ts_check.astype(float)  # all values should be close to zero
-    passed = np.isclose(metric, np.zeros_like(metric))
+    passed = metric < 1.5 * resolution
     return metric, passed
 
 

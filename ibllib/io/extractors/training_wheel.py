@@ -1,5 +1,5 @@
 import logging
-from collections import Sized
+from collections.abc import Sized
 
 import numpy as np
 from scipy import interpolate
@@ -243,7 +243,6 @@ def extract_wheel_moves(re_ts, re_pos, display=False):
     """
     if len(re_ts.shape) == 1:
         assert re_ts.size == re_pos.size, 'wheel data dimension mismatch'
-        assert np.all(np.diff(re_ts) > 0), 'wheel timestamps not strictly increasing'
     else:
         _logger.debug('2D wheel timestamps')
         if len(re_pos.shape) > 1:  # Ensure 1D array of positions
@@ -287,7 +286,7 @@ def extract_wheel_moves(re_ts, re_pos, display=False):
     on, off, amp, peak_vel = wh.movements(t, pos, freq=1000, **kwargs)
     assert on.size == off.size, 'onset/offset number mismatch'
     assert np.all(np.diff(on) > 0) and np.all(
-        np.diff(off) > 0), 'onsets/offsets not monotonically increasing'
+        np.diff(off) > 0), 'onsets/offsets not strictly increasing'
     assert np.all((off - on) > 0), 'not all offsets occur after onset'
 
     # Put into dict
