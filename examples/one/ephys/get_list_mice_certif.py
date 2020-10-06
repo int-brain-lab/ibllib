@@ -1,12 +1,16 @@
-'''
-Get list of subjects associated to the certification recording project.
-TODO not finished: number of subject per lab, number of recording per lab
-'''
+"""
+Find certification recording sessions
+=====================================
+Use ONE to get the training status of a chosen subject or all subjects within a lab.
+Training status is computed based on performance over latest 3 sessions (default) or last 3
+sessions before a specified date.
+"""
 # Author: Gaelle Chapuis
 
-import numpy
+# import modules
+import numpy as np
 from oneibl.one import ONE
-one = ONE()  # base_url='https://dev.alyx.internationalbrainlab.org'
+one = ONE()
 
 dataset_types = ['spikes.times',
                  'spikes.clusters']
@@ -27,13 +31,13 @@ lab = [p['lab'] for p in det]
 # task_unique = list(set(task))
 
 # -- How many animals were used per lab
-su, ind_su = numpy.unique(sub, return_index=True)
-lab_arr = numpy.array(lab)
+su, ind_su = np.unique(sub, return_index=True)
+lab_arr = np.array(lab)
 lu = lab_arr[ind_su]
 
 for i_su in range(0, len(su)):
     # Find how many recordings were made with this animals
-    sess_id = numpy.where(numpy.array(sub) == su[i_su])
+    sess_id = np.where(np.array(sub) == su[i_su])
     # Display
     tr_pl = one.alyx.rest('trajectories', 'list', subject=su[i_su], provenance='Planned')
     tr_tr = one.alyx.rest('trajectories', 'list', subject=su[i_su], provenance='Histology track')
