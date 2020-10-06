@@ -1,3 +1,4 @@
+from functools import wraps
 import json
 import logging
 import os
@@ -216,18 +217,34 @@ class Globus:
             sizes = [None] * len(paths)
         return [_filename_size_matches((path, size), existing) for (path, size) in zip(paths, sizes)]
 
-    def rm(self, endpoint, path):
+    def blocking(f):
+        """Add two keyword arguments to a method, blocking (boolean) and timeout."""
+        @wraps(f)
+        def wrapped(self, *args, **kwargs):
+            blocking = kwargs.pop('blocking', None)
+            timeout = kwargs.pop('timeout', None)
+            task_id = f(self, *args, **kwargs)
+            if blocking:
+                return self.wait_task(task_id, timeout=timeout)
+            else:
+                return task_id
+        return wrapped
+
+    @blocking
+    def rm(self, endpoint, path, blocking=False):
         """Delete a single file on an endpoint."""
         endpoint, root = ENDPOINTS.get(endpoint, (endpoint, ''))
         assert root
         path = _remote_path(root, path)
 
-        ddata = globus.DeleteData(tc, endpoint, recursive=False)
-        ddata.add_item(root, path)
-        delete_result = tc.submit_delete(ddata)
+        ddata = globus.DeleteData(self._tc, endpoint, recursive=False)
+        ddata.add_item(path)
+        delete_result = self._tc.submit_delete(ddata)
         task_id = delete_result["task_id"]
         message = delete_result["message"]
+        return task_id
 
+    @blocking
     def move_files(
         self, source_endpoint, target_endpoint,
         source_paths, target_paths,
@@ -247,6 +264,7 @@ class Globus:
         response = self._tc.submit_transfer(tdata)
         task_id = response.get('task_id', None)
         message = response.get('message', None)
+        return task_id
 
     def add_text_file(self, endpoint, path, contents):
         """Create a text file on a remote endpoint."""
@@ -263,5 +281,17 @@ class Globus:
         fn = '_tmp_text_file.txt'
         local_path = local_root / fn
         local_path.write_text(contents)
-        self.move_files(local_endpoint, endpoint, [local_path], [path])
-        # os.remove(local_path)
+        task_id = self.move_files(local_endpoint, endpoint, [local_path], [path], blocking=True)
+        os.remove(local_path)
+
+    def wait_task(self, task_id, timeout=None):
+        """Block until a Globus task finishes."""
+        if timeout is None:
+            timeout = 300
+        i = 0
+        while not self._tc.task_wait(task_id, timeout=1, polling_interval=1):
+            print('.', end='')
+            i += 1
+            if i >= timeout:
+                raise IOError(
+                    "The task %s has not finished after %d seconds." % (task_id, timeout))

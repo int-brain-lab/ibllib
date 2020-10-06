@@ -35,4 +35,9 @@ def test_globus_4(g):
 
 
 def test_globus_5(g):
+    print("Adding text file")
     g.add_text_file('flatiron', 'test_file', 'hello world')
+    print("Done!")
+    assert g.file_exists('flatiron', 'test_file', size=11)
+    g.rm('flatiron', 'test_file', blocking=True)
+    assert not g.file_exists('flatiron', 'test_file', size=11)
