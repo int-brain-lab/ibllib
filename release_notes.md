@@ -1,3 +1,9 @@
+### Release Notes 1.5.13
+-   ibllib.atlas
+    -   allen csv Atlas part of package is not installed in dev mode
+    -   improved slicing performance
+-   ephys extraction: mtscomp registers ch file on run and re-runs bis
+
 ### Release Notes 1.5.12  Hotfix
 -   mtscomp registers ch file on run and re-runs
 
