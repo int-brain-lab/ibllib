@@ -151,7 +151,8 @@ class TaskQCExtractor(object):
         # Run behaviour extractors
         kwargs = dict(save=False, bpod_trials=self.raw_data, settings=self.settings)
         data, _ = run_extractor_classes(extractors, session_path=self.session_path, **kwargs)
-        n_trials = data['intervals'].shape[0]
+
+        n_trials = np.unique(list(map(lambda k: data[k].shape[0], data)))[0]
 
         # Extract some parameters
         if self.type == 'ephys':
