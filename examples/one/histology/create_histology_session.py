@@ -13,12 +13,16 @@ ap_scale, ml_scale values are computed from the affine matrix.
 
 Parameters
 ----------
+
+lab : str
+    The subject lab - zadorlab, churchlandlab, danlab, wittenlab, etc.
+
 id : str
-    The subject id
+    The subject id - CSH_ZAD_025, CSHL029, DY_013, etc
+
 sample_imaging_date : str
     Date of Sample Imaging, given in format DD-MM-YYYY
-sample_reception_date : str
-    Date of Sample Reception, given in format DD-MM-YYYY
+
 affine_matrix : str
     4x4 Affine Transformation Matrix mapping sample2ARA/, given in format
     "0.912838 0.038861 0.142005 -0.054963 0.820837 0.034729 -0.135135
@@ -28,8 +32,9 @@ affine_matrix : str
 Returns
 -------
 none
+
+@author: stevenwest Olivier Winter Gaelle Chapuis
 '''
-# Author: Steven West (main), Olivier Winter, Gaelle Chapuis
 
 import sys
 import math
@@ -41,7 +46,7 @@ import json
 from json import JSONEncoder
 
 
-# override default method of JSONEncoder to implement custom NumPy JSON serialization.
+# override deault method of JSONEncoder to implement custom NumPy JSON serialization.
 # see https://pynative.com/python-serialize-numpy-ndarray-into-json/
 class NumpyArrayEncoder(JSONEncoder):
     def default(self, obj):
@@ -51,9 +56,9 @@ class NumpyArrayEncoder(JSONEncoder):
 
 
 # collect ARGS
-subject = sys.argv[1]  # subject id is in the first ARG
-sample_imaging_date = sys.argv[2]
-sample_reception_date = sys.argv[3]
+lab = sys.argv[1]
+subject = sys.argv[2]
+sample_imaging_date = sys.argv[3]
 affine_matrix = sys.argv[4]
 
 
@@ -64,11 +69,6 @@ if len(sample_imaging_date) != 10 \
     print("sample_imaging_date not in correct format")
     sys.exit()
 
-if len(sample_reception_date) != 10 \
-    or sample_reception_date[2:3] != "-" \
-        or sample_reception_date[5:6] != "-":
-    print("sample_reception_date not in correct format")
-    sys.exit()
 
 if affine_matrix.count(" ") != 11:
     print("affine_matrix not in correct format")
@@ -80,12 +80,8 @@ imD = int(sample_imaging_date[0:2])
 imM = int(sample_imaging_date[3:5])
 imY = int(sample_imaging_date[6:10])
 
-reD = int(sample_reception_date[0:2])
-reM = int(sample_reception_date[3:5])
-reY = int(sample_reception_date[6:10])
-
 sample_imaging_date = datetime.date(imY, imM, imD)  # Format: y - m - d
-sample_reception_date = datetime.date(reY, reM, reD)  # Format: y - m - d
+sample_reception_date = sample_imaging_date
 
 
 # Create 4x4 affine_matrix in Homogenous Coordinates:
@@ -158,7 +154,8 @@ rz = math.atan2(rot_mat[1, 0], rot_mat[0, 0])
 
 
 # Upload to IBL alyx:
-one = ONE(base_url='https://dev.alyx.internationalbrainlab.org')
+#one = ONE(base_url='https://dev.alyx.internationalbrainlab.org')
+one = ONE(base_url='https://alyx.internationalbrainlab.org')
 
 
 TASK_PROTOCOL = 'SWC_Histology_Serial2P_v0.0.1'
@@ -183,7 +180,7 @@ ses_ = {
     'users': ['steven.west'],
     'location': 'serial2P_01',
     'procedures': ['Histology'],
-    'lab': 'mrsicflogellab',
+    'lab': lab,
     # 'project': project['name'],
     # 'type': 'Experiment',
     'task_protocol': TASK_PROTOCOL,
