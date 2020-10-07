@@ -25,7 +25,7 @@ Examples:
 """
 import logging
 import sys
-import datetime
+from datetime import datetime, timedelta
 from inspect import getmembers, isfunction
 from functools import reduce
 from collections.abc import Sized
@@ -124,6 +124,7 @@ class TaskQC(base.QC):
 
 
 class HabituationQC(TaskQC):
+
     def compute(self):
         """Compute and store the QC metrics
         Runs the QC on the session and stores a map of the metrics for each datapoint for each
@@ -144,50 +145,34 @@ class HabituationQC(TaskQC):
         metrics[check] = data['rewardVolume']
         passed[check] = metrics[check] == 3.0
 
-        # Check number of trials greater than previous session
-        # NB: Requires ONE
+        # Check session durations are increasing in steps >= 12 minutes
         check = 'habituation_time'
-        if not self.one:
+        if not self.one or not self.session_path:
             self.log.warning('unable to determine session trials without ONE')
             metrics[check] = passed[check] = None
         else:
-            assert self.session_path is not None
             subject, session_date = self.session_path.parts[-3:-1]
-            ###
+            # compute from the date specified
+            date_minus_week = (
+                datetime.strptime(session_date, '%Y-%m-%d') - timedelta(days=7)
+            ).strftime('%Y-%m-%d')
+            sessions = self.one.alyx.rest('sessions', 'list', subject=subject,
+                                          date_range=[date_minus_week, session_date],
+                                          task_protocol='habituation')
+            # Remove the current session if already registered
+            if sessions[0]['start_time'].startswith(session_date):
+                sessions = sessions[1:]
+            metric = ([0, data['intervals'][-1, 1] - data['intervals'][0, 0]] +
+                      [(datetime.fromisoformat(x['end_time']) -
+                        datetime.fromisoformat(x['start_time'])).total_seconds() / 60
+                       for x in [self.one.alyx.get(s['url']) for s in sessions]])
 
-            if date is None:
-                # compute from yesterday
-                latest_sess = (datetime.date.today() - datetime.timedelta(days=1)).strftime(
-                    "%Y-%m-%d")
-                latest_minus_week = (datetime.date.today() -
-                                     datetime.timedelta(days=8)).strftime("%Y-%m-%d")
-            else:
-                # compute from the date specified
-                specified_date = datetime.datetime.strptime(date, '%Y-%m-%d')
-                latest_minus_week = (specified_date - datetime.timedelta(days=7)).strftime(
-                    "%Y-%m-%d")
-                latest_sess = date
-
-            sessions = one.alyx.rest('sessions', 'list', subject=subj,
-                                     date_range=[latest_minus_week,
-                                                 latest_sess], dataset_types='trials.intervals')
-            ###
-            # session_date = datetime.date.fromisoformat(session_date)
-            # det = self.one.get_details(self.eid)
-            # _, det = self.one.search(subject=subject, task_protocol='habituation', details=True)
-            query = (f'start_time__lte,{session_date},'
-                     f'task_protocol__contains,habituation,'
-                     f'subject__nickname,{subject}')
-            det = self.one.alyx.rest('sessions', 'list', django=query)[0]
-            prev_n_trials = None
-            for d in det:
-                # WARNING: Assumes eids are returned in descending date order
-                if datetime.datetime.fromisoformat(d['start_time']).date() < session_date:
-                    prev_eid = d['url'][-36:]
-                    prev_n_trials = self.one.alyx.get('sessions', uuid=prev_eid)['n_trials']
-                    break
-            metric = np.array([prev_n_trials or 0, data['intervals'].shape[0]])
-            passed[check] = np.diff()  # TODO
+            # The duration from raw trial data
+            # duration = map(float, self.extractor.raw_data[-1]['elapsed_time'].split(':'))
+            # duration = timedelta(**dict(zip(('hours', 'minutes', 'seconds'),
+            #                                 duration))).total_seconds() / 60
+            metrics[check] = np.array(metric)
+            passed[check] = np.diff(metric) >= 12
 
         # Check event orders: trial_start < stim on < stim center < feedback < stim off
         check = 'trial_event_sequence'
