@@ -9,6 +9,7 @@ International Brain Lab, 2020
 """
 from warnings import warn, catch_warnings
 import numpy as np
+from numpy.linalg.linalg import LinAlgError
 import pandas as pd
 from brainbox.processing import bincount2D
 from sklearn.linear_model import PoissonRegressor
@@ -514,7 +515,10 @@ class NeuralGLM:
                            method='trust-ncg', jac=d_neglog, hess=dd_neglog)
             if retvar:
                 hess = dd_neglog(res.x, dm, cellbinned)
-                wvar = np.diag(np.linalg.inv(hess))
+                try:
+                    wvar = np.diag(np.linalg.inv(hess))
+                except LinAlgError:
+                    wvar = np.ones_like(np.diag(hess)) * np.inf
             else:
                 wvar = np.ones((res.x.shape[0], res.x.shape[0])) * np.nan
             coefs.at[cell] = res.x[1:]
@@ -616,6 +620,7 @@ class NeuralGLM:
                 cellcovars = {cell: tuple(singlepar_scores.loc[cell].iloc[:i].index)
                               for cell in fitcells}
                 covarsets = [frozenset(cov) for cov in cellcovars.values()]
+                retvar = True if i == len(self.covar) else False
                 # Iterate through unique unordered combinations of covariates
                 iscores = []
                 progressdesc = f'Fitting covariate sets for {i} parameter groups'
@@ -630,12 +635,14 @@ class NeuralGLM:
                     if method == 'sklearn':
                         coefs, intercepts, variances = self._fit_sklearn(traindm, trainbinned,
                                                                          alpha, cells=currcells,
-                                                                         retvar=False,
+                                                                         retvar=retvar,
                                                                          noncovwarn=False)
                     else:
-                        coefs, intercepts, variances = self._fit_minimize(traindm, trainbinned,
+                        biasdm = np.pad(traindm.copy(), ((0, 0), (1, 0)), 'constant',
+                                        constant_values=1)
+                        coefs, intercepts, variances = self._fit_minimize(biasdm, trainbinned,
                                                                           cells=currcells,
-                                                                          retvar=False)
+                                                                          retvar=retvar)
                     iscores.append(self._score_submodel(coefs, intercepts, testdm, testbinned))
                 submodel_scores[f'{i}cov'] = pd.concat(iscores).sort_index()
             self.submodel_scores = submodel_scores
