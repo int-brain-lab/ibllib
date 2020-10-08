@@ -11,7 +11,7 @@ import ibllib.atlas as atlas
 from ibllib.ephys.spikes import probes_description as extract_probes
 from ibllib.dsp.utils import fcn_cosine
 from ibllib.ephys.neuropixel import TIP_SIZE_UM
-from ibllib.qc import base2
+from ibllib.qc import base
 
 
 _logger = logging.getLogger('ibllib')
@@ -230,7 +230,7 @@ def register_track(probe_id, picks=None, one=None, overwrite=False):
                  }
         brain_locations = None
         # Update the insertion qc to CRITICAL
-        hist_qc = base2.QC(probe_id, one=one, endpoint='insertions')
+        hist_qc = base.QC(probe_id, one=one, endpoint='insertions')
         hist_qc.update_extended_qc({'_tracing_exists': 0})
         hist_qc.update('CRITICAL', namespace='tracing')
 
@@ -242,7 +242,7 @@ def register_track(probe_id, picks=None, one=None, overwrite=False):
                                    data={'xyz_picks': np.int32(picks * 1e6).tolist()})
 
         # Update the insertion qc to register tracing exits
-        hist_qc = base2.QC(probe_id, one=one, endpoint='insertions')
+        hist_qc = base.QC(probe_id, one=one, endpoint='insertions')
         hist_qc.update_extended_qc({'_tracing_exists': 1})
         # 2) patch or create the trajectory coming from histology track
         tdict = create_trajectory_dict(probe_id, insertion_histology, provenance='Histology track')
