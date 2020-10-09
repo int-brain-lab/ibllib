@@ -210,7 +210,7 @@ def get_brain_regions(xyz, channels_positions=SITES_COORDINATES, brain_atlas=bra
     return brain_regions, insertion
 
 
-def register_track(probe_id, picks=None, one=None, overwrite=False):
+def register_track(probe_id, picks=None, one=None, overwrite=False, channels=True):
     """
     Register the user picks to a probe in Alyx
     Here we update Alyx models on the database in 3 steps
@@ -262,12 +262,15 @@ def register_track(probe_id, picks=None, one=None, overwrite=False):
     if brain_locations is None:
         return brain_locations, None
     # 3) create channel locations
-    channel_dict = create_channel_dict(hist_traj, brain_locations)
-    one.alyx.rest('channels', 'create', data=channel_dict)
+    if channels:
+        channel_dict = create_channel_dict(hist_traj, brain_locations)
+        one.alyx.rest('channels', 'create', data=channel_dict)
+
     return brain_locations, insertion_histology
 
 
-def register_aligned_track(probe_id, insertion, brain_locations, one=None, overwrite=False):
+def register_aligned_track(probe_id, insertion, brain_locations, one=None, overwrite=False,
+                           channels=True):
     """
     Register ephys aligned trajectory and channel locations to Alyx
     Here we update Alyx models on the database in 2 steps
@@ -289,8 +292,9 @@ def register_aligned_track(probe_id, insertion, brain_locations, one=None, overw
                                   'If you want to overwrite, set overwrite=True.')
     hist_traj = one.alyx.rest('trajectories', 'create', data=tdict)
 
-    channel_dict = create_channel_dict(hist_traj, brain_locations)
-    one.alyx.rest('channels', 'create', data=channel_dict)
+    if channels:
+        channel_dict = create_channel_dict(hist_traj, brain_locations)
+        one.alyx.rest('channels', 'create', data=channel_dict)
 
 
 def create_trajectory_dict(probe_id, insertion, provenance):

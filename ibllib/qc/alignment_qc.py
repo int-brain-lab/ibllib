@@ -27,20 +27,28 @@ class AlignmentQC(base.QC):
         self.brain_atlas = brain_atlas or AllenAtlas(25)
 
     def load_data(self, prev_alignments=None, xyz_picks=None, depths=None, cluster_chns=None):
-        self.alignments = prev_alignments or \
-                          self.one.alyx.rest('trajectories', 'list', probe_insertion=self.eid,
-                                             provenance='Ephys aligned histology track' )[0]['json']
+        if not self.alignments:
+            self.alignments = self.one.alyx.rest('trajectories', 'list',
+                                                 probe_insertion=self.eid, provenance=
+                                                 'Ephys aligned histology track')[0]['json']
+        else:
+            self.alignments = prev_alignments
 
-        self.xyz_picks = xyz_picks or \
-                         np.array(self.one.alyx.rest('insertions', 'list', id=self.eid)
-                                  [0]['json']['xyz_picks'])/1e6
+        if not np.any(xyz_picks):
+            self.xyz_picks = np.array(self.one.alyx.rest('insertions', 'read', id=self.eid)
+                                      ['json']['xyz_picks'])/1e6
+        else:
+            self.xyz_picks=xyz_picks
 
-        self.depths = depths or SITES_COORDINATES[:, 1]
+        if not np.any(depths):
+            self.depths = SITES_COORDINATES[:, 1]
+        else:
+            self.depths = depths
 
-        if not cluster_chns:
-            ins = self.one.alyx.rest('insertions', 'list', id = '/' + self.eid)
-            session_id = ins[0]['session']
-            probe_name = ins[0]['name']
+        if not np.any(cluster_chns):
+            ins = self.one.alyx.rest('insertions', 'read', id= self.eid)
+            session_id = ins['session']
+            probe_name = ins['name']
             _ = self.one.load(session_id, dataset_types='clusters.channels', download_only=True)
             self.cluster_chns = np.load(self.one.path_from_eid(session_id).
                                         joinpath('alf', probe_name, 'clusters.channels.npy'))
@@ -55,7 +63,7 @@ class AlignmentQC(base.QC):
         """
         if self.alignments is None:
             self.load_data()
-        self.log.info(f"Session {self.session_path}: Running QC on behavior data...")
+        self.log.info(f"Insertion {self.eid}: Running QC on alignment data...")
         self.sim_matrix = self.compute_similarity_matrix()
         return
 
