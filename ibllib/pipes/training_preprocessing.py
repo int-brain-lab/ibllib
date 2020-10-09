@@ -6,7 +6,7 @@ from ibllib.io import ffmpeg, raw_data_loaders as rawio
 from ibllib.io.extractors import (
     habituation_trials, training_trials, biased_trials, training_wheel, training_audio
 )
-from ibllib.qc.task_metrics import TaskQC
+from ibllib.qc.task_metrics import TaskQC, HabituationQC
 from ibllib.qc.task_extractors import TaskQCExtractor
 from oneibl.registration import register_session_raw_data
 
@@ -31,15 +31,20 @@ class TrainingTrials(tasks.Task):
         Extracts an iblrig training session
         """
         trials, wheel, output_files = extract_training(self.session_path, save=True)
+
         # Run the task QC
-        qc = TaskQC(self.session_path, one=self.one)
-        qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one)
-        qc.extractor.data = trials
-        if wheel:  # Update wheel data
+        if rawio.get_session_extractor_type(self.session_path) == 'habituation':
+            qc = HabituationQC(self.session_path, one=self.one)
+        else:  # Update wheel data
+            qc = TaskQC(self.session_path, one=self.one)
             ts, pos, *_, first_moves = wheel
             qc.extractor.data.update(
                 {'wheel_timestamps': ts, 'wheel_position': pos, 'firstMovement_times': first_moves}
             )
+
+        # Compile task data for QC
+        qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one)
+        qc.extractor.data = trials
         qc.extractor.extract_data(partial=True)  # Extract the rest of the data
 
         # Aggregate and update Alyx QC fields
