@@ -39,7 +39,7 @@ class TestAtlasSlicesConversion(unittest.TestCase):
         self.assertTrue(np.allclose(self.ba.bc.xyz2i(np.array([0, 0, 0]), round=False),
                                     ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / 25))
 
-    def test_ccf_xyz(self):
+    def test_slice(self):
         nx, ny, nz = self.ba.bc.nxyz
         self.assertTrue(self.ba.slice(axis=0, coordinate=0).shape == (ny, nz))
         self.assertTrue(self.ba.slice(axis=1, coordinate=0).shape == (nx, nz))
