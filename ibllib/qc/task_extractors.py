@@ -34,7 +34,7 @@ class TaskQCExtractor(object):
         self.data = None
         self.settings = None
         self.raw_data = None
-        self.frame_ttls = self.audio_ttls = None
+        self.frame_ttls = self.audio_ttls = self.bpod_ttls = None
         self.type = None
         self.wheel_encoding = None
         self.bpod_only = bpod_only
@@ -102,8 +102,8 @@ class TaskQCExtractor(object):
                 mask = sync['channels'] == chmap[name]
                 return dict(zip(keys, (sync[k][mask] for k in keys)))
 
-            ttls = [channel_events(ch) for ch in ('frame2ttl', 'audio')]
-        self.frame_ttls, self.audio_ttls = ttls
+            ttls = [channel_events(ch) for ch in ('frame2ttl', 'audio', 'bpod')]
+        self.frame_ttls, self.audio_ttls, self.bpod_ttls = ttls
 
     def extract_data(self, partial=False):
         """Extracts and loads behaviour data for QC
