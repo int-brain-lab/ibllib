@@ -170,8 +170,12 @@ class TaskQCExtractor(object):
                 # These fields have to be re-synced
                 sync_fields = ['stimOnTrigger_times', 'stimOffTrigger_times', 'stimFreeze_times',
                                'stimFreezeTrigger_times', 'errorCueTrigger_times', 'itiIn_times']
+                bpod_fields = ['probabilityLeft', 'contrastLeft', 'contrastRight', 'position',
+                               'contrast', 'quiescence', 'phase']
                 # build trials output
                 data.update({k: bpod2fpga(data[k][ibpod]) for k in sync_fields})
+                data.update({k: data[k][ibpod] for k in bpod_fields})
+
         elif self.type == 'habituation':
             data['position'] = np.array([t['position'] for t in self.raw_data])
             data['phase'] = np.array([t['stim_phase'] for t in self.raw_data])
