@@ -21,7 +21,9 @@ from collections.abc import Iterable, Mapping
 from oneibl.one import ONE
 from brainbox.core import Bunch
 
-__all__ = ['ref2eid', 'ref2dict', 'ref2path', 'eid2path', 'eid2ref', 'path2ref', 'ref2dj']
+__all__ = [
+    'ref2eid', 'ref2dict', 'ref2path', 'eid2path', 'eid2ref', 'path2ref', 'ref2dj', 'is_exp_ref'
+]
 
 
 def parse_values(func):

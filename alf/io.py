@@ -19,6 +19,7 @@ import pandas as pd
 from brainbox.core import Bunch
 from brainbox.io import parquet
 from ibllib.io import jsonable
+from ibllib.exceptions import ALFObjectNotFound
 from . import files
 
 _logger = logging.getLogger('ibllib')
@@ -197,7 +198,9 @@ def _ls(alfpath, object=None, **kwargs):
     :return: lists of pathlib.Path for each file and list of corresponding attributes
     """
     alfpath = Path(alfpath)
-    if alfpath.is_dir():
+    if not alfpath.exists():
+        files_alf = None
+    elif alfpath.is_dir():
         if object is None:
             # List all ALF files
             files_alf, attributes = files.filter_by(alfpath)
@@ -211,7 +214,7 @@ def _ls(alfpath, object=None, **kwargs):
     # raise error if no files found
     if not files_alf:
         err_str = 'object "%s" ' % object if object else 'ALF files'
-        raise FileNotFoundError('No {} found in {}'.format(err_str, str(alfpath)))
+        raise ALFObjectNotFound(f'No {err_str} found in {alfpath}')
 
     return [alfpath.joinpath(f) for f in files_alf], attributes
 

@@ -30,12 +30,19 @@ class AlyxSubjectNotFound(IblError):
 
 
 class ALFMultipleObjectsFound(IblError):
-    explanation = 'The search object was not found in database'
+    explanation = ('The search object was not found.  ALF names have the pattern '
+                   '(_namespace_)object.attribute(_timescale).extension, e.g. for the file '
+                   '"_ibl_trials.intervals.npy" the object is "trials"')
+
+
+class ALFMultipleCollectionsFound(IblError):
+    explanation = ('The matching object/file(s) belong to more than one collection.  '
+                   'ALF names have the pattern '
+                   'collection/(_namespace_)object.attribute(_timescale).extension, e.g. for the '
+                   'file "alf/probe01/spikes.times.npy" the collection is "alf/probe01"')
 
 
 class ALFObjectNotFound(IblError):
-    explanation = 'The ALF object was not found in database'
-
-
-# class AlyxSubjectNotFound(IblError):
-#     explanation = 'The subject was not found in Alyx database'
+    explanation = ('The ALF object was not found.  This may occur if the object or namespace or '
+                   'incorrectly formatted e.g. the object "_ibl_trials.intervals.npy" would be '
+                   'found with the filters `object="trials", namespace="ibl"`')
