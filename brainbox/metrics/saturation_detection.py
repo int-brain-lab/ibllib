@@ -5,7 +5,7 @@ from oneibl.one import ONE
 from pathlib import Path
 
 
-def check_for_saturation(eid):
+def check_for_quiet_spike_periods(eid):
     '''
     This functions reads in spikes for a given session,
     bins them into time bins and computes for how many of them,
