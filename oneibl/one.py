@@ -1,5 +1,6 @@
 import abc
 import concurrent.futures
+import json
 import logging
 import os
 from pathlib import Path, PurePath
@@ -180,6 +181,7 @@ class OneAbstract(abc.ABC):
         # if empty in parameter file, do not allow and set default
         if not cache_dir:
             cache_dir = str(PurePath(Path.home(), "Downloads", "FlatIron"))
+        assert cache_dir
         return cache_dir
 
     def _make_dataclass_offline(self, eid, dataset_types=None, cache_dir=None, **kwargs):
@@ -854,6 +856,65 @@ class OneAlyx(OneAbstract):
             assert (all(map(lambda t: t == np.int64, typs)))
             # if this gets too big, look into saving only when destroying the ONE object
             parquet.save(self._cache_file, self._cache)
+
+    def download_raw_partial(self, url_cbin, url_ch, first_chunk=0, last_chunk=0):
+        assert url_cbin.endswith('.cbin')
+        assert url_ch.endswith('.ch')
+
+        relpath = Path(url_cbin.replace(self._par.HTTP_DATA_SERVER, '.')).parents[0]
+        target_dir = Path(self._get_cache_dir(None), relpath)
+        Path(target_dir).mkdir(parents=True, exist_ok=True)
+
+        # First, download the .ch file.
+        ch_local_path = Path(wc.http_download_file(
+            url_ch,
+            username=self._par.HTTP_DATA_SERVER_LOGIN,
+            password=self._par.HTTP_DATA_SERVER_PWD,
+            cache_dir=target_dir, clobber=True, offline=False, return_md5=False))
+        ch_local_path = remove_uuid_file(ch_local_path)
+        ch_local_path = ch_local_path.rename(ch_local_path.with_suffix('.chopped.ch'))
+        assert ch_local_path.exists()
+
+        # Load the .ch file.
+        with open(ch_local_path, 'r') as f:
+            cmeta = json.load(f)
+
+        # Get the first byte and number of bytes to download.
+        i0 = cmeta['chunk_bounds'][first_chunk]
+        cmeta['chunk_bounds'] = cmeta['chunk_bounds'][first_chunk:last_chunk + 2]
+        cmeta['chunk_bounds'] = [_ - i0 for _ in cmeta['chunk_bounds']]
+        assert len(cmeta['chunk_bounds']) >= 2
+        assert cmeta['chunk_bounds'][0] == 0
+
+        first_byte = cmeta['chunk_offsets'][first_chunk]
+        cmeta['chunk_offsets'] = cmeta['chunk_offsets'][first_chunk:last_chunk + 2]
+        cmeta['chunk_offsets'] = [_ - first_byte for _ in cmeta['chunk_offsets']]
+        assert len(cmeta['chunk_offsets']) >= 2
+        assert cmeta['chunk_offsets'][0] == 0
+        n_bytes = cmeta['chunk_offsets'][-1]
+        assert n_bytes > 0
+
+        # Save the chopped chunk bounds and ossets.
+        cmeta['sha1_compressed'] = None
+        cmeta['sha1_uncompressed'] = None
+        cmeta['chopped'] = True
+        with open(ch_local_path, 'w') as f:
+            json.dump(cmeta, f, indent=2, sort_keys=True)
+
+        # Download the requested chunks
+        cbin_local_path = wc.http_download_file(
+            url_cbin,
+            username=self._par.HTTP_DATA_SERVER_LOGIN,
+            password=self._par.HTTP_DATA_SERVER_PWD,
+            cache_dir=target_dir, clobber=True, offline=False, return_md5=False,
+            chunks=(first_byte, n_bytes))
+        cbin_local_path = remove_uuid_file(cbin_local_path)
+        cbin_local_path = cbin_local_path.rename(cbin_local_path.with_suffix('.chopped.cbin'))
+        assert cbin_local_path.exists()
+
+        import mtscomp
+        reader = mtscomp.decompress(cbin_local_path, cmeta=ch_local_path)
+        return reader[:]
 
 
 def _validate_date_range(date_range):
