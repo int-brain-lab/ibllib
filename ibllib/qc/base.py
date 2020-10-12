@@ -20,10 +20,10 @@ CRITERIA = {'CRITICAL': 4,
 class QC:
     """A base class for data quality control"""
     def __init__(self, session, one=None, log=None):
-        self.one = one or ONE()
+        self.one = one
         self.log = log or logging.getLogger('ibllib')
         self._set_eid_or_path(session)
-
+        self.eid = None
         self.outcome = "NOT_SET"
 
     @abstractmethod
@@ -52,9 +52,10 @@ class QC:
             self.session_path = self.one.path_from_eid(self.eid)
         elif is_session_path(session_path_or_eid):
             self.session_path = Path(session_path_or_eid)
-            self.eid = self.one.eid_from_path(self.session_path)
-            if not self.eid:
-                self.log.warning('Failed to determine eID from session path')
+            if self.one is not None:
+                self.eid = self.one.eid_from_path(self.session_path)
+                if not self.eid:
+                    self.log.warning('Failed to determine eID from session path')
         else:
             self.log.error('Cannot run QC: an experiment uuid or session path is required')
             raise ValueError("'session' must be a valid session path or uuid")

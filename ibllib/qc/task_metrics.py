@@ -61,14 +61,16 @@ class TaskQC(base.QC):
         self.extractor = TaskQCExtractor(
             self.session_path, one=self.one, download_data=download_data, bpod_only=bpod_only)
 
-    def compute(self):
+    def compute(self, **kwargs):
         """Compute and store the QC metrics
         Runs the QC on the session and stores a map of the metrics for each datapoint for each
         test, and a map of which datapoints passed for each test
+        :param bpod_only (False)
+        :param download_data (True)
         :return:
         """
         if self.extractor is None:
-            self.load_data()
+            self.load_data(**kwargs)
         self.log.info(f"Session {self.session_path}: Running QC on behavior data...")
         self.metrics, self.passed = get_bpodqc_metrics_frame(
             self.extractor.data,
@@ -80,9 +82,15 @@ class TaskQC(base.QC):
         )
         return
 
-    def run(self, update=False):
+    def run(self, update=False, **kwargs):
+        """
+        :param update: if True, updates the session QC fields on Alyx
+        :param bpod_only (False)
+        :param download_data (True)
+        :return:
+        """
         if self.metrics is None:
-            self.compute()
+            self.compute(**kwargs)
         self.outcome, results, _ = self.compute_session_status()
         if update:
             self.update_extended_qc(results)
