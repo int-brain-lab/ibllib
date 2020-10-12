@@ -269,7 +269,7 @@ def register_track(probe_id, picks=None, one=None, overwrite=False, channels=Tru
     return brain_locations, insertion_histology
 
 
-def register_aligned_track(probe_id, insertion, brain_locations, one=None, overwrite=False,
+def register_aligned_track(probe_id, xyz_channels, chn_coords=None, one=None, overwrite=False,
                            channels=True):
     """
     Register ephys aligned trajectory and channel locations to Alyx
@@ -278,6 +278,9 @@ def register_aligned_track(probe_id, insertion, brain_locations, one=None, overw
     2) Channel locations are set to the trajectory
     """
     assert one
+    chn_coords = chn_coords or SITES_COORDINATES
+
+    insertion = atlas.Insertion.from_track(xyz_channels, brain_atlas)
     tdict = create_trajectory_dict(probe_id, insertion, provenance='Ephys aligned histology track')
 
     hist_traj = one.alyx.rest('trajectories', 'list',
@@ -293,7 +296,12 @@ def register_aligned_track(probe_id, insertion, brain_locations, one=None, overw
     hist_traj = one.alyx.rest('trajectories', 'create', data=tdict)
 
     if channels:
-        channel_dict = create_channel_dict(hist_traj, brain_locations)
+        brain_regions = brain_atlas.regions.get(brain_atlas.get_labels(xyz_channels))
+        brain_regions['xyz'] = xyz_channels
+        brain_regions['lateral'] = chn_coords[:, 0]
+        brain_regions['axial'] = chn_coords[:, 1]
+        assert np.unique([len(brain_regions[k]) for k in brain_regions]).size == 1
+        channel_dict = create_channel_dict(hist_traj, brain_regions)
         one.alyx.rest('channels', 'create', data=channel_dict)
 
 

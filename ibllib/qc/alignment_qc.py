@@ -1,5 +1,6 @@
 import logging
 from ibllib.atlas import AllenAtlas, regions_from_allen_csv
+from ibllib.pipes import histology
 from ibllib.ephys.neuropixel import SITES_COORDINATES
 import numpy as np
 from ibllib.pipes.ephys_alignment import EphysAlignment
@@ -10,7 +11,7 @@ CRITERIA = {"PASS": 0.8}
 
 
 class AlignmentQC(base.QC):
-    def __init__(self, probe_id, one=None, brain_atlas=None):
+    def __init__(self, probe_id, one=None, brain_atlas=None, override=True):
         super().__init__(probe_id, one=one, log=_log, endpoint='insertions')
 
         # Data
@@ -22,12 +23,13 @@ class AlignmentQC(base.QC):
         # Metrics and passed trials
         self.sim_matrix = None
         self.criteria = CRITERIA
+        self.override = override
 
         # Get the brain atlas
         self.brain_atlas = brain_atlas or AllenAtlas(25)
 
     def load_data(self, prev_alignments=None, xyz_picks=None, depths=None, cluster_chns=None):
-        if not self.alignments:
+        if not np.any(prev_alignments):
             self.alignments = self.one.alyx.rest('trajectories', 'list',
                                                  probe_insertion=self.eid, provenance=
                                                  'Ephys aligned histology track')[0]['json']
@@ -38,7 +40,7 @@ class AlignmentQC(base.QC):
             self.xyz_picks = np.array(self.one.alyx.rest('insertions', 'read', id=self.eid)
                                       ['json']['xyz_picks'])/1e6
         else:
-            self.xyz_picks=xyz_picks
+            self.xyz_picks = xyz_picks
 
         if not np.any(depths):
             self.depths = SITES_COORDINATES[:, 1]
@@ -67,13 +69,21 @@ class AlignmentQC(base.QC):
         self.sim_matrix = self.compute_similarity_matrix()
         return
 
-    def run(self, update=False):
+    def run(self, update=False, upload=False):
         if self.sim_matrix is None:
             self.compute()
         self.outcome, results = self.compute_alignment_status()
+
         if update:
             self.update_extended_qc(results)
-            self.update(self.outcome, 'alignment')
+            self.update(self.outcome, 'alignment', override=self.override)
+
+        if upload:
+            if results['_alignment_stored'] != self.align_keys_sorted[0]:
+                self.upload_alyx_channels(results['_alignment_stored'])
+
+            self.upload_to_flatiron
+
         return self.outcome, results
 
     def compute_similarity_matrix(self):
@@ -129,18 +139,9 @@ class AlignmentQC(base.QC):
                    '_alignment_number': self.sim_matrix.shape[0]}
 
         if max_sim > CRITERIA['PASS']:
-            if self.sim_matrix.shape[0] > 2:
-                location = np.where(self.sim_matrix == max_sim)
-
-                if not np.any(location == (self.sim_matrix.shape[0] - 1)):
-                    # in this case the one if the ones that align are not the latest uploaded
-                    # and so we need to reassign the channels that are stored on alyx
-                    results.update({'_alignment_stored': self.align_keys_sorted[np.max(location)]})
-                    results.update({'_alignment_resolved': 1})
-                else:
-                    results.update({'_alignment_stored': self.align_keys_sorted[0]})
-                    results.update({'_alignment_resolved': 1})
-
+            location = np.where(self.sim_matrix == max_sim)
+            results.update({'_alignment_stored': self.align_keys_sorted[np.min(location)]})
+            results.update({'_alignment_resolved': 1})
             outcome = 'PASS'
 
         else:
@@ -150,3 +151,40 @@ class AlignmentQC(base.QC):
             outcome = 'WARNING'
 
         return outcome, results
+
+    def upload_alyx_channels(self, alignment_key):
+
+
+        feature = np.array(self.alignments[alignment_key][0])
+        track = np.array(self.alignments[alignment_key][1])
+        ephysalign = EphysAlignment(self.xyz_picks, self.depths,
+                                    track_prev=track,
+                                    feature_prev=feature,
+                                    brain_atlas=self.brain_atlas)
+
+        channels_mlapdv = ephysalign.get_channel_locations(feature, track)
+        channels_brainID = ephysalign.get_brain_locations(channels_mlapdv)['id']
+
+        # Find cluster
+        r = regions_from_allen_csv()
+        clusters_mlapdv = channels_mlapdv[self.cluster_chns]
+        clusters_brainID = channels_brainID[self.cluster_chns]
+        clusters_brainAcro = r.get(ids=clusters_brainID).acronym
+
+
+        # Need to clean up on the alyx as well
+        if alignment_key != self.align_keys_sorted[0]:
+            histology.register_aligned_track(self.eid, channels_mlapdv,
+                                             chn_coords=SITES_COORDINATES, one=self.one,
+                                             overwrite=True)
+
+            ephys_traj = self.one.alyx.rest('trajectories', 'list', probe_insertion=self.eid,
+                                            provenance='Ephys aligned histology track')
+            patch_dict = {'json': self.alignments}
+            self.one.alyx.rest('trajectories', 'partial_update', id=ephys_traj[0]['id'],
+                               data=patch_dict)
+
+
+
+
+
