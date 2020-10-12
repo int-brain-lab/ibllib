@@ -4,7 +4,6 @@ from pathlib import Path
 
 import numpy as np
 
-from oneibl.one import ONE
 from alf.io import is_session_path, is_uuid_string
 
 

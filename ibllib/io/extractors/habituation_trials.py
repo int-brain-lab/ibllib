@@ -33,14 +33,14 @@ class StimCenterTimes(BaseBpodTrialsExtractor):
         """
         # Get all stim_sync events detected
         ttls = [raw.get_port_events(tr, 'BNC1') for tr in self.bpod_trials]
-        stim_center_triggers, _ = (StimCenterTriggerTimes(self.session_path)
-                                .extract(self.bpod_trials, self.settings))
+        stim_center_triggers, _ = StimCenterTriggerTimes(
+            self.session_path).extract(self.bpod_trials, self.settings)
 
         # StimCenter times
         stim_center_times = np.full(stim_center_triggers.shape, np.nan)
         for i, (sync, last) in enumerate(zip(ttls, stim_center_triggers)):
-            """We expect there to be 3 pulses per trial; if this is the case, stim center will 
-            be the third pulse. If any pulses are missing, we can only be confident of the correct 
+            """We expect there to be 3 pulses per trial; if this is the case, stim center will
+            be the third pulse. If any pulses are missing, we can only be confident of the correct
             one if exactly one pulse occurs after the stim center trigger"""
             if len(sync) == 3 or (len(sync) > 0 and sum(pulse > last for pulse in sync) == 1):
                 stim_center_times[i] = sync[-1]
