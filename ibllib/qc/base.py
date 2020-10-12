@@ -29,7 +29,6 @@ class QC:
         self.one = ONE() if 'one' not in kwargs else kwargs['one']
         self.log = logging.getLogger('ibllib') if 'log' not in kwargs else kwargs['log']
         self._set_eid_or_path(session)
-        self.eid = None
         self.outcome = "NOT_SET"
 
     @abstractmethod
@@ -52,6 +51,7 @@ class QC:
         :param session_path_or_eid:
         :return:
         """
+        self.eid = None
         if is_uuid_string(str(session_path_or_eid)):
             self.eid = session_path_or_eid
             # Try to set session_path if data is found locally
