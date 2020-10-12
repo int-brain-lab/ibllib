@@ -78,7 +78,7 @@ class AlignmentQC(base.QC):
             self.update_extended_qc(results)
             self.update(self.outcome, 'alignment', override=self.override)
 
-        if upload:
+        if results['_alignment_resolved'] == 1 and upload:
             if results['_alignment_stored'] != self.align_keys_sorted[0]:
                 self.upload_alyx_channels(results['_alignment_stored'])
 
@@ -153,7 +153,6 @@ class AlignmentQC(base.QC):
         return outcome, results
 
     def upload_alyx_channels(self, alignment_key):
-
 
         feature = np.array(self.alignments[alignment_key][0])
         track = np.array(self.alignments[alignment_key][1])

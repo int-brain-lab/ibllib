@@ -71,6 +71,11 @@ class QC:
         target_obj = self.one.alyx.rest(self.endpoint, 'read', id=endpoint_id) or None
         if target_obj:
             self.eid = endpoint_id
+            json_qc_field = target_obj.get('json', {'temp': 0}).get('qc', None)
+            if not json_qc_field:
+                self.one.alyx.json_field_update(endpoint=self.endpoint, uuid=self.eid,
+                                                field_name='json', data={'qc': 'NOT_SET',
+                                                                         'extended_qc': {}})
         else:
             self.log.error('Cannot run QC: endpoint id is not recognised')
             raise ValueError("'endpoint_id' must be a valid uuid")
