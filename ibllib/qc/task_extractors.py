@@ -10,7 +10,6 @@ from ibllib.io.extractors.training_trials import (
 )
 import ibllib.io.extractors.habituation_trials as habit
 from ibllib.io.extractors.training_wheel import Wheel
-from oneibl.one import ONE
 from ibllib.io.extractors.ephys_fpga import (
     _get_pregenerated_events, _get_main_probe_sync, bpod_fpga_sync, FpgaTrials
 )
