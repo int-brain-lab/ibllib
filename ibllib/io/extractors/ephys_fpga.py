@@ -604,6 +604,7 @@ class FpgaTrials(BaseExtractor):
             sync = sync or _sync
             chmap = chmap or _chmap
         bpod_raw = raw_data_loaders.load_data(self.session_path)
+        assert bpod_raw is not None, "No task trials data in raw_behavior_data - Exit"
         tmax = bpod_raw[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
         bpod_trials, _ = biased_trials.extract_all(
             session_path=self.session_path, save=False, bpod_trials=bpod_raw)
