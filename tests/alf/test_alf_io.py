@@ -8,6 +8,7 @@ import uuid
 import numpy as np
 
 import alf.io
+from ibllib.exceptions import ALFObjectNotFound
 
 
 class TestAlfBunch(unittest.TestCase):
@@ -92,7 +93,7 @@ class TestsAlfPartsFilters(unittest.TestCase):
         # Test load with extra filter
         b = alf.io.load_object(self.tmpdir, 'neuveux', timescale='toto', short_keys=True)
         self.assertCountEqual(list(b.keys()), ['fifi_toto', 'riri_toto'])
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaises(ALFObjectNotFound):
             alf.io.load_object(self.tmpdir, 'neuveux', timescale='toto', namespace='baz')
 
         # also test file filters through wildcard
@@ -201,7 +202,7 @@ class TestsAlf(unittest.TestCase):
         self.assertTrue(all([obj[o].shape == (5,) for o in obj]))
         # providing directory without object will return all ALF files
         with self.assertRaises(ValueError) as context:
-            obj = alf.io.load_object(self.tmpdir)
+            alf.io.load_object(self.tmpdir)
         self.assertTrue('object name should be provided too' in str(context.exception))
 
     def test_save_npy(self):

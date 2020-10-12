@@ -231,7 +231,7 @@ def exists(alfpath, object, attributes=None, **kwargs):
     # if the object is not found, return False
     try:
         _, attributes_found = _ls(alfpath, object, **kwargs)
-    except FileNotFoundError:
+    except (FileNotFoundError, ALFObjectNotFound):
         return False
 
     # if object found and no attribute provided, True
