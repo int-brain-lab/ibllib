@@ -313,7 +313,9 @@ class TestPipesMisc(unittest.TestCase):
             eid,
             one=one,
             model='3A',
-            labels=['probe00', 'probe01'])
+            labels=['probe00', 'probe01'],
+            force=True
+        )
         # Verify it's been inserted
         alyx_insertion = one.alyx.rest('insertions', 'list',
                                        session=eid)
