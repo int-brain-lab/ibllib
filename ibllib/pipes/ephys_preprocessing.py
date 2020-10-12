@@ -232,6 +232,7 @@ class EphysMtscomp(tasks.Task):
                 else:
                     _logger.info(f"Compressing binary file {bin_file}")
                     out_files.append(sr.compress_file(keep_original=False))
+                    out_files.append(bin_file.with_suffix('.ch'))
         return out_files
 
 
