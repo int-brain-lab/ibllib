@@ -341,6 +341,28 @@ def check_stimOff_itiIn_delays(data, **_):
     return metric, passed
 
 
+def check_iti_delays(data, **_):
+    """ Check that the period of gray screen between stim off and the start of the next trial is
+    0.5s +/- 50%.
+
+    Metric: M = stimOff (n) - trialStart (n+1) - 0.5
+    Criterion: |M| < 0.25 s
+    Units: seconds [s]
+
+    :param data: dict of trial data with keys ('stimOff_times', 'intervals')
+    """
+    # Initialize array the length of completed trials
+    metric = np.full(data["intervals"].shape[0], np.nan)
+    passed = metric.copy()
+    # Get the difference between stim off and the start of the next trial
+    # Missing data are set to Inf, except for the last trial which is a NaN
+    metric[:-1] = \
+        np.nan_to_num(data["intervals"][1:, 0] - data["stimOff_times"][:-1] - 0.5, nan=np.inf)
+    passed[:-1] = np.abs(metric[:-1]) < .5  # Last trial is not counted
+    assert data["intervals"].shape[0] == len(metric) == len(passed)
+    return metric, passed
+
+
 def check_positive_feedback_stimOff_delays(data, **_):
     """ Check that the time difference between the valve onset and the visual stimulus turning off
     is 1 ± 0.150 seconds.
