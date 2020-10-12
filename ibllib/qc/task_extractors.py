@@ -28,7 +28,7 @@ class TaskQCExtractor(object):
         :param bpod_only: extract from from raw Bpod data only, even for FPGA sessions
         """
         self.session_path = session_path
-        self.one = one or ONE()
+        self.one = one
         self.log = logging.getLogger("ibllib")
 
         self.data = None
@@ -39,7 +39,7 @@ class TaskQCExtractor(object):
         self.wheel_encoding = None
         self.bpod_only = bpod_only
 
-        if download_data:
+        if download_data and one is not None:
             self._ensure_required_data()
 
         if not lazy:
@@ -92,7 +92,8 @@ class TaskQCExtractor(object):
         self.settings, self.raw_data = raw.load_bpod(self.session_path)
         # Fetch the TTLs for the photodiode and audio
         if self.type != 'ephys' or self.bpod_only is True:  # Extract from Bpod
-            ttls = raw.load_bpod_fronts(self.session_path, data=self.raw_data)
+            self.frame_ttls, self.audio_ttls = raw.load_bpod_fronts(
+                self.session_path, data=self.raw_data)
         else:  # Extract from FPGA
             sync, chmap = _get_main_probe_sync(self.session_path)
 
@@ -103,7 +104,7 @@ class TaskQCExtractor(object):
                 return dict(zip(keys, (sync[k][mask] for k in keys)))
 
             ttls = [channel_events(ch) for ch in ('frame2ttl', 'audio', 'bpod')]
-        self.frame_ttls, self.audio_ttls, self.bpod_ttls = ttls
+            self.frame_ttls, self.audio_ttls, self.bpod_ttls = ttls
 
     def extract_data(self, partial=False):
         """Extracts and loads behaviour data for QC
