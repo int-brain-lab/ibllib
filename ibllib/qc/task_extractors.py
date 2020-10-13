@@ -14,6 +14,8 @@ from ibllib.io.extractors.ephys_fpga import (
     _get_pregenerated_events, _get_main_probe_sync, bpod_fpga_sync, FpgaTrials
 )
 import ibllib.io.raw_data_loaders as raw
+from alf.io import is_session_path
+from oneibl.one import ONE
 
 
 class TaskQCExtractor(object):
@@ -26,6 +28,8 @@ class TaskQCExtractor(object):
         :param download_data: if True, any missing raw data is downloaded via ONE
         :param bpod_only: extract from from raw Bpod data only, even for FPGA sessions
         """
+        if not is_session_path(session_path):
+            raise ValueError('Invalid session path')
         self.session_path = session_path
         self.one = one
         self.log = logging.getLogger("ibllib")
@@ -38,7 +42,8 @@ class TaskQCExtractor(object):
         self.wheel_encoding = None
         self.bpod_only = bpod_only
 
-        if download_data and one is not None:
+        if download_data:
+            self.one = one or ONE()
             self._ensure_required_data()
 
         if not lazy:
