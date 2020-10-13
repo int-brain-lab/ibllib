@@ -54,7 +54,7 @@ class AlignmentQC(base.QC):
             self.depths = depths
 
         if not np.any(cluster_chns):
-            ins = self.one.alyx.rest('insertions', 'read', id= self.eid)
+            ins = self.one.alyx.rest('insertions', 'read', id=self.eid)
             session_id = ins['session']
             probe_name = ins['name']
             _ = self.one.load(session_id, dataset_types='clusters.channels', download_only=True)
