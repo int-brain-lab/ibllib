@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
+from oneibl.one import ONE
 from alf.io import is_session_path, is_uuid_string
 
 
@@ -18,11 +19,16 @@ CRITERIA = {'CRITICAL': 4,
 
 class QC:
     """A base class for data quality control"""
-    def __init__(self, session, one=None, log=None):
-        self.one = one
-        self.log = log or logging.getLogger('ibllib')
+    def __init__(self, session, **kwargs):
+        """
+        :param session:
+        :param log:
+        :param one
+        """
+        # don't want to instantiate ONE in the default parameters so using kwargs
+        self.one = ONE() if 'one' not in kwargs else kwargs['one']
+        self.log = logging.getLogger('ibllib') if 'log' not in kwargs else kwargs['log']
         self._set_eid_or_path(session)
-        self.eid = None
         self.outcome = "NOT_SET"
 
     @abstractmethod
@@ -45,6 +51,7 @@ class QC:
         :param session_path_or_eid:
         :return:
         """
+        self.eid = None
         if is_uuid_string(str(session_path_or_eid)):
             self.eid = session_path_or_eid
             # Try to set session_path if data is found locally

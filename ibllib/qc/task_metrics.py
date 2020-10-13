@@ -47,8 +47,13 @@ class TaskQC(base.QC):
                 "WARNING": 0.95,
                 "FAIL": 0}
 
-    def __init__(self, session_path_or_eid, one=None, log=None):
-        super().__init__(session_path_or_eid, one, log=log or _log)
+    def __init__(self, session_path_or_eid, **kwargs):
+        """
+        :param session_path_or_eid:
+        :param log: logger
+        :param one
+        """
+        super().__init__(session_path_or_eid, **kwargs)
 
         # Data
         self.extractor = None
