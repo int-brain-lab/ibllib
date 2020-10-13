@@ -21,13 +21,13 @@ class QC:
     """A base class for data quality control"""
     def __init__(self, session, **kwargs):
         """
-        :param session:
-        :param log:
-        :param one
+        :param session: A session eid or path
+        :param log: A logging.Logger instance, if None the 'ibllib' logger is used
+        :param one: An ONE instance for fetching and setting the QC on Alyx
         """
         # don't want to instantiate ONE in the default parameters so using kwargs
-        self.one = ONE() if 'one' not in kwargs else kwargs['one']
-        self.log = logging.getLogger('ibllib') if 'log' not in kwargs else kwargs['log']
+        self.one = kwargs.get('one') or ONE()
+        self.log = kwargs.get('log') or logging.getLogger('ibllib')
         self._set_eid_or_path(session)
         self.outcome = "NOT_SET"
 
@@ -48,7 +48,7 @@ class QC:
     def _set_eid_or_path(self, session_path_or_eid):
         """Parse a given eID or session path
         If a session UUID is given, resolves and stores the local path and vice versa
-        :param session_path_or_eid:
+        :param session_path_or_eid: A session eid or path
         :return:
         """
         self.eid = None

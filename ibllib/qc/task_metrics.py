@@ -43,15 +43,16 @@ _log = logging.getLogger('ibllib')
 
 
 class TaskQC(base.QC):
+    """A class for computing task QC metrics"""
     criteria = {"PASS": 0.99,
                 "WARNING": 0.95,
                 "FAIL": 0}
 
     def __init__(self, session_path_or_eid, **kwargs):
         """
-        :param session_path_or_eid:
-        :param log: logger
-        :param one
+        :param session_path_or_eid: A session eid or path
+        :param log: A logging.Logger instance, if None the 'ibllib' logger is used
+        :param one: An ONE instance for fetching and setting the QC on Alyx
         """
         super().__init__(session_path_or_eid, **kwargs)
 
