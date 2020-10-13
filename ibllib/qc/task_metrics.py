@@ -349,10 +349,10 @@ def check_stimOff_itiIn_delays(data, **_):
 
 def check_iti_delays(data, **_):
     """ Check that the period of gray screen between stim off and the start of the next trial is
-    0.5s +/- 50%.
+    0.5s +/- 200%.
 
     Metric: M = stimOff (n) - trialStart (n+1) - 0.5
-    Criterion: |M| < 0.25 s
+    Criterion: |M| < 1
     Units: seconds [s]
 
     :param data: dict of trial data with keys ('stimOff_times', 'intervals')
