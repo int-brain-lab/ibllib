@@ -32,6 +32,7 @@ ALF_EXP = re.compile(
     r'(?P<extension>\w+$)')
 STR_SPEC = 'collection/(_namespace_)object.attribute(_timescale)(.extra.parts).ext'
 
+
 def is_valid(filename):
     """
     Returns a True for a given file name if it is an ALF file, otherwise returns False
