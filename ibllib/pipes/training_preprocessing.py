@@ -33,20 +33,23 @@ class TrainingTrials(tasks.Task):
         trials, wheel, output_files = extract_training(self.session_path, save=True)
 
         # Run the task QC
+        # Compile task data for QC
+        def _qc_extract(qc):
+            qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one)
+            qc.extractor.data = trials
+            qc.extractor.extract_data(partial=True)  # Extract the rest of the data
+            return qc
+
         if rawio.get_session_extractor_type(self.session_path) == 'habituation':
             qc = HabituationQC(self.session_path, one=self.one)
+            qc = _qc_extract(qc)
         else:  # Update wheel data
             qc = TaskQC(self.session_path, one=self.one)
             ts, pos, *_, first_moves = wheel
+            qc = _qc_extract(qc)
             qc.extractor.data.update(
                 {'wheel_timestamps': ts, 'wheel_position': pos, 'firstMovement_times': first_moves}
             )
-
-        # Compile task data for QC
-        qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one)
-        qc.extractor.data = trials
-        qc.extractor.extract_data(partial=True)  # Extract the rest of the data
-
         # Aggregate and update Alyx QC fields
         qc.run(update=True)
 
