@@ -11,7 +11,7 @@ CRITERIA = {"PASS": 0.8}
 
 
 class AlignmentQC(base.QC):
-    def __init__(self, probe_id, one=None, brain_atlas=None, override=True):
+    def __init__(self, probe_id, one=None, brain_atlas=None, override=True, channels=True):
         super().__init__(probe_id, one=one, log=_log, endpoint='insertions')
 
         # Data
@@ -19,6 +19,7 @@ class AlignmentQC(base.QC):
         self.xyz_picks = None
         self.depths = None
         self.cluster_chns = None
+        self.align_keys_sorted = None
 
         # Metrics and passed trials
         self.sim_matrix = None
@@ -27,6 +28,8 @@ class AlignmentQC(base.QC):
 
         # Get the brain atlas
         self.brain_atlas = brain_atlas or AllenAtlas(25)
+        # Flag for uploading to alyx. For testing purposes
+        self.channels = channels
 
     def load_data(self, prev_alignments=None, xyz_picks=None, depths=None, cluster_chns=None):
         if not np.any(prev_alignments):
@@ -35,6 +38,9 @@ class AlignmentQC(base.QC):
                                                  'Ephys aligned histology track')[0]['json']
         else:
             self.alignments = prev_alignments
+
+        align_keys = [*self.alignments.keys()]
+        self.align_keys_sorted = sorted(align_keys, reverse=True)
 
         if not np.any(xyz_picks):
             self.xyz_picks = np.array(self.one.alyx.rest('insertions', 'read', id=self.eid)
@@ -79,19 +85,31 @@ class AlignmentQC(base.QC):
             self.update(self.outcome, 'alignment', override=self.override)
 
         if results['_alignment_resolved'] == 1 and upload:
-            if results['_alignment_stored'] != self.align_keys_sorted[0]:
-                self.upload_alyx_channels(results['_alignment_stored'])
+            self.upload_alyx_channels(results['_alignment_stored'])
 
-            self.upload_to_flatiron
+            # self.upload_to_flatiron
 
         return self.outcome, results
+
+    def resolve_manual(self, align_key, update=False, upload=False):
+        if self.sim_matrix is None:
+            self.compute()
+        assert align_key in self.align_keys_sorted, 'align key not recognised'
+        self.outcome, results = self.compute_alignment_status()
+        results['_alignment_resolved'] = 1
+        results['_alignment_stored'] = align_key
+        self.outcome = 'PASS'
+
+        if update:
+            self.update_extended_qc(results)
+            self.update(self.outcome, 'alignment_user', override=self.override)
+
+        if upload:
+            self.upload_alyx_channels(align_key)
 
     def compute_similarity_matrix(self):
 
         r = regions_from_allen_csv()
-        # Get the keys ordered by date
-        align_keys = [*self.alignments.keys()]
-        self.align_keys_sorted = sorted(align_keys, reverse=True)
 
         clusters = dict()
         for iK, key in enumerate(self.align_keys_sorted):
@@ -170,12 +188,11 @@ class AlignmentQC(base.QC):
         clusters_brainID = channels_brainID[self.cluster_chns]
         clusters_brainAcro = r.get(ids=clusters_brainID).acronym
 
-
         # Need to clean up on the alyx as well
         if alignment_key != self.align_keys_sorted[0]:
             histology.register_aligned_track(self.eid, channels_mlapdv,
                                              chn_coords=SITES_COORDINATES, one=self.one,
-                                             overwrite=True)
+                                             overwrite=True, channels=self.channels)
 
             ephys_traj = self.one.alyx.rest('trajectories', 'list', probe_insertion=self.eid,
                                             provenance='Ephys aligned histology track')

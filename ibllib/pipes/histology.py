@@ -278,7 +278,8 @@ def register_aligned_track(probe_id, xyz_channels, chn_coords=None, one=None, ov
     2) Channel locations are set to the trajectory
     """
     assert one
-    chn_coords = chn_coords or SITES_COORDINATES
+    if not np.any(chn_coords):
+        chn_coords = SITES_COORDINATES
 
     insertion = atlas.Insertion.from_track(xyz_channels, brain_atlas)
     tdict = create_trajectory_dict(probe_id, insertion, provenance='Ephys aligned histology track')
