@@ -5,6 +5,7 @@ from ibllib.ephys.neuropixel import SITES_COORDINATES
 import numpy as np
 from ibllib.pipes.ephys_alignment import EphysAlignment
 from ibllib.qc import base
+from oneibl.patcher import FTPPatcher
 
 _log = logging.getLogger('ibllib')
 CRITERIA = {"PASS": 0.8}
@@ -75,7 +76,7 @@ class AlignmentQC(base.QC):
         self.sim_matrix = self.compute_similarity_matrix()
         return
 
-    def run(self, update=False, upload=False):
+    def run(self, update=False, upload_alyx=False, upload_flatiron=False):
         if self.sim_matrix is None:
             self.compute()
         self.outcome, results = self.compute_alignment_status()
@@ -84,14 +85,12 @@ class AlignmentQC(base.QC):
             self.update_extended_qc(results)
             self.update(self.outcome, 'alignment', override=self.override)
 
-        if results['_alignment_resolved'] == 1 and upload:
-            self.upload_alyx_channels(results['_alignment_stored'])
-
-            # self.upload_to_flatiron
+        if results['_alignment_resolved'] == 1 and (upload_alyx or upload_flatiron):
+            self.upload_channels(results['_alignment_stored'], upload_alyx, upload_flatiron)
 
         return self.outcome, results
 
-    def resolve_manual(self, align_key, update=False, upload=False):
+    def resolve_manual(self, align_key, update=False, upload_alyx=False, upload_flatiron=False):
         if self.sim_matrix is None:
             self.compute()
         assert align_key in self.align_keys_sorted, 'align key not recognised'
@@ -104,8 +103,8 @@ class AlignmentQC(base.QC):
             self.update_extended_qc(results)
             self.update(self.outcome, 'alignment_user', override=self.override)
 
-        if upload:
-            self.upload_alyx_channels(align_key)
+        if upload_alyx or upload_flatiron:
+            self.upload_channels(align_key, upload_alyx, upload_flatiron)
 
     def compute_similarity_matrix(self):
 
@@ -170,7 +169,7 @@ class AlignmentQC(base.QC):
 
         return outcome, results
 
-    def upload_alyx_channels(self, alignment_key):
+    def upload_channels(self, alignment_key, upload_alyx, upload_flatiron, dry=True):
 
         feature = np.array(self.alignments[alignment_key][0])
         track = np.array(self.alignments[alignment_key][1])
@@ -179,26 +178,67 @@ class AlignmentQC(base.QC):
                                     feature_prev=feature,
                                     brain_atlas=self.brain_atlas)
 
-        channels_mlapdv = ephysalign.get_channel_locations(feature, track)
-        channels_brainID = ephysalign.get_brain_locations(channels_mlapdv)['id']
+        # Find the channels
+        channels_mlapdv = np.int32(ephysalign.get_channel_locations(feature, track) * 1e6)
+        channels_brainID = ephysalign.get_brain_locations(channels_mlapdv / 1e6)['id']
 
-        # Find cluster
+        # Find the clusters
         r = regions_from_allen_csv()
         clusters_mlapdv = channels_mlapdv[self.cluster_chns]
         clusters_brainID = channels_brainID[self.cluster_chns]
         clusters_brainAcro = r.get(ids=clusters_brainID).acronym
 
-        # Need to clean up on the alyx as well
-        if alignment_key != self.align_keys_sorted[0]:
-            histology.register_aligned_track(self.eid, channels_mlapdv,
-                                             chn_coords=SITES_COORDINATES, one=self.one,
-                                             overwrite=True, channels=self.channels)
+        # upload datasets to flatiron
+        files_to_register = []
+        if upload_flatiron:
+            ftp_patcher = FTPPatcher(one=self.one)
+            insertion = self.one.alyx.rest('insertions', 'read', id=self.eid)
+            alf_path = self.one.path_from_eid(insertion['session']).joinpath('alf',
+                                                                             insertion['name'])
+            alf_path.mkdir(exist_ok=True, parents=True)
 
-            ephys_traj = self.one.alyx.rest('trajectories', 'list', probe_insertion=self.eid,
-                                            provenance='Ephys aligned histology track')
-            patch_dict = {'json': self.alignments}
-            self.one.alyx.rest('trajectories', 'partial_update', id=ephys_traj[0]['id'],
-                               data=patch_dict)
+            # Make the channels.mlapdv dataset
+            f_name = alf_path.joinpath('channels.mlapdv.npy')
+            np.save(f_name, channels_mlapdv)
+            files_to_register.append(f_name)
+
+            # Make the channels.brainLocationIds dataset
+            f_name = alf_path.joinpath('channels.brainLocationIds_ccf_2017.npy')
+            np.save(f_name, channels_brainID)
+            files_to_register.append(f_name)
+
+            # Make the clusters.mlapdv dataset
+            f_name = alf_path.joinpath('clusters.mlapdv.npy')
+            np.save(f_name, clusters_mlapdv)
+            files_to_register.append(f_name)
+
+            # Make the clusters.brainLocationIds dataset
+            f_name = alf_path.joinpath('clusters.brainLocationIds_ccf_2017.npy')
+            np.save(f_name, clusters_brainID)
+            files_to_register.append(f_name)
+
+            # Make the clusters.brainLocationAcronym dataset
+            f_name = alf_path.joinpath('clusters.brainLocationAcronyms_ccf_2017.npy')
+            np.save(f_name, clusters_brainAcro)
+            files_to_register.append(f_name)
+
+            ftp_patcher.create_dataset(path=files_to_register, dry=False)
+
+        # Need to change channels stored on alyx as well as the stored key is not the same as the
+        # latest key
+        if upload_alyx:
+            if alignment_key != self.align_keys_sorted[0]:
+                histology.register_aligned_track(self.eid, channels_mlapdv,
+                                                 chn_coords=SITES_COORDINATES, one=self.one,
+                                                 overwrite=True, channels=self.channels)
+
+                ephys_traj = self.one.alyx.rest('trajectories', 'list', probe_insertion=self.eid,
+                                                provenance='Ephys aligned histology track')
+                patch_dict = {'json': self.alignments}
+                self.one.alyx.rest('trajectories', 'partial_update', id=ephys_traj[0]['id'],
+                                   data=patch_dict)
+
+        return files_to_register
 
 
 
