@@ -90,9 +90,3 @@ def execute(root_data_folder, dry=True):
         return from_to_pairs, [False for x in from_to_pairs]
     moved_ok = move_rename_pairs(from_to_pairs)
     return from_to_pairs, moved_ok
-
-
-if __name__ == "__main__":
-    root_data_folder = '/home/nico/Downloads/FlatIron'
-    from_to_pairs = find_pairs(root_data_folder)
-    # TODO: implement command line interface
