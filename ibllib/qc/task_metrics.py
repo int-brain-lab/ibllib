@@ -112,7 +112,9 @@ class TaskQC(base.QC):
         if self.passed is None:
             raise AttributeError('passed is None; compute QC first')
         MAX_BOUND, MIN_BOUND = (1, 0)
-        results = {k: np.nanmean(v) for k, v in self.passed.items()}
+        # Get mean passed of each check, or None if passed is None or all NaN
+        results = {k: None if v is None or np.isnan(v).all() else np.nanmean(v)
+                   for k, v in self.passed.items()}
 
         # Ensure criteria are in order
         criteria = self.criteria.items()
@@ -150,17 +152,18 @@ class HabituationQC(TaskQC):
         self.log.info(f"Session {self.session_path}: Running QC on habituation data...")
 
         # Initialize checks
+        prefix = '_task_'
         data = self.extractor.data
         metrics = {}
         passed = {}
 
         # Check all reward volumes == 3.0ul
-        check = 'reward_volumes'
+        check = prefix + 'reward_volumes'
         metrics[check] = data['rewardVolume']
         passed[check] = metrics[check] == 3.0
 
         # Check session durations are increasing in steps >= 12 minutes
-        check = 'habituation_time'
+        check = prefix + 'habituation_time'
         if not self.one or not self.session_path:
             self.log.warning('unable to determine session trials without ONE')
             metrics[check] = passed[check] = None
@@ -189,7 +192,7 @@ class HabituationQC(TaskQC):
             passed[check] = np.diff(metric) >= 12
 
         # Check event orders: trial_start < stim on < stim center < feedback < stim off
-        check = 'trial_event_sequence'
+        check = prefix + 'trial_event_sequence'
         nans = (
                 np.isnan(data["intervals"][:, 0])  |  # noqa
                 np.isnan(data["stimOn_times"])     |  # noqa
@@ -207,19 +210,19 @@ class HabituationQC(TaskQC):
 
         # Check that the time difference between the visual stimulus center-command being
         # triggered and the stimulus effectively appearing in the center is smaller than 150 ms.
-        check = 'stimCenter_delays'
+        check = prefix + 'stimCenter_delays'
         metric = np.nan_to_num(data["stimCenter_times"] - data["stimCenterTrigger_times"],
                                nan=np.inf)
         passed[check] = (metric <= 0.15) & (metric > 0)
         metrics[check] = metric
 
         # Phase check
-        check = 'phase'
-        metric = data[check]
+        check = prefix + 'phase'
+        metric = data['phase']
         passed[check] = (metric <= 2 * np.pi) & (metric >= 0)
         metrics[check] = metric
 
-        check = 'phase_distribution'
+        check = prefix + 'phase_distribution'
         metric, _ = np.histogram(data['phase'])
         _, p = chisquare(metric)
         passed[check] = p < 0.05
@@ -229,7 +232,7 @@ class HabituationQC(TaskQC):
         checks = [check_goCue_delays, check_stimOn_goCue_delays,
                   check_stimOn_delays, check_stimOff_delays]
         for fcn in checks:
-            check = fcn.__name__[6:]
+            check = prefix + fcn.__name__[6:]
             metrics[check], passed[check] = fcn(data)
 
         self.metrics, self.passed = (metrics, passed)
@@ -252,7 +255,8 @@ def get_bpodqc_metrics_frame(data, **kwargs):
     def is_metric(x):
         return isfunction(x) and x.__name__.startswith('check_')
     checks = getmembers(sys.modules[__name__], is_metric)
-    qc_metrics_map = {'_task' + k[5:]: fn(data, **kwargs) for k, fn in checks}
+    prefix = '_task_'
+    qc_metrics_map = {prefix + k[6:]: fn(data, **kwargs) for k, fn in checks}
 
     # Split metrics and passed frames
     metrics = {}
@@ -264,7 +268,7 @@ def get_bpodqc_metrics_frame(data, **kwargs):
     n_trials = data['intervals'].shape[0]
     trial_level_passed = [m for m in passed.values()
                           if isinstance(m, Sized) and len(m) == n_trials]
-    name = '_task_passed_trial_checks'
+    name = prefix + 'passed_trial_checks'
     metrics[name] = reduce(np.logical_and, trial_level_passed or (None, None))
     passed[name] = metrics[name].astype(np.float) if trial_level_passed else None
 
