@@ -307,7 +307,13 @@ class TestPipesMisc(unittest.TestCase):
         # Use existing session on test database
         eid = "b1c968ad-4874-468d-b2e4-5ffa9b9964e9"
         # Force probe insertion 3A
-        misc.create_alyx_probe_insertions(eid, one=one, model="3A", labels=["probe00", "probe01"])
+        misc.create_alyx_probe_insertions(
+            eid,
+            one=one,
+            model='3A',
+            labels=['probe00', 'probe01'],
+            force=True
+        )
         # Verify it's been inserted
         alyx_insertion = one.alyx.rest("insertions", "list", session=eid)
         self.assertTrue(alyx_insertion[0]["model"] == "3A")
