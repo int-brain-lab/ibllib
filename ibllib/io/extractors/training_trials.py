@@ -507,11 +507,11 @@ class StimOnTimes(BaseBpodTrialsExtractor):
 
     def _extract(self):
         """
-        Find the time of the statemachine command to turn on hte stim
+        Find the time of the state machine command to turn on the stim
         (state stim_on start or rotary_encoder_event2)
-        Find the next frame change from the photodiodeafter that TS.
+        Find the next frame change from the photodiode after that TS.
         Screen is not displaying anything until then.
-        (Frame changes are in BNC1High and BNC1Low)
+        (Frame changes are in BNC1 High and BNC1 Low)
         """
         # Version check
         if version.ge(self.settings['IBLRIG_VERSION_TAG'], '5.0.0'):
