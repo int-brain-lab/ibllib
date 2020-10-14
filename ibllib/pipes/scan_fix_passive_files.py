@@ -26,9 +26,14 @@ def find_pairs(root_data_folder):
     """Find all passive sessions that needs transfer and where to"""
     root_data_folder = Path(root_data_folder)
     settings_files = list(root_data_folder.rglob("_iblrig_taskSettings.raw.json"))
-    log.info(f"Found {len(settings_files)} sessions")
-    pairs = []
+    n_settings_files = len(settings_files)
+    if n_settings_files == 0:
+        log.warning(f"Found {n_settings_files} sessions")
+    else:
+        log.info(f"Found {n_settings_files} sessions")
+
     # Load the corresponding ephys session path form settings file if exists
+    pairs = []
     for sf in settings_files:
         # Get session path form settings file
         source_spath = session_path(sf)
@@ -48,7 +53,12 @@ def find_pairs(root_data_folder):
         pairs.append((source_spath, target_spath))
     # Remove sessions that are already transfered i.e. source and destination files are ==
     from_to_pairs = [(x, y) for x, y in pairs if x != y]
-    log.info(f"Found {len(from_to_pairs)} passive sessions to move")
+    n_pairs = len(from_to_pairs)
+    if n_pairs == 0:
+        log.warning(f"Found {n_pairs} passive sessions to move")
+    else:
+        log.info(f"Found {n_pairs} passive sessions to move")
+
     return from_to_pairs
 
 
