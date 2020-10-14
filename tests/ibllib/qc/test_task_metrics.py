@@ -451,9 +451,19 @@ class TestTaskMetrics(unittest.TestCase):
         pass  # TODO Nicco?
 
     def test_check_iti_delays(self):
-        # TODO Expand test
         metric, passed = qcmetrics.check_iti_delays(self.data)
+        # We want the metric to return positive values that are close to 0.1, given the test data
+        self.assertTrue(np.allclose(metric[:-1], 1e-1, atol=0.01),
+                        "failed to return correct metric")
+        self.assertTrue(np.isnan(metric[-1]), "last trial should be NaN")
         self.assertTrue(np.all(passed))
+        # Mess up a trial
+        id = 2
+        self.data["intervals"][id + 1, 0] += 0.5  # Next trial starts 0.5 sec later
+        metric, passed = qcmetrics.check_iti_delays(self.data)
+        n_trials = len(self.data["stimOff_times"]) - 1  # Last trial NaN here
+        expected = (n_trials - 1) / n_trials
+        self.assertTrue(expected, np.nanmean(passed))
 
     @unittest.skip("not implemented")
     def test_check_frame_frequency(self):
@@ -520,9 +530,10 @@ class TestHabituationQC(unittest.TestCase):
     def test_compute(self):
         # All should pass except one NOT_SET
         self.qc.compute()
-        assert self.qc.metrics is not None
+        self.assertIsNotNone(self.qc.metrics)
         _, _, outcomes = self.qc.compute_session_status()
-        pass
+        if self.qc.passed['_task_habituation_time'] is None:
+            self.assertEqual(outcomes['_task_habituation_time'], 'NOT_SET')
 
 
 if __name__ == "__main__":
