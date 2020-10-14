@@ -142,8 +142,8 @@ def _assign_events_bpod(bpod_t, bpod_polarities, ignore_first_valve=True):
     # detect start trials event assuming length is 0.23 ms except the first trial
     i_trial_start = np.r_[0, np.where(dt <= TRIAL_START_TTL_LEN)[0] * 2]
     t_trial_start = bpod_t[i_trial_start]
-    # # the first trial we detect the first falling edge to which we subtract 0.1ms
-    # t_trial_start[0] -= 1e-4
+    # the last trial is a dud and should be removed
+    t_trial_start = t_trial_start[:-1]
     # valve open events are between 50ms to 300 ms
     i_valve_open = np.where(np.logical_and(dt > TRIAL_START_TTL_LEN,
                                            dt < ITI_TTL_LEN))[0] * 2
