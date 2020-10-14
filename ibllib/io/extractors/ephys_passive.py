@@ -3,22 +3,17 @@
 # @Author: Niccolò Bonacchi
 # @Date: Monday, September 7th 2020, 11:51:17 am
 import json
-import random
+import logging
 from pathlib import Path, PosixPath
 
+import ibllib.io.extractors.passive as passive
+import ibllib.io.raw_data_loaders as rawio
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.pyplot import axvline
-
-import alf.folders as folders
-import alf.io
-import ibllib.io.extractors.passive as passive
-import ibllib.io.raw_data_loaders as rawio
 from ibllib.io.extractors import ephys_fpga
 from ibllib.plots import color_cycle, squares, vertical_lines
 from oneibl.one import ONE
-import logging
 
 log = logging.getLogger("ibllib")
 
@@ -1639,7 +1634,8 @@ if __name__ == "__main__":
     for s in error_types["gabor_stim"]:
         try:
             extract_replay_plot(s[0])
-        except:
+        except BaseException as e:
+            print(e)
             continue
     # eid = eids[random.randint(0, len(eids))]
     # print(eid)
