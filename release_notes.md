@@ -1,3 +1,15 @@
+### Release Notes 1.5.13
+-   ibllib.atlas
+    -   allen csv Atlas part of package is not installed in dev mode
+    -   improved slicing performance
+-   ephys extraction: mtscomp registers ch file on run and re-runs bis
+
+### Release Notes 1.5.12  Hotfix
+-   mtscomp registers ch file on run and re-runs
+
+### Release Notes 1.5.11  Hotfix
+-   ffmpeg nostdin option as jobs were stopped in background on a server
+
 ### Release Notes 1.5.10
 -   QC base class
 -   Support for task QC on FPGA data

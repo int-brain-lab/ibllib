@@ -19,11 +19,16 @@ CRITERIA = {'CRITICAL': 4,
 
 class QC:
     """A base class for data quality control"""
-    def __init__(self, session, one=None, log=None):
-        self.one = one or ONE()
-        self.log = log or logging.getLogger('ibllib')
+    def __init__(self, session, **kwargs):
+        """
+        :param session: A session eid or path
+        :param log: A logging.Logger instance, if None the 'ibllib' logger is used
+        :param one: An ONE instance for fetching and setting the QC on Alyx
+        """
+        # don't want to instantiate ONE in the default parameters so using kwargs
+        self.one = kwargs.get('one') or ONE()
+        self.log = kwargs.get('log') or logging.getLogger('ibllib')
         self._set_eid_or_path(session)
-
         self.outcome = "NOT_SET"
 
     @abstractmethod
@@ -43,18 +48,20 @@ class QC:
     def _set_eid_or_path(self, session_path_or_eid):
         """Parse a given eID or session path
         If a session UUID is given, resolves and stores the local path and vice versa
-        :param session_path_or_eid:
+        :param session_path_or_eid: A session eid or path
         :return:
         """
+        self.eid = None
         if is_uuid_string(str(session_path_or_eid)):
             self.eid = session_path_or_eid
             # Try to set session_path if data is found locally
             self.session_path = self.one.path_from_eid(self.eid)
         elif is_session_path(session_path_or_eid):
             self.session_path = Path(session_path_or_eid)
-            self.eid = self.one.eid_from_path(self.session_path)
-            if not self.eid:
-                self.log.warning('Failed to determine eID from session path')
+            if self.one is not None:
+                self.eid = self.one.eid_from_path(self.session_path)
+                if not self.eid:
+                    self.log.warning('Failed to determine eID from session path')
         else:
             self.log.error('Cannot run QC: an experiment uuid or session path is required')
             raise ValueError("'session' must be a valid session path or uuid")

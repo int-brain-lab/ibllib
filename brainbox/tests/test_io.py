@@ -38,6 +38,7 @@ class TestParquet(unittest.TestCase):
         # test empty
         arr_empty = rec2col([], include=include, uuid_fields=uuid_fields, join=join)
         self.assertTrue(arr_empty.to_df().size == 0)
+
         # the empty float fields should be serialized as NaNs when coerced into double
         [ds.update({'float_field': None}) for ds in datasets]
         arr = rec2col(datasets, uuid_fields=uuid_fields, join=join,

@@ -38,8 +38,8 @@ There are two ways to define the connection settings.
 In a Python terminal, type:
 
 ```python
-from oneibl.one import ONE
-ONE.setup() # For first time use, need to define connection credentials
+from oneibl.one import OneAlyx
+OneAlyx.setup() # For first time use, need to define connection credentials
 ```
 
 **_Note_**:

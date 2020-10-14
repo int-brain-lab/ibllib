@@ -1,9 +1,10 @@
-
-'''
+"""
+Coronal Plot
+============
 Plot a coronal slice (best fit) that contains a given probe track.
 As input, use an eID and probe label.
 environment installation guide https://github.com/int-brain-lab/iblenv
-'''
+"""
 # Author: Olivier Winter
 
 import numpy as np

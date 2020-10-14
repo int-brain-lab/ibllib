@@ -344,21 +344,34 @@ class BrainAtlas:
         ax.imshow(im, extent=extent, cmap=cmap, **kwargs)
         return ax
 
-    def slice(self, coordinate, axis, volume='image'):
+    def slice(self, coordinate, axis, volume='image', mode='raise'):
         """
         :param coordinate: float
         :param axis: xyz convention:  0 for ml, 1 for ap, 2
         :param volume: 'image' or 'annotation'
+        :param mode: 'raise' raise an error, 'clip' gets the first or last index
         :return: 2d array or 3d RGB numpy int8 array
         """
         index = self.bc.xyz2i(np.array([coordinate] * 3))[axis]
+
+        # np.take is 50 thousand times slower than straight slicing !
+        def _take(vol, ind, axis):
+            if mode == 'clip':
+                ind = np.minimum(np.maximum(ind, 0), vol.shape[axis] - 1)
+            if axis == 0:
+                return vol[ind, :, :]
+            elif axis == 1:
+                return vol[:, ind, :]
+            elif axis == 2:
+                return vol[:, :, ind]
+
         if isinstance(volume, np.ndarray):
-            return volume.take(index, axis=self.xyz2dims[axis])
+            return _take(volume, index, axis=self.xyz2dims[axis])
         elif volume == 'annotation':
-            im = self.label.take(index, axis=self.xyz2dims[axis])
+            im = _take(self.label, index, axis=self.xyz2dims[axis])
             return self._label2rgb(im)
         elif volume == 'image':
-            return self.image.take(index, axis=self.xyz2dims[axis])
+            return _take(self.image, index, axis=self.xyz2dims[axis])
 
     def plot_cslice(self, ap_coordinate, volume='image', **kwargs):
         """

@@ -6,7 +6,7 @@ from alf.io import is_uuid_string
 
 class ONEQC(base.QC):
     def __init__(self, eid, one=None, bpod_ntrials=None, lazy=False):
-        super().__init__(eid, one)
+        super().__init__(eid, one=one)
         self.details = self.one.get_details(self.eid, full=True)
         self.bpod_ntrials = bpod_ntrials or self.details["n_trials"]
         self.metrics = self.passed = None
