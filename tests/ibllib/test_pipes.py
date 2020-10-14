@@ -184,16 +184,16 @@ class TestPipesMisc(unittest.TestCase):
         probe01_file_names = [x.name for x in probe01_files]
 
         self.assertTrue(
-            "_spikeglx_ephysData_g0_t0.imec.ap.bin" in probe00_file_names
-            and "_spikeglx_ephysData_g0_t0.imec.ap.meta" in probe00_file_names
-            and "_spikeglx_ephysData_g0_t0.imec.lf.bin" in probe00_file_names
-            and "_spikeglx_ephysData_g0_t0.imec.lf.meta" in probe00_file_names
+            "_spikeglx_ephysData_g0_t0.imec.ap.bin" in probe00_file_names and
+            "_spikeglx_ephysData_g0_t0.imec.ap.meta" in probe00_file_names and
+            "_spikeglx_ephysData_g0_t0.imec.lf.bin" in probe00_file_names and
+            "_spikeglx_ephysData_g0_t0.imec.lf.meta" in probe00_file_names
         )
         self.assertTrue(
-            "_spikeglx_ephysData_g0_t0.imec.ap.bin" in probe01_file_names
-            and "_spikeglx_ephysData_g0_t0.imec.ap.meta" in probe01_file_names
-            and "_spikeglx_ephysData_g0_t0.imec.lf.bin" in probe01_file_names
-            and "_spikeglx_ephysData_g0_t0.imec.lf.meta" in probe01_file_names
+            "_spikeglx_ephysData_g0_t0.imec.ap.bin" in probe01_file_names and
+            "_spikeglx_ephysData_g0_t0.imec.ap.meta" in probe01_file_names and
+            "_spikeglx_ephysData_g0_t0.imec.lf.bin" in probe01_file_names and
+            "_spikeglx_ephysData_g0_t0.imec.lf.meta" in probe01_file_names
         )
         # Test for 3B
         misc.move_ephys_files(self.local_session_path_3B)
@@ -204,20 +204,20 @@ class TestPipesMisc(unittest.TestCase):
         nidq_files = list(self.raw_ephys_data_path_3B.glob("*.nidq.*"))
         nidq_file_names = [x.name for x in nidq_files]
         self.assertTrue(
-            "_spikeglx_ephysData_g0_t0.imec0.ap.bin" in probe00_file_names
-            and "_spikeglx_ephysData_g0_t0.imec0.ap.meta" in probe00_file_names
-            and "_spikeglx_ephysData_g0_t0.imec0.lf.bin" in probe00_file_names
-            and "_spikeglx_ephysData_g0_t0.imec0.lf.meta" in probe00_file_names
+            "_spikeglx_ephysData_g0_t0.imec0.ap.bin" in probe00_file_names and
+            "_spikeglx_ephysData_g0_t0.imec0.ap.meta" in probe00_file_names and
+            "_spikeglx_ephysData_g0_t0.imec0.lf.bin" in probe00_file_names and
+            "_spikeglx_ephysData_g0_t0.imec0.lf.meta" in probe00_file_names
         )
         self.assertTrue(
-            "_spikeglx_ephysData_g0_t0.imec1.ap.bin" in probe01_file_names
-            and "_spikeglx_ephysData_g0_t0.imec1.ap.meta" in probe01_file_names
-            and "_spikeglx_ephysData_g0_t0.imec1.lf.bin" in probe01_file_names
-            and "_spikeglx_ephysData_g0_t0.imec1.lf.meta" in probe01_file_names
+            "_spikeglx_ephysData_g0_t0.imec1.ap.bin" in probe01_file_names and
+            "_spikeglx_ephysData_g0_t0.imec1.ap.meta" in probe01_file_names and
+            "_spikeglx_ephysData_g0_t0.imec1.lf.bin" in probe01_file_names and
+            "_spikeglx_ephysData_g0_t0.imec1.lf.meta" in probe01_file_names
         )
         self.assertTrue(
-            "_spikeglx_ephysData_g0_t0.nidq.bin" in nidq_file_names
-            and "_spikeglx_ephysData_g0_t0.nidq.meta" in nidq_file_names
+            "_spikeglx_ephysData_g0_t0.nidq.bin" in nidq_file_names and
+            "_spikeglx_ephysData_g0_t0.nidq.meta" in nidq_file_names
         )
 
     def test_create_ephys_transfer_done_flag(self):

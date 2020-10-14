@@ -162,7 +162,8 @@ def create_fake_complete_ephys_session(
     )
     fpath = Path(session_path) / "raw_passive_data" / "_iblrig_taskSettings.raw.json"
     passive_settings = {
-        "CORRESPONDING_EPHYS_SESSION": f"C:\\some\\root\\folder\\Subjects\\{_mouse}\\{_date}\\{_num}"
+        "CORRESPONDING_EPHYS_SESSION":
+            f"C:\\some\\root\\folder\\Subjects\\{_mouse}\\{_date}\\{_num}"
     }
     populate_task_settings(fpath, passive_settings)
     if session_path.joinpath("passive_data_for_ephys.flag").exists():
@@ -188,7 +189,8 @@ def create_fake_ephys_recording_bad_passive_transfer_sessions(
     create_fake_raw_behavior_data_folder(passive_session_path, populate=True, task="passive")
     fpath = Path(passive_session_path) / "raw_behavior_data" / "_iblrig_taskSettings.raw.json"
     passive_settings = {
-        "CORRESPONDING_EPHYS_SESSION": f"C:\\some\\root\\folder\\Subjects\\{_mouse}\\{_date}\\{_num}"
+        "CORRESPONDING_EPHYS_SESSION":
+            f"C:\\some\\root\\folder\\Subjects\\{_mouse}\\{_date}\\{_num}"
     }
     populate_task_settings(fpath, passive_settings)
 
