@@ -708,7 +708,7 @@ def check_errorCue_delays(data, **_):
     """
     metric = np.nan_to_num(data["errorCue_times"] - data["errorCueTrigger_times"], nan=np.inf)
     passed = ((metric <= 0.0015) & (metric > 0)).astype(np.float)
-    passed[~data["correct"]] = metric[~data["correct"]] = np.nan
+    passed[data["correct"]] = metric[data["correct"]] = np.nan
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
