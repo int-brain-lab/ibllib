@@ -462,6 +462,12 @@ def plot_audio_times(passiveTone_intervals, passiveNoise_intervals, ax=None):
 
 
 if __name__ == "__main__":
+    # TODO: Check all TODO's in file!!
+    # TODO: chck spacer detection using ephys_end
+    # TODO: remove passive module
+    # TODO: remove passive_script
+    # TODO: find and fix duplicate code
+    # TODO: Remove usage and variables in __main__
     # load data
     one = ONE()
     # eids = one.search(dataset_types=min_dataset_types)
