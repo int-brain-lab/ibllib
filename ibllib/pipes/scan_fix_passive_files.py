@@ -26,11 +26,14 @@ def find_pairs(root_data_folder):
     """Find all passive sessions that needs transfer and where to"""
     root_data_folder = Path(root_data_folder)
     settings_files = list(root_data_folder.rglob("_iblrig_taskSettings.raw.json"))
+    log.info(f"Found {len(settings_files)} sessions")
     pairs = []
     # Load the corresponding ephys session path form settings file if exists
     for sf in settings_files:
         # Get session path form settings file
         source_spath = session_path(sf)
+        if source_spath is None:
+            continue
         # Find the root_data_path for session
         subjects_folder_path = Path(*Path(source_spath).parts[:-3])
         # Load reference to corresponding ephys session (ces) which comes in windows format
@@ -71,12 +74,15 @@ def move_rename_pairs(from_to_pairs):
     return moved_ok
 
 
-def execute(root_data_folder):
+def execute(root_data_folder, dry=True):
     from_to_pairs = find_pairs(root_data_folder)
+    if dry:
+        return from_to_pairs, [False for x in from_to_pairs]
     moved_ok = move_rename_pairs(from_to_pairs)
     return from_to_pairs, moved_ok
 
 
 if __name__ == "__main__":
-    pass
+    root_data_folder = '/home/nico/Downloads/FlatIron'
+    from_to_pairs = find_pairs(root_data_folder)
     # TODO: implement command line interface

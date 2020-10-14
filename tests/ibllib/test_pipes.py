@@ -357,11 +357,17 @@ class TestScanFixPassiveFiles(unittest.TestCase):
         )
 
     def test_scan_fix(self):
-        from_to_pairs, moved_ok = fix.execute(self.tmp_dir.name)
+        from_to_pairs, moved_ok = fix.execute(self.tmp_dir.name, dry=True)
+        self.assertTrue(len(from_to_pairs) == 1)
+        self.assertTrue(sum(moved_ok) == 0)
+        from_to_pairs, moved_ok = fix.execute(self.tmp_dir.name, dry=False)
         self.assertTrue(len(from_to_pairs) == 1)
         self.assertTrue(sum(moved_ok) == 1)
         # Second run Nothing to do
-        from_to_pairs, moved_ok = fix.execute(self.tmp_dir.name)
+        from_to_pairs, moved_ok = fix.execute(self.tmp_dir.name, dry=True)
+        self.assertTrue(len(from_to_pairs) == 0)
+        self.assertTrue(sum(moved_ok) == 0)
+        from_to_pairs, moved_ok = fix.execute(self.tmp_dir.name, dry=False)
         self.assertTrue(len(from_to_pairs) == 0)
         self.assertTrue(sum(moved_ok) == 0)
 
