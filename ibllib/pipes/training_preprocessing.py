@@ -31,6 +31,8 @@ class TrainingTrials(tasks.Task):
         Extracts an iblrig training session
         """
         trials, wheel, output_files = extract_training(self.session_path, save=True)
+        if trials is None:
+            return None
 
         # Run the task QC
         # Compile task data for QC
@@ -134,7 +136,11 @@ def extract_training(session_path, save=True):
         trials, files_trials = biased_trials.extract_all(
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
     elif extractor_type == 'habituation':
+        from ibllib.misc import version
         _logger.info('habituation session on ' + settings['PYBPOD_BOARD'])
+        if version.le(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+            _logger.warning("No extraction of legacy habituation sessions")
+            return None, None, None
         trials, files_trials = habituation_trials.extract_all(
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
         wheel = None
