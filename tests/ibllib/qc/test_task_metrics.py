@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
+from brainbox.core import Bunch
 from oneibl.one import ONE
 from ibllib.qc import task_metrics as qcmetrics
 from brainbox.behavior.wheel import cm_to_rad
@@ -11,8 +12,6 @@ from brainbox.behavior.wheel import cm_to_rad
 
 class TestTaskMetrics(unittest.TestCase):
     def setUp(self):
-        # random eid will not be used if data is passed
-        self.eid = "7be8fec4-406b-4e74-8548-d2885dcc3d5e"
         self.data = self.load_fake_bpod_data()
         self.wheel_gain = 4
         wheel_data = self.load_fake_wheel_data(self.data, wheel_gain=self.wheel_gain)
@@ -203,7 +202,7 @@ class TestTaskMetrics(unittest.TestCase):
         self.assertEqual(np.nanmean(passed), expected, "failed to detect dodgy timestamp")
 
     def test_check_negative_feedback_stimOff_delays(self):
-        err_trial = ~self.data["correct"] & self.data["outcome"] != 0
+        err_trial = ~self.data["correct"]
         metric, passed = qcmetrics.check_negative_feedback_stimOff_delays(self.data)
         values = np.abs(metric[err_trial])
         self.assertTrue(np.allclose(values, 1e-2), "failed to return correct metric")
@@ -451,6 +450,11 @@ class TestTaskMetrics(unittest.TestCase):
     def test_check_stimOff_itiIn_delays(self):
         pass  # TODO Nicco?
 
+    def test_check_iti_delays(self):
+        # TODO Expand test
+        metric, passed = qcmetrics.check_iti_delays(self.data)
+        self.assertTrue(np.all(passed))
+
     @unittest.skip("not implemented")
     def test_check_frame_frequency(self):
         pass  # TODO Miles
@@ -467,12 +471,11 @@ class TestHabituationQC(unittest.TestCase):
     def setUp(self):
         self.load_fake_bpod_data()
         # random eid will not be used if data is passed
-        eid = "7be8fec4-406b-4e74-8548-d2885dcc3d5e"
-        self.data = self.load_fake_bpod_data()
+        eid = 'ac80cd12-49e5-4aff-b5f2-1a718679ceeb'
         one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
                   password='TapetesBloc18')
         self.qc = qcmetrics.HabituationQC(eid, one=one)
-        self.qc.one = None  # Ensure no calls to db are made
+        self.qc.extractor = Bunch({'data': self.load_fake_bpod_data()})  # Dummy extractor obj
 
     @staticmethod
     def load_fake_bpod_data(n=5):
