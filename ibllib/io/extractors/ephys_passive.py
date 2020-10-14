@@ -126,6 +126,39 @@ def extract_passive_periods(session_path, sync=None, sync_map=None):
 
 
 # 2/3 RFMapping stimuli
+def extract_rfmapping(session_path, sync=None, sync_map=None):
+    meta = load_passive_stim_meta()
+    if sync is None or sync_map is None:
+        sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
+
+    t_start_passive, tspontaneous, trfm, treplay = extract_passive_periods(
+        session_path, sync=sync, sync_map=sync_map
+    )
+
+    fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=trfm[0], tmax=trfm[1])
+
+    RF_file = Path.joinpath(session_path, "raw_passive_data", "_iblrig_RFMapStim.raw.bin")
+    RF_frames, RF_ttl_trace = passive.reshape_RF(RF_file=RF_file, meta_stim=meta[s["mkey"]])
+    rf_id_up, rf_id_dw, RF_n_ttl_expected = passive.get_id_raisefall_from_analogttl(RF_ttl_trace)
+    meta[s["mkey"]]["ttl_num"] = RF_n_ttl_expected
+    RF_times = passive.check_n_ttl_between(
+        n_exp=meta[s["mkey"]]["ttl_num"],
+        key_stim=s["mkey"],
+        t_start_search=s["start"] + 0.2,
+        t_end_search=s["end"] - 0.2,
+        ttl=fttl,
+    )
+    RF_times_1 = RF_times[0::2]
+    # Interpolate times for RF before outputting dataset
+    times_interp_RF = passive.interpolate_rf_mapping_stimulus(
+        idxs_up=rf_id_up,
+        idxs_dn=rf_id_dw,
+        times=RF_times_1,
+        Xq=np.arange(RF_frames.shape[0]),
+        t_bin=1 / FRAME_FS,
+    )
+
+    return RF_frames, times_interp_RF
 
 
 # 3/3 Replay of task stimuli
@@ -172,7 +205,9 @@ def _extract_passiveGabor_df(fttl, session_path):
     if not np.allclose([y - x for x, y in passiveGabor_intervals], 0.3, atol=0.15):
         log.warning("Some Gabor presentation lengths seem wrong.")
 
-    assert len(passiveGabor_intervals) == NGABOR, "Wrong number of Gabor stimuli detected"
+    assert (
+        len(passiveGabor_intervals) == NGABOR
+    ), f"Wrong number of Gabor stimuli detected: {len(passiveGabor_intervals)} / {NGABOR}"
     fixture = load_passive_session_fixtures(session_path)
     passiveGabor_properties = fixture["pcs"]
     passiveGabor_table = np.append(passiveGabor_intervals, passiveGabor_properties, axis=1)
@@ -248,9 +283,6 @@ def extract_replay(session_path, sync=None, sync_map=None):
     if sync is None or sync_map is None:
         sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
 
-    t_start_passive, t_starts, t_ends = get_passive_spacers(
-        session_path, sync=sync, sync_map=sync_map
-    )
     t_start_passive, tspontaneous, trfm, treplay = extract_passive_periods(
         session_path, sync=sync, sync_map=sync_map
     )
@@ -264,13 +296,15 @@ def extract_replay(session_path, sync=None, sync_map=None):
     audio = ephys_fpga._get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
     passiveTone_intervals, passiveNoise_intervals = _extract_passiveAudio_intervals(audio)
 
+    return passiveGabor_df, passiveValve_intervals, passiveTone_intervals, passiveNoise_intervals
+
 
 def extract_replay_plot(session_path):
     # Load sessions sync channels, map
     sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
 
     f, ax = plt.subplots(1, 1)
-    f.suptitle("/".join(session_path.split("/")[-5:]))
+    f.suptitle("/".join(str(session_path).split("/")[-5:]))
     plot_sync_channels(sync=sync, sync_map=sync_map, ax=ax)
 
     t_start_passive, t_starts, t_ends = get_passive_spacers(
@@ -294,6 +328,28 @@ def extract_replay_plot(session_path):
     plot_audio_times(passiveTone_intervals, passiveNoise_intervals, ax=ax)
 
 
+# Mian passiveCWe xtractor, calls all others
+# TODO: try catch so it always extracts what it can + add option to plot stuff
+def extract_passive_choice_world(session_path):
+    sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
+
+    t_start_passive, tspontaneous, trfm, treplay = extract_passive_periods(
+        session_path, sync=sync, sync_map=sync_map
+    )
+
+    RF_frames, times_interp_RF = extract_rfmapping(session_path, sync=sync, sync_map=sync_map)
+
+    (
+        passiveGabor_df,
+        passiveValve_intervals,
+        passiveTone_intervals,
+        passiveNoise_intervals,
+    ) = extract_replay(session_path, sync=sync, sync_map=sync_map)
+
+    return  # TODO: return something
+
+
+# PLOTTING
 def plot_sync_channels(sync, sync_map, ax=None):
     # Plot all sync pulses
     if ax is None:
@@ -408,24 +464,24 @@ def plot_audio_times(passiveTone_intervals, passiveNoise_intervals, ax=None):
 if __name__ == "__main__":
     # load data
     one = ONE()
-    eids = one.search(dataset_types=min_dataset_types)
-    session_paths = []
-    for i, eid in enumerate(eids):
-        try:
-            local_paths = one.load(eid, dataset_types=dataset_types, download_only=True)
-            session_paths.append(alf.io.get_session_path(local_paths[0]))
-        except BaseException as e:
-            print(f"{i+1}/{len(eids)} - Failed session: {eid}\n\n{e}")
-        print(f"\n\n{i+1}/{len(eids)}\n\n")
+    # eids = one.search(dataset_types=min_dataset_types)
+    # session_paths = []
+    # for i, eid in enumerate(eids):
+    #     try:
+    #         local_paths = one.load(eid, dataset_types=dataset_types, download_only=True)
+    #         session_paths.append(alf.io.get_session_path(local_paths[0]))
+    #     except BaseException as e:
+    #         print(f"{i+1}/{len(eids)} - Failed session: {eid}\n\n{e}")
+    #     print(f"\n\n{i+1}/{len(eids)}\n\n")
 
-    failed = []
-    for i, sp in enumerate(session_paths):
-        try:
-            extract_replay(sp)
-        except BaseException as e:
-            failed.append((sp, e))
-        print(f"\n{i+1}/{len(session_paths)}")
-    print(f"nfailed = {len(failed)} / {len(session_paths)}")
+    # failed = []
+    # for i, sp in enumerate(session_paths):
+    #     try:
+    #         extract_replay(sp)
+    #     except BaseException as e:
+    #         failed.append((sp, e))
+    #     print(f"\n{i+1}/{len(session_paths)}")
+    # print(f"nfailed = {len(failed)} / {len(session_paths)}")
 
     some_eids = [
         "c6db3304-c906-400c-aa0f-45dd3945b2ea",
@@ -1138,395 +1194,447 @@ if __name__ == "__main__":
         "/home/nico/Downloads/FlatIron/cortexlab/Subjects/KS004/2019-09-26/001",
         "/home/nico/Downloads/FlatIron/cortexlab/Subjects/KS004/2019-09-25/001",
     ]
-    all_failing_errors = [
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL027/2020-08-20/001"
+    all_failing_errors = []
+    error_types = {
+        "gabor_stim": [
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_019/2020-08-19/001"
+                ),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-            ValueError(
-                "The number of expected spacer (3) is different than the one found on the raw trace (2.0)"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-26/2020-08-18/001"
+                ),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_019/2020-08-19/001"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_019/2020-08-18/001"
+                ),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-26/2020-08-18/001"),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_019/2020-08-18/001"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_019/2020-08-14/001"
+                ),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_019/2020-08-14/001"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-21/2020-08-12/006"
+                ),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-21/2020-08-12/006"),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_3001/2020-08-05/001"),
-            ValueError(
-                "The number of expected spacer (3) is different than the one found on the raw trace (2.0)"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_3003/2020-07-27/001"
+                ),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_3003/2020-07-30/001"),
-            ValueError(
-                "The number of expected spacer (3) is different than the one found on the raw trace (2.0)"
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_014/2020-07-13/001"),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_3003/2020-07-29/001"),
-            ValueError("first array argument cannot be empty"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_3003/2020-07-28/001"),
-            ValueError(
-                "The number of expected spacer (3) is different than the one found on the raw trace (2.0)"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_017/2020-06-07/001"
+                ),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL029/2020-07-27/001"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_022/2020-05-28/001"
+                ),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-            AssertionError("Wrong number of valve ONSET times"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_3003/2020-07-27/001"),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_014/2020-07-13/001"),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_017/2020-06-07/001"
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_013/2020-03-12/001"),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_017/2020-06-05/001"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL060/2020-03-10/001"
+                ),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-            IndexError("index 0 is out of bounds for axis 0 with size 0"),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_022/2020-05-28/001"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL059/2020-03-05/001"
+                ),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_022/2020-05-26/001"
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_009/2020-03-03/001"),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-            ValueError(
-                "The number of expected spacer (3) is different than the one found on the raw trace (4.0)"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/angelakilab/Subjects/SH006/2020-02-27/001"
+                ),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL060/2020-03-14/003"
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_010/2020-02-04/001"),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-            ValueError("zero-size array to reduction operation minimum which has no identity"),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL_019/2020-03-12/001"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL053/2020-02-03/003"
+                ),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-            AssertionError("Wrong number of valve ONSET times"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_013/2020-03-12/001"),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL060/2020-03-10/001"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_2241/2020-01-31/001"
+                ),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_013/2020-03-07/001"),
-            AssertionError("Wrong number of valve ONSET times"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_009/2020-03-06/001"),
-            ValueError(
-                "The number of expected spacer (3) is different than the one found on the raw trace (2.0)"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_2241/2020-01-27/001"
+                ),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL059/2020-03-05/001"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-12/2020-01-24/001"
+                ),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL059/2020-03-04/001"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_2240/2020-01-23/001"
+                ),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-            ValueError(
-                "The number of expected spacer (3) is different than the one found on the raw trace (4.0)"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-12/2020-01-23/001"
+                ),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_009/2020-03-03/001"),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_009/2020-02-29/001"),
-            ValueError(
-                "The number of expected spacer (3) is different than the one found on the raw trace (2.0)"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_1897/2019-12-06/001"
+                ),
+                AssertionError("Wrong number of Gabor stimuli detected"),
             ),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL045/2020-02-28/001"
+        ],
+        "spacer": [
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL027/2020-08-20/001"
+                ),
+                ValueError(
+                    "The number of expected spacer (3) is different than the one found on the raw trace (2.0)"
+                ),
             ),
-            ValueError(
-                "The number of expected spacer (3) is different than the one found on the raw trace (4.0)"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_3001/2020-08-05/001"
+                ),
+                ValueError(
+                    "The number of expected spacer (3) is different than the one found on the raw trace (2.0)"
+                ),
             ),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/angelakilab/Subjects/SH006/2020-02-27/001"),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-11/2020-02-21/001"),
-            ValueError(
-                "The number of expected spacer (3) is different than the one found on the raw trace (4.0)"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_3003/2020-07-28/001"
+                ),
+                ValueError(
+                    "The number of expected spacer (3) is different than the one found on the raw trace (2.0)"
+                ),
             ),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL051/2020-02-10/001"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL053/2020-01-29/001"
+                ),
+                ValueError(
+                    "The number of expected spacer (3) is different than the one found on the raw trace (4.0)"
+                ),
             ),
-            ValueError(
-                "The number of expected spacer (3) is different than the one found on the raw trace (2.0)"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_2241/2020-01-29/008"
+                ),
+                ValueError(
+                    "The number of expected spacer (3) is different than the one found on the raw trace (2.0)"
+                ),
             ),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_011/2020-02-07/001"),
-            ValueError(
-                "The number of expected spacer (3) is different than the one found on the raw trace (4.0)"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_3003/2020-07-30/001"
+                ),
+                ValueError(
+                    "The number of expected spacer (3) is different than the one found on the raw trace (2.0)"
+                ),
             ),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL051/2020-02-07/001"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_022/2020-05-26/001"
+                ),
+                ValueError(
+                    "The number of expected spacer (3) is different than the one found on the raw trace (4.0)"
+                ),
             ),
-            AssertionError("Wrong number of sound ONSETS"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/angelakilab/Subjects/SH011/2020-02-06/001"),
-            AssertionError("Wrong number of valve ONSET times"),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL051/2020-02-06/001"
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_009/2020-03-06/001"),
+                ValueError(
+                    "The number of expected spacer (3) is different than the one found on the raw trace (2.0)"
+                ),
             ),
-            ValueError(
-                "The number of expected spacer (3) is different than the one found on the raw trace (4.0)"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL059/2020-03-04/001"
+                ),
+                ValueError(
+                    "The number of expected spacer (3) is different than the one found on the raw trace (4.0)"
+                ),
             ),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL051/2020-02-05/001"
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_009/2020-02-29/001"),
+                ValueError(
+                    "The number of expected spacer (3) is different than the one found on the raw trace (2.0)"
+                ),
             ),
-            AssertionError("Wrong number of sound ONSETS"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_010/2020-02-04/001"),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL053/2020-02-03/003"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL045/2020-02-28/001"
+                ),
+                ValueError(
+                    "The number of expected spacer (3) is different than the one found on the raw trace (4.0)"
+                ),
             ),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_011/2020-02-03/001"),
-            AssertionError("Wrong number of sound ONSETS"),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL053/2020-02-02/002"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-11/2020-02-21/001"
+                ),
+                ValueError(
+                    "The number of expected spacer (3) is different than the one found on the raw trace (4.0)"
+                ),
             ),
-            AssertionError("Wrong number of sound ONSETS"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_011/2020-02-01/001"),
-            AssertionError("Wrong number of sound ONSETS"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_010/2020-02-01/001"),
-            AssertionError("Wrong number of sound ONSETS"),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL053/2020-02-01/001"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL051/2020-02-10/001"
+                ),
+                ValueError(
+                    "The number of expected spacer (3) is different than the one found on the raw trace (2.0)"
+                ),
             ),
-            AssertionError("Wrong number of sound ONSETS"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_011/2020-01-31/001"),
-            AssertionError("Wrong number of sound ONSETS"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_2241/2020-01-31/001"),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL053/2020-01-31/001"
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_011/2020-02-07/001"),
+                ValueError(
+                    "The number of expected spacer (3) is different than the one found on the raw trace (4.0)"
+                ),
             ),
-            AssertionError("Wrong number of sound ONSETS"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/angelakilab/Subjects/SH012/2020-01-31/001"),
-            AssertionError("Wrong number of valve ONSET times"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_011/2020-01-30/001"),
-            AssertionError("Wrong number of sound ONSETS"),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL053/2020-01-30/001"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL051/2020-02-06/001"
+                ),
+                ValueError(
+                    "The number of expected spacer (3) is different than the one found on the raw trace (4.0)"
+                ),
             ),
-            AssertionError("Wrong number of sound ONSETS"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_010/2020-01-30/001"),
-            AssertionError("Wrong number of sound ONSETS"),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL053/2020-01-29/001"
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_010/2020-01-27/001"),
+                ValueError(
+                    "The number of expected spacer (3) is different than the one found on the raw trace (4.0)"
+                ),
             ),
-            ValueError(
-                "The number of expected spacer (3) is different than the one found on the raw trace (4.0)"
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_010/2020-01-23/001"),
+                ValueError(
+                    "The number of expected spacer (3) is different than the one found on the raw trace (4.0)"
+                ),
             ),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_2241/2020-01-29/008"),
-            ValueError(
-                "The number of expected spacer (3) is different than the one found on the raw trace (2.0)"
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/cortexlab/Subjects/KS004/2019-09-29/001"),
+                ValueError(
+                    "The number of expected spacer (3) is different than the one found on the raw trace (7.0)"
+                ),
             ),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_010/2020-01-29/001"),
-            AssertionError("Wrong number of sound ONSETS"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_011/2020-01-28/001"),
-            ValueError("first array argument cannot be empty"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_2241/2020-01-27/001"),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL047/2020-01-27/001"
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/cortexlab/Subjects/KS004/2019-09-27/001"),
+                ValueError(
+                    "The number of expected spacer (3) is different than the one found on the raw trace (6.0)"
+                ),
             ),
-            AssertionError("Wrong number of sound ONSETS"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_010/2020-01-27/001"),
-            ValueError(
-                "The number of expected spacer (3) is different than the one found on the raw trace (4.0)"
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/cortexlab/Subjects/KS004/2019-09-26/001"),
+                ValueError(
+                    "The number of expected spacer (3) is different than the one found on the raw trace (7.0)"
+                ),
             ),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_010/2020-01-26/001"),
-            AssertionError("Wrong number of sound ONSETS"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-12/2020-01-24/001"),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_010/2020-01-24/001"),
-            AssertionError("Wrong number of sound ONSETS"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_2240/2020-01-23/001"),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/angelakilab/Subjects/NYU-12/2020-01-23/001"),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_010/2020-01-23/001"),
-            ValueError(
-                "The number of expected spacer (3) is different than the one found on the raw trace (4.0)"
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/cortexlab/Subjects/KS004/2019-09-25/001"),
+                ValueError(
+                    "The number of expected spacer (3) is different than the one found on the raw trace (7.0)"
+                ),
             ),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_010/2020-01-22/001"),
-            IndexError("index 0 is out of bounds for axis 0 with size 0"),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL047/2020-01-22/002"
+        ],
+        "sound_onsets": [
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL051/2020-02-07/001"
+                ),
+                AssertionError("Wrong number of sound ONSETS"),
             ),
-            AssertionError("Wrong number of sound ONSETS"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_010/2020-01-21/001"),
-            AssertionError("Wrong number of sound ONSETS"),
-        ),
-        (
-            PosixPath(
-                "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL047/2020-01-21/001"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL051/2020-02-05/001"
+                ),
+                AssertionError("Wrong number of sound ONSETS"),
             ),
-            AssertionError("Some valve outputs are longer or shorter than others"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_1897/2019-12-06/001"),
-            AssertionError("Wrong number of Gabor stimuli detected"),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/cortexlab/Subjects/KS004/2019-09-29/001"),
-            ValueError(
-                "The number of expected spacer (3) is different than the one found on the raw trace (7.0)"
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_011/2020-02-03/001"),
+                AssertionError("Wrong number of sound ONSETS"),
             ),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/cortexlab/Subjects/KS004/2019-09-27/001"),
-            ValueError(
-                "The number of expected spacer (3) is different than the one found on the raw trace (6.0)"
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL053/2020-02-02/002"
+                ),
+                AssertionError("Wrong number of sound ONSETS"),
             ),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/cortexlab/Subjects/KS004/2019-09-26/001"),
-            ValueError(
-                "The number of expected spacer (3) is different than the one found on the raw trace (7.0)"
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_011/2020-02-01/001"),
+                AssertionError("Wrong number of sound ONSETS"),
             ),
-        ),
-        (
-            PosixPath("/home/nico/Downloads/FlatIron/cortexlab/Subjects/KS004/2019-09-25/001"),
-            ValueError(
-                "The number of expected spacer (3) is different than the one found on the raw trace (7.0)"
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_010/2020-02-01/001"),
+                AssertionError("Wrong number of sound ONSETS"),
             ),
-        ),
-    ]
-
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL053/2020-02-01/001"
+                ),
+                AssertionError("Wrong number of sound ONSETS"),
+            ),
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_011/2020-01-31/001"),
+                AssertionError("Wrong number of sound ONSETS"),
+            ),
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL053/2020-01-31/001"
+                ),
+                AssertionError("Wrong number of sound ONSETS"),
+            ),
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_011/2020-01-30/001"),
+                AssertionError("Wrong number of sound ONSETS"),
+            ),
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL053/2020-01-30/001"
+                ),
+                AssertionError("Wrong number of sound ONSETS"),
+            ),
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_010/2020-01-30/001"),
+                AssertionError("Wrong number of sound ONSETS"),
+            ),
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_010/2020-01-29/001"),
+                AssertionError("Wrong number of sound ONSETS"),
+            ),
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL047/2020-01-27/001"
+                ),
+                AssertionError("Wrong number of sound ONSETS"),
+            ),
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_010/2020-01-26/001"),
+                AssertionError("Wrong number of sound ONSETS"),
+            ),
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_010/2020-01-24/001"),
+                AssertionError("Wrong number of sound ONSETS"),
+            ),
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL047/2020-01-22/002"
+                ),
+                AssertionError("Wrong number of sound ONSETS"),
+            ),
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_010/2020-01-21/001"),
+                AssertionError("Wrong number of sound ONSETS"),
+            ),
+        ],
+        "valve_onsets": [
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL029/2020-07-27/001"
+                ),
+                AssertionError("Wrong number of valve ONSET times"),
+            ),
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL_019/2020-03-12/001"
+                ),
+                AssertionError("Wrong number of valve ONSET times"),
+            ),
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_013/2020-03-07/001"),
+                AssertionError("Wrong number of valve ONSET times"),
+            ),
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/angelakilab/Subjects/SH011/2020-02-06/001"
+                ),
+                AssertionError("Wrong number of valve ONSET times"),
+            ),
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/angelakilab/Subjects/SH012/2020-01-31/001"
+                ),
+                AssertionError("Wrong number of valve ONSET times"),
+            ),
+        ],
+        "misc": [
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/zadorlab/Subjects/CSH_ZAD_017/2020-06-05/001"
+                ),
+                IndexError("index 0 is out of bounds for axis 0 with size 0"),
+            ),
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_010/2020-01-22/001"),
+                IndexError("index 0 is out of bounds for axis 0 with size 0"),
+            ),
+            (
+                PosixPath("/home/nico/Downloads/FlatIron/danlab/Subjects/DY_011/2020-01-28/001"),
+                ValueError("first array argument cannot be empty"),
+            ),
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/mainenlab/Subjects/ZM_3003/2020-07-29/001"
+                ),
+                ValueError("first array argument cannot be empty"),
+            ),
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL060/2020-03-14/003"
+                ),
+                ValueError("zero-size array to reduction operation minimum which has no identity"),
+            ),
+            (
+                PosixPath(
+                    "/home/nico/Downloads/FlatIron/churchlandlab/Subjects/CSHL047/2020-01-21/001"
+                ),
+                AssertionError("Some valve outputs are longer or shorter than others"),
+            ),
+        ],
+    }
+    print([(k, len(v)) for k, v in error_types.items()])
+    for s in error_types["gabor_stim"]:
+        try:
+            extract_replay_plot(s[0])
+        except:
+            continue
     # eid = eids[random.randint(0, len(eids))]
     # print(eid)
     # session_paths = []
