@@ -250,7 +250,7 @@ class RegistrationClient:
             ses_ = {'subject': subject['nickname'],
                     'users': [username],
                     'location': md['PYBPOD_BOARD'],
-                    'procedures': None if alyx_procedure is None else [alyx_procedure],
+                    'procedures': [] if alyx_procedure is None else [alyx_procedure],
                     'lab': subject['lab'],
                     # 'project': project['name'],
                     'type': 'Experiment',
