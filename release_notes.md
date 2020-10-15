@@ -1,3 +1,8 @@
+### Release Notes 1.5.14
+-   task extraction:
+    -   Habituation QC
+    -   ephys extraction StimOffTimes fix
+
 ### Release Notes 1.5.13
 -   ibllib.atlas
     -   allen csv Atlas part of package is not installed in dev mode
