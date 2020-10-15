@@ -80,9 +80,9 @@ class Patcher(abc.ABC):
             full_remote_path = PurePosixPath(FLATIRON_MOUNT + remote_path)
         else:
             full_remote_path = PurePosixPath(FLATIRON_MOUNT, remote_path)
-        if isinstance(path, WindowsPath):
+        #if isinstance(path, WindowsPath):
             # On Windows replace drive map with Globus uri, e.g. C:/ -> /~/C/
-            path = '/~/' + path.as_posix().replace(':', '')
+        #    path = '/~/' + path.as_posix().replace(':', '')
         status = self._scp(path, full_remote_path, dry=dry)[0]
         return status
 
@@ -307,8 +307,8 @@ class FTPPatcher(Patcher):
                                  fr['relative_path'] == fr_server['relative_path'], frs))
             reposerver = next(filter(lambda rep: rep['name'] == fr_server['data_repository'],
                                      self.repositories))
-            relative_path = str(Path(reposerver['globus_path']).joinpath(
-                Path(fr_ftp['relative_path'])))[1:]
+            relative_path = str(PurePosixPath(reposerver['globus_path']).joinpath(
+                PurePosixPath(fr_ftp['relative_path'])))[1:]
             # 1) if there was already a file, the registration created a duplicate
             fr_2del = list(filter(lambda fr: fr['data_repository'] == DMZ_REPOSITORY and
                                              fr['relative_path'] == relative_path, frs))  # NOQA
@@ -324,11 +324,17 @@ class FTPPatcher(Patcher):
 
     def _scp(self, local_path, remote_path, dry=True):
         # remote_path = '/mnt/ibl/zadorlab/Subjects/flowers/2018-07-13/001
-        remote_path = Path(Path(FLATIRON_MOUNT).root).joinpath(
-            remote_path.relative_to(FLATIRON_MOUNT))
+        remote_path = PurePosixPath('/').joinpath(
+            remote_path.relative_to(PurePosixPath(FLATIRON_MOUNT))
+        )
+
+        #remote_path = Path(Path(FLATIRON_MOUNT).root).joinpath(
+        #    remote_path.relative_to(FLATIRON_MOUNT))
+
         # local_path
         self.mktree(remote_path.parent)
         # if the file already exists on the buffer, do not overwrite
+        print('made it out alive')
         if local_path.name in self.ftp.nlst():
             _logger.info(f"FTP already on server {local_path}")
             return 0, ''
@@ -344,7 +350,7 @@ class FTPPatcher(Patcher):
             try:
                 self.ftp.cwd(str(remote_path))
             except ftplib.all_errors:
-                self.mktree(Path(remote_path.parent))
+                self.mktree(PurePosixPath(remote_path.parent))
                 self.ftp.mkd(str(remote_path))
                 self.ftp.cwd(str(remote_path))
 
