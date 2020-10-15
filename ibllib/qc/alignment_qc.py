@@ -104,7 +104,9 @@ class AlignmentQC(base.QC):
             self.update(self.outcome, 'alignment_user', override=self.override)
 
         if upload_alyx or upload_flatiron:
-            self.upload_channels(align_key, upload_alyx, upload_flatiron)
+            file_paths = self.upload_channels(align_key, upload_alyx, upload_flatiron)
+
+        return file_paths
 
     def compute_similarity_matrix(self):
 
