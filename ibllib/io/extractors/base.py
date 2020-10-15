@@ -98,6 +98,11 @@ def run_extractor_classes(classes, session_path=None, **kwargs):
     files = []
     outputs = OrderedDict({})
     assert session_path
+    # if a single class is passed, convert as a list
+    try:
+        iter(classes)
+    except TypeError:
+        classes = [classes]
     for classe in classes:
         out, fil = classe(session_path=session_path).extract(**kwargs)
         if isinstance(fil, list):

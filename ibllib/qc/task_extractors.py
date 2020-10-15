@@ -8,12 +8,14 @@ from ibllib.io.extractors.training_trials import (
     ErrorCueTriggerTimes, RewardVolume, ResponseTimes, FeedbackTimes, ItiInTimes,
     ProbabilityLeft, run_extractor_classes  # ContrastLR
 )
+import ibllib.io.extractors.habituation_trials as habit
 from ibllib.io.extractors.training_wheel import Wheel
-from oneibl.one import ONE
 from ibllib.io.extractors.ephys_fpga import (
     _get_pregenerated_events, _get_main_probe_sync, bpod_fpga_sync, FpgaTrials
 )
 import ibllib.io.raw_data_loaders as raw
+from alf.io import is_session_path
+from oneibl.one import ONE
 
 
 class TaskQCExtractor(object):
@@ -26,19 +28,22 @@ class TaskQCExtractor(object):
         :param download_data: if True, any missing raw data is downloaded via ONE
         :param bpod_only: extract from from raw Bpod data only, even for FPGA sessions
         """
+        if not is_session_path(session_path):
+            raise ValueError('Invalid session path')
         self.session_path = session_path
-        self.one = one or ONE()
+        self.one = one
         self.log = logging.getLogger("ibllib")
 
         self.data = None
         self.settings = None
         self.raw_data = None
-        self.frame_ttls = self.audio_ttls = None
+        self.frame_ttls = self.audio_ttls = self.bpod_ttls = None
         self.type = None
         self.wheel_encoding = None
         self.bpod_only = bpod_only
 
         if download_data:
+            self.one = one or ONE()
             self._ensure_required_data()
 
         if not lazy:
@@ -91,7 +96,8 @@ class TaskQCExtractor(object):
         self.settings, self.raw_data = raw.load_bpod(self.session_path)
         # Fetch the TTLs for the photodiode and audio
         if self.type != 'ephys' or self.bpod_only is True:  # Extract from Bpod
-            ttls = raw.load_bpod_fronts(self.session_path, data=self.raw_data)
+            self.frame_ttls, self.audio_ttls = raw.load_bpod_fronts(
+                self.session_path, data=self.raw_data)
         else:  # Extract from FPGA
             sync, chmap = _get_main_probe_sync(self.session_path)
 
@@ -101,8 +107,8 @@ class TaskQCExtractor(object):
                 mask = sync['channels'] == chmap[name]
                 return dict(zip(keys, (sync[k][mask] for k in keys)))
 
-            ttls = [channel_events(ch) for ch in ('frame2ttl', 'audio')]
-        self.frame_ttls, self.audio_ttls = ttls
+            ttls = [channel_events(ch) for ch in ('frame2ttl', 'audio', 'bpod')]
+            self.frame_ttls, self.audio_ttls, self.bpod_ttls = ttls
 
     def extract_data(self, partial=False):
         """Extracts and loads behaviour data for QC
@@ -124,15 +130,21 @@ class TaskQCExtractor(object):
         if not self.raw_data:
             self.load_raw_data()
 
-        # Signals and parameters not usually saved to file, available for all task types
-        extractors = [
-            StimOnTriggerTimes, StimOffTriggerTimes, StimOnOffFreezeTimes,
-            StimFreezeTriggerTimes, ErrorCueTriggerTimes, ItiInTimes]
+        # Signals and parameters not usually saved to file
+        if self.type == 'habituation':
+            extractors = [habit.StimCenterTimes, habit.StimCenterTriggerTimes,
+                          habit.ItiInTimes, habit.StimOffTriggerTimes]
+        else:
+            extractors = [
+                StimOnTriggerTimes, StimOffTriggerTimes, StimOnOffFreezeTimes,
+                StimFreezeTriggerTimes, ErrorCueTriggerTimes, ItiInTimes]
 
         # Extract the data that are usually saved to file
         if not partial:
             if self.type == 'ephys' and not self.bpod_only:
                 extractors.append(FpgaTrials)
+            elif self.type == 'habituation':
+                extractors.append(habit.HabituationTrials)
             else:
                 extractors.extend([
                     Choice, FeedbackType, Intervals, StimOnTimes, GoCueTriggerTimes, Wheel,
@@ -144,6 +156,8 @@ class TaskQCExtractor(object):
         # Run behaviour extractors
         kwargs = dict(save=False, bpod_trials=self.raw_data, settings=self.settings)
         data, _ = run_extractor_classes(extractors, session_path=self.session_path, **kwargs)
+
+        n_trials = np.unique(list(map(lambda k: data[k].shape[0], data)))[0]
 
         # Extract some parameters
         if self.type == 'ephys':
@@ -161,12 +175,23 @@ class TaskQCExtractor(object):
                 # These fields have to be re-synced
                 sync_fields = ['stimOnTrigger_times', 'stimOffTrigger_times', 'stimFreeze_times',
                                'stimFreezeTrigger_times', 'errorCueTrigger_times', 'itiIn_times']
+                bpod_fields = ['probabilityLeft', 'contrastLeft', 'contrastRight', 'position',
+                               'contrast', 'quiescence', 'phase']
                 # build trials output
                 data.update({k: bpod2fpga(data[k][ibpod]) for k in sync_fields})
-        else:
-            data['quiescence'] = np.array([t['quiescent_period'] for t in self.raw_data])
+                data.update({k: data[k][ibpod] for k in bpod_fields})
+
+        elif self.type == 'habituation':
             data['position'] = np.array([t['position'] for t in self.raw_data])
-            self.wheel_encoding = 'X1'
+            data['phase'] = np.array([t['stim_phase'] for t in self.raw_data])
+            # Nasty hack to trim last trial due to stim off events happening at trial num + 1
+            data = {k: v[:n_trials] for k, v in data.items()}
+        else:
+            data['quiescence'] = \
+                np.array([t['quiescent_period'] for t in self.raw_data[:n_trials]])
+            data['position'] = np.array([t['position'] for t in self.raw_data[:n_trials]])
+            # FIXME Check this is valid for biased choiceWorld
+            data['phase'] = np.array([t['stim_phase'] for t in self.raw_data[:n_trials]])
 
         # Update the data attribute with extracted data
         if self.data:
@@ -178,8 +203,7 @@ class TaskQCExtractor(object):
     @staticmethod
     def rename_data(data):
         """Rename the extracted data dict for use with TaskQC
-        Splits 'feedback_times' to 'errorCue_times' and 'valveOpen_times'.  Also adds 'outcome' and
-        'correct'.
+        Splits 'feedback_times' to 'errorCue_times' and 'valveOpen_times'.
         NB: The data is not copied before making changes
         :param data: A dict of task data returned by the task extractors
         :return: the same dict after modifying the keys
@@ -195,6 +219,4 @@ class TaskQCExtractor(object):
              "valveOpen_times": valveOpen_times,
              "correct": correct}
         )
-        data["outcome"] = data["feedbackType"].copy()
-        data["outcome"][data["choice"] == 0] = 0
         return data
