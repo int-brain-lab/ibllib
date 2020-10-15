@@ -123,6 +123,10 @@ def extract_passive_periods(session_path, sync=None, sync_map=None):
 # 2/3 RFMapping stimuli
 def extract_rfmapping(session_path, sync=None, sync_map=None):
     meta = load_passive_stim_meta()
+    mkey = (
+        "VISUAL_STIM_"
+        + {v: k for k, v in meta["VISUAL_STIMULI"].items()}["receptive_field_mapping"]
+    )
     if sync is None or sync_map is None:
         sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
 
@@ -132,15 +136,15 @@ def extract_rfmapping(session_path, sync=None, sync_map=None):
 
     fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=trfm[0], tmax=trfm[1])
 
-    RF_file = Path.joinpath(session_path, "raw_passive_data", "_iblrig_RFMapStim.raw.bin")
-    RF_frames, RF_ttl_trace = passive.reshape_RF(RF_file=RF_file, meta_stim=meta[s["mkey"]])
+    RF_file = Path().joinpath(session_path, "raw_passive_data", "_iblrig_RFMapStim.raw.bin")
+    RF_frames, RF_ttl_trace = passive.reshape_RF(RF_file=RF_file, meta_stim=meta[mkey])
     rf_id_up, rf_id_dw, RF_n_ttl_expected = passive.get_id_raisefall_from_analogttl(RF_ttl_trace)
-    meta[s["mkey"]]["ttl_num"] = RF_n_ttl_expected
+    meta[mkey]["ttl_num"] = RF_n_ttl_expected
     RF_times = passive.check_n_ttl_between(
-        n_exp=meta[s["mkey"]]["ttl_num"],
-        key_stim=s["mkey"],
-        t_start_search=s["start"] + 0.2,
-        t_end_search=s["end"] - 0.2,
+        n_exp=meta[mkey]["ttl_num"],
+        key_stim=mkey,
+        t_start_search=trfm[0],
+        t_end_search=trfm[0],
         ttl=fttl,
     )
     RF_times_1 = RF_times[0::2]
@@ -186,10 +190,10 @@ def _extract_passiveGabor_df(fttl, session_path):
 
     start_times = fttl["times"][idx_start_stims]
     end_times = fttl["times"][idx_end_stims]
-    # missing the first stim
-    first_stim_off_idx = idx_start_stims[0] - 1
-    first_stim_on_idx = first_stim_off_idx - 1
-    if first_stim_on_idx <= 0:
+    # Check if we missed the first stim
+    if len(start_times) < NGABOR:
+        first_stim_off_idx = idx_start_stims[0] - 1
+        first_stim_on_idx = first_stim_off_idx - 1
         end_times = np.insert(end_times, 0, fttl["times"][first_stim_off_idx])
         start_times = np.insert(start_times, 0, end_times[0] - 0.3)
 
@@ -294,11 +298,13 @@ def extract_replay(session_path, sync=None, sync_map=None):
     return passiveGabor_df, passiveValve_intervals, passiveTone_intervals, passiveNoise_intervals
 
 
-def extract_replay_plot(session_path):
+def extract_replay_plot(session_path, ax=None):
     # Load sessions sync channels, map
     sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
 
-    f, ax = plt.subplots(1, 1)
+    if ax is None:
+        f, ax = plt.subplots(1, 1)
+    f = ax.figure
     f.suptitle("/".join(str(session_path).split("/")[-5:]))
     plot_sync_channels(sync=sync, sync_map=sync_map, ax=ax)
 
@@ -311,7 +317,7 @@ def extract_replay_plot(session_path):
     plot_passive_periods(t_start_passive, t_starts, t_ends, ax=ax)
 
     fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0])
-    passiveGabor_df = _extract_passiveGabor_df(fttl)
+    passiveGabor_df = _extract_passiveGabor_df(fttl, session_path)
     plot_gabor_times(passiveGabor_df, ax=ax)
 
     bpod = ephys_fpga._get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
@@ -321,6 +327,8 @@ def extract_replay_plot(session_path):
     audio = ephys_fpga._get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
     passiveTone_intervals, passiveNoise_intervals = _extract_passiveAudio_intervals(audio)
     plot_audio_times(passiveTone_intervals, passiveNoise_intervals, ax=ax)
+
+    return passiveGabor_df, passiveValve_intervals, passiveTone_intervals, passiveNoise_intervals
 
 
 # Mian passiveCWe xtractor, calls all others
@@ -340,6 +348,33 @@ def extract_passive_choice_world(session_path):
         passiveTone_intervals,
         passiveNoise_intervals,
     ) = extract_replay(session_path, sync=sync, sync_map=sync_map)
+
+    return  # TODO: return something
+
+
+def extract_passive_choice_world_plot(session_path):
+    sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
+
+    f, ax = plt.subplots(1, 1)
+    f.suptitle("/".join(str(session_path).split("/")[-5:]))
+    plot_sync_channels(sync=sync, sync_map=sync_map, ax=ax)
+
+    t_start_passive, t_starts, t_ends = get_passive_spacers(
+        session_path, sync=sync, sync_map=sync_map
+    )
+    t_start_passive, tspontaneous, trfm, treplay = extract_passive_periods(
+        session_path, sync=sync, sync_map=sync_map
+    )
+    plot_passive_periods(t_start_passive, t_starts, t_ends, ax=ax)
+
+    RF_frames, times_interp_RF = extract_rfmapping(session_path, sync=sync, sync_map=sync_map)
+
+    (
+        passiveGabor_df,
+        passiveValve_intervals,
+        passiveTone_intervals,
+        passiveNoise_intervals,
+    ) = extract_replay_plot(session_path, sync=sync, sync_map=sync_map)
 
     return  # TODO: return something
 
@@ -1631,9 +1666,10 @@ if __name__ == "__main__":
         ],
     }
     print([(k, len(v)) for k, v in error_types.items()])
-    for s in error_types["gabor_stim"]:
+    # for s in error_types["gabor_stim"]:
+    for s in all_session_paths[:20]:
         try:
-            extract_replay_plot(s[0])
+            extract_replay_plot(s)
         except BaseException as e:
             print(e)
             continue
