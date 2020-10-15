@@ -29,23 +29,33 @@ class AlignmentQC(base.QC):
 
         # Get the brain atlas
         self.brain_atlas = brain_atlas or AllenAtlas(25)
-        # Flag for uploading to alyx. For testing purposes
+        # Flag for uploading channels to alyx. For testing purposes
         self.channels = channels
+
+        self.insertion = one.alyx.rest('insertions', 'read', id=self.eid)
+        self.resolved = (self.insertion.get('json', {'temp': 0}).get('extended_qc').
+                         get('_alignment_resolved', 0))
 
     def load_data(self, prev_alignments=None, xyz_picks=None, depths=None, cluster_chns=None):
         if not np.any(prev_alignments):
-            self.alignments = self.one.alyx.rest('trajectories', 'list',
-                                                 probe_insertion=self.eid, provenance=
-                                                 'Ephys aligned histology track')[0]['json']
+            aligned_traj = self.one.alyx.rest('trajectories', 'list', probe_insertion=self.eid,
+                                              provenance='Ephys aligned histology track')
+            if len(aligned_traj) > 0:
+                self.alignments = aligned_traj[0].get('json', {})
+            else:
+                self.alignments = {}
+                return
         else:
             self.alignments = prev_alignments
 
         align_keys = [*self.alignments.keys()]
         self.align_keys_sorted = sorted(align_keys, reverse=True)
 
+        if len(self.alignments) < 2:
+            return
+
         if not np.any(xyz_picks):
-            self.xyz_picks = np.array(self.one.alyx.rest('insertions', 'read', id=self.eid)
-                                      ['json']['xyz_picks'])/1e6
+            self.xyz_picks = np.array(self.insertion['json']['xyz_picks'])/1e6
         else:
             self.xyz_picks = xyz_picks
 
@@ -55,12 +65,11 @@ class AlignmentQC(base.QC):
             self.depths = depths
 
         if not np.any(cluster_chns):
-            ins = self.one.alyx.rest('insertions', 'read', id=self.eid)
-            session_id = ins['session']
-            probe_name = ins['name']
-            _ = self.one.load(session_id, dataset_types='clusters.channels', download_only=True)
-            self.cluster_chns = np.load(self.one.path_from_eid(session_id).
-                                        joinpath('alf', probe_name, 'clusters.channels.npy'))
+            _ = self.one.load(self.insertion['session'], dataset_types='clusters.channels',
+                              download_only=True)
+            self.cluster_chns = np.load(self.one.path_from_eid(self.insertion['session']).
+                                        joinpath('alf', self.insertion['name'],
+                                                 'clusters.channels.npy'))
         else:
             self.cluster_chns = cluster_chns
 
@@ -72,39 +81,77 @@ class AlignmentQC(base.QC):
         """
         if self.alignments is None:
             self.load_data()
-        self.log.info(f"Insertion {self.eid}: Running QC on alignment data...")
-        self.sim_matrix = self.compute_similarity_matrix()
+
+        if len(self.alignments) < 2:
+            self.log.info(f"Insertion {self.eid}: One or less alignment found...")
+            self.sim_matrix = len(self.alignments)
+        else:
+            self.log.info(f"Insertion {self.eid}: Running QC on alignment data...")
+            self.sim_matrix = self.compute_similarity_matrix()
         return
 
-    def run(self, update=False, upload_alyx=False, upload_flatiron=False):
+    def run(self, update=False, upload_alyx=False, upload_flatiron=False, force=False):
         if self.sim_matrix is None:
             self.compute()
-        self.outcome, results = self.compute_alignment_status()
 
-        if update:
-            self.update_extended_qc(results)
-            self.update(self.outcome, 'alignment', override=self.override)
+        # Case where the alignment has already been resolved
+        if self.resolved == 1 and not force:
+            self.log.info(f"Alignment for insertion {self.eid} already resolved, channels won't be"
+                          f" updated")
+            results = {'_alignment_number': len(self.alignments)}
+            if update:
+                self.update_extended_qc(results)
+            results.update({'_alignment_resolved': 1})
+            self.outcome = self.insertion['json']['qc']
+        # Case where no alignments have been made
+        elif self.resolved == 0 and np.all(self.sim_matrix == 0):
+            results = {'_alignment_resolved': 0}
+            self.outcome = 'NOT_SET'
+        # Case where only one alignment
+        elif self.resolved == 0 and np.all(self.sim_matrix == 1):
+            results = {'_alignment_number': self.sim_matrix,
+                       '_alignment_stored': self.align_keys_sorted[0],
+                       '_alignment_resolved': 0}
+            self.outcome = 'NOT_SET'
+            if update:
+                self.update_extended_qc(results)
+        # Case where 2 or more alignments and alignments haven't been resolved, or force=True
+        else:
+            self.outcome, results = self.compute_alignment_status()
 
-        if results['_alignment_resolved'] == 1 and (upload_alyx or upload_flatiron):
-            self.upload_channels(results['_alignment_stored'], upload_alyx, upload_flatiron)
+            if update:
+                self.update_extended_qc(results)
+                self.update(self.outcome, 'alignment', override=self.override)
+
+            if results['_alignment_resolved'] == 1 and (upload_alyx or upload_flatiron):
+                self.upload_channels(results['_alignment_stored'], upload_alyx, upload_flatiron)
 
         return self.outcome, results
 
-    def resolve_manual(self, align_key, update=False, upload_alyx=False, upload_flatiron=False):
+    def resolve_manual(self, align_key, update=False, upload_alyx=False, upload_flatiron=False,
+                       force=False):
+
         if self.sim_matrix is None:
             self.compute()
         assert align_key in self.align_keys_sorted, 'align key not recognised'
-        self.outcome, results = self.compute_alignment_status()
-        results['_alignment_resolved'] = 1
-        results['_alignment_stored'] = align_key
-        self.outcome = 'PASS'
 
-        if update:
-            self.update_extended_qc(results)
-            self.update(self.outcome, 'alignment_user', override=self.override)
+        if self.resolved == 1 and not force:
+            self.log.info(f"Alignment for insertion {self.eid} already resolved, channels won't be"
+                          f"updated. To overwrite stored channels with alignment {align_key} "
+                          f"set 'force=True'")
+            file_paths = []
+        else:
+            self.outcome, results = self.compute_alignment_status()
+            results['_alignment_resolved'] = 1
+            results['_alignment_stored'] = align_key
+            self.outcome = 'PASS'
 
-        if upload_alyx or upload_flatiron:
-            file_paths = self.upload_channels(align_key, upload_alyx, upload_flatiron)
+            if update:
+                self.update_extended_qc(results)
+                self.update(self.outcome, 'alignment_user', override=self.override)
+
+            if upload_alyx or upload_flatiron:
+                file_paths = self.upload_channels(align_key, upload_alyx, upload_flatiron)
 
         return file_paths
 
@@ -230,7 +277,7 @@ class AlignmentQC(base.QC):
         # latest key
         if upload_alyx:
             if alignment_key != self.align_keys_sorted[0]:
-                histology.register_aligned_track(self.eid, channels_mlapdv,
+                histology.register_aligned_track(self.eid, channels_mlapdv / 1e6,
                                                  chn_coords=SITES_COORDINATES, one=self.one,
                                                  overwrite=True, channels=self.channels)
 
