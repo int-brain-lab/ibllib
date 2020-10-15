@@ -334,7 +334,6 @@ class FTPPatcher(Patcher):
         # local_path
         self.mktree(remote_path.parent)
         # if the file already exists on the buffer, do not overwrite
-        print('made it out alive')
         if local_path.name in self.ftp.nlst():
             _logger.info(f"FTP already on server {local_path}")
             return 0, ''
