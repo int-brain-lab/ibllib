@@ -133,14 +133,14 @@ class QC:
             extended_qc.update(data)
             extended_qc_dict = {'extended_qc': extended_qc}
             out = self.one.alyx.json_field_update(
-                  endpoint=self.endpoint, uuid=self.eid, field_name='json', data=extended_qc_dict)
+                endpoint=self.endpoint, uuid=self.eid, field_name='json', data=extended_qc_dict)
         else:
-            extended_qc = self.one.alyx.rest(self.endpoint, 'read', id=self.eid)['extended_qc'] \
-                          or {}
+            extended_qc = self.one.alyx.rest(self.endpoint, 'read', id=self.eid)
+            ['extended_qc'] or {}
             extended_qc.update(data)
             out = self.one.alyx.json_field_update(
-                  endpoint=self.endpoint, uuid=self.eid, field_name='extended_qc',
-                  data=extended_qc)
+                endpoint=self.endpoint, uuid=self.eid, field_name='extended_qc',
+                data=extended_qc)
 
         self.log.info(f'Extended QC field successfully updated for {self.endpoint[:-1]} '
                       f'{self.eid}')

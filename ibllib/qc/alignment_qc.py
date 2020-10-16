@@ -12,7 +12,11 @@ CRITERIA = {"PASS": 0.8}
 
 
 class AlignmentQC(base.QC):
-    def __init__(self, probe_id, one=None, brain_atlas=None, override=True, channels=True):
+    """
+    Class that is used to update the extended_qc of the probe insertion fields with the results
+    from the ephys alignment procedure
+    """
+    def __init__(self, probe_id, one=None, brain_atlas=None, channels=True):
         super().__init__(probe_id, one=one, log=_log, endpoint='insertions')
 
         # Data
@@ -25,7 +29,6 @@ class AlignmentQC(base.QC):
         # Metrics and passed trials
         self.sim_matrix = None
         self.criteria = CRITERIA
-        self.override = override
 
         # Get the brain atlas
         self.brain_atlas = brain_atlas or AllenAtlas(25)
@@ -34,9 +37,13 @@ class AlignmentQC(base.QC):
 
         self.insertion = one.alyx.rest('insertions', 'read', id=self.eid)
         self.resolved = (self.insertion.get('json', {'temp': 0}).get('extended_qc').
-                         get('_alignment_resolved', 0))
+                         get('alignment_resolved', 0))
 
     def load_data(self, prev_alignments=None, xyz_picks=None, depths=None, cluster_chns=None):
+        """"
+        Load data required to assess alignment qc and compute similarity matrix. If no arguments
+        are given load_data will fetch all the relevant data required
+        """
         if not np.any(prev_alignments):
             aligned_traj = self.one.alyx.rest('trajectories', 'list', probe_insertion=self.eid,
                                               provenance='Ephys aligned histology track')
@@ -55,7 +62,7 @@ class AlignmentQC(base.QC):
             return
 
         if not np.any(xyz_picks):
-            self.xyz_picks = np.array(self.insertion['json']['xyz_picks'])/1e6
+            self.xyz_picks = np.array(self.insertion['json']['xyz_picks']) / 1e6
         else:
             self.xyz_picks = xyz_picks
 
@@ -74,62 +81,75 @@ class AlignmentQC(base.QC):
             self.cluster_chns = cluster_chns
 
     def compute(self):
-        """Compute and store the QC metrics
-        Runs the QC on the session and stores a map of the metrics for each datapoint for each
-        test, and a map of which datapoints passed for each test
-        :return:
         """
+        Computes the similarity matrix if > 2 alignments. If no data loaded, wraps around load_data
+        to get all relevant data needed
+        """
+
         if self.alignments is None:
             self.load_data()
 
         if len(self.alignments) < 2:
             self.log.info(f"Insertion {self.eid}: One or less alignment found...")
-            self.sim_matrix = len(self.alignments)
+            self.sim_matrix = np.array([len(self.alignments)])
         else:
             self.log.info(f"Insertion {self.eid}: Running QC on alignment data...")
             self.sim_matrix = self.compute_similarity_matrix()
         return
 
-    def run(self, update=False, upload_alyx=False, upload_flatiron=False, force=False):
+    def run(self, update=True, upload_alyx=True, upload_flatiron=True):
+        """
+        Compute alignment_qc for a specified probe insertion and updates extended qc field in alyx.
+        If alignment is resolved and upload flags set to True channels from resolved
+        alignment will be updated to alyx and datasets sent to ibl-ftp-patcher to be uploaded to
+        flatiron
+        """
         if self.sim_matrix is None:
             self.compute()
 
         # Case where the alignment has already been resolved
-        if self.resolved == 1 and not force:
+        if self.resolved == 1:
             self.log.info(f"Alignment for insertion {self.eid} already resolved, channels won't be"
-                          f" updated")
+                          f" updated. To force update of channels use "
+                          f"resolve_manual method with force=True")
             results = {'_alignment_number': len(self.alignments)}
             if update:
                 self.update_extended_qc(results)
-            results.update({'_alignment_resolved': 1})
-            self.outcome = self.insertion['json']['qc']
+            results.update({'alignment_resolved': 1})
+
         # Case where no alignments have been made
-        elif self.resolved == 0 and np.all(self.sim_matrix == 0):
-            results = {'_alignment_resolved': 0}
-            self.outcome = 'NOT_SET'
+        elif np.all(self.sim_matrix == 0) and self.sim_matrix.shape[0] == 1:
+            # We don't update database
+            results = {'alignment_resolved': 0}
+
         # Case where only one alignment
-        elif self.resolved == 0 and np.all(self.sim_matrix == 1):
-            results = {'_alignment_number': self.sim_matrix,
+        elif np.all(self.sim_matrix == 1) and self.sim_matrix.shape[0] == 1:
+            results = {'_alignment_number': len(self.alignments),
                        '_alignment_stored': self.align_keys_sorted[0],
-                       '_alignment_resolved': 0}
-            self.outcome = 'NOT_SET'
+                       'alignment_resolved': 0}
             if update:
                 self.update_extended_qc(results)
-        # Case where 2 or more alignments and alignments haven't been resolved, or force=True
+
+        # Case where 2 or more alignments and alignments haven't been resolved
         else:
-            self.outcome, results = self.compute_alignment_status()
+            results = self.compute_alignment_status()
 
             if update:
                 self.update_extended_qc(results)
-                self.update(self.outcome, 'alignment', override=self.override)
 
-            if results['_alignment_resolved'] == 1 and (upload_alyx or upload_flatiron):
+            if results['alignment_resolved'] == 1 and (upload_alyx or upload_flatiron):
                 self.upload_channels(results['_alignment_stored'], upload_alyx, upload_flatiron)
 
-        return self.outcome, results
+        return results
 
-    def resolve_manual(self, align_key, update=False, upload_alyx=False, upload_flatiron=False,
+    def resolve_manual(self, align_key, update=True, upload_alyx=True, upload_flatiron=True,
                        force=False):
+        """
+        Method to manually resolve the alignment of a probe insertion with a given alignment
+        regardless of the number of alignments or the alignment qc value. Channels from specified
+        alignment will be uploaded to alyx and datasets sent to ibl-ftp-patcher to be uploaded to
+        flatiron. If alignment already resolved will only upload if force flag set to True
+        """
 
         if self.sim_matrix is None:
             self.compute()
@@ -141,14 +161,13 @@ class AlignmentQC(base.QC):
                           f"set 'force=True'")
             file_paths = []
         else:
-            self.outcome, results = self.compute_alignment_status()
-            results['_alignment_resolved'] = 1
+            results = self.compute_alignment_status()
+            results['alignment_resolved'] = 1
             results['_alignment_stored'] = align_key
-            self.outcome = 'PASS'
+            results['_alignment_resolved_by'] = 'experimenter'
 
             if update:
                 self.update_extended_qc(results)
-                self.update(self.outcome, 'alignment_user', override=self.override)
 
             if upload_alyx or upload_flatiron:
                 file_paths = self.upload_channels(align_key, upload_alyx, upload_flatiron)
@@ -156,6 +175,11 @@ class AlignmentQC(base.QC):
         return file_paths
 
     def compute_similarity_matrix(self):
+        """
+        Computes the similarity matrix between each alignment stored in the ephys aligned
+        trajectory. Similarity matrix based on number of clusters that share brain region and
+        parent brain region
+        """
 
         r = regions_from_allen_csv()
 
@@ -196,9 +220,13 @@ class AlignmentQC(base.QC):
         return sim_matrix_norm
 
     def compute_alignment_status(self):
-
+        """
+        Determine whether alignments agree based on value in similarity matrix. If any alignments
+        have similarity of 0.8 set the alignment to be resolved
+        """
         # Set diagonals to zero so we don't use those to find max
-        self.sim_matrix[self.sim_matrix == 1] = 0
+        np.fill_diagonal(self.sim_matrix, 0)
+        # self.sim_matrix[self.sim_matrix == 1] = 0
         max_sim = np.max(self.sim_matrix)
 
         results = {'_alignment_qc': max_sim,
@@ -207,18 +235,23 @@ class AlignmentQC(base.QC):
         if max_sim > CRITERIA['PASS']:
             location = np.where(self.sim_matrix == max_sim)
             results.update({'_alignment_stored': self.align_keys_sorted[np.min(location)]})
-            results.update({'_alignment_resolved': 1})
-            outcome = 'PASS'
+            results.update({'alignment_resolved': 1})
+            results.update({'_alignment_resolved_by': 'qc'})
+
+            # outcome = 'PASS'
 
         else:
             results.update({'_alignment_stored': self.align_keys_sorted[0]})
-            results.update({'_alignment_resolved': 0})
+            results.update({'alignment_resolved': 0})
 
-            outcome = 'WARNING'
+            # outcome = 'WARNING'
 
-        return outcome, results
+        return results
 
-    def upload_channels(self, alignment_key, upload_alyx, upload_flatiron, dry=True):
+    def upload_channels(self, alignment_key, upload_alyx, upload_flatiron):
+        """
+        Upload channels to alyx and flatiron based on the alignment specified by the alignment key
+        """
 
         feature = np.array(self.alignments[alignment_key][0])
         track = np.array(self.alignments[alignment_key][1])
@@ -271,6 +304,7 @@ class AlignmentQC(base.QC):
             np.save(f_name, clusters_brainAcro)
             files_to_register.append(f_name)
 
+            self.log.info(f"Writing datasets to FlatIron")
             ftp_patcher.create_dataset(path=files_to_register, created_by=self.one._par.ALYX_LOGIN)
 
         # Need to change channels stored on alyx as well as the stored key is not the same as the
@@ -288,8 +322,3 @@ class AlignmentQC(base.QC):
                                    data=patch_dict)
 
         return files_to_register
-
-
-
-
-
