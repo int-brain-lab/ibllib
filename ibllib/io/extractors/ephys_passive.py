@@ -508,9 +508,11 @@ def extract_passive_choice_world(session_path, plot=False):
 if __name__ == "__main__":
     # TODO: Check all TODO's in file!!
     # TODO: reuse test from passive.py before deleting
+    # sp = '/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_029/2020-10-07/001'
+    # extract_passive_choice_world(sp)
+    # extract_passive_choice_world(sp, plot=True)
     # from oneibl.one import ONE
     # import alf.io
-
 
     # one = ONE()
 
@@ -539,4 +541,4 @@ if __name__ == "__main__":
     #     except BaseException as e:
     #         print(e)
     #         continue
-    print('.')
+    print(".")

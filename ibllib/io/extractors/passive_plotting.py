@@ -4,6 +4,10 @@
 # @Date: Friday, October 16th 2020, 5:53:15 pm
 # PLOTTING
 from ibllib.plots import color_cycle, squares, vertical_lines
+from ibllib.io.extractors import ephys_fpga
+import matplotlib.pyplot as plt
+import numpy as np
+
 
 
 def plot_rfmapping(times_interp_RF, ax=None):
