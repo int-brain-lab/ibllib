@@ -245,11 +245,12 @@ class RegistrationClient:
 
         # if nothing found create a new session in Alyx
         task_protocol = md['PYBPOD_PROTOCOL'] + md['IBLRIG_VERSION_TAG']
+        alyx_procedure = _alyx_procedure_from_task(task_protocol)
         if not session:
             ses_ = {'subject': subject['nickname'],
                     'users': [username],
                     'location': md['PYBPOD_BOARD'],
-                    'procedures': [_alyx_procedure_from_task(task_protocol)],
+                    'procedures': [] if alyx_procedure is None else [alyx_procedure],
                     'lab': subject['lab'],
                     # 'project': project['name'],
                     'type': 'Experiment',
