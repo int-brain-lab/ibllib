@@ -268,3 +268,51 @@ def load_wheel_reaction_times(eid, one=None):
     assert trials and moves, 'unable to load trials and wheelMoves data'
     firstMove_times, is_final_movement, ids = extract_first_movement_times(moves, trials)
     return firstMove_times - trials['goCue_times']
+
+
+def download_raw_video(eid, cameras='all', one=None):
+    """
+    Return the calculated reaction times for session.  Reaction times are defined as the time
+    between the go cue (onset tone) and the onset of the first substantial wheel movement.   A
+    movement is considered sufficiently large if its peak amplitude is at least 1/3rd of the
+    distance to threshold (~0.1 radians).
+
+    Negative times mean the onset of the movement occurred before the go cue.  Nans may occur if
+    there was no detected movement withing the period, or when the goCue_times or feedback_times
+    are nan.
+
+    Parameters
+    ----------
+    eid : str
+        Session UUID
+    one : oneibl.ONE
+        An instance of ONE for loading data.  If None a new one is instantiated using the defaults.
+    cameras: str, str list
+        The specific camera to load (i.e. 'left', 'right', or 'body') If None all three videos are
+        downloaded.
+        :return:
+    Returns
+    ----------
+    Path, Path list
+        the file path(s) of the raw videos
+    """
+    one = one or ONE()
+    if not alf.io.is_uuid_string(str(eid)):
+    if cameras:
+        cameras = [cameras] if isinstance(cameras, str) else cameras
+        cam_files = ['_iblrig_{}Camera.raw.mp4'.format(cam) for cam in cameras]
+        datasets = one.alyx.rest('sessions', 'read', id=eid)['data_dataset_session_related']
+        urls = [ds['data_url'] for ds in datasets if ds['name'] in cam_files]
+        cache_dir = one.path_from_eid(eid).joinpath('raw_video_data')
+        cache_dir.mkdir(exist_ok=True)  # Create folder if doesn't already exist
+        # Check if file already downloaded
+        cam_files = [file[:-4] for file in cam_files]  # Remove ext
+        filenames = [f for f in cache_dir.iterdir()
+                     if any([cam in str(f) for cam in cam_files])]
+        if filenames:
+            return [cache_dir.joinpath(file) for file in filenames]
+        return http_download_file_list(urls, username=one._par.HTTP_DATA_SERVER_LOGIN,
+                                       password=one._par.HTTP_DATA_SERVER_PWD,
+                                       cache_dir=str(cache_dir))
+    else:
+        return one.load(eid, ['_iblrig_Camera.raw'], download_only=True)

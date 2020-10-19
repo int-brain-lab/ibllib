@@ -9,6 +9,7 @@ import json
 import copy
 import logging
 import re
+from uuid import UUID
 from datetime import datetime
 from pathlib import Path
 from typing import Union
@@ -390,7 +391,8 @@ def add_uuid_string(file_path, uuid):
 
 def is_uuid_string(string: str) -> bool:
     """
-    Bool test for uuid version 4
+    Bool test for randomly generated hexadecimal uuid validity
+    NB: uuid must be hyphen separated
     """
     if string is None:
         return False
@@ -401,6 +403,20 @@ def is_uuid_string(string: str) -> bool:
         return True
     else:
         return False
+
+
+def is_uuid(uuid: Union[str, int, bytes, UUID]) -> bool:
+    """Bool test for randomly generated hexadecimal uuid validity
+    Unlike `is_uuid_string`, this function accepts UUID objects
+    """
+    if not isinstance(uuid, (UUID, str, bytes, int)):
+        return False
+    elif not isinstance(uuid, UUID):
+        try:
+            uuid = UUID(uuid) if isinstance(uuid, str) else UUID(**{type(uuid).__name__: uuid})
+        except ValueError:
+            return False
+    return isinstance(uuid, UUID) and uuid.version == 4
 
 
 def _isdatetime(s: str) -> bool:

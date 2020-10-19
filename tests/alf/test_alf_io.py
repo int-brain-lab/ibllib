@@ -309,6 +309,16 @@ class TestSessionFolder(unittest.TestCase):
         for i, e in zip(testins, expected):
             self.assertTrue(alf.io.is_uuid_string(i) == e)
 
+    def test_is_uuid(self):
+        hex_uuid = 'f6ffe25827-06-425aaa-f5-919f70025835'
+        uuid_obj = uuid.UUID(hex_uuid)
+        # Check valid inputs
+        for valid in (hex_uuid, hex_uuid.replace('-', ''), uuid_obj.bytes, uuid_obj.int, uuid_obj):
+            self.assertTrue(alf.io.is_uuid(valid), f'{valid} is a valid uuid')
+        # Check bad inputs
+        for fake in (None, 54323, 'dddd-aaa-eeee'):
+            self.assertFalse(alf.io.is_uuid(fake), f'{fake} is not a valid uuid')
+
     def test_is_details_dict(self):
         keys = [
             'subject',
