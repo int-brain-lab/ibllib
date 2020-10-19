@@ -8,6 +8,7 @@ import uuid
 import numpy as np
 
 import alf.io
+from ibllib.exceptions import ALFObjectNotFound
 
 
 class TestAlfBunch(unittest.TestCase):
@@ -92,7 +93,7 @@ class TestsAlfPartsFilters(unittest.TestCase):
         # Test load with extra filter
         b = alf.io.load_object(self.tmpdir, 'neuveux', timescale='toto', short_keys=True)
         self.assertCountEqual(list(b.keys()), ['fifi_toto', 'riri_toto'])
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaises(ALFObjectNotFound):
             alf.io.load_object(self.tmpdir, 'neuveux', timescale='toto', namespace='baz')
 
         # also test file filters through wildcard
@@ -201,7 +202,7 @@ class TestsAlf(unittest.TestCase):
         self.assertTrue(all([obj[o].shape == (5,) for o in obj]))
         # providing directory without object will return all ALF files
         with self.assertRaises(ValueError) as context:
-            obj = alf.io.load_object(self.tmpdir)
+            alf.io.load_object(self.tmpdir)
         self.assertTrue('object name should be provided too' in str(context.exception))
 
     def test_save_npy(self):
@@ -308,6 +309,16 @@ class TestSessionFolder(unittest.TestCase):
         expected = [False, False, False, True]
         for i, e in zip(testins, expected):
             self.assertTrue(alf.io.is_uuid_string(i) == e)
+
+    def test_is_uuid(self):
+        hex_uuid = 'f6ffe25827-06-425aaa-f5-919f70025835'
+        uuid_obj = uuid.UUID(hex_uuid)
+        # Check valid inputs
+        for valid in (hex_uuid, hex_uuid.replace('-', ''), uuid_obj.bytes, uuid_obj.int, uuid_obj):
+            self.assertTrue(alf.io.is_uuid(valid), f'{valid} is a valid uuid')
+        # Check bad inputs
+        for fake in (None, 54323, 'dddd-aaa-eeee'):
+            self.assertFalse(alf.io.is_uuid(fake), f'{fake} is not a valid uuid')
 
     def test_is_details_dict(self):
         keys = [

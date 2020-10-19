@@ -120,10 +120,6 @@ def get_sessions(subj, date=None, one=None):
             trials_ = one.load_object(sessions[n]['url'].split('/')[-1], 'trials')
 
             if trials_:
-                trials_.probabilityLeft, = one.load(sessions[n]['url'].split('/')[-1],
-                                                    'trials.probabilityLeft')
-                trials_.response_times, = one.load(sessions[n]['url'].split('/')[-1],
-                                                   'trials.response_times')
                 task_protocol.append(re.search('tasks_(.*)Choice',
                                      sessions[n]['task_protocol']).group(1))
                 sess_dates.append(sessions[n]['start_time'][:10])
@@ -135,10 +131,6 @@ def get_sessions(subj, date=None, one=None):
             trials_ = one.load_object(sessions[n]['url'].split('/')[-1], 'trials')
 
             if trials_:
-                trials_.probabilityLeft, = one.load(sessions[n]['url'].split('/')[-1],
-                                                    'trials.probabilityLeft')
-                trials_.response_times, = one.load(sessions[n]['url'].split('/')[-1],
-                                                   'trials.response_times')
                 task_protocol.append(re.search('tasks_(.*)Choice',
                                      sessions[n]['task_protocol']).group(1))
                 sess_dates.append(sessions[n]['start_time'][:10])
