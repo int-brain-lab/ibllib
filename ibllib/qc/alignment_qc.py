@@ -95,7 +95,8 @@ class AlignmentQC(base.QC):
         else:
             self.log.info(f"Insertion {self.eid}: Running QC on alignment data...")
             self.sim_matrix = self.compute_similarity_matrix()
-        return
+
+        return self.sim_matrix
 
     def run(self, update=True, upload_alyx=True, upload_flatiron=True):
         """

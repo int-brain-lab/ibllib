@@ -253,8 +253,7 @@ class BrainAtlas:
         :param imlabel: 2D np-array containing label ids (slice of the label volume)
         :return: 3D np-array of the slice uint8 rgb values
         """
-      # if the regions exist and have the rgb attribute, do the rgb lookup
-            # the lookup is done in pure numpy for speed. This is the ismember matlab fcn
+
         im_unique, ilabels, iim = np.unique(imlabel, return_index=True, return_inverse=True)
         _, ir_unique, _ = np.intersect1d(self.regions.id, im_unique, return_indices=True)
 
@@ -388,8 +387,6 @@ class BrainAtlas:
         elif volume == 'value':
             im = _take(self.label, index, axis=self.xyz2dims[axis])
             return self._label2value(im, region_values=region_values)
-
-
 
     def plot_cslice(self, ap_coordinate, volume='image', **kwargs):
         """
