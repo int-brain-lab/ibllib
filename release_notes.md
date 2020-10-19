@@ -1,3 +1,6 @@
+### Release Notes 1.5.16  Hotfix
+-   numpy needs upgrading >= 1.18
+
 ### Release Notes 1.5.15  Hotfix
 -   session creation skips alyx procedure for unknown task protocol (custom projects)
 
