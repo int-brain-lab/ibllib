@@ -880,6 +880,7 @@ class OneAlyx(OneAbstract):
             cmeta = json.load(f)
 
         # Get the first byte and number of bytes to download.
+        total_n_samples = cmeta['chunk_bounds'][-1]
         i0 = cmeta['chunk_bounds'][first_chunk]
         cmeta['chunk_bounds'] = cmeta['chunk_bounds'][first_chunk:last_chunk + 2]
         cmeta['chunk_bounds'] = [_ - i0 for _ in cmeta['chunk_bounds']]
@@ -898,6 +899,8 @@ class OneAlyx(OneAbstract):
         cmeta['sha1_compressed'] = None
         cmeta['sha1_uncompressed'] = None
         cmeta['chopped'] = True
+        cmeta['chopped_first_sample'] = i0
+        cmeta['chopped_total_samples'] = total_n_samples
         with open(ch_local_path, 'w') as f:
             json.dump(cmeta, f, indent=2, sort_keys=True)
 
@@ -914,7 +917,7 @@ class OneAlyx(OneAbstract):
 
         import mtscomp
         reader = mtscomp.decompress(cbin_local_path, cmeta=ch_local_path)
-        return reader[:]
+        return reader
 
 
 def _validate_date_range(date_range):
