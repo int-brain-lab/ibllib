@@ -20,7 +20,7 @@ class TestONEQCMetrics(unittest.TestCase):
 
     def test_ONEQC_lazy(self):
         oneqc = ONEQC(self.test_eid, one=self.one, bpod_ntrials=None, lazy=True)
-        self.assertTrue(oneqc.bpod_ntrials == 616)
+        self.assertTrue(isinstance(oneqc.bpod_ntrials, int))
         self.assertTrue(oneqc.metrics is None)
         self.assertTrue(oneqc.passed is None)
         oneqc.compute()
