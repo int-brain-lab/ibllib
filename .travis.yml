@@ -1,10 +1,7 @@
 language: python
 python:
   - "3.8"
-os:
-  - linux
-  - osx
-  - windows
+os: linux
 dist: bionic
 # command to install dependencies
 install:
