@@ -949,7 +949,7 @@ class OneAlyx(OneAbstract):
             username=self._par.HTTP_DATA_SERVER_LOGIN,
             password=self._par.HTTP_DATA_SERVER_PWD,
             cache_dir=target_dir, clobber=True, offline=False, return_md5=False))
-        ch_local_path = remove_uuid_file(ch_local_path)
+        ch_local_path = alfio.remove_uuid_file(ch_local_path)
         ch_local_path = ch_local_path.rename(ch_local_path.with_suffix('.chopped.ch'))
         assert ch_local_path.exists()
 
@@ -986,7 +986,7 @@ class OneAlyx(OneAbstract):
             password=self._par.HTTP_DATA_SERVER_PWD,
             cache_dir=target_dir, clobber=True, offline=False, return_md5=False,
             chunks=(first_byte, n_bytes))
-        cbin_local_path = remove_uuid_file(cbin_local_path)
+        cbin_local_path = alfio.remove_uuid_file(cbin_local_path)
         cbin_local_path = cbin_local_path.rename(cbin_local_path.with_suffix('.chopped.cbin'))
         assert cbin_local_path.exists()
 
