@@ -22,6 +22,23 @@ Examples:
     qc.load_data(bpod_only=True)  # Extract without FPGA
     bpod_qc = qc.run()
 
+    # Running bpod QC only, from training rig PC
+    from ibllib.qc.task_metrics import TaskQC
+    from ibllib.qc.qcplots import plot_results
+    session_path = r'/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_023/2020-02-14/001'
+    qc = TaskQC(session_path)
+    qc.load_data(bpod_only=True, download_data=False)  # Extract without FPGA
+    qc.run()
+    plot_results(qc, save_path=session_path)
+
+    # Running ephys QC, from local server PC (after ephys + bpod data have been copied to a same
+    folder)
+    from ibllib.qc.task_metrics import TaskQC
+    from ibllib.qc.qcplots import plot_results
+    session_path = r'/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_023/2020-02-14/001'
+    qc = TaskQC(session_path)
+    qc.run()
+    plot_results(qc, save_path=session_path)
 """
 import logging
 import sys
@@ -37,6 +54,7 @@ from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.io.extractors.training_wheel import WHEEL_RADIUS_CM
 from ibllib.io.extractors.ephys_fpga import WHEEL_TICKS
+from alf.io import is_session_path
 from . import base
 
 _log = logging.getLogger('ibllib')
@@ -54,6 +72,8 @@ class TaskQC(base.QC):
         :param log: A logging.Logger instance, if None the 'ibllib' logger is used
         :param one: An ONE instance for fetching and setting the QC on Alyx
         """
+        # When an eid is provided, we will download the required data by default (if necessary)
+        self.download_data = not is_session_path(session_path_or_eid)
         super().__init__(session_path_or_eid, **kwargs)
 
         # Data
@@ -64,6 +84,12 @@ class TaskQC(base.QC):
         self.passed = None
 
     def load_data(self, bpod_only=False, download_data=True):
+        """Extract the data from raw data files
+        Extracts all the required task data from the raw data files.
+
+        :param bpod_only: if True no data is extracted from the FPGA for ephys sessions
+        :param download_data: if True, any missing raw data is downloaded via ONE.
+        """
         self.extractor = TaskQCExtractor(
             self.session_path, one=self.one, download_data=download_data, bpod_only=bpod_only)
 
@@ -71,12 +97,14 @@ class TaskQC(base.QC):
         """Compute and store the QC metrics
         Runs the QC on the session and stores a map of the metrics for each datapoint for each
         test, and a map of which datapoints passed for each test
-        :param bpod_only (False)
-        :param download_data (True)
+        :param bpod_only: if True no data is extracted from the FPGA for ephys sessions
+        :param download_data: if True, any missing raw data is downloaded via ONE.  By default
+        data are not downloaded if a session path was provided to the constructor.
         :return:
         """
         if self.extractor is None:
-            self.load_data(**kwargs)
+            ensure_data = kwargs.pop('download_only', self.download_data)
+            self.load_data(download_data=ensure_data, **kwargs)
         self.log.info(f"Session {self.session_path}: Running QC on behavior data...")
         self.metrics, self.passed = get_bpodqc_metrics_frame(
             self.extractor.data,
@@ -91,9 +119,10 @@ class TaskQC(base.QC):
     def run(self, update=False, **kwargs):
         """
         :param update: if True, updates the session QC fields on Alyx
-        :param bpod_only (False)
-        :param download_data (True)
-        :return:
+        :param bpod_only: if True no data is extracted from the FPGA for ephys sessions
+        :param download_data: if True, any missing raw data is downloaded via ONE.  By default
+        data are not downloaded if a session path was provided to the constructor.
+        :return: session outcome (str), a dict for extended QC
         """
         if self.metrics is None:
             self.compute(**kwargs)
@@ -141,14 +170,16 @@ class TaskQC(base.QC):
 
 class HabituationQC(TaskQC):
 
-    def compute(self):
+    def compute(self, download_data=None):
         """Compute and store the QC metrics
         Runs the QC on the session and stores a map of the metrics for each datapoint for each
         test, and a map of which datapoints passed for each test
         :return:
         """
         if self.extractor is None:
-            self.load_data()
+            # If download_data is None, decide based on whether eid or session path was provided
+            ensure_data = self.download_data if download_data is None else download_data
+            self.load_data(download_data=ensure_data)
         self.log.info(f"Session {self.session_path}: Running QC on habituation data...")
 
         # Initialize checks
