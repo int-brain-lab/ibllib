@@ -1,13 +1,17 @@
 import unittest
-import numpy as np
+from uuid import UUID
 import requests
 from pathlib import Path
 import tempfile
 import shutil
 
+import numpy as np
+
 import ibllib.io.hashfile as hashfile
 from alf.io import remove_uuid_file
-from oneibl.one import ONE, SessionDataInfo
+from oneibl.one import ONE
+# from ibllib.misc.exp_ref import eid2ref
+
 
 one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
           password='TapetesBloc18')
@@ -73,7 +77,7 @@ class TestSearch(unittest.TestCase):
 class TestList(unittest.TestCase):
 
     def setUp(self):
-        # Init connection to the databas
+        # Init connection to the database
         eids = ['cf264653-2deb-44cb-aa84-89b82507028a', '4e0b3320-47b7-416e-b842-c34dc9004cf8']
         self.eid = eids[0]
         self.eid2 = eids[1]
@@ -83,15 +87,34 @@ class TestList(unittest.TestCase):
         eid = self.eid
         dt = one.list(eid)  # returns dataset-type
         self.assertTrue(isinstance(dt, list))
-        dt = one.list(eid, details=True)
-        self.assertTrue(isinstance(dt, SessionDataInfo))
+        self.assertEqual(29, len(dt))
+        self.assertEqual('eye.xyPos', dt[0])
+
+        dt = one.list(eid, details=True)  # returns dict of dataset-types
+        self.assertTrue(isinstance(dt, dict))
+        self.assertEqual(list(dt.keys()), ['alf'])
+        self.assertEqual('eye.xyPos', dt['alf'][0])
+
+        dt = one.list(eid, 'datasets')  # returns dataset
+        self.assertEqual('eye.xyPos.npy', dt[0])
+
+        dt = one.list()  # returns list of dataset-types
+        self.assertTrue(isinstance(dt, list))
+        self.assertIn('spikes.times', dt)
+
+        dt = one.list(details=True)
+        self.assertTrue(isinstance(dt, list))
+        self.assertTrue(isinstance(dt[0], dict))
+
+        dt2 = one.list(keyword='datasets', details=True)
+        self.assertEqual(dt, dt2)
 
     def test_list_error(self):
         a = 0
         eid = self.eid
         try:
             one.list(eid, keyword='tutu')  # throws an error
-        except KeyError:
+        except ValueError:
             a = 1
             pass
         self.assertTrue(a == 1)
@@ -100,11 +123,6 @@ class TestList(unittest.TestCase):
         dtypes = one.list(None, keyword='dataset-types')
         one.help(dtypes[0])
         one.help([])
-
-    def test_list_allkeys(self):
-        for k in one.keywords():
-            rep = one.list(keyword=k)
-            self.assertTrue(len(rep) > 1)
 
 
 class TestLoad(unittest.TestCase):
@@ -176,15 +194,6 @@ class TestLoad(unittest.TestCase):
         # Now try in offline mode where the file already exists
         t_ = one.load(eid, dataset_types=['clusters.channels'])
         self.assertTrue(np.all(t == t_))
-
-        # load_dataset()
-        t__ = one.load_dataset(eid, 'clusters.channels')
-        self.assertTrue(np.all(t == t__))
-
-        # load_object()
-        obj = one.load_object(eid, 'clusters')
-        t__ = obj['channels']
-        self.assertTrue(np.all(t == t__))
 
     def test_load_empty(self):
         # Test with a session that doesn't have any dataset on the Flat Iron
@@ -263,6 +272,24 @@ class TestMisc(unittest.TestCase):
             self.assertEqual(_validate_date_range(v), expval)
         val = ('2018-11-04', '2018-11-04')
         self.assertEqual(_validate_date_range(val), val)
+
+    def test_to_eid(self):
+        eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
+        url = 'https://test.alyx.internationalbrainlab.org/sessions/' + eid
+        uuid = UUID(eid)
+        # ref = eid2ref(eid, one=one)
+        # ref_str = eid2ref(eid, one=one, as_dict=False)
+        path = one.path_from_eid(eid)
+
+        for id in (eid, url, uuid, path):
+            self.assertEqual(one.to_eid(id), eid)
+
+        # Test list
+        self.assertEqual(one.to_eid([id, url]), [eid, eid])
+
+        with self.assertRaises(ValueError):
+            one.to_eid('e73hj')
+            one.to_eid({'subject': 'flowers'})
 
 
 if __name__ == '__main__':
