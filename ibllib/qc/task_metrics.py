@@ -122,7 +122,7 @@ class TaskQC(base.QC):
         :param bpod_only: if True no data is extracted from the FPGA for ephys sessions
         :param download_data: if True, any missing raw data is downloaded via ONE.  By default
         data are not downloaded if a session path was provided to the constructor.
-        :return:
+        :return: session outcome (str), a dict for extended QC
         """
         if self.metrics is None:
             self.compute(**kwargs)
@@ -177,7 +177,9 @@ class HabituationQC(TaskQC):
         :return:
         """
         if self.extractor is None:
-            self.load_data(download_data or self.download_data)
+            # If download_data is None, decide based on whether eid or session path was provided
+            ensure_data = self.download_data if download_data is None else download_data
+            self.load_data(download_data=ensure_data)
         self.log.info(f"Session {self.session_path}: Running QC on habituation data...")
 
         # Initialize checks
