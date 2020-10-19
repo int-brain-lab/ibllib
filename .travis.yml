@@ -5,6 +5,7 @@ os:
   - linux
   - osx
   - windows
+
 dist: bionic
 # command to install dependencies
 install:
