@@ -71,6 +71,7 @@ if chans is not None:
     chans['rgb'] = r.get(ids=chans['atlas_id']).rgb
     cluster_brain_region = chans['acronym'][cluster_chans]
     cluster_colour = chans['rgb'][cluster_chans]
+    cluster_xyz = np.c_[chans['x'], chans['y'], chans['z']][cluster_chans]
     regions, idx, n_clust = np.unique(cluster_brain_region, return_counts=True, return_index=True)
 
     region_cols = cluster_colour[idx, :]
