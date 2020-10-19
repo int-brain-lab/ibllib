@@ -48,6 +48,7 @@ class TestAtlasSlicesConversion(unittest.TestCase):
         self.assertTrue(self.ba.slice(axis=1, coordinate=21, mode='clip').shape == (nx, nz))
 
     def test_ccf_xyz(self):
+        # test with bregma first
         assert np.all(np.abs(ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] -
                              self.ba.xyz2ccf(np.array([[0, 0, 0]]))) < 12)
         # check it works with a single coordinate
@@ -55,6 +56,14 @@ class TestAtlasSlicesConversion(unittest.TestCase):
                   np.array([[0, 0, 0], [-2000., 500, 200]]) / 1.e6)
         for xyz in coords:
             assert np.all(np.isclose(self.ba.ccf2xyz(self.ba.xyz2ccf(xyz)), xyz))
+        # test with the vertices from a mesh -
+        vertices = np.array([[7896.46, 3385.61, 514.179],  # this is apdvml
+                             [7777.87, 3416.28, 512.176],
+                             [7902.99, 3481.55, 503.324]])
+        vxyz = self.ba.ccf2xyz(vertices, ccf_order='mlapdv')
+        self.assertTrue(np.all(np.isclose(self.ba.xyz2ccf(vxyz, ccf_order='mlapdv'), vertices)))
+        vxyz = self.ba.ccf2xyz(vertices, ccf_order='apdvml')
+        self.assertTrue(np.all(np.isclose(self.ba.xyz2ccf(vxyz, ccf_order='apdvml'), vertices)))
 
 
 class TestInsertion(unittest.TestCase):

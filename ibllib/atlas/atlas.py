@@ -784,7 +784,7 @@ class AllenAtlas(BrainAtlas):
         :return: coordinates in um (mlapdv by default), origin is the front left top corner
          of the data volume
         """
-        ordre = self._ccf_order(ccf_order)
+        ordre = self._ccf_order(ccf_order, reverse=True)
         ccf = self.bc.xyz2i(xyz, round=False) * np.float(self.res_um)
         return ccf[..., ordre]
 
@@ -800,11 +800,22 @@ class AllenAtlas(BrainAtlas):
         return self.bc.i2xyz((ccf[..., ordre] / np.float(self.res_um)))
 
     @staticmethod
-    def _ccf_order(ccf_order):
+    def _ccf_order(ccf_order, reverse=False):
+        """
+        Returns the mapping to go from CCF coordinates order to the brain atlas xyz
+        :param ccf_order: 'mlapdv' or 'apdvml'
+        :param reverse: defaults to False.
+            If False, returns from CCF to brain atlas
+            If True, returns from brain atlas to CCF
+        :return:
+        """
         if ccf_order == 'mlapdv':
             return [0, 1, 2]
         elif ccf_order == 'apdvml':
-            return [2, 0, 1]
+            if reverse:
+                return [2, 0, 1]
+            else:
+                return [1, 2, 0]
         else:
             ValueError("ccf_order needs to be either 'mlapdv' or 'apdvml'")
 
