@@ -31,7 +31,10 @@ from brainbox.core import ismember, ismember2d
 
 _logger = logging.getLogger('ibllib')
 
-Listable = lambda t: Union[t, Sequence[t]]  # noqa
+
+def Listable(t): return Union[t, Sequence[t]]  # noqa
+
+
 NTHREADS = 4  # number of download threads
 
 _ENDPOINTS = {  # keynames are possible input arguments and values are actual endpoints
@@ -950,8 +953,10 @@ class OneAlyx(OneAbstract):
             password=self._par.HTTP_DATA_SERVER_PWD,
             cache_dir=target_dir, clobber=True, offline=False, return_md5=False))
         ch_local_path = alfio.remove_uuid_file(ch_local_path)
-        ch_local_path = ch_local_path.rename(ch_local_path.with_suffix('.chopped.ch'))
-        assert ch_local_path.exists()
+        ch_local_path_renamed = ch_local_path.with_suffix('.chopped.ch')
+        ch_local_path.rename(ch_local_path_renamed)
+        assert ch_local_path_renamed.exists()
+        ch_local_path = ch_local_path_renamed
 
         # Load the .ch file.
         with open(ch_local_path, 'r') as f:
