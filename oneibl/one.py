@@ -4,6 +4,7 @@ import json
 import logging
 import os
 from pathlib import Path, PurePath
+from typing import Optional
 
 import requests
 import tqdm
@@ -194,6 +195,63 @@ class OneAbstract(abc.ABC):
         # select datasets
         df = df[ismember(df['dataset_type'], dataset_types)[0]]
         return SessionDataInfo.from_pandas(df, self._get_cache_dir(cache_dir))
+
+    def path_from_eid(self, eid: str) -> Optional[Path]:
+        """
+        From an experiment id or a list of experiment ids, gets the local cache path
+        :param eid: eid (UUID) or list of UUIDs
+        :return: eid or list of eids
+        """
+        # If eid is a list of eIDs recurse through list and return the results
+        if isinstance(eid, list):
+            path_list = []
+            for p in eid:
+                path_list.append(self.path_from_eid(p))
+            return path_list
+        # If not valid return None
+        if not is_uuid_string(eid):
+            print(eid, " is not a valid eID/UUID string")
+            return
+        if self._cache.size == 0:
+            return
+
+        # load path from cache
+        ic = parquet.find_first_2d(
+            self._cache[['eid_0', 'eid_1']].to_numpy(), parquet.str2np(eid))
+        if ic is not None:
+            ses = self._cache.iloc[ic]
+            return Path(self._par.CACHE_DIR).joinpath(
+                ses['lab'], 'Subjects', ses['subject'], ses['start_time'].isoformat()[:10],
+                str(ses['number']).zfill(3))
+
+    def eid_from_path(self, path_obj):
+        """
+        From a local path, gets the experiment id
+        :param path_obj: local path or list of local paths
+        :return: eid or list of eids
+        """
+        # If path_obj is a list recurse through it and return a list
+        if isinstance(path_obj, list):
+            path_obj = [Path(x) for x in path_obj]
+            eid_list = []
+            for p in path_obj:
+                eid_list.append(self.eid_from_path(p))
+            return eid_list
+        # else ensure the path ends with mouse,date, number
+        path_obj = Path(path_obj)
+        session_path = get_session_path(path_obj)
+        # if path does not have a date and a number, or cache is empty return None
+        if session_path is None or self._cache.size == 0:
+            return None
+
+        # fetch eid from cache
+        ind = ((self._cache['subject'] == session_path.parts[-3]) &
+               (self._cache['start_time'].apply(
+                   lambda x: x.isoformat()[:10] == session_path.parts[-2])) &
+               (self._cache['number']) == int(session_path.parts[-1]))
+        ind = np.where(ind.to_numpy())[0]
+        if ind.size > 0:
+            return parquet.np2str(self._cache[['eid_0', 'eid_1']].iloc[ind[0]])
 
     @abc.abstractmethod
     def _make_dataclass(self, eid, dataset_types=None, cache_dir=None, **kwargs):
@@ -733,13 +791,9 @@ class OneAlyx(OneAbstract):
 
         # first try avoid hitting the database
         if self._cache.size > 0 and use_cache:
-            ic = parquet.find_first_2d(
-                self._cache[['eid_0', 'eid_1']].to_numpy(), parquet.str2np(eid))
-            if ic is not None:
-                ses = self._cache.iloc[ic]
-                return Path(self._par.CACHE_DIR).joinpath(
-                    ses['lab'], 'Subjects', ses['subject'], ses['start_time'].isoformat()[:10],
-                    str(ses['number']).zfill(3))
+            cache_path = super().path_from_eid(eid)
+            if cache_path:
+                return cache_path
 
         # if it wasn't successful, query Alyx
         ses = self.alyx.rest('sessions', 'list', django=f'pk,{eid}')
@@ -772,14 +826,9 @@ class OneAlyx(OneAbstract):
             return None
 
         # try the cached info to possibly avoid hitting database
-        if self._cache.size > 0 and use_cache:
-            ind = ((self._cache['subject'] == session_path.parts[-3]) &
-                   (self._cache['start_time'].apply(
-                       lambda x: x.isoformat()[:10] == session_path.parts[-2])) &
-                   (self._cache['number']) == int(session_path.parts[-1]))
-            ind = np.where(ind.to_numpy())[0]
-            if ind.size > 0:
-                return parquet.np2str(self._cache[['eid_0', 'eid_1']].iloc[ind[0]])
+        cache_eid = super().eid_from_path(path_obj)
+        if cache_eid:
+            return cache_eid
 
         # if not search for subj, date, number XXX: hits the DB
         uuid = self.search(subjects=session_path.parts[-3],
