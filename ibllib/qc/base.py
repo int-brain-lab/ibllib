@@ -24,7 +24,7 @@ class QC:
         :param endpoint_id: Eid for endpoint. If using sessions can also be a session path
         :param log: A logging.Logger instance, if None the 'ibllib' logger is used
         :param one: An ONE instance for fetching and setting the QC on Alyx
-        :param enpoint: The enpoint name to apply qc to. Default is 'sessions'
+        :param endpoint: The enpoint name to apply qc to. Default is 'sessions'
         """
         self.one = one or ONE()
         self.log = log or logging.getLogger('ibllib')
