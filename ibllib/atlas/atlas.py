@@ -710,6 +710,14 @@ class BrainRegions:
         """
         return self._navigate_tree(ids, direction='up')
 
+    def leaves(self):
+        """
+        Get all regions that do not have children
+        :return:
+        """
+        leaves = np.setxor1d(self.id, self.parent)
+        return self.get(np.int64(leaves[~np.isnan(leaves)]))
+
 
 class AllenAtlas(BrainAtlas):
     """
