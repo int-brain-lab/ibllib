@@ -995,8 +995,11 @@ class OneAlyx(OneAbstract):
             cache_dir=target_dir, clobber=True, offline=False, return_md5=False,
             chunks=(first_byte, n_bytes))
         cbin_local_path = alfio.remove_uuid_file(cbin_local_path)
-        cbin_local_path = cbin_local_path.rename(cbin_local_path.with_suffix('.chopped.cbin'))
-        assert cbin_local_path.exists()
+        cbin_local_path_renamed = cbin_local_path.with_suffix(
+            '.chopped.cbin').with_suffix('.chopped.cbin')
+        cbin_local_path.rename(cbin_local_path_renamed)
+        assert cbin_local_path_renamed.exists()
+        cbin_local_path = cbin_local_path_renamed
 
         import mtscomp
         reader = mtscomp.decompress(cbin_local_path, cmeta=ch_local_path)
