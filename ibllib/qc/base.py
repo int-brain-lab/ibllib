@@ -20,6 +20,12 @@ CRITERIA = {'CRITICAL': 4,
 class QC:
     """A base class for data quality control"""
     def __init__(self, endpoint_id, one=None, log=None, endpoint='sessions'):
+        """
+        :param endpoint_id: Eid for endpoint. If using sessions can also be a session path
+        :param log: A logging.Logger instance, if None the 'ibllib' logger is used
+        :param one: An ONE instance for fetching and setting the QC on Alyx
+        :param enpoint: The enpoint name to apply qc to. Default is 'sessions'
+        """
         self.one = one or ONE()
         self.log = log or logging.getLogger('ibllib')
         if endpoint == 'sessions':
