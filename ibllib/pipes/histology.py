@@ -416,6 +416,68 @@ def register_track_files(path_tracks, one=None, overwrite=False):
         _logger.info(f"{ind + 1}/{ntracks}, {str(track_file)}")
 
 
+def detect_missing_histology_tracks(path_tracks=None, one=None, subject=None):
+    """
+    Compares the number of probe insertions to the number of registered histology tracks to see if
+    there is a discrepancy so that missing tracks can be properly logged in the database
+    :param path_tracks: path to track files to be registered
+    :param subject: subject nickname for which to detect missing tracks
+    """
+
+    if path_tracks:
+        glob_pattern = "*_probe*_pts*.csv"
+
+        path_tracks = Path(path_tracks)
+
+        if not path_tracks.is_dir():
+            track_files = [path_tracks]
+        else:
+            track_files = list(path_tracks.rglob(glob_pattern))
+            track_files.sort()
+
+        subjects = []
+        for track_file in track_files:
+            search_filter = _parse_filename(track_file)
+            subjects.append(search_filter['subject'])
+
+        unique_subjects = np.unique(subjects)
+    elif not path_tracks and subject:
+        unique_subjects = [subject]
+    else:
+        _logger.warning('Must specifiy either path_tracks or subject argument')
+        return
+
+    for subj in unique_subjects:
+        insertions = one.alyx.rest('insertions', 'list', subject=subj)
+        trajectories = one.alyx.rest('trajectories', 'list', subject=subj,
+                                     provenance='Histology track')
+        if len(insertions) != len(trajectories):
+            ins_sess = np.array([ins['session'] + ins['name'] for ins in insertions])
+            traj_sess = np.array([traj['session']['id'] + traj['probe_name']
+                                  for traj in trajectories])
+            miss_idx = np.where(np.isin(ins_sess, traj_sess, invert=True))[0]
+
+            for idx in miss_idx:
+
+                info = one.path_from_eid(ins_sess[idx][:36]).parts
+                print(ins_sess[idx][:36])
+                msg = f"Histology tracing missing for {info[-3]}, {info[-2]}, {info[-1]}," \
+                      f" {ins_sess[idx][36:]}.\nEnter [y]es to register an empty track for " \
+                      f"this insertion \nEnter [n]o, if tracing for this probe insertion will be "\
+                      f"conducted at a later date \n>"
+                resp = input(msg)
+                resp = resp.lower()
+                if resp == 'y' or resp == 'yes':
+                    _logger.info('Histology track for this probe insertion registered as empty')
+                    probe_id = insertions[idx]['id']
+                    print(insertions[idx]['session'])
+                    print(probe_id)
+                    register_track(probe_id, one=one)
+                else:
+                    _logger.info('Histology track for this probe insertion will not be registered')
+                    continue
+
+
 def coverage(trajs, ba=None):
     """
     Computes a coverage volume from

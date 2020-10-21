@@ -77,8 +77,12 @@ class QC:
         target_obj = self.one.alyx.rest(self.endpoint, 'read', id=endpoint_id) or None
         if target_obj:
             self.eid = endpoint_id
-            json_qc_field = target_obj.get('json', {'temp': 0}).get('qc', None)
-            if not json_qc_field:
+            json_field = target_obj.get('json')
+            if not json_field:
+                self.one.alyx.json_field_update(endpoint=self.endpoint, uuid=self.eid,
+                                                field_name='json', data={'qc': 'NOT_SET',
+                                                                         'extended_qc': {}})
+            elif not json_field.get('qc', None):
                 self.one.alyx.json_field_update(endpoint=self.endpoint, uuid=self.eid,
                                                 field_name='json', data={'qc': 'NOT_SET',
                                                                          'extended_qc': {}})

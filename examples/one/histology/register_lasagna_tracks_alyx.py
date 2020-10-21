@@ -33,6 +33,7 @@ from pathlib import Path
 # Edit so as to reflect the directory containing your electrode tracks
 path_tracks = "/Users/gaelle/Downloads/Flatiron/examples/00_to_add"
 
+
 EXAMPLE_OVERWRITE = True  # Put to False when wanting to run the script on your data
 
 ALYX_URL = "https://dev.alyx.internationalbrainlab.org"  # FOR TESTING
@@ -47,3 +48,4 @@ if EXAMPLE_OVERWRITE:
     path_tracks = cachepath.joinpath('examples', 'histology', 'tracks_to_add')
 
 histology.register_track_files(path_tracks=path_tracks, one=one, overwrite=True)
+histology.detect_missing_histology_tracks(path_tracks=path_tracks, one=one)
