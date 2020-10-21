@@ -305,7 +305,7 @@ class AlignmentQC(base.QC):
             np.save(f_name, clusters_brainAcro)
             files_to_register.append(f_name)
 
-            self.log.info(f"Writing datasets to FlatIron")
+            self.log.info("Writing datasets to FlatIron")
             ftp_patcher.create_dataset(path=files_to_register, created_by=self.one._par.ALYX_LOGIN)
 
         # Need to change channels stored on alyx as well as the stored key is not the same as the
