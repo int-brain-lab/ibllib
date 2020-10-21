@@ -56,18 +56,20 @@ class QC:
     def _set_eid_or_path(self, session_path_or_eid):
         """Parse a given eID or session path
         If a session UUID is given, resolves and stores the local path and vice versa
-        :param session_path_or_eid:
+        :param session_path_or_eid: A session eid or path
         :return:
         """
+        self.eid = None
         if is_uuid_string(str(session_path_or_eid)):
             self.eid = session_path_or_eid
             # Try to set session_path if data is found locally
             self.session_path = self.one.path_from_eid(self.eid)
         elif is_session_path(session_path_or_eid):
             self.session_path = Path(session_path_or_eid)
-            self.eid = self.one.eid_from_path(self.session_path)
-            if not self.eid:
-                self.log.warning('Failed to determine eID from session path')
+            if self.one is not None:
+                self.eid = self.one.eid_from_path(self.session_path)
+                if not self.eid:
+                    self.log.warning('Failed to determine eID from session path')
         else:
             self.log.error('Cannot run QC: an experiment uuid or session path is required')
             raise ValueError("'session' must be a valid session path or uuid")

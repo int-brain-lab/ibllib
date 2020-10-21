@@ -21,6 +21,7 @@ class _PaginatedResponse(Mapping):
     Provides cache functionality
     PaginatedResponse(alyx, response)
     """
+
     def __init__(self, alyx, rep):
         self.alyx = alyx
         self.count = rep['count']
@@ -68,7 +69,7 @@ def http_download_file_list(links_to_file_list, **kwargs):
     return file_names_list
 
 
-def http_download_file(full_link_to_file, *, clobber=False, offline=False,
+def http_download_file(full_link_to_file, chunks=None, *, clobber=False, offline=False,
                        username='', password='', cache_dir='', return_md5=False):
     """
     :param full_link_to_file: http link to the file.
@@ -117,9 +118,15 @@ def http_download_file(full_link_to_file, *, clobber=False, offline=False,
     opener = urllib.request.build_opener(auth)
     urllib.request.install_opener(opener)
 
+    # Support for partial download.
+    req = urllib.request.Request(full_link_to_file)
+    if chunks is not None:
+        first_byte, n_bytes = chunks
+        req.add_header("Range", "bytes=%d-%d" % (first_byte, first_byte + n_bytes - 1))
+
     # Open the url and get the length
     try:
-        u = urllib.request.urlopen(full_link_to_file)
+        u = urllib.request.urlopen(req)
     except urllib.error.HTTPError as e:
         _logger.error(f"{str(e)} {full_link_to_file}")
         raise e
@@ -424,9 +431,14 @@ class AlyxClient(metaclass=UniqueSingletons):
             assert(endpoint_scheme[action]['action'] == 'get')
             # add to url data if it is a string
             if id:
-                url = url + id
+                # this is a special case of the list where we query an uuid. Usually read is better
+                if 'django' in kwargs.keys():
+                    kwargs['django'] = kwargs['django'] + ','
+                else:
+                    kwargs['django'] = ""
+                kwargs['django'] = f"{kwargs['django']}pk,{id}"
             # otherwise, look for a dictionary of filter terms
-            elif kwargs:
+            if kwargs:
                 url += '?'
                 for k in kwargs.keys():
                     if isinstance(kwargs[k], str):

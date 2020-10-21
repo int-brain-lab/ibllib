@@ -22,28 +22,59 @@ Examples:
     qc.load_data(bpod_only=True)  # Extract without FPGA
     bpod_qc = qc.run()
 
+    # Running bpod QC only, from training rig PC
+    from ibllib.qc.task_metrics import TaskQC
+    from ibllib.qc.qcplots import plot_results
+    session_path = r'/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_023/2020-02-14/001'
+    qc = TaskQC(session_path)
+    qc.load_data(bpod_only=True, download_data=False)  # Extract without FPGA
+    qc.run()
+    plot_results(qc, save_path=session_path)
+
+    # Running ephys QC, from local server PC (after ephys + bpod data have been copied to a same
+    folder)
+    from ibllib.qc.task_metrics import TaskQC
+    from ibllib.qc.qcplots import plot_results
+    session_path = r'/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_023/2020-02-14/001'
+    qc = TaskQC(session_path)
+    qc.run()
+    plot_results(qc, save_path=session_path)
 """
 import logging
 import sys
+from datetime import datetime, timedelta
 from inspect import getmembers, isfunction
 from functools import reduce
 from collections.abc import Sized
 
 import numpy as np
+from scipy.stats import chisquare
 
 from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.io.extractors.training_wheel import WHEEL_RADIUS_CM
 from ibllib.io.extractors.ephys_fpga import WHEEL_TICKS
+from alf.io import is_session_path
 from . import base
 
 _log = logging.getLogger('ibllib')
-CRITERIA = {"PASS": 0.99, "WARNING": 0.95, "FAIL": 0}
 
 
 class TaskQC(base.QC):
-    def __init__(self, session_path_or_eid, one=None, log=None):
-        super().__init__(session_path_or_eid, one, log=log or _log)
+    """A class for computing task QC metrics"""
+    criteria = {"PASS": 0.99,
+                "WARNING": 0.95,
+                "FAIL": 0}
+
+    def __init__(self, session_path_or_eid, **kwargs):
+        """
+        :param session_path_or_eid: A session eid or path
+        :param log: A logging.Logger instance, if None the 'ibllib' logger is used
+        :param one: An ONE instance for fetching and setting the QC on Alyx
+        """
+        # When an eid is provided, we will download the required data by default (if necessary)
+        self.download_data = not is_session_path(session_path_or_eid)
+        super().__init__(session_path_or_eid, **kwargs)
 
         # Data
         self.extractor = None
@@ -51,20 +82,29 @@ class TaskQC(base.QC):
         # Metrics and passed trials
         self.metrics = None
         self.passed = None
-        self.criteria = CRITERIA
 
     def load_data(self, bpod_only=False, download_data=True):
+        """Extract the data from raw data files
+        Extracts all the required task data from the raw data files.
+
+        :param bpod_only: if True no data is extracted from the FPGA for ephys sessions
+        :param download_data: if True, any missing raw data is downloaded via ONE.
+        """
         self.extractor = TaskQCExtractor(
             self.session_path, one=self.one, download_data=download_data, bpod_only=bpod_only)
 
-    def compute(self):
+    def compute(self, **kwargs):
         """Compute and store the QC metrics
         Runs the QC on the session and stores a map of the metrics for each datapoint for each
         test, and a map of which datapoints passed for each test
+        :param bpod_only: if True no data is extracted from the FPGA for ephys sessions
+        :param download_data: if True, any missing raw data is downloaded via ONE.  By default
+        data are not downloaded if a session path was provided to the constructor.
         :return:
         """
         if self.extractor is None:
-            self.load_data()
+            ensure_data = kwargs.pop('download_only', self.download_data)
+            self.load_data(download_data=ensure_data, **kwargs)
         self.log.info(f"Session {self.session_path}: Running QC on behavior data...")
         self.metrics, self.passed = get_bpodqc_metrics_frame(
             self.extractor.data,
@@ -76,9 +116,16 @@ class TaskQC(base.QC):
         )
         return
 
-    def run(self, update=False):
+    def run(self, update=False, **kwargs):
+        """
+        :param update: if True, updates the session QC fields on Alyx
+        :param bpod_only: if True no data is extracted from the FPGA for ephys sessions
+        :param download_data: if True, any missing raw data is downloaded via ONE.  By default
+        data are not downloaded if a session path was provided to the constructor.
+        :return: session outcome (str), a dict for extended QC
+        """
         if self.metrics is None:
-            self.compute()
+            self.compute(**kwargs)
         self.outcome, results, _ = self.compute_session_status()
         if update:
             self.update_extended_qc(results)
@@ -94,7 +141,9 @@ class TaskQC(base.QC):
         if self.passed is None:
             raise AttributeError('passed is None; compute QC first')
         MAX_BOUND, MIN_BOUND = (1, 0)
-        results = {k: np.nanmean(v) for k, v in self.passed.items()}
+        # Get mean passed of each check, or None if passed is None or all NaN
+        results = {k: None if v is None or np.isnan(v).all() else np.nanmean(v)
+                   for k, v in self.passed.items()}
 
         # Ensure criteria are in order
         criteria = self.criteria.items()
@@ -119,6 +168,107 @@ class TaskQC(base.QC):
         return session_outcome, results, outcomes
 
 
+class HabituationQC(TaskQC):
+
+    def compute(self, download_data=None):
+        """Compute and store the QC metrics
+        Runs the QC on the session and stores a map of the metrics for each datapoint for each
+        test, and a map of which datapoints passed for each test
+        :return:
+        """
+        if self.extractor is None:
+            # If download_data is None, decide based on whether eid or session path was provided
+            ensure_data = self.download_data if download_data is None else download_data
+            self.load_data(download_data=ensure_data)
+        self.log.info(f"Session {self.session_path}: Running QC on habituation data...")
+
+        # Initialize checks
+        prefix = '_task_'
+        data = self.extractor.data
+        metrics = {}
+        passed = {}
+
+        # Check all reward volumes == 3.0ul
+        check = prefix + 'reward_volumes'
+        metrics[check] = data['rewardVolume']
+        passed[check] = metrics[check] == 3.0
+
+        # Check session durations are increasing in steps >= 12 minutes
+        check = prefix + 'habituation_time'
+        if not self.one or not self.session_path:
+            self.log.warning('unable to determine session trials without ONE')
+            metrics[check] = passed[check] = None
+        else:
+            subject, session_date = self.session_path.parts[-3:-1]
+            # compute from the date specified
+            date_minus_week = (
+                datetime.strptime(session_date, '%Y-%m-%d') - timedelta(days=7)
+            ).strftime('%Y-%m-%d')
+            sessions = self.one.alyx.rest('sessions', 'list', subject=subject,
+                                          date_range=[date_minus_week, session_date],
+                                          task_protocol='habituation')
+            # Remove the current session if already registered
+            if sessions[0]['start_time'].startswith(session_date):
+                sessions = sessions[1:]
+            metric = ([0, data['intervals'][-1, 1] - data['intervals'][0, 0]] +
+                      [(datetime.fromisoformat(x['end_time']) -
+                        datetime.fromisoformat(x['start_time'])).total_seconds() / 60
+                       for x in [self.one.alyx.get(s['url']) for s in sessions]])
+
+            # The duration from raw trial data
+            # duration = map(float, self.extractor.raw_data[-1]['elapsed_time'].split(':'))
+            # duration = timedelta(**dict(zip(('hours', 'minutes', 'seconds'),
+            #                                 duration))).total_seconds() / 60
+            metrics[check] = np.array(metric)
+            passed[check] = np.diff(metric) >= 12
+
+        # Check event orders: trial_start < stim on < stim center < feedback < stim off
+        check = prefix + 'trial_event_sequence'
+        nans = (
+                np.isnan(data["intervals"][:, 0])  |  # noqa
+                np.isnan(data["stimOn_times"])     |  # noqa
+                np.isnan(data["stimCenter_times"]) |
+                np.isnan(data["valveOpen_times"])  |  # noqa
+                np.isnan(data["stimOff_times"])
+        )
+        a = np.less(data["intervals"][:, 0], data["stimOn_times"], where=~nans)
+        b = np.less(data["stimOn_times"], data["stimCenter_times"], where=~nans)
+        c = np.less(data["stimCenter_times"], data["valveOpen_times"], where=~nans)
+        d = np.less(data["valveOpen_times"], data["stimOff_times"], where=~nans)
+
+        metrics[check] = a & b & c & d & ~nans
+        passed[check] = metrics[check].astype(np.float)
+
+        # Check that the time difference between the visual stimulus center-command being
+        # triggered and the stimulus effectively appearing in the center is smaller than 150 ms.
+        check = prefix + 'stimCenter_delays'
+        metric = np.nan_to_num(data["stimCenter_times"] - data["stimCenterTrigger_times"],
+                               nan=np.inf)
+        passed[check] = (metric <= 0.15) & (metric > 0)
+        metrics[check] = metric
+
+        # Phase check
+        check = prefix + 'phase'
+        metric = data['phase']
+        passed[check] = (metric <= 2 * np.pi) & (metric >= 0)
+        metrics[check] = metric
+
+        check = prefix + 'phase_distribution'
+        metric, _ = np.histogram(data['phase'])
+        _, p = chisquare(metric)
+        passed[check] = p < 0.05
+        metrics[check] = metric
+
+        # Checks common to training QC
+        checks = [check_goCue_delays, check_stimOn_goCue_delays,
+                  check_stimOn_delays, check_stimOff_delays]
+        for fcn in checks:
+            check = prefix + fcn.__name__[6:]
+            metrics[check], passed[check] = fcn(data)
+
+        self.metrics, self.passed = (metrics, passed)
+
+
 def get_bpodqc_metrics_frame(data, **kwargs):
     """
     Evaluates all the QC metric functions in this module (those starting with 'check') and
@@ -136,7 +286,8 @@ def get_bpodqc_metrics_frame(data, **kwargs):
     def is_metric(x):
         return isfunction(x) and x.__name__.startswith('check_')
     checks = getmembers(sys.modules[__name__], is_metric)
-    qc_metrics_map = {'_task' + k[5:]: fn(data, **kwargs) for k, fn in checks}
+    prefix = '_task_'
+    qc_metrics_map = {prefix + k[6:]: fn(data, **kwargs) for k, fn in checks}
 
     # Split metrics and passed frames
     metrics = {}
@@ -148,7 +299,7 @@ def get_bpodqc_metrics_frame(data, **kwargs):
     n_trials = data['intervals'].shape[0]
     trial_level_passed = [m for m in passed.values()
                           if isinstance(m, Sized) and len(m) == n_trials]
-    name = '_task_passed_trial_checks'
+    name = prefix + 'passed_trial_checks'
     metrics[name] = reduce(np.logical_and, trial_level_passed or (None, None))
     passed[name] = metrics[name].astype(np.float) if trial_level_passed else None
 
@@ -170,10 +321,8 @@ def check_stimOn_goCue_delays(data, **_):
 
     :param data: dict of trial data with keys ('goCue_times', 'stimOn_times', 'intervals')
     """
-    metric = data["goCue_times"] - data["stimOn_times"]
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = (metric[~nans] < 0.01) & (metric[~nans] > 0)
+    metric = np.nan_to_num(data["goCue_times"] - data["stimOn_times"], nan=np.inf)
+    passed = (metric < 0.01) & (metric > 0)
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -188,10 +337,8 @@ def check_response_feedback_delays(data, **_):
 
     :param data: dict of trial data with keys ('feedback_times', 'response_times', 'intervals')
     """
-    metric = data["feedback_times"] - data["response_times"]
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = ((metric[~nans] < 0.01) & (metric[~nans] > 0)).astype(np.float)
+    metric = np.nan_to_num(data["feedback_times"] - data["response_times"], nan=np.inf)
+    passed = (metric < 0.01) & (metric > 0)
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -207,12 +354,9 @@ def check_response_stimFreeze_delays(data, **_):
     :param data: dict of trial data with keys ('stimFreeze_times', 'response_times', 'intervals',
     'choice')
     """
-    metric = data["stimFreeze_times"] - data["response_times"]
-    # Find NaNs (if any of the values are nan operation will be nan)
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
+    metric = np.nan_to_num(data["stimFreeze_times"] - data["response_times"], nan=np.inf)
     # Test for valid values
-    passed[~nans] = ((metric[~nans] < 0.1) & (metric[~nans] > 0)).astype(np.float)
+    passed = ((metric < 0.1) & (metric > 0)).astype(np.float)
     # Finally remove no_go trials (stimFreeze triggered differently in no_go trials)
     # should account for all the nans
     passed[data["choice"] == 0] = np.nan
@@ -230,12 +374,32 @@ def check_stimOff_itiIn_delays(data, **_):
     :param data: dict of trial data with keys ('stimOff_times', 'itiIn_times', 'intervals',
     'choice')
     """
-    metric = data["itiIn_times"] - data["stimOff_times"]
-    passed = valid = ~np.isnan(metric)
-    passed[valid] = ((metric[valid] < 0.01) & (metric[valid] >= 0)).astype(np.float)
+    metric = np.nan_to_num(data["itiIn_times"] - data["stimOff_times"], nan=np.inf)
+    passed = ((metric < 0.01) & (metric >= 0)).astype(np.float)
     # Remove no_go trials (stimOff triggered differently in no_go trials)
-    metric[data["choice"] == 0] = np.nan
-    passed[data["choice"] == 0] = np.nan
+    metric[data["choice"] == 0] = passed[data["choice"] == 0] = np.nan
+    assert data["intervals"].shape[0] == len(metric) == len(passed)
+    return metric, passed
+
+
+def check_iti_delays(data, **_):
+    """ Check that the period of gray screen between stim off and the start of the next trial is
+    0.5s +/- 200%.
+
+    Metric: M = stimOff (n) - trialStart (n+1) - 0.5
+    Criterion: |M| < 1
+    Units: seconds [s]
+
+    :param data: dict of trial data with keys ('stimOff_times', 'intervals')
+    """
+    # Initialize array the length of completed trials
+    metric = np.full(data["intervals"].shape[0], np.nan)
+    passed = metric.copy()
+    # Get the difference between stim off and the start of the next trial
+    # Missing data are set to Inf, except for the last trial which is a NaN
+    metric[:-1] = \
+        np.nan_to_num(data["intervals"][1:, 0] - data["stimOff_times"][:-1] - 0.5, nan=np.inf)
+    passed[:-1] = np.abs(metric[:-1]) < .5  # Last trial is not counted
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -248,13 +412,12 @@ def check_positive_feedback_stimOff_delays(data, **_):
     Criterion: |M| < 0.150 s
     Units: seconds [s]
 
-    :param data: dict of trial data with keys ('stimOff_times', 'feedback_times', 'intervals')
+    :param data: dict of trial data with keys ('stimOff_times', 'feedback_times', 'intervals',
+    'correct')
     """
-    metric = data["stimOff_times"] - data["feedback_times"] - 1
-    metric[~data["correct"]] = np.nan
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = (np.abs(metric[~nans]) < 0.15).astype(np.float)
+    metric = np.nan_to_num(data["stimOff_times"] - data["feedback_times"] - 1, nan=np.inf)
+    passed = (np.abs(metric) < 0.15).astype(np.float)
+    metric[~data["correct"]] = passed[~data["correct"]] = np.nan
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -267,18 +430,13 @@ def check_negative_feedback_stimOff_delays(data, **_):
     Criterion: |M| < 0.150 s
     Units: seconds [s]
 
-    :param data: dict of trial data with keys ('stimOff_times', 'errorCue_times', 'outcome',
-    'intervals')
+    :param data: dict of trial data with keys ('stimOff_times', 'errorCue_times', 'intervals')
     """
-    metric = data["stimOff_times"] - data["errorCue_times"] - 2
-    # Find NaNs (if any of the values are nan operation will be nan)
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
+    metric = np.nan_to_num(data["stimOff_times"] - data["errorCue_times"] - 2, nan=np.inf)
     # Apply criteria
-    passed[~nans] = (np.abs(metric[~nans]) < 0.15).astype(np.float)
-    # Remove no negative feedback trials
-    metric[~data["outcome"] == -1] = np.nan
-    passed[~data["outcome"] == -1] = np.nan
+    passed = (np.abs(metric) < 0.15).astype(np.float)
+    # Remove none negative feedback trials
+    metric[data["correct"]] = passed[data["correct"]] = np.nan
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -286,7 +444,7 @@ def check_negative_feedback_stimOff_delays(data, **_):
 # === Wheel movement during trial checks ===
 
 def check_wheel_move_before_feedback(data, **_):
-    """ Check that the wheel does not move within 100ms of the feedback onset (error sound or valve).
+    """ Check that the wheel does move within 100ms of the feedback onset (error sound or valve).
 
     Metric: M = (w_t - 0.05) - (w_t + 0.05), where t = feedback_times
     Criterion: M != 0
@@ -364,8 +522,7 @@ def check_wheel_move_during_closed_loop(data, wheel_gain=None, **_):
     metric = metric - criterion  # difference should be close to 0
     rad_per_deg = cm_to_rad(1 / wheel_gain * 1e-1)
     passed = (np.abs(metric) < rad_per_deg).astype(np.float)  # less than 1 visual degree off
-    metric[data["choice"] == 0] = np.nan  # except no-go trials
-    passed[data["choice"] == 0] = np.nan  # except no-go trials
+    metric[data["choice"] == 0] = passed[data["choice"] == 0] = np.nan  # except no-go trials
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -407,7 +564,7 @@ def check_wheel_freeze_during_quiescence(data, **_):
     metric = np.max(metric, axis=1)
     metric = 180 * metric / np.pi  # convert to degrees from radians
     criterion = 2  # Position shouldn't change more than 2 in either direction
-    passed = (metric < criterion).astype(np.float)
+    passed = metric < criterion
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -535,7 +692,7 @@ def check_n_trial_events(data, **_):
         metric[i] = (all([start < data[k][i] < end for k in events]) and
                      (np.isnan(err_trig[i]) if correct[i] else start < err_trig[i] < end))
 
-    passed = metric.astype(np.float)
+    passed = metric.astype(np.bool)
     assert intervals.shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -550,10 +707,8 @@ def check_trial_length(data, **_):
 
     :param data: dict of trial data with keys ('feedback_times', 'goCue_times', 'intervals')
     """
-    metric = data["feedback_times"] - data["goCue_times"]
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = (metric[~nans] < 60.1) & (metric[~nans] > 0)
+    metric = np.nan_to_num(data["feedback_times"] - data["goCue_times"], nan=np.inf)
+    passed = (metric < 60.1) & (metric > 0)
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -570,10 +725,8 @@ def check_goCue_delays(data, **_):
 
     :param data: dict of trial data with keys ('goCue_times', 'goCueTrigger_times', 'intervals')
     """
-    metric = data["goCue_times"] - data["goCueTrigger_times"]
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = (metric[~nans] <= 0.0015) & (metric[~nans] > 0)
+    metric = np.nan_to_num(data["goCue_times"] - data["goCueTrigger_times"], nan=np.inf)
+    passed = (metric <= 0.0015) & (metric > 0)
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -586,12 +739,11 @@ def check_errorCue_delays(data, **_):
     Units: seconds [s]
 
     :param data: dict of trial data with keys ('errorCue_times', 'errorCueTrigger_times',
-    'intervals')
+    'intervals', 'correct')
     """
-    metric = data["errorCue_times"] - data["errorCueTrigger_times"]
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = (metric[~nans] <= 0.0015) & (metric[~nans] > 0)
+    metric = np.nan_to_num(data["errorCue_times"] - data["errorCueTrigger_times"], nan=np.inf)
+    passed = ((metric <= 0.0015) & (metric > 0)).astype(np.float)
+    passed[data["correct"]] = metric[data["correct"]] = np.nan
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -607,10 +759,8 @@ def check_stimOn_delays(data, **_):
     :param data: dict of trial data with keys ('stimOn_times', 'stimOnTrigger_times',
     'intervals')
     """
-    metric = data["stimOn_times"] - data["stimOnTrigger_times"]
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = (metric[~nans] <= 0.15) & (metric[~nans] > 0)
+    metric = np.nan_to_num(data["stimOn_times"] - data["stimOnTrigger_times"], nan=np.inf)
+    passed = (metric <= 0.15) & (metric > 0)
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -627,10 +777,8 @@ def check_stimOff_delays(data, **_):
     :param data: dict of trial data with keys ('stimOff_times', 'stimOffTrigger_times',
     'intervals')
     """
-    metric = data["stimOff_times"] - data["stimOffTrigger_times"]
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = (metric[~nans] <= 0.15) & (metric[~nans] > 0)
+    metric = np.nan_to_num(data["stimOff_times"] - data["stimOffTrigger_times"], nan=np.inf)
+    passed = (metric <= 0.15) & (metric > 0)
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -647,10 +795,8 @@ def check_stimFreeze_delays(data, **_):
     :param data: dict of trial data with keys ('stimFreeze_times', 'stimFreezeTrigger_times',
     'intervals')
     """
-    metric = data["stimFreeze_times"] - data["stimFreezeTrigger_times"]
-    nans = np.isnan(metric)
-    passed = np.zeros_like(metric) * np.nan
-    passed[~nans] = (metric[~nans] <= 0.15) & (metric[~nans] > 0)
+    metric = np.nan_to_num(data["stimFreeze_times"] - data["stimFreezeTrigger_times"], nan=np.inf)
+    passed = (metric <= 0.15) & (metric > 0)
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -668,7 +814,7 @@ def check_reward_volumes(data, **_):
     """
     metric = data['rewardVolume']
     correct = data['correct']
-    passed = np.zeros_like(metric, dtype=np.float)
+    passed = np.zeros_like(metric, dtype=np.bool)
     # Check correct trials within correct range
     passed[correct] = (1.5 <= metric[correct]) & (metric[correct] <= 3.)
     # Check incorrect trials are 0
@@ -766,6 +912,6 @@ def check_audio_pre_trial(data, audio=None, **_):
     metric = np.array([], dtype=np.int8)
     for i, c in zip(data["intervals"][:, 0], data["goCue_times"]):
         metric = np.append(metric, sum(s[s > i] < (c - 0.02)))
-    passed = (metric == 0).astype(np.float)
+    passed = metric == 0
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
