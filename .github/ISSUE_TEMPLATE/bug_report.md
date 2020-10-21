@@ -6,6 +6,12 @@ labels: ''
 assignees: ''
 
 ---
+**Before posting** 
+Make sure your environment is fully up-to-date by running 
+```
+conda activate iblenv
+conda env update --file iblenv.yaml --prune
+```
 
 **Describe the bug**
 A clear and concise description of what the bug is.
