@@ -37,7 +37,7 @@ class AlignmentQC(base.QC):
 
         self.insertion = one.alyx.rest('insertions', 'read', id=self.eid)
         self.resolved = (self.insertion.get('json', {'temp': 0}).get('extended_qc').
-                         get('alignment_resolved', 0))
+                         get('alignment_resolved', False))
 
     def load_data(self, prev_alignments=None, xyz_picks=None, depths=None, cluster_chns=None):
         """"
@@ -109,25 +109,25 @@ class AlignmentQC(base.QC):
             self.compute()
 
         # Case where the alignment has already been resolved
-        if self.resolved == 1:
+        if self.resolved:
             self.log.info(f"Alignment for insertion {self.eid} already resolved, channels won't be"
                           f" updated. To force update of channels use "
                           f"resolve_manual method with force=True")
-            results = {'_alignment_number': len(self.alignments)}
+            results = {'alignment_count': len(self.alignments)}
             if update:
                 self.update_extended_qc(results)
-            results.update({'alignment_resolved': 1})
+            results.update({'alignment_resolved': True})
 
         # Case where no alignments have been made
         elif np.all(self.sim_matrix == 0) and self.sim_matrix.shape[0] == 1:
             # We don't update database
-            results = {'alignment_resolved': 0}
+            results = {'alignment_resolved': False}
 
         # Case where only one alignment
         elif np.all(self.sim_matrix == 1) and self.sim_matrix.shape[0] == 1:
-            results = {'_alignment_number': len(self.alignments),
-                       '_alignment_stored': self.align_keys_sorted[0],
-                       'alignment_resolved': 0}
+            results = {'alignment_count': len(self.alignments),
+                       'alignment_stored': self.align_keys_sorted[0],
+                       'alignment_resolved': False}
             if update:
                 self.update_extended_qc(results)
 
@@ -138,8 +138,8 @@ class AlignmentQC(base.QC):
             if update:
                 self.update_extended_qc(results)
 
-            if results['alignment_resolved'] == 1 and (upload_alyx or upload_flatiron):
-                self.upload_channels(results['_alignment_stored'], upload_alyx, upload_flatiron)
+            if results['alignment_resolved'] and (upload_alyx or upload_flatiron):
+                self.upload_channels(results['alignment_stored'], upload_alyx, upload_flatiron)
 
         return results
 
@@ -163,9 +163,9 @@ class AlignmentQC(base.QC):
             file_paths = []
         else:
             results = self.compute_alignment_status()
-            results['alignment_resolved'] = 1
-            results['_alignment_stored'] = align_key
-            results['_alignment_resolved_by'] = 'experimenter'
+            results['alignment_resolved'] = True
+            results['alignment_stored'] = align_key
+            results['alignment_resolved_by'] = 'experimenter'
 
             if update:
                 self.update_extended_qc(results)
@@ -230,20 +230,20 @@ class AlignmentQC(base.QC):
         # self.sim_matrix[self.sim_matrix == 1] = 0
         max_sim = np.max(self.sim_matrix)
 
-        results = {'_alignment_qc': max_sim,
-                   '_alignment_number': self.sim_matrix.shape[0]}
+        results = {'alignment_qc': max_sim,
+                   'alignment_count': self.sim_matrix.shape[0]}
 
         if max_sim > CRITERIA['PASS']:
             location = np.where(self.sim_matrix == max_sim)
-            results.update({'_alignment_stored': self.align_keys_sorted[np.min(location)]})
-            results.update({'alignment_resolved': 1})
-            results.update({'_alignment_resolved_by': 'qc'})
+            results.update({'alignment_stored': self.align_keys_sorted[np.min(location)]})
+            results.update({'alignment_resolved': True})
+            results.update({'alignment_resolved_by': 'qc'})
 
             # outcome = 'PASS'
 
         else:
-            results.update({'_alignment_stored': self.align_keys_sorted[0]})
-            results.update({'alignment_resolved': 0})
+            results.update({'alignment_stored': self.align_keys_sorted[0]})
+            results.update({'alignment_resolved': False})
 
             # outcome = 'WARNING'
 

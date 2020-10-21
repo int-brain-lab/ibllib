@@ -60,14 +60,14 @@ class TestTracingQc(unittest.TestCase):
         insertion = one.alyx.rest('insertions', 'read', id=self.probe00_id)
 
         assert (insertion['json']['qc'] == 'NOT_SET')
-        assert (insertion['json']['extended_qc']['_tracing_exists'] == 1)
+        assert (insertion['json']['extended_qc']['tracing_exists'] == 1)
 
     def test_tracing_not_exists(self):
         register_track(self.probe01_id, picks=None, one=one, overwrite=True,
                        channels=False)
         insertion = one.alyx.rest('insertions', 'read', id=self.probe01_id)
         assert (insertion['json']['qc'] == 'CRITICAL')
-        assert (insertion['json']['extended_qc']['_tracing_exists'] == 0)
+        assert (insertion['json']['extended_qc']['tracing_exists'] == 0)
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -118,8 +118,8 @@ class TestAlignmentQcExisting(unittest.TestCase):
         align_qc.run(update=True, upload_alyx=True, upload_flatiron=False)
         insertion = one.alyx.rest('insertions', 'read', id=self.probe_id)
         assert (insertion['json']['qc'] == 'NOT_SET')
-        assert (insertion['json']['extended_qc']['_alignment_number'] == 1)
-        assert (insertion['json']['extended_qc']['_alignment_stored'] ==
+        assert (insertion['json']['extended_qc']['alignment_count'] == 1)
+        assert (insertion['json']['extended_qc']['alignment_stored'] ==
                 '2020-06-26T16:40:14_Karolina_Socha')
         assert (insertion['json']['extended_qc']['alignment_resolved'] == 0)
 
@@ -138,11 +138,11 @@ class TestAlignmentQcExisting(unittest.TestCase):
         align_qc.run(update=True, upload_alyx=True, upload_flatiron=False)
         insertion = one.alyx.rest('insertions', 'read', id=self.probe_id)
         assert (insertion['json']['qc'] == 'NOT_SET')
-        assert (insertion['json']['extended_qc']['_alignment_number'] == 2)
-        assert (insertion['json']['extended_qc']['_alignment_stored'] ==
+        assert (insertion['json']['extended_qc']['alignment_count'] == 2)
+        assert (insertion['json']['extended_qc']['alignment_stored'] ==
                 '2020-06-26T16:40:14_Karolina_Socha')
         assert (insertion['json']['extended_qc']['alignment_resolved'] == 0)
-        assert (insertion['json']['extended_qc']['_alignment_qc'] < 0.8)
+        assert (insertion['json']['extended_qc']['alignment_qc'] < 0.8)
         traj = one.alyx.rest('trajectories', 'list', probe_id=self.probe_id,
                              provenance='Ephys aligned histology track')
         assert(traj_id == traj[0]['id'])
@@ -160,12 +160,12 @@ class TestAlignmentQcExisting(unittest.TestCase):
         align_qc.run(update=True, upload_alyx=True, upload_flatiron=False)
         insertion = one.alyx.rest('insertions', 'read', id=self.probe_id)
         assert (insertion['json']['qc'] == 'NOT_SET')
-        assert (insertion['json']['extended_qc']['_alignment_number'] == 2)
-        assert (insertion['json']['extended_qc']['_alignment_stored'] ==
+        assert (insertion['json']['extended_qc']['alignment_count'] == 2)
+        assert (insertion['json']['extended_qc']['alignment_stored'] ==
                 '2020-06-19T10:52:36_noam.roth')
         assert (insertion['json']['extended_qc']['alignment_resolved'] == 1)
-        assert (insertion['json']['extended_qc']['_alignment_resolved_by'] == 'qc')
-        assert (insertion['json']['extended_qc']['_alignment_qc'] > 0.8)
+        assert (insertion['json']['extended_qc']['alignment_resolved_by'] == 'qc')
+        assert (insertion['json']['extended_qc']['alignment_qc'] > 0.8)
         traj = one.alyx.rest('trajectories', 'list', probe_id=self.probe_id,
                              provenance='Ephys aligned histology track')
         assert(self.prev_traj_id == traj[0]['id'])
@@ -183,12 +183,12 @@ class TestAlignmentQcExisting(unittest.TestCase):
         align_qc.run(update=True, upload_alyx=True, upload_flatiron=False)
         insertion = one.alyx.rest('insertions', 'read', id=self.probe_id)
         assert (insertion['json']['qc'] == 'NOT_SET')
-        assert (insertion['json']['extended_qc']['_alignment_number'] == 4)
-        assert (insertion['json']['extended_qc']['_alignment_stored'] ==
+        assert (insertion['json']['extended_qc']['alignment_count'] == 4)
+        assert (insertion['json']['extended_qc']['alignment_stored'] ==
                 '2020-06-19T10:52:36_noam.roth')
         assert (insertion['json']['extended_qc']['alignment_resolved'] == 1)
-        assert (insertion['json']['extended_qc']['_alignment_resolved_by'] == 'qc')
-        assert (insertion['json']['extended_qc']['_alignment_qc'] > 0.8)
+        assert (insertion['json']['extended_qc']['alignment_resolved_by'] == 'qc')
+        assert (insertion['json']['extended_qc']['alignment_qc'] > 0.8)
         traj = one.alyx.rest('trajectories', 'list', probe_id=self.probe_id,
                              provenance='Ephys aligned histology track')
         assert(self.prev_traj_id != traj[0]['id'])
@@ -234,11 +234,11 @@ class TestAlignmentQcManual(unittest.TestCase):
         align_qc.run(update=True, upload_alyx=True, upload_flatiron=False)
         insertion = one.alyx.rest('insertions', 'read', id=self.probe_id)
         assert (insertion['json']['qc'] == 'NOT_SET')
-        assert (insertion['json']['extended_qc']['_alignment_number'] == 3)
-        assert (insertion['json']['extended_qc']['_alignment_stored'] ==
+        assert (insertion['json']['extended_qc']['alignment_count'] == 3)
+        assert (insertion['json']['extended_qc']['alignment_stored'] ==
                 '2020-09-28T15:57:25_mayo')
         assert (insertion['json']['extended_qc']['alignment_resolved'] == 0)
-        assert (insertion['json']['extended_qc']['_alignment_qc'] < 0.8)
+        assert (insertion['json']['extended_qc']['alignment_qc'] < 0.8)
         traj = one.alyx.rest('trajectories', 'list', probe_id=self.probe_id,
                              provenance='Ephys aligned histology track')
         assert(self.prev_traj_id == traj[0]['id'])
@@ -252,12 +252,12 @@ class TestAlignmentQcManual(unittest.TestCase):
                                 upload_flatiron=False)
         insertion = one.alyx.rest('insertions', 'read', id=self.probe_id)
         assert (insertion['json']['qc'] == 'NOT_SET')
-        assert (insertion['json']['extended_qc']['_alignment_number'] == 3)
-        assert (insertion['json']['extended_qc']['_alignment_stored'] ==
+        assert (insertion['json']['extended_qc']['alignment_count'] == 3)
+        assert (insertion['json']['extended_qc']['alignment_stored'] ==
                 '2020-09-28T15:57:25_mayo')
         assert (insertion['json']['extended_qc']['alignment_resolved'] == 1)
-        assert (insertion['json']['extended_qc']['_alignment_resolved_by'] == 'experimenter')
-        assert (insertion['json']['extended_qc']['_alignment_qc'] < 0.8)
+        assert (insertion['json']['extended_qc']['alignment_resolved_by'] == 'experimenter')
+        assert (insertion['json']['extended_qc']['alignment_qc'] < 0.8)
         traj = one.alyx.rest('trajectories', 'list', probe_id=self.probe_id,
                              provenance='Ephys aligned histology track')
         assert(self.prev_traj_id == traj[0]['id'])
@@ -271,12 +271,12 @@ class TestAlignmentQcManual(unittest.TestCase):
                                 upload_flatiron=False, force=True)
         insertion = one.alyx.rest('insertions', 'read', id=self.probe_id)
         assert (insertion['json']['qc'] == 'NOT_SET')
-        assert (insertion['json']['extended_qc']['_alignment_number'] == 3)
-        assert (insertion['json']['extended_qc']['_alignment_stored'] ==
+        assert (insertion['json']['extended_qc']['alignment_count'] == 3)
+        assert (insertion['json']['extended_qc']['alignment_stored'] ==
                 '2020-09-28T10:03:06_alejandro')
         assert (insertion['json']['extended_qc']['alignment_resolved'] == 1)
-        assert (insertion['json']['extended_qc']['_alignment_resolved_by'] == 'experimenter')
-        assert (insertion['json']['extended_qc']['_alignment_qc'] < 0.8)
+        assert (insertion['json']['extended_qc']['alignment_resolved_by'] == 'experimenter')
+        assert (insertion['json']['extended_qc']['alignment_qc'] < 0.8)
 
         traj = one.alyx.rest('trajectories', 'list', probe_id=self.probe_id,
                              provenance='Ephys aligned histology track')

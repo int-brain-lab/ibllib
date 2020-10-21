@@ -231,7 +231,7 @@ def register_track(probe_id, picks=None, one=None, overwrite=False, channels=Tru
         brain_locations = None
         # Update the insertion qc to CRITICAL
         hist_qc = base.QC(probe_id, one=one, endpoint='insertions')
-        hist_qc.update_extended_qc({'_tracing_exists': 0})
+        hist_qc.update_extended_qc({'tracing_exists': False})
         hist_qc.update('CRITICAL', namespace='tracing')
 
         # Here need to change the track qc to critical and also extended qc to zero
@@ -243,7 +243,7 @@ def register_track(probe_id, picks=None, one=None, overwrite=False, channels=Tru
 
         # Update the insertion qc to register tracing exits
         hist_qc = base.QC(probe_id, one=one, endpoint='insertions')
-        hist_qc.update_extended_qc({'_tracing_exists': 1})
+        hist_qc.update_extended_qc({'tracing_exists': True})
         # 2) patch or create the trajectory coming from histology track
         tdict = create_trajectory_dict(probe_id, insertion_histology, provenance='Histology track')
 
