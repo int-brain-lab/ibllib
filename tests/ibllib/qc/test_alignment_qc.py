@@ -288,6 +288,7 @@ class TestAlignmentQcManual(unittest.TestCase):
 
 
 class TestUploadToFlatIron(unittest.TestCase):
+    @unittest.skip("Skip FTP upload test")
     @classmethod
     def setUpClass(cls) -> None:
         data = np.load(Path(Path(__file__).parent.parent.
