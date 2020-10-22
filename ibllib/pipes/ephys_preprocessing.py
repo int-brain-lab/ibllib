@@ -21,16 +21,23 @@ _logger = logging.getLogger('ibllib')
 
 #  level 0
 class EphysPulses(tasks.Task):
+    """
+    Extract Pulses from raw electrophysiology data into numpy arrays
+    Perform the probes synchronisation with nidq (3B) or main probe (3A)
+    """
     cpu = 2
     io_charge = 30  # this jobs reads raw ap files
     priority = 90  # a lot of jobs depend on this one
     level = 0  # this job doesn't depend on anything
 
     def _run(self, overwrite=False):
+        # outputs numpy
         syncs, out_files = ephys_fpga.extract_sync(self.session_path, overwrite=overwrite)
         for out_file in out_files:
             _logger.info(f"extracted pulses for {out_file}")
-        return out_files
+
+        status, sync_files = sync_probes.sync(self.session_path)
+        return out_files + sync_files
 
 
 class RawEphysQC(tasks.Task):
@@ -199,13 +206,11 @@ class EphysSyncSpikeSorting(tasks.Task):
         associated with a `sync_merge_ephys.flag` file
         Outputs individual probes
         """
-        # first sync the probes
-        status, sync_files = sync_probes.sync(self.session_path)
         # then convert ks2 to ALF and resync spike sorting data
         alf_files = spikes.sync_spike_sortings(self.session_path)
         # outputs the probes object in the ALF folder
         probe_files = spikes.probes_description(self.session_path, one=self.one)
-        return sync_files + alf_files + probe_files
+        return alf_files + probe_files
 
 
 class EphysMtscomp(tasks.Task):
