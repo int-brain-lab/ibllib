@@ -181,7 +181,7 @@ def load_file_content(fil):
     if fil.suffix == '.jsonable':
         return jsonable.read(fil)
     if fil.suffix == '.npy':
-        return np.load(file=fil)
+        return np.load(file=fil, allow_pickle=True)
     if fil.suffix == '.pqt':
         return parquet.load(fil)
     if fil.suffix == '.ssv':
