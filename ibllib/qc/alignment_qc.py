@@ -35,7 +35,7 @@ class AlignmentQC(base.QC):
         # Flag for uploading channels to alyx. For testing purposes
         self.channels = channels
 
-        self.insertion = one.alyx.rest('insertions', 'read', id=self.eid)
+        self.insertion = self.one.alyx.rest('insertions', 'read', id=self.eid)
         self.resolved = (self.insertion.get('json', {'temp': 0}).get('extended_qc').
                          get('alignment_resolved', False))
 
