@@ -213,6 +213,20 @@ class EphysSyncSpikeSorting(tasks.Task):
         return alf_files + probe_files
 
 
+class EphysCellsQc(tasks.Task):
+    priority = 90
+    level = 3
+
+    def _run(self):
+        """
+        Post spike-sorting quality control at the cluster level.
+        Outputs a QC table in the clusters ALF object
+        """
+        print(self.session_path)
+        qc_file = None
+        return qc_file
+
+
 class EphysMtscomp(tasks.Task):
     priority = 50  # ideally after spike sorting
     level = 0
@@ -274,4 +288,7 @@ class EphysExtractionPipeline(tasks.Pipeline):
         # level 2
         tasks['EphysSyncSpikeSorting'] = EphysSyncSpikeSorting(self.session_path, parents=[
             tasks['SpikeSorting'], tasks['EphysPulses']])
+        # level 3
+        tasks['EphysCellsQc'] = EphysCellsQc(self.session_path, parents=[
+            tasks['EphysSyncSpikeSorting']])
         self.tasks = tasks
