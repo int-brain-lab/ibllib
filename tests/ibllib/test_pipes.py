@@ -308,7 +308,11 @@ class TestPipesMisc(unittest.TestCase):
         eid = "b1c968ad-4874-468d-b2e4-5ffa9b9964e9"
         # Force probe insertion 3A
         misc.create_alyx_probe_insertions(
-            eid, one=one, model="3A", labels=["probe00", "probe01"], force=True
+            eid,
+            one=one,
+            model='3A',
+            labels=['probe00', 'probe01'],
+            force=True
         )
         # Verify it's been inserted
         alyx_insertion = one.alyx.rest("insertions", "list", session=eid)
@@ -369,8 +373,10 @@ class TestScanFixPassiveFiles(unittest.TestCase):
 
     def test_find_pairs(self):
         from_to_pairs = fix.find_pairs(self.tmp_dir.name)
-        self.assertTrue("fakelab/Subjects/fakemouse/1900-01-01/002" in from_to_pairs[0][0])
-        self.assertTrue("fakelab/Subjects/fakemouse/1900-01-01/001" in from_to_pairs[0][1])
+        from_path_parts = ['fakelab', 'Subjects', 'fakemouse', '1900-01-01', '002']
+        self.assertTrue(all([x in Path(from_to_pairs[0][0]).parts for x in from_path_parts]))
+        to_path_parts = ['fakelab', 'Subjects', 'fakemouse', '1900-01-01', '001']
+        self.assertTrue(all([x in Path(from_to_pairs[0][1]).parts for x in to_path_parts]))
 
     def test_move_rename_pairs(self):
         # Test all outputs of find function

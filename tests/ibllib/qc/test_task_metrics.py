@@ -26,6 +26,7 @@ class TestTaskMetrics(unittest.TestCase):
         """
         trigg_delay = 1e-4  # an ideal delay between triggers and measured times
         resp_feeback_delay = 1e-3  # delay between feedback and response
+        stimOff_itiIn_delay = 5e-3  # delay between stimOff and itiIn
         N = partial(np.random.normal, (n,))  # Convenience function for norm dist sampling
 
         choice = np.ones((n,), dtype=int)
@@ -39,7 +40,7 @@ class TestTaskMetrics(unittest.TestCase):
         quiescence_length = 0.2 + np.random.standard_exponential(size=(n,))
         iti_length = 0.5  # inter-trial interval
         # trial lengths include quiescence period, a couple small trigger delays and iti
-        trial_lengths = quiescence_length + resp_feeback_delay + 1e-1 + iti_length
+        trial_lengths = quiescence_length + resp_feeback_delay + (trigg_delay * 4) + iti_length
         # add on 60s for nogos + feedback time (1 or 2s) + ~0.5s for other responses
         trial_lengths += (choice == 0) * 60 + (~correct + 1) + (choice != 0) * N(0.5)
         start_times = np.concatenate(([0], np.cumsum(trial_lengths)[:-1]))
@@ -51,7 +52,7 @@ class TestTaskMetrics(unittest.TestCase):
             "choice": choice,
             "correct": correct,
             "intervals": np.c_[start_times, end_times],
-            "itiIn_times": end_times - iti_length,
+            "itiIn_times": end_times - iti_length + stimOff_itiIn_delay,
             "position": np.ones_like(choice) * 35
         }
 
@@ -61,7 +62,7 @@ class TestTaskMetrics(unittest.TestCase):
         data["goCue_times"] = data["goCueTrigger_times"] + trigg_delay
 
         data["response_times"] = end_times - (
-            resp_feeback_delay + 1e-1 + iti_length + (~correct + 1)
+            resp_feeback_delay + iti_length + (~correct + 1)
         )
         data["feedback_times"] = data["response_times"] + resp_feeback_delay
         data["stimFreeze_times"] = data["response_times"] + 1e-2
@@ -446,14 +447,22 @@ class TestTaskMetrics(unittest.TestCase):
     def test_check_stimulus_move_before_goCue(self):
         pass  # TODO Nicco?
 
-    @unittest.skip("not implemented")
     def test_check_stimOff_itiIn_delays(self):
-        pass  # TODO Nicco?
+        metric, passed = qcmetrics.check_stimOff_itiIn_delays(self.data)
+        self.assertTrue(np.nanmean(passed))
+        # No go should be NaN
+        id = np.argmax(self.data['choice'] == 0)
+        self.assertTrue(np.isnan(passed[id]), 'No go trials should be excluded')
+        # Change a trial
+        id = np.argmax(self.data['choice'] != 0)
+        self.data['stimOff_times'][id] = self.data['itiIn_times'][id] + 1e-4
+        _, passed = qcmetrics.check_stimOff_itiIn_delays(self.data)  # recompute
+        self.assertEqual(0.75, np.nanmean(passed))
 
     def test_check_iti_delays(self):
         metric, passed = qcmetrics.check_iti_delays(self.data)
         # We want the metric to return positive values that are close to 0.1, given the test data
-        self.assertTrue(np.allclose(metric[:-1], 1e-1, atol=0.01),
+        self.assertTrue(np.allclose(metric[:-1], 1e-2, atol=0.001),
                         "failed to return correct metric")
         self.assertTrue(np.isnan(metric[-1]), "last trial should be NaN")
         self.assertTrue(np.all(passed))
