@@ -318,11 +318,18 @@ def create_alyx_probe_insertions(session_path: str,
         ]
     else:
         probe_labels = labels
+
+    # create the qc fields in the json field
+    qc_dict = {}
+    qc_dict.update({'qc': 'NOT_SET'})
+    qc_dict.update({'extended_qc': {}})
+
     # create the dictionary
     for plabel in probe_labels:
         insdict = {'session': eid,
                    'name': plabel,
-                   'model': pmodel}
+                   'model': pmodel,
+                   'json': qc_dict}
         # search for the corresponding insertion in Alyx
         alyx_insertion = one.alyx.rest('insertions', 'list',
                                        session=insdict['session'],

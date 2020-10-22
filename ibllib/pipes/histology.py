@@ -11,6 +11,7 @@ import ibllib.atlas as atlas
 from ibllib.ephys.spikes import probes_description as extract_probes
 from ibllib.dsp.utils import fcn_cosine
 from ibllib.ephys.neuropixel import TIP_SIZE_UM
+from ibllib.qc import base
 
 
 _logger = logging.getLogger('ibllib')
@@ -209,7 +210,7 @@ def get_brain_regions(xyz, channels_positions=SITES_COORDINATES, brain_atlas=bra
     return brain_regions, insertion
 
 
-def register_track(probe_id, picks=None, one=None, overwrite=False):
+def register_track(probe_id, picks=None, one=None, overwrite=False, channels=True):
     """
     Register the user picks to a probe in Alyx
     Here we update Alyx models on the database in 3 steps
@@ -228,12 +229,21 @@ def register_track(probe_id, picks=None, one=None, overwrite=False):
                  'coordinate_system': 'IBL-Allen',
                  }
         brain_locations = None
+        # Update the insertion qc to CRITICAL
+        hist_qc = base.QC(probe_id, one=one, endpoint='insertions')
+        hist_qc.update_extended_qc({'tracing_exists': False})
+        hist_qc.update('CRITICAL', namespace='tracing')
+
+        # Here need to change the track qc to critical and also extended qc to zero
     else:
         brain_locations, insertion_histology = get_brain_regions(picks)
         # 1) update the alyx models, first put the picked points in the insertion json
-        one.alyx.rest('insertions', 'partial_update',
-                      id=probe_id,
-                      data={'json': {'xyz_picks': np.int32(picks * 1e6).tolist()}})
+        one.alyx.json_field_update(endpoint='insertions', uuid=probe_id, field_name='json',
+                                   data={'xyz_picks': np.int32(picks * 1e6).tolist()})
+
+        # Update the insertion qc to register tracing exits
+        hist_qc = base.QC(probe_id, one=one, endpoint='insertions')
+        hist_qc.update_extended_qc({'tracing_exists': True})
         # 2) patch or create the trajectory coming from histology track
         tdict = create_trajectory_dict(probe_id, insertion_histology, provenance='Histology track')
 
@@ -252,12 +262,15 @@ def register_track(probe_id, picks=None, one=None, overwrite=False):
     if brain_locations is None:
         return brain_locations, None
     # 3) create channel locations
-    channel_dict = create_channel_dict(hist_traj, brain_locations)
-    one.alyx.rest('channels', 'create', data=channel_dict)
+    if channels:
+        channel_dict = create_channel_dict(hist_traj, brain_locations)
+        one.alyx.rest('channels', 'create', data=channel_dict)
+
     return brain_locations, insertion_histology
 
 
-def register_aligned_track(probe_id, insertion, brain_locations, one=None, overwrite=False):
+def register_aligned_track(probe_id, xyz_channels, chn_coords=None, one=None, overwrite=False,
+                           channels=True):
     """
     Register ephys aligned trajectory and channel locations to Alyx
     Here we update Alyx models on the database in 2 steps
@@ -265,6 +278,10 @@ def register_aligned_track(probe_id, insertion, brain_locations, one=None, overw
     2) Channel locations are set to the trajectory
     """
     assert one
+    if not np.any(chn_coords):
+        chn_coords = SITES_COORDINATES
+
+    insertion = atlas.Insertion.from_track(xyz_channels, brain_atlas)
     tdict = create_trajectory_dict(probe_id, insertion, provenance='Ephys aligned histology track')
 
     hist_traj = one.alyx.rest('trajectories', 'list',
@@ -279,8 +296,14 @@ def register_aligned_track(probe_id, insertion, brain_locations, one=None, overw
                                   'If you want to overwrite, set overwrite=True.')
     hist_traj = one.alyx.rest('trajectories', 'create', data=tdict)
 
-    channel_dict = create_channel_dict(hist_traj, brain_locations)
-    one.alyx.rest('channels', 'create', data=channel_dict)
+    if channels:
+        brain_regions = brain_atlas.regions.get(brain_atlas.get_labels(xyz_channels))
+        brain_regions['xyz'] = xyz_channels
+        brain_regions['lateral'] = chn_coords[:, 0]
+        brain_regions['axial'] = chn_coords[:, 1]
+        assert np.unique([len(brain_regions[k]) for k in brain_regions]).size == 1
+        channel_dict = create_channel_dict(hist_traj, brain_regions)
+        one.alyx.rest('channels', 'create', data=channel_dict)
 
 
 def create_trajectory_dict(probe_id, insertion, provenance):
@@ -391,6 +414,68 @@ def register_track_files(path_tracks, one=None, overwrite=False):
             _logger.error(str(track_file))
             raise e
         _logger.info(f"{ind + 1}/{ntracks}, {str(track_file)}")
+
+
+def detect_missing_histology_tracks(path_tracks=None, one=None, subject=None):
+    """
+    Compares the number of probe insertions to the number of registered histology tracks to see if
+    there is a discrepancy so that missing tracks can be properly logged in the database
+    :param path_tracks: path to track files to be registered
+    :param subject: subject nickname for which to detect missing tracks
+    """
+
+    if path_tracks:
+        glob_pattern = "*_probe*_pts*.csv"
+
+        path_tracks = Path(path_tracks)
+
+        if not path_tracks.is_dir():
+            track_files = [path_tracks]
+        else:
+            track_files = list(path_tracks.rglob(glob_pattern))
+            track_files.sort()
+
+        subjects = []
+        for track_file in track_files:
+            search_filter = _parse_filename(track_file)
+            subjects.append(search_filter['subject'])
+
+        unique_subjects = np.unique(subjects)
+    elif not path_tracks and subject:
+        unique_subjects = [subject]
+    else:
+        _logger.warning('Must specifiy either path_tracks or subject argument')
+        return
+
+    for subj in unique_subjects:
+        insertions = one.alyx.rest('insertions', 'list', subject=subj)
+        trajectories = one.alyx.rest('trajectories', 'list', subject=subj,
+                                     provenance='Histology track')
+        if len(insertions) != len(trajectories):
+            ins_sess = np.array([ins['session'] + ins['name'] for ins in insertions])
+            traj_sess = np.array([traj['session']['id'] + traj['probe_name']
+                                  for traj in trajectories])
+            miss_idx = np.where(np.isin(ins_sess, traj_sess, invert=True))[0]
+
+            for idx in miss_idx:
+
+                info = one.path_from_eid(ins_sess[idx][:36]).parts
+                print(ins_sess[idx][:36])
+                msg = f"Histology tracing missing for {info[-3]}, {info[-2]}, {info[-1]}," \
+                      f" {ins_sess[idx][36:]}.\nEnter [y]es to register an empty track for " \
+                      f"this insertion \nEnter [n]o, if tracing for this probe insertion will be "\
+                      f"conducted at a later date \n>"
+                resp = input(msg)
+                resp = resp.lower()
+                if resp == 'y' or resp == 'yes':
+                    _logger.info('Histology track for this probe insertion registered as empty')
+                    probe_id = insertions[idx]['id']
+                    print(insertions[idx]['session'])
+                    print(probe_id)
+                    register_track(probe_id, one=one)
+                else:
+                    _logger.info('Histology track for this probe insertion will not be registered')
+                    continue
 
 
 def coverage(trajs, ba=None):
