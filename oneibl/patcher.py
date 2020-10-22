@@ -60,7 +60,7 @@ class Patcher(abc.ABC):
                                      'version': version.ibllib()}
                                )
 
-    def _patch_dataset(self, path, dset_id=None, dry=False):
+    def _patch_dataset(self, path, dset_id=None, dry=False, ftp=False):
         """
         Private method that skips
         """
@@ -80,7 +80,7 @@ class Patcher(abc.ABC):
             full_remote_path = PurePosixPath(FLATIRON_MOUNT + remote_path)
         else:
             full_remote_path = PurePosixPath(FLATIRON_MOUNT, remote_path)
-        if isinstance(path, WindowsPath):
+        if isinstance(path, WindowsPath) and not ftp:
             # On Windows replace drive map with Globus uri, e.g. C:/ -> /~/C/
             path = '/~/' + path.as_posix().replace(':', '')
         status = self._scp(path, full_remote_path, dry=dry)[0]
@@ -98,7 +98,7 @@ class Patcher(abc.ABC):
         """
         return register_dataset(file_list, one=self.one, server_only=True, **kwargs)
 
-    def create_dataset(self, file_list, repository=None, created_by='root', dry=False):
+    def create_dataset(self, file_list, repository=None, created_by='root', dry=False, ftp=False):
         """
         Creates a new dataset on FlatIron and uploads it from arbitrary location.
         Rules for creation/patching are the same that apply for registration via Alyx
@@ -108,7 +108,10 @@ class Patcher(abc.ABC):
         can also be a list of full file pathes belonging to the same session.
         :param server_repository: Alyx server repository name
         :param created_by: alyx username for the dataset (optional, defaults to root)
+        :param ftp: flag for case when using ftppatcher. Don't adjust windows path in
+        _patch_dataset when ftp=True
         :return: the registrations response, a list of dataset records
+
         """
         # first register the file
         if not isinstance(file_list, list):
@@ -121,7 +124,7 @@ class Patcher(abc.ABC):
             return
         # from the dataset info, set flatIron flag to exists=True
         for p, d in zip(file_list, response):
-            self._patch_dataset(p, dset_id=d['id'], dry=dry)
+            self._patch_dataset(p, dset_id=d['id'], dry=dry, ftp=ftp)
         return response
 
     def delete_dataset(self, dset_id, dry=False):
@@ -298,7 +301,7 @@ class FTPPatcher(Patcher):
     def create_dataset(self, path, created_by='root', dry=False, repository=DMZ_REPOSITORY):
         # overrides the superclass just to remove the server repository argument
         response = super().create_dataset(path, created_by=created_by, dry=dry,
-                                          repository=repository)
+                                          repository=repository, ftp=True)
         # need to patch the file records to be consistent
         for ds in response:
             frs = ds['file_records']
@@ -307,8 +310,8 @@ class FTPPatcher(Patcher):
                                  fr['relative_path'] == fr_server['relative_path'], frs))
             reposerver = next(filter(lambda rep: rep['name'] == fr_server['data_repository'],
                                      self.repositories))
-            relative_path = str(Path(reposerver['globus_path']).joinpath(
-                Path(fr_ftp['relative_path'])))[1:]
+            relative_path = str(PurePosixPath(reposerver['globus_path']).joinpath(
+                PurePosixPath(fr_ftp['relative_path'])))[1:]
             # 1) if there was already a file, the registration created a duplicate
             fr_2del = list(filter(lambda fr: fr['data_repository'] == DMZ_REPOSITORY and
                                              fr['relative_path'] == relative_path, frs))  # NOQA
@@ -324,8 +327,10 @@ class FTPPatcher(Patcher):
 
     def _scp(self, local_path, remote_path, dry=True):
         # remote_path = '/mnt/ibl/zadorlab/Subjects/flowers/2018-07-13/001
-        remote_path = Path(Path(FLATIRON_MOUNT).root).joinpath(
-            remote_path.relative_to(FLATIRON_MOUNT))
+        remote_path = PurePosixPath('/').joinpath(
+            remote_path.relative_to(PurePosixPath(FLATIRON_MOUNT))
+        )
+
         # local_path
         self.mktree(remote_path.parent)
         # if the file already exists on the buffer, do not overwrite
@@ -344,7 +349,7 @@ class FTPPatcher(Patcher):
             try:
                 self.ftp.cwd(str(remote_path))
             except ftplib.all_errors:
-                self.mktree(Path(remote_path.parent))
+                self.mktree(PurePosixPath(remote_path.parent))
                 self.ftp.mkd(str(remote_path))
                 self.ftp.cwd(str(remote_path))
 

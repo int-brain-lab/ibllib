@@ -3,7 +3,13 @@ import concurrent.futures
 import json
 import logging
 import os
+import fnmatch
+import re
+from functools import wraps
 from pathlib import Path, PurePath
+from collections import defaultdict
+from typing import Any, Sequence, Union, Optional, List, Dict
+from uuid import UUID
 
 import requests
 import tqdm
@@ -12,8 +18,11 @@ import numpy as np
 
 import oneibl.params
 import oneibl.webclient as wc
-from alf.io import (AlfBunch, get_session_path, is_uuid_string,
-                    load_file_content, remove_uuid_file)
+import alf.io as alfio
+from alf.files import is_valid, alf_parts
+# from ibllib.misc.exp_ref import is_exp_ref
+from ibllib.exceptions import \
+    ALFMultipleObjectsFound, ALFObjectNotFound, ALFMultipleCollectionsFound
 from ibllib.io import hashfile
 from ibllib.misc import pprint
 from oneibl.dataclass import SessionDataInfo
@@ -22,12 +31,16 @@ from brainbox.core import ismember, ismember2d
 
 _logger = logging.getLogger('ibllib')
 
+
+def Listable(t): return Union[t, Sequence[t]]  # noqa
+
+
 NTHREADS = 4  # number of download threads
 
 _ENDPOINTS = {  # keynames are possible input arguments and values are actual endpoints
     'data': 'dataset-types',
-    'dataset': 'dataset-types',
-    'datasets': 'dataset-types',
+    'dataset': 'datasets',
+    'datasets': 'datasets',
     'dataset-types': 'dataset-types',
     'dataset_types': 'dataset-types',
     'dataset-type': 'dataset-types',
@@ -53,21 +66,6 @@ _SESSION_FIELDS = {  # keynames are possible input arguments and values are actu
     'start-time': 'start_time',
     'end_time': 'end_time',
     'end-time': 'end_time'}
-
-_LIST_KEYWORDS = dict(_SESSION_FIELDS, **{
-    'all': 'all',
-    'data': 'dataset-type',
-    'dataset': 'dataset-type',
-    'datasets': 'dataset-type',
-    'dataset-types': 'dataset-type',
-    'dataset_types': 'dataset-type',
-    'dataset-type': 'dataset-type',
-    'dataset_type': 'dataset-type',
-    'dtypes': 'dataset-type',
-    'dtype': 'dataset-type',
-    'labs': 'lab',
-    'lab': 'lab'
-})
 
 SEARCH_TERMS = {  # keynames are possible input arguments and values are actual fields
     'data': 'dataset_types',
@@ -117,6 +115,19 @@ def _ses2pandas(ses, dtypes=None):
     return col
 
 
+def parse_id(method):
+    """
+    Ensures the input experiment identifier is an experiment UUID string
+    :param method: An ONE method whose second arg is an experiment id
+    :return: A wrapper function that parses the id to the expected string
+    """
+    @wraps(method)
+    def wrapper(self, id, *args, **kwargs):
+        id = self.to_eid(id)
+        return method(self, id, *args, **kwargs)
+    return wrapper
+
+
 class OneAbstract(abc.ABC):
 
     def __init__(self, username=None, password=None, base_url=None, cache_dir=None, silent=None):
@@ -140,7 +151,7 @@ class OneAbstract(abc.ABC):
         From a Session ID and dataset types, queries Alyx database, downloads the data
         from Globus, and loads into numpy array. Single session only
         """
-        if is_uuid_string(eid):
+        if alfio.is_uuid_string(eid):
             eid = '/sessions/' + eid
         eid_str = eid[-36:]
         # if no dataset_type is provided:
@@ -156,7 +167,7 @@ class OneAbstract(abc.ABC):
         # load the files content in variables if requested
         if not download_only:
             for ind, fil in enumerate(dc.local_path):
-                dc.data[ind] = load_file_content(fil)
+                dc.data[ind] = alfio.load_file_content(fil)
         # parse output arguments
         if dclass_output:
             return dc
@@ -268,71 +279,54 @@ class OneAlyx(OneAbstract):
         out = self.alyx.rest('dataset-types', 'read', dataset_type)
         print(out['description'])
 
-    def list(self, eid=None, keyword='dataset-type', details=False):
+    def list(self,
+             eid: Optional[Union[str, Path, UUID]] = None,
+             keyword: str = 'dataset-type',
+             details: bool = False) -> Union[List, Dict[str, str]]:
         """
-        From a Session ID, queries Alyx database for datasets-types related to a session.
+        From a Session ID, queries Alyx database for datasets related to a session.
 
-        :param eid: Experiment ID, for IBL this is the UUID String of the Session as per Alyx
-         database. Example: '698361f6-b7d0-447d-a25d-42afdef7a0da'
-         If None, returns the set of possible values. Only for the following keys:
-         ('users', 'dataset-types', subjects')
-        :type eid: str or list of strings
+        :param eid: Experiment session uuid str
+        :type eid: str
 
-        :param keyword: The attribute to be listed.
+        :param keyword: The attribute to be listed, options include 'dataset', 'dataset-type'.
+        If no eid provided, only dataset-types will be returned.
         :type keyword: str
 
-        :param details: returns a second argument with a full dictionary to provide context
+        :param details: If eid provided returns datasets as a dict with collection names as
+        keys, if eid is None a list of dataset-type dicts is returned, with a description field.
         :type details: bool
 
-        :return: list of strings, plus list of dictionaries if details option selected
-        :rtype:  list, list
-
-        for a list of keywords, use the methods `one.search_terms()`
+        :return: list of strings or dict of lists if details is True
+        :rtype:  list, dict
         """
-        # check and validate the input keyword
-        if keyword.lower() not in set(_LIST_KEYWORDS.keys()):
-            raise KeyError("The field: " + keyword + " doesn't exist in the Session model." +
-                           "\n Here is a list of expected values: " +
-                           str(set(_LIST_KEYWORDS.values())))
-        keyword = _LIST_KEYWORDS[keyword.lower()]  # accounts for possible typos
+        if keyword[-1] == 's':
+            keyword = keyword[:-1]  # Remove plural
+        if keyword not in ('dataset', 'dataset-type'):
+            raise ValueError('keyword should be either "dataset" or "dataset-type"')
 
-        # recursive call for cases where a list is provided
-        if isinstance(eid, list):
-            out = []
-            for e in eid:
-                out.append(self.list(e, keyword=keyword, details=details))
-            if details and (keyword != 'dataset-type'):
-                return [[o[0] for o in out], [o[1] for o in out]]
-            else:
-                return out
+        if not eid:
+            if keyword != 'dataset-type':
+                _logger.warning('Unable to list all datasets, returning dataset types instead')
+            results = self.alyx.rest('dataset-types', 'list')
+            return results if details else [x['name'] for x in results]
 
-        #  this is for basic endpoints queries: dataset-type, users, and subjects with None
-        if eid is None:
-            out = self._ls(table=keyword)
-            if details:
-                return out
-            else:
-                return out[0]
+        # Session specific list
+        results = self.alyx.rest('datasets', 'list', session=eid)
+        collection = []
+        name = []
+        for r in results:
+            collection.append(r['collection'])
+            name.append(r['name'] if keyword == 'dataset' else r['dataset_type'])
 
-        # this is a query about datasets: need to unnest session info through the load function
-        if keyword == 'dataset-type':
-            dses = self.load(eid, dataset_types='__all__', dry_run=True)
-            dlist = list(sorted(set(dses.dataset_type)))
-            if details:
-                return dses
-            else:
-                return dlist
-
-        # get the session information
-        ses = self.alyx.rest('sessions', 'read', eid)
-
-        if keyword.lower() == 'all':
-            return [ses]
-        elif details:
-            return ses[keyword], ses
+        if details:  # Order the datasets by collection
+            out = defaultdict(list)
+            [out[k or 'alf'].append(v) for k, v in zip(collection, name)]
+            return out
         else:
-            return ses[keyword]
+            return name
 
+    @parse_id
     def load(self, eid, dataset_types=None, dclass_output=False, dry_run=False, cache_dir=None,
              download_only=False, clobber=False, offline=False, keep_uuid=False):
         """
@@ -367,47 +361,106 @@ class OneAlyx(OneAbstract):
                                     dry_run=dry_run, cache_dir=cache_dir, keep_uuid=keep_uuid,
                                     download_only=download_only, clobber=clobber, offline=offline)
 
-    def load_dataset(self, eid, dataset_type, **kwargs):
+    @parse_id
+    def load_dataset(self,
+                     eid: Union[str, Path, UUID],
+                     dataset: str,
+                     collection: Optional[str] = 'alf',
+                     download_only: bool = False) -> Any:
         """
         Load a single dataset from a Session ID and a dataset type.
 
-        :param eid: Experiment ID, for IBL this is the UUID of the Session as per Alyx
-         database. Could be a full Alyx URL:
-         'http://localhost:8000/sessions/698361f6-b7d0-447d-a25d-42afdef7a0da' or only the UUID:
-         '698361f6-b7d0-447d-a25d-42afdef7a0da'.
-        :type eid: str
-        :param dataset_type: Alyx dataset type to be returned.
-        :type dataset_types: str
+        :param eid: Experiment session identifier; may be a UUID, URL, experiment reference string
+        details dict or Path
+        :param dataset: The ALF dataset to load.  Supports asterisks as wildcards.
+        :param collection:  The collection to which the object belongs, e.g. 'alf/probe01'.
+        Supports asterisks as wildcards.
+        :param download_only: When true the data are downloaded and the file path is returned
+        :return: dataset or a Path object if download_only is true
 
-        :return: A numpy array.
-        :rtype: numpy array
+        Examples:
+            intervals = one.load_dataset(eid, '_ibl_trials.intervals.npy')
+            intervals = one.load_dataset(eid, '*trials.intervals*')
+            filepath = one.load_dataset(eid '_ibl_trials.intervals.npy', download_only=True)
+            spikes = one.load_dataset(eid 'spikes.times.npy', collection='alf/probe01')
         """
-        return self._load(eid, dataset_types=[dataset_type], **kwargs)[0]
+        search_str = 'name__regex,' + dataset.replace('.', r'\.').replace('*', '.*')
+        if collection and collection != 'all':
+            search_str += ',collection__regex,' + collection.replace('*', '.*')
+        results = self.alyx.rest('datasets', 'list', session=eid, django=search_str)
 
-    def load_object(self, eid, obj, **kwargs):
+        # Get filenames of returned ALF files
+        collection_set = {x['collection'] for x in results}
+        if len(collection_set) > 1:
+            raise ALFMultipleCollectionsFound('Matching dataset belongs to multiple collections:' +
+                                              ', '.join(collection_set))
+        if len(results) > 1:
+            raise ALFMultipleObjectsFound('The following matching datasets were found: ' +
+                                          ', '.join(x['name'] for x in results))
+        if len(results) == 0:
+            raise ALFObjectNotFound(f'Dataset "{dataset}" not found on Alyx')
+
+        filename = self.download_dataset(results[0])
+        assert filename is not None, 'failed to download dataset'
+
+        return filename if download_only else alfio.load_file_content(filename)
+
+    @parse_id
+    def load_object(self,
+                    eid: Union[str, Path, UUID],
+                    obj: str,
+                    collection: Optional[str] = 'alf',
+                    download_only: bool = False,
+                    **kwargs) -> Union[alfio.AlfBunch, List[Path]]:
         """
         Load all attributes of an ALF object from a Session ID and an object name.
 
-        :param eid: Experiment ID, for IBL this is the UUID of the Session as per Alyx
-         database. Could be a full Alyx URL:
-         'http://localhost:8000/sessions/698361f6-b7d0-447d-a25d-42afdef7a0da' or only the UUID:
-         '698361f6-b7d0-447d-a25d-42afdef7a0da'.
-        :type eid: str
-        :param obj: Alyx object to load.
-        :type obj: str
+        :param eid: Experiment session identifier; may be a UUID, URL, experiment reference string
+        details dict or Path
+        :param obj: The ALF object to load.  Supports asterisks as wildcards.
+        :param collection:  The collection to which the object belongs, e.g. 'alf/probe01'.
+        Supports asterisks as wildcards.
+        :param download_only: When true the data are downloaded and the file paths are returned
+        :param kwargs: Optional filters for the ALF objects, including namespace and timescale
+        :return: An ALF bunch or if download_only is True, a list of Paths objects
 
-        :return: A dictionary-like structure with one key per dataset type for the requested
-         object, and a NumPy array per value.
-        :rtype: AlfBunch instance
+        Examples:
+        load_object(eid, '*moves')
+        load_object(eid, 'trials')
+        load_object(eid, 'spikes', collection='*probe01')
         """
-        dataset_types = [dst for dst in self.list(eid) if dst.startswith(obj)]
-        if len(dataset_types) == 0:
-            _logger.warning(f"{eid} does not contain any {obj} object datasets")
-            return
-        dsets = self._load(eid, dataset_types=dataset_types, **kwargs)
-        return AlfBunch({
-            '.'.join(dataset_types[i].split('.')[1:]): dsets[i]
-            for i in range(len(dataset_types))})
+        # Filter server-side by collection and dataset name
+        search_str = 'name__regex,' + obj.replace('*', '.*')
+        if collection and collection != 'all':
+            search_str += ',collection__regex,' + collection.replace('*', '.*')
+        results = self.alyx.rest('datasets', 'list', session=eid, django=search_str)
+        pattern = re.compile(fnmatch.translate(obj))
+
+        # Further refine by matching object part of ALF datasets
+        def match(r):
+            return is_valid(r['name']) and pattern.match(alf_parts(r['name'])[1])
+
+        # Get filenames of returned ALF files
+        returned_obj = {alf_parts(x['name'])[1] for x in results if match(x)}
+
+        # Validate result before loading
+        if len(returned_obj) > 1:
+            raise ALFMultipleObjectsFound('The following matching objects were found: ' +
+                                          ', '.join(returned_obj))
+        elif len(returned_obj) == 0:
+            raise ALFObjectNotFound(f'ALF object "{obj}" not found on Alyx')
+        collection_set = {x['collection'] for x in results if match(x)}
+        if len(collection_set) > 1:
+            raise ALFMultipleCollectionsFound('Matching object belongs to multiple collections:' +
+                                              ', '.join(collection_set))
+
+        # Download and optionally load the datasets
+        out_files = self.download_datasets(x for x in results if match(x))
+        assert not any(x is None for x in out_files), 'failed to download object'
+        if download_only:
+            return out_files
+        else:
+            return alfio.load_object(out_files[0].parent, obj, **kwargs)
 
     def _load_recursive(self, eid, **kwargs):
         """
@@ -429,6 +482,36 @@ class OneAlyx(OneAbstract):
                 for e in eid:
                     out.append(self._load(e, **kwargs)[0])
             return out
+
+    def to_eid(self,
+               id: Listable(Union[str, Path, UUID, dict]) = None,
+               cache_dir: Optional[Union[str, Path]] = None) -> Listable(str):
+        if isinstance(id, (list, tuple)):  # Recurse
+            return [self.to_eid(i, cache_dir) for i in id]
+        if isinstance(id, UUID):
+            return str(id)
+        # elif is_exp_ref(id):
+        #     return ref2eid(id, one=self)
+        elif isinstance(id, dict):
+            assert {'subject', 'number', 'start_time', 'lab'}.issubset(id)
+            root = Path(self._get_cache_dir(cache_dir))
+            id = root.joinpath(
+                id['lab'],
+                'Subjects', id['subject'],
+                id['start_time'][:10],
+                ('%03d' % id['number']))
+
+        if alfio.is_session_path(id):
+            return self.eid_from_path(id)
+        elif isinstance(id, str):
+            if len(id) > 36:
+                id = id[-36:]
+            if not alfio.is_uuid_string(id):
+                raise ValueError('Invalid experiment ID')
+            else:
+                return id
+        else:
+            raise ValueError('Unrecognized experiment ID')
 
     def _make_dataclass(self, eid, dataset_types=None, cache_dir=None, dry_run=False,
                         clobber=False, offline=False, keep_uuid=False):
@@ -477,22 +560,20 @@ class OneAlyx(OneAbstract):
         assert (isinstance(table, str))
         table_field_names = {
             'dataset-types': 'name',
+            'datasets': 'name',
             'users': 'username',
             'subjects': 'nickname',
             'labs': 'name'}
         if not table or table not in list(set(_ENDPOINTS.keys())):
             raise KeyError("The attribute/endpoint: " + table + " doesn't exist \n" +
                            "possible values are " + str(set(_ENDPOINTS.values())))
-        full_out = []
-        list_out = []
-        for ind, tab in enumerate(_ENDPOINTS):
-            if tab == table:
-                field_name = table_field_names[_ENDPOINTS[tab]]
-                full_out.append(self.alyx.get('/' + _ENDPOINTS[tab]))
-                list_out.append([f[field_name] for f in full_out[-1]])
+
+        field_name = table_field_names[_ENDPOINTS[table]]
+        full_out = self.alyx.get('/' + _ENDPOINTS[table])
+        list_out = [f[field_name] for f in full_out]
         if verbose:
             pprint(list_out)
-        return list_out[0], full_out[0]
+        return list_out, full_out
 
     # def search(self, dataset_types=None, users=None, subjects=None, date_range=None,
     #            lab=None, number=None, task_protocol=None, details=False):
@@ -659,7 +740,7 @@ class OneAlyx(OneAbstract):
         Path(target_dir).mkdir(parents=True, exist_ok=True)
         local_path = str(target_dir) + os.sep + os.path.basename(url)
         if not keep_uuid:
-            local_path = remove_uuid_file(local_path, dry=True)
+            local_path = alfio.remove_uuid_file(local_path, dry=True)
         if Path(local_path).exists() and not offline:
             # the local file hash doesn't match the dataset table cached hash
             hash_mismatch = hash and hashfile.md5(Path(local_path)) != hash
@@ -684,7 +765,7 @@ class OneAlyx(OneAbstract):
         if keep_uuid:
             return local_path
         else:
-            return remove_uuid_file(local_path)
+            return alfio.remove_uuid_file(local_path)
 
     @staticmethod
     def search_terms():
@@ -727,7 +808,7 @@ class OneAlyx(OneAbstract):
                 path_list.append(self.path_from_eid(p))
             return path_list
         # If not valid return None
-        if not is_uuid_string(eid):
+        if not alfio.is_uuid_string(eid):
             print(eid, " is not a valid eID/UUID string")
             return
 
@@ -766,7 +847,7 @@ class OneAlyx(OneAbstract):
             return eid_list
         # else ensure the path ends with mouse,date, number
         path_obj = Path(path_obj)
-        session_path = get_session_path(path_obj)
+        session_path = alfio.get_session_path(path_obj)
         # if path does not have a date and a number return None
         if session_path is None:
             return None
@@ -800,7 +881,7 @@ class OneAlyx(OneAbstract):
                 details_list.append(self.get_details(p, full=full))
             return details_list
         # If not valid return None
-        if not is_uuid_string(eid):
+        if not alfio.is_uuid_string(eid):
             print(eid, " is not a valid eID/UUID string")
             return
         # load all details
@@ -871,15 +952,18 @@ class OneAlyx(OneAbstract):
             username=self._par.HTTP_DATA_SERVER_LOGIN,
             password=self._par.HTTP_DATA_SERVER_PWD,
             cache_dir=target_dir, clobber=True, offline=False, return_md5=False))
-        ch_local_path = remove_uuid_file(ch_local_path)
-        ch_local_path = ch_local_path.rename(ch_local_path.with_suffix('.chopped.ch'))
-        assert ch_local_path.exists()
+        ch_local_path = alfio.remove_uuid_file(ch_local_path)
+        ch_local_path_renamed = ch_local_path.with_suffix('.chopped.ch')
+        ch_local_path.rename(ch_local_path_renamed)
+        assert ch_local_path_renamed.exists()
+        ch_local_path = ch_local_path_renamed
 
         # Load the .ch file.
         with open(ch_local_path, 'r') as f:
             cmeta = json.load(f)
 
         # Get the first byte and number of bytes to download.
+        total_n_samples = cmeta['chunk_bounds'][-1]
         i0 = cmeta['chunk_bounds'][first_chunk]
         cmeta['chunk_bounds'] = cmeta['chunk_bounds'][first_chunk:last_chunk + 2]
         cmeta['chunk_bounds'] = [_ - i0 for _ in cmeta['chunk_bounds']]
@@ -898,6 +982,8 @@ class OneAlyx(OneAbstract):
         cmeta['sha1_compressed'] = None
         cmeta['sha1_uncompressed'] = None
         cmeta['chopped'] = True
+        cmeta['chopped_first_sample'] = i0
+        cmeta['chopped_total_samples'] = total_n_samples
         with open(ch_local_path, 'w') as f:
             json.dump(cmeta, f, indent=2, sort_keys=True)
 
@@ -908,13 +994,16 @@ class OneAlyx(OneAbstract):
             password=self._par.HTTP_DATA_SERVER_PWD,
             cache_dir=target_dir, clobber=True, offline=False, return_md5=False,
             chunks=(first_byte, n_bytes))
-        cbin_local_path = remove_uuid_file(cbin_local_path)
-        cbin_local_path = cbin_local_path.rename(cbin_local_path.with_suffix('.chopped.cbin'))
-        assert cbin_local_path.exists()
+        cbin_local_path = alfio.remove_uuid_file(cbin_local_path)
+        cbin_local_path_renamed = cbin_local_path.with_suffix(
+            '.chopped.cbin').with_suffix('.chopped.cbin')
+        cbin_local_path.rename(cbin_local_path_renamed)
+        assert cbin_local_path_renamed.exists()
+        cbin_local_path = cbin_local_path_renamed
 
         import mtscomp
         reader = mtscomp.decompress(cbin_local_path, cmeta=ch_local_path)
-        return reader[:]
+        return reader
 
 
 def _validate_date_range(date_range):
