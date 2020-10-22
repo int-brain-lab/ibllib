@@ -20,6 +20,8 @@ from scipy.optimize import minimize
 from scipy.special import xlogy
 from tqdm import tqdm
 
+import torch
+from poissonGLM import PoissonGLM
 
 class NeuralGLM:
     """
@@ -484,6 +486,60 @@ class NeuralGLM:
                 warn(f'Fitting did not converge for some units: {nonconverged}')
         return coefs, intercepts, variances
 
+
+    def _fit_pytorch(self, dm, binned, retvar=False, epochs=8000, lr=0.2):
+        """
+        Fit the GLM using PyTorch on GPU(s). Regularization has not been applied yet.
+
+        Parameters
+        ----------
+        dm : numpy.ndarray
+            Design matrix, in which rows are observations and columns are regressor values. First
+            column must be a bias column of ones.
+        binned : numpy.ndarray
+            Vector of observed spike counts which we seek to predict. Must be of the same length
+            as dm.shape[0]
+        variances : bool
+            Whether or not to return variances on parameters in dm.
+        epochs : int
+            The number of epochs to train the model
+        lr : float
+            Learning rate for the optimizer
+        """
+        cells = self.clu_ids.flatten()
+        coefs = pd.Series(index=cells, name='coefficients', dtype=object)
+        intercepts = pd.Series(index=cells, name='intercepts')
+        variances = pd.Series(index=cells, name='variances', dtype=object)
+
+        # CPU or GPU
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # device = torch.device('cpu')
+        in_features = dm.shape[1]
+        out_features = binned.shape[1]
+        glm = PoissonGLM(in_features, out_features).to(device)
+        x = torch.as_tensor(dm, dtype=torch.float32, device=device)
+        y = torch.as_tensor(binned, dtype=torch.float32, device=device)
+
+        # Use Adam to fit the model
+        optimizer = torch.optim.Adam(glm.parameters(), lr=lr)
+        _, weight, bias = glm.fit(x, y, epochs=epochs, optimizer=optimizer)
+        # Store parameters
+        biasdm = np.pad(dm.copy(), ((0, 0), (1, 0)), 'constant', constant_values=1)       
+        for cell in cells:
+            cell_idx = np.argwhere(self.clu_ids == cell)[0, 0]
+            cellbinned = binned[:, cell_idx]
+            coefs.at[cell] = weight[cell_idx, :]
+            intercepts.at[cell] = bias[cell_idx]
+
+            wts = np.concatenate([[bias[cell_idx]], weight[cell_idx, :]], axis=0)
+            if retvar:
+                wvar = np.diag(np.linalg.inv(dd_neglog(wts, biasdm, cellbinned)))
+            else:
+                wvar = np.ones((wts.shape[0], wts.shape[0])) * np.nan
+            variances.at[cell] = wvar[1:]
+
+        return coefs, intercepts, variances
+
     def _fit_minimize(self, dm, binned, cells=None, retvar=False):
         """
         Fit a GLM using direct minimization of the negative log likelihood. No regularization.
@@ -526,7 +582,7 @@ class NeuralGLM:
             variances.at[cell] = wvar[1:]
         return coefs, intercepts, variances
 
-    def fit(self, method='sklearn', alpha=0, singlepar_var=False):
+    def fit(self, method='sklearn', alpha=0, singlepar_var=False, epochs=8000, lr=0.2):
         """
         Fit the current set of binned spikes as a function of the current design matrix. Requires
         NeuralGLM.bin_spike_trains and NeuralGLM.compile_design_matrix to be run first. Will store
@@ -544,6 +600,10 @@ class NeuralGLM:
             Regularization strength for scikit-learn implementation of GLM fitting, where 0 is
             effectively unregularized weights. Does not function in the minimize
             option, by default 1
+        epochs : int
+            Used for _fit_pytorch funtion, see details there
+        lr : float
+            Used for _fit_pytorch funtion, see details there
 
         Returns
         -------
@@ -556,8 +616,8 @@ class NeuralGLM:
         if not self.compiled:
             raise AttributeError('Design matrix has not been compiled yet. Please run '
                                  'neuroglm.compile_design_matrix() before fitting.')
-        if method not in ('sklearn', 'minimize'):
-            raise ValueError('Method must be \'minimize\' or \'sklearn\'')
+        if method not in ('sklearn', 'minimize', 'pytorch'):
+            raise ValueError('Method must be \'minimize\' or \'sklearn\' or \'pytorch\'')
         # TODO: Make this optionally parallel across multiple cores of CPU
         # Initialize pd Series to store output coefficients and intercepts for fits
         trainmask = np.isin(self.trlabels, self.traininds).flatten()  # Mask for training data
@@ -569,6 +629,10 @@ class NeuralGLM:
                 traindm = self.dm[trainmask]
                 coefs, intercepts, variances = self._fit_sklearn(traindm, trainbinned, alpha,
                                                                  retvar=True)
+            elif method == 'pytorch':
+                traindm = self.dm[trainmask]
+                coefs, intercepts, variances  = self._fit_pytorch(traindm, trainbinned,
+                                                                  retvar=True, epochs=epochs, lr=lr)
             else:
                 biasdm = np.pad(self.dm.copy(), ((0, 0), (1, 0)), 'constant', constant_values=1)
                 traindm = biasdm[trainmask]
