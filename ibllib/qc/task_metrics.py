@@ -103,8 +103,8 @@ class TaskQC(base.QC):
         :return:
         """
         if self.extractor is None:
-            ensure_data = kwargs.pop('download_data', self.download_data)
-            self.load_data(download_data=ensure_data, **kwargs)
+            kwargs['download_data'] = kwargs.pop('download_data', self.download_data)
+            self.load_data(**kwargs)
         self.log.info(f"Session {self.session_path}: Running QC on behavior data...")
         self.metrics, self.passed = get_bpodqc_metrics_frame(
             self.extractor.data,

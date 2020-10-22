@@ -247,6 +247,18 @@ class BrainAtlas:
             _, ir_unique, _ = np.intersect1d(self.regions.id, im_unique, return_indices=True)
             return np.reshape(self.regions.rgb[ir_unique[iim], :], (*imlabel.shape, 3))
 
+    def _label2value(self, imlabel, region_values):
+        """
+        Converts a slice from the label volume to its RGB equivalent for display
+        :param imlabel: 2D np-array containing label ids (slice of the label volume)
+        :return: 3D np-array of the slice uint8 rgb values
+        """
+
+        im_unique, ilabels, iim = np.unique(imlabel, return_index=True, return_inverse=True)
+        _, ir_unique, _ = np.intersect1d(self.regions.id, im_unique, return_indices=True)
+
+        return np.squeeze(np.reshape(region_values[ir_unique[iim]], (*imlabel.shape, 1)))
+
     def tilted_slice(self, xyz, axis, volume='image'):
         """
         From line coordinates, extracts the tilted plane containing the line from the 3D volume
@@ -344,7 +356,7 @@ class BrainAtlas:
         ax.imshow(im, extent=extent, cmap=cmap, **kwargs)
         return ax
 
-    def slice(self, coordinate, axis, volume='image', mode='raise'):
+    def slice(self, coordinate, axis, volume='image', mode='raise', region_values=None):
         """
         :param coordinate: float
         :param axis: xyz convention:  0 for ml, 1 for ap, 2
@@ -372,6 +384,9 @@ class BrainAtlas:
             return self._label2rgb(im)
         elif volume == 'image':
             return _take(self.image, index, axis=self.xyz2dims[axis])
+        elif volume == 'value':
+            im = _take(self.label, index, axis=self.xyz2dims[axis])
+            return self._label2value(im, region_values=region_values)
 
     def plot_cslice(self, ap_coordinate, volume='image', **kwargs):
         """
