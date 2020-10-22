@@ -30,12 +30,12 @@ def plot_sync_channels(sync, sync_map, ax=None):
         squares(sy["times"], sy["polarities"], yrange=[0.1 + i, 0.9 + i], color="k", ax=ax)
 
 
-def plot_passive_periods(t_start_passive, t_starts, t_ends, ax=None):
+def plot_passive_periods(passivePeriods_df, ax=None):
     if ax is None:
         f, ax = plt.subplots(1, 1)
     # Update plot
     vertical_lines(
-        np.r_[t_start_passive, t_starts, t_ends],
+        np.r_[passivePeriods_df.loc['start'], passivePeriods_df.loc['stop']],
         ymin=-1,
         ymax=4,
         color=color_cycle(0),
@@ -121,6 +121,63 @@ def plot_audio_times(passiveTone_intervals, passiveNoise_intervals, ax=None):
     )
     vertical_lines(
         passiveNoise_intervals[:, 1],
+        ymin=1,
+        ymax=2,
+        color=color_cycle(8),
+        ax=ax,
+        label="noiseOff_times",
+    )
+
+    ax.legend()
+
+
+def plot_stims_times(passiveStims_df, ax=None):
+    if ax is None:
+        f, ax = plt.subplots(1, 1)
+    # Look at it
+    vertical_lines(
+        passiveStims_df["valveOn"].values,
+        ymin=2,
+        ymax=3,
+        color=color_cycle(3),
+        ax=ax,
+        label="ValveOn_times",
+    )
+    vertical_lines(
+        passiveStims_df["valveOff"].values,
+        ymin=2,
+        ymax=3,
+        color=color_cycle(4),
+        ax=ax,
+        label="ValveOff_times",
+    )
+    ax.legend()
+    vertical_lines(
+        passiveStims_df["toneOn"].values,
+        ymin=1,
+        ymax=2,
+        color=color_cycle(5),
+        ax=ax,
+        label="toneOn_times",
+    )
+    vertical_lines(
+        passiveStims_df["toneOff"].values,
+        ymin=1,
+        ymax=2,
+        color=color_cycle(6),
+        ax=ax,
+        label="toneOff_times",
+    )
+    vertical_lines(
+        passiveStims_df["noiseOn"].values,
+        ymin=1,
+        ymax=2,
+        color=color_cycle(7),
+        ax=ax,
+        label="noiseOn_times",
+    )
+    vertical_lines(
+        passiveStims_df["noiseOff"].values,
         ymin=1,
         ymax=2,
         color=color_cycle(8),
