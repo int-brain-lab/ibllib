@@ -1,3 +1,6 @@
+### Release Notes 1.5.17
+-   histology probe QC pipeline and final locations dataset export
+
 ### Release Notes 1.5.16  Hotfix
 -   numpy needs upgrading >= 1.18
 
