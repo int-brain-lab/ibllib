@@ -7,6 +7,7 @@ from pathlib import Path
 import tempfile
 
 import globus_sdk as globus
+from alf.io import is_uuid_string
 from ibllib.io import params
 
 
@@ -147,6 +148,7 @@ def _remote_path(root, path=''):
 
 
 def _split_file_path(path):
+    path = str(path)
     assert not path.endswith('/')
     if '/' in path:
         i = path.rindex('/')
@@ -167,43 +169,60 @@ def _filename_size_matches(path_size, existing):
         return (path, size) in existing
 
 
+def _remove_uuid_from_filename(file_path):
+    file_path = Path(file_path)
+    name_parts = file_path.name.split('.')
+    if len(name_parts) < 2 or not is_uuid_string(name_parts[-2]):
+        return str(file_path)
+    name_parts.pop(-2)
+    return str(file_path.parent.joinpath('.'.join(name_parts)))
+
+
 class Globus:
     """Wrapper for managing files on Globus endpoints."""
 
     def __init__(self):
         self._tc = globus_transfer_client()
 
-    def ls(self, endpoint, path=''):
-        """Return the list of (filename, filesize) in a given endpoint directory."""
+    def ls(self, endpoint, path='', remove_uuid=False):
+        """Return the list of (filename, filesize) in a given endpoint directory.
+
+        NOTE: this function automatically removes the UUIDs from the filenames.
+
+        """
         endpoint, root = ENDPOINTS.get(endpoint, (endpoint, ''))
         assert root
         path = _remote_path(root, path)
         out = []
         try:
             for entry in self._tc.operation_ls(endpoint, path=path):
-                out.append((entry['name'], entry['size'] if entry['type'] == 'file' else None))
+                fn = entry['name']
+                if remove_uuid:
+                    fn = _remove_uuid_from_filename(fn)
+                size = entry['size'] if entry['type'] == 'file' else None
+                out.append((fn, size))
         except Exception as e:
             logger.error(str(e))
         return out
 
-    def file_exists(self, endpoint, path, size=None):
+    def file_exists(self, endpoint, path, size=None, remove_uuid=False):
         """Return whether a given file exists on a given endpoint, optionally with a specified
         file size."""
         parent, filename = _split_file_path(path)
-        existing = self.ls(endpoint, parent)
+        existing = self.ls(endpoint, parent, remove_uuid=remove_uuid)
         return _filename_size_matches((filename, size), existing)
 
-    def dir_contains_files(self, endpoint, dir_path, filenames):
+    def dir_contains_files(self, endpoint, dir_path, filenames, remove_uuid=False):
         """Return whether a directory contains a list of filenames. Returns a list of boolean,
         one for each input file."""
-        files = self.ls(endpoint, dir_path)
+        files = self.ls(endpoint, dir_path, remove_uuid=remove_uuid)
         existing = [fn for fn, size in files]
         out = []
         for filename in filenames:
             out.append(filename in existing)
         return out
 
-    def files_exist(self, endpoint, paths, sizes=None):
+    def files_exist(self, endpoint, paths, sizes=None, remove_uuid=False):
         """Return whether a list of files exist on an endpoint, optionally with specified
         file sizes."""
         if not paths:
@@ -211,7 +230,7 @@ class Globus:
         parents = sorted(set(_split_file_path(path)[0] for path in paths))
         existing = []
         for parent in parents:
-            filenames_sizes = self.ls(endpoint, parent)
+            filenames_sizes = self.ls(endpoint, parent, remove_uuid=remove_uuid)
             existing.extend([(parent + '/' + fn, size) for fn, size in filenames_sizes])
         if sizes is None:
             sizes = [None] * len(paths)
