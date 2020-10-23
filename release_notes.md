@@ -1,3 +1,6 @@
+### Release Notes 1.5.18
+-   add Karolina's optogenetics tasks for extractions
+
 ### Release Notes 1.5.17
 -   histology probe QC pipeline and final locations dataset export
 
