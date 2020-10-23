@@ -27,6 +27,7 @@ class TestExtractors(unittest.TestCase):
             ("_iblrig_calibration_screen4.1.3", None),
             ("_iblrig_tasks_ephys_certification4.1.3", "sync_ephys"),
             ("optokarolinaChoiceWorld5.34", "biased"),
+            ("karolinaChoiceWorld5.34", "biased"),
             ("ephyskarolinaChoiceWorld4.34", "ephys"),
         ]
         for to in task_out:

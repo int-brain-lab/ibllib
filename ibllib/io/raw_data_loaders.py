@@ -533,14 +533,19 @@ def get_task_extractor_type(task_name):
             task_name = settings.get('PYBPOD_PROTOCOL', None)
         else:
             return
+    # ephys
+    if 'ephysChoiceWorld' in task_name:
+        return 'ephys'
+    elif 'ephyskarolinaChoiceWorld' in task_name:
+        return 'ephys'
     # biased choice world
-    if '_biasedChoiceWorld' in task_name:
+    elif '_biasedChoiceWorld' in task_name:
         return 'biased'
     elif 'biasedScanningChoiceWorld' in task_name:
         return 'biased'
     elif 'biasedVisOffChoiceWorld' in task_name:
         return 'biased'
-    elif 'optokarolinaChoiceWorld' in task_name:
+    elif 'karolinaChoiceWorld' in task_name:
         return 'biased'
     # habituation
     elif '_habituationChoiceWorld' in task_name:
@@ -548,11 +553,6 @@ def get_task_extractor_type(task_name):
     # training
     elif '_trainingChoiceWorld' in task_name:
         return 'training'
-    # ephys
-    elif 'ephysChoiceWorld' in task_name:
-        return 'ephys'
-    elif 'ephyskarolinaChoiceWorld' in task_name:
-        return 'ephys'
     # mock ephys
     elif 'ephysMockChoiceWorld' in task_name:
         return 'mock_ephys'
