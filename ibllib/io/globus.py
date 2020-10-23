@@ -162,6 +162,7 @@ def _split_file_path(path):
 
 def _filename_size_matches(path_size, existing):
     path, size = path_size
+    path = str(path)
     if size is None:
         return path in [fn for fn, sz in existing]
     else:
