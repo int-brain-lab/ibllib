@@ -137,11 +137,10 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
     return p_vals_b, cv_b
 
 
-def missed_spikes_est(feat, spks_per_bin=20, sigma=4, min_num_bins=50):
-    """
-    Computes the approximate fraction of spikes missing (i.e. a pseudo false negative estimate)
-    from a spike feature distribution for a given unit, assuming the distribution is symmetric.
-
+def feat_cutoff(feat, spks_per_bin=20, sigma=5, min_num_bins=50):
+    '''
+    Computes the approximate fraction of spikes missing from a spike feature distribution for a
+    given unit, assuming the distribution is symmetric.
     Inspired by metric described in Hill et al. (2011) J Neurosci 31: 8699-8705.
 
     Parameters
@@ -169,16 +168,15 @@ def missed_spikes_est(feat, spks_per_bin=20, sigma=4, min_num_bins=50):
 
     See Also
     --------
-    plot.missed_spikes_est
-
+    plot.feat_cutoff
     Examples
     --------
     1) Determine the fraction of spikes missing from unit 1 based on the recorded unit's spike
     amplitudes, assuming the distribution of the unit's spike amplitudes is symmetric.
         # Get unit 1 amplitudes from a unit bunch, and compute fraction spikes missing.
         >>> feat = units_b['amps']['1']
-        >>> fraction_missing = bb.plot.missed_spikes_est(feat)
-    """
+        >>> fraction_missing = bb.plot.feat_cutoff(feat)
+    '''
 
     # Ensure minimum number of spikes requirement is met.
     error_str = 'The number of spikes in this unit is {0}, ' \
@@ -282,8 +280,8 @@ def wf_similarity(wf1, wf2):
     return s
 
 
-def firing_rate_cv(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
-    """
+def firing_rate_coeff_var(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
+    '''
     Computes the coefficient of variation of the firing rate: the ratio of the standard
     deviation to the mean.
 
@@ -321,9 +319,9 @@ def firing_rate_cv(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
         >>> ts_1 = units_b['times']['1']
         >>> ts_2 = units_b['times']['2']
         >>> ts_2 = np.intersect1d(np.where(ts_2 > 60)[0], np.where(ts_2 < 120)[0])
-        >>> cv, cvs, fr = bb.metrics.firing_rate_cv(ts_1)
-        >>> cv_2, cvs_2, fr_2 = bb.metrics.firing_rate_cv(ts_2)
-    """
+        >>> cv, cvs, fr = bb.metrics.firing_rate_coeff_var(ts_1)
+        >>> cv_2, cvs_2, fr_2 = bb.metrics.firing_rate_coeff_var(ts_2)
+    '''
 
     # Compute overall instantaneous firing rate and firing rate for each bin.
     fr = bb.singlecell.firing_rate(ts, hist_win=hist_win, fr_win=fr_win)
@@ -654,8 +652,8 @@ def contamination_est(ts, rp=0.002):
     """
 
     # Get number of spikes, number of isi violations, and time from first to final spike.
-    n_spks = len(ts)
-    n_isi_viol = np.sum(np.diff(ts) < rp)
+    n_spks = ts.size
+    n_isi_viol = np.size(np.where(np.diff(ts) < rp)[0])
     t = ts[-1] - ts[0]
 
     # `ce` is min of roots of solved quadratic equation.
@@ -798,18 +796,18 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
     nclust = cluster_ids.size
     r = Bunch({
         'cluster_id': cluster_ids,
-        'num_spikes': np.full((nclust,), np.nan),
-        'firing_rate': np.full((nclust,), np.nan),
-        'presence_ratio': np.full((nclust,), np.nan),
-        'presence_ratio_std': np.full((nclust,), np.nan),
-        'frac_isi_viol': np.full((nclust,), np.nan),
         'contamination_est': np.full((nclust,), np.nan),
         'contamination_est2': np.full((nclust,), np.nan),
-        'missed_spikes_est': np.full((nclust,), np.nan),
         'cum_amp_drift': np.full((nclust,), np.nan),
-        'max_amp_drift': np.full((nclust,), np.nan),
         'cum_depth_drift': np.full((nclust,), np.nan),
+        'firing_rate': np.full((nclust,), np.nan),
+        'frac_isi_viol': np.full((nclust,), np.nan),
+        'max_amp_drift': np.full((nclust,), np.nan),
         'max_depth_drift': np.full((nclust,), np.nan),
+        'missed_spikes_est': np.full((nclust,), np.nan),
+        'num_spikes': np.full((nclust,), np.nan),
+        'presence_ratio': np.full((nclust,), np.nan),
+        'presence_ratio_std': np.full((nclust,), np.nan),
         # could add 'epoch_name' in future:
         # 'epoch_name': np.zeros(nclust, dtype='object'),
     })
