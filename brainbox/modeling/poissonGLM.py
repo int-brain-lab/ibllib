@@ -26,7 +26,7 @@ class PoissonGLM(torch.nn.Module):
         best_bias = torch.ones_like(self.linear.bias.data)
 
 
-        for epoch in tqdm(range(1, epochs+1), 'Epoch: ', leave=True):
+        for epoch in tqdm(range(1, epochs+1), 'Epoch: ', leave=False):
             # Clear cummulated gradients in every epoch
             optimizer.zero_grad()
             # Get output from the model
@@ -47,8 +47,8 @@ class PoissonGLM(torch.nn.Module):
             # Update parameters
             optimizer.step()
 
-            if epoch % 200 == 0:
-                print(f'Epoch: {epoch} Loss: {loss.item()}')
+            # if epoch % 200 == 0:
+            #     print(f'Epoch: {epoch} Loss: {loss.item()}')
         print(f'Training end, min loss: {torch.sum(min_loss)/num_cells}')
 
         return min_loss.cpu().numpy(), best_weight.cpu().numpy(), best_bias.cpu().numpy()
