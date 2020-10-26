@@ -1,3 +1,6 @@
+### Release Notes 1.5.19
+-   create tasks looks for create_me.flags
+
 ### Release Notes 1.5.18
 -   add Karolina's optogenetics tasks for extractions
 
