@@ -318,17 +318,11 @@ def load_spike_sorting_with_channel(eid, one=None, dataset_types=None, aligned=F
     :return: spikes, clusters, channels (dict of bunch, 1 bunch per probe)
     """
     # --- Get spikes and clusters data
-    start_time = time.time()
     dic_spk_bunch, dic_clus = load_spike_sorting(eid, one=one, dataset_types=dataset_types)
-    print(time.time() - start_time)
     # -- Get brain regions and assign to clusters
-    start_time = time.time()
     channels = load_channel_locations(eid, one=one, aligned=aligned)
-    print(time.time() - start_time)
-    start_time = time.time()
 
     dic_clus = merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None)
-    print(time.time() - start_time)
     return dic_spk_bunch, dic_clus, channels
 
 
