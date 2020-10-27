@@ -431,9 +431,14 @@ class AlyxClient(metaclass=UniqueSingletons):
             assert(endpoint_scheme[action]['action'] == 'get')
             # add to url data if it is a string
             if id:
-                url = url + id
+                # this is a special case of the list where we query an uuid. Usually read is better
+                if 'django' in kwargs.keys():
+                    kwargs['django'] = kwargs['django'] + ','
+                else:
+                    kwargs['django'] = ""
+                kwargs['django'] = f"{kwargs['django']}pk,{id}"
             # otherwise, look for a dictionary of filter terms
-            elif kwargs:
+            if kwargs:
                 url += '?'
                 for k in kwargs.keys():
                     if isinstance(kwargs[k], str):

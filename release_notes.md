@@ -1,3 +1,23 @@
+### Release Notes 1.5.19
+-   create tasks looks for create_me.flags
+
+### Release Notes 1.5.18
+-   add Karolina's optogenetics tasks for extractions
+
+### Release Notes 1.5.17
+-   histology probe QC pipeline and final locations dataset export
+
+### Release Notes 1.5.16  Hotfix
+-   numpy needs upgrading >= 1.18
+
+### Release Notes 1.5.15  Hotfix
+-   session creation skips alyx procedure for unknown task protocol (custom projects)
+
+### Release Notes 1.5.14
+-   task extraction:
+    -   Habituation QC
+    -   ephys extraction StimOffTimes fix
+
 ### Release Notes 1.5.13
 -   ibllib.atlas
     -   allen csv Atlas part of package is not installed in dev mode

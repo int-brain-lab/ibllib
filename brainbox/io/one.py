@@ -1,13 +1,16 @@
 from pathlib import Path
-
+import logging
 import numpy as np
 
 import alf.io
 from ibllib.io import spikeglx
+from ibllib.atlas import regions_from_allen_csv
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
 from oneibl.one import ONE
 
 from brainbox.core import Bunch
+
+logger = logging.getLogger('ibllib')
 
 
 def load_lfp(eid, one=None, dataset_types=None):
@@ -29,7 +32,7 @@ def load_lfp(eid, one=None, dataset_types=None):
     return [spikeglx.Reader(ef['lf']) for ef in efiles]
 
 
-def load_channel_locations(eid, one=None, probe=None):
+def load_channel_locations(eid, one=None, probe=None, aligned=False):
     """
     From an eid, get brain locations from Alyx database
     analysis.
@@ -40,41 +43,86 @@ def load_channel_locations(eid, one=None, probe=None):
     if isinstance(eid, dict):
         ses = eid
         eid = ses['url'][-36:]
-    else:
-        # need to query alyx. Make sure we have a one client before we hit the endpoint
-        if not one:
-            one = ONE()
-        ses = one.alyx.rest('sessions', 'read', id=eid)
-    if isinstance(probe, str):
-        probe = [probe]
-    labels = probe if probe else [pi['name'] for pi in ses['probe_insertion']]
-    channels = Bunch({})
-    for label in labels:
-        i = [i for i, pi in enumerate(ses['probe_insertion']) if pi['name'] == label]
-        if len(i) == 0:
-            continue
-        trajs = ses['probe_insertion'][i[0]]['trajectory_estimate']
-        if not trajs:
-            continue
-        # the trajectories are ordered within the serializer: histology processed, histology,
-        # micro manipulator, planned so the first is always the desired one
-        traj = trajs[0]
-        channels[label] = Bunch({
-            'atlas_id': np.array([ch['brain_region']['id'] for ch in traj['channels']]),
-            'acronym': np.array([ch['brain_region']['acronym'] for ch in traj['channels']]),
-            'x': np.array([ch['x'] for ch in traj['channels']]) / 1e6,
-            'y': np.array([ch['y'] for ch in traj['channels']]) / 1e6,
-            'z': np.array([ch['z'] for ch in traj['channels']]) / 1e6,
-            'axial_um': np.array([ch['axial'] for ch in traj['channels']]),
-            'lateral_um': np.array([ch['lateral'] for ch in traj['channels']])
-        })
 
-        # Check that channels mapping matches coordinate on Flatiron
-        channel_coord = one.load_dataset(eid=eid, dataset_type='channels.localCoordinates')
-        if len(traj['channels']) == 0:
-            continue
-        assert np.all(np.c_[channels[label]['lateral_um'],
-                            channels[label]['axial_um']] == channel_coord)
+    one = one or ONE()
+
+    # When a specific probe has been requested
+    if isinstance(probe, str):
+        insertions = one.alyx.rest('insertions', 'read', session=eid, name=probe)
+        labels = [probe]
+        tracing = insertions['json']['extended_qc']['tracing_exists'] or False
+        resolved = insertions['json']['extended_qc']['alignment_resolved'] or False
+        counts = insertions['json']['extended_qc']['alignment_count'] or 0
+        probe_id = insertions['id']
+    # No specific probe specified, load any that is available
+    # Need to catch for the case where we have two of the same probe insertions
+    else:
+        insertions = one.alyx.rest('insertions', 'list', session=eid)
+        labels = [ins['name'] for ins in insertions]
+        tracing = [ins['json']['extended_qc']['tracing_exists'] or False for ins in insertions]
+        resolved = [ins['json']['extended_qc']['alignment_resolved'] or False
+                    for ins in insertions]
+        counts = [ins['json']['extended_qc']['alignment_count'] or 0 for ins in insertions]
+        probe_id = [ins['id'] for ins in insertions]
+
+    channels = Bunch({})
+    r = regions_from_allen_csv()
+    for label, trace, resol, count, id in zip(labels, tracing, resolved, counts, probe_id):
+        if trace:
+            if resol:
+                logger.info(f'Channel locations for {label} have been resolved. '
+                            f'Channel and cluster locations obtained from ephys aligned histology '
+                            f'track.')
+                # download the data
+                chans = one.load_object(eid, 'channels', collection=f'alf/{label}')
+                channels[label] = Bunch({
+                    'atlas_id': chans['brainLocationIds_ccf_2017'],
+                    'acronym':  r.get(chans['brainLocationIds_ccf_2017'])['acronym'],
+                    'x':  chans['mlapdv'][:, 0] / 1e6,
+                    'y':  chans['mlapdv'][:, 1] / 1e6,
+                    'z':  chans['mlapdv'][:, 2] / 1e6,
+                    'axial_um': chans['localCoordinates'][:, 1],
+                    'lateral_um': chans['localCoordinates'][:, 0]
+                })
+            elif count > 0 and aligned:
+                logger.info(f'Channel locations for {label} have not been '
+                            f'resolved. However, alignment flag set to True so channel and cluster'
+                            f' locations will be obtained from latest available ephys aligned '
+                            f'histology track.')
+                # get the latest user aligned channels
+                traj_id = one.alyx.rest('trajectories', 'list', session=eid, probe_name=label,
+                                        provenance='Ephys aligned histology track')[0]['id']
+                chans = one.alyx.rest('channels', 'list', trajectory_estimate=traj_id)
+
+                channels[label] = Bunch({
+                    'atlas_id': np.array([ch['brain_region'] for ch in chans]),
+                    'x': np.array([ch['x'] for ch in chans]) / 1e6,
+                    'y': np.array([ch['y'] for ch in chans]) / 1e6,
+                    'z': np.array([ch['z'] for ch in chans]) / 1e6,
+                    'axial_um': np.array([ch['axial'] for ch in chans]),
+                    'lateral_um': np.array([ch['lateral'] for ch in chans])
+                })
+                channels[label]['acronym'] = r.get(channels[label]['atlas_id'])['acronym']
+            else:
+                logger.info(f'Channel locations for {label} have not been resolved. '
+                            f'Channel and cluster locations obtained from histology track.')
+                # get the channels from histology tracing
+                traj_id = one.alyx.rest('trajectories', 'list', session=eid, probe_name=label,
+                                        provenance = 'Histology track')[0]['id']
+                chans = one.alyx.rest('channels', 'list', trajectory_estimate=traj_id)
+
+                channels[label] = Bunch({
+                    'atlas_id': np.array([ch['brain_region'] for ch in chans]),
+                    'x': np.array([ch['x'] for ch in chans]) / 1e6,
+                    'y': np.array([ch['y'] for ch in chans]) / 1e6,
+                    'z': np.array([ch['z'] for ch in chans]) / 1e6,
+                    'axial_um': np.array([ch['axial'] for ch in chans]),
+                    'lateral_um': np.array([ch['lateral'] for ch in chans])
+                })
+                channels[label]['acronym'] = r.get(channels[label]['atlas_id'])['acronym']
+        else:
+            logger.warning(f'Histology tracing for this probe does not exist. Channels for {label}'
+                           f'will return an empty dict')
 
     return channels
 
@@ -105,7 +153,7 @@ def load_ephys_session(eid, one=None, dataset_types=None):
     return spikes, clusters, trials
 
 
-def load_spike_sorting(eid, one=None, dataset_types=None):
+def load_spike_sorting(eid, one=None, probe=None, dataset_types=None):
     """
     From an eid, hits the Alyx database and downloads a standard default set of dataset types
     From a local session Path (pathlib.Path), loads a standard default set of dataset types
@@ -123,10 +171,12 @@ def load_spike_sorting(eid, one=None, dataset_types=None):
     """
     if isinstance(eid, Path):
         return _load_spike_sorting_local(eid)
-    if not one:
-        one = ONE()
+    one = one or ONE()
+
     # This is a first draft, no safeguard, no error handling and a draft dataset list.
     session_path = one.path_from_eid(eid)
+
+    # here should try loadlocal before hitting database
     if not session_path:
         print("no session path")
         return (None, None), 'no session path'
@@ -211,7 +261,7 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
     return dic_clus
 
 
-def load_spike_sorting_with_channel(eid, one=None, dataset_types=None):
+def load_spike_sorting_with_channel(eid, one=None, dataset_types=None, aligned=False):
     '''
     For a given eid, get spikes, clusters and channels information, and merges clusters
     and channels information before returning all three variables.
@@ -223,7 +273,7 @@ def load_spike_sorting_with_channel(eid, one=None, dataset_types=None):
     dic_spk_bunch, dic_clus = load_spike_sorting(eid, one=one, dataset_types=dataset_types)
 
     # -- Get brain regions and assign to clusters
-    channels = load_channel_locations(eid, one=one)
+    channels = load_channel_locations(eid, one=one, aligned=aligned)
     dic_clus = merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None)
 
     return dic_spk_bunch, dic_clus, channels

@@ -77,7 +77,7 @@ depths = np.arange(20, 3860, 20) / 1e6
 class TestsEphysAlignment(unittest.TestCase):
 
     def setUp(self):
-        self.ephysalign = EphysAlignment(xyz_picks)
+        self.ephysalign = EphysAlignment(xyz_picks, brain_atlas=brain_atlas)
         self.feature = self.ephysalign.feature_init
         self.track = self.ephysalign.track_init
 
@@ -148,7 +148,7 @@ class TestsEphysReconstruction(unittest.TestCase):
 
     def setUp(self):
         self.ephysalign = EphysAlignment(xyz_picks, track_prev=track_prev,
-                                         feature_prev=feature_prev)
+                                         feature_prev=feature_prev, brain_atlas=brain_atlas)
         self.feature = self.ephysalign.feature_init
         self.track = self.ephysalign.track_init
 

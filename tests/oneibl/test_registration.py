@@ -135,6 +135,16 @@ class TestRegistration(unittest.TestCase):
         eid = one.search(subjects=SUBJECT, date_range=['2018-04-01', '2018-04-01'])[0]
         ses_info = one.alyx.rest('sessions', 'read', id=eid)
         self.assertTrue(ses_info['procedures'] == ['Behavior training/tasks'])
+        one.alyx.rest('sessions', 'delete', id=eid)
+        # re-register the session as unknown protocol this time
+        MOCK_SESSION_SETTINGS['PYBPOD_PROTOCOL'] = 'gnagnagna'
+        with open(settings_file, 'w') as fid:
+            json.dump(MOCK_SESSION_SETTINGS, fid)
+        rc.register_session(self.session_path)
+        eid = one.search(subjects=SUBJECT, date_range=['2018-04-01', '2018-04-01'])[0]
+        ses_info = one.alyx.rest('sessions', 'read', id=eid)
+        self.assertTrue(ses_info['procedures'] == [])
+        one.alyx.rest('sessions', 'delete', id=eid)
 
     def tearDown(self) -> None:
         self.td.cleanup()

@@ -12,6 +12,7 @@ import logging
 import wave
 from datetime import datetime
 from pathlib import Path
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -74,7 +75,7 @@ def load_bpod(session_path):
     return load_settings(session_path), load_data(session_path)
 
 
-def load_data(session_path, time='absolute'):
+def load_data(session_path: Union[str, Path], time='absolute'):
     """
     Load PyBpod data files (.jsonable).
 
@@ -82,7 +83,7 @@ def load_data(session_path, time='absolute'):
     PyBpod timestamps are is seconds (s)
 
     :param session_path: Absolute path of session folder
-    :type session_path: str
+    :type session_path: str, Path
     :return: A list of len ntrials each trial being a dictionary
     :rtype: list of dicts
     """
@@ -100,14 +101,14 @@ def load_data(session_path, time='absolute'):
     return data
 
 
-def load_settings(session_path):
+def load_settings(session_path: Union[str, Path]):
     """
     Load PyBpod Settings files (.json).
 
     [description]
 
     :param session_path: Absolute path of session folder
-    :type session_path: str
+    :type session_path: str, Path
     :return: Settings dictionary
     :rtype: dict
     """
@@ -532,20 +533,30 @@ def get_task_extractor_type(task_name):
             task_name = settings.get('PYBPOD_PROTOCOL', None)
         else:
             return
-    if '_biasedChoiceWorld' in task_name:
+    # ephys
+    if 'ephysChoiceWorld' in task_name:
+        return 'ephys'
+    elif 'ephyskarolinaChoiceWorld' in task_name:
+        return 'ephys'
+    # biased choice world
+    elif '_biasedChoiceWorld' in task_name:
         return 'biased'
     elif 'biasedScanningChoiceWorld' in task_name:
         return 'biased'
     elif 'biasedVisOffChoiceWorld' in task_name:
         return 'biased'
+    elif 'karolinaChoiceWorld' in task_name:
+        return 'biased'
+    # habituation
     elif '_habituationChoiceWorld' in task_name:
         return 'habituation'
+    # training
     elif '_trainingChoiceWorld' in task_name:
         return 'training'
-    elif 'ephysChoiceWorld' in task_name:
-        return 'ephys'
+    # mock ephys
     elif 'ephysMockChoiceWorld' in task_name:
         return 'mock_ephys'
+    # sync ephys
     elif task_name and task_name.startswith('_iblrig_tasks_ephys_certification'):
         return 'sync_ephys'
 
