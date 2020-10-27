@@ -1,9 +1,14 @@
-from pathlib import Path
 import abc
 from collections import OrderedDict
-import numpy as np
+from pathlib import Path
 
+import numpy as np
+import pandas as pd
 from ibllib.io import raw_data_loaders as raw
+import logging
+
+
+log = logging.getLogger("ibllib")
 
 
 class BaseExtractor(abc.ABC):
@@ -13,11 +18,13 @@ class BaseExtractor(abc.ABC):
     :param session_path: Absolute path of session folder
     :type session_path: str
     """
+
     session_path = None
     save_names = None
-    default_path = Path('alf')  # relative to session
+    default_path = Path("alf")  # relative to session
 
     def __init__(self, session_path=None):
+        # If session_path is None Path(session_path) will fail
         self.session_path = Path(session_path)
 
     def extract(self, save=False, path_out=None, **kwargs):
@@ -26,25 +33,39 @@ class BaseExtractor(abc.ABC):
         :rtype: dtype('float64')
         """
         out = self._extract(**kwargs)
-        if not save:
-            return out, None
-        else:
-            files = self._save(out, path_out=path_out) if save else None
+        files = self._save(out, path_out=path_out) if save else None
         return out, files
 
-    def _save(self, out, path_out=None):
+    def _save(self, data, path_out=None):
+        # Chack if self.save_namesis of the same length of out
         if not path_out:
             path_out = self.session_path.joinpath(self.default_path)
         path_out.mkdir(exist_ok=True, parents=True)
+
+        def _write_to_disk(file_path, data):
+            """Implements different save calls depending on file extension"""
+            file_path = Path(file_path)
+            if file_path.suffix == ".npy":
+                np.save(file_path, data)
+            elif file_path.suffix == ".parquet":
+                if not isinstance(data, pd.DataFrame):
+                    log.error("Data is not a panda's DataFrame object")
+                    raise TypeError("Data is not a panda's DataFrame object")
+                data.to_parquet(file_path)
+            else:
+                log.error(f"Don't know how to save {file_path.suffix} files yet")
+
         if isinstance(self.save_names, str):
-            files = path_out.joinpath(self.save_names)
-            np.save(files, out)
-        else:
-            files = []
-            for i, fn in enumerate(self.save_names):
-                np.save(path_out.joinpath(fn), out[i])
-                files.append(path_out.joinpath(fn))
-        return files
+            file_paths = path_out.joinpath(self.save_names)
+            _write_to_disk(file_paths, data)
+        else:  # Should be list or tuple...
+            assert len(data) == len(self.save_names)
+            file_paths = []
+            for data, fn in zip(data, self.save_names):
+                fpath = path_out.joinpath(fn)
+                _write_to_disk(fpath, data)
+                file_paths.append(fpath)
+        return file_paths
 
     @abc.abstractmethod
     def _extract(self):
@@ -61,6 +82,7 @@ class BaseBpodTrialsExtractor(BaseExtractor):
     :param bpod_trials
     :param settings
     """
+
     bpod_trials = None
     settings = None
 
@@ -80,9 +102,9 @@ class BaseBpodTrialsExtractor(BaseExtractor):
         if not self.settings:
             self.settings = raw.load_settings(self.session_path)
         if self.settings is None:
-            self.settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
-        elif self.settings['IBLRIG_VERSION_TAG'] == '':
-            self.settings['IBLRIG_VERSION_TAG'] = '100.0.0'
+            self.settings = {"IBLRIG_VERSION_TAG": "100.0.0"}
+        elif self.settings["IBLRIG_VERSION_TAG"] == "":
+            self.settings["IBLRIG_VERSION_TAG"] = "100.0.0"
         return super(BaseBpodTrialsExtractor, self).extract(**kwargs)
 
 
