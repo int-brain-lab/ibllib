@@ -21,7 +21,8 @@ from scipy.special import xlogy
 from tqdm import tqdm
 
 import torch
-from brainbox.modeling.poissonGLM import poissonGLM
+from brainbox.modeling.poissonGLM import PoissonGLM
+
 
 class NeuralGLM:
     """
@@ -486,8 +487,7 @@ class NeuralGLM:
                 warn(f'Fitting did not converge for some units: {nonconverged}')
         return coefs, intercepts, variances
 
-
-    def _fit_pytorch(self, dm, binned, cells=None, retvar=False, epochs=8000, lr=0.2):
+    def _fit_pytorch(self, dm, binned, cells=None, retvar=False, epochs=5000, lr=0.2):
         """
         Fit the GLM using PyTorch on GPU(s). Regularization has not been applied yet.
 
@@ -528,7 +528,7 @@ class NeuralGLM:
         optimizer = torch.optim.Adam(glm.parameters(), lr=lr)
         _, weight, bias = glm.fit(x, y, epochs=epochs, optimizer=optimizer)
         # Store parameters
-        biasdm = np.pad(dm.copy(), ((0, 0), (1, 0)), 'constant', constant_values=1)       
+        biasdm = np.pad(dm.copy(), ((0, 0), (1, 0)), 'constant', constant_values=1)
         for cell in cells:
             cell_idx = np.argwhere(self.clu_ids == cell)[0, 0]
             cellbinned = binned[:, cell_idx]
@@ -586,7 +586,7 @@ class NeuralGLM:
             variances.at[cell] = wvar[1:]
         return coefs, intercepts, variances
 
-    def fit(self, method='sklearn', alpha=0, singlepar_var=False, epochs=8000, lr=0.2):
+    def fit(self, method='sklearn', alpha=0, singlepar_var=False, epochs=5000, lr=0.2):
         """
         Fit the current set of binned spikes as a function of the current design matrix. Requires
         NeuralGLM.bin_spike_trains and NeuralGLM.compile_design_matrix to be run first. Will store
@@ -635,8 +635,8 @@ class NeuralGLM:
                                                                  retvar=True)
             elif method == 'pytorch':
                 traindm = self.dm[trainmask]
-                coefs, intercepts, variances  = self._fit_pytorch(traindm, trainbinned,
-                                                                  retvar=True, epochs=epochs, lr=lr)
+                coefs, intercepts, variances = self._fit_pytorch(traindm, trainbinned,
+                                                                 retvar=True, epochs=epochs, lr=lr)
             else:
                 biasdm = np.pad(self.dm.copy(), ((0, 0), (1, 0)), 'constant', constant_values=1)
                 traindm = biasdm[trainmask]
@@ -665,9 +665,9 @@ class NeuralGLM:
                     coefs, intercepts, variances = self._fit_sklearn(traindm, trainbinned, alpha,
                                                                      retvar=singlepar_var)
                 elif method == 'pytorch':
-                    coefs, intercepts, variances  = self._fit_pytorch(traindm, trainbinned, 
-                                                                      retvar=singlepar_var, 
-                                                                      epochs=epochs, lr=lr)                                                     
+                    coefs, intercepts, variances = self._fit_pytorch(traindm, trainbinned, 
+                                                                     retvar=singlepar_var, 
+                                                                     epochs=epochs, lr=lr)                                                     
                 else:
                     biasdm = np.pad(traindm.copy(), ((0, 0), (1, 0)), 'constant',
                                     constant_values=1)
@@ -710,9 +710,10 @@ class NeuralGLM:
                                                                          retvar=retvar,
                                                                          noncovwarn=False)
                     elif method == 'pytorch':
-                        coefs, intercepts, variances  = self._fit_pytorch(traindm, trainbinned, 
-                                                                          cells=currcells, retvar=retvar, 
-                                                                          epochs=epochs, lr=lr)                                                       
+                        coefs, intercepts, variances = self._fit_pytorch(traindm, trainbinned,
+                                                                         cells=currcells,
+                                                                         retvar=retvar,
+                                                                         epochs=epochs, lr=lr)                                                       
                     else:
                         biasdm = np.pad(traindm.copy(), ((0, 0), (1, 0)), 'constant',
                                         constant_values=1)
