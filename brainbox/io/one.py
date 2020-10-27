@@ -95,7 +95,7 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
                 chans = one.alyx.rest('channels', 'list', trajectory_estimate=traj_id)
 
                 channels[label] = Bunch({
-                    'atlas_id': np.array([ch['brain_region']['id'] for ch in chans]),
+                    'atlas_id': np.array([ch['brain_region'] for ch in chans]),
                     'x': np.array([ch['x'] for ch in chans]) / 1e6,
                     'y': np.array([ch['y'] for ch in chans]) / 1e6,
                     'z': np.array([ch['z'] for ch in chans]) / 1e6,
