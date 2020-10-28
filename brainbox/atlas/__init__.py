@@ -1,1 +1,1 @@
-from .atlas import *
+from brainbox.atlas.atlas import plot_atlas
