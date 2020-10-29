@@ -36,5 +36,3 @@ spikes = alf.io.load_object(alf_path, 'spikes')
 drift = electrode_drift.estimate_drift(spikes['times'], spikes['amps'], spikes['depths'],
                                        display=True)
 plt.show()
-
-

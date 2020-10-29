@@ -68,4 +68,3 @@ ax.set_ylabel('Depth along probe (um)')
 ax.set_title('Power Spectrum of LFP')
 
 plt.show()
-

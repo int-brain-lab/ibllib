@@ -46,7 +46,7 @@ if len(aligned_traj) > 0:
 
 else:
     histology_traj = one.alyx.rest('trajectories', 'list', subject=subject, session=eid,
-                                    probe=probe_label, provenance='Histology track')
+                                   probe=probe_label, provenance='Histology track')
     if len(histology_traj) > 0:
         print('Getting channels for provenance ' + histology_traj[0]['provenance'])
 
@@ -76,16 +76,7 @@ if chans is not None:
 
     region_cols = cluster_colour[idx, :]
     fig, ax = plt.subplots()
-    ax.bar(x=np.arange(len(regions)), height=n_clust, tick_label=regions, color=region_cols/255)
+    ax.bar(x=np.arange(len(regions)), height=n_clust, tick_label=regions, color=region_cols / 255)
     ax.set_xlabel('Brain region acronym')
     ax.set_ylabel('No. of clusters')
     plt.show()
-
-
-
-
-
-
-
-
-
