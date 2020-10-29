@@ -173,8 +173,8 @@ class TaskQCExtractor(object):
                 # 0.5s iti already removed during extraction so we set duration to 0 here
                 ibpod, _, bpod2fpga = bpod_fpga_sync(intervals_bpod, intervals, iti_duration=0)
                 # These fields have to be re-synced
-                sync_fields = ['stimOnTrigger_times', 'stimOffTrigger_times', 'stimFreeze_times',
-                               'stimFreezeTrigger_times', 'errorCueTrigger_times', 'itiIn_times']
+                sync_fields = ['stimOnTrigger_times', 'stimOffTrigger_times', 'itiIn_times',
+                               'stimFreezeTrigger_times', 'errorCueTrigger_times']
                 bpod_fields = ['probabilityLeft', 'contrastLeft', 'contrastRight', 'position',
                                'contrast', 'quiescence', 'phase']
                 # build trials output

@@ -15,7 +15,6 @@ from ibllib.pipes.training_preprocessing import TrainingRegisterRaw as EphysRegi
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.task_extractors import TaskQCExtractor
 
-
 _logger = logging.getLogger('ibllib')
 
 
@@ -110,7 +109,7 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
             line = [line for line in lines if line.startswith('SCRATCH_DRIVE=')][0]
             m = re.search(r"\=(.*?)(\#|\n)", line)[0]
             scratch_drive = Path(m[1:-1].strip())
-            assert(scratch_drive.exists())
+            assert (scratch_drive.exists())
 
             # clean up and create directory, this also checks write permissions
             # scratch dir has the following shape: ks2m/ZM_3003_2020-07-29_001_probe00
@@ -154,12 +153,19 @@ class EphysVideoCompress(tasks.Task):
     level = 1
 
     def _run(self, **kwargs):
-        # avi to mp4 compression
-        command = ('ffmpeg -i {file_in} -y -nostdin -codec:v libx264 -preset slow -crf 17 '
-                   '-loglevel 0 -codec:a copy {file_out}')
-        output_files = ffmpeg.iblrig_video_compression(self.session_path, command)
-        if len(output_files) == 0:
-            self.session_path.joinpath('')
+        if (len(self.session_path.rglob('*.mp4')) == 0 and
+                len(self.session_path.rglob('*.avi')) > 0):
+            # avi to mp4 compression
+            command = ('ffmpeg -i {file_in} -y -nostdin -codec:v libx264 -preset slow -crf 17 '
+                       '-loglevel 0 -codec:a copy {file_out}')
+            output_files = ffmpeg.iblrig_video_compression(self.session_path, command)
+            if len(output_files) == 0:  # TODO Find out what this line does
+                self.session_path.joinpath('')
+
+        ## Video timestamps extraction
+
+        ## Video QC
+
         return output_files
 
 

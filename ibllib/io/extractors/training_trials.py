@@ -653,93 +653,6 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
         return stimOn_times, stimOff_times, stimFreeze_times
 
 
-class CameraTimestamps(BaseBpodTrialsExtractor):
-    """
-    Get the camera timestamps from the Bpod
-
-    The camera events are logged only during the events not in between, so the times need
-    to be interpolated
-    """
-    save_names = '_ibl_leftCamera.times.npy'
-    var_names = 'camera_timestamps'
-
-    def _extract(self):
-        ntrials = len(self.bpod_trials)
-
-        cam_times = []
-        n_frames = 0
-        n_out_of_sync = 0
-        for ind in np.arange(ntrials):
-            # get upgoing and downgoing fronts
-            pin = np.array(self.bpod_trials[ind]['behavior_data']
-                           ['Events timestamps'].get('Port1In'))
-            pout = np.array(self.bpod_trials[ind]['behavior_data']
-                            ['Events timestamps'].get('Port1Out'))
-            # some trials at startup may not have the camera working, discard
-            if np.all(pin) is None:
-                continue
-            # if the trial starts in the middle of a square, discard the first downgoing front
-            if pout[0] < pin[0]:
-                pout = pout[1:]
-            # same if the last sample is during an upgoing front, always
-            # put size as it happens last
-            pin = pin[:pout.size]
-            frate = np.median(np.diff(pin))
-            if ind > 0:
-                """
-                assert that the pulses have the same length and that we don't miss frames during
-                the trial, the refresh rate of bpod is 100us
-                """
-                test1 = np.all(np.abs(1 - (pin - pout) / np.median(pin - pout)) < 0.1)
-                test2 = np.all(np.abs(np.diff(pin) - frate) <= 0.00011)
-                if not all([test1, test2]):
-                    n_out_of_sync += 1
-            # grow a list of cam times for ech trial
-            cam_times.append(pin)
-            n_frames += pin.size
-
-        if n_out_of_sync > 0:
-            _logger.warning(f"{n_out_of_sync} trials with bpod camera frame times not within"
-                            f" 10% of the expected sampling rate")
-
-        t_first_frame = np.array([c[0] for c in cam_times])
-        t_last_frame = np.array([c[-1] for c in cam_times])
-        frate = 1 / np.nanmedian(np.array([np.median(np.diff(c)) for c in cam_times]))
-        intertrial_duration = t_first_frame[1:] - t_last_frame[:-1]
-        intertrial_missed_frames = np.int32(np.round(intertrial_duration * frate)) - 1
-
-        # initialize the full times array
-        frame_times = np.zeros(n_frames + int(np.sum(intertrial_missed_frames)))
-        ii = 0
-        for trial, cam_time in enumerate(cam_times):
-            if cam_time is not None:
-                # populate first the recovered times within the trials
-                frame_times[ii: ii + cam_time.size] = cam_time
-                ii += cam_time.size
-            if trial == (len(cam_times) - 1):
-                break
-            # then extrapolate in-between
-            nmiss = intertrial_missed_frames[trial]
-            frame_times[ii: ii + nmiss] = (cam_time[-1] + intertrial_duration[trial] /
-                                           (nmiss + 1) * (np.arange(nmiss) + 1))
-            ii += nmiss
-        # import matplotlib.pyplot as plt
-        # plt.plot(np.diff(frame_times))
-        """
-        if we find a video file, get the number of frames and extrapolate the times
-         using the median frame rate as the video stops after the bpod
-        """
-        video_file = list(self.session_path.joinpath(
-            'raw_video_data').glob('_iblrig_leftCamera*.mp4'))
-        if video_file:
-            cap = cv2.VideoCapture(str(video_file[0]))
-            nframes = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-            if nframes > len(frame_times):
-                to_app = (np.arange(int(nframes - frame_times.size),) + 1
-                          ) / frate + frame_times[-1]
-                frame_times = np.r_[frame_times, to_app]
-        assert(np.all(np.diff(frame_times) > 0))  # negative diffs implies a big problem
-        return frame_times
 
 
 def extract_all(session_path, save=False, bpod_trials=False, settings=False):
@@ -755,7 +668,7 @@ def extract_all(session_path, save=False, bpod_trials=False, settings=False):
             GoCueTimes]
     # Version check
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
-        base.extend([StimOnTriggerTimes, CameraTimestamps])
+        base.extend([StimOnTriggerTimes])
     else:
         base.extend([IncludedTrials, ItiDuration])
 
