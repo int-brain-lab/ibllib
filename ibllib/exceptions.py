@@ -1,4 +1,4 @@
-class IblError(BaseException):
+class IblError(Exception):
     explanation = ''
 
     def __init__(self, *args):

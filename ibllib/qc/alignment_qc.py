@@ -169,6 +169,7 @@ class AlignmentQC(base.QC):
 
             if update:
                 self.update_extended_qc(results)
+                file_paths = []
 
             if upload_alyx or upload_flatiron:
                 file_paths = self.upload_channels(align_key, upload_alyx, upload_flatiron)
