@@ -76,10 +76,18 @@ class TestEphysSyncExtraction(unittest.TestCase):
         self.assertTrue(np.allclose(desired_out, t_event_nans, equal_nan=True, atol=0, rtol=0))
 
         # same test above but this time take the first index instead of last
-        t_trial_start = np.array([0, 10, 20, 30, 40])
-        t_event = np.array([-1, 2, 4, 12, 35, 42])
         t_event_nans = ephys_fpga._assign_events_to_trial(t_trial_start, t_event, take='first')
         desired_out = np.array([2, 12., np.nan, 35, 42])
+        self.assertTrue(np.allclose(desired_out, t_event_nans, equal_nan=True, atol=0, rtol=0))
+
+        # take second to last
+        t_trial_start = np.array([0, 10, 20, 30, 40])
+        t_event = np.array([2, 4, 12, 13, 14, 21, 32, 33, 34, 35, 42])
+        t_event_nans = ephys_fpga._assign_events_to_trial(t_trial_start, t_event, take=-2)
+        desired_out = np.array([2, 13, np.nan, 34, np.nan])
+        self.assertTrue(np.allclose(desired_out, t_event_nans, equal_nan=True, atol=0, rtol=0))
+        t_event_nans = ephys_fpga._assign_events_to_trial(t_trial_start, t_event, take=1)
+        desired_out = np.array([4, 13, np.nan, 33, np.nan])
         self.assertTrue(np.allclose(desired_out, t_event_nans, equal_nan=True, atol=0, rtol=0))
 
     def test_wheel_trace_from_sync(self):

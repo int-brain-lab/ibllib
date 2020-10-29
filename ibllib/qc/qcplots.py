@@ -28,7 +28,7 @@ def plot_results(qc_obj, save_path=None):
         print('\n'.join(v), '\n')
 
     # Collect some session details
-    n_trials = qc_obj.extractor.data['intervals_0'].size
+    n_trials = qc_obj.extractor.data['intervals'].shape[0]
     det = qc_obj.one.get_details(qc_obj.eid)
     ref = f"{datetime.fromisoformat(det['start_time']).date()}_{det['number']:d}_{det['subject']}"
     title = ref + (' (Bpod data only)' if qc_obj.extractor.bpod_only else '')

@@ -12,18 +12,13 @@ one.search_terms()
 ## List dataset types for a session
 eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
 one.list(eid)
-## More Info about a session
-d = one.list(eid, 'All')
 
-## Get More Info about datasets
-d = one.list(eid, details=True)
+## List dataset names organized by collection
+d = one.list(eid, 'datasets', details=True)
 print(d)
 
-print(d)
 ## List #1
 one.list(None, 'dataset-types')
-one.list(None, 'users')
-one.list(None, 'subjects')
 
 ## Load #1
 dataset_types = ['clusters.templateWaveforms', 'clusters.probes', 'clusters.depths']

@@ -30,6 +30,7 @@ ALF_EXP = re.compile(
     r'(?P<timescale>(?:_?)\w+)*\.?'
     r'(?P<extra>[.\w-]+)*\.'
     r'(?P<extension>\w+$)')
+STR_SPEC = 'collection/(_namespace_)object.attribute(_timescale)(.extra.parts).ext'
 
 
 def is_valid(filename):

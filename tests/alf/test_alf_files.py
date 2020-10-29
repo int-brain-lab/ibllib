@@ -57,7 +57,7 @@ class TestsAlfPartsFilters(unittest.TestCase):
         # Test filtering multiple attributes; should return only trials intervals
         alf_files, _ = alf.files.filter_by(self.tmpdir, attribute='intervals', object='trials')
         expected = ['_ibl_trials.intervals.npy', '_ibl_trials.intervals_bpod.csv']
-        self.assertListEqual(alf_files, expected, 'failed to filter by multiple attribute')
+        self.assertCountEqual(alf_files, expected, 'failed to filter by multiple attribute')
 
         # Test returning only ALF files
         alf_files, _ = alf.files.filter_by(self.tmpdir)

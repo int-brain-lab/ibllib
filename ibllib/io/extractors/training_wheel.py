@@ -1,5 +1,5 @@
 import logging
-from collections import Sized
+from collections.abc import Sized
 
 import numpy as np
 from scipy import interpolate
@@ -232,32 +232,27 @@ def get_wheel_position(session_path, bp_data=None, display=False):
     return data['re_ts'], data['re_pos']
 
 
-def extract_wheel_moves(re_ts, re_pos, display=False):
+def infer_wheel_units(pos):
     """
-    Extract wheel positions and times from sync fronts dictionary
-    :param re_ts: numpy array of rotary encoder timestamps
-    :param re_pos: numpy array of rotary encoder positions
-    :param display: bool: show the wheel position and velocity for full session with detected
-    movements highlighted
-    :return: wheel_moves dictionary
+    Given an array of wheel positions, infer the rotary encoder resolution, encoding type and units
+
+    The encoding type varies across hardware (Bpod uses X1 while FPGA usually extracted as X4), and
+    older data were extracted in linear cm rather than radians.
+
+    :param pos: a 1D array of extracted wheel positions
+    :return units: the position units, assumed to be either 'rad' or 'cm'
+    :return resolution: the number of decoded fronts per 360 degree rotation
+    :return encoding: one of {'X1', 'X2', 'X4'}
     """
-    if len(re_ts.shape) == 1:
-        assert re_ts.size == re_pos.size, 'wheel data dimension mismatch'
-        assert np.all(np.diff(re_ts) > 0), 'wheel timestamps not strictly increasing'
-    else:
-        _logger.debug('2D wheel timestamps')
-        if len(re_pos.shape) > 1:  # Ensure 1D array of positions
-            re_pos = re_pos.flatten()
-        # Linearly interpolate the times
-        x = np.arange(re_pos.size)
-        re_ts = np.interp(x, re_ts[:, 0], re_ts[:, 1])
+    if len(pos.shape) > 1:  # Ensure 1D array of positions
+        pos = pos.flatten()
 
     # Check the values and units of wheel position
     res = np.array([wh.ENC_RES, wh.ENC_RES / 2, wh.ENC_RES / 4])
     # min change in rad and cm for each decoding type
     # [rad_X4, rad_X2, rad_X1, cm_X4, cm_X2, cm_X1]
     min_change = np.concatenate([2 * np.pi / res, wh.WHEEL_DIAMETER * np.pi / res])
-    pos_diff = np.median(np.abs(np.ediff1d(re_pos)))
+    pos_diff = np.median(np.abs(np.ediff1d(pos)))
 
     # find min change closest to min pos_diff
     idx = np.argmin(np.abs(min_change - pos_diff))
@@ -269,13 +264,36 @@ def extract_wheel_moves(re_ts, re_pos, display=False):
         units = 'cm'
         encoding = idx - len(res)
     enc_names = {0: 'X4', 1: 'X2', 2: 'X1'}
-    _logger.info('Wheel in %s units using %s encoding', units, enc_names[int(encoding)])
+    return units, int(res[encoding]), enc_names[int(encoding)]
+
+
+def extract_wheel_moves(re_ts, re_pos, display=False):
+    """
+    Extract wheel positions and times from sync fronts dictionary
+    :param re_ts: numpy array of rotary encoder timestamps
+    :param re_pos: numpy array of rotary encoder positions
+    :param display: bool: show the wheel position and velocity for full session with detected
+    movements highlighted
+    :return: wheel_moves dictionary
+    """
+    if len(re_ts.shape) == 1:
+        assert re_ts.size == re_pos.size, 'wheel data dimension mismatch'
+    else:
+        _logger.debug('2D wheel timestamps')
+        if len(re_pos.shape) > 1:  # Ensure 1D array of positions
+            re_pos = re_pos.flatten()
+        # Linearly interpolate the times
+        x = np.arange(re_pos.size)
+        re_ts = np.interp(x, re_ts[:, 0], re_ts[:, 1])
+
+    units, res, enc = infer_wheel_units(re_pos)
+    _logger.info('Wheel in %s units using %s encoding', units, enc)
 
     # The below assertion is violated by Bpod wheel data
     #  assert np.allclose(pos_diff, min_change, rtol=1e-05), 'wheel position skips'
 
     # Convert the pos threshold defaults from samples to correct unit
-    thresholds = wh.samples_to_cm(np.array([8, 1.5]), resolution=res[encoding])
+    thresholds = wh.samples_to_cm(np.array([8, 1.5]), resolution=res)
     if units == 'rad':
         thresholds = wh.cm_to_rad(thresholds)
     kwargs = {'pos_thresh': thresholds[0],
@@ -287,7 +305,7 @@ def extract_wheel_moves(re_ts, re_pos, display=False):
     on, off, amp, peak_vel = wh.movements(t, pos, freq=1000, **kwargs)
     assert on.size == off.size, 'onset/offset number mismatch'
     assert np.all(np.diff(on) > 0) and np.all(
-        np.diff(off) > 0), 'onsets/offsets not monotonically increasing'
+        np.diff(off) > 0), 'onsets/offsets not strictly increasing'
     assert np.all((off - on) > 0), 'not all offsets occur after onset'
 
     # Put into dict

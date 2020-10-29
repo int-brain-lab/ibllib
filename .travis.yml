@@ -1,6 +1,8 @@
 language: python
 python:
-  - "3.6"
+  - "3.8"
+os: linux
+dist: bionic
 # command to install dependencies
 install:
   - pip install -r requirements.txt

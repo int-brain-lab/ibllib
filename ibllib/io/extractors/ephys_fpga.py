@@ -142,8 +142,6 @@ def _assign_events_bpod(bpod_t, bpod_polarities, ignore_first_valve=True):
     # detect start trials event assuming length is 0.23 ms except the first trial
     i_trial_start = np.r_[0, np.where(dt <= TRIAL_START_TTL_LEN)[0] * 2]
     t_trial_start = bpod_t[i_trial_start]
-    # # the first trial we detect the first falling edge to which we subtract 0.1ms
-    # t_trial_start[0] -= 1e-4
     # the last trial is a dud and should be removed
     t_trial_start = t_trial_start[:-1]
     # valve open events are between 50ms to 300 ms
@@ -238,10 +236,6 @@ def _assign_events_audio(audio_t, audio_polarities, return_indices=False):
         return t_ready_tone_in, t_error_tone_in
 
 
-def _frame2ttl_events_extraction(f2ttl_t, f2ttl_fronts):
-    pass
-
-
 def _assign_events_to_trial(t_trial_start, t_event, take='last'):
     """
     Assign events to a trial given trial start times and event times.
@@ -275,7 +269,14 @@ def _assign_events_to_trial(t_trial_start, t_event, take='last'):
     elif take == 'first':
         iall, iu = np.unique(ind, return_index=True)
         t_event_nans[iall] = t_event[iu]
-
+    else:  # if the index is arbitrary, needs to be numeric (could be negative if from the end)
+        iall = np.unique(ind)
+        minsize = take + 1 if take >= 0 else - take
+        # for each trial, take the takenth element if there are enough values in trial
+        for iu in iall:
+            match = t_event[iu == ind]
+            if len(match) >= minsize:
+                t_event_nans[iu] = match[take]
     return t_event_nans
 
 
@@ -386,20 +387,13 @@ def extract_behaviour_sync(sync, chmap=None, display=False, tmax=np.inf):
         bpod['times'], bpod['polarities'])
     t_ready_tone_in, t_error_tone_in = _assign_events_audio(
         audio['times'], audio['polarities'])
-    # stim off time is the first frame2ttl rise/fall after the trial start
-    # does not apply for 1st trial
-    ind = np.searchsorted(frame2ttl['times'], t_iti_in, side='left')
-    t_stim_off = frame2ttl['times'][np.minimum(ind, frame2ttl.times.size - 1)]
-    t_stim_freeze = frame2ttl['times'][np.minimum(ind, frame2ttl.times.size - 2)]
-    # t_stim_freeze = frame2ttl['times'][np.maximum(ind - 1, 0)]
-    # stimOn_times: first fram2ttl change after trial start
     trials = Bunch({
         'goCue_times': _assign_events_to_trial(t_trial_start, t_ready_tone_in, take='first'),
         'errorCue_times': _assign_events_to_trial(t_trial_start, t_error_tone_in),
         'valveOpen_times': _assign_events_to_trial(t_trial_start, t_valve_open),
-        'stimFreeze_times': _assign_events_to_trial(t_trial_start, t_stim_freeze),
+        'stimFreeze_times': _assign_events_to_trial(t_trial_start, frame2ttl['times'], take=-2),
         'stimOn_times': _assign_events_to_trial(t_trial_start, frame2ttl['times'], take='first'),
-        'stimOff_times': _assign_events_to_trial(t_trial_start, t_stim_off),
+        'stimOff_times': _assign_events_to_trial(t_trial_start, frame2ttl['times']),
         'itiIn_times': _assign_events_to_trial(t_trial_start, t_iti_in)
     })
     # feedback times are valve open on good trials and error tone in on error trials
@@ -429,9 +423,9 @@ def extract_behaviour_sync(sync, chmap=None, display=False, tmax=np.inf):
                              ax=ax, label='error tone', color='r', linewidth=width)
         plots.vertical_lines(t_valve_open, ymin=0, ymax=ymax,
                              ax=ax, label='valveOpen_times', color='g', linewidth=width)
-        plots.vertical_lines(t_stim_freeze, ymin=0, ymax=ymax,
+        plots.vertical_lines(trials['stimFreeze_times'], ymin=0, ymax=ymax,
                              ax=ax, label='stimFreeze_times', color='y', linewidth=width)
-        plots.vertical_lines(t_stim_off, ymin=0, ymax=ymax,
+        plots.vertical_lines(trials['stimOff_times'], ymin=0, ymax=ymax,
                              ax=ax, label='stim off', color='c', linewidth=width)
         plots.vertical_lines(trials['stimOn_times'], ymin=0, ymax=ymax,
                              ax=ax, label='stimOn_times', color='tab:orange', linewidth=width)
@@ -610,6 +604,7 @@ class FpgaTrials(BaseExtractor):
             sync = sync or _sync
             chmap = chmap or _chmap
         bpod_raw = raw_data_loaders.load_data(self.session_path)
+        assert bpod_raw is not None, "No task trials data in raw_behavior_data - Exit"
         tmax = bpod_raw[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
         bpod_trials, _ = biased_trials.extract_all(
             session_path=self.session_path, save=False, bpod_trials=bpod_raw)

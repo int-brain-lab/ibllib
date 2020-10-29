@@ -418,7 +418,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
 
     def testGetSerialNumber(self):
         self.meta_files.sort()
-        expected = [641251510, 641251510, 641251510, 18005116811, 18005116811, None]
+        expected = [641251510, 641251510, 641251510, 17216703352, 18005116811, 18005116811, None]
         for meta_data_file, res in zip(self.meta_files, expected):
             md = spikeglx.read_meta_data(meta_data_file)
             self.assertEqual(md.serial, res)
@@ -436,6 +436,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
 
     def testReadChannelGainAPLF(self):
         for meta_data_file in self.meta_files:
+            print(meta_data_file)
             if meta_data_file.name.split('.')[-2] not in ['lf', 'ap']:
                 continue
             md = spikeglx.read_meta_data(meta_data_file)
