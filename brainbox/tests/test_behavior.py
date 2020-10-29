@@ -125,6 +125,7 @@ class TestTraining(unittest.TestCase):
         else:
             with open(pickle_file, 'rb') as f:
                 self.trial_data = pickle.load(f)
+        np.random.seed(0)
 
     def test_concatenate_and_computations(self):
         sess_dates = ['2020-08-25', '2020-08-24', '2020-08-21']
