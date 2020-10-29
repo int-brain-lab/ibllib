@@ -49,26 +49,37 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
 
     # When a specific probe has been requested
     if isinstance(probe, str):
-        insertions = one.alyx.rest('insertions', 'read', session=eid, name=probe)
+        insertions = one.alyx.rest('insertions', 'list', session=eid, name=probe)[0]
         labels = [probe]
-        tracing = (insertions.get('json', {'temp': 0}).get('extended_qc', {'temp': 0}).
-                   get('tracing_exists', False))
-        resolved = (insertions.get('json', {'temp': 0}).get('extended_qc', {'temp': 0}).
-                    get('alignment_resolved', False))
-        counts = (insertions.get('json', {'temp': 0}).get('extended_qc', {'temp': 0}).
-                  get('alignment_count', 0))
-        probe_id = insertions['id']
+        if not insertions['json']:
+            tracing = [False]
+            resolved = [False]
+            counts = [0]
+        else:
+            tracing = [(insertions.get('json', {'temp': 0}).get('extended_qc', {'temp': 0}).
+                       get('tracing_exists', False))]
+            resolved = [(insertions.get('json', {'temp': 0}).get('extended_qc', {'temp': 0}).
+                        get('alignment_resolved', False))]
+            counts = [(insertions.get('json', {'temp': 0}).get('extended_qc', {'temp': 0}).
+                      get('alignment_count', 0))]
+        probe_id = [insertions['id']]
     # No specific probe specified, load any that is available
     # Need to catch for the case where we have two of the same probe insertions
     else:
         insertions = one.alyx.rest('insertions', 'list', session=eid)
         labels = [ins['name'] for ins in insertions]
-        tracing = [ins.get('json', {'temp': 0}).get('extended_qc', {'temp': 0}).
-                   get('tracing_exists', False) for ins in insertions]
-        resolved = [ins.get('json', {'temp': 0}).get('extended_qc', {'temp': 0}).
-                    get('alignment_resolved', False) for ins in insertions]
-        counts = [ins.get('json', {'temp': 0}).get('extended_qc', {'temp': 0}).
-                  get('alignment_count', 0) for ins in insertions]
+        try:
+            tracing = [ins.get('json', {'temp': 0}).get('extended_qc', {'temp': 0}).
+                       get('tracing_exists', False) for ins in insertions]
+            resolved = [ins.get('json', {'temp': 0}).get('extended_qc', {'temp': 0}).
+                        get('alignment_resolved', False) for ins in insertions]
+            counts = [ins.get('json', {'temp': 0}).get('extended_qc', {'temp': 0}).
+                      get('alignment_count', 0) for ins in insertions]
+        except Exception as err:
+            tracing = [False for ins in insertions]
+            resolved = [False for ins in insertions]
+            counts = [0 for ins in insertions]
+
         probe_id = [ins['id'] for ins in insertions]
 
     channels = Bunch({})
@@ -306,7 +317,7 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
     return dic_clus
 
 
-def load_spike_sorting_with_channel(eid, one=None, dataset_types=None, aligned=False):
+def load_spike_sorting_with_channel(eid, one=None, probe=None, dataset_types=None, aligned=False):
     """
     For a given eid, get spikes, clusters and channels information, and merges clusters
     and channels information before returning all three variables.
@@ -318,9 +329,10 @@ def load_spike_sorting_with_channel(eid, one=None, dataset_types=None, aligned=F
     :return: spikes, clusters, channels (dict of bunch, 1 bunch per probe)
     """
     # --- Get spikes and clusters data
-    dic_spk_bunch, dic_clus = load_spike_sorting(eid, one=one, dataset_types=dataset_types)
+    dic_spk_bunch, dic_clus = load_spike_sorting(eid, one=one, probe=probe,
+                                                 dataset_types=dataset_types)
     # -- Get brain regions and assign to clusters
-    channels = load_channel_locations(eid, one=one, aligned=aligned)
+    channels = load_channel_locations(eid, one=one, probe=probe, aligned=aligned)
 
     dic_clus = merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None)
     return dic_spk_bunch, dic_clus, channels
