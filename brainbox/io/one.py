@@ -7,7 +7,6 @@ from ibllib.io import spikeglx
 from ibllib.atlas import regions_from_allen_csv
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
 from oneibl.one import ONE
-import time
 
 from brainbox.core import Bunch
 
@@ -75,7 +74,7 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
                         get('alignment_resolved', False) for ins in insertions]
             counts = [ins.get('json', {'temp': 0}).get('extended_qc', {'temp': 0}).
                       get('alignment_count', 0) for ins in insertions]
-        except Exception as err:
+        except Exception:
             tracing = [False for ins in insertions]
             resolved = [False for ins in insertions]
             counts = [0 for ins in insertions]
@@ -94,10 +93,10 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
                 chans = one.load_object(eid, 'channels', collection=f'alf/{label}')
                 channels[label] = Bunch({
                     'atlas_id': chans['brainLocationIds_ccf_2017'],
-                    'acronym':  r.get(chans['brainLocationIds_ccf_2017'])['acronym'],
-                    'x':  chans['mlapdv'][:, 0] / 1e6,
-                    'y':  chans['mlapdv'][:, 1] / 1e6,
-                    'z':  chans['mlapdv'][:, 2] / 1e6,
+                    'acronym': r.get(chans['brainLocationIds_ccf_2017'])['acronym'],
+                    'x': chans['mlapdv'][:, 0] / 1e6,
+                    'y': chans['mlapdv'][:, 1] / 1e6,
+                    'z': chans['mlapdv'][:, 2] / 1e6,
                     'axial_um': chans['localCoordinates'][:, 1],
                     'lateral_um': chans['localCoordinates'][:, 0]
                 })
@@ -125,7 +124,7 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
                             f'Channel and cluster locations obtained from histology track.')
                 # get the channels from histology tracing
                 traj_id = one.alyx.rest('trajectories', 'list', session=eid, probe_name=label,
-                                        provenance = 'Histology track')[0]['id']
+                                        provenance='Histology track')[0]['id']
                 chans = one.alyx.rest('channels', 'list', trajectory_estimate=traj_id)
 
                 channels[label] = Bunch({
@@ -190,69 +189,82 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, force=Fals
     :return: spikes, clusters (dict of bunch, 1 bunch per probe)
     """
     if isinstance(eid, Path):
+        # Do everything locally without ONE
         session_path = eid
-    else:
-        session_path = one.path_from_eid(eid)
-    if not session_path:
-        logger.warning('Session not found')
-        return (None, None), 'no session path'
-
-    one = one or ONE()
-    dtypes_default = [
-        'clusters.channels',
-        'clusters.depths',
-        'clusters.metrics',
-        'spikes.clusters',
-        'spikes.times'
-    ]
-    if dataset_types is None:
-        dtypes = dtypes_default
-    else:
-        # Append extra optional DS
-        dtypes = list(set(dataset_types + dtypes_default))
-
-    if isinstance(probe, str):
-        labels = [probe]
-    else:
-        insertions = one.alyx.rest('insertions', 'list', session=eid)
-        labels = [ins['name'] for ins in insertions]
-
-    spikes = Bunch({})
-    clusters = Bunch({})
-    for label in labels:
-        _spikes, _clusters = _load_spike_sorting_local(session_path, label)
-        spike_dtypes = [sp for sp in dtypes if 'spikes.' in sp]
-        spike_local = ['spikes.' + sp for sp in list(_spikes.keys())]
-        spike_exists = all([sp in spike_local for sp in spike_dtypes])
-        cluster_dtypes = [cl for cl in dtypes if 'clusters.' in cl]
-        cluster_local = ['clusters.' + cl for cl in list(_clusters.keys())]
-        cluster_exists = all([cl in cluster_local for cl in cluster_dtypes])
-
-        if not spike_exists or not cluster_exists or force:
-            logger.info(f'Did not find local files for spikes and clusters for {session_path} '
-                        f'and {label}. Downloading....')
-            one.load(eid, dataset_types=dtypes, download_only=True)
+        probes = alf.io.load_object(session_path.joinpath('alf'), 'probes')
+        labels = [pr['label'] for pr in probes['description']]
+        spikes = Bunch({})
+        clusters = Bunch({})
+        for label in labels:
             _spikes, _clusters = _load_spike_sorting_local(session_path, label)
-            if not _spikes:
-                logger.warning(
-                    f'Could not load spikes datasets for session {session_path} and {label}. '
-                    f'Spikes for {probe} will return an empty dict')
-            else:
-                spikes[label] = _spikes
-            if not _clusters:
-                logger.warning(
-                    f'Could not load clusters datasets for session {session_path} and {label}. '
-                    f'Clusters for {label} will return an empty dict')
-            else:
-                clusters[label] = _clusters
-        else:
-            logger.info(f'Local files for spikes and clusters for {session_path} '
-                        f'and {label} found. To re-download set force=True')
-
             spikes[label] = _spikes
             clusters[label] = _clusters
 
-    return spikes, clusters
+        return spikes, clusters
+
+    else:
+        session_path = one.path_from_eid(eid)
+        if not session_path:
+            logger.warning('Session not found')
+            return (None, None), 'no session path'
+
+        one = one or ONE()
+        dtypes_default = [
+            'clusters.channels',
+            'clusters.depths',
+            'clusters.metrics',
+            'spikes.clusters',
+            'spikes.times',
+            'probes.description'
+        ]
+        if dataset_types is None:
+            dtypes = dtypes_default
+        else:
+            # Append extra optional DS
+            dtypes = list(set(dataset_types + dtypes_default))
+
+        if isinstance(probe, str):
+            labels = [probe]
+        else:
+            insertions = one.alyx.rest('insertions', 'list', session=eid)
+            labels = [ins['name'] for ins in insertions]
+
+        spikes = Bunch({})
+        clusters = Bunch({})
+        for label in labels:
+            _spikes, _clusters = _load_spike_sorting_local(session_path, label)
+            spike_dtypes = [sp for sp in dtypes if 'spikes.' in sp]
+            spike_local = ['spikes.' + sp for sp in list(_spikes.keys())]
+            spike_exists = all([sp in spike_local for sp in spike_dtypes])
+            cluster_dtypes = [cl for cl in dtypes if 'clusters.' in cl]
+            cluster_local = ['clusters.' + cl for cl in list(_clusters.keys())]
+            cluster_exists = all([cl in cluster_local for cl in cluster_dtypes])
+
+            if not spike_exists or not cluster_exists or force:
+                logger.info(f'Did not find local files for spikes and clusters for {session_path} '
+                            f'and {label}. Downloading....')
+                one.load(eid, dataset_types=dtypes, download_only=True)
+                _spikes, _clusters = _load_spike_sorting_local(session_path, label)
+                if not _spikes:
+                    logger.warning(
+                        f'Could not load spikes datasets for session {session_path} and {label}. '
+                        f'Spikes for {probe} will return an empty dict')
+                else:
+                    spikes[label] = _spikes
+                if not _clusters:
+                    logger.warning(
+                        f'Could not load clusters datasets for session {session_path} and {label}.'
+                        f' Clusters for {label} will return an empty dict')
+                else:
+                    clusters[label] = _clusters
+            else:
+                logger.info(f'Local files for spikes and clusters for {session_path} '
+                            f'and {label} found. To re-download set force=True')
+
+                spikes[label] = _spikes
+                clusters[label] = _clusters
+
+        return spikes, clusters
 
 
 def _load_spike_sorting_local(session_path, probe):
@@ -260,13 +272,13 @@ def _load_spike_sorting_local(session_path, probe):
     probe_path = session_path.joinpath('alf', probe)
     try:
         spikes = alf.io.load_object(probe_path, object='spikes')
-    except:
+    except Exception:
         logger.warning(f'Could not load spikes datasets for session {session_path} and {probe}. '
                        f'Spikes for {probe} will return an empty dict')
         spikes = {}
     try:
         clusters = alf.io.load_object(probe_path, object='clusters')
-    except:
+    except Exception:
         logger.warning(f'Could not load clusters datasets for session {session_path} and {probe}. '
                        f'Clusters for {probe} will return an empty dict')
         clusters = {}
