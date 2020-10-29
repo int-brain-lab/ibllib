@@ -191,8 +191,11 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, force=Fals
     if isinstance(eid, Path):
         # Do everything locally without ONE
         session_path = eid
-        probes = alf.io.load_object(session_path.joinpath('alf'), 'probes')
-        labels = [pr['label'] for pr in probes['description']]
+        if isinstance(probe, str):
+            labels = [probe]
+        else:
+            probes = alf.io.load_object(session_path.joinpath('alf'), 'probes')
+            labels = [pr['label'] for pr in probes['description']]
         spikes = Bunch({})
         clusters = Bunch({})
         for label in labels:
@@ -297,7 +300,7 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
     :return: clusters (dict of bunch, 1 bunch per probe), with new keys values.
     '''
     probe_labels = list(channels.keys())  # Convert dict_keys into list
-    keys_to_add_default = ['acronym', 'atlas_id']
+    keys_to_add_default = ['acronym', 'atlas_id', 'x', 'y', 'z']
 
     if keys_to_add_extra is None:
         keys_to_add = keys_to_add_default
@@ -329,7 +332,8 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
     return dic_clus
 
 
-def load_spike_sorting_with_channel(eid, one=None, probe=None, dataset_types=None, aligned=False):
+def load_spike_sorting_with_channel(eid, one=None, probe=None, dataset_types=None, aligned=False,
+                                    force=False):
     """
     For a given eid, get spikes, clusters and channels information, and merges clusters
     and channels information before returning all three variables.
@@ -342,7 +346,7 @@ def load_spike_sorting_with_channel(eid, one=None, probe=None, dataset_types=Non
     """
     # --- Get spikes and clusters data
     dic_spk_bunch, dic_clus = load_spike_sorting(eid, one=one, probe=probe,
-                                                 dataset_types=dataset_types)
+                                                 dataset_types=dataset_types, force=force)
     # -- Get brain regions and assign to clusters
     channels = load_channel_locations(eid, one=one, probe=probe, aligned=aligned)
 
