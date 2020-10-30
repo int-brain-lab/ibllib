@@ -139,7 +139,8 @@ class TaskQCExtractor(object):
                 StimOnTriggerTimes, StimOffTriggerTimes, StimOnOffFreezeTimes,
                 StimFreezeTriggerTimes, ErrorCueTriggerTimes, ItiInTimes]
 
-        # Extract the data that are usually saved to file
+        # Extract the data that are usually saved to file;
+        # this must be after the Bpod extractors in the list
         if not partial:
             if self.type == 'ephys' and not self.bpod_only:
                 extractors.append(FpgaTrials)
@@ -177,7 +178,10 @@ class TaskQCExtractor(object):
                                'stimFreezeTrigger_times', 'errorCueTrigger_times', 'itiIn_times']
                 bpod_fields = ['probabilityLeft', 'contrastLeft', 'contrastRight', 'position',
                                'contrast', 'quiescence', 'phase']
-                # build trials output
+                if partial:
+                    # Remove any extraneous fields, i.e. bpod stimOn, stimOff
+                    data = {k: v for k, v in data.items() if k in sync_fields + bpod_fields}
+                # Build trials output
                 data.update({k: bpod2fpga(data[k][ibpod]) for k in sync_fields})
                 data.update({k: data[k][ibpod] for k in bpod_fields})
 
@@ -195,6 +199,7 @@ class TaskQCExtractor(object):
 
         # Update the data attribute with extracted data
         if self.data:
+
             self.data.update(data)
             self.rename_data(self.data)
         else:
