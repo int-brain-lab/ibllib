@@ -24,6 +24,10 @@ class TestsPassiveExtractor(unittest.TestCase):
         # (pr / "iblrig_ephysData.raw_g0_t0.imec.lf.bin").touch()
         # (pr / "iblrig_ephysData.raw_g0_t0.imec.ap.bin").touch()
 
+    def test_load_passive_stim_meta(self):
+        meta = passive._load_passive_stim_meta()
+        self.assertTrue(isinstance(meta, dict))
+
     def test_interpolate_rf_mapping_stimulus(self):
         idxs_up = np.array([0, 4, 8])
         idxs_dn = np.array([1, 5, 9])
