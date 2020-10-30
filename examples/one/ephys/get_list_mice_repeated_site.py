@@ -15,7 +15,6 @@ traj = one.alyx.rest('trajectories', 'list', provenance='Planned',
 # Display subjects names
 sess = [p['session'] for p in traj]
 sub = [p['subject'] for p in sess]
-
 task = [p['task_protocol'] for p in sess]
 
 for i_su in range(0, len(sub)):
