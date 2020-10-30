@@ -147,10 +147,10 @@ class NeuralGLM:
         self.subset = subset
 
         # Bin spikes
-        self.bin_spike_trains()
+        self._bin_spike_trains()
         return
 
-    def bin_spike_trains(self):
+    def _bin_spike_trains(self):
         """
         Bins spike times passed to class at instantiation. Will not bin spike trains which did
         not meet the criteria for minimum number of spiking trials. Must be run before the
