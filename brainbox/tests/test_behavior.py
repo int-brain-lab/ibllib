@@ -125,6 +125,7 @@ class TestTraining(unittest.TestCase):
         else:
             with open(pickle_file, 'rb') as f:
                 self.trial_data = pickle.load(f)
+        np.random.seed(0)
 
     def test_concatenate_and_computations(self):
         sess_dates = ['2020-08-25', '2020-08-24', '2020-08-21']
@@ -155,13 +156,6 @@ class TestTraining(unittest.TestCase):
         status, info = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
                                                  n_delay=0)
         assert (status == 'in training')
-
-        # also test the computations in the first test
-        np.testing.assert_allclose(info.perf_easy, [0.91489362, 0.9, 0.90853659])
-        np.testing.assert_array_equal(info.n_trials, [617, 532, 719])
-        np.testing.assert_allclose(info.psych, [4.04487042, 21.6293942, 1.91451396e-02,
-                                                1.72669957e-01], rtol=1e-5)
-        assert (np.isclose(info.rt, 0.83655))
 
     def test_trained_1a(self):
         sess_dates = ['2020-08-26', '2020-08-25', '2020-08-24']
