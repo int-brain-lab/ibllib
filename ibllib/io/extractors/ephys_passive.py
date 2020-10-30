@@ -5,25 +5,22 @@
 import json
 import logging
 from pathlib import Path
+from typing import Tuple
 
 import ibllib.io.raw_data_loaders as rawio
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from ibllib.io.extractors import ephys_fpga
+from ibllib.io.extractors.base import BaseExtractor, run_extractor_classes
 from ibllib.io.extractors.passive_plotting import (
-    plot_gabor_times,
-    plot_stims_times,
-    plot_valve_times,
     plot_audio_times,
+    plot_gabor_times,
     plot_passive_periods,
     plot_rfmapping,
+    plot_stims_times,
     plot_sync_channels,
-)
-from ibllib.io.extractors.base import (
-    BaseBpodTrialsExtractor,
-    BaseExtractor,
-    run_extractor_classes,
+    plot_valve_times,
 )
 
 log = logging.getLogger("ibllib")
@@ -243,7 +240,7 @@ def _reshape_RF(RF_file, meta_stim):
 
 
 # 3/3 Replay of task stimuli
-def _extract_passiveGabor_df(fttl, session_path):
+def _extract_passiveGabor_df(fttl: dict, session_path: str) -> pd.DataFrame:
     # At this stage we want to define what pulses are and not quality control them.
     # Pulses are stricty altternating with intevals
     # find min max lengths for both (we don'tknow which are pulses and which are intervals yet)
@@ -294,11 +291,10 @@ def _extract_passiveGabor_df(fttl, session_path):
     passiveGabor_table = np.append(passiveGabor_intervals, passiveGabor_properties, axis=1)
     columns = ["start", "stop", "position", "contrast", "phase"]
     passiveGabor_df = pd.DataFrame(passiveGabor_table, columns=columns)
-    # TODO save dstype
     return passiveGabor_df
 
 
-def _extract_passiveValve_intervals(bpod):
+def _extract_passiveValve_intervals(bpod: dict) -> np.array:
     # passiveValve.intervals
     # Get valve intervals from bpod channel
     # bpod channel should only contain valve output for passiveCW protocol
@@ -318,7 +314,7 @@ def _extract_passiveValve_intervals(bpod):
     return np.array([(x, y) for x, y in zip(valveOn_times, valveOff_times)])
 
 
-def _extract_passiveAudio_intervals(audio):
+def _extract_passiveAudio_intervals(audio: dict) -> Tuple[np.array, np.array]:
     # Get Tone and Noise cue intervals
 
     # Get all sound onsets and offsets
@@ -359,7 +355,9 @@ def _extract_passiveAudio_intervals(audio):
 
 
 # ------------------------------------------------------------------
-def extract_passive_periods(session_path, sync=None, sync_map=None):
+def extract_passive_periods(
+    session_path: str, sync: dict = None, sync_map: dict = None
+) -> pd.DataFrame:
     if sync is None or sync_map is None:
         sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
 
@@ -380,7 +378,9 @@ def extract_passive_periods(session_path, sync=None, sync_map=None):
     return passivePeriods_df  # _ibl_passivePeriods.intervals_table.parquet
 
 
-def extract_rfmapping(session_path, sync=None, sync_map=None, trfm=None):
+def extract_rfmapping(
+    session_path: str, sync: dict = None, sync_map: dict = None, trfm: np.array = None
+) -> Tuple[np.array, np.array]:
     meta = _load_passive_stim_meta()
     mkey = (
         "VISUAL_STIM_"
@@ -417,7 +417,9 @@ def extract_rfmapping(session_path, sync=None, sync_map=None, trfm=None):
     )  # _ibl_passiveRFM.frames.npy, _ibl_passiveRFM.times.npy
 
 
-def extract_task_replay(session_path, sync=None, sync_map=None, treplay=None):
+def extract_task_replay(
+    session_path: str, sync: dict = None, sync_map: dict = None, treplay: np.array = None
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     if sync is None or sync_map is None:
         sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
 
@@ -445,7 +447,13 @@ def extract_task_replay(session_path, sync=None, sync_map=None, treplay=None):
     )  # _ibl_passiveGabor.table.parquet, _ibl_passiveStims.times_table.parquet
 
 
-def extract_replay_debug(session_path, sync=None, sync_map=None, treplay=None, ax=None):
+def extract_replay_debug(
+    session_path: str,
+    sync: dict = None,
+    sync_map: dict = None,
+    treplay: np.array = None,
+    ax: plt.axes = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     # Load sessions sync channels, map
     if sync is None or sync_map is None:
         sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
@@ -500,20 +508,22 @@ class PassiveChoiceWorld(BaseExtractor):
         "_ibl_passiveStims.table.parquet",
     )
     var_names = (
-        'passivePeriods_df',
-        'passiveRFM_frames',
-        'passiveRFM_times',
-        'passiveGabor_df',
-        'passiveStims_df',
+        "passivePeriods_df",
+        "passiveRFM_frames",
+        "passiveRFM_times",
+        "passiveGabor_df",
+        "passiveStims_df",
     )
 
-    def _extract(self, sync=None, sync_map=None, plot=False, **kwargs):
+    def _extract(self, sync: dict = None, sync_map: dict = None, plot: bool = False, **kwargs) -> tuple:
         if sync is None or sync_map is None:
-            sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
+            sync, sync_map = ephys_fpga._get_main_probe_sync(self.session_path, bin_exists=False)
 
         try:
             # Passive periods
-            passivePeriods_df = extract_passive_periods(session_path, sync=sync, sync_map=sync_map)
+            passivePeriods_df = extract_passive_periods(
+                self.session_path, sync=sync, sync_map=sync_map
+            )
             trfm = passivePeriods_df.RFM.values
             treplay = passivePeriods_df.taskReplay.values
 
@@ -523,22 +533,21 @@ class PassiveChoiceWorld(BaseExtractor):
         try:
             # RFMapping
             passiveRFM_frames, passiveRFM_times = extract_rfmapping(
-                session_path, sync=sync, sync_map=sync_map, trfm=trfm
+                self.session_path, sync=sync, sync_map=sync_map, trfm=trfm
             )
         except BaseException as e:
             log.error("Failed to extract RFMapping datasets", e)
 
         try:
-            (
-                passiveGabor_df,
-                passiveStims_df,
-            ) = extract_task_replay(session_path, sync=sync, sync_map=sync_map, treplay=treplay)
+            (passiveGabor_df, passiveStims_df,) = extract_task_replay(
+                self.session_path, sync=sync, sync_map=sync_map, treplay=treplay
+            )
         except BaseException as e:
             log.error("Failed to extract task replay stimuli", e)
 
         if plot:
             f, ax = plt.subplots(1, 1)
-            f.suptitle("/".join(str(session_path).split("/")[-5:]))
+            f.suptitle("/".join(str(self.session_path).split("/")[-5:]))
             plot_sync_channels(sync=sync, sync_map=sync_map, ax=ax)
             plot_passive_periods(passivePeriods_df, ax=ax)
             plot_rfmapping(passiveRFM_times, ax=ax)
@@ -551,17 +560,13 @@ class PassiveChoiceWorld(BaseExtractor):
             passiveRFM_times,  # _ibl_passiveRFM.times.npy
             passiveGabor_df,  # _ibl_passiveGabor.table.parquet,
             passiveStims_df,  # _ibl_passiveStims.table.parquet
-        )  # TODO: return something
-
-    # def _save(self, data, names):
-
-
-# session_path = "/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_054/2020-10-10/001"
+        )
 
 
 if __name__ == "__main__":
     # TODO: Check all TODO's in file!!
     # TODO: reuse test from passive.py before deleting
+    # session_path = "/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_054/2020-10-10/001"
     # sp = '/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_029/2020-10-07/001'
     # extract_passive_choice_world(sp)
     # extract_passive_choice_world(sp, plot=True)
