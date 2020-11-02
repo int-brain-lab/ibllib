@@ -24,6 +24,7 @@ import numpy as np
 import scipy.ndimage.filters as filters
 import scipy.stats as stats
 
+from phylib.stats import correlograms
 import brainbox as bb
 from brainbox.core import Bunch
 from brainbox.processing import bincount2D
@@ -37,6 +38,13 @@ METRICS_PARAMS = {
     'spks_per_bin_for_missed_spks_est': 10,
     'std_smoothing_kernel_for_missed_spks_est': 4,
     'min_num_bins_for_missed_spks_est': 50,
+    'bin_size': 0.25,
+    'RPslide_thresh': 0.1,
+    'acceptable_contamination': 0.1,
+    'nc_quartile_length': 0.2,
+    'nc_bins': 100,
+    'nc_n_low_bins':2
+
 }
 
 
@@ -719,6 +727,88 @@ def contamination_est2(ts, min_time, max_time, rp=0.002, min_isi=0.0001):
 
     return ce, num_violations
 
+def max_acceptable_cont(FR, RP, rec_duration,acceptableCont, thresh ):
+    '''
+    Function to compute the maximum acceptable refractory period contamination
+        called during slidingRP_viol
+    '''
+    trueContRate = np.linspace(0,FR,100)
+    timeForViol = RP*2*FR*rec_duration
+
+
+    expectedCountForAcceptableLimit = acceptableCont*timeForViol
+
+    max_acceptable = stats.poisson.ppf(thresh,expectedCountForAcceptableLimit)
+
+    if max_acceptable==0 and stats.poisson.pmf(0,expectedCountForAcceptableLimit)>0:
+        max_acceptable=-1
+
+    return max_acceptable
+
+def slidingRP_viol(ts, bin_size = 0.25, thresh = 0.1, acceptThresh = 0.1):
+    '''
+    Determine whether there are refractory period violations, using a sliding
+    refractory period metric
+
+    '''
+    b= np.arange(0,10.25,binSize)/1000 + 1e-6 #bins in seconds
+    bTestIdx = [5, 6, 7, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40]
+    bTest = [b[i] for i in bTestIdx]
+
+    if(len(ts)>0 and ts[-1]>ts[0]): #only do this for units with samples
+        recDur = (ts[-1]-ts[0])
+        c0 = correlograms(ts,np.zeros(len(ts),dtype='int8'),cluster_ids=[0],bin_size=bin_size/1000,sample_rate=20000,window_size=2,symmetrize=False) #compute acg
+        cumsumc0 = np.cumsum(c0[0,0,:]) #cumulative sum of acg, i.e. number of total spikes occuring from 0 to end of that bin
+        res = cumsumc0[bTestIdx] #cumulative sum at each of the testing bins
+        total_spike_count = len(ts)
+
+        bin_count_normalized = c0[0,0]/total_spike_count/bin_size*1000 #divide each bin's count by the unit's total spike count and the bin size
+        num_bins_2s = len(c0[0,0]) #number of total bins that equal 2 seconds
+        num_bins_1s = int(num_bins_2s/2) #number of bins that equal 1 second
+        fr = np.sum(bin_count_normalized[num_bins_1s:num_bins_2s])/num_bins_1s #compute fr based on the  mean of bin_count_normalized from 1 to 2 s instead of as before (len(ts)/recDur) for a better estimate
+        mfunc =np.vectorize(max_acceptable_cont)
+        m = mfunc(fr,bTest,recDur,fr*acceptThresh,thresh) #compute the maximum allowed number of spikes per testing bin
+        didpass = int(np.any(np.less_equal(res,m))) #did the unit pass (resulting number of spikes less than maximum allowed spikes) at any of the testing bins?
+    else:
+        didpass=0
+
+    return didpass
+
+
+
+def noise_cutoff(amps,quartile_length=.2, nbins=100, n_low_bins = 2):
+    '''
+
+    Determine whether a unit's amplitude distribution is cutoff (at floor), without
+    assuming a Gaussian distribution
+
+    '''
+    if(len(amps)>1):
+        bins_list= np.linspace(0, np.max(amps), nbins)
+        n,bins = np.histogram(amps,bins = bins_list)
+        dx = np.diff(n)
+        idx_nz = np.nonzero(dx) #indices of nonzeros
+        length_nonzeros = idx_nz[0][-1]-idx_nz[0][0] #length of the entire stretch, from first nonzero to last nonzero
+        high_quartile = 1-quartile_length
+        idx_peak = np.argmax(n)
+        length_top_half = idx_nz[0][-1]-idx_peak
+        high_quartile = 1-(2*quartile_length)
+
+        high_quartile_start_ind = int(np.ceil(high_quartile*length_top_half + idx_peak))
+        xx=idx_nz[0][idx_nz[0]>high_quartile_start_ind]
+        if len(n[xx])>0:
+            mean_high_quartile = np.mean(n[xx])
+            std_high_quartile = np.std(n[xx])
+            first_low_quartile = np.mean(n[idx_nz[0][1:n_low_bins]])
+            if std_high_quartile>0:
+                cutoff=(first_low_quartile-mean_high_quartile)/std_high_quartile
+            else:
+                cutoff=np.float64(np.nan)
+        else:
+            cutoff=np.float64(np.nan)
+    else:
+        cutoff=np.float64(np.nan)
+    return cutoff
 
 def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
                        params=METRICS_PARAMS):
@@ -739,6 +829,8 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         max_amp_drift (see `max_drift`)
         cum_depth_drift (see `cum_drift`)
         max_depth_drift (see `max_drift`)
+        slidingRP_viol
+        noise_cutoff
 
     Parameters
     ----------
@@ -808,6 +900,8 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         'num_spikes': np.full((nclust,), np.nan),
         'presence_ratio': np.full((nclust,), np.nan),
         'presence_ratio_std': np.full((nclust,), np.nan),
+        'slidingRP_viol': np.full((nclust,),np.nan),
+        'noise_cutoff':np.full((nclust,),np.nan),
         # could add 'epoch_name' in future:
         # 'epoch_name': np.zeros(nclust, dtype='object'),
     })
@@ -838,6 +932,8 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         r.contamination_est[ic] = contamination_est(ts, rp=params['refractory_period'])
         r.contamination_est2[ic], _ = contamination_est2(
             ts, tmin, tmax, rp=params['refractory_period'], min_isi=params['min_isi'])
+        r.slidingRP_viol[ic](ts,bin_size = params['bin_size'], thresh = params['RPslide_thresh'], acceptThresh = params['acceptable_contamination'] )
+        r.noise_cutoff[ic]((amps,quartile_length=params['nc_quartile_length'], nbins=params['nc_bins'], n_low_bins = params['nc_n_low_bins']))
         try:  # this may fail because `missed_spikes_est` requires a min number of spikes
             r.missed_spikes_est[ic], _, _ = missed_spikes_est(
                 amps, spks_per_bin=params['spks_per_bin_for_missed_spks_est'],
