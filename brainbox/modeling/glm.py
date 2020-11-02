@@ -487,7 +487,7 @@ class NeuralGLM:
                 warn(f'Fitting did not converge for some units: {nonconverged}')
         return coefs, intercepts, variances
 
-    def _fit_pytorch(self, dm, binned, cells=None, retvar=False, epochs=500, optim='lbfgs', lr=1.3):
+    def _fit_pytorch(self, dm, binned, cells=None, retvar=False, epochs=500, optim='lbfgs', lr=1.0):
         """
         Fit the GLM using PyTorch on GPU(s). Regularization has not been applied yet.
 
@@ -586,7 +586,7 @@ class NeuralGLM:
             variances.at[cell] = wvar[1:]
         return coefs, intercepts, variances
 
-    def fit(self, method='sklearn', alpha=0, singlepar_var=False, epochs=500, optim='lbfgs', lr=1.3):
+    def fit(self, method='sklearn', alpha=0, singlepar_var=False, epochs=500, optim='lbfgs', lr=1.0):
         """
         Fit the current set of binned spikes as a function of the current design matrix. Requires
         NeuralGLM.bin_spike_trains and NeuralGLM.compile_design_matrix to be run first. Will store
