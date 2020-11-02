@@ -487,7 +487,7 @@ class NeuralGLM:
                 warn(f'Fitting did not converge for some units: {nonconverged}')
         return coefs, intercepts, variances
 
-    def _fit_pytorch(self, dm, binned, cells=None, retvar=False, epochs=5000, lr=0.2):
+    def _fit_pytorch(self, dm, binned, cells=None, retvar=False, epochs=500, optim='lbfgs', lr=1.3):
         """
         Fit the GLM using PyTorch on GPU(s). Regularization has not been applied yet.
 
@@ -506,6 +506,8 @@ class NeuralGLM:
             Whether or not to return variances on parameters in dm.
         epochs : int
             The number of epochs to train the model
+        optim : string
+            The name of optimization method in pytorch
         lr : float
             Learning rate for the optimizer
         """
@@ -524,9 +526,7 @@ class NeuralGLM:
         x = torch.as_tensor(dm, dtype=torch.float32, device=device)
         y = torch.as_tensor(binned, dtype=torch.float32, device=device)
 
-        # Use Adam to fit the model
-        optimizer = torch.optim.Adam(glm.parameters(), lr=lr)
-        _, weight, bias = glm.fit(x, y, epochs=epochs, optimizer=optimizer)
+        _, weight, bias = glm.fit(x, y, epochs=epochs, optim=optim, lr=lr)
         # Store parameters
         biasdm = np.pad(dm.copy(), ((0, 0), (1, 0)), 'constant', constant_values=1)
         for cell in cells:
@@ -586,7 +586,7 @@ class NeuralGLM:
             variances.at[cell] = wvar[1:]
         return coefs, intercepts, variances
 
-    def fit(self, method='sklearn', alpha=0, singlepar_var=False, epochs=5000, lr=0.2):
+    def fit(self, method='sklearn', alpha=0, singlepar_var=False, epochs=500, optim='lbfgs', lr=1.3):
         """
         Fit the current set of binned spikes as a function of the current design matrix. Requires
         NeuralGLM.bin_spike_trains and NeuralGLM.compile_design_matrix to be run first. Will store
@@ -605,6 +605,8 @@ class NeuralGLM:
             effectively unregularized weights. Does not function in the minimize
             option, by default 1
         epochs : int
+            Used for _fit_pytorch funtion, see details there
+        optim : string
             Used for _fit_pytorch funtion, see details there
         lr : float
             Used for _fit_pytorch funtion, see details there
@@ -636,7 +638,8 @@ class NeuralGLM:
             elif method == 'pytorch':
                 traindm = self.dm[trainmask]
                 coefs, intercepts, variances = self._fit_pytorch(traindm, trainbinned,
-                                                                 retvar=True, epochs=epochs, lr=lr)
+                                                                 retvar=True, epochs=epochs, 
+                                                                 optim=optim, lr=lr)
             else:
                 biasdm = np.pad(self.dm.copy(), ((0, 0), (1, 0)), 'constant', constant_values=1)
                 traindm = biasdm[trainmask]
@@ -667,7 +670,8 @@ class NeuralGLM:
                 elif method == 'pytorch':
                     coefs, intercepts, variances = self._fit_pytorch(traindm, trainbinned, 
                                                                      retvar=singlepar_var, 
-                                                                     epochs=epochs, lr=lr)                                                     
+                                                                     epochs=epochs, 
+                                                                     optim=optim, lr=lr)                                                     
                 else:
                     biasdm = np.pad(traindm.copy(), ((0, 0), (1, 0)), 'constant',
                                     constant_values=1)
@@ -713,7 +717,8 @@ class NeuralGLM:
                         coefs, intercepts, variances = self._fit_pytorch(traindm, trainbinned,
                                                                          cells=currcells,
                                                                          retvar=retvar,
-                                                                         epochs=epochs, lr=lr)                                                       
+                                                                         epochs=epochs, 
+                                                                         optim=optim, lr=lr)                                                       
                     else:
                         biasdm = np.pad(traindm.copy(), ((0, 0), (1, 0)), 'constant',
                                         constant_values=1)
