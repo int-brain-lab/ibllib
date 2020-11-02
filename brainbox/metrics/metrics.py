@@ -900,6 +900,8 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         'num_spikes': np.full((nclust,), np.nan),
         'presence_ratio': np.full((nclust,), np.nan),
         'presence_ratio_std': np.full((nclust,), np.nan),
+        'slidingRP_viol': np.full((nclust,),np.nan),
+        'noise_cutoff':np.full((nclust,),np.nan),
         # could add 'epoch_name' in future:
         # 'epoch_name': np.zeros(nclust, dtype='object'),
     })
