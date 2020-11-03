@@ -236,6 +236,9 @@ def unit_metrics_ks2(ks2_path=None, m=None, save=True):
     m = phy_model_from_ks2_path(ks2_path) if None else m
     # compute metrics and convert to `DataFrame`
     r = pd.DataFrame(quick_unit_metrics(m.spike_clusters, m.spike_times, m.amplitudes, m.depths))
+    # TODO compute drift as a function of time here
+    # TODO compute metrics using sample waveforms here
+    # TODO once all of this is done compute unit labels here
 
     #  include the ks2 cluster contamination if `cluster_ContamPct` file exists
     file_contamination = ks2_path.joinpath('cluster_ContamPct.tsv')

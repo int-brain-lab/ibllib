@@ -145,8 +145,8 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
     return p_vals_b, cv_b
 
 
-def feat_cutoff(feat, spks_per_bin=20, sigma=5, min_num_bins=50):
-    '''
+def missed_spikes_est(feat, spks_per_bin=20, sigma=5, min_num_bins=50):
+    """
     Computes the approximate fraction of spikes missing from a spike feature distribution for a
     given unit, assuming the distribution is symmetric.
     Inspired by metric described in Hill et al. (2011) J Neurosci 31: 8699-8705.
@@ -184,7 +184,7 @@ def feat_cutoff(feat, spks_per_bin=20, sigma=5, min_num_bins=50):
         # Get unit 1 amplitudes from a unit bunch, and compute fraction spikes missing.
         >>> feat = units_b['amps']['1']
         >>> fraction_missing = bb.plot.feat_cutoff(feat)
-    '''
+    """
 
     # Ensure minimum number of spikes requirement is met.
     error_str = 'The number of spikes in this unit is {0}, ' \
@@ -439,40 +439,7 @@ def isi_viol(ts, rp=0.002):
     frac_isi_viol = len(v) / len(ts)
     return frac_isi_viol, len(v), isis
 
-
-def max_drift(feat):
-    """
-    Computes the maximum drift (max - min) of a spike feature array.
-
-    Parameters
-    ----------
-    feat : ndarray
-        The spike feature values from which to compute the maximum drift.
-
-    Returns
-    -------
-    md : float
-        The maxmimum drift of the unit.
-
-    See Also
-    --------
-    cum_drift
-
-    Examples
-    --------
-    1) Get the maximum depth and amp drift for unit 1.
-        >>> unit_idxs = np.where(spks_b['clusters'] == 1)[0]
-        >>> depths = spks_b['depths'][unit_idxs]
-        >>> amps = spks_b['amps'][unit_idxs]
-        >>> depth_md = bb.metrics.max_drift(depths)
-        >>> amp_md = bb.metrics.max_drift(amps)
-    """
-
-    md = np.max(feat) - np.min(feat)
-    return md
-
-
-def cum_drift(feat):
+def average_drift(feat, times):
     """
     Computes the cumulative drift (normalized by the total number of spikes) of a spike feature
     array.
@@ -481,6 +448,7 @@ def cum_drift(feat):
     ----------
     feat : ndarray
         The spike feature values from which to compute the maximum drift.
+        Usually amplitudes
 
     Returns
     -------
@@ -501,7 +469,7 @@ def cum_drift(feat):
         >>> amp_cd = bb.metrics.cum_drift(amps)
     """
 
-    cd = np.sum(np.abs(np.diff(feat))) / len(feat)
+    cd = np.sum(np.abs(np.diff(feat) / np.diff(times))) / len(feat)
     return cd
 
 
@@ -745,21 +713,24 @@ def max_acceptable_cont(FR, RP, rec_duration,acceptableCont, thresh ):
 
     return max_acceptable
 
-def slidingRP_viol(ts, bin_size = 0.25, thresh = 0.1, acceptThresh = 0.1):
-    '''
+
+def slidingRP_viol(ts, bin_size=0.25, thresh=0.1, acceptThresh=0.1):
+    """
     Determine whether there are refractory period violations, using a sliding
     refractory period metric
+    """
 
-    '''
-    b= np.arange(0,10.25,binSize)/1000 + 1e-6 #bins in seconds
+    b= np.arange(0, 10.25, bin_size)/1000 + 1e-6  # bins in seconds
     bTestIdx = [5, 6, 7, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40]
     bTest = [b[i] for i in bTestIdx]
 
-    if(len(ts)>0 and ts[-1]>ts[0]): #only do this for units with samples
+    if(len(ts)>0 and ts[-1]>ts[0]):  # only do this for units with samples
         recDur = (ts[-1]-ts[0])
-        c0 = correlograms(ts,np.zeros(len(ts),dtype='int8'),cluster_ids=[0],bin_size=bin_size/1000,sample_rate=20000,window_size=2,symmetrize=False) #compute acg
-        cumsumc0 = np.cumsum(c0[0,0,:]) #cumulative sum of acg, i.e. number of total spikes occuring from 0 to end of that bin
-        res = cumsumc0[bTestIdx] #cumulative sum at each of the testing bins
+        c0 = correlograms(ts,np.zeros(len(ts), dtype='int8'), cluster_ids=[0],
+                          bin_size=bin_size/1000, sample_rate=20000, window_size=2,
+                          symmetrize=False) # compute acg
+        cumsumc0 = np.cumsum(c0[0, 0, :])  # cumulative sum of acg, i.e. number of total spikes occuring from 0 to end of that bin
+        res = cumsumc0[bTestIdx]  # cumulative sum at each of the testing bins
         total_spike_count = len(ts)
 
         bin_count_normalized = c0[0,0]/total_spike_count/bin_size*1000 #divide each bin's count by the unit's total spike count and the bin size
@@ -773,7 +744,6 @@ def slidingRP_viol(ts, bin_size = 0.25, thresh = 0.1, acceptThresh = 0.1):
         didpass=0
 
     return didpass
-
 
 
 def noise_cutoff(amps,quartile_length=.2, nbins=100, n_low_bins = 2):
@@ -800,15 +770,16 @@ def noise_cutoff(amps,quartile_length=.2, nbins=100, n_low_bins = 2):
             mean_high_quartile = np.mean(n[xx])
             std_high_quartile = np.std(n[xx])
             first_low_quartile = np.mean(n[idx_nz[0][1:n_low_bins]])
-            if std_high_quartile>0:
-                cutoff=(first_low_quartile-mean_high_quartile)/std_high_quartile
+            if std_high_quartile > 0:
+                cutoff = (first_low_quartile-mean_high_quartile)/std_high_quartile
             else:
-                cutoff=np.float64(np.nan)
+                cutoff = np.float64(np.nan)
         else:
-            cutoff=np.float64(np.nan)
+            cutoff = np.float64(np.nan)
     else:
-        cutoff=np.float64(np.nan)
+        cutoff = np.float64(np.nan)
     return cutoff
+
 
 def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
                        params=METRICS_PARAMS):
@@ -900,8 +871,8 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         'num_spikes': np.full((nclust,), np.nan),
         'presence_ratio': np.full((nclust,), np.nan),
         'presence_ratio_std': np.full((nclust,), np.nan),
-        'slidingRP_viol': np.full((nclust,),np.nan),
-        'noise_cutoff':np.full((nclust,),np.nan),
+        'slidingRP_viol': np.full((nclust,), np.nan),
+        'noise_cutoff': np.full((nclust,), np.nan),
         # could add 'epoch_name' in future:
         # 'epoch_name': np.zeros(nclust, dtype='object'),
     })
@@ -932,18 +903,20 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         r.contamination_est[ic] = contamination_est(ts, rp=params['refractory_period'])
         r.contamination_est2[ic], _ = contamination_est2(
             ts, tmin, tmax, rp=params['refractory_period'], min_isi=params['min_isi'])
-        r.slidingRP_viol[ic](ts,bin_size = params['bin_size'], thresh = params['RPslide_thresh'], acceptThresh = params['acceptable_contamination'] )
-        r.noise_cutoff[ic]((amps,quartile_length=params['nc_quartile_length'], nbins=params['nc_bins'], n_low_bins = params['nc_n_low_bins']))
-        try:  # this may fail because `missed_spikes_est` requires a min number of spikes
-            r.missed_spikes_est[ic], _, _ = missed_spikes_est(
-                amps, spks_per_bin=params['spks_per_bin_for_missed_spks_est'],
-                sigma=params['std_smoothing_kernel_for_missed_spks_est'],
-                min_num_bins=params['min_num_bins_for_missed_spks_est'])
-        except AssertionError:
-            pass
-        r.cum_amp_drift[ic] = cum_drift(amps)
-        r.max_amp_drift[ic] = max_drift(amps)
-        r.cum_depth_drift[ic] = cum_drift(depths)
-        r.max_depth_drift[ic] = max_drift(depths)
+        r.slidingRP_viol[ic] = slidingRP_viol(ts,
+                                              bin_size=params['bin_size'],
+                                              thresh=params['RPslide_thresh'],
+                                              acceptThresh=params['acceptable_contamination'])
+        r.noise_cutoff[ic] = noise_cutoff(amps,
+                                          quartile_length=params['nc_quartile_length'],
+                                          nbins=params['nc_bins'],
+                                          n_low_bins=params['nc_n_low_bins'])
+        r.missed_spikes_est[ic], _, _ = missed_spikes_est(
+            amps, spks_per_bin=params['spks_per_bin_for_missed_spks_est'],
+            sigma=params['std_smoothing_kernel_for_missed_spks_est'],
+            min_num_bins=params['min_num_bins_for_missed_spks_est'])
+        # max_amp , med_amp, min_amp, std_amp should all be vectorized
+        # cumulative_drift : sum(abs( low_pass( diff(depths)  / diff(time) )))
+        # average_drift: median( low_pass( diff(depths)  / diff(time) ))
 
     return r
