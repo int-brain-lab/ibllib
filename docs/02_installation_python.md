@@ -20,7 +20,7 @@ The steps to setup the unified environment are here:
 
 The first step is to instantiate the **One class**: behind the scenes, the constructor connects to the IBL cloud database and gets credentials.
 
-The connections settings are defined in a JSON parameter file (named *.one_params*). The file is created when you first run `ONE.setup()`
+The connections settings are defined in a JSON parameter file (named *.one_params*). The file is created when you first run `OneAlyx.setup()`
 -   In Linux, the file is in `~/.one_params`.
 -   In Windows, the file is in the Roaming App directory `C:\Users\CurrentUser\AppData\Roaming\.one_params`.
 -   In Mac OS, the file is in the user directory `/Users/CurrentUser/.one_params`.
@@ -38,8 +38,8 @@ There are two ways to define the connection settings.
 In a Python terminal, type:
 
 ```python
-from oneibl.one import ONE
-ONE.setup() # For first time use, need to define connection credentials
+from oneibl.one import OneAlyx
+OneAlyx.setup() # For first time use, need to define connection credentials
 ```
 
 **_Note_**:

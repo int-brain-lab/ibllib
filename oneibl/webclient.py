@@ -10,7 +10,6 @@ import hashlib
 
 import requests
 
-from alf.io import is_uuid_string
 from ibllib.misc import pprint, print_progress
 
 _logger = logging.getLogger('ibllib')
@@ -22,6 +21,7 @@ class _PaginatedResponse(Mapping):
     Provides cache functionality
     PaginatedResponse(alyx, response)
     """
+
     def __init__(self, alyx, rep):
         self.alyx = alyx
         self.count = rep['count']
@@ -69,7 +69,7 @@ def http_download_file_list(links_to_file_list, **kwargs):
     return file_names_list
 
 
-def http_download_file(full_link_to_file, *, clobber=False, offline=False,
+def http_download_file(full_link_to_file, chunks=None, *, clobber=False, offline=False,
                        username='', password='', cache_dir='', return_md5=False):
     """
     :param full_link_to_file: http link to the file.
@@ -118,9 +118,15 @@ def http_download_file(full_link_to_file, *, clobber=False, offline=False,
     opener = urllib.request.build_opener(auth)
     urllib.request.install_opener(opener)
 
+    # Support for partial download.
+    req = urllib.request.Request(full_link_to_file)
+    if chunks is not None:
+        first_byte, n_bytes = chunks
+        req.add_header("Range", "bytes=%d-%d" % (first_byte, first_byte + n_bytes - 1))
+
     # Open the url and get the length
     try:
-        u = urllib.request.urlopen(full_link_to_file)
+        u = urllib.request.urlopen(req)
     except urllib.error.HTTPError as e:
         _logger.error(f"{str(e)} {full_link_to_file}")
         raise e
@@ -425,9 +431,14 @@ class AlyxClient(metaclass=UniqueSingletons):
             assert(endpoint_scheme[action]['action'] == 'get')
             # add to url data if it is a string
             if id:
-                url = url + id
+                # this is a special case of the list where we query an uuid. Usually read is better
+                if 'django' in kwargs.keys():
+                    kwargs['django'] = kwargs['django'] + ','
+                else:
+                    kwargs['django'] = ""
+                kwargs['django'] = f"{kwargs['django']}pk,{id}"
             # otherwise, look for a dictionary of filter terms
-            elif kwargs:
+            if kwargs:
                 url += '?'
                 for k in kwargs.keys():
                     if isinstance(kwargs[k], str):
@@ -455,15 +466,12 @@ class AlyxClient(metaclass=UniqueSingletons):
             return self.put('/' + endpoint + '/' + id.split('/')[-1], data=data)
 
     # JSON field interface convenience methods
-    def _check_inputs(self, endpoint: str, uuid: str) -> None:
+    def _check_inputs(self, endpoint: str) -> None:
         # make sure the queryied endpoint exists, if not throw an informative error
         if endpoint not in self._rest_schemes.keys():
             av = [k for k in self._rest_schemes.keys() if not k.startswith('_') and k]
             raise ValueError('REST endpoint "' + endpoint + '" does not exist. Available ' +
                              'endpoints are \n       ' + '\n       '.join(av))
-        # make sure the uuid is a valid UUID4
-        if is_uuid_string(uuid) is False:
-            raise ValueError(f"{uuid} is not a valid uuid")
         return
 
     def json_field_write(
@@ -479,7 +487,7 @@ class AlyxClient(metaclass=UniqueSingletons):
 
         :param endpoint: Valid alyx endpoint, defaults to None
         :type endpoint: str, optional
-        :param uuid: Valid uuid sting for a given endpoint, defaults to None
+        :param uuid: uuid or lookup name for endpoint
         :type uuid: str, optional
         :param field_name: Valid json field name, defaults to None
         :type field_name: str, optional
@@ -488,7 +496,7 @@ class AlyxClient(metaclass=UniqueSingletons):
         :return: Written data dict
         :rtype: dict
         """
-        self._check_inputs(endpoint, uuid)
+        self._check_inputs(endpoint)
         # Prepare data to patch
         patch_dict = {field_name: data}
         # Upload new extended_qc to session
@@ -499,7 +507,7 @@ class AlyxClient(metaclass=UniqueSingletons):
         self,
         endpoint: str = None,
         uuid: str = None,
-        field_name: str = None,
+        field_name: str = 'json',
         data: dict = None
     ) -> dict:
         """json_field_update
@@ -513,7 +521,7 @@ class AlyxClient(metaclass=UniqueSingletons):
 
         :param endpoint: endpoint to hit
         :type endpoint: str
-        :param uuid: valid uuid of object
+        :param uuid: uuid or lookup name of object
         :type uuid: str
         :param field_name: name of the json field
         :type field_name: str
@@ -522,7 +530,7 @@ class AlyxClient(metaclass=UniqueSingletons):
         :return: new patched json field contents
         :rtype: dict
         """
-        self._check_inputs(endpoint, uuid)
+        self._check_inputs(endpoint)
         # Load current json field contents
         current = self.rest(endpoint, "read", id=uuid)[field_name]
         if current is None:
@@ -546,7 +554,7 @@ class AlyxClient(metaclass=UniqueSingletons):
         self,
         endpoint: str = None,
         uuid: str = None,
-        field_name: str = None,
+        field_name: str = 'json',
         key: str = None
     ) -> dict:
         """json_field_remove_key
@@ -555,7 +563,7 @@ class AlyxClient(metaclass=UniqueSingletons):
 
         :param endpoint: endpoint to hit, defaults to None
         :type endpoint: str, optional
-        :param uuid: valid uuid of endpoint object, defaults to None
+        :param uuid: uuid or lookup name for endpoint
         :type uuid: str, optional
         :param field_name: json field name of object, defaults to None
         :type field_name: str, optional
@@ -564,7 +572,7 @@ class AlyxClient(metaclass=UniqueSingletons):
         :return: returns new content of json field
         :rtype: dict
         """
-        self._check_inputs(endpoint, uuid)
+        self._check_inputs(endpoint)
         current = self.rest(endpoint, "read", id=uuid)[field_name]
         # If no contents, cannot remove key, return
         if current is None:
@@ -590,6 +598,6 @@ class AlyxClient(metaclass=UniqueSingletons):
     def json_field_delete(
         self, endpoint: str = None, uuid: str = None, field_name: str = None
     ) -> None:
-        self._check_inputs(endpoint, uuid)
+        self._check_inputs(endpoint)
         _ = self.rest(endpoint, "partial_update", id=uuid, data={field_name: None})
         return _[field_name]

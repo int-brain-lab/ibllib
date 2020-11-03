@@ -4,26 +4,29 @@ from pathlib import Path
 
 import numpy as np
 
+from brainbox.core import Bunch
+from oneibl.one import ONE
 from ibllib.qc import task_metrics as qcmetrics
 from brainbox.behavior.wheel import cm_to_rad
 
 
 class TestTaskMetrics(unittest.TestCase):
     def setUp(self):
-        self.load_fake_bpod_data()
-        # random eid will not be used if data is passed
-        self.eid = "7be8fec4-406b-4e74-8548-d2885dcc3d5e"
         self.data = self.load_fake_bpod_data()
         self.wheel_gain = 4
         wheel_data = self.load_fake_wheel_data(self.data, wheel_gain=self.wheel_gain)
         self.data.update(wheel_data)
 
     @staticmethod
-    def load_fake_bpod_data():
-        """Create fake extractor output of bpodqc.load_data"""
-        n = 5  # number of trials
+    def load_fake_bpod_data(n=5):
+        """Create fake extractor output of bpodqc.load_data
+
+        :param n: the number of trials
+        :return: a dict of simulated trial data
+        """
         trigg_delay = 1e-4  # an ideal delay between triggers and measured times
         resp_feeback_delay = 1e-3  # delay between feedback and response
+        stimOff_itiIn_delay = 5e-3  # delay between stimOff and itiIn
         N = partial(np.random.normal, (n,))  # Convenience function for norm dist sampling
 
         choice = np.ones((n,), dtype=int)
@@ -37,7 +40,7 @@ class TestTaskMetrics(unittest.TestCase):
         quiescence_length = 0.2 + np.random.standard_exponential(size=(n,))
         iti_length = 0.5  # inter-trial interval
         # trial lengths include quiescence period, a couple small trigger delays and iti
-        trial_lengths = quiescence_length + resp_feeback_delay + 1e-1 + iti_length
+        trial_lengths = quiescence_length + resp_feeback_delay + (trigg_delay * 4) + iti_length
         # add on 60s for nogos + feedback time (1 or 2s) + ~0.5s for other responses
         trial_lengths += (choice == 0) * 60 + (~correct + 1) + (choice != 0) * N(0.5)
         start_times = np.concatenate(([0], np.cumsum(trial_lengths)[:-1]))
@@ -49,7 +52,7 @@ class TestTaskMetrics(unittest.TestCase):
             "choice": choice,
             "correct": correct,
             "intervals": np.c_[start_times, end_times],
-            "itiIn_times": end_times - iti_length,
+            "itiIn_times": end_times - iti_length + stimOff_itiIn_delay,
             "position": np.ones_like(choice) * 35
         }
 
@@ -59,7 +62,7 @@ class TestTaskMetrics(unittest.TestCase):
         data["goCue_times"] = data["goCueTrigger_times"] + trigg_delay
 
         data["response_times"] = end_times - (
-            resp_feeback_delay + 1e-1 + iti_length + (~correct + 1)
+            resp_feeback_delay + iti_length + (~correct + 1)
         )
         data["feedback_times"] = data["response_times"] + resp_feeback_delay
         data["stimFreeze_times"] = data["response_times"] + 1e-2
@@ -200,7 +203,7 @@ class TestTaskMetrics(unittest.TestCase):
         self.assertEqual(np.nanmean(passed), expected, "failed to detect dodgy timestamp")
 
     def test_check_negative_feedback_stimOff_delays(self):
-        err_trial = ~self.data["correct"] & self.data["outcome"] != 0
+        err_trial = ~self.data["correct"]
         metric, passed = qcmetrics.check_negative_feedback_stimOff_delays(self.data)
         values = np.abs(metric[err_trial])
         self.assertTrue(np.allclose(values, 1e-2), "failed to return correct metric")
@@ -444,9 +447,32 @@ class TestTaskMetrics(unittest.TestCase):
     def test_check_stimulus_move_before_goCue(self):
         pass  # TODO Nicco?
 
-    @unittest.skip("not implemented")
     def test_check_stimOff_itiIn_delays(self):
-        pass  # TODO Nicco?
+        metric, passed = qcmetrics.check_stimOff_itiIn_delays(self.data)
+        self.assertTrue(np.nanmean(passed))
+        # No go should be NaN
+        id = np.argmax(self.data['choice'] == 0)
+        self.assertTrue(np.isnan(passed[id]), 'No go trials should be excluded')
+        # Change a trial
+        id = np.argmax(self.data['choice'] != 0)
+        self.data['stimOff_times'][id] = self.data['itiIn_times'][id] + 1e-4
+        _, passed = qcmetrics.check_stimOff_itiIn_delays(self.data)  # recompute
+        self.assertEqual(0.75, np.nanmean(passed))
+
+    def test_check_iti_delays(self):
+        metric, passed = qcmetrics.check_iti_delays(self.data)
+        # We want the metric to return positive values that are close to 0.1, given the test data
+        self.assertTrue(np.allclose(metric[:-1], 1e-2, atol=0.001),
+                        "failed to return correct metric")
+        self.assertTrue(np.isnan(metric[-1]), "last trial should be NaN")
+        self.assertTrue(np.all(passed))
+        # Mess up a trial
+        id = 2
+        self.data["intervals"][id + 1, 0] += 0.5  # Next trial starts 0.5 sec later
+        metric, passed = qcmetrics.check_iti_delays(self.data)
+        n_trials = len(self.data["stimOff_times"]) - 1  # Last trial NaN here
+        expected = (n_trials - 1) / n_trials
+        self.assertTrue(expected, np.nanmean(passed))
 
     @unittest.skip("not implemented")
     def test_check_frame_frequency(self):
@@ -455,6 +481,68 @@ class TestTaskMetrics(unittest.TestCase):
     @unittest.skip("not implemented")
     def test_check_frame_updates(self):
         pass  # TODO Nicco?
+
+
+class TestHabituationQC(unittest.TestCase):
+    """Test HabituationQC class
+    NB: For complete coverage this should be run along slide the integration tests
+    """
+    def setUp(self):
+        self.load_fake_bpod_data()
+        # random eid will not be used if data is passed
+        eid = 'ac80cd12-49e5-4aff-b5f2-1a718679ceeb'
+        one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
+                  password='TapetesBloc18')
+        self.qc = qcmetrics.HabituationQC(eid, one=one)
+        self.qc.extractor = Bunch({'data': self.load_fake_bpod_data()})  # Dummy extractor obj
+
+    @staticmethod
+    def load_fake_bpod_data(n=5):
+        """Create fake extractor output of bpodqc.load_data
+
+        :param n: the number of trials
+        :return: a dict of simulated trial data
+        """
+        trigg_delay = 1e-4  # an ideal delay between triggers and measured times
+        iti_length = 0.5  # the so-called 'inter-trial interval'
+        blank_length = 1.  # the time between trial start and stim on
+        stimCenter_length = 1.  # the length of time the stimulus is in the center
+        # the lengths of time between stim on and stim center
+        stimOn_length = np.random.normal(size=(n,)) + 10
+        # trial lengths include couple small trigger delays and iti
+        trial_lengths = blank_length + stimOn_length + 1e-1 + stimCenter_length
+        start_times = np.concatenate(([0], np.cumsum(trial_lengths)[:-1]))
+        end_times = np.cumsum(trial_lengths) - 1e-2
+
+        data = {
+            "phase": np.random.uniform(low=0, high=2 * np.pi, size=(n,)),
+            "stimOnTrigger_times": start_times + blank_length,
+            "intervals": np.c_[start_times, end_times],
+            "itiIn_times": end_times - iti_length,
+            "position": np.random.choice([-1, 1], n, replace=True) * 35,
+            "feedbackType": np.ones(n),
+            "feedback_times": end_times - 0.5,
+            "rewardVolume": np.ones(n) * 3.,
+            "stimOff_times": end_times + trigg_delay,
+            "stimOffTrigger_times": end_times
+        }
+
+        data["stimOn_times"] = data["stimOnTrigger_times"] + trigg_delay
+        data["goCueTrigger_times"] = data["stimOnTrigger_times"]
+        data["goCue_times"] = data["goCueTrigger_times"] + trigg_delay
+        data["stimCenter_times"] = data["feedback_times"] - 0.5
+        data["stimCenterTrigger_times"] = data["stimCenter_times"] - trigg_delay
+        data["valveOpen_times"] = data["feedback_times"]
+
+        return data
+
+    def test_compute(self):
+        # All should pass except one NOT_SET
+        self.qc.compute()
+        self.assertIsNotNone(self.qc.metrics)
+        _, _, outcomes = self.qc.compute_session_status()
+        if self.qc.passed['_task_habituation_time'] is None:
+            self.assertEqual(outcomes['_task_habituation_time'], 'NOT_SET')
 
 
 if __name__ == "__main__":

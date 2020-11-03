@@ -19,10 +19,23 @@ CRITERIA = {'CRITICAL': 4,
 
 class QC:
     """A base class for data quality control"""
-    def __init__(self, session, one=None, log=None):
+    def __init__(self, endpoint_id, one=None, log=None, endpoint='sessions'):
+        """
+        :param endpoint_id: Eid for endpoint. If using sessions can also be a session path
+        :param log: A logging.Logger instance, if None the 'ibllib' logger is used
+        :param one: An ONE instance for fetching and setting the QC on Alyx
+        :param endpoint: The enpoint name to apply qc to. Default is 'sessions'
+        """
         self.one = one or ONE()
         self.log = log or logging.getLogger('ibllib')
-        self._set_eid_or_path(session)
+        if endpoint == 'sessions':
+            self.endpoint = endpoint
+            self._set_eid_or_path(endpoint_id)
+            self.json = False
+        else:
+            self.endpoint = endpoint
+            self._confirm_endpoint_id(endpoint_id)
+            self.json = True
 
         self.outcome = "NOT_SET"
 
@@ -43,21 +56,41 @@ class QC:
     def _set_eid_or_path(self, session_path_or_eid):
         """Parse a given eID or session path
         If a session UUID is given, resolves and stores the local path and vice versa
-        :param session_path_or_eid:
+        :param session_path_or_eid: A session eid or path
         :return:
         """
+        self.eid = None
         if is_uuid_string(str(session_path_or_eid)):
             self.eid = session_path_or_eid
             # Try to set session_path if data is found locally
             self.session_path = self.one.path_from_eid(self.eid)
         elif is_session_path(session_path_or_eid):
             self.session_path = Path(session_path_or_eid)
-            self.eid = self.one.eid_from_path(self.session_path)
-            if not self.eid:
-                self.log.warning('Failed to determine eID from session path')
+            if self.one is not None:
+                self.eid = self.one.eid_from_path(self.session_path)
+                if not self.eid:
+                    self.log.warning('Failed to determine eID from session path')
         else:
             self.log.error('Cannot run QC: an experiment uuid or session path is required')
             raise ValueError("'session' must be a valid session path or uuid")
+
+    def _confirm_endpoint_id(self, endpoint_id):
+        # Have as read for now since 'list' isn't working
+        target_obj = self.one.alyx.rest(self.endpoint, 'read', id=endpoint_id) or None
+        if target_obj:
+            self.eid = endpoint_id
+            json_field = target_obj.get('json')
+            if not json_field:
+                self.one.alyx.json_field_update(endpoint=self.endpoint, uuid=self.eid,
+                                                field_name='json', data={'qc': 'NOT_SET',
+                                                                         'extended_qc': {}})
+            elif not json_field.get('qc', None):
+                self.one.alyx.json_field_update(endpoint=self.endpoint, uuid=self.eid,
+                                                field_name='json', data={'qc': 'NOT_SET',
+                                                                         'extended_qc': {}})
+        else:
+            self.log.error('Cannot run QC: endpoint id is not recognised')
+            raise ValueError("'endpoint_id' must be a valid uuid")
 
     def update(self, outcome, namespace='experimenter', override=False):
         """Update the qc field in Alyx
@@ -77,12 +110,19 @@ class QC:
         assert self.eid, 'Unable to update Alyx; eID not set'
         if namespace:  # Record in extended qc
             self.update_extended_qc({namespace: outcome})
-        current_status = self.one.alyx.rest('sessions', 'read', id=self.eid)['qc']
+        current_status = self.one.alyx.rest(self.endpoint, 'read', id=self.eid)['json']['qc'] \
+            if self.json else self.one.alyx.rest(self.endpoint, 'read', id=self.eid)['qc']
+
         if CRITERIA[current_status] < CRITERIA[outcome] or override:
-            r = self.one.alyx.rest('sessions', 'partial_update', id=self.eid, data={'qc': outcome})
+            r = self.one.alyx.json_field_update(endpoint=self.endpoint, uuid=self.eid,
+                                                field_name='json', data={'qc': outcome}) \
+                if self.json else self.one.alyx.rest(self.endpoint, 'partial_update', id=self.eid,
+                                                     data={'qc': outcome})
+
             current_status = r['qc'].upper()
             assert current_status == outcome, 'Failed to update session QC'
-            self.log.info(f'QC field successfully updated to {outcome} for session {self.eid}')
+            self.log.info(f'QC field successfully updated to {outcome} for {self.endpoint[:-1]} '
+                          f'{self.eid}')
         self.outcome = current_status
         return self.outcome
 
@@ -99,9 +139,21 @@ class QC:
             if (v is not None and not isinstance(v, str)) and np.isnan(v):
                 data[k] = None
 
-        extended_qc = self.one.alyx.rest('sessions', 'read', id=self.eid)['extended_qc'] or {}
-        extended_qc.update(data)
-        out = self.one.alyx.json_field_update(
-            endpoint='sessions', uuid=self.eid, field_name='extended_qc', data=extended_qc)
-        self.log.info(f'Extended QC field successfully updated for session {self.eid}')
+        if self.json:
+            extended_qc = (self.one.alyx.rest(self.endpoint, 'read', id=self.eid)['json']
+                           ['extended_qc']) or {}
+            extended_qc.update(data)
+            extended_qc_dict = {'extended_qc': extended_qc}
+            out = self.one.alyx.json_field_update(
+                endpoint=self.endpoint, uuid=self.eid, field_name='json', data=extended_qc_dict)
+        else:
+            extended_qc = self.one.alyx.rest(
+                self.endpoint, 'read', id=self.eid)['extended_qc'] or {}
+            extended_qc.update(data)
+            out = self.one.alyx.json_field_update(
+                endpoint=self.endpoint, uuid=self.eid, field_name='extended_qc',
+                data=extended_qc)
+
+        self.log.info(f'Extended QC field successfully updated for {self.endpoint[:-1]} '
+                      f'{self.eid}')
         return out

@@ -7,7 +7,7 @@ import logging
 import numpy as np
 
 import ibllib.io.spikeglx as spikeglx
-from ibllib.io.extractors.training_wheel import extract_first_movement_times
+from ibllib.io.extractors.training_wheel import extract_first_movement_times, infer_wheel_units
 from ibllib.io.extractors import ephys_fpga
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 import brainbox.behavior.wheel as wh
@@ -119,6 +119,51 @@ class TestWheelExtraction(unittest.TestCase):
             self.ta, self.pa, self.tb, self.pb, ticks=np.pi * 2, coding='x2')
         self.assertTrue(np.all(t == t_))
         self.assertTrue(np.all(p == p_))
+
+
+class TestExtractedWheelUnits(unittest.TestCase):
+    """Tests the infer_wheel_units function"""
+
+    wheel_radius_cm = 3.1
+
+    def setUp(self) -> None:
+        """
+        Create the wheel position data for testing: the positions attribute holds a dictionary of
+        units, each holding a dictionary of encoding types to test, e.g.
+
+        positions = {
+            'rad': {
+                'X1': ...,
+                'X2': ...,
+                'X4': ...
+            },
+            'cm': {
+                'X1': ...,
+                'X2': ...,
+                'X4': ...
+            }
+        }
+        :return:
+        """
+        def x(unit, enc=int(1), wheel_radius=self.wheel_radius_cm):
+            radius = 1 if unit == 'rad' else wheel_radius
+            return 1 / ephys_fpga.WHEEL_TICKS * np.pi * 2 * radius / enc
+
+        # A pseudo-random sequence of integrated fronts
+        seq = np.array([-1, 0, 1, 2, 1, 2, 3, 4, 3, 2, 1, 0, -1, -2, 1, -2])
+        encs = (1, 2, 4)  # Encoding types to test
+        units = ('rad', 'cm')  # Units to test
+        self.positions = {unit: {f'X{e}': x(unit, e) * seq for e in encs} for unit in units}
+
+    def test_extract_wheel_moves(self):
+        for unit in self.positions.keys():
+            for encoding, pos in self.positions[unit].items():
+                result = infer_wheel_units(pos)
+                self.assertEqual(unit, result[0], f'failed to determine units for {encoding}')
+                expected = int(ephys_fpga.WHEEL_TICKS * int(encoding[1]))
+                self.assertEqual(expected, result[1],
+                                 f'failed to determine number of ticks for {encoding} in {unit}')
+                self.assertEqual(encoding, result[2], f'failed to determine encoding in {unit}')
 
 
 class TestWheelMovesExtraction(unittest.TestCase):

@@ -247,6 +247,18 @@ class BrainAtlas:
             _, ir_unique, _ = np.intersect1d(self.regions.id, im_unique, return_indices=True)
             return np.reshape(self.regions.rgb[ir_unique[iim], :], (*imlabel.shape, 3))
 
+    def _label2value(self, imlabel, region_values):
+        """
+        Converts a slice from the label volume to its RGB equivalent for display
+        :param imlabel: 2D np-array containing label ids (slice of the label volume)
+        :return: 3D np-array of the slice uint8 rgb values
+        """
+
+        im_unique, ilabels, iim = np.unique(imlabel, return_index=True, return_inverse=True)
+        _, ir_unique, _ = np.intersect1d(self.regions.id, im_unique, return_indices=True)
+
+        return np.squeeze(np.reshape(region_values[ir_unique[iim]], (*imlabel.shape, 1)))
+
     def tilted_slice(self, xyz, axis, volume='image'):
         """
         From line coordinates, extracts the tilted plane containing the line from the 3D volume
@@ -344,21 +356,37 @@ class BrainAtlas:
         ax.imshow(im, extent=extent, cmap=cmap, **kwargs)
         return ax
 
-    def slice(self, coordinate, axis, volume='image'):
+    def slice(self, coordinate, axis, volume='image', mode='raise', region_values=None):
         """
         :param coordinate: float
         :param axis: xyz convention:  0 for ml, 1 for ap, 2
         :param volume: 'image' or 'annotation'
+        :param mode: 'raise' raise an error, 'clip' gets the first or last index
         :return: 2d array or 3d RGB numpy int8 array
         """
         index = self.bc.xyz2i(np.array([coordinate] * 3))[axis]
+
+        # np.take is 50 thousand times slower than straight slicing !
+        def _take(vol, ind, axis):
+            if mode == 'clip':
+                ind = np.minimum(np.maximum(ind, 0), vol.shape[axis] - 1)
+            if axis == 0:
+                return vol[ind, :, :]
+            elif axis == 1:
+                return vol[:, ind, :]
+            elif axis == 2:
+                return vol[:, :, ind]
+
         if isinstance(volume, np.ndarray):
-            return volume.take(index, axis=self.xyz2dims[axis])
+            return _take(volume, index, axis=self.xyz2dims[axis])
         elif volume == 'annotation':
-            im = self.label.take(index, axis=self.xyz2dims[axis])
+            im = _take(self.label, index, axis=self.xyz2dims[axis])
             return self._label2rgb(im)
         elif volume == 'image':
-            return self.image.take(index, axis=self.xyz2dims[axis])
+            return _take(self.image, index, axis=self.xyz2dims[axis])
+        elif volume == 'value':
+            im = _take(self.label, index, axis=self.xyz2dims[axis])
+            return self._label2value(im, region_values=region_values)
 
     def plot_cslice(self, ap_coordinate, volume='image', **kwargs):
         """
@@ -697,6 +725,14 @@ class BrainRegions:
         """
         return self._navigate_tree(ids, direction='up')
 
+    def leaves(self):
+        """
+        Get all regions that do not have children
+        :return:
+        """
+        leaves = np.setxor1d(self.id, self.parent)
+        return self.get(np.int64(leaves[~np.isnan(leaves)]))
+
 
 class AllenAtlas(BrainAtlas):
     """
@@ -763,7 +799,7 @@ class AllenAtlas(BrainAtlas):
         :return: coordinates in um (mlapdv by default), origin is the front left top corner
          of the data volume
         """
-        ordre = self._ccf_order(ccf_order)
+        ordre = self._ccf_order(ccf_order, reverse=True)
         ccf = self.bc.xyz2i(xyz, round=False) * np.float(self.res_um)
         return ccf[..., ordre]
 
@@ -779,11 +815,22 @@ class AllenAtlas(BrainAtlas):
         return self.bc.i2xyz((ccf[..., ordre] / np.float(self.res_um)))
 
     @staticmethod
-    def _ccf_order(ccf_order):
+    def _ccf_order(ccf_order, reverse=False):
+        """
+        Returns the mapping to go from CCF coordinates order to the brain atlas xyz
+        :param ccf_order: 'mlapdv' or 'apdvml'
+        :param reverse: defaults to False.
+            If False, returns from CCF to brain atlas
+            If True, returns from brain atlas to CCF
+        :return:
+        """
         if ccf_order == 'mlapdv':
             return [0, 1, 2]
         elif ccf_order == 'apdvml':
-            return [2, 0, 1]
+            if reverse:
+                return [2, 0, 1]
+            else:
+                return [1, 2, 0]
         else:
             ValueError("ccf_order needs to be either 'mlapdv' or 'apdvml'")
 
