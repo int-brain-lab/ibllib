@@ -6,6 +6,7 @@ Code for decoding by G. Meijer
 '''
 
 import numpy as np
+import scipy as sp
 import types
 from itertools import groupby
 from sklearn.ensemble import RandomForestClassifier
@@ -197,7 +198,7 @@ def xcorr(spike_times, spike_clusters, bin_size=None, window_size=None):
 
 def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, post_time=0.5,
            classifier='bayes', cross_validation='kfold', num_splits=5, prob_left=None,
-           custom_validation=None, n_neurons='all', iterations=1, shuffle=False):
+           custom_validation=None, n_neurons='all', iterations=1, shuffle=False, phase_rand=False):
     """
     Use decoding to classify groups of trials (e.g. stim left/right). Classification is done using
     the population vector of summed spike counts from the specified time window. Cross-validation
@@ -257,6 +258,9 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
         number of times to repeat the decoding (especially usefull when subselecting neurons)
     shuffle : boolean
         whether to shuffle the trial labels each decoding iteration
+    phase_rand : boolean
+        whether to use phase randomization of the activity over trials to use as a "chance"
+        predictor
 
     Returns
     -------
@@ -310,6 +314,21 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
                                  iterations))
     pred = np.zeros([iterations, pop_vector.shape[0]])
     prob = np.zeros([iterations, pop_vector.shape[0]])
+
+    # Perform phase randomization of activity over trials
+    if phase_rand is True:
+        rand_pop_vector = np.empty(pop_vector.shape)
+        frequencies = int((pop_vector.shape[0] - 1) / 2)
+        fsignal = sp.fft.fft(pop_vector, axis=0)
+        power = np.abs(fsignal[1:1+frequencies])
+        phases = 2*np.pi*np.random.rand(frequencies)
+        for i in range(pop_vector.shape[1]):
+            newfsignal = fsignal[0, i]
+            newfsignal = np.append(newfsignal, np.exp(1j * phases) * power[:, i])
+            newfsignal = np.append(newfsignal, np.flip(np.exp(-1j * phases) * power[:, i]))
+            newsignal = sp.fft.ifft(newfsignal)
+            rand_pop_vector[:, i] = np.abs(newsignal.real)
+        pop_vector = rand_pop_vector
 
     for i in range(iterations):
 
