@@ -43,9 +43,10 @@ METRICS_PARAMS = {
     'acceptable_contamination': 0.1,
     'nc_quartile_length': 0.2,
     'nc_bins': 100,
-    'nc_n_low_bins':2
-
-}
+    'nc_n_low_bins': 2,
+    'nc_thresh': 20,
+    'med_amp_thresh': 50
+    }
 
 
 def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='ks'):
@@ -715,7 +716,6 @@ def max_acceptable_cont(FR, RP, rec_duration,acceptableCont, thresh ):
 
 
 def slidingRP_viol(ts, bin_size=0.25, thresh=0.1, acceptThresh=0.1):
-    
     """
     A binary metric which determines whether there is an acceptable level of 
     refractory period violations by using a sliding refractory period:
@@ -755,68 +755,110 @@ def slidingRP_viol(ts, bin_size=0.25, thresh=0.1, acceptThresh=0.1):
 
     Examples
     --------
-    1) Compute whether a unit has too much refractory period contamination at 
-    any possible value of a refractory period, for a 0.25 ms bin, with a 
+    1) Compute whether a unit has too much refractory period contamination at
+    any possible value of a refractory period, for a 0.25 ms bin, with a
     threshold of 10% acceptable contamination
         >>> ts = units_b['times']['1']
         >>> didpass = bb.metrics.slidingRP_viol(ts, bin_size=0.25, thresh=0.1,
                                                 acceptThresh=0.1)
     """
-    
 
-
-    b= np.arange(0, 10.25, bin_size)/1000 + 1e-6  # bins in seconds
+    b = np.arange(0, 10.25, bin_size) / 1000 + 1e-6  # bins in seconds
     bTestIdx = [5, 6, 7, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40]
     bTest = [b[i] for i in bTestIdx]
 
-    if(len(ts)>0 and ts[-1]>ts[0]):  # only do this for units with samples
+    if(len(ts) > 0 and ts[-1] > ts[0]):  # only do this for units with samples
         recDur = (ts[-1]-ts[0])
-        c0 = correlograms(ts,np.zeros(len(ts), dtype='int8'), cluster_ids=[0],
-                          bin_size=bin_size/1000, sample_rate=20000, window_size=2,
-                          symmetrize=False) # compute acg
-        cumsumc0 = np.cumsum(c0[0, 0, :])  # cumulative sum of acg, i.e. number of total spikes occuring from 0 to end of that bin
-        res = cumsumc0[bTestIdx]  # cumulative sum at each of the testing bins
+        # compute acg
+        c0 = correlograms(ts, np.zeros(len(ts), dtype='int8'), cluster_ids=[0],
+                          bin_size=bin_size/1000, sample_rate=20000,
+                          window_size=2,
+                          symmetrize=False)
+        # cumulative sum of acg, i.e. number of total spikes occuring from 0
+        # to end of that bin
+        cumsumc0 = np.cumsum(c0[0, 0, :])
+        # cumulative sum at each of the testing bins
+        res = cumsumc0[bTestIdx]
         total_spike_count = len(ts)
 
-        bin_count_normalized = c0[0,0]/total_spike_count/bin_size*1000 #divide each bin's count by the unit's total spike count and the bin size
-        num_bins_2s = len(c0[0,0]) #number of total bins that equal 2 seconds
-        num_bins_1s = int(num_bins_2s/2) #number of bins that equal 1 second
-        fr = np.sum(bin_count_normalized[num_bins_1s:num_bins_2s])/num_bins_1s #compute fr based on the  mean of bin_count_normalized from 1 to 2 s instead of as before (len(ts)/recDur) for a better estimate
-        mfunc =np.vectorize(max_acceptable_cont)
-        m = mfunc(fr,bTest,recDur,fr*acceptThresh,thresh) #compute the maximum allowed number of spikes per testing bin
-        didpass = int(np.any(np.less_equal(res,m))) #did the unit pass (resulting number of spikes less than maximum allowed spikes) at any of the testing bins?
+        # divide each bin's count by the total spike count and the bin size
+        bin_count_normalized = c0[0, 0]/total_spike_count/bin_size*1000
+        num_bins_2s = len(c0[0, 0])  # number of total bins that equal 2 secs
+        num_bins_1s = int(num_bins_2s/2)  # number of bins that equal 1 sec
+        # compute fr based on the  mean of bin_count_normalized from 1 to 2 s
+        # instead of as before (len(ts)/recDur) for a better estimate
+        fr = np.sum(bin_count_normalized[num_bins_1s:num_bins_2s])/num_bins_1s
+        mfunc = np.vectorize(max_acceptable_cont)
+        # compute the maximum allowed number of spikes per testing bin
+        m = mfunc(fr, bTest, recDur, fr*acceptThresh, thresh)
+        # did the unit pass (resulting number of spikes less than maximum
+        # allowed spikes) at any of the testing bins?
+        didpass = int(np.any(np.less_equal(res, m)))
     else:
-        didpass=0
+        didpass = 0
 
     return didpass
 
 
-def noise_cutoff(amps,quartile_length=.2, nbins=100, n_low_bins = 2):
-    '''
+def noise_cutoff(amps, quartile_length=.2, n_bins=100, n_low_bins=2):
+    """
+    A metric to determine whether a unit's amplitude distribution is cut off
+    (at floor), without assuming a Gaussian distribution.
 
-    Determine whether a unit's amplitude distribution is cutoff (at floor), without
-    assuming a Gaussian distribution
+    This metric takes the amplitude distribution, computes the mean and std
+    of an upper quartile of the distribution, and determines how many standard
+    deviations away from that mean a lower quartile lies.
 
-    '''
-    if(len(amps)>1):
-        bins_list= np.linspace(0, np.max(amps), nbins)
-        n,bins = np.histogram(amps,bins = bins_list)
+    Parameters
+    ----------
+    amps : ndarray_like
+        The amplitudes (in uV) of the spikes.
+    quartile_length : float
+        The size of the upper quartile of the amplitude distribution.
+    n_bins : int
+        The number of bins used to compute a histogram of the amplitude
+        distribution.
+    n_low_bins : int
+        The number of bins used in the lower part of the distribution (where
+        cutoff is determined).
+    Returns
+    -------
+    cutoff : float
+        Number of standard deviations that the lower mean is outside of the
+        mean of the upper quartile.
+
+    See Also
+    --------
+    missed_spikes_est
+
+    Examples
+    --------
+    1) Compute whether a unit's amplitude distribution is cut off
+        >>> amps = spks_b['amps'][unit_idxs]
+        >>> cutoff = bb.metrics.noise_cutoff(amps, quartile_length=.2,
+                                             n_bins=100, n_low_bins=2)
+    """
+
+    if(len(amps) > 1):
+        bins_list = np.linspace(0, np.max(amps), n_bins)
+        n, bins = np.histogram(amps, bins=bins_list)
         dx = np.diff(n)
-        idx_nz = np.nonzero(dx) #indices of nonzeros
-        length_nonzeros = idx_nz[0][-1]-idx_nz[0][0] #length of the entire stretch, from first nonzero to last nonzero
+        idx_nz = np.nonzero(dx)  # indices of nonzeros
         high_quartile = 1-quartile_length
         idx_peak = np.argmax(n)
         length_top_half = idx_nz[0][-1]-idx_peak
         high_quartile = 1-(2*quartile_length)
 
-        high_quartile_start_ind = int(np.ceil(high_quartile*length_top_half + idx_peak))
-        xx=idx_nz[0][idx_nz[0]>high_quartile_start_ind]
-        if len(n[xx])>0:
+        high_quartile_start_ind = int(np.ceil(high_quartile*length_top_half
+                                              + idx_peak))
+        xx = idx_nz[0][idx_nz[0] > high_quartile_start_ind]
+        if len(n[xx]) > 0:
             mean_high_quartile = np.mean(n[xx])
             std_high_quartile = np.std(n[xx])
             first_low_quartile = np.mean(n[idx_nz[0][1:n_low_bins]])
             if std_high_quartile > 0:
-                cutoff = (first_low_quartile-mean_high_quartile)/std_high_quartile
+                cutoff = (first_low_quartile - mean_high_quartile) \
+                    / std_high_quartile
             else:
                 cutoff = np.float64(np.nan)
         else:
@@ -829,8 +871,8 @@ def noise_cutoff(amps,quartile_length=.2, nbins=100, n_low_bins = 2):
 def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
                        params=METRICS_PARAMS):
     """
-    Computes single unit metrics from only the spike times, amplitudes, and depths for a set of
-    units.
+    Computes single unit metrics from only the spike times, amplitudes, and
+    depths for a set of units.
 
     Metrics computed:
         num_spikes
@@ -965,3 +1007,24 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         # average_drift: median( low_pass( diff(depths)  / diff(time) ))
 
     return r
+
+
+def unit_labels(spike_clusters, spike_times, spike_amps,
+                params=METRICS_PARAMS):
+
+    cluster_ids = np.arange(np.max(spike_clusters) + 1)
+    nclust = cluster_ids.size
+
+    for ic in np.arange(nclust):
+        # slice the spike_times array
+        ispikes = spike_clusters == cluster_ids[ic]
+        if np.all(~ispikes):  # if this cluster has no spikes, continue
+            continue
+        ts = spike_times[ispikes]
+        amps = spike_amps[ispikes]
+
+    label = int(slidingRP_viol(ts)
+                and noise_cutoff((amps)) < params['nc_thresh']
+                and np.median(amps) > params['med_amp_thresh'])
+
+    return label
