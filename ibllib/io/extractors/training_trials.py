@@ -230,7 +230,13 @@ class Intervals(BaseBpodTrialsExtractor):
 
     def _extract(self):
         starts = [t['behavior_data']['Trial start timestamp'] for t in self.bpod_trials]
-        ends = [t['behavior_data']['Trial end timestamp'] for t in self.bpod_trials]
+        if parse_version(self.settings["IBLRIG_VERSION_TAG"]) < parse_version("5.0.0"):
+            ends = [t['behavior_data']['Trial end timestamp'] for t in self.bpod_trials]
+        else:
+            ends = [
+                t['behavior_data']['States timestamps']["exit_state"][0][0]
+                for t in self.bpod_trials
+            ]
         return np.array([starts, ends]).T
 
 
