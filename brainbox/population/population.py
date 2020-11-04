@@ -334,18 +334,20 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
 
         # Perform phase randomization of activity over trials if necessary
         if phase_rand is True:
-            rand_pop_vector = np.empty(pop_vector.shape)
-            frequencies = int((pop_vector.shape[0] - 1) / 2)
-            fsignal = sp.fft.fft(pop_vector, axis=0)
+            if i == 0:
+                original_pop_vector = sub_pop_vector
+            rand_pop_vector = np.empty(original_pop_vector.shape)
+            frequencies = int((original_pop_vector.shape[0] - 1) / 2)
+            fsignal = sp.fft.fft(original_pop_vector, axis=0)
             power = np.abs(fsignal[1:1+frequencies])
             phases = 2*np.pi*np.random.rand(frequencies)
-            for i in range(pop_vector.shape[1]):
-                newfsignal = fsignal[0, i]
-                newfsignal = np.append(newfsignal, np.exp(1j * phases) * power[:, i])
-                newfsignal = np.append(newfsignal, np.flip(np.exp(-1j * phases) * power[:, i]))
+            for k in range(original_pop_vector.shape[1]):
+                newfsignal = fsignal[0, k]
+                newfsignal = np.append(newfsignal, np.exp(1j * phases) * power[:, k])
+                newfsignal = np.append(newfsignal, np.flip(np.exp(-1j * phases) * power[:, k]))
                 newsignal = sp.fft.ifft(newfsignal)
-                rand_pop_vector[:, i] = np.abs(newsignal.real)
-            pop_vector = rand_pop_vector
+                rand_pop_vector[:, k] = np.abs(newsignal.real)
+            sub_pop_vector = rand_pop_vector
 
         if cross_validation == 'none':
 
@@ -360,13 +362,13 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
         else:
             # Perform cross-validation
             if cross_validation == 'leave-one-out':
-                cv = LeaveOneOut().split(pop_vector)
+                cv = LeaveOneOut().split(sub_pop_vector)
             elif cross_validation == 'kfold':
-                cv = KFold(n_splits=num_splits).split(pop_vector)
+                cv = KFold(n_splits=num_splits).split(sub_pop_vector)
             elif cross_validation == 'block':
                 block_lengths = [sum(1 for i in g) for k, g in groupby(prob_left)]
                 blocks = np.repeat(np.arange(len(block_lengths)), block_lengths)
-                cv = LeaveOneGroupOut().split(pop_vector, groups=blocks)
+                cv = LeaveOneGroupOut().split(sub_pop_vector, groups=blocks)
             elif cross_validation == 'custom':
                 cv = custom_validation
 
