@@ -715,10 +715,55 @@ def max_acceptable_cont(FR, RP, rec_duration,acceptableCont, thresh ):
 
 
 def slidingRP_viol(ts, bin_size=0.25, thresh=0.1, acceptThresh=0.1):
+    
     """
-    Determine whether there are refractory period violations, using a sliding
-    refractory period metric
+    A binary metric which determines whether there is an acceptable level of 
+    refractory period violations by using a sliding refractory period:
+    
+    This takes into account the firing rate of the neuron and computes a 
+    maximum acceptable level of contamination at different possible values of 
+    the refractory period. If the unit has less than the maximum contamination
+    at any of the possible values of the refractory period, the unit passes.
+    
+    A neuron will always fail this metric for very low firing rates, and thus
+    this metric takes into account both firing rate and refractory period 
+    violations.
+        
+
+    Parameters
+    ----------
+    ts : ndarray_like
+        The timestamps (in s) of the spikes.
+    bin_size : float
+        The size of binning for the autocorrelogram.
+    thresh : float
+        Spike rate used to generate poisson distribution (to compute maximum 
+              acceptable contamination, see max_acceptable_cont)
+    acceptThresh : float
+        The fraction of contamination we are willing to accept (default value 
+              set to 0.1, or 10% contamination)
+
+    Returns
+    -------
+    didpass : int
+        0 if unit didn't pass
+        1 if unit did pass
+
+    See Also
+    --------
+    contamination_est
+
+    Examples
+    --------
+    1) Compute whether a unit has too much refractory period contamination at 
+    any possible value of a refractory period, for a 0.25 ms bin, with a 
+    threshold of 10% acceptable contamination
+        >>> ts = units_b['times']['1']
+        >>> didpass = bb.metrics.slidingRP_viol(ts, bin_size=0.25, thresh=0.1,
+                                                acceptThresh=0.1)
     """
+    
+
 
     b= np.arange(0, 10.25, bin_size)/1000 + 1e-6  # bins in seconds
     bTestIdx = [5, 6, 7, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40]
