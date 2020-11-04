@@ -315,21 +315,6 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
     pred = np.zeros([iterations, pop_vector.shape[0]])
     prob = np.zeros([iterations, pop_vector.shape[0]])
 
-    # Perform phase randomization of activity over trials
-    if phase_rand is True:
-        rand_pop_vector = np.empty(pop_vector.shape)
-        frequencies = int((pop_vector.shape[0] - 1) / 2)
-        fsignal = sp.fft.fft(pop_vector, axis=0)
-        power = np.abs(fsignal[1:1+frequencies])
-        phases = 2*np.pi*np.random.rand(frequencies)
-        for i in range(pop_vector.shape[1]):
-            newfsignal = fsignal[0, i]
-            newfsignal = np.append(newfsignal, np.exp(1j * phases) * power[:, i])
-            newfsignal = np.append(newfsignal, np.flip(np.exp(-1j * phases) * power[:, i]))
-            newsignal = sp.fft.ifft(newfsignal)
-            rand_pop_vector[:, i] = np.abs(newsignal.real)
-        pop_vector = rand_pop_vector
-
     for i in range(iterations):
 
         # Pre-allocate variables for this iteration
@@ -346,6 +331,21 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
         # Shuffle trail labels if necessary
         if shuffle is True:
             event_groups = sklearn_shuffle(event_groups)
+
+        # Perform phase randomization of activity over trials if necessary
+        if phase_rand is True:
+            rand_pop_vector = np.empty(pop_vector.shape)
+            frequencies = int((pop_vector.shape[0] - 1) / 2)
+            fsignal = sp.fft.fft(pop_vector, axis=0)
+            power = np.abs(fsignal[1:1+frequencies])
+            phases = 2*np.pi*np.random.rand(frequencies)
+            for i in range(pop_vector.shape[1]):
+                newfsignal = fsignal[0, i]
+                newfsignal = np.append(newfsignal, np.exp(1j * phases) * power[:, i])
+                newfsignal = np.append(newfsignal, np.flip(np.exp(-1j * phases) * power[:, i]))
+                newsignal = sp.fft.ifft(newfsignal)
+                rand_pop_vector[:, i] = np.abs(newsignal.real)
+            pop_vector = rand_pop_vector
 
         if cross_validation == 'none':
 
