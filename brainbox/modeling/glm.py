@@ -32,7 +32,7 @@ class NeuralGLM:
     """
 
     def __init__(self, trialsdf, spk_times, spk_clu, vartypes,
-                 train=0.8, binwidth=0.02, mintrials=100, subset=False):
+                 train=0.8, blocktrain=False, binwidth=0.02, mintrials=100, subset=False):
         """
         Construct GLM object using information about all trials, and the relevant spike times.
         Only ingests data, and further object methods must be called to describe kernels, gain
@@ -129,6 +129,10 @@ class NeuralGLM:
             print('Training fraction set to 1. Training on all data.')
             traininds = trialsdf.index
             testinds = trialsdf.index
+        elif blocktrain:
+            trainlen = int(np.floor(len(trialsdf) * train))
+            traininds = trialsdf.index[:trainlen]
+            testinds = trialsdf.index[trainlen:]
         else:
             trainlen = int(np.floor(len(trialsdf) * train))
             traininds = sorted(np.random.choice(trialsdf.index, trainlen, replace=False))
@@ -487,7 +491,8 @@ class NeuralGLM:
                 warn(f'Fitting did not converge for some units: {nonconverged}')
         return coefs, intercepts, variances
 
-    def _fit_pytorch(self, dm, binned, cells=None, retvar=False, epochs=500, optim='lbfgs', lr=1.0):
+    def _fit_pytorch(self, dm, binned, cells=None, retvar=False, epochs=500, optim='lbfgs',
+                     lr=1.0):
         """
         Fit the GLM using PyTorch on GPU(s). Regularization has not been applied yet.
 
@@ -586,7 +591,8 @@ class NeuralGLM:
             variances.at[cell] = wvar[1:]
         return coefs, intercepts, variances
 
-    def fit(self, method='sklearn', alpha=0, singlepar_var=False, epochs=500, optim='lbfgs', lr=1.0):
+    def fit(self, method='sklearn', alpha=0, singlepar_var=False, epochs=500, optim='lbfgs',
+            lr=1.0):
         """
         Fit the current set of binned spikes as a function of the current design matrix. Requires
         NeuralGLM.bin_spike_trains and NeuralGLM.compile_design_matrix to be run first. Will store
@@ -638,7 +644,7 @@ class NeuralGLM:
             elif method == 'pytorch':
                 traindm = self.dm[trainmask]
                 coefs, intercepts, variances = self._fit_pytorch(traindm, trainbinned,
-                                                                 retvar=True, epochs=epochs, 
+                                                                 retvar=True, epochs=epochs,
                                                                  optim=optim, lr=lr)
             else:
                 biasdm = np.pad(self.dm.copy(), ((0, 0), (1, 0)), 'constant', constant_values=1)
@@ -668,10 +674,10 @@ class NeuralGLM:
                     coefs, intercepts, variances = self._fit_sklearn(traindm, trainbinned, alpha,
                                                                      retvar=singlepar_var)
                 elif method == 'pytorch':
-                    coefs, intercepts, variances = self._fit_pytorch(traindm, trainbinned, 
-                                                                     retvar=singlepar_var, 
-                                                                     epochs=epochs, 
-                                                                     optim=optim, lr=lr)                                                     
+                    coefs, intercepts, variances = self._fit_pytorch(traindm, trainbinned,
+                                                                     retvar=singlepar_var,
+                                                                     epochs=epochs,
+                                                                     optim=optim, lr=lr)
                 else:
                     biasdm = np.pad(traindm.copy(), ((0, 0), (1, 0)), 'constant',
                                     constant_values=1)
