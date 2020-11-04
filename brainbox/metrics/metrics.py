@@ -716,7 +716,6 @@ def max_acceptable_cont(FR, RP, rec_duration,acceptableCont, thresh ):
 
 
 def slidingRP_viol(ts, bin_size=0.25, thresh=0.1, acceptThresh=0.1):
-    
     """
     A binary metric which determines whether there is an acceptable level of 
     refractory period violations by using a sliding refractory period:
@@ -756,17 +755,15 @@ def slidingRP_viol(ts, bin_size=0.25, thresh=0.1, acceptThresh=0.1):
 
     Examples
     --------
-    1) Compute whether a unit has too much refractory period contamination at 
-    any possible value of a refractory period, for a 0.25 ms bin, with a 
+    1) Compute whether a unit has too much refractory period contamination at
+    any possible value of a refractory period, for a 0.25 ms bin, with a
     threshold of 10% acceptable contamination
         >>> ts = units_b['times']['1']
         >>> didpass = bb.metrics.slidingRP_viol(ts, bin_size=0.25, thresh=0.1,
                                                 acceptThresh=0.1)
     """
-    
 
-
-    b= np.arange(0, 10.25, bin_size)/1000 + 1e-6  # bins in seconds
+    b = np.arange(0, 10.25, bin_size) / 1000 + 1e-6  # bins in seconds
     bTestIdx = [5, 6, 7, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40]
     bTest = [b[i] for i in bTestIdx]
 
@@ -1018,11 +1015,6 @@ def unit_labels(spike_clusters, spike_times, spike_amps,
     cluster_ids = np.arange(np.max(spike_clusters) + 1)
     nclust = cluster_ids.size
 
-    r = Bunch({
-        'cluster_id': cluster_ids,
-        'label': np.full((nclust,), np.nan)
-    })
-
     for ic in np.arange(nclust):
         # slice the spike_times array
         ispikes = spike_clusters == cluster_ids[ic]
@@ -1031,8 +1023,8 @@ def unit_labels(spike_clusters, spike_times, spike_amps,
         ts = spike_times[ispikes]
         amps = spike_amps[ispikes]
 
-    r.label[ic] = int(slidingRP_viol(ts)
-                  and noise_cutoff((amps)) < params['nc_thresh']
-                  and np.median(amps) > params['med_amp_thresh'])
+    label = int(slidingRP_viol(ts)
+                and noise_cutoff((amps)) < params['nc_thresh']
+                and np.median(amps) > params['med_amp_thresh'])
 
-    return r
+    return label
