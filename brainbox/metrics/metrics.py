@@ -19,6 +19,7 @@ TODO metrics that could be added: iso_dist, l_ratio, d_prime, nn_hit, nn_miss, s
 """
 
 import time
+import logging
 
 import numpy as np
 import scipy.ndimage.filters as filters
@@ -29,6 +30,8 @@ import brainbox as bb
 from brainbox.core import Bunch
 from brainbox.processing import bincount2D
 from ibllib.io import spikeglx
+
+_logger = logging.getLogger('ibllib')
 
 # Parameters to be used in `quick_unit_metrics`
 METRICS_PARAMS = {
@@ -187,10 +190,9 @@ def missed_spikes_est(feat, spks_per_bin=20, sigma=5, min_num_bins=50):
         >>> fraction_missing = bb.plot.feat_cutoff(feat)
     """
 
-    # Ensure minimum number of spikes requirement is met.
-    error_str = 'The number of spikes in this unit is {0}, ' \
-                'but it must be at least {1}'.format(feat.size, spks_per_bin * min_num_bins)
-    assert (feat.size > (spks_per_bin * min_num_bins)), error_str
+    # Ensure minimum number of spikes requirement is met, return Nan otherwise
+    if feat.size <= (spks_per_bin * min_num_bins):
+        return np.nan, None, None
 
     # compute the spike feature histogram and pdf:
     num_bins = np.int(feat.size / spks_per_bin)
