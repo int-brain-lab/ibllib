@@ -11,7 +11,7 @@ from scipy import signal
 
 import alf.io
 from brainbox.core import Bunch
-from brainbox.metrics import quick_unit_metrics
+from brainbox.metrics import quick_unit_metrics, unit_labels
 from ibllib.ephys import sync_probes
 from ibllib.io import spikeglx, raw_data_loaders
 import ibllib.dsp as dsp
@@ -238,8 +238,12 @@ def unit_metrics_ks2(ks2_path=None, m=None, save=True):
     r = pd.DataFrame(quick_unit_metrics(m.spike_clusters, m.spike_times, m.amplitudes, m.depths))
     # TODO compute drift as a function of time here
     # TODO compute metrics using sample waveforms here
-    # TODO once all of this is done compute unit labels here
 
+    # compute labels based on metrics
+    l = pd.DataFrame(unit_labels(m.spike_clusters, m.spike_times, m.amplitudes))
+    # add labels to metrics dataframe
+    r = r.set_index('cluster_id', drop=False).join(l.set_index('cluster_id'))
+    
     #  include the ks2 cluster contamination if `cluster_ContamPct` file exists
     file_contamination = ks2_path.joinpath('cluster_ContamPct.tsv')
     if file_contamination.exists():

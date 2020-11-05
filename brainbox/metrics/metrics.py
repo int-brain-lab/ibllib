@@ -1015,6 +1015,10 @@ def unit_labels(spike_clusters, spike_times, spike_amps,
     cluster_ids = np.arange(np.max(spike_clusters) + 1)
     nclust = cluster_ids.size
 
+    r = Bunch({
+        'cluster_id': cluster_ids,
+        'label': np.full((nclust,), np.nan)
+    })
     for ic in np.arange(nclust):
         # slice the spike_times array
         ispikes = spike_clusters == cluster_ids[ic]
@@ -1023,8 +1027,8 @@ def unit_labels(spike_clusters, spike_times, spike_amps,
         ts = spike_times[ispikes]
         amps = spike_amps[ispikes]
 
-    label = int(slidingRP_viol(ts)
-                and noise_cutoff((amps)) < params['nc_thresh']
-                and np.median(amps) > params['med_amp_thresh'])
+    r.label[ic] = int(slidingRP_viol(ts)
+                  and noise_cutoff((amps)) < params['nc_thresh']
+                  and np.median(amps) > params['med_amp_thresh'])
 
-    return label
+    return r
