@@ -235,7 +235,7 @@ def unit_metrics_ks2(ks2_path=None, m=None, save=True):
     # create phylib `TemplateModel` if not given
     m = phy_model_from_ks2_path(ks2_path) if None else m
     # compute metrics and convert to `DataFrame`
-    r = pd.DataFrame(quick_unit_metrics(m.spike_clusters, m.spike_times, m.amplitudes, m.depths))
+    r = pd.DataFrame(quick_unit_metrics(m.spike_clusters, m.spike_times, m.amSplitudes, m.depths))
     # TODO compute drift as a function of time here
     # TODO compute metrics using sample waveforms here
 

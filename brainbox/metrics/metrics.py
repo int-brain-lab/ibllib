@@ -1019,6 +1019,7 @@ def unit_labels(spike_clusters, spike_times, spike_amps,
         'cluster_id': cluster_ids,
         'label': np.full((nclust,), np.nan)
     })
+
     for ic in np.arange(nclust):
         # slice the spike_times array
         ispikes = spike_clusters == cluster_ids[ic]
