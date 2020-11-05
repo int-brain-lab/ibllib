@@ -872,20 +872,7 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
     depths for a set of units.
 
     Metrics computed:
-        num_spikes
-        firing_rate
-        presence_ratio
-        presence_ratio_std
-        frac_isi_viol (see `isi_viol`)
-        contamination_est (see `contamination_est`)
-        contamination_est2 (see `contamination_est2`)
-        missed_spikes_est (see `missed_spikes_est`)
-        cum_amp_drift (see `cum_drift`)
-        max_amp_drift (see `max_drift`)
-        cum_depth_drift (see `cum_drift`)
-        max_depth_drift (see `max_drift`)
-        slidingRP_viol
-        noise_cutoff
+        TODO list final set of metrics
 
     Parameters
     ----------
