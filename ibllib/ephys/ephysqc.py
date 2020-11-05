@@ -240,10 +240,10 @@ def unit_metrics_ks2(ks2_path=None, m=None, save=True):
     # TODO compute metrics using sample waveforms here
 
     # compute labels based on metrics
-    l = pd.DataFrame(unit_labels(m.spike_clusters, m.spike_times, m.amplitudes))
+    df_labels = pd.DataFrame(unit_labels(m.spike_clusters, m.spike_times, m.amplitudes))
     # add labels to metrics dataframe
-    r = r.set_index('cluster_id', drop=False).join(l.set_index('cluster_id'))
-    
+    r = r.set_index('cluster_id', drop=False).join(df_labels.set_index('cluster_id'))
+
     #  include the ks2 cluster contamination if `cluster_ContamPct` file exists
     file_contamination = ks2_path.joinpath('cluster_ContamPct.tsv')
     if file_contamination.exists():

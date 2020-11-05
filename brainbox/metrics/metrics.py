@@ -46,7 +46,7 @@ METRICS_PARAMS = {
     'nc_n_low_bins': 2,
     'nc_thresh': 20,
     'med_amp_thresh': 50
-    }
+}
 
 
 def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='ks'):
@@ -440,6 +440,7 @@ def isi_viol(ts, rp=0.002):
     frac_isi_viol = len(v) / len(ts)
     return frac_isi_viol, len(v), isis
 
+
 def average_drift(feat, times):
     """
     Computes the cumulative drift (normalized by the total number of spikes) of a spike feature
@@ -696,39 +697,35 @@ def contamination_est2(ts, min_time, max_time, rp=0.002, min_isi=0.0001):
 
     return ce, num_violations
 
-def max_acceptable_cont(FR, RP, rec_duration,acceptableCont, thresh ):
-    '''
+
+def max_acceptable_cont(FR, RP, rec_duration, acceptableCont, thresh):
+    """
     Function to compute the maximum acceptable refractory period contamination
         called during slidingRP_viol
-    '''
-    trueContRate = np.linspace(0,FR,100)
-    timeForViol = RP*2*FR*rec_duration
+    """
 
-
-    expectedCountForAcceptableLimit = acceptableCont*timeForViol
-
-    max_acceptable = stats.poisson.ppf(thresh,expectedCountForAcceptableLimit)
-
-    if max_acceptable==0 and stats.poisson.pmf(0,expectedCountForAcceptableLimit)>0:
-        max_acceptable=-1
-
+    time_for_viol = RP * 2 * FR * rec_duration
+    expected_count_for_acceptable_limit = acceptableCont * time_for_viol
+    max_acceptable = stats.poisson.ppf(thresh, expected_count_for_acceptable_limit)
+    if max_acceptable == 0 and stats.poisson.pmf(0, expected_count_for_acceptable_limit) > 0:
+        max_acceptable = -1
     return max_acceptable
 
 
 def slidingRP_viol(ts, bin_size=0.25, thresh=0.1, acceptThresh=0.1):
     """
-    A binary metric which determines whether there is an acceptable level of 
+    A binary metric which determines whether there is an acceptable level of
     refractory period violations by using a sliding refractory period:
-    
-    This takes into account the firing rate of the neuron and computes a 
-    maximum acceptable level of contamination at different possible values of 
+
+    This takes into account the firing rate of the neuron and computes a
+    maximum acceptable level of contamination at different possible values of
     the refractory period. If the unit has less than the maximum contamination
     at any of the possible values of the refractory period, the unit passes.
-    
+
     A neuron will always fail this metric for very low firing rates, and thus
-    this metric takes into account both firing rate and refractory period 
+    this metric takes into account both firing rate and refractory period
     violations.
-        
+
 
     Parameters
     ----------
@@ -737,10 +734,10 @@ def slidingRP_viol(ts, bin_size=0.25, thresh=0.1, acceptThresh=0.1):
     bin_size : float
         The size of binning for the autocorrelogram.
     thresh : float
-        Spike rate used to generate poisson distribution (to compute maximum 
+        Spike rate used to generate poisson distribution (to compute maximum
               acceptable contamination, see max_acceptable_cont)
     acceptThresh : float
-        The fraction of contamination we are willing to accept (default value 
+        The fraction of contamination we are willing to accept (default value
               set to 0.1, or 10% contamination)
 
     Returns
@@ -767,11 +764,11 @@ def slidingRP_viol(ts, bin_size=0.25, thresh=0.1, acceptThresh=0.1):
     bTestIdx = [5, 6, 7, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40]
     bTest = [b[i] for i in bTestIdx]
 
-    if(len(ts) > 0 and ts[-1] > ts[0]):  # only do this for units with samples
-        recDur = (ts[-1]-ts[0])
+    if len(ts) > 0 and ts[-1] > ts[0]:  # only do this for units with samples
+        recDur = (ts[-1] - ts[0])
         # compute acg
         c0 = correlograms(ts, np.zeros(len(ts), dtype='int8'), cluster_ids=[0],
-                          bin_size=bin_size/1000, sample_rate=20000,
+                          bin_size=bin_size / 1000, sample_rate=20000,
                           window_size=2,
                           symmetrize=False)
         # cumulative sum of acg, i.e. number of total spikes occuring from 0
@@ -782,15 +779,15 @@ def slidingRP_viol(ts, bin_size=0.25, thresh=0.1, acceptThresh=0.1):
         total_spike_count = len(ts)
 
         # divide each bin's count by the total spike count and the bin size
-        bin_count_normalized = c0[0, 0]/total_spike_count/bin_size*1000
+        bin_count_normalized = c0[0, 0] / total_spike_count / bin_size * 1000
         num_bins_2s = len(c0[0, 0])  # number of total bins that equal 2 secs
-        num_bins_1s = int(num_bins_2s/2)  # number of bins that equal 1 sec
+        num_bins_1s = int(num_bins_2s / 2)  # number of bins that equal 1 sec
         # compute fr based on the  mean of bin_count_normalized from 1 to 2 s
         # instead of as before (len(ts)/recDur) for a better estimate
-        fr = np.sum(bin_count_normalized[num_bins_1s:num_bins_2s])/num_bins_1s
+        fr = np.sum(bin_count_normalized[num_bins_1s:num_bins_2s]) / num_bins_1s
         mfunc = np.vectorize(max_acceptable_cont)
         # compute the maximum allowed number of spikes per testing bin
-        m = mfunc(fr, bTest, recDur, fr*acceptThresh, thresh)
+        m = mfunc(fr, bTest, recDur, fr * acceptThresh, thresh)
         # did the unit pass (resulting number of spikes less than maximum
         # allowed spikes) at any of the testing bins?
         didpass = int(np.any(np.less_equal(res, m)))
@@ -844,21 +841,19 @@ def noise_cutoff(amps, quartile_length=.2, n_bins=100, n_low_bins=2):
         n, bins = np.histogram(amps, bins=bins_list)
         dx = np.diff(n)
         idx_nz = np.nonzero(dx)  # indices of nonzeros
-        high_quartile = 1-quartile_length
+        high_quartile = 1 - quartile_length
         idx_peak = np.argmax(n)
-        length_top_half = idx_nz[0][-1]-idx_peak
-        high_quartile = 1-(2*quartile_length)
+        length_top_half = idx_nz[0][-1] - idx_peak
+        high_quartile = 1 - (2 * quartile_length)
 
-        high_quartile_start_ind = int(np.ceil(high_quartile*length_top_half
-                                              + idx_peak))
+        high_quartile_start_ind = int(np.ceil(high_quartile * length_top_half + idx_peak))
         xx = idx_nz[0][idx_nz[0] > high_quartile_start_ind]
         if len(n[xx]) > 0:
             mean_high_quartile = np.mean(n[xx])
             std_high_quartile = np.std(n[xx])
             first_low_quartile = np.mean(n[idx_nz[0][1:n_low_bins]])
             if std_high_quartile > 0:
-                cutoff = (first_low_quartile - mean_high_quartile) \
-                    / std_high_quartile
+                cutoff = (first_low_quartile - mean_high_quartile) / std_high_quartile
             else:
                 cutoff = np.float64(np.nan)
         else:
@@ -983,7 +978,6 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
             continue
         ts = spike_times[ispikes]
         amps = spike_amps[ispikes]
-        depths = spike_depths[ispikes]
 
         # compute metrics
         r.frac_isi_viol[ic], _, _ = isi_viol(ts, rp=params['refractory_period'])
@@ -996,7 +990,7 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
                                               acceptThresh=params['acceptable_contamination'])
         r.noise_cutoff[ic] = noise_cutoff(amps,
                                           quartile_length=params['nc_quartile_length'],
-                                          nbins=params['nc_bins'],
+                                          n_bins=params['nc_bins'],
                                           n_low_bins=params['nc_n_low_bins'])
         r.missed_spikes_est[ic], _, _ = missed_spikes_est(
             amps, spks_per_bin=params['spks_per_bin_for_missed_spks_est'],
@@ -1029,7 +1023,7 @@ def unit_labels(spike_clusters, spike_times, spike_amps,
         amps = spike_amps[ispikes]
 
     r.label[ic] = int(slidingRP_viol(ts)
-                  and noise_cutoff((amps)) < params['nc_thresh']
-                  and np.median(amps) > params['med_amp_thresh'])
+                      and noise_cutoff(amps) < params['nc_thresh']
+                      and np.median(amps) > params['med_amp_thresh'])
 
     return r
