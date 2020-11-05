@@ -1,3 +1,8 @@
+### Release Notes 1.5.20
+-   ephys alignment QC
+-   hotfix: ibl errors inherit Exception, not BaseException
+-   hotfix: partial qc task extractor keeps FPGA stim times
+
 ### Release Notes 1.5.19
 -   create tasks looks for create_me.flags
 
