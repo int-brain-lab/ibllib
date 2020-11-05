@@ -26,11 +26,10 @@ class PoissonGLM(torch.nn.Module):
 
         if optim == 'adam':
             # Use Adam to fit the model
-                optimizer = torch.optim.Adam(self.parameters(), lr=lr)
+            optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         else:
             # Use LBFGS to fit the model
             optimizer = torch.optim.LBFGS(self.parameters(), lr=lr)
-
 
         for epoch in tqdm(range(1, epochs + 1), 'Epoch: ', leave=False):
             if optim == 'adam':
@@ -70,14 +69,12 @@ class PoissonGLM(torch.nn.Module):
                 loss_cells = F.poisson_nll_loss(outputs, y, reduction='none')
                 loss_cells = torch.sum(loss_cells, dim=0)
                 loss = torch.sum(loss_cells) / num_cells
-            
 
             # Update min loss, best weight/bias for each cell
             mask = loss_cells < min_loss
             min_loss[mask] = loss_cells[mask].detach()  # Don't grad on this tensor
             best_weight[mask] = self.linear.weight.data[mask]
             best_bias[mask] = self.linear.bias.data[mask]
-
 
             # if epoch % 200 == 0:
             #     print(f'Epoch: {epoch} Loss: {loss.item()}')

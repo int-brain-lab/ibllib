@@ -90,7 +90,6 @@ class TestModels(unittest.TestCase):
         bases = glm.full_rcos(self.kernlen, 10, nglm.binf)
         nglm.add_covariate_timing('stim', 'stimOn_times', bases)
         nglm.compile_design_matrix()
-        nglm.bin_spike_trains()
         skl_nglm = deepcopy(nglm)
 
         # Test the 'minimize' fit method first
@@ -122,7 +121,7 @@ class TestModels(unittest.TestCase):
         perc_errors = np.abs((recovered_stimk / subsamp) - 1)
         wmean_err = np.sum(error_weights * perc_errors)
         self.assertTrue(wmean_err < 0.05,
-                        r"Mean error in simple timing kernel recovery is over 10% in GLM with"
+                        r"Mean error in simple timing kernel recovery is over 5% in GLM with"
                         " sklearn deviance-based optimization.")
 
 

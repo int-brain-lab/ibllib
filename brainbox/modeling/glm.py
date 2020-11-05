@@ -723,8 +723,8 @@ class NeuralGLM:
                         coefs, intercepts, variances = self._fit_pytorch(traindm, trainbinned,
                                                                          cells=currcells,
                                                                          retvar=retvar,
-                                                                         epochs=epochs, 
-                                                                         optim=optim, lr=lr)                                                       
+                                                                         epochs=epochs,
+                                                                         optim=optim, lr=lr)
                     else:
                         biasdm = np.pad(traindm.copy(), ((0, 0), (1, 0)), 'constant',
                                         constant_values=1)
