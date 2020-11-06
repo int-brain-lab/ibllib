@@ -24,6 +24,7 @@ import logging
 import numpy as np
 import scipy.ndimage.filters as filters
 import scipy.stats as stats
+import pandas as pd
 
 from phylib.stats import correlograms
 import brainbox as bb
@@ -35,20 +36,20 @@ _logger = logging.getLogger('ibllib')
 
 # Parameters to be used in `quick_unit_metrics`
 METRICS_PARAMS = {
-    'presence_window': 10,
-    'refractory_period': 0.0015,
-    'min_isi': 0.0001,
-    'spks_per_bin_for_missed_spks_est': 10,
-    'std_smoothing_kernel_for_missed_spks_est': 4,
-    'min_num_bins_for_missed_spks_est': 50,
-    'bin_size': 0.25,
-    'RPslide_thresh': 0.1,
     'acceptable_contamination': 0.1,
-    'nc_quartile_length': 0.2,
+    'bin_size': 0.25,
+    'med_amp_thresh': 50,
+    'min_isi': 0.0001,
+    'min_num_bins_for_missed_spks_est': 50,
     'nc_bins': 100,
     'nc_n_low_bins': 2,
+    'nc_quartile_length': 0.2,
     'nc_thresh': 20,
-    'med_amp_thresh': 50
+    'presence_window': 10,
+    'refractory_period': 0.0015,
+    'RPslide_thresh': 0.1,
+    'spks_per_bin_for_missed_spks_est': 10,
+    'std_smoothing_kernel_for_missed_spks_est': 4,
 }
 
 
@@ -602,7 +603,7 @@ def ptp_over_noise(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='i
     return ptp_sigma
 
 
-def contamination_est(ts, rp=0.002):
+def contamination(ts, rp=0.002):
     """
     An estimate of the contamination of the unit (i.e. a pseudo false positive measure) based on
     the number of spikes, number of isi violations, and time between the first and last spike.
@@ -642,7 +643,7 @@ def contamination_est(ts, rp=0.002):
     return ce
 
 
-def contamination_est2(ts, min_time, max_time, rp=0.002, min_isi=0.0001):
+def contamination_alt(ts, min_time, max_time, rp=0.002, min_isi=0.0001):
     """
     An estimate of the contamination of the unit (i.e. a pseudo false positive measure) based on
     the number of spikes, number of isi violations, and time between the first and last spike.
@@ -700,7 +701,7 @@ def contamination_est2(ts, min_time, max_time, rp=0.002, min_isi=0.0001):
     return ce, num_violations
 
 
-def max_acceptable_cont(FR, RP, rec_duration, acceptableCont, thresh):
+def _max_acceptable_cont(FR, RP, rec_duration, acceptableCont, thresh):
     """
     Function to compute the maximum acceptable refractory period contamination
         called during slidingRP_viol
@@ -737,7 +738,7 @@ def slidingRP_viol(ts, bin_size=0.25, thresh=0.1, acceptThresh=0.1):
         The size of binning for the autocorrelogram.
     thresh : float
         Spike rate used to generate poisson distribution (to compute maximum
-              acceptable contamination, see max_acceptable_cont)
+              acceptable contamination, see _max_acceptable_cont)
     acceptThresh : float
         The fraction of contamination we are willing to accept (default value
               set to 0.1, or 10% contamination)
@@ -787,7 +788,7 @@ def slidingRP_viol(ts, bin_size=0.25, thresh=0.1, acceptThresh=0.1):
         # compute fr based on the  mean of bin_count_normalized from 1 to 2 s
         # instead of as before (len(ts)/recDur) for a better estimate
         fr = np.sum(bin_count_normalized[num_bins_1s:num_bins_2s]) / num_bins_1s
-        mfunc = np.vectorize(max_acceptable_cont)
+        mfunc = np.vectorize(_max_acceptable_cont)
         # compute the maximum allowed number of spikes per testing bin
         m = mfunc(fr, bTest, recDur, fr * acceptThresh, thresh)
         # did the unit pass (resulting number of spikes less than maximum
@@ -838,12 +839,11 @@ def noise_cutoff(amps, quartile_length=.2, n_bins=100, n_low_bins=2):
                                              n_bins=100, n_low_bins=2)
     """
 
-    if(len(amps) > 1):
+    if amps.size > 1:
         bins_list = np.linspace(0, np.max(amps), n_bins)
         n, bins = np.histogram(amps, bins=bins_list)
         dx = np.diff(n)
         idx_nz = np.nonzero(dx)  # indices of nonzeros
-        high_quartile = 1 - quartile_length
         idx_peak = np.argmax(n)
         length_top_half = idx_nz[0][-1] - idx_peak
         high_quartile = 1 - (2 * quartile_length)
@@ -926,27 +926,30 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         >>> r = bb.metrics.quick_unit_metrics(cluster_ids, ts, amps, depths)
     """
 
-    cluster_ids = np.arange(np.max(spike_clusters) + 1)
+    cluster_ids = np.unique(spike_clusters)
     nclust = cluster_ids.size
-    r = Bunch({
-        'cluster_id': cluster_ids,
-        'contamination_est': np.full((nclust,), np.nan),
-        'contamination_est2': np.full((nclust,), np.nan),
-        'cum_amp_drift': np.full((nclust,), np.nan),
-        'cum_depth_drift': np.full((nclust,), np.nan),
-        'firing_rate': np.full((nclust,), np.nan),
-        'frac_isi_viol': np.full((nclust,), np.nan),
-        'max_amp_drift': np.full((nclust,), np.nan),
-        'max_depth_drift': np.full((nclust,), np.nan),
-        'missed_spikes_est': np.full((nclust,), np.nan),
-        'num_spikes': np.full((nclust,), np.nan),
-        'presence_ratio': np.full((nclust,), np.nan),
-        'presence_ratio_std': np.full((nclust,), np.nan),
-        'slidingRP_viol': np.full((nclust,), np.nan),
-        'noise_cutoff': np.full((nclust,), np.nan),
-        # could add 'epoch_name' in future:
-        # 'epoch_name': np.zeros(nclust, dtype='object'),
-    })
+
+    metrics_list = [
+        'cluster_id',
+        'amp_max_V',
+        'amp_min_V',
+        'amp_median_V',
+        'amp_std_dB',
+        'contamination',
+        'contamination_alt',
+        'drift_average',
+        'drift_cumulative',
+        'frac_isi_viol',
+        'missed_spikes_est',
+        'noise_cutoff',
+        'num_spikes',
+        'presence_ratio',
+        'presence_ratio_std',
+        'slidingRP_viol',
+        ]
+
+    r = Bunch({k: np.full((nclust,), np.nan) for k in metrics_list})
+    r['cluster_id'] = cluster_ids
 
     # vectorized computation of basic metrics such as presence ratio and firing rate
     tmin = spike_times[0]
@@ -958,6 +961,16 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
     r.presence_ratio_std = np.std(presence_ratio, axis=1)
     r.num_spikes = np.sum(presence_ratio, axis=1)
     r.firing_rate = r.num_spikes / (tmax - tmin)
+
+    # computing amplitude statistical indicators
+    camp = pd.DataFrame(np.c_[spike_amps, 20 * np.log10(spike_amps), spike_clusters],
+                        columns=['amps', 'log_amps', 'clusters'])
+    camp = camp.groupby('clusters')
+    assert np.all(camp.clusters.unique() == r['cluster_id'])
+    r.min_amp = np.array(camp['amps'].min())
+    r.max_amp = np.array(camp['amps'].max())
+    r.med_amp = np.array(10 ** (camp['log_amps'].median() / 20))  # this is the geometric median
+    r.std_amp_dB = np.array(camp['log_amps'].median())
 
     # loop over each cluster to compute the rest of the metrics
     for ic in np.arange(nclust):

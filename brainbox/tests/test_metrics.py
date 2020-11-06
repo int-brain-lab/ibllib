@@ -6,15 +6,17 @@ REC_LEN_SECS = 1000
 fr = 200
 
 
-def multiple_spike_trains(firing_rates=None, rec_len_secs=1000):
+def multiple_spike_trains(firing_rates=None, rec_len_secs=1000, cluster_ids=None):
     """
 
-    :param firing_rates:
-    :param rec_len_secs:
+    :param firing_rates: list or np.array of firing rates (spikes per second)
+    :param rec_len_secs: recording length in seconds
     :return: spike_times, spike_amps, spike_clusters
     """
     if firing_rates is None:
         firing_rates = np.random.randint(150, 600, 10)
+    if cluster_ids is None:
+        clusters_ids = np.arange(firing_rates.size)
     st = np.empty(0)
     sa = np.empty(0)
     sc = np.empty(0)
@@ -22,7 +24,7 @@ def multiple_spike_trains(firing_rates=None, rec_len_secs=1000):
         t, a = single_spike_train(firing_rate=firing_rate, rec_len_secs=rec_len_secs)
         st = np.r_[st, t]
         sa = np.r_[sa, a]
-        sc = np.r_[sc, np.zeros(t.size, dtype=np.int32) + i]
+        sc = np.r_[sc, np.zeros(t.size, dtype=np.int32) + cluster_ids[i]]
 
     ordre = st.argsort()
     st = st[ordre]
@@ -51,10 +53,10 @@ def single_spike_train(firing_rate=200, rec_len_secs=1000):
 
 
 def test_clusters_metrics():
-    t, a, c = multiple_spike_trains(firing_rates=[3, 200, 259, 567], rec_len_secs=1000)
+    t, a, c = multiple_spike_trains(firing_rates=[3, 200, 259, 567], rec_len_secs=1000,
+                                    cluster_ids=[0, 1, 3, 4])
     dfm = quick_unit_metrics(c, t, a, t * 0)
 
     # probe_path = "/datadisk/FlatIron/mainenlab/Subjects/ZFM-01577/2020-11-04/001/alf/probe00"
     # spikes = alf.io.load_object(probe_path, 'spikes')
     # quick_unit_metrics(spikes['clusters'], spikes['times'], spikes['amps'], spikes['depths'])
-
