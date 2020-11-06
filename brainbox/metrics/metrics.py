@@ -623,13 +623,13 @@ def contamination(ts, rp=0.002):
 
     See Also
     --------
-    contamination_est2
+    contamination_alt
 
     Examples
     --------
     1) Compute contamination estimate for unit 1.
         >>> ts = units_b['times']['1']
-        >>> ce = bb.metrics.contamination_est(ts)
+        >>> ce = bb.metrics.contamination(ts)
     """
 
     # Get number of spikes, number of isi violations, and time from first to final spike.
@@ -676,14 +676,14 @@ def contamination_alt(ts, min_time, max_time, rp=0.002, min_isi=0.0001):
 
     See Also
     --------
-    contamination_est
+    contamination
 
     Examples
     --------
     1) Compute contamination estimate for unit 1, with a minimum isi for counting duplicate
     spikes of 0.1 ms.
         >>> ts = units_b['times']['1']
-        >>> ce = bb.metrics.contamination_est2(ts, min_isi=0.0001)
+        >>> ce = bb.metrics.contamination_alt(ts, min_isi=0.0001)
     """
 
     duplicate_spikes = np.where(np.diff(ts) <= min_isi)[0]
@@ -751,7 +751,7 @@ def slidingRP_viol(ts, bin_size=0.25, thresh=0.1, acceptThresh=0.1):
 
     See Also
     --------
-    contamination_est
+    contamination
 
     Examples
     --------
@@ -931,21 +931,20 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
 
     metrics_list = [
         'cluster_id',
-        'amp_max_V',
-        'amp_min_V',
-        'amp_median_V',
+        'amp_max',
+        'amp_min',
+        'amp_median',
         'amp_std_dB',
         'contamination',
         'contamination_alt',
-        'drift_average',
-        'drift_cumulative',
+        'drift',
         'frac_isi_viol',
         'missed_spikes_est',
         'noise_cutoff',
-        'num_spikes',
         'presence_ratio',
         'presence_ratio_std',
         'slidingRP_viol',
+        'spike_count',
         ]
 
     r = Bunch({k: np.full((nclust,), np.nan) for k in metrics_list})
@@ -959,18 +958,18 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
                                 ybin=cluster_ids, xlim=[tmin, tmax])[0]
     r.presence_ratio = np.sum(presence_ratio > 0, axis=1) / presence_ratio.shape[1]
     r.presence_ratio_std = np.std(presence_ratio, axis=1)
-    r.num_spikes = np.sum(presence_ratio, axis=1)
-    r.firing_rate = r.num_spikes / (tmax - tmin)
+    r.spike_count = np.sum(presence_ratio, axis=1)
+    r.firing_rate = r.spike_count / (tmax - tmin)
 
     # computing amplitude statistical indicators
     camp = pd.DataFrame(np.c_[spike_amps, 20 * np.log10(spike_amps), spike_clusters],
                         columns=['amps', 'log_amps', 'clusters'])
     camp = camp.groupby('clusters')
     assert np.all(camp.clusters.unique() == r['cluster_id'])
-    r.min_amp = np.array(camp['amps'].min())
-    r.max_amp = np.array(camp['amps'].max())
-    r.med_amp = np.array(10 ** (camp['log_amps'].median() / 20))  # this is the geometric median
-    r.std_amp_dB = np.array(camp['log_amps'].median())
+    r.amp_min = np.array(camp['amps'].min())
+    r.amp_max = np.array(camp['amps'].max())
+    r.amp_median = np.array(10 ** (camp['log_amps'].median() / 20))  # this is the geometric median
+    r.amp_std_dB = np.array(camp['log_amps'].std())
 
     # loop over each cluster to compute the rest of the metrics
     for ic in np.arange(nclust):
@@ -980,11 +979,12 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
             continue
         ts = spike_times[ispikes]
         amps = spike_amps[ispikes]
+        depths = spike_depths[ispikes]
 
         # compute metrics
         r.frac_isi_viol[ic], _, _ = isi_viol(ts, rp=params['refractory_period'])
-        r.contamination_est[ic] = contamination_est(ts, rp=params['refractory_period'])
-        r.contamination_est2[ic], _ = contamination_est2(
+        r.contamination[ic] = contamination(ts, rp=params['refractory_period'])
+        r.contamination_alt[ic], _ = contamination_alt(
             ts, tmin, tmax, rp=params['refractory_period'], min_isi=params['min_isi'])
         r.slidingRP_viol[ic] = slidingRP_viol(ts,
                                               bin_size=params['bin_size'],
@@ -998,10 +998,9 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
             amps, spks_per_bin=params['spks_per_bin_for_missed_spks_est'],
             sigma=params['std_smoothing_kernel_for_missed_spks_est'],
             min_num_bins=params['min_num_bins_for_missed_spks_est'])
-        # max_amp , med_amp, min_amp, std_amp should all be vectorized
-        # cumulative_drift : sum(abs( low_pass( diff(depths)  / diff(time) )))
-        # average_drift: median( low_pass( diff(depths)  / diff(time) ))
 
+        # wonder if there is a need to low-cut this
+        r.drift[ic] = np.sum(np.abs(np.diff(depths))) / (tmax - tmin) * 3600
     return r
 
 

@@ -55,7 +55,12 @@ def single_spike_train(firing_rate=200, rec_len_secs=1000):
 def test_clusters_metrics():
     t, a, c = multiple_spike_trains(firing_rates=[3, 200, 259, 567], rec_len_secs=1000,
                                     cluster_ids=[0, 1, 3, 4])
-    dfm = quick_unit_metrics(c, t, a, t * 0)
+    d = np.sin(2 * np.pi * c / 1000 * t) * 100  # sinusoidal shift where cluster id drives period
+    dfm = quick_unit_metrics(c, t, a, d)
+
+    assert np.allclose(dfm['amp_median'] / np.exp(5.5) * 1e6, 1, rtol=1.1)
+    assert np.allclose(dfm['amp_std_dB'] / 20 * np.log10(np.exp(0.5)), 1, rtol=1.1)
+    assert np.allclose(dfm['drift'], np.array([0, 1, 3, 4]) * 100 * 4 * 3.6, rtol=1.1)
 
     # probe_path = "/datadisk/FlatIron/mainenlab/Subjects/ZFM-01577/2020-11-04/001/alf/probe00"
     # spikes = alf.io.load_object(probe_path, 'spikes')
