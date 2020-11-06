@@ -474,7 +474,7 @@ def glob_ephys_files(session_path, suffix='.meta', recursive=True, bin_exists=Tr
 
     recurse = '**/' if recursive else ''
     ephys_files = []
-    for raw_ephys_file in Path(session_path).glob(f'{recurse}*.ap{suffix}'):
+    for raw_ephys_file in Path(session_path).glob(f'{recurse}*.ap*{suffix}'):
         raw_ephys_apfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + '.*bin'), None)
         if not raw_ephys_apfile and bin_exists:
             continue
@@ -490,7 +490,7 @@ def glob_ephys_files(session_path, suffix='.meta', recursive=True, bin_exists=Tr
         ephys_files[-1].label = get_label(raw_ephys_apfile)
         ephys_files[-1].path = raw_ephys_apfile.parent
     # for 3b probes, need also to get the nidq dataset type
-    for raw_ephys_file in Path(session_path).rglob(f'{recurse}*.nidq{suffix}'):
+    for raw_ephys_file in Path(session_path).rglob(f'{recurse}*.nidq*{suffix}'):
         raw_ephys_nidqfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + '.*bin'), None)
         if not bin_exists:
             raw_ephys_nidqfile = raw_ephys_file.with_suffix('.bin')
