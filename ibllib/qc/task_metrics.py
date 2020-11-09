@@ -477,30 +477,31 @@ def check_wheel_move_before_feedback(data, **_):
     return metric, passed
 
 
-def check_wheel_move_during_closed_loop(data, wheel_gain=None, **_):
-    """ Check that the wheel moves by at least 35 degrees during the closed-loop period
+def _wheel_move_during_closed_loop(re_ts, re_pos, data, wheel_gain=None, tol=1, **_):
+    """ Check that the wheel moves by approximately 35 degrees during the closed-loop period
     on trials where a feedback (error sound or valve) is delivered.
 
     Metric: M = abs(w_resp - w_t0) - threshold_displacement, where w_resp = position at response
         time, w_t0 = position at go cue time, threshold_displacement = displacement required to
         move 35 visual degrees
-    Criterion: displacement < 1 visual degree
+    Criterion: displacement < tol visual degree
     Units: degrees angle of wheel turn
 
-    :param data: dict of trial data with keys ('wheel_timestamps', 'wheel_position', 'choice',
-    'intervals', 'goCueTrigger_times', 'response_times', 'feedback_times', 'position')
+    :param re_ts: extarcted wheel timestamps in seconds
+    :param re_pos: extracted wheel positions in radians
+    :param data: a dict with the keys (goCueTrigger_times, response_times, feedback_times,
+    position, choice, intervals)
     :param wheel_gain: the 'STIM_GAIN' task setting
+    :param tol: the criterion in visual degrees
     """
     if wheel_gain is None:
         _log.warning("No wheel_gain input in function call, returning None")
-        return None
+        return None, None
 
     # Get tuple of wheel times and positions over each trial's closed-loop period
-    traces = traces_by_trial(
-        data["wheel_timestamps"],
-        data["wheel_position"],
-        start=data["goCueTrigger_times"],
-        end=data["response_times"],
+    traces = traces_by_trial(re_ts, re_pos,
+                             start=data["goCueTrigger_times"],
+                             end=data["response_times"]
     )
 
     metric = np.zeros_like(data["feedback_times"])
@@ -509,8 +510,8 @@ def check_wheel_move_during_closed_loop(data, wheel_gain=None, **_):
         t, pos = trial
         if pos.size != 0:
             # Find the position of the preceding sample and subtract it
-            idx = np.abs(data["wheel_timestamps"] - t[0]).argmin() - 1
-            origin = data["wheel_position"][idx]
+            idx = np.abs(re_ts - t[0]).argmin() - 1
+            origin = re_pos[idx]
             metric[i] = np.abs(pos - origin).max()
 
     # Load wheel_gain and thresholds for each trial
@@ -521,25 +522,68 @@ def check_wheel_move_during_closed_loop(data, wheel_gain=None, **_):
     criterion = cm_to_rad(s_mm * 1e-1)  # convert abs displacement to radians (wheel pos is in rad)
     metric = metric - criterion  # difference should be close to 0
     rad_per_deg = cm_to_rad(1 / wheel_gain * 1e-1)
-    passed = (np.abs(metric) < rad_per_deg).astype(np.float)  # less than 1 visual degree off
+    passed = (np.abs(metric) < rad_per_deg * tol).astype(np.float)  # less than 1 visual degree off
     metric[data["choice"] == 0] = passed[data["choice"] == 0] = np.nan  # except no-go trials
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
 
+def check_wheel_move_during_closed_loop(data, wheel_gain=None, **_):
+    """ Check that the wheel moves by approximately 35 degrees during the closed-loop period
+    on trials where a feedback (error sound or valve) is delivered.
+
+    Metric: M = abs(w_resp - w_t0) - threshold_displacement, where w_resp = position at response
+        time, w_t0 = position at go cue time, threshold_displacement = displacement required to
+        move 35 visual degrees
+    Criterion: displacement < 3 visual degrees
+    Units: degrees angle of wheel turn
+
+    :param data: dict of trial data with keys ('wheel_timestamps', 'wheel_position', 'choice',
+    'intervals', 'goCueTrigger_times', 'response_times', 'feedback_times', 'position')
+    :param wheel_gain: the 'STIM_GAIN' task setting
+    """
+    # Get the Bpod extracted wheel data
+    timestamps = data['wheel_timestamps']
+    position = data['wheel_position']
+
+    return _wheel_move_during_closed_loop(timestamps, position, data, wheel_gain, tol=3)
+
+
+def check_wheel_move_during_closed_loop_bpod(data, wheel_gain=None, **_):
+    """ Check that the wheel moves by approximately 35 degrees during the closed-loop period
+    on trials where a feedback (error sound or valve) is delivered.  This check uses the Bpod
+    wheel data (measured at a lower resolution) with a stricter tolerance (1 visual degree).
+
+    Metric: M = abs(w_resp - w_t0) - threshold_displacement, where w_resp = position at response
+        time, w_t0 = position at go cue time, threshold_displacement = displacement required to
+        move 35 visual degrees
+    Criterion: displacement < 1 visual degree
+    Units: degrees angle of wheel turn
+
+    :param data: dict of trial data with keys ('wheel_timestamps(_bpod)', 'wheel_position(_bpod)',
+    'choice', 'intervals', 'goCueTrigger_times', 'response_times', 'feedback_times', 'position')
+    :param wheel_gain: the 'STIM_GAIN' task setting
+    """
+    # Get the Bpod extracted wheel data
+    timestamps = data.get('wheel_timestamps_bpod', data['wheel_timestamps'])
+    position = data.get('wheel_position_bpod', data['wheel_position'])
+
+    return _wheel_move_during_closed_loop(timestamps, position, data, wheel_gain, tol=1)
+
+
 def check_wheel_freeze_during_quiescence(data, **_):
-    """ Check that the wheel does not move more than 2 ticks each direction for at least 0.2 + 0.2-0.6
-    amount of time (quiescent period; exact value in bpod['quiescence']) before the go cue tone.
+    """ Check that the wheel does not move more than 2 degrees in each direction during the
+    quiescence interval before the stimulus appears.
 
     Metric: M = |max(W) - min(W)| where W is wheel pos over quiescence interval
-    interval = [goCueTrigger_time - quiescent_duration, goCueTrigger_time]
+    interval = [stimOnTrigger_times - quiescent_duration, stimOnTrigger_times]
     Criterion: M < 2 degrees
     Units: degrees angle of wheel turn
 
     :param data: dict of trial data with keys ('wheel_timestamps', 'wheel_position', 'quiescence',
     'intervals', 'stimOnTrigger_times')
     """
-    assert np.all(np.diff(data["wheel_timestamps"]) > 0)
+    assert np.all(np.diff(data["wheel_timestamps"]) >= 0)
     assert data["quiescence"].size == data["stimOnTrigger_times"].size
     # Get tuple of wheel times and positions over each trial's quiescence period
     qevt_start_times = data["stimOnTrigger_times"] - data["quiescence"]
