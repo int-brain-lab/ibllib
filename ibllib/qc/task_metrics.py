@@ -501,8 +501,7 @@ def _wheel_move_during_closed_loop(re_ts, re_pos, data, wheel_gain=None, tol=1, 
     # Get tuple of wheel times and positions over each trial's closed-loop period
     traces = traces_by_trial(re_ts, re_pos,
                              start=data["goCueTrigger_times"],
-                             end=data["response_times"]
-    )
+                             end=data["response_times"])
 
     metric = np.zeros_like(data["feedback_times"])
     # For each trial find the absolute displacement
