@@ -44,14 +44,23 @@ class BaseExtractor(abc.ABC):
 
         def _write_to_disk(file_path, data):
             """Implements different save calls depending on file extension"""
+            csv_separators = {
+                ".csv": ",",
+                ".ssv": " ",
+                ".tsv": "\t",
+            }
             file_path = Path(file_path)
             if file_path.suffix == ".npy":
                 np.save(file_path, data)
-            elif file_path.suffix == ".parquet":
+            elif file_path.suffix in [".parquet", ".pqt"]:
                 if not isinstance(data, pd.DataFrame):
                     log.error("Data is not a panda's DataFrame object")
                     raise TypeError("Data is not a panda's DataFrame object")
                 data.to_parquet(file_path)
+            elif file_path.suffix in [".csv", ".ssv", ".tsv"]:
+                sep = csv_separators[file_path.suffix]
+                data.to_csv(file_path, sep=sep)
+                # np.savetxt(file_path, data, delimiter=sep)
             else:
                 log.error(f"Don't know how to save {file_path.suffix} files yet")
 
