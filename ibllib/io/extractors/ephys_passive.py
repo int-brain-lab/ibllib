@@ -375,7 +375,7 @@ def extract_passive_periods(
         index=["start", "stop"],
         columns=["passiveProtocol", "spontaneousActivity", "RFM", "taskReplay"],
     )
-    return passivePeriods_df  # _ibl_passivePeriods.intervals_table.parquet
+    return passivePeriods_df  # _ibl_passivePeriods.intervals_table.csv
 
 
 def extract_rfmapping(
@@ -444,7 +444,7 @@ def extract_task_replay(
     return (
         passiveGabor_df,
         passiveStims_df,
-    )  # _ibl_passiveGabor.table.parquet, _ibl_passiveStims.times_table.parquet
+    )  # _ibl_passiveGabor.table.csv, _ibl_passiveStims.times_table.csv
 
 
 def extract_replay_debug(
@@ -495,17 +495,17 @@ def extract_replay_debug(
     return (
         passiveGabor_df,
         passiveStims_df,
-    )  # _ibl_passiveGabor.table.parquet, _ibl_passiveStims.table.parquet
+    )  # _ibl_passiveGabor.table.csv, _ibl_passiveStims.table.csv
 
 
 # Maan passiveCWe xtractor, calls all others
 class PassiveChoiceWorld(BaseExtractor):
     save_names = (
-        "_ibl_passivePeriods.intervals_table.parquet",
+        "_ibl_passivePeriods.intervals_table.csv",
         "_ibl_passiveRFM.frames.npy",
         "_ibl_passiveRFM.times.npy",
-        "_ibl_passiveGabor.table.parquet",
-        "_ibl_passiveStims.table.parquet",
+        "_ibl_passiveGabor.table.csv",
+        "_ibl_passiveStims.table.csv",
     )
     var_names = (
         "passivePeriods_df",
@@ -555,11 +555,11 @@ class PassiveChoiceWorld(BaseExtractor):
             plot_stims_times(passiveStims_df, ax=ax)
 
         return (
-            passivePeriods_df,  # _ibl_passivePeriods.intervals_table.parquet
+            passivePeriods_df,  # _ibl_passivePeriods.intervals_table.csv
             passiveRFM_frames,  # _ibl_passiveRFM.frames.npy,
             passiveRFM_times,  # _ibl_passiveRFM.times.npy
-            passiveGabor_df,  # _ibl_passiveGabor.table.parquet,
-            passiveStims_df,  # _ibl_passiveStims.table.parquet
+            passiveGabor_df,  # _ibl_passiveGabor.table.csv,
+            passiveStims_df,  # _ibl_passiveStims.table.csv
         )
 
 
