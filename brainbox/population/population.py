@@ -295,6 +295,11 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
     pop_vector, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters, times)
     pop_vector = np.rot90(pop_vector)
 
+    # Exclude last trial if the number of trials is even and phase shuffling
+    if (phase_rand is True) & (event_groups.shape[0] % 2 == 0):
+        event_groups = event_groups[:-1]
+        pop_vector = pop_vector[:-1]
+
     # Initialize classifier
     if classifier == 'forest':
         clf = RandomForestClassifier(n_estimators=100)
