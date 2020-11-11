@@ -289,7 +289,7 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
     # Get matrix of all neuronal responses
     times = np.column_stack(((event_times - pre_time), (event_times + post_time)))
     pop_vector, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters, times)
-    pop_vector = np.rot90(pop_vector)
+    pop_vector = pop_vector.T
 
     # Initialize classifier
     if classifier == 'forest':
