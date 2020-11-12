@@ -19,7 +19,6 @@ from numpy.matlib import repmat
 from scipy.optimize import minimize
 from scipy.special import xlogy
 from tqdm import tqdm
-
 import torch
 from brainbox.modeling.poissonGLM import PoissonGLM
 
@@ -491,7 +490,7 @@ class NeuralGLM:
                 warn(f'Fitting did not converge for some units: {nonconverged}')
         return coefs, intercepts, variances
 
-    def _fit_pytorch(self, dm, binned, cells=None, retvar=False, epochs=500, optim='lbfgs',
+    def _fit_pytorch(self, dm, binned, cells=None, retvar=False, epochs=500, optim='adam',
                      lr=1.0):
         """
         Fit the GLM using PyTorch on GPU(s). Regularization has not been applied yet.
@@ -591,7 +590,7 @@ class NeuralGLM:
             variances.at[cell] = wvar[1:]
         return coefs, intercepts, variances
 
-    def fit(self, method='sklearn', alpha=0, singlepar_var=False, epochs=500, optim='lbfgs',
+    def fit(self, method='sklearn', alpha=0, singlepar_var=False, epochs=6000, optim='adam',
             lr=1.0):
         """
         Fit the current set of binned spikes as a function of the current design matrix. Requires
@@ -630,6 +629,8 @@ class NeuralGLM:
                                  'neuroglm.compile_design_matrix() before fitting.')
         if method not in ('sklearn', 'minimize', 'pytorch'):
             raise ValueError('Method must be \'minimize\' or \'sklearn\' or \'pytorch\'')
+        if optim != 'adam':
+            epochs = 500
         # TODO: Make this optionally parallel across multiple cores of CPU
         # Initialize pd Series to store output coefficients and intercepts for fits
         trainmask = np.isin(self.trlabels, self.traininds).flatten()  # Mask for training data
