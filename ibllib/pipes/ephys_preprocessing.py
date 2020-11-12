@@ -177,7 +177,7 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
             probe_out_path = self.session_path.joinpath('alf', label)
             probe_out_path.mkdir(parents=True, exist_ok=True)
             spikes.ks2_to_alf(
-                ks2_dir, bin_dir=ap_file.parent, out_path=probe_out_path,
+                ks2_dir, bin_path=ap_file.parent, out_path=probe_out_path,
                 bin_file=ap_file, ampfactor=self._sample2v(ap_file))
             out, _ = spikes.sync_spike_sorting(ap_file=ap_file, out_path=probe_out_path)
             out_files.extend(out)
