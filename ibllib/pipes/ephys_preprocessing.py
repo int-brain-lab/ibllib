@@ -173,7 +173,7 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
         ap_files = [(ef.get('ap'), ef.get('label')) for ef in efiles if 'ap' in ef.keys()]
         out_files = []
         for ap_file, label in ap_files:
-            ks2_dir = self.run_ks2(ap_file)  # runs ks2, skips if it already ran
+            ks2_dir = self._run_ks2(ap_file)  # runs ks2, skips if it already ran
             probe_out_path = self.session_path.joinpath('alf', label)
             probe_out_path.mkdir(parents=True, exist_ok=True)
             spikes.ks2_to_alf(
