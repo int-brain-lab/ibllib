@@ -88,41 +88,9 @@ class TestList(unittest.TestCase):
         dt = one.list(eid)  # returns dataset-type
         self.assertTrue(isinstance(dt, list))
         self.assertEqual(29, len(dt))
-        self.assertEqual('eye.xyPos', dt[0])
 
         dt = one.list(eid, details=True)  # returns dict of dataset-types
-        self.assertTrue(isinstance(dt, dict))
-        self.assertEqual(list(dt.keys()), ['alf'])
-        self.assertEqual('eye.xyPos', dt['alf'][0])
-
-        dt = one.list(eid, 'datasets')  # returns dataset
-        self.assertEqual('eye.xyPos.npy', dt[0])
-
-        dt = one.list()  # returns list of dataset-types
-        self.assertTrue(isinstance(dt, list))
-        self.assertIn('spikes.times', dt)
-
-        dt = one.list(details=True)
-        self.assertTrue(isinstance(dt, list))
         self.assertTrue(isinstance(dt[0], dict))
-
-        dt2 = one.list(keyword='datasets', details=True)
-        self.assertEqual(dt, dt2)
-
-    def test_list_error(self):
-        a = 0
-        eid = self.eid
-        try:
-            one.list(eid, keyword='tutu')  # throws an error
-        except ValueError:
-            a = 1
-            pass
-        self.assertTrue(a == 1)
-
-    def test_help(self):
-        dtypes = one.list(None, keyword='dataset-types')
-        one.help(dtypes[0])
-        one.help([])
 
 
 class TestLoad(unittest.TestCase):
