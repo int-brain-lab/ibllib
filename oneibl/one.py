@@ -7,7 +7,6 @@ import fnmatch
 import re
 from functools import wraps
 from pathlib import Path, PurePath
-from collections import defaultdict
 from typing import Any, Sequence, Union, Optional, List, Dict
 from uuid import UUID
 
