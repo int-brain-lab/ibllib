@@ -241,7 +241,6 @@ def unit_metrics_ks2(ks2_path=None, m=None, save=True):
 
     # compute labels based on metrics
     df_labels = pd.DataFrame(unit_labels(m.spike_clusters, m.spike_times, m.amplitudes))
-    # add labels to metrics dataframe
     r = r.set_index('cluster_id', drop=False).join(df_labels.set_index('cluster_id'))
 
     #  include the ks2 cluster contamination if `cluster_ContamPct` file exists

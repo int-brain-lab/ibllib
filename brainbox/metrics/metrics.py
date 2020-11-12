@@ -603,7 +603,7 @@ def ptp_over_noise(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='i
     return ptp_sigma
 
 
-def contamination(ts, rp=0.002):
+def contamination_ks2(ts, rp=0.002):
     """
     An estimate of the contamination of the unit (i.e. a pseudo false positive measure) based on
     the number of spikes, number of isi violations, and time between the first and last spike.
@@ -643,7 +643,7 @@ def contamination(ts, rp=0.002):
     return ce
 
 
-def contamination_alt(ts, min_time, max_time, rp=0.002, min_isi=0.0001):
+def contamination(ts, min_time, max_time, rp=0.002, min_isi=0.0001):
     """
     An estimate of the contamination of the unit (i.e. a pseudo false positive measure) based on
     the number of spikes, number of isi violations, and time between the first and last spike.
@@ -683,7 +683,7 @@ def contamination_alt(ts, min_time, max_time, rp=0.002, min_isi=0.0001):
     1) Compute contamination estimate for unit 1, with a minimum isi for counting duplicate
     spikes of 0.1 ms.
         >>> ts = units_b['times']['1']
-        >>> ce = bb.metrics.contamination_alt(ts, min_isi=0.0001)
+        >>> ce = bb.metrics.contamination_ks2(ts, min_isi=0.0001)
     """
 
     duplicate_spikes = np.where(np.diff(ts) <= min_isi)[0]
@@ -936,7 +936,7 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         'amp_median',
         'amp_std_dB',
         'contamination',
-        'contamination_alt',
+        'contamination_ks2',
         'drift',
         'frac_isi_viol',
         'missed_spikes_est',
@@ -944,8 +944,8 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         'presence_ratio',
         'presence_ratio_std',
         'slidingRP_viol',
-        'spike_count',
-        ]
+        'spike_count'
+    ]
 
     r = Bunch({k: np.full((nclust,), np.nan) for k in metrics_list})
     r['cluster_id'] = cluster_ids
@@ -983,8 +983,8 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
 
         # compute metrics
         r.frac_isi_viol[ic], _, _ = isi_viol(ts, rp=params['refractory_period'])
-        r.contamination[ic] = contamination(ts, rp=params['refractory_period'])
-        r.contamination_alt[ic], _ = contamination_alt(
+        r.contamination_ks2[ic] = contamination_ks2(ts, rp=params['refractory_period'])
+        r.contamination[ic], _ = contamination(
             ts, tmin, tmax, rp=params['refractory_period'], min_isi=params['min_isi'])
         r.slidingRP_viol[ic] = slidingRP_viol(ts,
                                               bin_size=params['bin_size'],
