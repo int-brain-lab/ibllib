@@ -1,3 +1,6 @@
+### Release Notes 1.5.21: hotfix
+-   create local server tasks only on raw_session.flag
+
 ### Release Notes 1.5.20
 -   ephys alignment QC
 -   hotfix: ibl errors inherit Exception, not BaseException
