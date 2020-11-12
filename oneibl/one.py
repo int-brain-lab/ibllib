@@ -280,7 +280,7 @@ class OneAlyx(OneAbstract):
         print(out['description'])
 
     def list(self, eid: Optional[Union[str, Path, UUID]] = None, details=False
-             )-> Union[List, Dict[str, str]]:
+             ) -> Union[List, Dict[str, str]]:
         """
         From a Session ID, queries Alyx database for datasets related to a session.
 
@@ -363,7 +363,7 @@ class OneAlyx(OneAbstract):
         search_str = 'name__regex,' + dataset.replace('.', r'\.').replace('*', '.*')
         if collection and collection != 'all':
             search_str += ',collection__regex,' + collection.replace('*', '.*')
-        results = self.alyx.rest('datasets', 'list', session=eid, django=search_str)
+        results = self.alyx.rest('datasets', 'list', session=eid, django=search_str, exists=True)
 
         # Get filenames of returned ALF files
         collection_set = {x['collection'] for x in results}
