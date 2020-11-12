@@ -75,12 +75,12 @@ def plot_atlas(regions, values, ML=-1, AP=0, DV=-1, color_palette='Reds',
         all_regions = custom_region_list
 
     # Add values to brain region list
-    region_values = np.ones(ba.regions.acronym.shape) * (np.min(values) - 1)
+    region_values = np.ones(ba.regions.acronym.shape) * (np.min(values) - (np.max(values) + 1))
     for i, region in enumerate(regions):
         region_values[all_regions == region] = values[i]
 
     # Set 'void' to default white
-    region_values[0] = np.min(values) - 1
+    region_values[0] = np.min(values) - (np.max(values) + 1)
 
     # Get slices with fill values
     slice_sag = ba.slice(ML / 1000, axis=0, volume=ba.label)  # saggital
