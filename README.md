@@ -16,14 +16,8 @@ The library as currently 4 main modules:
 
 **Python Module**: Python 3.6 or higher, we develop on 3.7.
 
-## Documentation
-https://ibllib.readthedocs.io/en/latest/
-
-## Installation
-https://ibllib.readthedocs.io/en/latest/02_installation_python.html#
-
-## Demonstration
-https://ibllib.readthedocs.io/en/latest/_static/one_demo.html
+## Installation, documentation and examples
+https://docs.internationalbrainlab.org
 
 
 ## Contribution and development practices

@@ -517,7 +517,7 @@ class AlyxClient(metaclass=UniqueSingletons):
         values (uses the dict.update() method)
 
         Example:
-        one.alyx.json_field_update("sessions", "eid_str", "extended_qc" {"key": value})
+        one.alyx.json_field_update("sessions", "eid_str", "extended_qc", {"key": value})
 
         :param endpoint: endpoint to hit
         :type endpoint: str
