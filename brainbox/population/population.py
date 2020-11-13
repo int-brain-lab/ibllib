@@ -223,8 +223,8 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
         time (in seconds) preceding the event times
     post_time : float
         time (in seconds) following the event times
-    classifier : string
-        which decoder to use, options are:
+    classifier : string or sklearn object
+        which decoder to use, when it's a string options are:
             'bayes'         Naive Bayes
             'forest'        Random forest (with 100 trees)
             'regression'    Logistic regression
@@ -301,14 +301,17 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
         pop_vector = pop_vector[:-1]
 
     # Initialize classifier
-    if classifier == 'forest':
-        clf = RandomForestClassifier(n_estimators=100)
-    elif classifier == 'bayes':
-        clf = GaussianNB()
-    elif classifier == 'regression':
-        clf = LogisticRegression(solver='liblinear', multi_class='auto')
-    elif classifier == 'lda':
-        clf = LinearDiscriminantAnalysis()
+    if type(classifier) == str:
+        if classifier == 'forest':
+            clf = RandomForestClassifier(n_estimators=100)
+        elif classifier == 'bayes':
+            clf = GaussianNB()
+        elif classifier == 'regression':
+            clf = LogisticRegression(solver='liblinear', multi_class='auto')
+        elif classifier == 'lda':
+            clf = LinearDiscriminantAnalysis()
+    else:
+        clf = classifier
 
     # Pre-allocate variables
     acc = np.zeros(iterations)
