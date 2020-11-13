@@ -205,8 +205,24 @@ class EphysTrials(tasks.Task):
     priority = 90
     level = 1
 
+    def _behaviour_criterion(self):
+        """
+        Computes and update the behaviour criterion on Alyx
+        """
+        import alf.io
+        from brainbox.behavior import training
+
+        trials = alf.io.load_object(self.session_path.joinpath('alf'), 'trials')
+        good_enough = training.criterion_delay(
+            n_trials=trials['intervals'].shape[0],
+            perf_easy=training.compute_performance_easy(trials))
+        eid = self.one.eid_from_path(self.session_path)
+        self.one.alyx.json_field_update(
+            'sessions', eid, 'extended_qc', {'behavior': int(good_enough)})
+
     def _run(self):
         dsets, out_files = ephys_fpga.extract_all(self.session_path, save=True)
+        self._behaviour_criterion()
 
         # Run the task QC
         qc = TaskQC(self.session_path, one=self.one, log=_logger)
