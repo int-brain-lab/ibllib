@@ -224,9 +224,10 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
     post_time : float
         time (in seconds) following the event times
     classifier : string or sklearn object
-        which decoder to use, when it's a string options are:
+        which decoder to use, either input a scikit learn clf object directly or a string.
+        When it's a string options are (all classifiers are used with default options):
             'bayes'         Naive Bayes
-            'forest'        Random forest (with 100 trees)
+            'forest'        Random forest
             'regression'    Logistic regression
             'lda'           Linear Discriminant Analysis
     cross_validation : string
@@ -303,11 +304,11 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
     # Initialize classifier
     if type(classifier) == str:
         if classifier == 'forest':
-            clf = RandomForestClassifier(n_estimators=100)
+            clf = RandomForestClassifier()
         elif classifier == 'bayes':
             clf = GaussianNB()
         elif classifier == 'regression':
-            clf = LogisticRegression(solver='liblinear', multi_class='auto')
+            clf = LogisticRegression()
         elif classifier == 'lda':
             clf = LinearDiscriminantAnalysis()
     else:
