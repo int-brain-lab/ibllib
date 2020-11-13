@@ -11,7 +11,7 @@ from scipy import signal
 
 import alf.io
 from brainbox.core import Bunch
-from brainbox.metrics import quick_unit_metrics
+from brainbox.metrics import quick_unit_metrics, unit_labels
 from ibllib.ephys import sync_probes
 from ibllib.io import spikeglx, raw_data_loaders
 import ibllib.dsp as dsp
@@ -235,7 +235,13 @@ def unit_metrics_ks2(ks2_path=None, m=None, save=True):
     # create phylib `TemplateModel` if not given
     m = phy_model_from_ks2_path(ks2_path) if None else m
     # compute metrics and convert to `DataFrame`
-    r = pd.DataFrame(quick_unit_metrics(m.spike_clusters, m.spike_times, m.amplitudes, m.depths))
+    r = pd.DataFrame(quick_unit_metrics(m.spike_clusters, m.spike_times, m.amSplitudes, m.depths))
+    # TODO compute drift as a function of time here
+    # TODO compute metrics using sample waveforms here
+
+    # compute labels based on metrics
+    df_labels = pd.DataFrame(unit_labels(m.spike_clusters, m.spike_times, m.amplitudes))
+    r = r.set_index('cluster_id', drop=False).join(df_labels.set_index('cluster_id'))
 
     #  include the ks2 cluster contamination if `cluster_ContamPct` file exists
     file_contamination = ks2_path.joinpath('cluster_ContamPct.tsv')
