@@ -127,13 +127,23 @@ class TestTraining(unittest.TestCase):
                 self.trial_data = pickle.load(f)
         np.random.seed(0)
 
-    def test_concatenate_and_computations(self):
-        sess_dates = ['2020-08-25', '2020-08-24', '2020-08-21']
+    def _get_trials(self, sess_dates):
         trials_copy = copy.deepcopy(self.trial_data)
         trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
-        _ = [trials[k].pop('task_protocol') for k in trials.keys()]
-        trials_total = np.sum([len(trials[k]['contrastRight']) for k in trials.keys()])
+        task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
+        return trials, task_protocol
 
+    def test_psychometric_insufficient_data(self):
+        # the psychometric aggregate should return NaN when there is no data for a given contrast
+        trials, _ = self._get_trials(sess_dates=['2020-08-25', '2020-08-24', '2020-08-21'])
+        trials_all = train.concatenate_trials(trials)
+        trials_all['probability_left'] = trials_all['contrastLeft'] * 0 + 80
+        psych_nan = train.compute_psychometric(trials_all, block=100)
+        assert np.sum(np.isnan(psych_nan)) == 4
+
+    def test_concatenate_and_computations(self):
+        trials, _ = self._get_trials(sess_dates=['2020-08-25', '2020-08-24', '2020-08-21'])
+        trials_total = np.sum([len(trials[k]['contrastRight']) for k in trials.keys()])
         trials_all = train.concatenate_trials(trials)
         assert (len(trials_all.contrastRight) == trials_total)
 
@@ -148,40 +158,32 @@ class TestTraining(unittest.TestCase):
         assert (np.isclose(rt, 0.83655))
 
     def test_in_training(self):
-        sess_dates = ['2020-08-25', '2020-08-24', '2020-08-21']
-        trials_copy = copy.deepcopy(self.trial_data)
-        trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
-        task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
+        trials, task_protocol = self._get_trials(
+            sess_dates=['2020-08-25', '2020-08-24', '2020-08-21'])
         assert (np.all(np.array(task_protocol) == 'training'))
-        status, info = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
-                                                 n_delay=0)
+        status, info = train.get_training_status(
+            trials, task_protocol, ephys_sess_dates=[], n_delay=0)
         assert (status == 'in training')
 
     def test_trained_1a(self):
-        sess_dates = ['2020-08-26', '2020-08-25', '2020-08-24']
-        trials_copy = copy.deepcopy(self.trial_data)
-        trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
-        task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
+        trials, task_protocol = self._get_trials(
+            sess_dates=['2020-08-26', '2020-08-25', '2020-08-24'])
         assert (np.all(np.array(task_protocol) == 'training'))
         status, info = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
                                                  n_delay=0)
         assert (status == 'trained 1a')
 
     def test_trained_1b(self):
-        sess_dates = ['2020-08-27', '2020-08-26', '2020-08-25']
-        trials_copy = copy.deepcopy(self.trial_data)
-        trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
-        task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
+        trials, task_protocol = self._get_trials(
+            sess_dates=['2020-08-27', '2020-08-26', '2020-08-25'])
         assert (np.all(np.array(task_protocol) == 'training'))
         status, info = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
                                                  n_delay=0)
         assert(status == 'trained 1b')
 
     def test_training_to_bias(self):
-        sess_dates = ['2020-08-31', '2020-08-28', '2020-08-27']
-        trials_copy = copy.deepcopy(self.trial_data)
-        trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
-        task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
+        trials, task_protocol = self._get_trials(
+            sess_dates=['2020-08-31', '2020-08-28', '2020-08-27'])
         assert (~np.all(np.array(task_protocol) == 'training') and
                 np.any(np.array(task_protocol) == 'training'))
         status, info = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
@@ -190,9 +192,7 @@ class TestTraining(unittest.TestCase):
 
     def test_ready4ephys(self):
         sess_dates = ['2020-09-01', '2020-08-31', '2020-08-28']
-        trials_copy = copy.deepcopy(self.trial_data)
-        trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
-        task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
+        trials, task_protocol = self._get_trials(sess_dates=sess_dates)
         assert (np.all(np.array(task_protocol) == 'biased'))
         status, info = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
                                                  n_delay=0)
@@ -200,9 +200,7 @@ class TestTraining(unittest.TestCase):
 
     def test_ready4delay(self):
         sess_dates = ['2020-09-03', '2020-09-02', '2020-08-31']
-        trials_copy = copy.deepcopy(self.trial_data)
-        trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
-        task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
+        trials, task_protocol = self._get_trials(sess_dates=sess_dates)
         assert (np.all(np.array(task_protocol) == 'biased'))
         status, info = train.get_training_status(trials, task_protocol,
                                                  ephys_sess_dates=['2020-09-03'], n_delay=0)
@@ -210,9 +208,7 @@ class TestTraining(unittest.TestCase):
 
     def test_ready4recording(self):
         sess_dates = ['2020-09-01', '2020-08-31', '2020-08-28']
-        trials_copy = copy.deepcopy(self.trial_data)
-        trials = Bunch(zip(sess_dates, [trials_copy[k] for k in sess_dates]))
-        task_protocol = [trials[k].pop('task_protocol') for k in trials.keys()]
+        trials, task_protocol = self._get_trials(sess_dates=sess_dates)
         assert (np.all(np.array(task_protocol) == 'biased'))
         status, info = train.get_training_status(trials, task_protocol,
                                                  ephys_sess_dates=sess_dates, n_delay=1)

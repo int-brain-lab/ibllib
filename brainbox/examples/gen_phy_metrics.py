@@ -139,9 +139,9 @@ def gen_metrics(alf_dir, ks_dir, ephys_file_path=None):
 
         # Estimated fraction of false positives.
         try:
-            fp_est[int(unit)] = bb.metrics.contamination_est(ts, rp=0.002)
+            fp_est[int(unit)] = bb.metrics.contamination(ts, rp=0.002)
         except Exception as err:
-            print("Failed to compute 'contamination_est' for unit {}. Details: \n {}".format(unit, err))
+            print("Failed to compute 'contamination' for unit {}. Details: \n {}".format(unit, err))
             units_missing_metrics.add(unit)
 
         # Presence ratio
@@ -223,10 +223,10 @@ def gen_metrics(alf_dir, ks_dir, ephys_file_path=None):
 
     try:
         df_fp_est = pd.DataFrame(fp_est.round(2))
-        df_fp_est.to_csv(Path(ks_dir, 'contamination_est.tsv'),
-                         sep='\t', header=['contamination_est'])
+        df_fp_est.to_csv(Path(ks_dir, 'contamination.tsv'),
+                         sep='\t', header=['contamination'])
     except Exception as err:
-        print("Could not save 'contamination_est' to .tsv. Details: \n {}".format(err))
+        print("Could not save 'contamination' to .tsv. Details: \n {}".format(err))
 
     try:
         df_pres_ratio = pd.DataFrame(pres_ratio.round(2))
