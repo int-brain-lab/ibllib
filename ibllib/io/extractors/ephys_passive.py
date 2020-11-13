@@ -555,7 +555,7 @@ class PassiveChoiceWorld(BaseExtractor):
             plot_stims_times(passiveStims_df, ax=ax)
 
         return (
-            passivePeriods_df,  # _ibl_passivePeriods.intervals_table.csv
+            passivePeriods_df,  # _ibl_passivePeriods.intervalsTable.csv
             passiveRFM_frames,  # _ibl_passiveRFM.frames.npy,
             passiveRFM_times,  # _ibl_passiveRFM.times.npy
             passiveGabor_df,  # _ibl_passiveGabor.table.csv,
@@ -567,6 +567,7 @@ if __name__ == "__main__":
     # TODO: Check all TODO's in file!!
     # TODO: reuse test from passive.py before deleting
     # session_path = "/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_054/2020-10-10/001"
+    # pcw = PassiveChoiceWorld(session_path)
     # sp = '/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_029/2020-10-07/001'
     # extract_passive_choice_world(sp)
     # extract_passive_choice_world(sp, plot=True)
