@@ -106,7 +106,7 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
         session_path/spike_sorters/ks2_matlab/probeXX folder
         :return: path of the folder containing ks2 spike sorting output
         """
-        label = ap_file.parts[-1]
+        label = ap_file.parts[-2]
         if ap_file.parent.joinpath('spike_sorting_ks2.log').exists():
             _logger.info(f'Already ran: spike_sorting_ks2.log found for {ap_file}, skipping.')
             return ap_file.parent
