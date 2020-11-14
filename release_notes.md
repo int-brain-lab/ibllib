@@ -1,10 +1,11 @@
+### Release Notes 1.5.22
+-   Ephys extraction:
+    -   synchronisation between probes computed in the ephysPulses job
+    -   spike sorting resync done directly after KS2 output
+    -   unit-based metrics have their own task
+
 ### Release Notes 1.5.21: hotfix
 -   create local server tasks only on raw_session.flag
-
-### next release
--   synchronisation between probes computed in the ephysPulses job
--   spike sorting resync done directly after KS2 output
--   unit-based metrics have their own task
 
 ### Release Notes 1.5.20
 -   ephys alignment QC
