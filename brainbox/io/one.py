@@ -345,6 +345,7 @@ def load_spike_sorting_with_channel(eid, one=None, probe=None, dataset_types=Non
     :return: spikes, clusters, channels (dict of bunch, 1 bunch per probe)
     """
     # --- Get spikes and clusters data
+    one = one or ONE()
     dic_spk_bunch, dic_clus = load_spike_sorting(eid, one=one, probe=probe,
                                                  dataset_types=dataset_types, force=force)
     # -- Get brain regions and assign to clusters

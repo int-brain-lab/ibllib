@@ -9,7 +9,7 @@ from ibllib.io.extractors.training_trials import (
     ProbabilityLeft, run_extractor_classes  # ContrastLR
 )
 import ibllib.io.extractors.habituation_trials as habit
-from ibllib.io.extractors.training_wheel import Wheel
+from ibllib.io.extractors.training_wheel import Wheel, get_wheel_position
 from ibllib.io.extractors.ephys_fpga import (
     _get_pregenerated_events, _get_main_probe_sync, bpod_fpga_sync, FpgaTrials
 )
@@ -184,6 +184,10 @@ class TaskQCExtractor(object):
                 # Build trials output
                 data.update({k: bpod2fpga(data[k][ibpod]) for k in sync_fields})
                 data.update({k: data[k][ibpod] for k in bpod_fields})
+                # Add Bpod wheel data
+                re_ts, pos = get_wheel_position(self.session_path, self.raw_data)
+                data['wheel_timestamps_bpod'] = bpod2fpga(re_ts)
+                data['wheel_position_bpod'] = pos
 
         elif self.type == 'habituation':
             data['position'] = np.array([t['position'] for t in self.raw_data])
@@ -199,7 +203,6 @@ class TaskQCExtractor(object):
 
         # Update the data attribute with extracted data
         if self.data:
-
             self.data.update(data)
             self.rename_data(self.data)
         else:
