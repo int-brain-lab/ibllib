@@ -348,8 +348,8 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
             rand_pop_vector = np.empty(original_pop_vector.shape)
             frequencies = int((original_pop_vector.shape[0] - 1) / 2)
             fsignal = sp.fft.fft(original_pop_vector, axis=0)
-            power = np.abs(fsignal[1:1+frequencies])
-            phases = 2*np.pi*np.random.rand(frequencies)
+            power = np.abs(fsignal[1:1 + frequencies])
+            phases = 2 * np.pi * np.random.rand(frequencies)
             for k in range(original_pop_vector.shape[1]):
                 newfsignal = fsignal[0, k]
                 newfsignal = np.append(newfsignal, np.exp(1j * phases) * power[:, k])
