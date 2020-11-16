@@ -101,7 +101,7 @@ def responsive_units(spike_times, spike_clusters, event_times,
             stats[i], p_values[i] = wilcoxon(baseline_counts[i, :], spike_counts[i, :])
 
     # Perform FDR correction for multiple testing
-    sig_units, p_values, _, _ = multipletests(p_values, alpha, method='fdr_bh')
+    sig_units, p_values, _, _ = multipletests(p_values, alpha)
     significant_units = cluster_ids[sig_units]
 
     return significant_units, stats, p_values, cluster_ids
@@ -181,7 +181,7 @@ def differentiate_units(spike_times, spike_clusters, event_times, event_groups,
                 stats[i], p_values[i] = ttest_rel(counts_1[i, :], counts_2[i, :])
 
     # Perform FDR correction for multiple testing
-    sig_units, p_values, _, _ = multipletests(p_values, alpha, method='fdr_bh')
+    sig_units, p_values, _, _ = multipletests(p_values, alpha)
     significant_units = cluster_ids[sig_units]
 
     return significant_units, stats, p_values, cluster_ids
