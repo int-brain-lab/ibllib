@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from ibllib.io.extractors import ephys_fpga
-from ibllib.io.extractors.base import BaseExtractor, run_extractor_classes
+from ibllib.io.extractors.base import BaseExtractor
 from ibllib.io.extractors.passive_plotting import (
     plot_audio_times,
     plot_gabor_times,
@@ -510,7 +510,9 @@ class PassiveChoiceWorld(BaseExtractor):
         "passiveStims_df",
     )
 
-    def _extract(self, sync: dict = None, sync_map: dict = None, plot: bool = False, **kwargs) -> tuple:
+    def _extract(
+        self, sync: dict = None, sync_map: dict = None, plot: bool = False, **kwargs
+    ) -> tuple:
         if sync is None or sync_map is None:
             sync, sync_map = ephys_fpga._get_main_probe_sync(self.session_path, bin_exists=False)
 
@@ -542,7 +544,10 @@ class PassiveChoiceWorld(BaseExtractor):
             )
         except BaseException as e:
             log.error("Failed to extract task replay stimuli", e)
-            (passiveGabor_df, passiveStims_df,) = None, None
+            (passiveGabor_df, passiveStims_df,) = (
+                None,
+                None,
+            )
         if plot:
             f, ax = plt.subplots(1, 1)
             f.suptitle("/".join(str(self.session_path).split("/")[-5:]))

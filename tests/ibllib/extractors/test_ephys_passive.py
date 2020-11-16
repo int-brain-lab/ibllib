@@ -2,10 +2,7 @@
 # -*- coding:utf-8 -*-
 # @Author: Niccolò Bonacchi
 # @Date: Friday, October 30th 2020, 10:42:49 am
-from ibllib.io.extractors import passive
 import unittest
-import tempfile
-from pathlib import Path
 
 import ibllib.io.extractors.ephys_passive as passive
 import numpy as np

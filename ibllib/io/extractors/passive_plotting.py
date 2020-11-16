@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-
 def plot_rfmapping(times_interp_RF, ax=None):
     if ax is None:
         f, ax = plt.subplots(1, 1)
