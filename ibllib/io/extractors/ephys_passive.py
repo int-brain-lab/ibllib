@@ -375,7 +375,7 @@ def extract_passive_periods(
         index=["start", "stop"],
         columns=["passiveProtocol", "spontaneousActivity", "RFM", "taskReplay"],
     )
-    return passivePeriods_df  # _ibl_passivePeriods.intervals_table.csv
+    return passivePeriods_df  # _ibl_passivePeriods.intervalsTable.csv
 
 
 def extract_rfmapping(
@@ -411,10 +411,7 @@ def extract_rfmapping(
         t_bin=1 / FRAME_FS,
     )
 
-    return (
-        passiveRFM_frames,
-        passiveRFM_times,
-    )  # _ibl_passiveRFM.frames.npy, _ibl_passiveRFM.times.npy
+    return passiveRFM_times  # _ibl_passiveRFM.times.npy
 
 
 def extract_task_replay(
@@ -501,15 +498,13 @@ def extract_replay_debug(
 # Maan passiveCWe xtractor, calls all others
 class PassiveChoiceWorld(BaseExtractor):
     save_names = (
-        "_ibl_passivePeriods.intervals_table.csv",
-        "_ibl_passiveRFM.frames.npy",
+        "_ibl_passivePeriods.intervalsTable.csv",
         "_ibl_passiveRFM.times.npy",
         "_ibl_passiveGabor.table.csv",
         "_ibl_passiveStims.table.csv",
     )
     var_names = (
         "passivePeriods_df",
-        "passiveRFM_frames",
         "passiveRFM_times",
         "passiveGabor_df",
         "passiveStims_df",
@@ -529,22 +524,25 @@ class PassiveChoiceWorld(BaseExtractor):
 
         except BaseException as e:
             log.error("Failed to extract passive periods", e)
+            passivePeriods_df = None
+            trfm = None
+            treplay = None
 
         try:
             # RFMapping
-            passiveRFM_frames, passiveRFM_times = extract_rfmapping(
+            passiveRFM_times = extract_rfmapping(
                 self.session_path, sync=sync, sync_map=sync_map, trfm=trfm
             )
         except BaseException as e:
             log.error("Failed to extract RFMapping datasets", e)
-
+            passiveRFM_times = None
         try:
             (passiveGabor_df, passiveStims_df,) = extract_task_replay(
                 self.session_path, sync=sync, sync_map=sync_map, treplay=treplay
             )
         except BaseException as e:
             log.error("Failed to extract task replay stimuli", e)
-
+            (passiveGabor_df, passiveStims_df,) = None, None
         if plot:
             f, ax = plt.subplots(1, 1)
             f.suptitle("/".join(str(self.session_path).split("/")[-5:]))
@@ -556,7 +554,6 @@ class PassiveChoiceWorld(BaseExtractor):
 
         return (
             passivePeriods_df,  # _ibl_passivePeriods.intervalsTable.csv
-            passiveRFM_frames,  # _ibl_passiveRFM.frames.npy,
             passiveRFM_times,  # _ibl_passiveRFM.times.npy
             passiveGabor_df,  # _ibl_passiveGabor.table.csv,
             passiveStims_df,  # _ibl_passiveStims.table.csv
