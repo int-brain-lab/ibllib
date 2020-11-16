@@ -144,4 +144,5 @@ def ks2_to_alf(ks_path, bin_path, out_path, bin_file=None, ampfactor=1, label=No
     """
     m = ephysqc.phy_model_from_ks2_path(ks2_path=ks_path, bin_path=bin_path, bin_file=bin_file)
     ac = alf.EphysAlfCreator(m)
+    ephysqc.unit_metrics_ks2(ks_path, m, save=True)
     ac.convert(out_path, label=label, force=force, ampfactor=ampfactor)
