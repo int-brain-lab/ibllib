@@ -5,8 +5,6 @@ os: linux
 dist: bionic
 # command to install dependencies
 install:
-  # Have to install pytorch this way because reasons
-  - pip install torch==1.7.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
   - pip install -r requirements.txt
   - pip install -e .
   # phylib will be a proper pip dependency once it's more stable
