@@ -6,6 +6,7 @@ Code for decoding by G. Meijer
 '''
 
 import numpy as np
+import scipy as sp
 import types
 from itertools import groupby
 from sklearn.ensemble import RandomForestClassifier
@@ -197,7 +198,7 @@ def xcorr(spike_times, spike_clusters, bin_size=None, window_size=None):
 
 def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, post_time=0.5,
            classifier='bayes', cross_validation='kfold', num_splits=5, prob_left=None,
-           custom_validation=None, n_neurons='all', iterations=1, shuffle=False):
+           custom_validation=None, n_neurons='all', iterations=1, shuffle=False, phase_rand=False):
     """
     Use decoding to classify groups of trials (e.g. stim left/right). Classification is done using
     the population vector of summed spike counts from the specified time window. Cross-validation
@@ -222,10 +223,11 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
         time (in seconds) preceding the event times
     post_time : float
         time (in seconds) following the event times
-    classifier : string
-        which decoder to use, options are:
+    classifier : string or sklearn object
+        which decoder to use, either input a scikit learn clf object directly or a string.
+        When it's a string options are (all classifiers are used with default options):
             'bayes'         Naive Bayes
-            'forest'        Random forest (with 100 trees)
+            'forest'        Random forest
             'regression'    Logistic regression
             'lda'           Linear Discriminant Analysis
     cross_validation : string
@@ -257,6 +259,9 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
         number of times to repeat the decoding (especially usefull when subselecting neurons)
     shuffle : boolean
         whether to shuffle the trial labels each decoding iteration
+    phase_rand : boolean
+        whether to use phase randomization of the activity over trials to use as a "chance"
+        predictor
 
     Returns
     -------
@@ -289,17 +294,25 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
     # Get matrix of all neuronal responses
     times = np.column_stack(((event_times - pre_time), (event_times + post_time)))
     pop_vector, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters, times)
-    pop_vector = np.rot90(pop_vector)
+    pop_vector = pop_vector.T
+
+    # Exclude last trial if the number of trials is even and phase shuffling
+    if (phase_rand is True) & (event_groups.shape[0] % 2 == 0):
+        event_groups = event_groups[:-1]
+        pop_vector = pop_vector[:-1]
 
     # Initialize classifier
-    if classifier == 'forest':
-        clf = RandomForestClassifier(n_estimators=100)
-    elif classifier == 'bayes':
-        clf = GaussianNB()
-    elif classifier == 'regression':
-        clf = LogisticRegression(solver='liblinear', multi_class='auto')
-    elif classifier == 'lda':
-        clf = LinearDiscriminantAnalysis()
+    if type(classifier) == str:
+        if classifier == 'forest':
+            clf = RandomForestClassifier()
+        elif classifier == 'bayes':
+            clf = GaussianNB()
+        elif classifier == 'regression':
+            clf = LogisticRegression()
+        elif classifier == 'lda':
+            clf = LinearDiscriminantAnalysis()
+    else:
+        clf = classifier
 
     # Pre-allocate variables
     acc = np.zeros(iterations)
@@ -328,6 +341,23 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
         if shuffle is True:
             event_groups = sklearn_shuffle(event_groups)
 
+        # Perform phase randomization of activity over trials if necessary
+        if phase_rand is True:
+            if i == 0:
+                original_pop_vector = sub_pop_vector
+            rand_pop_vector = np.empty(original_pop_vector.shape)
+            frequencies = int((original_pop_vector.shape[0] - 1) / 2)
+            fsignal = sp.fft.fft(original_pop_vector, axis=0)
+            power = np.abs(fsignal[1:1 + frequencies])
+            phases = 2 * np.pi * np.random.rand(frequencies)
+            for k in range(original_pop_vector.shape[1]):
+                newfsignal = fsignal[0, k]
+                newfsignal = np.append(newfsignal, np.exp(1j * phases) * power[:, k])
+                newfsignal = np.append(newfsignal, np.flip(np.exp(-1j * phases) * power[:, k]))
+                newsignal = sp.fft.ifft(newfsignal)
+                rand_pop_vector[:, k] = np.abs(newsignal.real)
+            sub_pop_vector = rand_pop_vector
+
         if cross_validation == 'none':
 
             # Fit the model on all the data and predict
@@ -341,13 +371,13 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
         else:
             # Perform cross-validation
             if cross_validation == 'leave-one-out':
-                cv = LeaveOneOut().split(pop_vector)
+                cv = LeaveOneOut().split(sub_pop_vector)
             elif cross_validation == 'kfold':
-                cv = KFold(n_splits=num_splits).split(pop_vector)
+                cv = KFold(n_splits=num_splits).split(sub_pop_vector)
             elif cross_validation == 'block':
                 block_lengths = [sum(1 for i in g) for k, g in groupby(prob_left)]
                 blocks = np.repeat(np.arange(len(block_lengths)), block_lengths)
-                cv = LeaveOneGroupOut().split(pop_vector, groups=blocks)
+                cv = LeaveOneGroupOut().split(sub_pop_vector, groups=blocks)
             elif cross_validation == 'custom':
                 cv = custom_validation
 
