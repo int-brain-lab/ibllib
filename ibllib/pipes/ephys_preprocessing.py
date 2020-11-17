@@ -290,6 +290,16 @@ class EphysDLC(tasks.Task):
         pass
 
 
+class EphysPassive(tasks.Task):
+    cpu = 1
+    io_charge = 90
+    level = 1
+
+    def _run(self):
+        """returns a list of pathlib.Paths. """
+        pass
+
+
 class EphysExtractionPipeline(tasks.Pipeline):
     label = __name__
 
@@ -308,6 +318,7 @@ class EphysExtractionPipeline(tasks.Pipeline):
         tasks['SpikeSorting'] = SpikeSorting_KS2_Matlab(self.session_path,
                                                         parents=[tasks['EphysMtscomp']])
         tasks['EphysTrials'] = EphysTrials(self.session_path, parents=[tasks['EphysPulses']])
+        tasks['EphysPassive'] = EphysPassive(self.session_path, parents=[tasks['EphysPulses']])
         tasks['EphysDLC'] = EphysDLC(self.session_path, parents=[tasks['EphysVideoCompress']])
         # level 2
         tasks['EphysCellsQc'] = EphysCellsQc(self.session_path, parents=[
