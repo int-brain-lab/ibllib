@@ -283,7 +283,8 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
     """
 
     # Check input
-    assert classifier in ['bayes', 'forest', 'regression', 'lda']
+    if type(classifier) == str:
+        assert classifier in ['bayes', 'forest', 'regression', 'lda']
     assert cross_validation in ['none', 'kfold', 'leave-one-out', 'block', 'custom']
     assert event_times.shape[0] == event_groups.shape[0]
     if cross_validation == 'block':
