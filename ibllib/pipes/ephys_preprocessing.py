@@ -261,21 +261,26 @@ class EphysMtscomp(tasks.Task):
         Original bin file will be removed
         The registration flag created contains targeted file names at the root of the session
         """
-        ephys_files = spikeglx.glob_ephys_files(self.session_path)
         out_files = []
+        ephys_files = spikeglx.glob_ephys_files(self.session_path)
+        ephys_files += spikeglx.glob_ephys_files(self.session_path, ext='ch')
+        ephys_files += spikeglx.glob_ephys_files(self.session_path, ext='meta')
+
         for ef in ephys_files:
             for typ in ['ap', 'lf', 'nidq']:
                 bin_file = ef.get(typ)
                 if not bin_file:
                     continue
-                sr = spikeglx.Reader(bin_file)
-                if sr.is_mtscomp:
-                    out_files.append(bin_file)
-                    out_files.append(bin_file.with_suffix('.ch'))
+                if bin_file.suffix.find('bin') == 1:
+                    sr = spikeglx.Reader(bin_file)
+                    if sr.is_mtscomp:
+                        out_files.append(bin_file)
+                    else:
+                        _logger.info(f"Compressing binary file {bin_file}")
+                        out_files.append(sr.compress_file(keep_original=False))
                 else:
-                    _logger.info(f"Compressing binary file {bin_file}")
-                    out_files.append(sr.compress_file(keep_original=False))
-                    out_files.append(bin_file.with_suffix('.ch'))
+                    out_files.append(bin_file)
+
         return out_files
 
 
