@@ -93,10 +93,15 @@ def plot_atlas(regions, values, ML=-1, AP=0, DV=-1, color_palette='Reds',
     slice_hor = _label2values(slice_hor, region_values, ba)
     bound_hor = ba.slice(DV / 1000, axis=2, volume=boundaries)
 
-    # Add boundaries to slices outside of the fill value region
-    slice_sag[bound_sag == 1] = np.max(values) + 1
-    slice_cor[bound_cor == 1] = np.max(values) + 1
-    slice_hor[bound_hor == 1] = np.max(values) + 1
+    # Add boundaries to slices outside of the fill value region and set to grey
+    if minmax is None:
+        slice_sag[bound_sag == 1] = np.max(values) + 1
+        slice_cor[bound_cor == 1] = np.max(values) + 1
+        slice_hor[bound_hor == 1] = np.max(values) + 1
+    else:
+        slice_sag[bound_sag == 1] = minmax[1] + 1
+        slice_cor[bound_cor == 1] = minmax[1] + 1
+        slice_hor[bound_hor == 1] = minmax[1] + 1
 
     # Construct color map
     color_map = sns.color_palette(color_palette, 1000)
