@@ -1,3 +1,8 @@
+"""Base Extractor classes
+A module for the base Extractor classes.  The Extractor, given a session path, will extract the
+processed data from raw hardware files and optionally save them.
+"""
+
 from pathlib import Path
 import abc
 from collections import OrderedDict
@@ -29,10 +34,12 @@ class BaseExtractor(abc.ABC):
         if not save:
             return out, None
         else:
-            files = self._save(out, path_out=path_out) if save else None
+            files = self._save(out, path_out=path_out)
         return out, files
 
     def _save(self, out, path_out=None):
+        if not self.save_names:
+            return []
         if not path_out:
             path_out = self.session_path.joinpath(self.default_path)
         path_out.mkdir(exist_ok=True, parents=True)
@@ -42,8 +49,9 @@ class BaseExtractor(abc.ABC):
         else:
             files = []
             for i, fn in enumerate(self.save_names):
-                np.save(path_out.joinpath(fn), out[i])
-                files.append(path_out.joinpath(fn))
+                if fn:
+                    np.save(path_out.joinpath(fn), out[i])
+                    files.append(path_out.joinpath(fn))
         return files
 
     @abc.abstractmethod
@@ -114,5 +122,4 @@ def run_extractor_classes(classes, session_path=None, **kwargs):
         else:
             for i, k in enumerate(classe.var_names):
                 outputs[k] = out[i]
-    assert (len(files) == 0) or (len(files) == len(outputs.keys()))
     return outputs, files

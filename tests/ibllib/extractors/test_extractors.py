@@ -549,14 +549,14 @@ class TestExtractTrialData(unittest.TestCase):
 
     def test_size_outputs(self):
         # check the output dimensions
-        from ibllib.pipes.training_preprocessing import extract_training
-        extract_training(self.training_ge5['path'])
+        from ibllib.io.extractors.bpod_trials import extract_all
+        extract_all(self.training_ge5['path'])
         trials = alf.io.load_object(self.training_ge5['path'] / 'alf', object='trials')
         self.assertTrue(alf.io.check_dimensions(trials) == 0)
-        extract_training(self.training_lt5['path'])
+        extract_all(self.training_lt5['path'])
         trials = alf.io.load_object(self.training_lt5['path'] / 'alf', object='trials')
         self.assertTrue(alf.io.check_dimensions(trials) == 0)
-        extract_training(self.biased_ge5['path'])
+        extract_all(self.biased_ge5['path'])
         trials = alf.io.load_object(self.biased_ge5['path'] / 'alf', object='trials')
         self.assertTrue(alf.io.check_dimensions(trials) == 0)
         # Wheel moves extraction fails for these wheel data; skipping

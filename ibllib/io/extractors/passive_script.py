@@ -59,7 +59,7 @@ with open(path_fixtures.joinpath('passive_stim_meta.json'), 'r') as f:
     meta = json.load(f)
 t_end_ephys = passive.ephysCW_end(session_path=session_path)
 # load stimulus sequence
-sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
+sync, sync_map = ephys_fpga.get_main_probe_sync(session_path, bin_exists=False)
 fpga_sync = ephys_fpga._get_sync_fronts(sync, sync_map['frame2ttl'])
 fttl = ephys_fpga._get_sync_fronts(sync, sync_map['frame2ttl'], tmin=t_end_ephys)
 

@@ -53,9 +53,9 @@ def load_ttl_pulses(session_path):
     :rtype: np.ndarray
     """
 
-    from ibllib.io.extractors.ephys_fpga import _get_main_probe_sync
+    from ibllib.io.extractors.ephys_fpga import get_main_probe_sync
 
-    sync, sync_chmap = _get_main_probe_sync(session_path, bin_exists=False)
+    sync, sync_chmap = get_main_probe_sync(session_path, bin_exists=False)
     fr2ttl_ch = sync_chmap['frame2ttl']
 
     # find times of when ttl polarity changes on fr2ttl channel
