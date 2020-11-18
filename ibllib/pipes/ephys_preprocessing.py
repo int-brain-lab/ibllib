@@ -216,7 +216,8 @@ class EphysTrials(tasks.Task):
         """
         import alf.io
         from brainbox.behavior import training
-
+        if self.one is None:  # if no instance of Alyx is provided, do not touch any database
+            return
         trials = alf.io.load_object(self.session_path.joinpath('alf'), 'trials')
         good_enough = training.criterion_delay(
             n_trials=trials['intervals'].shape[0],
@@ -315,11 +316,11 @@ class EphysExtractionPipeline(tasks.Pipeline):
         tasks['EphysVideoCompress'] = EphysVideoCompress(self.session_path)
         tasks['EphysMtscomp'] = EphysMtscomp(self.session_path)
         # level 1
-        tasks['SpikeSorting'] = SpikeSorting_KS2_Matlab(self.session_path,
-                                                        parents=[tasks['EphysMtscomp']])
+        tasks['SpikeSorting'] = SpikeSorting_KS2_Matlab(
+            self.session_path, parents=[tasks['EphysMtscomp']])
         tasks['EphysTrials'] = EphysTrials(self.session_path, parents=[tasks['EphysPulses']])
         tasks['EphysDLC'] = EphysDLC(self.session_path, parents=[tasks['EphysVideoCompress']])
         # level 2
-        tasks['EphysCellsQc'] = EphysCellsQc(self.session_path, parents=[
-            tasks['SpikeSorting']])
+        tasks['EphysCellsQc'] = EphysCellsQc(
+            self.session_path, parents=[tasks['SpikeSorting']])
         self.tasks = tasks

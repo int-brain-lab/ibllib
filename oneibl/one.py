@@ -298,7 +298,7 @@ class OneAlyx(OneAbstract):
         # Session specific list
         dsets = self.alyx.rest('datasets', 'list', session=eid, exists=True)
         if not details:
-            dsets = [Path(dset['collection']).joinpath(dset['name']) for dset in dsets]
+            dsets = sorted([Path(dset['collection']).joinpath(dset['name']) for dset in dsets])
         return dsets
 
     @parse_id
