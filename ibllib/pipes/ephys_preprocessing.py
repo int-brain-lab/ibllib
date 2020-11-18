@@ -319,8 +319,9 @@ class EphysPassive(tasks.Task):
 
     def _run(self):
         """returns a list of pathlib.Paths. """
-        pass
-
+        data, paths = ephys_passive.PassiveChoiceWorld(self.session_path).extract(save=True)
+        # Register?
+        return paths
 
 class EphysExtractionPipeline(tasks.Pipeline):
     label = __name__
