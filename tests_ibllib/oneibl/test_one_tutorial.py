@@ -5,4 +5,4 @@ Tutorial example
 
 # ----- IMPORT EXAMPLES -----
 # -- Ibllib tutorial example page
-import examples.one.tutorial_script
+import examples.one.tutorial_script  # noqa

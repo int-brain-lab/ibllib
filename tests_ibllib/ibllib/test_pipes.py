@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 import ibllib.io.raw_data_loaders as rawio
-import tests.ibllib.fixtures.utils as fu
+import tests_ibllib.ibllib.fixtures.utils as fu
 from ibllib.pipes import misc
 from oneibl.one import ONE
 import ibllib.pipes.scan_fix_passive_files as fix
