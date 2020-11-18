@@ -5,7 +5,7 @@ from pathlib import Path
 CURRENT_DIRECTORY = Path(__file__).parent.absolute()
 
 CURRENT_PYTHON = sys.version_info[:2]
-REQUIRED_PYTHON = (3, 6)
+REQUIRED_PYTHON = (3, 7)
 if CURRENT_PYTHON < REQUIRED_PYTHON:
     sys.stderr.write("""
 ==========================
