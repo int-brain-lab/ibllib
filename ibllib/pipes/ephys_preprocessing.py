@@ -182,7 +182,8 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
                     bin_file=ap_file, ampfactor=self._sample2v(ap_file))
                 out, _ = spikes.sync_spike_sorting(ap_file=ap_file, out_path=probe_out_path)
                 out_files.extend(out)
-            except RuntimeError as err:
+            except BaseException as err:
+                _logger.info(err)
                 self.status = -1
                 continue
 
