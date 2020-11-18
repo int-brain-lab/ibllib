@@ -23,7 +23,7 @@ def _label2values(imlabel, fill_values, ba):
     return im
 
 
-def plot_atlas(regions, values, ML=-1, AP=0, DV=-1, color_palette='Reds',
+def plot_atlas(regions, values, ML=-1, AP=0, DV=-1, hemisphere='left', color_palette='Reds',
                minmax=None, axs=None, custom_region_list=None):
     """
     Plot a sagittal, coronal and horizontal slice of the Allen atlas with regions colored in
@@ -38,6 +38,8 @@ def plot_atlas(regions, values, ML=-1, AP=0, DV=-1, color_palette='Reds',
         Array of values that correspond to the brain region acronyms
     ML, AP, DV : float
         The coordinates of the slices in mm
+    hemisphere : string
+        Which hemisphere to color, options are 'left' (default), 'right', 'both'
     color_palette : any input that can be interpreted by sns.color_palette
         The color palette of the plot
     minmax : 2 element array
@@ -92,6 +94,16 @@ def plot_atlas(regions, values, ML=-1, AP=0, DV=-1, color_palette='Reds',
     slice_hor = ba.slice(DV / 1000, axis=2, volume=ba.label)  # horizontal
     slice_hor = _label2values(slice_hor, region_values, ba)
     bound_hor = ba.slice(DV / 1000, axis=2, volume=boundaries)
+
+    # Only color specified hemisphere
+    if hemisphere == 'left':
+        slice_cor[:int(slice_cor.shape[0] / 2), :] = np.min(values) - (np.max(values) + 1)
+        slice_hor[:, int(slice_cor.shape[0] / 2):] = np.min(values) - (np.max(values) + 1)
+    elif hemisphere == 'right':
+        slice_cor[int(slice_cor.shape[0] / 2):, :] = np.min(values) - (np.max(values) + 1)
+        slice_hor[:, :int(slice_cor.shape[0] / 2)] = np.min(values) - (np.max(values) + 1)
+    if ((hemisphere == 'left') & (ML > 0)) or ((hemisphere == 'right') & (ML < 0)):
+        slice_sag[:] = np.min(values) - (np.max(values) + 1)
 
     # Add boundaries to slices outside of the fill value region and set to grey
     if minmax is None:
