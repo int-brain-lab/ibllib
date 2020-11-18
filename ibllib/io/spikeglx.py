@@ -477,7 +477,9 @@ def glob_ephys_files(session_path, suffix='.meta', ext='bin', recursive=True, bi
     ephys_files = []
     for raw_ephys_file in Path(session_path).glob(f'{recurse}*.ap{suffix}'):
         raw_ephys_apfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + f'.*{ext}'), None)
-        if not raw_ephys_apfile and bin_exists and ext == 'bin':
+        if not raw_ephys_apfile and bin_exists:
+            continue
+        elif not raw_ephys_apfile and ext != 'bin':
             continue
         elif not bin_exists and ext == 'bin':
             raw_ephys_apfile = raw_ephys_file.with_suffix('.bin')
