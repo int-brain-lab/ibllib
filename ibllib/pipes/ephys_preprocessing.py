@@ -106,7 +106,7 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
         session_path/spike_sorters/ks2_matlab/probeXX folder
         :return: path of the folder containing ks2 spike sorting output
         """
-        label = ap_file.parts[-1]
+        label = ap_file.parts[-2]
         if ap_file.parent.joinpath('spike_sorting_ks2.log').exists():
             _logger.info(f'Already ran: spike_sorting_ks2.log found for {ap_file}, skipping.')
             return ap_file.parent
@@ -211,7 +211,8 @@ class EphysTrials(tasks.Task):
         """
         import alf.io
         from brainbox.behavior import training
-
+        if self.one is None:  # if no instance of Alyx is provided, do not touch any database
+            return
         trials = alf.io.load_object(self.session_path.joinpath('alf'), 'trials')
         good_enough = training.criterion_delay(
             n_trials=trials['intervals'].shape[0],
@@ -315,12 +316,12 @@ class EphysExtractionPipeline(tasks.Pipeline):
         tasks['EphysVideoCompress'] = EphysVideoCompress(self.session_path)
         tasks['EphysMtscomp'] = EphysMtscomp(self.session_path)
         # level 1
-        tasks['SpikeSorting'] = SpikeSorting_KS2_Matlab(self.session_path,
-                                                        parents=[tasks['EphysMtscomp']])
+        tasks['SpikeSorting'] = SpikeSorting_KS2_Matlab(
+            self.session_path, parents=[tasks['EphysMtscomp']])
         tasks['EphysTrials'] = EphysTrials(self.session_path, parents=[tasks['EphysPulses']])
         tasks['EphysPassive'] = EphysPassive(self.session_path, parents=[tasks['EphysPulses']])
         tasks['EphysDLC'] = EphysDLC(self.session_path, parents=[tasks['EphysVideoCompress']])
         # level 2
-        tasks['EphysCellsQc'] = EphysCellsQc(self.session_path, parents=[
-            tasks['SpikeSorting']])
+        tasks['EphysCellsQc'] = EphysCellsQc(
+            self.session_path, parents=[tasks['SpikeSorting']])
         self.tasks = tasks
