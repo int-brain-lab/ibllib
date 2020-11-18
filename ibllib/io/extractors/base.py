@@ -44,9 +44,6 @@ class BaseExtractor(abc.ABC):
 
         def _write_to_disk(file_path, data):
             """Implements different save calls depending on file extension"""
-            if data is None or not data:
-                log.error("Data is empty or None, not saving")
-                return
             csv_separators = {
                 ".csv": ",",
                 ".ssv": " ",
@@ -66,19 +63,18 @@ class BaseExtractor(abc.ABC):
                 # np.savetxt(file_path, data, delimiter=sep)
             else:
                 log.error(f"Don't know how to save {file_path.suffix} files yet")
-            return file_path
 
         if isinstance(self.save_names, str):
-            fpath = path_out.joinpath(self.save_names)
-            out_paths = _write_to_disk(fpath, data)
+            file_paths = path_out.joinpath(self.save_names)
+            _write_to_disk(file_paths, data)
         else:  # Should be list or tuple...
             assert len(data) == len(self.save_names)
-            out_paths = []
+            file_paths = []
             for data, fn in zip(data, self.save_names):
                 fpath = path_out.joinpath(fn)
-                saved_path = _write_to_disk(fpath, data)
-                out_paths.append(saved_path)
-        return out_paths
+                _write_to_disk(fpath, data)
+                file_paths.append(fpath)
+        return file_paths
 
     @abc.abstractmethod
     def _extract(self):
