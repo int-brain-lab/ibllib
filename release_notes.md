@@ -1,3 +1,10 @@
+### Release Notes 1.5.23
+- Ephys mtscomp
+    - ks2 task registers first probe even if one failing
+    - mtscomp task register .ch and .meta even if .cbin doesn't exist
+    - move ibllib tests to tests_ibllib
+    - brainbox atlas plot functions
+
 ### Release Notes 1.5.22
 -   Ephys extraction:
     -   synchronisation between probes computed in the ephysPulses job
