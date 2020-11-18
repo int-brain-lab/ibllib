@@ -68,9 +68,9 @@ class Task(abc.ABC):
         _logger.info(f"Starting job {self.__class__}")
         # run
         start_time = time.time()
+        self.status = 0
         try:
             self.outputs = self._run(**kwargs)
-            self.status = 0
             _logger.info(f"Job {self.__class__} complete")
         except BaseException:
             _logger.error(traceback.format_exc())

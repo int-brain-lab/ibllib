@@ -221,17 +221,31 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
                        {'label': '',
                         'nidq': self.dir3b / 'sync_testing_g0_t0.nidq.bin',
                         'path': self.dir3b}]
+        self.dict3b_ch = [{'label': 'imec0',
+                           'ap': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.ap.ch',
+                           'lf': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.lf.ch',
+                           'path': self.dir3b / 'imec0'},
+                          {'label': 'imec1',
+                           'ap': self.dir3b / 'imec1' / 'sync_testing_g0_t0.imec1.ap.ch',
+                           'lf': self.dir3b / 'imec1' / 'sync_testing_g0_t0.imec1.lf.ch',
+                           'path': self.dir3b / 'imec1'},
+                          {'label': '',
+                           'nidq': self.dir3b / 'sync_testing_g0_t0.nidq.ch',
+                           'path': self.dir3b}]
         create_tree(self.dir3a, self.dict3a)
         create_tree(self.dir3b, self.dict3b)
+        create_tree(self.dir3b, self.dict3b_ch)
 
     def test_glob_ephys(self):
         def dict_equals(d1, d2):
             return all([x in d1 for x in d2]) and all([x in d2 for x in d1])
         ef3b = spikeglx.glob_ephys_files(self.dir3b)
         ef3a = spikeglx.glob_ephys_files(self.dir3a)
+        ef3b_ch = spikeglx.glob_ephys_files(self.dir3b, ext='ch')
         # test glob
         self.assertTrue(dict_equals(self.dict3a, ef3a))
         self.assertTrue(dict_equals(self.dict3b, ef3b))
+        self.assertTrue(dict_equals(self.dict3b_ch, ef3b_ch))
         # test the version from glob
         self.assertTrue(spikeglx.get_neuropixel_version_from_files(ef3a) == '3A')
         self.assertTrue(spikeglx.get_neuropixel_version_from_files(ef3b) == '3B')

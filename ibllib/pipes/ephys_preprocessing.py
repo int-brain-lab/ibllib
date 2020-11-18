@@ -185,18 +185,19 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
         ap_files = [(ef.get("ap"), ef.get("label")) for ef in efiles if "ap" in ef.keys()]
         out_files = []
         for ap_file, label in ap_files:
-            ks2_dir = self._run_ks2(ap_file)  # runs ks2, skips if it already ran
-            probe_out_path = self.session_path.joinpath("alf", label)
-            probe_out_path.mkdir(parents=True, exist_ok=True)
-            spikes.ks2_to_alf(
-                ks2_dir,
-                bin_path=ap_file.parent,
-                out_path=probe_out_path,
-                bin_file=ap_file,
-                ampfactor=self._sample2v(ap_file),
-            )
-            out, _ = spikes.sync_spike_sorting(ap_file=ap_file, out_path=probe_out_path)
-            out_files.extend(out)
+            try:
+                ks2_dir = self._run_ks2(ap_file)  # runs ks2, skips if it already ran
+                probe_out_path = self.session_path.joinpath('alf', label)
+                probe_out_path.mkdir(parents=True, exist_ok=True)
+                spikes.ks2_to_alf(
+                    ks2_dir, bin_path=ap_file.parent, out_path=probe_out_path,
+                    bin_file=ap_file, ampfactor=self._sample2v(ap_file))
+                out, _ = spikes.sync_spike_sorting(ap_file=ap_file, out_path=probe_out_path)
+                out_files.extend(out)
+            except BaseException as err:
+                _logger.error(err)
+                self.status = -1
+                continue
 
         probe_files = spikes.probes_description(self.session_path, one=self.one)
         return out_files + probe_files
@@ -283,21 +284,30 @@ class EphysMtscomp(tasks.Task):
         Original bin file will be removed
         The registration flag created contains targeted file names at the root of the session
         """
-        ephys_files = spikeglx.glob_ephys_files(self.session_path)
         out_files = []
+        ephys_files = spikeglx.glob_ephys_files(self.session_path)
+        ephys_files += spikeglx.glob_ephys_files(self.session_path, ext='ch')
+        ephys_files += spikeglx.glob_ephys_files(self.session_path, ext='meta')
+
         for ef in ephys_files:
             for typ in ["ap", "lf", "nidq"]:
                 bin_file = ef.get(typ)
                 if not bin_file:
                     continue
-                sr = spikeglx.Reader(bin_file)
-                if sr.is_mtscomp:
+                if bin_file.suffix.find('bin') == 1:
+                    sr = spikeglx.Reader(bin_file)
+                    if sr.is_mtscomp:
+                        out_files.append(bin_file)
+                    else:
+                        _logger.info(f"Compressing binary file {bin_file}")
+                        out_files.append(sr.compress_file(keep_original=False))
+                else:
                     out_files.append(bin_file)
-                    out_files.append(bin_file.with_suffix(".ch"))
+                    out_files.append(bin_file.with_suffix('.ch'))
                 else:
                     _logger.info(f"Compressing binary file {bin_file}")
                     out_files.append(sr.compress_file(keep_original=False))
-                    out_files.append(bin_file.with_suffix(".ch"))
+                    out_files.append(bin_file.with_suffix('.ch'))
         return out_files
 
 
