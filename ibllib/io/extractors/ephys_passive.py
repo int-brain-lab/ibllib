@@ -525,25 +525,26 @@ class PassiveChoiceWorld(BaseExtractor):
             treplay = passivePeriods_df.taskReplay.values
 
         except BaseException as e:
-            log.error("Failed to extract passive periods", e)
+            log.error(f"Failed to extract passive periods: {e}")
             passivePeriods_df = None
             trfm = None
             treplay = None
+            raise e
 
         try:
             # RFMapping
             passiveRFM_times = extract_rfmapping(
                 self.session_path, sync=sync, sync_map=sync_map, trfm=trfm
             )
-        except BaseException as e:
-            log.error("Failed to extract RFMapping datasets", e)
+        except Exception as e:
+            log.error(f"Failed to extract RFMapping datasets: {e}")
             passiveRFM_times = None
         try:
             (passiveGabor_df, passiveStims_df,) = extract_task_replay(
                 self.session_path, sync=sync, sync_map=sync_map, treplay=treplay
             )
-        except BaseException as e:
-            log.error("Failed to extract task replay stimuli", e)
+        except Exception as e:
+            log.error(f"Failed to extract task replay stimuli: {e}")
             (passiveGabor_df, passiveStims_df,) = (
                 None,
                 None,
@@ -566,10 +567,12 @@ class PassiveChoiceWorld(BaseExtractor):
 
 
 if __name__ == "__main__":
-    # TODO: Check all TODO's in file!!
-    # TODO: reuse test from passive.py before deleting
-    # session_path = "/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_054/2020-10-10/001"
-    # pcw = PassiveChoiceWorld(session_path)
+    # Working session
+    session_path = "/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_054/2020-10-10/001"
+    # # Broken session
+    # session_path = "/home/nico/Downloads/FlatIron/integration/ephys/choice_world/KS022/2019-12-10/001"
+    pcw = PassiveChoiceWorld(session_path)
+    data, paths = pcw.extract(save=True)
     # sp = '/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_029/2020-10-07/001'
     # extract_passive_choice_world(sp)
     # extract_passive_choice_world(sp, plot=True)
