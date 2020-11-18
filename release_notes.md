@@ -1,3 +1,6 @@
+### Release Notes 1.5.24 Hotfix
+-   Ks2 task does not depend on ephys pulses
+
 ### Release Notes 1.5.23
 - Ephys mtscomp
     - ks2 task registers first probe even if one failing
