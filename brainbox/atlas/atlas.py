@@ -76,6 +76,13 @@ def plot_atlas(regions, values, ML=-1, AP=0, DV=-1, hemisphere='left', color_pal
     else:
         all_regions = custom_region_list
 
+    # Set values outside colormap bounds
+    if minmax is not None:
+        values[values < minmax[0] + np.abs(minmax[0] / 1000)] = (minmax[0]
+                                                                 + np.abs(minmax[0] / 1000))
+        values[values > minmax[1] - np.abs(minmax[1] / 1000)] = (minmax[1]
+                                                                 - np.abs(minmax[0] / 1000))
+
     # Add values to brain region list
     region_values = np.ones(ba.regions.acronym.shape) * (np.min(values) - (np.max(values) + 1))
     for i, region in enumerate(regions):
