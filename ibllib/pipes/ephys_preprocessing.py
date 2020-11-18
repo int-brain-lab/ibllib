@@ -317,7 +317,7 @@ class EphysExtractionPipeline(tasks.Pipeline):
         tasks['EphysMtscomp'] = EphysMtscomp(self.session_path)
         # level 1
         tasks['SpikeSorting'] = SpikeSorting_KS2_Matlab(
-            self.session_path, parents=[tasks['EphysMtscomp']])
+            self.session_path, parents=[tasks['EphysMtscomp'], tasks['EphysPulses']])
         tasks['EphysTrials'] = EphysTrials(self.session_path, parents=[tasks['EphysPulses']])
         tasks['EphysDLC'] = EphysDLC(self.session_path, parents=[tasks['EphysVideoCompress']])
         # level 2
