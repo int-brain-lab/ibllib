@@ -1,20 +1,19 @@
-import re
-from pathlib import Path
 import logging
-from collections import OrderedDict
-import subprocess
+import re
 import shutil
+import subprocess
+from collections import OrderedDict
+from pathlib import Path
 
 import mtscomp
-
+from ibllib.ephys import ephysqc, spikes, sync_probes
 from ibllib.io import ffmpeg, spikeglx
-from ibllib.io.extractors import ephys_fpga
+from ibllib.io.extractors import ephys_fpga, ephys_passive
 from ibllib.pipes import tasks
-from ibllib.ephys import ephysqc, sync_probes, spikes
-from ibllib.pipes.training_preprocessing import TrainingRegisterRaw as EphysRegisterRaw
-from ibllib.qc.task_metrics import TaskQC
+from ibllib.pipes.training_preprocessing import \
+    TrainingRegisterRaw as EphysRegisterRaw
 from ibllib.qc.task_extractors import TaskQCExtractor
-
+from ibllib.qc.task_metrics import TaskQC
 
 _logger = logging.getLogger('ibllib')
 
