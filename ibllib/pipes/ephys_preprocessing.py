@@ -1,18 +1,20 @@
-import logging
 import re
-import shutil
-import subprocess
-from collections import OrderedDict
 from pathlib import Path
+import logging
+from collections import OrderedDict
+import subprocess
+import shutil
 
 import mtscomp
-from ibllib.ephys import ephysqc, spikes, sync_probes
+
 from ibllib.io import ffmpeg, spikeglx
-from ibllib.io.extractors import ephys_fpga, ephys_passive
+from ibllib.io.extractors import ephys_fpga
 from ibllib.pipes import tasks
+from ibllib.ephys import ephysqc, sync_probes, spikes
 from ibllib.pipes.training_preprocessing import TrainingRegisterRaw as EphysRegisterRaw
-from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import TaskQC
+from ibllib.qc.task_extractors import TaskQCExtractor
+
 
 _logger = logging.getLogger("ibllib")
 
@@ -187,11 +189,15 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
         for ap_file, label in ap_files:
             try:
                 ks2_dir = self._run_ks2(ap_file)  # runs ks2, skips if it already ran
-                probe_out_path = self.session_path.joinpath('alf', label)
+                probe_out_path = self.session_path.joinpath("alf", label)
                 probe_out_path.mkdir(parents=True, exist_ok=True)
                 spikes.ks2_to_alf(
-                    ks2_dir, bin_path=ap_file.parent, out_path=probe_out_path,
-                    bin_file=ap_file, ampfactor=self._sample2v(ap_file))
+                    ks2_dir,
+                    bin_path=ap_file.parent,
+                    out_path=probe_out_path,
+                    bin_file=ap_file,
+                    ampfactor=self._sample2v(ap_file),
+                )
                 out, _ = spikes.sync_spike_sorting(ap_file=ap_file, out_path=probe_out_path)
                 out_files.extend(out)
             except BaseException as err:
@@ -286,15 +292,15 @@ class EphysMtscomp(tasks.Task):
         """
         out_files = []
         ephys_files = spikeglx.glob_ephys_files(self.session_path)
-        ephys_files += spikeglx.glob_ephys_files(self.session_path, ext='ch')
-        ephys_files += spikeglx.glob_ephys_files(self.session_path, ext='meta')
+        ephys_files += spikeglx.glob_ephys_files(self.session_path, ext="ch")
+        ephys_files += spikeglx.glob_ephys_files(self.session_path, ext="meta")
 
         for ef in ephys_files:
             for typ in ["ap", "lf", "nidq"]:
                 bin_file = ef.get(typ)
                 if not bin_file:
                     continue
-                if bin_file.suffix.find('bin') == 1:
+                if bin_file.suffix.find("bin") == 1:
                     sr = spikeglx.Reader(bin_file)
                     if sr.is_mtscomp:
                         out_files.append(bin_file)
@@ -303,11 +309,7 @@ class EphysMtscomp(tasks.Task):
                         out_files.append(sr.compress_file(keep_original=False))
                 else:
                     out_files.append(bin_file)
-                    out_files.append(bin_file.with_suffix('.ch'))
-                else:
-                    _logger.info(f"Compressing binary file {bin_file}")
-                    out_files.append(sr.compress_file(keep_original=False))
-                    out_files.append(bin_file.with_suffix('.ch'))
+
         return out_files
 
 
