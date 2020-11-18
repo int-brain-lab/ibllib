@@ -9,7 +9,7 @@ from ibllib.io.extractors.training_trials import (
     ProbabilityLeft, run_extractor_classes  # ContrastLR
 )
 import ibllib.io.extractors.habituation_trials as habit
-from ibllib.io.extractors.training_wheel import Wheel
+from ibllib.io.extractors.training_wheel import Wheel, get_wheel_position
 from ibllib.io.extractors.ephys_fpga import (
     _get_pregenerated_events, _get_main_probe_sync, bpod_fpga_sync, FpgaTrials
 )
@@ -139,7 +139,8 @@ class TaskQCExtractor(object):
                 StimOnTriggerTimes, StimOffTriggerTimes, StimOnOffFreezeTimes,
                 StimFreezeTriggerTimes, ErrorCueTriggerTimes, ItiInTimes]
 
-        # Extract the data that are usually saved to file
+        # Extract the data that are usually saved to file;
+        # this must be after the Bpod extractors in the list
         if not partial:
             if self.type == 'ephys' and not self.bpod_only:
                 extractors.append(FpgaTrials)
@@ -177,9 +178,16 @@ class TaskQCExtractor(object):
                                'stimFreezeTrigger_times', 'errorCueTrigger_times', 'itiIn_times']
                 bpod_fields = ['probabilityLeft', 'contrastLeft', 'contrastRight', 'position',
                                'contrast', 'quiescence', 'phase']
-                # build trials output
+                if partial:
+                    # Remove any extraneous fields, i.e. bpod stimOn, stimOff
+                    data = {k: v for k, v in data.items() if k in sync_fields + bpod_fields}
+                # Build trials output
                 data.update({k: bpod2fpga(data[k][ibpod]) for k in sync_fields})
                 data.update({k: data[k][ibpod] for k in bpod_fields})
+                # Add Bpod wheel data
+                re_ts, pos = get_wheel_position(self.session_path, self.raw_data)
+                data['wheel_timestamps_bpod'] = bpod2fpga(re_ts)
+                data['wheel_position_bpod'] = pos
 
         elif self.type == 'habituation':
             data['position'] = np.array([t['position'] for t in self.raw_data])
