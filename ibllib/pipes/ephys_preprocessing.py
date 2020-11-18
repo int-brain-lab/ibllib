@@ -323,6 +323,7 @@ class EphysPassive(tasks.Task):
         # Register?
         return paths
 
+
 class EphysExtractionPipeline(tasks.Pipeline):
     label = __name__
 

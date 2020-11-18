@@ -570,7 +570,8 @@ if __name__ == "__main__":
     # Working session
     session_path = "/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_054/2020-10-10/001"
     # # Broken session
-    # session_path = "/home/nico/Downloads/FlatIron/integration/ephys/choice_world/KS022/2019-12-10/001"
+#     session_path = "/home/nico/Downloads/FlatIron/integration/ephys/\
+# choice_world/KS022/2019-12-10/001"
     pcw = PassiveChoiceWorld(session_path)
     data, paths = pcw.extract(save=True)
     # sp = '/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_029/2020-10-07/001'
