@@ -148,6 +148,8 @@ class NeuralGLM:
         self.testinds = testinds
         self.compiled = False
         self.subset = subset
+        if len(self.clu_ids) == 0:
+            raise UserWarning('No neuron fired a spike in a minimum number.')
 
         # Bin spikes
         self._bin_spike_trains()
@@ -591,7 +593,7 @@ class NeuralGLM:
         return coefs, intercepts, variances
 
     def fit(self, method='sklearn', alpha=0, singlepar_var=False, epochs=6000, optim='adam',
-            lr=1.0):
+            lr=0.3):
         """
         Fit the current set of binned spikes as a function of the current design matrix. Requires
         NeuralGLM.bin_spike_trains and NeuralGLM.compile_design_matrix to be run first. Will store
