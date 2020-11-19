@@ -1,3 +1,6 @@
+### Release Notes 1.5.25 Hotfix
+-   ks2task import conflict fix
+
 ### Release Notes 1.5.24 Hotfix
 -   Ks2 task does not depend on ephys pulses
 
