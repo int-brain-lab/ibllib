@@ -1,3 +1,6 @@
+### Release Notes 1.5.26 Hotfix
+-   allows dataset registration on errored task
+
 ### Release Notes 1.5.25 Hotfix
 -   ks2task import conflict fix
 
