@@ -6,7 +6,7 @@ import shutil
 import numpy as np
 
 import alf.io
-from phylib.io import alf
+import phylib.io.alf
 from ibllib.ephys.sync_probes import apply_sync
 import ibllib.ephys.ephysqc as ephysqc
 from ibllib.ephys import sync_probes
@@ -151,5 +151,5 @@ def ks2_to_alf(ks_path, bin_path, out_path, bin_file=None, ampfactor=1, label=No
     :return:
     """
     m = ephysqc.phy_model_from_ks2_path(ks2_path=ks_path, bin_path=bin_path, bin_file=bin_file)
-    ac = alf.EphysAlfCreator(m)
+    ac = phylib.io.alf.EphysAlfCreator(m)
     ac.convert(out_path, label=label, force=force, ampfactor=ampfactor)
