@@ -340,7 +340,7 @@ class OneAlyx(OneAbstract):
     def load_dataset(self,
                      eid: Union[str, Path, UUID],
                      dataset: str,
-                     collection: Optional[str] = 'alf',
+                     collection: Optional[str] = None,
                      download_only: bool = False) -> Any:
         """
         Load a single dataset from a Session ID and a dataset type.
@@ -349,6 +349,7 @@ class OneAlyx(OneAbstract):
         details dict or Path
         :param dataset: The ALF dataset to load.  Supports asterisks as wildcards.
         :param collection:  The collection to which the object belongs, e.g. 'alf/probe01'.
+        For IBL this is the relative path of the file from the session root.
         Supports asterisks as wildcards.
         :param download_only: When true the data are downloaded and the file path is returned
         :return: dataset or a Path object if download_only is true
@@ -360,7 +361,7 @@ class OneAlyx(OneAbstract):
             spikes = one.load_dataset(eid 'spikes.times.npy', collection='alf/probe01')
         """
         search_str = 'name__regex,' + dataset.replace('.', r'\.').replace('*', '.*')
-        if collection and collection != 'all':
+        if collection:
             search_str += ',collection__regex,' + collection.replace('*', '.*')
         results = self.alyx.rest('datasets', 'list', session=eid, django=search_str, exists=True)
 
