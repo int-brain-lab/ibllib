@@ -1,0 +1,1 @@
+from brainbox.atlas.atlas import plot_atlas

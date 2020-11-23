@@ -19,24 +19,37 @@ TODO metrics that could be added: iso_dist, l_ratio, d_prime, nn_hit, nn_miss, s
 """
 
 import time
+import logging
 
 import numpy as np
 import scipy.ndimage.filters as filters
 import scipy.stats as stats
+import pandas as pd
 
+from phylib.stats import correlograms
 import brainbox as bb
 from brainbox.core import Bunch
 from brainbox.processing import bincount2D
 from ibllib.io import spikeglx
 
+_logger = logging.getLogger('ibllib')
+
 # Parameters to be used in `quick_unit_metrics`
 METRICS_PARAMS = {
+    'acceptable_contamination': 0.1,
+    'bin_size': 0.25,
+    'med_amp_thresh': 50,
+    'min_isi': 0.0001,
+    'min_num_bins_for_missed_spks_est': 50,
+    'nc_bins': 100,
+    'nc_n_low_bins': 2,
+    'nc_quartile_length': 0.2,
+    'nc_thresh': 20,
     'presence_window': 10,
     'refractory_period': 0.0015,
-    'min_isi': 0.0001,
+    'RPslide_thresh': 0.1,
     'spks_per_bin_for_missed_spks_est': 10,
     'std_smoothing_kernel_for_missed_spks_est': 4,
-    'min_num_bins_for_missed_spks_est': 50,
 }
 
 
@@ -137,11 +150,10 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
     return p_vals_b, cv_b
 
 
-def missed_spikes_est(feat, spks_per_bin=20, sigma=4, min_num_bins=50):
+def missed_spikes_est(feat, spks_per_bin=20, sigma=5, min_num_bins=50):
     """
-    Computes the approximate fraction of spikes missing (i.e. a pseudo false negative estimate)
-    from a spike feature distribution for a given unit, assuming the distribution is symmetric.
-
+    Computes the approximate fraction of spikes missing from a spike feature distribution for a
+    given unit, assuming the distribution is symmetric.
     Inspired by metric described in Hill et al. (2011) J Neurosci 31: 8699-8705.
 
     Parameters
@@ -169,21 +181,19 @@ def missed_spikes_est(feat, spks_per_bin=20, sigma=4, min_num_bins=50):
 
     See Also
     --------
-    plot.missed_spikes_est
-
+    plot.feat_cutoff
     Examples
     --------
     1) Determine the fraction of spikes missing from unit 1 based on the recorded unit's spike
     amplitudes, assuming the distribution of the unit's spike amplitudes is symmetric.
         # Get unit 1 amplitudes from a unit bunch, and compute fraction spikes missing.
         >>> feat = units_b['amps']['1']
-        >>> fraction_missing = bb.plot.missed_spikes_est(feat)
+        >>> fraction_missing = bb.plot.feat_cutoff(feat)
     """
 
-    # Ensure minimum number of spikes requirement is met.
-    error_str = 'The number of spikes in this unit is {0}, ' \
-                'but it must be at least {1}'.format(feat.size, spks_per_bin * min_num_bins)
-    assert (feat.size > (spks_per_bin * min_num_bins)), error_str
+    # Ensure minimum number of spikes requirement is met, return Nan otherwise
+    if feat.size <= (spks_per_bin * min_num_bins):
+        return np.nan, None, None
 
     # compute the spike feature histogram and pdf:
     num_bins = np.int(feat.size / spks_per_bin)
@@ -282,8 +292,8 @@ def wf_similarity(wf1, wf2):
     return s
 
 
-def firing_rate_cv(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
-    """
+def firing_rate_coeff_var(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
+    '''
     Computes the coefficient of variation of the firing rate: the ratio of the standard
     deviation to the mean.
 
@@ -321,9 +331,9 @@ def firing_rate_cv(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
         >>> ts_1 = units_b['times']['1']
         >>> ts_2 = units_b['times']['2']
         >>> ts_2 = np.intersect1d(np.where(ts_2 > 60)[0], np.where(ts_2 < 120)[0])
-        >>> cv, cvs, fr = bb.metrics.firing_rate_cv(ts_1)
-        >>> cv_2, cvs_2, fr_2 = bb.metrics.firing_rate_cv(ts_2)
-    """
+        >>> cv, cvs, fr = bb.metrics.firing_rate_coeff_var(ts_1)
+        >>> cv_2, cvs_2, fr_2 = bb.metrics.firing_rate_coeff_var(ts_2)
+    '''
 
     # Compute overall instantaneous firing rate and firing rate for each bin.
     fr = bb.singlecell.firing_rate(ts, hist_win=hist_win, fr_win=fr_win)
@@ -434,39 +444,7 @@ def isi_viol(ts, rp=0.002):
     return frac_isi_viol, len(v), isis
 
 
-def max_drift(feat):
-    """
-    Computes the maximum drift (max - min) of a spike feature array.
-
-    Parameters
-    ----------
-    feat : ndarray
-        The spike feature values from which to compute the maximum drift.
-
-    Returns
-    -------
-    md : float
-        The maxmimum drift of the unit.
-
-    See Also
-    --------
-    cum_drift
-
-    Examples
-    --------
-    1) Get the maximum depth and amp drift for unit 1.
-        >>> unit_idxs = np.where(spks_b['clusters'] == 1)[0]
-        >>> depths = spks_b['depths'][unit_idxs]
-        >>> amps = spks_b['amps'][unit_idxs]
-        >>> depth_md = bb.metrics.max_drift(depths)
-        >>> amp_md = bb.metrics.max_drift(amps)
-    """
-
-    md = np.max(feat) - np.min(feat)
-    return md
-
-
-def cum_drift(feat):
+def average_drift(feat, times):
     """
     Computes the cumulative drift (normalized by the total number of spikes) of a spike feature
     array.
@@ -475,6 +453,7 @@ def cum_drift(feat):
     ----------
     feat : ndarray
         The spike feature values from which to compute the maximum drift.
+        Usually amplitudes
 
     Returns
     -------
@@ -495,7 +474,7 @@ def cum_drift(feat):
         >>> amp_cd = bb.metrics.cum_drift(amps)
     """
 
-    cd = np.sum(np.abs(np.diff(feat))) / len(feat)
+    cd = np.sum(np.abs(np.diff(feat) / np.diff(times))) / len(feat)
     return cd
 
 
@@ -624,7 +603,7 @@ def ptp_over_noise(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='i
     return ptp_sigma
 
 
-def contamination_est(ts, rp=0.002):
+def contamination_ks2(ts, rp=0.002):
     """
     An estimate of the contamination of the unit (i.e. a pseudo false positive measure) based on
     the number of spikes, number of isi violations, and time between the first and last spike.
@@ -644,18 +623,18 @@ def contamination_est(ts, rp=0.002):
 
     See Also
     --------
-    contamination_est2
+    contamination_alt
 
     Examples
     --------
     1) Compute contamination estimate for unit 1.
         >>> ts = units_b['times']['1']
-        >>> ce = bb.metrics.contamination_est(ts)
+        >>> ce = bb.metrics.contamination(ts)
     """
 
     # Get number of spikes, number of isi violations, and time from first to final spike.
-    n_spks = len(ts)
-    n_isi_viol = np.sum(np.diff(ts) < rp)
+    n_spks = ts.size
+    n_isi_viol = np.size(np.where(np.diff(ts) < rp)[0])
     t = ts[-1] - ts[0]
 
     # `ce` is min of roots of solved quadratic equation.
@@ -664,7 +643,7 @@ def contamination_est(ts, rp=0.002):
     return ce
 
 
-def contamination_est2(ts, min_time, max_time, rp=0.002, min_isi=0.0001):
+def contamination(ts, min_time, max_time, rp=0.002, min_isi=0.0001):
     """
     An estimate of the contamination of the unit (i.e. a pseudo false positive measure) based on
     the number of spikes, number of isi violations, and time between the first and last spike.
@@ -697,14 +676,14 @@ def contamination_est2(ts, min_time, max_time, rp=0.002, min_isi=0.0001):
 
     See Also
     --------
-    contamination_est
+    contamination
 
     Examples
     --------
     1) Compute contamination estimate for unit 1, with a minimum isi for counting duplicate
     spikes of 0.1 ms.
         >>> ts = units_b['times']['1']
-        >>> ce = bb.metrics.contamination_est2(ts, min_isi=0.0001)
+        >>> ce = bb.metrics.contamination_ks2(ts, min_isi=0.0001)
     """
 
     duplicate_spikes = np.where(np.diff(ts) <= min_isi)[0]
@@ -722,25 +701,178 @@ def contamination_est2(ts, min_time, max_time, rp=0.002, min_isi=0.0001):
     return ce, num_violations
 
 
+def _max_acceptable_cont(FR, RP, rec_duration, acceptableCont, thresh):
+    """
+    Function to compute the maximum acceptable refractory period contamination
+        called during slidingRP_viol
+    """
+
+    time_for_viol = RP * 2 * FR * rec_duration
+    expected_count_for_acceptable_limit = acceptableCont * time_for_viol
+    max_acceptable = stats.poisson.ppf(thresh, expected_count_for_acceptable_limit)
+    if max_acceptable == 0 and stats.poisson.pmf(0, expected_count_for_acceptable_limit) > 0:
+        max_acceptable = -1
+    return max_acceptable
+
+
+def slidingRP_viol(ts, bin_size=0.25, thresh=0.1, acceptThresh=0.1):
+    """
+    A binary metric which determines whether there is an acceptable level of
+    refractory period violations by using a sliding refractory period:
+
+    This takes into account the firing rate of the neuron and computes a
+    maximum acceptable level of contamination at different possible values of
+    the refractory period. If the unit has less than the maximum contamination
+    at any of the possible values of the refractory period, the unit passes.
+
+    A neuron will always fail this metric for very low firing rates, and thus
+    this metric takes into account both firing rate and refractory period
+    violations.
+
+
+    Parameters
+    ----------
+    ts : ndarray_like
+        The timestamps (in s) of the spikes.
+    bin_size : float
+        The size of binning for the autocorrelogram.
+    thresh : float
+        Spike rate used to generate poisson distribution (to compute maximum
+              acceptable contamination, see _max_acceptable_cont)
+    acceptThresh : float
+        The fraction of contamination we are willing to accept (default value
+              set to 0.1, or 10% contamination)
+
+    Returns
+    -------
+    didpass : int
+        0 if unit didn't pass
+        1 if unit did pass
+
+    See Also
+    --------
+    contamination
+
+    Examples
+    --------
+    1) Compute whether a unit has too much refractory period contamination at
+    any possible value of a refractory period, for a 0.25 ms bin, with a
+    threshold of 10% acceptable contamination
+        >>> ts = units_b['times']['1']
+        >>> didpass = bb.metrics.slidingRP_viol(ts, bin_size=0.25, thresh=0.1,
+                                                acceptThresh=0.1)
+    """
+
+    b = np.arange(0, 10.25, bin_size) / 1000 + 1e-6  # bins in seconds
+    bTestIdx = [5, 6, 7, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40]
+    bTest = [b[i] for i in bTestIdx]
+
+    if len(ts) > 0 and ts[-1] > ts[0]:  # only do this for units with samples
+        recDur = (ts[-1] - ts[0])
+        # compute acg
+        c0 = correlograms(ts, np.zeros(len(ts), dtype='int8'), cluster_ids=[0],
+                          bin_size=bin_size / 1000, sample_rate=20000,
+                          window_size=2,
+                          symmetrize=False)
+        # cumulative sum of acg, i.e. number of total spikes occuring from 0
+        # to end of that bin
+        cumsumc0 = np.cumsum(c0[0, 0, :])
+        # cumulative sum at each of the testing bins
+        res = cumsumc0[bTestIdx]
+        total_spike_count = len(ts)
+
+        # divide each bin's count by the total spike count and the bin size
+        bin_count_normalized = c0[0, 0] / total_spike_count / bin_size * 1000
+        num_bins_2s = len(c0[0, 0])  # number of total bins that equal 2 secs
+        num_bins_1s = int(num_bins_2s / 2)  # number of bins that equal 1 sec
+        # compute fr based on the  mean of bin_count_normalized from 1 to 2 s
+        # instead of as before (len(ts)/recDur) for a better estimate
+        fr = np.sum(bin_count_normalized[num_bins_1s:num_bins_2s]) / num_bins_1s
+        mfunc = np.vectorize(_max_acceptable_cont)
+        # compute the maximum allowed number of spikes per testing bin
+        m = mfunc(fr, bTest, recDur, fr * acceptThresh, thresh)
+        # did the unit pass (resulting number of spikes less than maximum
+        # allowed spikes) at any of the testing bins?
+        didpass = int(np.any(np.less_equal(res, m)))
+    else:
+        didpass = 0
+
+    return didpass
+
+
+def noise_cutoff(amps, quartile_length=.2, n_bins=100, n_low_bins=2):
+    """
+    A metric to determine whether a unit's amplitude distribution is cut off
+    (at floor), without assuming a Gaussian distribution.
+
+    This metric takes the amplitude distribution, computes the mean and std
+    of an upper quartile of the distribution, and determines how many standard
+    deviations away from that mean a lower quartile lies.
+
+    Parameters
+    ----------
+    amps : ndarray_like
+        The amplitudes (in uV) of the spikes.
+    quartile_length : float
+        The size of the upper quartile of the amplitude distribution.
+    n_bins : int
+        The number of bins used to compute a histogram of the amplitude
+        distribution.
+    n_low_bins : int
+        The number of bins used in the lower part of the distribution (where
+        cutoff is determined).
+    Returns
+    -------
+    cutoff : float
+        Number of standard deviations that the lower mean is outside of the
+        mean of the upper quartile.
+
+    See Also
+    --------
+    missed_spikes_est
+
+    Examples
+    --------
+    1) Compute whether a unit's amplitude distribution is cut off
+        >>> amps = spks_b['amps'][unit_idxs]
+        >>> cutoff = bb.metrics.noise_cutoff(amps, quartile_length=.2,
+                                             n_bins=100, n_low_bins=2)
+    """
+
+    if amps.size > 1:
+        bins_list = np.linspace(0, np.max(amps), n_bins)
+        n, bins = np.histogram(amps, bins=bins_list)
+        dx = np.diff(n)
+        idx_nz = np.nonzero(dx)  # indices of nonzeros
+        idx_peak = np.argmax(n)
+        length_top_half = idx_nz[0][-1] - idx_peak
+        high_quartile = 1 - (2 * quartile_length)
+
+        high_quartile_start_ind = int(np.ceil(high_quartile * length_top_half + idx_peak))
+        xx = idx_nz[0][idx_nz[0] > high_quartile_start_ind]
+        if len(n[xx]) > 0:
+            mean_high_quartile = np.mean(n[xx])
+            std_high_quartile = np.std(n[xx])
+            first_low_quartile = np.mean(n[idx_nz[0][1:n_low_bins]])
+            if std_high_quartile > 0:
+                cutoff = (first_low_quartile - mean_high_quartile) / std_high_quartile
+            else:
+                cutoff = np.float64(np.nan)
+        else:
+            cutoff = np.float64(np.nan)
+    else:
+        cutoff = np.float64(np.nan)
+    return cutoff
+
+
 def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
                        params=METRICS_PARAMS):
     """
-    Computes single unit metrics from only the spike times, amplitudes, and depths for a set of
-    units.
+    Computes single unit metrics from only the spike times, amplitudes, and
+    depths for a set of units.
 
     Metrics computed:
-        num_spikes
-        firing_rate
-        presence_ratio
-        presence_ratio_std
-        frac_isi_viol (see `isi_viol`)
-        contamination_est (see `contamination_est`)
-        contamination_est2 (see `contamination_est2`)
-        missed_spikes_est (see `missed_spikes_est`)
-        cum_amp_drift (see `cum_drift`)
-        max_amp_drift (see `max_drift`)
-        cum_depth_drift (see `cum_drift`)
-        max_depth_drift (see `max_drift`)
+        TODO list final set of metrics
 
     Parameters
     ----------
@@ -794,25 +926,29 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         >>> r = bb.metrics.quick_unit_metrics(cluster_ids, ts, amps, depths)
     """
 
-    cluster_ids = np.arange(np.max(spike_clusters) + 1)
+    cluster_ids = np.unique(spike_clusters)
     nclust = cluster_ids.size
-    r = Bunch({
-        'cluster_id': cluster_ids,
-        'num_spikes': np.full((nclust,), np.nan),
-        'firing_rate': np.full((nclust,), np.nan),
-        'presence_ratio': np.full((nclust,), np.nan),
-        'presence_ratio_std': np.full((nclust,), np.nan),
-        'frac_isi_viol': np.full((nclust,), np.nan),
-        'contamination_est': np.full((nclust,), np.nan),
-        'contamination_est2': np.full((nclust,), np.nan),
-        'missed_spikes_est': np.full((nclust,), np.nan),
-        'cum_amp_drift': np.full((nclust,), np.nan),
-        'max_amp_drift': np.full((nclust,), np.nan),
-        'cum_depth_drift': np.full((nclust,), np.nan),
-        'max_depth_drift': np.full((nclust,), np.nan),
-        # could add 'epoch_name' in future:
-        # 'epoch_name': np.zeros(nclust, dtype='object'),
-    })
+
+    metrics_list = [
+        'cluster_id',
+        'amp_max',
+        'amp_min',
+        'amp_median',
+        'amp_std_dB',
+        'contamination',
+        'contamination_ks2',
+        'drift',
+        'frac_isi_viol',
+        'missed_spikes_est',
+        'noise_cutoff',
+        'presence_ratio',
+        'presence_ratio_std',
+        'slidingRP_viol',
+        'spike_count'
+    ]
+
+    r = Bunch({k: np.full((nclust,), np.nan) for k in metrics_list})
+    r['cluster_id'] = cluster_ids
 
     # vectorized computation of basic metrics such as presence ratio and firing rate
     tmin = spike_times[0]
@@ -822,8 +958,18 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
                                 ybin=cluster_ids, xlim=[tmin, tmax])[0]
     r.presence_ratio = np.sum(presence_ratio > 0, axis=1) / presence_ratio.shape[1]
     r.presence_ratio_std = np.std(presence_ratio, axis=1)
-    r.num_spikes = np.sum(presence_ratio, axis=1)
-    r.firing_rate = r.num_spikes / (tmax - tmin)
+    r.spike_count = np.sum(presence_ratio, axis=1)
+    r.firing_rate = r.spike_count / (tmax - tmin)
+
+    # computing amplitude statistical indicators
+    camp = pd.DataFrame(np.c_[spike_amps, 20 * np.log10(spike_amps), spike_clusters],
+                        columns=['amps', 'log_amps', 'clusters'])
+    camp = camp.groupby('clusters')
+    assert np.all(camp.clusters.unique() == r['cluster_id'])
+    r.amp_min = np.array(camp['amps'].min())
+    r.amp_max = np.array(camp['amps'].max())
+    r.amp_median = np.array(10 ** (camp['log_amps'].median() / 20))  # this is the geometric median
+    r.amp_std_dB = np.array(camp['log_amps'].std())
 
     # loop over each cluster to compute the rest of the metrics
     for ic in np.arange(nclust):
@@ -837,19 +983,48 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
 
         # compute metrics
         r.frac_isi_viol[ic], _, _ = isi_viol(ts, rp=params['refractory_period'])
-        r.contamination_est[ic] = contamination_est(ts, rp=params['refractory_period'])
-        r.contamination_est2[ic], _ = contamination_est2(
+        r.contamination_ks2[ic] = contamination_ks2(ts, rp=params['refractory_period'])
+        r.contamination[ic], _ = contamination(
             ts, tmin, tmax, rp=params['refractory_period'], min_isi=params['min_isi'])
-        try:  # this may fail because `missed_spikes_est` requires a min number of spikes
-            r.missed_spikes_est[ic], _, _ = missed_spikes_est(
-                amps, spks_per_bin=params['spks_per_bin_for_missed_spks_est'],
-                sigma=params['std_smoothing_kernel_for_missed_spks_est'],
-                min_num_bins=params['min_num_bins_for_missed_spks_est'])
-        except AssertionError:
-            pass
-        r.cum_amp_drift[ic] = cum_drift(amps)
-        r.max_amp_drift[ic] = max_drift(amps)
-        r.cum_depth_drift[ic] = cum_drift(depths)
-        r.max_depth_drift[ic] = max_drift(depths)
+        r.slidingRP_viol[ic] = slidingRP_viol(ts,
+                                              bin_size=params['bin_size'],
+                                              thresh=params['RPslide_thresh'],
+                                              acceptThresh=params['acceptable_contamination'])
+        r.noise_cutoff[ic] = noise_cutoff(amps,
+                                          quartile_length=params['nc_quartile_length'],
+                                          n_bins=params['nc_bins'],
+                                          n_low_bins=params['nc_n_low_bins'])
+        r.missed_spikes_est[ic], _, _ = missed_spikes_est(
+            amps, spks_per_bin=params['spks_per_bin_for_missed_spks_est'],
+            sigma=params['std_smoothing_kernel_for_missed_spks_est'],
+            min_num_bins=params['min_num_bins_for_missed_spks_est'])
+
+        # wonder if there is a need to low-cut this
+        r.drift[ic] = np.sum(np.abs(np.diff(depths))) / (tmax - tmin) * 3600
+    return r
+
+
+def unit_labels(spike_clusters, spike_times, spike_amps,
+                params=METRICS_PARAMS):
+
+    cluster_ids = np.arange(np.max(spike_clusters) + 1)
+    nclust = cluster_ids.size
+
+    r = Bunch({
+        'cluster_id': cluster_ids,
+        'label': np.full((nclust,), np.nan)
+    })
+
+    for ic in np.arange(nclust):
+        # slice the spike_times array
+        ispikes = spike_clusters == cluster_ids[ic]
+        if np.all(~ispikes):  # if this cluster has no spikes, continue
+            continue
+        ts = spike_times[ispikes]
+        amps = spike_amps[ispikes]
+
+    r.label[ic] = int(slidingRP_viol(ts)
+                      and noise_cutoff(amps) < params['nc_thresh']
+                      and np.median(amps) > params['med_amp_thresh'])
 
     return r
