@@ -7,7 +7,7 @@ import shutil
 
 import numpy as np
 
-from ibllib.io import params, flags, jsonable, spikeglx, hashfile, misc
+from ibllib.io import params, flags, jsonable, spikeglx, hashfile, misc, globus
 import ibllib.io.raw_data_loaders as raw
 
 
@@ -599,6 +599,24 @@ class TestsMisc(unittest.TestCase):
         self.file.unlink()
         (self.tempdir / 'test_full').rmdir()
         _ = [x.rmdir() for x in self.subdirs if x.exists()]
+
+
+class TestsGlobus(unittest.TestCase):
+    def test_as_globus_path(self):
+        # A Windows path
+        actual = globus.as_globus_path('E:\\FlatIron\\integration')
+        expected = '/~/E/FlatIron/integration'
+        self.assertEqual(expected, actual)
+
+        # A relative POSIX path
+        actual = globus.as_globus_path('/mnt/foo/../data/integration')
+        expected = '/mnt/data/integration'
+        self.assertTrue(actual.endswith(expected))
+
+        # A globus path
+        actual = globus.as_globus_path('/~/E/FlatIron/integration')
+        expected = '/~/E/FlatIron/integration'
+        self.assertEqual(expected, actual)
 
 
 if __name__ == "__main__":
