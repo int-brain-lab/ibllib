@@ -28,7 +28,7 @@ def probes_description(ses_path, one=None, bin_exists=True):
 
     eid = one.eid_from_path(ses_path)
     ses_path = Path(ses_path)
-    ephys_files = spikeglx.glob_ephys_files(ses_path, bin_exists=bin_exists)
+    ephys_files = spikeglx.glob_ephys_files(ses_path, ext='meta')
     subdirs, labels, efiles_sorted = zip(
         *sorted([(ep.ap.parent, ep.label, ep) for ep in ephys_files if ep.get('ap')]))
 
