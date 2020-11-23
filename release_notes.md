@@ -1,3 +1,23 @@
+### Release Notes 1.5.27
+- register ch when mtscomp runs properly
+- probes_description runs even if .cbin doesn't exist
+
+### Release Notes 1.5.26 Hotfix
+-   allows dataset registration on errored task
+
+### Release Notes 1.5.25 Hotfix
+-   ks2task import conflict fix
+
+### Release Notes 1.5.24 Hotfix
+-   Ks2 task does not depend on ephys pulses
+
+### Release Notes 1.5.23
+- Ephys mtscomp
+    - ks2 task registers first probe even if one failing
+    - mtscomp task register .ch and .meta even if .cbin doesn't exist
+    - move ibllib tests to tests_ibllib
+    - brainbox atlas plot functions
+
 ### Release Notes 1.5.22
 -   Ephys extraction:
     -   synchronisation between probes computed in the ephysPulses job

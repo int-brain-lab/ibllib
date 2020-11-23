@@ -438,7 +438,7 @@ def get_neuropixel_version_from_files(ephys_files):
         return '3A'
 
 
-def glob_ephys_files(session_path, suffix='.meta', recursive=True, bin_exists=True):
+def glob_ephys_files(session_path, suffix='.meta', ext='bin', recursive=True, bin_exists=True):
     """
     From an arbitrary folder (usually session folder) gets the ap and lf files and labels
     Associated to the subfolders where they are
@@ -461,6 +461,7 @@ def glob_ephys_files(session_path, suffix='.meta', recursive=True, bin_exists=Tr
 
     :param bin_exists:
     :param suffix:
+    :param ext: file extension to look for, default 'bin' but could also be 'meta' or 'ch'
     :param recursive:
     :param session_path: folder, string or pathlib.Path
     :param glob_pattern: pattern to look recursively for (defaults to '*.ap.*bin)
@@ -475,24 +476,27 @@ def glob_ephys_files(session_path, suffix='.meta', recursive=True, bin_exists=Tr
     recurse = '**/' if recursive else ''
     ephys_files = []
     for raw_ephys_file in Path(session_path).glob(f'{recurse}*.ap{suffix}'):
-        raw_ephys_apfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + '.*bin'), None)
+        raw_ephys_apfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + f'.*{ext}'), None)
         if not raw_ephys_apfile and bin_exists:
             continue
-        elif not bin_exists:
+        elif not raw_ephys_apfile and ext != 'bin':
+            continue
+        elif not bin_exists and ext == 'bin':
             raw_ephys_apfile = raw_ephys_file.with_suffix('.bin')
         # first get the ap file
         ephys_files.extend([Bunch({'label': None, 'ap': None, 'lf': None, 'path': None})])
         ephys_files[-1].ap = raw_ephys_apfile
         # then get the corresponding lf file if it exists
         lf_file = raw_ephys_apfile.parent / raw_ephys_apfile.name.replace('.ap.', '.lf.')
-        ephys_files[-1].lf = next(lf_file.parent.glob(lf_file.stem + '.*bin'), None)
+        ephys_files[-1].lf = next(lf_file.parent.glob(lf_file.stem + f'.*{ext}'), None)
         # finally, the label is the current directory except if it is bare in raw_ephys_data
         ephys_files[-1].label = get_label(raw_ephys_apfile)
         ephys_files[-1].path = raw_ephys_apfile.parent
     # for 3b probes, need also to get the nidq dataset type
     for raw_ephys_file in Path(session_path).rglob(f'{recurse}*.nidq{suffix}'):
-        raw_ephys_nidqfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + '.*bin'), None)
-        if not bin_exists:
+        raw_ephys_nidqfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + f'.*{ext}'),
+                                  None)
+        if not bin_exists and ext == 'bin':
             raw_ephys_nidqfile = raw_ephys_file.with_suffix('.bin')
         ephys_files.extend([Bunch({'label': get_label(raw_ephys_file),
                                    'nidq': raw_ephys_nidqfile,

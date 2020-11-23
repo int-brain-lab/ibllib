@@ -68,9 +68,9 @@ class Task(abc.ABC):
         _logger.info(f"Starting job {self.__class__}")
         # run
         start_time = time.time()
+        self.status = 0
         try:
             self.outputs = self._run(**kwargs)
-            self.status = 0
             _logger.info(f"Job {self.__class__} complete")
         except BaseException:
             _logger.error(traceback.format_exc())
@@ -302,18 +302,19 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None, max_md
     status = task.run()
     patch_data = {'time_elapsed_secs': task.time_elapsed_secs, 'log': task.log,
                   'version': task.version}
-    # only registers successful runs
-    if status == 0:
-        # on a successful run, if there is no data to register, set status to Empty
-        if task.outputs is None:
-            patch_data['status'] = 'Empty'
-        else:  # otherwise register data and set status to Complete
-            try:
-                registered_dsets = task.register_datasets(one=one, max_md5_size=max_md5_size)
-            except BaseException:
-                patch_data['status'] = 'Errored'
-            patch_data['status'] = 'Complete'
-    elif status == -1:
+    # if there is no data to register, set status to Empty
+    if task.outputs is None:
+        patch_data['status'] = 'Empty'
+    # otherwise register data and set (provisional) status to Complete
+    else:
+        try:
+            registered_dsets = task.register_datasets(one=one, max_md5_size=max_md5_size)
+        except BaseException:
+            patch_data['status'] = 'Errored'
+        patch_data['status'] = 'Complete'
+    # overwrite status to errored
+    if status == -1:
         patch_data['status'] = 'Errored'
+    # update task status on Alyx
     t = one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data=patch_data)
     return t, registered_dsets
