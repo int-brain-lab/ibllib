@@ -7,7 +7,6 @@ import fnmatch
 import re
 from functools import wraps
 from pathlib import Path, PurePath
-from collections import defaultdict
 from typing import Any, Sequence, Union, Optional, List, Dict
 from uuid import UUID
 
@@ -279,52 +278,28 @@ class OneAlyx(OneAbstract):
         out = self.alyx.rest('dataset-types', 'read', dataset_type)
         print(out['description'])
 
-    def list(self,
-             eid: Optional[Union[str, Path, UUID]] = None,
-             keyword: str = 'dataset-type',
-             details: bool = False) -> Union[List, Dict[str, str]]:
+    def list(self, eid: Optional[Union[str, Path, UUID]] = None, details=False
+             ) -> Union[List, Dict[str, str]]:
         """
         From a Session ID, queries Alyx database for datasets related to a session.
 
         :param eid: Experiment session uuid str
         :type eid: str
 
-        :param keyword: The attribute to be listed, options include 'dataset', 'dataset-type'.
-        If no eid provided, only dataset-types will be returned.
-        :type keyword: str
-
-        :param details: If eid provided returns datasets as a dict with collection names as
-        keys, if eid is None a list of dataset-type dicts is returned, with a description field.
-        :type details: bool
+        :param details: If false returns a list of path, otherwise returns the REST dictionary
+        :type eid: bool
 
         :return: list of strings or dict of lists if details is True
         :rtype:  list, dict
         """
-        if keyword[-1] == 's':
-            keyword = keyword[:-1]  # Remove plural
-        if keyword not in ('dataset', 'dataset-type'):
-            raise ValueError('keyword should be either "dataset" or "dataset-type"')
-
         if not eid:
-            if keyword != 'dataset-type':
-                _logger.warning('Unable to list all datasets, returning dataset types instead')
-            results = self.alyx.rest('dataset-types', 'list')
-            return results if details else [x['name'] for x in results]
+            return [x['name'] for x in self.alyx.rest('dataset-types', 'list')]
 
         # Session specific list
-        results = self.alyx.rest('datasets', 'list', session=eid)
-        collection = []
-        name = []
-        for r in results:
-            collection.append(r['collection'])
-            name.append(r['name'] if keyword == 'dataset' else r['dataset_type'])
-
-        if details:  # Order the datasets by collection
-            out = defaultdict(list)
-            [out[k or 'alf'].append(v) for k, v in zip(collection, name)]
-            return out
-        else:
-            return name
+        dsets = self.alyx.rest('datasets', 'list', session=eid, exists=True)
+        if not details:
+            dsets = sorted([Path(dset['collection']).joinpath(dset['name']) for dset in dsets])
+        return dsets
 
     @parse_id
     def load(self, eid, dataset_types=None, dclass_output=False, dry_run=False, cache_dir=None,
@@ -365,7 +340,7 @@ class OneAlyx(OneAbstract):
     def load_dataset(self,
                      eid: Union[str, Path, UUID],
                      dataset: str,
-                     collection: Optional[str] = 'alf',
+                     collection: Optional[str] = None,
                      download_only: bool = False) -> Any:
         """
         Load a single dataset from a Session ID and a dataset type.
@@ -374,6 +349,7 @@ class OneAlyx(OneAbstract):
         details dict or Path
         :param dataset: The ALF dataset to load.  Supports asterisks as wildcards.
         :param collection:  The collection to which the object belongs, e.g. 'alf/probe01'.
+        For IBL this is the relative path of the file from the session root.
         Supports asterisks as wildcards.
         :param download_only: When true the data are downloaded and the file path is returned
         :return: dataset or a Path object if download_only is true
@@ -385,9 +361,9 @@ class OneAlyx(OneAbstract):
             spikes = one.load_dataset(eid 'spikes.times.npy', collection='alf/probe01')
         """
         search_str = 'name__regex,' + dataset.replace('.', r'\.').replace('*', '.*')
-        if collection and collection != 'all':
+        if collection:
             search_str += ',collection__regex,' + collection.replace('*', '.*')
-        results = self.alyx.rest('datasets', 'list', session=eid, django=search_str)
+        results = self.alyx.rest('datasets', 'list', session=eid, django=search_str, exists=True)
 
         # Get filenames of returned ALF files
         collection_set = {x['collection'] for x in results}

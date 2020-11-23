@@ -426,6 +426,9 @@ def compute_psychometric(trials, signed_contrast=None, block=None):
     else:
         block_idx = trials.probabilityLeft == block
 
+    if not np.any(block_idx):
+        return np.nan * np.zeros(4)
+
     contrasts, n_contrasts = np.unique(signed_contrast[block_idx], return_counts=True)
     rightward = trials.choice == -1
     # Calculate the proportion rightward for each contrast type
