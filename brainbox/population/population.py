@@ -248,13 +248,15 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
             'forest'        Random forest
             'regression'    Logistic regression
             'lda'           Linear Discriminant Analysis
-    cross_validation : string
-        which cross-validation method to use, options are:
+    cross_validation : string of generator object
+        which cross-validation method to use
+        you can input the .split method of any sklearn cross-validation method
+        or a string. If it's a string, options are:
             'none'              No cross-validation
             'kfold'             K-fold cross-validation
+            'kfold-interleaved' K-fold cross validation with interleaved trial selection
             'leave-one-out'     Leave out the trial that is being decoded
             'block'             Leave out the block the to-be-decoded trial is in
-            'custom'            Any custom cross-validation provided by the user
     num_splits : integer
         ** only for 'kfold' cross-validation **
         Number of splits to use for k-fold cross validation, a value of 5 means that the decoder
@@ -306,12 +308,12 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
     # Check input
     if type(classifier) == str:
         assert classifier in ['bayes', 'forest', 'regression', 'lda']
-    assert cross_validation in ['none', 'kfold', 'leave-one-out', 'block', 'custom']
+    assert (type(cross_validation) == str) or (type(cross_validation) == types.GeneratorType)
+    if type(cross_validation) == str:
+        assert cross_validation in ['none', 'kfold', 'kfold-interleaved', 'leave-one-out', 'block']
     assert event_times.shape[0] == event_groups.shape[0]
     if cross_validation == 'block':
         assert event_times.shape[0] == prob_left.shape[0]
-    if cross_validation == 'custom':
-        assert isinstance(custom_validation, types.GeneratorType)
 
     # Get matrix of all neuronal responses
     times = np.column_stack(((event_times - pre_time), (event_times + post_time)))
@@ -400,12 +402,14 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
                 cv = LeaveOneOut().split(sub_pop_vector)
             elif cross_validation == 'kfold':
                 cv = KFold(n_splits=num_splits).split(sub_pop_vector)
+            elif cross_validation == 'kfold-interleaved':
+                cv = KFold(n_splits=num_splits, shuffle=True).split(sub_pop_vector)
             elif cross_validation == 'block':
                 block_lengths = [sum(1 for i in g) for k, g in groupby(prob_left)]
                 blocks = np.repeat(np.arange(len(block_lengths)), block_lengths)
                 cv = LeaveOneGroupOut().split(sub_pop_vector, groups=blocks)
             elif cross_validation == 'custom':
-                cv = custom_validation
+                cv = cross_validation
 
             # Loop over the splits into train and test
             for train_index, test_index in cv:
