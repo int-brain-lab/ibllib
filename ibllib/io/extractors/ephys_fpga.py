@@ -471,7 +471,7 @@ def _get_all_probes_sync(session_path, bin_exists=True):
     return ephys_files
 
 
-def _get_main_probe_sync(session_path, bin_exists=False):
+def get_main_probe_sync(session_path, bin_exists=False):
     """
     From 3A or 3B multiprobe session, returns the main probe (3A) or nidq sync pulses
     with the attached channel map (default chmap if none)
@@ -572,7 +572,7 @@ class FpgaTrials(BaseExtractor):
         # extracts trials
         # extract the behaviour data from bpod
         if sync is None or chmap is None:
-            _sync, _chmap = _get_main_probe_sync(self.session_path, bin_exists=False)
+            _sync, _chmap = get_main_probe_sync(self.session_path, bin_exists=False)
             sync = sync or _sync
             chmap = chmap or _chmap
         bpod_raw = raw_data_loaders.load_data(self.session_path)
@@ -625,7 +625,7 @@ def extract_all(session_path, save=True, bin_exists=False):
     :param version: bpod version, defaults to None
     :return: outputs, files
     """
-    sync, chmap = _get_main_probe_sync(session_path, bin_exists=bin_exists)
+    sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
     outputs, files = run_extractor_classes(
         [FpgaTrials], session_path=session_path,
         save=save, sync=sync, chmap=chmap)

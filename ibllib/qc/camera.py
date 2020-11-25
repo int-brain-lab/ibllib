@@ -6,23 +6,20 @@ Question:
 What is the order of things? I am assuming the frames, pin state, FPGA times all occur outside of the task
 What are the units of the ssv timestamps?  Can we use these as a measure of Bpod timestamp accuracy (these are interpolated)
 What to do if the pin_state file exists but not the count file?
+We're not extracting the audio based on TTL length.  Is this a problem?
 """
-
-import logging
 import sys
-from datetime import datetime, timedelta
+import logging
 from inspect import getmembers, isfunction
-from functools import reduce
-from collections.abc import Sized
 
 import cv2
 import numpy as np
-from scipy.stats import chisquare
+import matplotlib.pyplot as plt
 
 from ibllib.io.extractors.camera import (
-    load_embedded_frame_data, extract_camera_sync, PIN_STATE_THRESHOLD
+    load_embedded_frame_data, extract_camera_sync, PIN_STATE_THRESHOLD, extract_all
 )
-from ibllib.io.extractors import training_trials
+from ibllib.exceptions import ALFObjectNotFound
 from ibllib.io.extractors import ephys_fpga
 from ibllib.io import raw_data_loaders as raw
 import alf.io as alfio
@@ -32,11 +29,51 @@ from . import base
 _log = logging.getLogger('ibllib')
 
 
+def get_video_frame(video_path, frame_number):
+    """
+    Obtain numpy array corresponding to a particular video frame in video_path
+    :param video_path: local path to mp4 file
+    :param frame_number: video frame to be returned
+    :return: numpy array corresponding to frame of interest.  Dimensions are (1024, 1280, 3)
+    """
+    cap = cv2.VideoCapture(str(video_path))
+    #  fps = cap.get(cv2.CAP_PROP_FPS)
+    #  print("Frame rate = " + str(fps))
+    cap.set(1, frame_number)  # 0-based index of the frame to be decoded/captured next.
+    ret, frame_image = cap.read()
+    cap.release()
+    return frame_image
+
+
+def get_video_frames_preload(video_path, frame_numbers):
+    """
+    Obtain numpy array corresponding to a particular video frame in video_path
+    :param video_path: local path to mp4 file
+    :param frame_numbers: video frame to be returned
+    :return: numpy array corresponding to frame of interest.  Dimensions are (1024, 1280,
+    3).  Also returns the frame rate and total number of frames
+    """
+    cap = cv2.VideoCapture(str(video_path))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    if len(frame_numbers) == 0:
+        return None, fps, total_frames
+    elif 0 < frame_numbers[-1] >= total_frames:
+        raise IndexError('frame numbers must be between 0 and ' + str(total_frames))
+    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_numbers[0])
+    frame_images = []
+    for i in frame_numbers:
+        sys.stdout.write(f'\rloading frame {i}/{frame_numbers[-1]}')
+        sys.stdout.flush()
+        ret, frame = cap.read()
+        frame_images.append(frame)
+    cap.release()
+    sys.stdout.write('\x1b[2K\r')  # Erase current line in stdout
+    return np.array(frame_images), fps, total_frames
+
+
 class CameraQC(base.QC):
     """A class for computing camera QC metrics"""
-    criteria = {"PASS": 0.99,
-                "WARNING": 0.95,
-                "FAIL": 0}
     dstypes = [
         '_iblrig_Camera.frame_counter',
         '_iblrig_Camera.GPIO',
@@ -95,56 +132,53 @@ class CameraQC(base.QC):
 
         # Data
         self.side = side
+        filename = f'_iblrig_{self.side}Camera.raw.mp4'
+        self.video_path = self.session_path / 'raw_video_data' / filename
         self.type = raw.get_session_extractor_type(self.session_path)
         self.data = Bunch()
 
-        # Metrics and passed trials
+        # QC outcomes map
         self.metrics = None
-        self.passed = None
+        self.outcome = 'NOT_SET'
 
-    def load_data(self, partial=False, download_data=True):
+    def load_data(self, download_data=True):
         """Extract the data from raw data files
         Extracts all the required task data from the raw data files.
 
-        :param partial: if True, assumes trials and camera times already assigned to data
         :param download_data: if True, any missing raw data is downloaded via ONE.
         """
-        # if raw.get_session_extractor_type(self.session_path) == 'ephys':
-        #     pass
         if download_data:
             self._ensure_required_data()
 
         # Get frame count and pin state
-        self.data['count'], self.data['pin_state'] = load_embedded_frame_data(self.session_path, self.side)
-        assert self.data['count'].size == self.data['pin_state'].size
-        assert all(np.diff(self.data['count']) > 0), "frame count doesn't make sense"
-
+        self.data['count'], self.data['pin_state'] = \
+            load_embedded_frame_data(self.session_path, self.side, raw=True)
 
         # Get audio data
-        # TODO Load from trials ALF if possible
-        if alfio.exists(self.session_path / 'alf', 'trials'):
-            trials = alfio.load_object(self.session_path / 'alf', 'trials')
+        if self.type == 'ephys':
+            sync, chmap = ephys_fpga.get_main_probe_sync(self.session_path)
+            audio_ttls = ephys_fpga._get_sync_fronts(sync, chmap['audio'])
+            self.data['audio'] = audio_ttls['times'][::2]  # Get rises
+            # Load raw FPGA times
+            cam_ts = extract_camera_sync(sync, chmap)
+            self.data['fpga_times'] = cam_ts[f'{self.side}_camera']
         else:
-            # Extract the trial data
-            # TODO Bpod only extraction
-            if self.type == 'ephys':
-                trials, _ = ephys_fpga.extract_all(self.session_path, save=False, bin_exists=False)
-            else:
-                trials, _ = training_trials.extract_all(self.session_path, save=False)
+            _, audio_ttls = raw.load_bpod_fronts(self.session_path)
+            self.data['audio'] = audio_ttls['times'][::2]
+            # TODO load Bpod frames?
 
-        incorrect_trial = trials['feedbackType'] < 0
-        self.data['audioTTLs'] = np.sort(
-            np.append(trials['goCue_times'], trials['feedback_times'][incorrect_trial]))
-
-        # Extract camera times
-        sync, chmap = ephys_fpga._get_main_probe_sync(self.session_path)
-        ts = extract_camera_sync(sync, chmap)
-        self.data['frame_times'] = ts[f'{self.side}_camera']
+        # Load extracted frame times
+        alf_path = self.session_path / 'alf'
+        try:
+            self.data['frame_times'] = alfio.load_object(alf_path, f'{self.side}Camera')['times']
+        except ALFObjectNotFound:  # Re-extract
+            # TODO Flag for extracting single camera's data
+            outputs, _ = extract_all(self.session_path, self.type, save=False)
+            self.data['frame_times'] = outputs[f'{self.side}_camera_timestamps']
 
         # Gather information from video file
-        self.log('inspecting video file...')
-        cam_path = self.session_path / 'raw_video_data' / f'_iblrig_{self.side}Camera.raw.mp4'
-        cap = cv2.VideoCapture(str(cam_path))
+        _log.info('inspecting video file...')
+        cap = cv2.VideoCapture(str(self.video_path))
 
         # Get basic properties of video
         info = Bunch()
@@ -155,9 +189,7 @@ class CameraQC(base.QC):
         cap.release()
 
         self.data['video'] = info
-        # TODO Sample frames for brightness range check
-
-        assert self.data['count'].size == info.length  # FIXME Should be QC check
+        self.data['brightness'] = vid_to_brightness(self.video_path)
 
         # Load Bonsai frame timestamps
         file = self.session_path / 'raw_video_data' / f'_iblrig_{self.side}Camera.timestamps.ssv'
@@ -165,136 +197,188 @@ class CameraQC(base.QC):
         ssv_params = dict(names=('date', 'timestamp'), dtype='<M8[ns],<u4', delimiter=' ')
         self.data['bpod_frame_times'] = np.genfromtxt(file, **ssv_params)  # np.loadtxt is slower
 
-        """Here we will ensure that the FPGA camera times match the number of video frames in 
-        length.  We will make the following assumptions: 
-        
-        1. The number of FPGA camera times is equal to or greater than the number of video frames.
-        2. No TTLs were missed between the camera and FPGA.
-        3. No pin states were missed by Bonsai.
-        4  No pixel count data was missed by Bonsai.
-
-        In other words the count and pin state arrays accurately reflect the number of frames 
-        sent by the camera and should therefore be the same length.
-        
-        The missing frame timestamps are removed in three stages:
-        
-        1. Remove any timestamps that occurred before video frame acquisition in Bonsai.
-        2. Remove any timestamps where the frame counter reported missing frames, i.e. remove the
-        dropped frames which occurred throughout the session.
-        3. Remove the trailing timestamps at the end of the session if the camera was turned off
-        in the wrong order.
-        
-        TODO Confirm this last point 
-        """
-
-        # Align on first pin state change
-        # TODO It may be possible for the pin state to be high for 2 consecutive frames
-        first_uptick = (self.data['pin_state'] > 0).argmax()
-        first_ttl = np.searchsorted(self.data['frame_times'], self.data['audioTTLs'][0])  # - 1
-        # Minus any frames that were dropped between the start of frame acquisition and the
-        # first TTL
-        """Here we find up to which index in the FPGA times we discard by taking the difference 
-        between the index of the first pin state change (when the audio TTL was reported by the 
-        camera) and the index of the first audio TTL in FPGA time.  We subtract the difference 
-        between the frame count at the first pin state change and the index to account for any 
-        video frames that were not saved during this period (we will remove those from the 
-        camera FPGA times later).
-        """
-        start = first_ttl - first_uptick - (self.data['count'][first_uptick] - first_uptick)
-        assert start >= 0
-
-        # Remove the extraneous timestamps from the beginning and end
-        # TODO Add case for missing FPGA timestamps
-        end = self.data['count'][-1] + 1 + start
-        ts = self.data['frame_times'][start:end]
-
-        assert np.searchsorted(ts, self.data['audioTTLs'][0]) == first_uptick
-        assert ts.size >= self.data['count'].size
-        assert ts.size == self.data['count'][-1] + 1
-
-        # Remove the rest of the dropped frames
-        ts = ts[self.data['count']]
-
-        # Double check everything looks okay TODO Remove this
-        last_uptick = np.where(self.data['pin_state'] > 0)[0][-1]
-        last_ttl = np.searchsorted(ts, self.data['audioTTLs'][-1])
-
-        # Plot to check
-        import matplotlib.pyplot as plt
-        from ibllib.plots import squares, vertical_lines
-        help(squares)
-        y = self.data['pin_state'] > 0
-        y[y == 1] = 0.0005
-        y += 0.0002
-        plt.plot(ts, y, marker='d', color='blue', drawstyle='steps-pre')
-        plt.plot(ts, np.zeros_like(ts), 'kx')
-        vertical_lines(self.data['audioTTLs'], ymin=0, ymax=1, color='r', linestyle=':')
-        # vertical_lines(self.data['audioTTLs'], ymin=0, ymax=1, color='r', linestyle=':')
-
-        """Two ways to do this: first way assumes there are always more timestamps than frames.
-        This way does not make that assumption, and if the FPGA is missing timestamps at the end of
-        the session they are filled with nan values.
-        
-        
-        """
-        # ts2 = self.data['frame_times'][start:]
-        # incl = np.ones_like(ts2, dtype=bool)
-        # dropped = np.setdiff1d(np.arange(self.data['count'][-1]), self.data['count'],
-        #                        assume_unique=True)
-        # incl[dropped] = False
-        # ts2 = ts2[incl]
-        #
-        # plt.plot(ts2, y, marker='d', color='blue', drawstyle='steps-pre')
-        # plt.plot(ts2, np.zeros_like(ts2), 'kx')
-        # vertical_lines(self.data['audioTTLs'], ymin=0, ymax=1, color='r', linestyle=':')
-
-        # count_diff = np.diff(self.data['count'])
-        # for i, in np.where(count_diff > 1):
-        #     d = int(np.diff(self.data['count'][[i, i + 1]]) - 1)
-        #     ts[i:i+d]
-        # assert first_ttl < first_uptick
-        # aln = first_uptick - first_ttl
-
     def _ensure_required_data(self):
         files = self.one.load(self.eid,
                               dataset_types=self.dstypes + self.dstypes_fpga, download_only=True)
         assert not any(file is None for file in files)
 
-    def check_video_contrast(self):
+    def run(self, update: bool = False, download_data: bool = False) -> (str, dict):
+        """
+        Run video QC checks and return outcome
+        :param update: if True, updates the session QC fields on Alyx
+        :param download_data: if True, downloads any missing data if required
+        :returns:
+        """
+        _log.info('Computing QC outcome')
+        if not self.data:
+            self.load_data(download_data)
+
+        def is_metric(x):
+            return isfunction(x) and x.__name__.startswith('check_')
+
+        checks = getmembers(CameraQC, is_metric)
+        namespace = f'video{self.side.capitalize()}'
+        self.metrics = {f'_{namespace}_' + k[6:]: fn(self) for k, fn in checks}
+        all_pass = all(x is None or x == 'PASS' for x in self.metrics.values())
+        self.outcome = 'PASS' if all_pass else 'FAIL'
+        if update:
+            bool_map = {k: None if v is None else v == 'PASS' for k, v in self.metrics.items()}
+            self.update_extended_qc(bool_map)
+            self.update(self.outcome, namespace)
+        return self.outcome, self.metrics
+
+    def check_contrast(self):
         """Check that the video contrast range"""
-        pass
+        MIN_MAX = [20, 80]
+        MIN_STD = 20
+        brightness = self.data['brightness']
 
-    def check_video_headers(self):
+        within_range = np.logical_and(brightness > MIN_MAX[0],
+                                      brightness < MIN_MAX[1])
+        passed = within_range.all() and np.std(brightness) < MIN_STD
+        return 'PASS' if passed else 'FAIL'
+
+    def check_file_headers(self):
         """Check reported frame rate matches FPGA frame rate"""
-        pass
+        expected = self.video_meta[self.type][self.side]
+        return 'PASS' if self.data['video']['fps'] == expected['fps'] else 'FAIL'
 
-    def check_video_framerate(self):
+    def check_framerate(self):
         """Check camera times match specified frame rate for camera"""
-        pass
+        THRESH = 1.  # NB: Does not take into account dropped frames
+        fps = self.video_meta[self.type][self.side]['fps']
+        Fs = 1 / np.diff(self.data['frame_times']).mean()  # Approx. frequency of camera timestamps
+        return 'PASS' if Fs - fps < THRESH else 'FAIL'
 
-    def check_pin_state(self):
+    def check_pin_state(self, display=False):
         """Check the pin state reflects Bpod TTLs"""
-        # FIXME It may be possible for the pin state to be high for 2 consecutive frames
         if self.data['pin_state'] is None:
-            return  # NOT_SET
+            return 'NOT_SET'
         # There should be only one value below our threshold
         correct_threshold = sum(np.unique(self.data['pin_state']) < PIN_STATE_THRESHOLD) == 1
         state = self.data['pin_state'] > PIN_STATE_THRESHOLD
-        # Trailing one or two pin states permitted as last trial dropped
-        # TODO Trim pin state based on bonsai frames (if in Bpod time we can remove the last trial)
-        state_ttl_matches = sum(state) != self.data['audioTTLs'].size
-        return correct_threshold and state_ttl_matches
+        # NB: The pin state to be high for 2 consecutive frames
+        low2high = np.insert(np.diff(state.astype(int)) == 1, 0, False)
+        state_ttl_matches = sum(low2high) == self.data['audio'].size
+        # Check within ms of audio times
+        if display:
+            plt.Figure()
+            plt.plot(self.data['frame_times'][low2high], np.zeros(sum(low2high)), 'o',
+                     label='GPIO Low -> High')
+            plt.plot(self.data['audio'], np.zeros(self.data['audio'].size), 'rx',
+                     label='Audio TTL High')
+            plt.xlabel('FPGA frame times / s')
+            plt.gca().set(yticklabels=[])
+            plt.gca().tick_params(left=False)
+        # idx = [i for i, x in enumerate(self.data['audio'])
+        #        if np.abs(x - self.data['frame_times'][low2high]).min() > 0.01]
+        # mins = [np.abs(x - self.data['frame_times'][low2high]).min() for x in self.data['audio']]
+
+        return 'PASS' if correct_threshold and state_ttl_matches else 'FAIL'
 
     def check_dropped_frames(self):
         """Check how many frames were reported missing"""
+        THRESH = .1  # Percent
         assert np.all(np.diff(self.data['count']) > 0), 'frame count not strictly increasing'
         dropped = np.diff(self.data['count']).astype(int) - 1
+        return 'PASS' if (sum(dropped) / len(dropped) * 100) < THRESH else 'FAIL'
 
-    def check_camera_times(self):
+    def check_timestamps(self):
         """Check that the camera.times array is reasonable"""
         # Check frame rate matches what we expect
         expected = 1 / self.video_meta[self.type][self.side]['fps']
         # TODO Remove dropped frames from test
-        fps_matches = np.allclose(np.diff(self.data['frame_times']), expected)
+        frame_delta = np.diff(self.data['frame_times'])
+        fps_matches = np.isclose(frame_delta.mean(), expected, atol=0.001)
         # Check number of timestamps matches video
         length_matches = self.data['frame_times'].size == self.data['video'].length
+        # Check times are strictly increasing
+        increasing = all(np.diff(self.data['frame_times']) > 0)
+        return 'PASS' if increasing and fps_matches and length_matches else 'FAIL'
+
+    def check_resolution(self):
+        """Check that the timestamps and video file resolution match what we expect"""
+        actual = self.data['video']
+        expected = self.video_meta[self.type][self.side]
+        match = actual['width'] == expected['width'] and actual['height'] == expected['height']
+        return 'PASS' if match else 'FAIL'
+
+    def check_wheel_alignment(self):
+        """Check wheel motion in video correlates with the rotary encoder signal"""
+        pass
+
+    def check_position(self):
+        """Check camera is positioned correctly"""
+        pass
+
+    def check_focus(self):
+        """Check video is in focus"""
+        # Could blur a frame and check difference
+        img = get_video_frame(self.video_path, 50)
+        edges = cv2.Canny(img, 100, 200)
+        pass
+
+
+def vid_to_brightness(camera_path, n_frames=500):
+    """
+    :param camera_path: The full path for the camera
+    :param n_frames: Number of frames to sample for brightness
+    :return:
+    """
+    # TODO Use video loaders from iblapps
+    cap = cv2.VideoCapture(str(camera_path))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    brightness = []
+    # for n sampled frames, save brightness in array
+    idx = np.linspace(100, total_frames - 100, n_frames).astype(int)
+    for ii, i in enumerate(idx):
+        sys.stdout.write(f'\rloading frame {ii}/{n_frames}')
+        sys.stdout.flush()
+        cap.set(1, i)
+        ret, frame = cap.read()
+        if ret:
+            brightness.append(np.mean(frame))
+        else:
+            _log.warning(f'failed to read frame {ii}')
+    cap.release()
+    sys.stdout.write('\x1b[2K\r')  # Erase current line in stdout
+    return np.array(brightness)
+
+# def plot_brightness(D):
+#     plt.ion()
+#     plt.figure()
+#     ax0 = plt.subplot(1, 3, 1)
+#     for eid in D:
+#         for vid in D[eid]:
+#             if 'left' in vid:
+#                 plt.plot(D[eid][vid], label=eid)
+#     ax0.set_ylabel('brightness (mean pixel)')
+#     ax0.set_xlabel('uniformly sampled frames')
+#     ax0.set_title('left')
+#     ax1 = plt.subplot(1, 3, 2, sharex=ax0, sharey=ax0)
+#     for eid in D:
+#         for vid in D[eid]:
+#             if 'right' in vid:
+#                 plt.plot(D[eid][vid], label=eid)
+#     ax1.set_title('right')
+#     ax2 = plt.subplot(1, 3, 3, sharex=ax0, sharey=ax0)
+#     for eid in D:
+#         for vid in D[eid]:
+#             if 'body' in vid:
+#                 plt.plot(D[eid][vid], label='_'.join(vid.split('_')[:-1]))
+#     ax2.set_title('body')
+#     ax2.legend().set_draggable(True)
+
+
+def run_all_qc(session, update=False):
+    """Run QC for all cameras
+    Run the camera QC for left, right and body cameras.
+    :param session: A session path or eid.
+    :param update: If True, QC fields are updated on Alyx.
+    :return:
+    """
+    qc = {}
+    for camera in ['left', 'right', 'body']:
+        qc[camera] = CameraQC(session, side=camera)
+        qc[camera].run(update=update)
+    return qc

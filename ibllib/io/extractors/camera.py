@@ -9,7 +9,7 @@ import cv2
 
 import alf.io as alfio
 from ibllib.io.raw_data_loaders import get_session_extractor_type
-from ibllib.io.extractors.ephys_fpga import _get_sync_fronts, _get_main_probe_sync
+from ibllib.io.extractors.ephys_fpga import _get_sync_fronts, get_main_probe_sync
 from ibllib.io.extractors.base import (
     BaseBpodTrialsExtractor,
     BaseExtractor,
@@ -58,24 +58,21 @@ class CameraTimestampsFPGA(BaseExtractor):
         """
         fpga_times = extract_camera_sync(sync=sync, chmap=chmap)
         for camera, ts in fpga_times.items():
-            ### FIXME REMOVE THIS LINE
-            # For the purposes of testing let's only look at the left camera
-            if not camera.startswith('left'):
-                continue
-            ###
-            count, pin_state = load_embedded_frame_data(self.session_path, camera[:-7])
+            count, pin_state = load_embedded_frame_data(self.session_path, camera[:-7], raw=False)
 
             if pin_state is not None and any(pin_state):
                 _logger.info('Aligning to audio TTLs')
                 # Extract audio TTLs
                 audio = _get_sync_fronts(sync, chmap['audio'])
-                t_ready_tone_in, t_error_tone_in = _assign_events_audio(
-                    audio['times'], audio['polarities'])
-                fpga_times[camera] = align_with_audio(ts, audio, pin_state, count)
+                # make sure that there are no 2 consecutive fall or consecutive rise events
+                assert (np.all(np.abs(np.diff(audio['polarities'])) == 2))
+                # make sure first TTL is high
+                assert audio['polarities'][0] == 1
+                fpga_times[camera] = align_with_audio(ts, audio['times'][::2], pin_state, count)
             else:
                 _logger.warning('Alignment by wheel data not yet implemented')
 
-        return ts['right_camera'], ts['left_camera'], ts['body_camera']
+        return fpga_times['right_camera'], fpga_times['left_camera'], fpga_times['body_camera']
 
 
 class CameraTimestampsBpod(BaseBpodTrialsExtractor):
@@ -183,8 +180,10 @@ def align_with_audio(timestamps, audio, pin_state, count, display=False):
     """
     # Some assertions made on the raw data
     assert count.size == pin_state.size, 'frame count and pin state size mismatch'
-    assert all(np.diff(count) > 0), "frame count not strictly increasing"
+    assert all(np.diff(count) > 0), 'frame count not strictly increasing'
     assert all(np.diff(timestamps) > 0), 'FPGA camera times not strictly increasing'
+    low2high = np.diff(pin_state.astype(int)) == 1
+    assert sum(low2high) <= audio.size, 'more audio TTLs detected on camera than TTLs sent'
 
     """Here we will ensure that the FPGA camera times match the number of video frames in 
     length.  We will make the following assumptions: 
@@ -206,13 +205,9 @@ def align_with_audio(timestamps, audio, pin_state, count, display=False):
     3. Remove the trailing timestamps at the end of the session if the camera was turned off
     in the wrong order.
     """
-    # ^ TODO Confirm this last point
     # Align on first pin state change
-    # TODO It may be possible for the pin state to be high for 2 consecutive frames
     first_uptick = (pin_state > 0).argmax()
     first_ttl = np.searchsorted(timestamps, audio[0])
-    # Minus any frames that were dropped between the start of frame acquisition and the
-    # first TTL
     """Here we find up to which index in the FPGA times we discard by taking the difference 
     between the index of the first pin state change (when the audio TTL was reported by the 
     camera) and the index of the first audio TTL in FPGA time.  We subtract the difference 
@@ -220,6 +215,8 @@ def align_with_audio(timestamps, audio, pin_state, count, display=False):
     video frames that were not saved during this period (we will remove those from the 
     camera FPGA times later).
     """
+    # Minus any frames that were dropped between the start of frame acquisition and the
+    # first TTL
     start = first_ttl - first_uptick - (count[first_uptick] - first_uptick)
     assert start >= 0
 
@@ -227,37 +224,33 @@ def align_with_audio(timestamps, audio, pin_state, count, display=False):
     # TODO Add case for missing FPGA timestamps
     end = count[-1] + 1 + start
     ts = timestamps[start:end]
-
-    assert np.searchsorted(ts, audio[0]) == first_uptick
     assert ts.size >= count.size
     assert ts.size == count[-1] + 1
 
     # Remove the rest of the dropped frames
     ts = ts[count]
-
-    # Double check everything looks okay TODO Remove this
-    last_uptick = np.where(pin_state > 0)[0][-1]
-    last_ttl = np.searchsorted(ts, audio[-1])
+    assert np.searchsorted(ts, audio[0]) == first_uptick
 
     if display:
         # Plot to check
         import matplotlib.pyplot as plt
         from ibllib.plots import vertical_lines
-        y = pin_state > 0
+        y = (pin_state > 0).astype(float)
         y[y == 1] = 0.0005
         y += 0.0002
         plt.plot(ts, y, marker='d', color='blue', drawstyle='steps-pre')
         plt.plot(ts, np.zeros_like(ts), 'kx')
-        vertical_lines(audio, ymin=0, ymax=1, color='r', linestyle=':')
+        vertical_lines(audio, ymin=0, ymax=0.0007, color='r', linestyle=':')
 
     return ts
 
 
-def load_embedded_frame_data(session_path, camera: str):
+def load_embedded_frame_data(session_path, camera: str, raw=False):
     """
 
     :param session_path:
     :param camera: The specific camera to load, one of ('left', 'right', 'body')
+    :param raw: If True the raw data are returned without preprocessing (thresholding, etc.)
     :return: The frame counter, the pin state
     """
     if session_path is None:
@@ -267,12 +260,14 @@ def load_embedded_frame_data(session_path, camera: str):
     # Load frame count
     count_file = raw_path / f'_iblrig_{camera}Camera.frame_counter.bin'
     count = np.fromfile(count_file, dtype=np.float64).astype(int) if count_file.exists() else None
-    count -= count[0]  # start from zero
+    if not (count is None or raw):
+        count -= count[0]  # start from zero
 
     # Load pin state
     pin_file = raw_path / f'_iblrig_{camera}Camera.GPIO.bin'
     pin_state = np.fromfile(pin_file, dtype=np.float64).astype(int) if pin_file.exists() else None
-    pin_state = pin_state > PIN_STATE_THRESHOLD
+    if not (pin_state is None or raw):
+        pin_state = pin_state > PIN_STATE_THRESHOLD
 
     return count, pin_state
 
@@ -291,12 +286,13 @@ def extract_all(session_path, session_type=None, save=True, bin_exists=False):
         session_type = get_session_extractor_type(session_path)
     if session_type == 'ephys':
         extractor = CameraTimestampsFPGA
+        sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
     elif session_type in ['biased', 'training']:
         extractor = CameraTimestampsBpod
+        sync = chmap = None
     else:
         raise ValueError(f"Session type {session_type} as no matching extractor {session_path}")
 
-    sync, chmap = _get_main_probe_sync(session_path, bin_exists=bin_exists)
     outputs, files = run_extractor_classes(
         extractor, session_path=session_path, save=save, sync=sync, chmap=chmap)
     return outputs, files

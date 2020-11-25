@@ -8,12 +8,13 @@ import shutil
 import mtscomp
 
 from ibllib.io import ffmpeg, spikeglx
-from ibllib.io.extractors import ephys_fpga
+from ibllib.io.extractors import ephys_fpga, camera
 from ibllib.pipes import tasks
 from ibllib.ephys import ephysqc, sync_probes, spikes
 from ibllib.pipes.training_preprocessing import TrainingRegisterRaw as EphysRegisterRaw
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.task_extractors import TaskQCExtractor
+from ibllib.qc.camera import run_all_qc as run_camera_qc
 
 _logger = logging.getLogger('ibllib')
 
@@ -205,8 +206,11 @@ class EphysVideoCompress(tasks.Task):
                 self.session_path.joinpath('')
 
         ## Video timestamps extraction
+        data, files = camera.extract_all(self.session_path)
+        output_files.extend(files)
 
         ## Video QC
+        run_camera_qc(self.session_path, update=True)
 
         return output_files
 
@@ -269,7 +273,7 @@ class EphysMtscomp(tasks.Task):
 
     def _run(self):
         """
-        Compress ephys files looking for `compress_ephys.flag` whithin the probes folder
+        Compress ephys files looking for `compress_ephys.flag` within the probes folder
         Original bin file will be removed
         The registration flag created contains targeted file names at the root of the session
         """

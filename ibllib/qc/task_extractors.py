@@ -11,7 +11,7 @@ from ibllib.io.extractors.training_trials import (
 import ibllib.io.extractors.habituation_trials as habit
 from ibllib.io.extractors.training_wheel import Wheel, get_wheel_position
 from ibllib.io.extractors.ephys_fpga import (
-    _get_pregenerated_events, _get_main_probe_sync, bpod_fpga_sync, FpgaTrials
+    _get_pregenerated_events, get_main_probe_sync, bpod_fpga_sync, FpgaTrials
 )
 import ibllib.io.raw_data_loaders as raw
 from alf.io import is_session_path
@@ -99,7 +99,7 @@ class TaskQCExtractor(object):
             self.frame_ttls, self.audio_ttls = raw.load_bpod_fronts(
                 self.session_path, data=self.raw_data)
         else:  # Extract from FPGA
-            sync, chmap = _get_main_probe_sync(self.session_path)
+            sync, chmap = get_main_probe_sync(self.session_path)
 
             def channel_events(name):
                 """Fetches the polarities and times for a given channel"""
