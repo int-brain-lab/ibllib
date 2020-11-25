@@ -175,6 +175,10 @@ def get_task_extractor_type(task_name):
         return 'ephys'
     elif 'ephyskarolinaChoiceWorld' in task_name:
         return 'ephys'
+    elif 'passive_opto' in task_name:
+        return 'ephys'
+    elif 'opto_ephysChoiceWorld' in task_name:
+        return 'ephys'
     # biased choice world
     elif '_biasedChoiceWorld' in task_name:
         return 'biased'
@@ -183,6 +187,8 @@ def get_task_extractor_type(task_name):
     elif 'biasedVisOffChoiceWorld' in task_name:
         return 'biased'
     elif 'karolinaChoiceWorld' in task_name:
+        return 'biased'
+    elif '_iblrig_tasks_opto_biasedChoiceWorld' in task_name:
         return 'biased'
     # habituation
     elif '_habituationChoiceWorld' in task_name:
