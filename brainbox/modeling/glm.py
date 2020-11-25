@@ -130,8 +130,12 @@ class NeuralGLM:
             testinds = trialsdf.index
         elif blocktrain:
             trainlen = int(np.floor(len(trialsdf) * train))
-            traininds = trialsdf.index[:trainlen]
-            testinds = trialsdf.index[trainlen:]
+            testlen = len(trialsdf) - trainlen
+            midpoint = len(trialsdf) // 2
+            starttest = midpoint - (testlen // 2)
+            endtest = midpoint + (testlen // 2)
+            testinds = trialsdf.index[starttest:endtest]
+            traininds = trialsdf.index[np.isin(trialsdf.index, testinds)]
         else:
             trainlen = int(np.floor(len(trialsdf) * train))
             traininds = sorted(np.random.choice(trialsdf.index, trainlen, replace=False))
@@ -775,8 +779,8 @@ class NeuralGLM:
             y = binned[:, cell_idx]
             pred = np.exp(dm @ wt + bias)
             null_pred = np.ones_like(pred) * np.mean(y)
-            null_deviance = 2 * np.sum(xlogy(y, y / null_pred.flat) - y + null_pred.flat)
             with np.errstate(divide='ignore', invalid='ignore'):
+                null_deviance = 2 * np.sum(xlogy(y, y / null_pred.flat) - y + null_pred.flat)
                 full_deviance = 2 * np.sum(xlogy(y, y / pred.flat) - y + pred.flat)
             d_sq = 1 - (full_deviance / null_deviance)
             scores.at[cell] = d_sq
