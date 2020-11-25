@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import ibllib.io.raw_data_loaders as rawio
+import ibllib.io.extractors.base
 import tests_ibllib.ibllib.fixtures.utils as fu
 from ibllib.pipes import misc
 from oneibl.one import ONE
@@ -31,7 +31,7 @@ class TestExtractors(unittest.TestCase):
             ("ephyskarolinaChoiceWorld4.34", "ephys"),
         ]
         for to in task_out:
-            out = rawio.get_task_extractor_type(to[0])
+            out = ibllib.io.extractors.base.get_task_extractor_type(to[0])
             self.assertEqual(out, to[1])
 
 
