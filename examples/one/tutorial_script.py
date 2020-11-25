@@ -13,12 +13,8 @@ one.search_terms()
 eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
 one.list(eid)
 
-## List dataset names organized by collection
-d = one.list(eid, 'datasets', details=True)
-print(d)
-
 ## List #1
-one.list(None, 'dataset-types')
+one.list()
 
 ## Load #1
 dataset_types = ['clusters.templateWaveforms', 'clusters.probes', 'clusters.depths']

@@ -15,7 +15,7 @@ import brainbox.io.one as bbone
 
 # === Parameters section (edit) ===
 eid = '614e1937-4b24-4ad3-9055-c8253d089919'
-probe_label = 'probe01'
+probe_label = 'probe00'
 # === Code (do not edit) ===
 ba = atlas.AllenAtlas(25)
 one = ONE(base_url="https://alyx.internationalbrainlab.org")

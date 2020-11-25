@@ -5,9 +5,11 @@ import shutil
 
 import numpy as np
 
-from phylib.io import alf
+import alf.io
+import phylib.io.alf
 from ibllib.ephys.sync_probes import apply_sync
 import ibllib.ephys.ephysqc as ephysqc
+from ibllib.ephys import sync_probes
 from ibllib.io import spikeglx, raw_data_loaders
 
 _logger = logging.getLogger('ibllib')
@@ -26,7 +28,7 @@ def probes_description(ses_path, one=None, bin_exists=True):
 
     eid = one.eid_from_path(ses_path)
     ses_path = Path(ses_path)
-    ephys_files = spikeglx.glob_ephys_files(ses_path, bin_exists=bin_exists)
+    ephys_files = spikeglx.glob_ephys_files(ses_path, ext='meta')
     subdirs, labels, efiles_sorted = zip(
         *sorted([(ep.ap.parent, ep.label, ep) for ep in ephys_files if ep.get('ap')]))
 
@@ -98,71 +100,46 @@ def probes_description(ses_path, one=None, bin_exists=True):
     return [probe_trajectory_file, probe_description_file]
 
 
-def sync_spike_sortings(session_path):
+def sync_spike_sorting(ap_file, out_path):
     """
-    Converts the KS2 outputs for each probe in ALF format. Creates:
-    alf/probeXX/spikes.*
-    alf/probeXX/clusters.*
-    alf/probeXX/templates.*
-    :param session_path: session containing probes to be merged
-    :return: None
+    Synchronizes the spike.times using the previously computed sync files
+    :param ap_file: raw binary data file for the probe insertion
+    :param out_path: probe output path (usually {session_path}/alf/{probe_label})
     """
+
     def _sr(ap_file):
         # gets sampling rate from data
         md = spikeglx.read_meta_data(ap_file.with_suffix('.meta'))
         return spikeglx._get_fs_from_meta(md)
 
-    def _sample2v(ap_file):
-        md = spikeglx.read_meta_data(ap_file.with_suffix('.meta'))
-        s2v = spikeglx._conversion_sample2v_from_meta(md)
-        return s2v['ap'][0]
-
-    session_path = Path(session_path)
-    ephys_files = spikeglx.glob_ephys_files(session_path)
-    bin_data_dirs, labels, efiles_sorted, srates = zip(
-        *sorted([(ep.ap.parent, ep.label, ep, _sr(ep.ap)) for ep in ephys_files if ep.get('ap')]))
-
-    _logger.info('converting  spike-sorting outputs to ALF')
     out_files = []
-    # label: the probe name: "probe00"
-    # bin_data_dir: the directory with raw ephys: "{session_path}/raw_ephys_data/probe00"
-    # ks2_dir: spike sorted results: "{session_path}/spike_sorters/ks2_matlab/probe00"
-    for bin_data_dir, label, ef, sr in zip(bin_data_dirs, labels, efiles_sorted, srates):
-        ks2_dir = session_path.joinpath('spike_sorters', 'ks2_matlab', label)
-        if not ks2_dir.joinpath('spike_times.npy').exists():
-            ks2_dir = bin_data_dir
-        if not ks2_dir.joinpath('spike_times.npy').exists():
-            _logger.warning(f"No KS2 spike sorting found in {bin_data_dir}, skipping probe !")
-            continue
-        probe_out_path = session_path.joinpath('alf', label)
-        probe_out_path.mkdir(parents=True, exist_ok=True)
-        # handles the probes synchronization
-        sync_file = ef.ap.parent.joinpath(ef.ap.name.replace('.ap.', '.sync.')
-                                          ).with_suffix('.npy')
-        if not sync_file.exists():
-            """
-            if there is no sync file it means something went wrong. Outputs the spike sorting
-            in time according the the probe by following ALF convention on the times objects
-            """
-            error_msg = f'No synchronisation file for {label}: {sync_file}. The spike-' \
-                        f'sorting is not synchronized and data not uploaded on Flat-Iron'
-            _logger.error(error_msg)
-            # remove the alf folder if the sync failed
-            shutil.rmtree(probe_out_path)
-            continue
-        # converts the folder to ALF
-        ks2_to_alf(ks2_dir, bin_data_dir, probe_out_path, bin_file=ef.ap,
-                   ampfactor=_sample2v(ef.ap), label=None, force=True)
-        # patch the spikes.times files manually
-        st_file = session_path.joinpath(probe_out_path, 'spikes.times.npy')
-        spike_samples = np.load(session_path.joinpath(probe_out_path, 'spikes.samples.npy'))
-        interp_times = apply_sync(sync_file, spike_samples / sr, forward=True)
-        np.save(st_file, interp_times)
-        # get the list of output files
-        out_files.extend([f for f in session_path.joinpath(probe_out_path).glob("*.*") if
-                          f.name.startswith(('channels.', 'clusters.', 'spikes.', 'templates.',
-                                             '_kilosort_', '_phy_spikes_subset'))])
-    return out_files
+    label = ap_file.parts[-1]  # now the bin file is always in a folder bearing the name of probe
+    sync_file = ap_file.parent.joinpath(
+        ap_file.name.replace('.ap.', '.sync.')).with_suffix('.npy')
+    # try to get probe sync if it doesn't exist
+    if not sync_file.exists():
+        _, sync_files = sync_probes.sync(alf.io.get_session_path(ap_file))
+        out_files.extend(sync_files)
+    # if it still not there, full blown error
+    if not sync_file.exists():
+        # if there is no sync file it means something went wrong. Outputs the spike sorting
+        # in time according the the probe by following ALF convention on the times objects
+        error_msg = f'No synchronisation file for {label}: {sync_file}. The spike-' \
+                    f'sorting is not synchronized and data not uploaded on Flat-Iron'
+        _logger.error(error_msg)
+        # remove the alf folder if the sync failed
+        shutil.rmtree(out_path)
+        return None, 1
+    # patch the spikes.times files manually
+    st_file = out_path.joinpath('spikes.times.npy')
+    spike_samples = np.load(out_path.joinpath('spikes.samples.npy'))
+    interp_times = apply_sync(sync_file, spike_samples / _sr(ap_file), forward=True)
+    np.save(st_file, interp_times)
+    # get the list of output files
+    out_files.extend([f for f in out_path.glob("*.*") if
+                      f.name.startswith(('channels.', 'clusters.', 'spikes.', 'templates.',
+                                         '_kilosort_', '_phy_spikes_subset'))])
+    return out_files, 0
 
 
 def ks2_to_alf(ks_path, bin_path, out_path, bin_file=None, ampfactor=1, label=None, force=True):
@@ -174,6 +151,5 @@ def ks2_to_alf(ks_path, bin_path, out_path, bin_file=None, ampfactor=1, label=No
     :return:
     """
     m = ephysqc.phy_model_from_ks2_path(ks2_path=ks_path, bin_path=bin_path, bin_file=bin_file)
-    ephysqc.unit_metrics_ks2(ks_path, m, save=True)
-    ac = alf.EphysAlfCreator(m)
+    ac = phylib.io.alf.EphysAlfCreator(m)
     ac.convert(out_path, label=label, force=force, ampfactor=ampfactor)

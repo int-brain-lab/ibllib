@@ -1,9 +1,10 @@
 import logging
+from datetime import datetime
 from pathlib import Path
+import pkg_resources
 import re
 import subprocess
-import pkg_resources
-from datetime import datetime
+import sys
 
 from ibllib.pipes import ephys_preprocessing, training_preprocessing, tasks
 import ibllib.io.raw_data_loaders as rawio
@@ -47,7 +48,8 @@ def report_health(one):
              'volume': size_list[5]}
         return {f"{label}_{k}": d[k] for k in d}
 
-    status = {'ibllib_version': pkg_resources.get_distribution("ibllib").version,
+    status = {'python_version': sys.version,
+              'ibllib_version': pkg_resources.get_distribution("ibllib").version,
               'phylib_version': pkg_resources.get_distribution("phylib").version,
               'local_time': date2isostr(datetime.now())}
     status.update(_get_volume_usage('/mnt/s0/Data', 'raid'))
@@ -74,8 +76,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
     if not one:
         one = ONE()
     rc = registration.RegistrationClient(one=one)
-    flag_files = list(Path(root_path).glob('**/extract_me.flag'))
-    flag_files += list(Path(root_path).glob('**/raw_session.flag'))
+    flag_files = list(Path(root_path).glob('**/raw_session.flag'))
     all_datasets = []
     for flag_file in flag_files:
         session_path = flag_file.parent

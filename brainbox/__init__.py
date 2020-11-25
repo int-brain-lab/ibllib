@@ -1,3 +1,4 @@
+from brainbox import atlas
 from . import behavior
 from . import core
 from . import experimental
