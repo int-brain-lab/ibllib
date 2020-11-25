@@ -1,6 +1,7 @@
 import logging
 from collections import OrderedDict
 
+from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.pipes import tasks
 from ibllib.io import ffmpeg, raw_data_loaders as rawio
 from ibllib.io.extractors import (
@@ -42,7 +43,7 @@ class TrainingTrials(tasks.Task):
             qc.extractor.extract_data(partial=True)  # Extract the rest of the data
             return qc
 
-        if rawio.get_session_extractor_type(self.session_path) == 'habituation':
+        if get_session_extractor_type(self.session_path) == 'habituation':
             qc = HabituationQC(self.session_path, one=self.one)
             qc = _qc_extract(qc)
         else:  # Update wheel data
@@ -120,7 +121,7 @@ def extract_training(session_path, save=True):
     :return: wheel: Bunch/dict of wheel positions
     :return: out_Files: list of output files
     """
-    extractor_type = rawio.get_session_extractor_type(session_path)
+    extractor_type = get_session_extractor_type(session_path)
     _logger.info(f"Extracting {session_path} as {extractor_type}")
     settings, bpod_trials = rawio.load_bpod(session_path)
     if extractor_type == 'training':

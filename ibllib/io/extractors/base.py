@@ -1,12 +1,15 @@
 import abc
+import json
 from collections import OrderedDict
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from alf.io import get_session_path
 from ibllib.io import raw_data_loaders as raw
 import logging
 
+from ibllib.io.raw_data_loaders import load_settings, _logger
 
 log = logging.getLogger("ibllib")
 
@@ -147,3 +150,75 @@ def run_extractor_classes(classes, session_path=None, **kwargs):
                 outputs[k] = out[i]
     assert (len(files) == 0) or (len(files) == len(outputs.keys()))
     return outputs, files
+
+
+def get_task_extractor_type(task_name):
+    """
+    Splits the task name according to naming convention:
+    -   ignores everything
+    _iblrig_tasks_biasedChoiceWorld3.7.0 returns "biased"
+    _iblrig_tasks_trainingChoiceWorld3.6.0 returns "training'
+    :param task_name:
+    :return: one of ['biased', 'habituation', 'training', 'ephys', 'mock_ephys', 'sync_ephys']
+    """
+    if isinstance(task_name, Path):
+        try:
+            settings = load_settings(get_session_path(task_name))
+        except json.decoder.JSONDecodeError:
+            return
+        if settings:
+            task_name = settings.get('PYBPOD_PROTOCOL', None)
+        else:
+            return
+    # ephys
+    if 'ephysChoiceWorld' in task_name:
+        return 'ephys'
+    elif 'ephyskarolinaChoiceWorld' in task_name:
+        return 'ephys'
+    elif 'passive_opto' in task_name:
+        return 'ephys'
+    elif 'opto_ephysChoiceWorld' in task_name:
+        return 'ephys'
+    # biased choice world
+    elif '_biasedChoiceWorld' in task_name:
+        return 'biased'
+    elif 'biasedScanningChoiceWorld' in task_name:
+        return 'biased'
+    elif 'biasedVisOffChoiceWorld' in task_name:
+        return 'biased'
+    elif 'karolinaChoiceWorld' in task_name:
+        return 'biased'
+    elif '_iblrig_tasks_opto_biasedChoiceWorld' in task_name:
+        return 'biased'
+    # habituation
+    elif '_habituationChoiceWorld' in task_name:
+        return 'habituation'
+    # training
+    elif '_trainingChoiceWorld' in task_name:
+        return 'training'
+    # mock ephys
+    elif 'ephysMockChoiceWorld' in task_name:
+        return 'mock_ephys'
+    # sync ephys
+    elif task_name and task_name.startswith('_iblrig_tasks_ephys_certification'):
+        return 'sync_ephys'
+
+
+def get_session_extractor_type(session_path):
+    """
+    From a session path, loads the settings file, finds the task and checks if extractors exist
+    task names examples:
+    :param session_path:
+    :return: bool
+    """
+    settings = load_settings(session_path)
+    if settings is None:
+        _logger.error(f'ABORT: No data found in "raw_behavior_data" folder {session_path}')
+        return False
+    extractor_type = get_task_extractor_type(settings['PYBPOD_PROTOCOL'])
+    if extractor_type:
+        return extractor_type
+    else:
+        _logger.warning(str(session_path) +
+                        f" No extractors were found for {extractor_type} ChoiceWorld")
+        return False

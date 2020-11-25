@@ -1,13 +1,14 @@
 import logging
 from datetime import datetime
 from pathlib import Path
+
 import pkg_resources
 import re
 import subprocess
 import sys
 
+from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.pipes import ephys_preprocessing, training_preprocessing, tasks
-import ibllib.io.raw_data_loaders as rawio
 import ibllib.exceptions
 from ibllib.time import date2isostr
 
@@ -93,7 +94,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
             session_path, one=one, max_md5_size=max_md5_size)
         if dsets is not None:
             all_datasets.extend(dsets)
-        session_type = rawio.get_session_extractor_type(session_path)
+        session_type = get_session_extractor_type(session_path)
         if session_type in ['biased', 'habituation', 'training']:
             pipe = training_preprocessing.TrainingExtractionPipeline(session_path, one=one)
         # only start extracting ephys on a raw_session.flag
