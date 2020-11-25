@@ -390,10 +390,10 @@ class TestScanFixPassiveFiles(unittest.TestCase):
 
     def test_find_pairs(self):
         from_to_pairs = fix.find_pairs(self.tmp_dir.name)
-        from_path_parts = ["fakelab", "Subjects", "fakemouse", "1900-01-01", "002"]
-        self.assertTrue(all([x in Path(from_to_pairs[0][0]).parts for x in from_path_parts]))
-        to_path_parts = ["fakelab", "Subjects", "fakemouse", "1900-01-01", "001"]
-        self.assertTrue(all([x in Path(from_to_pairs[0][1]).parts for x in to_path_parts]))
+        from_path_parts = ['fakelab', 'Subjects', 'fakemouse', '1900-01-01', '002']
+        self.assertTrue(all(x in Path(from_to_pairs[0][0]).parts for x in from_path_parts))
+        to_path_parts = ['fakelab', 'Subjects', 'fakemouse', '1900-01-01', '001']
+        self.assertTrue(all(x in Path(from_to_pairs[0][1]).parts for x in to_path_parts))
 
     def test_move_rename_pairs(self):
         # Test all outputs of find function
