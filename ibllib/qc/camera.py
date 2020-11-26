@@ -165,7 +165,6 @@ class CameraQC(base.QC):
         else:
             _, audio_ttls = raw.load_bpod_fronts(self.session_path)
             self.data['audio'] = audio_ttls['times'][::2]
-            # TODO load Bpod frames?
 
         # Load extracted frame times
         alf_path = self.session_path / 'alf'
@@ -229,7 +228,7 @@ class CameraQC(base.QC):
 
     def check_contrast(self):
         """Check that the video contrast range"""
-        MIN_MAX = [20, 80]
+        MIN_MAX = [20, 80]  # TODO Normalize
         MIN_STD = 20
         brightness = self.data['brightness']
 
@@ -247,13 +246,14 @@ class CameraQC(base.QC):
         """Check camera times match specified frame rate for camera"""
         THRESH = 1.  # NB: Does not take into account dropped frames
         fps = self.video_meta[self.type][self.side]['fps']
-        Fs = 1 / np.diff(self.data['frame_times']).mean()  # Approx. frequency of camera timestamps
+        Fs = 1 / np.median(np.diff(self.data['frame_times']))  # Approx. frequency of camera
         return 'PASS' if Fs - fps < THRESH else 'FAIL'
 
     def check_pin_state(self, display=False):
         """Check the pin state reflects Bpod TTLs"""
         if self.data['pin_state'] is None:
             return 'NOT_SET'
+        size_matches = self.data['video']['length'] == self.data['pin_state'].size
         # There should be only one value below our threshold
         correct_threshold = sum(np.unique(self.data['pin_state']) < PIN_STATE_THRESHOLD) == 1
         state = self.data['pin_state'] > PIN_STATE_THRESHOLD
@@ -274,14 +274,15 @@ class CameraQC(base.QC):
         #        if np.abs(x - self.data['frame_times'][low2high]).min() > 0.01]
         # mins = [np.abs(x - self.data['frame_times'][low2high]).min() for x in self.data['audio']]
 
-        return 'PASS' if correct_threshold and state_ttl_matches else 'FAIL'
+        return 'PASS' if size_matches and correct_threshold and state_ttl_matches else 'FAIL'
 
     def check_dropped_frames(self):
         """Check how many frames were reported missing"""
         THRESH = .1  # Percent
+        size_matches = self.data['video']['length'] == self.data['count'].size
         assert np.all(np.diff(self.data['count']) > 0), 'frame count not strictly increasing'
         dropped = np.diff(self.data['count']).astype(int) - 1
-        return 'PASS' if (sum(dropped) / len(dropped) * 100) < THRESH else 'FAIL'
+        return 'PASS' if size_matches and (sum(dropped) / len(dropped) * 100) < THRESH else 'FAIL'
 
     def check_timestamps(self):
         """Check that the camera.times array is reasonable"""
@@ -311,15 +312,25 @@ class CameraQC(base.QC):
         """Check camera is positioned correctly"""
         pass
 
-    def check_focus(self):
+    def check_focus(self, display=False):
         """Check video is in focus"""
         # Could blur a frame and check difference
-        img = get_video_frame(self.video_path, 50)
-        edges = cv2.Canny(img, 100, 200)
-        pass
+        n = 50
+        img = get_video_frame(self.video_path, n)
+        # img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        # Smoothing without removing edges.
+        filtered = cv2.bilateralFilter(img, 7, 50, 50)
+
+        # Applying the canny filter
+        edges = cv2.Canny(filtered, 60, 120)
+
+        if display:
+            # Display the resulting frame
+            cv2.imshow(f'Frame #{n}', edges)
+        return  # 'NOT_SET'
 
 
-def vid_to_brightness(camera_path, n_frames=500):
+def vid_to_brightness(camera_path, n_frames=5):
     """
     :param camera_path: The full path for the camera
     :param n_frames: Number of frames to sample for brightness
