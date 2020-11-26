@@ -7,8 +7,7 @@ from pathlib import Path
 import numpy as np
 import cv2
 
-import alf.io as alfio
-from ibllib.io.raw_data_loaders import get_session_extractor_type
+from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io.extractors.ephys_fpga import _get_sync_fronts, get_main_probe_sync
 from ibllib.io.extractors.base import (
     BaseBpodTrialsExtractor,

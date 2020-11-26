@@ -21,6 +21,7 @@ from ibllib.io.extractors.camera import (
 )
 from ibllib.exceptions import ALFObjectNotFound
 from ibllib.io.extractors import ephys_fpga
+from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io import raw_data_loaders as raw
 import alf.io as alfio
 from brainbox.core import Bunch
@@ -127,27 +128,30 @@ class CameraQC(base.QC):
         :param cameras: The comeras to run QC on, if None QC is run for all three cameras
         """
         # When an eid is provided, we will download the required data by default (if necessary)
-        self.download_data = not alfio.is_session_path(session_path_or_eid)
+        download_data = not alfio.is_session_path(session_path_or_eid)
+        self.download_data = kwargs.pop('download_data', download_data)
         super().__init__(session_path_or_eid, **kwargs)
 
         # Data
         self.side = side
         filename = f'_iblrig_{self.side}Camera.raw.mp4'
         self.video_path = self.session_path / 'raw_video_data' / filename
-        self.type = raw.get_session_extractor_type(self.session_path)
+        if not self.download_data:
+            self.type = get_session_extractor_type(self.session_path)
         self.data = Bunch()
 
         # QC outcomes map
         self.metrics = None
         self.outcome = 'NOT_SET'
 
-    def load_data(self, download_data=True):
+    def load_data(self, download_data=None, reextract=False):
         """Extract the data from raw data files
         Extracts all the required task data from the raw data files.
 
         :param download_data: if True, any missing raw data is downloaded via ONE.
+        :param reextract: if True, the camera.times are re-extracted from the raw data
         """
-        if download_data:
+        if download_data or self.download_data:
             self._ensure_required_data()
 
         # Get frame count and pin state
@@ -169,8 +173,9 @@ class CameraQC(base.QC):
         # Load extracted frame times
         alf_path = self.session_path / 'alf'
         try:
+            assert not reextract
             self.data['frame_times'] = alfio.load_object(alf_path, f'{self.side}Camera')['times']
-        except ALFObjectNotFound:  # Re-extract
+        except (ALFObjectNotFound, AssertionError):  # Re-extract
             # TODO Flag for extracting single camera's data
             outputs, _ = extract_all(self.session_path, self.type, save=False)
             self.data['frame_times'] = outputs[f'{self.side}_camera_timestamps']
@@ -200,6 +205,7 @@ class CameraQC(base.QC):
         files = self.one.load(self.eid,
                               dataset_types=self.dstypes + self.dstypes_fpga, download_only=True)
         assert not any(file is None for file in files)
+        self.type = get_session_extractor_type(self.session_path)
 
     def run(self, update: bool = False, download_data: bool = False) -> (str, dict):
         """
@@ -381,15 +387,16 @@ def vid_to_brightness(camera_path, n_frames=5):
 #     ax2.legend().set_draggable(True)
 
 
-def run_all_qc(session, update=False):
+def run_all_qc(session, update=False, cameras=('left', 'right', 'body'), **kwargs):
     """Run QC for all cameras
     Run the camera QC for left, right and body cameras.
     :param session: A session path or eid.
     :param update: If True, QC fields are updated on Alyx.
-    :return:
+    :param cameras: A list of camera names to perform QC on.
+    :return: dict of CameraCQ objects
     """
     qc = {}
-    for camera in ['left', 'right', 'body']:
-        qc[camera] = CameraQC(session, side=camera)
+    for camera in cameras:
+        qc[camera] = CameraQC(session, side=camera, **kwargs)
         qc[camera].run(update=update)
     return qc
