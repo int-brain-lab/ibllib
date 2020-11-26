@@ -1,3 +1,6 @@
+### Release Notes 1.5.28
+- add opto laser tasks for pipeline
+
 ### Release Notes 1.5.27
 - register ch when mtscomp runs properly
 - probes_description runs even if .cbin doesn't exist

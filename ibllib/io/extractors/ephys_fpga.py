@@ -52,7 +52,9 @@ CHMAPS = {'3A':
             'rotary_encoder_0': 5,
             'rotary_encoder_1': 6,
             'audio': 7,
-            'bpod': 16},
+            'bpod': 16,
+            'laser': 17,
+            'laser_ttl': 18},
            'ap':
            {'imec_sync': 6}
            },
