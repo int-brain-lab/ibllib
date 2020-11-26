@@ -1,6 +1,7 @@
 from pathlib import Path
 import logging
 import numpy as np
+import pandas as pd
 
 import alf.io
 from ibllib.io import spikeglx
@@ -8,7 +9,8 @@ from ibllib.atlas import regions_from_allen_csv
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
 from oneibl.one import ONE
 
-from brainbox.core import Bunch
+from brainbox.core import Bunch, TimeSeries
+from brainbox.processing import sync
 
 logger = logging.getLogger('ibllib')
 
@@ -394,3 +396,118 @@ def load_wheel_reaction_times(eid, one=None):
     assert trials and moves, 'unable to load trials and wheelMoves data'
     firstMove_times, is_final_movement, ids = extract_first_movement_times(moves, trials)
     return firstMove_times - trials['goCue_times']
+
+
+def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_wheel=False,
+                   ret_abswheel=False, wheel_binsize=0.02):
+    """
+    Generate a pandas dataframe of per-trial timing information about a given session.
+    Each row in the frame will correspond to a single trial, with timing values indicating timing
+    session-wide (i.e. time in seconds since session start). Can optionally return a resampled
+    wheel velocity trace of either the signed or absolute wheel velocity.
+
+    The resulting dataframe will have a new set of columns, trial_start and trial_end, which define
+    via t_before and t_after the span of time assigned to a given trial.
+    (useful for bb.modeling.glm)
+
+    Parameters
+    ----------
+    eid : str
+        Session UUID string to pass to ONE
+    one : oneibl.one.OneAlyx, optional
+        one object to use for loading. Will generate internal one if not used, by default None
+    maxlen : float, optional
+        Maximum trial length for inclusion in df. Trials where feedback - response is longer
+        than this value will not be included in the dataframe, by default None
+    t_before : float, optional
+        Time before stimulus onset to include for a given trial, as defined by the trial_start
+        column of the dataframe. If zero, trial_start will be identical to stimOn, by default 0.
+    t_after : float, optional
+        Time after feedback to include in the trail, as defined by the trial_end
+        column of the dataframe. If zero, trial_end will be identical to feedback, by default 0.
+    ret_wheel : bool, optional
+        Whether to return the time-resampled wheel velocity trace, by default False
+    ret_abswheel : bool, optional
+        Whether to return the time-resampled absolute wheel velocity trace, by default False
+    wheel_binsize : float, optional
+        Time bins to resample wheel velocity to, by default 0.02
+
+    Returns
+    -------
+    pandas.DataFrame
+        Dataframe with trial-wise information. Indices are the actual trial order in the original
+        data, preserved even if some trials do not meet the maxlen criterion. As a result will not
+        have a monotonic index. Has special columns trial_start and trial_end which define start
+        and end times via t_before and t_after
+    """
+    if not one:
+        one = ONE()
+
+    if ret_wheel and ret_abswheel:
+        raise ValueError('ret_wheel and ret_abswheel cannot both be true.')
+
+    # Define which datatypes we want to pull out
+    trialstypes = ['trials.choice',
+                   'trials.probabilityLeft',
+                   'trials.feedbackType',
+                   'trials.feedback_times',
+                   'trials.contrastLeft',
+                   'trials.contrastRight',
+                   'trials.goCue_times',
+                   'trials.stimOn_times', ]
+
+    # A quick function to remap probabilities in those sessions where it was not computed correctly
+    def remap_trialp(probs):
+        # Block probabilities in trial data aren't accurate and need to be remapped
+        validvals = np.array([0.2, 0.5, 0.8])
+        diffs = np.abs(np.array([x - validvals for x in probs]))
+        maps = diffs.argmin(axis=1)
+        return validvals[maps]
+
+    starttimes = one.load(eid, dataset_types=['trials.stimOn_times'])[0]
+    endtimes = one.load(eid, dataset_types=['trials.feedback_times'])[0]
+    tmp = one.load(eid, dataset_types=trialstypes)
+
+    if maxlen is not None:
+        with np.errstate(invalid='ignore'):
+            keeptrials = (endtimes - starttimes) <= maxlen
+    else:
+        keeptrials = range(len(starttimes))
+    trialdata = {x.split('.')[1]: tmp[i][keeptrials] for i, x in enumerate(trialstypes)}
+    trialdata['probabilityLeft'] = remap_trialp(trialdata['probabilityLeft'])
+    trialsdf = pd.DataFrame(trialdata)
+    if maxlen is not None:
+        trialsdf.set_index(np.nonzero(keeptrials)[0], inplace=True)
+    trialsdf['trial_start'] = trialsdf['stimOn_times'] - t_before
+    trialsdf['trial_end'] = trialsdf['feedback_times'] + t_after
+    if not ret_wheel and not ret_abswheel:
+        return trialsdf
+
+    wheel = one.load_object(eid, 'wheel')
+    whlpos, whlt = wheel.position, wheel.timestamps
+    starttimes = trialsdf['trial_start']
+    endtimes = trialsdf['trial_end']
+    wh_endlast = 0
+    trials = []
+    for (start, end) in np.vstack((starttimes, endtimes)).T:
+        wh_startind = np.searchsorted(whlt[wh_endlast:], start) + wh_endlast
+        wh_endind = np.searchsorted(whlt[wh_endlast:], end, side='right') + wh_endlast + 4
+        wh_endlast = wh_endind
+        tr_whlpos = whlpos[wh_startind - 1:wh_endind + 1]
+        tr_whlt = whlt[wh_startind - 1:wh_endind + 1] - start
+        tr_whlt[0] = 0.  # Manual previous-value interpolation
+        whlseries = TimeSeries(tr_whlt, tr_whlpos, columns=['whlpos'])
+        whlsync = sync(wheel_binsize, timeseries=whlseries, interp='previous')
+        trialstartind = np.searchsorted(whlsync.times, 0)
+        trialendind = np.ceil((end - start) / wheel_binsize).astype(int)
+        trpos = whlsync.values[trialstartind:trialendind + trialstartind]
+        whlvel = trpos[1:] - trpos[:-1]
+        whlvel = np.insert(whlvel, 0, 0)
+        if np.abs((trialendind - len(whlvel))) > 0:
+            raise IndexError('Mismatch between expected length of wheel data and actual.')
+        if ret_wheel:
+            trials.append(whlvel)
+        elif ret_abswheel:
+            trials.append(np.abs(whlvel))
+    trialsdf['wheel_velocity'] = trials
+    return trialsdf

@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import ibllib.io.raw_data_loaders as rawio
+import ibllib.io.extractors.base
 import tests_ibllib.ibllib.fixtures.utils as fu
 from ibllib.pipes import misc
 from oneibl.one import ONE
@@ -29,9 +29,12 @@ class TestExtractors(unittest.TestCase):
             ("optokarolinaChoiceWorld5.34", "biased"),
             ("karolinaChoiceWorld5.34", "biased"),
             ("ephyskarolinaChoiceWorld4.34", "ephys"),
+            ("passive_opto", "ephys"),
+            ("_iblrig_tasks_opto_ephysChoiceWorld", "ephys"),
+            ("_iblrig_tasks_opto_biasedChoiceWorld", "biased"),
         ]
         for to in task_out:
-            out = rawio.get_task_extractor_type(to[0])
+            out = ibllib.io.extractors.base.get_task_extractor_type(to[0])
             self.assertEqual(out, to[1])
 
 
@@ -242,9 +245,18 @@ class TestPipesMisc(unittest.TestCase):
         video.unlink()
 
     def test_check_create_raw_session_flag(self):
+        from tests_ibllib.ibllib.fixtures import utils as futils
+
         raw_session = Path(self.local_session_path_3A).joinpath("raw_session.flag")
         ephys = Path(self.local_session_path_3A).joinpath("ephys_data_transferred.flag")
         video = Path(self.local_session_path_3A).joinpath("video_data_transferred.flag")
+        # Add settings file
+        fpath = self.local_session_path_3A / "raw_behavior_data" / "_iblrig_taskSettings.raw.json"
+        fpath.touch()
+        futils.populate_task_settings(
+            fpath, patch={"PYBPOD_PROTOCOL": "some_ephysChoiceWorld_task"}
+        )
+        ""
         # Check not created
         misc.check_create_raw_session_flag(self.local_session_path_3A)
         self.assertFalse(raw_session.exists())
@@ -268,6 +280,15 @@ class TestPipesMisc(unittest.TestCase):
         self.assertTrue(raw_session.exists())
         # Check other flags deleted
         self.assertFalse(ephys.exists())
+        self.assertFalse(video.exists())
+        raw_session.unlink()
+        # Check if biased session
+        futils.populate_task_settings(
+            fpath, patch={"PYBPOD_PROTOCOL": "some_biasedChoiceWorld_task"}
+        )
+        misc.create_video_transfer_done_flag(self.local_session_path_3A)
+        misc.check_create_raw_session_flag(self.local_session_path_3A)
+        self.assertTrue(raw_session.exists())
         self.assertFalse(video.exists())
         raw_session.unlink()
 
@@ -311,11 +332,7 @@ class TestPipesMisc(unittest.TestCase):
         eid = "b1c968ad-4874-468d-b2e4-5ffa9b9964e9"
         # Force probe insertion 3A
         misc.create_alyx_probe_insertions(
-            eid,
-            one=one,
-            model='3A',
-            labels=['probe00', 'probe01'],
-            force=True
+            eid, one=one, model="3A", labels=["probe00", "probe01"], force=True
         )
         # Verify it's been inserted
         alyx_insertion = one.alyx.rest("insertions", "list", session=eid)
@@ -377,9 +394,9 @@ class TestScanFixPassiveFiles(unittest.TestCase):
     def test_find_pairs(self):
         from_to_pairs = fix.find_pairs(self.tmp_dir.name)
         from_path_parts = ['fakelab', 'Subjects', 'fakemouse', '1900-01-01', '002']
-        self.assertTrue(all([x in Path(from_to_pairs[0][0]).parts for x in from_path_parts]))
+        self.assertTrue(all(x in Path(from_to_pairs[0][0]).parts for x in from_path_parts))
         to_path_parts = ['fakelab', 'Subjects', 'fakemouse', '1900-01-01', '001']
-        self.assertTrue(all([x in Path(from_to_pairs[0][1]).parts for x in to_path_parts]))
+        self.assertTrue(all(x in Path(from_to_pairs[0][1]).parts for x in to_path_parts))
 
     def test_move_rename_pairs(self):
         # Test all outputs of find function

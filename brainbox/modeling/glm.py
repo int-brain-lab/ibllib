@@ -9,6 +9,7 @@ International Brain Lab, 2020
 """
 from warnings import warn, catch_warnings
 import numpy as np
+from numpy.linalg.linalg import LinAlgError
 import pandas as pd
 from brainbox.processing import bincount2D
 from sklearn.linear_model import PoissonRegressor
@@ -18,6 +19,8 @@ from numpy.matlib import repmat
 from scipy.optimize import minimize
 from scipy.special import xlogy
 from tqdm import tqdm
+import torch
+from brainbox.modeling.poissonGLM import PoissonGLM
 
 
 class NeuralGLM:
@@ -28,7 +31,7 @@ class NeuralGLM:
     """
 
     def __init__(self, trialsdf, spk_times, spk_clu, vartypes,
-                 train=0.8, binwidth=0.02, mintrials=100):
+                 train=0.8, blocktrain=False, binwidth=0.02, mintrials=100, subset=False):
         """
         Construct GLM object using information about all trials, and the relevant spike times.
         Only ingests data, and further object methods must be called to describe kernels, gain
@@ -63,6 +66,11 @@ class NeuralGLM:
         mintrials: int
             Minimum number of trials in which neurons fired a spike in order to be fit. Defaults
             to 100 trials.
+        subset: bool
+            Whether or not to perform model subsetting, in which the model is built iteratively
+            from only the mean rate, up. This allows comparison of D^2 scores for sub-models which
+            incorporate only some parameters, to see which regressors actually improve
+            explainability. Default to False.
 
         Returns
         -------
@@ -120,11 +128,16 @@ class NeuralGLM:
             print('Training fraction set to 1. Training on all data.')
             traininds = trialsdf.index
             testinds = trialsdf.index
+        elif blocktrain:
+            trainlen = int(np.floor(len(trialsdf) * train))
+            traininds = trialsdf.index[:trainlen]
+            testinds = trialsdf.index[trainlen:]
         else:
             trainlen = int(np.floor(len(trialsdf) * train))
             traininds = sorted(np.random.choice(trialsdf.index, trainlen, replace=False))
             testinds = trialsdf.index[~trialsdf.index.isin(traininds)]
 
+        # Set model parameters to begin with
         self.spikes = spks
         self.clu = clu
         self.clu_ids = np.argwhere(np.sum(trialspiking, axis=0) > mintrials)
@@ -134,6 +147,41 @@ class NeuralGLM:
         self.traininds = traininds
         self.testinds = testinds
         self.compiled = False
+        self.subset = subset
+        if len(self.clu_ids) == 0:
+            raise UserWarning('No neuron fired a spike in a minimum number.')
+
+        # Bin spikes
+        self._bin_spike_trains()
+        return
+
+    def _bin_spike_trains(self):
+        """
+        Bins spike times passed to class at instantiation. Will not bin spike trains which did
+        not meet the criteria for minimum number of spiking trials. Must be run before the
+        NeuralGLM.fit() method is called.
+        """
+        spkarrs = []
+        arrdiffs = []
+        for i in self.trialsdf.index:
+            duration = self.trialsdf.loc[i, 'duration']
+            durmod = duration % self.binwidth
+            if durmod > (self.binwidth / 2):
+                duration = duration - (self.binwidth / 2)
+            if len(self.spikes[i]) == 0:
+                arr = np.zeros((self.binf(duration), len(self.clu_ids)))
+                spkarrs.append(arr)
+                continue
+            spks = self.spikes[i]
+            clu = self.clu[i]
+            arr = bincount2D(spks, clu,
+                             xbin=self.binwidth, ybin=self.clu_ids, xlim=[0, duration])[0]
+            arrdiffs.append(arr.shape[1] - self.binf(duration))
+            spkarrs.append(arr.T)
+        y = np.vstack(spkarrs)
+        if hasattr(self, 'dm'):
+            assert y.shape[0] == self.dm.shape[0], "Oh shit. Indexing error."
+        self.binnedspikes = y
         return
 
     def add_covariate_timing(self, covlabel, eventname, bases,
@@ -315,7 +363,7 @@ class NeuralGLM:
 
         if np.any(mismatch):
             raise ValueError('Length mismatch between regressor and trial on trials'
-                             f'{*np.argwhere(mismatch),}.')
+                             f'{np.argwhere(mismatch)}.')
 
         # Initialize containers for the covariate dicts
         if not hasattr(self, 'currcol'):
@@ -338,35 +386,6 @@ class NeuralGLM:
             self.currcol += bases.shape[1]
 
         self.covar[covlabel] = cov
-        return
-
-    def bin_spike_trains(self):
-        """
-        Bins spike times passed to class at instantiation. Will not bin spike trains which did
-        not meet the criteria for minimum number of spiking trials. Must be run before the
-        NeuralGLM.fit() method is called.
-        """
-        spkarrs = []
-        arrdiffs = []
-        for i in self.trialsdf.index:
-            duration = self.trialsdf.loc[i, 'duration']
-            durmod = duration % self.binwidth
-            if durmod > (self.binwidth / 2):
-                duration = duration - (self.binwidth / 2)
-            if len(self.spikes[i]) == 0:
-                arr = np.zeros((self.binf(duration), len(self.clu_ids)))
-                spkarrs.append(arr)
-                continue
-            spks = self.spikes[i]
-            clu = self.clu[i]
-            arr = bincount2D(spks, clu,
-                             xbin=self.binwidth, ybin=self.clu_ids, xlim=[0, duration])[0]
-            arrdiffs.append(arr.shape[1] - self.binf(duration))
-            spkarrs.append(arr.T)
-        y = np.vstack(spkarrs)
-        if hasattr(self, 'dm'):
-            assert y.shape[0] == self.dm.shape[0], "Oh shit. Indexing error."
-        self.binnedspikes = y
         return
 
     def compile_design_matrix(self, dense=True):
@@ -422,7 +441,159 @@ class NeuralGLM:
         self.compiled = True
         return
 
-    def fit(self, method='sklearn', alpha=0):
+    def _fit_sklearn(self, dm, binned, alpha, cells=None, retvar=False, noncovwarn=True):
+        """
+        Fit a GLM using scikit-learn implementation of PoissonRegressor. Uses a regularization
+        strength parameter alpha, which is the strength of ridge regularization term. When alpha
+        is set to 0, this *should* in theory be the same as _fit_minimize, but in practice it is
+        not and seems to exhibit some regularization still.
+
+        Parameters
+        ----------
+        dm : numpy.ndarray
+            Design matrix, in which rows are observations and columns are regressor values. Should
+            NOT contain a bias column for the intercept. Scikit-learn handles that.
+        binned : numpy.ndarray
+            Vector of observed spike counts which we seek to predict. Must be of the same length
+            as dm.shape[0]
+        alpha : float
+            Regularization strength, applied as multiplicative constant on ridge regularization.
+        cells : list
+            List of cells which should be fit. If None is passed, will default to fitting all cells
+            in clu_ids
+        variances : bool
+            Whether or not to return variances on parameters in dm.
+        """
+        if cells is None:
+            cells = self.clu_ids.flatten()
+        coefs = pd.Series(index=cells, name='coefficients', dtype=object)
+        intercepts = pd.Series(index=cells, name='intercepts')
+        variances = pd.Series(index=cells, name='variances', dtype=object)
+        nonconverged = []
+        for cell in tqdm(cells, 'Fitting units:', leave=False):
+            cell_idx = np.argwhere(self.clu_ids == cell)[0, 0]
+            cellbinned = binned[:, cell_idx]
+            with catch_warnings(record=True) as w:
+                fitobj = PoissonRegressor(alpha=alpha, max_iter=300).fit(dm,
+                                                                         cellbinned)
+            if len(w) != 0:
+                nonconverged.append(cell)
+            wts = np.concatenate([[fitobj.intercept_], fitobj.coef_], axis=0)
+            biasdm = np.pad(dm.copy(), ((0, 0), (1, 0)), 'constant', constant_values=1)
+            if retvar:
+                wvar = np.diag(np.linalg.inv(dd_neglog(wts, biasdm, cellbinned)))
+            else:
+                wvar = np.ones((wts.shape[0], wts.shape[0])) * np.nan
+            coefs.at[cell] = fitobj.coef_
+            variances.at[cell] = wvar[1:]
+            intercepts.at[cell] = fitobj.intercept_
+        if noncovwarn:
+            if len(nonconverged) != 0:
+                warn(f'Fitting did not converge for some units: {nonconverged}')
+        return coefs, intercepts, variances
+
+    def _fit_pytorch(self, dm, binned, cells=None, retvar=False, epochs=500, optim='adam',
+                     lr=1.0):
+        """
+        Fit the GLM using PyTorch on GPU(s). Regularization has not been applied yet.
+
+        Parameters
+        ----------
+        dm : numpy.ndarray
+            Design matrix, in which rows are observations and columns are regressor values. First
+            column must be a bias column of ones.
+        binned : numpy.ndarray
+            Vector of observed spike counts which we seek to predict. Must be of the same length
+            as dm.shape[0]
+        cells : list
+            List of cells which should be fit. If None is passed, will default to fitting all cells
+            in clu_ids
+        variances : bool
+            Whether or not to return variances on parameters in dm.
+        epochs : int
+            The number of epochs to train the model
+        optim : string
+            The name of optimization method in pytorch
+        lr : float
+            Learning rate for the optimizer
+        """
+        if cells is None:
+            cells = self.clu_ids.flatten()
+        coefs = pd.Series(index=cells, name='coefficients', dtype=object)
+        intercepts = pd.Series(index=cells, name='intercepts')
+        variances = pd.Series(index=cells, name='variances', dtype=object)
+
+        # CPU or GPU
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # device = torch.device('cpu')
+        in_features = dm.shape[1]
+        out_features = binned.shape[1]
+        glm = PoissonGLM(in_features, out_features).to(device)
+        x = torch.as_tensor(dm, dtype=torch.float32, device=device)
+        y = torch.as_tensor(binned, dtype=torch.float32, device=device)
+
+        _, weight, bias = glm.fit(x, y, epochs=epochs, optim=optim, lr=lr)
+        # Store parameters
+        biasdm = np.pad(dm.copy(), ((0, 0), (1, 0)), 'constant', constant_values=1)
+        for cell in cells:
+            cell_idx = np.argwhere(self.clu_ids == cell)[0, 0]
+            cellbinned = binned[:, cell_idx]
+            coefs.at[cell] = weight[cell_idx, :]
+            intercepts.at[cell] = bias[cell_idx]
+
+            wts = np.concatenate([[bias[cell_idx]], weight[cell_idx, :]], axis=0)
+            if retvar:
+                wvar = np.diag(np.linalg.inv(dd_neglog(wts, biasdm, cellbinned)))
+            else:
+                wvar = np.ones((wts.shape[0], wts.shape[0])) * np.nan
+            variances.at[cell] = wvar[1:]
+
+        return coefs, intercepts, variances
+
+    def _fit_minimize(self, dm, binned, cells=None, retvar=False):
+        """
+        Fit a GLM using direct minimization of the negative log likelihood. No regularization.
+
+        Parameters
+        ----------
+        dm : numpy.ndarray
+            Design matrix, in which rows are observations and columns are regressor values. First
+            column must be a bias column of ones.
+        binned : numpy.ndarray
+            Vector of observed spike counts which we seek to predict. Must be of the same length
+            as dm.shape[0]
+        cells : list
+            List of cells which should be fit. If None is passed, will default to fitting all cells
+            in clu_ids
+        variances : bool
+            Whether or not to return variances on parameters in dm.
+        """
+        if cells is None:
+            cells = self.clu_ids.flatten()
+        coefs = pd.Series(index=cells, name='coefficients', dtype=object)
+        intercepts = pd.Series(index=cells, name='intercepts')
+        variances = pd.Series(index=cells, name='variances', dtype=object)
+        for cell in tqdm(cells, 'Fitting units:', leave=False):
+            cell_idx = np.argwhere(self.clu_ids == cell)[0, 0]
+            cellbinned = binned[:, cell_idx]
+            wi = np.linalg.lstsq(dm, cellbinned, rcond=None)[0]
+            res = minimize(neglog, wi, (dm, cellbinned),
+                           method='trust-ncg', jac=d_neglog, hess=dd_neglog)
+            if retvar:
+                hess = dd_neglog(res.x, dm, cellbinned)
+                try:
+                    wvar = np.diag(np.linalg.inv(hess))
+                except LinAlgError:
+                    wvar = np.ones_like(np.diag(hess)) * np.inf
+            else:
+                wvar = np.ones((res.x.shape[0], res.x.shape[0])) * np.nan
+            coefs.at[cell] = res.x[1:]
+            intercepts.at[cell] = res.x[0]
+            variances.at[cell] = wvar[1:]
+        return coefs, intercepts, variances
+
+    def fit(self, method='sklearn', alpha=0, singlepar_var=False, epochs=6000, optim='adam',
+            lr=0.3):
         """
         Fit the current set of binned spikes as a function of the current design matrix. Requires
         NeuralGLM.bin_spike_trains and NeuralGLM.compile_design_matrix to be run first. Will store
@@ -440,6 +611,12 @@ class NeuralGLM:
             Regularization strength for scikit-learn implementation of GLM fitting, where 0 is
             effectively unregularized weights. Does not function in the minimize
             option, by default 1
+        epochs : int
+            Used for _fit_pytorch funtion, see details there
+        optim : string
+            Used for _fit_pytorch funtion, see details there
+        lr : float
+            Used for _fit_pytorch funtion, see details there
 
         Returns
         -------
@@ -452,53 +629,158 @@ class NeuralGLM:
         if not self.compiled:
             raise AttributeError('Design matrix has not been compiled yet. Please run '
                                  'neuroglm.compile_design_matrix() before fitting.')
+        if method not in ('sklearn', 'minimize', 'pytorch'):
+            raise ValueError('Method must be \'minimize\' or \'sklearn\' or \'pytorch\'')
+        if optim != 'adam':
+            epochs = 500
         # TODO: Make this optionally parallel across multiple cores of CPU
         # Initialize pd Series to store output coefficients and intercepts for fits
-        coefs = pd.Series(index=self.clu_ids.flat, name='coefficients', dtype=object)
-        intercepts = pd.Series(index=self.clu_ids.flat, name='intercepts', dtype=object)
-        variances = pd.Series(index=self.clu_ids.flat, name='variances', dtype=object)
-        biasdm = np.pad(self.dm.copy(), ((0, 0), (1, 0)), 'constant', constant_values=1)
         trainmask = np.isin(self.trlabels, self.traininds).flatten()  # Mask for training data
         trainbinned = self.binnedspikes[trainmask]
         print(f'Condition of design matrix is {np.linalg.cond(self.dm[trainmask])}')
 
-        if method == 'sklearn':
-            traindm = self.dm[trainmask]
-            nonconverged = []
-            for i, cell in tqdm(enumerate(self.clu_ids), 'Fitting units:', leave=False):
-                binned = trainbinned[:, i]
-                with catch_warnings(record=True) as w:
-                    fitobj = PoissonRegressor(alpha=alpha, max_iter=300).fit(traindm,
-                                                                             binned)
-                if len(w) != 0:
-                    nonconverged.append(cell[0])
-                wts = np.concatenate([[fitobj.intercept_], fitobj.coef_], axis=0)
-                wvar = np.diag(np.linalg.inv(dd_neglog(wts, biasdm[trainmask], binned)))
-                coefs.at[cell[0]] = fitobj.coef_
-                variances.at[cell[0]] = wvar[1:]
-                intercepts.at[cell[0]] = fitobj.intercept_
-            if len(nonconverged) != 0:
-                warn(f'Fitting did not converge for some units: {nonconverged}')
-        elif method == 'minimize':
-            traindm = biasdm[trainmask]
-            for i, cell in tqdm(enumerate(self.clu_ids), 'Fitting units:', leave=False):
-                binned = trainbinned[:, i]
-                wi = np.linalg.lstsq(traindm, binned, rcond=None)[0]
-                res = minimize(neglog, wi, (traindm, binned),
-                               method='trust-ncg', jac=d_neglog, hess=dd_neglog)
-                hess = dd_neglog(res.x, traindm, binned)
-                try:
-                    wvar = np.diag(np.linalg.inv(hess))
-                except np.linalg.LinAlgError:
-                    wvar = np.ones_like(res.x) * 1e6
-                coefs.at[cell[0]] = res.x[1:]
-                intercepts.at[cell[0]] = res.x[0]
-                variances.at[cell[0]] = wvar[1:]
-        self.coefs = coefs
-        self.intercepts = intercepts
-        self.variances = variances
-        self.fitmethod = method
-        return coefs, intercepts
+        if not self.subset:
+            if method == 'sklearn':
+                traindm = self.dm[trainmask]
+                coefs, intercepts, variances = self._fit_sklearn(traindm, trainbinned, alpha,
+                                                                 retvar=True)
+            elif method == 'pytorch':
+                traindm = self.dm[trainmask]
+                coefs, intercepts, variances = self._fit_pytorch(traindm, trainbinned,
+                                                                 retvar=True, epochs=epochs,
+                                                                 optim=optim, lr=lr)
+            else:
+                biasdm = np.pad(self.dm.copy(), ((0, 0), (1, 0)), 'constant', constant_values=1)
+                traindm = biasdm[trainmask]
+                coefs, intercepts, variances = self._fit_minimize(traindm, trainbinned,
+                                                                  retvar=True)
+            self.coefs = coefs
+            self.intercepts = intercepts
+            self.variances = variances
+            self.fitmethod = method
+            return
+        else:
+            # Get testing matrices for scoring in submodels
+            testmask = np.isin(self.trlabels, self.testinds).flatten()
+            testbinned = self.binnedspikes[testmask]
+
+            # Build single-parameter-group models first:
+            singlepar_models = {}
+            singlepar_scores = pd.DataFrame(columns=['cell', 'covar', 'scores'])
+            for cov in tqdm(self.covar, desc='Fitting single-cov models:', leave=False):
+                dmcols = self.covar[cov]['dmcol_idx']
+                colmask = np.zeros(self.dm.shape[1], dtype=bool)
+                colmask[dmcols] = True
+                traindm = self.dm[np.ix_(trainmask, colmask)]
+                testdm = self.dm[np.ix_(testmask, colmask)]
+                if method == 'sklearn':
+                    coefs, intercepts, variances = self._fit_sklearn(traindm, trainbinned, alpha,
+                                                                     retvar=singlepar_var)
+                elif method == 'pytorch':
+                    coefs, intercepts, variances = self._fit_pytorch(traindm, trainbinned,
+                                                                     retvar=singlepar_var,
+                                                                     epochs=epochs,
+                                                                     optim=optim, lr=lr)
+                else:
+                    biasdm = np.pad(traindm.copy(), ((0, 0), (1, 0)), 'constant',
+                                    constant_values=1)
+                    coefs, intercepts, variances = self._fit_minimize(biasdm, trainbinned,
+                                                                      retvar=singlepar_var)
+                scores = self._score_submodel(coefs, intercepts, testdm, testbinned)
+                scoresdf = pd.DataFrame(scores).reset_index()
+                scoresdf.rename(columns={'index': 'cell'}, inplace=True)
+                scoresdf['covar'] = cov
+                if singlepar_var:
+                    singlepar_models[cov] = (coefs, intercepts, variances, scores)
+                else:
+                    singlepar_models[cov] = (coefs, intercepts, np.nan, scores)
+                singlepar_scores = pd.concat([singlepar_scores, scoresdf], sort=False)
+            singlepar_scores.set_index(['cell', 'covar'], inplace=True)
+            singlepar_scores.sort_values(by=['cell', 'scores'], ascending=False, inplace=True)
+            fitcells = singlepar_scores.index.levels[0]
+            # Iteratively build model with 2 through K parameter groups:
+            submodel_scores = singlepar_scores.unstack()
+            submodel_scores.columns = submodel_scores.columns.droplevel()
+            for i in tqdm(range(2, len(self.covar) + 1), desc='Fitting submodels', leave=False):
+                cellcovars = {cell: tuple(singlepar_scores.loc[cell].iloc[:i].index)
+                              for cell in fitcells}
+                covarsets = [frozenset(cov) for cov in cellcovars.values()]
+                retvar = True if i == len(self.covar) else False
+                # Iterate through unique unordered combinations of covariates
+                iscores = []
+                progressdesc = f'Fitting covariate sets for {i} parameter groups'
+                for covarset in tqdm(set(covarsets), desc=progressdesc, leave=False):
+                    currcells = [cell for cell, covar in cellcovars.items()
+                                 if set(covar) == covarset]
+                    currcols = np.hstack([self.covar[cov]['dmcol_idx'] for cov in covarset])
+                    colmask = np.zeros(self.dm.shape[1], dtype=bool)
+                    colmask[currcols] = True
+                    traindm = self.dm[np.ix_(trainmask, colmask)]
+                    testdm = self.dm[np.ix_(testmask, colmask)]
+                    if method == 'sklearn':
+                        coefs, intercepts, variances = self._fit_sklearn(traindm, trainbinned,
+                                                                         alpha, cells=currcells,
+                                                                         retvar=retvar,
+                                                                         noncovwarn=False)
+                    elif method == 'pytorch':
+                        coefs, intercepts, variances = self._fit_pytorch(traindm, trainbinned,
+                                                                         cells=currcells,
+                                                                         retvar=retvar,
+                                                                         epochs=epochs,
+                                                                         optim=optim, lr=lr)
+                    else:
+                        biasdm = np.pad(traindm.copy(), ((0, 0), (1, 0)), 'constant',
+                                        constant_values=1)
+                        coefs, intercepts, variances = self._fit_minimize(biasdm, trainbinned,
+                                                                          cells=currcells,
+                                                                          retvar=retvar)
+                    iscores.append(self._score_submodel(coefs, intercepts, testdm, testbinned))
+                submodel_scores[f'{i}cov'] = pd.concat(iscores).sort_index()
+            self.submodel_scores = submodel_scores
+            self.coefs = coefs
+            self.intercepts = intercepts
+            self.variances = variances
+            return
+
+    def _score_submodel(self, weights, intercepts, dm, binned):
+        """
+        Utility function for computing D^2 (pseudo R^2) on a given set of weights and
+        intercepts. Is be used in both model subsetting and the mother score() function of the GLM.
+
+        Parameters
+        ----------
+        weights : pd.Series
+            Series in which entries are numpy arrays containing the weights for a given cell.
+            Indices should be cluster ids.
+        intercepts : pd.Series
+            Series in which elements are the intercept fit to each cell. Indicies should match
+            weights.
+        dm : numpy.ndarray
+            Design matrix. Should not contain the bias column. dm.shape[1] should be the same as
+            the length of an element in weights.
+        binned : numpy.ndarray
+            nT x nCells array, in which each column is the binned spike train for a single unit.
+            Should be the same number of rows as dm.
+
+        Returns
+        -------
+        pd.Series
+            Pandas series containing the scores of the given model for each cell.
+        """
+        scores = pd.Series(index=weights.index, name='scores')
+        for cell in weights.index:
+            cell_idx = np.argwhere(self.clu_ids == cell)[0, 0]
+            wt = weights.loc[cell].reshape(-1, 1)
+            bias = intercepts.loc[cell]
+            y = binned[:, cell_idx]
+            pred = np.exp(dm @ wt + bias)
+            null_pred = np.ones_like(pred) * np.mean(y)
+            null_deviance = 2 * np.sum(xlogy(y, y / null_pred.flat) - y + null_pred.flat)
+            with np.errstate(divide='ignore', invalid='ignore'):
+                full_deviance = 2 * np.sum(xlogy(y, y / pred.flat) - y + pred.flat)
+            d_sq = 1 - (full_deviance / null_deviance)
+            scores.at[cell] = d_sq
+        return scores
 
     def combine_weights(self):
         """
@@ -551,7 +833,8 @@ class NeuralGLM:
         """
         if not hasattr(self, 'coefs'):
             raise AttributeError('Fit was not run. Please run fit first.')
-
+        if hasattr(self, 'submodel_scores'):
+            return self.submodel_scores
         testmask = np.isin(self.trlabels, self.testinds).flatten()
         testdm = self.dm[testmask, :]
         scores = pd.Series(index=self.coefs.index)
