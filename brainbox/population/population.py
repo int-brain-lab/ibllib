@@ -10,7 +10,7 @@ import scipy as sp
 import types
 from itertools import groupby
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.naive_bayes import GaussianNB
+from sklearn.naive_bayes import GaussianNB, MultinomialNB
 from sklearn.linear_model import LogisticRegression
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.model_selection import KFold, LeaveOneOut, LeaveOneGroupOut
@@ -214,9 +214,9 @@ def xcorr(spike_times, spike_clusters, bin_size=None, window_size=None):
 
 
 def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, post_time=0.5,
-           classifier='bayes', cross_validation='kfold', num_splits=5, spike_matrix=None,
-           prob_left=None, custom_validation=None, n_neurons='all', iterations=1, shuffle=False,
-           phase_rand=False, pseudo_blocks=False):
+           classifier='bayes-multinomial', cross_validation='kfold', num_splits=5, prob_left=None,
+           custom_validation=None, n_neurons='all', iterations=1, shuffle=False, phase_rand=False,
+           pseudo_blocks=False):
     """
     Use decoding to classify groups of trials (e.g. stim left/right). Classification is done using
     the population vector of summed spike counts from the specified time window. Cross-validation
@@ -244,10 +244,11 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
     classifier : string or sklearn object
         which decoder to use, either input a scikit learn clf object directly or a string.
         When it's a string options are (all classifiers are used with default options):
-            'bayes'         Naive Bayes
-            'forest'        Random forest
-            'regression'    Logistic regression
-            'lda'           Linear Discriminant Analysis
+            'bayes-multinomal'      Naive Bayes with multinomial likelihood
+            'bayes-gaussian'        Naive Bayes with gaussian likelihood
+            'forest'                Random forest
+            'regression'            Logistic regression
+            'lda'                   Linear Discriminant Analysis
     cross_validation : string of generator object
         which cross-validation method to use
         you can input the .split method of any sklearn cross-validation method
@@ -307,7 +308,7 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
 
     # Check input
     if type(classifier) == str:
-        assert classifier in ['bayes', 'forest', 'regression', 'lda']
+        assert classifier in ['bayes-multinomial', 'bayes-gaussian', 'forest', 'regression', 'lda']
     assert (type(cross_validation) == str) or (type(cross_validation) == types.GeneratorType)
     if type(cross_validation) == str:
         assert cross_validation in ['none', 'kfold', 'kfold-interleaved', 'leave-one-out', 'block']
@@ -329,10 +330,12 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
     if type(classifier) == str:
         if classifier == 'forest':
             clf = RandomForestClassifier()
-        elif classifier == 'bayes':
+        elif classifier == 'bayes-multinomial':
+            clf = MultinomialNB()
+        elif classifier == 'bayes-gaussian':
             clf = GaussianNB()
         elif classifier == 'regression':
-            clf = LogisticRegression()
+            clf = LogisticRegression(solver='liblinear')
         elif classifier == 'lda':
             clf = LinearDiscriminantAnalysis()
     else:
