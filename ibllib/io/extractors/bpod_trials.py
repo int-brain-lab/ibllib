@@ -5,6 +5,7 @@ i.e. habituation, training or biased.
 import logging
 
 from ibllib.io.extractors import habituation_trials, training_trials, biased_trials, training_wheel
+import ibllib.io.extractors.base
 import ibllib.io.raw_data_loaders as rawio
 
 _logger = logging.getLogger('ibllib')
@@ -22,7 +23,7 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None):
     :return: wheel: Bunch/dict of wheel positions
     :return: out_Files: list of output files
     """
-    extractor_type = rawio.get_session_extractor_type(session_path)
+    extractor_type = ibllib.io.extractors.base.get_session_extractor_type(session_path)
     _logger.info(f"Extracting {session_path} as {extractor_type}")
     bpod_trials = bpod_trials or rawio.load_data(session_path)
     settings = settings or rawio.load_settings(session_path)

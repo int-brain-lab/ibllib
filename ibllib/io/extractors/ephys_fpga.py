@@ -140,8 +140,6 @@ def _assign_events_bpod(bpod_t, bpod_polarities, ignore_first_valve=True):
     ITI_TTL_LEN = 0.4
     # make sure that there are no 2 consecutive fall or consecutive rise events
     assert(np.all(np.abs(np.diff(bpod_polarities)) == 2))
-    # make sure that the first event is a rise
-    assert(bpod_polarities[0] == 1)
     # take only even time differences: ie. from rising to falling fronts
     dt = np.diff(bpod_t)[::2]
     # detect start trials event assuming length is 0.23 ms except the first trial
@@ -158,15 +156,26 @@ def _assign_events_bpod(bpod_t, bpod_polarities, ignore_first_valve=True):
     # ITI events are above 400 ms
     i_iti_in = np.where(dt > ITI_TTL_LEN)[0] * 2
     i_iti_in = np.delete(i_iti_in, np.where(i_valve_open < 2))
-    i_iti_in = bpod_t[i_iti_in]
-    # # some debug plots when needed
+    t_iti_in = bpod_t[i_iti_in]
+    ## some debug plots when needed
     # import matplotlib.pyplot as plt
     # import ibllib.plots as plots
+    # events = {'id': np.zeros(bpod_t.shape), 't': bpod_t, 'p': bpod_polarities}
+    # events['id'][i_trial_start] = 1
+    # events['id'][i_valve_open] = 2
+    # events['id'][i_iti_in] = 3
+    # i_abnormal = np.where(np.diff(events['id'][bpod_polarities != -1]) == 0)
+    # t_abnormal = events['t'][bpod_polarities != -1][i_abnormal]
+    # assert(np.all(events != 0))
     # plt.figure()
-    # plots.squares(bpod_t, bpod_fronts)
-    # plots.vertical_lines(t_valve_open, ymin=-0.2, ymax=1.2, linewidth=0.5, color='g')
-    # plots.vertical_lines(t_trial_start, ymin=-0.2, ymax=1.2, linewidth=0.5, color='r')
-    return t_trial_start, t_valve_open, i_iti_in
+    # plots.squares(bpod_t, bpod_polarities)
+    # plots.vertical_lines(t_trial_start, ymin=-0.2, ymax=1.1, linewidth=0.5)
+    # plots.vertical_lines(t_valve_open, ymin=-0.2, ymax=1.1, linewidth=0.5)
+    # plots.vertical_lines(t_iti_in, ymin=-0.2, ymax=1.1, linewidth=0.5)
+    # plt.plot(t_abnormal, t_abnormal * 0 + .5, 'k*')
+    # plt.legend(['raw fronts', 'trial start', 'valve open', 'iti_in'])
+
+    return t_trial_start, t_valve_open, t_iti_in
 
 
 def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, radius=1,
@@ -306,7 +315,9 @@ def bpod_fpga_sync(bpod_intervals=None, ephys_intervals=None, iti_duration=None)
     if bpod_intervals.size != ephys_intervals.size:
         # patching things up if the bpod and FPGA don't have the same recording span
         _logger.warning("BPOD/FPGA synchronization: Bpod and FPGA don't have the same amount of"
-                        " trial start events. Patching alf files.")
+                        " trial start events")
+        _logger.warning(f"bpod has {bpod_intervals.size}")
+        _logger.warning(f"fpga has {ephys_intervals.size}")
         _, _, ibpod, ifpga = raw_data_loaders.sync_trials_robust(
             bpod_intervals[:, 0], ephys_intervals[:, 0], return_index=True)
         if ibpod.size == 0:
@@ -316,6 +327,7 @@ def bpod_fpga_sync(bpod_intervals=None, ephys_intervals=None, iti_duration=None)
         ephys_intervals = ephys_intervals[ifpga, :]
     else:
         ibpod, ifpga = [np.arange(bpod_intervals.shape[0]) for _ in np.arange(2)]
+
     tlen = (np.diff(bpod_intervals) - np.diff(ephys_intervals))[:-1] - iti_duration
     assert np.all(np.abs(tlen[np.invert(np.isnan(tlen))])[:-1] < 5 * 1e-3)
     # dt is the delta to apply to bpod times in order to be on the ephys clock
@@ -587,7 +599,7 @@ class CameraTimestamps(BaseExtractor):
 
 class FpgaTrials(BaseExtractor):
     save_names = (ProbaContrasts.save_names +
-                  ('_ibl_trials.feedbackType.npy',  '_ibl_trials.choice.npy',
+                  ('_ibl_trials.feedbackType.npy', '_ibl_trials.choice.npy',
                    '_ibl_trials.rewardVolume.npy', '_ibl_trials.intervals_bpod.npy',
                    '_ibl_trials.intervals.npy', '_ibl_trials.response_times.npy',
                    '_ibl_trials.goCueTrigger_times.npy', None, None, None, None, None,
@@ -611,19 +623,20 @@ class FpgaTrials(BaseExtractor):
         self.bpod2fpga = None
 
     def _extract(self, sync=None, chmap=None, **kwargs):
-        # extracts trials
+        """Extracts ephys trials by combining Bpod and FPGA sync pulses"""
         # extract the behaviour data from bpod
         if sync is None or chmap is None:
             _sync, _chmap = get_main_probe_sync(self.session_path, bin_exists=False)
             sync = sync or _sync
             chmap = chmap or _chmap
+        # load the bpod data and performs a biased choice world training extraction
         bpod_raw = raw_data_loaders.load_data(self.session_path)
         assert bpod_raw is not None, "No task trials data in raw_behavior_data - Exit"
-        tmax = bpod_raw[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
         bpod_trials, _ = biased_trials.extract_all(
             session_path=self.session_path, save=False, bpod_trials=bpod_raw)
         bpod_trials['intervals_bpod'] = np.copy(bpod_trials['intervals'])
-        fpga_trials = extract_behaviour_sync(sync=sync, chmap=chmap, tmax=tmax)
+        fpga_trials = extract_behaviour_sync(
+            sync=sync, chmap=chmap, tmax=bpod_trials['intervals'][-1, -1] + 60)
         # checks consistency and compute dt with bpod
         ibpod, ifpga, self.bpod2fpga = bpod_fpga_sync(
             bpod_trials['intervals_bpod'], fpga_trials.pop('intervals'))

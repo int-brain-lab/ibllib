@@ -1,10 +1,9 @@
 import logging
 from collections import OrderedDict
 
-from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.pipes import tasks
 from ibllib.io import ffmpeg
-from ibllib.io.raw_data_loaders import get_session_extractor_type
+from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io.extractors import training_audio, bpod_trials
 from ibllib.qc.task_metrics import TaskQC, HabituationQC
 from ibllib.qc.task_extractors import TaskQCExtractor

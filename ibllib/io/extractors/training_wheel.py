@@ -397,8 +397,9 @@ class Wheel(BaseBpodTrialsExtractor):
         min_qt = self.settings.get('QUIESCENT_PERIOD', None)
 
         first_moves, is_final, _ = extract_first_movement_times(moves, trials, min_qt=min_qt)
-
-        return ts, pos, moves['intervals'], moves['peakAmplitude'], first_moves, is_final
+        output = (ts, pos, moves['intervals'], moves['peakAmplitude'],
+                  moves['peakVelocity_times'], first_moves, is_final)
+        return output
 
 
 def extract_all(session_path, bpod_trials=None, settings=None, save=False):

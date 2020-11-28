@@ -2,8 +2,9 @@ import logging
 
 import numpy as np
 
-from ibllib.io.extractors.training_wheel import get_wheel_position
 from ibllib.io.extractors import bpod_trials
+from ibllib.io.extractors.base import get_session_extractor_type
+from ibllib.io.extractors.training_wheel import get_wheel_position
 from ibllib.io.extractors.ephys_fpga import get_main_probe_sync, FpgaTrials
 import ibllib.io.raw_data_loaders as raw
 from alf.io import is_session_path

@@ -3,7 +3,6 @@ A module for the base Extractor classes.  The Extractor, given a session path, w
 processed data from raw hardware files and optionally save them.
 """
 
-from pathlib import Path
 import abc
 import json
 from collections import OrderedDict
@@ -73,7 +72,9 @@ class BaseExtractor(abc.ABC):
             else:
                 log.error(f"Don't know how to save {file_path.suffix} files yet")
 
-        if isinstance(self.save_names, str):
+        if self.save_names is None:
+            file_paths = []
+        elif isinstance(self.save_names, str):
             file_paths = path_out.joinpath(self.save_names)
             _write_to_disk(file_paths, data)
         else:  # Should be list or tuple...
