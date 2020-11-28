@@ -2,6 +2,8 @@ from pathlib import Path
 import json
 import datetime
 import logging
+
+import ibllib.io.extractors.base
 from dateutil import parser as dateparser
 import re
 
@@ -331,7 +333,7 @@ class RegistrationClient:
 
 
 def _alyx_procedure_from_task(task_protocol):
-    task_str = raw.get_task_extractor_type(task_protocol)
+    task_str = ibllib.io.extractors.base.get_task_extractor_type(task_protocol)
     lookup = {'biased': 'Behavior training/tasks',
               'habituation': 'Behavior training/tasks',
               'training': 'Behavior training/tasks',

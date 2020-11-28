@@ -1,6 +1,7 @@
 import logging
 from collections import OrderedDict
 
+from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.pipes import tasks
 from ibllib.io import ffmpeg
 from ibllib.io.raw_data_loaders import get_session_extractor_type

@@ -8,8 +8,8 @@ import shutil
 from pathlib import Path
 from shutil import ignore_patterns as ig
 
+import ibllib.io.extractors.base
 import ibllib.io.flags as flags
-import ibllib.io.raw_data_loaders as raw
 
 log = logging.getLogger('ibllib')
 log.setLevel(logging.INFO)
@@ -46,7 +46,7 @@ def main(local_folder: str, remote_folder: str, force: bool = False) -> None:
             shutil.copytree(src, dst, ignore=ig(str(src_flag_file.name)))
         # finally if folder was created delete the src flag_file and create compress_me.flag
         if dst.exists():
-            task_type = raw.get_session_extractor_type(Path(src))
+            task_type = ibllib.io.extractors.base.get_session_extractor_type(Path(src))
             if task_type not in ['ephys', 'ephys_sync', 'ephys_mock']:
                 flags.write_flag_file(dst.joinpath('raw_session.flag'))
             log.info(f"Copied to {remote_folder}: Session {src_flag_file.parent}")

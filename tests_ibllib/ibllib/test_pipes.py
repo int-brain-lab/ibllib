@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import ibllib.io.raw_data_loaders as rawio
+import ibllib.io.extractors.base
 import tests_ibllib.ibllib.fixtures.utils as fu
 from ibllib.pipes import misc
 from oneibl.one import ONE
@@ -29,9 +29,12 @@ class TestExtractors(unittest.TestCase):
             ("optokarolinaChoiceWorld5.34", "biased"),
             ("karolinaChoiceWorld5.34", "biased"),
             ("ephyskarolinaChoiceWorld4.34", "ephys"),
+            ("passive_opto", "ephys"),
+            ("_iblrig_tasks_opto_ephysChoiceWorld", "ephys"),
+            ("_iblrig_tasks_opto_biasedChoiceWorld", "biased"),
         ]
         for to in task_out:
-            out = rawio.get_task_extractor_type(to[0])
+            out = ibllib.io.extractors.base.get_task_extractor_type(to[0])
             self.assertEqual(out, to[1])
 
 
@@ -390,10 +393,10 @@ class TestScanFixPassiveFiles(unittest.TestCase):
 
     def test_find_pairs(self):
         from_to_pairs = fix.find_pairs(self.tmp_dir.name)
-        from_path_parts = ["fakelab", "Subjects", "fakemouse", "1900-01-01", "002"]
-        self.assertTrue(all([x in Path(from_to_pairs[0][0]).parts for x in from_path_parts]))
-        to_path_parts = ["fakelab", "Subjects", "fakemouse", "1900-01-01", "001"]
-        self.assertTrue(all([x in Path(from_to_pairs[0][1]).parts for x in to_path_parts]))
+        from_path_parts = ['fakelab', 'Subjects', 'fakemouse', '1900-01-01', '002']
+        self.assertTrue(all(x in Path(from_to_pairs[0][0]).parts for x in from_path_parts))
+        to_path_parts = ['fakelab', 'Subjects', 'fakemouse', '1900-01-01', '001']
+        self.assertTrue(all(x in Path(from_to_pairs[0][1]).parts for x in to_path_parts))
 
     def test_move_rename_pairs(self):
         # Test all outputs of find function
