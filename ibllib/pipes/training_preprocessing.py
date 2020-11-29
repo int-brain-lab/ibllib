@@ -38,17 +38,13 @@ class TrainingTrials(tasks.Task):
         type = get_session_extractor_type(self.session_path)
         if type == 'habituation':
             qc = HabituationQC(self.session_path, one=self.one)
-            qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=self.one)
-            qc.extractor.data = qc.extractor.rename_data(trials)
+            qc.extractor = TaskQCExtractor(self.session_path, one=self.one)
         else:  # Update wheel data
             qc = TaskQC(self.session_path, one=self.one)
-            qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=self.one)
-            qc.extractor.data = qc.extractor.rename_data({**trials, **wheel})
+            qc.extractor = TaskQCExtractor(self.session_path, one=self.one)
             qc.extractor.wheel_encoding = 'X1'
-        qc.extractor.type = type
         # Aggregate and update Alyx QC fields
         qc.run(update=True)
-
         return output_files
 
 
