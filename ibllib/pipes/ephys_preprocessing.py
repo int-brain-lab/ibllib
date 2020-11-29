@@ -232,9 +232,8 @@ class EphysTrials(tasks.Task):
 
         # Run the task QC
         qc = TaskQC(self.session_path, one=self.one, log=_logger)
-        qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one)
+        qc.extractor = TaskQCExtractor(self.session_path, one=qc.one)
         # Setup object with newly extracted data
-        qc.extractor.data = qc.extractor.rename_data(dsets)
         qc.extractor.type = 'ephys'
         qc.extractor.wheel_encoding = 'X4'
         # Aggregate and update Alyx QC fields
