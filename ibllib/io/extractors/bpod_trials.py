@@ -33,7 +33,7 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None):
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
         trials, files_trials = training_trials.extract_all(
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
-    elif extractor_type == 'biased':
+    elif extractor_type == 'biased' or extractor_type == 'ephys':
         _logger.info('biased session on ' + settings['PYBPOD_BOARD'])
         wheel, files_wheel = training_wheel.extract_all(
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)

@@ -5,7 +5,7 @@ import numpy as np
 from scipy import interpolate
 
 from ibllib.io.extractors import training_trials
-from ibllib.io.extractors.base import BaseBpodTrialsExtractor
+from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
 import ibllib.exceptions as err
@@ -403,5 +403,5 @@ class Wheel(BaseBpodTrialsExtractor):
 
 
 def extract_all(session_path, bpod_trials=None, settings=None, save=False):
-    return Wheel(session_path=session_path).extract(
-        save=save, bpod_trials=bpod_trials, settings=settings)
+    return run_extractor_classes(Wheel, save=save, session_path=session_path,
+                                 bpod_trials=bpod_trials, settings=settings)
