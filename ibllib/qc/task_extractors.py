@@ -57,28 +57,12 @@ class TaskQCExtractor(object):
         missing.
         :return:
         """
-        dstypes = [
-            "_iblrig_taskData.raw",
-            "_iblrig_taskSettings.raw",
-            "_iblrig_encoderPositions.raw",
-            "_iblrig_encoderEvents.raw",
-            "_iblrig_stimPositionScreen.raw",
-            "_iblrig_syncSquareUpdate.raw",
-            "_iblrig_encoderTrialInfo.raw",
-            "_iblrig_ambientSensorData.raw",
-        ]
         eid = self.one.eid_from_path(self.session_path)
         # Ensure we have the settings
-        settings = self.one.load(eid, ["_iblrig_taskSettings.raw"], download_only=True)
-        if settings and get_session_extractor_type(self.session_path) == 'ephys':
-            dstypes.extend(['_spikeglx_sync.channels',
-                            '_spikeglx_sync.polarities',
-                            '_spikeglx_sync.times',
-                            'ephysData.raw.meta',
-                            'ephysData.raw.wiring'])
-        self.log.info(f"Downloading data for session {eid}")
-        files = self.one.load(eid, dataset_types=dstypes, download_only=True)
-        missing = [True for _ in dstypes] if not files else [x is None for x in files]
+        type = (get_session_extractor_type(self.session_path) or
+                self.one.get_details(eid)['task_protocol'])
+        files = download_taskqc_raw_data(eid, one=self.one, fpga='ephys' in type)
+        missing = [True] if not files else [x is None for x in files]
         if self.session_path is None or all(missing):
             self.lazy = True
             self.log.error("Data not found on server, can't calculate QC.")
@@ -229,3 +213,34 @@ class TaskQCExtractor(object):
              "correct": correct}
         )
         return data
+
+
+def download_taskqc_raw_data(eid, one=None, fpga=False):
+    """Download raw data required for performing task QC
+
+    :param eid: A session UUID string
+    :param one: An instance of ONE with which to download the data
+    :param fpga: When True, downloads the raw ephys data required for extracting the FPGA task data
+    :return: A list of file paths for the downloaded raw data
+    """
+    one = one or ONE()
+    # Datasets required for extracting task data
+    dstypes = [
+        "_iblrig_taskData.raw",
+        "_iblrig_taskSettings.raw",
+        "_iblrig_encoderPositions.raw",
+        "_iblrig_encoderEvents.raw",
+        "_iblrig_stimPositionScreen.raw",
+        "_iblrig_syncSquareUpdate.raw",
+        "_iblrig_encoderTrialInfo.raw",
+        "_iblrig_ambientSensorData.raw",
+    ]
+    # Extra files required for extracting task data from FPGA
+    if fpga:
+        dstypes.extend(['_spikeglx_sync.channels',
+                        '_spikeglx_sync.polarities',
+                        '_spikeglx_sync.times',
+                        'ephysData.raw.meta',
+                        'ephysData.raw.wiring'])
+    # Download the data via ONE
+    return one.load(eid, dataset_types=dstypes, download_only=True)

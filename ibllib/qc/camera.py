@@ -81,7 +81,8 @@ class CameraQC(base.QC):
         '_iblrig_Camera.timestamps',
         '_iblrig_taskData.raw',
         '_iblrig_taskSettings.raw',
-        '_iblrig_Camera.raw'
+        '_iblrig_Camera.raw',
+        'camera.times'
     ]
     dstypes_fpga = [
         '_spikeglx_sync.channels',
@@ -136,20 +137,19 @@ class CameraQC(base.QC):
         self.side = side
         filename = f'_iblrig_{self.side}Camera.raw.mp4'
         self.video_path = self.session_path / 'raw_video_data' / filename
-        if not self.download_data:
-            self.type = get_session_extractor_type(self.session_path)
+        self.type = get_session_extractor_type(self.session_path) or None
         self.data = Bunch()
 
         # QC outcomes map
         self.metrics = None
         self.outcome = 'NOT_SET'
 
-    def load_data(self, download_data=None, reextract=False):
+    def load_data(self, download_data: bool = None, extract_times: bool = False) -> None:
         """Extract the data from raw data files
         Extracts all the required task data from the raw data files.
 
         :param download_data: if True, any missing raw data is downloaded via ONE.
-        :param reextract: if True, the camera.times are re-extracted from the raw data
+        :param extract_times: if True, the camera.times are re-extracted from the raw data
         """
         if download_data or self.download_data:
             self._ensure_required_data()
@@ -173,7 +173,7 @@ class CameraQC(base.QC):
         # Load extracted frame times
         alf_path = self.session_path / 'alf'
         try:
-            assert not reextract
+            assert not extract_times
             self.data['frame_times'] = alfio.load_object(alf_path, f'{self.side}Camera')['times']
         except (ALFObjectNotFound, AssertionError):  # Re-extract
             # TODO Flag for extracting single camera's data
@@ -202,21 +202,31 @@ class CameraQC(base.QC):
         self.data['bpod_frame_times'] = np.genfromtxt(file, **ssv_params)  # np.loadtxt is slower
 
     def _ensure_required_data(self):
+        """
+        TODO make static method with side as optional arg; download cameras individually,
+        remove assert
+        :return:
+        """
+        assert self.one is not None, 'ONE required to download data'
+        # Get extractor type
+        is_ephys = 'ephys' in (self.type or self.one.get_details(self.eid)['task_protocol'])
+        dtypes = self.dstypes + self.dstypes_fpga if is_ephys else self.dstypes
         files = self.one.load(self.eid,
-                              dataset_types=self.dstypes + self.dstypes_fpga, download_only=True)
+                              dataset_types=dtypes, download_only=True)
         assert not any(file is None for file in files)
         self.type = get_session_extractor_type(self.session_path)
 
-    def run(self, update: bool = False, download_data: bool = False) -> (str, dict):
+    def run(self, update: bool = False, **kwargs) -> (str, dict):
         """
         Run video QC checks and return outcome
         :param update: if True, updates the session QC fields on Alyx
         :param download_data: if True, downloads any missing data if required
+        :param extract_times: if True, re-extracts the camera timestamps from the raw data
         :returns:
         """
         _log.info('Computing QC outcome')
         if not self.data:
-            self.load_data(download_data)
+            self.load_data(**kwargs)
 
         def is_metric(x):
             return isfunction(x) and x.__name__.startswith('check_')
@@ -318,11 +328,10 @@ class CameraQC(base.QC):
         """Check camera is positioned correctly"""
         pass
 
-    def check_focus(self, display=False):
+    def check_focus(self, n_frames=5, display=False):
         """Check video is in focus"""
         # Could blur a frame and check difference
-        n = 50
-        img = get_video_frame(self.video_path, n)
+        img = get_video_frame(self.video_path, n_frames)
         # img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         # Smoothing without removing edges.
         filtered = cv2.bilateralFilter(img, 7, 50, 50)
@@ -349,7 +358,7 @@ def vid_to_brightness(camera_path, n_frames=5):
     # for n sampled frames, save brightness in array
     idx = np.linspace(100, total_frames - 100, n_frames).astype(int)
     for ii, i in enumerate(idx):
-        sys.stdout.write(f'\rloading frame {ii}/{n_frames}')
+        sys.stdout.write(f'\rloading frame {ii}/{int(n_frames)}')
         sys.stdout.flush()
         cap.set(1, i)
         ret, frame = cap.read()
@@ -397,6 +406,6 @@ def run_all_qc(session, update=False, cameras=('left', 'right', 'body'), **kwarg
     """
     qc = {}
     for camera in cameras:
-        qc[camera] = CameraQC(session, side=camera, **kwargs)
-        qc[camera].run(update=update)
+        qc[camera] = CameraQC(session, side=camera, one=kwargs.pop('one', None))
+        qc[camera].run(update=update, **kwargs)
     return qc

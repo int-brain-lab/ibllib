@@ -9,6 +9,7 @@ import cv2
 
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io.extractors.ephys_fpga import _get_sync_fronts, get_main_probe_sync
+from ibllib.io.raw_data_loaders import load_bpod_fronts
 from ibllib.io.extractors.base import (
     BaseBpodTrialsExtractor,
     BaseExtractor,
@@ -82,9 +83,25 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
     to be interpolated
     """
     save_names = '_ibl_leftCamera.times.npy'
-    var_names = 'camera_timestamps'
+    var_names = 'left_camera_timestamps'
 
     def _extract(self):
+        ts = self.interpolate_times_from_bpod()  # FIXME Extrapolate after alignment
+        count, pin_state = load_embedded_frame_data(self.session_path, 'left', raw=False)
+
+        if pin_state is not None and any(pin_state):
+            _logger.info('Aligning to audio TTLs')
+            # Extract audio TTLs
+            _, audio = load_bpod_fronts(self.session_path, self.bpod_trials)
+            # make sure that there are no 2 consecutive fall or consecutive rise events
+            assert (np.all(np.abs(np.diff(audio['polarities'])) == 2))
+            # make sure first TTL is high
+            assert audio['polarities'][0] == 1
+            return align_with_audio(ts, audio['times'][::2], pin_state, count)
+        else:
+            _logger.warning('Alignment by wheel data not yet implemented')
+
+    def interpolate_times_from_bpod(self):
         ntrials = len(self.bpod_trials)
 
         cam_times = []
@@ -175,7 +192,6 @@ def align_with_audio(timestamps, audio, pin_state, count, display=False):
     :return: The corrected frame timestamps
 
     TODO Deal with None values
-    TODO Add QC check for count and frame number mismatch
     """
     # Some assertions made on the raw data
     assert count.size == pin_state.size, 'frame count and pin state size mismatch'
@@ -271,7 +287,7 @@ def load_embedded_frame_data(session_path, camera: str, raw=False):
     return count, pin_state
 
 
-def extract_all(session_path, session_type=None, save=True, bin_exists=False):
+def extract_all(session_path, session_type=None, save=True, **kwargs):
     """
     For the IBL ephys task, reads ephys binary file and extract:
         -   video time stamps
@@ -279,19 +295,21 @@ def extract_all(session_path, session_type=None, save=True, bin_exists=False):
     :param session_type: the session type to extract, i.e. 'ephys', 'training' or 'biased'. If
     None the session type is inferred from the settings file.
     :param save: Bool, defaults to False
+    :param kwargs: parameters to pass to the extractor
     :return: outputs, files
     """
     if session_type is None:
         session_type = get_session_extractor_type(session_path)
     if session_type == 'ephys':
         extractor = CameraTimestampsFPGA
-        sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
+        if 'sync' not in kwargs:
+            kwargs['sync'], kwargs['chmap'] = \
+                get_main_probe_sync(session_path, bin_exists=kwargs.pop('bin_exists', False))
     elif session_type in ['biased', 'training']:
         extractor = CameraTimestampsBpod
-        sync = chmap = None
     else:
         raise ValueError(f"Session type {session_type} as no matching extractor {session_path}")
 
     outputs, files = run_extractor_classes(
-        extractor, session_path=session_path, save=save, sync=sync, chmap=chmap)
+        extractor, session_path=session_path, save=save, **kwargs)
     return outputs, files
