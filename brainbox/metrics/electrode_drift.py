@@ -11,7 +11,9 @@ def estimate_drift(spike_times, spike_amps, spike_depths, display=False):
     :param spike_amps:
     :param spike_depths:
     :param display:
-    :return:
+    :return: drift (ntimes vector) in input units (usually um)
+    :return: ts (ntimes vector) time scale in seconds
+
     """
     # binning parameters
     DT_SECS = 1  # output sampling rate of the depth estimation (seconds)
@@ -44,12 +46,12 @@ def estimate_drift(spike_times, spike_amps, spike_depths, display=False):
     # experimental: parabolic fit to get max values
     raw_drift = (np.argmax(xcorr, axis=-1) - NXCORR) * DEPTH_BIN_UM
     drift = smooth.rolling_window(raw_drift, window_len=NT_SMOOTH, window='hanning')
-
+    ts = DT_SECS * np.arange(drift.size)
     if display:
         import matplotlib.pyplot as plt
         from brainbox.plot import driftmap
         _, axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [.15, .85]}, sharex=True)
-        axs[0].plot(DT_SECS * np.arange(drift.size), drift)
+        axs[0].plot(ts, drift)
         driftmap(spike_times, spike_depths, t_bin=0.1, d_bin=5, ax=axs[1])
 
-    return drift
+    return drift, ts
