@@ -6,6 +6,39 @@ import numpy as np
 from ibllib.misc import print_progress
 
 
+def parabolic_max(x):
+    """
+    Maximum picking with parabolic interpolation around the maxima
+    :param x: 1d or 2d array
+    :return: interpolated max index, interpolated max
+    """
+    # for 2D arrays, operate along the last dimension
+    ns = x.shape[-1]
+    axis = -1
+    imax = np.argmax(x, axis=axis)
+
+    if x.ndim == 1:
+        v010 = x[np.maximum(np.minimum(imax + np.array([-1, 0, 1]), ns - 1), 0)]
+        v010 = v010[:, np.newaxis]
+    else:
+        v010 = np.vstack((x[..., np.arange(x.shape[0]), np.maximum(imax - 1, 0)],
+                          x[..., np.arange(x.shape[0]), imax],
+                          x[..., np.arange(x.shape[0]), np.minimum(imax + 1, ns - 1)]))
+    poly = np.matmul(.5 * np.array([[1, -2, 1], [-1, 0, 1], [0, 2, 0]]), v010)
+    ipeak = - poly[1] / (poly[0] + np.double(poly[0] == 0)) / 2
+    maxi = poly[2] + ipeak * poly[1] + ipeak ** 2. * poly[0]
+    ipeak += imax
+    # handle edges
+    iedges = np.logical_or(imax == 0, imax == ns - 1)
+    if x.ndim == 1:
+        maxi = v010[1, 0] if iedges else maxi[0]
+        ipeak = imax if iedges else ipeak[0]
+    else:
+        maxi[iedges] = v010[1, iedges]
+        ipeak[iedges] = imax[iedges]
+    return ipeak, maxi
+
+
 def _fcn_extrap(x, f, bounds):
     """
     Extrapolates a flat value before and after bounds
