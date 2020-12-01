@@ -86,7 +86,7 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
     var_names = 'left_camera_timestamps'
 
     def _extract(self):
-        ts = self.interpolate_times_from_bpod()  # FIXME Extrapolate after alignment
+        ts = self._times_from_bpod()  # FIXME Extrapolate after alignment
         count, pin_state = load_embedded_frame_data(self.session_path, 'left', raw=False)
 
         if pin_state is not None and any(pin_state):
@@ -101,7 +101,7 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
         else:
             _logger.warning('Alignment by wheel data not yet implemented')
 
-    def interpolate_times_from_bpod(self):
+    def _times_from_bpod(self):
         ntrials = len(self.bpod_trials)
 
         cam_times = []
@@ -167,31 +167,34 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
         if we find a video file, get the number of frames and extrapolate the times
          using the median frame rate as the video stops after the bpod
         """
-        video_file = list(self.session_path
-                          .joinpath('raw_video_data')
-                          .glob('_iblrig_leftCamera*.mp4'))
+        video_file, = list(self.session_path
+                           .joinpath('raw_video_data')
+                           .glob('_iblrig_leftCamera*.mp4'))
         if video_file:
-            cap = cv2.VideoCapture(str(video_file[0]))
+            cap = cv2.VideoCapture(str(video_file))
             nframes = cap.get(cv2.CAP_PROP_FRAME_COUNT)
             if nframes > len(frame_times):
-                to_app = (np.arange(int(nframes - frame_times.size),) + 1
-                          ) / frate + frame_times[-1]
+                n_missing = int(nframes - frame_times.size)
+                to_app = (np.arange(n_missing,) + 1) / frate + frame_times[-1]
                 frame_times = np.r_[frame_times, to_app]
-        assert(np.all(np.diff(frame_times) > 0))  # negative diffs implies a big problem
+        assert all(np.diff(frame_times) > 0)  # negative diffs implies a big problem
         return frame_times
 
 
-def align_with_audio(timestamps, audio, pin_state, count, display=False):
+def align_with_audio(timestamps, audio, pin_state, count,
+                     extrapolate_missing=True, display=False):
     """
-    Groom the raw FPGA camera timestamps using the frame embedded audio TTLs and frame counter.
-    :param timestamps: An array of raw FPGA camera timestamps
-    :param audio: An array of FPGA audio TTL times
+    Groom the raw FPGA or Bpod camera timestamps using the frame embedded audio TTLs and frame
+    counter.
+    :param timestamps: An array of raw FPGA or Bpod camera timestamps
+    :param audio: An array of FPGA or Bpod audio TTL times
     :param pin_state: An array of camera pin states
     :param count: An array of frame numbers
+    :param extrapolate_missing: If true and the number of timestamps is fewer than the number of
+    frame counts, the remaining timestamps are extrapolated based on the frame rate, otherwise
+    they are NaNs
     :param display: Plot the resulting timestamps
     :return: The corrected frame timestamps
-
-    TODO Deal with None values
     """
     # Some assertions made on the raw data
     assert count.size == pin_state.size, 'frame count and pin state size mismatch'
@@ -236,9 +239,21 @@ def align_with_audio(timestamps, audio, pin_state, count, display=False):
     assert start >= 0
 
     # Remove the extraneous timestamps from the beginning and end
-    # TODO Add case for missing FPGA timestamps
     end = count[-1] + 1 + start
     ts = timestamps[start:end]
+    if ts.size < count.size:
+        """
+        For ephys sessions there may be fewer FPGA times than frame counts if SpikeGLX is turned 
+        off before the video acquisition workflow.  For Bpod this always occurs because Bpod 
+        finishes before the camera workflow.  For Bpod the times are already extrapolated for 
+        these late frames."""
+        _logger.warning('Fewer FPGA timestamps than frame counts')
+        n_missing = count.size - ts.size
+        frate = round(1 / np.nanmedian(np.diff(ts)))
+        to_app = ((np.arange(n_missing, ) + 1) / frate + ts[-1]
+                  if extrapolate_missing
+                  else np.full(n_missing, np.nan))
+        ts = np.r_[ts, to_app]  # Append the missing times
     assert ts.size >= count.size
     assert ts.size == count[-1] + 1
 
@@ -251,11 +266,10 @@ def align_with_audio(timestamps, audio, pin_state, count, display=False):
         import matplotlib.pyplot as plt
         from ibllib.plots import vertical_lines
         y = (pin_state > 0).astype(float)
-        y[y == 1] = 0.0005
-        y += 0.0002
+        y *= 1e-5  # For scale when zoomed in
         plt.plot(ts, y, marker='d', color='blue', drawstyle='steps-pre')
         plt.plot(ts, np.zeros_like(ts), 'kx')
-        vertical_lines(audio, ymin=0, ymax=0.0007, color='r', linestyle=':')
+        vertical_lines(audio, ymin=0, ymax=1e-5, color='r', linestyle=':')
 
     return ts
 

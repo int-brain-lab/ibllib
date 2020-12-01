@@ -151,8 +151,11 @@ class CameraQC(base.QC):
         :param download_data: if True, any missing raw data is downloaded via ONE.
         :param extract_times: if True, the camera.times are re-extracted from the raw data
         """
-        if download_data or self.download_data:
+        if download_data is not None:
+            self.download_data = download_data
+        if self.download_data:
             self._ensure_required_data()
+        _log.info('Gathering data for QC')
 
         # Get frame count and pin state
         self.data['count'], self.data['pin_state'] = \
@@ -177,7 +180,8 @@ class CameraQC(base.QC):
             self.data['frame_times'] = alfio.load_object(alf_path, f'{self.side}Camera')['times']
         except (ALFObjectNotFound, AssertionError):  # Re-extract
             # TODO Flag for extracting single camera's data
-            outputs, _ = extract_all(self.session_path, self.type, save=False)
+            kwargs = dict(sync=sync, chmap=chmap) if self.type == 'ephys' else {}
+            outputs, _ = extract_all(self.session_path, self.type, save=False, **kwargs)
             self.data['frame_times'] = outputs[f'{self.side}_camera_timestamps']
 
         # Gather information from video file
@@ -311,7 +315,9 @@ class CameraQC(base.QC):
         length_matches = self.data['frame_times'].size == self.data['video'].length
         # Check times are strictly increasing
         increasing = all(np.diff(self.data['frame_times']) > 0)
-        return 'PASS' if increasing and fps_matches and length_matches else 'FAIL'
+        # Check times do not contain nans
+        nanless = not np.isnan(self.data['frame_times']).any()
+        return 'PASS' if increasing and fps_matches and length_matches and nanless else 'FAIL'
 
     def check_resolution(self):
         """Check that the timestamps and video file resolution match what we expect"""
@@ -341,7 +347,7 @@ class CameraQC(base.QC):
 
         if display:
             # Display the resulting frame
-            cv2.imshow(f'Frame #{n}', edges)
+            cv2.imshow(f'Frame #{n_frames}', edges)
         return  # 'NOT_SET'
 
 
