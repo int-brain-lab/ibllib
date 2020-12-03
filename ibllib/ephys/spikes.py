@@ -5,9 +5,11 @@ import shutil
 
 import numpy as np
 
-from phylib.io import alf
+import alf.io
+import phylib.io.alf
 from ibllib.ephys.sync_probes import apply_sync
 import ibllib.ephys.ephysqc as ephysqc
+from ibllib.ephys import sync_probes
 from ibllib.io import spikeglx, raw_data_loaders
 
 _logger = logging.getLogger('ibllib')
@@ -26,7 +28,7 @@ def probes_description(ses_path, one=None, bin_exists=True):
 
     eid = one.eid_from_path(ses_path)
     ses_path = Path(ses_path)
-    ephys_files = spikeglx.glob_ephys_files(ses_path, bin_exists=bin_exists)
+    ephys_files = spikeglx.glob_ephys_files(ses_path, ext='meta')
     subdirs, labels, efiles_sorted = zip(
         *sorted([(ep.ap.parent, ep.label, ep) for ep in ephys_files if ep.get('ap')]))
 
@@ -110,9 +112,15 @@ def sync_spike_sorting(ap_file, out_path):
         md = spikeglx.read_meta_data(ap_file.with_suffix('.meta'))
         return spikeglx._get_fs_from_meta(md)
 
+    out_files = []
     label = ap_file.parts[-1]  # now the bin file is always in a folder bearing the name of probe
     sync_file = ap_file.parent.joinpath(
         ap_file.name.replace('.ap.', '.sync.')).with_suffix('.npy')
+    # try to get probe sync if it doesn't exist
+    if not sync_file.exists():
+        _, sync_files = sync_probes.sync(alf.io.get_session_path(ap_file))
+        out_files.extend(sync_files)
+    # if it still not there, full blown error
     if not sync_file.exists():
         # if there is no sync file it means something went wrong. Outputs the spike sorting
         # in time according the the probe by following ALF convention on the times objects
@@ -128,9 +136,9 @@ def sync_spike_sorting(ap_file, out_path):
     interp_times = apply_sync(sync_file, spike_samples / _sr(ap_file), forward=True)
     np.save(st_file, interp_times)
     # get the list of output files
-    out_files = [f for f in out_path.glob("*.*") if
-                 f.name.startswith(('channels.', 'clusters.', 'spikes.', 'templates.',
-                                    '_kilosort_', '_phy_spikes_subset'))]
+    out_files.extend([f for f in out_path.glob("*.*") if
+                      f.name.startswith(('channels.', 'clusters.', 'spikes.', 'templates.',
+                                         '_kilosort_', '_phy_spikes_subset'))])
     return out_files, 0
 
 
@@ -143,5 +151,5 @@ def ks2_to_alf(ks_path, bin_path, out_path, bin_file=None, ampfactor=1, label=No
     :return:
     """
     m = ephysqc.phy_model_from_ks2_path(ks2_path=ks_path, bin_path=bin_path, bin_file=bin_file)
-    ac = alf.EphysAlfCreator(m)
+    ac = phylib.io.alf.EphysAlfCreator(m)
     ac.convert(out_path, label=label, force=force, ampfactor=ampfactor)

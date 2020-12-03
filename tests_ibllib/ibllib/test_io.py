@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 import os
 import uuid
 import tempfile
@@ -7,7 +8,7 @@ import shutil
 
 import numpy as np
 
-from ibllib.io import params, flags, jsonable, spikeglx, hashfile, misc
+from ibllib.io import params, flags, jsonable, spikeglx, hashfile, misc, globus
 import ibllib.io.raw_data_loaders as raw
 
 
@@ -221,17 +222,31 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
                        {'label': '',
                         'nidq': self.dir3b / 'sync_testing_g0_t0.nidq.bin',
                         'path': self.dir3b}]
+        self.dict3b_ch = [{'label': 'imec0',
+                           'ap': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.ap.ch',
+                           'lf': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.lf.ch',
+                           'path': self.dir3b / 'imec0'},
+                          {'label': 'imec1',
+                           'ap': self.dir3b / 'imec1' / 'sync_testing_g0_t0.imec1.ap.ch',
+                           'lf': self.dir3b / 'imec1' / 'sync_testing_g0_t0.imec1.lf.ch',
+                           'path': self.dir3b / 'imec1'},
+                          {'label': '',
+                           'nidq': self.dir3b / 'sync_testing_g0_t0.nidq.ch',
+                           'path': self.dir3b}]
         create_tree(self.dir3a, self.dict3a)
         create_tree(self.dir3b, self.dict3b)
+        create_tree(self.dir3b, self.dict3b_ch)
 
     def test_glob_ephys(self):
         def dict_equals(d1, d2):
             return all([x in d1 for x in d2]) and all([x in d2 for x in d1])
         ef3b = spikeglx.glob_ephys_files(self.dir3b)
         ef3a = spikeglx.glob_ephys_files(self.dir3a)
+        ef3b_ch = spikeglx.glob_ephys_files(self.dir3b, ext='ch')
         # test glob
         self.assertTrue(dict_equals(self.dict3a, ef3a))
         self.assertTrue(dict_equals(self.dict3b, ef3b))
+        self.assertTrue(dict_equals(self.dict3b_ch, ef3b_ch))
         # test the version from glob
         self.assertTrue(spikeglx.get_neuropixel_version_from_files(ef3a) == '3A')
         self.assertTrue(spikeglx.get_neuropixel_version_from_files(ef3b) == '3B')
@@ -503,7 +518,9 @@ class TestsHardwareParameters(unittest.TestCase):
                       'rotary_encoder_0': 5,
                       'rotary_encoder_1': 6,
                       'audio': 7,
-                      'bpod': 16}
+                      'bpod': 16,
+                      'laser': 17,
+                      'laser_ttl': 18}
         self.file3a = self.workdir / 'sample3A_g0_t0.imec.wiring.json'
         self.file3b = self.workdir / 'sample3B_g0_t0.nidq.wiring.json'
 
@@ -585,6 +602,52 @@ class TestsMisc(unittest.TestCase):
         self.file.unlink()
         (self.tempdir / 'test_full').rmdir()
         _ = [x.rmdir() for x in self.subdirs if x.exists()]
+
+
+class TestsGlobus(unittest.TestCase):
+    def setUp(self):
+        self.patcher = patch.multiple('globus_sdk',
+                                      NativeAppAuthClient=unittest.mock.DEFAULT,
+                                      RefreshTokenAuthorizer=unittest.mock.DEFAULT,
+                                      TransferClient=unittest.mock.DEFAULT)
+        self.patcher.start()
+        self.addCleanup(self.patcher.stop)
+
+    def test_as_globus_path(self):
+        # A Windows path
+        actual = globus.as_globus_path('E:\\FlatIron\\integration')
+        self.assertTrue(actual.startswith('/~/'))
+
+        # A relative POSIX path
+        actual = globus.as_globus_path('/mnt/foo/../data/integration')
+        expected = '/mnt/data/integration'
+        self.assertTrue(actual.endswith(expected))
+
+        # A globus path
+        actual = globus.as_globus_path('/~/E/FlatIron/integration')
+        expected = '/~/E/FlatIron/integration'
+        self.assertEqual(expected, actual)
+
+    @unittest.mock.patch('ibllib.io.params.read')
+    def test_login_auto(self, mock_params):
+        client_id = 'h3u2i'
+        # Test ValueError thrown with incorrect parameters
+        mock_params.return_value = None  # No parameters saved
+        with self.assertRaises(ValueError):
+            globus.login_auto(client_id)
+        mock_params.assert_called_with('globus')
+
+        pars = params.from_dict({'transfer_token': '7r3hj89', 'expires_at_s': '2020-09-10'})
+        mock_params.return_value = pars  # Incomplete parameter object
+        with self.assertRaises(ValueError):
+            globus.login_auto(client_id)
+
+        # Complete parameter object
+        mock_params.return_value = pars.set('refresh_token', '37yh4')
+        gtc = globus.login_auto(client_id)
+        self.assertIsInstance(gtc, unittest.mock.Mock)
+        mock, _ = self.patcher.get_original()
+        mock.assert_called_once_with(client_id)
 
 
 if __name__ == "__main__":

@@ -5,6 +5,37 @@ import scipy.signal
 import ibllib.dsp.fourier as ft
 from ibllib.dsp import WindowGenerator, rms, rises, falls, fronts, smooth, shift, fit_phase,\
     fcn_cosine
+from ibllib.dsp.utils import parabolic_max
+
+
+class TestParabolicMax(unittest.TestCase):
+    # expected values
+    maxi = np.array([np.NaN, 0, 3.04166667, 3.04166667, 5, 5])
+    ipeak = np.array([np.NaN, 0, 5.166667, 2.166667, 0, 7])
+    # input
+    x = np.array([
+        [0, 0, 0, 0, 0, np.NaN, 0, 0],  # some NaNs
+        [0, 0, 0, 0, 0, 0, 0, 0],  # all flat
+        [0, 0, 0, 0, 1, 3, 2, 0],
+        [0, 1, 3, 2, 0, 0, 0, 0],
+        [5, 1, 3, 2, 0, 0, 0, 0],  # test first sample
+        [0, 1, 3, 2, 0, 0, 0, 5],  # test last sample
+    ])
+
+    def test_error_cases(self):
+        pass
+
+    def test_2d(self):
+        ipeak_, maxi_ = parabolic_max(self.x)
+        self.assertTrue(np.all(np.isclose(self.maxi, maxi_, equal_nan=True)))
+        self.assertTrue(np.all(np.isclose(self.ipeak, ipeak_, equal_nan=True)))
+
+    def test_1d(self):
+        # look over the 2D array as 1D chunks
+        for i, x in enumerate(self.x):
+            ipeak_, maxi_ = parabolic_max(x)
+            self.assertTrue(np.all(np.isclose(self.ipeak[i], ipeak_, equal_nan=True)))
+            self.assertTrue(np.all(np.isclose(self.maxi[i], maxi_, equal_nan=True)))
 
 
 class TestDspMisc(unittest.TestCase):
