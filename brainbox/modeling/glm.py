@@ -135,7 +135,7 @@ class NeuralGLM:
             starttest = midpoint - (testlen // 2)
             endtest = midpoint + (testlen // 2)
             testinds = trialsdf.index[starttest:endtest]
-            traininds = trialsdf.index[np.isin(trialsdf.index, testinds)]
+            traininds = trialsdf.index[~np.isin(trialsdf.index, testinds)]
         else:
             trainlen = int(np.floor(len(trialsdf) * train))
             traininds = sorted(np.random.choice(trialsdf.index, trainlen, replace=False))
@@ -597,7 +597,7 @@ class NeuralGLM:
         return coefs, intercepts, variances
 
     def fit(self, method='sklearn', alpha=0, singlepar_var=False, epochs=6000, optim='adam',
-            lr=0.3):
+            lr=0.3, printcond=True):
         """
         Fit the current set of binned spikes as a function of the current design matrix. Requires
         NeuralGLM.bin_spike_trains and NeuralGLM.compile_design_matrix to be run first. Will store
@@ -641,7 +641,8 @@ class NeuralGLM:
         # Initialize pd Series to store output coefficients and intercepts for fits
         trainmask = np.isin(self.trlabels, self.traininds).flatten()  # Mask for training data
         trainbinned = self.binnedspikes[trainmask]
-        print(f'Condition of design matrix is {np.linalg.cond(self.dm[trainmask])}')
+        if printcond:
+            print(f'Condition of design matrix is {np.linalg.cond(self.dm[trainmask])}')
 
         if not self.subset:
             if method == 'sklearn':
