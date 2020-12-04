@@ -10,6 +10,14 @@ from oneibl.patcher import FTPPatcher
 _log = logging.getLogger('ibllib')
 CRITERIA = {"PASS": 0.8}
 
+CRITERIA_BASE = {'CRITICAL': 4,
+                 'FAIL': 3,
+                 'WARNING': 2,
+                 'PASS': 1,
+                 'NOT_SET': 0
+                 }
+
+
 
 class AlignmentQC(base.QC):
     """
@@ -324,3 +332,27 @@ class AlignmentQC(base.QC):
                                    data=patch_dict)
 
         return files_to_register
+
+    def update_experimenter_evaluation(self, prev_alignments=None):
+
+        if not np.any(prev_alignments) and not np.any(self.alignments):
+            aligned_traj = self.one.alyx.rest('trajectories', 'list', probe_insertion=self.eid,
+                                              provenance='Ephys aligned histology track')
+            if len(aligned_traj) > 0:
+                self.alignments = aligned_traj[0].get('json', {})
+            else:
+                self.alignments = {}
+                return
+        else:
+            self.alignments = prev_alignments
+
+        outcomes = [align[2].split(':')[0] for key, align in self.alignments.items() if len(align) == 3]
+        vals = [CRITERIA_BASE[out] for out in outcomes]
+        max_qc = np.argmax(vals)
+        outcome = outcomes[max_qc]
+        self.update(outcome, namespace='experimenter')
+
+
+
+
+
