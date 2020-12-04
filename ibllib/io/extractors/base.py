@@ -1,9 +1,17 @@
-from pathlib import Path
 import abc
+import json
 from collections import OrderedDict
-import numpy as np
+from pathlib import Path
 
+import numpy as np
+import pandas as pd
+from alf.io import get_session_path
 from ibllib.io import raw_data_loaders as raw
+import logging
+
+from ibllib.io.raw_data_loaders import load_settings, _logger
+
+log = logging.getLogger("ibllib")
 
 
 class BaseExtractor(abc.ABC):
@@ -13,11 +21,13 @@ class BaseExtractor(abc.ABC):
     :param session_path: Absolute path of session folder
     :type session_path: str
     """
+
     session_path = None
     save_names = None
-    default_path = Path('alf')  # relative to session
+    default_path = Path("alf")  # relative to session
 
     def __init__(self, session_path=None):
+        # If session_path is None Path(session_path) will fail
         self.session_path = Path(session_path)
 
     def extract(self, save=False, path_out=None, **kwargs):
@@ -26,25 +36,48 @@ class BaseExtractor(abc.ABC):
         :rtype: dtype('float64')
         """
         out = self._extract(**kwargs)
-        if not save:
-            return out, None
-        else:
-            files = self._save(out, path_out=path_out) if save else None
+        files = self._save(out, path_out=path_out) if save else None
         return out, files
 
-    def _save(self, out, path_out=None):
+    def _save(self, data, path_out=None):
+        # Chack if self.save_namesis of the same length of out
         if not path_out:
             path_out = self.session_path.joinpath(self.default_path)
         path_out.mkdir(exist_ok=True, parents=True)
+
+        def _write_to_disk(file_path, data):
+            """Implements different save calls depending on file extension"""
+            csv_separators = {
+                ".csv": ",",
+                ".ssv": " ",
+                ".tsv": "\t",
+            }
+            file_path = Path(file_path)
+            if file_path.suffix == ".npy":
+                np.save(file_path, data)
+            elif file_path.suffix in [".parquet", ".pqt"]:
+                if not isinstance(data, pd.DataFrame):
+                    log.error("Data is not a panda's DataFrame object")
+                    raise TypeError("Data is not a panda's DataFrame object")
+                data.to_parquet(file_path)
+            elif file_path.suffix in [".csv", ".ssv", ".tsv"]:
+                sep = csv_separators[file_path.suffix]
+                data.to_csv(file_path, sep=sep)
+                # np.savetxt(file_path, data, delimiter=sep)
+            else:
+                log.error(f"Don't know how to save {file_path.suffix} files yet")
+
         if isinstance(self.save_names, str):
-            files = path_out.joinpath(self.save_names)
-            np.save(files, out)
-        else:
-            files = []
-            for i, fn in enumerate(self.save_names):
-                np.save(path_out.joinpath(fn), out[i])
-                files.append(path_out.joinpath(fn))
-        return files
+            file_paths = path_out.joinpath(self.save_names)
+            _write_to_disk(file_paths, data)
+        else:  # Should be list or tuple...
+            assert len(data) == len(self.save_names)
+            file_paths = []
+            for data, fn in zip(data, self.save_names):
+                fpath = path_out.joinpath(fn)
+                _write_to_disk(fpath, data)
+                file_paths.append(fpath)
+        return file_paths
 
     @abc.abstractmethod
     def _extract(self):
@@ -61,6 +94,7 @@ class BaseBpodTrialsExtractor(BaseExtractor):
     :param bpod_trials
     :param settings
     """
+
     bpod_trials = None
     settings = None
 
@@ -80,9 +114,9 @@ class BaseBpodTrialsExtractor(BaseExtractor):
         if not self.settings:
             self.settings = raw.load_settings(self.session_path)
         if self.settings is None:
-            self.settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
-        elif self.settings['IBLRIG_VERSION_TAG'] == '':
-            self.settings['IBLRIG_VERSION_TAG'] = '100.0.0'
+            self.settings = {"IBLRIG_VERSION_TAG": "100.0.0"}
+        elif self.settings["IBLRIG_VERSION_TAG"] == "":
+            self.settings["IBLRIG_VERSION_TAG"] = "100.0.0"
         return super(BaseBpodTrialsExtractor, self).extract(**kwargs)
 
 
@@ -116,3 +150,75 @@ def run_extractor_classes(classes, session_path=None, **kwargs):
                 outputs[k] = out[i]
     assert (len(files) == 0) or (len(files) == len(outputs.keys()))
     return outputs, files
+
+
+def get_task_extractor_type(task_name):
+    """
+    Splits the task name according to naming convention:
+    -   ignores everything
+    _iblrig_tasks_biasedChoiceWorld3.7.0 returns "biased"
+    _iblrig_tasks_trainingChoiceWorld3.6.0 returns "training'
+    :param task_name:
+    :return: one of ['biased', 'habituation', 'training', 'ephys', 'mock_ephys', 'sync_ephys']
+    """
+    if isinstance(task_name, Path):
+        try:
+            settings = load_settings(get_session_path(task_name))
+        except json.decoder.JSONDecodeError:
+            return
+        if settings:
+            task_name = settings.get('PYBPOD_PROTOCOL', None)
+        else:
+            return
+    # ephys
+    if 'ephysChoiceWorld' in task_name:
+        return 'ephys'
+    elif 'ephyskarolinaChoiceWorld' in task_name:
+        return 'ephys'
+    elif 'passive_opto' in task_name:
+        return 'ephys'
+    elif 'opto_ephysChoiceWorld' in task_name:
+        return 'ephys'
+    # biased choice world
+    elif '_biasedChoiceWorld' in task_name:
+        return 'biased'
+    elif 'biasedScanningChoiceWorld' in task_name:
+        return 'biased'
+    elif 'biasedVisOffChoiceWorld' in task_name:
+        return 'biased'
+    elif 'karolinaChoiceWorld' in task_name:
+        return 'biased'
+    elif '_iblrig_tasks_opto_biasedChoiceWorld' in task_name:
+        return 'biased'
+    # habituation
+    elif '_habituationChoiceWorld' in task_name:
+        return 'habituation'
+    # training
+    elif '_trainingChoiceWorld' in task_name:
+        return 'training'
+    # mock ephys
+    elif 'ephysMockChoiceWorld' in task_name:
+        return 'mock_ephys'
+    # sync ephys
+    elif task_name and task_name.startswith('_iblrig_tasks_ephys_certification'):
+        return 'sync_ephys'
+
+
+def get_session_extractor_type(session_path):
+    """
+    From a session path, loads the settings file, finds the task and checks if extractors exist
+    task names examples:
+    :param session_path:
+    :return: bool
+    """
+    settings = load_settings(session_path)
+    if settings is None:
+        _logger.error(f'ABORT: No data found in "raw_behavior_data" folder {session_path}')
+        return False
+    extractor_type = get_task_extractor_type(settings['PYBPOD_PROTOCOL'])
+    if extractor_type:
+        return extractor_type
+    else:
+        _logger.warning(str(session_path) +
+                        f" No extractors were found for {extractor_type} ChoiceWorld")
+        return False

@@ -1,5 +1,35 @@
+from pathlib import Path
+
 import globus_sdk as globus
 from ibllib.io import params
+
+
+def as_globus_path(path):
+    """
+    Convert a path into one suitable for the Globus TransferClient.
+
+    :param path: A path str or Path instance
+    :return: A formatted path string
+
+    Examples:
+        # A Windows path
+        >>> as_globus_path('E:\\FlatIron\\integration')
+        >>> '/~/E/FlatIron/integration'
+
+        # A relative POSIX path
+        >>> as_globus_path('../data/integration')
+        >>> '/~/mnt/data/integration'
+
+        # A globus path
+        >>> as_globus_path('/~/E/FlatIron/integration')
+        >>> '/~/E/FlatIron/integration'
+    """
+    if str(path).startswith('/~/'):
+        return path
+    path = Path(path).resolve()
+    if path.drive:
+        path = path.as_posix().replace(':', '', 1)
+    return '/~/' + str(path)
 
 
 def _login(globus_client_id, refresh_tokens=False):
@@ -38,9 +68,10 @@ def setup(globus_client_id, str_app='globus'):
 
 def login_auto(globus_client_id, str_app='globus'):
     token = params.read(str_app)
-    if not token:
+    required_fields = {'refresh_token', 'transfer_token', 'expires_at_s'}
+    if not (token and required_fields.issubset(token.as_dict())):
         raise ValueError("Token file doesn't exist, run ibllib.io.globus.setup first")
     client = globus.NativeAppAuthClient(globus_client_id)
     client.oauth2_start_flow(refresh_tokens=True)
-    authorizer = globus.RefreshTokenAuthorizer(token.transfer_rt, client)
+    authorizer = globus.RefreshTokenAuthorizer(token.refresh_token, client)
     return globus.TransferClient(authorizer=authorizer)

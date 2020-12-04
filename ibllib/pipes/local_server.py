@@ -1,12 +1,14 @@
 import logging
+from datetime import datetime
 from pathlib import Path
+
+import pkg_resources
 import re
 import subprocess
-import pkg_resources
-from datetime import datetime
+import sys
 
+from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.pipes import ephys_preprocessing, training_preprocessing, tasks
-import ibllib.io.raw_data_loaders as rawio
 import ibllib.exceptions
 from ibllib.time import date2isostr
 
@@ -47,7 +49,8 @@ def report_health(one):
              'volume': size_list[5]}
         return {f"{label}_{k}": d[k] for k in d}
 
-    status = {'ibllib_version': pkg_resources.get_distribution("ibllib").version,
+    status = {'python_version': sys.version,
+              'ibllib_version': pkg_resources.get_distribution("ibllib").version,
               'phylib_version': pkg_resources.get_distribution("phylib").version,
               'local_time': date2isostr(datetime.now())}
     status.update(_get_volume_usage('/mnt/s0/Data', 'raid'))
@@ -74,9 +77,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
     if not one:
         one = ONE()
     rc = registration.RegistrationClient(one=one)
-    flag_files = list(Path(root_path).glob('**/extract_me.flag'))
-    flag_files += list(Path(root_path).glob('**/raw_session.flag'))
-    flag_files += list(Path(root_path).glob('**/create_me.flag'))
+    flag_files = list(Path(root_path).glob('**/raw_session.flag'))
     all_datasets = []
     for flag_file in flag_files:
         session_path = flag_file.parent
@@ -93,7 +94,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
             session_path, one=one, max_md5_size=max_md5_size)
         if dsets is not None:
             all_datasets.extend(dsets)
-        session_type = rawio.get_session_extractor_type(session_path)
+        session_type = get_session_extractor_type(session_path)
         if session_type in ['biased', 'habituation', 'training']:
             pipe = training_preprocessing.TrainingExtractionPipeline(session_path, one=one)
         # only start extracting ephys on a raw_session.flag

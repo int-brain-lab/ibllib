@@ -10,7 +10,6 @@ import numpy as np
 import ibllib.io.hashfile as hashfile
 from alf.io import remove_uuid_file
 from oneibl.one import ONE
-# from ibllib.misc.exp_ref import eid2ref
 
 
 one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
@@ -19,29 +18,47 @@ one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test
 
 class TestOneOffline(unittest.TestCase):
 
-    def test_one_offline(self) -> None:
+    def setUp(self) -> None:
         # init: create a temp directory and copy the fixtures
         init_cache_file = Path(__file__).parent.joinpath('fixtures', '.one_cache.parquet')
-        with tempfile.TemporaryDirectory() as td:
-            cache_dir = Path(td)
-            shutil.copyfile(init_cache_file, cache_dir.joinpath(init_cache_file.name))
 
-            # test the constructor
-            self.assertTrue(one._cache.shape[1] == 14)
+        # Create a temporary directory
+        self.test_dir = tempfile.TemporaryDirectory()
 
-            # test the load with download false so it returns only file paths
-            eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
-            one.list(eid)
-            dtypes = ['_spikeglx_sync.channels',
-                      '_spikeglx_sync.polarities',
-                      '_spikeglx_sync.times',
-                      '_iblrig_taskData.raw',
-                      '_iblrig_taskSettings.raw',
-                      'ephysData.raw.meta',
-                      'camera.times',
-                      'ephysData.raw.wiring']
-            one.load(eid, dataset_types=dtypes, dclass_output=False,
-                     download_only=True, offline=False)
+        cache_dir = Path(self.test_dir.name)
+        shutil.copyfile(init_cache_file, cache_dir.joinpath(init_cache_file.name))
+
+        # test the constructor
+        self.one = ONE(offline=True)
+        self.assertTrue(self.one._cache.shape[1] == 14)
+
+        self.eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
+
+    def test_one_offline(self) -> None:
+        # test the load with download false so it returns only file paths
+        one.list(self.eid)
+        dtypes = ['_spikeglx_sync.channels',
+                  '_spikeglx_sync.polarities',
+                  '_spikeglx_sync.times',
+                  '_iblrig_taskData.raw',
+                  '_iblrig_taskSettings.raw',
+                  'ephysData.raw.meta',
+                  'camera.times',
+                  'ephysData.raw.wiring']
+        one.load(self.eid, dataset_types=dtypes, dclass_output=False,
+                 download_only=True, offline=False)
+
+    def test_path_eid(self):
+        """Test `path_from_eid` and `eid_from_path` methods"""
+        eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
+        # path from eid
+        session_path = self.one.path_from_eid(eid)
+        self.assertEqual(session_path.parts[-3:], ('clns0730', '2018-08-24', '002'))
+        # eid from path
+        self.assertEqual(eid, one.eid_from_path(session_path))
+
+    def tearDown(self) -> None:
+        self.test_dir.cleanup()
 
 
 class TestSearch(unittest.TestCase):
@@ -88,41 +105,9 @@ class TestList(unittest.TestCase):
         dt = one.list(eid)  # returns dataset-type
         self.assertTrue(isinstance(dt, list))
         self.assertEqual(29, len(dt))
-        self.assertEqual('eye.xyPos', dt[0])
 
         dt = one.list(eid, details=True)  # returns dict of dataset-types
-        self.assertTrue(isinstance(dt, dict))
-        self.assertEqual(list(dt.keys()), ['alf'])
-        self.assertEqual('eye.xyPos', dt['alf'][0])
-
-        dt = one.list(eid, 'datasets')  # returns dataset
-        self.assertEqual('eye.xyPos.npy', dt[0])
-
-        dt = one.list()  # returns list of dataset-types
-        self.assertTrue(isinstance(dt, list))
-        self.assertIn('spikes.times', dt)
-
-        dt = one.list(details=True)
-        self.assertTrue(isinstance(dt, list))
         self.assertTrue(isinstance(dt[0], dict))
-
-        dt2 = one.list(keyword='datasets', details=True)
-        self.assertEqual(dt, dt2)
-
-    def test_list_error(self):
-        a = 0
-        eid = self.eid
-        try:
-            one.list(eid, keyword='tutu')  # throws an error
-        except ValueError:
-            a = 1
-            pass
-        self.assertTrue(a == 1)
-
-    def test_help(self):
-        dtypes = one.list(None, keyword='dataset-types')
-        one.help(dtypes[0])
-        one.help([])
 
 
 class TestLoad(unittest.TestCase):

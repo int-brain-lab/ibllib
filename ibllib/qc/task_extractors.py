@@ -9,10 +9,11 @@ from ibllib.io.extractors.training_trials import (
     ProbabilityLeft, run_extractor_classes  # ContrastLR
 )
 import ibllib.io.extractors.habituation_trials as habit
-from ibllib.io.extractors.training_wheel import Wheel
+from ibllib.io.extractors.training_wheel import Wheel, get_wheel_position
 from ibllib.io.extractors.ephys_fpga import (
     _get_pregenerated_events, _get_main_probe_sync, bpod_fpga_sync, FpgaTrials
 )
+from ibllib.io.extractors.base import get_session_extractor_type
 import ibllib.io.raw_data_loaders as raw
 from alf.io import is_session_path
 from oneibl.one import ONE
@@ -69,7 +70,7 @@ class TaskQCExtractor(object):
         eid = self.one.eid_from_path(self.session_path)
         # Ensure we have the settings
         settings = self.one.load(eid, ["_iblrig_taskSettings.raw"], download_only=True)
-        if settings and raw.get_session_extractor_type(self.session_path) == 'ephys':
+        if settings and get_session_extractor_type(self.session_path) == 'ephys':
             dstypes.extend(['_spikeglx_sync.channels',
                             '_spikeglx_sync.polarities',
                             '_spikeglx_sync.times',
@@ -92,7 +93,7 @@ class TaskQCExtractor(object):
         :return:
         """
         self.log.info(f"Loading raw data from {self.session_path}")
-        self.type = self.type or raw.get_session_extractor_type(self.session_path)
+        self.type = self.type or get_session_extractor_type(self.session_path)
         self.settings, self.raw_data = raw.load_bpod(self.session_path)
         # Fetch the TTLs for the photodiode and audio
         if self.type != 'ephys' or self.bpod_only is True:  # Extract from Bpod
@@ -118,7 +119,7 @@ class TaskQCExtractor(object):
         :return:
         """
         self.log.info(f"Extracting session: {self.session_path}")
-        self.type = self.type or raw.get_session_extractor_type(self.session_path)
+        self.type = self.type or get_session_extractor_type(self.session_path)
         self.wheel_encoding = 'X4' if (self.type == 'ephys' and not self.bpod_only) else 'X1'
 
         # Partial extraction for FPGA sessions only worth it if intervals already extracted and
@@ -184,6 +185,10 @@ class TaskQCExtractor(object):
                 # Build trials output
                 data.update({k: bpod2fpga(data[k][ibpod]) for k in sync_fields})
                 data.update({k: data[k][ibpod] for k in bpod_fields})
+                # Add Bpod wheel data
+                re_ts, pos = get_wheel_position(self.session_path, self.raw_data)
+                data['wheel_timestamps_bpod'] = bpod2fpga(re_ts)
+                data['wheel_position_bpod'] = pos
 
         elif self.type == 'habituation':
             data['position'] = np.array([t['position'] for t in self.raw_data])
@@ -199,7 +204,6 @@ class TaskQCExtractor(object):
 
         # Update the data attribute with extracted data
         if self.data:
-
             self.data.update(data)
             self.rename_data(self.data)
         else:

@@ -7,7 +7,6 @@ import fnmatch
 import re
 from functools import wraps
 from pathlib import Path, PurePath
-from collections import defaultdict
 from typing import Any, Sequence, Union, Optional, List, Dict
 from uuid import UUID
 
@@ -206,6 +205,63 @@ class OneAbstract(abc.ABC):
         df = df[ismember(df['dataset_type'], dataset_types)[0]]
         return SessionDataInfo.from_pandas(df, self._get_cache_dir(cache_dir))
 
+    def path_from_eid(self, eid: str) -> Optional[Listable(Path)]:
+        """
+        From an experiment id or a list of experiment ids, gets the local cache path
+        :param eid: eid (UUID) or list of UUIDs
+        :return: eid or list of eids
+        """
+        # If eid is a list of eIDs recurse through list and return the results
+        if isinstance(eid, list):
+            path_list = []
+            for p in eid:
+                path_list.append(self.path_from_eid(p))
+            return path_list
+        # If not valid return None
+        if not alfio.is_uuid_string(eid):
+            print(eid, " is not a valid eID/UUID string")
+            return
+        if self._cache.size == 0:
+            return
+
+        # load path from cache
+        ic = parquet.find_first_2d(
+            self._cache[['eid_0', 'eid_1']].to_numpy(), parquet.str2np(eid))
+        if ic is not None:
+            ses = self._cache.iloc[ic]
+            return Path(self._par.CACHE_DIR).joinpath(
+                ses['lab'], 'Subjects', ses['subject'], ses['start_time'].isoformat()[:10],
+                str(ses['number']).zfill(3))
+
+    def eid_from_path(self, path_obj):
+        """
+        From a local path, gets the experiment id
+        :param path_obj: local path or list of local paths
+        :return: eid or list of eids
+        """
+        # If path_obj is a list recurse through it and return a list
+        if isinstance(path_obj, list):
+            path_obj = [Path(x) for x in path_obj]
+            eid_list = []
+            for p in path_obj:
+                eid_list.append(self.eid_from_path(p))
+            return eid_list
+        # else ensure the path ends with mouse,date, number
+        path_obj = Path(path_obj)
+        session_path = alfio.get_session_path(path_obj)
+        # if path does not have a date and a number, or cache is empty return None
+        if session_path is None or self._cache.size == 0:
+            return None
+
+        # fetch eid from cache
+        ind = ((self._cache['subject'] == session_path.parts[-3]) &
+               (self._cache['start_time'].apply(
+                   lambda x: x.isoformat()[:10] == session_path.parts[-2])) &
+               (self._cache['number']) == int(session_path.parts[-1]))
+        ind = np.where(ind.to_numpy())[0]
+        if ind.size > 0:
+            return parquet.np2str(self._cache[['eid_0', 'eid_1']].iloc[ind[0]])
+
     @abc.abstractmethod
     def _make_dataclass(self, eid, dataset_types=None, cache_dir=None, **kwargs):
         pass
@@ -279,52 +335,28 @@ class OneAlyx(OneAbstract):
         out = self.alyx.rest('dataset-types', 'read', dataset_type)
         print(out['description'])
 
-    def list(self,
-             eid: Optional[Union[str, Path, UUID]] = None,
-             keyword: str = 'dataset-type',
-             details: bool = False) -> Union[List, Dict[str, str]]:
+    def list(self, eid: Optional[Union[str, Path, UUID]] = None, details=False
+             ) -> Union[List, Dict[str, str]]:
         """
         From a Session ID, queries Alyx database for datasets related to a session.
 
         :param eid: Experiment session uuid str
         :type eid: str
 
-        :param keyword: The attribute to be listed, options include 'dataset', 'dataset-type'.
-        If no eid provided, only dataset-types will be returned.
-        :type keyword: str
-
-        :param details: If eid provided returns datasets as a dict with collection names as
-        keys, if eid is None a list of dataset-type dicts is returned, with a description field.
-        :type details: bool
+        :param details: If false returns a list of path, otherwise returns the REST dictionary
+        :type eid: bool
 
         :return: list of strings or dict of lists if details is True
         :rtype:  list, dict
         """
-        if keyword[-1] == 's':
-            keyword = keyword[:-1]  # Remove plural
-        if keyword not in ('dataset', 'dataset-type'):
-            raise ValueError('keyword should be either "dataset" or "dataset-type"')
-
         if not eid:
-            if keyword != 'dataset-type':
-                _logger.warning('Unable to list all datasets, returning dataset types instead')
-            results = self.alyx.rest('dataset-types', 'list')
-            return results if details else [x['name'] for x in results]
+            return [x['name'] for x in self.alyx.rest('dataset-types', 'list')]
 
         # Session specific list
-        results = self.alyx.rest('datasets', 'list', session=eid)
-        collection = []
-        name = []
-        for r in results:
-            collection.append(r['collection'])
-            name.append(r['name'] if keyword == 'dataset' else r['dataset_type'])
-
-        if details:  # Order the datasets by collection
-            out = defaultdict(list)
-            [out[k or 'alf'].append(v) for k, v in zip(collection, name)]
-            return out
-        else:
-            return name
+        dsets = self.alyx.rest('datasets', 'list', session=eid, exists=True)
+        if not details:
+            dsets = sorted([Path(dset['collection']).joinpath(dset['name']) for dset in dsets])
+        return dsets
 
     @parse_id
     def load(self, eid, dataset_types=None, dclass_output=False, dry_run=False, cache_dir=None,
@@ -365,7 +397,7 @@ class OneAlyx(OneAbstract):
     def load_dataset(self,
                      eid: Union[str, Path, UUID],
                      dataset: str,
-                     collection: Optional[str] = 'alf',
+                     collection: Optional[str] = None,
                      download_only: bool = False) -> Any:
         """
         Load a single dataset from a Session ID and a dataset type.
@@ -374,6 +406,7 @@ class OneAlyx(OneAbstract):
         details dict or Path
         :param dataset: The ALF dataset to load.  Supports asterisks as wildcards.
         :param collection:  The collection to which the object belongs, e.g. 'alf/probe01'.
+        For IBL this is the relative path of the file from the session root.
         Supports asterisks as wildcards.
         :param download_only: When true the data are downloaded and the file path is returned
         :return: dataset or a Path object if download_only is true
@@ -385,9 +418,9 @@ class OneAlyx(OneAbstract):
             spikes = one.load_dataset(eid 'spikes.times.npy', collection='alf/probe01')
         """
         search_str = 'name__regex,' + dataset.replace('.', r'\.').replace('*', '.*')
-        if collection and collection != 'all':
+        if collection:
             search_str += ',collection__regex,' + collection.replace('*', '.*')
-        results = self.alyx.rest('datasets', 'list', session=eid, django=search_str)
+        results = self.alyx.rest('datasets', 'list', session=eid, django=search_str, exists=True)
 
         # Get filenames of returned ALF files
         collection_set = {x['collection'] for x in results}
@@ -729,7 +762,6 @@ class OneAlyx(OneAbstract):
         """
         Downloads a single file from an HTTP webserver
         :param url:
-        :param cache_dir:
         :param clobber: (bool: False) overwrites local dataset if any
         :param offline:
         :param keep_uuid:
@@ -794,7 +826,7 @@ class OneAlyx(OneAbstract):
         """
         oneibl.params.setup()
 
-    def path_from_eid(self, eid: str, use_cache=True) -> Path:
+    def path_from_eid(self, eid: str, use_cache: bool = True) -> Listable(Path):
         """
         From an experiment id or a list of experiment ids, gets the local cache path
         :param eid: eid (UUID) or list of UUIDs
@@ -814,13 +846,9 @@ class OneAlyx(OneAbstract):
 
         # first try avoid hitting the database
         if self._cache.size > 0 and use_cache:
-            ic = parquet.find_first_2d(
-                self._cache[['eid_0', 'eid_1']].to_numpy(), parquet.str2np(eid))
-            if ic is not None:
-                ses = self._cache.iloc[ic]
-                return Path(self._par.CACHE_DIR).joinpath(
-                    ses['lab'], 'Subjects', ses['subject'], ses['start_time'].isoformat()[:10],
-                    str(ses['number']).zfill(3))
+            cache_path = super().path_from_eid(eid)
+            if cache_path:
+                return cache_path
 
         # if it wasn't successful, query Alyx
         ses = self.alyx.rest('sessions', 'list', django=f'pk,{eid}')
@@ -831,7 +859,7 @@ class OneAlyx(OneAbstract):
                 ses[0]['lab'], 'Subjects', ses[0]['subject'], ses[0]['start_time'][:10],
                 str(ses[0]['number']).zfill(3))
 
-    def eid_from_path(self, path_obj, use_cache=True):
+    def eid_from_path(self, path_obj: Union[str, Path], use_cache: bool = True) -> Listable(Path):
         """
         From a local path, gets the experiment id
         :param path_obj: local path or list of local paths
@@ -853,14 +881,9 @@ class OneAlyx(OneAbstract):
             return None
 
         # try the cached info to possibly avoid hitting database
-        if self._cache.size > 0 and use_cache:
-            ind = ((self._cache['subject'] == session_path.parts[-3]) &
-                   (self._cache['start_time'].apply(
-                       lambda x: x.isoformat()[:10] == session_path.parts[-2])) &
-                   (self._cache['number']) == int(session_path.parts[-1]))
-            ind = np.where(ind.to_numpy())[0]
-            if ind.size > 0:
-                return parquet.np2str(self._cache[['eid_0', 'eid_1']].iloc[ind[0]])
+        cache_eid = super().eid_from_path(path_obj)
+        if cache_eid:
+            return cache_eid
 
         # if not search for subj, date, number XXX: hits the DB
         uuid = self.search(subjects=session_path.parts[-3],
@@ -870,7 +893,7 @@ class OneAlyx(OneAbstract):
         # Return the uuid if any
         return uuid[0] if uuid else None
 
-    def get_details(self, eid, full=False):
+    def get_details(self, eid: str, full: bool = False):
         """ Returns details of eid like from one.search, optional return full
         session details.
         """

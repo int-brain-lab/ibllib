@@ -11,6 +11,8 @@
         "P0.7": "audio"
     },
     "SYNC_WIRING_ANALOG": {
-        "AI0": "bpod"
+        "AI0": "bpod",
+        "AI1": "laser",
+        "AI2": "laser_ttl"
     }
 }
