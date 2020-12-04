@@ -376,8 +376,10 @@ def generate_pseudo_session(trials):
     # Generate synthetic session
     pseudo_trials = trials.copy()
     pseudo_trials['probabilityLeft'] = prob_left
-    pseudo_trials['contrastLeft'] = [np.nan] * n_trials
-    pseudo_trials['contrastRight'] = [np.nan] * n_trials
+    pseudo_trials['contrastLeft'] = np.empty(n_trials)
+    pseudo_trials['contrastLeft'][:] = np.nan
+    pseudo_trials['contrastRight'] = np.empty(n_trials)
+    pseudo_trials['contrastRight'][:] = np.nan
 
     # For each trial draw stimulus contrast and side and generate a synthetic choice
     for i in range(n_trials):
