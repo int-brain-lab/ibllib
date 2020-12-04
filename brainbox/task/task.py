@@ -391,7 +391,7 @@ def generate_pseudo_session(trials):
         trial_select = ((signed_contrast == signed_stim) & (trials['choice'] != 0)
                         & (trials['probabilityLeft'] == pseudo_trials['probabilityLeft'][i]))
         p_right = (np.sum(trials['choice'][trial_select] == 1)
-                  / trials['choice'][trial_select].shape[0])
+                   / trials['choice'][trial_select].shape[0])
         this_choice = [-1, 1][np.random.binomial(1, p_right)]
 
         # Add to trials
