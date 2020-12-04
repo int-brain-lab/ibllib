@@ -277,3 +277,136 @@ def roc_between_two_events(spike_times, spike_clusters, event_times, event_group
         auc_roc[i] = roc_auc_score(event_groups, spike_counts[i, :])
 
     return auc_roc, cluster_ids
+
+
+def generate_pseudo_blocks(n_trials, factor=60, min_=20, max_=100, first5050=90):
+    """
+    Generate a pseudo block structure
+
+    Parameters
+    ----------
+    n_trials : int
+        how many trials to generate
+    factor : int
+        factor of the exponential
+    min_ : int
+        minimum number of trials per block
+    max_ : int
+        maximum number of trials per block
+
+    Returns
+    ---------
+    probabilityLeft : 1D array
+        array with probability left per trial
+    """
+
+    block_ids = []
+    while len(block_ids) < n_trials:
+        x = np.random.exponential(factor)
+        while (x <= min_) | (x >= max_):
+            x = np.random.exponential(factor)
+        if (len(block_ids) == 0) & (np.random.randint(2) == 0):
+            block_ids += [0.2] * int(x)
+        elif (len(block_ids) == 0):
+            block_ids += [0.8] * int(x)
+        elif block_ids[-1] == 0.2:
+            block_ids += [0.8] * int(x)
+        elif block_ids[-1] == 0.8:
+            block_ids += [0.2] * int(x)
+    return np.array([0.5] * first5050 + block_ids[:n_trials - first5050])
+
+
+def _get_biased_probs(n: int, idx: int = -1, prob: float = 0.5) -> list:
+    n_1 = n - 1
+    z = n_1 + prob
+    p = [1 / z] * (n_1 + 1)
+    p[idx] *= prob
+    return p
+
+
+def _draw_contrast(
+    contrast_set: list, prob_type: str = "biased", idx: int = -1, idx_prob: float = 0.5
+) -> float:
+    if prob_type == "biased":
+        p = _get_biased_probs(len(contrast_set), idx=idx, prob=idx_prob)
+        return np.random.choice(contrast_set, p=p)
+    elif prob_type == "uniform":
+        return np.random.choice(contrast_set)
+
+
+def _draw_position(position_set, stim_probability_left):
+    return int(
+        np.random.choice(
+            position_set, p=[stim_probability_left, 1 - stim_probability_left]
+        )
+    )
+
+
+def generate_pseudo_session(trials):
+    """
+    Generate a complete pseudo session with biased blocks, all stimulus contrasts, choices and
+    rewards and omissions. Biased blocks and stimulus contrasts are generated using the same
+    statistics as used in the actual task. The choices of the animal are generated using the
+    actual psychometrics of the animal in the session. For each synthetic trial the choice is
+    determined by drawing from a Bernoulli distribution that is biased according to the proportion
+    of times the animal chose left for the stimulus contrast, side, and block probability.
+    No-go trials are ignored in the generating of the synthetic choices.
+
+    Parameters
+    ----------
+    trials : AlfBunch
+        trials object as loaded using ONE
+
+    Returns
+    -------
+    pseudo_trials : AlfBunch
+        a trials object with synthetically generated trials
+    """
+
+    # Get contrast set presented to the animal
+    contrast_set = np.unique(trials['contrastLeft'][~np.isnan(trials['contrastLeft'])])
+    signed_contrast = trials['contrastRight'].copy()
+    signed_contrast[np.isnan(signed_contrast)] = -trials['contrastLeft'][
+                                                            ~np.isnan(trials['contrastLeft'])]
+
+    # Generate pseudo blocks
+    n_trials = trials['probabilityLeft'].shape[0]
+    prob_left = generate_pseudo_blocks(n_trials)
+
+    # Generate synthetic session
+    pseudo_trials = trials.copy()
+    pseudo_trials['probabilityLeft'] = prob_left
+    pseudo_trials['contrastLeft'] = [np.nan] * n_trials
+    pseudo_trials['contrastRight'] = [np.nan] * n_trials
+
+    # For each trial draw stimulus contrast and side and generate a synthetic choice
+    for i in range(n_trials):
+
+        # Draw position and contrast for this trial
+        position = _draw_position([-1, 1], pseudo_trials['probabilityLeft'][i])
+        contrast = _draw_contrast(contrast_set, 'uniform')
+        signed_stim = contrast * np.sign(position)
+
+        # Generate synthetic choice by drawing from Bernoulli distribution
+        trial_select = ((signed_contrast == signed_stim) & (trials['choice'] != 0)
+                        & (trials['probabilityLeft'] == pseudo_trials['probabilityLeft'][i]))
+        p_right = (np.sum(trials['choice'][trial_select] == 1)
+                  / trials['choice'][trial_select].shape[0])
+        this_choice = [-1, 1][np.random.binomial(1, p_right)]
+
+        # Add to trials
+        if position == -1:
+            pseudo_trials['contrastLeft'][i] = contrast
+            if this_choice == -1:
+                pseudo_trials['feedbackType'][i] = -1
+            elif this_choice == 1:
+                pseudo_trials['feedbackType'][i] = 1
+        elif position == 1:
+            pseudo_trials['contrastRight'][i] = contrast
+            if this_choice == -1:
+                pseudo_trials['feedbackType'][i] = 1
+            elif this_choice == 1:
+                pseudo_trials['feedbackType'][i] = -1
+        pseudo_trials['choice'][i] = this_choice
+
+    return pseudo_trials
