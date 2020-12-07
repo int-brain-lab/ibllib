@@ -650,16 +650,13 @@ def driftmap(ts, feat, ax=None, plot_style='bincount',
     1) Plot the amplitude driftmap for unit 1.
         >>> ts = units_b['times']['1']
         >>> amps = units_b['amps']['1']
-        >>> cd, md = bb.plot.driftmap(ts, amps)
+        >>> ax = bb.plot.driftmap(ts, amps)
     2) Plot the depth driftmap for unit 1.
         >>> ts = units_b['times']['1']
         >>> depths = units_b['depths']['1']
-        >>> cd, md = bb.plot.driftmap(ts, depths)
+        >>> ax = bb.plot.driftmap(ts, depths)
     """
     iok = ~np.isnan(feat)
-    cd = bb.metrics.cum_drift(feat[iok])
-    md = bb.metrics.max_drift(feat[iok])
-
     if ax is None:
         fig, ax = plt.subplots()
 
@@ -675,8 +672,7 @@ def driftmap(ts, feat, ax=None, plot_style='bincount',
         # plot raster map
         ax.imshow(R, aspect='auto', cmap='binary', vmin=0, vmax=np.std(R) * 4,
                   extent=np.r_[times[[0, -1]], depths[[0, -1]]], origin='lower', **kwargs)
-
-    return cd, md
+    return ax
 
 
 def pres_ratio(ts, hist_win=10, ax=None):
