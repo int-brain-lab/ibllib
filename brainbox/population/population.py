@@ -10,7 +10,7 @@ import scipy as sp
 import types
 from itertools import groupby
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.naive_bayes import GaussianNB
+from sklearn.naive_bayes import GaussianNB, MultinomialNB
 from sklearn.linear_model import LogisticRegression
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.model_selection import KFold, LeaveOneOut, LeaveOneGroupOut
@@ -121,6 +121,23 @@ def _symmetrize_correlograms(correlograms):
     return np.dstack((sym, correlograms))
 
 
+def _generate_pseudo_blocks(n_trials, factor=60, min_=20, max_=100):
+    block_ids = []
+    while len(block_ids) < n_trials:
+        x = np.random.exponential(factor)
+        while (x <= min_) | (x >= max_):
+            x = np.random.exponential(factor)
+        if (len(block_ids) == 0) & (np.random.randint(2) == 0):
+            block_ids += [0] * int(x)
+        elif (len(block_ids) == 0):
+            block_ids += [1] * int(x)
+        elif block_ids[-1] == 0:
+            block_ids += [1] * int(x)
+        elif block_ids[-1] == 1:
+            block_ids += [0] * int(x)
+    return np.array(block_ids[:n_trials])
+
+
 def xcorr(spike_times, spike_clusters, bin_size=None, window_size=None):
     """Compute all pairwise cross-correlograms among the clusters appearing in `spike_clusters`.
 
@@ -197,8 +214,9 @@ def xcorr(spike_times, spike_clusters, bin_size=None, window_size=None):
 
 
 def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, post_time=0.5,
-           classifier='bayes', cross_validation='kfold', num_splits=5, prob_left=None,
-           custom_validation=None, n_neurons='all', iterations=1, shuffle=False, phase_rand=False):
+           classifier='bayes-multinomial', cross_validation='kfold', num_splits=5, prob_left=None,
+           custom_validation=None, n_neurons='all', iterations=1, shuffle=False, phase_rand=False,
+           pseudo_blocks=False):
     """
     Use decoding to classify groups of trials (e.g. stim left/right). Classification is done using
     the population vector of summed spike counts from the specified time window. Cross-validation
@@ -215,9 +233,9 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
         spike times (in seconds)
     spike_clusters : 1D array
         cluster ids corresponding to each event in `spikes`
-    event_times : 1D array
-        times (in seconds) of the events from the two groups
-    event_groups : 1D array
+    event_times : 1D or 2D array
+        times (in seconds) of the events from the two groups, if it's a 2D array every row will
+    event_groups : 1D or 2D array
         group identities of the events, can be any number of groups, accepts integers and strings
     pre_time : float
         time (in seconds) preceding the event times
@@ -226,17 +244,20 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
     classifier : string or sklearn object
         which decoder to use, either input a scikit learn clf object directly or a string.
         When it's a string options are (all classifiers are used with default options):
-            'bayes'         Naive Bayes
-            'forest'        Random forest
-            'regression'    Logistic regression
-            'lda'           Linear Discriminant Analysis
-    cross_validation : string
-        which cross-validation method to use, options are:
+            'bayes-multinomal'      Naive Bayes with multinomial likelihood
+            'bayes-gaussian'        Naive Bayes with gaussian likelihood
+            'forest'                Random forest
+            'regression'            Logistic regression
+            'lda'                   Linear Discriminant Analysis
+    cross_validation : string of generator object
+        which cross-validation method to use
+        you can input the .split method of any sklearn cross-validation method
+        or a string. If it's a string, options are:
             'none'              No cross-validation
             'kfold'             K-fold cross-validation
+            'kfold-interleaved' K-fold cross validation with interleaved trial selection
             'leave-one-out'     Leave out the trial that is being decoded
             'block'             Leave out the block the to-be-decoded trial is in
-            'custom'            Any custom cross-validation provided by the user
     num_splits : integer
         ** only for 'kfold' cross-validation **
         Number of splits to use for k-fold cross validation, a value of 5 means that the decoder
@@ -262,6 +283,9 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
     phase_rand : boolean
         whether to use phase randomization of the activity over trials to use as a "chance"
         predictor
+    pseudo_blocks : boolean
+        whether to generate pseudo blocks with the same statistics as the actual blocks
+        to estimate chance level
 
     Returns
     -------
@@ -283,13 +307,14 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
     """
 
     # Check input
-    assert classifier in ['bayes', 'forest', 'regression', 'lda']
-    assert cross_validation in ['none', 'kfold', 'leave-one-out', 'block', 'custom']
+    if type(classifier) == str:
+        assert classifier in ['bayes-multinomial', 'bayes-gaussian', 'forest', 'regression', 'lda']
+    assert (type(cross_validation) == str) or (isinstance(cross_validation, types.GeneratorType))
+    if type(cross_validation) == str:
+        assert cross_validation in ['none', 'kfold', 'kfold-interleaved', 'leave-one-out', 'block']
     assert event_times.shape[0] == event_groups.shape[0]
     if cross_validation == 'block':
         assert event_times.shape[0] == prob_left.shape[0]
-    if cross_validation == 'custom':
-        assert isinstance(custom_validation, types.GeneratorType)
 
     # Get matrix of all neuronal responses
     times = np.column_stack(((event_times - pre_time), (event_times + post_time)))
@@ -305,10 +330,12 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
     if type(classifier) == str:
         if classifier == 'forest':
             clf = RandomForestClassifier()
-        elif classifier == 'bayes':
+        elif classifier == 'bayes-multinomial':
+            clf = MultinomialNB()
+        elif classifier == 'bayes-gaussian':
             clf = GaussianNB()
         elif classifier == 'regression':
-            clf = LogisticRegression()
+            clf = LogisticRegression(solver='liblinear')
         elif classifier == 'lda':
             clf = LinearDiscriminantAnalysis()
     else:
@@ -358,6 +385,10 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
                 rand_pop_vector[:, k] = np.abs(newsignal.real)
             sub_pop_vector = rand_pop_vector
 
+        # Generate pseudo blocks if necessary
+        if pseudo_blocks:
+            event_groups = _generate_pseudo_blocks(event_groups.shape[0])
+
         if cross_validation == 'none':
 
             # Fit the model on all the data and predict
@@ -374,12 +405,14 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
                 cv = LeaveOneOut().split(sub_pop_vector)
             elif cross_validation == 'kfold':
                 cv = KFold(n_splits=num_splits).split(sub_pop_vector)
+            elif cross_validation == 'kfold-interleaved':
+                cv = KFold(n_splits=num_splits, shuffle=True).split(sub_pop_vector)
             elif cross_validation == 'block':
                 block_lengths = [sum(1 for i in g) for k, g in groupby(prob_left)]
                 blocks = np.repeat(np.arange(len(block_lengths)), block_lengths)
                 cv = LeaveOneGroupOut().split(sub_pop_vector, groups=blocks)
             elif cross_validation == 'custom':
-                cv = custom_validation
+                cv = cross_validation
 
             # Loop over the splits into train and test
             for train_index, test_index in cv:
@@ -397,7 +430,7 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
         # Calculate performance metrics and confusion matrix
         acc[i] = accuracy_score(event_groups, y_pred)
         f1[i] = f1_score(event_groups, y_pred)
-        auroc[i] = roc_auc_score(event_groups, y_probs)
+        auroc[i] = roc_auc_score(event_groups[~np.isnan(y_probs)], y_probs[~np.isnan(y_probs)])
         conf_matrix = confusion_matrix(event_groups, y_pred)
         conf_matrix_norm[:, :, i] = conf_matrix / conf_matrix.sum(axis=1)[:, np.newaxis]
 
@@ -418,7 +451,8 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
                         'confusion_matrix': conf_matrix_norm,
                         'n_groups': np.shape(np.unique(event_groups))[0],
                         'classifier': classifier, 'cross_validation': '%d-fold' % num_splits,
-                        'iterations': iterations, 'shuffle': shuffle})
+                        'iterations': iterations, 'shuffle': shuffle, 'phase_rand': phase_rand,
+                        'pseudo_blocks': pseudo_blocks})
 
     else:
         results = dict({'accuracy': acc, 'f1': f1, 'auroc': auroc,
@@ -426,7 +460,8 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
                         'confusion_matrix': conf_matrix_norm,
                         'n_groups': np.shape(np.unique(event_groups))[0],
                         'classifier': classifier, 'cross_validation': cross_validation,
-                        'iterations': iterations, 'shuffle': shuffle})
+                        'iterations': iterations, 'shuffle': shuffle, 'phase_rand': phase_rand,
+                        'pseudo_blocks': pseudo_blocks})
     return results
 
 
@@ -523,6 +558,6 @@ def lda_project(spike_times, spike_clusters, event_times, event_groups, pre_time
             lda.fit(pop_vector[train_index], [event_groups[j] for j in train_index])
 
             # Project the held-out test data to projection
-            lda_projection[test_index] = np.rot90(lda.transform(pop_vector[test_index]))[0]
+            lda_projection[test_index] = lda.transform(pop_vector[test_index]).T[0]
 
     return lda_projection
