@@ -247,8 +247,8 @@ def align_with_audio(timestamps, audio, pin_state, count,
         off before the video acquisition workflow.  For Bpod this always occurs because Bpod 
         finishes before the camera workflow.  For Bpod the times are already extrapolated for 
         these late frames."""
-        _logger.warning('Fewer FPGA timestamps than frame counts')
         n_missing = count.size - ts.size
+        _logger.warning(f'{n_missing} fewer FPGA timestamps than frame counts')
         frate = round(1 / np.nanmedian(np.diff(ts)))
         to_app = ((np.arange(n_missing, ) + 1) / frate + ts[-1]
                   if extrapolate_missing

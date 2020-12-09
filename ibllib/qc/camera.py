@@ -23,6 +23,7 @@ from ibllib.exceptions import ALFObjectNotFound
 from ibllib.io.extractors import ephys_fpga
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io import raw_data_loaders as raw
+from oneibl.stream import VideoStreamer
 import alf.io as alfio
 from brainbox.core import Bunch
 from . import base
@@ -246,7 +247,7 @@ class CameraQC(base.QC):
             self.update(self.outcome, namespace)
         return self.outcome, self.metrics
 
-    def check_contrast(self):
+    def check_contrast(self, display=False):
         """Check that the video contrast range"""
         MIN_MAX = [20, 80]  # TODO Normalize
         MIN_STD = 20
@@ -255,6 +256,15 @@ class CameraQC(base.QC):
         within_range = np.logical_and(brightness > MIN_MAX[0],
                                       brightness < MIN_MAX[1])
         passed = within_range.all() and np.std(brightness) < MIN_STD
+        if display:
+            # TODO Plot bounds
+            plt.figure()
+            plt.plot(brightness)
+            ax = plt.gca()
+            ax.set_ylabel('brightness (mean pixel)')
+            ax.set_xlabel('uniformly sampled frames')
+            ax.set_title('Brightness')
+
         return 'PASS' if passed else 'FAIL'
 
     def check_file_headers(self):
@@ -334,10 +344,10 @@ class CameraQC(base.QC):
         """Check camera is positioned correctly"""
         pass
 
-    def check_focus(self, n_frames=5, display=False):
+    def check_focus(self, n=5, threshold=100, display=False):
         """Check video is in focus"""
         # Could blur a frame and check difference
-        img = get_video_frame(self.video_path, n_frames)
+        img = get_video_frame(self.video_path, n)
         # img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         # Smoothing without removing edges.
         filtered = cv2.bilateralFilter(img, 7, 50, 50)
@@ -345,9 +355,23 @@ class CameraQC(base.QC):
         # Applying the canny filter
         edges = cv2.Canny(filtered, 60, 120)
 
+        kernal_sz = (5, 5)
+        blurred = cv2.blur(img, kernal_sz)
+        # A measure of the sharpness effectively taking the second derivative of the image
+        lpc = cv2.Laplacian(img[:350,:500], cv2.CV_64F).var()
+
+        f = cv2.dft(np.float32(img), flags=cv2.DFT_COMPLEX_OUTPUT)
+        f_shift = np.fft.fftshift(f)
+        f_complex = f_shift[:, :, 0] + 1j * f_shift[:, :, 1]
+        f_abs = np.abs(f_complex) + 1  # lie between 1 and 1e6
+        f_bounded = 20 * np.log(f_abs)
+        f_img = 255 * f_bounded / np.max(f_bounded)
+        f_img = f_img.astype(np.uint8)
+
         if display:
             # Display the resulting frame
-            cv2.imshow(f'Frame #{n_frames}', edges)
+            cv2.imshow(f'Frame #{n}', edges)
+            cv2.imshow(f'Frame #{n}-blurred', blurred)
         return  # 'NOT_SET'
 
 
@@ -375,31 +399,6 @@ def vid_to_brightness(camera_path, n_frames=5):
     cap.release()
     sys.stdout.write('\x1b[2K\r')  # Erase current line in stdout
     return np.array(brightness)
-
-# def plot_brightness(D):
-#     plt.ion()
-#     plt.figure()
-#     ax0 = plt.subplot(1, 3, 1)
-#     for eid in D:
-#         for vid in D[eid]:
-#             if 'left' in vid:
-#                 plt.plot(D[eid][vid], label=eid)
-#     ax0.set_ylabel('brightness (mean pixel)')
-#     ax0.set_xlabel('uniformly sampled frames')
-#     ax0.set_title('left')
-#     ax1 = plt.subplot(1, 3, 2, sharex=ax0, sharey=ax0)
-#     for eid in D:
-#         for vid in D[eid]:
-#             if 'right' in vid:
-#                 plt.plot(D[eid][vid], label=eid)
-#     ax1.set_title('right')
-#     ax2 = plt.subplot(1, 3, 3, sharex=ax0, sharey=ax0)
-#     for eid in D:
-#         for vid in D[eid]:
-#             if 'body' in vid:
-#                 plt.plot(D[eid][vid], label='_'.join(vid.split('_')[:-1]))
-#     ax2.set_title('body')
-#     ax2.legend().set_draggable(True)
 
 
 def run_all_qc(session, update=False, cameras=('left', 'right', 'body'), **kwargs):
