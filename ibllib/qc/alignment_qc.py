@@ -18,7 +18,6 @@ CRITERIA_BASE = {'CRITICAL': 4,
                  }
 
 
-
 class AlignmentQC(base.QC):
     """
     Class that is used to update the extended_qc of the probe insertion fields with the results
@@ -346,11 +345,16 @@ class AlignmentQC(base.QC):
         else:
             self.alignments = prev_alignments
 
-        outcomes = [align[2].split(':')[0] for key, align in self.alignments.items() if len(align) == 3]
-        vals = [CRITERIA_BASE[out] for out in outcomes]
-        max_qc = np.argmax(vals)
-        outcome = outcomes[max_qc]
-        self.update(outcome, namespace='experimenter')
+        outcomes = [align[2].split(':')[0] for key, align in self.alignments.items()
+                    if len(align) == 3]
+        if len(outcomes) > 0:
+            vals = [CRITERIA_BASE[out] for out in outcomes]
+            max_qc = np.argmax(vals)
+            outcome = outcomes[max_qc]
+            self.update(outcome, namespace='experimenter')
+        else:
+            self.log.warning('No experimenter qc found, qc field of probe insertion will not '
+                             'be updated')
 
 
 
