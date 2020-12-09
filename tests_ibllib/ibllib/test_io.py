@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 import os
 import uuid
 import tempfile
@@ -604,6 +605,14 @@ class TestsMisc(unittest.TestCase):
 
 
 class TestsGlobus(unittest.TestCase):
+    def setUp(self):
+        self.patcher = patch.multiple('globus_sdk',
+                                      NativeAppAuthClient=unittest.mock.DEFAULT,
+                                      RefreshTokenAuthorizer=unittest.mock.DEFAULT,
+                                      TransferClient=unittest.mock.DEFAULT)
+        self.patcher.start()
+        self.addCleanup(self.patcher.stop)
+
     def test_as_globus_path(self):
         # A Windows path
         actual = globus.as_globus_path('E:\\FlatIron\\integration')
@@ -618,6 +627,27 @@ class TestsGlobus(unittest.TestCase):
         actual = globus.as_globus_path('/~/E/FlatIron/integration')
         expected = '/~/E/FlatIron/integration'
         self.assertEqual(expected, actual)
+
+    @unittest.mock.patch('ibllib.io.params.read')
+    def test_login_auto(self, mock_params):
+        client_id = 'h3u2i'
+        # Test ValueError thrown with incorrect parameters
+        mock_params.return_value = None  # No parameters saved
+        with self.assertRaises(ValueError):
+            globus.login_auto(client_id)
+        mock_params.assert_called_with('globus')
+
+        pars = params.from_dict({'transfer_token': '7r3hj89', 'expires_at_s': '2020-09-10'})
+        mock_params.return_value = pars  # Incomplete parameter object
+        with self.assertRaises(ValueError):
+            globus.login_auto(client_id)
+
+        # Complete parameter object
+        mock_params.return_value = pars.set('refresh_token', '37yh4')
+        gtc = globus.login_auto(client_id)
+        self.assertIsInstance(gtc, unittest.mock.Mock)
+        mock, _ = self.patcher.get_original()
+        mock.assert_called_once_with(client_id)
 
 
 if __name__ == "__main__":

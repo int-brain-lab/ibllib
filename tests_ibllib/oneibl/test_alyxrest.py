@@ -1,5 +1,12 @@
-from oneibl.one import ONE
+from pathlib import Path
 import unittest
+import tempfile
+
+import matplotlib.image
+import numpy as np
+
+from oneibl.one import ONE
+
 
 one = ONE(username='test_user', password='TapetesBloc18',
           base_url='https://test.alyx.internationalbrainlab.org')
@@ -31,3 +38,19 @@ class Tests_REST(unittest.TestCase):
         ses = one.alyx.rest('sessions', 'list')[0]
         ses_ = one.alyx.rest('sessions', 'list', id=ses['url'][-36:])[0]
         self.assertEqual(ses, ses_)
+
+    def test_note_with_picture_upload(self):
+        eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
+        my_note = {'user': 'olivier',
+                   'content_type': 'session',
+                   'object_id': eid,
+                   'text': "gnagnagna"}
+
+        with tempfile.NamedTemporaryFile(mode="wb", suffix='.png') as png:
+            matplotlib.image.imsave(png.name, np.random.random((500, 500)))
+            files = {'image': open(Path(png.name), 'rb')}
+            ar_note = one.alyx.rest('notes', 'create', data=my_note, files=files)
+
+        self.assertTrue(len(ar_note['image']))
+        self.assertTrue(ar_note['content_type'] == 'actions.session')
+        one.alyx.rest('notes', 'delete', id=ar_note['id'])
