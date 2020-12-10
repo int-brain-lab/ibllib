@@ -353,10 +353,5 @@ class AlignmentQC(base.QC):
             outcome = outcomes[max_qc]
             self.update(outcome, namespace='experimenter')
         else:
-            self.log.warning('No experimenter qc found, qc field of probe insertion will not '
-                             'be updated')
-
-
-
-
-
+            self.log.warning(f'No experimenter qc found, qc field of probe insertion {self.eid} '
+                             f'will not be updated')

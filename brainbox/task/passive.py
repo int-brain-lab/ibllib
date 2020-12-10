@@ -7,6 +7,20 @@ from scipy.linalg import svd
 
 
 def get_on_off_times_and_positions(rf_map):
+    """
+
+    Prepares passive receptive field mapping into format for analysis
+    ----------
+    rf_map: output from alf.io.load_object(alf_path, object='passiveRFM', namespace='ibl')
+
+    Returns
+    -------
+    rf_map_times: time of each receptive field map frame np.array(len(stim_frames)
+    rf_map_pos: unique position of each pixel on scree np.array(len(x_pos), len(y_pos))
+    rf_stim_frames: for each pixel on screen stores array of stimulus frames where stim onset
+    occured. For both white squares 'on' and black squares 'off'
+
+    """
 
     rf_map_times = rf_map['times']
     rf_map_frames = rf_map['frames'].astype('float')
@@ -53,6 +67,28 @@ def get_on_off_times_and_positions(rf_map):
 def get_rf_map_over_depth(rf_map_times, rf_map_pos, rf_stim_frames, spike_times, spike_depths,
                           T_BIN=0.01, D_BIN=80, pre_stim=0.05, post_stim=1.5, y_lim=[0, 3840],
                           x_lim=None):
+    """
+    Compute receptive field map for each stimulus onset binned across depth
+    Parameters
+    ----------
+    rf_map_times
+    rf_map_pos
+    rf_stim_frames
+    spike_times: array of spike times
+    spike_depths: array of spike depths along probe
+    T_BIN: bin size along time dimension
+    D_BIN: bin size along depth dimension
+    pre_stim: time period before rf map stim onset to epoch around
+    post_stim: time period after rf map onset to epoch around
+    y_lim: values to limit to in depth direction
+    x_lim: values to limit in time direction
+
+    Returns
+    -------
+    rfmap: receptive field map for 'on' 'off' stimuli.
+    Each rfmap has shape (depths, x_pos, y_pos, epoch_window)
+    depths: depths between which receptive field map has been computed
+    """
 
     binned_array, times, depths = bincount2D(spike_times, spike_depths, T_BIN, D_BIN,
                                              ylim=y_lim, xlim=x_lim)
@@ -88,6 +124,17 @@ def get_rf_map_over_depth(rf_map_times, rf_map_pos, rf_stim_frames, spike_times,
 
 
 def get_svd_map(rf_map):
+    """
+    Perform SVD on the spatiotemporal rf_map and return the first spatial components
+    Parameters
+    ----------
+    rf_map
+
+    Returns
+    -------
+    rf_svd: First spatial component of rf map for 'on' 'off' stimuli.
+    Each dict has shape (depths, x_pos, y_pos)
+    """
 
     rf_svd = {}
     for stim_type, stims in rf_map.items():
@@ -112,6 +159,27 @@ def get_svd_map(rf_map):
 def get_stim_aligned_activity(stim_events, spike_times, spike_depths, z_score_flag=True, D_BIN=20,
                               T_BIN=0.01, pre_stim=0.4, post_stim=1, base_stim=1,
                               y_lim=[0, 3840], x_lim=None):
+    """
+
+    Parameters
+    ----------
+    stim_events: dict of different stim events. Each key contains time of stimulus onset
+    spike_times: array of spike times
+    spike_depths: array of spike depths along probe
+    z_score_flag: whether to return values as z_score of firing rate
+    T_BIN: bin size along time dimension
+    D_BIN: bin size along depth dimension
+    pre_stim: time period before rf map stim onset to epoch around
+    post_stim: time period after rf map onset to epoch around
+    base_stim: time period before rf map stim to use as baseline for z_score correction
+    y_lim: values to limit to in depth direction
+    x_lim: values to limit in time direction
+
+    Returns
+    -------
+    stim_activity: stimulus aligned activity for each stimulus type, returned as z_score of firing
+    rate
+    """
 
     binned_array, times, depths = bincount2D(spike_times, spike_depths, T_BIN, D_BIN,
                                              ylim=y_lim, xlim=x_lim)
@@ -145,7 +213,3 @@ def get_stim_aligned_activity(stim_events, spike_times, spike_depths, z_score_fl
         stim_activity[stim_type] = avg_stim_trials
 
     return stim_activity
-
-
-
-
