@@ -332,7 +332,7 @@ class AlignmentQC(base.QC):
 
         return files_to_register
 
-    def update_experimenter_evaluation(self, prev_alignments=None):
+    def update_experimenter_evaluation(self, prev_alignments=None, override=False):
 
         if not np.any(prev_alignments) and not np.any(self.alignments):
             aligned_traj = self.one.alyx.rest('trajectories', 'list', probe_insertion=self.eid,
@@ -351,7 +351,7 @@ class AlignmentQC(base.QC):
             vals = [CRITERIA_BASE[out] for out in outcomes]
             max_qc = np.argmax(vals)
             outcome = outcomes[max_qc]
-            self.update(outcome, namespace='experimenter')
+            self.update(outcome, namespace='experimenter', override=override)
         else:
             self.log.warning(f'No experimenter qc found, qc field of probe insertion {self.eid} '
                              f'will not be updated')
