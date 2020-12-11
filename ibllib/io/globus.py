@@ -130,6 +130,7 @@ def local_endpoint():
 ENDPOINTS = {
     'test': ('2bfac104-12b1-11ea-bea5-02fcc9cdd752', '/~/mnt/xvdf/Data/'),
     'flatiron': ('15f76c0c-10ee-11e8-a7ed-0a448319c2f8', '/~/'),
+    'cortexlab': ('9426178c-dc39-11e9-b5de-0ef30f6b83a8', '/cortexlab/Subjects/'),
     'local': (local_endpoint(), '/~/ssd/ephys/globus/'),
 }
 
