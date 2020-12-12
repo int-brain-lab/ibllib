@@ -7,6 +7,7 @@ import alf.io
 from ibllib.io import spikeglx
 from ibllib.atlas import regions_from_allen_csv
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
+from ibllib.exceptions import ALFObjectNotFound
 from oneibl.one import ONE
 
 from brainbox.core import Bunch, TimeSeries
@@ -292,7 +293,7 @@ def _load_spike_sorting_local(session_path, probe):
 
 
 def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
-    '''
+    """
     Takes (default and any extra) values in given keys from channels and assign them to clusters.
     If channels does not contain any data, the new keys are added to clusters but left empty.
     :param dic_clus: dict of bunch, 1 bunch per probe, containing cluster information
@@ -300,7 +301,7 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
     :param keys_to_add_extra: Any extra keys contained in channels (will be added to default
     ['acronym', 'atlas_id'])
     :return: clusters (dict of bunch, 1 bunch per probe), with new keys values.
-    '''
+    """
     probe_labels = list(channels.keys())  # Convert dict_keys into list
     keys_to_add_default = ['acronym', 'atlas_id', 'x', 'y', 'z']
 
@@ -511,3 +512,19 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
             trials.append(np.abs(whlvel))
     trialsdf['wheel_velocity'] = trials
     return trialsdf
+
+
+def path_to_url(filepath, one=None):
+    """
+    Given a local file path, returns the URL of the remote file.
+    :param filepath: A local file path
+    :param one: An instance of ONE for fetching the remote file record
+    :return: A URL string
+    """
+    one = one or ONE()
+    eid = one.eid_from_path(filepath)
+    try:
+        dataset, = one.alyx.rest('datasets', 'list', session=eid, name=Path(filepath).name)
+    except ValueError:
+        raise ALFObjectNotFound(f'File record for {filepath} not found on Alyx')
+    return next(r['data_url'] for r in dataset['file_records'] if r['data_url'])

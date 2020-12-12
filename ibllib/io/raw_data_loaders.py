@@ -19,6 +19,7 @@ import pandas as pd
 
 from ibllib.io import jsonable
 from ibllib.misc import version
+from ibllib.time import uncycle_pgts, convert_pgts
 
 _logger = logging.getLogger('ibllib')
 
@@ -98,6 +99,25 @@ def load_data(session_path: Union[str, Path], time='absolute'):
     if time == 'absolute':
         data = [trial_times_to_times(t) for t in data]
     return data
+
+
+def load_camera_ssv_times(session_path, camera):
+    """
+    Load the bonsai frame and camera timestamps from Camera.timestamps.ssv
+    :param session_path: Absolute path of session folder
+    :param camera: Name of the camera to load, e.g. 'left'
+    :return: array of datetimes, array of frame times in seconds
+    """
+    camera_labels = ('left', 'right', 'body')
+    if camera.lower() not in camera_labels:
+        raise ValueError(f"camera must be one of ({', '.join(('left', 'right', 'body'))})")
+    file = Path(session_path) / 'raw_video_data' / f'_iblrig_{camera.lower()}Camera.timestamps.ssv'
+    assert file.exists()
+    ssv_params = dict(names=('bonsai', 'camera'), dtype='<M8[ns],<u4', delimiter=' ')
+    ssv_times = np.genfromtxt(file, **ssv_params)  # np.loadtxt is slower for some reason
+    bonsai_times = ssv_times['bonsai']
+    camera_times = uncycle_pgts(convert_pgts(ssv_times['camera']))
+    return bonsai_times, camera_times
 
 
 def load_settings(session_path: Union[str, Path]):

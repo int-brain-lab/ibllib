@@ -1,20 +1,20 @@
 """Camera QC
 This module runs a list of quality control metrics on the camera and extracted video data.
 
-TODO Add checks from check_cam scratch
 Question:
-What is the order of things? I am assuming the frames, pin state, FPGA times all occur outside of the task
-What are the units of the ssv timestamps?  Can we use these as a measure of Bpod timestamp accuracy (these are interpolated)
-What to do if the pin_state file exists but not the count file?
-We're not extracting the audio based on TTL length.  Is this a problem?
+    We're not extracting the audio based on TTL length.  Is this a problem?
 """
 import sys
 import logging
 from inspect import getmembers, isfunction
+from datetime import timedelta
+from pathlib import Path
+import re
 
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 
 from ibllib.io.extractors.camera import (
     load_embedded_frame_data, extract_camera_sync, PIN_STATE_THRESHOLD, extract_all
@@ -26,6 +26,7 @@ from ibllib.io import raw_data_loaders as raw
 from oneibl.stream import VideoStreamer
 import alf.io as alfio
 from brainbox.core import Bunch
+from brainbox.io.one import path_to_url
 from . import base
 
 _log = logging.getLogger('ibllib')
@@ -36,42 +37,88 @@ def get_video_frame(video_path, frame_number):
     Obtain numpy array corresponding to a particular video frame in video_path
     :param video_path: local path to mp4 file
     :param frame_number: video frame to be returned
-    :return: numpy array corresponding to frame of interest.  Dimensions are (1024, 1280, 3)
+    :return: numpy array corresponding to frame of interest.  Dimensions are (w, h, 3)
     """
-    cap = cv2.VideoCapture(str(video_path))
-    #  fps = cap.get(cv2.CAP_PROP_FPS)
-    #  print("Frame rate = " + str(fps))
-    cap.set(1, frame_number)  # 0-based index of the frame to be decoded/captured next.
+    is_url = isinstance(video_path, str) and video_path.startswith('http')
+    cap = VideoStreamer(video_path).cap if is_url else cv2.VideoCapture(str(video_path))
+    # 0-based index of the frame to be decoded/captured next.
+    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
     ret, frame_image = cap.read()
     cap.release()
     return frame_image
 
 
-def get_video_frames_preload(video_path, frame_numbers):
+def get_video_frames_preload(video_path, frame_numbers, mask=None, as_list=False):
     """
     Obtain numpy array corresponding to a particular video frame in video_path
-    :param video_path: local path to mp4 file
-    :param frame_numbers: video frame to be returned
-    :return: numpy array corresponding to frame of interest.  Dimensions are (1024, 1280,
-    3).  Also returns the frame rate and total number of frames
+    :param video_path: URL or local path to mp4 file
+    :param frame_numbers: video frames to be returned
+    :param mask: a logical mask or slice to apply to frames
+    :param as_list: if true the frames are returned as a list, this is faster but less memory
+    efficient
+    :return: numpy array corresponding to frame of interest.  Default dimensions are (n, w, h, 3)
+    where n = len(frame_numbers)
+
+    Example - Load first 1000 frames, keeping only the first colour channel:
+        frames = get_video_frames_preload(video_path, range(1000), mask=np.s_[:, :, 0])
     """
-    cap = cv2.VideoCapture(str(video_path))
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    if len(frame_numbers) == 0:
-        return None, fps, total_frames
-    elif 0 < frame_numbers[-1] >= total_frames:
-        raise IndexError('frame numbers must be between 0 and ' + str(total_frames))
-    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_numbers[0])
-    frame_images = []
-    for i in frame_numbers:
-        sys.stdout.write(f'\rloading frame {i}/{frame_numbers[-1]}')
-        sys.stdout.flush()
+    is_url = isinstance(video_path, str) and video_path.startswith('http')
+    cap = VideoStreamer(video_path).cap if is_url else cv2.VideoCapture(str(video_path))
+    assert cap.isOpened(), 'Failed to open video'
+
+    if as_list:
+        frame_images = [None] * len(frame_numbers)
+    else:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
         ret, frame = cap.read()
-        frame_images.append(frame)
+        frame_images = np.empty((len(frame_numbers), *frame[mask or ...].shape), np.uint8)
+
+    for ii, i in enumerate(frame_numbers):
+        sys.stdout.write(f'\rloading frame {ii}/{len(frame_numbers)}')
+        sys.stdout.flush()
+        cap.set(cv2.CAP_PROP_POS_FRAMES, i)
+        ret, frame = cap.read()
+        if ret:
+            frame_images[ii] = frame[mask]
+        else:
+            print(f'failed to read frame #{i}')
+            if not as_list:
+                frame_images[ii] = np.nan
     cap.release()
     sys.stdout.write('\x1b[2K\r')  # Erase current line in stdout
-    return np.array(frame_images), fps, total_frames
+    return frame_images
+
+
+def get_video_meta(video_path, one=None):
+    """
+    Return a bunch of video information with the fields ('length', 'fps', 'width', 'height',
+    'duration', 'size')
+    :param video_path: A path to the video
+    :param one:
+    :return:
+    """
+    is_url = isinstance(video_path, str) and video_path.startswith('http')
+    cap = VideoStreamer(video_path).cap if is_url else cv2.VideoCapture(str(video_path))
+    assert cap.isOpened(), f'Failed to open video file {video_path}'
+
+    # Get basic properties of video
+    meta = Bunch()
+    meta.length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    meta.fps = int(cap.get(cv2.CAP_PROP_FPS))
+    meta.width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    meta.height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    meta.duration = timedelta(seconds=meta.length / meta.fps)
+    if is_url and one:
+        eid = one.eid_from_path(video_path)
+        name = re.match(r'.*(_iblrig_[a-z]+Camera\.raw\.)(?:[\w-]{36}\.)?(mp4)$', video_path)
+        det, = one.alyx.rest('datasets', 'list', session=eid, name=''.join(name.groups()))
+        meta.size = det['file_size']
+    elif is_url and not one:
+        meta.size = None
+    else:
+        meta.size = Path(video_path).stat().st_size
+    cap.release()
+    return meta
 
 
 class CameraQC(base.QC):
@@ -127,19 +174,30 @@ class CameraQC(base.QC):
         :param session_path_or_eid: A session eid or path
         :param log: A logging.Logger instance, if None the 'ibllib' logger is used
         :param one: An ONE instance for fetching and setting the QC on Alyx
-        :param cameras: The comeras to run QC on, if None QC is run for all three cameras
+        :param camera: The camera to run QC on, if None QC is run for all three cameras
+        :param stream: If true and local video files not available, the data are streamed from
+        the remote source.
+        :param n_samples: The number of frames to sample for the position and brightness QC
         """
         # When an eid is provided, we will download the required data by default (if necessary)
         download_data = not alfio.is_session_path(session_path_or_eid)
         self.download_data = kwargs.pop('download_data', download_data)
+        self.stream = kwargs.pop('stream', True)
+        self.n_samples = kwargs.pop('n_samples', 2)
         super().__init__(session_path_or_eid, **kwargs)
 
         # Data
         self.side = side
         filename = f'_iblrig_{self.side}Camera.raw.mp4'
         self.video_path = self.session_path / 'raw_video_data' / filename
+        # If local video doesn't exist, change video path to URL
+        if not self.video_path.exists() and self.stream and self.one is not None:
+            self.video_path = path_to_url(self.video_path, self.one)
+
         self.type = get_session_extractor_type(self.session_path) or None
         self.data = Bunch()
+        self.frame_sampels = None
+        self.frame_samples_idx = None
 
         # QC outcomes map
         self.metrics = None
@@ -187,24 +245,16 @@ class CameraQC(base.QC):
 
         # Gather information from video file
         _log.info('inspecting video file...')
-        cap = cv2.VideoCapture(str(self.video_path))
-
         # Get basic properties of video
-        info = Bunch()
-        info.length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        info.fps = int(cap.get(cv2.CAP_PROP_FPS))
-        info.width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        info.height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        cap.release()
-
-        self.data['video'] = info
-        self.data['brightness'] = vid_to_brightness(self.video_path)
-
+        self.data['video'] = get_video_meta(self.video_path, one=self.one)
+        # Sample some frames from the video file
+        indices = np.linspace(100, self.data['video'].length - 100, self.n_samples).astype(int)
+        self.frame_samples_idx = indices
+        self.data['frame_samples'] = get_video_frames_preload(self.video_path, indices,
+                                                              mask=np.s_[:, :, 0])
         # Load Bonsai frame timestamps
-        file = self.session_path / 'raw_video_data' / f'_iblrig_{self.side}Camera.timestamps.ssv'
-        # df = pd.read_csv(file, delim_whitespace=True)
-        ssv_params = dict(names=('date', 'timestamp'), dtype='<M8[ns],<u4', delimiter=' ')
-        self.data['bpod_frame_times'] = np.genfromtxt(file, **ssv_params)  # np.loadtxt is slower
+        ssv_times = raw.load_camera_ssv_times(self.session_path, self.side)
+        self.data['bonsai_times'], self.data['camera_times'] = ssv_times
 
     def _ensure_required_data(self):
         """
@@ -248,22 +298,28 @@ class CameraQC(base.QC):
         return self.outcome, self.metrics
 
     def check_contrast(self, display=False):
-        """Check that the video contrast range"""
-        MIN_MAX = [20, 80]  # TODO Normalize
+        """Check that the video contrast range
+        Assumes that the frame samples are 2D (no colour channels)
+        """
+        MIN_MAX = [20, 80]
         MIN_STD = 20
-        brightness = self.data['brightness']
+        brightness = self.data['frame_samples'].mean(axis=(1, 2))
+        # dims = self.data['frame_samples'].shape
+        # brightness /= np.array((*dims[1:], 255)).prod()  # Normalize
 
         within_range = np.logical_and(brightness > MIN_MAX[0],
                                       brightness < MIN_MAX[1])
         passed = within_range.all() and np.std(brightness) < MIN_STD
         if display:
-            # TODO Plot bounds
             plt.figure()
-            plt.plot(brightness)
+            plt.plot(brightness, label='brightness')
             ax = plt.gca()
-            ax.set_ylabel('brightness (mean pixel)')
-            ax.set_xlabel('uniformly sampled frames')
-            ax.set_title('Brightness')
+            ax.set(
+                xlabel='brightness (mean pixel)',
+                ylabel='uniformly sampled frames',
+                title='Brightness')
+            ax.hlines(MIN_MAX, 0, self.n_samples, colors='r', linestyles=':', label='bounds')
+            ax.legend()
 
         return 'PASS' if passed else 'FAIL'
 
@@ -300,6 +356,7 @@ class CameraQC(base.QC):
             plt.xlabel('FPGA frame times / s')
             plt.gca().set(yticklabels=[])
             plt.gca().tick_params(left=False)
+            plt.legend()
         # idx = [i for i, x in enumerate(self.data['audio'])
         #        if np.abs(x - self.data['frame_times'][low2high]).min() > 0.01]
         # mins = [np.abs(x - self.data['frame_times'][low2high]).min() for x in self.data['audio']]
@@ -340,65 +397,196 @@ class CameraQC(base.QC):
         """Check wheel motion in video correlates with the rotary encoder signal"""
         pass
 
-    def check_position(self):
-        """Check camera is positioned correctly"""
-        pass
+    def check_position(self, hist_thresh=0.7, metric=cv2.TM_CCOEFF_NORMED,
+                       display=False, test=False):
+        """Check camera is positioned correctly
+        For the template matching zero-normalized cross-correlation (default) should be more
+        robust to exposer (which we're not checking here).  The L2 norm (TM_SQDIFF) should
+        also work.
+        """
+        if self.side in ('right', 'body'):
+            return 'NOT_SET'
+        # TODO Save only histogram
+        refs = self.load_reference_frames('left')
 
-    def check_focus(self, n=5, threshold=100, display=False):
-        """Check video is in focus"""
-        # Could blur a frame and check difference
-        img = get_video_frame(self.video_path, n)
-        # img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        # Smoothing without removing edges.
-        filtered = cv2.bilateralFilter(img, 7, 50, 50)
+        # Method 1: compareHist
+        ref_h = cv2.calcHist([refs[0]], [0], None, [256], [0, 256])
+        frames = refs if test else self.data['frame_samples']
+        hists = [cv2.calcHist([x], [0], None, [256], [0, 256]) for x in frames]
+        corr = [cv2.compareHist(test_h, ref_h, cv2.HISTCMP_CORREL) for test_h in hists]
+        hist_correlates = all(x > hist_thresh for x in corr)
 
-        # Applying the canny filter
-        edges = cv2.Canny(filtered, 60, 120)
-
-        kernal_sz = (5, 5)
-        blurred = cv2.blur(img, kernal_sz)
-        # A measure of the sharpness effectively taking the second derivative of the image
-        lpc = cv2.Laplacian(img[:350,:500], cv2.CV_64F).var()
-
-        f = cv2.dft(np.float32(img), flags=cv2.DFT_COMPLEX_OUTPUT)
-        f_shift = np.fft.fftshift(f)
-        f_complex = f_shift[:, :, 0] + 1j * f_shift[:, :, 1]
-        f_abs = np.abs(f_complex) + 1  # lie between 1 and 1e6
-        f_bounded = 20 * np.log(f_abs)
-        f_img = 255 * f_bounded / np.max(f_bounded)
-        f_img = f_img.astype(np.uint8)
+        # Method 2:
+        # roi = (
+        #     np.arange(138, 501, dtype=int),  # col
+        #     np.arange(45, 346, dtype=int)    # row
+        # )
+        roi = {
+            'left': ((45, 346), (138, 501))
+        }
+        template = refs[0][tuple(slice(*r) for r in roi['left'])]
+        (y1, y2), (x1, x2) = roi['left']
+        top_left = []
+        for frame in frames:
+            res = cv2.matchTemplate(frame, template, metric)
+            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+            # If the method is TM_SQDIFF or TM_SQDIFF_NORMED, take minimum
+            top_left.append(min_loc if metric < 2 else max_loc)
+            # bottom_right = (top_left[0] + w, top_left[1] + h)
+        err = (x1, y1) - np.median(np.array(top_left), axis=0)
 
         if display:
-            # Display the resulting frame
-            cv2.imshow(f'Frame #{n}', edges)
-            cv2.imshow(f'Frame #{n}-blurred', blurred)
-        return  # 'NOT_SET'
+            plt.figure()
+            # Plot frame with template overlay
+            img = frames[0]
+            ax0 = plt.subplot(221)
+            ax0.imshow(img, cmap='gray', vmin=0, vmax=255)
+            bounds = (x1 - err[0], x2 - err[0], y2 - err[1], y1 - err[1])
+            ax0.imshow(template, cmap='gray', alpha=0.5, extent=bounds)
+            xy = (x1 - 60, y1 - 60)
+            ax0.add_patch(Rectangle(xy, x2-x1+120, y2-y1+120,
+                                    fill=True, facecolor='green', lw=0, alpha=0.2))
+            xy = (x1 - err[0], y1 - err[1])
+            ax0.add_patch(Rectangle(xy, x2-x1, y2-y1,
+                                    edgecolor='pink', fill=False, hatch='//', lw=1))
+            ax0.set(xlim=(0, img.shape[1]), ylim=(img.shape[0], 0))
+            ax0.set_axis_off()
+            # Plot the image histograms
+            ax1 = plt.subplot(212)
+            ax1.plot(ref_h[5:-1], label='reference frame')
+            ax1.plot(np.array(hists).mean(axis=0)[5:-1], label='mean frame')
+            ax1.set_xlim([0, 256])
+            plt.legend()
+            # Plot the correlations for each sample frame
+            ax2 = plt.subplot(222)
+            ax2.plot(corr, label='hist correlation')
+            ax2.axhline(hist_thresh, 0, self.n_samples,
+                        linestyle=':', color='r', label='pass threshold')
+            ax2.set(xlabel='Sample Frame #', ylabel='Hist correlation')
+            plt.legend()
+            plt.suptitle('Check position')
+            plt.show()
+        face_aligned = all(np.abs(err) < 60)
 
+        return 'PASS' if face_aligned and hist_correlates else 'FAIL'
 
-def vid_to_brightness(camera_path, n_frames=5):
-    """
-    :param camera_path: The full path for the camera
-    :param n_frames: Number of frames to sample for brightness
-    :return:
-    """
-    # TODO Use video loaders from iblapps
-    cap = cv2.VideoCapture(str(camera_path))
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    brightness = []
-    # for n sampled frames, save brightness in array
-    idx = np.linspace(100, total_frames - 100, n_frames).astype(int)
-    for ii, i in enumerate(idx):
-        sys.stdout.write(f'\rloading frame {ii}/{int(n_frames)}')
-        sys.stdout.flush()
-        cap.set(1, i)
-        ret, frame = cap.read()
-        if ret:
-            brightness.append(np.mean(frame))
+    def check_focus(self, n=5, threshold=100, display=False, test=False):
+        """Check video is in focus
+        Two methods are used here: Looking at the high frequencies with a DFT and
+        applying a Laplacian HPF and looking at the variance.
+
+        Note:
+            - Both methods are sensitive to noise (Laplacian is 2nd order filter).
+            - The thresholds for the fft may need to be different for the left/right vs body as
+              the distribution of frequencies in the image is different (e.g. the holder
+              comprises mostly very high frequencies).
+            - The image may be overall in focus but the places we care about can still be out of
+              focus (namely the face).  For this we'll take 2 ROIs - face and wheel/paws.
+        """
+        if self.side in ('right', 'body'):
+            return 'NOT_SET'
+        if test:
+            """In test mode load a reference frame and run it through a normalized box filter with
+            increasing kernel size.
+            """
+            idx = 0
+            ref = self.load_reference_frames(self.side)[idx]
+            img = np.empty((n, *ref.shape), dtype=np.uint8)
+            kernal_sz = np.unique(np.linspace(0, 15, n, dtype=int))
+            for i, k in enumerate(kernal_sz):
+                img[i] = ref if k == 0 else cv2.blur(ref, (k, k))
+            if display:
+                # Plot blurred images
+                f, axes = plt.subplots(1, len(img))
+                for ax, ig, k in zip(axes, img, kernal_sz):
+                    self.imshow(ig, ax=ax, title='Kernal ({0}, {0})'.format(k or 'None'))
+                f.suptitle('Reference frame with box filter')
         else:
-            _log.warning(f'failed to read frame {ii}')
-    cap.release()
-    sys.stdout.write('\x1b[2K\r')  # Erase current line in stdout
-    return np.array(brightness)
+            # Sub-sample the frame samples
+            idx = np.unique(np.linspace(0, len(self.data['frame_samples']) - 1, n, dtype=int))
+            img = self.data['frame_samples'][idx]
+
+        # A measure of the sharpness effectively taking the second derivative of the image
+        roi = {
+            'left': (np.s_[:400, :561], np.s_[500:, 100:800])  # (face, wheel)
+        }
+
+        lpc_var = np.empty((min(n, len(img)), len(roi['left'])))
+        for i, frame in enumerate(img[::-1]):
+            lpc = cv2.Laplacian(frame, cv2.CV_16S, ksize=1)
+            lpc_var[i] = [lpc[mask].var() for mask in roi[self.side]]
+
+        if display:
+            # Plot the first sample image
+            f = plt.figure()
+            gs = f.add_gridspec(len(roi[self.side]), 4)
+            f.add_subplot(gs[:, 0])
+            self.imshow(img[0], title=f'Frame #{self.frame_samples_idx[idx[0]]}')
+            # Plot the ROIs with and without filter
+            lpc = cv2.Laplacian(img[0], cv2.CV_16S, ksize=1)
+            abs_lpc = cv2.convertScaleAbs(lpc)
+            for i, r in enumerate(roi[self.side]):
+                f.add_subplot(gs[i, 1])
+                self.imshow(img[0][r], title=f'ROI #{i + 1}')
+                f.add_subplot(gs[i, 2])
+                self.imshow(abs_lpc[r], title=f'ROI #{i + 1} - Lapacian filter')
+            f.suptitle('Laplacian blur detection')
+            # TODO Add variance over frames
+            ax = f.add_subplot(gs[1, 0])
+            ln = plt.plot(lpc_var)
+            [l.set_label(f'ROI #{i + 1}') for i, l in enumerate(ln)]
+            ax.axhline(threshold, 0, n, linestyle=':', color='r', label='lower threshold')
+            ax.set(xlabel='Frame sample', ylabel='Variance of the Laplacian')
+            plt.legend()
+
+        # Second test is to highpass with dft
+        h, w = img.shape[1:]
+        cX, cY = w // 2, h // 2
+        sz = 60  # Seems to be the magic number for high pass
+        mask = np.ones((h, w, 2), bool)
+        mask[cY - sz:cY + sz, cX - sz:cX + sz] = False
+        filt_mean = np.empty(len(img))
+        for i, frame in enumerate(img[::-1]):
+            dft = cv2.dft(np.float32(frame), flags=cv2.DFT_COMPLEX_OUTPUT)
+            f_shift = np.fft.fftshift(dft) * mask  # Shift & remove low frequencies
+            f_ishift = np.fft.ifftshift(f_shift)  # Shift back
+            filt_frame = cv2.idft(f_ishift)  # Reconstruct
+            filt_frame = cv2.magnitude(filt_frame[..., 0], filt_frame[..., 1])
+            # Re-normalize to 8-bits to make threshold simpler
+            img_back = cv2.normalize(filt_frame, None, alpha=0, beta=256,
+                                     norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+            filt_mean[i] = np.mean(img_back)
+            if i == len(img) - 1 and display:
+                # Plot Fourier transforms
+                f, axes = plt.subplots(1, 3)
+                self.imshow(img[0], ax=axes[0], title='Original frame')
+                dft_shift = np.fft.fftshift(dft)
+                magnitude = 20 * np.log(cv2.magnitude(dft_shift[..., 0], dft_shift[..., 1]))
+                self.imshow(magnitude, ax=axes[1], title='Magnitude spectrum')
+                self.imshow(img_back, ax=axes[2], title='Filtered frame')
+                f.suptitle('Discrete Fourier Transform')
+                plt.show()
+        return 'PASS' if np.all(lpc_var > threshold) and np.all(filt_mean > threshold) else 'FAIL'
+
+    @staticmethod
+    def load_reference_frames(side):
+        refs = [np.load(str(x)) for x in Path(__file__).parent.glob('ref*.npy')]
+        refs = np.c_[refs]
+        return refs
+
+    @staticmethod
+    def imshow(frame, ax=None, title=None, **kwargs):
+        """plt.imshow with some convenient defaults for greyscale frames"""
+        h = ax or plt.gca()
+        defaults = {
+            'cmap': kwargs.pop('cmap', 'gray'),
+            'vmin': kwargs.pop('vmin', 0),
+            'vmax': kwargs.pop('vmax', 255)
+        }
+        h.imshow(frame, **defaults, **kwargs)
+        h.set(title=title)
+        h.set_axis_off()
+        return ax
 
 
 def run_all_qc(session, update=False, cameras=('left', 'right', 'body'), **kwargs):
