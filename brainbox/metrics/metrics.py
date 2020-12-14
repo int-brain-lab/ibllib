@@ -406,44 +406,6 @@ def firing_rate_fano_factor(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
     return ff, ffs, fr
 
 
-def isi_viol(ts, rp=0.002):
-    """
-    Computes the fraction of isi violations for a unit.
-
-    Parameters
-    ----------
-    ts : ndarray
-        The spike timestamps from which to compute the firing rate.
-    rp : float (optional)
-        The refractory period (in s).
-
-    Returns
-    -------
-    frac_isi_viol : float
-        The fraction of isi violations.
-    n_isi_viol : int
-        The number of isi violations.
-    isis : ndarray
-        The isis.
-
-    See Also
-    --------
-
-    Examples
-    --------
-    1) Get the fraction of isi violations, the total number of isi violations, and the array of
-    isis for unit 1.
-        >>> unit_idxs = np.where(spks_b['clusters'] == 1)[0]
-        >>> ts = spks_b['times'][unit_idxs]
-        >>> frac_isi_viol, n_isi_viol, isi = bb.metrics.isi_viol(ts)
-    """
-
-    isis = np.diff(ts)
-    v = np.where(isis < rp)[0]  # violations
-    frac_isi_viol = len(v) / len(ts)
-    return frac_isi_viol, len(v), isis
-
-
 def average_drift(feat, times):
     """
     Computes the cumulative drift (normalized by the total number of spikes) of a spike feature
@@ -603,7 +565,7 @@ def ptp_over_noise(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='i
     return ptp_sigma
 
 
-def contamination_ks2(ts, rp=0.002):
+def contamination_alt(ts, rp=0.002):
     """
     An estimate of the contamination of the unit (i.e. a pseudo false positive measure) based on
     the number of spikes, number of isi violations, and time between the first and last spike.
@@ -683,7 +645,7 @@ def contamination(ts, min_time, max_time, rp=0.002, min_isi=0.0001):
     1) Compute contamination estimate for unit 1, with a minimum isi for counting duplicate
     spikes of 0.1 ms.
         >>> ts = units_b['times']['1']
-        >>> ce = bb.metrics.contamination_ks2(ts, min_isi=0.0001)
+        >>> ce = bb.metrics.contamination_alt(ts, min_isi=0.0001)
     """
 
     duplicate_spikes = np.where(np.diff(ts) <= min_isi)[0]
@@ -865,6 +827,29 @@ def noise_cutoff(amps, quartile_length=.2, n_bins=100, n_low_bins=2):
     return cutoff
 
 
+def spike_sorting_metrics(times, clusters, amps, depths):
+    """
+    Computes:
+    -   cell level metrics (cf quick_unit_metrics)
+    -   label the metrics according to quality thresholds
+    -   estimates drift as a function of time
+    :param times: vector of spike times
+    :param clusters:
+    :param amplitudes:
+    :param depths:
+    :return:
+    """
+    # compute metrics and convert to `DataFrame`
+    df_units = pd.DataFrame(quick_unit_metrics(clusters, times, amps, depths))
+    # compute labels based on metrics
+    df_labels = pd.DataFrame(unit_labels(clusters, times, depths))
+    df_units = df_units.set_index('cluster_id', drop=False).join(df_labels.set_index('cluster_id'))
+    from brainbox.metrics import electrode_drift
+    electrode_drift.estimate_drift(times, amps, depths)
+
+    return df_units, None
+
+
 def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
                        params=METRICS_PARAMS):
     """
@@ -872,7 +857,19 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
     depths for a set of units.
 
     Metrics computed:
-        TODO list final set of metrics
+        'amp_max',
+        'amp_min',
+        'amp_median',
+        'amp_std_dB',
+        'contamination',
+        'contamination_alt',
+        'drift',
+        'missed_spikes_est',
+        'noise_cutoff',
+        'presence_ratio',
+        'presence_ratio_std',
+        'slidingRP_viol',
+        'spike_count'
 
     Parameters
     ----------
@@ -936,9 +933,8 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         'amp_median',
         'amp_std_dB',
         'contamination',
-        'contamination_ks2',
+        'contamination_alt',
         'drift',
-        'frac_isi_viol',
         'missed_spikes_est',
         'noise_cutoff',
         'presence_ratio',
@@ -982,8 +978,7 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         depths = spike_depths[ispikes]
 
         # compute metrics
-        r.frac_isi_viol[ic], _, _ = isi_viol(ts, rp=params['refractory_period'])
-        r.contamination_ks2[ic] = contamination_ks2(ts, rp=params['refractory_period'])
+        r.contamination_ks2[ic] = contamination_alt(ts, rp=params['refractory_period'])
         r.contamination[ic], _ = contamination(
             ts, tmin, tmax, rp=params['refractory_period'], min_isi=params['min_isi'])
         r.slidingRP_viol[ic] = slidingRP_viol(ts,

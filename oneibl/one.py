@@ -735,8 +735,11 @@ class OneAlyx(OneAbstract):
         if isinstance(dset, str):
             url = dset
         else:
-            url = next((fr['data_url'] for fr in dset['file_records'] if fr['data_url']), None)
+            url = next((fr['data_url'] for fr in dset['file_records']
+                        if fr['data_url'] and fr['exists']), None)
         if not url:
+            str_dset = Path(dset['collection']).joinpath(dset['name'])
+            _logger.warning(f"{str_dset} exist flag or url not found in Alyx")
             return
         assert url.startswith(self._par.HTTP_DATA_SERVER), \
             ('remote protocol and/or hostname does not match HTTP_DATA_SERVER parameter:\n' +
@@ -773,7 +776,7 @@ class OneAlyx(OneAbstract):
         local_path = str(target_dir) + os.sep + os.path.basename(url)
         if not keep_uuid:
             local_path = alfio.remove_uuid_file(local_path, dry=True)
-        if Path(local_path).exists() and not offline:
+        if Path(local_path).exists():
             # the local file hash doesn't match the dataset table cached hash
             hash_mismatch = hash and hashfile.md5(Path(local_path)) != hash
             file_size_mismatch = file_size and Path(local_path).stat().st_size != file_size
@@ -783,11 +786,11 @@ class OneAlyx(OneAbstract):
         # if there is no cached file, download
         else:
             clobber = True
-        if clobber:
+        if clobber and not offline:
             local_path, md5 = wc.http_download_file(
                 url, username=self._par.HTTP_DATA_SERVER_LOGIN,
                 password=self._par.HTTP_DATA_SERVER_PWD, cache_dir=str(target_dir),
-                clobber=clobber, offline=offline, return_md5=True)
+                clobber=clobber, return_md5=True)
             # post download, if there is a mismatch between Alyx and the newly downloaded file size
             # or hash flag the offending file record in Alyx for database maintenance
             hash_mismatch = hash and md5 != hash

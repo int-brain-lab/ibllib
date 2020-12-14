@@ -219,7 +219,7 @@ class EphysVideoCompress(tasks.Task):
         )
         output_files = ffmpeg.iblrig_video_compression(self.session_path, command)
         if len(output_files) == 0:
-            self.session_path.joinpath("")
+            output_files = None  # labels the task as empty if no output
         return output_files
 
 
