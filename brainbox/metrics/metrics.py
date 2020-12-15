@@ -13,9 +13,6 @@ Run the following to set-up the workspace to run the docstring examples:
 >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
 >>> clstrs_b = aio.load_object(path_to_alf_out, 'clusters')
 >>> units_b = bb.processing.get_units_bunch(spks_b)  # may take a few mins to compute
-
-TODO add spikemetrics as dependency?
-TODO metrics that could be added: iso_dist, l_ratio, d_prime, nn_hit, nn_miss, sil
 """
 
 import time
@@ -26,11 +23,13 @@ import scipy.ndimage.filters as filters
 import scipy.stats as stats
 import pandas as pd
 
+from ibllib.io import spikeglx
 from phylib.stats import correlograms
 import brainbox as bb
-from brainbox.core import Bunch
+from brainbox.core import Bunch, ismember
 from brainbox.processing import bincount2D
-from ibllib.io import spikeglx
+from brainbox.metrics import electrode_drift
+
 
 _logger = logging.getLogger('ibllib')
 
@@ -837,21 +836,22 @@ def spike_sorting_metrics(times, clusters, amps, depths):
     :param clusters:
     :param amplitudes:
     :param depths:
-    :return:
+    :return: data_frame of metrics (cluster records, columns are qc attributes)|
+    :return: dictionary of recording qc (keys 'time_scale' and 'drift_um')
     """
     # compute metrics and convert to `DataFrame`
     df_units = pd.DataFrame(quick_unit_metrics(clusters, times, amps, depths))
     # compute labels based on metrics
     df_labels = pd.DataFrame(unit_labels(clusters, times, depths))
     df_units = df_units.set_index('cluster_id', drop=False).join(df_labels.set_index('cluster_id'))
-    from brainbox.metrics import electrode_drift
-    electrode_drift.estimate_drift(times, amps, depths)
-
-    return df_units, None
+    # compute drift as a function of time and put in a dictionary
+    drift, ts = electrode_drift.estimate_drift(times, amps, depths)
+    rec_qc = {'time_scale': ts, 'drift_um': drift}
+    return df_units, rec_qc
 
 
 def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
-                       params=METRICS_PARAMS):
+                       params=METRICS_PARAMS, cluster_ids=None):
     """
     Computes single unit metrics from only the spike times, amplitudes, and
     depths for a set of units.
@@ -871,7 +871,7 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         'slidingRP_viol',
         'spike_count'
 
-    Parameters
+    Parameters (see the METRICS_PARAMS constant)
     ----------
     spike_clusters : ndarray_like
         A vector of the unit ids for a set of spikes.
@@ -881,6 +881,9 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         A vector of the amplitudes for a set of spikes.
     spike_depths : ndarray_like
         A vector of the depths for a set of spikes.
+    clusters_id: (optional) lists of cluster ids. If not all clusters are represented in the
+    spikes_clusters (ie. cluster has no spike), this will ensure the output size is consistent
+    with the input arrays.
     params : dict (optional)
         Parameters used for computing some of the metrics in the function:
             'presence_window': float
@@ -922,8 +925,8 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         >>> depths = m.depths
         >>> r = bb.metrics.quick_unit_metrics(cluster_ids, ts, amps, depths)
     """
-
-    cluster_ids = np.unique(spike_clusters)
+    if cluster_ids is None:
+        cluster_ids = np.unique(spike_clusters)
     nclust = cluster_ids.size
 
     metrics_list = [
@@ -957,15 +960,16 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
     r.spike_count = np.sum(presence_ratio, axis=1)
     r.firing_rate = r.spike_count / (tmax - tmin)
 
-    # computing amplitude statistical indicators
+    # computing amplitude statistical indicators by aggregating over cluster id
     camp = pd.DataFrame(np.c_[spike_amps, 20 * np.log10(spike_amps), spike_clusters],
                         columns=['amps', 'log_amps', 'clusters'])
     camp = camp.groupby('clusters')
-    assert np.all(camp.clusters.unique() == r['cluster_id'])
-    r.amp_min = np.array(camp['amps'].min())
-    r.amp_max = np.array(camp['amps'].max())
-    r.amp_median = np.array(10 ** (camp['log_amps'].median() / 20))  # this is the geometric median
-    r.amp_std_dB = np.array(camp['log_amps'].std())
+    ir, ib = ismember(r.cluster_id, camp.clusters.unique())
+    r.amp_min[ir] = np.array(camp['amps'].min())
+    r.amp_max[ir] = np.array(camp['amps'].max())
+    # this is the geometric median
+    r.amp_median[ir] = np.array(10 ** (camp['log_amps'].median() / 20))
+    r.amp_std_dB[ir] = np.array(camp['log_amps'].std())
 
     # loop over each cluster to compute the rest of the metrics
     for ic in np.arange(nclust):
@@ -978,7 +982,7 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         depths = spike_depths[ispikes]
 
         # compute metrics
-        r.contamination_ks2[ic] = contamination_alt(ts, rp=params['refractory_period'])
+        r.contamination_alt[ic] = contamination_alt(ts, rp=params['refractory_period'])
         r.contamination[ic], _ = contamination(
             ts, tmin, tmax, rp=params['refractory_period'], min_isi=params['min_isi'])
         r.slidingRP_viol[ic] = slidingRP_viol(ts,
@@ -996,6 +1000,7 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
 
         # wonder if there is a need to low-cut this
         r.drift[ic] = np.sum(np.abs(np.diff(depths))) / (tmax - tmin) * 3600
+
     return r
 
 
