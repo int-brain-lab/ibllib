@@ -5,7 +5,37 @@ import scipy.signal
 import ibllib.dsp.fourier as ft
 from ibllib.dsp import WindowGenerator, rms, rises, falls, fronts, smooth, shift, fit_phase,\
     fcn_cosine
-from ibllib.dsp.utils import parabolic_max
+from ibllib.dsp.utils import parabolic_max, sync_timestamps
+
+
+class TestSyncTimestamps(unittest.TestCase):
+
+    def test_timestamps_lin(self):
+        np.random.seed(4132)
+        n = 50
+        drift = 17.14
+        offset = 34.323
+        tsa = np.cumsum(np.random.random(n) * 10)
+        tsb = tsa * (1 + drift / 1e6) + offset
+
+        # test linear drift
+        _fcn, _drift = sync_timestamps(tsa, tsb)
+        assert np.all(np.isclose(_fcn(tsa), tsb))
+        assert np.isclose(drift, _drift)
+
+        # test missing indices on a
+        imiss = np.setxor1d(np.arange(n), [1, 2, 34, 35])
+        _fcn, _drift, _ia, _ib = sync_timestamps(tsa[imiss], tsb, return_indices=True)
+        assert np.all(np.isclose(_fcn(tsa[imiss[_ia]]), tsb[_ib]))
+
+        # test missing indices on b
+        _fcn, _drift, _ia, _ib = sync_timestamps(tsa, tsb[imiss], return_indices=True)
+        assert np.all(np.isclose(_fcn(tsa[_ia]), tsb[imiss[_ib]]))
+
+        # test missing indices on both
+        imiss2 = np.setxor1d(np.arange(n), [14, 17])
+        _fcn, _drift, _ia, _ib = sync_timestamps(tsa[imiss], tsb[imiss2], return_indices=True)
+        assert np.all(np.isclose(_fcn(tsa[imiss[_ia]]), tsb[imiss2[_ib]]))
 
 
 class TestParabolicMax(unittest.TestCase):
