@@ -88,7 +88,8 @@ def get_sessions(subj, date=None, one=None):
 
     if date is None:
         # compute from yesterday
-        latest_sess = (datetime.date.today() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        specified_date = (datetime.date.today() - datetime.timedelta(days=1))
+        latest_sess = specified_date.strftime("%Y-%m-%d")
         latest_minus_week = (datetime.date.today() -
                              datetime.timedelta(days=8)).strftime("%Y-%m-%d")
     else:
