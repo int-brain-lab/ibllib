@@ -1,6 +1,6 @@
 """
 Accessing DeepLabCut (DLC) traces
-=====================
+=================================
 This script illustrates how to access DLC results for a range of trials,
 filter them by likelihood and save as a dictionary of numpy arrays,
 with the keys being the tracked points and the entries being x,y
