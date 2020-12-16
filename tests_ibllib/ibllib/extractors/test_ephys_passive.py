@@ -11,15 +11,6 @@ import numpy as np
 class TestsPassiveExtractor(unittest.TestCase):
     def setUp(self):
         pass
-        # self.dir = tempfile.TemporaryDirectory()
-        # pl = Path(self.dir.name) / "raw_ephys_data" / "probe_left"
-        # pr = Path(self.dir.name) / "raw_ephys_data" / "probe_right"
-        # pl.mkdir(parents=True)
-        # pr.mkdir(parents=True)
-        # (pl / "iblrig_ephysData.raw_g0_t0.imec.lf.bin").touch()
-        # (pl / "iblrig_ephysData.raw_g0_t0.imec.ap.bin").touch()
-        # (pr / "iblrig_ephysData.raw_g0_t0.imec.lf.bin").touch()
-        # (pr / "iblrig_ephysData.raw_g0_t0.imec.ap.bin").touch()
 
     def test_load_passive_stim_meta(self):
         meta = passive._load_passive_stim_meta()
@@ -38,4 +29,3 @@ class TestsPassiveExtractor(unittest.TestCase):
 
     def tearDown(self):
         pass
-        # self.dir.cleanup()

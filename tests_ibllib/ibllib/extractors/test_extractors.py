@@ -1,14 +1,16 @@
-import logging
-import unittest
 import functools
+import logging
 import shutil
+import tempfile
+import unittest
 from pathlib import Path
 
-import numpy as np
-
 import alf.io
+import numpy as np
+import pandas as pd
 from ibllib.io import extractors
 from ibllib.io import raw_data_loaders as raw
+from ibllib.io.extractors.base import BaseExtractor
 
 
 def wheelMoves_fixture(func):
@@ -634,6 +636,40 @@ class TestWheelLoaders(unittest.TestCase):
         for file_position in path.rglob('_iblrig_encoderPositions.raw.*'):
             dy = raw._load_encoder_positions_file_lt5(file_position)
             self.assertTrue(dy.size > 18)
+
+
+class MockExtracor(BaseExtractor):
+    save_names = (
+        "some_file.csv",
+        "some_file.tsv",
+        "some_file.ssv",
+        "some_file.npy",
+    )
+    var_names = (
+        "csv",
+        "ssv",
+        "tsv",
+        "npy",
+    )
+
+    def _extract(self, **kwargs) -> tuple:
+        csv = pd.DataFrame([])
+        ssv = pd.DataFrame([])
+        tsv = pd.DataFrame([])
+        npy = np.array([])
+
+        return (csv, ssv, tsv, npy)
+
+
+class TestBaseExtractorSavingMethods(unittest.TestCase):
+    def setUp(self) -> None:
+        self.session_path = Path(tempfile.gettempdir()) / 'fake_session'
+        self.session_path.mkdir(exist_ok=True)
+        self.mock_extractor = MockExtracor(self.session_path)
+
+    def test_saving_method(self):
+        data, paths = self.mock_extractor.extract(save=True)
+        self.assertTrue(all([x.exists() for x in paths]))
 
 
 if __name__ == "__main__":
