@@ -1,3 +1,6 @@
+### Release Notes 1.5.29
+- add widefieldChoiceworld tasks for pipeline
+
 ### Release Notes 1.5.28
 - add opto laser tasks for pipeline
 
