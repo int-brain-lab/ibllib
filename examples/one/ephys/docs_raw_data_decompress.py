@@ -11,7 +11,6 @@ client codes (such as Matlab spike sorting KS2 algorithm) to run
 # Author: Olivier, Gaelle, Mayo
 
 from ibllib.io import spikeglx
-from pathlib import Path
 from oneibl.one import ONE
 
 one = ONE()

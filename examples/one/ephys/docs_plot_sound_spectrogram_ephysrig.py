@@ -52,4 +52,3 @@ ax.set_xlabel(r'Time (s)')
 ax.set_ylabel(r'Frequency (Hz)')
 plt.colorbar(im)
 plt.show()
-
