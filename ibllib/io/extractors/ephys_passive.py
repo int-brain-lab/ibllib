@@ -326,8 +326,8 @@ def _extract_passiveAudio_intervals(audio: dict) -> Tuple[np.array, np.array]:
 
     diff = soundOff_times - soundOn_times
     # Tone is ~100ms so check if diff < 0.3
-    toneOn_times = soundOn_times[diff < 0.3]
-    toneOff_times = soundOff_times[diff < 0.3]
+    toneOn_times = soundOn_times[diff <= 0.3]
+    toneOff_times = soundOff_times[diff <= 0.3]
     # Noise is ~500ms so check if diff > 0.3
     noiseOn_times = soundOn_times[diff > 0.3]
     noiseOff_times = soundOff_times[diff > 0.3]
@@ -529,7 +529,7 @@ class PassiveChoiceWorld(BaseExtractor):
             passivePeriods_df = None
             trfm = None
             treplay = None
-            raise e
+            return (None, None, None, None)
 
         try:
             # RFMapping
@@ -539,6 +539,7 @@ class PassiveChoiceWorld(BaseExtractor):
         except Exception as e:
             log.error(f"Failed to extract RFMapping datasets: {e}")
             passiveRFM_times = None
+
         try:
             (passiveGabor_df, passiveStims_df,) = extract_task_replay(
                 self.session_path, sync=sync, sync_map=sync_map, treplay=treplay
@@ -557,6 +558,7 @@ class PassiveChoiceWorld(BaseExtractor):
             plot_rfmapping(passiveRFM_times, ax=ax)
             plot_gabor_times(passiveGabor_df, ax=ax)
             plot_stims_times(passiveStims_df, ax=ax)
+            plt.show()
 
         return (
             passivePeriods_df,  # _ibl_passivePeriods.intervalsTable.csv
@@ -570,10 +572,16 @@ if __name__ == "__main__":
     # Working session
     session_path = "/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_054/2020-10-10/001"
     # # Broken session
-#     session_path = "/home/nico/Downloads/FlatIron/integration/ephys/\
-# choice_world/KS022/2019-12-10/001"
+    #     session_path = "/home/nico/Downloads/FlatIron/integration/ephys/\
+    # choice_world/KS022/2019-12-10/001"
     pcw = PassiveChoiceWorld(session_path)
-    data, paths = pcw.extract(save=True)
+    data, paths = pcw.extract(save=False)
+    (
+        passivePeriods_df,
+        passiveRFM_times,
+        passiveGabor_df,
+        passiveStims_df
+    ) = data
     # sp = '/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_029/2020-10-07/001'
     # extract_passive_choice_world(sp)
     # extract_passive_choice_world(sp, plot=True)
