@@ -331,6 +331,8 @@ class EphysPassive(tasks.Task):
     def _run(self):
         """returns a list of pathlib.Paths. """
         data, paths = ephys_passive.PassiveChoiceWorld(self.session_path).extract(save=True)
+        if any([x is None for x in paths]):
+            self.status = -1
         # Register?
         return paths
 
