@@ -6,16 +6,10 @@ import numpy as np
 from ibllib.pipes.ephys_alignment import EphysAlignment
 from ibllib.qc import base
 from oneibl.patcher import FTPPatcher
+from ibllib.qc.base import CRITERIA as CRITERIA_BASE
 
 _log = logging.getLogger('ibllib')
 CRITERIA = {"PASS": 0.8}
-
-CRITERIA_BASE = {'CRITICAL': 4,
-                 'FAIL': 3,
-                 'WARNING': 2,
-                 'PASS': 1,
-                 'NOT_SET': 0
-                 }
 
 
 class AlignmentQC(base.QC):

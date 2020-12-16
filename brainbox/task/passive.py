@@ -65,7 +65,7 @@ def get_on_off_times_and_positions(rf_map):
 
 
 def get_rf_map_over_depth(rf_map_times, rf_map_pos, rf_stim_frames, spike_times, spike_depths,
-                          T_BIN=0.01, D_BIN=80, pre_stim=0.05, post_stim=1.5, y_lim=[0, 3840],
+                          t_bin=0.01, d_bin=80, pre_stim=0.05, post_stim=1.5, y_lim=[0, 3840],
                           x_lim=None):
     """
     Compute receptive field map for each stimulus onset binned across depth
@@ -76,8 +76,8 @@ def get_rf_map_over_depth(rf_map_times, rf_map_pos, rf_stim_frames, spike_times,
     rf_stim_frames
     spike_times: array of spike times
     spike_depths: array of spike depths along probe
-    T_BIN: bin size along time dimension
-    D_BIN: bin size along depth dimension
+    t_bin: bin size along time dimension
+    d_bin: bin size along depth dimension
     pre_stim: time period before rf map stim onset to epoch around
     post_stim: time period after rf map onset to epoch around
     y_lim: values to limit to in depth direction
@@ -90,12 +90,12 @@ def get_rf_map_over_depth(rf_map_times, rf_map_pos, rf_stim_frames, spike_times,
     depths: depths between which receptive field map has been computed
     """
 
-    binned_array, times, depths = bincount2D(spike_times, spike_depths, T_BIN, D_BIN,
+    binned_array, times, depths = bincount2D(spike_times, spike_depths, t_bin, d_bin,
                                              ylim=y_lim, xlim=x_lim)
 
     x_bin = len(np.unique(rf_map_pos[:, 0]))
     y_bin = len(np.unique(rf_map_pos[:, 1]))
-    n_bins = int((pre_stim + post_stim) / T_BIN)
+    n_bins = int((pre_stim + post_stim) / t_bin)
 
     rf_map = {}
 
@@ -156,8 +156,8 @@ def get_svd_map(rf_map):
     return rf_svd
 
 
-def get_stim_aligned_activity(stim_events, spike_times, spike_depths, z_score_flag=True, D_BIN=20,
-                              T_BIN=0.01, pre_stim=0.4, post_stim=1, base_stim=1,
+def get_stim_aligned_activity(stim_events, spike_times, spike_depths, z_score_flag=True, d_bin=20,
+                              t_bin=0.01, pre_stim=0.4, post_stim=1, base_stim=1,
                               y_lim=[0, 3840], x_lim=None):
     """
 
@@ -181,10 +181,10 @@ def get_stim_aligned_activity(stim_events, spike_times, spike_depths, z_score_fl
     rate
     """
 
-    binned_array, times, depths = bincount2D(spike_times, spike_depths, T_BIN, D_BIN,
+    binned_array, times, depths = bincount2D(spike_times, spike_depths, t_bin, d_bin,
                                              ylim=y_lim, xlim=x_lim)
-    n_bins = int((pre_stim + post_stim) / T_BIN)
-    n_bins_base = int(np.ceil((base_stim - pre_stim) / T_BIN))
+    n_bins = int((pre_stim + post_stim) / t_bin)
+    n_bins_base = int(np.ceil((base_stim - pre_stim) / t_bin))
 
     stim_activity = {}
     for stim_type, stim_times in stim_events.items():
