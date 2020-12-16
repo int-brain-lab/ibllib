@@ -1,44 +1,39 @@
-'''
-This code demonstrates how to decompress raw ephys
-(binary) data - This is necessary for some client codes
-(such as Matlab spike sorting KS2 algorithm) to run
+"""
+Download and decompress raw ephys data
+======================================
 
-(example taken of the LFP, but can be done with AP files similarly)
-'''
-# Author: Olivier, Gaelle
+This code demonstrates how to decompress raw ephys (binary) data - This is necessary for some
+client codes (such as Matlab spike sorting KS2 algorithm) to run
+
+(example taken for nidq.cbin file, but also applicable for lf.cbin and ap.cbin files)
+"""
+
+# Author: Olivier, Gaelle, Mayo
 
 from ibllib.io import spikeglx
-from pathlib import Path
 from oneibl.one import ONE
 
-# === Option 1 === Download a dataset of interest
-# See download example.
+one = ONE()
+# Download a dataset of interest
+eid = one.search(subject='ZM_2240', date_range='2020-01-22')[0]
 
-# === Option 2 === Input a file locally, e.g.
-# NB the .ch file matching the cbin file name must exit in the same folder
-efile = Path("/Users/gaelle/Downloads/FlatIron/examples/ephys/"
-             "mainenlab/Subjects/ZM_2240/2020-01-22/001/raw_ephys_data/probe00/"
-             "_spikeglx_ephysData_g0_t0.imec0.lf.cbin")
+dtypes = ['ephysData.raw.nidq',  # change this to ephysData.raw.lf or ephysData.raw.ap for
+          'ephysData.raw.ch',
+          'ephysData.raw.meta']
 
-EXAMPLE_OVERWRITE = True  # Put to False when wanting to run the script on your data
 
-# ======== DO NOT EDIT BELOW (used for example testing) ====
+_ = one.load(eid, dataset_types=dtypes, download_only=True)
 
-if EXAMPLE_OVERWRITE:
-    one = ONE()
-    # TODO Olivier : Function to download examples folder
-    cachepath = Path(one._par.CACHE_DIR)
-    efile = cachepath.joinpath('examples', 'ephys',
-                               'mainenlab', 'Subjects', 'ZM_2240',
-                               '2020-01-22', '001', 'raw_ephys_data', 'probe00',
-                               '_spikeglx_ephysData_g0_t0.imec0.lf.cbin')
+# Get file paths of interest
+raw_ephys_path = one.path_from_eid(eid).joinpath('raw_ephys_data')
+efile = raw_ephys_path.joinpath('_spikeglx_ephysData_g0_t0.nidq.cbin')
 
-# === Read the files and get the data ===
+# Read the files and get the data
 # Enough to do analysis
 sr = spikeglx.Reader(efile)
 
-# === Decompress the data ===
+# Decompress the data
 # Used by client code, e.g. Matlab for spike sorting
 # Give new path output name
-sr.decompress_file(keep_original=True,  # Keeps the original file
-                   overwrite=True)  # Overwrite the out file in case it already exists
+sr.decompress_file(keep_original=True, overwrite=True)  # Keep the original file and overwrite any
+# previously decompressed file
