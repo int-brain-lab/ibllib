@@ -1,6 +1,10 @@
 """Camera QC
 This module runs a list of quality control metrics on the camera and extracted video data.
 
+Example - Run camera QC, downloading all but video file
+    qc = CameraQC(eid, download_data=True, stream=True)
+    qc.run()
+
 Question:
     We're not extracting the audio based on TTL length.  Is this a problem?
 """
@@ -26,7 +30,7 @@ from ibllib.io import raw_data_loaders as raw
 from oneibl.stream import VideoStreamer
 import alf.io as alfio
 from brainbox.core import Bunch
-from brainbox.io.one import path_to_url
+from brainbox.io.one import path_to_url, datasets_from_type
 from . import base
 
 _log = logging.getLogger('ibllib')
@@ -183,7 +187,7 @@ class CameraQC(base.QC):
         download_data = not alfio.is_session_path(session_path_or_eid)
         self.download_data = kwargs.pop('download_data', download_data)
         self.stream = kwargs.pop('stream', True)
-        self.n_samples = kwargs.pop('n_samples', 2)
+        self.n_samples = kwargs.pop('n_samples', 100)
         super().__init__(session_path_or_eid, **kwargs)
 
         # Data
@@ -196,7 +200,6 @@ class CameraQC(base.QC):
 
         self.type = get_session_extractor_type(self.session_path) or None
         self.data = Bunch()
-        self.frame_sampels = None
         self.frame_samples_idx = None
 
         # QC outcomes map
@@ -212,7 +215,7 @@ class CameraQC(base.QC):
         """
         if download_data is not None:
             self.download_data = download_data
-        if self.download_data:
+        if self.one:
             self._ensure_required_data()
         _log.info('Gathering data for QC')
 
@@ -232,43 +235,68 @@ class CameraQC(base.QC):
             _, audio_ttls = raw.load_bpod_fronts(self.session_path)
             self.data['audio'] = audio_ttls['times'][::2]
 
+        # Gather information from video file
+        _log.info('Inspecting video file...')
+        # Get basic properties of video
+        try:
+            self.data['video'] = get_video_meta(self.video_path, one=self.one)
+            # Sample some frames from the video file
+            indices = np.linspace(100, self.data['video'].length - 100, self.n_samples).astype(int)
+            self.frame_samples_idx = indices
+            self.data['frame_samples'] = get_video_frames_preload(self.video_path, indices,
+                                                                  mask=np.s_[:, :, 0])
+        except AssertionError:
+            _log.error('Failed to read video file; setting outcome to CRITICAL')
+            self.data['video'] = self.data['frame_samples'] = None
+            self._outcome = 'CRITICAL'
+
         # Load extracted frame times
         alf_path = self.session_path / 'alf'
         try:
             assert not extract_times
             self.data['frame_times'] = alfio.load_object(alf_path, f'{self.side}Camera')['times']
         except (ALFObjectNotFound, AssertionError):  # Re-extract
-            # TODO Flag for extracting single camera's data
-            kwargs = dict(sync=sync, chmap=chmap) if self.type == 'ephys' else {}
+            kwargs = dict(video_paths=self.video_path, camera=self.side)
+            if self.type == 'ephys':
+                kwargs = {**kwargs, 'sync': sync, 'chmap': chmap}  # noqa
             outputs, _ = extract_all(self.session_path, self.type, save=False, **kwargs)
-            self.data['frame_times'] = outputs[f'{self.side}_camera_timestamps']
+            self.data['frame_times'] = outputs[f'{self.side}_camera_timestamps'][self.side]
 
-        # Gather information from video file
-        _log.info('inspecting video file...')
-        # Get basic properties of video
-        self.data['video'] = get_video_meta(self.video_path, one=self.one)
-        # Sample some frames from the video file
-        indices = np.linspace(100, self.data['video'].length - 100, self.n_samples).astype(int)
-        self.frame_samples_idx = indices
-        self.data['frame_samples'] = get_video_frames_preload(self.video_path, indices,
-                                                              mask=np.s_[:, :, 0])
         # Load Bonsai frame timestamps
         ssv_times = raw.load_camera_ssv_times(self.session_path, self.side)
         self.data['bonsai_times'], self.data['camera_times'] = ssv_times
 
     def _ensure_required_data(self):
         """
-        TODO make static method with side as optional arg; download cameras individually,
-        remove assert
+        Ensures the datasets required for QC are local.  If the download_data attribute is True,
+        any missing data are downloaded.  If all the data are not present locally at the end of
+        it an exception is raised.  If the stream attribute is True, the video file is not
+        required to be local, however it must be remotely accessible.
+
+        TODO make static method with side as optional arg
         :return:
         """
         assert self.one is not None, 'ONE required to download data'
         # Get extractor type
         is_ephys = 'ephys' in (self.type or self.one.get_details(self.eid)['task_protocol'])
         dtypes = self.dstypes + self.dstypes_fpga if is_ephys else self.dstypes
-        files = self.one.load(self.eid,
-                              dataset_types=dtypes, download_only=True)
-        assert not any(file is None for file in files)
+        for dstype in dtypes:
+            dataset = datasets_from_type(self.eid, dstype, self.one)
+            if 'camera' in dstype.lower():  # Download individual camera file
+                dataset = [d for d in dataset if self.side in d]
+            if any(x.endswith('.mp4') for x in dataset) and self.stream:
+                names = [x.name for x in self.one.list(self.eid)]
+                assert f'_iblrig_{self.side}Camera.raw.mp4' in names, 'No remote video file found'
+                continue
+            required = (dstype not in ('camera.times', '_iblrig_Camera.raw'))
+            collection = 'raw_behavior_data' if dstype == '_iblrig_taskSettings.raw' else None
+            kwargs = {'download_only': True, 'collection': collection}
+            present = (
+                (self.one.load_dataset(self.eid, d, **kwargs) for d in dataset)
+                if self.download_data
+                else (next(self.session_path.rglob(d), None) for d in dataset)
+            )
+            assert (dataset and all(present)) or not required, f'Dataset {dstype} not found'
         self.type = get_session_extractor_type(self.session_path)
 
     def run(self, update: bool = False, **kwargs) -> (str, dict):
@@ -277,9 +305,11 @@ class CameraQC(base.QC):
         :param update: if True, updates the session QC fields on Alyx
         :param download_data: if True, downloads any missing data if required
         :param extract_times: if True, re-extracts the camera timestamps from the raw data
-        :returns:
+        :returns: overall outcome as a str, a dict of checks and their outcomes
+        TODO Ensure that when pinstate QC NOT_SET it is not used in overall outcome
         """
         _log.info('Computing QC outcome')
+        namespace = f'video{self.side.capitalize()}'
         if not self.data:
             self.load_data(**kwargs)
 
@@ -287,7 +317,6 @@ class CameraQC(base.QC):
             return isfunction(x) and x.__name__.startswith('check_')
 
         checks = getmembers(CameraQC, is_metric)
-        namespace = f'video{self.side.capitalize()}'
         self.metrics = {f'_{namespace}_' + k[6:]: fn(self) for k, fn in checks}
         all_pass = all(x is None or x == 'PASS' for x in self.metrics.values())
         self.outcome = 'PASS' if all_pass else 'FAIL'
@@ -297,43 +326,67 @@ class CameraQC(base.QC):
             self.update(self.outcome, namespace)
         return self.outcome, self.metrics
 
-    def check_contrast(self, display=False):
-        """Check that the video contrast range
-        Assumes that the frame samples are 2D (no colour channels)
+    def check_brightness(self, bounds=(20, 100), max_std=20, display=False):
+        """Check that the video brightness is within a given range
+        The mean brightness of each frame must be with the bounds provided, and the standard
+        deviation across samples frames should be less then the given value.  Assumes that the
+        frame samples are 2D (no colour channels).
+
+        :param bounds: For each frame, check that: bounds[0] < M < bounds[1], where M = mean(frame)
+        :param max_std: The standard deviation of the frame luminance means must be less than this
+        :param display: When True the mean frame luminance is plotted against sample frames.
+        The sample frames with the lowest and highest mean luminance are shown.
         """
-        MIN_MAX = [20, 80]
-        MIN_STD = 20
+        if self.data['frame_samples'] is None:
+            return 'NOT_SET'
         brightness = self.data['frame_samples'].mean(axis=(1, 2))
         # dims = self.data['frame_samples'].shape
         # brightness /= np.array((*dims[1:], 255)).prod()  # Normalize
 
-        within_range = np.logical_and(brightness > MIN_MAX[0],
-                                      brightness < MIN_MAX[1])
-        passed = within_range.all() and np.std(brightness) < MIN_STD
+        within_range = np.logical_and(brightness > bounds[0],
+                                      brightness < bounds[1])
+        passed = within_range.all() and np.std(brightness) < max_std
         if display:
-            plt.figure()
-            plt.plot(brightness, label='brightness')
-            ax = plt.gca()
+            f = plt.figure()
+            gs = f.add_gridspec(2, 3)
+            indices = self.frame_samples_idx
+            # Plot mean frame luminance
+            ax = f.add_subplot(gs[:2, :2])
+            plt.plot(indices, brightness, label='brightness')
             ax.set(
-                xlabel='brightness (mean pixel)',
-                ylabel='uniformly sampled frames',
+                xlabel='frame #',
+                ylabel='brightness (mean pixel)',
                 title='Brightness')
-            ax.hlines(MIN_MAX, 0, self.n_samples, colors='r', linestyles=':', label='bounds')
+            ax.hlines(bounds, 0, indices[-1], colors='r', linestyles=':', label='bounds')
             ax.legend()
-
+            # Plot min-max frames
+            for i, idx in enumerate((np.argmax(brightness), np.argmin(brightness))):
+                a = f.add_subplot(gs[i, 2])
+                ax.annotate('*',  (indices[idx], brightness[idx]),  # this is the point to label
+                            textcoords="offset points", xytext=(0, 1),  ha='center')
+                frame = self.data['frame_samples'][idx]
+                title = ('min' if i else 'max') + ' mean luminance = %.2f' % brightness[idx]
+                self.imshow(frame, ax=a, title=title)
         return 'PASS' if passed else 'FAIL'
 
     def check_file_headers(self):
         """Check reported frame rate matches FPGA frame rate"""
+        if self.data['video_meta'] is None:
+            return 'NOT_SET'
         expected = self.video_meta[self.type][self.side]
         return 'PASS' if self.data['video']['fps'] == expected['fps'] else 'FAIL'
 
-    def check_framerate(self):
-        """Check camera times match specified frame rate for camera"""
-        THRESH = 1.  # NB: Does not take into account dropped frames
+    def check_framerate(self, threshold=1.):
+        """Check camera times match specified frame rate for camera
+
+        :param threshold: The maximum absolute difference between timestamp sample rate and video
+        frame rate.  NB: Does not take into account dropped frames.
+        """
+        if self.data['video_meta'] is None:
+            return 'NOT_SET'
         fps = self.video_meta[self.type][self.side]['fps']
         Fs = 1 / np.median(np.diff(self.data['frame_times']))  # Approx. frequency of camera
-        return 'PASS' if Fs - fps < THRESH else 'FAIL'
+        return 'PASS' if Fs - fps < threshold else 'FAIL'
 
     def check_pin_state(self, display=False):
         """Check the pin state reflects Bpod TTLs"""
@@ -363,16 +416,23 @@ class CameraQC(base.QC):
 
         return 'PASS' if size_matches and correct_threshold and state_ttl_matches else 'FAIL'
 
-    def check_dropped_frames(self):
-        """Check how many frames were reported missing"""
-        THRESH = .1  # Percent
+    def check_dropped_frames(self, threshold=.1):
+        """Check how many frames were reported missing
+
+        :param threshold: The maximum allowable percentage of dropped frames
+        """
+        if None in (self.data['video'], self.data['count']):
+            return 'NOT_SET'
         size_matches = self.data['video']['length'] == self.data['count'].size
         assert np.all(np.diff(self.data['count']) > 0), 'frame count not strictly increasing'
         dropped = np.diff(self.data['count']).astype(int) - 1
-        return 'PASS' if size_matches and (sum(dropped) / len(dropped) * 100) < THRESH else 'FAIL'
+        pct_dropped = (sum(dropped) / len(dropped) * 100)
+        return 'PASS' if size_matches and pct_dropped < threshold else 'FAIL'
 
     def check_timestamps(self):
         """Check that the camera.times array is reasonable"""
+        if None in (self.data['frame_times'], self.data['video']):
+            return 'NOT_SET'
         # Check frame rate matches what we expect
         expected = 1 / self.video_meta[self.type][self.side]['fps']
         # TODO Remove dropped frames from test
@@ -388,6 +448,8 @@ class CameraQC(base.QC):
 
     def check_resolution(self):
         """Check that the timestamps and video file resolution match what we expect"""
+        if self.data['video'] is None:
+            return 'NOT_SET'
         actual = self.data['video']
         expected = self.video_meta[self.type][self.side]
         match = actual['width'] == expected['width'] and actual['height'] == expected['height']
@@ -397,17 +459,29 @@ class CameraQC(base.QC):
         """Check wheel motion in video correlates with the rotary encoder signal"""
         pass
 
-    def check_position(self, hist_thresh=0.7, metric=cv2.TM_CCOEFF_NORMED,
-                       display=False, test=False):
+    def check_position(self, hist_thresh=0.7, pos_thresh=100, metric=cv2.TM_CCOEFF_NORMED,
+                       display=False, test=False, roi=None):
         """Check camera is positioned correctly
         For the template matching zero-normalized cross-correlation (default) should be more
-        robust to exposer (which we're not checking here).  The L2 norm (TM_SQDIFF) should
+        robust to exposure (which we're not checking here).  The L2 norm (TM_SQDIFF) should
         also work.
+
+        :param hist_thresh: The minimum histogram cross-correlation threshold to pass (0-1).
+        :param pos_thresh: The maximum number of pixels off that the template matcher may be off by
+        :param metric: The metric to use for template matching.
+        :param roi: A tuple of indices for the face template in the for ((y1, y2), (x1, x2))
         """
-        if self.side in ('right', 'body'):
+        if not test and self.data['frame_samples'] is None:
             return 'NOT_SET'
-        # TODO Save only histogram
-        refs = self.load_reference_frames('left')
+
+        ROI = {
+            'left': ((45, 346), (138, 501)),
+            'right': ((14, 174), (430, 618)),
+            'body': ((141, 272), (90, 339))
+        }
+        roi = roi or ROI[self.side]
+        (y1, y2), (x1, x2) = roi
+        refs = self.load_reference_frames(self.side)
 
         # Method 1: compareHist
         ref_h = cv2.calcHist([refs[0]], [0], None, [256], [0, 256])
@@ -417,15 +491,8 @@ class CameraQC(base.QC):
         hist_correlates = all(x > hist_thresh for x in corr)
 
         # Method 2:
-        # roi = (
-        #     np.arange(138, 501, dtype=int),  # col
-        #     np.arange(45, 346, dtype=int)    # row
-        # )
-        roi = {
-            'left': ((45, 346), (138, 501))
-        }
-        template = refs[0][tuple(slice(*r) for r in roi['left'])]
-        (y1, y2), (x1, x2) = roi['left']
+        # TODO Ensure template fully in frame
+        template = refs[0][tuple(slice(*r) for r in roi)]
         top_left = []
         for frame in frames:
             res = cv2.matchTemplate(frame, template, metric)
@@ -443,8 +510,8 @@ class CameraQC(base.QC):
             ax0.imshow(img, cmap='gray', vmin=0, vmax=255)
             bounds = (x1 - err[0], x2 - err[0], y2 - err[1], y1 - err[1])
             ax0.imshow(template, cmap='gray', alpha=0.5, extent=bounds)
-            xy = (x1 - 60, y1 - 60)
-            ax0.add_patch(Rectangle(xy, x2-x1+120, y2-y1+120,
+            xy = (x1 - pos_thresh, y1 - pos_thresh)
+            ax0.add_patch(Rectangle(xy, x2 - x1 + (pos_thresh * 2), y2 - y1 +(pos_thresh * 2),
                                     fill=True, facecolor='green', lw=0, alpha=0.2))
             xy = (x1 - err[0], y1 - err[1])
             ax0.add_patch(Rectangle(xy, x2-x1, y2-y1,
@@ -466,11 +533,11 @@ class CameraQC(base.QC):
             plt.legend()
             plt.suptitle('Check position')
             plt.show()
-        face_aligned = all(np.abs(err) < 60)
+        face_aligned = all(np.abs(err) < pos_thresh)
 
         return 'PASS' if face_aligned and hist_correlates else 'FAIL'
 
-    def check_focus(self, n=5, threshold=100, display=False, test=False):
+    def check_focus(self, n=20, threshold=100, roi=None, display=False, test=False):
         """Check video is in focus
         Two methods are used here: Looking at the high frequencies with a DFT and
         applying a Laplacian HPF and looking at the variance.
@@ -483,13 +550,21 @@ class CameraQC(base.QC):
             - The image may be overall in focus but the places we care about can still be out of
               focus (namely the face).  For this we'll take 2 ROIs - face and wheel/paws.
         """
-        if self.side in ('right', 'body'):
+        if not test and self.data['frame_samples'] is None:
             return 'NOT_SET'
+
+        ROI = {
+            'left': (np.s_[:400, :561], np.s_[500:, 100:800]),  # (face, wheel)
+            'right': (np.s_[:196, 397:], np.s_[221:, 255:]),
+            'body': (np.s_[143:274, 84:433],)  # body holder
+        }
+        roi = roi or ROI[self.side]
+
         if test:
             """In test mode load a reference frame and run it through a normalized box filter with
             increasing kernel size.
             """
-            idx = 0
+            idx = (0,)
             ref = self.load_reference_frames(self.side)[idx]
             img = np.empty((n, *ref.shape), dtype=np.uint8)
             kernal_sz = np.unique(np.linspace(0, 15, n, dtype=int))
@@ -507,36 +582,34 @@ class CameraQC(base.QC):
             img = self.data['frame_samples'][idx]
 
         # A measure of the sharpness effectively taking the second derivative of the image
-        roi = {
-            'left': (np.s_[:400, :561], np.s_[500:, 100:800])  # (face, wheel)
-        }
 
-        lpc_var = np.empty((min(n, len(img)), len(roi['left'])))
+        lpc_var = np.empty((min(n, len(img)), len(roi)))
         for i, frame in enumerate(img[::-1]):
             lpc = cv2.Laplacian(frame, cv2.CV_16S, ksize=1)
-            lpc_var[i] = [lpc[mask].var() for mask in roi[self.side]]
+            lpc_var[i] = [lpc[mask].var() for mask in roi]
 
         if display:
             # Plot the first sample image
             f = plt.figure()
-            gs = f.add_gridspec(len(roi[self.side]), 4)
-            f.add_subplot(gs[:, 0])
+            gs = f.add_gridspec(len(roi) + 1, 3)
+            f.add_subplot(gs[0:len(roi), 0])
             self.imshow(img[0], title=f'Frame #{self.frame_samples_idx[idx[0]]}')
             # Plot the ROIs with and without filter
             lpc = cv2.Laplacian(img[0], cv2.CV_16S, ksize=1)
             abs_lpc = cv2.convertScaleAbs(lpc)
-            for i, r in enumerate(roi[self.side]):
+            for i, r in enumerate(roi):
                 f.add_subplot(gs[i, 1])
                 self.imshow(img[0][r], title=f'ROI #{i + 1}')
                 f.add_subplot(gs[i, 2])
                 self.imshow(abs_lpc[r], title=f'ROI #{i + 1} - Lapacian filter')
             f.suptitle('Laplacian blur detection')
-            # TODO Add variance over frames
-            ax = f.add_subplot(gs[1, 0])
+            # Plot variance over frames
+            ax = f.add_subplot(gs[len(roi), :])
             ln = plt.plot(lpc_var)
             [l.set_label(f'ROI #{i + 1}') for i, l in enumerate(ln)]
             ax.axhline(threshold, 0, n, linestyle=':', color='r', label='lower threshold')
             ax.set(xlabel='Frame sample', ylabel='Variance of the Laplacian')
+            plt.tight_layout()
             plt.legend()
 
         # Second test is to highpass with dft
@@ -570,7 +643,7 @@ class CameraQC(base.QC):
 
     @staticmethod
     def load_reference_frames(side):
-        refs = [np.load(str(x)) for x in Path(__file__).parent.glob('ref*.npy')]
+        refs = [np.load(str(x)) for x in Path(__file__).parent.glob(f'ref*_{side}.npy')]
         refs = np.c_[refs]
         return refs
 
@@ -589,7 +662,7 @@ class CameraQC(base.QC):
         return ax
 
 
-def run_all_qc(session, update=False, cameras=('left', 'right', 'body'), **kwargs):
+def run_all_qc(session, update=False, cameras=('left', 'right', 'body'), stream=True, **kwargs):
     """Run QC for all cameras
     Run the camera QC for left, right and body cameras.
     :param session: A session path or eid.
@@ -599,6 +672,7 @@ def run_all_qc(session, update=False, cameras=('left', 'right', 'body'), **kwarg
     """
     qc = {}
     for camera in cameras:
-        qc[camera] = CameraQC(session, side=camera, one=kwargs.pop('one', None))
+        qc[camera] = CameraQC(session, side=camera, stream=stream,
+                              one=kwargs.pop('one', None))
         qc[camera].run(update=update, **kwargs)
     return qc
