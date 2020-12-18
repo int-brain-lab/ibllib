@@ -113,11 +113,12 @@ def get(silent=False):
     return patch_migration_params(iopar.read(_PAR_ID_STR, default=default()))
 
 
-def patch_migration_params(par):
+def patch_migration_params(par, save=True):
     if par.HTTP_DATA_SERVER[:5] == "http:":
         par = par.set(
             "HTTP_DATA_SERVER", "".join([par.HTTP_DATA_SERVER[:4], "s", par.HTTP_DATA_SERVER[4:]])
         )
-        iopar.write(_PAR_ID_STR, par)
+        if save:
+            iopar.write(_PAR_ID_STR, par)
 
     return par
