@@ -240,7 +240,7 @@ class AlyxClient(metaclass=UniqueSingletons):
         _logger.debug(f"{self._base_url + rest_query}, headers: {self._headers}")
         headers = self._headers.copy()
         if files is None:
-            data = json.dumps(data) if isinstance(data, dict) else data
+            data = json.dumps(data) if isinstance(data, dict) or isinstance(data, list) else data
             headers['Content-Type'] = 'application/json'
         r = reqfunction(self._base_url + rest_query, stream=True, headers=headers,
                         data=data, files=files)

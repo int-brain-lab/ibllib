@@ -1,3 +1,11 @@
+### Release Notes develop
+- Added passive extractor
+- passive extraction task and pipeline deployment
+- BaseExtractor class save method now saves npy, csv, ssv and tsv form file name extension
+
+### Release Notes 1.5.29
+- add widefieldChoiceworld tasks for pipeline
+
 ### Release Notes 1.5.28
 - add opto laser tasks for pipeline
 
