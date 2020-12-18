@@ -2,11 +2,14 @@ import json
 from pathlib import Path
 import unittest
 import uuid
+from datetime import timedelta
 
 import numpy as np
 
+from oneibl.one import ONE
 from brainbox.core import intersect2d, ismember2d, ismember
 from brainbox.io.parquet import uuid2np, np2uuid, rec2col, np2str
+import brainbox.io.video as video
 
 
 class TestParquet(unittest.TestCase):
@@ -74,3 +77,73 @@ class TestParquet(unittest.TestCase):
         uuids = [uuid.uuid4() for _ in np.arange(4)]
         np_uuids = uuid2np(uuids)
         assert np2uuid(np_uuids) == uuids
+
+
+class TestVideo(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.one = ONE(
+            base_url="https://test.alyx.internationalbrainlab.org",
+            username="test_user",
+            password="TapetesBloc18"
+        )
+
+    def setUp(self) -> None:
+        self.eid = '8dd0fcb0-1151-4c97-ae35-2e2421695ad7'
+        self.url = ('http://ibl.flatironinstitute.org/mainenlab/'
+                    'Subjects/ZM_1743/2019-06-14/001/raw_video_data/'
+                    '_iblrig_leftCamera.raw.71cfeef2-2aa5-46b5-b88f-ca07e3d92474.mp4')
+
+    def test_label_from_path(self):
+        # Test file path
+        session_path = self.one.path_from_eid(self.eid)
+        video_path = session_path / 'raw_video_data' / '_iblrig_bodyCamera.raw.mp4'
+        label = video.label_from_path(video_path)
+        self.assertEqual('body', label)
+        # Test URL
+        label = video.label_from_path(self.url)
+        self.assertEqual('left', label)
+        # Test file name
+        label = video.label_from_path('_iblrig_rightCamera.raw.mp4')
+        self.assertEqual('right', label)
+        # Test wrong file
+        label = video.label_from_path('_iblrig_taskSettings.raw.json')
+        self.assertIsNone(label)
+
+    def test_url_from_eid(self):
+        actual = video.url_from_eid(self.eid, 'left', self.one)
+        self.assertEqual(self.url, actual)
+        actual = video.url_from_eid(self.eid, one=self.one)
+        expected = {'left': self.url}
+        self.assertEqual(expected, actual)
+        actual = video.url_from_eid(self.eid, label=('left', 'right'), one=self.one)
+        expected = {'left': self.url, 'right': None}
+        self.assertEqual(expected, actual)
+
+    def test_get_video_meta(self):
+        actual = video.get_video_meta(self.url, self.one)
+        expected = {
+            'length': 144120,
+            'fps': 30,
+            'width': 1280,
+            'height': 1024,
+            'duration': timedelta(seconds=4804),
+            'size': 495090155
+        }
+        self.assertEqual(expected, actual)
+
+    def test_get_video_frame(self):
+        actual = video.get_video_frame(self.url, 0)
+        expected = np.array([152, 44, 206, 97, 0], dtype=np.uint8)
+        self.assertTrue(np.all(actual[0, :5, 0] == expected))
+
+    def test_get_video_frames_preload(self):
+        actual = video.get_video_frames_preload(self.url, [0, 3, 4])
+        expected = np.array([152, 44, 206, 97, 0], dtype=np.uint8)
+        self.assertEqual((3, 1024, 1280, 3), actual.shape)
+        self.assertTrue(np.all(actual[0, 0, :5, 0] == expected))
+        actual = video.get_video_frames_preload(self.url, [0, 3, 4],
+                                                mask=np.s_[0, :5, 0], as_list=True)
+        self.assertIsInstance(actual, list)
+        self.assertEqual(3, len(actual))
+        self.assertEqual((5,), actual[0].shape)
