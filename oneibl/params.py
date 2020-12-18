@@ -5,22 +5,23 @@ from pathlib import Path, PurePath
 from ibllib.graphic import login
 
 
-_PAR_ID_STR = 'one_params'
+_PAR_ID_STR = "one_params"
 
 
 def default():
-    par = {"ALYX_LOGIN": "test_user",
-           "ALYX_PWD": "TapetesBloc18",
-           "ALYX_URL": "https://test.alyx.internationalbrainlab.org",
-           "CACHE_DIR": str(PurePath(Path.home(), "Downloads", "FlatIron")),
-           "FTP_DATA_SERVER": "ftp://ibl.flatironinstitute.org",
-           "FTP_DATA_SERVER_LOGIN": "iblftp",
-           "FTP_DATA_SERVER_PWD": None,
-           "HTTP_DATA_SERVER": "https://ibl.flatironinstitute.org",
-           "HTTP_DATA_SERVER_LOGIN": "iblmember",
-           "HTTP_DATA_SERVER_PWD": None,
-           "GLOBUS_CLIENT_ID": None,
-           }
+    par = {
+        "ALYX_LOGIN": "test_user",
+        "ALYX_PWD": "TapetesBloc18",
+        "ALYX_URL": "https://test.alyx.internationalbrainlab.org",
+        "CACHE_DIR": str(PurePath(Path.home(), "Downloads", "FlatIron")),
+        "FTP_DATA_SERVER": "ftp://ibl.flatironinstitute.org",
+        "FTP_DATA_SERVER_LOGIN": "iblftp",
+        "FTP_DATA_SERVER_PWD": None,
+        "HTTP_DATA_SERVER": "https://ibl.flatironinstitute.org",
+        "HTTP_DATA_SERVER_LOGIN": "iblmember",
+        "HTTP_DATA_SERVER_PWD": None,
+        "GLOBUS_CLIENT_ID": None,
+    }
     return iopar.from_dict(par)
 
 
@@ -51,9 +52,9 @@ def setup_silent():
 def setup_alyx_params():
     setup_silent()
     par = iopar.read(_PAR_ID_STR).as_dict()
-    [usr, pwd] = login(title='Alyx credentials')
-    par['ALYX_LOGIN'] = usr
-    par['ALYX_PWD'] = pwd
+    [usr, pwd] = login(title="Alyx credentials")
+    par["ALYX_LOGIN"] = usr
+    par["ALYX_PWD"] = pwd
     iopar.write(_PAR_ID_STR, par)
 
 
@@ -71,22 +72,28 @@ def setup():
             par[k] = input("Param " + k + ",  current value is [" + str(cpar) + "]:") or cpar
 
     cpar = _get_current_par("ALYX_PWD", par_current)
-    prompt = "Enter the Alyx password for " + par["ALYX_LOGIN"] + '(leave empty to keep current):'
+    prompt = "Enter the Alyx password for " + par["ALYX_LOGIN"] + "(leave empty to keep current):"
     par["ALYX_PWD"] = getpass(prompt) or cpar
 
     cpar = _get_current_par("HTTP_DATA_SERVER_PWD", par_current)
-    prompt = "Enter the FlatIron HTTP password for " + par["HTTP_DATA_SERVER_LOGIN"] +\
-             '(leave empty to keep current): '
+    prompt = (
+        "Enter the FlatIron HTTP password for "
+        + par["HTTP_DATA_SERVER_LOGIN"]
+        + "(leave empty to keep current): "
+    )
     par["HTTP_DATA_SERVER_PWD"] = getpass(prompt) or cpar
 
     cpar = _get_current_par("FTP_DATA_SERVER_PWD", par_current)
-    prompt = "Enter the FlatIron FTP password for " + par["FTP_DATA_SERVER_LOGIN"] +\
-             '(leave empty to keep current): '
+    prompt = (
+        "Enter the FlatIron FTP password for "
+        + par["FTP_DATA_SERVER_LOGIN"]
+        + "(leave empty to keep current): "
+    )
     par["FTP_DATA_SERVER_PWD"] = getpass(prompt) or cpar
 
     # default to home dir if empty dir somehow made it here
-    if len(par['CACHE_DIR']) == 0:
-        par['CACHE_DIR'] = str(PurePath(Path.home(), "Downloads", "FlatIron"))
+    if len(par["CACHE_DIR"]) == 0:
+        par["CACHE_DIR"] = str(PurePath(Path.home(), "Downloads", "FlatIron"))
 
     par = iopar.from_dict(par)
 
@@ -94,7 +101,7 @@ def setup():
     if par.CACHE_DIR and not os.path.isdir(par.CACHE_DIR):
         os.mkdir(par.CACHE_DIR)
     iopar.write(_PAR_ID_STR, par)
-    print('ONE Parameter file location: ' + iopar.getfile(_PAR_ID_STR))
+    print("ONE Parameter file location: " + iopar.getfile(_PAR_ID_STR))
 
 
 def get(silent=False):
@@ -103,4 +110,14 @@ def get(silent=False):
         setup()
     elif par is None and silent:
         setup_silent()
-    return iopar.read(_PAR_ID_STR, default=default())
+    return patch_migration_params(iopar.read(_PAR_ID_STR, default=default()))
+
+
+def patch_migration_params(par):
+    if par.HTTP_DATA_SERVER[:5] == "http:":
+        par = par.set(
+            "HTTP_DATA_SERVER", "".join([par.HTTP_DATA_SERVER[:4], "s", par.HTTP_DATA_SERVER[4:]])
+        )
+        iopar.write(_PAR_ID_STR, par)
+
+    return par
