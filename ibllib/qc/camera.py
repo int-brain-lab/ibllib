@@ -8,12 +8,9 @@ Example - Run camera QC, downloading all but video file
 Question:
     We're not extracting the audio based on TTL length.  Is this a problem?
 """
-import sys
 import logging
 from inspect import getmembers, isfunction
-from datetime import timedelta
 from pathlib import Path
-import re
 
 import cv2
 import numpy as np
@@ -27,102 +24,13 @@ from ibllib.exceptions import ALFObjectNotFound
 from ibllib.io.extractors import ephys_fpga
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io import raw_data_loaders as raw
-from oneibl.stream import VideoStreamer
 import alf.io as alfio
 from brainbox.core import Bunch
 from brainbox.io.one import path_to_url, datasets_from_type
+from brainbox.io.video import get_video_meta, get_video_frames_preload
 from . import base
 
 _log = logging.getLogger('ibllib')
-
-
-def get_video_frame(video_path, frame_number):
-    """
-    Obtain numpy array corresponding to a particular video frame in video_path
-    :param video_path: local path to mp4 file
-    :param frame_number: video frame to be returned
-    :return: numpy array corresponding to frame of interest.  Dimensions are (w, h, 3)
-    """
-    is_url = isinstance(video_path, str) and video_path.startswith('http')
-    cap = VideoStreamer(video_path).cap if is_url else cv2.VideoCapture(str(video_path))
-    # 0-based index of the frame to be decoded/captured next.
-    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
-    ret, frame_image = cap.read()
-    cap.release()
-    return frame_image
-
-
-def get_video_frames_preload(video_path, frame_numbers, mask=None, as_list=False):
-    """
-    Obtain numpy array corresponding to a particular video frame in video_path
-    :param video_path: URL or local path to mp4 file
-    :param frame_numbers: video frames to be returned
-    :param mask: a logical mask or slice to apply to frames
-    :param as_list: if true the frames are returned as a list, this is faster but less memory
-    efficient
-    :return: numpy array corresponding to frame of interest.  Default dimensions are (n, w, h, 3)
-    where n = len(frame_numbers)
-
-    Example - Load first 1000 frames, keeping only the first colour channel:
-        frames = get_video_frames_preload(video_path, range(1000), mask=np.s_[:, :, 0])
-    """
-    is_url = isinstance(video_path, str) and video_path.startswith('http')
-    cap = VideoStreamer(video_path).cap if is_url else cv2.VideoCapture(str(video_path))
-    assert cap.isOpened(), 'Failed to open video'
-
-    if as_list:
-        frame_images = [None] * len(frame_numbers)
-    else:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        ret, frame = cap.read()
-        frame_images = np.empty((len(frame_numbers), *frame[mask or ...].shape), np.uint8)
-
-    for ii, i in enumerate(frame_numbers):
-        sys.stdout.write(f'\rloading frame {ii}/{len(frame_numbers)}')
-        sys.stdout.flush()
-        cap.set(cv2.CAP_PROP_POS_FRAMES, i)
-        ret, frame = cap.read()
-        if ret:
-            frame_images[ii] = frame[mask]
-        else:
-            print(f'failed to read frame #{i}')
-            if not as_list:
-                frame_images[ii] = np.nan
-    cap.release()
-    sys.stdout.write('\x1b[2K\r')  # Erase current line in stdout
-    return frame_images
-
-
-def get_video_meta(video_path, one=None):
-    """
-    Return a bunch of video information with the fields ('length', 'fps', 'width', 'height',
-    'duration', 'size')
-    :param video_path: A path to the video
-    :param one:
-    :return:
-    """
-    is_url = isinstance(video_path, str) and video_path.startswith('http')
-    cap = VideoStreamer(video_path).cap if is_url else cv2.VideoCapture(str(video_path))
-    assert cap.isOpened(), f'Failed to open video file {video_path}'
-
-    # Get basic properties of video
-    meta = Bunch()
-    meta.length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    meta.fps = int(cap.get(cv2.CAP_PROP_FPS))
-    meta.width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    meta.height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    meta.duration = timedelta(seconds=meta.length / meta.fps)
-    if is_url and one:
-        eid = one.eid_from_path(video_path)
-        name = re.match(r'.*(_iblrig_[a-z]+Camera\.raw\.)(?:[\w-]{36}\.)?(mp4)$', video_path)
-        det, = one.alyx.rest('datasets', 'list', session=eid, name=''.join(name.groups()))
-        meta.size = det['file_size']
-    elif is_url and not one:
-        meta.size = None
-    else:
-        meta.size = Path(video_path).stat().st_size
-    cap.release()
-    return meta
 
 
 class CameraQC(base.QC):
@@ -198,7 +106,9 @@ class CameraQC(base.QC):
         if not self.video_path.exists() and self.stream and self.one is not None:
             self.video_path = path_to_url(self.video_path, self.one)
 
+        logging.disable(logging.CRITICAL)
         self.type = get_session_extractor_type(self.session_path) or None
+        logging.disable(logging.NOTSET)
         self.data = Bunch()
         self.frame_samples_idx = None
 
@@ -371,7 +281,7 @@ class CameraQC(base.QC):
 
     def check_file_headers(self):
         """Check reported frame rate matches FPGA frame rate"""
-        if self.data['video_meta'] is None:
+        if None in (self.data['video'], self.video_meta):
             return 'NOT_SET'
         expected = self.video_meta[self.type][self.side]
         return 'PASS' if self.data['video']['fps'] == expected['fps'] else 'FAIL'
@@ -382,11 +292,11 @@ class CameraQC(base.QC):
         :param threshold: The maximum absolute difference between timestamp sample rate and video
         frame rate.  NB: Does not take into account dropped frames.
         """
-        if self.data['video_meta'] is None:
+        if any( x is None for x in (self.data['frame_times'], self.video_meta)):
             return 'NOT_SET'
         fps = self.video_meta[self.type][self.side]['fps']
         Fs = 1 / np.median(np.diff(self.data['frame_times']))  # Approx. frequency of camera
-        return 'PASS' if Fs - fps < threshold else 'FAIL'
+        return 'PASS' if abs(Fs - fps) < threshold else 'FAIL'
 
     def check_pin_state(self, display=False):
         """Check the pin state reflects Bpod TTLs"""

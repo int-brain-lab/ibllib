@@ -520,6 +520,7 @@ def path_to_url(filepath, one=None):
     :param filepath: A local file path
     :param one: An instance of ONE for fetching the remote file record
     :return: A URL string
+    FIXME Move into AlyxOne
     """
     one = one or ONE()
     eid = one.eid_from_path(filepath)
@@ -527,4 +528,12 @@ def path_to_url(filepath, one=None):
         dataset, = one.alyx.rest('datasets', 'list', session=eid, name=Path(filepath).name)
     except ValueError:
         raise ALFObjectNotFound(f'File record for {filepath} not found on Alyx')
-    return next(r['data_url'] for r in dataset['file_records'] if r['data_url'])
+    return next(r['data_url'] for r in dataset['file_records'] if r['data_url'] and r['exists'])
+
+
+def datasets_from_type(eid, dataset_type, one=None):
+    one = one or ONE()
+    restriction = f'session__id,{eid},dataset_type__name,{dataset_type}'
+    datasets = one.alyx.rest('datasets', 'list', django=restriction)
+    return [d['name'] for d in datasets]
+

@@ -38,7 +38,7 @@ class QC:
             self.json = True
 
         # Ensure outcome attribute matches Alyx record
-        self._outcome = self.update('NOT_SET', namespace='')
+        self._outcome = self.update('NOT_SET', namespace='') if self.eid else 'NOT_SET'
         self.log.debug(f'Current QC status is {self.outcome}')
 
     @abstractmethod

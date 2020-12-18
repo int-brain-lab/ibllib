@@ -113,6 +113,10 @@ def load_camera_ssv_times(session_path, camera):
         raise ValueError(f"camera must be one of ({', '.join(('left', 'right', 'body'))})")
     file = Path(session_path) / 'raw_video_data' / f'_iblrig_{camera.lower()}Camera.timestamps.ssv'
     assert file.exists()
+    # NB: Numpy has deprecated support for non-naive timestamps.
+    # Converting them is extremely slow: 6000 timestamps takes 0.8615s vs 0.0352s.
+    # from datetime import timezone
+    # c = {0: lambda x: datetime.fromisoformat(x).astimezone(timezone.utc).replace(tzinfo=None)}
     ssv_params = dict(names=('bonsai', 'camera'), dtype='<M8[ns],<u4', delimiter=' ')
     ssv_times = np.genfromtxt(file, **ssv_params)  # np.loadtxt is slower for some reason
     bonsai_times = ssv_times['bonsai']

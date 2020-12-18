@@ -140,6 +140,17 @@ class TestsRawDataLoaders(unittest.TestCase):
         data = raw.load_encoder_trial_info(self.session)
         self.assertTrue(data is not None)
 
+    def test_load_camera_ssv_times(self):
+        session = Path(__file__).parent.joinpath('extractors', 'data', 'session_ephys')
+        with self.assertRaises(ValueError):
+            raw.load_camera_ssv_times(session, 'tail')
+        bonsai, camera = raw.load_camera_ssv_times(session, 'body')
+        self.assertTrue(bonsai.size == camera.size == 6001)
+        self.assertEqual(bonsai.dtype.str, '<M8[ns]')
+        self.assertEqual(str(bonsai[0]), '2020-08-19T16:42:57.790361600')
+        expected = np.array([69.466875, 69.5, 69.533, 69.566125, 69.59925])
+        np.testing.assert_array_equal(expected, camera[:5])
+
     def tearDown(self):
         self.tempfile.close()
         os.unlink(self.tempfile.name)
@@ -616,7 +627,7 @@ class TestsGlobus(unittest.TestCase):
     def test_as_globus_path(self):
         # A Windows path
         actual = globus.as_globus_path('E:\\FlatIron\\integration')
-        self.assertTrue(actual.startswith('/~/'))
+        self.assertTrue(actual.startswith('/E/'))
 
         # A relative POSIX path
         actual = globus.as_globus_path('/mnt/foo/../data/integration')
@@ -624,8 +635,8 @@ class TestsGlobus(unittest.TestCase):
         self.assertTrue(actual.endswith(expected))
 
         # A globus path
-        actual = globus.as_globus_path('/~/E/FlatIron/integration')
-        expected = '/~/E/FlatIron/integration'
+        actual = globus.as_globus_path('/E/FlatIron/integration')
+        expected = '/E/FlatIron/integration'
         self.assertEqual(expected, actual)
 
     @unittest.mock.patch('ibllib.io.params.read')

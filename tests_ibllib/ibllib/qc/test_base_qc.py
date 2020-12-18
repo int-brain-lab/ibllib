@@ -15,12 +15,12 @@ one = ONE(
 class TestQC(unittest.TestCase):
     def setUp(self) -> None:
         self.eid = 'b1c968ad-4874-468d-b2e4-5ffa9b9964e9'
-        self.qc = QC(self.eid, one=one)
         ses = one.alyx.rest('sessions', 'partial_update', id=self.eid, data={'qc': 'NOT_SET'})
         assert ses['qc'] == 'NOT_SET', 'failed to reset qc field for test'
         extended = one.alyx.json_field_write('sessions', field_name='extended_qc',
                                              uuid=self.eid, data={})
         assert not extended, 'failed to reset extended_qc field for test'
+        self.qc = QC(self.eid, one=one)
 
     def test__set_eid_or_path(self) -> None:
         """Test setting both the eid and session path when providing one or the other"""
@@ -101,6 +101,23 @@ class TestQC(unittest.TestCase):
         data = {'_qc_test_foo': np.random.rand(), '_qc_test_bar': np.random.rand()}
         updated = self.qc.update_extended_qc(data)
         self.assertEqual(updated, {**current, **data}, 'failed to update the extended qc')
+
+    def test_outcome_setter(self):
+        qc = self.qc
+        qc.outcome = 'Fail'
+        self.assertEqual(qc.outcome, 'FAIL')
+        # Test setting invalid outcome
+        with self.assertRaises(ValueError):
+            qc.outcome = '%INVALID%'
+        qc.outcome = 'PASS'
+        self.assertEqual(qc.outcome, 'FAIL')
+
+        # Set remote session to 'PASS' and check object reflects this on init
+        ses = one.alyx.rest('sessions', 'partial_update', id=self.eid, data={'qc': 'PASS'})
+        assert ses['qc'] == 'PASS', 'failed to reset qc field for test'
+        qc = QC(self.eid, one=one)
+        self.assertEqual(qc.outcome, 'PASS')
+
 
 
 if __name__ == '__main__':

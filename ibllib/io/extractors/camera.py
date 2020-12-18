@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import cv2
 
+from oneibl.stream import VideoStreamer
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io.extractors.ephys_fpga import _get_sync_fronts, get_main_probe_sync
 from ibllib.io.raw_data_loaders import load_bpod_fronts
@@ -38,12 +39,26 @@ def extract_camera_sync(sync, chmap=None):
             'body_camera': sb.times[::2]}
 
 
+def get_video_length(video_path):
+    """
+    Returns video length
+    :param video_path: A path to the video
+    :return:
+    """
+    is_url = isinstance(video_path, str) and video_path.startswith('http')
+    cap = VideoStreamer(video_path).cap if is_url else cv2.VideoCapture(str(video_path))
+    assert cap.isOpened(), f'Failed to open video file {video_path}'
+    length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
+    return length
+
+
 class CameraTimestampsFPGA(BaseExtractor):
     save_names = ['_ibl_rightCamera.times.npy', '_ibl_leftCamera.times.npy',
                   '_ibl_bodyCamera.times.npy']
     var_names = ['right_camera_timestamps', 'left_camera_timestamps', 'body_camera_timestamps']
 
-    def _extract(self, sync=None, chmap=None):
+    def _extract(self, camera='all', sync=None, chmap=None, video_paths=None):
         """
         The raw timestamps are taken from the FPGA.  These are the times of the camera's frame
         TTLs.
@@ -57,8 +72,11 @@ class CameraTimestampsFPGA(BaseExtractor):
         :return:
         """
         fpga_times = extract_camera_sync(sync=sync, chmap=chmap)
-        for camera, ts in fpga_times.items():
-            count, pin_state = load_embedded_frame_data(self.session_path, camera[:-7], raw=False)
+
+        for label, ts in fpga_times.items():
+            if camera != 'all' and camera != label[:-7]:
+                continue
+            count, pin_state = load_embedded_frame_data(self.session_path, label[:-7], raw=False)
 
             if pin_state is not None and any(pin_state):
                 _logger.info('Aligning to audio TTLs')
@@ -68,11 +86,31 @@ class CameraTimestampsFPGA(BaseExtractor):
                 assert (np.all(np.abs(np.diff(audio['polarities'])) == 2))
                 # make sure first TTL is high
                 assert audio['polarities'][0] == 1
+                """
+                The length of the count and pin state are regularly longer than the length of 
+                the video file.  Here we assert that the video is either shorter or the same 
+                length as the arrays, and  we make an assumption that the missing frames are 
+                right at the end of the video.  We therefore simply shorten the arrays to match
+                the length of the video.
+                """
+                if video_paths is None:
+                    filename = f'_iblrig_{label[:-7]}Camera.raw.mp4'
+                    video_path = self.session_path / 'raw_video_data' / filename
+                elif isinstance(video_paths, dict):
+                    video_path = video_paths[label[:-7]]
+                else:
+                    video_path = video_paths
+                length = get_video_length(video_path)
+                assert length <= count.size
+                if count.size > length:
+                    count = count[:length]
+                    pin_state = pin_state[:length]
                 fpga_times[camera] = align_with_audio(ts, audio['times'][::2], pin_state, count)
             else:
                 _logger.warning('Alignment by wheel data not yet implemented')
 
-        return fpga_times['right_camera'], fpga_times['left_camera'], fpga_times['body_camera']
+        # return fpga_times['right_camera'], fpga_times['left_camera'], fpga_times['body_camera']
+        return fpga_times
 
 
 class CameraTimestampsBpod(BaseBpodTrialsExtractor):
@@ -270,6 +308,61 @@ def align_with_audio(timestamps, audio, pin_state, count,
         plt.plot(ts, y, marker='d', color='blue', drawstyle='steps-pre')
         plt.plot(ts, np.zeros_like(ts), 'kx')
         vertical_lines(audio, ymin=0, ymax=1e-5, color='r', linestyle=':')
+
+    return ts
+
+
+def align_with_audio_safe(timestamps, audio, pin_state, count,
+                          extrapolate_missing=True, display=False):
+    """
+    Groom the raw FPGA or Bpod camera timestamps using the frame embedded audio TTLs and frame
+    counter.
+    :param timestamps: An array of raw FPGA or Bpod camera timestamps
+    :param audio: An array of FPGA or Bpod audio TTL times
+    :param pin_state: An array of camera pin states
+    :param count: An array of frame numbers
+    :param extrapolate_missing: If true and the number of timestamps is fewer than the number of
+    frame counts, the remaining timestamps are extrapolated based on the frame rate, otherwise
+    they are NaNs
+    :param display: Plot the resulting timestamps
+    :return: The corrected frame timestamps
+    """
+    # Some assertions made on the raw data
+    assert count.size == pin_state.size, 'frame count and pin state size mismatch'
+    assert all(np.diff(count) > 0), 'frame count not strictly increasing'
+    assert all(np.diff(timestamps) > 0), 'FPGA camera times not strictly increasing'
+    low2high = np.diff(pin_state.astype(int)) == 1
+    assert sum(low2high) <= audio.size, 'more audio TTLs detected on camera than TTLs sent'
+
+    # Align on first pin state change
+    first_uptick = (pin_state > 0).argmax()
+    first_ttl = np.searchsorted(timestamps, audio[0])
+    """Here we find up to which index in the FPGA times we discard by taking the difference 
+    between the index of the first pin state change (when the audio TTL was reported by the 
+    camera) and the index of the first audio TTL in FPGA time.  We subtract the difference 
+    between the frame count at the first pin state change and the index to account for any 
+    video frames that were not saved during this period (we will remove those from the 
+    camera FPGA times later).
+    """
+    # NB: The pin state to be high for 2 consecutive frames
+    low2high = np.insert(np.diff((pin_state > 0).astype(int)) == 1, 0, False)
+    upticks = np.insert(*np.where(low2high), 0, 0)
+
+    start = first_ttl - first_uptick - (count[first_uptick] - first_uptick)
+    assert start >= 0
+    # Remove the timestamps that occur before bonsai starts acquiring
+    ts = timestamps[start:]
+    ttls = np.searchsorted(ts, audio)
+    timestamps_split = np.split(ts, ttls)
+    """
+    This fails either because some pin state changes are a frame out, or because bonsai messed 
+    up the count.
+    """
+    for i in range(len(upticks) - 1):
+        count_frag = count[upticks[i]:upticks[i + 1]] - count[upticks[i]]
+        missing = np.setdiff1d(np.arange(0, count_frag[-1]), count_frag)
+        assert (timestamps_split[i].size - count_frag.size) == len(missing)
+        timestamps_split[i] = timestamps_split[i][count_frag]
 
     return ts
 
