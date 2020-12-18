@@ -16,7 +16,7 @@ def default():
            "FTP_DATA_SERVER": "ftp://ibl.flatironinstitute.org",
            "FTP_DATA_SERVER_LOGIN": "iblftp",
            "FTP_DATA_SERVER_PWD": None,
-           "HTTP_DATA_SERVER": "http://ibl.flatironinstitute.org",
+           "HTTP_DATA_SERVER": "https://ibl.flatironinstitute.org",
            "HTTP_DATA_SERVER_LOGIN": "iblmember",
            "HTTP_DATA_SERVER_PWD": None,
            "GLOBUS_CLIENT_ID": None,
