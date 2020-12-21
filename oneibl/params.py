@@ -13,13 +13,9 @@ def default():
            "ALYX_PWD": "TapetesBloc18",
            "ALYX_URL": "https://test.alyx.internationalbrainlab.org",
            "CACHE_DIR": str(PurePath(Path.home(), "Downloads", "FlatIron")),
-           "FTP_DATA_SERVER": "ftp://ibl.flatironinstitute.org",
-           "FTP_DATA_SERVER_LOGIN": "iblftp",
-           "FTP_DATA_SERVER_PWD": None,
            "HTTP_DATA_SERVER": "https://ibl.flatironinstitute.org",
            "HTTP_DATA_SERVER_LOGIN": "iblmember",
            "HTTP_DATA_SERVER_PWD": None,
-           "GLOBUS_CLIENT_ID": None,
            }
     return iopar.from_dict(par)
 
