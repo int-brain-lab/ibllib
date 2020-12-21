@@ -132,6 +132,9 @@ class OneAbstract(abc.ABC):
     def __init__(self, username=None, password=None, base_url=None, cache_dir=None, silent=None):
         # get parameters override if inputs provided
         self._par = oneibl.params.get(silent=silent)
+        # can delete those 2 lines from mid January 2021
+        if self._par.HTTP_DATA_SERVER == 'http://ibl.flatironinstitute.org':
+            self._par = self._par.set("HTTP_DATA_SERVER", "https://ibl.flatironinstitute.org")
         self._par = self._par.set('ALYX_LOGIN', username or self._par.ALYX_LOGIN)
         self._par = self._par.set('ALYX_URL', base_url or self._par.ALYX_URL)
         self._par = self._par.set('ALYX_PWD', password or self._par.ALYX_PWD)
