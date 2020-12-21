@@ -3,6 +3,9 @@
 - passive extraction task and pipeline deployment
 - BaseExtractor class save method now saves npy, csv, ssv and tsv form file name extension
 
+### Release Notes 1.5.30
+- following flatiron server change, add auto-redirect to https
+
 ### Release Notes 1.5.29
 - add widefieldChoiceworld tasks for pipeline
 
