@@ -826,7 +826,7 @@ def noise_cutoff(amps, quartile_length=.2, n_bins=100, n_low_bins=2):
     return cutoff
 
 
-def spike_sorting_metrics(times, clusters, amps, depths):
+def spike_sorting_metrics(times, clusters, amps, depths, cluster_ids=None):
     """
     Computes:
     -   cell level metrics (cf quick_unit_metrics)
@@ -836,11 +836,14 @@ def spike_sorting_metrics(times, clusters, amps, depths):
     :param clusters:
     :param amplitudes:
     :param depths:
+    :param cluster_ids (optional): set of clusters (if None the output datgrame will match
+    the unique set of clusters represented in spike clusters)
     :return: data_frame of metrics (cluster records, columns are qc attributes)|
     :return: dictionary of recording qc (keys 'time_scale' and 'drift_um')
     """
     # compute metrics and convert to `DataFrame`
-    df_units = pd.DataFrame(quick_unit_metrics(clusters, times, amps, depths))
+    df_units = quick_unit_metrics(clusters, times, amps, depths, cluster_ids=cluster_ids)
+    df_units = pd.DataFrame(df_units)
     # compute labels based on metrics
     df_labels = pd.DataFrame(unit_labels(clusters, times, depths))
     df_units = df_units.set_index('cluster_id', drop=False).join(df_labels.set_index('cluster_id'))
