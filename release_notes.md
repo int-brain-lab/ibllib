@@ -1,3 +1,6 @@
+### Release Notes 1.5.30
+- following flatiron server change, add auto-redirect to https
+
 ### Release Notes 1.5.29
 - add widefieldChoiceworld tasks for pipeline
 
