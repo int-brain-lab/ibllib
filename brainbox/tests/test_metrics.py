@@ -1,6 +1,6 @@
 import numpy as np
 from brainbox.metrics import quick_unit_metrics, electrode_drift
-from brainbox.core import ismember
+from brainbox.numerical import ismember
 
 REC_LEN_SECS = 1000
 fr = 200
@@ -49,7 +49,7 @@ def generate_spike_train(firing_rate=200, rec_len_secs=1000):
 def test_clusters_metrics():
     np.random.seed(54)
     rec_length = 1000
-    frs = np.array([3, 200, 259, 567])  # firing rates
+    frs = np.array([3, 100, 80, 40])  # firing rates
     cid = [0, 1, 3, 4]  # here we make sure one of the clusters has no spike
     t, a, c = multiple_spike_trains(firing_rates=frs, rec_len_secs=rec_length, cluster_ids=cid)
     d = np.sin(2 * np.pi * c / rec_length * t) * 100  # sinusoidal shift where cluster id drives f

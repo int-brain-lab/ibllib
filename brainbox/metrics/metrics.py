@@ -26,7 +26,8 @@ import pandas as pd
 from ibllib.io import spikeglx
 from phylib.stats import correlograms
 import brainbox as bb
-from brainbox.core import Bunch, ismember
+from brainbox.core import Bunch
+from brainbox.numerical import ismember
 from brainbox.processing import bincount2D
 from brainbox.metrics import electrode_drift
 

@@ -26,7 +26,7 @@ from ibllib.io import hashfile
 from ibllib.misc import pprint
 from oneibl.dataclass import SessionDataInfo
 from brainbox.io import parquet
-from brainbox.core import ismember, ismember2d
+from brainbox.numerical import ismember, ismember2d, find_first_2d
 
 _logger = logging.getLogger('ibllib')
 
@@ -228,7 +228,7 @@ class OneAbstract(abc.ABC):
             return
 
         # load path from cache
-        ic = parquet.find_first_2d(
+        ic = find_first_2d(
             self._cache[['eid_0', 'eid_1']].to_numpy(), parquet.str2np(eid))
         if ic is not None:
             ses = self._cache.iloc[ic]
