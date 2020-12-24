@@ -3,6 +3,9 @@
 - passive extraction task and pipeline deployment
 - BaseExtractor class save method now saves npy, csv, ssv and tsv form file name extension
 
+### Release Notes 1.5.31 Hotfix
+- add the available space of system and raid volumes in local servers reports.
+
 ### Release Notes 1.5.30
 - following flatiron server change, add auto-redirect to https
 
