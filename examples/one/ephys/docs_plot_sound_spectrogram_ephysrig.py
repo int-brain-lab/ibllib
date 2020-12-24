@@ -1,5 +1,8 @@
 """
+Plot audio spectrogtam
+======================
 For a given session eid (ephys session), plot spectrogram of sound recorded via the microphone.
+Example of using soundfile to read in .flac file extensions
 """
 # Author: Gaelle Chapuis
 
@@ -20,15 +23,14 @@ one.load(eid, dataset_types=dataset_types, download_only=True)
 session_path = one.path_from_eid(eid)
 
 # -- Get raw data
-# data_raw = alf.io.load_object(session_path.joinpath('raw_behavior_data'),
-#                         'micData', namespace='iblrig')
 filename = session_path.joinpath('raw_behavior_data', '_iblrig_micData.raw.flac')
 
 with open(filename, 'rb') as f:
     wav, fs = sf.read(f)
 
-# -- Compute spectrogram
-tscale, fscale, W, detect = welchogram(fs, wav)
+# -- Compute spectrogram over first 2 minutes
+t_idx = 120 * fs
+tscale, fscale, W, detect = welchogram(fs, wav[:t_idx])
 
 # -- Put data into single variable
 TF = {}
@@ -49,4 +51,4 @@ im = ax.imshow(20 * np.log10(TF['power'].T), aspect='auto', cmap=plt.get_cmap('m
 ax.set_xlabel(r'Time (s)')
 ax.set_ylabel(r'Frequency (Hz)')
 plt.colorbar(im)
-# im.set_clim(-100, -60)
+plt.show()

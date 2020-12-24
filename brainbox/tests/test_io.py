@@ -5,7 +5,7 @@ import uuid
 
 import numpy as np
 
-from brainbox.core import intersect2d, ismember2d, ismember
+from brainbox.numerical import ismember, ismember2d, intersect2d
 from brainbox.io.parquet import uuid2np, np2uuid, rec2col, np2str
 
 

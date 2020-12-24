@@ -326,8 +326,8 @@ def _extract_passiveAudio_intervals(audio: dict) -> Tuple[np.array, np.array]:
 
     diff = soundOff_times - soundOn_times
     # Tone is ~100ms so check if diff < 0.3
-    toneOn_times = soundOn_times[diff < 0.3]
-    toneOff_times = soundOff_times[diff < 0.3]
+    toneOn_times = soundOn_times[diff <= 0.3]
+    toneOff_times = soundOff_times[diff <= 0.3]
     # Noise is ~500ms so check if diff > 0.3
     noiseOn_times = soundOn_times[diff > 0.3]
     noiseOff_times = soundOff_times[diff > 0.3]
@@ -525,25 +525,27 @@ class PassiveChoiceWorld(BaseExtractor):
             treplay = passivePeriods_df.taskReplay.values
 
         except BaseException as e:
-            log.error("Failed to extract passive periods", e)
+            log.error(f"Failed to extract passive periods: {e}")
             passivePeriods_df = None
             trfm = None
             treplay = None
+            return (None, None, None, None)
 
         try:
             # RFMapping
             passiveRFM_times = extract_rfmapping(
                 self.session_path, sync=sync, sync_map=sync_map, trfm=trfm
             )
-        except BaseException as e:
-            log.error("Failed to extract RFMapping datasets", e)
+        except Exception as e:
+            log.error(f"Failed to extract RFMapping datasets: {e}")
             passiveRFM_times = None
+
         try:
             (passiveGabor_df, passiveStims_df,) = extract_task_replay(
                 self.session_path, sync=sync, sync_map=sync_map, treplay=treplay
             )
-        except BaseException as e:
-            log.error("Failed to extract task replay stimuli", e)
+        except Exception as e:
+            log.error(f"Failed to extract task replay stimuli: {e}")
             (passiveGabor_df, passiveStims_df,) = (
                 None,
                 None,
@@ -556,6 +558,7 @@ class PassiveChoiceWorld(BaseExtractor):
             plot_rfmapping(passiveRFM_times, ax=ax)
             plot_gabor_times(passiveGabor_df, ax=ax)
             plot_stims_times(passiveStims_df, ax=ax)
+            plt.show()
 
         return (
             passivePeriods_df,  # _ibl_passivePeriods.intervalsTable.csv
@@ -566,10 +569,19 @@ class PassiveChoiceWorld(BaseExtractor):
 
 
 if __name__ == "__main__":
-    # TODO: Check all TODO's in file!!
-    # TODO: reuse test from passive.py before deleting
-    # session_path = "/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_054/2020-10-10/001"
-    # pcw = PassiveChoiceWorld(session_path)
+    # Working session
+    session_path = "/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_054/2020-10-10/001"
+    # # Broken session
+    #     session_path = "/home/nico/Downloads/FlatIron/integration/ephys/\
+    # choice_world/KS022/2019-12-10/001"
+    pcw = PassiveChoiceWorld(session_path)
+    data, paths = pcw.extract(save=False)
+    (
+        passivePeriods_df,
+        passiveRFM_times,
+        passiveGabor_df,
+        passiveStims_df
+    ) = data
     # sp = '/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_029/2020-10-07/001'
     # extract_passive_choice_world(sp)
     # extract_passive_choice_world(sp, plot=True)

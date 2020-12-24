@@ -1,2 +1,3 @@
 include ibllib/io/extractors/ephys_sessions/*.npy
 include ibllib/atlas/allen_structure_tree.csv
+include ibllib/tests/fixtures/ephysalignment/alignment_data.npz
