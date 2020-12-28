@@ -186,6 +186,8 @@ def get_task_extractor_type(task_name):
         return 'ephys'
     elif 'opto_ephysChoiceWorld' in task_name:
         return 'ephys'
+    elif 'widefieldChoiceWorld' in task_name:
+        return 'ephys'
     # biased choice world
     elif '_biasedChoiceWorld' in task_name:
         return 'biased'

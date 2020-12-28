@@ -55,6 +55,8 @@ class TrainingVideoCompress(tasks.Task):
         command = ('ffmpeg -i {file_in} -y -nostdin -codec:v libx264 -preset slow -crf 29 '
                    '-nostats -codec:a copy {file_out}')
         output_files = ffmpeg.iblrig_video_compression(self.session_path, command)
+        if len(output_files) == 0:
+            output_files = None  # labels the task as empty if no output
         return output_files
 
 
