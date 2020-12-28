@@ -105,7 +105,7 @@ class TaskQCExtractor(object):
 
     def extract_data(self):
         """Extracts and loads behaviour data for QC
-        NB: partial extraction when bpod_only attricbute is False requires intervals and
+        NB: partial extraction when bpod_only attribute is False requires intervals and
         intervals_bpod to be assigned to the data attribute before calling this function.
         :return:
         """

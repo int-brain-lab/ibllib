@@ -9,7 +9,6 @@ import uuid
 import matplotlib.pyplot as plt
 import numpy as np
 from pkg_resources import parse_version
-from scipy import interpolate
 
 import alf.io
 from brainbox.core import Bunch
@@ -302,49 +301,6 @@ def _get_sync_fronts(sync, channel_nb, tmin=None, tmax=None):
                   'polarities': sync['polarities'][selection]})
 
 
-def bpod_fpga_sync(bpod_intervals=None, ephys_intervals=None, iti_duration=None):
-    """
-    Computes synchronization function from bpod to fpga
-    :param bpod_intervals
-    :param ephys_intervals
-    :return: interpolation function
-    """
-    if iti_duration is None:
-        iti_duration = 0.5
-    # check consistency
-    if bpod_intervals.size != ephys_intervals.size:
-        # patching things up if the bpod and FPGA don't have the same recording span
-        _logger.warning("BPOD/FPGA synchronization: Bpod and FPGA don't have the same amount of"
-                        " trial start events")
-        _logger.warning(f"bpod has {bpod_intervals.size}")
-        _logger.warning(f"fpga has {ephys_intervals.size}")
-        _, _, ibpod, ifpga = raw_data_loaders.sync_trials_robust(
-            bpod_intervals[:, 0], ephys_intervals[:, 0], return_index=True)
-        if ibpod.size == 0:
-            raise err.SyncBpodFpgaException('Can not sync BPOD and FPGA - no matching sync pulses '
-                                            'found.')
-        bpod_intervals = bpod_intervals[ibpod, :]
-        ephys_intervals = ephys_intervals[ifpga, :]
-    else:
-        ibpod, ifpga = [np.arange(bpod_intervals.shape[0]) for _ in np.arange(2)]
-
-    tlen = (np.diff(bpod_intervals) - np.diff(ephys_intervals))[:-1] - iti_duration
-    assert np.all(np.abs(tlen[np.invert(np.isnan(tlen))])[:-1] < 5 * 1e-3)
-    # dt is the delta to apply to bpod times in order to be on the ephys clock
-    dt = bpod_intervals[:, 0] - ephys_intervals[:, 0]
-    # compute the clock drift bpod versus dt
-    ppm = np.polyfit(bpod_intervals[:, 0], dt, 1)[0] * 1e6
-    if ppm > BPOD_FPGA_DRIFT_THRESHOLD_PPM:
-        _logger.warning(
-            'BPOD/FPGA synchronization shows values greater than %i ppm',
-            BPOD_FPGA_DRIFT_THRESHOLD_PPM)
-        # plt.plot(trials['intervals'][:, 0], dt, '*')
-    # so far 2 datasets concerned: goCueTrigger_times_bpod  and response_times_bpod
-    fcn_bpod2fpga = interpolate.interp1d(bpod_intervals[:, 0], ephys_intervals[:, 0],
-                                         fill_value="extrapolate")
-    return ibpod, ifpga, fcn_bpod2fpga
-
-
 def extract_camera_sync(sync, chmap=None):
     """
     Extract camera timestamps from the sync matrix
@@ -382,7 +338,7 @@ def extract_wheel_sync(sync, chmap=None):
     return wheel['re_ts'], wheel['re_pos']
 
 
-def extract_behaviour_sync(sync, chmap=None, display=False, tmax=np.inf):
+def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tmax=np.inf):
     """
     Extract wheel positions and times from sync fronts dictionary
 
@@ -402,6 +358,20 @@ def extract_behaviour_sync(sync, chmap=None, display=False, tmax=np.inf):
     # extract events from the fronts for each trace
     t_trial_start, t_valve_open, t_iti_in = _assign_events_bpod(
         bpod['times'], bpod['polarities'])
+    # one issue is that sometimes bpod pulses may not have been detected, in this case
+    # perform the sync bpod/FPGA, and add the start that have not been detected
+    if bpod_trials:
+        bpod_start = bpod_trials['intervals_bpod'][:, 0]
+        fcn, drift, ibpod, ifpga = dsp.utils.sync_timestamps(
+            bpod_start, t_trial_start, return_indices=True)
+        # if it's drifting too much
+        if drift > 200 and bpod_start.size != t_trial_start.size:
+            raise err.SyncBpodFpgaException("sync cluster f*ck")
+        missing_bpod = fcn(bpod_start[np.setxor1d(ibpod, np.arange(len(bpod_start)))])
+        t_trial_start = np.sort(np.r_[t_trial_start, missing_bpod])
+    else:
+        _logger.warning("Deprecation Warning: calling FPGA trials extraction without a bpod trials"
+                        " dictionary will result in an error.")
     t_ready_tone_in, t_error_tone_in = _assign_events_audio(
         audio['times'], audio['polarities'])
     trials = Bunch({
@@ -635,11 +605,15 @@ class FpgaTrials(BaseExtractor):
         bpod_trials, _ = biased_trials.extract_all(
             session_path=self.session_path, save=False, bpod_trials=bpod_raw)
         bpod_trials['intervals_bpod'] = np.copy(bpod_trials['intervals'])
-        fpga_trials = extract_behaviour_sync(
-            sync=sync, chmap=chmap, tmax=bpod_trials['intervals'][-1, -1] + 60)
+        fpga_trials = extract_behaviour_sync(sync=sync, chmap=chmap, bpod_trials=bpod_trials,
+                                             tmax=bpod_trials['intervals'][-1, -1] + 60)
         # checks consistency and compute dt with bpod
-        ibpod, ifpga, self.bpod2fpga = bpod_fpga_sync(
-            bpod_trials['intervals_bpod'], fpga_trials.pop('intervals'))
+        self.bpod2fpga, drift_ppm, ibpod, ifpga = dsp.utils.sync_timestamps(
+            bpod_trials['intervals_bpod'][:, 0], fpga_trials.pop('intervals')[:, 0],
+            return_indices=True)
+        if drift_ppm > BPOD_FPGA_DRIFT_THRESHOLD_PPM:
+            _logger.warning('BPOD/FPGA synchronization shows values greater than %i ppm',
+                            BPOD_FPGA_DRIFT_THRESHOLD_PPM)
         # those fields get directly in the output
         bpod_fields = ['feedbackType', 'choice', 'rewardVolume', 'intervals_bpod']
         # those fields have to be resynced

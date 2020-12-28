@@ -14,7 +14,11 @@ def sync_timestamps(tsa, tsb, tbin=0.1, return_indices=False):
     :param tbin: time bin length
     :param return_indices (bool), if True returns 2 sets of indices for tsa and tsb with
     identified matches
-    :return: drift (tsb later than tsa shows as positive)
+    :return:
+     function: interpolation function such as fnc(tsa) = tsb
+     float: drift in ppm
+     numpy array: of indices ia
+     numpy array: of indices ib
     """
 
     def _interp_fcn(tsa, tsb, ib):
