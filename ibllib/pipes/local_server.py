@@ -47,7 +47,7 @@ def report_health(one):
         fac = 1024 ** 2
         d = {'total': int(size_list[1]) / fac,
              'used': int(size_list[2]) / fac,
-             'available': int(size_list[3] / fac),
+             'available': int(size_list[3]) / fac,
              'volume': size_list[5]}
         return {f"{label}_{k}": d[k] for k in d}
 
