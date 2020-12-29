@@ -26,7 +26,7 @@ import ibllib.plots as plots
 
 _logger = logging.getLogger('ibllib')
 
-SYNC_BATCH_SIZE_SAMPLES = 2 ** 18  # number of samples to read at once in bin file for sync
+SYNC_BATCH_SIZE_SECS = 100  # number of samples to read at once in bin file for sync
 WHEEL_RADIUS_CM = 1  # stay in radians
 WHEEL_TICKS = 1024
 
@@ -101,7 +101,7 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
     file_ftcp = Path(output_path).joinpath(f'fronts_times_channel_polarity{str(uuid.uuid4())}.bin')
 
     # loop over chunks of the raw ephys file
-    wg = dsp.WindowGenerator(sr.ns, SYNC_BATCH_SIZE_SAMPLES, overlap=1)
+    wg = dsp.WindowGenerator(sr.ns, int(SYNC_BATCH_SIZE_SECS * sr.fs), overlap=1)
     fid_ftcp = open(file_ftcp, 'wb')
     for sl in wg.slice:
         ss = sr.read_sync(sl)
@@ -624,7 +624,7 @@ class FpgaTrials(BaseExtractor):
         pclcr, _ = ProbaContrasts(self.session_path).extract(bpod_trials=bpod_raw, save=False)
         # build trials output
         out = OrderedDict()
-        out.update({k: pclcr[i][ifpga] for i, k in enumerate(ProbaContrasts.var_names)})
+        out.update({k: pclcr[i][ibpod] for i, k in enumerate(ProbaContrasts.var_names)})
         out.update({k: bpod_trials[k][ibpod] for k in bpod_fields})
         out.update({k: self.bpod2fpga(bpod_trials[k][ibpod]) for k in bpod_rsync_fields})
         out.update({k: fpga_trials[k][ifpga] for k in sorted(fpga_trials.keys())})
