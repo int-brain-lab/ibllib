@@ -33,6 +33,15 @@ class TestsParams(unittest.TestCase):
         par2 = params.read('toto')
         self.assertEqual(par, par2)
 
+    def test_param_get_file(self):
+        home_dir = Path(params.getfile("toto")).parent
+        # straight case the file is .{str} in the home directory
+        assert home_dir.joinpath(".toto") == Path(params.getfile("toto"))
+        # straight case the file is .{str} in the home directory
+        assert home_dir.joinpath(".toto") == Path(params.getfile(".toto"))
+        # subfolder case
+        assert home_dir.joinpath(".toto", ".titi") == Path(params.getfile("toto/titi"))
+
     def test_new_default_param(self):
         # in this case an updated version of the codes brings in a new parameter
         default = {'A': 'tata2',

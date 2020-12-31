@@ -1,5 +1,5 @@
 import collections
-import pathlib
+from pathlib import Path, PurePath
 import sys
 import os
 import json
@@ -41,10 +41,12 @@ def getfile(str_params):
     :param str_params: string that identifies parm file
     :return: string of full path
     """
+    # strips already existing dot if any
+    parts = ['.' + p if not p.startswith('.') else p for p in Path(str_params).parts]
     if sys.platform == 'win32' or sys.platform == 'cygwin':
-        pfile = str(pathlib.PurePath(os.environ['APPDATA'], '.' + str_params))
+        pfile = str(PurePath(os.environ['APPDATA'], *parts))
     else:
-        pfile = str(pathlib.PurePath(pathlib.Path.home(), '.' + str_params))
+        pfile = str(PurePath(Path.home(), *parts))
     return pfile
 
 
@@ -57,7 +59,7 @@ def read(str_params, default=None):
     :return: named tuple containing parameters
     """
     pfile = getfile(str_params)
-    if pathlib.Path(pfile).exists():
+    if Path(pfile).exists():
         with open(pfile) as fil:
             par_dict = json.loads(fil.read())
     else:
@@ -88,7 +90,7 @@ def write(str_params, par):
     pfile = getfile(str_params)
     dpar = as_dict(par)
     for k in dpar:
-        if isinstance(dpar[k], pathlib.Path):
+        if isinstance(dpar[k], Path):
             dpar[k] = str(dpar[k])
     with open(pfile, 'w') as fil:
         json.dump(as_dict(par), fil, sort_keys=False, indent=4)
