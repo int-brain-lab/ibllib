@@ -10,6 +10,18 @@ import ibllib.io.raw_data_loaders as raw
 from alf.io import is_session_path
 from oneibl.one import ONE
 
+_logger = logging.getLogger("ibllib")
+
+REQUIRED_FIELDS = ['choice', 'contrast', 'contrastLeft', 'contrastRight', 'correct',
+                   'errorCueTrigger_times', 'errorCue_times', 'feedbackType', 'feedback_times',
+                   'firstMovement_times', 'goCueTrigger_times', 'goCue_times', 'intervals',
+                   'itiIn_times', 'phase', 'position', 'probabilityLeft', 'quiescence',
+                   'response_times', 'rewardVolume', 'stimFreezeTrigger_times',
+                   'stimFreeze_times', 'stimOffTrigger_times', 'stimOff_times',
+                   'stimOnTrigger_times', 'stimOn_times', 'valveOpen_times',
+                   'wheel_moves_intervals', 'wheel_moves_peak_amplitude',
+                   'wheel_position', 'wheel_timestamps']
+
 
 class TaskQCExtractor(object):
     def __init__(self, session_path, lazy=False, one=None, download_data=False, bpod_only=False):
@@ -164,4 +176,9 @@ class TaskQCExtractor(object):
             data['valveOpen_times'] = data["feedback_times"].copy()
             data['valveOpen_times'][~correct] = np.nan
         data['correct'] = correct
+        diff_fields = list(set(REQUIRED_FIELDS).difference(set(data.keys())))
+        for miss_field in diff_fields:
+            data[miss_field] = data["feedback_times"] * np.nan
+        if len(diff_fields):
+            _logger.warning(f"QC extractor, missing fields filled with NaNs: {diff_fields}")
         return data
