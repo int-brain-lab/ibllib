@@ -143,7 +143,7 @@ def _get_passive_spacers(session_path, sync=None, sync_map=None):
     returns t_passive_starts, t_starts, t_ends
     """
     if sync is None or sync_map is None:
-        sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
+        sync, sync_map = ephys_fpga.get_main_probe_sync(session_path, bin_exists=False)
     meta = _load_passive_stim_meta()
     # t_end_ephys = passive.ephysCW_end(session_path=session_path)
     fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=None)
@@ -359,7 +359,7 @@ def extract_passive_periods(
     session_path: str, sync: dict = None, sync_map: dict = None
 ) -> pd.DataFrame:
     if sync is None or sync_map is None:
-        sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
+        sync, sync_map = ephys_fpga.get_main_probe_sync(session_path, bin_exists=False)
 
     t_start_passive, t_starts, t_ends = _get_passive_spacers(
         session_path, sync=sync, sync_map=sync_map
@@ -387,7 +387,7 @@ def extract_rfmapping(
         + {v: k for k, v in meta["VISUAL_STIMULI"].items()}["receptive_field_mapping"]
     )
     if sync is None or sync_map is None:
-        sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
+        sync, sync_map = ephys_fpga.get_main_probe_sync(session_path, bin_exists=False)
     if trfm is None:
         passivePeriods_df = extract_passive_periods(session_path, sync=sync, sync_map=sync_map)
         trfm = passivePeriods_df.RFM.values
@@ -418,7 +418,7 @@ def extract_task_replay(
     session_path: str, sync: dict = None, sync_map: dict = None, treplay: np.array = None
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     if sync is None or sync_map is None:
-        sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
+        sync, sync_map = ephys_fpga.get_main_probe_sync(session_path, bin_exists=False)
 
     if treplay is None:
         passivePeriods_df = extract_passive_periods(session_path, sync=sync, sync_map=sync_map)
@@ -453,7 +453,7 @@ def extract_replay_debug(
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     # Load sessions sync channels, map
     if sync is None or sync_map is None:
-        sync, sync_map = ephys_fpga._get_main_probe_sync(session_path, bin_exists=False)
+        sync, sync_map = ephys_fpga.get_main_probe_sync(session_path, bin_exists=False)
 
     if treplay is None:
         passivePeriods_df = extract_passive_periods(session_path, sync=sync, sync_map=sync_map)
@@ -514,7 +514,7 @@ class PassiveChoiceWorld(BaseExtractor):
         self, sync: dict = None, sync_map: dict = None, plot: bool = False, **kwargs
     ) -> tuple:
         if sync is None or sync_map is None:
-            sync, sync_map = ephys_fpga._get_main_probe_sync(self.session_path, bin_exists=False)
+            sync, sync_map = ephys_fpga.get_main_probe_sync(self.session_path, bin_exists=False)
 
         try:
             # Passive periods

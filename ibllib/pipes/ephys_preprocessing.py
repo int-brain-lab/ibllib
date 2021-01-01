@@ -261,7 +261,7 @@ class EphysTrials(tasks.Task):
         qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one)
         # Extract extra datasets required for QC
         qc.extractor.data = dsets
-        qc.extractor.extract_data(partial=True)
+        qc.extractor.extract_data()
         # Aggregate and update Alyx QC fields
         qc.run(update=True)
         return out_files

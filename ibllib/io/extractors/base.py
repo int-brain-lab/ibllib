@@ -1,3 +1,8 @@
+"""Base Extractor classes
+A module for the base Extractor classes.  The Extractor, given a session path, will extract the
+processed data from raw hardware files and optionally save them.
+"""
+
 import abc
 import json
 from collections import OrderedDict
@@ -67,16 +72,19 @@ class BaseExtractor(abc.ABC):
             else:
                 log.error(f"Don't know how to save {file_path.suffix} files yet")
 
-        if isinstance(self.save_names, str):
+        if self.save_names is None:
+            file_paths = []
+        elif isinstance(self.save_names, str):
             file_paths = path_out.joinpath(self.save_names)
             _write_to_disk(file_paths, data)
         else:  # Should be list or tuple...
             assert len(data) == len(self.save_names)
             file_paths = []
             for data, fn in zip(data, self.save_names):
-                fpath = path_out.joinpath(fn)
-                _write_to_disk(fpath, data)
-                file_paths.append(fpath)
+                if fn:
+                    fpath = path_out.joinpath(fn)
+                    _write_to_disk(fpath, data)
+                    file_paths.append(fpath)
         return file_paths
 
     @abc.abstractmethod
@@ -148,7 +156,6 @@ def run_extractor_classes(classes, session_path=None, **kwargs):
         else:
             for i, k in enumerate(classe.var_names):
                 outputs[k] = out[i]
-    assert (len(files) == 0) or (len(files) == len(outputs.keys()))
     return outputs, files
 
 

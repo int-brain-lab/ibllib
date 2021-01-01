@@ -1,12 +1,10 @@
 import logging
 from collections import OrderedDict
 
-from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.pipes import tasks
-from ibllib.io import ffmpeg, raw_data_loaders as rawio
-from ibllib.io.extractors import (
-    habituation_trials, training_trials, biased_trials, training_wheel, training_audio
-)
+from ibllib.io import ffmpeg
+from ibllib.io.extractors.base import get_session_extractor_type
+from ibllib.io.extractors import training_audio, bpod_trials
 from ibllib.qc.task_metrics import TaskQC, HabituationQC
 from ibllib.qc.task_extractors import TaskQCExtractor
 from oneibl.registration import register_session_raw_data
@@ -31,32 +29,23 @@ class TrainingTrials(tasks.Task):
         """
         Extracts an iblrig training session
         """
-        trials, wheel, output_files = extract_training(self.session_path, save=True)
+        trials, wheel, output_files = bpod_trials.extract_all(self.session_path, save=True)
         if trials is None:
             return None
 
         # Run the task QC
         # Compile task data for QC
-        def _qc_extract(qc):
-            qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one)
-            qc.extractor.data = trials
-            qc.extractor.extract_data(partial=True)  # Extract the rest of the data
-            return qc
-
-        if get_session_extractor_type(self.session_path) == 'habituation':
+        type = get_session_extractor_type(self.session_path)
+        if type == 'habituation':
             qc = HabituationQC(self.session_path, one=self.one)
-            qc = _qc_extract(qc)
+            qc.extractor = TaskQCExtractor(self.session_path, one=self.one)
         else:  # Update wheel data
             qc = TaskQC(self.session_path, one=self.one)
-            ts, pos, *_, first_moves = wheel
-            qc = _qc_extract(qc)
-            qc.extractor.data.update(
-                {'wheel_timestamps': ts, 'wheel_position': pos, 'firstMovement_times': first_moves}
-            )
+            qc.extractor = TaskQCExtractor(self.session_path, one=self.one)
+            qc.extractor.wheel_encoding = 'X1'
         # Aggregate and update Alyx QC fields
         qc.run(update=True)
-
-        return [file for file in output_files if file is not None]
+        return output_files
 
 
 class TrainingVideoCompress(tasks.Task):
@@ -111,44 +100,3 @@ class TrainingExtractionPipeline(tasks.Pipeline):
         tasks['TrainingDLC'] = TrainingDLC(
             self.session_path, parents=[tasks['TrainingVideoCompress']])
         self.tasks = tasks
-
-
-def extract_training(session_path, save=True):
-    """
-    Extracts a training session from its path.  NB: Wheel must be extracted first in order to
-    extract trials.firstMovement_times.
-    :param session_path:
-    :param save:
-    :return: trials: Bunch/dict of trials
-    :return: wheel: Bunch/dict of wheel positions
-    :return: out_Files: list of output files
-    """
-    extractor_type = get_session_extractor_type(session_path)
-    _logger.info(f"Extracting {session_path} as {extractor_type}")
-    settings, bpod_trials = rawio.load_bpod(session_path)
-    if extractor_type == 'training':
-        _logger.info('training session on ' + settings['PYBPOD_BOARD'])
-        wheel, files_wheel = training_wheel.extract_all(
-            session_path, bpod_trials=bpod_trials, settings=settings, save=save)
-        trials, files_trials = training_trials.extract_all(
-            session_path, bpod_trials=bpod_trials, settings=settings, save=save)
-    elif extractor_type == 'biased':
-        _logger.info('biased session on ' + settings['PYBPOD_BOARD'])
-        wheel, files_wheel = training_wheel.extract_all(
-            session_path, bpod_trials=bpod_trials, settings=settings, save=save)
-        trials, files_trials = biased_trials.extract_all(
-            session_path, bpod_trials=bpod_trials, settings=settings, save=save)
-    elif extractor_type == 'habituation':
-        from ibllib.misc import version
-        _logger.info('habituation session on ' + settings['PYBPOD_BOARD'])
-        if version.le(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
-            _logger.warning("No extraction of legacy habituation sessions")
-            return None, None, None
-        trials, files_trials = habituation_trials.extract_all(
-            session_path, bpod_trials=bpod_trials, settings=settings, save=save)
-        wheel = None
-        files_wheel = []
-    else:
-        raise ValueError(f"No extractor for task {extractor_type}")
-    _logger.info('session extracted \n')  # timing info in log
-    return trials, wheel, (files_trials + files_wheel) if save else None
