@@ -644,9 +644,9 @@ class TestsGlobus(unittest.TestCase):
         mock_params.return_value = None  # No parameters saved
         with self.assertRaises(ValueError):
             globus.login_auto(client_id)
-        mock_params.assert_called_with('globus')
+        mock_params.assert_called_with('globus/default')
 
-        pars = params.from_dict({'transfer_token': '7r3hj89', 'expires_at_s': '2020-09-10'})
+        pars = params.from_dict({'access_token': '7r3hj89', 'expires_at_seconds': '2020-09-10'})
         mock_params.return_value = pars  # Incomplete parameter object
         with self.assertRaises(ValueError):
             globus.login_auto(client_id)

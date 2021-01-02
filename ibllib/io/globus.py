@@ -46,8 +46,8 @@ def _login(globus_client_id, refresh_tokens=False):
     globus_transfer_data = token_response.by_resource_server['transfer.api.globus.org']
 
     token = dict(refresh_token=globus_transfer_data['refresh_token'],
-                 transfer_token=globus_transfer_data['access_token'],
-                 expires_at_s=globus_transfer_data['expires_at_seconds'],
+                 access_token=globus_transfer_data['access_token'],
+                 expires_at_seconds=globus_transfer_data['expires_at_seconds'],
                  )
     return token
 
@@ -59,16 +59,16 @@ def login(globus_client_id):
     return tc
 
 
-def setup(globus_client_id, str_app='globus'):
+def setup(globus_client_id, str_app='globus/default'):
     # Lookup and manage consents there
     # https://auth.globus.org/v2/web/consents
     gtok = _login(globus_client_id, refresh_tokens=True)
     params.write(str_app, gtok)
 
 
-def login_auto(globus_client_id, str_app='globus'):
+def login_auto(globus_client_id, str_app='globus/default'):
     token = params.read(str_app)
-    required_fields = {'refresh_token', 'transfer_token', 'expires_at_s'}
+    required_fields = {'refresh_token', 'access_token', 'expires_at_seconds'}
     if not (token and required_fields.issubset(token.as_dict())):
         raise ValueError("Token file doesn't exist, run ibllib.io.globus.setup first")
     client = globus.NativeAppAuthClient(globus_client_id)
