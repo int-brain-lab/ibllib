@@ -98,6 +98,27 @@ class Patcher(abc.ABC):
         """
         return register_dataset(file_list, one=self.one, server_only=True, **kwargs)
 
+    def register_datasets(self, file_list, **kwargs):
+        """
+        Same as register_dataset but works with files belonging to different sessions
+        """
+        register_dict = {}
+        # creates a dictionary of sessions with one file list per session
+        for f in file_list:
+            session_path = alf.io.get_session_path(f)
+            label = '_'.join(session_path.parts[-3:])
+            if label in register_dict:
+                register_dict[label]['files'].append(f)
+            else:
+                register_dict[label] = {'session_path': session_path, 'files': [f]}
+        responses = []
+        nses = len(register_dict)
+        for i, label in enumerate(register_dict):
+            _files = register_dict[label]['files']
+            _logger.info(f"{i}/{nses} {label}, registering {len(_files)} files")
+            responses.append(self.register_dataset(_files, **kwargs))
+        return responses
+
     def create_dataset(self, file_list, repository=None, created_by='root', dry=False, ftp=False):
         """
         Creates a new dataset on FlatIron and uploads it from arbitrary location.
@@ -126,6 +147,27 @@ class Patcher(abc.ABC):
         for p, d in zip(file_list, response):
             self._patch_dataset(p, dset_id=d['id'], dry=dry, ftp=ftp)
         return response
+
+    def create_datasets(self, file_list, **kwargs):
+        """
+        Same as create_dataset method but works with several sessions
+        """
+        register_dict = {}
+        # creates a dictionary of sessions with one file list per session
+        for f in file_list:
+            session_path = alf.io.get_session_path(f)
+            label = '_'.join(session_path.parts[-3:])
+            if label in register_dict:
+                register_dict[label]['files'].append(f)
+            else:
+                register_dict[label] = {'session_path': session_path, 'files': [f]}
+        responses = []
+        nses = len(register_dict)
+        for i, label in enumerate(register_dict):
+            _files = register_dict[label]['files']
+            _logger.info(f"{i}/{nses} {label}, registering {len(_files)} files")
+            responses.append(self.create_dataset(_files, **kwargs))
+        return responses
 
     def delete_dataset(self, dset_id, dry=False):
         """
@@ -192,6 +234,7 @@ class Patcher(abc.ABC):
 class GlobusPatcher(Patcher):
     """
     Requires GLOBUS keys access
+    GlobusPatcher(one=one, globu_transfer=gtc)
     """
 
     def __init__(self, one=None, globus_transfer=None, globus_delete=None):
