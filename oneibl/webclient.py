@@ -69,7 +69,7 @@ def http_download_file_list(links_to_file_list, **kwargs):
     return file_names_list
 
 
-def http_download_file(full_link_to_file, chunks=None, *, clobber=False, offline=False,
+def http_download_file(full_link_to_file, chunks=None, *, clobber=False,
                        username='', password='', cache_dir='', return_md5=False):
     """
     :param full_link_to_file: http link to the file.
@@ -99,8 +99,6 @@ def http_download_file(full_link_to_file, chunks=None, *, clobber=False, offline
 
     # do not overwrite an existing file unless specified
     if not clobber and os.path.exists(file_name):
-        return (file_name, hashfile.md5(file_name)) if return_md5 else file_name
-    elif offline:
         return (file_name, hashfile.md5(file_name)) if return_md5 else file_name
 
     # This should be the base url you wanted to access.
@@ -242,7 +240,7 @@ class AlyxClient(metaclass=UniqueSingletons):
         _logger.debug(f"{self._base_url + rest_query}, headers: {self._headers}")
         headers = self._headers.copy()
         if files is None:
-            data = json.dumps(data) if isinstance(data, dict) else data
+            data = json.dumps(data) if isinstance(data, dict) or isinstance(data, list) else data
             headers['Content-Type'] = 'application/json'
         r = reqfunction(self._base_url + rest_query, stream=True, headers=headers,
                         data=data, files=files)

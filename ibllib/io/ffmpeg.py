@@ -32,6 +32,7 @@ def compress(file_in, file_out, command, remove_original=True):
     info, error = process.communicate()
     if process.returncode != 0:
         _logger.error(f'compression failed for {file_in}: {error}')
+        _logger.error(command2run)
         return process.returncode, None
     else:
         # if the command was successful delete the original file
