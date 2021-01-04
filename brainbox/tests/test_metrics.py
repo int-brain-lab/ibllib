@@ -1,5 +1,6 @@
 import numpy as np
 from brainbox.metrics import quick_unit_metrics, electrode_drift
+from brainbox.numerical import ismember
 
 REC_LEN_SECS = 1000
 fr = 200
@@ -27,7 +28,8 @@ def multiple_spike_trains(firing_rates=None, rec_len_secs=1000, cluster_ids=None
     ordre = st.argsort()
     st = st[ordre]
     sc = np.int32(sc[ordre])
-    sa = np.maximum(ca[sc] + np.random.randn(st.size) * amplitude_noise, 25 * 1e-6)
+    _, isc = ismember(sc, cluster_ids)  # clusters ids may be arbitrary: re-index
+    sa = np.maximum(ca[isc] + np.random.randn(st.size) * amplitude_noise, 25 * 1e-6)
     return st, sa, sc
 
 
@@ -38,28 +40,36 @@ def generate_spike_train(firing_rate=200, rec_len_secs=1000):
     :param rec_len_secs:
     :return: spike_times (secs) , spike_amplitudes (V)
     """
-
     # spike times: exponential decay prob
     st = np.cumsum(- np.log(np.random.rand(int(rec_len_secs * firing_rate * 1.5))) / firing_rate)
     st = st[:np.searchsorted(st, rec_len_secs)]
-
     return st
 
 
 def test_clusters_metrics():
-    frs = [3, 200, 259, 567]  # firing rates
-    t, a, c = multiple_spike_trains(firing_rates=frs, rec_len_secs=1000, cluster_ids=[0, 1, 3, 4])
-    d = np.sin(2 * np.pi * c / 1000 * t) * 100  # sinusoidal shift where cluster id drives period
-    dfm = quick_unit_metrics(c, t, a, d)
+    np.random.seed(54)
+    rec_length = 1000
+    frs = np.array([3, 100, 80, 40])  # firing rates
+    cid = [0, 1, 3, 4]  # here we make sure one of the clusters has no spike
+    t, a, c = multiple_spike_trains(firing_rates=frs, rec_len_secs=rec_length, cluster_ids=cid)
+    d = np.sin(2 * np.pi * c / rec_length * t) * 100  # sinusoidal shift where cluster id drives f
 
-    assert np.allclose(dfm['amp_median'] / np.exp(5.5) * 1e6, 1, rtol=1.1)
-    assert np.allclose(dfm['amp_std_dB'] / 20 * np.log10(np.exp(0.5)), 1, rtol=1.1)
-    assert np.allclose(dfm['drift'], np.array([0, 1, 3, 4]) * 100 * 4 * 3.6, rtol=1.1)
+    def _assertions(dfm, idf, target_cid):
+        # dfm: qc dataframe, idf: indices of existing clusters in dfm, cid: cluster ids
+        assert np.allclose(dfm['amp_median'][idf] / np.exp(5.5) * 1e6, 1, rtol=1.1)
+        assert np.allclose(dfm['amp_std_dB'][idf] / 20 * np.log10(np.exp(0.5)), 1, rtol=1.1)
+        assert np.allclose(dfm['drift'][idf], np.array(cid) * 100 * 4 * 3.6, rtol=1.1)
+        assert np.allclose(dfm['firing_rate'][idf], frs, rtol=1.1)
+        assert np.allclose(dfm['cluster_id'], target_cid)
 
-    np.allclose(dfm['firing_rate'], frs)
-    # probe_path = "/datadisk/FlatIron/m1ainenlab/Subjects/ZFM-01577/2020-11-04/001/alf/probe00"
-    # spikes = alf.io.load_object(probe_path, 'spikes')
-    # quick_unit_metrics(spikes['clusters'], spikes['times'], spikes['amps'], spikes['depths'])
+    # # check with straight indexing
+    # dfm = quick_unit_metrics(c, t, a, d)
+    # _assertions(dfm, np.arange(4), cid)
+
+    # check with missing clusters
+    dfm = quick_unit_metrics(c, t, a, d, cluster_ids=np.arange(5))
+    idf, _ = ismember(np.arange(5), cid)
+    _assertions(dfm, idf, np.arange(5))
 
 
 def test_drift_estimate():

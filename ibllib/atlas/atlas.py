@@ -6,7 +6,8 @@ import pandas as pd
 import numpy as np
 import nrrd
 
-from brainbox.core import Bunch, ismember
+from brainbox.core import Bunch
+from brainbox.numerical import ismember
 from ibllib.io import params
 from oneibl.webclient import http_download_file
 

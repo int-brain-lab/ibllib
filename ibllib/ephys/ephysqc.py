@@ -155,7 +155,7 @@ def validate_ttl_test(ses_path, display=False):
 
     # get the synchronization fronts (from the raw binary if necessary)
     ephys_fpga.extract_sync(session_path=ses_path, overwrite=False)
-    rawsync, sync_map = ephys_fpga._get_main_probe_sync(ses_path)
+    rawsync, sync_map = ephys_fpga.get_main_probe_sync(ses_path)
     last_time = rawsync['times'][-1]
 
     # get upgoing fronts for each
@@ -234,7 +234,7 @@ def spike_sorting_metrics_ks2(ks2_path=None, m=None, save=True):
                                                 'directory, or a phylib `TemplateModel` object'
     # create phylib `TemplateModel` if not given
     m = phy_model_from_ks2_path(ks2_path) if None else m
-    c = spike_sorting_metrics(m.spike_times, m.spike_clusters, m.amplitudes, m.depths)
+    c, drift = spike_sorting_metrics(m.spike_times, m.spike_clusters, m.amplitudes, m.depths)
     #  include the ks2 cluster contamination if `cluster_ContamPct` file exists
     file_contamination = ks2_path.joinpath('cluster_ContamPct.tsv')
     if file_contamination.exists():
@@ -396,7 +396,7 @@ def _qc_from_path(sess_path, display=True):
     raw_trials = raw_data_loaders.load_data(sess_path)
     tmax = raw_trials[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
 
-    sync, chmap = ephys_fpga._get_main_probe_sync(sess_path, bin_exists=False)
+    sync, chmap = ephys_fpga.get_main_probe_sync(sess_path, bin_exists=False)
     _ = ephys_fpga.extract_all(sess_path, output_path=temp_alf_folder, save=True)
     # check that the output is complete
     fpga_trials = ephys_fpga.extract_behaviour_sync(sync, output_path=temp_alf_folder, tmax=tmax,
