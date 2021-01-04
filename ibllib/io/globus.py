@@ -1,4 +1,5 @@
 from pathlib import Path
+import sys
 
 import globus_sdk as globus
 from ibllib.io import params
@@ -75,3 +76,11 @@ def login_auto(globus_client_id, str_app='globus/default'):
     client.oauth2_start_flow(refresh_tokens=True)
     authorizer = globus.RefreshTokenAuthorizer(token.refresh_token, client)
     return globus.TransferClient(authorizer=authorizer)
+
+
+def get_local_endpoint():
+    if sys.platform == 'win32' or sys.platform == 'cygwin':
+        raise NotImplementedError("No clue where this file is on a Windows OS")
+    with open(Path.home().joinpath(".globusonline/lta/client-id.txt"), 'r') as fid:
+        globus_id = fid.read()
+    return globus_id.strip()
