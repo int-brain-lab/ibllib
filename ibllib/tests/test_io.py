@@ -625,7 +625,7 @@ class TestsGlobus(unittest.TestCase):
     def test_as_globus_path(self):
         # A Windows path
         actual = globus.as_globus_path('E:\\FlatIron\\integration')
-        self.assertTrue(actual.startswith('/~/'))
+        self.assertTrue(actual.startswith('/E/'))
 
         # A relative POSIX path
         actual = globus.as_globus_path('/mnt/foo/../data/integration')
@@ -633,8 +633,8 @@ class TestsGlobus(unittest.TestCase):
         self.assertTrue(actual.endswith(expected))
 
         # A globus path
-        actual = globus.as_globus_path('/~/E/FlatIron/integration')
-        expected = '/~/E/FlatIron/integration'
+        actual = globus.as_globus_path('/E/FlatIron/integration')
+        expected = '/E/FlatIron/integration'
         self.assertEqual(expected, actual)
 
     @unittest.mock.patch('ibllib.io.params.read')

@@ -1,5 +1,7 @@
-from pathlib import Path
+import re
 import sys
+import os
+from pathlib import Path
 
 import globus_sdk as globus
 from ibllib.io import params
@@ -7,7 +9,8 @@ from ibllib.io import params
 
 def as_globus_path(path):
     """
-    Convert a path into one suitable for the Globus TransferClient.
+    Convert a path into one suitable for the Globus TransferClient.  NB: If using tilda in path,
+    the home folder of your Globus Connect instance must be the same as the OS home dir.
 
     :param path: A path str or Path instance
     :return: A formatted path string
@@ -19,18 +22,23 @@ def as_globus_path(path):
 
         # A relative POSIX path
         >>> as_globus_path('../data/integration')
-        >>> '/~/mnt/data/integration'
+        >>> '/mnt/data/integration'
 
         # A globus path
-        >>> as_globus_path('/~/E/FlatIron/integration')
-        >>> '/~/E/FlatIron/integration'
+        >>> as_globus_path('/E/FlatIron/integration')
+        >>> '/E/FlatIron/integration'
     """
-    if str(path).startswith('/~/'):
+    path = str(path)
+    if (
+        re.match(r'/[A-Z]($|/)', path)
+        if sys.platform in ('win32', 'cygwin')
+        else Path(path).is_absolute()
+    ):
         return path
     path = Path(path).resolve()
     if path.drive:
-        path = path.as_posix().replace(':', '', 1)
-    return '/~/' + str(path)
+        path = '/' + str(path.as_posix().replace(':', '', 1))
+    return str(path)
 
 
 def _login(globus_client_id, refresh_tokens=False):
@@ -80,7 +88,9 @@ def login_auto(globus_client_id, str_app='globus/default'):
 
 def get_local_endpoint():
     if sys.platform == 'win32' or sys.platform == 'cygwin':
-        raise NotImplementedError("No clue where this file is on a Windows OS")
-    with open(Path.home().joinpath(".globusonline/lta/client-id.txt"), 'r') as fid:
+        id_path = Path(os.environ['LOCALAPPDATA']).joinpath("Globus Connect")
+    else:
+        id_path = Path.home().joinpath(".globusonline", "lta")
+    with open(id_path / "client-id.txt", 'r') as fid:
         globus_id = fid.read()
     return globus_id.strip()
