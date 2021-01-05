@@ -16,18 +16,21 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
+from scipy import signal
 
 from ibllib.io.extractors.camera import (
     load_embedded_frame_data, extract_camera_sync, PIN_STATE_THRESHOLD, extract_all
 )
 from ibllib.exceptions import ALFObjectNotFound
-from ibllib.io.extractors import ephys_fpga
+from ibllib.io.extractors import ephys_fpga, training_wheel
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io import raw_data_loaders as raw
 import alf.io as alfio
 from brainbox.core import Bunch
+import brainbox.behavior.wheel as wh
 from brainbox.io.one import path_to_url, datasets_from_type
 from brainbox.io.video import get_video_meta, get_video_frames_preload
+from brainbox.video import frame_diff
 from . import base
 
 _log = logging.getLogger('ibllib')
@@ -109,7 +112,8 @@ class CameraQC(base.QC):
         logging.disable(logging.CRITICAL)
         self.type = get_session_extractor_type(self.session_path) or None
         logging.disable(logging.NOTSET)
-        self.data = Bunch()
+        keys = ('count', 'pin_state', 'audio', 'fpga_times', 'wheel', 'video', 'frame_samples')
+        self.data = Bunch.fromkeys(keys)
         self.frame_samples_idx = None
 
         # QC outcomes map
@@ -133,32 +137,42 @@ class CameraQC(base.QC):
         self.data['count'], self.data['pin_state'] = \
             load_embedded_frame_data(self.session_path, self.side, raw=True)
 
-        # Get audio data
+        # Get audio and wheel data
+        wheel_keys = ('timestamps', 'position')
         if self.type == 'ephys':
             sync, chmap = ephys_fpga.get_main_probe_sync(self.session_path)
+            wheel_data = ephys_fpga.extract_wheel_sync(sync, chmap)
             audio_ttls = ephys_fpga._get_sync_fronts(sync, chmap['audio'])
             self.data['audio'] = audio_ttls['times'][::2]  # Get rises
             # Load raw FPGA times
             cam_ts = extract_camera_sync(sync, chmap)
             self.data['fpga_times'] = cam_ts[f'{self.side}_camera']
         else:
-            _, audio_ttls = raw.load_bpod_fronts(self.session_path)
+            bpod_data = raw.load_data(self.session_path)
+            wheel_data = training_wheel.get_wheel_position(self.session_path)
+            _, audio_ttls = raw.load_bpod_fronts(self.session_path, bpod_data)
             self.data['audio'] = audio_ttls['times'][::2]
+        self.data['wheel'] = Bunch(zip(wheel_keys, wheel_data))
 
-        # Gather information from video file
-        _log.info('Inspecting video file...')
-        # Get basic properties of video
-        try:
-            self.data['video'] = get_video_meta(self.video_path, one=self.one)
-            # Sample some frames from the video file
-            indices = np.linspace(100, self.data['video'].length - 100, self.n_samples).astype(int)
-            self.frame_samples_idx = indices
-            self.data['frame_samples'] = get_video_frames_preload(self.video_path, indices,
-                                                                  mask=np.s_[:, :, 0])
-        except AssertionError:
-            _log.error('Failed to read video file; setting outcome to CRITICAL')
-            self.data['video'] = self.data['frame_samples'] = None
-            self._outcome = 'CRITICAL'
+        # Find short period of wheel motion for motion correlation.  For speed start with the
+        # fist 2 minutes (nearly always enough), extract wheel movements and pick one.
+        # TODO Pick movement towards the end of the session (but not right at the end as some
+        #  are extrapolated).  Make sure the movement isn't too long.
+        START = 1 * 60  # Start 1 minute in
+        SEARCH_PERIOD = 2 * 60
+        ts, pos = wheel_data
+        while True:
+            win = np.logical_and(
+                ts > START,
+                ts < SEARCH_PERIOD + START
+            )
+            if np.sum(win) > 1000:
+                break
+            SEARCH_PERIOD *= 2
+        wheel_moves = training_wheel.extract_wheel_moves(ts[win], pos[win])
+        move_ind = np.argmax(np.abs(wheel_moves['peakAmplitude']))
+        # TODO Save only the wheel fragment we need
+        self.data['wheel'].period = wheel_moves['intervals'][move_ind, :]
 
         # Load extracted frame times
         alf_path = self.session_path / 'alf'
@@ -171,6 +185,33 @@ class CameraQC(base.QC):
                 kwargs = {**kwargs, 'sync': sync, 'chmap': chmap}  # noqa
             outputs, _ = extract_all(self.session_path, self.type, save=False, **kwargs)
             self.data['frame_times'] = outputs[f'{self.side}_camera_timestamps'][self.side]
+
+        # Gather information from video file
+        _log.info('Inspecting video file...')
+        # Get basic properties of video
+        try:
+            self.data['video'] = get_video_meta(self.video_path, one=self.one)
+            # Sample some frames from the video file
+            indices = np.linspace(100, self.data['video'].length - 100, self.n_samples).astype(int)
+            self.frame_samples_idx = indices
+            self.data['frame_samples'] = get_video_frames_preload(self.video_path, indices,
+                                                                  mask=np.s_[:, :, 0])
+            if self.data['wheel']:
+                ROI = {
+                    'left': ((800, 1020), (233, 1096)),
+                    'right': ((426, 510), (104, 545)),
+                    'body': ((402, 481), (31, 103))
+                }
+                roi = (*[slice(*r) for r in ROI[self.side]], 0)
+                indices, = np.where(np.logical_and(
+                    self.data['frame_times'] > self.data.wheel.period[0],
+                    self.data['frame_times'] < self.data.wheel.period[1]
+                ))
+                self.data['wheel_frames'] = get_video_frames_preload(self.video_path, indices,
+                                                                     mask=roi)
+        except AssertionError:
+            _log.error('Failed to read video file; setting outcome to CRITICAL')
+            self._outcome = 'CRITICAL'
 
         # Load Bonsai frame timestamps
         ssv_times = raw.load_camera_ssv_times(self.session_path, self.side)
@@ -365,9 +406,86 @@ class CameraQC(base.QC):
         match = actual['width'] == expected['width'] and actual['height'] == expected['height']
         return 'PASS' if match else 'FAIL'
 
-    def check_wheel_alignment(self):
+    def check_wheel_alignment(self, display=False):
         """Check wheel motion in video correlates with the rotary encoder signal"""
-        pass
+        # TODO Try normalizing velocity first; try sampling wheel at frame rate
+        if self.data['wheel_frames'] is None or self.data['wheel'] is None:
+            return 'NOT_SET'
+
+        def to_mask(ts):
+            a, b = self.data['wheel'].get('period', (ts[0], ts[1]))
+            return np.logical_and(ts > a, ts < b)
+
+        def find_nearest(array, value):
+            array = np.asarray(array)
+            idx = (np.abs(array - value)).argmin()
+            return idx
+
+        def frame_diffs(frames):
+            df = []
+            frame0 = frames[0]
+            frame1 = frames[1]
+
+            for i in range(2, len(frames)):
+                frame2 = frames[i]
+                df.append(frame_diff(frame0, frame2))
+                frame0 = frame1
+                frame1 = frame2
+            return np.array(df)
+
+        # Calculate rotary encoder velocity trace
+        Fs = self.video_meta[self.type][self.side]['fps']
+        ts, pos = self.data['wheel'].timestamps, self.data['wheel'].position
+        mask = to_mask(ts)
+        pos, ts = wh.interpolate_position(ts[mask], pos[mask], freq=Fs)
+        v, _ = wh.velocity_smoothed(pos, Fs)
+        # Calculate video motion trace
+        frame_times = self.data['frame_times']
+        frame_times = frame_times[to_mask(frame_times)]
+        df_ = frame_diffs(self.data['wheel_frames'])
+
+        xs = np.unique([find_nearest(ts, x) for x in frame_times])
+        vs = np.abs(v[xs])
+        vs = (vs - np.min(vs)) / (np.max(vs) - np.min(vs))
+
+        # FIXME This can be used as a goodness of fit measure
+        xcorr = signal.correlate(df_, vs)
+        c = max(xcorr)
+        xcorr = np.argmax(xcorr)
+        dt_i = xcorr - xs.size
+        self.log.info(f'{self.side} camera, adjusted by {dt_i} frames')
+
+        if display:
+            # mask = np.logical_and(ts > period[0], ts < period[1])
+            # plt.plot(ts[mask], pos[mask])
+            # x = x[1::2]
+            fig, axes = plt.subplots(4, 1)
+            axes[0].plot(ts, pos, label='wheel position')
+            axes[0].set(
+                xlabel='time / s',
+                ylabel='position / rad',
+                title='Wheel position'
+            )
+            axes[1].plot(ts, np.abs(v), label='rotary encoder velocity')
+            axes[1].set(
+                xlabel='Time (s)',
+                ylabel='Abs wheel velocity (rad / s)',
+                title='Wheel velocity'
+            )
+            # FIXME Shouldn't be missing frames in diff
+            axes[2].plot(frame_times[1:-1], df_, '-x', label='wheel motion energy')
+            # ax[0].vlines(x[np.array(thresh)], 0, 1,
+            #              linewidth=0.5, linestyle=':', label='>%i s.d. diff' % sd_thresh)
+            v_abs = np.abs(v)
+            v_normed = (v_abs - np.min(v_abs)) / (np.max(v_abs) - np.min(v_abs))
+            axes[3].plot(ts, v_normed, label='Normalized absolute velocity')
+            dt = np.diff(frame_times[[0, np.abs(dt_i)]])
+            axes[3].plot(ts[xs] - dt, vs, 'r-x', label='velocity (shifted)')
+            axes[3].set_title('normalized motion energy, %s camera, %.0f fps' % (self.side, 60))
+            axes[3].set_ylabel('rate of change (a.u.)')
+            axes[3].legend()
+            plt.tight_layout()
+        return 'PASS' if dt_i == 0 else 'FAIL'
 
     def check_position(self, hist_thresh=0.7, pos_thresh=100, metric=cv2.TM_CCOEFF_NORMED,
                        display=False, test=False, roi=None):

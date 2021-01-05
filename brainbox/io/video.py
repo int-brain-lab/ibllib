@@ -40,6 +40,8 @@ def get_video_frames_preload(video_path, frame_numbers, mask=None, as_list=False
 
     Example - Load first 1000 frames, keeping only the first colour channel:
         frames = get_video_frames_preload(video_path, range(1000), mask=np.s_[:, :, 0])
+    TODO Check whether setting position adds time, if so check whether frame numbers sequential
+    and skip this step if possible
     """
     is_url = isinstance(video_path, str) and video_path.startswith('http')
     cap = VideoStreamer(video_path).cap if is_url else cv2.VideoCapture(str(video_path))
