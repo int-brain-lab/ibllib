@@ -279,43 +279,6 @@ def roc_between_two_events(spike_times, spike_clusters, event_times, event_group
     return auc_roc, cluster_ids
 
 
-def generate_pseudo_blocks(n_trials, factor=60, min_=20, max_=100, first5050=90):
-    """
-    Generate a pseudo block structure
-
-    Parameters
-    ----------
-    n_trials : int
-        how many trials to generate
-    factor : int
-        factor of the exponential
-    min_ : int
-        minimum number of trials per block
-    max_ : int
-        maximum number of trials per block
-
-    Returns
-    ---------
-    probabilityLeft : 1D array
-        array with probability left per trial
-    """
-
-    block_ids = []
-    while len(block_ids) < n_trials:
-        x = np.random.exponential(factor)
-        while (x <= min_) | (x >= max_):
-            x = np.random.exponential(factor)
-        if (len(block_ids) == 0) & (np.random.randint(2) == 0):
-            block_ids += [0.2] * int(x)
-        elif (len(block_ids) == 0):
-            block_ids += [0.8] * int(x)
-        elif block_ids[-1] == 0.2:
-            block_ids += [0.8] * int(x)
-        elif block_ids[-1] == 0.8:
-            block_ids += [0.2] * int(x)
-    return np.array([0.5] * first5050 + block_ids[:n_trials - first5050])
-
-
 def _get_biased_probs(n: int, idx: int = -1, prob: float = 0.5) -> list:
     n_1 = n - 1
     z = n_1 + prob
@@ -340,6 +303,93 @@ def _draw_position(position_set, stim_probability_left):
             position_set, p=[stim_probability_left, 1 - stim_probability_left]
         )
     )
+
+
+def generate_pseudo_blocks(n_trials, factor=60, min_=20, max_=100, first5050=90):
+    """
+    Generate a pseudo block structure
+
+    Parameters
+    ----------
+    n_trials : int
+        how many trials to generate
+    factor : int
+        factor of the exponential
+    min_ : int
+        minimum number of trials per block
+    max_ : int
+        maximum number of trials per block
+    first5050 : int
+        amount of trials with 50/50 left right probability at the beginning
+
+    Returns
+    ---------
+    probabilityLeft : 1D array
+        array with probability left per trial
+    """
+
+    block_ids = []
+    while len(block_ids) < n_trials:
+        x = np.random.exponential(factor)
+        while (x <= min_) | (x >= max_):
+            x = np.random.exponential(factor)
+        if (len(block_ids) == 0) & (np.random.randint(2) == 0):
+            block_ids += [0.2] * int(x)
+        elif (len(block_ids) == 0):
+            block_ids += [0.8] * int(x)
+        elif block_ids[-1] == 0.2:
+            block_ids += [0.8] * int(x)
+        elif block_ids[-1] == 0.8:
+            block_ids += [0.2] * int(x)
+    return np.array([0.5] * first5050 + block_ids[:n_trials - first5050])
+
+
+def generate_pseudo_stimuli(n_trials, contrast_set=[0.06, 0.12, 0.25, 1], first5050=90):
+    """
+    Generate a block structure with stimuli
+
+    Parameters
+    ----------
+    n_trials : int
+        number of trials to generate
+    contrast_set : 1D array
+        the contrasts that are presented. The default is [0.06, 0.12, 0.25, 1].
+    first5050 : int
+        Number of 50/50 trials at the beginning of the session. The default is 90.
+
+    Returns
+    -------
+    p_left : 1D array
+        probability of left stimulus
+    contrast_left : 1D array
+        contrast on the left
+    contrast_right : 1D array
+        contrast on the right
+
+    """
+
+    # Initialize vectors
+    contrast_left = np.empty(n_trials)
+    contrast_left[:] = np.nan
+    contrast_right = np.empty(n_trials)
+    contrast_right[:] = np.nan
+
+    # Generate block structure
+    p_left = generate_pseudo_blocks(n_trials)
+
+    for i in range(n_trials):
+
+        # Draw position and contrast for this trial
+        position = _draw_position([-1, 1], p_left[i])
+        contrast = _draw_contrast(contrast_set, 'uniform')
+
+        # Add to trials
+        if position == -1:
+            contrast_left[i] = contrast
+        elif position == 1:
+            contrast_right[i] = contrast
+
+    return p_left, contrast_left, contrast_right
 
 
 def generate_pseudo_session(trials):
@@ -412,3 +462,4 @@ def generate_pseudo_session(trials):
         pseudo_trials['choice'][i] = this_choice
 
     return pseudo_trials
+
