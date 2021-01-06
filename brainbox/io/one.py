@@ -2,6 +2,7 @@ from pathlib import Path
 import logging
 import numpy as np
 import pandas as pd
+import os
 
 import alf.io
 from ibllib.io import spikeglx
@@ -275,6 +276,14 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, force=Fals
 def _load_spike_sorting_local(session_path, probe):
     # gets clusters and spikes from a local session folder
     probe_path = session_path.joinpath('alf', probe)
+
+    # look for clusters.metrics.csv file, if it exists delete as we now have .pqt file instead
+    cluster_file = probe_path.joinpath('clusters.metrics.csv')
+
+    if cluster_file.exists():
+        os.remove(cluster_file)
+        logger.info('Deleting old clusters.metrics.csv file')
+
     try:
         spikes = alf.io.load_object(probe_path, object='spikes')
     except Exception:
