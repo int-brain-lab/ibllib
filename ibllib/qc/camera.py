@@ -372,7 +372,7 @@ class CameraQC(base.QC):
 
         :param threshold: The maximum allowable percentage of dropped frames
         """
-        if None in (self.data['video'], self.data['count']):
+        if self.data['video'] is None or self.data['count'] is None:
             return 'NOT_SET'
         size_matches = self.data['video']['length'] == self.data['count'].size
         assert np.all(np.diff(self.data['count']) > 0), 'frame count not strictly increasing'
@@ -382,7 +382,7 @@ class CameraQC(base.QC):
 
     def check_timestamps(self):
         """Check that the camera.times array is reasonable"""
-        if None in (self.data['frame_times'], self.data['video']):
+        if self.data['frame_times'] is None or self.data['video'] is None:
             return 'NOT_SET'
         # Check frame rate matches what we expect
         expected = 1 / self.video_meta[self.type][self.side]['fps']
@@ -671,8 +671,13 @@ class CameraQC(base.QC):
 
     @staticmethod
     def load_reference_frames(side):
-        refs = [np.load(str(x)) for x in Path(__file__).parent.glob(f'ref*_{side}.npy')]
-        refs = np.c_[refs]
+        """
+        Load some reference frames for a given video
+        :param side: Video label, e.g. 'left'
+        :return: numpy array of frames with the shape (n, h, w)
+        """
+        file = next(Path(__file__).parent.joinpath('reference').glob(f'frames_{side}.npy'))
+        refs = np.load(file)
         return refs
 
     @staticmethod
