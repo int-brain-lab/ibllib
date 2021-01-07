@@ -201,25 +201,20 @@ class BrainAtlas:
         the image volume. This is needed to compute probe insertions intersections
         """
         axz = self.xyz2dims[2]  # this is the dv axis
-        l0 = np.diff((self.label == 0).astype(np.int8) * 2, axis=axz)
+        _surface = (self.label == 0).astype(np.int8) * 2
+        l0 = np.diff(_surface, axis=axz, append=2)
         _top = np.argmax(l0 == -2, axis=axz).astype(np.float)
         _top[_top == 0] = np.nan
-        _bottom = self.bc.nz - np.argmax(np.flip(l0, axis=axz) == 2, axis=axz).astype(np.float) - 1
-        _bottom[_bottom == self.bc.nz - 1] = np.nan
+        _bottom = self.bc.nz - np.argmax(np.flip(l0, axis=axz) == 2, axis=axz).astype(np.float)
+        _bottom[_bottom == self.bc.nz] = np.nan
         self.top = self.bc.i2z(_top + 1)
         self.bottom = self.bc.i2z(_bottom - 1)
+        self.surface = np.diff(_surface, axis=self.xyz2dims[0], append=2) + l0
 
-        _surface = (label == 0).astype(np.int8) * 1
-        self.surface = np.diff(_surface, axis=0, append=1)
-        self.surface = self.surface + np.diff(_surface, axis=1, append=1)
-        self.surface = self.surface + np.diff(_surface, axis=2, append=1)
-
-        self.surface[self.surface != 0] = 100
         idx_srf = np.where(self.surface != 0)
-
-        self.srf_xyz = self.bc.i2xyz(np.c_[idx_srf[self.xyz2dims[0]].astype(np.float),
-                                           idx_srf[self.xyz2dims[1]].astype(np.float),
-                                           idx_srf[self.xyz2dims[2]].astype(np.float)])
+        self.surface[idx_srf] = 1
+        self.srf_xyz = self.bc.i2xyz(np.c_[idx_srf[self.xyz2dims[0]], idx_srf[self.xyz2dims[1]],
+                                           idx_srf[self.xyz2dims[2]]].astype(np.float))
 
 
     def _lookup_inds(self, ixyz):
@@ -643,8 +638,10 @@ class Insertion:
 
         distance = traj.mindist(brain_atlas.srf_xyz)
         dist_sort = np.argsort(distance)
+        # In some cases the nearest two intersection points are not the top and bottom of brain
+        # So we find all intersection points that fall within one voxel and take the one with
+        # highest dV to be entry and lowest dV to be exit
         idx_lim = np.sum(distance[dist_sort] * 1e6 < brain_atlas.res_um)
-        print(idx_lim)
         dist_lim = dist_sort[0:idx_lim]
         z_val = brain_atlas.srf_xyz[dist_lim, 2]
         if surface == 'top':
@@ -656,50 +653,26 @@ class Insertion:
 
         return xyz
 
-
-    #@staticmethod
-    #def _get_surface_intersection(traj, brain_atlas, surface, z=0):
-    #    """
-    #    Given a Trajectory and a BrainAtlas object, computes the intersection of the trajectory
-    #    and a surface (usually brain_atlas.top)
-    #    :param brain_atlas:
-    #    :param surface: np.array 2d, shape [ny, nx]
-    #    :param z: init position for the lookup
-    #    :return: 3 element array x,y,z
-    #    """
-    #    # do a recursive look-up of the brain surface along the trajectory, 5 is more than enough
-    #    for m in range(5):
-    #        xyz = traj.eval_z(z)[0]
-    #        iy = brain_atlas.bc.y2i(xyz[1])
-    #        ix = brain_atlas.bc.x2i(xyz[0])
-    #        z = surface[iy, ix]
-    #    return xyz
-
     @staticmethod
     def get_brain_exit(traj, brain_atlas):
         """
-        Given a Trajectory and a BrainAtlas object, computes the brain entry coordinate as the
-        intersection of the trajectory and the brain surface (brain_atlas.top)
+        Given a Trajectory and a BrainAtlas object, computes the brain exit coordinate as the
+        intersection of the trajectory and the brain surface (brain_atlas.surface)
         :param brain_atlas:
         :return: 3 element array x,y,z
         """
-        # do a recursive look-up of the brain surface along the trajectory, 5 is more than enough
-        #return Insertion._get_surface_intersection(traj, brain_atlas,
-        #                                           brain_atlas.bottom, z=brain_atlas.bc.zlim[-1])
-
+        # Find point where trajectory intersects with bottom of brain
         return Insertion._get_surface_intersection(traj, brain_atlas, surface='bottom')
 
     @staticmethod
     def get_brain_entry(traj, brain_atlas):
         """
         Given a Trajectory and a BrainAtlas object, computes the brain entry coordinate as the
-        intersection of the trajectory and the brain surface (brain_atlas.top)
+        intersection of the trajectory and the brain surface (brain_atlas.surface)
         :param brain_atlas:
         :return: 3 element array x,y,z
         """
-        # do a recursive look-up of the brain surface along the trajectory, 5 is more than enough
-        #return Insertion._get_surface_intersection(traj, brain_atlas, brain_atlas.top, z=0)
-
+        # Find point where trajectory intersects with top of brain
         return Insertion._get_surface_intersection(traj, brain_atlas, surface='top')
 
 
@@ -794,8 +767,8 @@ class AllenAtlas(BrainAtlas):
         FLAT_IRON_ATLAS_REL_PATH = Path('histology', 'ATLAS', 'Needles', 'Allen')
         if mock:
             image, label = [np.zeros((528, 456, 320), dtype=np.bool) for _ in range(2)]
-            label[:,:, 100] = 1
-            label[:,:, 300] = 1
+            label[:, :, 100] = True
+            label[:, :, 300] = True
         else:
             path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
             file_image = hist_path or path_atlas.joinpath(f'average_template_{res_um}.nrrd')
