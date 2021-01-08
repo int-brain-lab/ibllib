@@ -209,13 +209,12 @@ class BrainAtlas:
         _bottom[_bottom == self.bc.nz] = np.nan
         self.top = self.bc.i2z(_top + 1)
         self.bottom = self.bc.i2z(_bottom - 1)
-        self.surface = np.diff(_surface, axis=self.xyz2dims[0], append=2) + l0
 
+        self.surface = np.diff(_surface, axis=self.xyz2dims[0], append=2) + l0
         idx_srf = np.where(self.surface != 0)
         self.surface[idx_srf] = 1
         self.srf_xyz = self.bc.i2xyz(np.c_[idx_srf[self.xyz2dims[0]], idx_srf[self.xyz2dims[1]],
                                            idx_srf[self.xyz2dims[2]]].astype(np.float))
-
 
     def _lookup_inds(self, ixyz):
         """
@@ -651,10 +650,12 @@ class Insertion:
             _xyz = brain_atlas.srf_xyz[dist_lim[ma], :]
             _ixyz = brain_atlas.bc.xyz2i(_xyz)
             _ixyz[brain_atlas.xyz2dims[2]] += 1
-            xyz = brain_atlas.bc.i2xyz(_ixyz.astype(np.float))
         elif surface == 'bottom':
             ma = np.argmin(z_val)
-            xyz = brain_atlas.srf_xyz[dist_lim[ma], :]
+            _xyz = brain_atlas.srf_xyz[dist_lim[ma], :]
+            _ixyz = brain_atlas.bc.xyz2i(_xyz)
+
+        xyz = brain_atlas.bc.i2xyz(_ixyz.astype(np.float))
 
         return xyz
 
