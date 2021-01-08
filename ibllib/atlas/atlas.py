@@ -650,13 +650,11 @@ class Insertion:
             ma = np.argmax(z_val)
             _xyz = brain_atlas.srf_xyz[dist_lim[ma], :]
             _ixyz = brain_atlas.bc.xyz2i(_xyz)
-            _ixyz[2] += 1
+            _ixyz[brain_atlas.xyz2dims[2]] += 1
             xyz = brain_atlas.bc.i2xyz(_ixyz.astype(np.float))
         elif surface == 'bottom':
             ma = np.argmin(z_val)
             xyz = brain_atlas.srf_xyz[dist_lim[ma], :]
-
-        #xyz = brain_atlas.srf_xyz[dist_lim[ma], :]
 
         return xyz
 

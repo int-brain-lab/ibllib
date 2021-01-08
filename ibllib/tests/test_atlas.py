@@ -110,7 +110,7 @@ class TestInsertion(unittest.TestCase):
         brain_entry = insertion.get_brain_entry(insertion.trajectory, brain_atlas)
         self.assertTrue(brain_entry[2] == brain_atlas.bc.i2z(100))
         brain_exit = insertion.get_brain_exit(insertion.trajectory, brain_atlas)
-        self.assertTrue(brain_exit[2] == brain_atlas.bc.i2z(105))
+        self.assertTrue(brain_exit[2] == brain_atlas.bc.i2z(104))
 
 
 class TestTrajectory(unittest.TestCase):
