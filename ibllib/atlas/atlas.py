@@ -400,6 +400,8 @@ class BrainAtlas:
         elif volume == 'value':
             im = _take(self.label, index, axis=self.xyz2dims[axis])
             return self._label2value(im, region_values=region_values)
+        elif volume == 'surface':
+            return _take(self.surface, index, axis=self.xyz2dims[axis])
 
     def plot_cslice(self, ap_coordinate, volume='image', **kwargs):
         """
@@ -646,10 +648,15 @@ class Insertion:
         z_val = brain_atlas.srf_xyz[dist_lim, 2]
         if surface == 'top':
             ma = np.argmax(z_val)
+            _xyz = brain_atlas.srf_xyz[dist_lim[ma], :]
+            _ixyz = brain_atlas.bc.xyz2i(_xyz)
+            _ixyz[2] += 1
+            xyz = brain_atlas.bc.i2xyz(_ixyz.astype(np.float))
         elif surface == 'bottom':
             ma = np.argmin(z_val)
+            xyz = brain_atlas.srf_xyz[dist_lim[ma], :]
 
-        xyz = brain_atlas.srf_xyz[dist_lim[ma], :]
+        #xyz = brain_atlas.srf_xyz[dist_lim[ma], :]
 
         return xyz
 
@@ -767,8 +774,7 @@ class AllenAtlas(BrainAtlas):
         FLAT_IRON_ATLAS_REL_PATH = Path('histology', 'ATLAS', 'Needles', 'Allen')
         if mock:
             image, label = [np.zeros((528, 456, 320), dtype=np.bool) for _ in range(2)]
-            label[:, :, 100] = True
-            label[:, :, 300] = True
+            label[:, :, 100:105] = True
         else:
             path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
             file_image = hist_path or path_atlas.joinpath(f'average_template_{res_um}.nrrd')

@@ -106,6 +106,11 @@ class TestInsertion(unittest.TestCase):
                               [0.002364, -0.0044, -0.005418]])
         insertion = Insertion.from_track(xyz_track, brain_atlas)
         self.assertTrue(abs(insertion.theta - 10.58704241) < 1e6)
+        # Test that the entry and exit intersection are computed properly
+        brain_entry = insertion.get_brain_entry(insertion.trajectory, brain_atlas)
+        self.assertTrue(brain_entry[2] == brain_atlas.bc.i2z(100))
+        brain_exit = insertion.get_brain_exit(insertion.trajectory, brain_atlas)
+        self.assertTrue(brain_exit[2] == brain_atlas.bc.i2z(105))
 
 
 class TestTrajectory(unittest.TestCase):
