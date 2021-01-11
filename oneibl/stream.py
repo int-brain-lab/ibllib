@@ -1,3 +1,5 @@
+import re
+
 import cv2
 import oneibl.params
 
@@ -24,7 +26,7 @@ class VideoStreamer(object):
     def _url(self):
         username = self._par.HTTP_DATA_SERVER_LOGIN
         password = self._par.HTTP_DATA_SERVER_PWD
-        return self.url.replace('http://', f'http://{username}:{password}@')
+        return re.sub(r'(^https?://)', r'\1' + f'{username}:{password}@', self.url)
 
     def get_frame(self, frame_index):
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
