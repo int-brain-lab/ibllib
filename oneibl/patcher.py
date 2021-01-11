@@ -351,7 +351,7 @@ class FTPPatcher(Patcher):
     def create_dataset(self, path, created_by='root', dry=False, repository=DMZ_REPOSITORY):
         # overrides the superclass just to remove the server repository argument
         response = super().patch_dataset(path, created_by=created_by, dry=dry,
-                                          repository=repository, ftp=True)
+                                         repository=repository, ftp=True)
         # need to patch the file records to be consistent
         for ds in response:
             frs = ds['file_records']
