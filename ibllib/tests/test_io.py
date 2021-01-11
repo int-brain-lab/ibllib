@@ -5,6 +5,7 @@ import uuid
 import tempfile
 from pathlib import Path
 import shutil
+import sys
 
 import numpy as np
 
@@ -624,13 +625,14 @@ class TestsGlobus(unittest.TestCase):
 
     def test_as_globus_path(self):
         # A Windows path
-        actual = globus.as_globus_path('E:\\FlatIron\\integration')
-        self.assertTrue(actual.startswith('/E/'))
-
-        # A relative POSIX path
-        actual = globus.as_globus_path('/mnt/foo/../data/integration')
-        expected = '/mnt/data/integration'
-        self.assertTrue(actual.endswith(expected))
+        if sys.platform == 'win32':
+            # "/E/FlatIron/integration"
+            actual = globus.as_globus_path('E:\\FlatIron\\integration')
+            self.assertTrue(actual.startswith('/E/'))
+            # A relative POSIX path
+            actual = globus.as_globus_path('/mnt/foo/../data/integration')
+            expected = '/mnt/data/integration'  # "/C/mnt/data/integration
+            self.assertTrue(actual.endswith(expected))
 
         # A globus path
         actual = globus.as_globus_path('/E/FlatIron/integration')
