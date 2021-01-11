@@ -40,7 +40,7 @@ def _check_filename_for_registration(full_file, patterns):
 
 
 def register_dataset(file_list, one=None, created_by=None, repository=None, server_only=False,
-                     versions=False, dry=False, max_md5_size=None):
+                     versions=None, dry=False, max_md5_size=None):
     """
     Registers a set of files belonging to a session only on the server
     :param file_list: (list of pathlib.Path or pathlib.Path)
@@ -63,10 +63,11 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
         file_list = [Path(file_list)]
     assert len(set([alf.io.get_session_path(f) for f in file_list])) == 1
     assert all([Path(f).exists() for f in file_list])
-    if not versions:
-        versions = [version.ibllib() for _ in file_list]
-    else:
-        assert isinstance(versions, list) and len(versions) == len(file_list)
+    if versions is None:
+        versions = version.ibllib()
+    if isinstance(versions, str):
+        versions = [versions for _ in file_list]
+    assert isinstance(versions, list) and len(versions) == len(file_list)
 
     # computing the md5 can be very long, so this is an option to skip if the file is bigger
     # than a certain threshold
