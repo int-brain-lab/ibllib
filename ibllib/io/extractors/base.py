@@ -4,16 +4,15 @@ processed data from raw hardware files and optionally save them.
 """
 
 import abc
-import json
 from collections import OrderedDict
+import json
+import logging
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from alf.io import get_session_path
 from ibllib.io import raw_data_loaders as raw
-import logging
-
 from ibllib.io.raw_data_loaders import load_settings, _logger
 
 log = logging.getLogger("ibllib")
@@ -177,40 +176,10 @@ def get_task_extractor_type(task_name):
             task_name = settings.get('PYBPOD_PROTOCOL', None)
         else:
             return
-    # ephys
-    if 'ephysChoiceWorld' in task_name:
-        return 'ephys'
-    elif 'ephyskarolinaChoiceWorld' in task_name:
-        return 'ephys'
-    elif 'passive_opto' in task_name:
-        return 'ephys'
-    elif 'opto_ephysChoiceWorld' in task_name:
-        return 'ephys'
-    elif 'widefieldChoiceWorld' in task_name:
-        return 'ephys'
-    # biased choice world
-    elif '_biasedChoiceWorld' in task_name:
-        return 'biased'
-    elif 'biasedScanningChoiceWorld' in task_name:
-        return 'biased'
-    elif 'biasedVisOffChoiceWorld' in task_name:
-        return 'biased'
-    elif 'karolinaChoiceWorld' in task_name:
-        return 'biased'
-    elif '_iblrig_tasks_opto_biasedChoiceWorld' in task_name:
-        return 'biased'
-    # habituation
-    elif '_habituationChoiceWorld' in task_name:
-        return 'habituation'
-    # training
-    elif '_trainingChoiceWorld' in task_name:
-        return 'training'
-    # mock ephys
-    elif 'ephysMockChoiceWorld' in task_name:
-        return 'mock_ephys'
-    # sync ephys
-    elif task_name and task_name.startswith('_iblrig_tasks_ephys_certification'):
-        return 'sync_ephys'
+
+    with open(Path(__file__).parent.joinpath('extractor_types.json')) as fp:
+        task_types = json.load(fp)
+    return next((task_types[tt] for tt in task_types if tt in task_name), None)
 
 
 def get_session_extractor_type(session_path):
