@@ -334,16 +334,20 @@ class RegistrationClient:
 
 
 def _alyx_procedure_from_task(task_protocol):
-    task_str = ibllib.io.extractors.base.get_task_extractor_type(task_protocol)
+    task_type = ibllib.io.extractors.base.get_task_extractor_type(task_protocol)
+    return _alyx_procedure_from_task_type(task_type)
+
+
+def _alyx_procedure_from_task_type(task_type):
     lookup = {'biased': 'Behavior training/tasks',
               'habituation': 'Behavior training/tasks',
               'training': 'Behavior training/tasks',
               'ephys': 'Ephys recording with acute probe(s)',
               'mock_ephys': 'Ephys recording with acute probe(s)',
               'sync_ephys': 'Ephys recording with acute probe(s)'}
-    if task_str not in lookup:
+    if task_type not in lookup:
         return
-    return lookup[task_str]
+    return lookup[task_type]
 
 
 def _register_bool(fn, file_list):

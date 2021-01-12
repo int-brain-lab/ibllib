@@ -158,10 +158,15 @@ def run_extractor_classes(classes, session_path=None, **kwargs):
     return outputs, files
 
 
+def _get_task_types_json_config():
+    with open(Path(__file__).parent.joinpath('extractor_types.json')) as fp:
+        task_types = json.load(fp)
+    return task_types
+
+
 def get_task_extractor_type(task_name):
     """
-    Splits the task name according to naming convention:
-    -   ignores everything
+    Returns the task type string from the full pybpod task name:
     _iblrig_tasks_biasedChoiceWorld3.7.0 returns "biased"
     _iblrig_tasks_trainingChoiceWorld3.6.0 returns "training'
     :param task_name:
@@ -176,9 +181,7 @@ def get_task_extractor_type(task_name):
             task_name = settings.get('PYBPOD_PROTOCOL', None)
         else:
             return
-
-    with open(Path(__file__).parent.joinpath('extractor_types.json')) as fp:
-        task_types = json.load(fp)
+    task_types = _get_task_types_json_config()
     return next((task_types[tt] for tt in task_types if tt in task_name), None)
 
 
