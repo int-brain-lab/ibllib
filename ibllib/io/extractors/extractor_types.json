@@ -1,0 +1,16 @@
+{
+ "ephysChoiceWorld": "ephys",
+ "ephyskarolinaChoiceWorld": "ephys",
+ "passive_opto": "ephys",
+ "opto_ephysChoiceWorld": "ephys",
+ "widefieldChoiceWorld": "ephys",
+ "_biasedChoiceWorld": "biased",
+ "biasedScanningChoiceWorld": "biased",
+ "biasedVisOffChoiceWorld": "biased",
+ "karolinaChoiceWorld": "biased",
+ "opto_biasedChoiceWorld": "biased",
+ "_habituationChoiceWorld": "habituation",
+ "_trainingChoiceWorld": "training",
+ "ephysMockChoiceWorld": "mock_ephys",
+ "ephys_certification": "sync_ephys"
+}

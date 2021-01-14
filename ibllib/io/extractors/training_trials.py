@@ -737,6 +737,17 @@ class CameraTimestamps(BaseBpodTrialsExtractor):
         return frame_times
 
 
+class LaserBool(BaseBpodTrialsExtractor):
+    save_names = '_ibl_trials.laser_stimulation.npy'
+    var_names = 'laser_stimulation'
+
+    def _extract(self):
+        laser = np.array([np.float(t.get('laser_stimulation', np.NaN)) for t in self.bpod_trials])
+        if np.all(np.isnan(laser)):
+            self.save_names = None  # this prevents the file from being saved
+        return laser
+
+
 def extract_all(session_path, save=False, bpod_trials=None, settings=None):
     if not bpod_trials:
         bpod_trials = raw.load_data(session_path)
@@ -745,7 +756,7 @@ def extract_all(session_path, save=False, bpod_trials=None, settings=None):
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
 
-    base = [FeedbackType, ContrastLR, ProbabilityLeft, Choice, RepNum, RewardVolume,
+    base = [FeedbackType, ContrastLR, ProbabilityLeft, Choice, RepNum, RewardVolume, LaserBool,
             FeedbackTimes, Intervals, ResponseTimes, GoCueTriggerTimes, GoCueTimes]
     # Version check
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):

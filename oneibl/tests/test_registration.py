@@ -5,6 +5,7 @@ import json
 
 import numpy as np
 
+import ibllib.io.extractors.base
 from ibllib.misc import version
 from oneibl import one, registration
 
@@ -68,6 +69,10 @@ class TestRegistrationEndpoint(unittest.TestCase):
         for to in task_out:
             out = registration._alyx_procedure_from_task(to[0])
             self.assertEqual(out, to[1])
+        # also makes sure that all task types have a defined procedure
+        task_types = ibllib.io.extractors.base._get_task_types_json_config()
+        for task_type in list(set([task_types[tt] for tt in task_types])):
+            assert registration._alyx_procedure_from_task_type(task_type) is not None
 
 
 class TestRegistration(unittest.TestCase):

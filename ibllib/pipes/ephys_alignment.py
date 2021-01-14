@@ -25,8 +25,9 @@ class EphysAlignment:
             self.track_init = track_prev
             self.feature_init = feature_prev
         else:
-            self.track_init = np.copy(self.track_extent)
-            self.feature_init = np.copy(self.track_extent)
+            start_lims = 6000 / 1e6
+            self.track_init = np.array([-1 * start_lims, start_lims])
+            self.feature_init = np.array([-1 * start_lims, start_lims])
 
         self.sampling_trk = np.arange(self.track_extent[0],
                                       self.track_extent[-1] - 10 * 1e-6, 10 * 1e-6)
@@ -164,8 +165,9 @@ class EphysAlignment:
         :return track: reference coordinates in track space with first and last value adjusted
         :type track: np.array((n_lines + 2))
         """
-        feature[0] = self.track_extent[0] - extend_feature
-        feature[-1] = self.track_extent[-1] + extend_feature
+
+        feature[0] = self.track_init[0] - extend_feature
+        feature[-1] = self.track_init[-1] + extend_feature
         extend_track = self.feature2track_lin(feature[[0, -1]], feature, track)
         track[0] = extend_track[0]
         track[-1] = extend_track[-1]

@@ -611,6 +611,10 @@ class FpgaTrials(BaseExtractor):
         self.bpod2fpga, drift_ppm, ibpod, ifpga = dsp.utils.sync_timestamps(
             bpod_trials['intervals_bpod'][:, 0], fpga_trials.pop('intervals')[:, 0],
             return_indices=True)
+        nbpod = bpod_trials['intervals_bpod'].shape[0]
+        npfga = fpga_trials['feedback_times'].shape[0]
+        nsync = len(ibpod)
+        _logger.info(f"N trials: {nbpod} bpod, {npfga} FPGA, {nsync} merged, sync {drift_ppm} ppm")
         if drift_ppm > BPOD_FPGA_DRIFT_THRESHOLD_PPM:
             _logger.warning('BPOD/FPGA synchronization shows values greater than %i ppm',
                             BPOD_FPGA_DRIFT_THRESHOLD_PPM)
