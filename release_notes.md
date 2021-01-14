@@ -1,3 +1,7 @@
+### Release Notes 1.5.35
+- histology: brain atlas can handle insertion on the sides 
+- optogenetics dataset type _ibl_trials.laser_stimulation for training sessions
+
 ### Release Notes 1.5.34
 - spikeglx analog sync thresholding removes DC offset option
 - ephys FPGA behaviour extraction: bpod sync with FPGA assumes possible missing FPGA fronts
