@@ -21,7 +21,12 @@ log = logging.getLogger("ibllib")
 class BaseExtractor(abc.ABC):
     """
     Base extractor class
-
+    Writing an extractor checklist:
+    -   on the child class, overload the _extract method
+    -   this method should output one or several numpy.arrays or dataframe with a consistent shape
+    -   save_names is a list or a string of filenames, there should be one per dataset
+    -   set save_names to None for a dataset that doesn't need saving (could be set dynamically
+    in the _extract method)
     :param session_path: Absolute path of session folder
     :type session_path: str
     """

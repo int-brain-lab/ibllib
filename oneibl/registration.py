@@ -345,9 +345,8 @@ def _alyx_procedure_from_task_type(task_type):
               'ephys': 'Ephys recording with acute probe(s)',
               'mock_ephys': 'Ephys recording with acute probe(s)',
               'sync_ephys': 'Ephys recording with acute probe(s)'}
-    if task_type not in lookup:
-        return
-    return lookup[task_type]
+    if task_type in lookup:
+        return lookup[task_type]
 
 
 def _register_bool(fn, file_list):
