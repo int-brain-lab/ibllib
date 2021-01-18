@@ -19,17 +19,19 @@ def _create_mock_atlas():
 
 
 class TestBrainRegions(unittest.TestCase):
+    brs = regions_from_allen_csv()
+
+    def test_init(self):
+        pass
 
     def test_get(self):
-        brs = regions_from_allen_csv()
-        ctx = brs.get(688)
+        ctx = self.brs.get(688)
         self.assertTrue(len(ctx.acronym) == 1 and ctx.acronym == 'CTX')
 
     def test_ancestors_descendants(self):
         # here we use the same brain region as in the alyx test
-        brs = regions_from_allen_csv()
-        self.assertTrue(brs.descendants(ids=688).id.size == 567)
-        self.assertTrue(brs.ancestors(ids=688).id.size == 4)
+        self.assertTrue(self.brs.descendants(ids=688).id.size == 567)
+        self.assertTrue(self.brs.ancestors(ids=688).id.size == 4)
 
 
 class TestAtlasSlicesConversion(unittest.TestCase):

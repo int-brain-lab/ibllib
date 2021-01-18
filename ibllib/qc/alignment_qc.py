@@ -1,5 +1,6 @@
 import logging
-from ibllib.atlas import AllenAtlas, regions_from_allen_csv
+from ibllib.atlas import AllenAtlas
+from ibllib.atlas.regions import regions_from_allen_csv
 from ibllib.pipes import histology
 from ibllib.ephys.neuropixel import SITES_COORDINATES
 import numpy as np

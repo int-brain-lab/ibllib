@@ -2,17 +2,15 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
 
-import pandas as pd
 import numpy as np
 import nrrd
 
-from brainbox.core import Bunch
 from brainbox.numerical import ismember
+from ibllib.atlas.regions import BrainRegions
 from ibllib.io import params
 from oneibl.webclient import http_download_file
 
 ALLEN_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5739, 5400, 332])}
-FILE_REGIONS = str(Path(__file__).parent.joinpath('allen_structure_tree.csv'))
 
 
 def cart2sph(x, y, z):
@@ -259,11 +257,12 @@ class BrainAtlas:
 
     def _label2value(self, imlabel, region_values):
         """
-        Converts a slice from the label volume to its RGB equivalent for display
+        Converts a slice from the label volume to its value after lookup
         :param imlabel: 2D np-array containing label ids (slice of the label volume)
+        :param region_values: 1D np-array sane size as self.regions.id containing the value to be
+        mapped onto the structure
         :return: 3D np-array of the slice uint8 rgb values
         """
-
         im_unique, ilabels, iim = np.unique(imlabel, return_index=True, return_inverse=True)
         _, ir_unique, _ = np.intersect1d(self.regions.id, im_unique, return_indices=True)
 
@@ -682,91 +681,20 @@ class Insertion:
         return Insertion._get_surface_intersection(traj, brain_atlas, surface='top')
 
 
-@dataclass
-class BrainRegions:
-    """
-    self.id: contains label ids found in the BrainCoordinate.label volume
-    self.name: list/tuple of brain region names
-    self.acronym: list/tuple of brain region acronyms
-    """
-    id: np.ndarray
-    name: np.object
-    acronym: np.object
-    rgb: np.uint8
-    level: np.ndarray
-    parent: np.ndarray
-
-    def get(self, ids) -> Bunch:
-        """
-        Get a bunch of the name/id
-        """
-        uid, uind = np.unique(ids, return_inverse=True)
-        a, iself, _ = np.intersect1d(self.id, uid, assume_unique=False, return_indices=True)
-        b = Bunch()
-        for k in self.__dataclass_fields__.keys():
-            b[k] = self.__getattribute__(k)[iself[uind]]
-        return b
-
-    def _navigate_tree(self, ids, direction='down'):
-        """
-        Private method to navigate the tree and get all related objects either up or down
-        :param ids:
-        :param direction:
-        :return: Bunch
-        """
-        indices = ismember(self.id, ids)[0]
-        count = np.sum(indices)
-        while True:
-            if direction == 'down':
-                indices |= ismember(self.parent, self.id[indices])[0]
-            elif direction == 'up':
-                indices |= ismember(self.id, self.parent[indices])[0]
-            else:
-                raise ValueError("direction should be either 'up' or 'down'")
-            if count == np.sum(indices):  # last iteration didn't find any match
-                break
-            else:
-                count = np.sum(indices)
-        return self.get(self.id[indices])
-
-    def descendants(self, ids):
-        """
-        Get descendants from one or an array of ids
-        :param ids: np.array or scalar representing the region primary key
-        :return: Bunch
-        """
-        return self._navigate_tree(ids, direction='down')
-
-    def ancestors(self, ids):
-        """
-        Get ancestors from one or an array of ids
-        :param ids: np.array or scalar representing the region primary key
-        :return: Bunch
-        """
-        return self._navigate_tree(ids, direction='up')
-
-    def leaves(self):
-        """
-        Get all regions that do not have children
-        :return:
-        """
-        leaves = np.setxor1d(self.id, self.parent)
-        return self.get(np.int64(leaves[~np.isnan(leaves)]))
-
-
 class AllenAtlas(BrainAtlas):
     """
     Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
     using the IBL Bregma and coordinate system
     """
 
-    def __init__(self, res_um=25, par=None, scaling=np.array([1, 1, 1]), mock=False,
-                 hist_path=None):
+    def __init__(self, res_um=25, brainmap='Allen', scaling=np.array([1, 1, 1]),
+                 mock=False, hist_path=None):
         """
         :param res_um: 10, 25 or 50 um
-        :param par: dictionary of parameters to override systems ones
-        :param scaling:
-        :param mock:
+        :param brainmap: defaults to 'Allen', see ibllib.atlas.BrainRegion for re-mappings
+        :param scaling: scale factor along ml, ap, dv for squeeze and stretch ([1, 1, 1])
+        :param mock: for testing purpose
+        :param hist_path
         :return: atlas.BrainAtlas
         """
         par = params.read('one_params')
@@ -778,12 +706,10 @@ class AllenAtlas(BrainAtlas):
             path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
             file_image = hist_path or path_atlas.joinpath(f'average_template_{res_um}.nrrd')
             file_label = path_atlas.joinpath(f'annotation_{res_um}.nrrd')
-
             if not file_image.exists():
                 file_image = path_atlas.joinpath(f'average_template_{res_um}.npz')
             if not file_label.exists():
                 file_label = path_atlas.joinpath(f'annotation_{res_um}.npz')
-
             if not file_image.exists():
                 _download_atlas_flatiron(file_image, FLAT_IRON_ATLAS_REL_PATH, par)
             if not file_label.exists():
@@ -791,7 +717,7 @@ class AllenAtlas(BrainAtlas):
             # loads the files
             image = self._read_volume(file_image)
             label = self._read_volume(file_label)
-        regions = regions_from_allen_csv(FILE_REGIONS)
+        regions = BrainRegions(brainmap)
         xyz2dims = np.array([1, 0, 2])  # this is the c-contiguous ordering
         dims2xyz = np.array([1, 0, 2])
         dxyz = res_um * 1e-6 * np.array([1, -1, -1]) * scaling
@@ -800,6 +726,10 @@ class AllenAtlas(BrainAtlas):
         self.res_um = res_um
         super().__init__(image, label, dxyz, regions, ibregma,
                          dims2xyz=dims2xyz, xyz2dims=xyz2dims)
+        # remap the regions
+        if self.regions.mapping is not None:
+            _, im = ismember(self.label, self.regions.id)
+            self.label = np.reshape(self.regions.mapping[im], self.label.shape)
 
     @staticmethod
     def _read_volume(file_volume):
@@ -877,23 +807,3 @@ def _download_atlas_flatiron(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
     http_download_file(url, cache_dir=Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH),
                        username=par.HTTP_DATA_SERVER_LOGIN,
                        password=par.HTTP_DATA_SERVER_PWD)
-
-
-def regions_from_allen_csv(csv_file=FILE_REGIONS):
-    """
-    Reads csv file containing the ALlen Ontology and instantiates a BrainRegions object
-    :param csv_file:
-    :return: BrainRegions object
-    """
-    df_regions = pd.read_csv(csv_file)
-    # converts colors to RGB uint8 array
-    c = np.uint32(df_regions.color_hex_triplet.map(
-        lambda x: int(x, 16) if isinstance(x, str) else 256 ** 3 - 1))
-    c = np.flip(np.reshape(c.view(np.uint8), (df_regions.id.size, 4))[:, :3], 1)
-    # creates the BrainRegion instance
-    return BrainRegions(id=df_regions.id.to_numpy(),
-                        name=df_regions.name.to_numpy(),
-                        acronym=df_regions.acronym.to_numpy(),
-                        rgb=c,
-                        level=df_regions.depth.to_numpy(),
-                        parent=df_regions.parent_structure_id.to_numpy())
