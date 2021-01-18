@@ -431,7 +431,7 @@ def split_sync(sync_tr):
 
 
 def get_neuropixel_version_from_folder(session_path):
-    ephys_files = glob_ephys_files(session_path, ext='.meta')
+    ephys_files = glob_ephys_files(session_path, ext='meta')
     return get_neuropixel_version_from_files(ephys_files)
 
 

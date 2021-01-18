@@ -123,7 +123,7 @@ def version3B(ses_path, display=True, type=None, tol=2.5):
     :return: None
     """
     DEFAULT_TYPE = 'smooth'
-    ephys_files = spikeglx.glob_ephys_files(ses_path, ext='.meta', bin_exists=False)
+    ephys_files = spikeglx.glob_ephys_files(ses_path, ext='meta', bin_exists=False)
     for ef in ephys_files:
         ef['sync'] = alf.io.load_object(ef.path, 'sync', namespace='spikeglx', short_keys=True)
         ef['sync_map'] = get_ibl_sync_map(ef, '3B')
