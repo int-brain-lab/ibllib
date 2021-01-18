@@ -56,7 +56,7 @@ def version3A(ses_path, display=True, type='smooth', tol=2.1):
     :param type: linear, exact or smooth
     :return: bool True on a a successful sync
     """
-    ephys_files = spikeglx.glob_ephys_files(ses_path, bin_exists=False)
+    ephys_files = spikeglx.glob_ephys_files(ses_path, ext='meta', bin_exists=False)
     nprobes = len(ephys_files)
     if nprobes == 1:
         timestamps = np.array([[0., 0.], [1., 1.]])
