@@ -205,7 +205,8 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
                 out, _ = spikes.sync_spike_sorting(ap_file=ap_file, out_path=probe_out_path)
                 out_files.extend(out)
                 # convert ks2_output into tar file and also register
-                out = spikes.ks2_to_tar(ks2_dir, probe_out_path)
+                tar_dir = self.session_path.joinpath('spike_sorters', 'ks2_matlab', label)
+                out = spikes.ks2_to_tar(ks2_dir, tar_dir)
                 out_files.extend(out)
             except BaseException:
                 _logger.error(traceback.format_exc())
