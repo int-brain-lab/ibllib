@@ -198,7 +198,7 @@ def ks2_to_tar(ks_path, out_path):
     out_file = Path(out_path).joinpath('_kilosort_raw.output.tar')
     if out_file.exists():
         _logger.info(f"Already converted ks2 to tar: for {ks_path}, skipping.")
-        return out_file
+        return [out_file]
 
     with tarfile.open(out_file, 'x') as tar_dir:
         for file in Path(ks_path).iterdir():
