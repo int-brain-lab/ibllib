@@ -265,3 +265,22 @@ class TestWheelMovesExtraction(unittest.TestCase):
         np.testing.assert_allclose(first, [162.48462599, 105.62562599, np.nan])
         np.testing.assert_array_equal(is_final, [False, True, False])
         np.testing.assert_array_equal(ind, [46, 18])
+
+
+class TestEphysFPGA_TTLsExtraction(unittest.TestCase):
+
+    def test_ttl_bpod_gaelle_writes_protocols_but_guido_doesnt_read_them(self):
+        bpod_t = np.array([5.423290950005423, 6.397993470006398, 6.468919710006469,
+                           7.497916800007498, 7.997933460007998, 8.599239990008599,
+                           8.5993399800086, 15.141985650015142, 15.642002310015641,
+                           16.215411630016217, 16.215511620016215, 17.104122750017105,
+                           17.175015660017174, 18.204012750018205, 18.704029410018705,
+                           19.286337840019286, 19.28643783001929, 21.76005711002176,
+                           21.83095002002183, 22.85998044002286])
+        # when the bpod has started before the ephys, the first pulses may have been missed
+        # and the first TTL may be negative/. This needs to yield the same result as if the
+        # bpod was started properly
+        pol = (np.mod(np.arange(bpod_t.size), 2) - 0.5) * 2
+        st, op, iti = ephys_fpga._assign_events_bpod(bpod_t=bpod_t, bpod_polarities=pol)
+        st_, op_, iti_ = ephys_fpga._assign_events_bpod(bpod_t=bpod_t[1:], bpod_polarities=pol[1:])
+        assert np.all(st == st_) and np.all(op == op_) and np.all(iti_ == iti)
