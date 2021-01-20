@@ -1,3 +1,9 @@
+### Release Notes 1.5.36
+- Amplitudes fix:
+    - sync_probes doesn't require raw binary file and looks for meta-data files instead
+    - tar file of intermediate spike sorting results gets uploaded on flatiron
+- Ephys Task extraction: ephys extraction doesn't fail when bpod started before ephys
+
 ### Release Notes 1.5.35
 - histology: brain atlas can handle insertion on the sides 
 - optogenetics dataset type _ibl_trials.laser_stimulation for training sessions
