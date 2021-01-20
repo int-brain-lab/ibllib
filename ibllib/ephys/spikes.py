@@ -205,4 +205,4 @@ def ks2_to_tar(ks_path, out_path):
             if file.name in ks2_output:
                 tar_dir.add(file, file.name)
 
-    return out_file
+    return [out_file]
