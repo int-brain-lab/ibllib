@@ -159,7 +159,7 @@ def ks2_to_alf(ks_path, bin_path, out_path, bin_file=None, ampfactor=1, label=No
 def ks2_to_tar(ks_path, out_path):
     """
     Compress output from kilosort 2 into tar file in order to register to flatiron and move to
-    alf/probexx path. Output file to register
+    spikesorters/ks2_matlab/probexx path. Output file to register
 
     :param ks_path: path to kilosort output
     :param out_path: path to keep the
@@ -185,7 +185,7 @@ def ks2_to_tar(ks_path, out_path):
                   'pc_features.npy',
                   'similar_templates.npy',
                   'spike_clusters.npy',
-                  'spike_sorting_k2.txt',
+                  'spike_sorting_ks2.log',
                   'spike_templates.npy',
                   'spike_times.npy',
                   'template_feature_ind.npy',
@@ -195,7 +195,7 @@ def ks2_to_tar(ks_path, out_path):
                   'whitening_mat.npy',
                   'whitening_mat_inv.npy']
 
-    out_file = Path(out_path).joinpath('_kilosort_output.tar')
+    out_file = Path(out_path).joinpath('_kilosort_raw.output.tar')
     if out_file.exists():
         _logger.info(f"Already converted ks2 to tar: for {ks_path}, skipping.")
         return out_file

@@ -205,7 +205,10 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
                 out, _ = spikes.sync_spike_sorting(ap_file=ap_file, out_path=probe_out_path)
                 out_files.extend(out)
                 # convert ks2_output into tar file and also register
+                # Make this in case spike sorting is in old raw_ephys_data folders, for new
+                # sessions it should already exist
                 tar_dir = self.session_path.joinpath('spike_sorters', 'ks2_matlab', label)
+                tar_dir.mkdir(parents=True, exist_ok=True)
                 out = spikes.ks2_to_tar(ks2_dir, tar_dir)
                 out_files.extend(out)
             except BaseException:
