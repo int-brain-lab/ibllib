@@ -94,7 +94,6 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
                             f'track.')
                 # download the data
                 chans = one.load_object(eid, 'channels', collection=f'alf/{label}')
-                chans.pop('brainLocationIds_ccf_2017')
 
                 # If we have successfully downloaded the data
                 if 'brainLocationIds_ccf_2017' in chans.keys():
@@ -309,14 +308,10 @@ def _load_spike_sorting_local(session_path, probe):
     try:
         spikes = alf.io.load_object(probe_path, object='spikes')
     except Exception:
-        logger.warning(f'Could not load spikes datasets for session {session_path} and {probe}. '
-                       f'Spikes for {probe} will return an empty dict')
         spikes = {}
     try:
         clusters = alf.io.load_object(probe_path, object='clusters')
     except Exception:
-        logger.warning(f'Could not load clusters datasets for session {session_path} and {probe}. '
-                       f'Clusters for {probe} will return an empty dict')
         clusters = {}
 
     return spikes, clusters
