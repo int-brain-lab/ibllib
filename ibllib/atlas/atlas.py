@@ -1,6 +1,7 @@
-from pathlib import Path
-import matplotlib.pyplot as plt
 from dataclasses import dataclass
+import logging
+import matplotlib.pyplot as plt
+from pathlib import Path
 
 import numpy as np
 import nrrd
@@ -10,6 +11,7 @@ from ibllib.atlas.regions import BrainRegions
 from ibllib.io import params
 from oneibl.webclient import http_download_file
 
+_logger = logging.getLogger('ibllib')
 ALLEN_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5739, 5400, 332])}
 
 
@@ -699,25 +701,30 @@ class AllenAtlas(BrainAtlas):
         """
         par = params.read('one_params')
         FLAT_IRON_ATLAS_REL_PATH = Path('histology', 'ATLAS', 'Needles', 'Allen')
+        regions = BrainRegions(brainmap)
         if mock:
             image, label = [np.zeros((528, 456, 320), dtype=np.bool) for _ in range(2)]
             label[:, :, 100:105] = True
         else:
             path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
             file_image = hist_path or path_atlas.joinpath(f'average_template_{res_um}.nrrd')
-            file_label = path_atlas.joinpath(f'annotation_{res_um}.nrrd')
-            if not file_image.exists():
-                file_image = path_atlas.joinpath(f'average_template_{res_um}.npz')
-            if not file_label.exists():
-                file_label = path_atlas.joinpath(f'annotation_{res_um}.npz')
+            # get the image volume
             if not file_image.exists():
                 _download_atlas_flatiron(file_image, FLAT_IRON_ATLAS_REL_PATH, par)
+            # get the remapped label volume
+            file_label = path_atlas.joinpath(f'annotation_{res_um}.nrrd')
             if not file_label.exists():
                 _download_atlas_flatiron(file_label, FLAT_IRON_ATLAS_REL_PATH, par)
+            file_label_remap = path_atlas.joinpath(f'annotation_{res_um}_lut.npz')
+            if not file_label_remap.exists():
+                label = self._read_volume(file_label)
+                _logger.info("computing brain atlas annotations lookup table")
+                _, im = ismember(label, regions.id)
+                label = np.reshape(im.astype(np.uint16), label.shape)
+                np.savez_compressed(file_label_remap, label)
             # loads the files
+            label = self._read_volume(file_label_remap)
             image = self._read_volume(file_image)
-            label = self._read_volume(file_label)
-        regions = BrainRegions(brainmap)
         xyz2dims = np.array([1, 0, 2])  # this is the c-contiguous ordering
         dims2xyz = np.array([1, 0, 2])
         dxyz = res_um * 1e-6 * np.array([1, -1, -1]) * scaling
@@ -726,10 +733,7 @@ class AllenAtlas(BrainAtlas):
         self.res_um = res_um
         super().__init__(image, label, dxyz, regions, ibregma,
                          dims2xyz=dims2xyz, xyz2dims=xyz2dims)
-        # remap the regions
-        if self.regions.mapping is not None:
-            _, im = ismember(self.label, self.regions.id)
-            self.label = np.reshape(self.regions.mapping[im], self.label.shape)
+
 
     @staticmethod
     def _read_volume(file_volume):
