@@ -445,7 +445,8 @@ class NeuralGLM:
         self.compiled = True
         return
 
-    def _fit_sklearn(self, dm, binned, alpha, cells=None, retvar=False, noncovwarn=True):
+    def _fit_sklearn(self, dm, binned, alpha, cells=None, retvar=False, noncovwarn=True,
+                     fit_intercept=True):
         """
         Fit a GLM using scikit-learn implementation of PoissonRegressor. Uses a regularization
         strength parameter alpha, which is the strength of ridge regularization term. When alpha
@@ -470,6 +471,8 @@ class NeuralGLM:
         """
         if cells is None:
             cells = self.clu_ids.flatten()
+        if not fit_intercept:
+            retvar = False;
         coefs = pd.Series(index=cells, name='coefficients', dtype=object)
         intercepts = pd.Series(index=cells, name='intercepts')
         variances = pd.Series(index=cells, name='variances', dtype=object)
@@ -478,8 +481,9 @@ class NeuralGLM:
             cell_idx = np.argwhere(self.clu_ids == cell)[0, 0]
             cellbinned = binned[:, cell_idx]
             with catch_warnings(record=True) as w:
-                fitobj = PoissonRegressor(alpha=alpha, max_iter=300).fit(dm,
-                                                                         cellbinned)
+                fitobj = PoissonRegressor(alpha=alpha,
+                                          max_iter=300,
+                                          fit_intercept=fit_intercept).fit(dm, cellbinned)
             if len(w) != 0:
                 nonconverged.append(cell)
             wts = np.concatenate([[fitobj.intercept_], fitobj.coef_], axis=0)
@@ -490,10 +494,14 @@ class NeuralGLM:
                 wvar = np.ones((wts.shape[0], wts.shape[0])) * np.nan
             coefs.at[cell] = fitobj.coef_
             variances.at[cell] = wvar[1:]
-            intercepts.at[cell] = fitobj.intercept_
+            if fit_intercept:
+                intercepts.at[cell] = fitobj.intercept_
+            else:
+                intercepts.at[cell] = 0
         if noncovwarn:
             if len(nonconverged) != 0:
                 warn(f'Fitting did not converge for some units: {nonconverged}')
+        
         return coefs, intercepts, variances
 
     def _fit_pytorch(self, dm, binned, cells=None, retvar=False, epochs=500, optim='adam',
@@ -597,7 +605,7 @@ class NeuralGLM:
         return coefs, intercepts, variances
 
     def fit(self, method='sklearn', alpha=0, singlepar_var=False, epochs=6000, optim='adam',
-            lr=0.3, printcond=True):
+            lr=0.3, fit_intercept=True, printcond=True):
         """
         Fit the current set of binned spikes as a function of the current design matrix. Requires
         NeuralGLM.bin_spike_trains and NeuralGLM.compile_design_matrix to be run first. Will store
@@ -621,6 +629,10 @@ class NeuralGLM:
             Used for _fit_pytorch funtion, see details there
         lr : float
             Used for _fit_pytorch funtion, see details there
+        fit_intercept : bool
+            Only works when using 'sklearn' method. Whether or not to fit the bias term of the GLM
+        printcond : bool
+            Whether or not to print the condition number of the design matrix. Defaults to True
 
         Returns
         -------
@@ -648,6 +660,7 @@ class NeuralGLM:
             if method == 'sklearn':
                 traindm = self.dm[trainmask]
                 coefs, intercepts, variances = self._fit_sklearn(traindm, trainbinned, alpha,
+                                                                 fit_intercept=fit_intercept,
                                                                  retvar=True)
             elif method == 'pytorch':
                 traindm = self.dm[trainmask]
@@ -680,6 +693,7 @@ class NeuralGLM:
                 testdm = self.dm[np.ix_(testmask, colmask)]
                 if method == 'sklearn':
                     coefs, intercepts, variances = self._fit_sklearn(traindm, trainbinned, alpha,
+                                                                     fit_intercept=fit_intercept,
                                                                      retvar=singlepar_var)
                 elif method == 'pytorch':
                     coefs, intercepts, variances = self._fit_pytorch(traindm, trainbinned,
