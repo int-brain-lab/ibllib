@@ -1,4 +1,5 @@
 include ibllib/atlas/allen_structure_tree.csv
 include ibllib/io/extractors/ephys_sessions/*.npy
+include ibllib/io/extractors/ephys_sessions/passive_stim_meta.json
 include ibllib/io/extractors/extractor_types.json
 include ibllib/tests/fixtures/ephysalignment/alignment_data.npz
