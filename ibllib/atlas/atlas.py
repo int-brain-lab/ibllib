@@ -7,7 +7,7 @@ import numpy as np
 import nrrd
 
 from brainbox.numerical import ismember
-from ibllib.atlas.regions import BrainRegions
+from ibllib.atlas.regions import BrainRegions, regions_from_allen_csv  # noqa
 from ibllib.io import params
 from oneibl.webclient import http_download_file
 
@@ -209,7 +209,6 @@ class BrainAtlas:
         _bottom[_bottom == self.bc.nz] = np.nan
         self.top = self.bc.i2z(_top + 1)
         self.bottom = self.bc.i2z(_bottom - 1)
-
         self.surface = np.diff(_surface, axis=self.xyz2dims[0], append=2) + l0
         idx_srf = np.where(self.surface != 0)
         self.surface[idx_srf] = 1
@@ -220,7 +219,7 @@ class BrainAtlas:
         """
         Performs a 3D lookup from volume indices ixyz to the image volume
         :param ixyz: [n, 3] array of indices in the mlapdv order
-        :return: n array of label values
+        :return: n array of flat indices
         """
         idims = np.split(ixyz[..., self.xyz2dims], [1, 2], axis=-1)
         inds = np.ravel_multi_index(idims, self.bc.nxyz[self.xyz2dims])
@@ -231,17 +230,31 @@ class BrainAtlas:
         Performs a 3D lookup from real world coordinates to the flat indices in the volume
         defined in the BrainCoordinates object
         :param xyz: [n, 3] array of coordinates
-        :return: n array of label values
+        :return: n array of flat indices
         """
         return self._lookup_inds(self.bc.xyz2i(xyz))
 
-    def get_labels(self, xyz):
+    def get_labels(self, xyz, mapping='Allen'):
         """
         Performs a 3D lookup from real world coordinates to the volume labels
+        and return the regions ids according to the mapping
         :param xyz: [n, 3] array of coordinates
-        :return: n array of label values
+        :param mapping: brain region mapping (defaults to original Allen mapping)
+        :return: n array of region ids
         """
-        return self.label.flat[self._lookup(xyz)]
+        regions_indices = self._get_mapping(mapping=mapping)[self.label.flat[self._lookup(xyz)]]
+        return self.regions.id[regions_indices]
+
+    def _get_mapping(self, mapping='Allen'):
+        """
+        Safe way to get mappings if nothing defined in regions.
+        A mapping transforms from the full allen brain Atlas ids to the remapped ids
+        new_ids = ids[mapping]
+        """
+        if hasattr(self.regions, 'mappings'):
+            return self.regions.mappings[mapping]
+        else:
+            return np.arange(self.regions.id.size)
 
     def _label2rgb(self, imlabel):
         """
@@ -249,26 +262,10 @@ class BrainAtlas:
         :param imlabel: 2D np-array containing label ids (slice of the label volume)
         :return: 3D np-array of the slice uint8 rgb values
         """
-        if self.regions is None or getattr(self.regions, 'rgb', None) is None:
-            return imlabel
+        if getattr(self.regions, 'rgb', None) is None:
+            return self.regions.id[imlabel]
         else:  # if the regions exist and have the rgb attribute, do the rgb lookup
-            # the lookup is done in pure numpy for speed. This is the ismember matlab fcn
-            im_unique, ilabels, iim = np.unique(imlabel, return_index=True, return_inverse=True)
-            _, ir_unique, _ = np.intersect1d(self.regions.id, im_unique, return_indices=True)
-            return np.reshape(self.regions.rgb[ir_unique[iim], :], (*imlabel.shape, 3))
-
-    def _label2value(self, imlabel, region_values):
-        """
-        Converts a slice from the label volume to its value after lookup
-        :param imlabel: 2D np-array containing label ids (slice of the label volume)
-        :param region_values: 1D np-array sane size as self.regions.id containing the value to be
-        mapped onto the structure
-        :return: 3D np-array of the slice uint8 rgb values
-        """
-        im_unique, ilabels, iim = np.unique(imlabel, return_index=True, return_inverse=True)
-        _, ir_unique, _ = np.intersect1d(self.regions.id, im_unique, return_indices=True)
-
-        return np.squeeze(np.reshape(region_values[ir_unique[iim]], (*imlabel.shape, 1)))
+            return self.regions.rgb[imlabel]
 
     def tilted_slice(self, xyz, axis, volume='image'):
         """
@@ -369,12 +366,19 @@ class BrainAtlas:
         ax.imshow(im, extent=extent, cmap=cmap, **kwargs)
         return ax
 
-    def slice(self, coordinate, axis, volume='image', mode='raise', region_values=None):
+    def slice(self, coordinate, axis, volume='image', mode='raise', region_values=None,
+              mapping="Allen"):
         """
         :param coordinate: float
-        :param axis: xyz convention:  0 for ml, 1 for ap, 2
+        :param axis: xyz convention:  0 for ml, 1 for ap, 2 for dv
+            - 0: sagittal slice (along ml axis)
+            - 1: coronal slice (along ap axis)
+            - 2: horizontal slice (along dv axis)
         :param volume: 'image' or 'annotation'
-        :param mode: 'raise' raise an error, 'clip' gets the first or last index
+        :param mode: error mode for out of bounds coordinates
+            -   'raise' raise an error
+            -   'clip' gets the first or last index
+        :param region_values
         :return: 2d array or 3d RGB numpy int8 array
         """
         index = self.bc.xyz2i(np.array([coordinate] * 3))[axis]
@@ -390,17 +394,20 @@ class BrainAtlas:
             elif axis == 2:
                 return vol[:, :, ind]
 
+        def _take_remap(vol, ind, axis, mapping):
+            # For the labels, remap the regions indices according to the mapping
+            return self._get_mapping(mapping=mapping)[_take(vol, ind, axis)]
+
         if isinstance(volume, np.ndarray):
             return _take(volume, index, axis=self.xyz2dims[axis])
-        elif volume == 'annotation':
-            im = _take(self.label, index, axis=self.xyz2dims[axis])
-            return self._label2rgb(im)
+        elif volume in 'annotation':
+            iregion = _take_remap(self.label, index, self.xyz2dims[axis], mapping)
+            return self._label2rgb(iregion)
+        elif volume == 'value':
+            return region_values[_take_remap(self.label, index, self.xyz2dims[axis], mapping)]
         elif volume == 'image':
             return _take(self.image, index, axis=self.xyz2dims[axis])
-        elif volume == 'value':
-            im = _take(self.label, index, axis=self.xyz2dims[axis])
-            return self._label2value(im, region_values=region_values)
-        elif volume == 'surface':
+        elif volume in ['surface', 'edges']:
             return _take(self.surface, index, axis=self.xyz2dims[axis])
 
     def plot_cslice(self, ap_coordinate, volume='image', **kwargs):
@@ -701,10 +708,10 @@ class AllenAtlas(BrainAtlas):
         """
         par = params.read('one_params')
         FLAT_IRON_ATLAS_REL_PATH = Path('histology', 'ATLAS', 'Needles', 'Allen')
-        regions = BrainRegions(brainmap)
+        regions = BrainRegions()
         if mock:
-            image, label = [np.zeros((528, 456, 320), dtype=np.bool) for _ in range(2)]
-            label[:, :, 100:105] = True
+            image, label = [np.zeros((528, 456, 320), dtype=np.int16) for _ in range(2)]
+            label[:, :, 100:105] = 1327  # lookup index for retina, id 304325711 (no id 1327)
         else:
             path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
             file_image = hist_path or path_atlas.joinpath(f'average_template_{res_um}.nrrd')
@@ -733,7 +740,6 @@ class AllenAtlas(BrainAtlas):
         self.res_um = res_um
         super().__init__(image, label, dxyz, regions, ibregma,
                          dims2xyz=dims2xyz, xyz2dims=xyz2dims)
-
 
     @staticmethod
     def _read_volume(file_volume):

@@ -2,8 +2,9 @@ import unittest
 
 import numpy as np
 
-from ibllib.atlas import (BrainCoordinates, cart2sph, sph2cart, Trajectory, regions_from_allen_csv,
+from ibllib.atlas import (BrainCoordinates, cart2sph, sph2cart, Trajectory,
                           Insertion, ALLEN_CCF_LANDMARKS_MLAPDV_UM, AllenAtlas)
+from ibllib.atlas.regions import BrainRegions
 
 
 def _create_mock_atlas():
@@ -19,7 +20,10 @@ def _create_mock_atlas():
 
 
 class TestBrainRegions(unittest.TestCase):
-    brs = regions_from_allen_csv()
+
+    @classmethod
+    def setUpClass(self):
+        self.brs = BrainRegions()
 
     def test_init(self):
         pass
@@ -33,21 +37,54 @@ class TestBrainRegions(unittest.TestCase):
         self.assertTrue(self.brs.descendants(ids=688).id.size == 567)
         self.assertTrue(self.brs.ancestors(ids=688).id.size == 4)
 
+    def test_mappings(self):
+        inds = self.brs._mapping_from_regions_list(np.array([304325711]))
+        inds_ = np.zeros_like(self.brs.id)
+        inds_[-1] = 1327
+        assert np.all(inds == inds_)
+
 
 class TestAtlasSlicesConversion(unittest.TestCase):
-    ba = _create_mock_atlas()
+
+    @classmethod
+    def setUpClass(self):
+        self.ba = _create_mock_atlas()
 
     def test_allen_ba(self):
         self.assertTrue(np.allclose(self.ba.bc.xyz2i(np.array([0, 0, 0]), round=False),
                                     ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / 25))
 
+    def test_lookups(self):
+        # the get_labels lookup returns the regions ids (not the indices !!)
+        assert self.ba.get_labels([0, 0, self.ba.bc.i2z(103)]) == 304325711
+        assert self.ba.get_labels([0, 0, self.ba.bc.i2z(103)], mapping='Nick') == 0
+        assert self.ba.get_labels([0, 0, 0]) == 0
+
     def test_slice(self):
-        nx, ny, nz = self.ba.bc.nxyz
-        self.assertTrue(self.ba.slice(axis=0, coordinate=0).shape == (ny, nz))
-        self.assertTrue(self.ba.slice(axis=1, coordinate=0).shape == (nx, nz))
+        ba = self.ba
+        nx, ny, nz = ba.bc.nxyz
+        # tests output shapes
+        self.assertTrue(ba.slice(axis=0, coordinate=0).shape == (ny, nz))  # sagittal
+        self.assertTrue(ba.slice(axis=1, coordinate=0).shape == (nx, nz))  # coronal
+        self.assertTrue(ba.slice(axis=2, coordinate=.002).shape == (ny, nx))  # horizontal
+        # tests out of bound
         with self.assertRaises(IndexError):
-            self.ba.slice(axis=1, coordinate=123)
-        self.assertTrue(self.ba.slice(axis=1, coordinate=21, mode='clip').shape == (nx, nz))
+            ba.slice(axis=1, coordinate=123)
+        self.assertTrue(ba.slice(axis=1, coordinate=21, mode='clip').shape == (nx, nz))
+        """
+        here we test the different volumes and mappings
+        """
+        # the label volume contains the region index (not id!),
+        iregions = ba.slice(axis=0, coordinate=0, volume=ba.label)
+        assert np.all(np.unique(iregions) == np.array([0, 1327]))
+        rgb_slice = ba.slice(axis=0, coordinate=0, volume='annotation')
+        assert rgb_slice.shape == (ny, nz, 3)
+        # check that without remapping (default full remap) the retina gets returned
+        assert np.all(np.unique(rgb_slice) == np.unique(np.r_[ba.regions.rgb[1327], 255]))
+        # now with a remap the retina should not be there anymore and there should be only white
+        rgb_slice = ba.slice(axis=0, coordinate=0, volume='annotation', mapping='Nick')
+        assert np.all(np.unique(rgb_slice) == 255)
+        assert ba.slice(axis=0, coordinate=0, volume='surface').shape == (ny, nz)
 
     def test_ccf_xyz(self):
         # test with bregma first
