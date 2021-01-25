@@ -2,14 +2,15 @@ import json
 from pathlib import Path
 import unittest
 import uuid
-from datetime import timedelta
+import tempfile
+import shutil
 
 import numpy as np
 
-from oneibl.one import ONE
 from brainbox.core import intersect2d, ismember2d, ismember
 from brainbox.io.parquet import uuid2np, np2uuid, rec2col, np2str
-import brainbox.io.video as video
+from brainbox.io import one as bbone
+from oneibl.one import ONE
 
 
 class TestParquet(unittest.TestCase):
@@ -79,71 +80,78 @@ class TestParquet(unittest.TestCase):
         assert np2uuid(np_uuids) == uuids
 
 
-class TestVideo(unittest.TestCase):
+class TestIO_ALF(unittest.TestCase):
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.one = ONE(
-            base_url="https://test.alyx.internationalbrainlab.org",
-            username="test_user",
-            password="TapetesBloc18"
-        )
+        cls.one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
+                      username='test_user', password='TapetesBloc18')
 
     def setUp(self) -> None:
-        self.eid = '8dd0fcb0-1151-4c97-ae35-2e2421695ad7'
-        self.url = ('http://ibl.flatironinstitute.org/mainenlab/'
-                    'Subjects/ZM_1743/2019-06-14/001/raw_video_data/'
-                    '_iblrig_leftCamera.raw.71cfeef2-2aa5-46b5-b88f-ca07e3d92474.mp4')
+        """
+        Creates a mock ephsy alf data folder with minimal spikes info for loading
+        :return:
+        """
+        self.tmpdir = Path(tempfile.gettempdir()) / 'test_bbio'
+        self.tmpdir.mkdir(exist_ok=True)
+        self.alf_path = self.tmpdir.joinpath('subject', '2019-08-12', '001', 'alf')
+        self.session_path = self.alf_path.parent
+        self.probes = ['probe00', 'probe01']
+        nspi = [10000, 10001]
+        nclusters = [420, 421]
+        nch = [64, 62]
+        probe_description = []
+        for i, prb in enumerate(self.probes):
+            prb_path = self.alf_path.joinpath(prb)
+            prb_path.mkdir(exist_ok=True, parents=True)
+            np.save(prb_path.joinpath('clusters.channels.npy'),
+                    np.random.randint(0, nch[i], nclusters[i]))
+            np.save(prb_path.joinpath('spikes.depths.npy'),
+                    np.random.rand(nspi[i]) * 3200)
+            np.save(prb_path.joinpath('spikes.clusters.npy'),
+                    np.random.randint(0, nclusters[i], nspi[i]))
+            np.save(prb_path.joinpath('spikes.times.npy'),
+                    np.sort(np.random.random(nspi[i]) * 1200))
 
-    def test_label_from_path(self):
-        # Test file path
+            probe_description.append({'label': prb,
+                                      'model': '3B1',
+                                      'serial': int(456248),
+                                      'raw_file_name': 'gnagnagnaga',
+                                      })
+        # create session level
+        with open(self.alf_path.joinpath('probes.description.json'), 'w+') as fid:
+            fid.write(json.dumps(probe_description))
+        np.save(self.alf_path.joinpath('trials.gnagnag.npy'), np.random.rand(50))
+
+    def test_load_ephys(self):
+        # straight test
+        spikes, clusters, trials = bbone.load_ephys_session(self.session_path, one=self.one)
+        self.assertTrue(list(spikes.keys()) == self.probes)
+        self.assertTrue(list(clusters.keys()) == self.probes)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmpdir)
+
+
+class TestOne(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
+                      username='test_user', password='TapetesBloc18')
+        cls.eid = '8dd0fcb0-1151-4c97-ae35-2e2421695ad7'
+
+    def test_path_from_eid(self):
         session_path = self.one.path_from_eid(self.eid)
-        video_path = session_path / 'raw_video_data' / '_iblrig_bodyCamera.raw.mp4'
-        label = video.label_from_path(video_path)
-        self.assertEqual('body', label)
-        # Test URL
-        label = video.label_from_path(self.url)
-        self.assertEqual('left', label)
-        # Test file name
-        label = video.label_from_path('_iblrig_rightCamera.raw.mp4')
-        self.assertEqual('right', label)
-        # Test wrong file
-        label = video.label_from_path('_iblrig_taskSettings.raw.json')
-        self.assertIsNone(label)
+        url = bbone.path_to_url(session_path / 'alf' / '_ibl_trials.choice.npy', one=self.one)
+        expected = ('flatironinstitute.org/mainenlab/Subjects/'
+                    'ZM_1743/2019-06-14/001/alf/_ibl_trials.choice')
+        self.assertIn(expected, url)
 
-    def test_url_from_eid(self):
-        actual = video.url_from_eid(self.eid, 'left', self.one)
-        self.assertEqual(self.url, actual)
-        actual = video.url_from_eid(self.eid, one=self.one)
-        expected = {'left': self.url}
-        self.assertEqual(expected, actual)
-        actual = video.url_from_eid(self.eid, label=('left', 'right'), one=self.one)
-        expected = {'left': self.url, 'right': None}
-        self.assertEqual(expected, actual)
+    def test_datasets_from_type(self):
+        ds = bbone.datasets_from_type(self.eid, '_iblrig_Camera.raw', one=self.one)
+        self.assertCountEqual(ds, ['_iblrig_leftCamera.raw.mp4'])
 
-    def test_get_video_meta(self):
-        actual = video.get_video_meta(self.url, self.one)
-        expected = {
-            'length': 144120,
-            'fps': 30,
-            'width': 1280,
-            'height': 1024,
-            'duration': timedelta(seconds=4804),
-            'size': 495090155
-        }
-        self.assertEqual(expected, actual)
 
-    def test_get_video_frame(self):
-        actual = video.get_video_frame(self.url, 0)
-        expected = np.array([152, 44, 206, 97, 0], dtype=np.uint8)
-        self.assertTrue(np.all(actual[0, :5, 0] == expected))
-
-    def test_get_video_frames_preload(self):
-        actual = video.get_video_frames_preload(self.url, [0, 3, 4])
-        expected = np.array([152, 44, 206, 97, 0], dtype=np.uint8)
-        self.assertEqual((3, 1024, 1280, 3), actual.shape)
-        self.assertTrue(np.all(actual[0, 0, :5, 0] == expected))
-        actual = video.get_video_frames_preload(self.url, [0, 3, 4],
-                                                mask=np.s_[0, :5, 0], as_list=True)
-        self.assertIsInstance(actual, list)
-        self.assertEqual(3, len(actual))
-        self.assertEqual((5,), actual[0].shape)
+if __name__ == "__main__":
+    unittest.main(exit=False)

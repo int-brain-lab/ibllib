@@ -27,44 +27,46 @@ def get_video_frame(video_path, frame_number):
     return frame_image
 
 
-def get_video_frames_preload(video_path, frame_numbers, mask=None, as_list=False):
+def get_video_frames_preload(video_path, frame_numbers, mask=Ellipsis, as_list=False):
     """
-    Obtain numpy array corresponding to a particular video frame in video_path
+    Obtain numpy array corresponding to a particular video frame in video_path.
+    Fetching and returning a list is about 33% faster but may be less memory controlled. NB: Any
+    gain in speed will be lost if subsequently converted to array.
     :param video_path: URL or local path to mp4 file
     :param frame_numbers: video frames to be returned
     :param mask: a logical mask or slice to apply to frames
-    :param as_list: if true the frames are returned as a list, this is faster but less memory
-    efficient
-    :return: numpy array corresponding to frame of interest.  Default dimensions are (n, w, h, 3)
-    where n = len(frame_numbers)
+    :param as_list: if true the frames are returned as a list, this is faster but may be less
+    memory efficient
+    :return: numpy array corresponding to frame of interest, or list if as_list is True.
+    Default dimensions are (n, w, h, 3) where n = len(frame_numbers)
 
     Example - Load first 1000 frames, keeping only the first colour channel:
         frames = get_video_frames_preload(video_path, range(1000), mask=np.s_[:, :, 0])
-    TODO Check whether setting position adds time, if so check whether frame numbers sequential
-    and skip this step if possible
     """
     is_url = isinstance(video_path, str) and video_path.startswith('http')
     cap = VideoStreamer(video_path).cap if is_url else cv2.VideoCapture(str(video_path))
     assert cap.isOpened(), 'Failed to open video'
 
+    # Setting the index is extremely slow; determine where frame index must be set
+    # The first index is always explicitly set.
+    to_set = np.insert(np.diff(frame_numbers), 0, 0) != 1
+
     if as_list:
         frame_images = [None] * len(frame_numbers)
     else:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
         ret, frame = cap.read()
         frame_images = np.empty((len(frame_numbers), *frame[mask or ...].shape), np.uint8)
 
     for ii, i in enumerate(frame_numbers):
         sys.stdout.write(f'\rloading frame {ii}/{len(frame_numbers)}')
         sys.stdout.flush()
-        cap.set(cv2.CAP_PROP_POS_FRAMES, i)
+        if to_set[ii]:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, i)
         ret, frame = cap.read()
         if ret:
             frame_images[ii] = frame[mask]
         else:
             print(f'failed to read frame #{i}')
-            if not as_list:
-                frame_images[ii] = np.nan
     cap.release()
     sys.stdout.write('\x1b[2K\r')  # Erase current line in stdout
     return frame_images

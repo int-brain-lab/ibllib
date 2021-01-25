@@ -5,10 +5,12 @@ import uuid
 import tempfile
 from pathlib import Path
 import shutil
+from datetime import timedelta
 
 import numpy as np
 
-from ibllib.io import params, flags, jsonable, spikeglx, hashfile, misc, globus
+from oneibl.one import ONE
+from ibllib.io import params, flags, jsonable, spikeglx, hashfile, misc, globus, video
 import ibllib.io.raw_data_loaders as raw
 
 
@@ -659,6 +661,48 @@ class TestsGlobus(unittest.TestCase):
         self.assertIsInstance(gtc, unittest.mock.Mock)
         mock, _ = self.patcher.get_original()
         mock.assert_called_once_with(client_id)
+
+
+class TestVideo(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.one = ONE(
+            base_url="https://test.alyx.internationalbrainlab.org",
+            username="test_user",
+            password="TapetesBloc18"
+        )
+
+    def setUp(self) -> None:
+        self.eid = '8dd0fcb0-1151-4c97-ae35-2e2421695ad7'
+        self.url = ('https://ibl.flatironinstitute.org/mainenlab/'
+                    'Subjects/ZM_1743/2019-06-14/001/raw_video_data/'
+                    '_iblrig_leftCamera.raw.71cfeef2-2aa5-46b5-b88f-ca07e3d92474.mp4')
+
+    def test_label_from_path(self):
+        # Test file path
+        session_path = self.one.path_from_eid(self.eid)
+        video_path = session_path / 'raw_video_data' / '_iblrig_bodyCamera.raw.mp4'
+        label = video.label_from_path(video_path)
+        self.assertEqual('body', label)
+        # Test URL
+        label = video.label_from_path(self.url)
+        self.assertEqual('left', label)
+        # Test file name
+        label = video.label_from_path('_iblrig_rightCamera.raw.mp4')
+        self.assertEqual('right', label)
+        # Test wrong file
+        label = video.label_from_path('_iblrig_taskSettings.raw.json')
+        self.assertIsNone(label)
+
+    def test_url_from_eid(self):
+        actual = video.url_from_eid(self.eid, 'left', self.one)
+        self.assertEqual(self.url, actual)
+        actual = video.url_from_eid(self.eid, one=self.one)
+        expected = {'left': self.url}
+        self.assertEqual(expected, actual)
+        actual = video.url_from_eid(self.eid, label=('left', 'right'), one=self.one)
+        expected = {'left': self.url, 'right': None}
+        self.assertEqual(expected, actual)
 
 
 if __name__ == "__main__":

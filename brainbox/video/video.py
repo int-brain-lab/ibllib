@@ -1,8 +1,14 @@
 import numpy as np
+import cv2
 
 
 def frame_diff(frame1, frame2):
-    """outputs pythagorean distance between two frames"""
+    """
+    Outputs pythagorean distance between two frames
+    :param frame1: A numpy array of pixels with a shape of either (m, n, 3) or (m, n)
+    :param frame2: A numpy array of pixels with a shape of either (m, n, 3) or (m, n)
+    :return: An array with a shape equal to the input frames
+    """
     if frame1.shape != frame2.shape:
         raise ValueError('Frames must have the same shape')
     diff32 = np.float32(frame1) - np.float32(frame2)
@@ -15,6 +21,13 @@ def frame_diff(frame1, frame2):
 
 
 def frame_diffs(frames, diff=1):
+    """
+    Return the difference between frames.  May also take difference between more than 1 frames.
+    Values are normalized between 0-255.
+    :param frames: Array or list of frames, where each frame is either (y, x) or (y, x, 3).
+    :param diff: Take difference between frames N and frames N + diff.
+    :return: uint8 array with shape (n-diff, y, x).
+    """
     frames = np.array(frames, dtype=np.float32)
     if frames.shape[0] < diff:
         raise ValueError('Difference must be less than number of frames')
@@ -27,21 +40,30 @@ def frame_diffs(frames, diff=1):
     return np.uint8(norm32 * 255)
 
 
-# def frame_diffs(frames):
-#     # Ensure array
-#     # frames = np.array(frames)
-#     # frames = np.array(
-#     #     [np.ones((5, 9, 3)), np.zeros((5, 9, 3)), np.ones((5, 9, 3)), np.zeros((5, 9, 3))],
-#     #     dtype=np.int32)
-#     df = np.empty((len(frames) - 2, *frames[0].shape[:2]), dtype=np.uint8)
-#     for i in range(len(frames) - 2):
-#         df[i] = frame_diff(frames[i], frames[i + 2])
-#         # dist = cv2.GaussianBlur(dist, (9, 9), 0)
-#         # calculate st dev test
-#         # _, stDev = cv2.meanStdDev(dist)
-#         # thresh.append(bool(stDev > sd_thresh))
-#
-#     # Feature scaling
-#     df_ = df.sum(axis=(1, 2))
-#     df_ = (df_ - np.min(df_)) / (np.max(df_) - np.min(df_))
-#     return df_
+def motion_energy(frames, diff=2, kernel=None, normalize=True):
+    """
+    Returns a min-max normalized vector of motion energy between frames.
+    :param frames: A list of ndarray of frames.
+    :param diff: Take difference between frames N and frames N + diff.
+    :param kernel: An optional Gaussian smoothing to apply with a given kernel size.
+    :return df_: A vector of length n frames - diff, normalized between 0 and 1.
+    :return stDev: The standard deviation between the frames (not normalized).
+
+    Example 1 - Calculate normalized difference between consecutive frames
+        df, std = motion_energy(frames, diff=1)
+
+    Example 2 - Calculate smoothed difference between every 2nd frame
+        df, _ = motion_energy(frames, kernel=(9, 9))
+    """
+    df = frame_diffs(frames, diff)
+
+    # Smooth with a Gaussian blur
+    if kernel is not None:
+        df = cv2.GaussianBlur(df, (9, 9), 0)
+    stDev = np.array([cv2.meanStdDev(x)[1] for x in df]).squeeze()
+
+    # Feature scaling
+    df_ = df.sum(axis=(1, 2))
+    if normalize:
+        df_ = (df_ - np.min(df_)) / (np.max(df_) - np.min(df_))
+    return df_, stDev
