@@ -38,9 +38,12 @@ class TestBrainRegions(unittest.TestCase):
         self.assertTrue(self.brs.ancestors(ids=688).id.size == 4)
 
     def test_mappings(self):
+        # the mapping assigns all non found regions to root (1:997), except for the void (0:0)
+        # here we're looking at the retina (1327:304325711)
         inds = self.brs._mapping_from_regions_list(np.array([304325711]))
-        inds_ = np.zeros_like(self.brs.id)
+        inds_ = np.zeros_like(self.brs.id) + 1
         inds_[-1] = 1327
+        inds_[0] = 0
         assert np.all(inds == inds_)
 
 
@@ -57,8 +60,11 @@ class TestAtlasSlicesConversion(unittest.TestCase):
     def test_lookups(self):
         # the get_labels lookup returns the regions ids (not the indices !!)
         assert self.ba.get_labels([0, 0, self.ba.bc.i2z(103)]) == 304325711
-        assert self.ba.get_labels([0, 0, self.ba.bc.i2z(103)], mapping='Nick') == 0
-        assert self.ba.get_labels([0, 0, 0]) == 0
+        # the beryl mapping doesn't include the retina so it returns root
+        assert self.ba.get_labels([0, 0, self.ba.bc.i2z(103)], mapping='Beryl') == 997  # root
+        # unlike the retina, root stays root whatever the mapping
+        assert self.ba.get_labels([0, 0, 0]) == 0  # void !
+        assert self.ba.get_labels([0, 0, 0], mapping='Beryl') == 0  # root
 
     def test_slice(self):
         ba = self.ba
@@ -80,10 +86,10 @@ class TestAtlasSlicesConversion(unittest.TestCase):
         rgb_slice = ba.slice(axis=0, coordinate=0, volume='annotation')
         assert rgb_slice.shape == (ny, nz, 3)
         # check that without remapping (default full remap) the retina gets returned
-        assert np.all(np.unique(rgb_slice) == np.unique(np.r_[ba.regions.rgb[1327], 255]))
+        assert np.all(np.unique(rgb_slice) == np.unique(np.r_[ba.regions.rgb[1327], 0]))
         # now with a remap the retina should not be there anymore and there should be only white
-        rgb_slice = ba.slice(axis=0, coordinate=0, volume='annotation', mapping='Nick')
-        assert np.all(np.unique(rgb_slice) == 255)
+        rgb_slice = ba.slice(axis=0, coordinate=0, volume='annotation', mapping='Beryl')
+        assert np.all(np.unique(rgb_slice) == np.array([0, 255]))
         assert ba.slice(axis=0, coordinate=0, volume='surface').shape == (ny, nz)
 
     def test_ccf_xyz(self):

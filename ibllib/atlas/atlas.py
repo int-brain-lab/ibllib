@@ -400,6 +400,9 @@ class BrainAtlas:
 
         if isinstance(volume, np.ndarray):
             return _take(volume, index, axis=self.xyz2dims[axis])
+        # add annotation_ids
+        # add annotation_indices
+        # rename annoatation_rgb ?
         elif volume in 'annotation':
             iregion = _take_remap(self.label, index, self.xyz2dims[axis], mapping)
             return self._label2rgb(iregion)
