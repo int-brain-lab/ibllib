@@ -3,6 +3,7 @@ This module handles extraction of camera timestamps for both Bpod and FPGA.
 """
 import logging
 from pathlib import Path
+from functools import partial
 
 import numpy as np
 import cv2
@@ -34,9 +35,9 @@ def extract_camera_sync(sync, chmap=None):
     sr = _get_sync_fronts(sync, chmap['right_camera'])
     sl = _get_sync_fronts(sync, chmap['left_camera'])
     sb = _get_sync_fronts(sync, chmap['body_camera'])
-    return {'right_camera': sr.times[::2],
-            'left_camera': sl.times[::2],
-            'body_camera': sb.times[::2]}
+    return {'right': sr.times[::2],
+            'left': sl.times[::2],
+            'body': sb.times[::2]}
 
 
 def get_video_length(video_path):
@@ -44,6 +45,7 @@ def get_video_length(video_path):
     Returns video length
     :param video_path: A path to the video
     :return:
+    TODO Use get_video_meta with key arg instead?
     """
     is_url = isinstance(video_path, str) and video_path.startswith('http')
     cap = VideoStreamer(video_path).cap if is_url else cv2.VideoCapture(str(video_path))
@@ -54,11 +56,15 @@ def get_video_length(video_path):
 
 
 class CameraTimestampsFPGA(BaseExtractor):
-    save_names = ['_ibl_rightCamera.times.npy', '_ibl_leftCamera.times.npy',
-                  '_ibl_bodyCamera.times.npy']
-    var_names = ['right_camera_timestamps', 'left_camera_timestamps', 'body_camera_timestamps']
 
-    def _extract(self, camera='all', sync=None, chmap=None, video_paths=None):
+    def __init__(self, label, session_path=None):
+        super().__init__(session_path)
+        assert label in ('left', 'right', 'body'), f'unknown video label "{label}"'
+        self.label = label
+        self.save_names = f'_ibl_{label}Camera.times.npy'
+        self.var_names = f'{label}_camera_timestamps'
+
+    def _extract(self, sync=None, chmap=None, video_path=None):
         """
         The raw timestamps are taken from the FPGA.  These are the times of the camera's frame
         TTLs.
@@ -72,45 +78,56 @@ class CameraTimestampsFPGA(BaseExtractor):
         :return:
         """
         fpga_times = extract_camera_sync(sync=sync, chmap=chmap)
+        count, pin_state = load_embedded_frame_data(self.session_path, self.label, raw=False)
 
-        for label, ts in fpga_times.items():
-            if camera != 'all' and camera != label[:-7]:
-                continue
-            count, pin_state = load_embedded_frame_data(self.session_path, label[:-7], raw=False)
+        if pin_state is not None and any(pin_state):
+            _logger.info('Aligning to audio TTLs')
+            # Extract audio TTLs
+            audio = _get_sync_fronts(sync, chmap['audio'])
+            # make sure that there are no 2 consecutive fall or consecutive rise events
+            assert (np.all(np.abs(np.diff(audio['polarities'])) == 2))
+            """
+            NB: Some of the audio TTLs occur very close together, and are therefore not 
+            reflected in the pin state.
+            """
+            import matplotlib.pyplot as plt
+            from ibllib.plots import vertical_lines
+            plt.subplots(1, 1)
+            ups = audio['polarities'] == 1
+            downs = audio['polarities'] == -1
+            vertical_lines(audio['times'][ups], ymin=0, ymax=1e-5, color='g', linestyle=':')
+            vertical_lines(audio['times'][downs], ymin=0, ymax=1e-5, color='r', linestyle=':')
+            # 0.00032999999999994145
+            aud_diff = np.diff(audio['times'])
+            plt.hist(aud_diff[aud_diff < 15], 1000)
 
-            if pin_state is not None and any(pin_state):
-                _logger.info('Aligning to audio TTLs')
-                # Extract audio TTLs
-                audio = _get_sync_fronts(sync, chmap['audio'])
-                # make sure that there are no 2 consecutive fall or consecutive rise events
-                assert (np.all(np.abs(np.diff(audio['polarities'])) == 2))
-                # make sure first TTL is high
-                assert audio['polarities'][0] == 1
-                """
-                The length of the count and pin state are regularly longer than the length of 
-                the video file.  Here we assert that the video is either shorter or the same 
-                length as the arrays, and  we make an assumption that the missing frames are 
-                right at the end of the video.  We therefore simply shorten the arrays to match
-                the length of the video.
-                """
-                if video_paths is None:
-                    filename = f'_iblrig_{label[:-7]}Camera.raw.mp4'
-                    video_path = self.session_path / 'raw_video_data' / filename
-                elif isinstance(video_paths, dict):
-                    video_path = video_paths[label[:-7]]
-                else:
-                    video_path = video_paths
-                length = get_video_length(video_path)
-                assert length <= count.size
-                if count.size > length:
-                    count = count[:length]
-                    pin_state = pin_state[:length]
-                fpga_times[camera] = align_with_audio(ts, audio['times'][::2], pin_state, count)
+            # make sure first TTL is high
+            assert audio['polarities'][0] == 1
+            # make sure first GPIO state is low
+            assert pin_state[0] == False
+            """
+            The length of the count and pin state are regularly longer than the length of 
+            the video file.  Here we assert that the video is either shorter or the same 
+            length as the arrays, and  we make an assumption that the missing frames are 
+            right at the end of the video.  We therefore simply shorten the arrays to match
+            the length of the video.
+            """
+            if video_path is None:
+                filename = f'_iblrig_{self.label}Camera.raw.mp4'
+                video_path = self.session_path / 'raw_video_data' / filename
+            length = get_video_length(video_path)
+            if count.size > length:
+                count = count[:length]
+                pin_state = pin_state[:length]
             else:
-                _logger.warning('Alignment by wheel data not yet implemented')
+                assert length == count.size, 'fewer counts than frames'
+            raw_ts = fpga_times[self.label]
+            timestamps = align_with_audio(raw_ts, audio['times'][::2], pin_state,  count)
+        else:
+            _logger.warning('Alignment by wheel data not yet implemented')
+            timestamps = fpga_times[self.label]
 
-        # return fpga_times['right_camera'], fpga_times['left_camera'], fpga_times['body_camera']
-        return fpga_times
+        return timestamps
 
 
 class CameraTimestampsBpod(BaseBpodTrialsExtractor):
@@ -303,11 +320,16 @@ def align_with_audio(timestamps, audio, pin_state, count,
         # Plot to check
         import matplotlib.pyplot as plt
         from ibllib.plots import vertical_lines
+        fig, axes = plt.subplots(2, 1)
         y = (pin_state > 0).astype(float)
         y *= 1e-5  # For scale when zoomed in
-        plt.plot(ts, y, marker='d', color='blue', drawstyle='steps-pre')
-        plt.plot(ts, np.zeros_like(ts), 'kx')
-        vertical_lines(audio, ymin=0, ymax=1e-5, color='r', linestyle=':')
+        axes[0].plot(ts, y, marker='d', color='blue', drawstyle='steps-pre')
+        axes[0].plot(ts, np.zeros_like(ts), 'kx')
+        vertical_lines(audio, ymin=0, ymax=1e-5, color='r', linestyle=':', ax=axes[0])
+        # gpio_ttl_diff = ts[low2high] - audio[:sum(low2high)]
+        # axes[1].hist(gpio_ttl_diff, 1000)
+        # _logger.info('%i timestamps negative when taking diff between audio TTLs and GPIO',
+        #              np.sum(gpio_ttl_diff < 0))
 
     return ts
 
@@ -367,31 +389,32 @@ def align_with_audio_safe(timestamps, audio, pin_state, count,
     return ts
 
 
-def load_embedded_frame_data(session_path, camera: str, raw=False):
+def load_embedded_frame_data(session_path, label: str, raw=False):
     """
 
     :param session_path:
-    :param camera: The specific camera to load, one of ('left', 'right', 'body')
+    :param label: The specific camera to load, one of ('left', 'right', 'body')
     :param raw: If True the raw data are returned without preprocessing (thresholding, etc.)
-    :return: The frame counter, the pin state
+    :return: The frame counter, the GPIO pin state
     """
     if session_path is None:
         return None, None
     raw_path = Path(session_path).joinpath('raw_video_data')
 
     # Load frame count
-    count_file = raw_path / f'_iblrig_{camera}Camera.frame_counter.bin'
+    count_file = raw_path / f'_iblrig_{label}Camera.frame_counter.bin'
     count = np.fromfile(count_file, dtype=np.float64).astype(int) if count_file.exists() else None
     if not (count is None or raw):
         count -= count[0]  # start from zero
 
     # Load pin state
-    pin_file = raw_path / f'_iblrig_{camera}Camera.GPIO.bin'
-    pin_state = np.fromfile(pin_file, dtype=np.float64).astype(int) if pin_file.exists() else None
-    if not (pin_state is None or raw):
-        pin_state = pin_state > PIN_STATE_THRESHOLD
+    GPIO_file = raw_path / f'_iblrig_{label}Camera.GPIO.bin'
+    gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(int) if GPIO_file.exists() else None
+    if not (gpio is None or raw):
+        assert np.unique(gpio).size == 2  # TODO relax assertion, rely on QC check
+        gpio = (gpio - gpio.min() / gpio.max() - gpio.min()) > 0.5  # min-max normalize + threshold
 
-    return count, pin_state
+    return count, gpio
 
 
 def extract_all(session_path, session_type=None, save=True, **kwargs):
@@ -408,7 +431,7 @@ def extract_all(session_path, session_type=None, save=True, **kwargs):
     if session_type is None:
         session_type = get_session_extractor_type(session_path)
     if session_type == 'ephys':
-        extractor = CameraTimestampsFPGA
+        extractor = [partial(CameraTimestampsFPGA, label) for label in ('left', 'right', 'body')]
         if 'sync' not in kwargs:
             kwargs['sync'], kwargs['chmap'] = \
                 get_main_probe_sync(session_path, bin_exists=kwargs.pop('bin_exists', False))

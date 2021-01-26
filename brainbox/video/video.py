@@ -1,3 +1,4 @@
+"""Functions for analyzing video frame data"""
 import numpy as np
 import cv2
 
@@ -46,6 +47,7 @@ def motion_energy(frames, diff=2, kernel=None, normalize=True):
     :param frames: A list of ndarray of frames.
     :param diff: Take difference between frames N and frames N + diff.
     :param kernel: An optional Gaussian smoothing to apply with a given kernel size.
+    :param normalize: If True, motion energy is min-max normalized
     :return df_: A vector of length n frames - diff, normalized between 0 and 1.
     :return stDev: The standard deviation between the frames (not normalized).
 
@@ -57,7 +59,7 @@ def motion_energy(frames, diff=2, kernel=None, normalize=True):
     """
     df = frame_diffs(frames, diff)
 
-    # Smooth with a Gaussian blur
+    # Smooth with a Gaussian blur  TODO Use median blur instead
     if kernel is not None:
         df = cv2.GaussianBlur(df, (9, 9), 0)
     stDev = np.array([cv2.meanStdDev(x)[1] for x in df]).squeeze()
@@ -65,5 +67,5 @@ def motion_energy(frames, diff=2, kernel=None, normalize=True):
     # Feature scaling
     df_ = df.sum(axis=(1, 2))
     if normalize:
-        df_ = (df_ - np.min(df_)) / (np.max(df_) - np.min(df_))
+        df_ = df_ - df_.min() / df_.max() - df_.min()
     return df_, stDev

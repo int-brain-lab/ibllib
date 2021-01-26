@@ -1,3 +1,4 @@
+"""Functions for fetching video frames, meta data and file locations"""
 import sys
 import re
 from datetime import timedelta

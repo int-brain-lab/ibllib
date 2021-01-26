@@ -1,5 +1,5 @@
 """
-TODO Move into ibllib
+TODO Document
 """
 import matplotlib
 import matplotlib.pyplot as plt
@@ -14,7 +14,7 @@ from pathlib import Path
 import re
 
 from oneibl.one import ONE
-from brainbox.io.video import get_video_frames_preload, get_video_frame
+from ibllib.io.video import get_video_frames_preload, get_video_frame
 import brainbox.video.video as video
 import brainbox.behavior.wheel as wh
 from ibllib.misc.exp_ref import eid2ref

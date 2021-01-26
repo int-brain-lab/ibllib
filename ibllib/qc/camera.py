@@ -29,7 +29,7 @@ import alf.io as alfio
 from brainbox.core import Bunch
 import brainbox.behavior.wheel as wh
 from brainbox.io.one import path_to_url, datasets_from_type
-from brainbox.io.video import get_video_meta, get_video_frames_preload
+from ibllib.io.video import get_video_meta, get_video_frames_preload
 from brainbox.video import frame_diff
 from . import base
 
@@ -146,33 +146,33 @@ class CameraQC(base.QC):
             self.data['audio'] = audio_ttls['times'][::2]  # Get rises
             # Load raw FPGA times
             cam_ts = extract_camera_sync(sync, chmap)
-            self.data['fpga_times'] = cam_ts[f'{self.side}_camera']
+            self.data['fpga_times'] = cam_ts[self.side]
         else:
             bpod_data = raw.load_data(self.session_path)
             wheel_data = training_wheel.get_wheel_position(self.session_path)
             _, audio_ttls = raw.load_bpod_fronts(self.session_path, bpod_data)
             self.data['audio'] = audio_ttls['times'][::2]
-        self.data['wheel'] = Bunch(zip(wheel_keys, wheel_data))
+        # self.data['wheel'] = Bunch(zip(wheel_keys, wheel_data))
 
         # Find short period of wheel motion for motion correlation.  For speed start with the
         # fist 2 minutes (nearly always enough), extract wheel movements and pick one.
         # TODO Pick movement towards the end of the session (but not right at the end as some
         #  are extrapolated).  Make sure the movement isn't too long.
-        START = 1 * 60  # Start 1 minute in
-        SEARCH_PERIOD = 2 * 60
-        ts, pos = wheel_data
-        while True:
-            win = np.logical_and(
-                ts > START,
-                ts < SEARCH_PERIOD + START
-            )
-            if np.sum(win) > 1000:
-                break
-            SEARCH_PERIOD *= 2
-        wheel_moves = training_wheel.extract_wheel_moves(ts[win], pos[win])
-        move_ind = np.argmax(np.abs(wheel_moves['peakAmplitude']))
-        # TODO Save only the wheel fragment we need
-        self.data['wheel'].period = wheel_moves['intervals'][move_ind, :]
+        # START = 1 * 60  # Start 1 minute in
+        # SEARCH_PERIOD = 2 * 60
+        # ts, pos = wheel_data
+        # while True:
+        #     win = np.logical_and(
+        #         ts > START,
+        #         ts < SEARCH_PERIOD + START
+        #     )
+        #     if np.sum(win) > 1000:
+        #         break
+        #     SEARCH_PERIOD *= 2
+        # wheel_moves = training_wheel.extract_wheel_moves(ts[win], pos[win])
+        # move_ind = np.argmax(np.abs(wheel_moves['peakAmplitude']))
+        # # TODO Save only the wheel fragment we need
+        # self.data['wheel'].period = wheel_moves['intervals'][move_ind, :]
 
         # Load extracted frame times
         alf_path = self.session_path / 'alf'
@@ -180,7 +180,7 @@ class CameraQC(base.QC):
             assert not extract_times
             self.data['frame_times'] = alfio.load_object(alf_path, f'{self.side}Camera')['times']
         except (ALFObjectNotFound, AssertionError):  # Re-extract
-            kwargs = dict(video_paths=self.video_path, camera=self.side)
+            kwargs = dict(video_path=self.video_path)
             if self.type == 'ephys':
                 kwargs = {**kwargs, 'sync': sync, 'chmap': chmap}  # noqa
             outputs, _ = extract_all(self.session_path, self.type, save=False, **kwargs)
@@ -261,7 +261,7 @@ class CameraQC(base.QC):
         """
         _log.info('Computing QC outcome')
         namespace = f'video{self.side.capitalize()}'
-        if not self.data:
+        if all(x is None for x in self.data.values()):
             self.load_data(**kwargs)
 
         def is_metric(x):
@@ -277,7 +277,7 @@ class CameraQC(base.QC):
             self.update(self.outcome, namespace)
         return self.outcome, self.metrics
 
-    def check_brightness(self, bounds=(20, 100), max_std=20, display=False):
+    def check_brightness(self, bounds=(20, 200), max_std=20, display=False):
         """Check that the video brightness is within a given range
         The mean brightness of each frame must be with the bounds provided, and the standard
         deviation across samples frames should be less then the given value.  Assumes that the
@@ -345,10 +345,11 @@ class CameraQC(base.QC):
             return 'NOT_SET'
         size_matches = self.data['video']['length'] == self.data['pin_state'].size
         # There should be only one value below our threshold
-        correct_threshold = sum(np.unique(self.data['pin_state']) < PIN_STATE_THRESHOLD) == 1
+        binary = np.unique(self.data['pin_state']).size == 2
         state = self.data['pin_state'] > PIN_STATE_THRESHOLD
         # NB: The pin state to be high for 2 consecutive frames
         low2high = np.insert(np.diff(state.astype(int)) == 1, 0, False)
+        # NB: Time between two consecutive TTLs can be sub-frame, so this will fail
         state_ttl_matches = sum(low2high) == self.data['audio'].size
         # Check within ms of audio times
         if display:
@@ -365,7 +366,7 @@ class CameraQC(base.QC):
         #        if np.abs(x - self.data['frame_times'][low2high]).min() > 0.01]
         # mins = [np.abs(x - self.data['frame_times'][low2high]).min() for x in self.data['audio']]
 
-        return 'PASS' if size_matches and correct_threshold and state_ttl_matches else 'FAIL'
+        return 'PASS' if size_matches and binary and state_ttl_matches else 'FAIL'
 
     def check_dropped_frames(self, threshold=.1):
         """Check how many frames were reported missing
@@ -408,6 +409,7 @@ class CameraQC(base.QC):
 
     def check_wheel_alignment(self, display=False):
         """Check wheel motion in video correlates with the rotary encoder signal"""
+        return 'NOT_SET'
         # TODO Try normalizing velocity first; try sampling wheel at frame rate
         if self.data['wheel_frames'] is None or self.data['wheel'] is None:
             return 'NOT_SET'
@@ -422,6 +424,7 @@ class CameraQC(base.QC):
             return idx
 
         def frame_diffs(frames):
+            """Inefficient hack function"""
             df = []
             frame0 = frames[0]
             frame1 = frames[1]
@@ -437,12 +440,17 @@ class CameraQC(base.QC):
         Fs = self.video_meta[self.type][self.side]['fps']
         ts, pos = self.data['wheel'].timestamps, self.data['wheel'].position
         mask = to_mask(ts)
-        pos, ts = wh.interpolate_position(ts[mask], pos[mask], freq=Fs)
-        v, _ = wh.velocity_smoothed(pos, Fs)
+        pos, ts = wh.interpolate_position(ts[mask], pos[mask], freq=1000)
+        v, _ = wh.velocity_smoothed(pos, 1000)
         # Calculate video motion trace
         frame_times = self.data['frame_times']
         frame_times = frame_times[to_mask(frame_times)]
         df_ = frame_diffs(self.data['wheel_frames'])
+
+        # Feature scaling
+        df_ = np.pad(df_, 1, 'constant', constant_values=0)
+        df_ = np.sum(df_, axis=(1, 2))
+        df_ = (df_ - np.min(df_)) / (np.max(df_) - np.min(df_))
 
         xs = np.unique([find_nearest(ts, x) for x in frame_times])
         vs = np.abs(v[xs])
@@ -456,6 +464,16 @@ class CameraQC(base.QC):
         self.log.info(f'{self.side} camera, adjusted by {dt_i} frames')
 
         if display:
+            fig, ax = plt.subplots(2, 1, sharex=True)
+            ax[0].plot(frame_times, df_, '-x', label='wheel motion energy')
+            ax[1].plot(ts, vs)
+            dt = np.diff(frame_times[[0, np.abs(dt_i)]])
+            ax[0].plot(ts[xs] - dt, vs, 'r-x', label='velocity (shifted)')
+            ax[0].set_title('normalized motion energy, %s camera, %.0f fps' % (self.side, Fs))
+            ax[0].set_ylabel('rate of change (a.u.)')
+            ax[0].legend()
+            ax[1].set_ylabel('Abs wheel velocity (rad / s)')
+            ax[1].set_xlabel('Time (s)')
             # mask = np.logical_and(ts > period[0], ts < period[1])
             # plt.plot(ts[mask], pos[mask])
             # x = x[1::2]
@@ -485,6 +503,103 @@ class CameraQC(base.QC):
             axes[3].set_ylabel('rate of change (a.u.)')
             axes[3].legend()
             plt.tight_layout()
+
+            fig, axes = plt.subplots(nrows=2)
+            fig.suptitle('%s, trial %i' % (ref, trial), fontsize=16)
+            data = {}
+
+        def init_plot():
+            """
+            Plot the wheel data for the current trial
+            :return: None
+            """
+            data['im'] = axes[0].imshow(df[0])
+            axes[0].axis('off')
+            axes[0].set_title('%s camera, adjusted by %d frames' % (side, dt_i))
+
+            # Plot the wheel position
+            ax = axes[1]
+            ax.clear()
+            ax.plot(self.wheel.timestamps[wheel_mask], self.wheel.position[wheel_mask], '-x')
+
+            ts_0, = np.where(cam_mask)
+            data['idx_0'] = ts_0[0] - dt_i
+            ts_0 = camera_times[ts_0[0] + dt_i]
+            data['ln'] = ax.axvline(x=ts_0, color='k')
+            ax.set_xlim([ts_0 - (3 / 2), ts_0 + (3 / 2)])
+            data['frame_num'] = 0
+            mkr = find_nearest(self.wheel.timestamps[wheel_mask], ts_0)
+
+            data['marker'], = ax.plot(
+                self.wheel.timestamps[wheel_mask][mkr],
+                self.wheel.position[wheel_mask][mkr], 'r-x')
+            ax.set_ylabel('Wheel position (rad))')
+            ax.set_xlabel('Time (s))')
+            return
+
+        def animate(i):
+            """
+            Callback for figure animation.  Sets image data for current frame and moves pointer
+            along axis
+            :param i: unused; the current timestep of the calling method
+            :return: None
+            """
+            if i < 0:
+                data['frame_num'] -= 1
+                if data['frame_num'] < 0:
+                    data['frame_num'] = len(df) - 1
+            else:
+                data['frame_num'] += 1
+                if data['frame_num'] >= len(df):
+                    data['frame_num'] = 0
+            i = data['frame_num']  # NB: This is index for current trial's frame list
+
+            frame = df[i]
+            t_x = camera_times[data['idx_0'] + i]
+            data['ln'].set_xdata([t_x, t_x])
+            axes[1].set_xlim([t_x - (3 / 2), t_x + (3 / 2)])
+            data['im'].set_data(frame)
+
+            mkr = find_nearest(self.wheel.timestamps[wheel_mask], t_x)
+            data['marker'].set_data(
+                self.wheel.timestamps[wheel_mask][mkr],
+                self.wheel.position[wheel_mask][mkr]
+            )
+
+            return data['im'], data['ln'], data['marker']
+
+        anim = animation.FuncAnimation(fig, animate, init_func=init_plot,
+                                       frames=range(len(df)) if save else cycle(range(60)),
+                                       interval=20, blit=False,
+                                       repeat=not save, cache_frame_data=False)
+        anim.running = False
+
+        def process_key(event):
+            """
+            Callback for key presses.
+            :param event: a figure key_press_event
+            :return: None
+            """
+            if event.key.isspace():
+                if anim.running:
+                    anim.event_source.stop()
+                else:
+                    anim.event_source.start()
+                anim.running = ~anim.running
+            elif event.key == 'right':
+                if anim.running:
+                    anim.event_source.stop()
+                    anim.running = False
+                animate(1)
+                fig.canvas.draw()
+            elif event.key == 'left':
+                if anim.running:
+                    anim.event_source.stop()
+                    anim.running = False
+                animate(-1)
+                fig.canvas.draw()
+
+        fig.canvas.mpl_connect('key_press_event', process_key)
         return 'PASS' if dt_i == 0 else 'FAIL'
 
     def check_position(self, hist_thresh=0.7, pos_thresh=100, metric=cv2.TM_CCOEFF_NORMED,
