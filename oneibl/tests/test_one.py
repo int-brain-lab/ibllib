@@ -8,6 +8,7 @@ import shutil
 import numpy as np
 
 import ibllib.io.hashfile as hashfile
+from ibllib.exceptions import ALFObjectNotFound
 from alf.io import remove_uuid_file
 from oneibl.one import ONE
 
@@ -275,6 +276,24 @@ class TestMisc(unittest.TestCase):
         with self.assertRaises(ValueError):
             one.to_eid('e73hj')
             one.to_eid({'subject': 'flowers'})
+
+    def test_path_to_url(self):
+        eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
+        session_path = one.path_from_eid(eid)
+        # Test URL is returned
+        filepath = session_path.joinpath('alf', '_ibl_wheel.position.npy')
+        url = one.path_to_url(filepath)
+        expected = ('mainenlab/Subjects/clns0730/2018-08-24/1/'
+                    '_ibl_wheel.position.a0155492-ee9d-4584-ba4e-7c86f9b12d3a.npy')
+        self.assertIn(expected, url)
+        # Test errors raised
+        with self.assertRaises(ALFObjectNotFound):
+            one.path_to_url(session_path.joinpath('raw_video_data', '_iblrig_leftCamera.raw.mp4'))
+
+    def test_datasets_from_type(self):
+        eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
+        dsets = one.datasets_from_type(eid, 'eye.blink')
+        self.assertCountEqual(dsets, ['eye.blink.npy'])
 
 
 if __name__ == '__main__':
