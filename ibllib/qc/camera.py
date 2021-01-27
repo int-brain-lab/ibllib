@@ -16,7 +16,6 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
-from scipy import signal
 
 from ibllib.io.extractors.camera import (
     load_embedded_frame_data, extract_camera_sync, PIN_STATE_THRESHOLD, extract_all
@@ -27,10 +26,9 @@ from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io import raw_data_loaders as raw
 import alf.io as alfio
 from brainbox.core import Bunch
-import brainbox.behavior.wheel as wh
 from brainbox.io.one import path_to_url, datasets_from_type
+from brainbox.video.motion import MotionAlignment
 from ibllib.io.video import get_video_meta, get_video_frames_preload
-from brainbox.video import frame_diff
 from . import base
 
 _log = logging.getLogger('ibllib')
@@ -152,27 +150,27 @@ class CameraQC(base.QC):
             wheel_data = training_wheel.get_wheel_position(self.session_path)
             _, audio_ttls = raw.load_bpod_fronts(self.session_path, bpod_data)
             self.data['audio'] = audio_ttls['times'][::2]
-        # self.data['wheel'] = Bunch(zip(wheel_keys, wheel_data))
+        self.data['wheel'] = Bunch(zip(wheel_keys, wheel_data))
 
         # Find short period of wheel motion for motion correlation.  For speed start with the
         # fist 2 minutes (nearly always enough), extract wheel movements and pick one.
         # TODO Pick movement towards the end of the session (but not right at the end as some
         #  are extrapolated).  Make sure the movement isn't too long.
-        # START = 1 * 60  # Start 1 minute in
-        # SEARCH_PERIOD = 2 * 60
-        # ts, pos = wheel_data
-        # while True:
-        #     win = np.logical_and(
-        #         ts > START,
-        #         ts < SEARCH_PERIOD + START
-        #     )
-        #     if np.sum(win) > 1000:
-        #         break
-        #     SEARCH_PERIOD *= 2
-        # wheel_moves = training_wheel.extract_wheel_moves(ts[win], pos[win])
-        # move_ind = np.argmax(np.abs(wheel_moves['peakAmplitude']))
-        # # TODO Save only the wheel fragment we need
-        # self.data['wheel'].period = wheel_moves['intervals'][move_ind, :]
+        START = 1 * 60  # Start 1 minute in
+        SEARCH_PERIOD = 2 * 60
+        ts, pos = wheel_data
+        while True:
+            win = np.logical_and(
+                ts > START,
+                ts < SEARCH_PERIOD + START
+            )
+            if np.sum(win) > 1000:
+                break
+            SEARCH_PERIOD *= 2
+        wheel_moves = training_wheel.extract_wheel_moves(ts[win], pos[win])
+        move_ind = np.argmax(np.abs(wheel_moves['peakAmplitude']))
+        # TODO Save only the wheel fragment we need
+        self.data['wheel'].period = wheel_moves['intervals'][move_ind, :]
 
         # Load extracted frame times
         alf_path = self.session_path / 'alf'
@@ -196,19 +194,6 @@ class CameraQC(base.QC):
             self.frame_samples_idx = indices
             self.data['frame_samples'] = get_video_frames_preload(self.video_path, indices,
                                                                   mask=np.s_[:, :, 0])
-            if self.data['wheel']:
-                ROI = {
-                    'left': ((800, 1020), (233, 1096)),
-                    'right': ((426, 510), (104, 545)),
-                    'body': ((402, 481), (31, 103))
-                }
-                roi = (*[slice(*r) for r in ROI[self.side]], 0)
-                indices, = np.where(np.logical_and(
-                    self.data['frame_times'] > self.data.wheel.period[0],
-                    self.data['frame_times'] < self.data.wheel.period[1]
-                ))
-                self.data['wheel_frames'] = get_video_frames_preload(self.video_path, indices,
-                                                                     mask=roi)
         except AssertionError:
             _log.error('Failed to read video file; setting outcome to CRITICAL')
             self._outcome = 'CRITICAL'
@@ -270,12 +255,12 @@ class CameraQC(base.QC):
         checks = getmembers(CameraQC, is_metric)
         self.metrics = {f'_{namespace}_' + k[6:]: fn(self) for k, fn in checks}
         all_pass = all(x is None or x == 'PASS' for x in self.metrics.values())
-        self.outcome = 'PASS' if all_pass else 'FAIL'
+        outcome = 'PASS' if all_pass else 'FAIL'
         if update:
             bool_map = {k: None if v is None else v == 'PASS' for k, v in self.metrics.items()}
             self.update_extended_qc(bool_map)
-            self.update(self.outcome, namespace)
-        return self.outcome, self.metrics
+            self.update(outcome, namespace)
+        return outcome, self.metrics
 
     def check_brightness(self, bounds=(20, 200), max_std=20, display=False):
         """Check that the video brightness is within a given range
@@ -407,200 +392,18 @@ class CameraQC(base.QC):
         match = actual['width'] == expected['width'] and actual['height'] == expected['height']
         return 'PASS' if match else 'FAIL'
 
-    def check_wheel_alignment(self, display=False):
+    def check_wheel_alignment(self, tolerance=1, display=False):
         """Check wheel motion in video correlates with the rotary encoder signal"""
-        return 'NOT_SET'
-        # TODO Try normalizing velocity first; try sampling wheel at frame rate
         if self.data['wheel_frames'] is None or self.data['wheel'] is None:
             return 'NOT_SET'
 
-        def to_mask(ts):
-            a, b = self.data['wheel'].get('period', (ts[0], ts[1]))
-            return np.logical_and(ts > a, ts < b)
-
-        def find_nearest(array, value):
-            array = np.asarray(array)
-            idx = (np.abs(array - value)).argmin()
-            return idx
-
-        def frame_diffs(frames):
-            """Inefficient hack function"""
-            df = []
-            frame0 = frames[0]
-            frame1 = frames[1]
-
-            for i in range(2, len(frames)):
-                frame2 = frames[i]
-                df.append(frame_diff(frame0, frame2))
-                frame0 = frame1
-                frame1 = frame2
-            return np.array(df)
-
-        # Calculate rotary encoder velocity trace
-        Fs = self.video_meta[self.type][self.side]['fps']
-        ts, pos = self.data['wheel'].timestamps, self.data['wheel'].position
-        mask = to_mask(ts)
-        pos, ts = wh.interpolate_position(ts[mask], pos[mask], freq=1000)
-        v, _ = wh.velocity_smoothed(pos, 1000)
-        # Calculate video motion trace
-        frame_times = self.data['frame_times']
-        frame_times = frame_times[to_mask(frame_times)]
-        df_ = frame_diffs(self.data['wheel_frames'])
-
-        # Feature scaling
-        df_ = np.pad(df_, 1, 'constant', constant_values=0)
-        df_ = np.sum(df_, axis=(1, 2))
-        df_ = (df_ - np.min(df_)) / (np.max(df_) - np.min(df_))
-
-        xs = np.unique([find_nearest(ts, x) for x in frame_times])
-        vs = np.abs(v[xs])
-        vs = (vs - np.min(vs)) / (np.max(vs) - np.min(vs))
-
-        # FIXME This can be used as a goodness of fit measure
-        xcorr = signal.correlate(df_, vs)
-        c = max(xcorr)
-        xcorr = np.argmax(xcorr)
-        dt_i = xcorr - xs.size
-        self.log.info(f'{self.side} camera, adjusted by {dt_i} frames')
-
+        aln = MotionAlignment(self.eid, self.one, self.log)
+        aln.data = self.data
+        offset, *_ = aln.align_motion(period=self.data['wheel'].period,
+                                      display=display, side=self.side)
         if display:
-            fig, ax = plt.subplots(2, 1, sharex=True)
-            ax[0].plot(frame_times, df_, '-x', label='wheel motion energy')
-            ax[1].plot(ts, vs)
-            dt = np.diff(frame_times[[0, np.abs(dt_i)]])
-            ax[0].plot(ts[xs] - dt, vs, 'r-x', label='velocity (shifted)')
-            ax[0].set_title('normalized motion energy, %s camera, %.0f fps' % (self.side, Fs))
-            ax[0].set_ylabel('rate of change (a.u.)')
-            ax[0].legend()
-            ax[1].set_ylabel('Abs wheel velocity (rad / s)')
-            ax[1].set_xlabel('Time (s)')
-            # mask = np.logical_and(ts > period[0], ts < period[1])
-            # plt.plot(ts[mask], pos[mask])
-            # x = x[1::2]
-            fig, axes = plt.subplots(4, 1)
-            axes[0].plot(ts, pos, label='wheel position')
-            axes[0].set(
-                xlabel='time / s',
-                ylabel='position / rad',
-                title='Wheel position'
-            )
-            axes[1].plot(ts, np.abs(v), label='rotary encoder velocity')
-            axes[1].set(
-                xlabel='Time (s)',
-                ylabel='Abs wheel velocity (rad / s)',
-                title='Wheel velocity'
-            )
-            # FIXME Shouldn't be missing frames in diff
-            axes[2].plot(frame_times[1:-1], df_, '-x', label='wheel motion energy')
-            # ax[0].vlines(x[np.array(thresh)], 0, 1,
-            #              linewidth=0.5, linestyle=':', label='>%i s.d. diff' % sd_thresh)
-            v_abs = np.abs(v)
-            v_normed = (v_abs - np.min(v_abs)) / (np.max(v_abs) - np.min(v_abs))
-            axes[3].plot(ts, v_normed, label='Normalized absolute velocity')
-            dt = np.diff(frame_times[[0, np.abs(dt_i)]])
-            axes[3].plot(ts[xs] - dt, vs, 'r-x', label='velocity (shifted)')
-            axes[3].set_title('normalized motion energy, %s camera, %.0f fps' % (self.side, 60))
-            axes[3].set_ylabel('rate of change (a.u.)')
-            axes[3].legend()
-            plt.tight_layout()
-
-            fig, axes = plt.subplots(nrows=2)
-            fig.suptitle('%s, trial %i' % (ref, trial), fontsize=16)
-            data = {}
-
-        def init_plot():
-            """
-            Plot the wheel data for the current trial
-            :return: None
-            """
-            data['im'] = axes[0].imshow(df[0])
-            axes[0].axis('off')
-            axes[0].set_title('%s camera, adjusted by %d frames' % (side, dt_i))
-
-            # Plot the wheel position
-            ax = axes[1]
-            ax.clear()
-            ax.plot(self.wheel.timestamps[wheel_mask], self.wheel.position[wheel_mask], '-x')
-
-            ts_0, = np.where(cam_mask)
-            data['idx_0'] = ts_0[0] - dt_i
-            ts_0 = camera_times[ts_0[0] + dt_i]
-            data['ln'] = ax.axvline(x=ts_0, color='k')
-            ax.set_xlim([ts_0 - (3 / 2), ts_0 + (3 / 2)])
-            data['frame_num'] = 0
-            mkr = find_nearest(self.wheel.timestamps[wheel_mask], ts_0)
-
-            data['marker'], = ax.plot(
-                self.wheel.timestamps[wheel_mask][mkr],
-                self.wheel.position[wheel_mask][mkr], 'r-x')
-            ax.set_ylabel('Wheel position (rad))')
-            ax.set_xlabel('Time (s))')
-            return
-
-        def animate(i):
-            """
-            Callback for figure animation.  Sets image data for current frame and moves pointer
-            along axis
-            :param i: unused; the current timestep of the calling method
-            :return: None
-            """
-            if i < 0:
-                data['frame_num'] -= 1
-                if data['frame_num'] < 0:
-                    data['frame_num'] = len(df) - 1
-            else:
-                data['frame_num'] += 1
-                if data['frame_num'] >= len(df):
-                    data['frame_num'] = 0
-            i = data['frame_num']  # NB: This is index for current trial's frame list
-
-            frame = df[i]
-            t_x = camera_times[data['idx_0'] + i]
-            data['ln'].set_xdata([t_x, t_x])
-            axes[1].set_xlim([t_x - (3 / 2), t_x + (3 / 2)])
-            data['im'].set_data(frame)
-
-            mkr = find_nearest(self.wheel.timestamps[wheel_mask], t_x)
-            data['marker'].set_data(
-                self.wheel.timestamps[wheel_mask][mkr],
-                self.wheel.position[wheel_mask][mkr]
-            )
-
-            return data['im'], data['ln'], data['marker']
-
-        anim = animation.FuncAnimation(fig, animate, init_func=init_plot,
-                                       frames=range(len(df)) if save else cycle(range(60)),
-                                       interval=20, blit=False,
-                                       repeat=not save, cache_frame_data=False)
-        anim.running = False
-
-        def process_key(event):
-            """
-            Callback for key presses.
-            :param event: a figure key_press_event
-            :return: None
-            """
-            if event.key.isspace():
-                if anim.running:
-                    anim.event_source.stop()
-                else:
-                    anim.event_source.start()
-                anim.running = ~anim.running
-            elif event.key == 'right':
-                if anim.running:
-                    anim.event_source.stop()
-                    anim.running = False
-                animate(1)
-                fig.canvas.draw()
-            elif event.key == 'left':
-                if anim.running:
-                    anim.event_source.stop()
-                    anim.running = False
-                animate(-1)
-                fig.canvas.draw()
-
-        fig.canvas.mpl_connect('key_press_event', process_key)
-        return 'PASS' if dt_i == 0 else 'FAIL'
+            aln.plot_alignment()
+        return 'PASS' if np.abs(offset) <= tolerance else 'FAIL'
 
     def check_position(self, hist_thresh=0.7, pos_thresh=100, metric=cv2.TM_CCOEFF_NORMED,
                        display=False, test=False, roi=None):
@@ -691,14 +494,14 @@ class CameraQC(base.QC):
               the distribution of frequencies in the image is different (e.g. the holder
               comprises mostly very high frequencies).
             - The image may be overall in focus but the places we care about can still be out of
-              focus (namely the face).  For this we'll take 2 ROIs - face and wheel/paws.
+              focus (namely the face).  For this we'll take an ROI around the face.
         """
         if not test and self.data['frame_samples'] is None:
             return 'NOT_SET'
 
         ROI = {
-            'left': (np.s_[:400, :561], np.s_[500:, 100:800]),  # (face, wheel)
-            'right': (np.s_[:196, 397:], np.s_[221:, 255:]),
+            'left': (np.s_[:400, :561],),  # np.s_[500:, 100:800]),  # (face, wheel)
+            'right': (np.s_[:196, 397:],),  # np.s_[221:, 255:]),
             'body': (np.s_[143:274, 84:433],)  # body holder
         }
         roi = roi or ROI[self.side]

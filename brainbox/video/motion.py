@@ -11,34 +11,41 @@ from itertools import cycle
 import matplotlib.animation as animation
 import logging
 from pathlib import Path
-import re
 
 from oneibl.one import ONE
-from ibllib.io.video import get_video_frames_preload, get_video_frame
+from ibllib.io.video import get_video_frames_preload, get_video_frame, label_from_path
+from brainbox.core import Bunch
 import brainbox.video.video as video
 import brainbox.behavior.wheel as wh
 from ibllib.misc.exp_ref import eid2ref
 import alf.io as alfio
 
 
+def find_nearest(array, value):
+    array = np.asarray(array)
+    idx = (np.abs(array - value)).argmin()
+    return idx
+
+
 class MotionAlignment:
-    # TODO Make tuple?
     roi = {
         'left': ((800, 1020), (233, 1096)),
         'right': ((426, 510), (104, 545)),
         'body': ((402, 481), (31, 103))
     }
-    cam_regex = re.compile(r'(?<=_)[a-z]+(?=Camera.)')
 
     def __init__(self, eid, one=None, log=logging.getLogger('ibllib')):
         self.one = one or ONE()
         self.eid = eid
         self.session_path = self.one.path_from_eid(eid)
+        self.ref = eid2ref(self.eid, as_dict=False, one=self.one)
         self.log = log
         self.trials = self.wheel = self.camera_times = None
         raw_cam_path = self.session_path.joinpath('raw_video_data')
         camera_path = list(raw_cam_path.glob('_iblrig_*Camera.raw.*'))
-        self.video_paths = {self.cam_regex.search(str(x)).group(): x for x in camera_path}
+        self.video_paths = {label_from_path(x): x for x in camera_path}
+        self.data = Bunch()
+        self.alignment = Bunch()
 
     def align_all_trials(self, side='all'):
         """Align all wheel motion for all trials"""
@@ -55,6 +62,7 @@ class MotionAlignment:
         for i in np.arange(self.trials['intervals'].shape[0]):
             self.align_motion(i, display=False)
 
+    @staticmethod
     def set_roi(video_path):
         """Manually set the ROIs for a given set of videos
         TODO Improve docstring
@@ -90,15 +98,20 @@ class MotionAlignment:
         """
         Load wheel, trial and camera timestamp data
         :return: wheel, trials
-        TODO Assert data present
-        TODO load collection
         """
-        self.wheel = self.one.load_object(self.eid, 'wheel')
-        self.trials = self.one.load_object(self.eid, 'trials')
-        cam = self.one.load(eid, ['camera.times'], dclass_output=True)
-        self.camera_times = {self.cam_regex.search(url).group(): ts
-                             for ts, url in zip(cam.data, cam.url)}
-        # cam_ts, = [ts for ts, url in zip(cam_ts.data, cam_ts.url) if side in url]
+        if download:
+            self.data.wheel = self.one.load_object(self.eid, 'wheel')
+            self.data.trials = self.one.load_object(self.eid, 'trials')
+            cam = self.one.load(self.eid, ['camera.times'], dclass_output=True)
+            self.data.camera_times = {label_from_path(url): ts
+                                      for ts, url in zip(cam.data, cam.url)}
+        else:
+            alf_path = self.session_path / 'alf'
+            self.data.wheel = alfio.load_object(alf_path, 'wheel')
+            self.data.trials = alfio.load_object(alf_path, 'trials')
+            self.data.camera_times = {label_from_path(x): alfio.load_file_content(x)
+                                      for x in alf_path.glob('*Camera.times*')}
+        assert all(x is not None for x in self.data.values())
 
     def _set_eid_or_path(self, session_path_or_eid):
         """Parse a given eID or session path
@@ -118,73 +131,42 @@ class MotionAlignment:
                 if not self.eid:
                     self.log.warning('Failed to determine eID from session path')
         else:
-            self.log.error('Cannot run QC: an experiment uuid or session path is required')
+            self.log.error('Cannot run alignment: an experiment uuid or session path is required')
             raise ValueError("'session' must be a valid session path or uuid")
 
-    def align_motion(self, trial=None, side='left', save=True, display=False, sd_thresh=10):
-        ref = eid2ref(self.eid, as_dict=False, one=self.one)
-        backend = matplotlib.get_backend()
-        if (save and backend != 'Agg') or (not save and backend == 'Agg'):
-            new_backend = 'Agg' if save else 'Qt5Agg'
-            self.log.warning('Switching backend from %s to %s', backend, new_backend)
-            matplotlib.use(new_backend)
-        from matplotlib import pyplot as plt
+    def align_motion(self, period=(-np.inf, np.inf), side='left', sd_thresh=10, display=False):
 
-        if trial is None:
-            trial = np.random.randint(len(self.trials.choice))
-
-        def mask(ts):
-            intervals = self.trials.intervals
-            return np.logical_and(ts >= intervals[trial, 0], ts <= intervals[trial + 1, 1])
-
-        camera_times = self.camera_times[side]
-        cam_mask = mask(camera_times)
-        wheel_mask = mask(self.wheel.timestamps)
+        # Get data samples within period
+        wheel = self.data['wheel']
+        self.alignment.label = side
+        self.alignment.to_mask = lambda ts: np.logical_and(ts >= period[0], ts <= period[1])
+        camera_times = self.data['camera_times'][side]
+        cam_mask = self.alignment.to_mask(camera_times)
         frame_numbers, = np.where(cam_mask)
-        # frames, fps, count = get_video_frames_preload(camera_path, frame_numbers)
-        # col = np.arange(233, 1096, dtype=int)  # Predetermined ROI
-        # row = np.arange(800, 1020, dtype=int)
 
         # Motion Energy
         camera_path = self.video_paths[side]
-        print(str(camera_path))
-        # cap = cv2.VideoCapture(str(camera_path))
-        # assert cap.isOpened()
-        fame_ids, = np.where(cam_mask)
-
         roi = (*[slice(*r) for r in self.roi[side]], 0)
-        frames = get_video_frames_preload(camera_path, frame_numbers, mask=roi, as_list=True)
-        df, stDev = video.motion_energy(frames, 2)
-        thresh = stDev > sd_thresh
+        self.alignment.frames = get_video_frames_preload(camera_path, frame_numbers, mask=roi)
+        self.alignment.df, stDev = video.motion_energy(self.alignment.frames, 2)
+        self.alignment.period = period  # For plotting
 
+        # Calculate rotary encoder velocity trace
         x = camera_times[cam_mask]
         Fs = 1000
-        # x = x[1::2]
-        pos, t = wh.interpolate_position(self.wheel.timestamps, self.wheel.position, freq=Fs)
+        pos, t = wh.interpolate_position(wheel.timestamps, wheel.position, freq=Fs)
         v, _ = wh.velocity_smoothed(pos, Fs)
-        interp_mask = mask(t)
-
-        def find_nearest(array, value):
-            array = np.asarray(array)
-            idx = (np.abs(array - value)).argmin()
-            return idx
-
+        interp_mask = self.alignment.to_mask(t)
+        # Convert to normalized speed
         xs = np.unique([find_nearest(t[interp_mask], ts) for ts in x])
         vs = np.abs(v[interp_mask][xs])
         vs = (vs - np.min(vs)) / (np.max(vs) - np.min(vs))
-
-        if display:
-            fig, ax = plt.subplots(2, 1, sharex=True)
-            ax[0].plot(x, df, '-x', label='wheel motion energy')
-            ax[0].vlines(x[np.array(thresh)], 0, 1,
-                         linewidth=0.5, linestyle=':', label='>%i s.d. diff' % sd_thresh)
-            ax[1].plot(t[interp_mask], np.abs(v[interp_mask]))
 
         # FIXME This can be used as a goodness of fit measure
         USE_CV2 = False
         if USE_CV2:
             # convert from numpy format to openCV format
-            dfCV = np.float32(df.reshape((-1, 1)))
+            dfCV = np.float32(self.alignment.df.reshape((-1, 1)))
             reCV = np.float32(vs.reshape((-1, 1)))
 
             # perform cross correlation
@@ -193,59 +175,91 @@ class MotionAlignment:
             # convert result back to numpy array
             xcorr = np.asarray(resultCv)
         else:
-            xcorr = signal.correlate(df, vs)
+            xcorr = signal.correlate(self.alignment.df, vs)
 
-        print(np.all(
-            np.array([0.04682708, 0.08597485, 0.12770387, 0.16950493, 0.21221944,
-                      0.25907589, 0.30770999, 0.35522964, 0.40655199, 0.46094253]) == xcorr))
-        c = max(xcorr)
-        xcorr = np.argmax(xcorr)
-        dt_i = xcorr - xs.size
-        self.log.info(f'{side} camera, adjusted by {dt_i} frames')
+        # Cross correlate wheel speed trace with the motion energy
+        self.alignment.c = max(xcorr)
+        self.alignment.xcorr = np.argmax(xcorr)
+        self.alignment.dt_i = self.alignment.xcorr - xs.size
+        self.log.info(f'{side} camera, adjusted by {self.alignment.dt_i} frames')
 
         if display:
-            dt = np.diff(camera_times[[0, np.abs(dt_i)]])
+            # Plot the motion energy
+            fig, ax = plt.subplots(2, 1, sharex='true')
+            y = np.pad(self.alignment.df, 1, 'edge')
+            ax[0].plot(x, y, '-x', label='wheel motion energy')
+            thresh = stDev > sd_thresh
+            ax[0].vlines(x[np.array(np.pad(thresh, 1, 'constant', constant_values=False))], 0, 1,
+                         linewidth=0.5, linestyle=':', label=f'>{sd_thresh} s.d. diff')
+            ax[1].plot(t[interp_mask], np.abs(v[interp_mask]))
+
+            # Plot other stuff
+            dt = np.diff(camera_times[[0, np.abs(self.alignment.dt_i)]])
+            fps = 1 / np.diff(camera_times).mean()
             ax[0].plot(t[interp_mask][xs] - dt, vs, 'r-x', label='velocity (shifted)')
             ax[0].set_title('normalized motion energy, %s camera, %.0f fps' % (side, fps))
             ax[0].set_ylabel('rate of change (a.u.)')
             ax[0].legend()
-            ax[1].set_ylabel('Abs wheel velocity (rad / s)')
+            ax[1].set_ylabel('wheel speed (rad / s)')
             ax[1].set_xlabel('Time (s)')
 
-            fig.suptitle('%s, trial %i' % (ref, trial), fontsize=16)
+            title = f'{self.ref}, from {period[0]:.1f}s - {period[1]:.1f}s'
+            fig.suptitle(title, fontsize=16)
             fig.set_size_inches(19.2, 9.89)
-            fig.savefig('%s_%i_%c.png' % (ref, trial, side[0]), dpi=100)
 
-            ###
-            fig, axes = plt.subplots(nrows=2)
-            fig.suptitle('%s, trial %i' % (ref, trial), fontsize=16)
-            data = {}
+        return self.alignment.dt_i, self.alignment.c, self.alignment.df
+
+    def plot_alignment(self, energy=True, save=False):
+        if not self.alignment:
+            self.log.error('No alignment data, run `align_motion` first')
+            return
+        # Change backend based on save flag
+        backend = matplotlib.get_backend()
+        if (save and backend != 'Agg') or (not save and backend == 'Agg'):
+            new_backend = 'Agg' if save else 'Qt5Agg'
+            self.log.warning('Switching backend from %s to %s', backend, new_backend)
+            matplotlib.use(new_backend)
+        from matplotlib import pyplot as plt
+
+        # Main animated plots
+        fig, axes = plt.subplots(nrows=2)
+        title = f'{self.ref}'  # ', from {period[0]:.1f}s - {period[1]:.1f}s'
+        fig.suptitle(title, fontsize=16)
+
+        wheel = self.data['wheel']
+        wheel_mask = self.alignment['to_mask'](wheel.timestamps)
+        ts = self.data['camera_times'][self.alignment['label']]
+        frame_numbers, = np.where(self.alignment['to_mask'](ts))
+        if energy:
+            self.alignment['frames'] = video.frame_diffs(self.alignment['frames'], 2)
+            frame_numbers = frame_numbers[1:-1]
+        data = {'frame_ids': frame_numbers}
 
         def init_plot():
             """
             Plot the wheel data for the current trial
             :return: None
             """
-            data['im'] = axes[0].imshow(df[0])
+            data['im'] = axes[0].imshow(self.alignment['frames'][0])
             axes[0].axis('off')
-            axes[0].set_title('%s camera, adjusted by %d frames' % (side, dt_i))
+            axes[0].set_title(f'adjusted by {self.alignment["dt_i"]} frames')
 
             # Plot the wheel position
             ax = axes[1]
             ax.clear()
-            ax.plot(self.wheel.timestamps[wheel_mask], self.wheel.position[wheel_mask], '-x')
+            ax.plot(wheel.timestamps[wheel_mask], wheel.position[wheel_mask], '-x')
 
-            ts_0, = np.where(cam_mask)
-            data['idx_0'] = ts_0[0] - dt_i
-            ts_0 = camera_times[ts_0[0] + dt_i]
+            ts_0 = frame_numbers[0]
+            data['idx_0'] = ts_0 - self.alignment['dt_i']
+            ts_0 = ts[ts_0 + self.alignment['dt_i']]
             data['ln'] = ax.axvline(x=ts_0, color='k')
             ax.set_xlim([ts_0 - (3 / 2), ts_0 + (3 / 2)])
             data['frame_num'] = 0
-            mkr = find_nearest(self.wheel.timestamps[wheel_mask], ts_0)
+            mkr = find_nearest(wheel.timestamps[wheel_mask], ts_0)
 
             data['marker'], = ax.plot(
-                self.wheel.timestamps[wheel_mask][mkr],
-                self.wheel.position[wheel_mask][mkr], 'r-x')
+                wheel.timestamps[wheel_mask][mkr],
+                wheel.position[wheel_mask][mkr], 'r-x')
             ax.set_ylabel('Wheel position (rad))')
             ax.set_xlabel('Time (s))')
             return
@@ -254,38 +268,40 @@ class MotionAlignment:
             """
             Callback for figure animation.  Sets image data for current frame and moves pointer
             along axis
-            :param i: unused; the current timestep of the calling method
+            :param i: unused; the current time step of the calling method
             :return: None
             """
             if i < 0:
                 data['frame_num'] -= 1
                 if data['frame_num'] < 0:
-                    data['frame_num'] = len(df) - 1
+                    data['frame_num'] = len(self.alignment['frames']) - 1
             else:
                 data['frame_num'] += 1
-                if data['frame_num'] >= len(df):
+                if data['frame_num'] >= len(self.alignment['frames']):
                     data['frame_num'] = 0
             i = data['frame_num']  # NB: This is index for current trial's frame list
 
-            frame = df[i]
-            t_x = camera_times[data['idx_0'] + i]
+            frame = self.alignment['frames'][i]
+            t_x = ts[data['idx_0'] + i]
             data['ln'].set_xdata([t_x, t_x])
             axes[1].set_xlim([t_x - (3 / 2), t_x + (3 / 2)])
             data['im'].set_data(frame)
 
-            mkr = find_nearest(self.wheel.timestamps[wheel_mask], t_x)
+            mkr = find_nearest(wheel.timestamps[wheel_mask], t_x)
             data['marker'].set_data(
-                self.wheel.timestamps[wheel_mask][mkr],
-                self.wheel.position[wheel_mask][mkr]
+                wheel.timestamps[wheel_mask][mkr],
+                wheel.position[wheel_mask][mkr]
             )
 
             return data['im'], data['ln'], data['marker']
-        if display:
-            anim = animation.FuncAnimation(fig, animate, init_func=init_plot,
-                                           frames=range(len(df)) if save else cycle(range(60)),
-                                           interval=20, blit=False,
-                                           repeat=not save, cache_frame_data=False)
-            anim.running = False
+
+        anim = animation.FuncAnimation(fig, animate, init_func=init_plot,
+                                       frames=(range(len(self.alignment.df))
+                                               if save
+                                               else cycle(range(60))),
+                                       interval=20, blit=False,
+                                       repeat=not save, cache_frame_data=False)
+        anim.running = False
 
         def process_key(event):
             """
@@ -311,23 +327,21 @@ class MotionAlignment:
                     anim.running = False
                 animate(-1)
                 fig.canvas.draw()
-        if display:
-            fig.canvas.mpl_connect('key_press_event', process_key)
+
+        fig.canvas.mpl_connect('key_press_event', process_key)
 
         # init_plot()
         # while True:
         #     animate(0)
         if save:
-            filename = '%s_%i_%c.mp4' % (ref, trial, side[0])
+            filename = '%s_%c.mp4' % (self.ref, self.alignment['label'][0])
             self.log.info('Saving to ' + filename)
             # Set up formatting for the movie files
             Writer = animation.writers['ffmpeg']
             writer = Writer(fps=24, metadata=dict(artist='Miles Wells'), bitrate=1800)
             anim.save(filename, writer=writer)
-        elif display:
+        else:
             plt.show()
-
-        return dt_i, c, df
 
 
 def motion_energy(video_path, n=5):

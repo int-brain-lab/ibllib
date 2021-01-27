@@ -142,5 +142,5 @@ def label_from_path(video_name):
     :param video_name: A file path, URL or file name for the video
     :return: The string label or None if the video doesn't match
     """
-    result = re.search(r'(?<=_iblrig_)([a-z]+)(?=Camera)', str(video_name))
+    result = re.search(r'(?<=_)([a-z]+)(?=Camera)', str(video_name))
     return result.group() if result else None

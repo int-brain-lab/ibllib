@@ -412,7 +412,8 @@ def load_embedded_frame_data(session_path, label: str, raw=False):
     gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(int) if GPIO_file.exists() else None
     if not (gpio is None or raw):
         assert np.unique(gpio).size == 2  # TODO relax assertion, rely on QC check
-        gpio = (gpio - gpio.min() / gpio.max() - gpio.min()) > 0.5  # min-max normalize + threshold
+        # min-max normalize + threshold
+        gpio = (gpio - gpio.min()) / (gpio.max() - gpio.min()) > 0.5
 
     return count, gpio
 
