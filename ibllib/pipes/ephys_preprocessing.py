@@ -3,9 +3,14 @@ import re
 import shutil
 import subprocess
 from collections import OrderedDict
+import traceback
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
+
 import mtscomp
+import alf.io
 from ibllib.ephys import ephysqc, spikes, sync_probes
 from ibllib.io import ffmpeg, spikeglx
 from ibllib.io.extractors import ephys_fpga, ephys_passive, camera
@@ -14,6 +19,7 @@ from ibllib.pipes.training_preprocessing import TrainingRegisterRaw as EphysRegi
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
+from ibllib.dsp import rms
 
 _logger = logging.getLogger("ibllib")
 
@@ -199,11 +205,17 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
                 )
                 out, _ = spikes.sync_spike_sorting(ap_file=ap_file, out_path=probe_out_path)
                 out_files.extend(out)
-            except BaseException as err:
-                _logger.error(err)
+                # convert ks2_output into tar file and also register
+                # Make this in case spike sorting is in old raw_ephys_data folders, for new
+                # sessions it should already exist
+                tar_dir = self.session_path.joinpath('spike_sorters', 'ks2_matlab', label)
+                tar_dir.mkdir(parents=True, exist_ok=True)
+                out = spikes.ks2_to_tar(ks2_dir, tar_dir)
+                out_files.extend(out)
+            except BaseException:
+                _logger.error(traceback.format_exc())
                 self.status = -1
                 continue
-
         probe_files = spikes.probes_description(self.session_path, one=self.one)
         return out_files + probe_files
 
@@ -265,11 +277,9 @@ class EphysTrials(tasks.Task):
         qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one)
         # Extract extra datasets required for QC
         qc.extractor.data = dsets
-        qc.extractor.extract_data(partial=True)
-
+        qc.extractor.extract_data()
         # Aggregate and update Alyx QC fields
         qc.run(update=True)
-
         return out_files
 
 
@@ -277,14 +287,81 @@ class EphysCellsQc(tasks.Task):
     priority = 90
     level = 3
 
+    def _compute_cell_qc(self, folder_probe):
+        """
+        Computes the cell QC given an extracted probe alf path
+        :param folder_probe: folder
+        :return:
+        """
+        # compute the straight qc
+        _logger.info(f"Computing cluster qc for {folder_probe}")
+        spikes = alf.io.load_object(folder_probe, 'spikes')
+        clusters = alf.io.load_object(folder_probe, 'clusters')
+        df_units, drift = ephysqc.spike_sorting_metrics(
+            spikes.times, spikes.clusters, spikes.amps, spikes.depths,
+            cluster_ids=np.arange(clusters.channels.size))
+        # if the ks2 labels file exist, load them and add the column
+        file_labels = folder_probe.joinpath('cluster_KSLabel.tsv')
+        if file_labels.exists():
+            ks2_labels = pd.read_csv(file_labels, sep='\t')
+            ks2_labels.rename(columns={'KSLabel': 'ks2_label'}, inplace=True)
+            df_units = pd.concat(
+                [df_units, ks2_labels['ks2_label'].reindex(df_units.index)], axis=1)
+        # save as parquet file
+        df_units.to_parquet(folder_probe.joinpath("clusters.metrics.pqt"))
+        return folder_probe.joinpath("clusters.metrics.pqt"), df_units, drift
+
+    def _label_probe_qc(self, folder_probe, df_units, drift):
+        """
+        Labels the json field of the alyx corresponding probe insertion
+        :param folder_probe:
+        :param df_units:
+        :param drift:
+        :return:
+        """
+        eid = self.one.eid_from_path(self.session_path)
+        pdict = self.one.alyx.rest('insertions', 'list', session=eid, name=folder_probe.parts[-1])
+        if len(pdict) != 1:
+            return
+        isok = df_units['label'] == 1
+        qcdict = {'n_units': int(df_units.shape[0]),
+                  'n_units_qc_pass': int(np.sum(isok)),
+                  'firing_rate_max': np.max(df_units['firing_rate'][isok]),
+                  'firing_rate_median': np.median(df_units['firing_rate'][isok]),
+                  'amplitude_max_uV': np.max(df_units['amp_max'][isok]) * 1e6,
+                  'amplitude_median_uV': np.max(df_units['amp_median'][isok]) * 1e6,
+                  'drift_rms_um': rms(drift['drift_um']),
+                  }
+        file_wm = folder_probe.joinpath('_kilosort_whitening.matrix.npy')
+        if file_wm.exists():
+            wm = np.load(file_wm)
+            qcdict['whitening_matrix_conditioning'] = np.linalg.cond(wm)
+        # groom qc dict (this function will eventually go directly into the json field update)
+        for k in qcdict:
+            if isinstance(qcdict[k], np.int64):
+                qcdict[k] = int(qcdict[k])
+            elif isinstance(qcdict[k], float):
+                qcdict[k] = np.round(qcdict[k], 2)
+        self.one.alyx.json_field_update("insertions", pdict[0]["id"], "json", qcdict)
+
     def _run(self):
         """
         Post spike-sorting quality control at the cluster level.
-        Outputs a QC table in the clusters ALF object
+        Outputs a QC table in the clusters ALF object and labels corresponding probes in Alyx
         """
-        print(self.session_path)
-        qc_file = None
-        return qc_file
+        files_spikes = Path(self.session_path).joinpath('alf').rglob('spikes.times.npy')
+        folder_probes = [f.parent for f in files_spikes]
+        out_files = []
+        for folder_probe in folder_probes:
+            try:
+                qc_file, df_units, drift = self._compute_cell_qc(folder_probe)
+                out_files.append(qc_file)
+                self._label_probe_qc(folder_probe, df_units, drift)
+            except BaseException:
+                _logger.error(traceback.format_exc())
+                self.status = -1
+                continue
+        return out_files
 
 
 class EphysMtscomp(tasks.Task):

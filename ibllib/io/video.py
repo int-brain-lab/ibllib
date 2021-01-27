@@ -115,7 +115,7 @@ def url_from_eid(eid, label=None, one=None):
     """
     valid_labels = ('left', 'right', 'body')
     if not (label is None or np.isin(label, ('left', 'right', 'body')).all()):
-        raise ValueError(f'labels must be one of ("%s")' % '", "'.join(valid_labels))
+        raise ValueError('labels must be one of ("%s")' % '", "'.join(valid_labels))
     one = one or ONE()
     datasets = one.list(eid, details=True)
 

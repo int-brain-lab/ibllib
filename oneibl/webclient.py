@@ -70,7 +70,7 @@ def http_download_file_list(links_to_file_list, **kwargs):
 
 
 def http_download_file(full_link_to_file, chunks=None, *, clobber=False,
-                       username='', password='', cache_dir='', return_md5=False):
+                       username='', password='', cache_dir='', return_md5=False, headers=None):
     """
     :param full_link_to_file: http link to the file.
     :type full_link_to_file: str
@@ -82,6 +82,7 @@ def http_download_file(full_link_to_file, chunks=None, *, clobber=False,
     :type password: str
     :param cache_dir: [''] directory in which files are cached; defaults to user's
      Download directory.
+    :param: headers: [{}] additional headers to add to the request (auth tokens etc..)
     :type cache_dir: str
 
     :return: (str) a list of the local full path of the downloaded files.
@@ -121,6 +122,11 @@ def http_download_file(full_link_to_file, chunks=None, *, clobber=False,
     if chunks is not None:
         first_byte, n_bytes = chunks
         req.add_header("Range", "bytes=%d-%d" % (first_byte, first_byte + n_bytes - 1))
+
+    # add additional headers
+    if headers is not None:
+        for k in headers:
+            req.add_header(k, headers[k])
 
     # Open the url and get the length
     try:
@@ -290,6 +296,15 @@ class AlyxClient(metaclass=UniqueSingletons):
         :return: (dict/list) json interpreted dictionary from response
         """
         return self._generic_request(requests.delete, rest_query)
+
+    def download_file(self, url, **kwargs):
+        """
+        Downloads a file on the Alyx server from a filerecord REST field URL
+        :param url: full url of the file
+        :param kwargs: webclient.http_download_file parameters
+        :return: local path of downloaded file
+        """
+        return http_download_file(url, headers=self._headers, **kwargs)
 
     def get(self, rest_query):
         """

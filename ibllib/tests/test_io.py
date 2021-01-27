@@ -5,7 +5,7 @@ import uuid
 import tempfile
 from pathlib import Path
 import shutil
-from datetime import timedelta
+import sys
 
 import numpy as np
 
@@ -34,6 +34,15 @@ class TestsParams(unittest.TestCase):
         # next go to and from dictionary via json
         par2 = params.read('toto')
         self.assertEqual(par, par2)
+
+    def test_param_get_file(self):
+        home_dir = Path(params.getfile("toto")).parent
+        # straight case the file is .{str} in the home directory
+        assert home_dir.joinpath(".toto") == Path(params.getfile("toto"))
+        # straight case the file is .{str} in the home directory
+        assert home_dir.joinpath(".toto") == Path(params.getfile(".toto"))
+        # subfolder case
+        assert home_dir.joinpath(".toto", ".titi") == Path(params.getfile("toto/titi"))
 
     def test_new_default_param(self):
         # in this case an updated version of the codes brings in a new parameter
@@ -628,13 +637,14 @@ class TestsGlobus(unittest.TestCase):
 
     def test_as_globus_path(self):
         # A Windows path
-        actual = globus.as_globus_path('E:\\FlatIron\\integration')
-        self.assertTrue(actual.startswith('/E/'))
-
-        # A relative POSIX path
-        actual = globus.as_globus_path('/mnt/foo/../data/integration')
-        expected = '/mnt/data/integration'
-        self.assertTrue(actual.endswith(expected))
+        if sys.platform == 'win32':
+            # "/E/FlatIron/integration"
+            actual = globus.as_globus_path('E:\\FlatIron\\integration')
+            self.assertTrue(actual.startswith('/E/'))
+            # A relative POSIX path
+            actual = globus.as_globus_path('/mnt/foo/../data/integration')
+            expected = '/mnt/data/integration'  # "/C/mnt/data/integration
+            self.assertTrue(actual.endswith(expected))
 
         # A globus path
         actual = globus.as_globus_path('/E/FlatIron/integration')
@@ -648,9 +658,9 @@ class TestsGlobus(unittest.TestCase):
         mock_params.return_value = None  # No parameters saved
         with self.assertRaises(ValueError):
             globus.login_auto(client_id)
-        mock_params.assert_called_with('globus')
+        mock_params.assert_called_with('globus/default')
 
-        pars = params.from_dict({'transfer_token': '7r3hj89', 'expires_at_s': '2020-09-10'})
+        pars = params.from_dict({'access_token': '7r3hj89', 'expires_at_seconds': '2020-09-10'})
         mock_params.return_value = pars  # Incomplete parameter object
         with self.assertRaises(ValueError):
             globus.login_auto(client_id)

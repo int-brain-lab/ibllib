@@ -1,14 +1,18 @@
+"""Base Extractor classes
+A module for the base Extractor classes.  The Extractor, given a session path, will extract the
+processed data from raw hardware files and optionally save them.
+"""
+
 import abc
-import json
 from collections import OrderedDict
+import json
+import logging
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from alf.io import get_session_path
 from ibllib.io import raw_data_loaders as raw
-import logging
-
 from ibllib.io.raw_data_loaders import load_settings, _logger
 
 log = logging.getLogger("ibllib")
@@ -17,7 +21,12 @@ log = logging.getLogger("ibllib")
 class BaseExtractor(abc.ABC):
     """
     Base extractor class
-
+    Writing an extractor checklist:
+    -   on the child class, overload the _extract method
+    -   this method should output one or several numpy.arrays or dataframe with a consistent shape
+    -   save_names is a list or a string of filenames, there should be one per dataset
+    -   set save_names to None for a dataset that doesn't need saving (could be set dynamically
+    in the _extract method)
     :param session_path: Absolute path of session folder
     :type session_path: str
     """
@@ -67,16 +76,19 @@ class BaseExtractor(abc.ABC):
             else:
                 log.error(f"Don't know how to save {file_path.suffix} files yet")
 
-        if isinstance(self.save_names, str):
+        if self.save_names is None:
+            file_paths = []
+        elif isinstance(self.save_names, str):
             file_paths = path_out.joinpath(self.save_names)
             _write_to_disk(file_paths, data)
         else:  # Should be list or tuple...
             assert len(data) == len(self.save_names)
             file_paths = []
             for data, fn in zip(data, self.save_names):
-                fpath = path_out.joinpath(fn)
-                _write_to_disk(fpath, data)
-                file_paths.append(fpath)
+                if fn:
+                    fpath = path_out.joinpath(fn)
+                    _write_to_disk(fpath, data)
+                    file_paths.append(fpath)
         return file_paths
 
     @abc.abstractmethod
@@ -148,14 +160,18 @@ def run_extractor_classes(classes, session_path=None, **kwargs):
         else:
             for i, k in enumerate(classe.var_names):
                 outputs[k] = out[i]
-    assert (len(files) == 0) or (len(files) == len(outputs.keys()))
     return outputs, files
+
+
+def _get_task_types_json_config():
+    with open(Path(__file__).parent.joinpath('extractor_types.json')) as fp:
+        task_types = json.load(fp)
+    return task_types
 
 
 def get_task_extractor_type(task_name):
     """
-    Splits the task name according to naming convention:
-    -   ignores everything
+    Returns the task type string from the full pybpod task name:
     _iblrig_tasks_biasedChoiceWorld3.7.0 returns "biased"
     _iblrig_tasks_trainingChoiceWorld3.6.0 returns "training'
     :param task_name:
@@ -170,40 +186,8 @@ def get_task_extractor_type(task_name):
             task_name = settings.get('PYBPOD_PROTOCOL', None)
         else:
             return
-    # ephys
-    if 'ephysChoiceWorld' in task_name:
-        return 'ephys'
-    elif 'ephyskarolinaChoiceWorld' in task_name:
-        return 'ephys'
-    elif 'passive_opto' in task_name:
-        return 'ephys'
-    elif 'opto_ephysChoiceWorld' in task_name:
-        return 'ephys'
-    elif 'widefieldChoiceWorld' in task_name:
-        return 'ephys'
-    # biased choice world
-    elif '_biasedChoiceWorld' in task_name:
-        return 'biased'
-    elif 'biasedScanningChoiceWorld' in task_name:
-        return 'biased'
-    elif 'biasedVisOffChoiceWorld' in task_name:
-        return 'biased'
-    elif 'karolinaChoiceWorld' in task_name:
-        return 'biased'
-    elif '_iblrig_tasks_opto_biasedChoiceWorld' in task_name:
-        return 'biased'
-    # habituation
-    elif '_habituationChoiceWorld' in task_name:
-        return 'habituation'
-    # training
-    elif '_trainingChoiceWorld' in task_name:
-        return 'training'
-    # mock ephys
-    elif 'ephysMockChoiceWorld' in task_name:
-        return 'mock_ephys'
-    # sync ephys
-    elif task_name and task_name.startswith('_iblrig_tasks_ephys_certification'):
-        return 'sync_ephys'
+    task_types = _get_task_types_json_config()
+    return next((task_types[tt] for tt in task_types if tt in task_name), None)
 
 
 def get_session_extractor_type(session_path):

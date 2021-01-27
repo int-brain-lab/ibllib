@@ -2,8 +2,9 @@ import unittest
 
 import numpy as np
 
-from ibllib.atlas import (BrainCoordinates, cart2sph, sph2cart, Trajectory, regions_from_allen_csv,
+from ibllib.atlas import (BrainCoordinates, cart2sph, sph2cart, Trajectory,
                           Insertion, ALLEN_CCF_LANDMARKS_MLAPDV_UM, AllenAtlas)
+from ibllib.atlas.regions import BrainRegions
 
 
 def _create_mock_atlas():
@@ -20,32 +21,76 @@ def _create_mock_atlas():
 
 class TestBrainRegions(unittest.TestCase):
 
+    @classmethod
+    def setUpClass(self):
+        self.brs = BrainRegions()
+
+    def test_init(self):
+        pass
+
     def test_get(self):
-        brs = regions_from_allen_csv()
-        ctx = brs.get(688)
+        ctx = self.brs.get(688)
         self.assertTrue(len(ctx.acronym) == 1 and ctx.acronym == 'CTX')
 
     def test_ancestors_descendants(self):
         # here we use the same brain region as in the alyx test
-        brs = regions_from_allen_csv()
-        self.assertTrue(brs.descendants(ids=688).id.size == 567)
-        self.assertTrue(brs.ancestors(ids=688).id.size == 4)
+        self.assertTrue(self.brs.descendants(ids=688).id.size == 567)
+        self.assertTrue(self.brs.ancestors(ids=688).id.size == 4)
+
+    def test_mappings(self):
+        # the mapping assigns all non found regions to root (1:997), except for the void (0:0)
+        # here we're looking at the retina (1327:304325711)
+        inds = self.brs._mapping_from_regions_list(np.array([304325711]))
+        inds_ = np.zeros_like(self.brs.id) + 1
+        inds_[-1] = 1327
+        inds_[0] = 0
+        assert np.all(inds == inds_)
 
 
 class TestAtlasSlicesConversion(unittest.TestCase):
-    ba = _create_mock_atlas()
+
+    @classmethod
+    def setUpClass(self):
+        self.ba = _create_mock_atlas()
 
     def test_allen_ba(self):
         self.assertTrue(np.allclose(self.ba.bc.xyz2i(np.array([0, 0, 0]), round=False),
                                     ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / 25))
 
+    def test_lookups(self):
+        # the get_labels lookup returns the regions ids (not the indices !!)
+        assert self.ba.get_labels([0, 0, self.ba.bc.i2z(103)]) == 304325711
+        # the beryl mapping doesn't include the retina so it returns root
+        assert self.ba.get_labels([0, 0, self.ba.bc.i2z(103)], mapping='Beryl') == 997  # root
+        # unlike the retina, root stays root whatever the mapping
+        assert self.ba.get_labels([0, 0, 0]) == 0  # void !
+        assert self.ba.get_labels([0, 0, 0], mapping='Beryl') == 0  # root
+
     def test_slice(self):
-        nx, ny, nz = self.ba.bc.nxyz
-        self.assertTrue(self.ba.slice(axis=0, coordinate=0).shape == (ny, nz))
-        self.assertTrue(self.ba.slice(axis=1, coordinate=0).shape == (nx, nz))
+        ba = self.ba
+        nx, ny, nz = ba.bc.nxyz
+        # tests output shapes
+        self.assertTrue(ba.slice(axis=0, coordinate=0).shape == (ny, nz))  # sagittal
+        self.assertTrue(ba.slice(axis=1, coordinate=0).shape == (nx, nz))  # coronal
+        self.assertTrue(ba.slice(axis=2, coordinate=.002).shape == (ny, nx))  # horizontal
+        # tests out of bound
         with self.assertRaises(IndexError):
-            self.ba.slice(axis=1, coordinate=123)
-        self.assertTrue(self.ba.slice(axis=1, coordinate=21, mode='clip').shape == (nx, nz))
+            ba.slice(axis=1, coordinate=123)
+        self.assertTrue(ba.slice(axis=1, coordinate=21, mode='clip').shape == (nx, nz))
+        """
+        here we test the different volumes and mappings
+        """
+        # the label volume contains the region index (not id!),
+        iregions = ba.slice(axis=0, coordinate=0, volume=ba.label)
+        assert np.all(np.unique(iregions) == np.array([0, 1327]))
+        rgb_slice = ba.slice(axis=0, coordinate=0, volume='annotation')
+        assert rgb_slice.shape == (ny, nz, 3)
+        # check that without remapping (default full remap) the retina gets returned
+        assert np.all(np.unique(rgb_slice) == np.unique(np.r_[ba.regions.rgb[1327], 0]))
+        # now with a remap the retina should not be there anymore and there should be only white
+        rgb_slice = ba.slice(axis=0, coordinate=0, volume='annotation', mapping='Beryl')
+        assert np.all(np.unique(rgb_slice) == np.array([0, 255]))
+        assert ba.slice(axis=0, coordinate=0, volume='surface').shape == (ny, nz)
 
     def test_ccf_xyz(self):
         # test with bregma first
@@ -106,6 +151,11 @@ class TestInsertion(unittest.TestCase):
                               [0.002364, -0.0044, -0.005418]])
         insertion = Insertion.from_track(xyz_track, brain_atlas)
         self.assertTrue(abs(insertion.theta - 10.58704241) < 1e6)
+        # Test that the entry and exit intersection are computed properly
+        brain_entry = insertion.get_brain_entry(insertion.trajectory, brain_atlas)
+        self.assertTrue(brain_entry[2] == brain_atlas.bc.i2z(100))
+        brain_exit = insertion.get_brain_exit(insertion.trajectory, brain_atlas)
+        self.assertTrue(brain_exit[2] == brain_atlas.bc.i2z(104))
 
 
 class TestTrajectory(unittest.TestCase):

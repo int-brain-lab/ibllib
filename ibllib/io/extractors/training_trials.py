@@ -1,5 +1,4 @@
 import logging
-import cv2
 import numpy as np
 from pkg_resources import parse_version
 
@@ -378,7 +377,6 @@ class IncludedTrials(BaseBpodTrialsExtractor):
 
 
 class ItiInTimes(BaseBpodTrialsExtractor):
-    save_names = '_ibl_trials.itiIn_times.npy'
     var_names = 'itiIn_times'
 
     def _extract(self):
@@ -393,7 +391,6 @@ class ItiInTimes(BaseBpodTrialsExtractor):
 
 
 class ErrorCueTriggerTimes(BaseBpodTrialsExtractor):
-    save_names = '_ibl_trials.errorCueTrigger_times.npy'
     var_names = 'errorCueTrigger_times'
 
     def _extract(self):
@@ -409,7 +406,6 @@ class ErrorCueTriggerTimes(BaseBpodTrialsExtractor):
 
 
 class StimFreezeTriggerTimes(BaseBpodTrialsExtractor):
-    save_names = '_ibl_trials.stimFreeze_times.npy'
     var_names = 'stimFreezeTrigger_times'
 
     def _extract(self):
@@ -454,7 +450,6 @@ class StimFreezeTriggerTimes(BaseBpodTrialsExtractor):
 
 
 class StimOffTriggerTimes(BaseBpodTrialsExtractor):
-    save_names = '_ibl_trials.stimOffTrigger_times.npy'
     var_names = 'stimOffTrigger_times'
 
     def _extract(self):
@@ -615,8 +610,7 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
     """
     Extracts stim on / off and freeze times from Bpod BNC1 detected fronts
     """
-    save_names = ["_ibl_trials.stimOn_times.npy", "_ibl_trials.stimOff_times.npy",
-                  "_ibl_trials.stimFreeze_times.npy"]
+    save_names = ["_ibl_trials.stimOn_times.npy", None, None]
     var_names = ['stimOn_times', 'stimOff_times', 'stimFreeze_times']
 
     def _extract(self):
@@ -655,7 +649,18 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
 
 
 
-def extract_all(session_path, save=False, bpod_trials=False, settings=False):
+class LaserBool(BaseBpodTrialsExtractor):
+    save_names = '_ibl_trials.laser_stimulation.npy'
+    var_names = 'laser_stimulation'
+
+    def _extract(self):
+        laser = np.array([np.float(t.get('laser_stimulation', np.NaN)) for t in self.bpod_trials])
+        if np.all(np.isnan(laser)):
+            self.save_names = None  # this prevents the file from being saved
+        return laser
+
+
+def extract_all(session_path, save=False, bpod_trials=None, settings=None):
     if not bpod_trials:
         bpod_trials = raw.load_data(session_path)
     if not settings:
@@ -663,14 +668,14 @@ def extract_all(session_path, save=False, bpod_trials=False, settings=False):
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
 
-    base = [FeedbackType, ContrastLR, ProbabilityLeft, Choice, RepNum, RewardVolume,
-            FeedbackTimes, StimOnTimes, Intervals, ResponseTimes, GoCueTriggerTimes,
-            GoCueTimes]
+    base = [FeedbackType, ContrastLR, ProbabilityLeft, Choice, RepNum, RewardVolume, LaserBool,
+            FeedbackTimes, Intervals, ResponseTimes, GoCueTriggerTimes, GoCueTimes]
     # Version check
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
-        base.extend([StimOnTriggerTimes])
+        base.extend([StimOnTriggerTimes, StimOnOffFreezeTimes, ItiInTimes,
+                     StimOffTriggerTimes, StimFreezeTriggerTimes, ErrorCueTriggerTimes])
     else:
-        base.extend([IncludedTrials, ItiDuration])
+        base.extend([IncludedTrials, ItiDuration, StimOnTimes])
 
     out, fil = run_extractor_classes(
         base, save=save, session_path=session_path, bpod_trials=bpod_trials, settings=settings)

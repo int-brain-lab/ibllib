@@ -7,7 +7,7 @@ import shutil
 
 import numpy as np
 
-from brainbox.core import intersect2d, ismember2d, ismember
+from brainbox.numerical import ismember, ismember2d, intersect2d
 from brainbox.io.parquet import uuid2np, np2uuid, rec2col, np2str
 from brainbox.io import one as bbone
 from oneibl.one import ONE
