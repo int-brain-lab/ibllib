@@ -13,7 +13,7 @@ the terminal. In this case no plot is generated.
 from oneibl.one import ONE
 import numpy as np
 import matplotlib.pyplot as plt
-from ibllib.atlas import regions_from_allen_csv
+from ibllib.atlas import BrainRegions
 
 one = ONE()
 
@@ -66,7 +66,7 @@ else:
 
 
 if chans is not None:
-    r = regions_from_allen_csv()
+    r = BrainRegions()
     chans['acronym'] = r.get(ids=chans['atlas_id']).acronym
     chans['rgb'] = r.get(ids=chans['atlas_id']).rgb
     cluster_brain_region = chans['acronym'][cluster_chans]

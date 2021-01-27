@@ -6,7 +6,7 @@ import os
 
 import alf.io
 from ibllib.io import spikeglx
-from ibllib.atlas import regions_from_allen_csv
+from ibllib.atlas.regions import BrainRegions
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
 from oneibl.one import ONE
 
@@ -85,7 +85,7 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
         probe_id = [ins['id'] for ins in insertions]
 
     channels = Bunch({})
-    r = regions_from_allen_csv()
+    r = BrainRegions()
     for label, trace, resol, count, id in zip(labels, tracing, resolved, counts, probe_id):
         if trace:
             if resol:

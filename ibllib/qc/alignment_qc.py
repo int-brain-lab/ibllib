@@ -1,5 +1,6 @@
 import logging
-from ibllib.atlas import AllenAtlas, regions_from_allen_csv
+from ibllib.atlas import AllenAtlas
+from ibllib.atlas.regions import BrainRegions
 from ibllib.pipes import histology
 from ibllib.ephys.neuropixel import SITES_COORDINATES
 import numpy as np
@@ -184,7 +185,7 @@ class AlignmentQC(base.QC):
         parent brain region
         """
 
-        r = regions_from_allen_csv()
+        r = BrainRegions()
 
         clusters = dict()
         for iK, key in enumerate(self.align_keys_sorted):
@@ -268,7 +269,7 @@ class AlignmentQC(base.QC):
         channels_brainID = ephysalign.get_brain_locations(channels_mlapdv / 1e6)['id']
 
         # Find the clusters
-        r = regions_from_allen_csv()
+        r = BrainRegions()
         clusters_mlapdv = channels_mlapdv[self.cluster_chns]
         clusters_brainID = channels_brainID[self.cluster_chns]
         clusters_brainAcro = r.get(ids=clusters_brainID).acronym
