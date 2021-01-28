@@ -62,12 +62,8 @@ def test_clusters_metrics():
         assert np.allclose(dfm['firing_rate'][idf], frs, rtol=1.1)
         assert np.allclose(dfm['cluster_id'], target_cid)
 
-    # # check with straight indexing
-    # dfm = quick_unit_metrics(c, t, a, d)
-    # _assertions(dfm, np.arange(4), cid)
-
     # check with missing clusters
-    dfm = quick_unit_metrics(c, t, a, d, cluster_ids=np.arange(5))
+    dfm = quick_unit_metrics(c, t, a, d, cluster_ids=np.arange(5), tbounds=[100, 900])
     idf, _ = ismember(np.arange(5), cid)
     _assertions(dfm, idf, np.arange(5))
 
