@@ -356,6 +356,21 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tm
         raise err.SyncBpodFpgaException('No Bpod event found in FPGA. No behaviour extraction. '
                                         'Check channel maps.')
     frame2ttl = _get_sync_fronts(sync, chmap['frame2ttl'], tmax=tmax)
+    F2TTL_THRESH = 0.01
+    dt = np.diff(frame2ttl['times'])
+    iko = np.where(dt < F2TTL_THRESH)[0]
+    todel = np.unique(np.r_[dt, dt + 1])
+    frame2ttl = {'times': np.delete(frame2ttl['times'], iko),
+                 'polarities': np.delete(frame2ttl['polarities'], iko)}
+    # from ibllib.plots import squares
+    import seaborn as sns
+    sns.displot(dt[dt < 0.05], binwidth=0.0005)
+    # f2ttl_t = np.delete(frame2ttl['times'], todel)
+    # f2ttl_p = np.delete(frame2ttl['polarities'], todel)
+    # squares(frame2ttl['times'] * 1000, frame2ttl['polarities'])
+    # squares(f2ttl_t * 1000, f2ttl_p)
+    # plt.plot(frame2ttl['times'][todel] * 1000, todel * 0 + 0.6, '*')
+
     audio = _get_sync_fronts(sync, chmap['audio'], tmax=tmax)
     # extract events from the fronts for each trace
     t_trial_start, t_valve_open, t_iti_in = _assign_events_bpod(
