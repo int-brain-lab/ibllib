@@ -1,18 +1,18 @@
-from pathlib import Path
-import matplotlib.pyplot as plt
 from dataclasses import dataclass
+import logging
+import matplotlib.pyplot as plt
+from pathlib import Path
 
-import pandas as pd
 import numpy as np
 import nrrd
 
-from brainbox.core import Bunch
 from brainbox.numerical import ismember
+from ibllib.atlas.regions import BrainRegions, regions_from_allen_csv  # noqa
 from ibllib.io import params
 from oneibl.webclient import http_download_file
 
+_logger = logging.getLogger('ibllib')
 ALLEN_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5739, 5400, 332])}
-FILE_REGIONS = str(Path(__file__).parent.joinpath('allen_structure_tree.csv'))
 
 
 def cart2sph(x, y, z):
@@ -195,23 +195,31 @@ class BrainAtlas:
         nxyz = np.array(self.image.shape)[self.dims2xyz]
         bc = BrainCoordinates(nxyz=nxyz, xyz0=(0, 0, 0), dxyz=dxyz)
         self.bc = BrainCoordinates(nxyz=nxyz, xyz0=- bc.i2xyz(iorigin), dxyz=dxyz)
+
         """
-        Get the volume top surface, this is needed to compute probe insertions intersections
+        Get the volume top, bottom, left and right surfaces, and from these the outer surface of
+        the image volume. This is needed to compute probe insertions intersections
         """
         axz = self.xyz2dims[2]  # this is the dv axis
-        l0 = np.diff((self.label == 0).astype(np.int8) * 2, axis=axz)
+        _surface = (self.label == 0).astype(np.int8) * 2
+        l0 = np.diff(_surface, axis=axz, append=2)
         _top = np.argmax(l0 == -2, axis=axz).astype(np.float)
         _top[_top == 0] = np.nan
-        _bottom = self.bc.nz - np.argmax(np.flip(l0, axis=axz) == 2, axis=axz).astype(np.float) - 1
-        _bottom[_bottom == self.bc.nz - 1] = np.nan
+        _bottom = self.bc.nz - np.argmax(np.flip(l0, axis=axz) == 2, axis=axz).astype(np.float)
+        _bottom[_bottom == self.bc.nz] = np.nan
         self.top = self.bc.i2z(_top + 1)
         self.bottom = self.bc.i2z(_bottom - 1)
+        self.surface = np.diff(_surface, axis=self.xyz2dims[0], append=2) + l0
+        idx_srf = np.where(self.surface != 0)
+        self.surface[idx_srf] = 1
+        self.srf_xyz = self.bc.i2xyz(np.c_[idx_srf[self.xyz2dims[0]], idx_srf[self.xyz2dims[1]],
+                                           idx_srf[self.xyz2dims[2]]].astype(np.float))
 
     def _lookup_inds(self, ixyz):
         """
         Performs a 3D lookup from volume indices ixyz to the image volume
         :param ixyz: [n, 3] array of indices in the mlapdv order
-        :return: n array of label values
+        :return: n array of flat indices
         """
         idims = np.split(ixyz[..., self.xyz2dims], [1, 2], axis=-1)
         inds = np.ravel_multi_index(idims, self.bc.nxyz[self.xyz2dims])
@@ -222,17 +230,31 @@ class BrainAtlas:
         Performs a 3D lookup from real world coordinates to the flat indices in the volume
         defined in the BrainCoordinates object
         :param xyz: [n, 3] array of coordinates
-        :return: n array of label values
+        :return: n array of flat indices
         """
         return self._lookup_inds(self.bc.xyz2i(xyz))
 
-    def get_labels(self, xyz):
+    def get_labels(self, xyz, mapping='Allen'):
         """
         Performs a 3D lookup from real world coordinates to the volume labels
+        and return the regions ids according to the mapping
         :param xyz: [n, 3] array of coordinates
-        :return: n array of label values
+        :param mapping: brain region mapping (defaults to original Allen mapping)
+        :return: n array of region ids
         """
-        return self.label.flat[self._lookup(xyz)]
+        regions_indices = self._get_mapping(mapping=mapping)[self.label.flat[self._lookup(xyz)]]
+        return self.regions.id[regions_indices]
+
+    def _get_mapping(self, mapping='Allen'):
+        """
+        Safe way to get mappings if nothing defined in regions.
+        A mapping transforms from the full allen brain Atlas ids to the remapped ids
+        new_ids = ids[mapping]
+        """
+        if hasattr(self.regions, 'mappings'):
+            return self.regions.mappings[mapping]
+        else:
+            return np.arange(self.regions.id.size)
 
     def _label2rgb(self, imlabel):
         """
@@ -240,25 +262,10 @@ class BrainAtlas:
         :param imlabel: 2D np-array containing label ids (slice of the label volume)
         :return: 3D np-array of the slice uint8 rgb values
         """
-        if self.regions is None or getattr(self.regions, 'rgb', None) is None:
-            return imlabel
+        if getattr(self.regions, 'rgb', None) is None:
+            return self.regions.id[imlabel]
         else:  # if the regions exist and have the rgb attribute, do the rgb lookup
-            # the lookup is done in pure numpy for speed. This is the ismember matlab fcn
-            im_unique, ilabels, iim = np.unique(imlabel, return_index=True, return_inverse=True)
-            _, ir_unique, _ = np.intersect1d(self.regions.id, im_unique, return_indices=True)
-            return np.reshape(self.regions.rgb[ir_unique[iim], :], (*imlabel.shape, 3))
-
-    def _label2value(self, imlabel, region_values):
-        """
-        Converts a slice from the label volume to its RGB equivalent for display
-        :param imlabel: 2D np-array containing label ids (slice of the label volume)
-        :return: 3D np-array of the slice uint8 rgb values
-        """
-
-        im_unique, ilabels, iim = np.unique(imlabel, return_index=True, return_inverse=True)
-        _, ir_unique, _ = np.intersect1d(self.regions.id, im_unique, return_indices=True)
-
-        return np.squeeze(np.reshape(region_values[ir_unique[iim]], (*imlabel.shape, 1)))
+            return self.regions.rgb[imlabel]
 
     def tilted_slice(self, xyz, axis, volume='image'):
         """
@@ -299,6 +306,8 @@ class BrainAtlas:
             tslice = self._label2rgb(self.label[indsl[0], indsl[1], indsl[2]])
         elif volume.lower() == 'image':
             tslice = self.image[indsl[0], indsl[1], indsl[2]]
+        elif volume.lower() == 'surface':
+            tslice = self.surface[indsl[0], indsl[1], indsl[2]]
 
         #  get extents with correct convention NB: matplotlib flips the y-axis on imshow !
         width = np.sort(sub_volume[:, wdim])[np.argsort(self.bc.lim(axis=wdim))]
@@ -357,12 +366,19 @@ class BrainAtlas:
         ax.imshow(im, extent=extent, cmap=cmap, **kwargs)
         return ax
 
-    def slice(self, coordinate, axis, volume='image', mode='raise', region_values=None):
+    def slice(self, coordinate, axis, volume='image', mode='raise', region_values=None,
+              mapping="Allen"):
         """
         :param coordinate: float
-        :param axis: xyz convention:  0 for ml, 1 for ap, 2
+        :param axis: xyz convention:  0 for ml, 1 for ap, 2 for dv
+            - 0: sagittal slice (along ml axis)
+            - 1: coronal slice (along ap axis)
+            - 2: horizontal slice (along dv axis)
         :param volume: 'image' or 'annotation'
-        :param mode: 'raise' raise an error, 'clip' gets the first or last index
+        :param mode: error mode for out of bounds coordinates
+            -   'raise' raise an error
+            -   'clip' gets the first or last index
+        :param region_values
         :return: 2d array or 3d RGB numpy int8 array
         """
         index = self.bc.xyz2i(np.array([coordinate] * 3))[axis]
@@ -378,16 +394,24 @@ class BrainAtlas:
             elif axis == 2:
                 return vol[:, :, ind]
 
+        def _take_remap(vol, ind, axis, mapping):
+            # For the labels, remap the regions indices according to the mapping
+            return self._get_mapping(mapping=mapping)[_take(vol, ind, axis)]
+
         if isinstance(volume, np.ndarray):
             return _take(volume, index, axis=self.xyz2dims[axis])
-        elif volume == 'annotation':
-            im = _take(self.label, index, axis=self.xyz2dims[axis])
-            return self._label2rgb(im)
+        # add annotation_ids
+        # add annotation_indices
+        # rename annoatation_rgb ?
+        elif volume in 'annotation':
+            iregion = _take_remap(self.label, index, self.xyz2dims[axis], mapping)
+            return self._label2rgb(iregion)
+        elif volume == 'value':
+            return region_values[_take_remap(self.label, index, self.xyz2dims[axis], mapping)]
         elif volume == 'image':
             return _take(self.image, index, axis=self.xyz2dims[axis])
-        elif volume == 'value':
-            im = _take(self.label, index, axis=self.xyz2dims[axis])
-            return self._label2value(im, region_values=region_values)
+        elif volume in ['surface', 'edges']:
+            return _take(self.surface, index, axis=self.xyz2dims[axis])
 
     def plot_cslice(self, ap_coordinate, volume='image', **kwargs):
         """
@@ -622,117 +646,51 @@ class Insertion:
         return sph2cart(- self.depth, self.theta, self.phi) + np.array((self.x, self.y, self.z))
 
     @staticmethod
-    def _get_surface_intersection(traj, brain_atlas, surface, z=0):
-        """
-        Given a Trajectory and a BrainAtlas object, computes the intersection of the trajectory
-        and a surface (usually brain_atlas.top)
-        :param brain_atlas:
-        :param surface: np.array 2d, shape [ny, nx]
-        :param z: init position for the lookup
-        :return: 3 element array x,y,z
-        """
-        # do a recursive look-up of the brain surface along the trajectory, 5 is more than enough
-        for m in range(5):
-            xyz = traj.eval_z(z)[0]
-            iy = brain_atlas.bc.y2i(xyz[1])
-            ix = brain_atlas.bc.x2i(xyz[0])
-            z = surface[iy, ix]
+    def _get_surface_intersection(traj, brain_atlas, surface='top'):
+
+        distance = traj.mindist(brain_atlas.srf_xyz)
+        dist_sort = np.argsort(distance)
+        # In some cases the nearest two intersection points are not the top and bottom of brain
+        # So we find all intersection points that fall within one voxel and take the one with
+        # highest dV to be entry and lowest dV to be exit
+        idx_lim = np.sum(distance[dist_sort] * 1e6 < brain_atlas.res_um)
+        dist_lim = dist_sort[0:idx_lim]
+        z_val = brain_atlas.srf_xyz[dist_lim, 2]
+        if surface == 'top':
+            ma = np.argmax(z_val)
+            _xyz = brain_atlas.srf_xyz[dist_lim[ma], :]
+            _ixyz = brain_atlas.bc.xyz2i(_xyz)
+            _ixyz[brain_atlas.xyz2dims[2]] += 1
+        elif surface == 'bottom':
+            ma = np.argmin(z_val)
+            _xyz = brain_atlas.srf_xyz[dist_lim[ma], :]
+            _ixyz = brain_atlas.bc.xyz2i(_xyz)
+
+        xyz = brain_atlas.bc.i2xyz(_ixyz.astype(np.float))
+
         return xyz
 
     @staticmethod
     def get_brain_exit(traj, brain_atlas):
         """
-        Given a Trajectory and a BrainAtlas object, computes the brain entry coordinate as the
-        intersection of the trajectory and the brain surface (brain_atlas.top)
+        Given a Trajectory and a BrainAtlas object, computes the brain exit coordinate as the
+        intersection of the trajectory and the brain surface (brain_atlas.surface)
         :param brain_atlas:
         :return: 3 element array x,y,z
         """
-        # do a recursive look-up of the brain surface along the trajectory, 5 is more than enough
-        return Insertion._get_surface_intersection(traj, brain_atlas,
-                                                   brain_atlas.bottom, z=brain_atlas.bc.zlim[-1])
+        # Find point where trajectory intersects with bottom of brain
+        return Insertion._get_surface_intersection(traj, brain_atlas, surface='bottom')
 
     @staticmethod
     def get_brain_entry(traj, brain_atlas):
         """
         Given a Trajectory and a BrainAtlas object, computes the brain entry coordinate as the
-        intersection of the trajectory and the brain surface (brain_atlas.top)
+        intersection of the trajectory and the brain surface (brain_atlas.surface)
         :param brain_atlas:
         :return: 3 element array x,y,z
         """
-        # do a recursive look-up of the brain surface along the trajectory, 5 is more than enough
-        return Insertion._get_surface_intersection(traj, brain_atlas, brain_atlas.top, z=0)
-
-
-@dataclass
-class BrainRegions:
-    """
-    self.id: contains label ids found in the BrainCoordinate.label volume
-    self.name: list/tuple of brain region names
-    self.acronym: list/tuple of brain region acronyms
-    """
-    id: np.ndarray
-    name: np.object
-    acronym: np.object
-    rgb: np.uint8
-    level: np.ndarray
-    parent: np.ndarray
-
-    def get(self, ids) -> Bunch:
-        """
-        Get a bunch of the name/id
-        """
-        uid, uind = np.unique(ids, return_inverse=True)
-        a, iself, _ = np.intersect1d(self.id, uid, assume_unique=False, return_indices=True)
-        b = Bunch()
-        for k in self.__dataclass_fields__.keys():
-            b[k] = self.__getattribute__(k)[iself[uind]]
-        return b
-
-    def _navigate_tree(self, ids, direction='down'):
-        """
-        Private method to navigate the tree and get all related objects either up or down
-        :param ids:
-        :param direction:
-        :return: Bunch
-        """
-        indices = ismember(self.id, ids)[0]
-        count = np.sum(indices)
-        while True:
-            if direction == 'down':
-                indices |= ismember(self.parent, self.id[indices])[0]
-            elif direction == 'up':
-                indices |= ismember(self.id, self.parent[indices])[0]
-            else:
-                raise ValueError("direction should be either 'up' or 'down'")
-            if count == np.sum(indices):  # last iteration didn't find any match
-                break
-            else:
-                count = np.sum(indices)
-        return self.get(self.id[indices])
-
-    def descendants(self, ids):
-        """
-        Get descendants from one or an array of ids
-        :param ids: np.array or scalar representing the region primary key
-        :return: Bunch
-        """
-        return self._navigate_tree(ids, direction='down')
-
-    def ancestors(self, ids):
-        """
-        Get ancestors from one or an array of ids
-        :param ids: np.array or scalar representing the region primary key
-        :return: Bunch
-        """
-        return self._navigate_tree(ids, direction='up')
-
-    def leaves(self):
-        """
-        Get all regions that do not have children
-        :return:
-        """
-        leaves = np.setxor1d(self.id, self.parent)
-        return self.get(np.int64(leaves[~np.isnan(leaves)]))
+        # Find point where trajectory intersects with top of brain
+        return Insertion._get_surface_intersection(traj, brain_atlas, surface='top')
 
 
 class AllenAtlas(BrainAtlas):
@@ -741,37 +699,42 @@ class AllenAtlas(BrainAtlas):
     using the IBL Bregma and coordinate system
     """
 
-    def __init__(self, res_um=25, par=None, scaling=np.array([1, 1, 1]), mock=False,
-                 hist_path=None):
+    def __init__(self, res_um=25, brainmap='Allen', scaling=np.array([1, 1, 1]),
+                 mock=False, hist_path=None):
         """
         :param res_um: 10, 25 or 50 um
-        :param par: dictionary of parameters to override systems ones
-        :param scaling:
-        :param mock:
+        :param brainmap: defaults to 'Allen', see ibllib.atlas.BrainRegion for re-mappings
+        :param scaling: scale factor along ml, ap, dv for squeeze and stretch ([1, 1, 1])
+        :param mock: for testing purpose
+        :param hist_path
         :return: atlas.BrainAtlas
         """
         par = params.read('one_params')
         FLAT_IRON_ATLAS_REL_PATH = Path('histology', 'ATLAS', 'Needles', 'Allen')
+        regions = BrainRegions()
         if mock:
-            image, label = [np.zeros((528, 456, 320), dtype=np.bool) for _ in range(2)]
+            image, label = [np.zeros((528, 456, 320), dtype=np.int16) for _ in range(2)]
+            label[:, :, 100:105] = 1327  # lookup index for retina, id 304325711 (no id 1327)
         else:
             path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
             file_image = hist_path or path_atlas.joinpath(f'average_template_{res_um}.nrrd')
-            file_label = path_atlas.joinpath(f'annotation_{res_um}.nrrd')
-
-            if not file_image.exists():
-                file_image = path_atlas.joinpath(f'average_template_{res_um}.npz')
-            if not file_label.exists():
-                file_label = path_atlas.joinpath(f'annotation_{res_um}.npz')
-
+            # get the image volume
             if not file_image.exists():
                 _download_atlas_flatiron(file_image, FLAT_IRON_ATLAS_REL_PATH, par)
+            # get the remapped label volume
+            file_label = path_atlas.joinpath(f'annotation_{res_um}.nrrd')
             if not file_label.exists():
                 _download_atlas_flatiron(file_label, FLAT_IRON_ATLAS_REL_PATH, par)
+            file_label_remap = path_atlas.joinpath(f'annotation_{res_um}_lut.npz')
+            if not file_label_remap.exists():
+                label = self._read_volume(file_label)
+                _logger.info("computing brain atlas annotations lookup table")
+                _, im = ismember(label, regions.id)
+                label = np.reshape(im.astype(np.uint16), label.shape)
+                np.savez_compressed(file_label_remap, label)
             # loads the files
+            label = self._read_volume(file_label_remap)
             image = self._read_volume(file_image)
-            label = self._read_volume(file_label)
-        regions = regions_from_allen_csv(FILE_REGIONS)
         xyz2dims = np.array([1, 0, 2])  # this is the c-contiguous ordering
         dims2xyz = np.array([1, 0, 2])
         dxyz = res_um * 1e-6 * np.array([1, -1, -1]) * scaling
@@ -857,23 +820,3 @@ def _download_atlas_flatiron(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
     http_download_file(url, cache_dir=Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH),
                        username=par.HTTP_DATA_SERVER_LOGIN,
                        password=par.HTTP_DATA_SERVER_PWD)
-
-
-def regions_from_allen_csv(csv_file=FILE_REGIONS):
-    """
-    Reads csv file containing the ALlen Ontology and instantiates a BrainRegions object
-    :param csv_file:
-    :return: BrainRegions object
-    """
-    df_regions = pd.read_csv(csv_file)
-    # converts colors to RGB uint8 array
-    c = np.uint32(df_regions.color_hex_triplet.map(
-        lambda x: int(x, 16) if isinstance(x, str) else 256 ** 3 - 1))
-    c = np.flip(np.reshape(c.view(np.uint8), (df_regions.id.size, 4))[:, :3], 1)
-    # creates the BrainRegion instance
-    return BrainRegions(id=df_regions.id.to_numpy(),
-                        name=df_regions.name.to_numpy(),
-                        acronym=df_regions.acronym.to_numpy(),
-                        rgb=c,
-                        level=df_regions.depth.to_numpy(),
-                        parent=df_regions.parent_structure_id.to_numpy())

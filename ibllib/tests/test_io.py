@@ -5,10 +5,12 @@ import uuid
 import tempfile
 from pathlib import Path
 import shutil
+import sys
 
 import numpy as np
 
-from ibllib.io import params, flags, jsonable, spikeglx, hashfile, misc, globus
+from oneibl.one import ONE
+from ibllib.io import params, flags, jsonable, spikeglx, hashfile, misc, globus, video
 import ibllib.io.raw_data_loaders as raw
 
 
@@ -148,6 +150,17 @@ class TestsRawDataLoaders(unittest.TestCase):
         self.session = Path(__file__).parent.joinpath('extractors', 'data', 'session_biased_ge5')
         data = raw.load_encoder_trial_info(self.session)
         self.assertTrue(data is not None)
+
+    def test_load_camera_ssv_times(self):
+        session = Path(__file__).parent.joinpath('extractors', 'data', 'session_ephys')
+        with self.assertRaises(ValueError):
+            raw.load_camera_ssv_times(session, 'tail')
+        bonsai, camera = raw.load_camera_ssv_times(session, 'body')
+        self.assertTrue(bonsai.size == camera.size == 6001)
+        self.assertEqual(bonsai.dtype.str, '<M8[ns]')
+        self.assertEqual(str(bonsai[0]), '2020-08-19T16:42:57.790361600')
+        expected = np.array([69.466875, 69.5, 69.533, 69.566125, 69.59925])
+        np.testing.assert_array_equal(expected, camera[:5])
 
     def tearDown(self):
         self.tempfile.close()
@@ -624,17 +637,18 @@ class TestsGlobus(unittest.TestCase):
 
     def test_as_globus_path(self):
         # A Windows path
-        actual = globus.as_globus_path('E:\\FlatIron\\integration')
-        self.assertTrue(actual.startswith('/~/'))
-
-        # A relative POSIX path
-        actual = globus.as_globus_path('/mnt/foo/../data/integration')
-        expected = '/mnt/data/integration'
-        self.assertTrue(actual.endswith(expected))
+        if sys.platform == 'win32':
+            # "/E/FlatIron/integration"
+            actual = globus.as_globus_path('E:\\FlatIron\\integration')
+            self.assertTrue(actual.startswith('/E/'))
+            # A relative POSIX path
+            actual = globus.as_globus_path('/mnt/foo/../data/integration')
+            expected = '/mnt/data/integration'  # "/C/mnt/data/integration
+            self.assertTrue(actual.endswith(expected))
 
         # A globus path
-        actual = globus.as_globus_path('/~/E/FlatIron/integration')
-        expected = '/~/E/FlatIron/integration'
+        actual = globus.as_globus_path('/E/FlatIron/integration')
+        expected = '/E/FlatIron/integration'
         self.assertEqual(expected, actual)
 
     @unittest.mock.patch('ibllib.io.params.read')
@@ -644,9 +658,9 @@ class TestsGlobus(unittest.TestCase):
         mock_params.return_value = None  # No parameters saved
         with self.assertRaises(ValueError):
             globus.login_auto(client_id)
-        mock_params.assert_called_with('globus')
+        mock_params.assert_called_with('globus/default')
 
-        pars = params.from_dict({'transfer_token': '7r3hj89', 'expires_at_s': '2020-09-10'})
+        pars = params.from_dict({'access_token': '7r3hj89', 'expires_at_seconds': '2020-09-10'})
         mock_params.return_value = pars  # Incomplete parameter object
         with self.assertRaises(ValueError):
             globus.login_auto(client_id)
@@ -657,6 +671,48 @@ class TestsGlobus(unittest.TestCase):
         self.assertIsInstance(gtc, unittest.mock.Mock)
         mock, _ = self.patcher.get_original()
         mock.assert_called_once_with(client_id)
+
+
+class TestVideo(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.one = ONE(
+            base_url="https://test.alyx.internationalbrainlab.org",
+            username="test_user",
+            password="TapetesBloc18"
+        )
+
+    def setUp(self) -> None:
+        self.eid = '8dd0fcb0-1151-4c97-ae35-2e2421695ad7'
+        self.url = ('https://ibl.flatironinstitute.org/mainenlab/'
+                    'Subjects/ZM_1743/2019-06-14/001/raw_video_data/'
+                    '_iblrig_leftCamera.raw.71cfeef2-2aa5-46b5-b88f-ca07e3d92474.mp4')
+
+    def test_label_from_path(self):
+        # Test file path
+        session_path = self.one.path_from_eid(self.eid)
+        video_path = session_path / 'raw_video_data' / '_iblrig_bodyCamera.raw.mp4'
+        label = video.label_from_path(video_path)
+        self.assertEqual('body', label)
+        # Test URL
+        label = video.label_from_path(self.url)
+        self.assertEqual('left', label)
+        # Test file name
+        label = video.label_from_path('_iblrig_rightCamera.raw.mp4')
+        self.assertEqual('right', label)
+        # Test wrong file
+        label = video.label_from_path('_iblrig_taskSettings.raw.json')
+        self.assertIsNone(label)
+
+    def test_url_from_eid(self):
+        actual = video.url_from_eid(self.eid, 'left', self.one)
+        self.assertEqual(self.url, actual)
+        actual = video.url_from_eid(self.eid, one=self.one)
+        expected = {'left': self.url}
+        self.assertEqual(expected, actual)
+        actual = video.url_from_eid(self.eid, label=('left', 'right'), one=self.one)
+        expected = {'left': self.url, 'right': None}
+        self.assertEqual(expected, actual)
 
 
 if __name__ == "__main__":

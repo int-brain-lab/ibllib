@@ -139,6 +139,8 @@ def _assign_events_bpod(bpod_t, bpod_polarities, ignore_first_valve=True):
     ITI_TTL_LEN = 0.4
     # make sure that there are no 2 consecutive fall or consecutive rise events
     assert(np.all(np.abs(np.diff(bpod_polarities)) == 2))
+    if bpod_polarities[0] == -1:
+        bpod_t = np.delete(bpod_t, 0)
     # take only even time differences: ie. from rising to falling fronts
     dt = np.diff(bpod_t)[::2]
     # detect start trials event assuming length is 0.23 ms except the first trial
@@ -611,6 +613,10 @@ class FpgaTrials(BaseExtractor):
         self.bpod2fpga, drift_ppm, ibpod, ifpga = dsp.utils.sync_timestamps(
             bpod_trials['intervals_bpod'][:, 0], fpga_trials.pop('intervals')[:, 0],
             return_indices=True)
+        nbpod = bpod_trials['intervals_bpod'].shape[0]
+        npfga = fpga_trials['feedback_times'].shape[0]
+        nsync = len(ibpod)
+        _logger.info(f"N trials: {nbpod} bpod, {npfga} FPGA, {nsync} merged, sync {drift_ppm} ppm")
         if drift_ppm > BPOD_FPGA_DRIFT_THRESHOLD_PPM:
             _logger.warning('BPOD/FPGA synchronization shows values greater than %i ppm',
                             BPOD_FPGA_DRIFT_THRESHOLD_PPM)

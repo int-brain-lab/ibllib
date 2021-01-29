@@ -4,6 +4,41 @@ import brainbox.numerical as bnum
 import numpy as np
 
 
+class TestBetweeenSorted(unittest.TestCase):
+
+    def test_between_sorted_single_time(self):
+        # test single time, falling right on edges
+        t = np.arange(100)
+        bounds = [10, 25]
+        ind = bnum.between_sorted(t, bounds)
+        assert np.all(t[ind] == np.arange(int(np.ceil(bounds[0])), int(np.floor(bounds[1] + 1))))
+        # test single time in between edges
+        bounds = [10.4, 25.2]
+        ind = bnum.between_sorted(t, bounds)
+        assert np.all(t[ind] == np.arange(np.ceil(bounds[0]), np.floor(bounds[1]) + 1))
+        # out of bounds
+        ind = bnum.between_sorted(t, [-5, 800])
+        assert np.all(ind)
+
+    def test_between_sorted_multiple_times(self):
+        t = np.arange(100)
+        # non overlapping ranges
+        bounds = np.array([[10.4, 25.2], [67.2, 86.4]])
+        ind_ = np.logical_or(bnum.between_sorted(t, bounds[0]), bnum.between_sorted(t, bounds[1]))
+        ind = bnum.between_sorted(t, bounds)
+        assert np.all(ind == ind_)
+        # overlapping ranges
+        bounds = np.array([[10.4, 83.2], [67.2, 86.4]])
+        ind_ = np.logical_or(bnum.between_sorted(t, bounds[0]), bnum.between_sorted(t, bounds[1]))
+        ind = bnum.between_sorted(t, bounds)
+        assert np.all(ind == ind_)
+        # one range contains the other
+        bounds = np.array([[10.4, 83.2], [34, 78]])
+        ind_ = np.logical_or(bnum.between_sorted(t, bounds[0]), bnum.between_sorted(t, bounds[1]))
+        ind = bnum.between_sorted(t, bounds)
+        assert np.all(ind == ind_)
+
+
 class TestIsmember(unittest.TestCase):
 
     def test_ismember2d(self):

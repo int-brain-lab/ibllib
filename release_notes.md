@@ -1,3 +1,17 @@
+### Release Notes 1.5.37
+- MANIFEST.in fix
+  - Added fixtures file for passive protocol extraction
+
+### Release Notes 1.5.36
+- Amplitudes fix:
+    - sync_probes doesn't require raw binary file and looks for meta-data files instead
+    - tar file of intermediate spike sorting results gets uploaded on flatiron
+- Ephys Task extraction: ephys extraction doesn't fail when bpod started before ephys
+
+### Release Notes 1.5.35
+- histology: brain atlas can handle insertion on the sides 
+- optogenetics dataset type _ibl_trials.laser_stimulation for training sessions
+
 ### Release Notes 1.5.34
 - spikeglx analog sync thresholding removes DC offset option
 - ephys FPGA behaviour extraction: bpod sync with FPGA assumes possible missing FPGA fronts

@@ -6,7 +6,7 @@ import os
 
 import alf.io
 from ibllib.io import spikeglx
-from ibllib.atlas import regions_from_allen_csv
+from ibllib.atlas.regions import BrainRegions
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
 from oneibl.one import ONE
 
@@ -85,7 +85,7 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
         probe_id = [ins['id'] for ins in insertions]
 
     channels = Bunch({})
-    r = regions_from_allen_csv()
+    r = BrainRegions()
     for label, trace, resol, count, id in zip(labels, tracing, resolved, counts, probe_id):
         if trace:
             if resol:
@@ -94,15 +94,36 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
                             f'track.')
                 # download the data
                 chans = one.load_object(eid, 'channels', collection=f'alf/{label}')
-                channels[label] = Bunch({
-                    'atlas_id': chans['brainLocationIds_ccf_2017'],
-                    'acronym': r.get(chans['brainLocationIds_ccf_2017'])['acronym'],
-                    'x': chans['mlapdv'][:, 0] / 1e6,
-                    'y': chans['mlapdv'][:, 1] / 1e6,
-                    'z': chans['mlapdv'][:, 2] / 1e6,
-                    'axial_um': chans['localCoordinates'][:, 1],
-                    'lateral_um': chans['localCoordinates'][:, 0]
-                })
+
+                # If we have successfully downloaded the data
+                if 'brainLocationIds_ccf_2017' in chans.keys():
+
+                    channels[label] = Bunch({
+                        'atlas_id': chans['brainLocationIds_ccf_2017'],
+                        'acronym': r.get(chans['brainLocationIds_ccf_2017'])['acronym'],
+                        'x': chans['mlapdv'][:, 0] / 1e6,
+                        'y': chans['mlapdv'][:, 1] / 1e6,
+                        'z': chans['mlapdv'][:, 2] / 1e6,
+                        'axial_um': chans['localCoordinates'][:, 1],
+                        'lateral_um': chans['localCoordinates'][:, 0]
+                    })
+                # Otherwise we just get the channels from alyx. Shouldn't happen often, only if
+                # data is still inbetween ftp and flatiron after being resolved
+                else:
+                    traj_id = one.alyx.rest('trajectories', 'list', session=eid, probe_name=label,
+                                            provenance='Ephys aligned histology track')[0]['id']
+                    chans = one.alyx.rest('channels', 'list', trajectory_estimate=traj_id)
+
+                    channels[label] = Bunch({
+                        'atlas_id': np.array([ch['brain_region'] for ch in chans]),
+                        'x': np.array([ch['x'] for ch in chans]) / 1e6,
+                        'y': np.array([ch['y'] for ch in chans]) / 1e6,
+                        'z': np.array([ch['z'] for ch in chans]) / 1e6,
+                        'axial_um': np.array([ch['axial'] for ch in chans]),
+                        'lateral_um': np.array([ch['lateral'] for ch in chans])
+                    })
+                    channels[label]['acronym'] = r.get(channels[label]['atlas_id'])['acronym']
+
             elif count > 0 and aligned:
                 logger.info(f'Channel locations for {label} have not been '
                             f'resolved. However, alignment flag set to True so channel and cluster'
@@ -287,14 +308,10 @@ def _load_spike_sorting_local(session_path, probe):
     try:
         spikes = alf.io.load_object(probe_path, object='spikes')
     except Exception:
-        logger.warning(f'Could not load spikes datasets for session {session_path} and {probe}. '
-                       f'Spikes for {probe} will return an empty dict')
         spikes = {}
     try:
         clusters = alf.io.load_object(probe_path, object='clusters')
     except Exception:
-        logger.warning(f'Could not load clusters datasets for session {session_path} and {probe}. '
-                       f'Clusters for {probe} will return an empty dict')
         clusters = {}
 
     return spikes, clusters

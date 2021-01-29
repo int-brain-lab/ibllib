@@ -12,7 +12,7 @@ from oneibl.one import ONE
 
 _logger = logging.getLogger("ibllib")
 
-REQUIRED_FIELDS = ['choice', 'contrast', 'contrastLeft', 'contrastRight', 'correct',
+REQUIRED_FIELDS = ['choice', 'contrastLeft', 'contrastRight', 'correct',
                    'errorCueTrigger_times', 'errorCue_times', 'feedbackType', 'feedback_times',
                    'firstMovement_times', 'goCueTrigger_times', 'goCue_times', 'intervals',
                    'itiIn_times', 'phase', 'position', 'probabilityLeft', 'quiescence',
