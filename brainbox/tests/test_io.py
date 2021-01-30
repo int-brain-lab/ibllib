@@ -133,25 +133,5 @@ class TestIO_ALF(unittest.TestCase):
         shutil.rmtree(self.tmpdir)
 
 
-class TestOne(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls.one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
-                      username='test_user', password='TapetesBloc18')
-        cls.eid = '8dd0fcb0-1151-4c97-ae35-2e2421695ad7'
-
-    def test_path_from_eid(self):
-        session_path = self.one.path_from_eid(self.eid)
-        url = bbone.path_to_url(session_path / 'alf' / '_ibl_trials.choice.npy', one=self.one)
-        expected = ('flatironinstitute.org/mainenlab/Subjects/'
-                    'ZM_1743/2019-06-14/001/alf/_ibl_trials.choice')
-        self.assertIn(expected, url)
-
-    def test_datasets_from_type(self):
-        ds = bbone.datasets_from_type(self.eid, '_iblrig_Camera.raw', one=self.one)
-        self.assertCountEqual(ds, ['_iblrig_leftCamera.raw.mp4'])
-
-
 if __name__ == "__main__":
     unittest.main(exit=False)

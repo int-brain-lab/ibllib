@@ -150,15 +150,16 @@ def run_extractor_classes(classes, session_path=None, **kwargs):
     except TypeError:
         classes = [classes]
     for classe in classes:
-        out, fil = classe(session_path=session_path).extract(**kwargs)
+        cls = classe(session_path=session_path)
+        out, fil = cls.extract(**kwargs)
         if isinstance(fil, list):
             files.extend(fil)
         elif fil is not None:
             files.append(fil)
-        if isinstance(classe.var_names, str):
-            outputs[classe.var_names] = out
+        if isinstance(cls.var_names, str):
+            outputs[cls.var_names] = out
         else:
-            for i, k in enumerate(classe.var_names):
+            for i, k in enumerate(cls.var_names):
                 outputs[k] = out[i]
     return outputs, files
 

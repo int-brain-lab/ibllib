@@ -26,7 +26,6 @@ from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io import raw_data_loaders as raw
 import alf.io as alfio
 from brainbox.core import Bunch
-from brainbox.io.one import path_to_url, datasets_from_type
 from brainbox.video.motion import MotionAlignment
 from ibllib.io.video import get_video_meta, get_video_frames_preload
 from . import base
@@ -105,7 +104,7 @@ class CameraQC(base.QC):
         self.video_path = self.session_path / 'raw_video_data' / filename
         # If local video doesn't exist, change video path to URL
         if not self.video_path.exists() and self.stream and self.one is not None:
-            self.video_path = path_to_url(self.video_path, self.one)
+            self.video_path = self.one.url_from_path(self.video_path)
 
         logging.disable(logging.CRITICAL)
         self.type = get_session_extractor_type(self.session_path) or None
@@ -156,21 +155,22 @@ class CameraQC(base.QC):
         # fist 2 minutes (nearly always enough), extract wheel movements and pick one.
         # TODO Pick movement towards the end of the session (but not right at the end as some
         #  are extrapolated).  Make sure the movement isn't too long.
-        START = 1 * 60  # Start 1 minute in
-        SEARCH_PERIOD = 2 * 60
-        ts, pos = wheel_data
-        while True:
-            win = np.logical_and(
-                ts > START,
-                ts < SEARCH_PERIOD + START
-            )
-            if np.sum(win) > 1000:
-                break
-            SEARCH_PERIOD *= 2
-        wheel_moves = training_wheel.extract_wheel_moves(ts[win], pos[win])
-        move_ind = np.argmax(np.abs(wheel_moves['peakAmplitude']))
-        # TODO Save only the wheel fragment we need
-        self.data['wheel'].period = wheel_moves['intervals'][move_ind, :]
+        if all(x is not None for x in wheel_data):
+            START = 1 * 60  # Start 1 minute in
+            SEARCH_PERIOD = 2 * 60
+            ts, pos = wheel_data
+            while True:
+                win = np.logical_and(
+                    ts > START,
+                    ts < SEARCH_PERIOD + START
+                )
+                if np.sum(win) > 1000:
+                    break
+                SEARCH_PERIOD *= 2
+            wheel_moves = training_wheel.extract_wheel_moves(ts[win], pos[win])
+            move_ind = np.argmax(np.abs(wheel_moves['peakAmplitude']))
+            # TODO Save only the wheel fragment we need
+            self.data['wheel'].period = wheel_moves['intervals'][move_ind, :]
 
         # Load extracted frame times
         alf_path = self.session_path / 'alf'
@@ -186,6 +186,13 @@ class CameraQC(base.QC):
 
         # Gather information from video file
         _log.info('Inspecting video file...')
+        self.load_video_data()
+
+        # Load Bonsai frame timestamps
+        ssv_times = raw.load_camera_ssv_times(self.session_path, self.side)
+        self.data['bonsai_times'], self.data['camera_times'] = ssv_times
+
+    def load_video_data(self):
         # Get basic properties of video
         try:
             self.data['video'] = get_video_meta(self.video_path, one=self.one)
@@ -197,10 +204,6 @@ class CameraQC(base.QC):
         except AssertionError:
             _log.error('Failed to read video file; setting outcome to CRITICAL')
             self._outcome = 'CRITICAL'
-
-        # Load Bonsai frame timestamps
-        ssv_times = raw.load_camera_ssv_times(self.session_path, self.side)
-        self.data['bonsai_times'], self.data['camera_times'] = ssv_times
 
     def _ensure_required_data(self):
         """
@@ -217,7 +220,7 @@ class CameraQC(base.QC):
         is_ephys = 'ephys' in (self.type or self.one.get_details(self.eid)['task_protocol'])
         dtypes = self.dstypes + self.dstypes_fpga if is_ephys else self.dstypes
         for dstype in dtypes:
-            dataset = datasets_from_type(self.eid, dstype, self.one)
+            dataset = self.one.datasets_from_type(self.eid, dstype)
             if 'camera' in dstype.lower():  # Download individual camera file
                 dataset = [d for d in dataset if self.side in d]
             if any(x.endswith('.mp4') for x in dataset) and self.stream:
@@ -242,7 +245,7 @@ class CameraQC(base.QC):
         :param download_data: if True, downloads any missing data if required
         :param extract_times: if True, re-extracts the camera timestamps from the raw data
         :returns: overall outcome as a str, a dict of checks and their outcomes
-        TODO Ensure that when pinstate QC NOT_SET it is not used in overall outcome
+        TODO Ensure that when pin state QC NOT_SET it is not used in overall outcome
         """
         _log.info('Computing QC outcome')
         namespace = f'video{self.side.capitalize()}'
@@ -262,7 +265,7 @@ class CameraQC(base.QC):
             self.update(outcome, namespace)
         return outcome, self.metrics
 
-    def check_brightness(self, bounds=(20, 200), max_std=20, display=False):
+    def check_brightness(self, bounds=(40, 200), max_std=20, display=False):
         """Check that the video brightness is within a given range
         The mean brightness of each frame must be with the bounds provided, and the standard
         deviation across samples frames should be less then the given value.  Assumes that the
@@ -394,18 +397,19 @@ class CameraQC(base.QC):
 
     def check_wheel_alignment(self, tolerance=1, display=False):
         """Check wheel motion in video correlates with the rotary encoder signal"""
-        if self.data['wheel_frames'] is None or self.data['wheel'] is None:
+        if self.data['wheel'] is None or self.side == 'body':
             return 'NOT_SET'
 
         aln = MotionAlignment(self.eid, self.one, self.log)
         aln.data = self.data
+        aln.data['camera_times'] = {self.side: self.data['frame_times']}
         offset, *_ = aln.align_motion(period=self.data['wheel'].period,
                                       display=display, side=self.side)
         if display:
             aln.plot_alignment()
         return 'PASS' if np.abs(offset) <= tolerance else 'FAIL'
 
-    def check_position(self, hist_thresh=0.7, pos_thresh=100, metric=cv2.TM_CCOEFF_NORMED,
+    def check_position(self, hist_thresh=0.8, pos_thresh=100, metric=cv2.TM_CCOEFF_NORMED,
                        display=False, test=False, roi=None):
         """Check camera is positioned correctly
         For the template matching zero-normalized cross-correlation (default) should be more
@@ -483,7 +487,8 @@ class CameraQC(base.QC):
 
         return 'PASS' if face_aligned and hist_correlates else 'FAIL'
 
-    def check_focus(self, n=20, threshold=100, roi=None, display=False, test=False):
+    def check_focus(self, n=20, threshold=(100, 6),
+                    roi=None, display=False, test=False, equalize=True):
         """Check video is in focus
         Two methods are used here: Looking at the high frequencies with a DFT and
         applying a Laplacian HPF and looking at the variance.
@@ -495,6 +500,8 @@ class CameraQC(base.QC):
               comprises mostly very high frequencies).
             - The image may be overall in focus but the places we care about can still be out of
               focus (namely the face).  For this we'll take an ROI around the face.
+        TODO Focus check thrown off by brightness and incorrect positioning.  This could be
+         fixed by setting the ROI based on template matching, and equalizing the histogram
         """
         if not test and self.data['frame_samples'] is None:
             return 'NOT_SET'
@@ -515,10 +522,12 @@ class CameraQC(base.QC):
             img = np.empty((n, *ref.shape), dtype=np.uint8)
             kernal_sz = np.unique(np.linspace(0, 15, n, dtype=int))
             for i, k in enumerate(kernal_sz):
-                img[i] = ref if k == 0 else cv2.blur(ref, (k, k))
+                img[i] = ref.copy() if k == 0 else cv2.blur(ref, (k, k))
+            if equalize:
+                [cv2.equalizeHist(x, x) for x in img]
             if display:
                 # Plot blurred images
-                f, axes = plt.subplots(1, len(img))
+                f, axes = plt.subplots(1, len(kernal_sz))
                 for ax, ig, k in zip(axes, img, kernal_sz):
                     self.imshow(ig, ax=ax, title='Kernal ({0}, {0})'.format(k or 'None'))
                 f.suptitle('Reference frame with box filter')
@@ -526,11 +535,15 @@ class CameraQC(base.QC):
             # Sub-sample the frame samples
             idx = np.unique(np.linspace(0, len(self.data['frame_samples']) - 1, n, dtype=int))
             img = self.data['frame_samples'][idx]
+            if equalize:
+                [cv2.equalizeHist(x, x) for x in img]
 
         # A measure of the sharpness effectively taking the second derivative of the image
 
         lpc_var = np.empty((min(n, len(img)), len(roi)))
         for i, frame in enumerate(img[::-1]):
+            # if equalize:
+            #     frame = cv2.equalizeHist(frame)
             lpc = cv2.Laplacian(frame, cv2.CV_16S, ksize=1)
             lpc_var[i] = [lpc[mask].var() for mask in roi]
 
@@ -539,13 +552,14 @@ class CameraQC(base.QC):
             f = plt.figure()
             gs = f.add_gridspec(len(roi) + 1, 3)
             f.add_subplot(gs[0:len(roi), 0])
-            self.imshow(img[0], title=f'Frame #{self.frame_samples_idx[idx[0]]}')
+            frame = img[0] #cv2.equalizeHist(img[0]) if equalize else img[0]
+            self.imshow(frame, title=f'Frame #{self.frame_samples_idx[idx[0]]}')
             # Plot the ROIs with and without filter
-            lpc = cv2.Laplacian(img[0], cv2.CV_16S, ksize=1)
+            lpc = cv2.Laplacian(frame, cv2.CV_16S, ksize=1)
             abs_lpc = cv2.convertScaleAbs(lpc)
             for i, r in enumerate(roi):
                 f.add_subplot(gs[i, 1])
-                self.imshow(img[0][r], title=f'ROI #{i + 1}')
+                self.imshow(frame[r], title=f'ROI #{i + 1}')
                 f.add_subplot(gs[i, 2])
                 self.imshow(abs_lpc[r], title=f'ROI #{i + 1} - Lapacian filter')
             f.suptitle('Laplacian blur detection')
@@ -553,7 +567,7 @@ class CameraQC(base.QC):
             ax = f.add_subplot(gs[len(roi), :])
             ln = plt.plot(lpc_var)
             [l.set_label(f'ROI #{i + 1}') for i, l in enumerate(ln)]
-            ax.axhline(threshold, 0, n, linestyle=':', color='r', label='lower threshold')
+            ax.axhline(threshold[0], 0, n, linestyle=':', color='r', label='lower threshold')
             ax.set(xlabel='Frame sample', ylabel='Variance of the Laplacian')
             plt.tight_layout()
             plt.legend()
@@ -566,6 +580,8 @@ class CameraQC(base.QC):
         mask[cY - sz:cY + sz, cX - sz:cX + sz] = False
         filt_mean = np.empty(len(img))
         for i, frame in enumerate(img[::-1]):
+            # if equalize:
+            #     frame = cv2.equalizeHist(frame)
             dft = cv2.dft(np.float32(frame), flags=cv2.DFT_COMPLEX_OUTPUT)
             f_shift = np.fft.fftshift(dft) * mask  # Shift & remove low frequencies
             f_ishift = np.fft.ifftshift(f_shift)  # Shift back
@@ -577,15 +593,21 @@ class CameraQC(base.QC):
             filt_mean[i] = np.mean(img_back)
             if i == len(img) - 1 and display:
                 # Plot Fourier transforms
-                f, axes = plt.subplots(1, 3)
-                self.imshow(img[0], ax=axes[0], title='Original frame')
+                f = plt.figure()
+                gs = f.add_gridspec(2, 3)
+                self.imshow(img[0], ax=f.add_subplot(gs[0, 0]), title='Original frame')
                 dft_shift = np.fft.fftshift(dft)
                 magnitude = 20 * np.log(cv2.magnitude(dft_shift[..., 0], dft_shift[..., 1]))
-                self.imshow(magnitude, ax=axes[1], title='Magnitude spectrum')
-                self.imshow(img_back, ax=axes[2], title='Filtered frame')
+                self.imshow(magnitude, ax=f.add_subplot(gs[0, 1]), title='Magnitude spectrum')
+                self.imshow(img_back, ax=f.add_subplot(gs[0, 2]), title='Filtered frame')
+                ax = f.add_subplot(gs[1, :])
+                ax.plot(filt_mean)
+                ax.axhline(threshold[1], 0, n, linestyle=':', color='r', label='lower threshold')
+                ax.set(xlabel='Frame sample', ylabel='Mean of filtered frame')
                 f.suptitle('Discrete Fourier Transform')
                 plt.show()
-        return 'PASS' if np.all(lpc_var > threshold) and np.all(filt_mean > threshold) else 'FAIL'
+        passes = np.all(lpc_var > threshold[0]) and np.all(filt_mean > threshold[1])
+        return 'PASS' if passes else 'FAIL'
 
     @staticmethod
     def load_reference_frames(side):

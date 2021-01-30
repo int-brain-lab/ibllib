@@ -8,7 +8,6 @@ import alf.io
 from ibllib.io import spikeglx
 from ibllib.atlas.regions import BrainRegions
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
-from ibllib.exceptions import ALFObjectNotFound
 from oneibl.one import ONE
 
 from brainbox.core import Bunch, TimeSeries
@@ -538,28 +537,3 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
             trials.append(np.abs(whlvel))
     trialsdf['wheel_velocity'] = trials
     return trialsdf
-
-
-def path_to_url(filepath, one=None):
-    """
-    Given a local file path, returns the URL of the remote file.
-    :param filepath: A local file path
-    :param one: An instance of ONE for fetching the remote file record
-    :return: A URL string
-    FIXME Move into AlyxOne
-    """
-    one = one or ONE()
-    eid = one.eid_from_path(filepath)
-    try:
-        dataset, = one.alyx.rest('datasets', 'list', session=eid, name=Path(filepath).name)
-    except ValueError:
-        raise ALFObjectNotFound(f'File record for {filepath} not found on Alyx')
-    return next(r['data_url'] for r in dataset['file_records'] if r['data_url'] and r['exists'])
-
-
-def datasets_from_type(eid, dataset_type, one=None):
-    one = one or ONE()
-    restriction = f'session__id,{eid},dataset_type__name,{dataset_type}'
-    datasets = one.alyx.rest('datasets', 'list', django=restriction)
-    return [d['name'] for d in datasets]
-

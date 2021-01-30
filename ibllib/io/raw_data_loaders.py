@@ -538,14 +538,14 @@ def sync_trials_robust(t0, t1, diff_threshold=0.001, drift_threshold_ppm=200, ma
         return t0[ind0], t1[ind1]
 
 
-def load_bpod_fronts(session_path: str, data: dict = False) -> list:
+def load_bpod_fronts(session_path: str, data: list = False) -> list:
     """load_bpod_fronts
     Loads BNC1 and BNC2 bpod channels times and polarities from session_path
 
     :param session_path: a valid session_path
     :type session_path: str
     :param data: pre-loaded raw data dict, defaults to False
-    :type data: dict, optional
+    :type data: list, optional
     :return: List of dicts BNC1 and BNC2 {"times": np.array, "polarities":np.array}
     :rtype: list
     """
