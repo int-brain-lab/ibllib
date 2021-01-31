@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
 from ibllib.io.extractors.camera import (
-    load_embedded_frame_data, extract_camera_sync, PIN_STATE_THRESHOLD, extract_all
+    extract_camera_sync, PIN_STATE_THRESHOLD, extract_all
 )
 from ibllib.exceptions import ALFObjectNotFound
 from ibllib.io.extractors import ephys_fpga, training_wheel
@@ -132,7 +132,7 @@ class CameraQC(base.QC):
 
         # Get frame count and pin state
         self.data['count'], self.data['pin_state'] = \
-            load_embedded_frame_data(self.session_path, self.side, raw=True)
+            raw.load_embedded_frame_data(self.session_path, self.side, raw=True)
 
         # Get audio and wheel data
         wheel_keys = ('timestamps', 'position')
@@ -328,7 +328,10 @@ class CameraQC(base.QC):
         return 'PASS' if abs(Fs - fps) < threshold else 'FAIL'
 
     def check_pin_state(self, display=False):
-        """Check the pin state reflects Bpod TTLs"""
+        """Check the pin state reflects Bpod TTLs
+        TODO Return WARNING if more GPIOs elements than timestamps, FAIL if fewer GPIO elements
+         than frame times, or check audio events don't happen at end
+        """
         if self.data['pin_state'] is None:
             return 'NOT_SET'
         size_matches = self.data['video']['length'] == self.data['pin_state'].size

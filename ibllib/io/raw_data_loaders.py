@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
-# @Author: Niccolò Bonacchi
+# @Author: Niccolò Bonacchi, Miles Wells
 # @Date: Monday, July 16th 2018, 1:28:46 pm
 """
 Raw Data Loader functions for PyBpod rig
@@ -18,6 +18,8 @@ import numpy as np
 import pandas as pd
 
 from ibllib.io import jsonable
+from ibllib.dsp.utils import fronts
+from ibllib.io.video import assert_valid_label
 from ibllib.misc import version
 from ibllib.time import uncycle_pgts, convert_pgts
 
@@ -101,16 +103,14 @@ def load_data(session_path: Union[str, Path], time='absolute'):
     return data
 
 
-def load_camera_ssv_times(session_path, camera):
+def load_camera_ssv_times(session_path, camera: str):
     """
     Load the bonsai frame and camera timestamps from Camera.timestamps.ssv
     :param session_path: Absolute path of session folder
     :param camera: Name of the camera to load, e.g. 'left'
     :return: array of datetimes, array of frame times in seconds
     """
-    camera_labels = ('left', 'right', 'body')
-    if camera.lower() not in camera_labels:
-        raise ValueError(f"camera must be one of ({', '.join(('left', 'right', 'body'))})")
+    camera = assert_valid_label(camera)
     file = Path(session_path) / 'raw_video_data' / f'_iblrig_{camera.lower()}Camera.timestamps.ssv'
     assert file.exists()
     # NB: Numpy has deprecated support for non-naive timestamps.
@@ -122,6 +122,40 @@ def load_camera_ssv_times(session_path, camera):
     bonsai_times = ssv_times['bonsai']
     camera_times = uncycle_pgts(convert_pgts(ssv_times['camera']))
     return bonsai_times, camera_times
+
+
+def load_embedded_frame_data(session_path, label: str, raw=False):
+    """
+    Load the embedded frame count and GPIO for a given session.
+    :param session_path: Absolute path of session folder
+    :param label: The specific video to load, one of ('left', 'right', 'body')
+    :param raw: If True the raw data are returned without preprocessing, otherwise GPIO is
+    returned as dictionary of front indices and polarities; frame count returned starting from 0
+    :return: The frame count, the GPIO pin state
+    """
+    label = assert_valid_label(label)
+    if session_path is None:
+        return None, None
+    raw_path = Path(session_path).joinpath('raw_video_data')
+
+    # Load frame count
+    count_file = raw_path / f'_iblrig_{label}Camera.frame_counter.bin'
+    count = np.fromfile(count_file, dtype=np.float64).astype(int) if count_file.exists() else None
+    if not (count is None or len(count) == 0 or raw):
+        count -= count[0]  # start from zero
+
+    # Load pin state
+    GPIO_file = raw_path / f'_iblrig_{label}Camera.GPIO.bin'
+    gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(int) if GPIO_file.exists() else None
+
+    if not (gpio is None or len(gpio) == 0 or raw):
+        if np.unique(gpio).size != 2:
+            _logger.warning('pin state noisy')
+        thresh = int((gpio.max() - gpio.min()) / 2)
+        gpio = dict(zip(('indices', 'polarities'), fronts(gpio, step=thresh)))
+        gpio['polarities'] = np.sign(gpio['polarities'])
+
+    return count, gpio
 
 
 def load_settings(session_path: Union[str, Path]):

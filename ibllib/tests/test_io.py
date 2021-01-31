@@ -162,6 +162,25 @@ class TestsRawDataLoaders(unittest.TestCase):
         expected = np.array([69.466875, 69.5, 69.533, 69.566125, 69.59925])
         np.testing.assert_array_equal(expected, camera[:5])
 
+    def test_load_embedded_frame_data(self):
+        """
+        Embedded frame data comes from 057e25ef-3f80-42e8-aa9f-e259df8bc9ad, left camera
+        :return:
+        """
+        session = Path(__file__).parent.joinpath('extractors', 'data', 'session_ephys')
+        count, gpio = raw.load_embedded_frame_data(session, 'body')
+        np.testing.assert_array_equal(count, np.arange(510, dtype=np.int32))
+        self.assertEqual(count.dtype, np.int32)
+        self.assertTrue(all(k in ('indices', 'polarities') for k in gpio.keys()))
+        np.testing.assert_array_equal(gpio['indices'], np.array([166, 172], dtype=np.int64))
+        np.testing.assert_array_equal(gpio['polarities'], np.array([1, -1]))
+
+        # Test raw flag
+        count, gpio = raw.load_embedded_frame_data(session, 'body', raw=True)
+        self.assertEqual(count[0], int(16696704))
+        self.assertEqual(gpio.dtype, np.int32)
+        np.testing.assert_array_equal(np.unique(gpio), np.array([0, 268435456]))
+
     def tearDown(self):
         self.tempfile.close()
         os.unlink(self.tempfile.name)
@@ -713,6 +732,12 @@ class TestVideo(unittest.TestCase):
         actual = video.url_from_eid(self.eid, label=('left', 'right'), one=self.one)
         expected = {'left': self.url, 'right': None}
         self.assertEqual(expected, actual)
+
+    def test_assert_valid_label(self):
+        with self.assertRaises(ValueError):
+            video.assert_valid_label('tail')
+        label = video.assert_valid_label('LEFT')
+        self.assertEqual(label, 'left')
 
 
 if __name__ == "__main__":

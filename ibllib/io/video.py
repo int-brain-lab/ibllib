@@ -11,6 +11,8 @@ from brainbox.core import Bunch
 from oneibl.stream import VideoStreamer
 from oneibl.one import ONE
 
+VIDEO_LABELS = ('left', 'right', 'body')
+
 
 def get_video_frame(video_path, frame_number):
     """
@@ -144,3 +146,14 @@ def label_from_path(video_name):
     """
     result = re.search(r'(?<=_)([a-z]+)(?=Camera)', str(video_name))
     return result.group() if result else None
+
+
+def assert_valid_label(label):
+    """
+    Raises a value error is the provided label is not supported.
+    :param label: A video label to verify
+    :return: the label in lowercase
+    """
+    if label.lower() not in VIDEO_LABELS:
+        raise ValueError(f"camera must be one of ({', '.join(VIDEO_LABELS)})")
+    return label.lower()

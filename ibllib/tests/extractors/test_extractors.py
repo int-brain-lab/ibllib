@@ -675,3 +675,41 @@ class TestBaseExtractorSavingMethods(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main(exit=False)
     print('.')
+
+
+class TestCameraExtractors(unittest.TestCase):
+    def test_groom_pin_state(self):
+        # UNIT DATA
+        fps = 60
+        t_offset = 39.4
+        ts = np.arange(0, 10, 1 / fps) + t_offset
+        # Add drift
+        ts += np.full_like(ts, 1e-4).cumsum()
+        n_pulses = 2
+        pulse_width = 0.3
+        duty = 0.5
+        gpio = {'indices': np.empty(n_pulses * 2, dtype=np.int32),
+                'polarities': np.ones(n_pulses * 2, dtype=np.int32)}
+        gpio['polarities'][1::2] = -1
+        aud_offset = 40.
+        audio = {'times': np.empty(n_pulses * 2),
+                 'polarities': gpio['polarities']}
+        for p in range(n_pulses):
+            i = p * 2
+            rise = (pulse_width * p) + duty * p + 1
+            audio['times'][i] = aud_offset + rise
+            audio['times'][i + 1] = audio['times'][i] + pulse_width
+            rise += t_offset
+            gpio['indices'][i] = np.where(ts > rise)[0][0]
+            gpio['indices'][i + 1] = np.where(ts > rise + pulse_width)[0][0]
+
+        gpio, audio, ts = extractors.camera.groom_pin_state(gpio, audio, ts)
+
+        delay = 0.08
+        pulse_width = 1e-5
+        t = audio['times'][0] + delay
+        audio['times'] = np.sort(np.append(audio['times'], [t, t + pulse_width, 80]))
+        audio['polarities'] = np.ones(audio['times'].shape, dtype=np.int32)
+        audio['polarities'][1::2] = -1
+
+        gpio, audio, ts = extractors.camera.groom_pin_state(gpio, audio, ts, display=True)

@@ -418,11 +418,11 @@ def within_ranges(x: np.ndarray, ranges: Array, labels: Optional[Array] = None,
     mode. Labels must have a length of n.  Overlapping ranges have a value that is the sum of the
     relevant range labels (ones in 'matrix' mode).
 
-    If mode is 'matrix' (default) it will give a matrix output where each range is assigned a
-    particular row index with 1 if the point belongs to that range label.  Multiple ranges can be
-    assigned to a particular row, e.g. [0, 0,1] would give a 2-by-N matrix with the first two
-    ranges in the first row.  Points within more than one range are given a value > 1
-    If mode is 'vector' it will give a vector, specifying the range of each point.
+    If mode is 'vector' (default) it will give a vector, specifying the range of each point.
+    If mode is 'matrix' it will give a matrix output where each range is assigned a particular row
+    index with 1 if the point belongs to that range label.  Multiple ranges can be assigned to a
+    particular row, e.g. [0, 0,1] would give a 2-by-N matrix with the first two ranges in the
+    first row.  Points within more than one range are given a value > 1
 
     Parameters
     ----------
