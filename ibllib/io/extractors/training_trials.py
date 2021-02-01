@@ -647,8 +647,6 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
         return stimOn_times, stimOff_times, stimFreeze_times
 
 
-
-
 class LaserBool(BaseBpodTrialsExtractor):
     save_names = '_ibl_trials.laser_stimulation.npy'
     var_names = 'laser_stimulation'

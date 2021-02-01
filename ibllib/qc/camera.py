@@ -95,7 +95,7 @@ class CameraQC(base.QC):
         download_data = not alfio.is_session_path(session_path_or_eid)
         self.download_data = kwargs.pop('download_data', download_data)
         self.stream = kwargs.pop('stream', True)
-        self.n_samples = kwargs.pop('n_samples', 100)
+        self.n_samples = kwargs.pop('n_samples', 20)
         super().__init__(session_path_or_eid, **kwargs)
 
         # Data
@@ -176,13 +176,15 @@ class CameraQC(base.QC):
         alf_path = self.session_path / 'alf'
         try:
             assert not extract_times
-            self.data['frame_times'] = alfio.load_object(alf_path, f'{self.side}Camera')['times']
-        except (ALFObjectNotFound, AssertionError):  # Re-extract
-            kwargs = dict(video_path=self.video_path)
+            self.data['fpga_times'] = alfio.load_object(alf_path, f'{self.side}Camera')['times']
+        except AssertionError:  # Re-extract
+            kwargs = dict(video_path=self.video_path, labels=self.side)
             if self.type == 'ephys':
                 kwargs = {**kwargs, 'sync': sync, 'chmap': chmap}  # noqa
             outputs, _ = extract_all(self.session_path, self.type, save=False, **kwargs)
-            self.data['frame_times'] = outputs[f'{self.side}_camera_timestamps'][self.side]
+            self.data['fpga_times'] = outputs[f'{self.side}_camera_timestamps']
+        except ALFObjectNotFound:
+            _log.warning('no camera.times ALF found for session')
 
         # Gather information from video file
         _log.info('Inspecting video file...')
@@ -247,7 +249,8 @@ class CameraQC(base.QC):
         :returns: overall outcome as a str, a dict of checks and their outcomes
         TODO Ensure that when pin state QC NOT_SET it is not used in overall outcome
         """
-        _log.info('Computing QC outcome')
+        # TODO Use exp ref here
+        _log.info(f'Computing QC outcome for {self.side} camera, session {self.eid}')
         namespace = f'video{self.side.capitalize()}'
         if all(x is None for x in self.data.values()):
             self.load_data(**kwargs)
@@ -257,8 +260,12 @@ class CameraQC(base.QC):
 
         checks = getmembers(CameraQC, is_metric)
         self.metrics = {f'_{namespace}_' + k[6:]: fn(self) for k, fn in checks}
-        all_pass = all(x is None or x == 'PASS' for x in self.metrics.values())
-        outcome = 'PASS' if all_pass else 'FAIL'
+
+        # all_pass = all(x is None or x == 'PASS' for x in self.metrics.values())
+        # outcome = 'PASS' if all_pass else 'FAIL'
+        code = max(base.CRITERIA[x] for x in self.metrics.values())
+        outcome = next(k for k, v in base.CRITERIA.items() if v == code)
+
         if update:
             bool_map = {k: None if v is None else v == 'PASS' for k, v in self.metrics.items()}
             self.update_extended_qc(bool_map)
@@ -301,7 +308,7 @@ class CameraQC(base.QC):
             # Plot min-max frames
             for i, idx in enumerate((np.argmax(brightness), np.argmin(brightness))):
                 a = f.add_subplot(gs[i, 2])
-                ax.annotate('*',  (indices[idx], brightness[idx]),  # this is the point to label
+                ax.annotate('*', (indices[idx], brightness[idx]),  # this is the point to label
                             textcoords="offset points", xytext=(0, 1),  ha='center')
                 frame = self.data['frame_samples'][idx]
                 title = ('min' if i else 'max') + ' mean luminance = %.2f' % brightness[idx]
@@ -321,10 +328,10 @@ class CameraQC(base.QC):
         :param threshold: The maximum absolute difference between timestamp sample rate and video
         frame rate.  NB: Does not take into account dropped frames.
         """
-        if any( x is None for x in (self.data['frame_times'], self.video_meta)):
+        if any(x is None for x in (self.data['fpga_times'], self.video_meta)):
             return 'NOT_SET'
         fps = self.video_meta[self.type][self.side]['fps']
-        Fs = 1 / np.median(np.diff(self.data['frame_times']))  # Approx. frequency of camera
+        Fs = 1 / np.median(np.diff(self.data['fpga_times']))  # Approx. frequency of camera
         return 'PASS' if abs(Fs - fps) < threshold else 'FAIL'
 
     def check_pin_state(self, display=False):
@@ -345,7 +352,7 @@ class CameraQC(base.QC):
         # Check within ms of audio times
         if display:
             plt.Figure()
-            plt.plot(self.data['frame_times'][low2high], np.zeros(sum(low2high)), 'o',
+            plt.plot(self.data['fpga_times'][low2high], np.zeros(sum(low2high)), 'o',
                      label='GPIO Low -> High')
             plt.plot(self.data['audio'], np.zeros(self.data['audio'].size), 'rx',
                      label='Audio TTL High')
@@ -354,8 +361,8 @@ class CameraQC(base.QC):
             plt.gca().tick_params(left=False)
             plt.legend()
         # idx = [i for i, x in enumerate(self.data['audio'])
-        #        if np.abs(x - self.data['frame_times'][low2high]).min() > 0.01]
-        # mins = [np.abs(x - self.data['frame_times'][low2high]).min() for x in self.data['audio']]
+        #        if np.abs(x - self.data['fpga_times'][low2high]).min() > 0.01]
+        # mins = [np.abs(x - self.data['fpga_times'][low2high]).min() for x in self.data['audio']]
 
         return 'PASS' if size_matches and binary and state_ttl_matches else 'FAIL'
 
@@ -367,26 +374,31 @@ class CameraQC(base.QC):
         if self.data['video'] is None or self.data['count'] is None:
             return 'NOT_SET'
         size_matches = self.data['video']['length'] == self.data['count'].size
-        assert np.all(np.diff(self.data['count']) > 0), 'frame count not strictly increasing'
+        strict_increase = np.diff(self.data['count']) > 0
+        if not np.all(strict_increase):
+            n_effected = np.sum(np.invert(strict_increase))
+            _log.info(f'frame count not strictly increasing: '
+                      f'{n_effected} frames effected ({n_effected / strict_increase.size:.2%})')
+            return 'CRITICAL'
         dropped = np.diff(self.data['count']).astype(int) - 1
         pct_dropped = (sum(dropped) / len(dropped) * 100)
         return 'PASS' if size_matches and pct_dropped < threshold else 'FAIL'
 
     def check_timestamps(self):
         """Check that the camera.times array is reasonable"""
-        if self.data['frame_times'] is None or self.data['video'] is None:
+        if self.data['fpga_times'] is None or self.data['video'] is None:
             return 'NOT_SET'
         # Check frame rate matches what we expect
         expected = 1 / self.video_meta[self.type][self.side]['fps']
         # TODO Remove dropped frames from test
-        frame_delta = np.diff(self.data['frame_times'])
+        frame_delta = np.diff(self.data['fpga_times'])
         fps_matches = np.isclose(frame_delta.mean(), expected, atol=0.001)
         # Check number of timestamps matches video
-        length_matches = self.data['frame_times'].size == self.data['video'].length
+        length_matches = self.data['fpga_times'].size == self.data['video'].length
         # Check times are strictly increasing
-        increasing = all(np.diff(self.data['frame_times']) > 0)
+        increasing = all(np.diff(self.data['fpga_times']) > 0)
         # Check times do not contain nans
-        nanless = not np.isnan(self.data['frame_times']).any()
+        nanless = not np.isnan(self.data['fpga_times']).any()
         return 'PASS' if increasing and fps_matches and length_matches and nanless else 'FAIL'
 
     def check_resolution(self):
@@ -405,7 +417,8 @@ class CameraQC(base.QC):
 
         aln = MotionAlignment(self.eid, self.one, self.log)
         aln.data = self.data
-        aln.data['camera_times'] = {self.side: self.data['frame_times']}
+        aln.data['camera_times'] = {self.side: self.data['fpga_times']}
+        aln.video_paths = {self.side: self.video_path}
         offset, *_ = aln.align_motion(period=self.data['wheel'].period,
                                       display=display, side=self.side)
         if display:
@@ -647,8 +660,8 @@ def run_all_qc(session, update=False, cameras=('left', 'right', 'body'), stream=
     :return: dict of CameraCQ objects
     """
     qc = {}
+    one = kwargs.pop('one', None)
     for camera in cameras:
-        qc[camera] = CameraQC(session, side=camera, stream=stream,
-                              one=kwargs.pop('one', None))
+        qc[camera] = CameraQC(session, side=camera, stream=stream, one=one)
         qc[camera].run(update=update, **kwargs)
     return qc

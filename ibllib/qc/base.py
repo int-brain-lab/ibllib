@@ -7,7 +7,6 @@ import numpy as np
 from oneibl.one import ONE
 from alf.io import is_session_path, is_uuid_string
 
-
 # Map for comparing QC outcomes
 CRITERIA = {'CRITICAL': 4,
             'FAIL': 3,
@@ -19,6 +18,7 @@ CRITERIA = {'CRITICAL': 4,
 
 class QC:
     """A base class for data quality control"""
+
     def __init__(self, endpoint_id, one=None, log=None, endpoint='sessions'):
         """
         :param endpoint_id: Eid for endpoint. If using sessions can also be a session path
@@ -66,6 +66,14 @@ class QC:
             raise ValueError('Invalid outcome; must be one of ' + ', '.join(CRITERIA.keys()))
         if CRITERIA[self._outcome] < CRITERIA[value]:
             self._outcome = value
+
+    @staticmethod
+    def overall_outcome(outcomes):
+        # TODO Document and add test
+        # isnull = lambda x: x is None or (isinstance(x, float) and np.isnan(x))
+        outcomes = filter(lambda x: x or (isinstance(x, float) and not np.isnan(x)), outcomes)
+        code = max(CRITERIA.get(x, 0) if isinstance(x, str) else x for x in outcomes)
+        return next(k for k, v in CRITERIA.items() if v == code)
 
     def _set_eid_or_path(self, session_path_or_eid):
         """Parse a given eID or session path

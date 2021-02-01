@@ -713,3 +713,48 @@ class TestCameraExtractors(unittest.TestCase):
         audio['polarities'][1::2] = -1
 
         gpio, audio, ts = extractors.camera.groom_pin_state(gpio, audio, ts, display=True)
+
+    def test_attribute_times(self):
+        # Create two timestamp arrays at two different frequencies
+        tsa = np.linspace(0, 60, 60 * 4)[:60]  # 240bpm
+        tsb = np.linspace(0, 60, 60 * 3)[:45]  # 180bpm
+        tsa = np.sort(np.append(tsa, .4))  # Add ambiguous front
+        tsb = np.sort(np.append(tsb, .41))
+        from ibllib.plots import vertical_lines
+        import matplotlib.pyplot as plt
+        vertical_lines(tsb, linestyle=':', color='r', label='tsb')
+        vertical_lines(tsa, linestyle=':', color='b', label='tsa')
+        plt.legend()
+
+        # Check with default args
+        matches = extractors.camera.attribute_times(tsa, tsb)
+        expected = np.array(
+            [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14, 16, 17, 18, 20, 21,
+             22, 24, 25, 26, 28, 29, 30, 32, 33, 34, 36, 37, 38, 40, 41, 42, 44,
+             45, 46, 48, 49, -1, 52, 53, -1, 56, 57, -1, 60]
+        )
+        np.testing.assert_array_equal(matches, expected)
+        self.assertEqual(matches.size, tsb.size)
+
+        # Taking closest instead of first should change index of ambiguous front
+        matches = extractors.camera.attribute_times(tsa, tsb, take='nearest')
+        expected[np.r_[1:3]] = expected[1:3] + 1
+        np.testing.assert_array_equal(matches, expected)
+
+        # Lower tolerance
+        matches = extractors.camera.attribute_times(tsa, tsb, tol=0.05)
+        expected = np.array([0, 2, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49, 53, 57])
+        np.testing.assert_array_equal(matches[matches > -1], expected)
+
+        # Remove injective assert
+        matches = extractors.camera.attribute_times(tsa, tsb, injective=False, take='nearest')
+        expected = np.array(
+            [0, 2, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14, 16, 17, 18, 20, 21, 22,
+             24, 25, 26, 28, 29, 30, 32, 33, 34, 36, 37, 38, 40, 41, 42, 44, 45,
+             46, 48, 49, -1, 52, 53, -1, 56, 57, -1, 60]
+        )
+        np.testing.assert_array_equal(matches, expected)
+
+        # Check input validation
+        with self.assertRaises(ValueError):
+            extractors.camera.attribute_times(tsa, tsb, injective=False, take='closest')

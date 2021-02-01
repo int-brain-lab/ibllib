@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 
 from oneibl.one import ONE
-from ibllib.io.video import get_video_frames_preload, get_video_frame, label_from_path
+import ibllib.io.video as vidio
 from brainbox.core import Bunch
 import brainbox.video.video as video
 import brainbox.behavior.wheel as wh
@@ -43,7 +43,7 @@ class MotionAlignment:
         self.trials = self.wheel = self.camera_times = None
         raw_cam_path = self.session_path.joinpath('raw_video_data')
         camera_path = list(raw_cam_path.glob('_iblrig_*Camera.raw.*'))
-        self.video_paths = {label_from_path(x): x for x in camera_path}
+        self.video_paths = {vidio.label_from_path(x): x for x in camera_path}
         self.data = Bunch()
         self.alignment = Bunch()
 
@@ -68,7 +68,7 @@ class MotionAlignment:
         TODO Improve docstring
         TODO A method for setting ROIs by side
         """
-        frame = get_video_frame(str(video_path), 0)
+        frame = vidio.get_video_frame(str(video_path), 0)
 
         def line_select_callback(eclick, erelease):
             """
@@ -103,13 +103,13 @@ class MotionAlignment:
             self.data.wheel = self.one.load_object(self.eid, 'wheel')
             self.data.trials = self.one.load_object(self.eid, 'trials')
             cam = self.one.load(self.eid, ['camera.times'], dclass_output=True)
-            self.data.camera_times = {label_from_path(url): ts
+            self.data.camera_times = {vidio.label_from_path(url): ts
                                       for ts, url in zip(cam.data, cam.url)}
         else:
             alf_path = self.session_path / 'alf'
             self.data.wheel = alfio.load_object(alf_path, 'wheel')
             self.data.trials = alfio.load_object(alf_path, 'trials')
-            self.data.camera_times = {label_from_path(x): alfio.load_file_content(x)
+            self.data.camera_times = {vidio.label_from_path(x): alfio.load_file_content(x)
                                       for x in alf_path.glob('*Camera.times*')}
         assert all(x is not None for x in self.data.values())
 
@@ -147,7 +147,8 @@ class MotionAlignment:
         # Motion Energy
         camera_path = self.video_paths[side]
         roi = (*[slice(*r) for r in self.roi[side]], 0)
-        self.alignment.frames = get_video_frames_preload(camera_path, frame_numbers, mask=roi)
+        self.alignment.frames = \
+            vidio.get_video_frames_preload(camera_path, frame_numbers, mask=roi)
         self.alignment.df, stDev = video.motion_energy(self.alignment.frames, 2)
         self.alignment.period = period  # For plotting
 
@@ -351,7 +352,7 @@ def motion_energy(video_path, n=5):
     prev_frame = np.array([])
     nrg = np.empty(n_frames - 1)
     for idx in np.array_split(np.arange(n_frames), np.ceil(n_frames / n)):
-        frames = get_video_frames_preload(video_path, idx, mask=np.s_[:, :, 0])
+        frames = vidio.get_video_frames_preload(video_path, idx, mask=np.s_[:, :, 0])
         frames = np.r_[prev_frame[np.newaxis, :, :], frames] if prev_frame.size else frames
         nrg[idx[:len(frames)-1]], _ = video.motion_energy(frames, diff=1, normalize=False)
         prev_frame = frames[-1]

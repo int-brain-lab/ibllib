@@ -67,6 +67,10 @@ class CameraTimestampsFPGA(BaseExtractor):
         self.label = assert_valid_label(label)
         self.save_names = f'_ibl_{label}Camera.times.npy'
         self.var_names = f'{label}_camera_timestamps'
+        _logger.setLevel(logging.DEBUG)
+
+    def __del__(self):
+        _logger.setLevel(logging.INFO)
 
     def _extract(self, sync=None, chmap=None, video_path=None):
         """
@@ -108,11 +112,12 @@ class CameraTimestampsFPGA(BaseExtractor):
             length = get_video_length(video_path)
             if count.size > length:
                 count = count[:length]
-                gpio = gpio[:length]
+                # gpio = gpio[:length]
             else:
                 assert length == count.size, 'fewer counts than frames'
+                # _logger.warning('fewer frame counts than frames!')
             raw_ts = fpga_times[self.label]
-            timestamps = align_with_audio(raw_ts, audio[::2], gpio,  count)
+            timestamps = align_with_audio(raw_ts, audio, gpio, count)
         else:
             _logger.warning('Alignment by wheel data not yet implemented')
             timestamps = fpga_times[self.label]
@@ -242,11 +247,12 @@ def align_with_audio(timestamps, audio, pin_state, count,
     :return: The corrected frame timestamps
     """
     # Some assertions made on the raw data
-    assert count.size == pin_state.size, 'frame count and pin state size mismatch'
+    # assert count.size == pin_state.size, 'frame count and pin state size mismatch'
     assert all(np.diff(count) > 0), 'frame count not strictly increasing'
     assert all(np.diff(timestamps) > 0), 'FPGA camera times not strictly increasing'
-    low2high = np.diff(pin_state.astype(int)) == 1
-    assert sum(low2high) <= audio.size, 'more audio TTLs detected on camera than TTLs sent'
+    # low2high = np.diff(pin_state.astype(int)) == 1
+    same_n_ttl = pin_state['times'].size == audio['times'].size
+    assert same_n_ttl, 'more audio TTLs detected on camera than TTLs sent'
 
     """Here we will ensure that the FPGA camera times match the number of video frames in 
     length.  We will make the following assumptions: 
@@ -269,8 +275,10 @@ def align_with_audio(timestamps, audio, pin_state, count,
     in the wrong order.
     """
     # Align on first pin state change
-    first_uptick = (pin_state > 0).argmax()
-    first_ttl = np.searchsorted(timestamps, audio[0])
+    # first_uptick = (pin_state > 0).argmax()
+    # first_ttl = np.searchsorted(timestamps, audio[0])
+    first_uptick = pin_state['indices'][0]
+    first_ttl = np.searchsorted(timestamps, audio['times'][0])
     """Here we find up to which index in the FPGA times we discard by taking the difference 
     between the index of the first pin state change (when the audio TTL was reported by the 
     camera) and the index of the first audio TTL in FPGA time.  We subtract the difference 
@@ -304,7 +312,7 @@ def align_with_audio(timestamps, audio, pin_state, count,
 
     # Remove the rest of the dropped frames
     ts = ts[count]
-    assert np.searchsorted(ts, audio[0]) == first_uptick
+    assert np.searchsorted(ts, audio['times'][0]) == first_uptick
 
     if display:
         # Plot to check
@@ -340,15 +348,38 @@ def align_with_audio_safe(timestamps, audio, pin_state, count,
     :return: The corrected frame timestamps
     """
     # Some assertions made on the raw data
-    assert count.size == pin_state.size, 'frame count and pin state size mismatch'
+    # assert count.size == pin_state.size, 'frame count and pin state size mismatch'
     assert all(np.diff(count) > 0), 'frame count not strictly increasing'
     assert all(np.diff(timestamps) > 0), 'FPGA camera times not strictly increasing'
-    low2high = np.diff(pin_state.astype(int)) == 1
-    assert sum(low2high) <= audio.size, 'more audio TTLs detected on camera than TTLs sent'
+    # low2high = np.diff(pin_state.astype(int)) == 1
+    same_n_ttl = pin_state['times'].size == audio['times'].size
+    assert same_n_ttl, 'more audio TTLs detected on camera than TTLs sent'
 
+    """Here we will ensure that the FPGA camera times match the number of video frames in 
+    length.  We will make the following assumptions: 
+
+    1. The number of FPGA camera times is equal to or greater than the number of video frames.
+    2. No TTLs were missed between the camera and FPGA.
+    3. No pin states were missed by Bonsai.
+    4  No pixel count data was missed by Bonsai.
+
+    In other words the count and pin state arrays accurately reflect the number of frames 
+    sent by the camera and should therefore be the same length, and the length of the frame 
+    counter should match the number of saved video frames.
+
+    The missing frame timestamps are removed in three stages:
+
+    1. Remove any timestamps that occurred before video frame acquisition in Bonsai.
+    2. Remove any timestamps where the frame counter reported missing frames, i.e. remove the
+    dropped frames which occurred throughout the session.
+    3. Remove the trailing timestamps at the end of the session if the camera was turned off
+    in the wrong order.
+    """
     # Align on first pin state change
-    first_uptick = (pin_state > 0).argmax()
-    first_ttl = np.searchsorted(timestamps, audio[0])
+    # first_uptick = (pin_state > 0).argmax()
+    # first_ttl = np.searchsorted(timestamps, audio[0])
+    first_uptick = pin_state['indices'][0]
+    first_ttl = np.searchsorted(timestamps, audio['times'][0])
     """Here we find up to which index in the FPGA times we discard by taking the difference 
     between the index of the first pin state change (when the audio TTL was reported by the 
     camera) and the index of the first audio TTL in FPGA time.  We subtract the difference 
@@ -356,25 +387,33 @@ def align_with_audio_safe(timestamps, audio, pin_state, count,
     video frames that were not saved during this period (we will remove those from the 
     camera FPGA times later).
     """
-    # NB: The pin state to be high for 2 consecutive frames
-    low2high = np.insert(np.diff((pin_state > 0).astype(int)) == 1, 0, False)
-    upticks = np.insert(*np.where(low2high), 0, 0)
-
+    # Minus any frames that were dropped between the start of frame acquisition and the
+    # first TTL
     start = first_ttl - first_uptick - (count[first_uptick] - first_uptick)
     assert start >= 0
-    # Remove the timestamps that occur before bonsai starts acquiring
-    ts = timestamps[start:]
-    ttls = np.searchsorted(ts, audio)
-    timestamps_split = np.split(ts, ttls)
-    """
-    This fails either because some pin state changes are a frame out, or because bonsai messed 
-    up the count.
-    """
-    for i in range(len(upticks) - 1):
-        count_frag = count[upticks[i]:upticks[i + 1]] - count[upticks[i]]
-        missing = np.setdiff1d(np.arange(0, count_frag[-1]), count_frag)
-        assert (timestamps_split[i].size - count_frag.size) == len(missing)
-        timestamps_split[i] = timestamps_split[i][count_frag]
+
+    # Remove the extraneous timestamps from the beginning and end
+    end = count[-1] + 1 + start
+    ts = timestamps[start:end]
+    if ts.size < count.size:
+        """
+        For ephys sessions there may be fewer FPGA times than frame counts if SpikeGLX is turned
+        off before the video acquisition workflow.  For Bpod this always occurs because Bpod
+        finishes before the camera workflow.  For Bpod the times are already extrapolated for
+        these late frames."""
+        n_missing = count.size - ts.size
+        _logger.warning(f'{n_missing} fewer FPGA timestamps than frame counts')
+        frate = round(1 / np.nanmedian(np.diff(ts)))
+        to_app = ((np.arange(n_missing, ) + 1) / frate + ts[-1]
+                  if extrapolate_missing
+                  else np.full(n_missing, np.nan))
+        ts = np.r_[ts, to_app]  # Append the missing times
+    assert ts.size >= count.size
+    assert ts.size == count[-1] + 1
+
+    # Remove the rest of the dropped frames
+    ts = ts[count]
+    assert np.searchsorted(ts, audio['times'][0]) == first_uptick
 
     return ts
 
@@ -395,14 +434,15 @@ def attribute_times(arr, events, tol=.1, injective=True, take='first'):
     :param events: An array of event times considered a subset of `arr`
     :param tol: The max absolute difference between values in order to be considered a match
     :param injective: If true, once a value has been assigned it will not be assigned again
-    :param take: If 'first' the first value within tolerance is assigned; if 'closest' the
+    :param take: If 'first' the first value within tolerance is assigned; if 'nearest' the
     closest value is assigned
     :returns Numpy array the same length as `values`
     """
     take = take.lower()
-    if take not in ('first', 'closest'):
-        raise ValueError('Parameter `take` must be either "first" or "closest"')
+    if take not in ('first', 'nearest'):
+        raise ValueError('Parameter `take` must be either "first" or "nearest"')
     stack = np.ma.masked_invalid(arr, copy=False)
+    stack.fill_value = np.inf
     assigned = np.full(events.shape, -1, dtype=int)  # Initialize output array
     for i, x in enumerate(events):
         dx = np.abs(stack.filled() - x)
@@ -417,6 +457,10 @@ def groom_pin_state(gpio, audio, ts, display=False):
     """
     Align the GPIO pin state to the FPGA audio TTLs.  Any audio TTLs not reflected in the pin
     state are removed from the dict and the times of the detected fronts are converted to FPGA time
+
+    Note:
+      - This function is ultra safe: we probably don't need assign all the ups and down fronts
+      separately and could potentially even align the timestamps without removing the missed fronts
     :param gpio: array of GPIO pin state values
     :param audio: dict of FPGA audio TTLs (see ibllib.io.extractors.ephys_fpga._get_sync_fronts)
     :param ts: camera frame times
@@ -425,6 +469,7 @@ def groom_pin_state(gpio, audio, ts, display=False):
     :returns: audio times and polarities sans the TTLs not detected in the frame data
     :returns: frame times in FPGA time
     """
+    TOL = 2  # Two pulses need to be within this many seconds to be considered related
     # Check that the dimensions match
     if np.any(gpio['indices'] >= ts.size):
         _logger.warning('GPIO events occurring beyond timestamps array length')
@@ -445,14 +490,14 @@ def groom_pin_state(gpio, audio, ts, display=False):
     """
     Some audio TTLs appear to be so short that they are not recorded by the camera.  These can 
     be as short as a few microseconds.  Applying a cutoff based on framerate was unsuccessful.
-    Assigning each audio TTL to each pin state change is not easy because some onsets occur very 
+    Assigning each audio TTL to each pin state change is not easy because some onsets occur very
     close together (sometimes < 70ms), on the order of the delay between TTL and frame time.
-    Also, the two clocks have some degree of drift, so the delay between audio TTL and pin state 
+    Also, the two clocks have some degree of drift, so the delay between audio TTL and pin state
     change may be zero or even negative.
-    
-    Here we split the events into audio onsets (lo->hi) and audio offsets (hi->lo).  For each 
-    uptick in the GPIO pin state, we take the first audio onset time that was within 100ms of it.  
-    We ensure that each audio TTL is assigned only once, so a TTL that is closer to frame 3 than 
+
+    Here we split the events into audio onsets (lo->hi) and audio offsets (hi->lo).  For each
+    uptick in the GPIO pin state, we take the first audio onset time that was within 100ms of it. 
+    We ensure that each audio TTL is assigned only once, so a TTL that is closer to frame 3 than
     frame 1 may still be assigned to frame 1.
     """
     ifronts = gpio['indices']  # The pin state flips
@@ -465,17 +510,47 @@ def groom_pin_state(gpio, audio, ts, display=False):
         # Onsets
         ups = ts[low2high] - ts[low2high][0]
         onsets = audio['times'][::2] - audio['times'][0]
-        assigned = attribute_times(onsets, ups)
+        assigned = attribute_times(onsets, ups, tol=TOL)
+        unassigned = np.setdiff1d(np.arange(onsets.size), assigned[assigned > -1])
+        if unassigned.size > 0:
+            _logger.debug(f'{unassigned.size} audio TTL rises were not detected by the camera')
         # Check that all pin state upticks could be attributed to an onset TTL
-        assert np.all(assigned > -1)
+        missed = assigned == -1
+        if np.any(missed):
+            _logger.warning(f'{sum(missed)} pin state rises could '
+                            f'not be attributed to an audio TTL')
+            assigned = assigned[~missed]
+            if display:
+                from ibllib.plots import vertical_lines
+                ax = plt.subplot()
+                vertical_lines(ups[assigned > -1],
+                               linestyle='-', color='g', ax=ax,
+                               label='assigned GPIO up state')
+                vertical_lines(ups[missed],
+                               linestyle='-', color='r', ax=ax,
+                               label='unassigned GPIO up state')
+                vertical_lines(onsets[unassigned],
+                               linestyle=':', color='k', ax=ax,
+                               alpha=0.3, label='audio onset')
+                vertical_lines(onsets[assigned],
+                               linestyle=':', color='b', ax=ax, label='assigned audio onset')
+                plt.legend()
+                plt.show()
         onsets_ = audio['times'][::2][assigned]
 
         # Offsets
         downs = ts[high2low] - ts[high2low][0]
         offsets = audio['times'][1::2] - audio['times'][1]
-        assigned = attribute_times(offsets, downs)
+        assigned = attribute_times(offsets, downs, tol=TOL)
+        unassigned = np.setdiff1d(np.arange(onsets.size), assigned[assigned > -1])
+        if unassigned.size > 0:
+            _logger.debug(f'{unassigned.size} audio TTL falls were not detected by the camera')
         # Check that all pin state downticks could be attributed to an offset TTL
-        assert np.all(assigned > -1)
+        missed = assigned == -1
+        if np.any(missed):
+            _logger.warning(f'{sum(missed)} pin state falls could '
+                            f'not be attributed to an audio TTL')
+            assigned = assigned[~missed]
         offsets_ = audio['times'][1::2][assigned]
 
         # Audio groomed
@@ -526,11 +601,14 @@ def extract_all(session_path, session_type=None, save=True, **kwargs):
     if session_type is None:
         session_type = get_session_extractor_type(session_path)
     if session_type == 'ephys':
-        extractor = [partial(CameraTimestampsFPGA, label) for label in ('left', 'right', 'body')]
+        labels = assert_valid_label(kwargs.pop('labels', ('left', 'right', 'body')))
+        labels = (labels,) if isinstance(labels, str) else labels  # Ensure list/tuple
+        extractor = [partial(CameraTimestampsFPGA, label) for label in labels]
         if 'sync' not in kwargs:
             kwargs['sync'], kwargs['chmap'] = \
                 get_main_probe_sync(session_path, bin_exists=kwargs.pop('bin_exists', False))
     elif session_type in ['biased', 'training']:
+        assert kwargs.pop('labels', 'left'), 'only left camera is currently supported'
         extractor = CameraTimestampsBpod
     else:
         raise ValueError(f"Session type {session_type} as no matching extractor {session_path}")
