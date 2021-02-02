@@ -162,7 +162,7 @@ class DlcQC(base.QC):
         assert self.one is not None, 'ONE required to download data'
         # Get extractor type
         for dstype in self.dstypes:
-            dataset = self.one.datasets_from_type(self.eid, dstype, self.one)
+            dataset = self.one.datasets_from_type(self.eid, dstype)
             kwargs = {'download_only': True}
             present = (
                 (self.one.load_dataset(self.eid, d, **kwargs) for d in dataset)
