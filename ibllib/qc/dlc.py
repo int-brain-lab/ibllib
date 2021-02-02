@@ -8,7 +8,6 @@ Question:
     We're not extracting the audio based on TTL length.  Is this a problem?
 """
 from ibllib.qc import base
-from brainbox.io.one import datasets_from_type
 from brainbox.core import Bunch
 import alf.io
 import numpy as np
@@ -163,7 +162,7 @@ class DlcQC(base.QC):
         assert self.one is not None, 'ONE required to download data'
         # Get extractor type
         for dstype in self.dstypes:
-            dataset = datasets_from_type(self.eid, dstype, self.one)
+            dataset = self.one.datasets_from_type(self.eid, dstype, self.one)
             kwargs = {'download_only': True}
             present = (
                 (self.one.load_dataset(self.eid, d, **kwargs) for d in dataset)
