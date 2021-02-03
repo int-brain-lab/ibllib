@@ -88,7 +88,7 @@ class DlcQC(base.QC):
         for point in XYs:
             for coordinate in [0, 1]:
                 if len(Times) < len(XYs[point][coordinate]):
-                    _log.error(f'dlc time<{point} lengths mismatch')
+                    _log.error(f'{self.video_type} dlc time<{point} lengths mismatch')
                     t += 1
 
         if t == 0:
@@ -105,7 +105,7 @@ class DlcQC(base.QC):
             for coordinate in [0, 1]:
                 if all(np.isnan(XYs[point][coordinate])):
                     t += 1
-                    _log.error(f'{point} all coord {coordinate} nan')
+                    _log.error(f'{self.video_type} {point} all coord {coordinate} nan')
 
         if t == 0:
             return 'PASS'
