@@ -488,11 +488,9 @@ class TestHabituationQC(unittest.TestCase):
     NB: For complete coverage this should be run along slide the integration tests
     """
     def setUp(self):
-        self.load_fake_bpod_data()
-        # random eid will not be used if data is passed
-        eid = 'ac80cd12-49e5-4aff-b5f2-1a718679ceeb'
-        one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
-                  password='TapetesBloc18')
+        eid = '8dd0fcb0-1151-4c97-ae35-2e2421695ad7'
+        one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
+                  username='test_user', password='TapetesBloc18')
         self.qc = qcmetrics.HabituationQC(eid, one=one)
         self.qc.extractor = Bunch({'data': self.load_fake_bpod_data()})  # Dummy extractor obj
 
