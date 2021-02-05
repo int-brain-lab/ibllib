@@ -1,9 +1,6 @@
 include ibllib/atlas/allen_structure_tree.csv
-include ibllib/io/extractors/ephys_sessions/*.npy
-include ibllib/io/extractors/ephys_sessions/passive_stim_meta.json
 include ibllib/io/extractors/extractor_types.json
 recursive-include brainbox/tests/fixtures
-graft ibllib/io/extractors/data
-recursive-include ibllib/io/extractors/ephys_sessions *
+graft ibllib/io/extractors/ephys_sessions
 graft ibllib/tests/fixtures
 recursive-include oneibl/tests/fixtures *
