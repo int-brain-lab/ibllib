@@ -13,6 +13,7 @@ import alf.io
 import numpy as np
 import logging
 from inspect import getmembers, isfunction
+from scipy.stats import zscore
 
 _log = logging.getLogger('ibllib')
 
@@ -88,7 +89,8 @@ class DlcQC(base.QC):
         for point in XYs:
             for coordinate in [0, 1]:
                 if len(Times) < len(XYs[point][coordinate]):
-                    _log.error(f'{self.video_type} dlc time<{point} lengths mismatch')
+                    _log.error(f'{self.video_type} dlc time<{point} \
+                                  lengths mismatch')
                     t += 1
 
         if t == 0:
@@ -144,6 +146,55 @@ class DlcQC(base.QC):
             return 'FAIL'
         else:
             return 'PASS'
+
+
+    def check_whisker_pupil_block(self):
+        '''
+        count fraction of points that are 2 std 
+        away from mean; numbers sensible for 
+        pupil points only; 
+        '''
+        if self.video_type=='body':
+            return 'PASS'    
+        
+        XYs = self.data['XYs']
+        
+        for point in XYs:
+            if 'pupil' not in point:
+                continue
+            x = zscore(XYs[point][0],nan_policy = 'omit')   
+            y = zscore(XYs[point][1],nan_policy = 'omit')
+            ps = (x**2 + y**2)**0.5
+            outs = len(np.where(ps > 2)[0])
+            total = np.sum(~np.isnan(XYs[point][0]))
+                 
+            if outs/total > 0.12:
+                _log.error(f'{self.eid}, {video_type}, {point} \
+                              too often far from mean')
+                return 'FAIL'   
+                
+        return 'PASS'                
+
+     
+    def check_lick_detection(self):
+        '''
+        check if both of the two tongue edge points are 
+        less than 10 % nan, indicating that 
+        wrong points are detected (spout edge, mouth edge)
+        '''
+        
+        if self.video_type=='body':
+            return 'PASS'      
+               
+        XYs = self.data['XYs']
+        points = ['tongue_end_r','tongue_end_l'] 
+        ms = []
+        for point in points:    
+            ms.append(np.mean(np.isnan(XYs[point][0])))    
+        if (ms[0] < 0.1) and (ms[1] < 0.1):    
+            return 'FAIL'            
+        return 'PASS'  
+
 
     def _ensure_required_data(self):
         """
