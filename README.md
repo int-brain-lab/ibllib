@@ -1,6 +1,7 @@
 # IBL Python Libraries
-[![Build Status on master](https://travis-ci.org/int-brain-lab/ibllib.svg?branch=master)](https://travis-ci.org/int-brain-lab/ibllib)
-[![Build Status on dev](https://travis-ci.org/int-brain-lab/ibllib.svg?branch=develop)](https://travis-ci.org/int-brain-lab/ibllib)
+[![Build Status on master](https://travis-ci.org/int-brain-lab/ibllib.svg?branch=master)](https://travis-ci.org/int-brain-lab/ibllib) 
+[![Coverage badge](https://img.shields.io/endpoint.svg?url=https%3A%2F%2Fibllib.hooks.internationalbrainlab.org%2Fcoverage%2Fibllib%2Fmanifest)](https://ibllib.hooks.internationalbrainlab.org/coverage/manifest) 
+[![Tests status badge](https://img.shields.io/endpoint.svg?url=https%3A%2F%2Fibllib.hooks.internationalbrainlab.org%2Ftests%2Fibllib%2Fmanifest)](https://ibllib.hooks.internationalbrainlab.org/logs/records/manifest) 
 
 ## Description
 Library used to implement the International Brain Laboratory data pipeline. Currently in active development.
@@ -9,6 +10,7 @@ The library as currently 4 main modules:
 -   **ibllib**: general purpose library containing I/O, signal processing and IBL data pipelines utilities.
 -   **oneibl**: interface to the Alyx database of experiments to access IBL data.
 -   **alf**: implementation of ALF file naming convention
+
 [Release Notes here](release_notes.md)
 
 ## Requirements
@@ -21,7 +23,7 @@ https://docs.internationalbrainlab.org
 
 
 ## Contribution and development practices
-See developper's installation guide here: https://ibllib.readthedocs.io/en/latest/02_installation_dev_python.html
+See https://int-brain-lab.github.io/iblenv/07_contribution.html
 
 We use gitflow and Semantic Versioning.
 
