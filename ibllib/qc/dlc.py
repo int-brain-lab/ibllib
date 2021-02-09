@@ -169,7 +169,7 @@ class DlcQC(base.QC):
             total = np.sum(~np.isnan(XYs[point][0]))
                  
             if outs/total > 0.12:
-                _log.error(f'{self.eid}, {video_type}, {point} \
+                _log.error(f'{self.eid}, {self.video_type}, {point} \
                               too often far from mean')
                 return 'FAIL'   
                 
