@@ -4,6 +4,7 @@ from pathlib import Path
 
 import oneibl.params as params
 from ibllib.io import params as iopar
+from getpass import getpass
 
 
 class TestONEParams(unittest.TestCase):
@@ -22,6 +23,13 @@ class TestONEParams(unittest.TestCase):
                 params._get_current_par(
                     k, self.par_current) == self.par_default.as_dict()[k])
 
+    def test_setup(self):
+        # overwrite getpass,input and print method to silence prompts and prints
+        params.input = lambda prompt: 'mock_input'
+        params.getpass = lambda prompt: 'mock_pwd'
+        params.print = lambda text: 'mock_print'
+        params.setup()
+
     def test_setup_silent(self):
         self.assertIsNone(iopar.read(params._PAR_ID_STR))
         params.setup_silent()
@@ -39,6 +47,10 @@ class TestONEParams(unittest.TestCase):
         if self.bk_params.exists():
             shutil.copy(self.bk_params, self.existing_params)
             self.bk_params.unlink()
+        #Reassign original functions
+        params.getpass = getpass
+        params.input = input
+        params.print = print
 
 
 if __name__ == "__main__":
