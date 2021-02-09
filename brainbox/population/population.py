@@ -8,7 +8,6 @@ Code for decoding by G. Meijer
 import numpy as np
 import scipy as sp
 import types
-from brainbox.task import generate_pseudo_stimuli
 from itertools import groupby
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.naive_bayes import GaussianNB, MultinomialNB
@@ -214,11 +213,107 @@ def xcorr(spike_times, spike_clusters, bin_size=None, window_size=None):
     return _symmetrize_correlograms(correlograms)
 
 
+def classify(population_activity, trial_labels, classifier, cross_validation=None):
+    """
+    Classify trial identity (e.g. stim left/right) from neural population activity.
+
+    Parameters
+    ----------
+    population_activity : 2D array (trials x neurons)
+        population activity of all neurons in the population for each trial.
+    trial_labels : 1D or 2D array
+        identities of the trials, can be any number of groups, accepts integers and strings
+    classifier : scikit-learn object
+        which decoder to use, for example Gaussian with Multinomial likelihood:
+                    from sklearn.naive_bayes import MultinomialNB
+                    classifier = MultinomialNB()
+    cross_validation : None or scikit-learn object
+        which cross-validation method to use, for example 5-fold:
+                    from sklearn.model_selection import KFold
+                    cross_validation = KFold(n_splits=5)
+
+    Returns
+    -------
+    accuracy : float
+        accuracy of the classifier
+    pred : 1D array
+        predictions of the classifier
+    prob : 1D array
+        probablity of classification
+    """
+
+    # Check input
+    assert population_activity.shape[0] == trial_labels.shape[0]
+
+    if cross_validation is None:
+        # Fit the model on all the data
+        classifier.fit(population_activity, trial_labels)
+        pred = classifier.predict(population_activity)
+        prob = classifier.predict_proba(population_activity)
+        prob = prob[:, 1]
+    else:
+        pred = np.empty(trial_labels.shape[0])
+        prob = np.empty(trial_labels.shape[0])
+        for train_index, test_index in cross_validation.split(population_activity):
+            # Fit the model to the training data and predict the held-out test data
+            classifier.fit(population_activity[train_index], trial_labels[train_index])
+            pred[test_index] = classifier.predict(population_activity[test_index])
+            proba = classifier.predict_proba(population_activity[test_index])
+            prob[test_index] = proba[:, 1]
+
+    # Calcualte accuracy
+    accuracy = accuracy_score(trial_labels, pred)
+    return accuracy, pred, prob
+
+
+def regress(population_activity, trial_targets, cross_validation=None):
+    """
+    Perform linear regression to predict a continuous variable from neural data
+
+    Parameters
+    ----------
+    population_activity : 2D array (trials x neurons)
+        population activity of all neurons in the population for each trial.
+    trial_targets : 1D or 2D array
+        the decoding target per trial as a continuous variable
+    pre_time : float
+        time (in seconds) preceding the event times
+    post_time : float
+        time (in seconds) following the event times
+    cross_validation : None or scikit-learn object
+        which cross-validation method to use, for example 5-fold:
+                    from sklearn.model_selection import KFold
+                    cross_validation = KFold(n_splits=5)
+
+    Returns
+    -------
+    pred : 1D array
+        array with predictions
+    """
+
+    reg = LinearRegression()
+
+    if cross_validation is None:
+        # Fit the model on all the data
+        reg.fit(population_activity, trial_targets)
+        pred = reg.predict(population_activity)
+    else:
+        pred = np.empty(trial_targets.shape[0])
+        for train_index, test_index in cross_validation.split(population_activity):
+            # Fit the model to the training data and predict the held-out test data
+            reg.fit(population_activity[train_index], trial_targets[train_index])
+            pred[test_index] = reg.predict(population_activity[test_index])
+    return pred
+
+
 def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, post_time=0.5,
            classifier='bayes-multinomial', cross_validation='kfold', num_splits=5, prob_left=None,
            custom_validation=None, n_neurons='all', iterations=1, shuffle=False, phase_rand=False,
            pseudo_blocks=False):
     """
+
+    WILL BE DEPRICATED
+
     Use decoding to classify groups of trials (e.g. stim left/right). Classification is done using
     the population vector of summed spike counts from the specified time window. Cross-validation
     is achieved using n-fold cross validation or leave-one-out cross validation. Decoders can
@@ -306,6 +401,7 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
         probabilities : 2D array with dimensions iterations x trials
             classification probability for all trials in every iteration
     """
+    print('\n WARNING: The function decode will soon be depricated, use classify instead\n')
 
     # Check input
     if type(classifier) == str:
