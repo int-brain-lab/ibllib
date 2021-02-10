@@ -16,20 +16,6 @@ class TestTask(unittest.TestCase):
             with open(pickle_file, 'rb') as f:
                 self.test_data = pickle.load(f)
 
-    def test_get_spike_counts_in_bins(self):
-        if self.test_data is None:
-            return
-        spike_times = self.test_data['spike_times']
-        spike_clusters = self.test_data['spike_clusters']
-        event_times = self.test_data['event_times']
-        times = np.column_stack(((event_times - 0.5), (event_times + 0.5)))
-        counts, cluster_ids = bb.task._get_spike_counts_in_bins(spike_times,
-                                                                spike_clusters,
-                                                                times)
-        num_clusters = np.size(np.unique(spike_clusters))
-        self.assertEqual(counts.shape, (num_clusters, np.size(event_times)))
-        self.assertTrue(np.size(cluster_ids) == num_clusters)
-
     def test_responsive_units(self):
         if self.test_data is None:
             return
