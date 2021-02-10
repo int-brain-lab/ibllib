@@ -462,4 +462,3 @@ def generate_pseudo_session(trials):
         pseudo_trials['choice'][i] = this_choice
 
     return pseudo_trials
-

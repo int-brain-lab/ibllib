@@ -18,7 +18,7 @@ from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, roc_auc_
 from sklearn.utils import shuffle as sklearn_shuffle
 
 
-def _get_spike_counts_in_bins(spike_times, spike_clusters, intervals):
+def get_spike_counts_in_bins(spike_times, spike_clusters, intervals):
     """
     Return the number of spikes in a sequence of time intervals, for each neuron.
 
@@ -415,7 +415,7 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
 
     # Get matrix of all neuronal responses
     times = np.column_stack(((event_times - pre_time), (event_times + post_time)))
-    pop_vector, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters, times)
+    pop_vector, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters, times)
     pop_vector = pop_vector.T
 
     # Exclude last trial if the number of trials is even and phase shuffling
@@ -624,7 +624,7 @@ def lda_project(spike_times, spike_clusters, event_times, event_groups, pre_time
 
     # Get matrix of all neuronal responses
     times = np.column_stack(((event_times - pre_time), (event_times + post_time)))
-    pop_vector, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters, times)
+    pop_vector, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters, times)
     pop_vector = pop_vector.T
 
     # Initialize
