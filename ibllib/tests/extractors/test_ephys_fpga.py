@@ -284,3 +284,27 @@ class TestEphysFPGA_TTLsExtraction(unittest.TestCase):
         st, op, iti = ephys_fpga._assign_events_bpod(bpod_t=bpod_t, bpod_polarities=pol)
         st_, op_, iti_ = ephys_fpga._assign_events_bpod(bpod_t=bpod_t[1:], bpod_polarities=pol[1:])
         assert np.all(st == st_) and np.all(op == op_) and np.all(iti_ == iti)
+
+    def test_frame2ttl_flickers(self):
+        """
+        Frame2ttl can flicker abnormally. One way to detect this is to remove consecutive polarity
+        switches under a given threshold
+        """
+        DISPLAY = False  # for debug purposes
+        diff = ephys_fpga.F2TTL_THRESH * np.array([0.5, 10])
+
+        # flicker ends with a polarity switch
+        t = np.r_[0, np.cumsum(diff[np.array([1, 1, 0, 0, 1])])] + 1
+        frame2ttl = {'times': t, 'polarities': np.mod(np.arange(t.size) + 1, 2)}
+        expected = {'times': np.array([1., 1.1, 1.21, 1.31]),
+                    'polarities': np.array([1, 0, 1, 0])}
+        frame2ttl_ = ephys_fpga._clean_frame2ttl(frame2ttl, display=DISPLAY)
+        assert all([np.all(frame2ttl_[k] == expected[k]) for k in frame2ttl_])
+
+        # stand-alone flicker
+        t = np.r_[0, np.cumsum(diff[np.array([1, 1, 0, 0, 0, 1])])] + 1
+        frame2ttl = {'times': t, 'polarities': np.mod(np.arange(t.size) + 1, 2)}
+        expected = {'times': np.array([1., 1.1, 1.215, 1.315]),
+                    'polarities': np.array([1, 0, 0, 1])}
+        frame2ttl_ = ephys_fpga._clean_frame2ttl(frame2ttl, display=DISPLAY)
+        assert all([np.all(frame2ttl_[k] == expected[k]) for k in frame2ttl_])

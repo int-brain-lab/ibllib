@@ -30,7 +30,8 @@ SYNC_BATCH_SIZE_SECS = 100  # number of samples to read at once in bin file for 
 WHEEL_RADIUS_CM = 1  # stay in radians
 WHEEL_TICKS = 1024
 
-BPOD_FPGA_DRIFT_THRESHOLD_PPM = 150
+BPOD_FPGA_DRIFT_THRESHOLD_PPM = 150  # throws an error if bpod to fpga clock drift is higher
+F2TTL_THRESH = 0.01  # consecutive pulses with less than this threshold ignored
 
 CHMAPS = {'3A':
           {'ap':
@@ -303,6 +304,27 @@ def _get_sync_fronts(sync, channel_nb, tmin=None, tmax=None):
                   'polarities': sync['polarities'][selection]})
 
 
+def _clean_frame2ttl(frame2ttl, display=False):
+    """
+    Frame 2ttl calibration can be unstable and the fronts may be flickering at an unrealistic
+    pace. This removes the consecutive frame2ttl pulses happening too fast, below a threshold
+    of F2TTL_THRESH
+    """
+    dt = np.diff(frame2ttl['times'])
+    iko = np.where(dt < F2TTL_THRESH)[0]
+    frame2ttl_ = {'times': np.delete(frame2ttl['times'], iko),
+                  'polarities': np.delete(frame2ttl['polarities'], iko)}
+    if display:
+        from ibllib.plots import squares
+        plt.figure()
+        squares(frame2ttl['times'] * 1000, frame2ttl['polarities'])
+        squares(frame2ttl_['times'] * 1000, frame2ttl_['polarities'], linestyle='dashed')
+        # import seaborn as sns
+        # sns.displot(dt[dt < 0.05], binwidth=0.0005)
+
+    return frame2ttl_
+
+
 def extract_camera_sync(sync, chmap=None):
     """
     Extract camera timestamps from the sync matrix
@@ -355,22 +377,8 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tm
     if bpod.times.size == 0:
         raise err.SyncBpodFpgaException('No Bpod event found in FPGA. No behaviour extraction. '
                                         'Check channel maps.')
-    frame2ttl = _get_sync_fronts(sync, chmap['frame2ttl'], tmax=tmax)
-    F2TTL_THRESH = 0.01
-    dt = np.diff(frame2ttl['times'])
-    iko = np.where(dt < F2TTL_THRESH)[0]
-    todel = np.unique(np.r_[dt, dt + 1])
-    frame2ttl = {'times': np.delete(frame2ttl['times'], iko),
-                 'polarities': np.delete(frame2ttl['polarities'], iko)}
-    # from ibllib.plots import squares
-    import seaborn as sns
-    sns.displot(dt[dt < 0.05], binwidth=0.0005)
-    # f2ttl_t = np.delete(frame2ttl['times'], todel)
-    # f2ttl_p = np.delete(frame2ttl['polarities'], todel)
-    # squares(frame2ttl['times'] * 1000, frame2ttl['polarities'])
-    # squares(f2ttl_t * 1000, f2ttl_p)
-    # plt.plot(frame2ttl['times'][todel] * 1000, todel * 0 + 0.6, '*')
-
+    frame2ttl = _get_sync_fronts(sync, chmap['frame2ttl'], tmax)
+    frame2ttl = _clean_frame2ttl(frame2ttl)
     audio = _get_sync_fronts(sync, chmap['audio'], tmax=tmax)
     # extract events from the fronts for each trace
     t_trial_start, t_valve_open, t_iti_in = _assign_events_bpod(
