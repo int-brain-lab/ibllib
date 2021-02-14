@@ -47,7 +47,7 @@ class TestONEParams(unittest.TestCase):
         if self.bk_params.exists():
             shutil.copy(self.bk_params, self.existing_params)
             self.bk_params.unlink()
-        #Reassign original functions
+        # Reassign original functions
         params.getpass = getpass
         params.input = input
         params.print = print
