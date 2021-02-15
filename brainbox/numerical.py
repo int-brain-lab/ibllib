@@ -2,6 +2,27 @@ import numpy as np
 from numba import jit
 
 
+def between_sorted(sorted_v, bounds=None):
+    """
+    Given a vector of sorted values, returns a boolean vector indices True when the value
+    is between bounds. If multiple bounds are given, returns the equivalent OR of individual
+    bounds tuple
+    Especially useful for spike times
+    >>>indices = between_sorted(spike_times, [tstart, tstop])
+    :param sorted_v: vector containing sorted values (won't check)
+    :param bounds: minimum included value and maximum included value
+        can be a list[tstart, tstop] or an array of dimension (n, 2)
+    :return:
+    """
+    bounds = np.array(bounds)
+    starts, stops = (np.take(bounds, 0, axis=-1), np.take(bounds, 1, axis=-1))
+    sel = sorted_v * 0
+    sel[np.searchsorted(sorted_v, starts)] = 1
+    istops = np.searchsorted(sorted_v, stops, side='right')
+    sel[istops[istops < sorted_v.size]] = -1
+    return np.cumsum(sel).astype(np.bool)
+
+
 def ismember(a, b):
     """
     equivalent of np.isin but returns indices as in the matlab ismember function

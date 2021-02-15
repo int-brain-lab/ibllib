@@ -1,4 +1,8 @@
 include ibllib/atlas/allen_structure_tree.csv
-include ibllib/io/extractors/ephys_sessions/*.npy
 include ibllib/io/extractors/extractor_types.json
-include ibllib/tests/fixtures/ephysalignment/alignment_data.npz
+include brainbox/tests/wheel_test.p
+recursive-include brainbox/tests/fixtures *
+graft ibllib/tests/extractors/data
+graft ibllib/io/extractors/ephys_sessions
+graft ibllib/tests/fixtures
+recursive-include oneibl/tests/fixtures *
