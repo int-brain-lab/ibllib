@@ -311,8 +311,8 @@ def _clean_frame2ttl(frame2ttl, display=False):
     of F2TTL_THRESH
     """
     dt = np.diff(frame2ttl['times'])
-    iko = np.where(dt[:-1] < F2TTL_THRESH)[0]
-    # iko = np.unique(np.r_[iko, iko + 1])
+    iko = np.where(np.logical_and(dt < F2TTL_THRESH, frame2ttl['polarities'][:-1] == -1))[0]
+    iko = np.unique(np.r_[iko, iko + 1])
     frame2ttl_ = {'times': np.delete(frame2ttl['times'], iko),
                   'polarities': np.delete(frame2ttl['polarities'], iko)}
     if iko.size > (0.1 * frame2ttl['times'].size):
