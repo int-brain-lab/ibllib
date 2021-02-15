@@ -311,16 +311,20 @@ def _clean_frame2ttl(frame2ttl, display=False):
     of F2TTL_THRESH
     """
     dt = np.diff(frame2ttl['times'])
-    iko = np.where(dt < F2TTL_THRESH)[0]
+    iko = np.where(dt[:-1] < F2TTL_THRESH)[0]
+    # iko = np.unique(np.r_[iko, iko + 1])
     frame2ttl_ = {'times': np.delete(frame2ttl['times'], iko),
                   'polarities': np.delete(frame2ttl['polarities'], iko)}
+    if iko.size > (0.1 * frame2ttl['times'].size):
+        _logger.warning(f'{iko.size} ({iko.size / frame2ttl["times"].size * 100} %) '
+                        f'frame to TTL polarity switches below {F2TTL_THRESH} secs')
     if display:
         from ibllib.plots import squares
         plt.figure()
-        squares(frame2ttl['times'] * 1000, frame2ttl['polarities'])
-        squares(frame2ttl_['times'] * 1000, frame2ttl_['polarities'], linestyle='dashed')
-        # import seaborn as sns
-        # sns.displot(dt[dt < 0.05], binwidth=0.0005)
+        squares(frame2ttl['times'] * 1000, frame2ttl['polarities'], yrange=[0.1, 0.9])
+        squares(frame2ttl_['times'] * 1000, frame2ttl_['polarities'], yrange=[1.1, 1.9])
+        import seaborn as sns
+        sns.displot(dt[dt < 0.05], binwidth=0.0005)
 
     return frame2ttl_
 
@@ -377,12 +381,11 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tm
     if bpod.times.size == 0:
         raise err.SyncBpodFpgaException('No Bpod event found in FPGA. No behaviour extraction. '
                                         'Check channel maps.')
-    frame2ttl = _get_sync_fronts(sync, chmap['frame2ttl'], tmax)
+    frame2ttl = _get_sync_fronts(sync, chmap['frame2ttl'], tmax=tmax)
     frame2ttl = _clean_frame2ttl(frame2ttl)
     audio = _get_sync_fronts(sync, chmap['audio'], tmax=tmax)
     # extract events from the fronts for each trace
-    t_trial_start, t_valve_open, t_iti_in = _assign_events_bpod(
-        bpod['times'], bpod['polarities'])
+    t_trial_start, t_valve_open, t_iti_in = _assign_events_bpod(bpod['times'], bpod['polarities'])
     # one issue is that sometimes bpod pulses may not have been detected, in this case
     # perform the sync bpod/FPGA, and add the start that have not been detected
     if bpod_trials:
