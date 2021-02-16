@@ -293,18 +293,18 @@ class TestEphysFPGA_TTLsExtraction(unittest.TestCase):
         DISPLAY = False  # for debug purposes
         diff = ephys_fpga.F2TTL_THRESH * np.array([0.5, 10])
 
-        # flicker ends with a polarity switch
+        # flicker ends with a polarity switch - downgoing pulse is removed
         t = np.r_[0, np.cumsum(diff[np.array([1, 1, 0, 0, 1])])] + 1
-        frame2ttl = {'times': t, 'polarities': np.mod(np.arange(t.size) + 1, 2)}
-        expected = {'times': np.array([1., 1.1, 1.21, 1.31]),
-                    'polarities': np.array([1, 0, 1, 0])}
+        frame2ttl = {'times': t, 'polarities': np.mod(np.arange(t.size) + 1, 2) * 2 - 1}
+        expected = {'times': np.array([1., 1.1, 1.2, 1.31]),
+                    'polarities': np.array([1, -1, 1, -1])}
         frame2ttl_ = ephys_fpga._clean_frame2ttl(frame2ttl, display=DISPLAY)
         assert all([np.all(frame2ttl_[k] == expected[k]) for k in frame2ttl_])
 
         # stand-alone flicker
         t = np.r_[0, np.cumsum(diff[np.array([1, 1, 0, 0, 0, 1])])] + 1
-        frame2ttl = {'times': t, 'polarities': np.mod(np.arange(t.size) + 1, 2)}
-        expected = {'times': np.array([1., 1.1, 1.215, 1.315]),
-                    'polarities': np.array([1, 0, 0, 1])}
+        frame2ttl = {'times': t, 'polarities': np.mod(np.arange(t.size) + 1, 2) * 2 - 1}
+        expected = {'times': np.array([1., 1.1, 1.2, 1.215, 1.315]),
+                    'polarities': np.array([1, -1, 1, -1, 1])}
         frame2ttl_ = ephys_fpga._clean_frame2ttl(frame2ttl, display=DISPLAY)
         assert all([np.all(frame2ttl_[k] == expected[k]) for k in frame2ttl_])
