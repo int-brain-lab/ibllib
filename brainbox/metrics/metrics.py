@@ -855,7 +855,7 @@ def spike_sorting_metrics(times, clusters, amps, depths, cluster_ids=None, param
 
 
 def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
-                       params=METRICS_PARAMS, cluster_ids=None):
+                       params=METRICS_PARAMS, cluster_ids=None, tbounds=None):
     """
     Computes single unit metrics from only the spike times, amplitudes, and
     depths for a set of units.
@@ -888,6 +888,8 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
     clusters_id: (optional) lists of cluster ids. If not all clusters are represented in the
     spikes_clusters (ie. cluster has no spike), this will ensure the output size is consistent
     with the input arrays.
+    tbounds: (optional) list or 2 elements array containing a time-selection to perform the
+     metrics computation on.
     params : dict (optional)
         Parameters used for computing some of the metrics in the function:
             'presence_window': float
@@ -929,10 +931,6 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         >>> depths = m.depths
         >>> r = bb.metrics.quick_unit_metrics(cluster_ids, ts, amps, depths)
     """
-    if cluster_ids is None:
-        cluster_ids = np.unique(spike_clusters)
-    nclust = cluster_ids.size
-
     metrics_list = [
         'cluster_id',
         'amp_max',
@@ -949,6 +947,17 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         'slidingRP_viol',
         'spike_count'
     ]
+    from brainbox.numerical import between_sorted
+    if tbounds:
+        ispi = between_sorted(spike_times, tbounds)
+        spike_times = spike_times[ispi]
+        spike_clusters = spike_clusters[ispi]
+        spike_amps = spike_amps[ispi]
+        spike_depths = spike_depths[ispi]
+
+    if cluster_ids is None:
+        cluster_ids = np.unique(spike_clusters)
+    nclust = cluster_ids.size
 
     r = Bunch({k: np.full((nclust,), np.nan) for k in metrics_list})
     r['cluster_id'] = cluster_ids

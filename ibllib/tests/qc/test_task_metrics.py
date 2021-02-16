@@ -488,9 +488,9 @@ class TestHabituationQC(unittest.TestCase):
     NB: For complete coverage this should be run along slide the integration tests
     """
     def setUp(self):
+        eid = '8dd0fcb0-1151-4c97-ae35-2e2421695ad7'
         one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
                   username='test_user', password='TapetesBloc18')
-        eid = '8dd0fcb0-1151-4c97-ae35-2e2421695ad7'
         self.qc = qcmetrics.HabituationQC(eid, one=one)
         self.qc.extractor = Bunch({'data': self.load_fake_bpod_data()})  # Dummy extractor obj
 
