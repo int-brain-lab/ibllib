@@ -13,7 +13,6 @@ import alf.io
 import numpy as np
 import logging
 from inspect import getmembers, isfunction
-from scipy.stats import zscore
 
 _log = logging.getLogger('ibllib')
 
@@ -107,7 +106,8 @@ class DlcQC(base.QC):
             for coordinate in [0, 1]:
                 if all(np.isnan(XYs[point][coordinate])):
                     t += 1
-                    _log.error(f'{self.video_type} {point} all coord {coordinate} nan')
+                    _log.error(f'{self.video_type} {point} \
+                                 all coord {coordinate} nan')
 
         if t == 0:
             return 'PASS'
@@ -147,54 +147,75 @@ class DlcQC(base.QC):
         else:
             return 'PASS'
 
+    def get_diameter(self):
+        '''get mean of both pupil diameters
+        d1 = top - bottom, d2 = left - right
+        '''
+
+        XYs = self.data['XYs']
+        pt = XYs['pupil_top_r']
+        pb = XYs['pupil_bottom_r']
+        pl = XYs['pupil_left_r']
+        pr = XYs['pupil_right_r']
+
+        d1 = ((pt[0] - pb[0])**2 +
+              (pt[1] - pb[1])**2)**0.5
+        d2 = ((pl[0] - pr[0])**2 +
+              (pl[1] - pr[1])**2)**0.5
+
+        return np.nanmean([d1, d2], axis=0)
 
     def check_whisker_pupil_block(self):
         '''
-        count fraction of points that are 2 std 
-        away from mean; numbers sensible for 
-        pupil points only; 
+        Check if pupil diameter is nan for
+        more than 60 % of the frames;
+        (might be blocked by a whisker)
+        Check if standard deviation is above
+        a threshold, found for bad sessions
         '''
-        if self.video_type=='body':
-            return 'PASS'    
-        
-        XYs = self.data['XYs']
-        
-        for point in XYs:
-            if 'pupil' not in point:
-                continue
-            x = zscore(XYs[point][0],nan_policy = 'omit')   
-            y = zscore(XYs[point][1],nan_policy = 'omit')
-            ps = (x**2 + y**2)**0.5
-            outs = len(np.where(ps > 2)[0])
-            total = np.sum(~np.isnan(XYs[point][0]))
-                 
-            if outs/total > 0.3:
-                _log.error(f'{self.eid}, {self.video_type}, {point} \
-                              too often far from mean, {outs/total}')
-                return 'FAIL'   
-                
-        return 'PASS'                
 
-     
+        if self.video_type == 'body':
+            return 'PASS'
+
+        d = self.get_diameter()
+
+        if np.mean(np.isnan(d)) > 0.6:
+            _log.error(f'{self.eid}, {self.video_type}, \
+                          diameter too often nan, \
+                          {np.mean(np.isnan(d))}')
+            return 'FAIL'
+
+        if self.video_type == 'left':
+            THR = 10  # threshold for std of diameter
+
+        elif self.video_type == 'right':
+            THR = 5
+
+        if np.nanstd(d) > THR:
+            _log.error(f'{self.eid}, {self.video_type}, \
+                          diameter too jumpy')
+            return 'FAIL'
+
+        return 'PASS'
+
     def check_lick_detection(self):
         '''
-        check if both of the two tongue edge points are 
-        less than 10 % nan, indicating that 
+        check if both of the two tongue edge points are
+        less than 10 % nan, indicating that
         wrong points are detected (spout edge, mouth edge)
         '''
-        
-        if self.video_type=='body':
-            return 'PASS'      
-               
-        XYs = self.data['XYs']
-        points = ['tongue_end_r','tongue_end_l'] 
-        ms = []
-        for point in points:    
-            ms.append(np.mean(np.isnan(XYs[point][0])))    
-        if (ms[0] < 0.1) and (ms[1] < 0.1):    
-            return 'FAIL'            
-        return 'PASS'  
 
+        if self.video_type == 'body':
+            return 'PASS'
+
+        XYs = self.data['XYs']
+        points = ['tongue_end_r', 'tongue_end_l']
+        ms = []
+        for point in points:
+            ms.append(np.mean(np.isnan(XYs[point][0])))
+        if (ms[0] < 0.1) and (ms[1] < 0.1):
+            return 'FAIL'
+        return 'PASS'
 
     def _ensure_required_data(self):
         """
