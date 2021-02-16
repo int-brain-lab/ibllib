@@ -5,8 +5,29 @@ Example - Run camera QC, downloading all but video file
     qc = CameraQC(eid, download_data=True, stream=True)
     qc.run()
 
+TODO Remove notes
 Question:
     We're not extracting the audio based on TTL length.  Is this a problem?
+    For hist equalization:
+        cvAddWeighted( )" ?
+
+        What it does is:
+
+                     dst = src1*alpha + src2*beta + gamma
+
+        Applying brightness and contrast:
+
+                     dst = src*contrast + brightness;
+
+        so if
+
+                     src1  = input image
+                     src2  = any image of same type as src1
+                     alpha = contrast value
+                     beta  = 0.0
+                     gamma = brightness value
+                     dst   = resulting Image (must be of same type as src1)
+
 """
 import logging
 from inspect import getmembers, isfunction
@@ -42,7 +63,9 @@ class CameraQC(base.QC):
         '_iblrig_taskData.raw',
         '_iblrig_taskSettings.raw',
         '_iblrig_Camera.raw',
-        'camera.times'
+        'camera.times',
+        'wheel.position',
+        'wheel.timestamps',
     ]
     dstypes_fpga = [
         '_spikeglx_sync.channels',
@@ -95,7 +118,7 @@ class CameraQC(base.QC):
         download_data = not alfio.is_session_path(session_path_or_eid)
         self.download_data = kwargs.pop('download_data', download_data)
         self.stream = kwargs.pop('stream', True)
-        self.n_samples = kwargs.pop('n_samples', 20)
+        self.n_samples = kwargs.pop('n_samples', 100)
         super().__init__(session_path_or_eid, **kwargs)
 
         # Data
@@ -136,29 +159,34 @@ class CameraQC(base.QC):
 
         # Get audio and wheel data
         wheel_keys = ('timestamps', 'position')
-        if self.type == 'ephys':
-            sync, chmap = ephys_fpga.get_main_probe_sync(self.session_path)
-            wheel_data = ephys_fpga.extract_wheel_sync(sync, chmap)
-            audio_ttls = ephys_fpga._get_sync_fronts(sync, chmap['audio'])
-            self.data['audio'] = audio_ttls['times'][::2]  # Get rises
-            # Load raw FPGA times
-            cam_ts = extract_camera_sync(sync, chmap)
-            self.data['fpga_times'] = cam_ts[self.side]
-        else:
-            bpod_data = raw.load_data(self.session_path)
-            wheel_data = training_wheel.get_wheel_position(self.session_path)
-            _, audio_ttls = raw.load_bpod_fronts(self.session_path, bpod_data)
-            self.data['audio'] = audio_ttls['times'][::2]
-        self.data['wheel'] = Bunch(zip(wheel_keys, wheel_data))
+        try:
+            alf_path = self.session_path / 'alf'
+            self.data['wheel'] = alfio.load_object(alf_path, 'wheel')
+        except ALFObjectNotFound:
+            # Extract from raw data
+            if self.type == 'ephys':
+                sync, chmap = ephys_fpga.get_main_probe_sync(self.session_path)
+                wheel_data = ephys_fpga.extract_wheel_sync(sync, chmap)
+                audio_ttls = ephys_fpga._get_sync_fronts(sync, chmap['audio'])
+                self.data['audio'] = audio_ttls['times'][::2]  # Get rises
+                # Load raw FPGA times
+                cam_ts = extract_camera_sync(sync, chmap)
+                self.data['fpga_times'] = cam_ts[self.side]
+            else:
+                bpod_data = raw.load_data(self.session_path)
+                wheel_data = training_wheel.get_wheel_position(self.session_path)
+                _, audio_ttls = raw.load_bpod_fronts(self.session_path, bpod_data)
+                self.data['audio'] = audio_ttls['times'][::2]
+            self.data['wheel'] = Bunch(zip(wheel_keys, wheel_data))
 
         # Find short period of wheel motion for motion correlation.  For speed start with the
         # fist 2 minutes (nearly always enough), extract wheel movements and pick one.
         # TODO Pick movement towards the end of the session (but not right at the end as some
         #  are extrapolated).  Make sure the movement isn't too long.
-        if all(x is not None for x in wheel_data):
+        if not any(x is None for x in self.data['wheel']):
             START = 1 * 60  # Start 1 minute in
             SEARCH_PERIOD = 2 * 60
-            ts, pos = wheel_data
+            ts, pos = [self.data['wheel'][k] for k in wheel_keys]
             while True:
                 win = np.logical_and(
                     ts > START,
@@ -173,13 +201,13 @@ class CameraQC(base.QC):
             self.data['wheel'].period = wheel_moves['intervals'][move_ind, :]
 
         # Load extracted frame times
-        alf_path = self.session_path / 'alf'
         try:
             assert not extract_times
             self.data['fpga_times'] = alfio.load_object(alf_path, f'{self.side}Camera')['times']
         except AssertionError:  # Re-extract
             kwargs = dict(video_path=self.video_path, labels=self.side)
             if self.type == 'ephys':
+                sync, chmap = ephys_fpga.get_main_probe_sync(self.session_path)
                 kwargs = {**kwargs, 'sync': sync, 'chmap': chmap}  # noqa
             outputs, _ = extract_all(self.session_path, self.type, save=False, **kwargs)
             self.data['fpga_times'] = outputs[f'{self.side}_camera_timestamps']
@@ -191,8 +219,11 @@ class CameraQC(base.QC):
         self.load_video_data()
 
         # Load Bonsai frame timestamps
-        ssv_times = raw.load_camera_ssv_times(self.session_path, self.side)
-        self.data['bonsai_times'], self.data['camera_times'] = ssv_times
+        try:
+            ssv_times = raw.load_camera_ssv_times(self.session_path, self.side)
+            self.data['bonsai_times'], self.data['camera_times'] = ssv_times
+        except AssertionError:
+            _log.warning('No Bonsai video timestamps file found')
 
     def load_video_data(self):
         # Get basic properties of video
@@ -229,7 +260,8 @@ class CameraQC(base.QC):
                 names = [x.name for x in self.one.list(self.eid)]
                 assert f'_iblrig_{self.side}Camera.raw.mp4' in names, 'No remote video file found'
                 continue
-            required = (dstype not in ('camera.times', '_iblrig_Camera.raw'))
+            optional = ('camera.times', '_iblrig_Camera.raw', 'wheel.position', 'wheel.timestamps')
+            required = (dstype not in optional)
             collection = 'raw_behavior_data' if dstype == '_iblrig_taskSettings.raw' else None
             kwargs = {'download_only': True, 'collection': collection}
             present = (
@@ -254,6 +286,8 @@ class CameraQC(base.QC):
         namespace = f'video{self.side.capitalize()}'
         if all(x is None for x in self.data.values()):
             self.load_data(**kwargs)
+        if self.data['frame_samples'] is None:
+            return 'NOT_SET', {}
 
         def is_metric(x):
             return isfunction(x) and x.__name__.startswith('check_')

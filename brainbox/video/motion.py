@@ -186,7 +186,7 @@ class MotionAlignment:
 
         if display:
             # Plot the motion energy
-            fig, ax = plt.subplots(2, 1, sharex='true')
+            fig, ax = plt.subplots(2, 1, sharex='all')
             y = np.pad(self.alignment.df, 1, 'edge')
             ax[0].plot(x, y, '-x', label='wheel motion energy')
             thresh = stDev > sd_thresh

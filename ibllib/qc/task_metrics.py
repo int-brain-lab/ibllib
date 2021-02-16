@@ -208,7 +208,7 @@ class HabituationQC(TaskQC):
                                           date_range=[date_minus_week, session_date],
                                           task_protocol='habituation')
             # Remove the current session if already registered
-            if sessions[0]['start_time'].startswith(session_date):
+            if sessions and sessions[0]['start_time'].startswith(session_date):
                 sessions = sessions[1:]
             metric = ([0, data['intervals'][-1, 1] - data['intervals'][0, 0]] +
                       [(datetime.fromisoformat(x['end_time']) -

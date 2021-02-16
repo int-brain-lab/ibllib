@@ -2,7 +2,6 @@
 This module handles extraction of camera timestamps for both Bpod and FPGA.
 """
 import logging
-from pathlib import Path
 from functools import partial
 
 import cv2
@@ -108,7 +107,7 @@ class CameraTimestampsFPGA(BaseExtractor):
             """
             if video_path is None:
                 filename = f'_iblrig_{self.label}Camera.raw.mp4'
-                video_path = self.session_path / 'raw_video_data' / filename
+                video_path = self.session_path.joinpath('raw_video_data', filename)
             length = get_video_length(video_path)
             if count.size > length:
                 count = count[:length]
@@ -137,9 +136,9 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
 
     def _extract(self, video_path=None):
         ts = self._times_from_bpod()  # FIXME Extrapolate after alignment
-        count, pin_state = raw.load_embedded_frame_data(self.session_path, 'left', raw=False)
+        count, gpio = raw.load_embedded_frame_data(self.session_path, 'left', raw=False)
 
-        if pin_state is not None and any(pin_state):
+        if gpio is not None and any(gpio):
             _logger.info('Aligning to audio TTLs')
             # Extract audio TTLs
             _, audio = raw.load_bpod_fronts(self.session_path, self.bpod_trials)
@@ -147,7 +146,7 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
             assert (np.all(np.abs(np.diff(audio['polarities'])) == 2))
             # make sure first TTL is high
             assert audio['polarities'][0] == 1
-            return align_with_audio(ts, audio['times'][::2], pin_state, count)
+            return align_with_audio(ts, audio, gpio, count)
         else:
             _logger.warning('Alignment by wheel data not yet implemented')
 

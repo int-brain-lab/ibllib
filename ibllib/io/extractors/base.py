@@ -28,7 +28,7 @@ class BaseExtractor(abc.ABC):
     -   set save_names to None for a dataset that doesn't need saving (could be set dynamically
     in the _extract method)
     :param session_path: Absolute path of session folder
-    :type session_path: str
+    :type session_path: str/Path
     """
 
     session_path = None
