@@ -288,7 +288,8 @@ class TestMisc(unittest.TestCase):
         self.assertIn(expected, url)
         # Test errors raised
         with self.assertRaises(ALFObjectNotFound):
-            one.url_from_path(session_path.joinpath('raw_video_data', '_iblrig_leftCamera.raw.mp4'))
+            one.url_from_path(
+                session_path.joinpath('raw_video_data', '_iblrig_leftCamera.raw.mp4'))
 
     def test_datasets_from_type(self):
         eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
