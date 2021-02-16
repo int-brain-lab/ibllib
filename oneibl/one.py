@@ -899,7 +899,7 @@ class OneAlyx(OneAbstract):
         # Return the uuid if any
         return uuid[0] if uuid else None
 
-    def path_to_url(self, filepath):
+    def url_from_path(self, filepath):
         """
         Given a local file path, returns the URL of the remote file.
         :param filepath: A local file path
