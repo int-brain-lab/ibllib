@@ -374,7 +374,7 @@ class CameraQC(base.QC):
         TODO Return WARNING if more GPIOs elements than timestamps, FAIL if fewer GPIO elements
          than frame times, or check audio events don't happen at end
         """
-        if self.data['pin_state'] is None:
+        if not data_for_keys(('video', 'pin_state', 'audio'), self.data):
             return 'NOT_SET'
         size_matches = self.data['video']['length'] == self.data['pin_state'].size
         # There should be only one value below our threshold
@@ -406,7 +406,7 @@ class CameraQC(base.QC):
 
         :param threshold: The maximum allowable percentage of dropped frames
         """
-        if self.data['video'] is None or self.data['count'] is None:
+        if not data_for_keys(('video', 'count'), self.data):
             return 'NOT_SET'
         size_matches = self.data['video']['length'] == self.data['count'].size
         strict_increase = np.diff(self.data['count']) > 0
@@ -421,7 +421,7 @@ class CameraQC(base.QC):
 
     def check_timestamps(self):
         """Check that the camera.times array is reasonable"""
-        if self.data['fpga_times'] is None or self.data['video'] is None:
+        if not data_for_keys(('fpga_times', 'video'), self.data):
             return 'NOT_SET'
         # Check frame rate matches what we expect
         expected = 1 / self.video_meta[self.type][self.side]['fps']
@@ -723,7 +723,6 @@ class CameraQC(base.QC):
             # bottom_right = (top_left[0] + w, top_left[1] + h)
         return top_left, roi, template
 
-
     @staticmethod
     def load_reference_frames(side):
         """
@@ -750,12 +749,18 @@ class CameraQC(base.QC):
         return ax
 
 
+def data_for_keys(keys, data):
+    return all(k in data and data.get(k, None) is not None for k in keys)
+
+
 def run_all_qc(session, update=False, cameras=('left', 'right', 'body'), stream=True, **kwargs):
     """Run QC for all cameras
     Run the camera QC for left, right and body cameras.
     :param session: A session path or eid.
     :param update: If True, QC fields are updated on Alyx.
     :param cameras: A list of camera names to perform QC on.
+    :param stream: If true and local video files not available, the data are streamed from
+    the remote source.
     :return: dict of CameraCQ objects
     """
     qc = {}
