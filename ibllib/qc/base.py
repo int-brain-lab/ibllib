@@ -75,6 +75,11 @@ class QC:
         code = max(CRITERIA.get(x, 0) if isinstance(x, str) else x for x in outcomes)
         return next(k for k, v in CRITERIA.items() if v == code)
 
+    @staticmethod
+    def code_to_outcome(code):
+        # TODO Document and add test
+        return next(k for k, v in CRITERIA.items() if v == code)
+
     def _set_eid_or_path(self, session_path_or_eid):
         """Parse a given eID or session path
         If a session UUID is given, resolves and stores the local path and vice versa

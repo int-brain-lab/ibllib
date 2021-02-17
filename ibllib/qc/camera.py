@@ -159,8 +159,8 @@ class CameraQC(base.QC):
 
         # Get audio and wheel data
         wheel_keys = ('timestamps', 'position')
+        alf_path = self.session_path / 'alf'
         try:
-            alf_path = self.session_path / 'alf'
             self.data['wheel'] = alfio.load_object(alf_path, 'wheel')
         except ALFObjectNotFound:
             # Extract from raw data
@@ -260,7 +260,8 @@ class CameraQC(base.QC):
                 names = [x.name for x in self.one.list(self.eid)]
                 assert f'_iblrig_{self.side}Camera.raw.mp4' in names, 'No remote video file found'
                 continue
-            optional = ('camera.times', '_iblrig_Camera.raw', 'wheel.position', 'wheel.timestamps')
+            optional = ('camera.times', '_iblrig_Camera.raw', 'wheel.position',
+                        'wheel.timestamps', '_iblrig_Camera.frame_counter', '_iblrig_Camera.GPIO')
             required = (dstype not in optional)
             collection = 'raw_behavior_data' if dstype == '_iblrig_taskSettings.raw' else None
             kwargs = {'download_only': True, 'collection': collection}
@@ -459,48 +460,56 @@ class CameraQC(base.QC):
             aln.plot_alignment()
         return 'PASS' if np.abs(offset) <= tolerance else 'FAIL'
 
-    def check_position(self, hist_thresh=0.8, pos_thresh=100, metric=cv2.TM_CCOEFF_NORMED,
-                       display=False, test=False, roi=None):
+    def check_position(self, hist_thresh=(75, 80), pos_thresh=(10, 15),
+                       metric=cv2.TM_CCOEFF_NORMED,
+                       display=False, test=False, roi=None, pct_thresh=True):
         """Check camera is positioned correctly
         For the template matching zero-normalized cross-correlation (default) should be more
         robust to exposure (which we're not checking here).  The L2 norm (TM_SQDIFF) should
         also work.
 
+        If display is True, the template ROI (pick hashed) is plotted over a video frame,
+        along with the threshold regions (green solid).  The histogram correlations are plotted
+        and the full histogram is plotted for one of the sample frames and the reference frame.
+
         :param hist_thresh: The minimum histogram cross-correlation threshold to pass (0-1).
-        :param pos_thresh: The maximum number of pixels off that the template matcher may be off by
+        :param pos_thresh: The maximum number of pixels off that the template matcher may be off
+         by. If two values are provided, the lower threshold is treated as a warning boundary.
         :param metric: The metric to use for template matching.
+        :param display: If true, the results are plotted
+        :param test: If true a reference frame instead of the frames in frame_samples.
         :param roi: A tuple of indices for the face template in the for ((y1, y2), (x1, x2))
+        :param pct_thresh: If true, the thresholds are treated as percentages
         """
         if not test and self.data['frame_samples'] is None:
             return 'NOT_SET'
-
-        ROI = {
-            'left': ((45, 346), (138, 501)),
-            'right': ((14, 174), (430, 618)),
-            'body': ((141, 272), (90, 339))
-        }
-        roi = roi or ROI[self.side]
-        (y1, y2), (x1, x2) = roi
         refs = self.load_reference_frames(self.side)
+        # ensure iterable
+        pos_thresh = np.sort(np.array(pos_thresh))
+        hist_thresh = np.sort(np.array(hist_thresh))
 
         # Method 1: compareHist
         ref_h = cv2.calcHist([refs[0]], [0], None, [256], [0, 256])
         frames = refs if test else self.data['frame_samples']
         hists = [cv2.calcHist([x], [0], None, [256], [0, 256]) for x in frames]
-        corr = [cv2.compareHist(test_h, ref_h, cv2.HISTCMP_CORREL) for test_h in hists]
-        hist_correlates = all(x > hist_thresh for x in corr)
+        corr = np.array([cv2.compareHist(test_h, ref_h, cv2.HISTCMP_CORREL) for test_h in hists])
+        if pct_thresh:
+            corr *= 100
+        hist_passed = [np.all(corr > x) for x in hist_thresh]
 
         # Method 2:
         # TODO Ensure template fully in frame
-        template = refs[0][tuple(slice(*r) for r in roi)]
-        top_left = []
-        for frame in frames:
-            res = cv2.matchTemplate(frame, template, metric)
-            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
-            # If the method is TM_SQDIFF or TM_SQDIFF_NORMED, take minimum
-            top_left.append(min_loc if metric < 2 else max_loc)
-            # bottom_right = (top_left[0] + w, top_left[1] + h)
+        top_left, roi, template = self.find_face(roi=roi, test=test, metric=metric, refs=refs)
+        (y1, y2), (x1, x2) = roi
         err = (x1, y1) - np.median(np.array(top_left), axis=0)
+        h, w = frames[0].shape[:2]
+
+        if pct_thresh:  # Threshold as percent
+            # t_x, t_y = pct_thresh
+            err_pct = [(abs(x) / y) * 100 for x, y in zip(err, (h, w))]
+            face_passed = [all(err_pct < x) for x in pos_thresh]
+        else:
+            face_passed = [np.all(np.abs(err) < x) for x in pos_thresh]
 
         if display:
             plt.figure()
@@ -510,9 +519,18 @@ class CameraQC(base.QC):
             ax0.imshow(img, cmap='gray', vmin=0, vmax=255)
             bounds = (x1 - err[0], x2 - err[0], y2 - err[1], y1 - err[1])
             ax0.imshow(template, cmap='gray', alpha=0.5, extent=bounds)
-            xy = (x1 - pos_thresh, y1 - pos_thresh)
-            ax0.add_patch(Rectangle(xy, x2 - x1 + (pos_thresh * 2), y2 - y1 +(pos_thresh * 2),
-                                    fill=True, facecolor='green', lw=0, alpha=0.2))
+            if pct_thresh:
+                for c, thresh in zip(('green', 'yellow'), pos_thresh):
+                    t_y = (h / 100) * thresh
+                    t_x = (w / 100) * thresh
+                    xy = (x1 - t_x, y1 - t_y)
+                    ax0.add_patch(Rectangle(xy, x2 - x1 + (t_x * 2), y2 - y1 +(t_y * 2),
+                                            fill=True, facecolor=c, lw=0, alpha=0.05))
+            else:
+                for c, thresh in zip(('green', 'yellow'), pos_thresh):
+                    xy = (x1 - thresh, y1 - thresh)
+                    ax0.add_patch(Rectangle(xy, x2 - x1 + (thresh * 2), y2 - y1 + (thresh * 2),
+                                            fill=True, facecolor=c, lw=0, alpha=0.05))
             xy = (x1 - err[0], y1 - err[1])
             ax0.add_patch(Rectangle(xy, x2-x1, y2-y1,
                                     edgecolor='pink', fill=False, hatch='//', lw=1))
@@ -527,18 +545,23 @@ class CameraQC(base.QC):
             # Plot the correlations for each sample frame
             ax2 = plt.subplot(222)
             ax2.plot(corr, label='hist correlation')
-            ax2.axhline(hist_thresh, 0, self.n_samples,
-                        linestyle=':', color='r', label='pass threshold')
+            ax2.axhline(hist_thresh[0], 0, self.n_samples,
+                        linestyle=':', color='r', label='fail threshold')
+            ax2.axhline(hist_thresh[1], 0, self.n_samples,
+                        linestyle=':', color='g', label='pass threshold')
             ax2.set(xlabel='Sample Frame #', ylabel='Hist correlation')
             plt.legend()
             plt.suptitle('Check position')
             plt.show()
-        face_aligned = all(np.abs(err) < pos_thresh)
 
-        return 'PASS' if face_aligned and hist_correlates else 'FAIL'
+        pass_map = {i: s for i, s in enumerate(('FAIL', 'WARNING', 'PASS'))}
+        face_aligned = pass_map[sum(face_passed)]
+        hist_correlates = pass_map[sum(hist_passed)]
+
+        return self.overall_outcome([face_aligned, hist_correlates])
 
     def check_focus(self, n=20, threshold=(100, 6),
-                    roi=None, display=False, test=False, equalize=True):
+                    roi=False, display=False, test=False, equalize=True):
         """Check video is in focus
         Two methods are used here: Looking at the high frequencies with a DFT and
         applying a Laplacian HPF and looking at the variance.
@@ -550,18 +573,36 @@ class CameraQC(base.QC):
               comprises mostly very high frequencies).
             - The image may be overall in focus but the places we care about can still be out of
               focus (namely the face).  For this we'll take an ROI around the face.
-        TODO Focus check thrown off by brightness and incorrect positioning.  This could be
-         fixed by setting the ROI based on template matching, and equalizing the histogram
+            - Focus check thrown off by brightness.  This may be fixed by equalizing the histogram
+              (set equalize=True)
+
+        :param n: number of frames from frame_samples data to use in check.
+        :param threshold: the lower boundary for Laplacian variance and mean FFT filtered
+         brightness, respectively
+        :param roi: if False, the roi is determined via template matching for the face or body.
+        If None, some set ROIs for face and paws are used.  A list of slices may also be passed.
+        :param display: if true, the results are displayed
+        :param test: if true, a set of artificially blurred reference frames are used as the
+        input.  This can be used to selecting reasonable thresholds.
+        :param equalize: if true, the histograms of the frames are equalized, resulting in an
+        increased the global contrast and linear CDF.  This makes check robust to low light
+        conditions.
         """
         if not test and self.data['frame_samples'] is None:
             return 'NOT_SET'
 
-        ROI = {
-            'left': (np.s_[:400, :561],),  # np.s_[500:, 100:800]),  # (face, wheel)
-            'right': (np.s_[:196, 397:],),  # np.s_[221:, 255:]),
-            'body': (np.s_[143:274, 84:433],)  # body holder
-        }
-        roi = roi or ROI[self.side]
+        if roi == False:
+            top_left, roi, _ = self.find_face()
+            h, w = map(lambda x: np.diff(x).item(), roi)
+            y, x = np.median(np.array(top_left), axis=0).round().astype(int)
+            roi = (np.s_[y: y + h, x: x + w],)
+        else:
+            ROI = {
+                'left': (np.s_[:400, :561], np.s_[500:, 100:800]),  # (face, wheel)
+                'right': (np.s_[:196, 397:], np.s_[221:, 255:]),
+                'body': (np.s_[143:274, 84:433],)  # body holder
+            }
+            roi = roi or ROI[self.side]
 
         if test:
             """In test mode load a reference frame and run it through a normalized box filter with
@@ -592,8 +633,6 @@ class CameraQC(base.QC):
 
         lpc_var = np.empty((min(n, len(img)), len(roi)))
         for i, frame in enumerate(img[::-1]):
-            # if equalize:
-            #     frame = cv2.equalizeHist(frame)
             lpc = cv2.Laplacian(frame, cv2.CV_16S, ksize=1)
             lpc_var[i] = [lpc[mask].var() for mask in roi]
 
@@ -602,7 +641,7 @@ class CameraQC(base.QC):
             f = plt.figure()
             gs = f.add_gridspec(len(roi) + 1, 3)
             f.add_subplot(gs[0:len(roi), 0])
-            frame = img[0] #cv2.equalizeHist(img[0]) if equalize else img[0]
+            frame = img[0]
             self.imshow(frame, title=f'Frame #{self.frame_samples_idx[idx[0]]}')
             # Plot the ROIs with and without filter
             lpc = cv2.Laplacian(frame, cv2.CV_16S, ksize=1)
@@ -630,8 +669,6 @@ class CameraQC(base.QC):
         mask[cY - sz:cY + sz, cX - sz:cX + sz] = False
         filt_mean = np.empty(len(img))
         for i, frame in enumerate(img[::-1]):
-            # if equalize:
-            #     frame = cv2.equalizeHist(frame)
             dft = cv2.dft(np.float32(frame), flags=cv2.DFT_COMPLEX_OUTPUT)
             f_shift = np.fft.fftshift(dft) * mask  # Shift & remove low frequencies
             f_ishift = np.fft.ifftshift(f_shift)  # Shift back
@@ -658,6 +695,35 @@ class CameraQC(base.QC):
                 plt.show()
         passes = np.all(lpc_var > threshold[0]) and np.all(filt_mean > threshold[1])
         return 'PASS' if passes else 'FAIL'
+
+    def find_face(self, roi=None, test=False, metric=cv2.TM_CCOEFF_NORMED, refs=None):
+        """Use template matching to find face location in frame
+        For the template matching zero-normalized cross-correlation (default) should be more
+        robust to exposure (which we're not checking here).  The L2 norm (TM_SQDIFF) should
+        also work.  That said, normalizing the histograms works best.
+
+        :param roi: A tuple of indices for the face template in the for ((y1, y2), (x1, x2))
+        :returns: (y1, y2), (x1, x2)
+        """
+        ROI = {
+            'left': ((45, 346), (138, 501)),
+            'right': ((14, 174), (430, 618)),
+            'body': ((141, 272), (90, 339))
+        }
+        roi = roi or ROI[self.side]
+        refs = self.load_reference_frames(self.side) if refs is None else refs
+
+        frames = refs if test else self.data['frame_samples']
+        template = refs[0][tuple(slice(*r) for r in roi)]
+        top_left = []  # [(x1, y1), ...]
+        for frame in frames:
+            res = cv2.matchTemplate(frame, template, metric)
+            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+            # If the method is TM_SQDIFF or TM_SQDIFF_NORMED, take minimum
+            top_left.append(min_loc if metric < 2 else max_loc)
+            # bottom_right = (top_left[0] + w, top_left[1] + h)
+        return top_left, roi, template
+
 
     @staticmethod
     def load_reference_frames(side):

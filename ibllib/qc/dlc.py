@@ -261,14 +261,13 @@ class DlcQC(base.QC):
 
         checks = getmembers(DlcQC, is_metric)
         self.metrics = {f'_{namespace}_' + k[6:]: fn(self) for k, fn in checks}
-        all_pass = all(x is None or x == 'PASS' for x in self.metrics.values())
-        self.outcome = 'PASS' if all_pass else 'FAIL'
+        outcome = self.overall_outcome(self.metrics.values())
+
         if update:
-            bool_map = {k: None if v is None else v == 'PASS'
-                        for k, v in self.metrics.items()}
+            bool_map = {k: None if v is None else v == 'PASS' for k, v in self.metrics.items()}
             self.update_extended_qc(bool_map)
-            self.update(self.outcome, namespace)
-        return self.outcome, self.metrics
+            self.update(outcome, namespace)
+        return outcome, self.metrics
 
 
 def run_all_qc(session, update=False,
