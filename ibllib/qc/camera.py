@@ -498,7 +498,6 @@ class CameraQC(base.QC):
         hist_passed = [np.all(corr > x) for x in hist_thresh]
 
         # Method 2:
-        # TODO Ensure template fully in frame
         top_left, roi, template = self.find_face(roi=roi, test=test, metric=metric, refs=refs)
         (y1, y2), (x1, x2) = roi
         err = (x1, y1) - np.median(np.array(top_left), axis=0)

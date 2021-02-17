@@ -280,8 +280,8 @@ def run_all_qc(session, update=False,
     :return: dict of CameraCQ objects
     """
     qc = {}
+    one = kwargs.pop('one', None)
     for camera in cameras:
-        qc[camera] = DlcQC(session, video_type=camera,
-                           one=kwargs.pop('one', None))
+        qc[camera] = DlcQC(session, video_type=camera, one=one)
         qc[camera].run(update=update, **kwargs)
     return qc
