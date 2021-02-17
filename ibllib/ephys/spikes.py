@@ -48,6 +48,8 @@ def probes_description(ses_path, one=None, bin_exists=True):
                           'serial': md.serial, 'name': label}
         pi = one.alyx.rest('insertions', 'list', session=eid, name=label)
         if len(pi) == 0:
+            qc_dict = {'qc': 'NOT_SET', 'extended_qc': {}}
+            alyx_insertion.update({'json': qc_dict})
             alyx_insertions.append(one.alyx.rest('insertions', 'create', data=alyx_insertion))
         else:
             alyx_insertions.append(
