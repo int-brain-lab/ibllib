@@ -179,7 +179,7 @@ class DlcQC(base.QC):
 
         d = self.get_diameter()
 
-        if np.mean(np.isnan(d)) > 0.6:
+        if np.mean(np.isnan(d)) > 0.9:
             _log.error(f'{self.eid}, {self.video_type}, \
                           diameter too often nan, \
                           {np.mean(np.isnan(d))}')
