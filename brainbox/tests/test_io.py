@@ -6,7 +6,7 @@ import uuid
 import numpy as np
 
 from brainbox.numerical import ismember, ismember2d, intersect2d
-from brainbox.io.parquet import uuid2np, np2uuid, rec2col, np2str
+from brainbox.io.parquet import uuid2np, np2uuid, rec2col, np2str, str2np
 
 
 class TestParquet(unittest.TestCase):
@@ -19,6 +19,10 @@ class TestParquet(unittest.TestCase):
         self.assertTrue(all(map(lambda x: x == str_uuid, np2str(two_np_uuid))))
         # single uuid gives a string
         self.assertTrue(np2str(one_np_uuid) == str_uuid)
+        # list uuids with some None entries
+        uuid_list = ['bc74f49f33ec0f7545ebc03f0490bdf6', 'c5779e6d02ae6d1d6772df40a1a94243',
+                     None, '643371c81724378d34e04a60ef8769f4']
+        assert np.all(str2np(uuid_list)[2, :] == 0)
 
     def test_rec2col(self):
         json_fixture = Path(__file__).parent.joinpath('fixtures', 'parquet_records.json')
