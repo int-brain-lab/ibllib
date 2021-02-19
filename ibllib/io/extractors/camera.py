@@ -71,7 +71,7 @@ class CameraTimestampsFPGA(BaseExtractor):
     def __del__(self):
         _logger.setLevel(logging.INFO)
 
-    def _extract(self, sync=None, chmap=None, video_path=None):
+    def _extract(self, sync=None, chmap=None, video_path=None, display=False):
         """
         The raw timestamps are taken from the FPGA.  These are the times of the camera's frame
         TTLs.
@@ -97,7 +97,7 @@ class CameraTimestampsFPGA(BaseExtractor):
             reflected in the pin state.  This function removes those.  Also converts frame times to
             FPGA time.
             """
-            gpio, audio, ts = groom_pin_state(gpio, audio, ts)
+            gpio, audio, ts = groom_pin_state(gpio, audio, ts, display=display)
             """
             The length of the count and pin state are regularly longer than the length of 
             the video file.  Here we assert that the video is either shorter or the same 
@@ -116,7 +116,7 @@ class CameraTimestampsFPGA(BaseExtractor):
                 assert length == count.size, 'fewer counts than frames'
                 # _logger.warning('fewer frame counts than frames!')
             raw_ts = fpga_times[self.label]
-            timestamps = align_with_audio(raw_ts, audio, gpio, count)
+            timestamps = align_with_audio(raw_ts, audio, gpio, count, display=display)
         else:
             _logger.warning('Alignment by wheel data not yet implemented')
             timestamps = fpga_times[self.label]
