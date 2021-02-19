@@ -147,8 +147,12 @@ class MotionAlignment:
         # Motion Energy
         camera_path = self.video_paths[side]
         roi = (*[slice(*r) for r in self.roi[side]], 0)
-        self.alignment.frames = \
-            vidio.get_video_frames_preload(camera_path, frame_numbers, mask=roi)
+        try:
+            self.alignment.frames = \
+                vidio.get_video_frames_preload(camera_path, frame_numbers, mask=roi)
+        except AssertionError:
+            self.log.error('Failed to open video')
+            return None, None, None
         self.alignment.df, stDev = video.motion_energy(self.alignment.frames, 2)
         self.alignment.period = period  # For plotting
 

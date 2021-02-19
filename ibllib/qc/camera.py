@@ -118,7 +118,7 @@ class CameraQC(base.QC):
         download_data = not alfio.is_session_path(session_path_or_eid)
         self.download_data = kwargs.pop('download_data', download_data)
         self.stream = kwargs.pop('stream', True)
-        self.n_samples = kwargs.pop('n_samples', 100)
+        self.n_samples = kwargs.pop('n_samples', 10)
         super().__init__(session_path_or_eid, **kwargs)
 
         # Data
@@ -157,9 +157,23 @@ class CameraQC(base.QC):
         self.data['count'], self.data['pin_state'] = \
             raw.load_embedded_frame_data(self.session_path, self.side, raw=True)
 
+        # Load extracted frame times
+        alf_path = self.session_path / 'alf'
+        try:
+            assert not extract_times
+            self.data['fpga_times'] = alfio.load_object(alf_path, f'{self.side}Camera')['times']
+        except AssertionError:  # Re-extract
+            kwargs = dict(video_path=self.video_path, labels=self.side)
+            if self.type == 'ephys':
+                sync, chmap = ephys_fpga.get_main_probe_sync(self.session_path)
+                kwargs = {**kwargs, 'sync': sync, 'chmap': chmap}  # noqa
+            outputs, _ = extract_all(self.session_path, self.type, save=False, **kwargs)
+            self.data['fpga_times'] = outputs[f'{self.side}_camera_timestamps']
+        except ALFObjectNotFound:
+            _log.warning('no camera.times ALF found for session')
+
         # Get audio and wheel data
         wheel_keys = ('timestamps', 'position')
-        alf_path = self.session_path / 'alf'
         try:
             self.data['wheel'] = alfio.load_object(alf_path, 'wheel')
         except ALFObjectNotFound:
@@ -183,14 +197,17 @@ class CameraQC(base.QC):
         # fist 2 minutes (nearly always enough), extract wheel movements and pick one.
         # TODO Pick movement towards the end of the session (but not right at the end as some
         #  are extrapolated).  Make sure the movement isn't too long.
-        if not any(x is None for x in self.data['wheel']):
-            START = 1 * 60  # Start 1 minute in
+        if data_for_keys(wheel_keys, self.data['wheel']) and self.data['fpga_times'] is not None:
+            START = 5 * 60  # Default: start 5 minutes in
+            # Sometimes the camera starts later...
+            min_start = np.ceil(max(self.data['fpga_times'][0], self.data['wheel'].timestamps[0]))
+            start = max(START, min_start)  # Start later if camera still not on
             SEARCH_PERIOD = 2 * 60
             ts, pos = [self.data['wheel'][k] for k in wheel_keys]
             while True:
                 win = np.logical_and(
-                    ts > START,
-                    ts < SEARCH_PERIOD + START
+                    ts > start,
+                    ts < SEARCH_PERIOD + start
                 )
                 if np.sum(win) > 1000:
                     break
@@ -199,20 +216,6 @@ class CameraQC(base.QC):
             move_ind = np.argmax(np.abs(wheel_moves['peakAmplitude']))
             # TODO Save only the wheel fragment we need
             self.data['wheel'].period = wheel_moves['intervals'][move_ind, :]
-
-        # Load extracted frame times
-        try:
-            assert not extract_times
-            self.data['fpga_times'] = alfio.load_object(alf_path, f'{self.side}Camera')['times']
-        except AssertionError:  # Re-extract
-            kwargs = dict(video_path=self.video_path, labels=self.side)
-            if self.type == 'ephys':
-                sync, chmap = ephys_fpga.get_main_probe_sync(self.session_path)
-                kwargs = {**kwargs, 'sync': sync, 'chmap': chmap}  # noqa
-            outputs, _ = extract_all(self.session_path, self.type, save=False, **kwargs)
-            self.data['fpga_times'] = outputs[f'{self.side}_camera_timestamps']
-        except ALFObjectNotFound:
-            _log.warning('no camera.times ALF found for session')
 
         # Gather information from video file
         _log.info('Inspecting video file...')
@@ -296,14 +299,18 @@ class CameraQC(base.QC):
         checks = getmembers(CameraQC, is_metric)
         self.metrics = {f'_{namespace}_' + k[6:]: fn(self) for k, fn in checks}
 
-        # all_pass = all(x is None or x == 'PASS' for x in self.metrics.values())
-        # outcome = 'PASS' if all_pass else 'FAIL'
-        code = max(base.CRITERIA[x] for x in self.metrics.values())
+        values = [x if isinstance(x, str) else x[0] for x in self.metrics.values()]
+        code = max(base.CRITERIA[x] for x in values)
         outcome = next(k for k, v in base.CRITERIA.items() if v == code)
 
         if update:
-            bool_map = {k: None if v is None else v == 'PASS' for k, v in self.metrics.items()}
-            self.update_extended_qc(bool_map)
+            extended = {
+                k: None if v is None or v == 'NOT_SET'
+                else base.CRITERIA[v] < 3 if isinstance(v, str)
+                else v[1:] if len(v) > 2 else v[-1]  # Otherwise store custom value(s)
+                for k, v in self.metrics.items()
+            }
+            self.update_extended_qc(extended)
             self.update(outcome, namespace)
         return outcome, self.metrics
 
@@ -445,8 +452,16 @@ class CameraQC(base.QC):
         match = actual['width'] == expected['width'] and actual['height'] == expected['height']
         return 'PASS' if match else 'FAIL'
 
-    def check_wheel_alignment(self, tolerance=1, display=False):
-        """Check wheel motion in video correlates with the rotary encoder signal"""
+    def check_wheel_alignment(self, tolerance=(1, 2), display=False):
+        """Check wheel motion in video correlates with the rotary encoder signal
+
+        Check is skipped for body camera videos as the wheel is often obstructed
+
+        :param tolerance: maximum absolute offset in frames.  If two values, the maximum value
+        is taken as the warning threshold
+        :param display: if true, the wheel motion energy is plotted against the rotary encoder
+        :returns: outcome string, frame offset
+        """
         if self.data['wheel'] is None or self.side == 'body':
             return 'NOT_SET'
 
@@ -456,9 +471,16 @@ class CameraQC(base.QC):
         aln.video_paths = {self.side: self.video_path}
         offset, *_ = aln.align_motion(period=self.data['wheel'].period,
                                       display=display, side=self.side)
+        if offset is None:
+            return 'NOT_SET'
         if display:
             aln.plot_alignment()
-        return 'PASS' if np.abs(offset) <= tolerance else 'FAIL'
+
+        # Determine the outcome.  If there are two values for the tolerance, one is taken to be
+        # a warning threshold, the other a failure threshold.
+        out_map = {0: 'FAIL', 1: 'WARNING', 2: 'PASS'}
+        passed = np.abs(offset) <= np.sort(np.array(tolerance))
+        return out_map[sum(passed)], int(offset)
 
     def check_position(self, hist_thresh=(75, 80), pos_thresh=(10, 15),
                        metric=cv2.TM_CCOEFF_NORMED,

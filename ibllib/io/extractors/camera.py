@@ -299,7 +299,7 @@ def align_with_audio(timestamps, audio, pin_state, count,
         off before the video acquisition workflow.  For Bpod this always occurs because Bpod 
         finishes before the camera workflow.  For Bpod the times are already extrapolated for 
         these late frames."""
-        n_missing = count.size - ts.size
+        n_missing = count.size - ts.size + 1
         _logger.warning(f'{n_missing} fewer FPGA timestamps than frame counts')
         frate = round(1 / np.nanmedian(np.diff(ts)))
         to_app = ((np.arange(n_missing, ) + 1) / frate + ts[-1]
@@ -317,12 +317,14 @@ def align_with_audio(timestamps, audio, pin_state, count,
         # Plot to check
         import matplotlib.pyplot as plt
         from ibllib.plots import vertical_lines
-        fig, axes = plt.subplots(2, 1)
-        y = (pin_state > 0).astype(float)
+        fig, axes = plt.subplots(1, 1)
+        y = within_ranges(np.arange(ts.size), pin_state['indices'].reshape(-1, 2)).astype(float)
         y *= 1e-5  # For scale when zoomed in
-        axes[0].plot(ts, y, marker='d', color='blue', drawstyle='steps-pre')
-        axes[0].plot(ts, np.zeros_like(ts), 'kx')
-        vertical_lines(audio, ymin=0, ymax=1e-5, color='r', linestyle=':', ax=axes[0])
+        axes.plot(ts, y, marker='d', color='blue', drawstyle='steps-pre', label='GPIO')
+        axes.plot(ts, np.zeros_like(ts), 'kx', label='FPGA timestamps')
+        vertical_lines(audio['times'], ymin=0, ymax=1e-5,
+                       color='r', linestyle=':', ax=axes, label='audio TTL')
+        plt.legend()
         # gpio_ttl_diff = ts[low2high] - audio[:sum(low2high)]
         # axes[1].hist(gpio_ttl_diff, 1000)
         # _logger.info('%i timestamps negative when taking diff between audio TTLs and GPIO',
