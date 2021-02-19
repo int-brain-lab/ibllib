@@ -118,7 +118,7 @@ class CameraQC(base.QC):
         download_data = not alfio.is_session_path(session_path_or_eid)
         self.download_data = kwargs.pop('download_data', download_data)
         self.stream = kwargs.pop('stream', True)
-        self.n_samples = kwargs.pop('n_samples', 10)
+        self.n_samples = kwargs.pop('n_samples', 100)
         super().__init__(session_path_or_eid, **kwargs)
 
         # Data

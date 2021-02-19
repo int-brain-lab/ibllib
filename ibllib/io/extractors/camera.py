@@ -300,7 +300,8 @@ def align_with_audio(timestamps, audio, pin_state, count,
         finishes before the camera workflow.  For Bpod the times are already extrapolated for 
         these late frames."""
         n_missing = count.size - ts.size + 1
-        _logger.warning(f'{n_missing} fewer FPGA timestamps than frame counts')
+        _logger.warning(f'{n_missing} fewer FPGA timestamps than frame counts; '
+                        f'{"extrapolating" if extrapolate_missing else "appending nans"}')
         frate = round(1 / np.nanmedian(np.diff(ts)))
         to_app = ((np.arange(n_missing, ) + 1) / frate + ts[-1]
                   if extrapolate_missing
