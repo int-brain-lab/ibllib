@@ -6,6 +6,7 @@ import numpy as np
 from scipy.stats import ranksums, wilcoxon, ttest_ind, ttest_rel
 from ._statsmodels import multipletests
 from sklearn.metrics import roc_auc_score
+import pandas as pd
 from brainbox.population import get_spike_counts_in_bins
 
 
@@ -352,7 +353,7 @@ def generate_pseudo_stimuli(n_trials, contrast_set=[0.06, 0.12, 0.25, 1], first5
     return p_left, contrast_left, contrast_right
 
 
-def generate_pseudo_session(trials):
+def generate_pseudo_session(trials, generate_choices=True):
     """
     Generate a complete pseudo session with biased blocks, all stimulus contrasts, choices and
     rewards and omissions. Biased blocks and stimulus contrasts are generated using the same
@@ -364,8 +365,10 @@ def generate_pseudo_session(trials):
 
     Parameters
     ----------
-    trials : AlfBunch
-        trials object as loaded using ONE
+    trials : DataFrame
+        Pandas dataframe with columns as trial vectors loaded using ONE
+    generate_choices : bool
+        whether to generate the choices (runs faster without)
 
     Returns
     -------
@@ -379,46 +382,47 @@ def generate_pseudo_session(trials):
     signed_contrast[np.isnan(signed_contrast)] = -trials['contrastLeft'][
                                                             ~np.isnan(trials['contrastLeft'])]
 
-    # Generate pseudo blocks
-    n_trials = trials['probabilityLeft'].shape[0]
-    prob_left = generate_pseudo_blocks(n_trials)
-
     # Generate synthetic session
-    pseudo_trials = trials.copy()
-    pseudo_trials['probabilityLeft'] = prob_left
-    pseudo_trials['contrastLeft'] = np.empty(n_trials)
-    pseudo_trials['contrastLeft'][:] = np.nan
-    pseudo_trials['contrastRight'] = np.empty(n_trials)
-    pseudo_trials['contrastRight'][:] = np.nan
+    pseudo_trials = pd.DataFrame()
+    pseudo_trials['probabilityLeft'] = generate_pseudo_blocks(trials.shape[0])
 
     # For each trial draw stimulus contrast and side and generate a synthetic choice
-    for i in range(n_trials):
+    for i in range(pseudo_trials.shape[0]):
 
         # Draw position and contrast for this trial
         position = _draw_position([-1, 1], pseudo_trials['probabilityLeft'][i])
         contrast = _draw_contrast(contrast_set, 'uniform')
         signed_stim = contrast * np.sign(position)
 
-        # Generate synthetic choice by drawing from Bernoulli distribution
-        trial_select = ((signed_contrast == signed_stim) & (trials['choice'] != 0)
-                        & (trials['probabilityLeft'] == pseudo_trials['probabilityLeft'][i]))
-        p_right = (np.sum(trials['choice'][trial_select] == 1)
-                   / trials['choice'][trial_select].shape[0])
-        this_choice = [-1, 1][np.random.binomial(1, p_right)]
+        if generate_choices:
+            # Generate synthetic choice by drawing from Bernoulli distribution
+            trial_select = ((signed_contrast == signed_stim) & (trials['choice'] != 0)
+                            & (trials['probabilityLeft'] == pseudo_trials['probabilityLeft'][i]))
+            p_right = (np.sum(trials['choice'][trial_select] == 1)
+                       / trials['choice'][trial_select].shape[0])
+            this_choice = [-1, 1][np.random.binomial(1, p_right)]
 
-        # Add to trials
-        if position == -1:
-            pseudo_trials['contrastLeft'][i] = contrast
-            if this_choice == -1:
-                pseudo_trials['feedbackType'][i] = -1
-            elif this_choice == 1:
-                pseudo_trials['feedbackType'][i] = 1
-        elif position == 1:
-            pseudo_trials['contrastRight'][i] = contrast
-            if this_choice == -1:
-                pseudo_trials['feedbackType'][i] = 1
-            elif this_choice == 1:
-                pseudo_trials['feedbackType'][i] = -1
-        pseudo_trials['choice'][i] = this_choice
-
+            # Add to trials
+            if position == -1:
+                pseudo_trials.loc[i, 'contrastLeft'] = contrast
+                if this_choice == -1:
+                    pseudo_trials.loc[i, 'feedbackType'] = -1
+                elif this_choice == 1:
+                    pseudo_trials.loc[i, 'feedbackType'] = 1
+            elif position == 1:
+                pseudo_trials.loc[i, 'contrastRight'] = contrast
+                if this_choice == -1:
+                    pseudo_trials.loc[i, 'feedbackType'] = 1
+                elif this_choice == 1:
+                    pseudo_trials.loc[i, 'feedbackType'] = -1
+            pseudo_trials.loc[i, 'choice'] = this_choice
+        else:
+            if position == -1:
+                pseudo_trials.loc[i, 'contrastLeft'] = contrast
+            elif position == 1:
+                pseudo_trials.loc[i, 'contrastRight'] = contrast
+        pseudo_trials.loc[i, 'stim_side'] = position
+    pseudo_trials['signed_contrast'] = pseudo_trials['contrastRight']
+    pseudo_trials.loc[pseudo_trials['signed_contrast'].isnull(),
+                      'signed_contrast'] = -pseudo_trials['contrastLeft']
     return pseudo_trials
