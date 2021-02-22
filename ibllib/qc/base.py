@@ -164,7 +164,7 @@ class QC:
 
         # Ensure None instead of NaNs
         for k, v in data.items():
-            if (v is not None and not isinstance(v, str)) and np.isnan(v):
+            if (v is not None and not isinstance(v, str)) and np.isnan(v).all():
                 data[k] = None
 
         if self.json:

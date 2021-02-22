@@ -118,7 +118,7 @@ class CameraQC(base.QC):
         download_data = not alfio.is_session_path(session_path_or_eid)
         self.download_data = kwargs.pop('download_data', download_data)
         self.stream = kwargs.pop('stream', True)
-        self.n_samples = kwargs.pop('n_samples', 100)
+        self.n_samples = kwargs.pop('n_samples', 10)
         super().__init__(session_path_or_eid, **kwargs)
 
         # Data
@@ -132,7 +132,8 @@ class CameraQC(base.QC):
         logging.disable(logging.CRITICAL)
         self.type = get_session_extractor_type(self.session_path) or None
         logging.disable(logging.NOTSET)
-        keys = ('count', 'pin_state', 'audio', 'fpga_times', 'wheel', 'video', 'frame_samples')
+        keys = ('count', 'pin_state', 'audio', 'fpga_times', 'wheel', 'video',
+                'frame_samples', 'timestamps', 'camera_times', 'bonsai_times')
         self.data = Bunch.fromkeys(keys)
         self.frame_samples_idx = None
 
@@ -157,18 +158,30 @@ class CameraQC(base.QC):
         self.data['count'], self.data['pin_state'] = \
             raw.load_embedded_frame_data(self.session_path, self.side, raw=True)
 
+        # Load the audio and raw FPGA times
+        if self.type == 'ephys':
+            sync, chmap = ephys_fpga.get_main_probe_sync(self.session_path)
+            audio_ttls = ephys_fpga._get_sync_fronts(sync, chmap['audio'])
+            self.data['audio'] = audio_ttls['times']  # Get rises
+            # Load raw FPGA times
+            cam_ts = extract_camera_sync(sync, chmap)
+            self.data['fpga_times'] = cam_ts[self.side]
+        else:
+            bpod_data = raw.load_data(self.session_path)
+            _, audio_ttls = raw.load_bpod_fronts(self.session_path, bpod_data)
+            self.data['audio'] = audio_ttls['times']
+
         # Load extracted frame times
         alf_path = self.session_path / 'alf'
         try:
             assert not extract_times
-            self.data['fpga_times'] = alfio.load_object(alf_path, f'{self.side}Camera')['times']
+            self.data['timestamps'] = alfio.load_object(alf_path, f'{self.side}Camera')['times']
         except AssertionError:  # Re-extract
             kwargs = dict(video_path=self.video_path, labels=self.side)
             if self.type == 'ephys':
-                sync, chmap = ephys_fpga.get_main_probe_sync(self.session_path)
                 kwargs = {**kwargs, 'sync': sync, 'chmap': chmap}  # noqa
             outputs, _ = extract_all(self.session_path, self.type, save=False, **kwargs)
-            self.data['fpga_times'] = outputs[f'{self.side}_camera_timestamps']
+            self.data['timestamps'] = outputs[f'{self.side}_camera_timestamps']
         except ALFObjectNotFound:
             _log.warning('no camera.times ALF found for session')
 
@@ -179,28 +192,19 @@ class CameraQC(base.QC):
         except ALFObjectNotFound:
             # Extract from raw data
             if self.type == 'ephys':
-                sync, chmap = ephys_fpga.get_main_probe_sync(self.session_path)
                 wheel_data = ephys_fpga.extract_wheel_sync(sync, chmap)
-                audio_ttls = ephys_fpga._get_sync_fronts(sync, chmap['audio'])
-                self.data['audio'] = audio_ttls['times'][::2]  # Get rises
-                # Load raw FPGA times
-                cam_ts = extract_camera_sync(sync, chmap)
-                self.data['fpga_times'] = cam_ts[self.side]
             else:
-                bpod_data = raw.load_data(self.session_path)
                 wheel_data = training_wheel.get_wheel_position(self.session_path)
-                _, audio_ttls = raw.load_bpod_fronts(self.session_path, bpod_data)
-                self.data['audio'] = audio_ttls['times'][::2]
             self.data['wheel'] = Bunch(zip(wheel_keys, wheel_data))
 
         # Find short period of wheel motion for motion correlation.  For speed start with the
         # fist 2 minutes (nearly always enough), extract wheel movements and pick one.
         # TODO Pick movement towards the end of the session (but not right at the end as some
         #  are extrapolated).  Make sure the movement isn't too long.
-        if data_for_keys(wheel_keys, self.data['wheel']) and self.data['fpga_times'] is not None:
+        if data_for_keys(wheel_keys, self.data['wheel']) and self.data['timestamps'] is not None:
             START = 5 * 60  # Default: start 5 minutes in
             # Sometimes the camera starts later...
-            min_start = np.ceil(max(self.data['fpga_times'][0], self.data['wheel'].timestamps[0]))
+            min_start = np.ceil(max(self.data['timestamps'][0], self.data['wheel'].timestamps[0]))
             start = max(START, min_start)  # Start later if camera still not on
             SEARCH_PERIOD = 2 * 60
             ts, pos = [self.data['wheel'][k] for k in wheel_keys]
@@ -370,11 +374,11 @@ class CameraQC(base.QC):
         :param threshold: The maximum absolute difference between timestamp sample rate and video
         frame rate.  NB: Does not take into account dropped frames.
         """
-        if any(x is None for x in (self.data['fpga_times'], self.video_meta)):
+        if any(x is None for x in (self.data['timestamps'], self.video_meta)):
             return 'NOT_SET'
         fps = self.video_meta[self.type][self.side]['fps']
-        Fs = 1 / np.median(np.diff(self.data['fpga_times']))  # Approx. frequency of camera
-        return 'PASS' if abs(Fs - fps) < threshold else 'FAIL'
+        Fs = 1 / np.median(np.diff(self.data['timestamps']))  # Approx. frequency of camera
+        return 'PASS' if abs(Fs - fps) < threshold else 'FAIL', float(round(Fs, 3))
 
     def check_pin_state(self, display=False):
         """Check the pin state reflects Bpod TTLs
@@ -383,7 +387,7 @@ class CameraQC(base.QC):
         """
         if not data_for_keys(('video', 'pin_state', 'audio'), self.data):
             return 'NOT_SET'
-        size_matches = self.data['video']['length'] == self.data['pin_state'].size
+        size_diff = int(self.data['pin_state'].size - self.data['video']['length'])
         # There should be only one value below our threshold
         binary = np.unique(self.data['pin_state']).size == 2
         state = self.data['pin_state'] > PIN_STATE_THRESHOLD
@@ -405,8 +409,11 @@ class CameraQC(base.QC):
         # idx = [i for i, x in enumerate(self.data['audio'])
         #        if np.abs(x - self.data['fpga_times'][low2high]).min() > 0.01]
         # mins = [np.abs(x - self.data['fpga_times'][low2high]).min() for x in self.data['audio']]
-
-        return 'PASS' if size_matches and binary and state_ttl_matches else 'FAIL'
+        outcome = self.overall_outcome(
+            ('PASS' if size_diff == 0 else 'WARNING' if np.abs(size_diff) < 5 else 'FAIL',
+             'PASS' if binary and state_ttl_matches else 'WARNING')
+        )
+        return outcome, int(self.data['audio'].size - sum(low2high)), size_diff
 
     def check_dropped_frames(self, threshold=.1):
         """Check how many frames were reported missing
@@ -415,7 +422,7 @@ class CameraQC(base.QC):
         """
         if not data_for_keys(('video', 'count'), self.data):
             return 'NOT_SET'
-        size_matches = self.data['video']['length'] == self.data['count'].size
+        size_diff = int(self.data['count'].size - self.data['video']['length'])
         strict_increase = np.diff(self.data['count']) > 0
         if not np.all(strict_increase):
             n_effected = np.sum(np.invert(strict_increase))
@@ -424,24 +431,38 @@ class CameraQC(base.QC):
             return 'CRITICAL'
         dropped = np.diff(self.data['count']).astype(int) - 1
         pct_dropped = (sum(dropped) / len(dropped) * 100)
-        return 'PASS' if size_matches and pct_dropped < threshold else 'FAIL'
+        # Calculate overall outcome for this check
+        outcome = self.overall_outcome(
+            ('PASS' if size_diff == 0 else 'WARNING' if np.abs(size_diff) < 5 else 'FAIL',
+             'PASS' if pct_dropped < threshold else 'FAIL')
+        )
+        return outcome, int(sum(dropped)), size_diff
 
     def check_timestamps(self):
         """Check that the camera.times array is reasonable"""
-        if not data_for_keys(('fpga_times', 'video'), self.data):
+        if not data_for_keys(('timestamps', 'video'), self.data):
             return 'NOT_SET'
         # Check frame rate matches what we expect
         expected = 1 / self.video_meta[self.type][self.side]['fps']
         # TODO Remove dropped frames from test
-        frame_delta = np.diff(self.data['fpga_times'])
-        fps_matches = np.isclose(frame_delta.mean(), expected, atol=0.001)
+        frame_delta = np.diff(self.data['timestamps'])
+        fps_matches = np.isclose(np.median(frame_delta), expected, atol=0.001)
         # Check number of timestamps matches video
-        length_matches = self.data['fpga_times'].size == self.data['video'].length
+        length_matches = self.data['timestamps'].size == self.data['video'].length
         # Check times are strictly increasing
-        increasing = all(np.diff(self.data['fpga_times']) > 0)
+        increasing = all(np.diff(self.data['timestamps']) > 0)
         # Check times do not contain nans
-        nanless = not np.isnan(self.data['fpga_times']).any()
+        nanless = not np.isnan(self.data['timestamps']).any()
         return 'PASS' if increasing and fps_matches and length_matches and nanless else 'FAIL'
+
+    def check_camera_times(self):
+        """Check that the number of raw camera timestamps matches the number of video frames"""
+        if not data_for_keys(('bonsai_times', 'video'), self.data):
+            return 'NOT_SET'
+        length_match = len(self.data['camera_times']) == self.data['video'].length
+        outcome = 'PASS' if length_match else 'FAIL'
+        # 1 / np.median(np.diff(self.data.camera_times))
+        return outcome, len(self.data['camera_times']) - self.data['video'].length
 
     def check_resolution(self):
         """Check that the timestamps and video file resolution match what we expect"""
@@ -466,8 +487,8 @@ class CameraQC(base.QC):
             return 'NOT_SET'
 
         aln = MotionAlignment(self.eid, self.one, self.log)
-        aln.data = self.data
-        aln.data['camera_times'] = {self.side: self.data['fpga_times']}
+        aln.data = self.data.copy()
+        aln.data['camera_times'] = {self.side: self.data['timestamps']}
         aln.video_paths = {self.side: self.video_path}
         offset, *_ = aln.align_motion(period=self.data['wheel'].period,
                                       display=display, side=self.side)
