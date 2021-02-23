@@ -118,7 +118,7 @@ class CameraQC(base.QC):
         download_data = not alfio.is_session_path(session_path_or_eid)
         self.download_data = kwargs.pop('download_data', download_data)
         self.stream = kwargs.pop('stream', True)
-        self.n_samples = kwargs.pop('n_samples', 10)
+        self.n_samples = kwargs.pop('n_samples', 100)
         super().__init__(session_path_or_eid, **kwargs)
 
         # Data
@@ -144,6 +144,18 @@ class CameraQC(base.QC):
     def load_data(self, download_data: bool = None, extract_times: bool = False) -> None:
         """Extract the data from raw data files
         Extracts all the required task data from the raw data files.
+
+        Data keys:
+            - count (int array): the sequential frame number (n, n+1, n+2...)
+            - pin_state (): the camera GPIO pin; records the audio TTLs; should be one per frame
+            - audio (float array): timestamps of audio TTL fronts
+            - fpga_times (float array): timestamps of camera TTLs recorded by FPGA
+            - timestamps (float array): extracted video timestamps (the camera.times ALF)
+            - bonsai_times (datetime array): system timestamps of video PC; should be one per frame
+            - camera_times (float array): camera frame timestamps extracted from frame headers
+            - wheel (Bunch): rotary encoder timestamps, position and period used for wheel motion
+            - video (Bunch): video meta data, including dimensions and FPS
+            - frame_samples (h x w x n array): array of evenly sampled frames (1 colour channel)
 
         :param download_data: if True, any missing raw data is downloaded via ONE.
         :param extract_times: if True, the camera.times are re-extracted from the raw data
@@ -394,7 +406,8 @@ class CameraQC(base.QC):
         # NB: The pin state to be high for 2 consecutive frames
         low2high = np.insert(np.diff(state.astype(int)) == 1, 0, False)
         # NB: Time between two consecutive TTLs can be sub-frame, so this will fail
-        state_ttl_matches = sum(low2high) == self.data['audio'].size
+        ndiff_low2high = int(self.data['audio'][::2].size - sum(low2high))
+        state_ttl_matches = ndiff_low2high == 0
         # Check within ms of audio times
         if display:
             plt.Figure()
@@ -413,7 +426,7 @@ class CameraQC(base.QC):
             ('PASS' if size_diff == 0 else 'WARNING' if np.abs(size_diff) < 5 else 'FAIL',
              'PASS' if binary and state_ttl_matches else 'WARNING')
         )
-        return outcome, int(self.data['audio'].size - sum(low2high)), size_diff
+        return outcome, ndiff_low2high, size_diff
 
     def check_dropped_frames(self, threshold=.1):
         """Check how many frames were reported missing
@@ -460,7 +473,7 @@ class CameraQC(base.QC):
         if not data_for_keys(('bonsai_times', 'video'), self.data):
             return 'NOT_SET'
         length_match = len(self.data['camera_times']) == self.data['video'].length
-        outcome = 'PASS' if length_match else 'FAIL'
+        outcome = 'PASS' if length_match else 'WARNING'
         # 1 / np.median(np.diff(self.data.camera_times))
         return outcome, len(self.data['camera_times']) - self.data['video'].length
 
@@ -745,6 +758,10 @@ class CameraQC(base.QC):
         also work.  That said, normalizing the histograms works best.
 
         :param roi: A tuple of indices for the face template in the for ((y1, y2), (x1, x2))
+        :param test: If True the template is matched against frames that come from the same session
+        :param metric: The metric to use for template matching
+        :param refs: An array of frames to match the template to
+
         :returns: (y1, y2), (x1, x2)
         """
         ROI = {
@@ -768,8 +785,12 @@ class CameraQC(base.QC):
 
     @staticmethod
     def load_reference_frames(side):
-        """
-        Load some reference frames for a given video
+        """Load some reference frames for a given video
+
+        The reference frames are from sessions where the camera was well positioned. The
+        frames are in qc/reference, one file per camera, only one channel per frame.  The
+        session eids can be found in qc/reference/frame_src.json
+
         :param side: Video label, e.g. 'left'
         :return: numpy array of frames with the shape (n, h, w)
         """
@@ -793,6 +814,7 @@ class CameraQC(base.QC):
 
 
 def data_for_keys(keys, data):
+    """Check keys exist in 'data' dict and contain values other than None"""
     return all(k in data and data.get(k, None) is not None for k in keys)
 
 

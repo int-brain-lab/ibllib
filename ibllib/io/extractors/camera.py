@@ -313,6 +313,8 @@ def align_with_audio(timestamps, audio, pin_state, count,
     # Remove the rest of the dropped frames
     ts = ts[count]
     assert np.searchsorted(ts, audio['times'][0]) == first_uptick
+    if ts.size != count.size:
+        _logger.warning('number of timestamps and frames still don\'t match')
 
     if display:
         # Plot to check
@@ -330,92 +332,6 @@ def align_with_audio(timestamps, audio, pin_state, count,
         # axes[1].hist(gpio_ttl_diff, 1000)
         # _logger.info('%i timestamps negative when taking diff between audio TTLs and GPIO',
         #              np.sum(gpio_ttl_diff < 0))
-
-    return ts
-
-
-def align_with_audio_safe(timestamps, audio, pin_state, count,
-                          extrapolate_missing=True, display=False):
-    """
-    Groom the raw FPGA or Bpod camera timestamps using the frame embedded audio TTLs and frame
-    counter.
-    :param timestamps: An array of raw FPGA or Bpod camera timestamps
-    :param audio: An array of FPGA or Bpod audio TTL times
-    :param pin_state: An array of camera pin states
-    :param count: An array of frame numbers
-    :param extrapolate_missing: If true and the number of timestamps is fewer than the number of
-    frame counts, the remaining timestamps are extrapolated based on the frame rate, otherwise
-    they are NaNs
-    :param display: Plot the resulting timestamps
-    :return: The corrected frame timestamps
-    """
-    # Some assertions made on the raw data
-    # assert count.size == pin_state.size, 'frame count and pin state size mismatch'
-    assert all(np.diff(count) > 0), 'frame count not strictly increasing'
-    assert all(np.diff(timestamps) > 0), 'FPGA camera times not strictly increasing'
-    # low2high = np.diff(pin_state.astype(int)) == 1
-    same_n_ttl = pin_state['times'].size == audio['times'].size
-    assert same_n_ttl, 'more audio TTLs detected on camera than TTLs sent'
-
-    """Here we will ensure that the FPGA camera times match the number of video frames in 
-    length.  We will make the following assumptions: 
-
-    1. The number of FPGA camera times is equal to or greater than the number of video frames.
-    2. No TTLs were missed between the camera and FPGA.
-    3. No pin states were missed by Bonsai.
-    4  No pixel count data was missed by Bonsai.
-
-    In other words the count and pin state arrays accurately reflect the number of frames 
-    sent by the camera and should therefore be the same length, and the length of the frame 
-    counter should match the number of saved video frames.
-
-    The missing frame timestamps are removed in three stages:
-
-    1. Remove any timestamps that occurred before video frame acquisition in Bonsai.
-    2. Remove any timestamps where the frame counter reported missing frames, i.e. remove the
-    dropped frames which occurred throughout the session.
-    3. Remove the trailing timestamps at the end of the session if the camera was turned off
-    in the wrong order.
-    """
-    # Align on first pin state change
-    # first_uptick = (pin_state > 0).argmax()
-    # first_ttl = np.searchsorted(timestamps, audio[0])
-    first_uptick = pin_state['indices'][0]
-    first_ttl = np.searchsorted(timestamps, audio['times'][0])
-    """Here we find up to which index in the FPGA times we discard by taking the difference 
-    between the index of the first pin state change (when the audio TTL was reported by the 
-    camera) and the index of the first audio TTL in FPGA time.  We subtract the difference 
-    between the frame count at the first pin state change and the index to account for any 
-    video frames that were not saved during this period (we will remove those from the 
-    camera FPGA times later).
-    """
-    # Minus any frames that were dropped between the start of frame acquisition and the
-    # first TTL
-    start = first_ttl - first_uptick - (count[first_uptick] - first_uptick)
-    assert start >= 0
-
-    # Remove the extraneous timestamps from the beginning and end
-    end = count[-1] + 1 + start
-    ts = timestamps[start:end]
-    if ts.size < count.size:
-        """
-        For ephys sessions there may be fewer FPGA times than frame counts if SpikeGLX is turned
-        off before the video acquisition workflow.  For Bpod this always occurs because Bpod
-        finishes before the camera workflow.  For Bpod the times are already extrapolated for
-        these late frames."""
-        n_missing = count.size - ts.size
-        _logger.warning(f'{n_missing} fewer FPGA timestamps than frame counts')
-        frate = round(1 / np.nanmedian(np.diff(ts)))
-        to_app = ((np.arange(n_missing, ) + 1) / frate + ts[-1]
-                  if extrapolate_missing
-                  else np.full(n_missing, np.nan))
-        ts = np.r_[ts, to_app]  # Append the missing times
-    assert ts.size >= count.size
-    assert ts.size == count[-1] + 1
-
-    # Remove the rest of the dropped frames
-    ts = ts[count]
-    assert np.searchsorted(ts, audio['times'][0]) == first_uptick
 
     return ts
 
