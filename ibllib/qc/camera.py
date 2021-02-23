@@ -818,7 +818,7 @@ def data_for_keys(keys, data):
     return all(k in data and data.get(k, None) is not None for k in keys)
 
 
-def run_all_qc(session, update=False, cameras=('left', 'right', 'body'), stream=True, **kwargs):
+def run_all_qc(session, cameras=('left', 'right', 'body'), **kwargs):
     """Run QC for all cameras
     Run the camera QC for left, right and body cameras.
     :param session: A session path or eid.
@@ -829,8 +829,8 @@ def run_all_qc(session, update=False, cameras=('left', 'right', 'body'), stream=
     :return: dict of CameraCQ objects
     """
     qc = {}
-    one = kwargs.pop('one', None)
+    run_args = {k: kwargs.pop(k) for k in ('download_data', 'extract_times') if k in kwargs.keys()}
     for camera in cameras:
-        qc[camera] = CameraQC(session, side=camera, stream=stream, one=one)
-        qc[camera].run(update=update, **kwargs)
+        qc[camera] = CameraQC(session, side=camera, **kwargs)
+        qc[camera].run(**run_args)
     return qc
