@@ -101,11 +101,13 @@ class TestList(unittest.TestCase):
         self.eid2 = eids[1]
 
     def test_list(self):
-        # tests with a single input and a list input
+        # tests with a single input and a list input.
+        # One of the datasets has its exists flag set to False; it should be excluded from the list
         eid = self.eid
         dt = one.list(eid)  # returns dataset-type
         self.assertTrue(isinstance(dt, list))
-        self.assertEqual(29, len(dt))
+        self.assertFalse(any(str(x) == 'channels.rawRow.npy' for x in dt))
+        self.assertEqual(28, len(dt))
 
         dt = one.list(eid, details=True)  # returns dict of dataset-types
         self.assertTrue(isinstance(dt[0], dict))
@@ -241,6 +243,24 @@ class TestLoad(unittest.TestCase):
         fr = one.alyx.rest('files', 'list', django=f"dataset,{dset[0]['url'][-36:]},"
                                                    f"data_repository__globus_is_personal,False")
         self.assertTrue(fr[0]['json'] == {'mismatch_hash': True})
+
+    def test_load_object(self):
+        # Test download_only flag
+        files = one.load_object(self.eid, 'channels', collection=None, download_only=True)
+        self.assertTrue(len(files) == 4)
+        self.assertIsInstance(files[0], Path)
+
+        # Test loading
+        obj = one.load_object(self.eid, 'channels', collection=None)
+        # One of the datasets has its exists flag set to False; it should be excluded from the list
+        expected = ['brainLocation', 'probe', 'site', 'sitePositions']  # 'rawRow' missing
+        self.assertCountEqual(obj.keys(), expected)
+
+        with self.assertRaises(ALFObjectNotFound):
+            one.load_object(self.eid, 'channels', collection='alf')
+
+        with self.assertRaises(ValueError):
+            one.load_object('fake', 'channels', collection='alf')
 
 
 class TestMisc(unittest.TestCase):
