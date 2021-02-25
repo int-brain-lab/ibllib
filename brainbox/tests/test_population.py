@@ -16,13 +16,13 @@ def _random_data(max_cluster):
 class TestPopulation(unittest.TestCase):
 
     def setUp(self):
-         # Test data is a dictionary of spike times and clusters and event times and groups
-         pickle_file = Path(__file__).parent.joinpath('fixtures', 'ephys_test.p')
-         if not pickle_file.exists():
-             self.test_data = None
-         else:
-             with open(pickle_file, 'rb') as f:
-                 self.test_data = pickle.load(f)
+        # Test data is a dictionary of spike times and clusters and event times and groups
+        pickle_file = Path(__file__).parent.joinpath('fixtures', 'ephys_test.p')
+        if not pickle_file.exists():
+            self.test_data = None
+        else:
+            with open(pickle_file, 'rb') as f:
+                self.test_data = pickle.load(f)
 
     def test_get_spike_counts_in_bins(self):
         if self.test_data is None:

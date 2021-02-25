@@ -47,7 +47,7 @@ def responsive_units(spike_times, spike_clusters, event_times,
     # Get spike counts for baseline and event timewindow
     baseline_times = np.column_stack(((event_times - pre_time[0]), (event_times - pre_time[1])))
     baseline_counts, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters,
-                                                             baseline_times)
+                                                            baseline_times)
     times = np.column_stack(((event_times + post_time[0]), (event_times + post_time[1])))
     spike_counts, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters, times)
 
@@ -181,7 +181,7 @@ def roc_single_event(spike_times, spike_clusters, event_times,
     # Get spike counts for baseline and event timewindow
     baseline_times = np.column_stack(((event_times - pre_time[0]), (event_times - pre_time[1])))
     baseline_counts, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters,
-                                                             baseline_times)
+                                                            baseline_times)
     times = np.column_stack(((event_times + post_time[0]), (event_times + post_time[1])))
     spike_counts, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters, times)
 
@@ -380,7 +380,7 @@ def generate_pseudo_session(trials, generate_choices=True):
     contrast_set = np.unique(trials['contrastLeft'][~np.isnan(trials['contrastLeft'])])
     signed_contrast = trials['contrastRight'].copy()
     signed_contrast[np.isnan(signed_contrast)] = -trials['contrastLeft'][
-                                                            ~np.isnan(trials['contrastLeft'])]
+                        ~np.isnan(trials['contrastLeft'])]
 
     # Generate synthetic session
     pseudo_trials = pd.DataFrame()
