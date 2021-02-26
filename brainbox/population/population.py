@@ -121,23 +121,6 @@ def _symmetrize_correlograms(correlograms):
     return np.dstack((sym, correlograms))
 
 
-def _generate_pseudo_blocks(n_trials, factor=60, min_=20, max_=100):
-    block_ids = []
-    while len(block_ids) < n_trials:
-        x = np.random.exponential(factor)
-        while (x <= min_) | (x >= max_):
-            x = np.random.exponential(factor)
-        if (len(block_ids) == 0) & (np.random.randint(2) == 0):
-            block_ids += [0] * int(x)
-        elif (len(block_ids) == 0):
-            block_ids += [1] * int(x)
-        elif block_ids[-1] == 0:
-            block_ids += [1] * int(x)
-        elif block_ids[-1] == 1:
-            block_ids += [0] * int(x)
-    return np.array(block_ids[:n_trials])
-
-
 def xcorr(spike_times, spike_clusters, bin_size=None, window_size=None):
     """Compute all pairwise cross-correlograms among the clusters appearing in `spike_clusters`.
 
@@ -308,8 +291,7 @@ def regress(population_activity, trial_targets, cross_validation=None):
 
 def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, post_time=0.5,
            classifier='bayes-multinomial', cross_validation='kfold', num_splits=5, prob_left=None,
-           custom_validation=None, n_neurons='all', iterations=1, shuffle=False, phase_rand=False,
-           pseudo_blocks=False):
+           custom_validation=None, n_neurons='all', iterations=1, shuffle=False, phase_rand=False):
     """
 
     WILL BE DEPRICATED
@@ -379,9 +361,6 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
     phase_rand : boolean
         whether to use phase randomization of the activity over trials to use as a "chance"
         predictor
-    pseudo_blocks : boolean
-        whether to generate pseudo blocks with the same statistics as the actual blocks
-        to estimate chance level
 
     Returns
     -------
@@ -482,10 +461,6 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
                 rand_pop_vector[:, k] = np.abs(newsignal.real)
             sub_pop_vector = rand_pop_vector
 
-        # Generate pseudo blocks if necessary
-        if pseudo_blocks:
-            event_groups = _generate_pseudo_blocks(event_groups.shape[0])
-
         if cross_validation == 'none':
 
             # Fit the model on all the data and predict
@@ -548,8 +523,7 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
                         'confusion_matrix': conf_matrix_norm,
                         'n_groups': np.shape(np.unique(event_groups))[0],
                         'classifier': classifier, 'cross_validation': '%d-fold' % num_splits,
-                        'iterations': iterations, 'shuffle': shuffle, 'phase_rand': phase_rand,
-                        'pseudo_blocks': pseudo_blocks})
+                        'iterations': iterations, 'shuffle': shuffle, 'phase_rand': phase_rand})
 
     else:
         results = dict({'accuracy': acc, 'f1': f1, 'auroc': auroc,
@@ -557,8 +531,7 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
                         'confusion_matrix': conf_matrix_norm,
                         'n_groups': np.shape(np.unique(event_groups))[0],
                         'classifier': classifier, 'cross_validation': cross_validation,
-                        'iterations': iterations, 'shuffle': shuffle, 'phase_rand': phase_rand,
-                        'pseudo_blocks': pseudo_blocks})
+                        'iterations': iterations, 'shuffle': shuffle, 'phase_rand': phase_rand})
     return results
 
 
