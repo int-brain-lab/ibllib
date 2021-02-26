@@ -75,11 +75,6 @@ def setup():
              '(leave empty to keep current): '
     par["HTTP_DATA_SERVER_PWD"] = getpass(prompt) or cpar
 
-    cpar = _get_current_par("FTP_DATA_SERVER_PWD", par_current)
-    prompt = "Enter the FlatIron FTP password for " + par["FTP_DATA_SERVER_LOGIN"] +\
-             '(leave empty to keep current): '
-    par["FTP_DATA_SERVER_PWD"] = getpass(prompt) or cpar
-
     # default to home dir if empty dir somehow made it here
     if len(par['CACHE_DIR']) == 0:
         par['CACHE_DIR'] = str(PurePath(Path.home(), "Downloads", "FlatIron"))

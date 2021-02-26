@@ -738,14 +738,17 @@ class CameraTimestamps(BaseBpodTrialsExtractor):
 
 
 class LaserBool(BaseBpodTrialsExtractor):
-    save_names = '_ibl_trials.laser_stimulation.npy'
-    var_names = 'laser_stimulation'
+    save_names = ['_ibl_trials.laser_stimulation.npy', '_ibl_trials.laser_probability.npy']
+    var_names = ['laser_stimulation', 'laser_probability']
 
     def _extract(self):
-        laser = np.array([np.float(t.get('laser_stimulation', np.NaN)) for t in self.bpod_trials])
-        if np.all(np.isnan(laser)):
-            self.save_names = None  # this prevents the file from being saved
-        return laser
+        lstim = np.array([np.float(t.get('laser_stimulation', np.NaN)) for t in self.bpod_trials])
+        lprob = np.array([np.float(t.get('laser_probability', np.NaN)) for t in self.bpod_trials])
+        if np.all(np.isnan(lprob)):
+            self.save_names[1] = None  # this prevents the file from being saved when no data
+        if np.all(np.isnan(lstim)):
+            self.save_names[0] = None  # this prevents the file from being saved when no data
+        return lstim, lprob
 
 
 def extract_all(session_path, save=False, bpod_trials=None, settings=None):

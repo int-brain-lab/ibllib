@@ -319,13 +319,13 @@ class RegistrationClient:
                 raise e
             # extract the relative path of the file
             rel_path = Path(str(fn)[str(fn).find(str(gen_rel_path)):])
-            F.append(str(rel_path.relative_to(gen_rel_path)))
+            F.append(str(rel_path.relative_to(gen_rel_path).as_posix()))
             file_sizes.append(fn.stat().st_size)
             md5s.append(hashfile.md5(fn) if fn.stat().st_size < 1024 ** 3 else None)
             _logger.info('Registering ' + str(fn))
 
         r_ = {'created_by': username,
-              'path': str(gen_rel_path),
+              'path': str(gen_rel_path.as_posix()),
               'filenames': F,
               'hashes': md5s,
               'filesizes': file_sizes,
