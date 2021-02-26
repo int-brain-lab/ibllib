@@ -5,29 +5,20 @@ Example - Run camera QC, downloading all but video file
     qc = CameraQC(eid, download_data=True, stream=True)
     qc.run()
 
-TODO Remove notes
-Question:
-    We're not extracting the audio based on TTL length.  Is this a problem?
-    For hist equalization:
-        cvAddWeighted( )" ?
+Example - Run camera QC with session path, update QC field in Alyx
+    qc = CameraQC(session_path)
+    outcome, extended = qc.run(update=True)  # Returns outcome of videoQC only
+    print(f'video QC = {outcome}; overall session QC = {qc.outcome}')  # NB difference outcomes
 
-        What it does is:
+Example - Run only video QC (no timestamp/alignment checks) on 20 frames
+    qc = CameraQC(eid, n_samples=20)
+    qc.load_video_data()  # Quicker than loading all data
+    qc.run()
 
-                     dst = src1*alpha + src2*beta + gamma
-
-        Applying brightness and contrast:
-
-                     dst = src*contrast + brightness;
-
-        so if
-
-                     src1  = input image
-                     src2  = any image of same type as src1
-                     alpha = contrast value
-                     beta  = 0.0
-                     gamma = brightness value
-                     dst   = resulting Image (must be of same type as src1)
-
+Example - Run specific video QC check and display the plots
+    qc = CameraQC(eid)
+    qc.load_data(download_data=True)
+    qc.check_position(display=True)  # NB: Not all checks make plots
 """
 import logging
 from inspect import getmembers, isfunction
@@ -48,6 +39,7 @@ from ibllib.io import raw_data_loaders as raw
 import alf.io as alfio
 from brainbox.core import Bunch
 from brainbox.video.motion import MotionAlignment
+import brainbox.behavior.wheel as wh
 from ibllib.io.video import get_video_meta, get_video_frames_preload
 from . import base
 
@@ -214,24 +206,25 @@ class CameraQC(base.QC):
         # TODO Pick movement towards the end of the session (but not right at the end as some
         #  are extrapolated).  Make sure the movement isn't too long.
         if data_for_keys(wheel_keys, self.data['wheel']) and self.data['timestamps'] is not None:
-            START = 5 * 60  # Default: start 5 minutes in
-            # Sometimes the camera starts later...
-            min_start = np.ceil(max(self.data['timestamps'][0], self.data['wheel'].timestamps[0]))
-            start = max(START, min_start)  # Start later if camera still not on
-            SEARCH_PERIOD = 2 * 60
-            ts, pos = [self.data['wheel'][k] for k in wheel_keys]
-            while True:
-                win = np.logical_and(
-                    ts > start,
-                    ts < SEARCH_PERIOD + start
-                )
-                if np.sum(win) > 1000:
-                    break
-                SEARCH_PERIOD *= 2
-            wheel_moves = training_wheel.extract_wheel_moves(ts[win], pos[win])
-            move_ind = np.argmax(np.abs(wheel_moves['peakAmplitude']))
-            # TODO Save only the wheel fragment we need
-            self.data['wheel'].period = wheel_moves['intervals'][move_ind, :]
+            self.data['wheel'].period = self.get_active_wheel_period(self.data['wheel'])
+            # START = 5 * 60  # Default: start 5 minutes in
+            # # Sometimes the camera starts later...
+            # min_start = np.ceil(max(self.data['timestamps'][0], self.data['wheel'].timestamps[0]))
+            # start = max(START, min_start)  # Start later if camera still not on
+            # SEARCH_PERIOD = 2 * 60
+            # ts, pos = [self.data['wheel'][k] for k in wheel_keys]
+            # while True:
+            #     win = np.logical_and(
+            #         ts > start,
+            #         ts < SEARCH_PERIOD + start
+            #     )
+            #     if np.sum(win) > 1000:
+            #         break
+            #     SEARCH_PERIOD *= 2
+            # wheel_moves = training_wheel.extract_wheel_moves(ts[win], pos[win])
+            # move_ind = np.argmax(np.abs(wheel_moves['peakAmplitude']))
+            # # TODO Save only the wheel fragment we need
+            # self.data['wheel'].period = wheel_moves['intervals'][move_ind, :]
 
         # Gather information from video file
         _log.info('Inspecting video file...')
@@ -256,6 +249,16 @@ class CameraQC(base.QC):
         except AssertionError:
             _log.error('Failed to read video file; setting outcome to CRITICAL')
             self._outcome = 'CRITICAL'
+
+    def get_active_wheel_period(self, wheel):
+        pos, ts = wh.interpolate_position(wheel.timestamps, wheel.position)
+        v, acc = wh.velocity_smoothed(pos, 1000)
+        on, off, *_ = wh.movements(ts, acc, pos_thresh=.01, make_plots=False)
+        edges = np.c_[on, off]
+        indices, _ = np.where(np.logical_and(np.diff(edges) > 3, np.diff(edges) < 20))
+        # Pick movement somewhere in the middle
+        i = indices[int(indices.size / 2)]
+        return edges[i]
 
     def _ensure_required_data(self):
         """
@@ -829,7 +832,8 @@ def run_all_qc(session, cameras=('left', 'right', 'body'), **kwargs):
     :return: dict of CameraCQ objects
     """
     qc = {}
-    run_args = {k: kwargs.pop(k) for k in ('download_data', 'extract_times') if k in kwargs.keys()}
+    run_args = {k: kwargs.pop(k) for k in ('download_data', 'extract_times', 'update')
+                if k in kwargs.keys()}
     for camera in cameras:
         qc[camera] = CameraQC(session, side=camera, **kwargs)
         qc[camera].run(**run_args)

@@ -135,7 +135,6 @@ class MotionAlignment:
             raise ValueError("'session' must be a valid session path or uuid")
 
     def align_motion(self, period=(-np.inf, np.inf), side='left', sd_thresh=10, display=False):
-
         # Get data samples within period
         wheel = self.data['wheel']
         self.alignment.label = side
@@ -183,9 +182,10 @@ class MotionAlignment:
             xcorr = signal.correlate(self.alignment.df, vs)
 
         # Cross correlate wheel speed trace with the motion energy
+        CORRECTION = 2
         self.alignment.c = max(xcorr)
         self.alignment.xcorr = np.argmax(xcorr)
-        self.alignment.dt_i = self.alignment.xcorr - xs.size
+        self.alignment.dt_i = self.alignment.xcorr - xs.size + CORRECTION
         self.log.info(f'{side} camera, adjusted by {self.alignment.dt_i} frames')
 
         if display:

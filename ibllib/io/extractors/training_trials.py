@@ -313,7 +313,7 @@ class GoCueTimes(BaseBpodTrialsExtractor):
     Get trigger times of goCue from state machine.
 
     Current software solution for triggering sounds uses PyBpod soft codes.
-    Delays can be in the order of 10's of ms. This is the time when the command
+    Delays can be in the order of 10-100s of ms. This is the time when the command
     to play the sound was executed. To measure accurate time, either getting the
     sound onset from the future microphone OR the new xonar soundcard and
     setup developed by Sanworks guarantees a set latency (in testing).
