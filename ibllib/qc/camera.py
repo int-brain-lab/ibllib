@@ -119,7 +119,11 @@ class CameraQC(base.QC):
         self.video_path = self.session_path / 'raw_video_data' / filename
         # If local video doesn't exist, change video path to URL
         if not self.video_path.exists() and self.stream and self.one is not None:
-            self.video_path = self.one.url_from_path(self.video_path)
+            try:
+                self.video_path = self.one.url_from_path(self.video_path)
+            except StopIteration:
+                _log.error('No remote or local video file found')
+                self.video_path = None
 
         logging.disable(logging.CRITICAL)
         self.type = get_session_extractor_type(self.session_path) or None
@@ -250,14 +254,28 @@ class CameraQC(base.QC):
             _log.error('Failed to read video file; setting outcome to CRITICAL')
             self._outcome = 'CRITICAL'
 
-    def get_active_wheel_period(self, wheel):
+    @staticmethod
+    def get_active_wheel_period(wheel, range=(3., 20.), display=False):
+        """
+        Attempts to find a period of movement where the wheel accelerates and decelerates for
+        the wheel motion alignment QC.
+        :param wheel: A Bunch of wheel timestamps and position data
+        :param range: The candidates must be within min/max duration range
+        :return: 2-element array comprising the start and end times of the active period
+        """
         pos, ts = wh.interpolate_position(wheel.timestamps, wheel.position)
         v, acc = wh.velocity_smoothed(pos, 1000)
-        on, off, *_ = wh.movements(ts, acc, pos_thresh=.01, make_plots=False)
+        on, off, *_ = wh.movements(ts, acc, pos_thresh=.1, make_plots=False)
         edges = np.c_[on, off]
-        indices, _ = np.where(np.logical_and(np.diff(edges) > 3, np.diff(edges) < 20))
+        indices, _ = np.where(np.logical_and(
+            np.diff(edges) > range[0], np.diff(edges) < range[1]))
         # Pick movement somewhere in the middle
         i = indices[int(indices.size / 2)]
+        if display:
+            _, (ax0, ax1) = plt.subplots(2, 1, sharex='all')
+            mask = np.logical_and(ts > edges[i][0], ts < edges[i][1])
+            ax0.plot(ts[mask], pos[mask])
+            ax1.plot(ts[mask], acc[mask])
         return edges[i]
 
     def _ensure_required_data(self):

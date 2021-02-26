@@ -10,6 +10,7 @@ Module contains one loader function per raw datafile
 import json
 import logging
 import wave
+from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
 from typing import Union
@@ -106,6 +107,9 @@ def load_data(session_path: Union[str, Path], time='absolute'):
 def load_camera_ssv_times(session_path, camera: str):
     """
     Load the bonsai frame and camera timestamps from Camera.timestamps.ssv
+
+    NB: For some sessions the frame times are in the first column, in others the order is reversed.
+
     :param session_path: Absolute path of session folder
     :param camera: Name of the camera to load, e.g. 'left'
     :return: array of datetimes, array of frame times in seconds
@@ -117,7 +121,17 @@ def load_camera_ssv_times(session_path, camera: str):
     # Converting them is extremely slow: 6000 timestamps takes 0.8615s vs 0.0352s.
     # from datetime import timezone
     # c = {0: lambda x: datetime.fromisoformat(x).astimezone(timezone.utc).replace(tzinfo=None)}
-    ssv_params = dict(names=('bonsai', 'camera'), dtype='<M8[ns],<u4', delimiter=' ')
+
+    # Determine the order of the columns by reading one line and testing whether the first value
+    # is an integer or not.
+    with open(file, 'r') as f:
+        line = f.readline()
+    type_map = OrderedDict(bonsai='<M8[ns]', camera='<u4')
+    try:
+        int(line.split(' ')[1])
+    except ValueError:
+        type_map.move_to_end('bonsai')
+    ssv_params = dict(names=type_map.keys(), dtype=','.join(type_map.values()), delimiter=' ')
     ssv_times = np.genfromtxt(file, **ssv_params)  # np.loadtxt is slower for some reason
     bonsai_times = ssv_times['bonsai']
     camera_times = uncycle_pgts(convert_pgts(ssv_times['camera']))

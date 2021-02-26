@@ -132,16 +132,24 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
     save_names = '_ibl_leftCamera.times.npy'
     var_names = 'left_camera_timestamps'
 
-    def _extract(self, video_path=None, display=True, extrapolate_missing=True):
-        raw_ts = self._times_from_bpod()  # FIXME Extrapolate after alignment
+    def _extract(self, video_path=None, display=False, extrapolate_missing=True):
+        raw_ts = self._times_from_bpod()
+        _, ts = raw.load_camera_ssv_times(self.session_path, 'left')
         count, gpio = raw.load_embedded_frame_data(self.session_path, 'left')
 
         if gpio is not None and gpio['indices'].size > 1:
             _logger.info('Aligning to audio TTLs')
             # Extract audio TTLs
             _, audio = raw.load_bpod_fronts(self.session_path, self.bpod_trials)
-            gpio, audio, raw_ts = groom_pin_state(gpio, audio, raw_ts, take='nearest',
-                                                  tolerance=.5, min_diff=5e-3, display=display)
+            """
+            There are many audio TTLs that are for some reason missed by the GPIO.  Conversely 
+            the last GPIO doesn't often correspond to any audio TTL.  These will be removed.  
+            The drift appears to be less severe than the FPGA, so when assigning TTLs we'll take 
+            the nearest TTL within 500ms.  The go cue TTLs comprise two short pulses ~3ms apart.
+            We will fuse any TTLs less than 5ms apart to make assignment more accurate.
+            """
+            gpio, audio, ts = groom_pin_state(gpio, audio, ts, take='nearest',
+                                              tolerance=.5, min_diff=5e-3, display=display)
             if video_path is None:
                 filename = '_iblrigCamera.raw.mp4'
                 video_path = self.session_path.joinpath('raw_video_data', filename)
@@ -441,6 +449,7 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
     audio_times = audio['times']
     if ifronts.size != audio['times'].size:
         _logger.warning('more audio TTLs than GPIO state changes, assigning timestamps')
+        to_remove = np.zeros(ifronts.size, dtype=bool)  # unassigned GPIO fronts to remove
         low2high = ifronts[gpio['polarities'] == 1]
         high2low = ifronts[gpio['polarities'] == -1]
         assert low2high.size >= high2low.size
@@ -465,7 +474,6 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
         if np.any(missed):
             _logger.warning(f'{sum(missed)} pin state rises could '
                             f'not be attributed to an audio TTL')
-            assigned = assigned[~missed]
             if display:
                 from ibllib.plots import vertical_lines
                 ax = plt.subplot()
@@ -482,6 +490,9 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
                                linestyle=':', color='b', ax=ax, label='assigned audio onset')
                 plt.legend()
                 plt.show()
+            # Remove the missed fronts
+            to_remove = np.in1d(gpio['indices'], low2high[missed])
+            assigned = assigned[~missed]
         onsets_ = audio_times[::2][assigned]
 
         # Offsets
@@ -496,10 +507,19 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
         if np.any(missed):
             _logger.warning(f'{sum(missed)} pin state falls could '
                             f'not be attributed to an audio TTL')
+            # Remove the missed fronts
+            to_remove = np.logical_or(to_remove, np.in1d(gpio['indices'], high2low[missed]))
             assigned = assigned[~missed]
         offsets_ = audio_times[1::2][assigned]
 
         # Audio groomed
+        if np.any(to_remove):
+            gpio = {k: v[~to_remove] for k, v in gpio.items()}
+            ifronts = gpio['indices']
+            # Assert that we've removed discrete TTLs
+            assert (np.all(np.abs(np.diff(gpio['polarities'])) == 2))
+            assert gpio['polarities'][0] == 1
+
         audio_ = {'times': np.empty(ifronts.size), 'polarities': gpio['polarities']}
         audio_['times'][::2] = onsets_
         audio_['times'][1::2] = offsets_
