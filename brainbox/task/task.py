@@ -372,8 +372,8 @@ def generate_pseudo_session(trials, generate_choices=True):
 
     Returns
     -------
-    pseudo_trials : AlfBunch
-        a trials object with synthetically generated trials
+    pseudo_trials : DataFrame
+        a trials dataframe with synthetically generated trials
     """
 
     # Get contrast set presented to the animal
