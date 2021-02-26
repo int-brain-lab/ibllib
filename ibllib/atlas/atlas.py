@@ -8,7 +8,7 @@ import nrrd
 
 from brainbox.numerical import ismember
 from ibllib.atlas.regions import BrainRegions, regions_from_allen_csv  # noqa
-from ibllib.io import params
+from ibllib.io import params, hashfile
 from oneibl.webclient import http_download_file
 
 _logger = logging.getLogger('ibllib')
@@ -711,6 +711,7 @@ class AllenAtlas(BrainAtlas):
         """
         par = params.read('one_params')
         FLAT_IRON_ATLAS_REL_PATH = Path('histology', 'ATLAS', 'Needles', 'Allen')
+        MD5_LUT = 'a529ada7db10777bff31cf9916074663'  # if updating lut needs to update here
         regions = BrainRegions()
         if mock:
             image, label = [np.zeros((528, 456, 320), dtype=np.int16) for _ in range(2)]
@@ -726,6 +727,9 @@ class AllenAtlas(BrainAtlas):
             if not file_label.exists():
                 _download_atlas_flatiron(file_label, FLAT_IRON_ATLAS_REL_PATH, par)
             file_label_remap = path_atlas.joinpath(f'annotation_{res_um}_lut.npz')
+            # check the md5 of the remap to overwrite if the remapping algorithm changed
+            if file_label_remap.exists() and hashfile.md5(file_label_remap) != MD5_LUT:
+                file_label_remap.unlink()
             if not file_label_remap.exists():
                 label = self._read_volume(file_label)
                 _logger.info("computing brain atlas annotations lookup table")
