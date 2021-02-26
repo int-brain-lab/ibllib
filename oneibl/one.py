@@ -469,7 +469,7 @@ class OneAlyx(OneAbstract):
         search_str = 'name__regex,' + obj.replace('*', '.*')
         if collection and collection != 'all':
             search_str += ',collection__regex,' + collection.replace('*', '.*')
-        results = self.alyx.rest('datasets', 'list', session=eid, django=search_str)
+        results = self.alyx.rest('datasets', 'list', exists=True, session=eid, django=search_str)
         pattern = re.compile(fnmatch.translate(obj))
 
         # Further refine by matching object part of ALF datasets
@@ -899,7 +899,7 @@ class OneAlyx(OneAbstract):
         # Return the uuid if any
         return uuid[0] if uuid else None
 
-    def path_to_url(self, filepath):
+    def url_from_path(self, filepath):
         """
         Given a local file path, returns the URL of the remote file.
         :param filepath: A local file path

@@ -101,11 +101,13 @@ class TestList(unittest.TestCase):
         self.eid2 = eids[1]
 
     def test_list(self):
-        # tests with a single input and a list input
+        # tests with a single input and a list input.
+        # One of the datasets has its exists flag set to False; it should be excluded from the list
         eid = self.eid
         dt = one.list(eid)  # returns dataset-type
         self.assertTrue(isinstance(dt, list))
-        self.assertEqual(29, len(dt))
+        self.assertFalse(any(str(x) == 'channels.rawRow.npy' for x in dt))
+        self.assertEqual(28, len(dt))
 
         dt = one.list(eid, details=True)  # returns dict of dataset-types
         self.assertTrue(isinstance(dt[0], dict))
@@ -242,6 +244,24 @@ class TestLoad(unittest.TestCase):
                                                    f"data_repository__globus_is_personal,False")
         self.assertTrue(fr[0]['json'] == {'mismatch_hash': True})
 
+    def test_load_object(self):
+        # Test download_only flag
+        files = one.load_object(self.eid, 'channels', collection=None, download_only=True)
+        self.assertTrue(len(files) == 4)
+        self.assertIsInstance(files[0], Path)
+
+        # Test loading
+        obj = one.load_object(self.eid, 'channels', collection=None)
+        # One of the datasets has its exists flag set to False; it should be excluded from the list
+        expected = ['brainLocation', 'probe', 'site', 'sitePositions']  # 'rawRow' missing
+        self.assertCountEqual(obj.keys(), expected)
+
+        with self.assertRaises(ALFObjectNotFound):
+            one.load_object(self.eid, 'channels', collection='alf')
+
+        with self.assertRaises(ValueError):
+            one.load_object('fake', 'channels', collection='alf')
+
 
 class TestMisc(unittest.TestCase):
 
@@ -282,13 +302,14 @@ class TestMisc(unittest.TestCase):
         session_path = one.path_from_eid(eid)
         # Test URL is returned
         filepath = session_path.joinpath('alf', '_ibl_wheel.position.npy')
-        url = one.path_to_url(filepath)
+        url = one.url_from_path(filepath)
         expected = ('mainenlab/Subjects/clns0730/2018-08-24/1/'
                     '_ibl_wheel.position.a0155492-ee9d-4584-ba4e-7c86f9b12d3a.npy')
         self.assertIn(expected, url)
         # Test errors raised
         with self.assertRaises(ALFObjectNotFound):
-            one.path_to_url(session_path.joinpath('raw_video_data', '_iblrig_leftCamera.raw.mp4'))
+            one.url_from_path(
+                session_path.joinpath('raw_video_data', '_iblrig_leftCamera.raw.mp4'))
 
     def test_datasets_from_type(self):
         eid = 'cf264653-2deb-44cb-aa84-89b82507028a'

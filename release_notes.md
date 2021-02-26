@@ -1,3 +1,10 @@
+### Release Notes 1.5.39
+- ephys extraction: remove short TTL pulses of frame2ttl in task extraction 
+
+### Release Notes 1.5.38
+- ibllib.atlas.regions remapping option
+- optogenetics pybpod: extraction of laser probabilities
+
 ### Release Notes 1.5.37
 - MANIFEST.in fix
   - Added fixtures file for passive protocol extraction

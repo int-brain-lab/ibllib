@@ -33,9 +33,13 @@ def uuid2np(eids_uuid):
 
 
 def str2np(eids_str):
+    """
+    Converts uuid string or list of uuid strings to int64 numpy array with 2 cols
+    Returns [0, 0] for None list entries
+    """
     if isinstance(eids_str, str):
         eids_str = [eids_str]
-    return uuid2np([uuid.UUID(eid) for eid in eids_str])
+    return uuid2np([uuid.UUID(eid) if eid else uuid.UUID('0' * 32) for eid in eids_str])
 
 
 def np2uuid(eids_np):
