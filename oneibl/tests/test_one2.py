@@ -2,7 +2,7 @@
 from pathlib import Path
 import unittest
 
-from oneibl import sdsc
+from oneibl import webclient as wc
 
 dsets = [
     {'url': 'https://alyx.internationalbrainlab.org/datasets/00059298-1b33-429c-a802-fa51bb662d72',
@@ -79,7 +79,13 @@ dsets = [
 class TestAlyx2Path(unittest.TestCase):
 
     def test_dsets_2_path(self):
-        assert len(sdsc.path_from_dataset(dsets)) == 3
-        assert sdsc.path_from_dataset(dsets[0]) == Path(
-            '/mnt/ibl/hoferlab/Subjects/SWC_014/2019-12-11/001/alf/probe00/'
-            'channels.localCoordinates.00059298-1b33-429c-a802-fa51bb662d72.npy')
+        assert len(wc.globus_path_from_dataset(dsets)) == 3
+        sdsc_path = '/mnt/ibl/hoferlab/Subjects/SWC_014/2019-12-11/001/alf/probe00/channels.localCoordinates.00059298-1b33-429c-a802-fa51bb662d72.npy'
+        one_path = '/one_root/hoferlab/Subjects/SWC_014/2019-12-11/001/alf/probe00/channels.localCoordinates.npy'
+        globus_path_sdsc = '/hoferlab/Subjects/SWC_014/2019-12-11/001/alf/probe00/channels.localCoordinates.00059298-1b33-429c-a802-fa51bb662d72.npy'
+        globus_path_sr = '/mnt/s0/Data/Subjects/SWC_014/2019-12-11/001/alf/probe00/channels.localCoordinates.npy'
+
+        assert wc.sdsc_path_from_dataset(dsets[0]) == Path(sdsc_path)
+        assert wc.one_path_from_dataset(dsets[0], one_cache='/one_root') == Path(one_path)
+        assert wc.sdsc_globus_path_from_dataset(dsets[0]) == Path(globus_path_sdsc)
+        assert wc.globus_path_from_dataset(dsets[0], repository='ibl_floferlab_SR') == Path(globus_path_sr)

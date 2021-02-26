@@ -12,6 +12,7 @@ import requests
 
 from ibllib.misc import pprint, print_progress
 
+SDSC_ROOT_PATH = Path('/mnt/ibl')
 _logger = logging.getLogger('ibllib')
 
 
@@ -51,6 +52,74 @@ class _PaginatedResponse(Mapping):
     def __iter__(self):
         for i in range(self.count):
             yield self.__getitem__(i)
+
+
+def sdsc_globus_path_from_dataset(dset):
+    """
+    :param dset: dset dictionary or list of dictionaries from ALyx rest endpoint
+    Returns SDSC globus file path from a dset record or a list of dsets records from REST
+    """
+    return _path_from_dataset(dset, root_path=None, repository=None, uuid=True)
+
+
+def globus_path_from_dataset(dset, repository=None, uuid=False):
+    """
+    Returns local one file path from a dset record or a list of dsets records from REST
+    :param dset: dset dictionary or list of dictionaries from ALyx rest endpoint
+    :param repository: (optional) repository name of the file record (if None, will take
+     the first filerecord with an URL)
+    """
+    return _path_from_dataset(dset, root_path=None, repository=repository, uuid=uuid)
+
+
+def one_path_from_dataset(dset, one_cache):
+    """
+    Returns local one file path from a dset record or a list of dsets records from REST
+    :param dset: dset dictionary or list of dictionaries from ALyx rest endpoint
+    :param one_cache: the one cache directory
+    """
+    return _path_from_dataset(dset, root_path=one_cache, uuid=False)
+
+
+def sdsc_path_from_dataset(dset, root_path=SDSC_ROOT_PATH):
+    """
+    Returns sdsc file path from a dset record or a list of dsets records from REST
+    :param dset: dset dictionary or list of dictionaries from ALyx rest endpoint
+    :param root_path: (optional) the prefix path such as one download directory or sdsc root
+    """
+    return _path_from_dataset(dset, root_path=root_path, uuid=True)
+
+
+def _path_from_dataset(dset, root_path=None, repository=None, uuid=False):
+    """
+    returns the local file path from a dset record from a REST query
+    :param dset: dset dictionary or list of dictionaries from ALyx rest endpoint
+    :param root_path: (optional) the prefix path such as one download directory or sdsc root
+    :param repository:
+    :param uuid: (optional bool) if True, will add UUID before the file extension
+    :return: Path or list of Path
+    """
+    if isinstance(dset, list):
+        return [_path_from_dataset(d) for d in dset]
+    if repository:
+        fr = next((fr for fr in dset['file_records'] if fr['data_repository'] == repository))
+    else:
+        fr = next((fr for fr in dset['file_records'] if fr['data_url']))
+    uuid = dset['url'][-36:] if uuid else None
+    return _path_from_filerecord(fr, root_path=root_path, uuid=uuid)
+
+
+def _path_from_filerecord(fr, root_path=SDSC_ROOT_PATH, uuid=None):
+    import alf.io
+    if isinstance(fr, list):
+        return [_path_from_filerecord(f) for f in fr]
+    file_path = Path(fr['data_repository_path']).joinpath(fr['relative_path'])
+    if root_path:
+        file_system_root = Path(Path('.').absolute().parts[0])  # TODO: windows check
+        file_path = Path(root_path).joinpath(file_path.relative_to(file_system_root))
+    if uuid:
+        file_path = alf.io.add_uuid_string(file_path, uuid)
+    return file_path
 
 
 def http_download_file_list(links_to_file_list, **kwargs):
