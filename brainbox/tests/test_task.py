@@ -117,5 +117,6 @@ class TestTask(unittest.TestCase):
         pseudo_trials = bb.task.generate_pseudo_session(test_trials)
         self.assertTrue(pseudo_trials.shape[0] == test_trials.shape[0])
 
+
 if __name__ == "__main__":
     unittest.main(exit=False)
