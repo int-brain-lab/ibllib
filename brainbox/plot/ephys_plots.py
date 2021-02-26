@@ -104,6 +104,7 @@ def scatter_raster_plot(spike_amps, spike_depths, spike_times, n_amp_bins=10, am
 
     data = ScatterPlot(x=spike_times[0:-1:subsample_factor], y=spike_depths[0:-1:subsample_factor],
                        c=spike_colors, cmap='BuPu')
+    data.set_ylim((0, 3840))
     data.set_color(color=spike_colors)
     data.set_clim(clim=amp_range * 1e6)
     data.set_marker_size(marker_size=spike_size)

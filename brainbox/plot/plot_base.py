@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.image import NonUniformImage
+import matplotlib
+from matplotlib import cm
 
 axis_dict = {'x': 0, 'y': 1, 'z': 2}
 
@@ -13,15 +15,14 @@ class DefaultPlot(object):
         self.vlines = []
         self.set_labels()
 
-    def add_lines(self, pos, orientation, lim=None, style='--', width=6, color='k'):
+    def add_lines(self, pos, orientation, lim=None, style='--', width=3, color='k'):
         if orientation == 'v':
-            lim = self._set_default(lim, self.set_ylim())
-            print(lim)
-            self.vlines.append({'pos': pos, 'lim': lim, 'style': style, 'width': int(width),
+            lim = self._set_default(lim, self.ylim)
+            self.vlines.append({'pos': pos, 'lim': lim, 'style': style, 'width': width,
                                 'color': color})
         if orientation == 'h':
-            lim = self._set_default(lim, self.set_xlim())
-            self.hlines.append({'pos': pos, 'lim': lim, 'style': style, 'width': int(width),
+            lim = self._set_default(lim, self.xlim)
+            self.hlines.append({'pos': pos, 'lim': lim, 'style': style, 'width': width,
                                 'color': color})
 
     def set_labels(self, title=None, xlabel=None, ylabel=None, zlabel=None, clabel=None):
@@ -30,19 +31,15 @@ class DefaultPlot(object):
 
     def set_xlim(self, xlim=None):
         self.xlim = self._set_lim('x', lim=xlim)
-        return self.xlim
 
     def set_ylim(self, ylim=None):
         self.ylim = self._set_lim('y', lim=ylim)
-        return self.ylim
 
     def set_zlim(self, zlim=None):
         self.zlim = self._set_lim('z', lim=zlim)
-        return self.zlim
 
     def set_clim(self, clim=None):
         self.clim = self._set_lim('c', lim=clim)
-        return self.clim
 
     def _set_lim(self, axis, lim=None):
         if lim is not None:
@@ -168,8 +165,6 @@ class ScatterPlot(DefaultPlot):
         self.set_edge_width()
 
     def set_color(self, color=None):
-        # Only use for single colour for all point. If want to specifiy colour for each point use
-        # pass in this data as data['c']
         self.color = self._set_default(color, 'b')
 
     def set_marker_size(self, marker_size=None):
@@ -215,14 +210,14 @@ class LinePlot(DefaultPlot):
 def add_lines(ax, data, **kwargs):
 
     for vline in data['vlines']:
-        ax.vlines(x=vline['pos'], ymin=vline['lim'][0], ymax=vline['lim'][0],
-                 linestyles=vline['style'], linewidth=vline['width'], colors=vline['color'],
-                 **kwargs)
+        ax.vlines(vline['pos'], ymin=vline['lim'][0], ymax=vline['lim'][1],
+                  linestyles=vline['style'], linewidth=vline['width'], colors=vline['color'],
+                  **kwargs)
 
     for hline in data['hlines']:
-        ax.hlines(y=hline['pos'], xmin=hline['lim'][0], xmax=hline['lim'][0],
-                 linestyles=hline['style'], linewidth=hline['width'], colors=hline['color'],
-                 **kwargs)
+        ax.hlines(hline['pos'], xmin=hline['lim'][0], xmax=hline['lim'][1],
+                  linestyles=hline['style'], linewidth=hline['width'], colors=hline['color'],
+                  **kwargs)
 
     return ax
 
@@ -271,33 +266,37 @@ def plot_scatter(data, ax=None, show_cbar=True, **kwargs):
         scat = ax.scatter(x=data['data']['x'], y=data['data']['y'], c=data['color'],
                           s=data['marker_size'], marker=data['marker_type'],
                           edgecolors=data['edge_color'], linewidths=data['edge_width'])
-        show_cbar = False
     else:
         # Colour for each point specified
-        # need to check if we want to divide by 255
         if len(data['color']) == len(data['data']['x']):
-            scat = ax.scatter(x=data['data']['x'], y=data['data']['y'], c=data['color']/255,
-                              s=data['marker_size'], marker=data['marker_type'], cmap=data['cmap'],
-                              vmin=data['clim'][0], vmax=data['clim'][1],
+            if np.max(data['color']) > 1:
+                data['color'] = data['color'] / 255
+
+            scat = ax.scatter(x=data['data']['x'], y=data['data']['y'], c=data['color'],
+                              s=data['marker_size'], marker=data['marker_type'],
                               edgecolors=data['edge_color'], linewidths=data['edge_width'])
+            if show_cbar:
+                norm = matplotlib.colors.Normalize(vmin=data['clim'][0], vmax=data['clim'][1],
+                                                   clip=True)
+                cbar = fig.colorbar(cm.ScalarMappable(norm=norm, cmap=data['cmap']), ax=ax)
+                cbar.set_label(data['labels']['clabel'])
         # Automatically generate from c data
         else:
             scat = ax.scatter(x=data['data']['x'], y=data['data']['y'], c=data['data']['c'],
                               s=data['marker_size'], marker=data['marker_type'], cmap=data['cmap'],
                               vmin=data['clim'][0], vmax=data['clim'][1],
                               edgecolors=data['edge_color'], linewidths=data['edge_width'])
+            if show_cbar:
+                cbar = fig.colorbar(scat, ax=ax)
+                cbar.set_label(data['labels']['clabel'])
+
+    ax = add_lines(ax, data, **kwargs)
 
     ax.set_xlim(data['xlim'][0], data['xlim'][1])
     ax.set_ylim(data['ylim'][0], data['ylim'][1])
     ax.set_xlabel(data['labels']['xlabel'])
     ax.set_ylabel(data['labels']['ylabel'])
     ax.set_title(data['labels']['title'])
-
-    if show_cbar:
-        cbar = fig.colorbar(scat, ax=ax)
-        cbar.set_label(data['labels']['clabel'])
-
-    ax = add_lines(ax, data, **kwargs)
 
     plt.show()
 
