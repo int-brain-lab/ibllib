@@ -398,7 +398,7 @@ class FTPPatcher(Patcher):
         if str(remote_path) != '.':
             try:
                 self.ftp.cwd(str(remote_path))
-            except ftplib.all_errors:
+            except ftplib.error_perm:
                 self.mktree(PurePosixPath(remote_path.parent))
                 self.ftp.mkd(str(remote_path))
                 self.ftp.cwd(str(remote_path))
