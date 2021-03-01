@@ -71,7 +71,8 @@ class CameraTimestampsFPGA(BaseExtractor):
     def __del__(self):
         _logger.setLevel(logging.INFO)
 
-    def _extract(self, sync=None, chmap=None, video_path=None, display=False):
+    def _extract(self, sync=None, chmap=None, video_path=None,
+                 display=False, extrapolate_missing=True):
         """
         The raw timestamps are taken from the FPGA.  These are the times of the camera's frame
         TTLs.
@@ -114,7 +115,8 @@ class CameraTimestampsFPGA(BaseExtractor):
             else:
                 assert length == count.size, 'fewer counts than frames'
             raw_ts = fpga_times[self.label]
-            timestamps = align_with_audio(raw_ts, audio, gpio, count, display=display)
+            timestamps = align_with_audio(raw_ts, audio, gpio, count,
+                                          display=display, extrapolate_missing=extrapolate_missing)
         else:
             _logger.warning('Alignment by wheel data not yet implemented')
             timestamps = fpga_times[self.label]
@@ -159,7 +161,8 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
             else:
                 assert length == count.size, 'fewer counts than frames'
 
-            return align_with_audio(raw_ts, audio, gpio, count, extrapolate_missing)
+            return align_with_audio(raw_ts, audio, gpio, count,
+                                    extrapolate_missing, display=display)
         else:
             _logger.warning('Alignment by wheel data not yet implemented')
             # Extrapolate at median frame rate
