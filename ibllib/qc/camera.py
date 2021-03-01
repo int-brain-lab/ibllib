@@ -432,7 +432,7 @@ class CameraQC(base.QC):
         # Check within ms of audio times
         if display:
             plt.Figure()
-            plt.plot(self.data['fpga_times'][low2high], np.zeros(sum(low2high)), 'o',
+            plt.plot(self.data['timestamps'][low2high], np.zeros(sum(low2high)), 'o',
                      label='GPIO Low -> High')
             plt.plot(self.data['audio'], np.zeros(self.data['audio'].size), 'rx',
                      label='Audio TTL High')
@@ -457,7 +457,7 @@ class CameraQC(base.QC):
         if not data_for_keys(('video', 'count'), self.data):
             return 'NOT_SET'
         size_diff = int(self.data['count'].size - self.data['video']['length'])
-        strict_increase = np.diff(self.data['count']) > 0
+        strict_increase = np.all(np.diff(self.data['count']) > 0)
         if not np.all(strict_increase):
             n_effected = np.sum(np.invert(strict_increase))
             _log.info(f'frame count not strictly increasing: '
@@ -668,7 +668,7 @@ class CameraQC(base.QC):
             return 'NOT_SET'
 
         if roi == False:
-            top_left, roi, _ = self.find_face()
+            top_left, roi, _ = self.find_face(test=test)
             h, w = map(lambda x: np.diff(x).item(), roi)
             y, x = np.median(np.array(top_left), axis=0).round().astype(int)
             roi = (np.s_[y: y + h, x: x + w],)
@@ -706,7 +706,6 @@ class CameraQC(base.QC):
                 [cv2.equalizeHist(x, x) for x in img]
 
         # A measure of the sharpness effectively taking the second derivative of the image
-
         lpc_var = np.empty((min(n, len(img)), len(roi)))
         for i, frame in enumerate(img[::-1]):
             lpc = cv2.Laplacian(frame, cv2.CV_16S, ksize=1)
