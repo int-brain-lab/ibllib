@@ -27,10 +27,16 @@ class TestCameraQC(unittest.TestCase):
         self.qc.type = 'ephys'
 
     def test_check_brightness(self):
-        self.qc.data['frame_samples'] = np.random.rand(1280, 1024, self.qc.n_samples) * 50
+        self.qc.data['frame_samples'] = self.qc.load_reference_frames('left')
         self.assertEqual('PASS', self.qc.check_brightness())
+        # Make frames a third as bright
+        self.qc.data['frame_samples'] = (self.qc.data['frame_samples'] / 3).astype(np.int32)
+        self.assertEqual('FAIL', self.qc.check_brightness())
+        # Change thresholds
+        self.qc.data['frame_samples'] = self.qc.load_reference_frames('left')
         self.assertEqual('FAIL', self.qc.check_brightness(bounds=(10, 20)))
         self.assertEqual('FAIL', self.qc.check_brightness(max_std=1e-6))
+        # Check outcome when no frame samples loaded
         self.qc.data['frame_samples'] = None
         self.assertEqual('NOT_SET', self.qc.check_brightness())
 

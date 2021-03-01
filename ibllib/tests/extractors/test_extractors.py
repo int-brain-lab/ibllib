@@ -663,8 +663,9 @@ class MockExtracor(BaseExtractor):
 
 class TestBaseExtractorSavingMethods(unittest.TestCase):
     def setUp(self) -> None:
-        self.session_path = Path(tempfile.gettempdir()) / 'fake_session'
-        self.session_path.mkdir(exist_ok=True)
+        tempdir = tempfile.TemporaryDirectory()
+        self.session_path = tempdir.name
+        self.addClassCleanup(tempdir.cleanup)
         self.mock_extractor = MockExtracor(self.session_path)
 
     def test_saving_method(self):
@@ -711,8 +712,6 @@ class TestCameraExtractors(unittest.TestCase):
         audio['times'] = np.sort(np.append(audio['times'], [t, t + pulse_width, 80]))
         audio['polarities'] = np.ones(audio['times'].shape, dtype=np.int32)
         audio['polarities'][1::2] = -1
-
-        gpio, audio, ts = extractors.camera.groom_pin_state(gpio, audio, ts, display=True)
 
     def test_attribute_times(self):
         # Create two timestamp arrays at two different frequencies
