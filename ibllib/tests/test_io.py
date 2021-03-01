@@ -161,6 +161,23 @@ class TestsRawDataLoaders(unittest.TestCase):
         self.assertEqual(str(bonsai[0]), '2020-08-19T16:42:57.790361600')
         expected = np.array([69.466875, 69.5, 69.533, 69.566125, 69.59925])
         np.testing.assert_array_equal(expected, camera[:5])
+        # Many sessions have the columns in the wrong order.  Here we write 5 lines from the
+        # fixture file to another file in a temporary folder, with the columns swapped.
+        from_file = session.joinpath('raw_video_data', '_iblrig_bodyCamera.timestamps.ssv')
+        with tempfile.TemporaryDirectory() as tempdir:
+            # New file with columns swapped
+            to_file = Path(tempdir).joinpath('raw_video_data', '_iblrig_leftCamera.timestamps.ssv')
+            to_file.parent.mkdir(exist_ok=True)
+            with open(from_file, 'r') as a, open(to_file, 'w') as b:
+                for i in range(5):
+                    # Read line from fixture file and write into file in swapped order
+                    b.write('{1} {0} {2}'.format(*a.readline().split(' ')))
+            assert to_file.exists(), 'failed to write test file'
+            bonsai, camera = raw.load_camera_ssv_times(to_file.parents[1], 'left')
+            # Verify that values returned in the same order as before
+            self.assertEqual(bonsai.dtype.str, '<M8[ns]')
+            self.assertEqual(camera.dtype.str, '<f8')
+            self.assertAlmostEqual(69.466875, camera[0])
 
     def test_load_embedded_frame_data(self):
         """
@@ -305,6 +322,7 @@ class TestsSpikeGLX_compress(unittest.TestCase):
 
     def setUp(self):
         self._tempdir = tempfile.TemporaryDirectory()
+        self.addClassCleanup(self._tempdir.cleanup)
         self.workdir = Path(self._tempdir.name)
         file_meta = Path(__file__).parent.joinpath('fixtures', 'io', 'spikeglx',
                                                    'sample3A_short_g0_t0.imec.ap.meta')
@@ -324,6 +342,7 @@ class TestsSpikeGLX_compress(unittest.TestCase):
         self.assertTrue(np.all(np.isclose(sr._raw[55] * s2mv, sr[55])))
         self.assertTrue(np.all(np.isclose(sr._raw[5:500] * s2mv, sr[5:500])[:, :-1]))
 
+    @unittest.skipIf(os.name == 'nt', 'SpikeGLX compression fails on Windows')
     def test_compress(self):
 
         def compare_data(sr0, sr1):
@@ -373,42 +392,43 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
 
     def test_read_corrupt(self):
         # nidq has 1 analog and 1 digital sync channels
-        self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
-        int2volts = 5 / 32768
-        nidq = spikeglx._mock_spikeglx_file(
-            Path(self.tdir.name).joinpath('sample3B_g0_t0.nidq.bin'),
-            self.workdir / 'sample3B_g0_t0.nidq.meta',
-            ns=32, nc=2, sync_depth=8, int2volts=int2volts, corrupt=True)
-        self.assert_read_glx(nidq)
+        with tempfile.TemporaryDirectory(prefix='glx_test') as tdir:
+            int2volts = 5 / 32768
+            nidq = spikeglx._mock_spikeglx_file(
+                Path(tdir).joinpath('sample3B_g0_t0.nidq.bin'),
+                self.workdir / 'sample3B_g0_t0.nidq.meta',
+                ns=32, nc=2, sync_depth=8, int2volts=int2volts, corrupt=True)
+            self.assert_read_glx(nidq)
 
     def test_read_nidq(self):
         # nidq has 1 analog and 1 digital sync channels
-        self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
-        int2volts = 5 / 32768
-        nidq = spikeglx._mock_spikeglx_file(
-            Path(self.tdir.name).joinpath('sample3B_g0_t0.nidq.bin'),
-            self.workdir / 'sample3B_g0_t0.nidq.meta',
-            ns=32, nc=2, sync_depth=8, int2volts=int2volts)
-        self.assert_read_glx(nidq)
+        with tempfile.TemporaryDirectory(prefix='glx_test') as tdir:
+            int2volts = 5 / 32768
+            nidq = spikeglx._mock_spikeglx_file(
+                Path(tdir).joinpath('sample3B_g0_t0.nidq.bin'),
+                self.workdir / 'sample3B_g0_t0.nidq.meta',
+                ns=32, nc=2, sync_depth=8, int2volts=int2volts)
+            self.assert_read_glx(nidq)
 
     def test_read_3A(self):
-        self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
-        bin_3a = spikeglx._mock_spikeglx_file(
-            Path(self.tdir.name).joinpath('sample3A_g0_t0.imec.ap.bin'),
-            self.workdir / 'sample3A_g0_t0.imec.ap.meta',
-            ns=32, nc=385, sync_depth=16)
-        self.assert_read_glx(bin_3a)
+        with tempfile.TemporaryDirectory(prefix='glx_test') as tdir:
+            bin_3a = spikeglx._mock_spikeglx_file(
+                Path(tdir).joinpath('sample3A_g0_t0.imec.ap.bin'),
+                self.workdir / 'sample3A_g0_t0.imec.ap.meta',
+                ns=32, nc=385, sync_depth=16)
+            self.assert_read_glx(bin_3a)
 
     def test_read_3B(self):
-        self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
-        bin_3b = spikeglx._mock_spikeglx_file(
-            Path(self.tdir.name).joinpath('sample3B_g0_t0.imec1.ap.bin'),
-            self.workdir / 'sample3B_g0_t0.imec1.ap.meta',
-            ns=32, nc=385, sync_depth=16)
-        self.assert_read_glx(bin_3b)
+        with tempfile.TemporaryDirectory(prefix='glx_test') as tdir:
+            bin_3b = spikeglx._mock_spikeglx_file(
+                Path(tdir).joinpath('sample3B_g0_t0.imec1.ap.bin'),
+                self.workdir / 'sample3B_g0_t0.imec1.ap.meta',
+                ns=32, nc=385, sync_depth=16)
+            self.assert_read_glx(bin_3b)
 
     def test_check_ephys_file(self):
         self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
+        self.addCleanup(self.tdir.cleanup)
         bin_3b = spikeglx._mock_spikeglx_file(
             Path(self.tdir.name).joinpath('sample3B_g0_t0.imec1.ap.bin'),
             self.workdir / 'sample3B_g0_t0.imec1.ap.meta',
@@ -596,8 +616,9 @@ class TestsHardwareParameters(unittest.TestCase):
 class TestsMisc(unittest.TestCase):
 
     def setUp(self):
-        self.tempdir = Path(tempfile.TemporaryDirectory().name)
-        self.tempdir.mkdir()
+        tmpdir = tempfile.TemporaryDirectory()
+        self.addClassCleanup(tmpdir.cleanup)
+        self.tempdir = Path(tmpdir.name)
         self.subdirs = [
             self.tempdir / 'test_empty_parent',
             self.tempdir / 'test_empty_parent' / 'test_empty',
@@ -638,11 +659,6 @@ class TestsMisc(unittest.TestCase):
         misc.delete_empty_folders(self.tempdir, dry=False, recursive=True)
         pos = [x.exists() for x in self.subdirs]
         self.assertTrue(all([x == y for x, y in zip(pos, pos_expected)]))
-
-    def tearDown(self):
-        self.file.unlink()
-        (self.tempdir / 'test_full').rmdir()
-        _ = [x.rmdir() for x in self.subdirs if x.exists()]
 
 
 class TestsGlobus(unittest.TestCase):
