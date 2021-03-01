@@ -3,19 +3,19 @@ import matplotlib.pyplot as plt
 from matplotlib.image import NonUniformImage
 import matplotlib
 from matplotlib import cm
+from brainbox.core import Bunch
 
 
 axis_dict = {'x': 0, 'y': 1, 'z': 2}
 
 
 class DefaultPlot(object):
-    """
-    Base class for organising data into a structure that can be easily used to create plots.
-    The idea is that the dictionary is independent of plotting method and so can be fed into
-    matplotlib, pyqtgraph, datoviz (or any plotting method of choice).
-    """
+
     def __init__(self, plot_type, data):
         """
+        Base class for organising data into a structure that can be easily used to create plots.
+        The idea is that the dictionary is independent of plotting method and so can be fed into
+        matplotlib, pyqtgraph, datoviz (or any plotting method of choice).
 
         :param plot_type: type of plot (just for reference)
         :type plot_type: string
@@ -34,7 +34,7 @@ class DefaultPlot(object):
         Method to specify position and style of horizontal or vertical reference lines
         :param pos: position of line
         :param orientation: either 'v' for vertical line or 'h' for horizontal line
-        :param lim:
+        :param lim: extent of lines
         :param style: line style
         :param width: line width
         :param color: line colour
@@ -42,30 +42,72 @@ class DefaultPlot(object):
         """
         if orientation == 'v':
             lim = self._set_default(lim, self.ylim)
-            self.vlines.append({'pos': pos, 'lim': lim, 'style': style, 'width': width,
-                                'color': color})
+            self.vlines.append(Bunch({'pos': pos, 'lim': lim, 'style': style, 'width': width,
+                                      'color': color}))
         if orientation == 'h':
             lim = self._set_default(lim, self.xlim)
-            self.hlines.append({'pos': pos, 'lim': lim, 'style': style, 'width': width,
-                                'color': color})
+            self.hlines.append(Bunch({'pos': pos, 'lim': lim, 'style': style, 'width': width,
+                                      'color': color}))
 
     def set_labels(self, title=None, xlabel=None, ylabel=None, zlabel=None, clabel=None):
-        self.labels = {'title': title, 'xlabel': xlabel, 'ylabel': ylabel, 'zlabel': zlabel,
-                       'clabel': clabel}
+        """
+        Set labels for plot
+
+        :param title: title
+        :param xlabel: x axis label
+        :param ylabel: y axis label
+        :param zlabel: z axis label
+        :param clabel: cbar label
+        :return:
+        """
+        self.labels = Bunch({'title': title, 'xlabel': xlabel, 'ylabel': ylabel, 'zlabel': zlabel,
+                             'clabel': clabel})
 
     def set_xlim(self, xlim=None):
+        """
+        Set xlim values
+
+        :param xlim: xlim values (min, max) supports tuple, list or np.array of len(2). If not
+        specified will compute as min, max of y data
+        """
         self.xlim = self._set_lim('x', lim=xlim)
 
     def set_ylim(self, ylim=None):
+        """
+        Set ylim values
+
+        :param ylim: ylim values (min, max) supports tuple, list or np.array of len(2). If not
+        specified will compute as min, max of y data
+        """
         self.ylim = self._set_lim('y', lim=ylim)
 
     def set_zlim(self, zlim=None):
+        """
+        Set zlim values
+
+        :param zlim: zlim values (min, max) supports tuple, list or np.array of len(2). If not
+        specified will compute as min, max of z data
+        """
         self.zlim = self._set_lim('z', lim=zlim)
 
     def set_clim(self, clim=None):
+        """
+        Set clim values
+
+        :param clim: clim values (min, max) supports tuple, list or np.array of len(2). If not
+        specified will compute as min, max of c data
+        """
         self.clim = self._set_lim('c', lim=clim)
 
     def _set_lim(self, axis, lim=None):
+        """
+        General function to set limits to either specified value if lim is not None or to nanmin,
+        nanmin of data
+
+        :param axis: x, y, z or c
+        :param lim: lim values (min, max) supports tuple, list or np.array of len(2)
+        :return:
+        """
         if lim is not None:
             assert(len(lim) == 2)
         else:
@@ -73,20 +115,46 @@ class DefaultPlot(object):
         return lim
 
     def _set_default(self, val, default):
+        """
+        General function to set value of attribute. If val is not None, the value of val will be
+        returned otherwise default value will be returned
+
+        :param val: non-default value to set attribute to
+        :param default: default value of attribute
+        :return:
+        """
         if val is None:
             return default
         else:
             return val
 
     def convert2dict(self):
+        """
+        Convert class object to dictionary
+
+        :return: dict with variables needed for plotting
+        """
         return vars(self)
 
 
 class ImagePlot(DefaultPlot):
     def __init__(self, img, x=None, y=None, cmap=None):
+        """
+        Class for organising data that will be used to create 2D image plots
 
-        data = {'x': self._set_default(x, np.arange(img.shape[0])),
-                'y': self._set_default(y, np.arange(img.shape[1])), 'c': img}
+        :param img: 2D image data
+        :param x: x coordinate of each image voxel in x dimension
+        :param y: y coordinate of each image voxel in y dimension
+        :param cmap: name of colormap to use
+        """
+
+        data = Bunch({'x': self._set_default(x, np.arange(img.shape[0])),
+                      'y': self._set_default(y, np.arange(img.shape[1])), 'c': img})
+
+        # Make sure dimensions agree
+        assert data['c'].shape[0] == data['x'].shape[0], 'dimensions must agree'
+        assert data['c'].shape[1] == data['y'].shape[0], 'dimensions must agree'
+
         # Initialise default plot class with data
         super().__init__('image', data)
         self.scale = None
@@ -98,28 +166,71 @@ class ImagePlot(DefaultPlot):
         self.set_clim()
 
     def set_scale(self, scale=None):
+        """
+        Set the scaling factor to apply to image (mainly for pyqtgraph implementation)
+
+        :param scale: scale values (xscale, yscale), supports tuple, list or np.array of len(2).
+        If not specified will automatically compute from xlims/ylims and shape of data
+        :return:
+        """
         # For pyqtgraph implementation
         if scale is not None:
             assert(len(scale) == 2)
         self.scale = self._set_default(scale, (self._get_scale('x'), self._get_scale('y')))
 
     def _get_scale(self, axis):
+        """
+        Calculate scaling factor to apply along axis. Don't use directly, use set_scale() method
+
+        :param axis: 'x' or 'y'
+        :return:
+        """
         lim = self._set_lim(axis)
         scale = (lim[1] - lim[0]) / self.data['c'].shape[axis_dict[axis]]
         return scale
 
     def set_offset(self, offset=None):
+        """
+        Set the offset to apply to the image (mainly for pyqtgraph implementation)
+
+        :param offset: offset values (xoffset, yoffset), supports tuple, list or np.array of len(2)
+        If not specified will automatically compute from minimum of xlim and ylim
+        :return:
+        """
         # For pyqtgraph implementation
         if offset is not None:
             assert(len(offset) == 2)
-        self.offset = self._set_default(offset, (0, 0))
+        self.offset = self._set_default(offset, (self._get_offset('x'), self._get_offset('y')))
+
+    def _get_offset(self, axis):
+        """
+        Calculate offset to apply to axis. Don't use directly, use set_offset() method
+        :param axis: 'x' or 'y'
+        :return:
+        """
+        offset = np.nanmin(self.data[axis])
+        return offset
 
 
 class ProbePlot(DefaultPlot):
     def __init__(self, img, x, y, cmap=None):
-        data = {'x': x, 'y': y, 'c': img}
-        super().__init__('probe', data)
+        """
+        Class for organising data that will be used to create 2D probe plots. Use function
+        plot_base.arrange_channels2bank to prepare data in correct format before using this class
 
+        :param img: list of image data for each bank of probe
+        :param x: list of x coordinate for each bank of probe
+        :param y: list of y coordinate for each bank or probe
+        :param cmap: name of cmap
+        """
+
+        # Make sure we have inputs as lists, can get input from arrange_channels2banks
+        assert(type(img) == list)
+        assert(type(x) == list)
+        assert(type(y) == list)
+
+        data = Bunch({'x': x, 'y': y, 'c': img})
+        super().__init__('probe', data)
         self.cmap = self._set_default(cmap, 'viridis')
 
         self.set_xlim()
@@ -164,10 +275,26 @@ class ProbePlot(DefaultPlot):
 
 
 class ScatterPlot(DefaultPlot):
-    # z for 3D scatter or for using colorbar with scatterplot
-    # currently not supported
     def __init__(self, x, y, z=None, c=None, cmap=None, plot_type='scatter'):
-        data = {'x': x, 'y': y, 'z': z, 'c': c}
+        """
+        Class for organising data that will be used to create scatter plots. Can be 2D or 3D (if
+        z given). Can also represent variable through color by specifying c
+
+        :param x: x values for data
+        :param y: y values for data
+        :param z: z values for data
+        :param c: values to use to represent color of scatter points
+        :param cmap: name of colormap to use if c is given
+        :param plot_type:
+        """
+        data = Bunch({'x': x, 'y': y, 'z': z, 'c': c})
+
+        assert len(data['x']) == len(data['y']), 'dimensions must agree'
+        if data['z'] is not None:
+            assert len(data['z']) == len(data['x']), 'dimensions must agree'
+        if data['c'] is not None:
+            assert len(data['c']) == len(data['x']), 'dimensions must agree'
+
         super().__init__(plot_type, data)
 
         self._set_init_style()
@@ -181,37 +308,90 @@ class ScatterPlot(DefaultPlot):
         self.cmap = self._set_default(cmap, 'viridis')
 
     def _set_init_style(self):
+        """
+        Initialise defaults
+        :return:
+        """
         self.set_color()
         self.set_marker_size()
         self.set_marker_type('o')
         self.set_opacity()
         self.set_line_color()
         self.set_line_width()
+        self.set_line_style()
 
     def set_color(self, color=None):
+        """
+        Color of scatter points.
+        :param color: string e.g 'k', single RGB e,g [0,0,0] or np.array of RGB. In the latter case
+        must give same no. of colours as datapoints i.e. len(np.array(RGB)) == len(data['x'])
+        :return:
+        """
         self.color = self._set_default(color, 'b')
 
     def set_marker_size(self, marker_size=None):
+        """
+        Size of each scatter point
+        :param marker_size: int or np.array of int. In the latter case must give same no. of
+        marker_size as datapoints i.e len(np.array(marker_size)) == len(data['x'])
+        :return:
+        """
         self.marker_size = self._set_default(marker_size, None)
 
     def set_marker_type(self, marker_type=None):
+        """
+        Shape of each scatter point
+
+        :param marker_type:
+        :return:
+        """
         self.marker_type = self._set_default(marker_type, None)
 
     def set_opacity(self, opacity=None):
-        self.opacity  = self._set_default(opacity, 1)
+        """
+        Opacity of each scatter point
+
+        :param opacity:
+        :return:
+        """
+        self.opacity = self._set_default(opacity, 1)
 
     def set_line_color(self, line_color=None):
+        """
+        Colour of edge of scatter point
+
+        :param line_color: string e.g 'k' or RGB e.g [0,0,0]
+        :return:
+        """
         self.line_color = self._set_default(line_color, None)
 
     def set_line_width(self, line_width=None):
+        """
+        Width of line on edge of scatter point
+
+        :param line_width: int
+        :return:
+        """
         self.line_width = self._set_default(line_width, None)
 
     def set_line_style(self, line_style=None):
+        """
+        Style of line on edge of scatter point
+
+        :param line_style:
+        :return:
+        """
         self.line_style = self._set_default(line_style, '-')
 
 
 class LinePlot(ScatterPlot):
     def __init__(self, x, y):
+        """
+        Class for organising data that will be used to create line plots.
+
+        :param x: x values for data
+        :param y: y values for data
+        """
         super().__init__(x, y, plot_type='line')
 
         self._set_init_style()
@@ -227,6 +407,14 @@ class LinePlot(ScatterPlot):
 
 
 def add_lines(ax, data, **kwargs):
+    """
+    Function to add vertical and horizontal reference lines to matplotlib axis
+
+    :param ax: matplotlib axis
+    :param data: dict of plot data
+    :param kwargs: matplotlib keywords arguments associated with vlines/hlines
+    :return:
+    """
 
     for vline in data['vlines']:
         ax.vlines(vline['pos'], ymin=vline['lim'][0], ymax=vline['lim'][1],
@@ -241,18 +429,31 @@ def add_lines(ax, data, **kwargs):
     return ax
 
 
-def plot_image(data, ax=None, show_cbar=True, **kwargs):
+def plot_image(data, ax=None, show_cbar=True, fig_kwargs=dict(), line_kwargs=dict(),
+               img_kwargs=dict()):
+    """
+    Function to create matplotlib plot from ImagePlot object
+
+    :param data: ImagePlot object, either class or dict
+    :param ax: matplotlib axis to plot on, if None, will create figure
+    :param show_cbar: whether or not to display colour bar
+    :param fig_kwargs: dict of matplotlib keywords associcated with plt.subplots e.g can be
+    fig size, tight layout etc.
+    :param line_kwargs: dict of matplotlib keywords associated with ax.hlines/ax.vlines
+    :param img_kwargs: dict of matplotlib keywords associated with matplotlib.imshow
+    :return: matplotlib axis and figure handles
+    """
     if not isinstance(data, dict):
         data = data.convert2dict()
 
     if not ax:
-        fig, ax = plt.subplots(**kwargs)
+        fig, ax = plt.subplots(**fig_kwargs)
     else:
         fig = plt.gcf()
 
-    img = ax.imshow(data['data']['c'].T, extent=np.r_[data['xlim'], data['ylim']], cmap=data['cmap'],
-                    vmin=data['clim'][0], vmax=data['clim'][1], origin='lower', aspect='auto',
-                    **kwargs)
+    img = ax.imshow(data['data']['c'].T, extent=np.r_[data['xlim'], data['ylim']],
+                    cmap=data['cmap'], vmin=data['clim'][0], vmax=data['clim'][1], origin='lower',
+                    aspect='auto', **img_kwargs)
 
     ax.set_xlim(data['xlim'][0], data['xlim'][1])
     ax.set_ylim(data['ylim'][0], data['ylim'][1])
@@ -264,19 +465,33 @@ def plot_image(data, ax=None, show_cbar=True, **kwargs):
         cbar = fig.colorbar(img, ax=ax)
         cbar.set_label(data['labels']['clabel'])
 
-    ax = add_lines(ax, data, **kwargs)
+    ax = add_lines(ax, data, **line_kwargs)
 
     plt.show()
 
     return ax, fig
 
 
-def plot_scatter(data, ax=None, show_cbar=True, **kwargs):
+def plot_scatter(data, ax=None, show_cbar=True, fig_kwargs=dict(), line_kwargs=dict(),
+                 scat_kwargs=dict()):
+    """
+    Function to create matplotlib plot from ScatterPlot object. If data['colors'] is given for each
+    data point it will override automatic colours that would be generated from data['data']['c']
+
+    :param data: ScatterPlot object, either class or dict
+    :param ax: matplotlib axis to plot on, if None, will create figure
+    :param show_cbar: whether or not to display colour bar
+    :param fig_kwargs: dict of matplotlib keywords associcated with plt.subplots e.g can be
+    fig size, tight layout etc.
+    :param line_kwargs: dict of matplotlib keywords associated with ax.hlines/ax.vlines
+    :param scat_kwargs: dict of matplotlib keywords associated with matplotlib.scatter
+    :return: matplotlib axis and figure handles
+    """
     if not isinstance(data, dict):
         data = data.convert2dict()
 
     if not ax:
-        fig, ax = plt.subplots(**kwargs)
+        fig, ax = plt.subplots(**fig_kwargs)
     else:
         fig = plt.gcf()
 
@@ -284,7 +499,8 @@ def plot_scatter(data, ax=None, show_cbar=True, **kwargs):
     if data['data']['c'] is None:
         scat = ax.scatter(x=data['data']['x'], y=data['data']['y'], c=data['color'],
                           s=data['marker_size'], marker=data['marker_type'],
-                          edgecolors=data['line_color'], linewidths=data['line_width'])
+                          edgecolors=data['line_color'], linewidths=data['line_width'],
+                          **scat_kwargs)
     else:
         # Colour for each point specified
         if len(data['color']) == len(data['data']['x']):
@@ -293,7 +509,8 @@ def plot_scatter(data, ax=None, show_cbar=True, **kwargs):
 
             scat = ax.scatter(x=data['data']['x'], y=data['data']['y'], c=data['color'],
                               s=data['marker_size'], marker=data['marker_type'],
-                              edgecolors=data['line_color'], linewidths=data['line_width'])
+                              edgecolors=data['line_color'], linewidths=data['line_width'],
+                              **scat_kwargs)
             if show_cbar:
                 norm = matplotlib.colors.Normalize(vmin=data['clim'][0], vmax=data['clim'][1],
                                                    clip=True)
@@ -304,12 +521,13 @@ def plot_scatter(data, ax=None, show_cbar=True, **kwargs):
             scat = ax.scatter(x=data['data']['x'], y=data['data']['y'], c=data['data']['c'],
                               s=data['marker_size'], marker=data['marker_type'], cmap=data['cmap'],
                               vmin=data['clim'][0], vmax=data['clim'][1],
-                              edgecolors=data['line_color'], linewidths=data['line_width'])
+                              edgecolors=data['line_color'], linewidths=data['line_width'],
+                              **scat_kwargs)
             if show_cbar:
                 cbar = fig.colorbar(scat, ax=ax)
                 cbar.set_label(data['labels']['clabel'])
 
-    ax = add_lines(ax, data, **kwargs)
+    ax = add_lines(ax, data, **line_kwargs)
 
     ax.set_xlim(data['xlim'][0], data['xlim'][1])
     ax.set_ylim(data['ylim'][0], data['ylim'][1])
@@ -322,13 +540,26 @@ def plot_scatter(data, ax=None, show_cbar=True, **kwargs):
     return ax, fig
 
 
-def plot_probe(data, ax=None, show_cbar=True, make_pretty=True, **kwargs):
+def plot_probe(data, ax=None, show_cbar=True, make_pretty=True, fig_kwargs=dict(),
+               line_kwargs=dict()):
+    """
+    Function to create matplotlib plot from ProbePlot object
+
+    :param data: ProbePlot object, either class or dict
+    :param ax: matplotlib axis to plot on, if None, will create figure
+    :param show_cbar: whether or not to display colour bar
+    :param make_pretty: get rid of spines on axis
+    :param fig_kwargs: dict of matplotlib keywords associcated with plt.subplots e.g can be
+    fig size, tight layout etc.
+    :param line_kwargs: dict of matplotlib keywords associated with ax.hlines/ax.vlines
+    :return: matplotlib axis and figure handles
+    """
 
     if not isinstance(data, dict):
         data = data.convert2dict()
 
     if not ax:
-        fig, ax = plt.subplots(figsize=(2,8), **kwargs)
+        fig, ax = plt.subplots(figsize=(2, 8), **fig_kwargs)
     else:
         fig = plt.gcf()
 
@@ -354,26 +585,36 @@ def plot_probe(data, ax=None, show_cbar=True, make_pretty=True, **kwargs):
         cbar = fig.colorbar(im, orientation="horizontal", pad=0.02, ax=ax)
         cbar.set_label(data['labels']['clabel'])
 
-    ax = add_lines(ax, data, **kwargs)
+    ax = add_lines(ax, data, **line_kwargs)
 
     plt.show()
 
     return ax, fig
 
 
-def plot_line(data, ax=None, **kwargs):
+def plot_line(data, ax=None, fig_kwargs=dict(), line_kwargs=dict()):
+    """
+    Function to create matplotlib plot from LinePlot object
+
+    :param data: LinePlot object either class or dict
+    :param ax: matplotlib axis to plot on
+    :param fig_kwargs: dict of matplotlib keywords associcated with plt.subplots e.g can be
+    fig size, tight layout etc.
+    :param line_kwargs: dict of matplotlib keywords associated with ax.hlines/ax.vlines
+    :return: matplotlib axis and figure handles
+    """
     if not isinstance(data, dict):
         data = data.convert2dict()
 
     if not ax:
-        fig, ax = plt.subplots(**kwargs)
+        fig, ax = plt.subplots(**fig_kwargs)
     else:
         fig = plt.gcf()
 
-    line = ax.plot(data['data']['x'], data['data']['y'], color=data['line_color'],
-                   linestyle=data['line_style'], linewidth=data['line_width'],
-                   marker=data['marker_type'], markersize=data['marker_size'])
-    ax = add_lines(ax, data, **kwargs)
+    ax.plot(data['data']['x'], data['data']['y'], color=data['line_color'],
+            linestyle=data['line_style'], linewidth=data['line_width'], marker=data['marker_type'],
+            markersize=data['marker_size'])
+    ax = add_lines(ax, data, **line_kwargs)
 
     ax.set_xlim(data['xlim'][0], data['xlim'][1])
     ax.set_ylim(data['ylim'][0], data['ylim'][1])
@@ -436,7 +677,7 @@ def arrange_channels2banks(data, chn_coords, depth=None, pad=True, x_offset=1):
         # This is a hack! Although data is 1D we give it two x coords so we can correctly set
         # scale and extent (compatible with pyqtgraph and matplotlib.imshow)
         # For matplotlib.image.Nonuniformimage must use pad=True option
-        bnk_x = np.array((iX * x_offset, (iX + 1)* x_offset))
+        bnk_x = np.array((iX * x_offset, (iX + 1) * x_offset))
         bnk_y = depth[bnk_idx]
         if pad:
             # pad data in y direction
@@ -451,9 +692,11 @@ def arrange_channels2banks(data, chn_coords, depth=None, pad=True, x_offset=1):
             bnk_x = np.arange(iX * x_offset, (iX + 3) * x_offset, x_offset)
 
             # pad the y values
-            bnk_y = np.insert(bnk_y, 0, bnk_y[0] - np.abs(bnk_y[2] - bnk_y[0]))
-            bnk_y = np.append(bnk_y, bnk_y[-1] + np.abs(bnk_y[-3] - bnk_y[-1]))
+            diff = np.diff(bnk_y)
+            diff = diff[np.nonzero(diff)]
 
+            bnk_y = np.insert(bnk_y, 0, bnk_y[0] - np.abs(diff[0]))
+            bnk_y = np.append(bnk_y, bnk_y[-1] + np.abs(diff[-1]))
 
         data_bank.append(bnk_data)
         x_bank.append(bnk_x)
