@@ -77,7 +77,7 @@ def image_rms_plot(rms_amps, rms_times, chn_coords, chn_inds, avg_across_depth=F
 
     if avg_across_depth:
         chn_depth, chn_idx, chn_count = np.unique(chn_coords[:, 1], return_index=True,
-                                            return_counts=True)
+                                                  return_counts=True)
         chn_idx_eq = np.copy(chn_idx)
         chn_idx_eq[np.where(chn_count == 2)] += 1
         rms = np.apply_along_axis(lambda a: np.mean([a[chn_idx], a[chn_idx_eq]], axis=0), 1, rms)
@@ -226,7 +226,7 @@ def scatter_amp_depth_fr_plot(spike_amps, spike_clusters, spike_depths, spike_ti
     :return: ScatterPlot object, if display=True also returns matplotlib fig and ax objects
     """
 
-    cluster, cluster_depth,n_cluster = compute_cluster_average(spike_clusters, spike_depths)
+    cluster, cluster_depth, n_cluster = compute_cluster_average(spike_clusters, spike_depths)
     _, cluster_amp, _ = compute_cluster_average(spike_clusters, spike_amps)
     cluster_amp = cluster_amp * 1e6
     cluster_fr = n_cluster / np.max(spike_times)
@@ -356,7 +356,7 @@ def line_amp_plot(spike_amps, spike_depths, spike_times, chn_coords, d_bin=10, d
     n, _, _ = bincount2D(spike_times, spike_depths, t_bin, d_bin,
                          ylim=[0, np.max(chn_coords[:, 1])])
     amp, x, y = bincount2D(spike_times, spike_depths, t_bin, d_bin,
-                            ylim=[0, np.max(chn_coords[:, 1])], weights=spike_amps)
+                           ylim=[0, np.max(chn_coords[:, 1])], weights=spike_amps)
 
     mean_amp = np.divide(amp[:, 0], n[:, 0]) * 1e6
     mean_amp[np.isnan(mean_amp)] = 0
