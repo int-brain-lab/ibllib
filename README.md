@@ -16,7 +16,7 @@ The library as currently 4 main modules:
 ## Requirements
 **OS**: Deployed on Linux and Windows. Minimally tested for Mac.
 
-**Python Module**: Python 3.6 or higher, we develop on 3.7.
+**Python Module**: Python 3.7 or higher, we develop on 3.8.
 
 ## Installation, documentation and examples
 https://docs.internationalbrainlab.org
