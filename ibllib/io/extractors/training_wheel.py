@@ -5,7 +5,7 @@ import numpy as np
 from scipy import interpolate
 
 from ibllib.io.extractors import training_trials
-from ibllib.io.extractors.base import BaseBpodTrialsExtractor
+from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
 import ibllib.exceptions as err
@@ -88,8 +88,8 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
 
 def get_wheel_position(session_path, bp_data=None, display=False):
     """
-    Gets wheel timestamps and position. Position is in radian (constant above for radius is 1)
-    mathematical convention.
+    Gets wheel timestamps and position from Bpod data. Position is in radian (constant above for
+    radius is 1) mathematical convention.
     :param session_path:
     :param bp_data (optional): bpod trials read from jsonable file
     :param display (optional): (bool)
@@ -378,10 +378,11 @@ class Wheel(BaseBpodTrialsExtractor):
     Radians mathematical convention
     """
     save_names = ('_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
-                  '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy',
-                  '_ibl_trials.firstMovement_times.npy')
+                  '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None,
+                  '_ibl_trials.firstMovement_times.npy', None)
     var_names = ('wheel_timestamps', 'wheel_position', 'wheel_moves_intervals',
-                 'wheel_moves_peak_amplitude', 'firstMovement_times')
+                 'wheel_moves_peak_amplitude', 'peakVelocity_times', 'firstMovement_times',
+                 'is_final_movement')
 
     def _extract(self):
         ts, pos = get_wheel_position(self.session_path, self.bpod_trials)
@@ -395,11 +396,12 @@ class Wheel(BaseBpodTrialsExtractor):
         trials = {'goCue_times': goCue_times, 'feedback_times': feedback_times}
         min_qt = self.settings.get('QUIESCENT_PERIOD', None)
 
-        first_moves, *_ = extract_first_movement_times(moves, trials, min_qt=min_qt)
-
-        return ts, pos, moves['intervals'], moves['peakAmplitude'], first_moves
+        first_moves, is_final, _ = extract_first_movement_times(moves, trials, min_qt=min_qt)
+        output = (ts, pos, moves['intervals'], moves['peakAmplitude'],
+                  moves['peakVelocity_times'], first_moves, is_final)
+        return output
 
 
 def extract_all(session_path, bpod_trials=None, settings=None, save=False):
-    return Wheel(session_path=session_path).extract(
-        save=save, bpod_trials=bpod_trials, settings=settings)
+    return run_extractor_classes(Wheel, save=save, session_path=session_path,
+                                 bpod_trials=bpod_trials, settings=settings)

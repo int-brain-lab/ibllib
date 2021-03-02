@@ -37,7 +37,9 @@ class QC:
             self._confirm_endpoint_id(endpoint_id)
             self.json = True
 
-        self.outcome = "NOT_SET"
+        # Ensure outcome attribute matches Alyx record
+        self._outcome = self.update('NOT_SET', namespace='') if self.eid else 'NOT_SET'
+        self.log.debug(f'Current QC status is {self.outcome}')
 
     @abstractmethod
     def run(self):
@@ -52,6 +54,18 @@ class QC:
         Subclasses may implement this for loading raw data
         """
         pass
+
+    @property
+    def outcome(self):
+        return self._outcome
+
+    @outcome.setter
+    def outcome(self, value):
+        value = value.upper()  # Ensure outcome is uppercase
+        if value not in CRITERIA:
+            raise ValueError('Invalid outcome; must be one of ' + ', '.join(CRITERIA.keys()))
+        if CRITERIA[self._outcome] < CRITERIA[value]:
+            self._outcome = value
 
     def _set_eid_or_path(self, session_path_or_eid):
         """Parse a given eID or session path
@@ -92,7 +106,7 @@ class QC:
             self.log.error('Cannot run QC: endpoint id is not recognised')
             raise ValueError("'endpoint_id' must be a valid uuid")
 
-    def update(self, outcome, namespace='experimenter', override=False):
+    def update(self, outcome=None, namespace='experimenter', override=False):
         """Update the qc field in Alyx
         Updates the 'qc' field in Alyx if the new QC outcome is worse than the current value.
         :param outcome: A string; one of "CRITICAL", "FAIL", "WARNING", "PASS" or "NOT_SET"
@@ -104,6 +118,7 @@ class QC:
             qc = QC('path/to/session')
             qc.update('PASS')  # Update current QC field to 'PASS' if not set
         """
+        outcome = outcome or self.outcome
         outcome = outcome.upper()  # Ensure outcome is uppercase
         if outcome not in CRITERIA:
             raise ValueError('Invalid outcome; must be one of ' + ', '.join(CRITERIA.keys()))
@@ -123,12 +138,12 @@ class QC:
             assert current_status == outcome, 'Failed to update session QC'
             self.log.info(f'QC field successfully updated to {outcome} for {self.endpoint[:-1]} '
                           f'{self.eid}')
-        self.outcome = current_status
+        self._outcome = current_status
         return self.outcome
 
     def update_extended_qc(self, data):
         """Update the extended_qc field in Alyx
-        Subclasses should choin a call to this.
+        Subclasses should chain a call to this.
         :param data: a dict of qc tests and their outcomes, typically a value between 0. and 1.
         :return: the updated extended_qc field
         """

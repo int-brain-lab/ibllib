@@ -56,7 +56,7 @@ def version3A(ses_path, display=True, type='smooth', tol=2.1):
     :param type: linear, exact or smooth
     :return: bool True on a a successful sync
     """
-    ephys_files = spikeglx.glob_ephys_files(ses_path, bin_exists=False)
+    ephys_files = spikeglx.glob_ephys_files(ses_path, ext='meta', bin_exists=False)
     nprobes = len(ephys_files)
     if nprobes == 1:
         timestamps = np.array([[0., 0.], [1., 1.]])
@@ -123,7 +123,7 @@ def version3B(ses_path, display=True, type=None, tol=2.5):
     :return: None
     """
     DEFAULT_TYPE = 'smooth'
-    ephys_files = spikeglx.glob_ephys_files(ses_path, bin_exists=False)
+    ephys_files = spikeglx.glob_ephys_files(ses_path, ext='meta', bin_exists=False)
     for ef in ephys_files:
         ef['sync'] = alf.io.load_object(ef.path, 'sync', namespace='spikeglx', short_keys=True)
         ef['sync_map'] = get_ibl_sync_map(ef, '3B')

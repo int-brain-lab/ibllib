@@ -69,8 +69,8 @@ def http_download_file_list(links_to_file_list, **kwargs):
     return file_names_list
 
 
-def http_download_file(full_link_to_file, chunks=None, *, clobber=False, offline=False,
-                       username='', password='', cache_dir='', return_md5=False):
+def http_download_file(full_link_to_file, chunks=None, *, clobber=False,
+                       username='', password='', cache_dir='', return_md5=False, headers=None):
     """
     :param full_link_to_file: http link to the file.
     :type full_link_to_file: str
@@ -82,6 +82,7 @@ def http_download_file(full_link_to_file, chunks=None, *, clobber=False, offline
     :type password: str
     :param cache_dir: [''] directory in which files are cached; defaults to user's
      Download directory.
+    :param: headers: [{}] additional headers to add to the request (auth tokens etc..)
     :type cache_dir: str
 
     :return: (str) a list of the local full path of the downloaded files.
@@ -99,8 +100,6 @@ def http_download_file(full_link_to_file, chunks=None, *, clobber=False, offline
 
     # do not overwrite an existing file unless specified
     if not clobber and os.path.exists(file_name):
-        return (file_name, hashfile.md5(file_name)) if return_md5 else file_name
-    elif offline:
         return (file_name, hashfile.md5(file_name)) if return_md5 else file_name
 
     # This should be the base url you wanted to access.
@@ -123,6 +122,11 @@ def http_download_file(full_link_to_file, chunks=None, *, clobber=False, offline
     if chunks is not None:
         first_byte, n_bytes = chunks
         req.add_header("Range", "bytes=%d-%d" % (first_byte, first_byte + n_bytes - 1))
+
+    # add additional headers
+    if headers is not None:
+        for k in headers:
+            req.add_header(k, headers[k])
 
     # Open the url and get the length
     try:
@@ -213,9 +217,6 @@ class AlyxClient(metaclass=UniqueSingletons):
     Class that implements simple GET/POST wrappers for the Alyx REST API
     http://alyx.readthedocs.io/en/latest/api.html
     """
-    _token = ''  # These class params are not being used!!
-    _headers = ''
-    _rest_schemes = ''
 
     def __init__(self, **kwargs):
         """
@@ -237,16 +238,18 @@ class AlyxClient(metaclass=UniqueSingletons):
         self._headers['Accept'] = 'application/json'
         self._obj_id = id(self)
 
-    def _generic_request(self, reqfunction, rest_query, data=None):
-        # if the data is a dictionary, it has to be converted to json text
-        if isinstance(data, dict) or isinstance(data, list):
-            data = json.dumps(data)
+    def _generic_request(self, reqfunction, rest_query, data=None, files=None):
         # makes sure the base url is the one from the instance
         rest_query = rest_query.replace(self._base_url, '')
         if not rest_query.startswith('/'):
             rest_query = '/' + rest_query
-        _logger.debug(self._base_url + rest_query)
-        r = reqfunction(self._base_url + rest_query, stream=True, headers=self._headers, data=data)
+        _logger.debug(f"{self._base_url + rest_query}, headers: {self._headers}")
+        headers = self._headers.copy()
+        if files is None:
+            data = json.dumps(data) if isinstance(data, dict) or isinstance(data, list) else data
+            headers['Content-Type'] = 'application/json'
+        r = reqfunction(self._base_url + rest_query, stream=True, headers=headers,
+                        data=data, files=files)
         if r and r.status_code in (200, 201):
             return json.loads(r.text)
         elif r and r.status_code == 204:
@@ -278,8 +281,7 @@ class AlyxClient(metaclass=UniqueSingletons):
             raise Exception('Alyx authentication error. Check your credentials')
         self._headers = {
             'Authorization': 'Token {}'.format(list(self._token.values())[0]),
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'}
+            'Accept': 'application/json'}
 
     def delete(self, rest_query):
         """
@@ -294,6 +296,15 @@ class AlyxClient(metaclass=UniqueSingletons):
         :return: (dict/list) json interpreted dictionary from response
         """
         return self._generic_request(requests.delete, rest_query)
+
+    def download_file(self, url, **kwargs):
+        """
+        Downloads a file on the Alyx server from a filerecord REST field URL
+        :param url: full url of the file
+        :param kwargs: webclient.http_download_file parameters
+        :return: local path of downloaded file
+        """
+        return http_download_file(url, headers=self._headers, **kwargs)
 
     def get(self, rest_query):
         """
@@ -316,7 +327,7 @@ class AlyxClient(metaclass=UniqueSingletons):
                 rep = rep['results']
         return rep
 
-    def patch(self, rest_query, data=None):
+    def patch(self, rest_query, data=None, files=None):
         """
         Sends a PATCH request to the Alyx server.
         For the dictionary contents, refer to:
@@ -324,16 +335,15 @@ class AlyxClient(metaclass=UniqueSingletons):
 
         :param rest_query: (required)the endpoint as full or relative URL
         :type rest_query: str
-        :param data: json encoded string or dictionary
+        :param data: json encoded string or dictionary (cf.requests)
         :type data: None, dict or str
+        :param files: dictionary / tuple (cf.requests)
 
         :return: response object
         """
-        if isinstance(data, dict):
-            data = json.dumps(data)
-        return self._generic_request(requests.patch, rest_query, data=data)
+        return self._generic_request(requests.patch, rest_query, data=data, files=files)
 
-    def post(self, rest_query, data=None):
+    def post(self, rest_query, data=None, files=None):
         """
         Sends a POST request to the Alyx server.
         For the dictionary contents, refer to:
@@ -343,12 +353,13 @@ class AlyxClient(metaclass=UniqueSingletons):
         :type rest_query: str
         :param data: dictionary or json encoded string
         :type data: None, dict or str
+        :param files: dictionary / tuple (cf.requests)
 
         :return: response object
         """
-        return self._generic_request(requests.post, rest_query, data=data)
+        return self._generic_request(requests.post, rest_query, data=data, files=files)
 
-    def put(self, rest_query, data=None):
+    def put(self, rest_query, data=None, files=None):
         """
         Sends a PUT request to the Alyx server.
         For the dictionary contents, refer to:
@@ -358,12 +369,13 @@ class AlyxClient(metaclass=UniqueSingletons):
         :type rest_query: str
         :param data: dictionary or json encoded string
         :type data: None, dict or str
+        :param files: dictionary / tuple (cf.requests)
 
         :return: response object
         """
-        return self._generic_request(requests.put, rest_query, data=data)
+        return self._generic_request(requests.put, rest_query, data=data, files=files)
 
-    def rest(self, url=None, action=None, id=None, data=None, **kwargs):
+    def rest(self, url=None, action=None, id=None, data=None, files=None, **kwargs):
         """
         alyx_client.rest(): lists endpoints
         alyx_client.rest(endpoint): lists actions for endpoint
@@ -378,12 +390,15 @@ class AlyxClient(metaclass=UniqueSingletons):
             alyx.client.rest('subjects', 'update', id='nickname', data=sub_dict)
             alyx.client.rest('subjects', 'partial_update', id='nickname', data=sub_dict)
             alyx.client.rest('subjects', 'delete', id='nickname')
+            alyx.client.rest('notes', 'create', data=nd, files={'image': open(image_file, 'rb')})
 
         :param url: endpoint name
         :param action: 'list', 'create', 'read', 'update', 'partial_update', 'delete'
         :param id: lookup string for actions 'read', 'update', 'partial_update', and 'delete'
         :param data: data dictionary for actions 'update', 'partial_update' and 'create'
-        :param ``**kwargs``: filter as per the REST documentation
+        :param files: if file upload
+        :param ``**kwargs``: filter as per the Alyx REST documentation
+            cf. https://alyx.internationalbrainlab.org/docs/
         :return: list of queried dicts ('list') or dict (other actions)
         """
         # if endpoint is None, list available endpoints
@@ -454,16 +469,16 @@ class AlyxClient(metaclass=UniqueSingletons):
             return self.get('/' + endpoint + '/' + id.split('/')[-1])
         elif action == 'create':
             assert(endpoint_scheme[action]['action'] == 'post')
-            return self.post('/' + endpoint, data=data)
+            return self.post('/' + endpoint, data=data, files=files)
         elif action == 'delete':
             assert(endpoint_scheme[action]['action'] == 'delete')
             return self.delete('/' + endpoint + '/' + id.split('/')[-1])
         elif action == 'partial_update':
             assert(endpoint_scheme[action]['action'] == 'patch')
-            return self.patch('/' + endpoint + '/' + id.split('/')[-1], data=data)
+            return self.patch('/' + endpoint + '/' + id.split('/')[-1], data=data, files=files)
         elif action == 'update':
             assert(endpoint_scheme[action]['action'] == 'put')
-            return self.put('/' + endpoint + '/' + id.split('/')[-1], data=data)
+            return self.put('/' + endpoint + '/' + id.split('/')[-1], data=data, files=files)
 
     # JSON field interface convenience methods
     def _check_inputs(self, endpoint: str) -> None:

@@ -7,7 +7,7 @@ from ibllib.io import spikeglx
 
 def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='int16',
                       offset=0, car=True):
-    '''
+    """
     Extracts spike waveforms from binary ephys data file, after (optionally)
     common-average-referencing (CAR) spatial noise.
 
@@ -62,7 +62,7 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
         >>>     ch = np.arange(max_ch - 10, max_ch + 10)
         >>> wf = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, car=False)
         >>> wf_car = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, car=True)
-    '''
+    """
 
     # (Previously memmaped the file manually, but now use `spikeglx.Reader`)
     # item_bytes = np.dtype(dtype).itemsize

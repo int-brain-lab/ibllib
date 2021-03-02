@@ -17,9 +17,9 @@ from typing import Union
 import numpy as np
 import pandas as pd
 
-from alf.io import get_session_path
 from ibllib.io import jsonable
 from ibllib.misc import version
+from ibllib.time import uncycle_pgts, convert_pgts
 
 _logger = logging.getLogger('ibllib')
 
@@ -99,6 +99,29 @@ def load_data(session_path: Union[str, Path], time='absolute'):
     if time == 'absolute':
         data = [trial_times_to_times(t) for t in data]
     return data
+
+
+def load_camera_ssv_times(session_path, camera):
+    """
+    Load the bonsai frame and camera timestamps from Camera.timestamps.ssv
+    :param session_path: Absolute path of session folder
+    :param camera: Name of the camera to load, e.g. 'left'
+    :return: array of datetimes, array of frame times in seconds
+    """
+    camera_labels = ('left', 'right', 'body')
+    if camera.lower() not in camera_labels:
+        raise ValueError(f"camera must be one of ({', '.join(('left', 'right', 'body'))})")
+    file = Path(session_path) / 'raw_video_data' / f'_iblrig_{camera.lower()}Camera.timestamps.ssv'
+    assert file.exists()
+    # NB: Numpy has deprecated support for non-naive timestamps.
+    # Converting them is extremely slow: 6000 timestamps takes 0.8615s vs 0.0352s.
+    # from datetime import timezone
+    # c = {0: lambda x: datetime.fromisoformat(x).astimezone(timezone.utc).replace(tzinfo=None)}
+    ssv_params = dict(names=('bonsai', 'camera'), dtype='<M8[ns],<u4', delimiter=' ')
+    ssv_times = np.genfromtxt(file, **ssv_params)  # np.loadtxt is slower for some reason
+    bonsai_times = ssv_times['bonsai']
+    camera_times = uncycle_pgts(convert_pgts(ssv_times['camera']))
+    return bonsai_times, camera_times
 
 
 def load_settings(session_path: Union[str, Path]):
@@ -513,72 +536,6 @@ def sync_trials_robust(t0, t1, diff_threshold=0.001, drift_threshold_ppm=200, ma
         return t0[ind0], t1[ind1], ind0, ind1
     else:
         return t0[ind0], t1[ind1]
-
-
-def get_task_extractor_type(task_name):
-    """
-    Splits the task name according to naming convention:
-    -   ignores everything
-    _iblrig_tasks_biasedChoiceWorld3.7.0 returns "biased"
-    _iblrig_tasks_trainingChoiceWorld3.6.0 returns "training'
-    :param task_name:
-    :return: one of ['biased', 'habituation', 'training', 'ephys', 'mock_ephys', 'sync_ephys']
-    """
-    if isinstance(task_name, Path):
-        try:
-            settings = load_settings(get_session_path(task_name))
-        except json.decoder.JSONDecodeError:
-            return
-        if settings:
-            task_name = settings.get('PYBPOD_PROTOCOL', None)
-        else:
-            return
-    # ephys
-    if 'ephysChoiceWorld' in task_name:
-        return 'ephys'
-    elif 'ephyskarolinaChoiceWorld' in task_name:
-        return 'ephys'
-    # biased choice world
-    elif '_biasedChoiceWorld' in task_name:
-        return 'biased'
-    elif 'biasedScanningChoiceWorld' in task_name:
-        return 'biased'
-    elif 'biasedVisOffChoiceWorld' in task_name:
-        return 'biased'
-    elif 'karolinaChoiceWorld' in task_name:
-        return 'biased'
-    # habituation
-    elif '_habituationChoiceWorld' in task_name:
-        return 'habituation'
-    # training
-    elif '_trainingChoiceWorld' in task_name:
-        return 'training'
-    # mock ephys
-    elif 'ephysMockChoiceWorld' in task_name:
-        return 'mock_ephys'
-    # sync ephys
-    elif task_name and task_name.startswith('_iblrig_tasks_ephys_certification'):
-        return 'sync_ephys'
-
-
-def get_session_extractor_type(session_path):
-    """
-    From a session path, loads the settings file, finds the task and checks if extractors exist
-    task names examples:
-    :param session_path:
-    :return: bool
-    """
-    settings = load_settings(session_path)
-    if settings is None:
-        _logger.error(f'ABORT: No data found in "raw_behavior_data" folder {session_path}')
-        return False
-    extractor_type = get_task_extractor_type(settings['PYBPOD_PROTOCOL'])
-    if extractor_type:
-        return extractor_type
-    else:
-        _logger.warning(str(session_path) +
-                        f" No extractors were found for {extractor_type} ChoiceWorld")
-        return False
 
 
 def load_bpod_fronts(session_path: str, data: dict = False) -> list:

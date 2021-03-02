@@ -1,13 +1,14 @@
 import logging
 from datetime import datetime
 from pathlib import Path
+
 import pkg_resources
 import re
 import subprocess
 import sys
 
+from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.pipes import ephys_preprocessing, training_preprocessing, tasks
-import ibllib.io.raw_data_loaders as rawio
 import ibllib.exceptions
 from ibllib.time import date2isostr
 
@@ -25,29 +26,33 @@ def _get_lab(one):
         return [la['name'] for la in lab]
 
 
+def _run_command(cmd):
+    process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE)
+    info, error = process.communicate()
+    if process.returncode != 0:
+        return None
+    else:
+        return info.decode('utf-8').strip()
+
+
+def _get_volume_usage(vol, label=''):
+    cmd = f'df {vol}'
+    res = _run_command(cmd)
+    # size_list = ['/dev/sdc1', '1921802500', '1427128132', '494657984', '75%', '/datadisk']
+    size_list = re.split(' +', res.split('\n')[-1])
+    fac = 1024 ** 2
+    d = {'total': int(size_list[1]) / fac,
+         'used': int(size_list[2]) / fac,
+         'available': int(size_list[3]) / fac,
+         'volume': size_list[5]}
+    return {f"{label}_{k}": d[k] for k in d}
+
+
 def report_health(one):
     """
     Get a few indicators and label the json field of the corresponding lab with them
     """
-    def _run_command(cmd):
-        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE)
-        info, error = process.communicate()
-        if process.returncode != 0:
-            return None
-        else:
-            return info.decode('utf-8').strip()
-
-    def _get_volume_usage(vol, label=''):
-        cmd = f'df {vol}'
-        res = _run_command(cmd)
-        # size_list = ['/dev/sdc1', '1921802500', '1427128132', '494657984', '75%', '/datadisk']
-        size_list = re.split(' +', res.split('\n')[-1])
-        fac = 1024 ** 2
-        d = {'total': int(size_list[1]) / fac, 'used': int(size_list[2]) / fac,
-             'volume': size_list[5]}
-        return {f"{label}_{k}": d[k] for k in d}
-
     status = {'python_version': sys.version,
               'ibllib_version': pkg_resources.get_distribution("ibllib").version,
               'phylib_version': pkg_resources.get_distribution("phylib").version,
@@ -93,7 +98,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
             session_path, one=one, max_md5_size=max_md5_size)
         if dsets is not None:
             all_datasets.extend(dsets)
-        session_type = rawio.get_session_extractor_type(session_path)
+        session_type = get_session_extractor_type(session_path)
         if session_type in ['biased', 'habituation', 'training']:
             pipe = training_preprocessing.TrainingExtractionPipeline(session_path, one=one)
         # only start extracting ephys on a raw_session.flag

@@ -1,11 +1,13 @@
 import logging
-from ibllib.atlas import AllenAtlas, regions_from_allen_csv
+from ibllib.atlas import AllenAtlas
+from ibllib.atlas.regions import BrainRegions
 from ibllib.pipes import histology
 from ibllib.ephys.neuropixel import SITES_COORDINATES
 import numpy as np
 from ibllib.pipes.ephys_alignment import EphysAlignment
 from ibllib.qc import base
 from oneibl.patcher import FTPPatcher
+from ibllib.qc.base import CRITERIA as CRITERIA_BASE
 
 _log = logging.getLogger('ibllib')
 CRITERIA = {"PASS": 0.8}
@@ -183,7 +185,7 @@ class AlignmentQC(base.QC):
         parent brain region
         """
 
-        r = regions_from_allen_csv()
+        r = BrainRegions()
 
         clusters = dict()
         for iK, key in enumerate(self.align_keys_sorted):
@@ -267,7 +269,7 @@ class AlignmentQC(base.QC):
         channels_brainID = ephysalign.get_brain_locations(channels_mlapdv / 1e6)['id']
 
         # Find the clusters
-        r = regions_from_allen_csv()
+        r = BrainRegions()
         clusters_mlapdv = channels_mlapdv[self.cluster_chns]
         clusters_brainID = channels_brainID[self.cluster_chns]
         clusters_brainAcro = r.get(ids=clusters_brainID).acronym
@@ -324,3 +326,27 @@ class AlignmentQC(base.QC):
                                    data=patch_dict)
 
         return files_to_register
+
+    def update_experimenter_evaluation(self, prev_alignments=None, override=False):
+
+        if not np.any(prev_alignments) and not np.any(self.alignments):
+            aligned_traj = self.one.alyx.rest('trajectories', 'list', probe_insertion=self.eid,
+                                              provenance='Ephys aligned histology track')
+            if len(aligned_traj) > 0:
+                self.alignments = aligned_traj[0].get('json', {})
+            else:
+                self.alignments = {}
+                return
+        else:
+            self.alignments = prev_alignments
+
+        outcomes = [align[2].split(':')[0] for key, align in self.alignments.items()
+                    if len(align) == 3]
+        if len(outcomes) > 0:
+            vals = [CRITERIA_BASE[out] for out in outcomes]
+            max_qc = np.argmax(vals)
+            outcome = outcomes[max_qc]
+            self.update(outcome, namespace='experimenter', override=override)
+        else:
+            self.log.warning(f'No experimenter qc found, qc field of probe insertion {self.eid} '
+                             f'will not be updated')

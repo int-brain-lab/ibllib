@@ -13,9 +13,6 @@ Run the following to set-up the workspace to run the docstring examples:
 >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
 >>> clstrs_b = aio.load_object(path_to_alf_out, 'clusters')
 >>> units_b = bb.processing.get_units_bunch(spks_b)  # may take a few mins to compute
-
-TODO add spikemetrics as dependency?
-TODO metrics that could be added: iso_dist, l_ratio, d_prime, nn_hit, nn_miss, sil
 """
 
 import time
@@ -26,11 +23,14 @@ import scipy.ndimage.filters as filters
 import scipy.stats as stats
 import pandas as pd
 
+from ibllib.io import spikeglx
 from phylib.stats import correlograms
 import brainbox as bb
 from brainbox.core import Bunch
+from brainbox.numerical import ismember
 from brainbox.processing import bincount2D
-from ibllib.io import spikeglx
+from brainbox.metrics import electrode_drift
+
 
 _logger = logging.getLogger('ibllib')
 
@@ -38,7 +38,7 @@ _logger = logging.getLogger('ibllib')
 METRICS_PARAMS = {
     'acceptable_contamination': 0.1,
     'bin_size': 0.25,
-    'med_amp_thresh': 50,
+    'med_amp_thresh_uv': 50,
     'min_isi': 0.0001,
     'min_num_bins_for_missed_spks_est': 50,
     'nc_bins': 100,
@@ -406,44 +406,6 @@ def firing_rate_fano_factor(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
     return ff, ffs, fr
 
 
-def isi_viol(ts, rp=0.002):
-    """
-    Computes the fraction of isi violations for a unit.
-
-    Parameters
-    ----------
-    ts : ndarray
-        The spike timestamps from which to compute the firing rate.
-    rp : float (optional)
-        The refractory period (in s).
-
-    Returns
-    -------
-    frac_isi_viol : float
-        The fraction of isi violations.
-    n_isi_viol : int
-        The number of isi violations.
-    isis : ndarray
-        The isis.
-
-    See Also
-    --------
-
-    Examples
-    --------
-    1) Get the fraction of isi violations, the total number of isi violations, and the array of
-    isis for unit 1.
-        >>> unit_idxs = np.where(spks_b['clusters'] == 1)[0]
-        >>> ts = spks_b['times'][unit_idxs]
-        >>> frac_isi_viol, n_isi_viol, isi = bb.metrics.isi_viol(ts)
-    """
-
-    isis = np.diff(ts)
-    v = np.where(isis < rp)[0]  # violations
-    frac_isi_viol = len(v) / len(ts)
-    return frac_isi_viol, len(v), isis
-
-
 def average_drift(feat, times):
     """
     Computes the cumulative drift (normalized by the total number of spikes) of a spike feature
@@ -603,7 +565,7 @@ def ptp_over_noise(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='i
     return ptp_sigma
 
 
-def contamination_ks2(ts, rp=0.002):
+def contamination_alt(ts, rp=0.002):
     """
     An estimate of the contamination of the unit (i.e. a pseudo false positive measure) based on
     the number of spikes, number of isi violations, and time between the first and last spike.
@@ -683,7 +645,7 @@ def contamination(ts, min_time, max_time, rp=0.002, min_isi=0.0001):
     1) Compute contamination estimate for unit 1, with a minimum isi for counting duplicate
     spikes of 0.1 ms.
         >>> ts = units_b['times']['1']
-        >>> ce = bb.metrics.contamination_ks2(ts, min_isi=0.0001)
+        >>> ce = bb.metrics.contamination_alt(ts, min_isi=0.0001)
     """
 
     duplicate_spikes = np.where(np.diff(ts) <= min_isi)[0]
@@ -865,16 +827,55 @@ def noise_cutoff(amps, quartile_length=.2, n_bins=100, n_low_bins=2):
     return cutoff
 
 
+def spike_sorting_metrics(times, clusters, amps, depths, cluster_ids=None, params=METRICS_PARAMS):
+    """
+    Computes:
+    -   cell level metrics (cf quick_unit_metrics)
+    -   label the metrics according to quality thresholds
+    -   estimates drift as a function of time
+    :param times: vector of spike times
+    :param clusters:
+    :param amplitudes:
+    :param depths:
+    :param cluster_ids (optional): set of clusters (if None the output datgrame will match
+     the unique set of clusters represented in spike clusters)
+    :param params: dict (optional) parameters for qc computation (
+     see constant at the top of the module for default values and keys)
+    :return: data_frame of metrics (cluster records, columns are qc attributes)|
+    :return: dictionary of recording qc (keys 'time_scale' and 'drift_um')
+    """
+    # compute metrics and convert to `DataFrame`
+    df_units = quick_unit_metrics(
+        clusters, times, amps, depths, cluster_ids=cluster_ids, params=params)
+    df_units = pd.DataFrame(df_units)
+    # compute drift as a function of time and put in a dictionary
+    drift, ts = electrode_drift.estimate_drift(times, amps, depths)
+    rec_qc = {'time_scale': ts, 'drift_um': drift}
+    return df_units, rec_qc
+
+
 def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
-                       params=METRICS_PARAMS):
+                       params=METRICS_PARAMS, cluster_ids=None, tbounds=None):
     """
     Computes single unit metrics from only the spike times, amplitudes, and
     depths for a set of units.
 
     Metrics computed:
-        TODO list final set of metrics
+        'amp_max',
+        'amp_min',
+        'amp_median',
+        'amp_std_dB',
+        'contamination',
+        'contamination_alt',
+        'drift',
+        'missed_spikes_est',
+        'noise_cutoff',
+        'presence_ratio',
+        'presence_ratio_std',
+        'slidingRP_viol',
+        'spike_count'
 
-    Parameters
+    Parameters (see the METRICS_PARAMS constant)
     ----------
     spike_clusters : ndarray_like
         A vector of the unit ids for a set of spikes.
@@ -884,6 +885,11 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         A vector of the amplitudes for a set of spikes.
     spike_depths : ndarray_like
         A vector of the depths for a set of spikes.
+    clusters_id: (optional) lists of cluster ids. If not all clusters are represented in the
+    spikes_clusters (ie. cluster has no spike), this will ensure the output size is consistent
+    with the input arrays.
+    tbounds: (optional) list or 2 elements array containing a time-selection to perform the
+     metrics computation on.
     params : dict (optional)
         Parameters used for computing some of the metrics in the function:
             'presence_window': float
@@ -925,10 +931,6 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         >>> depths = m.depths
         >>> r = bb.metrics.quick_unit_metrics(cluster_ids, ts, amps, depths)
     """
-
-    cluster_ids = np.unique(spike_clusters)
-    nclust = cluster_ids.size
-
     metrics_list = [
         'cluster_id',
         'amp_max',
@@ -936,9 +938,8 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         'amp_median',
         'amp_std_dB',
         'contamination',
-        'contamination_ks2',
+        'contamination_alt',
         'drift',
-        'frac_isi_viol',
         'missed_spikes_est',
         'noise_cutoff',
         'presence_ratio',
@@ -946,6 +947,17 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         'slidingRP_viol',
         'spike_count'
     ]
+    from brainbox.numerical import between_sorted
+    if tbounds:
+        ispi = between_sorted(spike_times, tbounds)
+        spike_times = spike_times[ispi]
+        spike_clusters = spike_clusters[ispi]
+        spike_amps = spike_amps[ispi]
+        spike_depths = spike_depths[ispi]
+
+    if cluster_ids is None:
+        cluster_ids = np.unique(spike_clusters)
+    nclust = cluster_ids.size
 
     r = Bunch({k: np.full((nclust,), np.nan) for k in metrics_list})
     r['cluster_id'] = cluster_ids
@@ -961,15 +973,16 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
     r.spike_count = np.sum(presence_ratio, axis=1)
     r.firing_rate = r.spike_count / (tmax - tmin)
 
-    # computing amplitude statistical indicators
+    # computing amplitude statistical indicators by aggregating over cluster id
     camp = pd.DataFrame(np.c_[spike_amps, 20 * np.log10(spike_amps), spike_clusters],
                         columns=['amps', 'log_amps', 'clusters'])
     camp = camp.groupby('clusters')
-    assert np.all(camp.clusters.unique() == r['cluster_id'])
-    r.amp_min = np.array(camp['amps'].min())
-    r.amp_max = np.array(camp['amps'].max())
-    r.amp_median = np.array(10 ** (camp['log_amps'].median() / 20))  # this is the geometric median
-    r.amp_std_dB = np.array(camp['log_amps'].std())
+    ir, ib = ismember(r.cluster_id, camp.clusters.unique())
+    r.amp_min[ir] = np.array(camp['amps'].min())
+    r.amp_max[ir] = np.array(camp['amps'].max())
+    # this is the geometric median
+    r.amp_median[ir] = np.array(10 ** (camp['log_amps'].median() / 20))
+    r.amp_std_dB[ir] = np.array(camp['log_amps'].std())
 
     # loop over each cluster to compute the rest of the metrics
     for ic in np.arange(nclust):
@@ -982,8 +995,7 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         depths = spike_depths[ispikes]
 
         # compute metrics
-        r.frac_isi_viol[ic], _, _ = isi_viol(ts, rp=params['refractory_period'])
-        r.contamination_ks2[ic] = contamination_ks2(ts, rp=params['refractory_period'])
+        r.contamination_alt[ic] = contamination_alt(ts, rp=params['refractory_period'])
         r.contamination[ic], _ = contamination(
             ts, tmin, tmax, rp=params['refractory_period'], min_isi=params['min_isi'])
         r.slidingRP_viol[ic] = slidingRP_viol(ts,
@@ -1001,30 +1013,29 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
 
         # wonder if there is a need to low-cut this
         r.drift[ic] = np.sum(np.abs(np.diff(depths))) / (tmax - tmin) * 3600
+
+    r.label = compute_labels(r)
     return r
 
 
-def unit_labels(spike_clusters, spike_times, spike_amps,
-                params=METRICS_PARAMS):
-
-    cluster_ids = np.arange(np.max(spike_clusters) + 1)
-    nclust = cluster_ids.size
-
-    r = Bunch({
-        'cluster_id': cluster_ids,
-        'label': np.full((nclust,), np.nan)
-    })
-
-    for ic in np.arange(nclust):
-        # slice the spike_times array
-        ispikes = spike_clusters == cluster_ids[ic]
-        if np.all(~ispikes):  # if this cluster has no spikes, continue
-            continue
-        ts = spike_times[ispikes]
-        amps = spike_amps[ispikes]
-
-    r.label[ic] = int(slidingRP_viol(ts)
-                      and noise_cutoff(amps) < params['nc_thresh']
-                      and np.median(amps) > params['med_amp_thresh'])
-
-    return r
+def compute_labels(r, params=METRICS_PARAMS, return_details=False):
+    """
+    From a dataframe or a dictionary of unit metrics, compute a lablel
+    :param r: dictionary or pandas dataframe containing unit qcs
+    :param return_details: False (returns a full dictionary of metrics)
+    :return: vector of proportion of qcs passed between 0 and 1, where 1 denotes an all pass
+    """
+    # right now the score is a value between 0 and 1 denoting the proportion of passing qcs
+    # we could eventually do a bitwise qc
+    labels = np.c_[
+        r.slidingRP_viol,
+        r.noise_cutoff < params['nc_thresh'],
+        r.amp_median > params['med_amp_thresh_uv'] / 1e6,
+    ]
+    if not return_details:
+        return np.mean(labels, axis=1)
+    column_names = ['slidingRP_viol', 'noise_cutoff', 'amp_median']
+    qcdict = {}
+    for c in np.arange(labels.shape[1]):
+        qcdict[column_names[c]] = labels[:, c]
+    return np.mean(labels, axis=1), qcdict

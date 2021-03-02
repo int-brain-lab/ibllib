@@ -2,6 +2,7 @@ from pathlib import Path
 import logging
 import json
 import shutil
+import tarfile
 
 import numpy as np
 
@@ -47,6 +48,8 @@ def probes_description(ses_path, one=None, bin_exists=True):
                           'serial': md.serial, 'name': label}
         pi = one.alyx.rest('insertions', 'list', session=eid, name=label)
         if len(pi) == 0:
+            qc_dict = {'qc': 'NOT_SET', 'extended_qc': {}}
+            alyx_insertion.update({'json': qc_dict})
             alyx_insertions.append(one.alyx.rest('insertions', 'create', data=alyx_insertion))
         else:
             alyx_insertions.append(
@@ -153,3 +156,55 @@ def ks2_to_alf(ks_path, bin_path, out_path, bin_file=None, ampfactor=1, label=No
     m = ephysqc.phy_model_from_ks2_path(ks2_path=ks_path, bin_path=bin_path, bin_file=bin_file)
     ac = phylib.io.alf.EphysAlfCreator(m)
     ac.convert(out_path, label=label, force=force, ampfactor=ampfactor)
+
+
+def ks2_to_tar(ks_path, out_path):
+    """
+    Compress output from kilosort 2 into tar file in order to register to flatiron and move to
+    spikesorters/ks2_matlab/probexx path. Output file to register
+
+    :param ks_path: path to kilosort output
+    :param out_path: path to keep the
+    :return
+    path to tar ks output
+
+    To extract files from the tar file can use this code
+    Example:
+        save_path = Path('folder you want to extract to')
+        with tarfile.open('_kilosort_output.tar', 'r') as tar_dir:
+            tar_dir.extractall(path=save_path)
+
+    """
+    ks2_output = ['amplitudes.npy',
+                  'channel_map.npy',
+                  'channel_positions.npy',
+                  'cluster_Amplitude.tsv',
+                  'cluster_ContamPct.tsv',
+                  'cluster_group.tsv',
+                  'cluster_KSLabel.tsv',
+                  'params.py',
+                  'pc_feature_ind.npy',
+                  'pc_features.npy',
+                  'similar_templates.npy',
+                  'spike_clusters.npy',
+                  'spike_sorting_ks2.log',
+                  'spike_templates.npy',
+                  'spike_times.npy',
+                  'template_feature_ind.npy',
+                  'template_features.npy',
+                  'templates.npy',
+                  'templates_ind.npy',
+                  'whitening_mat.npy',
+                  'whitening_mat_inv.npy']
+
+    out_file = Path(out_path).joinpath('_kilosort_raw.output.tar')
+    if out_file.exists():
+        _logger.info(f"Already converted ks2 to tar: for {ks_path}, skipping.")
+        return [out_file]
+
+    with tarfile.open(out_file, 'x') as tar_dir:
+        for file in Path(ks_path).iterdir():
+            if file.name in ks2_output:
+                tar_dir.add(file, file.name)
+
+    return [out_file]

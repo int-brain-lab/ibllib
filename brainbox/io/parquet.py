@@ -1,7 +1,6 @@
 import uuid
 import numpy as np
 
-from numba import jit
 import pyarrow.parquet as pq
 import pyarrow as pa
 import pandas as pd
@@ -34,9 +33,13 @@ def uuid2np(eids_uuid):
 
 
 def str2np(eids_str):
+    """
+    Converts uuid string or list of uuid strings to int64 numpy array with 2 cols
+    Returns [0, 0] for None list entries
+    """
     if isinstance(eids_str, str):
         eids_str = [eids_str]
-    return uuid2np([uuid.UUID(eid) for eid in eids_str])
+    return uuid2np([uuid.UUID(eid) if eid else uuid.UUID('0' * 32) for eid in eids_str])
 
 
 def np2uuid(eids_np):
@@ -107,18 +110,3 @@ def rec2col(rec, join=None, include=None, exclude=None, uuid_fields=None, types=
             col[key] = np.tile(np.array(join[key]), (nrecs,))
 
     return Bunch(col)
-
-
-@jit(nopython=True)
-def find_first_2d(mat, val):
-    """
-    Returns first index where
-    The purpose of this function is performance: uses low level numba and avoids looping
-    through the full array
-    :param mat: np.array
-    :param val: values to search for
-    :return: index or empty array
-    """
-    for i in np.arange(mat.shape[0]):
-        if np.all(mat[i] == val):
-            return i

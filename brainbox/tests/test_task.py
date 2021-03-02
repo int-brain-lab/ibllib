@@ -3,12 +3,13 @@ import pickle
 import unittest
 import numpy as np
 import brainbox as bb
+import pandas as pd
 
 
 class TestTask(unittest.TestCase):
 
     def setUp(self):
-        # Test data is a dictionary of spike times and clusters and event times and groups
+        # Test ephys data is a dictionary of spike times and clusters and event times and groups
         pickle_file = Path(__file__).parent.joinpath('fixtures', 'ephys_test.p')
         if not pickle_file.exists():
             self.test_data = None
@@ -16,19 +17,9 @@ class TestTask(unittest.TestCase):
             with open(pickle_file, 'rb') as f:
                 self.test_data = pickle.load(f)
 
-    def test_get_spike_counts_in_bins(self):
-        if self.test_data is None:
-            return
-        spike_times = self.test_data['spike_times']
-        spike_clusters = self.test_data['spike_clusters']
-        event_times = self.test_data['event_times']
-        times = np.column_stack(((event_times - 0.5), (event_times + 0.5)))
-        counts, cluster_ids = bb.task._get_spike_counts_in_bins(spike_times,
-                                                                spike_clusters,
-                                                                times)
-        num_clusters = np.size(np.unique(spike_clusters))
-        self.assertEqual(counts.shape, (num_clusters, np.size(event_times)))
-        self.assertTrue(np.size(cluster_ids) == num_clusters)
+        # Test trials data is pandas dataframe with trials
+        csv_file = Path(__file__).parent.joinpath('fixtures', 'trials_df_test.csv')
+        self.test_trials = pd.read_csv(csv_file)
 
     def test_responsive_units(self):
         if self.test_data is None:
@@ -101,6 +92,30 @@ class TestTask(unittest.TestCase):
         self.assertTrue(np.sum(auc_roc < 0.3) == 24)
         self.assertTrue(np.sum(auc_roc > 0.7) == 10)
         self.assertTrue(np.size(cluster_ids) == num_clusters)
+
+    def test_generate_pseudo_blocks(self):
+        blocks = bb.task.generate_pseudo_blocks(100,
+                                                factor=60,
+                                                min_=20,
+                                                max_=100,
+                                                first5050=90)
+        self.assertTrue(len(blocks.shape) == 1)
+        self.assertTrue(blocks.shape[0] == 100)
+        self.assertTrue(blocks[0] == 0.5)
+        self.assertTrue(np.sum(blocks == 0.5) == 90)
+
+    def test_generate_pseudo_stimuli(self):
+        p_left, contrast_l, contrast_r = bb.task.generate_pseudo_stimuli(100,
+                                                                         contrast_set=[0.5, 1],
+                                                                         first5050=90)
+        self.assertTrue(p_left.shape[0] == 100)
+        self.assertTrue(np.sum(p_left == 0.5) == 90)
+        self.assertTrue(p_left.shape == contrast_l.shape == contrast_r.shape)
+
+    def test_generate_pseudo_session(self):
+        test_trials = self.test_trials
+        pseudo_trials = bb.task.generate_pseudo_session(test_trials)
+        self.assertTrue(pseudo_trials.shape[0] == test_trials.shape[0])
 
 
 if __name__ == "__main__":

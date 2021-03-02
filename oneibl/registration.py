@@ -2,6 +2,8 @@ from pathlib import Path
 import json
 import datetime
 import logging
+
+import ibllib.io.extractors.base
 from dateutil import parser as dateparser
 import re
 
@@ -24,6 +26,7 @@ REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
                               'raw_ephys_data/**/_iblrig_*.*',
                               'raw_ephys_data/**/_spikeglx_*.*',
                               'raw_ephys_data/**/_iblqc_*.*',
+                              'spikesorters/**/_kilosort_*.*'
                               ]
 
 
@@ -38,7 +41,7 @@ def _check_filename_for_registration(full_file, patterns):
 
 
 def register_dataset(file_list, one=None, created_by=None, repository=None, server_only=False,
-                     versions=False, dry=False, max_md5_size=None):
+                     versions=None, dry=False, max_md5_size=None):
     """
     Registers a set of files belonging to a session only on the server
     :param file_list: (list of pathlib.Path or pathlib.Path)
@@ -61,10 +64,11 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
         file_list = [Path(file_list)]
     assert len(set([alf.io.get_session_path(f) for f in file_list])) == 1
     assert all([Path(f).exists() for f in file_list])
-    if not versions:
-        versions = [version.ibllib() for _ in file_list]
-    else:
-        assert isinstance(versions, list) and len(versions) == len(file_list)
+    if versions is None:
+        versions = version.ibllib()
+    if isinstance(versions, str):
+        versions = [versions for _ in file_list]
+    assert isinstance(versions, list) and len(versions) == len(file_list)
 
     # computing the md5 can be very long, so this is an option to skip if the file is bigger
     # than a certain threshold
@@ -315,13 +319,13 @@ class RegistrationClient:
                 raise e
             # extract the relative path of the file
             rel_path = Path(str(fn)[str(fn).find(str(gen_rel_path)):])
-            F.append(str(rel_path.relative_to(gen_rel_path)))
+            F.append(str(rel_path.relative_to(gen_rel_path).as_posix()))
             file_sizes.append(fn.stat().st_size)
             md5s.append(hashfile.md5(fn) if fn.stat().st_size < 1024 ** 3 else None)
             _logger.info('Registering ' + str(fn))
 
         r_ = {'created_by': username,
-              'path': str(gen_rel_path),
+              'path': str(gen_rel_path.as_posix()),
               'filenames': F,
               'hashes': md5s,
               'filesizes': file_sizes,
@@ -331,16 +335,19 @@ class RegistrationClient:
 
 
 def _alyx_procedure_from_task(task_protocol):
-    task_str = raw.get_task_extractor_type(task_protocol)
+    task_type = ibllib.io.extractors.base.get_task_extractor_type(task_protocol)
+    return _alyx_procedure_from_task_type(task_type)
+
+
+def _alyx_procedure_from_task_type(task_type):
     lookup = {'biased': 'Behavior training/tasks',
               'habituation': 'Behavior training/tasks',
               'training': 'Behavior training/tasks',
               'ephys': 'Ephys recording with acute probe(s)',
               'mock_ephys': 'Ephys recording with acute probe(s)',
               'sync_ephys': 'Ephys recording with acute probe(s)'}
-    if task_str not in lookup:
-        return
-    return lookup[task_str]
+    if task_type in lookup:
+        return lookup[task_type]
 
 
 def _register_bool(fn, file_list):

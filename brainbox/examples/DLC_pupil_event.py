@@ -2,6 +2,7 @@ import numpy as np
 import alf.io
 import matplotlib.pyplot as plt
 import ibllib.plots as iblplt
+from ibllib.time import convert_pgts, uncycle_pgts
 from oneibl.one import ONE
 from pathlib import Path
 import csv
@@ -67,23 +68,6 @@ def plot_pupil_diameter_single_trial(
     plt.tight_layout()
 
 
-def convert_pgts(time):
-    """Convert PointGray cameras timestamps to seconds.
-    Use convert then uncycle"""
-    # offset = time & 0xFFF
-    cycle1 = (time >> 12) & 0x1FFF
-    cycle2 = (time >> 25) & 0x7F
-    seconds = cycle2 + cycle1 / 8000.
-    return seconds
-
-
-def uncycle_pgts(time):
-    """Unwrap the converted seconds of a PointGray camera timestamp series."""
-    cycles = np.insert(np.diff(time) < 0, 0, False)
-    cycleindex = np.cumsum(cycles)
-    return time + cycleindex * 128
-
-
 def get_pupil_diameter(alf_path):
 
     json1_file = open(alf_path / '_ibl_leftCamera.dlc.metadata.json')
@@ -135,9 +119,9 @@ def get_timestamps_from_ssv_file(alf_path):
 
 def plot_mean_std_around_event(event, diameter, times, eid):
     '''
-     
+
     event in {'stimOn_times', 'feedback_times', 'stimOff_times'}
-     
+
     '''
     event_times = trials[event]
 
@@ -205,7 +189,7 @@ if __name__ == "__main__":
     plot_mean_std_around_event('stimOn_times', diameter, times, eid)
     plot_mean_std_around_event('feedback_times', diameter, times, eid)
 
-    # what's that stim-off times, are they reliable? 
+    # what's that stim-off times, are they reliable?
     # plot_mean_std_around_event('stimOff_times', diameter, times, eid)
 
     plt.show()

@@ -151,15 +151,19 @@ class Reader:
         else:
             return self.read(nsel=_slice, csel=csel, sync=False)
 
-    def read_sync(self, _slice=slice(0, 10000), threshold=1.2):
+    def read_sync(self, _slice=slice(0, 10000), threshold=1.2, floor_percentile=10):
         """
         Reads all sync trace. Convert analog to digital with selected threshold and append to array
         :param _slice: samples slice
         :param threshold: (V) threshold for front detection, defaults to 1.2 V
+        :param floor_percentile: 10% removes the percentile value of the analog trace before
+         thresholding. This is to avoid DC offset drift
         :return: int8 array
         """
         digital = self.read_sync_digital(_slice)
         analog = self.read_sync_analog(_slice)
+        if analog is not None and floor_percentile:
+            analog -= np.percentile(analog, 10, axis=0)
         if analog is None:
             return digital
         analog[np.where(analog < threshold)] = 0
@@ -427,7 +431,7 @@ def split_sync(sync_tr):
 
 
 def get_neuropixel_version_from_folder(session_path):
-    ephys_files = glob_ephys_files(session_path)
+    ephys_files = glob_ephys_files(session_path, ext='meta')
     return get_neuropixel_version_from_files(ephys_files)
 
 

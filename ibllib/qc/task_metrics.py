@@ -208,7 +208,7 @@ class HabituationQC(TaskQC):
                                           date_range=[date_minus_week, session_date],
                                           task_protocol='habituation')
             # Remove the current session if already registered
-            if sessions[0]['start_time'].startswith(session_date):
+            if sessions and sessions[0]['start_time'].startswith(session_date):
                 sessions = sessions[1:]
             metric = ([0, data['intervals'][-1, 1] - data['intervals'][0, 0]] +
                       [(datetime.fromisoformat(x['end_time']) -
@@ -725,7 +725,10 @@ def check_n_trial_events(data, **_):
 
     # Exclude these fields; valve and errorCue times are the same as feedback_times and we must
     # test errorCueTrigger_times separately
-    exclude = ('firstMovement_times', 'valveOpen_times', 'errorCue_times', 'errorCueTrigger_times')
+    exclude = ['camera_timestamps', 'errorCueTrigger_times', 'errorCue_times',
+               'firstMovement_times', 'peakVelocity_times', 'valveOpen_times',
+               'wheel_moves_peak_amplitude', 'wheel_moves_intervals', 'wheel_timestamps',
+               'wheel_intervals']
     events = [k for k in data.keys() if k.endswith('_times') and k not in exclude]
     metric = np.zeros(data["intervals"].shape[0], dtype=bool)
 
@@ -734,7 +737,6 @@ def check_n_trial_events(data, **_):
     for i, (start, end) in enumerate(intervals):
         metric[i] = (all([start < data[k][i] < end for k in events]) and
                      (np.isnan(err_trig[i]) if correct[i] else start < err_trig[i] < end))
-
     passed = metric.astype(np.bool)
     assert intervals.shape[0] == len(metric) == len(passed)
     return metric, passed

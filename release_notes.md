@@ -1,3 +1,44 @@
+### Release Notes 1.5.39
+- ephys extraction: remove short TTL pulses of frame2ttl in task extraction 
+
+### Release Notes 1.5.38
+- ibllib.atlas.regions remapping option
+- optogenetics pybpod: extraction of laser probabilities
+
+### Release Notes 1.5.37
+- MANIFEST.in fix
+  - Added fixtures file for passive protocol extraction
+
+### Release Notes 1.5.36
+- Amplitudes fix:
+    - sync_probes doesn't require raw binary file and looks for meta-data files instead
+    - tar file of intermediate spike sorting results gets uploaded on flatiron
+- Ephys Task extraction: ephys extraction doesn't fail when bpod started before ephys
+
+### Release Notes 1.5.35
+- histology: brain atlas can handle insertion on the sides 
+- optogenetics dataset type _ibl_trials.laser_stimulation for training sessions
+
+### Release Notes 1.5.34
+- spikeglx analog sync thresholding removes DC offset option
+- ephys FPGA behaviour extraction: bpod sync with FPGA assumes possible missing FPGA fronts
+
+### Release Notes 1.5.32
+- Ephys pipeline:
+    - passive extractor
+    - units QC
+### Release Notes 1.5.31/1.5.33 Hotfix
+- add the available space of system and raid volumes in local servers reports.
+
+### Release Notes 1.5.30
+- following flatiron server change, add auto-redirect to https
+
+### Release Notes 1.5.29
+- add widefieldChoiceworld tasks for pipeline
+
+### Release Notes 1.5.28
+- add opto laser tasks for pipeline
+
 ### Release Notes 1.5.27
 - register ch when mtscomp runs properly
 - probes_description runs even if .cbin doesn't exist

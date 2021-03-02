@@ -13,13 +13,9 @@ def default():
            "ALYX_PWD": "TapetesBloc18",
            "ALYX_URL": "https://test.alyx.internationalbrainlab.org",
            "CACHE_DIR": str(PurePath(Path.home(), "Downloads", "FlatIron")),
-           "FTP_DATA_SERVER": "ftp://ibl.flatironinstitute.org",
-           "FTP_DATA_SERVER_LOGIN": "iblftp",
-           "FTP_DATA_SERVER_PWD": None,
-           "HTTP_DATA_SERVER": "http://ibl.flatironinstitute.org",
+           "HTTP_DATA_SERVER": "https://ibl.flatironinstitute.org",
            "HTTP_DATA_SERVER_LOGIN": "iblmember",
            "HTTP_DATA_SERVER_PWD": None,
-           "GLOBUS_CLIENT_ID": None,
            }
     return iopar.from_dict(par)
 
@@ -78,11 +74,6 @@ def setup():
     prompt = "Enter the FlatIron HTTP password for " + par["HTTP_DATA_SERVER_LOGIN"] +\
              '(leave empty to keep current): '
     par["HTTP_DATA_SERVER_PWD"] = getpass(prompt) or cpar
-
-    cpar = _get_current_par("FTP_DATA_SERVER_PWD", par_current)
-    prompt = "Enter the FlatIron FTP password for " + par["FTP_DATA_SERVER_LOGIN"] +\
-             '(leave empty to keep current): '
-    par["FTP_DATA_SERVER_PWD"] = getpass(prompt) or cpar
 
     # default to home dir if empty dir somehow made it here
     if len(par['CACHE_DIR']) == 0:

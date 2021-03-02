@@ -26,7 +26,7 @@ from ibllib.io import hashfile
 from ibllib.misc import pprint
 from oneibl.dataclass import SessionDataInfo
 from brainbox.io import parquet
-from brainbox.core import ismember, ismember2d
+from brainbox.numerical import ismember, ismember2d, find_first_2d
 
 _logger = logging.getLogger('ibllib')
 
@@ -132,6 +132,9 @@ class OneAbstract(abc.ABC):
     def __init__(self, username=None, password=None, base_url=None, cache_dir=None, silent=None):
         # get parameters override if inputs provided
         self._par = oneibl.params.get(silent=silent)
+        # can delete those 2 lines from mid January 2021
+        if self._par.HTTP_DATA_SERVER == 'http://ibl.flatironinstitute.org':
+            self._par = self._par.set("HTTP_DATA_SERVER", "https://ibl.flatironinstitute.org")
         self._par = self._par.set('ALYX_LOGIN', username or self._par.ALYX_LOGIN)
         self._par = self._par.set('ALYX_URL', base_url or self._par.ALYX_URL)
         self._par = self._par.set('ALYX_PWD', password or self._par.ALYX_PWD)
@@ -225,7 +228,7 @@ class OneAbstract(abc.ABC):
             return
 
         # load path from cache
-        ic = parquet.find_first_2d(
+        ic = find_first_2d(
             self._cache[['eid_0', 'eid_1']].to_numpy(), parquet.str2np(eid))
         if ic is not None:
             ses = self._cache.iloc[ic]
@@ -466,7 +469,7 @@ class OneAlyx(OneAbstract):
         search_str = 'name__regex,' + obj.replace('*', '.*')
         if collection and collection != 'all':
             search_str += ',collection__regex,' + collection.replace('*', '.*')
-        results = self.alyx.rest('datasets', 'list', session=eid, django=search_str)
+        results = self.alyx.rest('datasets', 'list', exists=True, session=eid, django=search_str)
         pattern = re.compile(fnmatch.translate(obj))
 
         # Further refine by matching object part of ALF datasets
@@ -735,8 +738,11 @@ class OneAlyx(OneAbstract):
         if isinstance(dset, str):
             url = dset
         else:
-            url = next((fr['data_url'] for fr in dset['file_records'] if fr['data_url']), None)
+            url = next((fr['data_url'] for fr in dset['file_records']
+                        if fr['data_url'] and fr['exists']), None)
         if not url:
+            str_dset = Path(dset['collection']).joinpath(dset['name'])
+            _logger.warning(f"{str_dset} exist flag or url not found in Alyx")
             return
         assert url.startswith(self._par.HTTP_DATA_SERVER), \
             ('remote protocol and/or hostname does not match HTTP_DATA_SERVER parameter:\n' +
@@ -773,7 +779,7 @@ class OneAlyx(OneAbstract):
         local_path = str(target_dir) + os.sep + os.path.basename(url)
         if not keep_uuid:
             local_path = alfio.remove_uuid_file(local_path, dry=True)
-        if Path(local_path).exists() and not offline:
+        if Path(local_path).exists():
             # the local file hash doesn't match the dataset table cached hash
             hash_mismatch = hash and hashfile.md5(Path(local_path)) != hash
             file_size_mismatch = file_size and Path(local_path).stat().st_size != file_size
@@ -783,11 +789,11 @@ class OneAlyx(OneAbstract):
         # if there is no cached file, download
         else:
             clobber = True
-        if clobber:
+        if clobber and not offline:
             local_path, md5 = wc.http_download_file(
                 url, username=self._par.HTTP_DATA_SERVER_LOGIN,
                 password=self._par.HTTP_DATA_SERVER_PWD, cache_dir=str(target_dir),
-                clobber=clobber, offline=offline, return_md5=True)
+                clobber=clobber, return_md5=True)
             # post download, if there is a mismatch between Alyx and the newly downloaded file size
             # or hash flag the offending file record in Alyx for database maintenance
             hash_mismatch = hash and md5 != hash
@@ -892,6 +898,33 @@ class OneAlyx(OneAbstract):
 
         # Return the uuid if any
         return uuid[0] if uuid else None
+
+    def url_from_path(self, filepath):
+        """
+        Given a local file path, returns the URL of the remote file.
+        :param filepath: A local file path
+        :return: A URL string
+        """
+        eid = self.eid_from_path(filepath)
+        try:
+            dataset, = self.alyx.rest('datasets', 'list', session=eid, name=Path(filepath).name)
+        except ValueError:
+            raise ALFObjectNotFound(f'File record for {filepath} not found on Alyx')
+        return next(
+            r['data_url'] for r in dataset['file_records'] if r['data_url'] and r['exists'])
+
+    @parse_id
+    def datasets_from_type(self, eid, dataset_type):
+        """
+        Get list of datasets belonging to a given dataset type for a given session
+        :param eid: Experiment session identifier; may be a UUID, URL, experiment reference string
+        details dict or Path
+        :param dataset_type: A dataset type, e.g. camera.times
+        :return: A list of datasets belonging to that session's dataset type
+        """
+        restriction = f'session__id,{eid},dataset_type__name,{dataset_type}'
+        datasets = self.alyx.rest('datasets', 'list', django=restriction)
+        return [d['name'] for d in datasets]
 
     def get_details(self, eid: str, full: bool = False):
         """ Returns details of eid like from one.search, optional return full
