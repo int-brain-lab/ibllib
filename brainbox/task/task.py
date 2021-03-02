@@ -6,47 +6,8 @@ import numpy as np
 from scipy.stats import ranksums, wilcoxon, ttest_ind, ttest_rel
 from ._statsmodels import multipletests
 from sklearn.metrics import roc_auc_score
-
-
-def _get_spike_counts_in_bins(spike_times, spike_clusters, intervals):
-    """
-    Return the number of spikes in a sequence of time intervals, for each neuron.
-
-    Parameters
-    ----------
-    spike_times : 1D array
-        spike times (in seconds)
-    spike_clusters : 1D array
-        cluster ids corresponding to each event in `spikes`
-    intervals : 2D array of shape (n_events, 2)
-        the start and end times of the events
-
-    Returns
-    ---------
-    counts : 2D array of shape (n_neurons, n_events)
-        the spike counts of all neurons ffrom scipy.stats import sem, tor all events
-        value (i, j) is the number of spikes of neuron `neurons[i]` in interval #j
-    cluster_ids : 1D array
-        list of cluster ids
-    """
-
-    # Check input
-    assert intervals.ndim == 2
-    assert intervals.shape[1] == 2
-
-    # For each neuron and each interval, the number of spikes in the interval.
-    cluster_ids = np.unique(spike_clusters)
-    n_neurons = len(cluster_ids)
-    n_intervals = intervals.shape[0]
-    counts = np.zeros((n_neurons, n_intervals), dtype=np.uint32)
-    for j in range(n_intervals):
-        t0, t1 = intervals[j, :]
-        # Count the number of spikes in the window, for each neuron.
-        x = np.bincount(
-            spike_clusters[(t0 <= spike_times) & (spike_times < t1)],
-            minlength=cluster_ids.max() + 1)
-        counts[:, j] = x[cluster_ids]
-    return counts, cluster_ids
+import pandas as pd
+from brainbox.population import get_spike_counts_in_bins
 
 
 def responsive_units(spike_times, spike_clusters, event_times,
@@ -85,10 +46,10 @@ def responsive_units(spike_times, spike_clusters, event_times,
 
     # Get spike counts for baseline and event timewindow
     baseline_times = np.column_stack(((event_times - pre_time[0]), (event_times - pre_time[1])))
-    baseline_counts, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters,
-                                                             baseline_times)
+    baseline_counts, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters,
+                                                            baseline_times)
     times = np.column_stack(((event_times + post_time[0]), (event_times + post_time[1])))
-    spike_counts, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters, times)
+    spike_counts, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters, times)
 
     # Do statistics
     p_values = np.empty(spike_counts.shape[0])
@@ -158,10 +119,10 @@ def differentiate_units(spike_times, spike_clusters, event_times, event_groups,
     # Get spike counts for the two events
     times_1 = np.column_stack(((event_times[event_groups == 0] - pre_time),
                                (event_times[event_groups == 0] + post_time)))
-    counts_1, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters, times_1)
+    counts_1, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters, times_1)
     times_2 = np.column_stack(((event_times[event_groups == 1] - pre_time),
                                (event_times[event_groups == 1] + post_time)))
-    counts_2, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters, times_2)
+    counts_2, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters, times_2)
 
     # Do statistics
     p_values = np.empty(len(cluster_ids))
@@ -219,10 +180,10 @@ def roc_single_event(spike_times, spike_clusters, event_times,
 
     # Get spike counts for baseline and event timewindow
     baseline_times = np.column_stack(((event_times - pre_time[0]), (event_times - pre_time[1])))
-    baseline_counts, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters,
-                                                             baseline_times)
+    baseline_counts, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters,
+                                                            baseline_times)
     times = np.column_stack(((event_times + post_time[0]), (event_times + post_time[1])))
-    spike_counts, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters, times)
+    spike_counts, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters, times)
 
     # Calculate area under the ROC curve per neuron
     auc_roc = np.empty(spike_counts.shape[0])
@@ -269,7 +230,7 @@ def roc_between_two_events(spike_times, spike_clusters, event_times, event_group
 
     # Get spike counts
     times = np.column_stack(((event_times - pre_time), (event_times + post_time)))
-    spike_counts, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters, times)
+    spike_counts, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters, times)
 
     # Calculate area under the ROC curve per neuron
     auc_roc = np.empty(spike_counts.shape[0])
@@ -277,3 +238,191 @@ def roc_between_two_events(spike_times, spike_clusters, event_times, event_group
         auc_roc[i] = roc_auc_score(event_groups, spike_counts[i, :])
 
     return auc_roc, cluster_ids
+
+
+def _get_biased_probs(n: int, idx: int = -1, prob: float = 0.5) -> list:
+    n_1 = n - 1
+    z = n_1 + prob
+    p = [1 / z] * (n_1 + 1)
+    p[idx] *= prob
+    return p
+
+
+def _draw_contrast(
+    contrast_set: list, prob_type: str = "biased", idx: int = -1, idx_prob: float = 0.5
+) -> float:
+    if prob_type == "biased":
+        p = _get_biased_probs(len(contrast_set), idx=idx, prob=idx_prob)
+        return np.random.choice(contrast_set, p=p)
+    elif prob_type == "uniform":
+        return np.random.choice(contrast_set)
+
+
+def _draw_position(position_set, stim_probability_left):
+    return int(
+        np.random.choice(
+            position_set, p=[stim_probability_left, 1 - stim_probability_left]
+        )
+    )
+
+
+def generate_pseudo_blocks(n_trials, factor=60, min_=20, max_=100, first5050=90):
+    """
+    Generate a pseudo block structure
+
+    Parameters
+    ----------
+    n_trials : int
+        how many trials to generate
+    factor : int
+        factor of the exponential
+    min_ : int
+        minimum number of trials per block
+    max_ : int
+        maximum number of trials per block
+    first5050 : int
+        amount of trials with 50/50 left right probability at the beginning
+
+    Returns
+    ---------
+    probabilityLeft : 1D array
+        array with probability left per trial
+    """
+
+    block_ids = []
+    while len(block_ids) < n_trials:
+        x = np.random.exponential(factor)
+        while (x <= min_) | (x >= max_):
+            x = np.random.exponential(factor)
+        if (len(block_ids) == 0) & (np.random.randint(2) == 0):
+            block_ids += [0.2] * int(x)
+        elif (len(block_ids) == 0):
+            block_ids += [0.8] * int(x)
+        elif block_ids[-1] == 0.2:
+            block_ids += [0.8] * int(x)
+        elif block_ids[-1] == 0.8:
+            block_ids += [0.2] * int(x)
+    return np.array([0.5] * first5050 + block_ids[:n_trials - first5050])
+
+
+def generate_pseudo_stimuli(n_trials, contrast_set=[0.06, 0.12, 0.25, 1], first5050=90):
+    """
+    Generate a block structure with stimuli
+
+    Parameters
+    ----------
+    n_trials : int
+        number of trials to generate
+    contrast_set : 1D array
+        the contrasts that are presented. The default is [0.06, 0.12, 0.25, 1].
+    first5050 : int
+        Number of 50/50 trials at the beginning of the session. The default is 90.
+
+    Returns
+    -------
+    p_left : 1D array
+        probability of left stimulus
+    contrast_left : 1D array
+        contrast on the left
+    contrast_right : 1D array
+        contrast on the right
+
+    """
+
+    # Initialize vectors
+    contrast_left = np.empty(n_trials)
+    contrast_left[:] = np.nan
+    contrast_right = np.empty(n_trials)
+    contrast_right[:] = np.nan
+
+    # Generate block structure
+    p_left = generate_pseudo_blocks(n_trials)
+
+    for i in range(n_trials):
+
+        # Draw position and contrast for this trial
+        position = _draw_position([-1, 1], p_left[i])
+        contrast = _draw_contrast(contrast_set, 'uniform')
+
+        # Add to trials
+        if position == -1:
+            contrast_left[i] = contrast
+        elif position == 1:
+            contrast_right[i] = contrast
+
+    return p_left, contrast_left, contrast_right
+
+
+def generate_pseudo_session(trials, generate_choices=True):
+    """
+    Generate a complete pseudo session with biased blocks, all stimulus contrasts, choices and
+    rewards and omissions. Biased blocks and stimulus contrasts are generated using the same
+    statistics as used in the actual task. The choices of the animal are generated using the
+    actual psychometrics of the animal in the session. For each synthetic trial the choice is
+    determined by drawing from a Bernoulli distribution that is biased according to the proportion
+    of times the animal chose left for the stimulus contrast, side, and block probability.
+    No-go trials are ignored in the generating of the synthetic choices.
+
+    Parameters
+    ----------
+    trials : DataFrame
+        Pandas dataframe with columns as trial vectors loaded using ONE
+    generate_choices : bool
+        whether to generate the choices (runs faster without)
+
+    Returns
+    -------
+    pseudo_trials : DataFrame
+        a trials dataframe with synthetically generated trials
+    """
+
+    # Get contrast set presented to the animal
+    contrast_set = np.unique(trials['contrastLeft'][~np.isnan(trials['contrastLeft'])])
+    signed_contrast = trials['contrastRight'].copy()
+    signed_contrast[np.isnan(signed_contrast)] = -trials['contrastLeft'][
+        ~np.isnan(trials['contrastLeft'])]
+
+    # Generate synthetic session
+    pseudo_trials = pd.DataFrame()
+    pseudo_trials['probabilityLeft'] = generate_pseudo_blocks(trials.shape[0])
+
+    # For each trial draw stimulus contrast and side and generate a synthetic choice
+    for i in range(pseudo_trials.shape[0]):
+
+        # Draw position and contrast for this trial
+        position = _draw_position([-1, 1], pseudo_trials['probabilityLeft'][i])
+        contrast = _draw_contrast(contrast_set, 'uniform')
+        signed_stim = contrast * np.sign(position)
+
+        if generate_choices:
+            # Generate synthetic choice by drawing from Bernoulli distribution
+            trial_select = ((signed_contrast == signed_stim) & (trials['choice'] != 0)
+                            & (trials['probabilityLeft'] == pseudo_trials['probabilityLeft'][i]))
+            p_right = (np.sum(trials['choice'][trial_select] == 1)
+                       / trials['choice'][trial_select].shape[0])
+            this_choice = [-1, 1][np.random.binomial(1, p_right)]
+
+            # Add to trials
+            if position == -1:
+                pseudo_trials.loc[i, 'contrastLeft'] = contrast
+                if this_choice == -1:
+                    pseudo_trials.loc[i, 'feedbackType'] = -1
+                elif this_choice == 1:
+                    pseudo_trials.loc[i, 'feedbackType'] = 1
+            elif position == 1:
+                pseudo_trials.loc[i, 'contrastRight'] = contrast
+                if this_choice == -1:
+                    pseudo_trials.loc[i, 'feedbackType'] = 1
+                elif this_choice == 1:
+                    pseudo_trials.loc[i, 'feedbackType'] = -1
+            pseudo_trials.loc[i, 'choice'] = this_choice
+        else:
+            if position == -1:
+                pseudo_trials.loc[i, 'contrastLeft'] = contrast
+            elif position == 1:
+                pseudo_trials.loc[i, 'contrastRight'] = contrast
+        pseudo_trials.loc[i, 'stim_side'] = position
+    pseudo_trials['signed_contrast'] = pseudo_trials['contrastRight']
+    pseudo_trials.loc[pseudo_trials['signed_contrast'].isnull(),
+                      'signed_contrast'] = -pseudo_trials['contrastLeft']
+    return pseudo_trials
