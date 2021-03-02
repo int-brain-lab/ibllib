@@ -13,6 +13,7 @@ from numpy.linalg.linalg import LinAlgError
 import pandas as pd
 from brainbox.processing import bincount2D
 from sklearn.linear_model import PoissonRegressor
+from sklearn.metrics import r2_score
 import scipy.sparse as sp
 import numba as nb
 from numpy.matlib import repmat
@@ -555,7 +556,10 @@ class NeuralGLM:
 
             wts = np.concatenate([[bias[cell_idx]], weight[cell_idx, :]], axis=0)
             if retvar:
-                wvar = np.diag(np.linalg.inv(dd_neglog(wts, biasdm, cellbinned)))
+                if np.linalg.cond(biasdm) < 1e10:
+                    wvar = np.diag(np.linalg.inv(dd_neglog(wts, biasdm, cellbinned)))
+                else:
+                    wvar = np.ones_like(wts) * np.inf
             else:
                 wvar = np.ones((wts.shape[0], wts.shape[0])) * np.nan
             variances.at[cell] = wvar[1:]
@@ -605,7 +609,7 @@ class NeuralGLM:
         return coefs, intercepts, variances
 
     def fit(self, method='sklearn', alpha=0, singlepar_var=False, epochs=6000, optim='adam',
-            lr=0.3, fit_intercept=True, printcond=True):
+            lr=0.3, fit_intercept=True, printcond=True, dsq=False, rsq=False):
         """
         Fit the current set of binned spikes as a function of the current design matrix. Requires
         NeuralGLM.bin_spike_trains and NeuralGLM.compile_design_matrix to be run first. Will store
@@ -705,7 +709,8 @@ class NeuralGLM:
                                     constant_values=1)
                     coefs, intercepts, variances = self._fit_minimize(biasdm, trainbinned,
                                                                       retvar=singlepar_var)
-                scores = self._score_submodel(coefs, intercepts, testdm, testbinned)
+                scores = self._score_submodel(coefs, intercepts, testdm, testbinned, dsq=dsq,
+                                              rsq=rsq)
                 scoresdf = pd.DataFrame(scores).reset_index()
                 scoresdf.rename(columns={'index': 'cell'}, inplace=True)
                 scoresdf['covar'] = cov
@@ -753,7 +758,8 @@ class NeuralGLM:
                         coefs, intercepts, variances = self._fit_minimize(biasdm, trainbinned,
                                                                           cells=currcells,
                                                                           retvar=retvar)
-                    iscores.append(self._score_submodel(coefs, intercepts, testdm, testbinned))
+                    iscores.append(self._score_submodel(coefs, intercepts, testdm, testbinned,
+                                                        dsq=dsq, rsq=rsq))
                 submodel_scores[f'{i}cov'] = pd.concat(iscores).sort_index()
             self.submodel_scores = submodel_scores
             self.coefs = coefs
@@ -761,7 +767,7 @@ class NeuralGLM:
             self.variances = variances
             return
 
-    def _score_submodel(self, weights, intercepts, dm, binned):
+    def _score_submodel(self, weights, intercepts, dm, binned, dsq=False, rsq=False):
         """
         Utility function for computing D^2 (pseudo R^2) on a given set of weights and
         intercepts. Is be used in both model subsetting and the mother score() function of the GLM.
@@ -787,18 +793,24 @@ class NeuralGLM:
             Pandas series containing the scores of the given model for each cell.
         """
         scores = pd.Series(index=weights.index, name='scores')
+        biasdm = np.pad(dm, ((0, 0), (1, 0)), constant_values=1)
         for cell in weights.index:
             cell_idx = np.argwhere(self.clu_ids == cell)[0, 0]
             wt = weights.loc[cell].reshape(-1, 1)
             bias = intercepts.loc[cell]
             y = binned[:, cell_idx]
             pred = np.exp(dm @ wt + bias)
-            null_pred = np.ones_like(pred) * np.mean(y)
-            with np.errstate(divide='ignore', invalid='ignore'):
-                null_deviance = 2 * np.sum(xlogy(y, y / null_pred.flat) - y + null_pred.flat)
-                full_deviance = 2 * np.sum(xlogy(y, y / pred.flat) - y + pred.flat)
-            d_sq = 1 - (full_deviance / null_deviance)
-            scores.at[cell] = d_sq
+            if dsq:
+                null_pred = np.ones_like(pred) * np.mean(y)
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    null_deviance = 2 * np.sum(xlogy(y, y / null_pred.flat) - y + null_pred.flat)
+                    full_deviance = 2 * np.sum(xlogy(y, y / pred.flat) - y + pred.flat)
+                d_sq = 1 - (full_deviance / null_deviance)
+                scores.at[cell] = d_sq
+            elif rsq:
+                scores.at[cell] = r2_score(y, pred)
+            else:
+                scores.at[cell] = -neglog(np.vstack((bias, wt)).flatten(), biasdm, y) / np.sum(y)
         return scores
 
     def combine_weights(self):
@@ -823,21 +835,24 @@ class NeuralGLM:
             winds = self.covar[var]['dmcol_idx']
             bases = self.covar[var]['bases']
             weights = self.coefs.apply(lambda w: np.sum(w[winds] * bases, axis=1))
-            variances = self.variances.apply(lambda v: np.sum(v[winds] * bases, axis=1))
+            if hasattr(self, 'variances'):
+                variances = self.variances.apply(lambda v: np.sum(v[winds] * bases, axis=1))
             offset = self.covar[var]['offset']
             tlen = bases.shape[0] * self.binwidth
             tstamps = np.linspace(0 + offset, tlen + offset, bases.shape[0])
             outputs[var] = pd.DataFrame(weights.values.tolist(),
                                         index=weights.index,
                                         columns=tstamps)
-            varoutputs[var] = pd.DataFrame(variances.values.tolist(),
-                                           index=weights.index,
-                                           columns=tstamps)
+            if hasattr(self, 'variances'):
+                varoutputs[var] = pd.DataFrame(variances.values.tolist(),
+                                               index=weights.index,
+                                               columns=tstamps)
         self.combined_weights = outputs
-        self.combined_variances = varoutputs
+        if hasattr(self, 'variances'):
+            self.combined_variances = varoutputs
         return outputs
 
-    def score(self):
+    def score(self, dsq=False, rsq=False):
         """
         Compute the squared deviance of the model, i.e. how much variance beyond the null model
         (a poisson process with the same mean, defined by the intercept, at every time step) the
@@ -856,19 +871,26 @@ class NeuralGLM:
             return self.submodel_scores
         testmask = np.isin(self.trlabels, self.testinds).flatten()
         testdm = self.dm[testmask, :]
+        biasdm = np.pad(testdm, ((0, 0), (1, 0)), constant_values=1)
         scores = pd.Series(index=self.coefs.index)
         for cell in self.coefs.index:
             cell_idx = np.argwhere(self.clu_ids == cell)[0, 0]
             wt = self.coefs.loc[cell].reshape(-1, 1)
             bias = self.intercepts.loc[cell]
             y = self.binnedspikes[testmask, cell_idx]
-            pred = np.exp(testdm @ wt + bias)
-            null_pred = np.ones_like(pred) * np.mean(y)
-            null_deviance = 2 * np.sum(xlogy(y, y / null_pred.flat) - y + null_pred.flat)
-            with np.errstate(invalid='ignore', divide='ignore'):
-                full_deviance = 2 * np.sum(xlogy(y, y / pred.flat) - y + pred.flat)
-            d_sq = 1 - (full_deviance / null_deviance)
-            scores.at[cell] = d_sq
+            if dsq or rsq:
+                pred = np.exp(testdm @ wt + bias)
+                if dsq:
+                    null_pred = np.ones_like(pred) * np.mean(y)
+                    null_deviance = 2 * np.sum(xlogy(y, y / null_pred.flat) - y + null_pred.flat)
+                    with np.errstate(invalid='ignore', divide='ignore'):
+                        full_deviance = 2 * np.sum(xlogy(y, y / pred.flat) - y + pred.flat)
+                    d_sq = 1 - (full_deviance / null_deviance)
+                    scores.at[cell] = d_sq
+                else:
+                    scores.at[cell] = r2_score(y, pred)
+            else:
+                scores.at[cell] = -neglog(np.vstack((bias, wt)).flatten(), biasdm, y) / np.sum(y)
         return scores
 
     def binf(self, t):
@@ -969,6 +991,22 @@ def d_neglog(weights, x, y):
 def dd_neglog(weights, x, y):
     xproj = x @ weights
     f = np.exp(xproj)
+    df = f
+    ddf = df
+    nzidx = (f != 0).reshape(-1)
+    if np.any(y[~nzidx] != 0):
+        return np.inf
+    yf = y[nzidx] / f[nzidx]
+    p1 = ddf[nzidx] * (1 - yf) + (y[nzidx] * (df[nzidx] / f[nzidx])**2)
+    p2 = x[nzidx, :]
+    return (p1.reshape(-1, 1) * p2).T @ x[nzidx, :]
+
+def dd_neglog_cp(weights, x, y):
+    weights = cp.array(weights)
+    x = cp.array(x)
+    y = cp.array(y)
+    xproj = x @ weights
+    f = cp.exp(xproj)
     df = f
     ddf = df
     nzidx = (f != 0).reshape(-1)
