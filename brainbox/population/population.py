@@ -11,14 +11,14 @@ import types
 from itertools import groupby
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.naive_bayes import GaussianNB, MultinomialNB
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.model_selection import KFold, LeaveOneOut, LeaveOneGroupOut
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, roc_auc_score
 from sklearn.utils import shuffle as sklearn_shuffle
 
 
-def _get_spike_counts_in_bins(spike_times, spike_clusters, intervals):
+def get_spike_counts_in_bins(spike_times, spike_clusters, intervals):
     """
     Return the number of spikes in a sequence of time intervals, for each neuron.
 
@@ -121,23 +121,6 @@ def _symmetrize_correlograms(correlograms):
     return np.dstack((sym, correlograms))
 
 
-def _generate_pseudo_blocks(n_trials, factor=60, min_=20, max_=100):
-    block_ids = []
-    while len(block_ids) < n_trials:
-        x = np.random.exponential(factor)
-        while (x <= min_) | (x >= max_):
-            x = np.random.exponential(factor)
-        if (len(block_ids) == 0) & (np.random.randint(2) == 0):
-            block_ids += [0] * int(x)
-        elif (len(block_ids) == 0):
-            block_ids += [1] * int(x)
-        elif block_ids[-1] == 0:
-            block_ids += [1] * int(x)
-        elif block_ids[-1] == 1:
-            block_ids += [0] * int(x)
-    return np.array(block_ids[:n_trials])
-
-
 def xcorr(spike_times, spike_clusters, bin_size=None, window_size=None):
     """Compute all pairwise cross-correlograms among the clusters appearing in `spike_clusters`.
 
@@ -213,11 +196,106 @@ def xcorr(spike_times, spike_clusters, bin_size=None, window_size=None):
     return _symmetrize_correlograms(correlograms)
 
 
+def classify(population_activity, trial_labels, classifier, cross_validation=None):
+    """
+    Classify trial identity (e.g. stim left/right) from neural population activity.
+
+    Parameters
+    ----------
+    population_activity : 2D array (trials x neurons)
+        population activity of all neurons in the population for each trial.
+    trial_labels : 1D or 2D array
+        identities of the trials, can be any number of groups, accepts integers and strings
+    classifier : scikit-learn object
+        which decoder to use, for example Gaussian with Multinomial likelihood:
+                    from sklearn.naive_bayes import MultinomialNB
+                    classifier = MultinomialNB()
+    cross_validation : None or scikit-learn object
+        which cross-validation method to use, for example 5-fold:
+                    from sklearn.model_selection import KFold
+                    cross_validation = KFold(n_splits=5)
+
+    Returns
+    -------
+    accuracy : float
+        accuracy of the classifier
+    pred : 1D array
+        predictions of the classifier
+    prob : 1D array
+        probablity of classification
+    """
+
+    # Check input
+    assert population_activity.shape[0] == trial_labels.shape[0]
+
+    if cross_validation is None:
+        # Fit the model on all the data
+        classifier.fit(population_activity, trial_labels)
+        pred = classifier.predict(population_activity)
+        prob = classifier.predict_proba(population_activity)
+        prob = prob[:, 1]
+    else:
+        pred = np.empty(trial_labels.shape[0])
+        prob = np.empty(trial_labels.shape[0])
+        for train_index, test_index in cross_validation.split(population_activity):
+            # Fit the model to the training data and predict the held-out test data
+            classifier.fit(population_activity[train_index], trial_labels[train_index])
+            pred[test_index] = classifier.predict(population_activity[test_index])
+            proba = classifier.predict_proba(population_activity[test_index])
+            prob[test_index] = proba[:, 1]
+
+    # Calcualte accuracy
+    accuracy = accuracy_score(trial_labels, pred)
+    return accuracy, pred, prob
+
+
+def regress(population_activity, trial_targets, cross_validation=None):
+    """
+    Perform linear regression to predict a continuous variable from neural data
+
+    Parameters
+    ----------
+    population_activity : 2D array (trials x neurons)
+        population activity of all neurons in the population for each trial.
+    trial_targets : 1D or 2D array
+        the decoding target per trial as a continuous variable
+    pre_time : float
+        time (in seconds) preceding the event times
+    post_time : float
+        time (in seconds) following the event times
+    cross_validation : None or scikit-learn object
+        which cross-validation method to use, for example 5-fold:
+                    from sklearn.model_selection import KFold
+                    cross_validation = KFold(n_splits=5)
+
+    Returns
+    -------
+    pred : 1D array
+        array with predictions
+    """
+
+    reg = LinearRegression()
+
+    if cross_validation is None:
+        # Fit the model on all the data
+        reg.fit(population_activity, trial_targets)
+        pred = reg.predict(population_activity)
+    else:
+        pred = np.empty(trial_targets.shape[0])
+        for train_index, test_index in cross_validation.split(population_activity):
+            # Fit the model to the training data and predict the held-out test data
+            reg.fit(population_activity[train_index], trial_targets[train_index])
+            pred[test_index] = reg.predict(population_activity[test_index])
+    return pred
+
+
 def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, post_time=0.5,
            classifier='bayes-multinomial', cross_validation='kfold', num_splits=5, prob_left=None,
-           custom_validation=None, n_neurons='all', iterations=1, shuffle=False, phase_rand=False,
-           pseudo_blocks=False):
+           custom_validation=None, n_neurons='all', iterations=1, shuffle=False, phase_rand=False):
     """
+
+    WILL BE DEPRICATED
+
     Use decoding to classify groups of trials (e.g. stim left/right). Classification is done using
     the population vector of summed spike counts from the specified time window. Cross-validation
     is achieved using n-fold cross validation or leave-one-out cross validation. Decoders can
@@ -283,9 +361,6 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
     phase_rand : boolean
         whether to use phase randomization of the activity over trials to use as a "chance"
         predictor
-    pseudo_blocks : boolean
-        whether to generate pseudo blocks with the same statistics as the actual blocks
-        to estimate chance level
 
     Returns
     -------
@@ -305,6 +380,7 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
         probabilities : 2D array with dimensions iterations x trials
             classification probability for all trials in every iteration
     """
+    print('\n WARNING: The function decode will soon be depricated, use classify instead\n')
 
     # Check input
     if type(classifier) == str:
@@ -318,7 +394,7 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
 
     # Get matrix of all neuronal responses
     times = np.column_stack(((event_times - pre_time), (event_times + post_time)))
-    pop_vector, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters, times)
+    pop_vector, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters, times)
     pop_vector = pop_vector.T
 
     # Exclude last trial if the number of trials is even and phase shuffling
@@ -385,10 +461,6 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
                 rand_pop_vector[:, k] = np.abs(newsignal.real)
             sub_pop_vector = rand_pop_vector
 
-        # Generate pseudo blocks if necessary
-        if pseudo_blocks:
-            event_groups = _generate_pseudo_blocks(event_groups.shape[0])
-
         if cross_validation == 'none':
 
             # Fit the model on all the data and predict
@@ -451,8 +523,7 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
                         'confusion_matrix': conf_matrix_norm,
                         'n_groups': np.shape(np.unique(event_groups))[0],
                         'classifier': classifier, 'cross_validation': '%d-fold' % num_splits,
-                        'iterations': iterations, 'shuffle': shuffle, 'phase_rand': phase_rand,
-                        'pseudo_blocks': pseudo_blocks})
+                        'iterations': iterations, 'shuffle': shuffle, 'phase_rand': phase_rand})
 
     else:
         results = dict({'accuracy': acc, 'f1': f1, 'auroc': auroc,
@@ -460,8 +531,7 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
                         'confusion_matrix': conf_matrix_norm,
                         'n_groups': np.shape(np.unique(event_groups))[0],
                         'classifier': classifier, 'cross_validation': cross_validation,
-                        'iterations': iterations, 'shuffle': shuffle, 'phase_rand': phase_rand,
-                        'pseudo_blocks': pseudo_blocks})
+                        'iterations': iterations, 'shuffle': shuffle, 'phase_rand': phase_rand})
     return results
 
 
@@ -527,7 +597,7 @@ def lda_project(spike_times, spike_clusters, event_times, event_groups, pre_time
 
     # Get matrix of all neuronal responses
     times = np.column_stack(((event_times - pre_time), (event_times + post_time)))
-    pop_vector, cluster_ids = _get_spike_counts_in_bins(spike_times, spike_clusters, times)
+    pop_vector, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters, times)
     pop_vector = pop_vector.T
 
     # Initialize
