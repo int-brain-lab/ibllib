@@ -154,6 +154,11 @@ def assert_valid_label(label):
     :param label: A video label to verify
     :return: the label in lowercase
     """
+    if not isinstance(label, str):
+        try:
+            return tuple(map(assert_valid_label, label))
+        except AttributeError:
+            raise ValueError('label must be string or iterable of strings')
     if label.lower() not in VIDEO_LABELS:
         raise ValueError(f"camera must be one of ({', '.join(VIDEO_LABELS)})")
     return label.lower()

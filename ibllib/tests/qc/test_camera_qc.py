@@ -29,10 +29,10 @@ class TestCameraQC(unittest.TestCase):
         self.tempdir = TemporaryDirectory()
         self.session_path = utils.create_fake_session_folder(self.tempdir.name)
         utils.create_fake_raw_video_data_folder(self.session_path)
-        # utils.create_fake_raw_behavior_data_folder(self.session_path)
+        self.eid = 'd3372b15-f696-4279-9be5-98f15783b5bb'
         self.qc = CameraQC(self.session_path, one=self.one, n_samples=5,
                            side='left', stream=False, download_data=False)
-        self.qc.type = 'ephys'
+        self.qc._type = 'ephys'
         self.addCleanup(plt.close, 'all')
 
     def test_check_brightness(self):
@@ -221,6 +221,16 @@ class TestCameraQC(unittest.TestCase):
 
         self.assertEqual('WARNING', outcome)
         self.assertEqual(n_over, actual)
+
+    def test_ensure_data(self):
+        self.qc.eid = self.eid
+        self.qc.download_data = False
+        # If data for this session exists locally, overwrite the methods so it is not found
+        if self.one.path_from_eid(self.eid).exists():
+            self.qc.one.to_eid = lambda _: self.eid
+            self.qc.one.download_datasets = lambda _: None
+        with self.assertRaises(AssertionError):
+            self.qc.run(update=False)
 
     def tearDown(self) -> None:
         self.tempdir.cleanup()

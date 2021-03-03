@@ -914,17 +914,18 @@ class OneAlyx(OneAbstract):
             r['data_url'] for r in dataset['file_records'] if r['data_url'] and r['exists'])
 
     @parse_id
-    def datasets_from_type(self, eid, dataset_type):
+    def datasets_from_type(self, eid, dataset_type, full=False):
         """
         Get list of datasets belonging to a given dataset type for a given session
         :param eid: Experiment session identifier; may be a UUID, URL, experiment reference string
         details dict or Path
         :param dataset_type: A dataset type, e.g. camera.times
+        :param full: If True, a dictionary of details is returned for each dataset
         :return: A list of datasets belonging to that session's dataset type
         """
         restriction = f'session__id,{eid},dataset_type__name,{dataset_type}'
         datasets = self.alyx.rest('datasets', 'list', django=restriction)
-        return [d['name'] for d in datasets]
+        return datasets if full else [d['name'] for d in datasets]
 
     def get_details(self, eid: str, full: bool = False):
         """ Returns details of eid like from one.search, optional return full

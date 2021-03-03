@@ -147,6 +147,7 @@ class MotionAlignment:
         camera_path = self.video_paths[side]
         roi = (*[slice(*r) for r in self.roi[side]], 0)
         try:
+            # TODO Add function arg to make grayscale
             self.alignment.frames = \
                 vidio.get_video_frames_preload(camera_path, frame_numbers, mask=roi)
         except AssertionError:

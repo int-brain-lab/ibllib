@@ -754,6 +754,12 @@ class TestVideo(unittest.TestCase):
             video.assert_valid_label('tail')
         label = video.assert_valid_label('LEFT')
         self.assertEqual(label, 'left')
+        # Verify works with lists
+        labels = video.assert_valid_label(['Right', 'body'])
+        self.assertEqual(labels, ('right', 'body'))
+        with self.assertRaises(TypeError):
+            video.assert_valid_label(None)
+
 
 
 if __name__ == "__main__":

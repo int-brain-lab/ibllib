@@ -5,9 +5,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import alf.io
 import numpy as np
 import pandas as pd
+
+import alf.io
 from ibllib.io import extractors
 from ibllib.io import raw_data_loaders as raw
 from ibllib.io.extractors.base import BaseExtractor
@@ -713,17 +714,18 @@ class TestCameraExtractors(unittest.TestCase):
         audio['polarities'] = np.ones(audio['times'].shape, dtype=np.int32)
         audio['polarities'][1::2] = -1
 
-    def test_attribute_times(self):
+    def test_attribute_times(self, display=False):
         # Create two timestamp arrays at two different frequencies
         tsa = np.linspace(0, 60, 60 * 4)[:60]  # 240bpm
         tsb = np.linspace(0, 60, 60 * 3)[:45]  # 180bpm
         tsa = np.sort(np.append(tsa, .4))  # Add ambiguous front
         tsb = np.sort(np.append(tsb, .41))
-        from ibllib.plots import vertical_lines
-        import matplotlib.pyplot as plt
-        vertical_lines(tsb, linestyle=':', color='r', label='tsb')
-        vertical_lines(tsa, linestyle=':', color='b', label='tsa')
-        plt.legend()
+        if display:
+            from ibllib.plots import vertical_lines
+            import matplotlib.pyplot as plt
+            vertical_lines(tsb, linestyle=':', color='r', label='tsb')
+            vertical_lines(tsa, linestyle=':', color='b', label='tsa')
+            plt.legend()
 
         # Check with default args
         matches = extractors.camera.attribute_times(tsa, tsb)

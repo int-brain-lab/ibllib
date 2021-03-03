@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 from oneibl.stream import VideoStreamer
 import ibllib.dsp.utils as dsp
-from ibllib.plots import squares
+from ibllib.plots import squares, vertical_lines
 from ibllib.io.video import assert_valid_label
 from brainbox.behavior.wheel import within_ranges
 from ibllib.io.extractors.base import get_session_extractor_type
@@ -23,7 +23,6 @@ from ibllib.io.extractors.base import (
 )
 
 _logger = logging.getLogger('ibllib')
-PIN_STATE_THRESHOLD = 1
 
 
 def extract_camera_sync(sync, chmap=None):
@@ -49,7 +48,6 @@ def get_video_length(video_path):
     Returns video length
     :param video_path: A path to the video
     :return:
-    TODO Use get_video_meta with key arg instead?
     """
     is_url = isinstance(video_path, str) and video_path.startswith('http')
     cap = VideoStreamer(video_path).cap if is_url else cv2.VideoCapture(str(video_path))
@@ -66,10 +64,11 @@ class CameraTimestampsFPGA(BaseExtractor):
         self.label = assert_valid_label(label)
         self.save_names = f'_ibl_{label}Camera.times.npy'
         self.var_names = f'{label}_camera_timestamps'
+        self._log_level = _logger.level
         _logger.setLevel(logging.DEBUG)
 
     def __del__(self):
-        _logger.setLevel(logging.INFO)
+        _logger.setLevel(self._log_level)
 
     def _extract(self, sync=None, chmap=None, video_path=None,
                  display=False, extrapolate_missing=True):
@@ -134,10 +133,22 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
     save_names = '_ibl_leftCamera.times.npy'
     var_names = 'left_camera_timestamps'
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._log_level = _logger.level
+        _logger.setLevel(logging.DEBUG)
+
+    def __del__(self):
+        _logger.setLevel(self._log_level)
+
     def _extract(self, video_path=None, display=False, extrapolate_missing=True):
         raw_ts = self._times_from_bpod()
         _, ts = raw.load_camera_ssv_times(self.session_path, 'left')
         count, gpio = raw.load_embedded_frame_data(self.session_path, 'left')
+        if video_path is None:
+            filename = '_iblrigCamera.raw.mp4'
+            video_path = self.session_path.joinpath('raw_video_data', filename)
+        length = get_video_length(video_path)
 
         if gpio is not None and gpio['indices'].size > 1:
             _logger.info('Aligning to audio TTLs')
@@ -152,10 +163,6 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
             """
             gpio, audio, ts = groom_pin_state(gpio, audio, ts, take='nearest',
                                               tolerance=.5, min_diff=5e-3, display=display)
-            if video_path is None:
-                filename = '_iblrigCamera.raw.mp4'
-                video_path = self.session_path.joinpath('raw_video_data', filename)
-            length = get_video_length(video_path)
             if count.size > length:
                 count = count[:length]
             else:
@@ -166,15 +173,17 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
         else:
             _logger.warning('Alignment by wheel data not yet implemented')
             # Extrapolate at median frame rate
-            n_missing = count[-1] - raw_ts.size + 1
-            if n_missing:
-                _logger.warning(f'{n_missing} fewer FPGA/Bpod timestamps than frame counts; '
+            n_missing = length - raw_ts.size
+            if n_missing > 0:
+                _logger.warning(f'{n_missing} fewer Bpod timestamps than frames; '
                                 f'{"extrapolating" if extrapolate_missing else "appending nans"}')
                 frate = np.median(np.diff(raw_ts))
                 to_app = ((np.arange(n_missing, ) + 1) / frate + raw_ts[-1]
                           if extrapolate_missing
                           else np.full(n_missing, np.nan))
                 raw_ts = np.r_[raw_ts, to_app]  # Append the missing times
+            elif n_missing < 0:
+                _logger.warning(f'{abs(n_missing)} fewer frames than Bpod timestamps')
 
             return raw_ts
 
@@ -192,6 +201,7 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
                             ['Events timestamps'].get('Port1Out'))
             # some trials at startup may not have the camera working, discard
             if np.all(pin) is None:
+                _logger.debug('trial %i missing TTL events', ind)
                 continue
             # if the trial starts in the middle of a square, discard the first downgoing front
             if pout[0] < pin[0]:
@@ -238,8 +248,6 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
             frame_times[ii: ii + nmiss] = (cam_time[-1] + intertrial_duration[trial] /
                                            (nmiss + 1) * (np.arange(nmiss) + 1))
             ii += nmiss
-        # import matplotlib.pyplot as plt
-        # plt.plot(np.diff(frame_times))
         assert all(np.diff(frame_times) > 0)  # negative diffs implies a big problem
         return frame_times
 
@@ -315,16 +323,12 @@ def align_with_audio(timestamps, audio, pin_state, count,
     # Remove the extraneous timestamps from the beginning and end
     end = count[-1] + 1 + start
     ts = timestamps[start:end]
-    """FIXME We have a situation here where there are the correct number of timestamps, 
-    but not enough to satisfy the count array"""
-    # if ts.size < count.size:
     if ts.size <= count[-1]:
         """
         For ephys sessions there may be fewer FPGA times than frame counts if SpikeGLX is turned 
         off before the video acquisition workflow.  For Bpod this always occurs because Bpod 
         finishes before the camera workflow.  For Bpod the times are already extrapolated for 
         these late frames."""
-        # n_missing = count.size - ts.size + 1
         n_missing = count[-1] - ts.size + 1
         _logger.warning(f'{n_missing} fewer FPGA/Bpod timestamps than frame counts; '
                         f'{"extrapolating" if extrapolate_missing else "appending nans"}')
@@ -339,12 +343,10 @@ def align_with_audio(timestamps, audio, pin_state, count,
     ts = ts[count]
     assert np.searchsorted(ts, audio['times'][0]) == first_uptick
     if ts.size != count.size:
-        _logger.warning('number of timestamps and frames still don\'t match')
+        _logger.error('number of timestamps and frames don\'t match after alignment')
 
     if display:
         # Plot to check
-        import matplotlib.pyplot as plt
-        from ibllib.plots import vertical_lines
         fig, axes = plt.subplots(1, 1)
         y = within_ranges(np.arange(ts.size), pin_state['indices'].reshape(-1, 2)).astype(float)
         y *= 1e-5  # For scale when zoomed in
@@ -353,10 +355,6 @@ def align_with_audio(timestamps, audio, pin_state, count,
         vertical_lines(audio['times'], ymin=0, ymax=1e-5,
                        color='r', linestyle=':', ax=axes, label='audio TTL')
         plt.legend()
-        # gpio_ttl_diff = ts[low2high] - audio[:sum(low2high)]
-        # axes[1].hist(gpio_ttl_diff, 1000)
-        # _logger.info('%i timestamps negative when taking diff between audio TTLs and GPIO',
-        #              np.sum(gpio_ttl_diff < 0))
 
     return ts
 
@@ -411,6 +409,8 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
     :param audio: dict of FPGA audio TTLs (see ibllib.io.extractors.ephys_fpga._get_sync_fronts)
     :param ts: camera frame times
     :param tolerance: two pulses need to be within this many seconds to be considered related
+    :param take:  If 'first' the first value within tolerance is assigned; if 'nearest' the
+    closest value is assigned
     :param display: If true, the resulting timestamps are plotted against the raw audio signal
     :param min_diff: Audio TTL fronts less than min_diff seconds apart will be removed
     :returns: dict of GPIO FPGA front indices, polarities and FPGA aligned times
@@ -478,7 +478,6 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
             _logger.warning(f'{sum(missed)} pin state rises could '
                             f'not be attributed to an audio TTL')
             if display:
-                from ibllib.plots import vertical_lines
                 ax = plt.subplot()
                 vertical_lines(ups[assigned > -1],
                                linestyle='-', color='g', ax=ax,
@@ -520,6 +519,8 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
             gpio = {k: v[~to_remove] for k, v in gpio.items()}
             ifronts = gpio['indices']
             # Assert that we've removed discrete TTLs
+            # A failure means e.g. an up-going front of one TTL was missed
+            # but not the down-going one.
             assert (np.all(np.abs(np.diff(gpio['polarities'])) == 2))
             assert gpio['polarities'][0] == 1
 
@@ -550,14 +551,6 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
         # Assigned audio
         squares(audio_['times'], audio_['polarities'],
                 ax=ax, label='assigned audio TTL', linestyle=':', color='g', yrange=[0, 1])
-        # Unassigned
-        # x = np.insert(audio['times'][np.r_[short, short + 1]], 0, 0)
-        # # y = audio['polarities'][np.r_[short, short + 1]]
-        # y = np.arange(x.size) % 2
-        # # x = np.setdiff1d(audio['times'], audio_['times'], assume_unique=True)
-        # # y = audio['polarities'][np.invert(np.in1d(audio['times'],  audio_['times']))]
-        # squares(x, y,
-        #         ax=ax, label='audio TTL', linestyle=':', color='r', yrange=[0, 1])
         ax.legend()
         plt.xlabel('FPGA time (s)')
         ax.set_yticks([0, 1])

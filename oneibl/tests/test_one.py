@@ -319,6 +319,8 @@ class TestMisc(unittest.TestCase):
         eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
         dsets = one.datasets_from_type(eid, 'eye.blink')
         self.assertCountEqual(dsets, ['eye.blink.npy'])
+        dsets, = one.datasets_from_type(eid, 'eye.blink', full=True)
+        self.assertIsInstance(dsets, dict)
 
 
 if __name__ == '__main__':

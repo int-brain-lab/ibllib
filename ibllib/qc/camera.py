@@ -29,9 +29,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
-from ibllib.io.extractors.camera import (
-    extract_camera_sync, PIN_STATE_THRESHOLD, extract_all
-)
+from ibllib.io.extractors.camera import extract_camera_sync, extract_all
 from ibllib.exceptions import ALFObjectNotFound
 from ibllib.io.extractors import ephys_fpga, training_wheel
 from ibllib.io.extractors.base import get_session_extractor_type
@@ -44,6 +42,7 @@ from ibllib.io.video import get_video_meta, get_video_frames_preload
 from . import base
 
 _log = logging.getLogger('ibllib')
+PIN_STATE_THRESHOLD = 1
 
 
 class CameraQC(base.QC):
@@ -126,7 +125,7 @@ class CameraQC(base.QC):
                 self.video_path = None
 
         logging.disable(logging.CRITICAL)
-        self.type = get_session_extractor_type(self.session_path) or None
+        self._type = get_session_extractor_type(self.session_path) or None
         logging.disable(logging.NOTSET)
         keys = ('count', 'pin_state', 'audio', 'fpga_times', 'wheel', 'video',
                 'frame_samples', 'timestamps', 'camera_times', 'bonsai_times')
@@ -137,7 +136,19 @@ class CameraQC(base.QC):
         self.metrics = None
         self.outcome = 'NOT_SET'
 
-    def load_data(self, download_data: bool = None, extract_times: bool = False) -> None:
+    @property
+    def type(self):
+        """
+        Returns the camera type based on the protocol.
+        :return: Returns either None, 'ephys' or 'training'
+        """
+        if not self._type:
+            return
+        else:
+            return 'ephys' if 'ephys' in self._type else 'training'
+
+    def load_data(self, download_data: bool = None,
+                  extract_times: bool = False, load_video: bool = True) -> None:
         """Extract the data from raw data files
         Extracts all the required task data from the raw data files.
 
@@ -155,6 +166,7 @@ class CameraQC(base.QC):
 
         :param download_data: if True, any missing raw data is downloaded via ONE.
         :param extract_times: if True, the camera.times are re-extracted from the raw data
+        :param load_video: if True, calls the load_video_data method
         """
         if download_data is not None:
             self.download_data = download_data
@@ -230,16 +242,17 @@ class CameraQC(base.QC):
             # # TODO Save only the wheel fragment we need
             # self.data['wheel'].period = wheel_moves['intervals'][move_ind, :]
 
-        # Gather information from video file
-        _log.info('Inspecting video file...')
-        self.load_video_data()
-
         # Load Bonsai frame timestamps
         try:
             ssv_times = raw.load_camera_ssv_times(self.session_path, self.side)
             self.data['bonsai_times'], self.data['camera_times'] = ssv_times
         except AssertionError:
             _log.warning('No Bonsai video timestamps file found')
+
+        # Gather information from video file
+        if load_video:
+            _log.info('Inspecting video file...')
+            self.load_video_data()
 
     def load_video_data(self):
         # Get basic properties of video
@@ -289,29 +302,31 @@ class CameraQC(base.QC):
         :return:
         """
         assert self.one is not None, 'ONE required to download data'
+        # dataset collections outside this list are ignored (e.g. probe00, raw_passive_data)
+        collections = ('alf', 'raw_ephys_data', 'raw_behavior_data', 'raw_video_data')
         # Get extractor type
         is_ephys = 'ephys' in (self.type or self.one.get_details(self.eid)['task_protocol'])
         dtypes = self.dstypes + self.dstypes_fpga if is_ephys else self.dstypes
         for dstype in dtypes:
-            dataset = self.one.datasets_from_type(self.eid, dstype)
+            dataset = self.one.datasets_from_type(self.eid, dstype, full=True)
             if 'camera' in dstype.lower():  # Download individual camera file
-                dataset = [d for d in dataset if self.side in d]
-            if any(x.endswith('.mp4') for x in dataset) and self.stream:
+                dataset = [d for d in dataset if self.side in d['name']]
+            else:  # Ignore probe datasets, etc.
+                dataset = [d for d in dataset if d['collection'] in collections]
+            if any(x['name'].endswith('.mp4') for x in dataset) and self.stream:
                 names = [x.name for x in self.one.list(self.eid)]
                 assert f'_iblrig_{self.side}Camera.raw.mp4' in names, 'No remote video file found'
                 continue
             optional = ('camera.times', '_iblrig_Camera.raw', 'wheel.position',
                         'wheel.timestamps', '_iblrig_Camera.frame_counter', '_iblrig_Camera.GPIO')
             required = (dstype not in optional)
-            collection = 'raw_behavior_data' if dstype == '_iblrig_taskSettings.raw' else None
-            kwargs = {'download_only': True, 'collection': collection}
             present = (
-                (self.one.load_dataset(self.eid, d, **kwargs) for d in dataset)
+                self.one.download_datasets(dataset)
                 if self.download_data
-                else (next(self.session_path.rglob(d), None) for d in dataset)
+                else (next(self.session_path.rglob(d['name']), None) for d in dataset)
             )
             assert (dataset and all(present)) or not required, f'Dataset {dstype} not found'
-        self.type = get_session_extractor_type(self.session_path)
+        self._type = get_session_extractor_type(self.session_path)
 
     def run(self, update: bool = False, **kwargs) -> (str, dict):
         """
@@ -517,7 +532,8 @@ class CameraQC(base.QC):
         :param display: if true, the wheel motion energy is plotted against the rotary encoder
         :returns: outcome string, frame offset
         """
-        if self.data['wheel'] is None or self.side == 'body':
+        wheel_present = data_for_keys(('position', 'timestamps', 'period'), self.data['wheel'])
+        if not wheel_present or self.side == 'body':
             return 'NOT_SET'
 
         aln = MotionAlignment(self.eid, self.one, self.log)
@@ -835,7 +851,7 @@ class CameraQC(base.QC):
 
 def data_for_keys(keys, data):
     """Check keys exist in 'data' dict and contain values other than None"""
-    return all(k in data and data.get(k, None) is not None for k in keys)
+    return data is not None and all(k in data and data.get(k, None) is not None for k in keys)
 
 
 def run_all_qc(session, cameras=('left', 'right', 'body'), **kwargs):
