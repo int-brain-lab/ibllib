@@ -124,6 +124,55 @@ def load_camera_ssv_times(session_path, camera):
     return bonsai_times, camera_times
 
 
+def _load_camera_bin_file(fpath):
+    return np.fromfile(fpath, dtype=np.float64).astype(int)
+
+
+def _check_camera_name(camera: str) -> str:
+    camera_labels = ("left", "right", "body")
+    if camera.lower() not in camera_labels:
+        raise ValueError(f"camera must be one of ({', '.join(('left', 'right', 'body'))})")
+    return camera.lower()
+
+
+def load_camera_frame_count(session_path, camera):
+    """
+    load_camera_frame_count loads camera frame counter output file from camera recording workflow
+
+    :param session_path: path to session
+    :type session_path: str or Path
+    :param camera: left, right or body camera string sedcriptor
+    :type camera: str
+    :return: array of gpio pin state from _load_camera_bin_file()
+    :rtype: np.array
+    """
+    camera = _check_camera_name(camera)
+    file = (
+        Path(session_path) / "raw_video_data" / f"_iblrig_{camera.lower()}Camera.frame_counter.bin"
+    )
+    print(file)
+    assert file.exists(), str(file)
+    return _load_camera_bin_file(file)
+
+
+def load_camera_gpio(session_path, camera):
+    """
+    load_camera_gpio loads camera GPIO state from camera recording workflow
+
+    :param session_path: path to session
+    :type session_path: str or Path
+    :param camera: string descriptor of camere from multiple inputs (left, right or body)
+    :type camera: str
+    :return: array of gpio pin state from _load_camera_bin_file()
+    :rtype: np.array
+    """
+    camera = _check_camera_name(camera)
+    file = Path(session_path) / "raw_video_data" / f"_iblrig_{camera.lower()}Camera.GPIO.bin"
+    print(file)
+    assert file.exists(), str(file)
+    return _load_camera_bin_file(file)
+
+
 def load_settings(session_path: Union[str, Path]):
     """
     Load PyBpod Settings files (.json).
