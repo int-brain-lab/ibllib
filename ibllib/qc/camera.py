@@ -39,6 +39,7 @@ from brainbox.core import Bunch
 from brainbox.video.motion import MotionAlignment
 import brainbox.behavior.wheel as wh
 from ibllib.io.video import get_video_meta, get_video_frames_preload
+from oneibl.one import OneOffline
 from . import base
 
 _log = logging.getLogger('ibllib')
@@ -108,7 +109,7 @@ class CameraQC(base.QC):
         # When an eid is provided, we will download the required data by default (if necessary)
         download_data = not alfio.is_session_path(session_path_or_eid)
         self.download_data = kwargs.pop('download_data', download_data)
-        self.stream = kwargs.pop('stream', True)
+        self.stream = kwargs.pop('stream', None)
         self.n_samples = kwargs.pop('n_samples', 100)
         super().__init__(session_path_or_eid, **kwargs)
 
@@ -117,8 +118,9 @@ class CameraQC(base.QC):
         filename = f'_iblrig_{self.side}Camera.raw.mp4'
         self.video_path = self.session_path / 'raw_video_data' / filename
         # If local video doesn't exist, change video path to URL
-        if not self.video_path.exists() and self.stream and self.one is not None:
+        if not self.video_path.exists() and self.stream is not False and self.one is not None:
             try:
+                self.stream = True
                 self.video_path = self.one.url_from_path(self.video_path)
             except StopIteration:
                 _log.error('No remote or local video file found')
@@ -170,7 +172,7 @@ class CameraQC(base.QC):
         """
         if download_data is not None:
             self.download_data = download_data
-        if self.one:
+        if self.one and not isinstance(self.one, OneOffline):
             self._ensure_required_data()
         _log.info('Gathering data for QC')
 
@@ -223,24 +225,6 @@ class CameraQC(base.QC):
         #  are extrapolated).  Make sure the movement isn't too long.
         if data_for_keys(wheel_keys, self.data['wheel']) and self.data['timestamps'] is not None:
             self.data['wheel'].period = self.get_active_wheel_period(self.data['wheel'])
-            # START = 5 * 60  # Default: start 5 minutes in
-            # # Sometimes the camera starts later...
-            # min_start = np.ceil(max(self.data['timestamps'][0], self.data['wheel'].timestamps[0]))
-            # start = max(START, min_start)  # Start later if camera still not on
-            # SEARCH_PERIOD = 2 * 60
-            # ts, pos = [self.data['wheel'][k] for k in wheel_keys]
-            # while True:
-            #     win = np.logical_and(
-            #         ts > start,
-            #         ts < SEARCH_PERIOD + start
-            #     )
-            #     if np.sum(win) > 1000:
-            #         break
-            #     SEARCH_PERIOD *= 2
-            # wheel_moves = training_wheel.extract_wheel_moves(ts[win], pos[win])
-            # move_ind = np.argmax(np.abs(wheel_moves['peakAmplitude']))
-            # # TODO Save only the wheel fragment we need
-            # self.data['wheel'].period = wheel_moves['intervals'][move_ind, :]
 
         # Load Bonsai frame timestamps
         try:
@@ -297,8 +281,6 @@ class CameraQC(base.QC):
         any missing data are downloaded.  If all the data are not present locally at the end of
         it an exception is raised.  If the stream attribute is True, the video file is not
         required to be local, however it must be remotely accessible.
-
-        TODO make static method with side as optional arg
         :return:
         """
         assert self.one is not None, 'ONE required to download data'
@@ -495,7 +477,7 @@ class CameraQC(base.QC):
         expected = 1 / self.video_meta[self.type][self.side]['fps']
         # TODO Remove dropped frames from test
         frame_delta = np.diff(self.data['timestamps'])
-        fps_matches = np.isclose(np.median(frame_delta), expected, atol=0.001)
+        fps_matches = np.isclose(np.median(frame_delta), expected, atol=0.01)
         # Check number of timestamps matches video
         length_matches = self.data['timestamps'].size == self.data['video'].length
         # Check times are strictly increasing

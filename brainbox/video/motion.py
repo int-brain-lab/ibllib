@@ -12,7 +12,7 @@ import matplotlib.animation as animation
 import logging
 from pathlib import Path
 
-from oneibl.one import ONE
+from oneibl.one import ONE, OneOffline
 import ibllib.io.video as vidio
 from brainbox.core import Bunch
 import brainbox.video.video as video
@@ -34,11 +34,14 @@ class MotionAlignment:
         'body': ((402, 481), (31, 103))
     }
 
-    def __init__(self, eid, one=None, log=logging.getLogger('ibllib')):
+    def __init__(self, eid, one=None, log=logging.getLogger('ibllib'), **kwargs):
         self.one = one or ONE()
         self.eid = eid
         self.session_path = self.one.path_from_eid(eid)
-        self.ref = eid2ref(self.eid, as_dict=False, one=self.one)
+        if self.one and not isinstance(self.one, OneOffline):
+            self.ref = eid2ref(self.eid, as_dict=False, one=self.one)
+        else:
+            self.ref = None
         self.log = log
         self.trials = self.wheel = self.camera_times = None
         raw_cam_path = self.session_path.joinpath('raw_video_data')
@@ -220,8 +223,8 @@ class MotionAlignment:
             self.log.error('No alignment data, run `align_motion` first')
             return
         # Change backend based on save flag
-        backend = matplotlib.get_backend()
-        if (save and backend != 'Agg') or (not save and backend == 'Agg'):
+        backend = matplotlib.get_backend().lower()
+        if (save and backend != 'agg') or (not save and backend == 'agg'):
             new_backend = 'Agg' if save else 'Qt5Agg'
             self.log.warning('Switching backend from %s to %s', backend, new_backend)
             matplotlib.use(new_backend)
@@ -341,24 +344,12 @@ class MotionAlignment:
         #     animate(0)
         if save:
             filename = '%s_%c.mp4' % (self.ref, self.alignment['label'][0])
-            self.log.info('Saving to ' + filename)
+            if isinstance(save, (str, Path)):
+                filename = Path(save).joinpath(filename)
+            self.log.info(f'Saving to {filename}')
             # Set up formatting for the movie files
             Writer = animation.writers['ffmpeg']
             writer = Writer(fps=24, metadata=dict(artist='Miles Wells'), bitrate=1800)
-            anim.save(filename, writer=writer)
+            anim.save(str(filename), writer=writer)
         else:
             plt.show()
-
-
-def motion_energy(video_path, n=5):
-    cap = cv2.VideoCapture(video_path)  # TODO Add https support
-    n_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-    n_frames = 100
-    prev_frame = np.array([])
-    nrg = np.empty(n_frames - 1)
-    for idx in np.array_split(np.arange(n_frames), np.ceil(n_frames / n)):
-        frames = vidio.get_video_frames_preload(video_path, idx, mask=np.s_[:, :, 0])
-        frames = np.r_[prev_frame[np.newaxis, :, :], frames] if prev_frame.size else frames
-        nrg[idx[:len(frames)-1]], _ = video.motion_energy(frames, diff=1, normalize=False)
-        prev_frame = frames[-1]
-    return nrg

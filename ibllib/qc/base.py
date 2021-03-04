@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from oneibl.one import ONE
+from oneibl.one import ONE, OneOffline
 from alf.io import is_session_path, is_uuid_string
 
 # Map for comparing QC outcomes
@@ -38,7 +38,8 @@ class QC:
             self.json = True
 
         # Ensure outcome attribute matches Alyx record
-        self._outcome = self.update('NOT_SET', namespace='') if self.eid else 'NOT_SET'
+        updatable = self.eid and self.one and not isinstance(self.one, OneOffline)
+        self._outcome = self.update('NOT_SET', namespace='') if updatable else 'NOT_SET'
         self.log.debug(f'Current QC status is {self.outcome}')
 
     @abstractmethod
@@ -131,6 +132,8 @@ class QC:
             qc = QC('path/to/session')
             qc.update('PASS')  # Update current QC field to 'PASS' if not set
         """
+        assert self.one and not isinstance(self.one, OneOffline), \
+            'unable to update remote QC; invalid ONE instance'
         outcome = outcome or self.outcome
         outcome = outcome.upper()  # Ensure outcome is uppercase
         if outcome not in CRITERIA:
@@ -161,6 +164,8 @@ class QC:
         :return: the updated extended_qc field
         """
         assert self.eid, 'Unable to update Alyx; eID not set'
+        assert self.one and not isinstance(self.one, OneOffline), \
+            'unable to update remote QC; invalid ONE instance'
 
         # Ensure None instead of NaNs
         for k, v in data.items():

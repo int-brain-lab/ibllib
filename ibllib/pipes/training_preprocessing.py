@@ -4,7 +4,8 @@ from collections import OrderedDict
 from ibllib.pipes import tasks
 from ibllib.io import ffmpeg
 from ibllib.io.extractors.base import get_session_extractor_type
-from ibllib.io.extractors import training_audio, bpod_trials
+from ibllib.io.extractors import training_audio, bpod_trials, camera
+from ibllib.qc.camera import CameraQC
 from ibllib.qc.task_metrics import TaskQC, HabituationQC
 from ibllib.qc.task_extractors import TaskQCExtractor
 from oneibl.registration import register_session_raw_data
@@ -55,6 +56,14 @@ class TrainingVideoCompress(tasks.Task):
         command = ('ffmpeg -i {file_in} -y -nostdin -codec:v libx264 -preset slow -crf 29 '
                    '-nostats -codec:a copy {file_out}')
         output_files = ffmpeg.iblrig_video_compression(self.session_path, command)
+
+        # Video timestamps extraction
+        data, files = camera.extract_all(self.session_path, save=True)
+        output_files.extend(files)
+
+        # Video QC
+        CameraQC(self.session_path, 'left', one=self.one, stream=False).run(update=True)
+
         if len(output_files) == 0:
             output_files = None  # labels the task as empty if no output
         return output_files

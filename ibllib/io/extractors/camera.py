@@ -33,7 +33,6 @@ def extract_camera_sync(sync, chmap=None):
     :param chmap: dictionary containing channel indices. Default to constant.
     :return: dictionary containing camera timestamps
     """
-    # NB: should we check we opencv the expected number of frames ?
     assert(chmap)
     sr = _get_sync_fronts(sync, chmap['right_camera'])
     sl = _get_sync_fronts(sync, chmap['left_camera'])
@@ -143,7 +142,6 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
 
     def _extract(self, video_path=None, display=False, extrapolate_missing=True):
         raw_ts = self._times_from_bpod()
-        _, ts = raw.load_camera_ssv_times(self.session_path, 'left')
         count, gpio = raw.load_embedded_frame_data(self.session_path, 'left')
         if video_path is None:
             filename = '_iblrigCamera.raw.mp4'
@@ -154,6 +152,7 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
             _logger.info('Aligning to audio TTLs')
             # Extract audio TTLs
             _, audio = raw.load_bpod_fronts(self.session_path, self.bpod_trials)
+            _, ts = raw.load_camera_ssv_times(self.session_path, 'left')
             """
             There are many audio TTLs that are for some reason missed by the GPIO.  Conversely 
             the last GPIO doesn't often correspond to any audio TTL.  These will be removed.  

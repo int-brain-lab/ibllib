@@ -225,21 +225,17 @@ class EphysVideoCompress(tasks.Task):
     level = 1
 
     def _run(self, **kwargs):
-        if (len(self.session_path.rglob('*.mp4')) == 0 and
-                len(self.session_path.rglob('*.avi')) > 0):
-            # avi to mp4 compression
-            command = ('ffmpeg -i {file_in} -y -nostdin -codec:v libx264 -preset slow -crf 17 '
-                       '-loglevel 0 -codec:a copy {file_out}')
-            output_files = ffmpeg.iblrig_video_compression(self.session_path, command)
-            if len(output_files) == 0:  # TODO Find out what this line does
-                self.session_path.joinpath('')
+        # avi to mp4 compression
+        command = ('ffmpeg -i {file_in} -y -nostdin -codec:v libx264 -preset slow -crf 17 '
+                   '-loglevel 0 -codec:a copy {file_out}')
+        output_files = ffmpeg.iblrig_video_compression(self.session_path, command)
 
-        ## Video timestamps extraction
-        data, files = camera.extract_all(self.session_path)
+        # Video timestamps extraction
+        data, files = camera.extract_all(self.session_path, save=True)
         output_files.extend(files)
 
-        ## Video QC
-        run_camera_qc(self.session_path, update=True)
+        # Video QC
+        run_camera_qc(self.session_path, update=True, one=self.one)
 
         return output_files
 

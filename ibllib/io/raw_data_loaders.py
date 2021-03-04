@@ -140,7 +140,8 @@ def load_camera_ssv_times(session_path, camera: str):
 
 def load_embedded_frame_data(session_path, label: str, raw=False):
     """
-    Load the embedded frame count and GPIO for a given session.
+    Load the embedded frame count and GPIO for a given session.  If the files don't exist,
+    or are empty, None values are returned
     :param session_path: Absolute path of session folder
     :param label: The specific video to load, one of ('left', 'right', 'body')
     :param raw: If True the raw data are returned without preprocessing, otherwise GPIO is
@@ -154,15 +155,19 @@ def load_embedded_frame_data(session_path, label: str, raw=False):
 
     # Load frame count
     count_file = raw_path / f'_iblrig_{label}Camera.frame_counter.bin'
-    count = np.fromfile(count_file, dtype=np.float64).astype(int) if count_file.exists() else None
-    if not (count is None or len(count) == 0 or raw):
+    count = np.fromfile(count_file, dtype=np.float64).astype(int) if count_file.exists() else []
+    if len(count) == 0:
+        count = None
+    elif not raw:
         count -= count[0]  # start from zero
 
     # Load pin state
     GPIO_file = raw_path / f'_iblrig_{label}Camera.GPIO.bin'
-    gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(int) if GPIO_file.exists() else None
+    gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(int) if GPIO_file.exists() else []
 
-    if not (gpio is None or len(gpio) == 0 or raw):
+    if len(gpio) == 0:
+        gpio = None
+    elif not raw:
         if np.unique(gpio).size != 2:
             _logger.warning('pin state noisy')
         thresh = int((gpio.max() - gpio.min()) / 2)

@@ -198,6 +198,10 @@ class TestsRawDataLoaders(unittest.TestCase):
         self.assertEqual(gpio.dtype, np.int32)
         np.testing.assert_array_equal(np.unique(gpio), np.array([0, 268435456]))
 
+        # Test empty / None
+        [self.assertIsNone(x) for x in raw.load_embedded_frame_data(None, 'body')]
+        [self.assertIsNone(x) for x in raw.load_embedded_frame_data(session, 'right')]
+
     def tearDown(self):
         self.tempfile.close()
         os.unlink(self.tempfile.name)
