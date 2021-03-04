@@ -66,8 +66,8 @@ class CameraQC(base.QC):
         'ephysData.raw.meta',
         'ephysData.raw.wiring'
     ]
-    """Recall that for the training rig there is only one side camera at 30 Hz and 1280 x 1024 px. 
-    For the recording rig there are two side cameras (left: 60 Hz, 1280 x 1024 px; 
+    """Recall that for the training rig there is only one side camera at 30 Hz and 1280 x 1024 px.
+    For the recording rig there are two side cameras (left: 60 Hz, 1280 x 1024 px;
     right: 150 Hz, 640 x 512 px) and one body camera (30 Hz, 640 x 512 px). """
     video_meta = {
         'training': {
@@ -385,7 +385,7 @@ class CameraQC(base.QC):
             for i, idx in enumerate((np.argmax(brightness), np.argmin(brightness))):
                 a = f.add_subplot(gs[i, 2])
                 ax.annotate('*', (indices[idx], brightness[idx]),  # this is the point to label
-                            textcoords="offset points", xytext=(0, 1),  ha='center')
+                            textcoords="offset points", xytext=(0, 1), ha='center')
                 frame = self.data['frame_samples'][idx]
                 title = ('min' if i else 'max') + ' mean luminance = %.2f' % brightness[idx]
                 self.imshow(frame, ax=a, title=title)
@@ -598,7 +598,7 @@ class CameraQC(base.QC):
                     t_y = (h / 100) * thresh
                     t_x = (w / 100) * thresh
                     xy = (x1 - t_x, y1 - t_y)
-                    ax0.add_patch(Rectangle(xy, x2 - x1 + (t_x * 2), y2 - y1 +(t_y * 2),
+                    ax0.add_patch(Rectangle(xy, x2 - x1 + (t_x * 2), y2 - y1 + (t_y * 2),
                                             fill=True, facecolor=c, lw=0, alpha=0.05))
             else:
                 for c, thresh in zip(('green', 'yellow'), pos_thresh):
@@ -606,7 +606,7 @@ class CameraQC(base.QC):
                     ax0.add_patch(Rectangle(xy, x2 - x1 + (thresh * 2), y2 - y1 + (thresh * 2),
                                             fill=True, facecolor=c, lw=0, alpha=0.05))
             xy = (x1 - err[0], y1 - err[1])
-            ax0.add_patch(Rectangle(xy, x2-x1, y2-y1,
+            ax0.add_patch(Rectangle(xy, x2 - x1, y2 - y1,
                                     edgecolor='pink', fill=False, hatch='//', lw=1))
             ax0.set(xlim=(0, img.shape[1]), ylim=(img.shape[0], 0))
             ax0.set_axis_off()
@@ -665,7 +665,7 @@ class CameraQC(base.QC):
         if not test and self.data['frame_samples'] is None:
             return 'NOT_SET'
 
-        if roi == False:
+        if roi is False:
             top_left, roi, _ = self.find_face(test=test)
             h, w = map(lambda x: np.diff(x).item(), roi)
             y, x = np.median(np.array(top_left), axis=0).round().astype(int)

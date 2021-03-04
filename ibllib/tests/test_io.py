@@ -765,6 +765,5 @@ class TestVideo(unittest.TestCase):
             video.assert_valid_label(None)
 
 
-
 if __name__ == "__main__":
     unittest.main(exit=False)

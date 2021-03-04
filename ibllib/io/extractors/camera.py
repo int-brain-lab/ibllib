@@ -92,15 +92,15 @@ class CameraTimestampsFPGA(BaseExtractor):
             audio = _get_sync_fronts(sync, chmap['audio'])
             _, ts = raw.load_camera_ssv_times(self.session_path, self.label)
             """
-            NB: Some of the audio TTLs occur very close together, and are therefore not 
+            NB: Some of the audio TTLs occur very close together, and are therefore not
             reflected in the pin state.  This function removes those.  Also converts frame times to
             FPGA time.
             """
             gpio, audio, ts = groom_pin_state(gpio, audio, ts, display=display)
             """
-            The length of the count and pin state are regularly longer than the length of 
-            the video file.  Here we assert that the video is either shorter or the same 
-            length as the arrays, and  we make an assumption that the missing frames are 
+            The length of the count and pin state are regularly longer than the length of
+            the video file.  Here we assert that the video is either shorter or the same
+            length as the arrays, and  we make an assumption that the missing frames are
             right at the end of the video.  We therefore simply shorten the arrays to match
             the length of the video.
             """
@@ -154,9 +154,9 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
             _, audio = raw.load_bpod_fronts(self.session_path, self.bpod_trials)
             _, ts = raw.load_camera_ssv_times(self.session_path, 'left')
             """
-            There are many audio TTLs that are for some reason missed by the GPIO.  Conversely 
-            the last GPIO doesn't often correspond to any audio TTL.  These will be removed.  
-            The drift appears to be less severe than the FPGA, so when assigning TTLs we'll take 
+            There are many audio TTLs that are for some reason missed by the GPIO.  Conversely
+            the last GPIO doesn't often correspond to any audio TTL.  These will be removed.
+            The drift appears to be less severe than the FPGA, so when assigning TTLs we'll take
             the nearest TTL within 500ms.  The go cue TTLs comprise two short pulses ~3ms apart.
             We will fuse any TTLs less than 5ms apart to make assignment more accurate.
             """
@@ -273,16 +273,16 @@ def align_with_audio(timestamps, audio, pin_state, count,
     same_n_ttl = pin_state['times'].size == audio['times'].size
     assert same_n_ttl, 'more audio TTLs detected on camera than TTLs sent'
 
-    """Here we will ensure that the FPGA camera times match the number of video frames in 
-    length.  We will make the following assumptions: 
+    """Here we will ensure that the FPGA camera times match the number of video frames in
+    length.  We will make the following assumptions:
 
     1. The number of FPGA camera times is equal to or greater than the number of video frames.
     2. No TTLs were missed between the camera and FPGA.
     3. No pin states were missed by Bonsai.
     4  No pixel count data was missed by Bonsai.
 
-    In other words the count and pin state arrays accurately reflect the number of frames 
-    sent by the camera and should therefore be the same length, and the length of the frame 
+    In other words the count and pin state arrays accurately reflect the number of frames
+    sent by the camera and should therefore be the same length, and the length of the frame
     counter should match the number of saved video frames.
 
     The missing frame timestamps are removed in three stages:
@@ -296,11 +296,11 @@ def align_with_audio(timestamps, audio, pin_state, count,
     # Align on first pin state change
     first_uptick = pin_state['indices'][0]
     first_ttl = np.searchsorted(timestamps, audio['times'][0])
-    """Here we find up to which index in the FPGA times we discard by taking the difference 
-    between the index of the first pin state change (when the audio TTL was reported by the 
-    camera) and the index of the first audio TTL in FPGA time.  We subtract the difference 
-    between the frame count at the first pin state change and the index to account for any 
-    video frames that were not saved during this period (we will remove those from the 
+    """Here we find up to which index in the FPGA times we discard by taking the difference
+    between the index of the first pin state change (when the audio TTL was reported by the
+    camera) and the index of the first audio TTL in FPGA time.  We subtract the difference
+    between the frame count at the first pin state change and the index to account for any
+    video frames that were not saved during this period (we will remove those from the
     camera FPGA times later).
     """
     # Minus any frames that were dropped between the start of frame acquisition and the
@@ -324,9 +324,9 @@ def align_with_audio(timestamps, audio, pin_state, count,
     ts = timestamps[start:end]
     if ts.size <= count[-1]:
         """
-        For ephys sessions there may be fewer FPGA times than frame counts if SpikeGLX is turned 
-        off before the video acquisition workflow.  For Bpod this always occurs because Bpod 
-        finishes before the camera workflow.  For Bpod the times are already extrapolated for 
+        For ephys sessions there may be fewer FPGA times than frame counts if SpikeGLX is turned
+        off before the video acquisition workflow.  For Bpod this always occurs because Bpod
+        finishes before the camera workflow.  For Bpod the times are already extrapolated for
         these late frames."""
         n_missing = count[-1] - ts.size + 1
         _logger.warning(f'{n_missing} fewer FPGA/Bpod timestamps than frame counts; '
@@ -435,7 +435,7 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
     # # make sure first GPIO state is high
     assert gpio['polarities'][0] == 1
     """
-    Some audio TTLs appear to be so short that they are not recorded by the camera.  These can 
+    Some audio TTLs appear to be so short that they are not recorded by the camera.  These can
     be as short as a few microseconds.  Applying a cutoff based on framerate was unsuccessful.
     Assigning each audio TTL to each pin state change is not easy because some onsets occur very
     close together (sometimes < 70ms), on the order of the delay between TTL and frame time.
@@ -443,7 +443,7 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
     change may be zero or even negative.
 
     Here we split the events into audio onsets (lo->hi) and audio offsets (hi->lo).  For each
-    uptick in the GPIO pin state, we take the first audio onset time that was within 100ms of it. 
+    uptick in the GPIO pin state, we take the first audio onset time that was within 100ms of it.
     We ensure that each audio TTL is assigned only once, so a TTL that is closer to frame 3 than
     frame 1 may still be assigned to frame 1.
     """
