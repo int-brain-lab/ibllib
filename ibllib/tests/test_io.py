@@ -187,7 +187,7 @@ class TestsRawDataLoaders(unittest.TestCase):
         session = Path(__file__).parent.joinpath('extractors', 'data', 'session_ephys')
         count, gpio = raw.load_embedded_frame_data(session, 'body')
         np.testing.assert_array_equal(count, np.arange(510, dtype=np.int32))
-        self.assertEqual(count.dtype, np.int32)
+        self.assertEqual(count.dtype, int)
         self.assertTrue(all(k in ('indices', 'polarities') for k in gpio.keys()))
         np.testing.assert_array_equal(gpio['indices'], np.array([166, 172], dtype=np.int64))
         np.testing.assert_array_equal(gpio['polarities'], np.array([1, -1]))
@@ -195,7 +195,7 @@ class TestsRawDataLoaders(unittest.TestCase):
         # Test raw flag
         count, gpio = raw.load_embedded_frame_data(session, 'body', raw=True)
         self.assertEqual(count[0], int(16696704))
-        self.assertEqual(gpio.dtype, np.int32)
+        self.assertEqual(gpio.dtype, int)
         np.testing.assert_array_equal(np.unique(gpio), np.array([0, 268435456]))
 
         # Test empty / None
