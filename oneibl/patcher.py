@@ -112,7 +112,6 @@ class Patcher(abc.ABC):
         :param ftp: flag for case when using ftppatcher. Don't adjust windows path in
         _patch_dataset when ftp=True
         :return: the registrations response, a list of dataset records
-
         """
         # first register the file
         if not isinstance(file_list, list):
@@ -380,13 +379,8 @@ class FTPPatcher(Patcher):
         remote_path = PurePosixPath('/').joinpath(
             remote_path.relative_to(PurePosixPath(FLATIRON_MOUNT))
         )
-
         # local_path
         self.mktree(remote_path.parent)
-        # if the file already exists on the buffer, do not overwrite
-        if local_path.name in self.ftp.nlst():
-            _logger.info(f"FTP already on server {local_path}")
-            return 0, ''
         self.ftp.pwd()
         _logger.info(f"FTP upload {local_path}")
         with open(local_path, 'rb') as fid:
@@ -398,7 +392,7 @@ class FTPPatcher(Patcher):
         if str(remote_path) != '.':
             try:
                 self.ftp.cwd(str(remote_path))
-            except ftplib.all_errors:
+            except ftplib.error_perm:
                 self.mktree(PurePosixPath(remote_path.parent))
                 self.ftp.mkd(str(remote_path))
                 self.ftp.cwd(str(remote_path))
