@@ -221,10 +221,6 @@ class TestLoad(unittest.TestCase):
         fsize = file.stat().st_size
         hash = hashfile.md5(file)
         data_server = np.load(file)
-        rec, = one._make_dataclass_offline(self.eid, dataset_types='channels.localCoordinates')
-        # Verify new hash / filesizes added to cache table
-        self.assertEqual(rec.file_size, fsize)
-        self.assertEqual(rec.hash, '5d1d13589934440a9947c2477b2e61ea')
         # overwrite the local file
         np.save(file, np.zeros([25, 0]))
         # here we patch the dataset with the server filesize and hash
@@ -234,6 +230,10 @@ class TestLoad(unittest.TestCase):
                       data={'file_size': fsize, 'hash': hash})
         data = one.load(eid, dataset_types=['channels.localCoordinates'])[0]
         self.assertTrue(data.shape == data_server.shape)
+        # Verify new hash / filesizes added to cache table
+        rec, = one._make_dataclass_offline(eid, dataset_types='channels.localCoordinates')
+        self.assertEqual(rec.file_size, fsize)
+        self.assertEqual(rec.hash, hash)
         # here we patch a dataset and make sure it overwrites if the checksum is different
         np.save(file, data_server * 2)
         data = one.load(eid, dataset_types=['channels.localCoordinates'])[0]
