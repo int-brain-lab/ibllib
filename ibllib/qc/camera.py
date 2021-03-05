@@ -684,8 +684,9 @@ class CameraQC(base.QC):
             """
             idx = (0,)
             ref = self.load_reference_frames(self.side)[idx]
-            img = np.empty((n, *ref.shape), dtype=np.uint8)
             kernal_sz = np.unique(np.linspace(0, 15, n, dtype=int))
+            n = kernal_sz.size  # Size excluding repeated kernels
+            img = np.empty((n, *ref.shape), dtype=np.uint8)
             for i, k in enumerate(kernal_sz):
                 img[i] = ref.copy() if k == 0 else cv2.blur(ref, (k, k))
             if equalize:
