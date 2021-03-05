@@ -322,13 +322,12 @@ def align_with_audio(timestamps, audio, pin_state, count,
     # Remove the extraneous timestamps from the beginning and end
     end = count[-1] + 1 + start
     ts = timestamps[start:end]
-    if ts.size <= count[-1]:
+    if (n_missing := count[-1] - ts.size + 1) > 0:
         """
         For ephys sessions there may be fewer FPGA times than frame counts if SpikeGLX is turned
         off before the video acquisition workflow.  For Bpod this always occurs because Bpod
         finishes before the camera workflow.  For Bpod the times are already extrapolated for
         these late frames."""
-        n_missing = count[-1] - ts.size + 1
         _logger.warning(f'{n_missing} fewer FPGA/Bpod timestamps than frame counts; '
                         f'{"extrapolating" if extrapolate_missing else "appending nans"}')
         to_app = ((np.arange(n_missing, ) + 1) / frate + ts[-1]
@@ -472,8 +471,7 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
         if unassigned.size > 0:
             _logger.debug(f'{unassigned.size} audio TTL rises were not detected by the camera')
         # Check that all pin state upticks could be attributed to an onset TTL
-        missed = assigned == -1
-        if np.any(missed):
+        if np.any(missed := assigned == -1):
             _logger.warning(f'{sum(missed)} pin state rises could '
                             f'not be attributed to an audio TTL')
             if display:
@@ -504,8 +502,7 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
         if unassigned.size > 0:
             _logger.debug(f'{unassigned.size} audio TTL falls were not detected by the camera')
         # Check that all pin state downticks could be attributed to an offset TTL
-        missed = assigned == -1
-        if np.any(missed):
+        if np.any(missed := assigned == -1):
             _logger.warning(f'{sum(missed)} pin state falls could '
                             f'not be attributed to an audio TTL')
             # Remove the missed fronts

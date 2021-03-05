@@ -202,19 +202,6 @@ class TestsRawDataLoaders(unittest.TestCase):
         [self.assertIsNone(x) for x in raw.load_embedded_frame_data(None, 'body')]
         [self.assertIsNone(x) for x in raw.load_embedded_frame_data(session, 'right')]
 
-    def test__load_camera_bin_file(self):
-        bla = np.array([range(10)])
-        bla.astype(float).tofile('bla.bin', sep="", format='%f')
-        ble = raw._load_camera_bin_file('bla.bin')
-        self.assertTrue(np.all(bla == ble))
-        os.unlink('bla.bin')
-
-    def test__check_camera_name(self):
-        self.assertTrue('left' == raw._check_camera_name('left'))
-        self.assertTrue('right' == raw._check_camera_name('right'))
-        self.assertTrue('body' == raw._check_camera_name('body'))
-        self.assertRaises(ValueError, raw._check_camera_name, 'blabla')
-
     def tearDown(self):
         self.tempfile.close()
         os.unlink(self.tempfile.name)
