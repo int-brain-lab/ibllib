@@ -686,20 +686,21 @@ def sigtest_linshift(X, y, fStatMeas, D=300):
     y : 1-d array
         predicted variable of size (timetrials)
     fStatMeas : function
-        takes arguments (X, y) and returns a scalar statistical measure relating how well X decodes y
+        takes arguments (X, y) and returns a scalar statistical measure of how well X decodes y
     D : int
-        the window length along the center of y used to compute the statistical measure. 
+        the window length along the center of y used to compute the statistical measure.
         must have room to shift both right and left: len(y) >= D+2
     -------
     returns
-    alpha : conservative p-value e.g. at a significance level of b, if alpha <= b then reject the null hypothesis.
+    alpha : conservative p-value e.g. at a significance level of b, if alpha <= b then reject the
+            null hypothesis.
     statms_real : the value of the statistical measure evaluated on X and y
     statms_pseuds : a 1-d array of statistical measures evaluated on shifted versions of y
     '''
     assert len(y) >= D + 2
 
     T = len(y)
-    N = int((T - D)/2)
+    N = int((T - D) / 2)
 
     shifts = np.arange(-N, N + 1)
 
@@ -711,6 +712,6 @@ def sigtest_linshift(X, y, fStatMeas, D=300):
         statms_pseuds[si] = fStatMeas(np.copy(X[:, N:T - N]), np.copy(y[s + N:s + T - N]))
 
     M = np.sum(statms_pseuds >= statms_real)
-    alpha = M/(N + 1)
+    alpha = M / (N + 1)
 
     return alpha, statms_real, statms_pseuds
