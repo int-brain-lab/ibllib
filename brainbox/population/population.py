@@ -634,12 +634,15 @@ def lda_project(spike_times, spike_clusters, event_times, event_groups, pre_time
 
     return lda_projection
 
+
 def sigtest_pseudosessions(X, y, fStatMeas, genPseudo, npseuds=200):
     '''
-    Estimates significance level of any statistical measure following Harris, Arxiv, 2021 
+    Estimates significance level of any statistical measure following Harris, Arxiv, 2021
     (https://www.biorxiv.org/content/10.1101/2020.11.29.402719v2).
-    fStatMeas is a function which computes and returns a scalar statistical measure (e.g. R^2) using data matrix, X,
-    and the variable, y.
+    fStatMeas computes a scalar statistical measure (e.g. R^2) between the data, X, and the
+    decoded variable, y.  pseudosessions are generated npseuds times to create a null
+    distribution of statistical measures.  Significance level is reported relative to this
+    null distribution.
     -------
     X : 2-d array
         Data of size (elements, timetrials)
@@ -648,12 +651,14 @@ def sigtest_pseudosessions(X, y, fStatMeas, genPseudo, npseuds=200):
     fStatMeas : function
         takes arguments (X, y) and returns a statistical measure relating how well X decodes y
     genPseudo : function
-        takes no arguments () and returns a pseudosession (same shape as y) drawn from the experimentally known null-distribution of y
+        takes no arguments () and returns a pseudosession (same shape as y) drawn from the
+        experimentally known null-distribution of y
     npseuds : int
         the number of pseudosessions used to estimate the significance level
     -------
     returns
-    alpha : p-value e.g. at a significance level of b, if alpha <= b then reject the null hypothesis.
+    alpha : p-value e.g. at a significance level of b, if alpha <= b then reject the null
+            hypothesis.
     statms_real : the value of the statistical measure evaluated on X and y
     statms_pseuds : array of statistical measures evaluated on pseudosessions
     '''
@@ -662,18 +667,19 @@ def sigtest_pseudosessions(X, y, fStatMeas, genPseudo, npseuds=200):
     for i in range(npseuds):
         statms_pseuds[i] = fStatMeas(X, genPseudo())
 
-    alpha = 1 - .01*sp.stats.percentileofscore(statms_pseuds,statms_real,kind='weak')
+    alpha = 1 - (0.01 * sp.stats.percentileofscore(statms_pseuds, statms_real, kind='weak'))
 
     return alpha, statms_real, statms_pseuds
 
+
 def sigtest_linshift(X, y, fStatMeas, D=300):
     '''
-    Uses a provably conservative Linear Shift technique (Harris, Kenneth Arxiv 2021, 
+    Uses a provably conservative Linear Shift technique (Harris, Kenneth Arxiv 2021,
     https://arxiv.org/ftp/arxiv/papers/2012/2012.06862.pdf) to estimate
-    significance level of a statistical measure. fStatMeas is a function which computes a 
-    scalar statistical measure (e.g. R^2) from the data matrix, X, and the variable, y.  A Linear Shift
-    method is used to generate a null distribution of statistical measures.  A central window of X and 
-    y of size, D, is shifted to the right and left and the significance level is returned from  
+    significance level of a statistical measure. fStatMeas computes a
+    scalar statistical measure (e.g. R^2) from the data matrix, X, and the variable, y.
+    A central window of X and y of size, D, is linearly shifted to generate a null distribution
+    of statistical measures.  Significance level is reported relative to this null distribution.
     -------
     X : 2-d array
         Data of size (elements, timetrials)
@@ -690,21 +696,21 @@ def sigtest_linshift(X, y, fStatMeas, D=300):
     statms_real : the value of the statistical measure evaluated on X and y
     statms_pseuds : a 1-d array of statistical measures evaluated on shifted versions of y
     '''
-    assert len(y) >= D+2
+    assert len(y) >= D + 2
 
     T = len(y)
     N = int((T - D)/2)
 
-    shifts = np.arange(-N,N+1)
+    shifts = np.arange(-N, N + 1)
 
     # compute all statms
-    statms_real = fStatMeas(X[:,N:T-N], y[N:T-N])
+    statms_real = fStatMeas(X[:, N:T - N], y[N:T - N])
     statms_pseuds = np.zeros(len(shifts))
     for si in range(len(shifts)):
         s = shifts[si]
-        statms_pseuds[si] = fStatMeas(np.copy(X[:,N:T-N]), np.copy(y[s+N:s+T-N]))
+        statms_pseuds[si] = fStatMeas(np.copy(X[:, N:T - N]), np.copy(y[s + N:s + T - N]))
 
     M = np.sum(statms_pseuds >= statms_real)
-    alpha = M/(N+1)
+    alpha = M/(N + 1)
 
     return alpha, statms_real, statms_pseuds
