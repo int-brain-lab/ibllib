@@ -3,10 +3,12 @@ Population functions.
 
 Code from https://github.com/cortex-lab/phylib/blob/master/phylib/stats/ccg.py by C. Rossant.
 Code for decoding by G. Meijer
+Code from sigtest_pseudosessions and sigtest_linshift by B. Benson
 '''
 
 import numpy as np
 import scipy as sp
+import scipy.stats
 import types
 from itertools import groupby
 from sklearn.ensemble import RandomForestClassifier
@@ -20,6 +22,7 @@ from sklearn.utils import shuffle as sklearn_shuffle
 
 def get_spike_counts_in_bins(spike_times, spike_clusters, intervals):
     """
+    Test: hello
     Return the number of spikes in a sequence of time intervals, for each neuron.
 
     Parameters
@@ -631,3 +634,78 @@ def lda_project(spike_times, spike_clusters, event_times, event_groups, pre_time
             lda_projection[test_index] = lda.transform(pop_vector[test_index]).T[0]
 
     return lda_projection
+
+def sigtest_pseudosessions(X, y, fStatMeas, genPseudo, npseuds=200):
+    '''
+    Estimates significance level of any statistical measure following Harris, Arxiv, 2021 
+    (https://www.biorxiv.org/content/10.1101/2020.11.29.402719v2).
+    fStatMeas is a function which computes and returns a scalar statistical measure (e.g. R^2) using data matrix, X,
+    and the variable, y.
+    -------
+    X : 2-d array
+        Data of size (elements, timetrials)
+    y : 1-d array
+        predicted variable of size (timetrials)
+    fStatMeas : function
+        takes arguments (X, y) and returns a statistical measure relating how well X decodes y
+    genPseudo : function
+        takes no arguments () and returns a pseudosession (same shape as y) drawn from the experimentally known null-distribution of y
+    npseuds : int
+        the number of pseudosessions used to estimate the significance level
+    -------
+    returns
+    alpha : p-value e.g. at a significance level of b, if alpha <= b then reject the null hypothesis.
+    statms_real : the value of the statistical measure evaluated on X and y
+    statms_pseuds : array of statistical measures evaluated on pseudosessions
+    '''
+    statms_real = fStatMeas(X, y)
+    statms_pseuds = np.zeros(npseuds)
+    for i in range(npseuds):
+        statms_pseuds[i] = fStatMeas(X, genPseudo())
+
+    alpha = 1 - .01*sp.stats.percentileofscore(statms_pseuds,statms_real,kind='weak')
+
+    return alpha, statms_real, statms_pseuds
+
+def sigtest_linshift(X, y, fStatMeas, D=300):
+    '''
+    Uses a provably conservative Linear Shift technique (Harris, Kenneth Arxiv 2021, 
+    https://arxiv.org/ftp/arxiv/papers/2012/2012.06862.pdf) to estimate
+    significance level of a statistical measure. fStatMeas is a function which computes a 
+    scalar statistical measure (e.g. R^2) from the data matrix, X, and the variable, y.  A Linear Shift
+    method is used to generate a null distribution of statistical measures.  A central window of X and 
+    y of size, D, is shifted to the right and left and the significance level is returned from  
+    -------
+    X : 2-d array
+        Data of size (elements, timetrials)
+    y : 1-d array
+        predicted variable of size (timetrials)
+    fStatMeas : function
+        takes arguments (X, y) and returns a scalar statistical measure relating how well X decodes y
+    D : int
+        the window length along the center of y used to compute the statistical measure. 
+        must have room to shift both right and left: len(y) >= D+2
+    -------
+    returns
+    alpha : conservative p-value e.g. at a significance level of b, if alpha <= b then reject the null hypothesis.
+    statms_real : the value of the statistical measure evaluated on X and y
+    statms_pseuds : a 1-d array of statistical measures evaluated on shifted versions of y
+    '''
+    assert len(y) >= D+2
+
+    T = len(y)
+    N = int((T - D)/2)
+
+    shifts = np.arange(-N,N+1)
+
+    # compute all statms
+    statms_real = fStatMeas(X[:,N:T-N], y[N:T-N])
+    statms_pseuds = np.zeros(len(shifts))
+    for si in range(len(shifts)):
+        s = shifts[si]
+        statms_pseuds[si] = fStatMeas(np.copy(X[:,N:T-N]), np.copy(y[s+N:s+T-N]))
+
+    M = np.sum(statms_pseuds >= statms_real)
+    alpha = M/(N+1)
+
+    return alpha, statms_real, statms_pseuds
