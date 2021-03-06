@@ -144,7 +144,7 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
         raw_ts = self._times_from_bpod()
         count, gpio = raw.load_embedded_frame_data(self.session_path, 'left')
         if video_path is None:
-            filename = '_iblrigCamera.raw.mp4'
+            filename = '_iblrig_leftCamera.raw.mp4'
             video_path = self.session_path.joinpath('raw_video_data', filename)
         length = get_video_length(video_path)
 
