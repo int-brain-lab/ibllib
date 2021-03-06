@@ -22,7 +22,6 @@ from sklearn.utils import shuffle as sklearn_shuffle
 
 def get_spike_counts_in_bins(spike_times, spike_clusters, intervals):
     """
-    Test: hello
     Return the number of spikes in a sequence of time intervals, for each neuron.
 
     Parameters
@@ -641,6 +640,7 @@ def sigtest_pseudosessions(X, y, fStatMeas, genPseudo, npseuds=200):
     (https://www.biorxiv.org/content/10.1101/2020.11.29.402719v2).
     fStatMeas is a function which computes and returns a scalar statistical measure (e.g. R^2) using data matrix, X,
     and the variable, y.
+    
     -------
     X : 2-d array
         Data of size (elements, timetrials)
