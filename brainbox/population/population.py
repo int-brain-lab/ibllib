@@ -22,7 +22,6 @@ from sklearn.utils import shuffle as sklearn_shuffle
 
 def get_spike_counts_in_bins(spike_times, spike_clusters, intervals):
     """
-    hello
     Return the number of spikes in a sequence of time intervals, for each neuron.
 
     Parameters
