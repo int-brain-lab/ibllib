@@ -170,9 +170,10 @@ class CameraQC(base.QC):
         :param extract_times: if True, the camera.times are re-extracted from the raw data
         :param load_video: if True, calls the load_video_data method
         """
+        assert self.session_path, 'no session path set'
         if download_data is not None:
             self.download_data = download_data
-        if self.one and not isinstance(self.one, OneOffline):
+        if self.eid and self.one and not isinstance(self.one, OneOffline):
             self._ensure_required_data()
         _log.info('Gathering data for QC')
 
@@ -281,6 +282,7 @@ class CameraQC(base.QC):
         any missing data are downloaded.  If all the data are not present locally at the end of
         it an exception is raised.  If the stream attribute is True, the video file is not
         required to be local, however it must be remotely accessible.
+        NB: Requires a valid instance of ONE and a valid session eid.
         :return:
         """
         assert self.one is not None, 'ONE required to download data'
@@ -317,7 +319,6 @@ class CameraQC(base.QC):
         :param download_data: if True, downloads any missing data if required
         :param extract_times: if True, re-extracts the camera timestamps from the raw data
         :returns: overall outcome as a str, a dict of checks and their outcomes
-        TODO Ensure that when pin state QC NOT_SET it is not used in overall outcome
         """
         # TODO Use exp ref here
         _log.info(f'Computing QC outcome for {self.side} camera, session {self.eid}')
