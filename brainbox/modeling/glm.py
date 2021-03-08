@@ -20,8 +20,6 @@ from numpy.matlib import repmat
 from scipy.optimize import minimize
 from scipy.special import xlogy
 from tqdm import tqdm
-import torch
-from brainbox.modeling.poissonGLM import PoissonGLM
 
 
 class NeuralGLM:
