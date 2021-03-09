@@ -436,7 +436,7 @@ class EphysExtractionPipeline(tasks.Pipeline):
         tasks["SpikeSorting"] = SpikeSorting_KS2_Matlab(
             self.session_path, parents=[tasks["EphysMtscomp"], tasks["EphysPulses"]])
         tasks["EphysVideoCompress"] = EphysVideoCompress(
-            self.session_path, parents=tasks["EphysPulses"])
+            self.session_path, parents=[tasks["EphysPulses"]])
         tasks["EphysTrials"] = EphysTrials(self.session_path, parents=[tasks["EphysPulses"]])
         tasks["EphysDLC"] = EphysDLC(self.session_path, parents=[tasks["EphysVideoCompress"]])
         tasks["EphysPassive"] = EphysPassive(self.session_path, parents=[tasks["EphysPulses"]])
