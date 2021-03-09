@@ -148,6 +148,8 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
             video_path = self.session_path.joinpath('raw_video_data', filename)
         length = get_video_length(video_path)
 
+        # Check if the GPIO is usable for extraction.  GPIO is None if the file does not exist,
+        # is empty, or contains only one value (i.e. doesn't change)
         if gpio is not None and gpio['indices'].size > 1:
             _logger.info('Aligning to audio TTLs')
             # Extract audio TTLs
