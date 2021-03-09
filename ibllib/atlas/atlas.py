@@ -711,8 +711,14 @@ class AllenAtlas(BrainAtlas):
         """
         par = params.read('one_params')
         FLAT_IRON_ATLAS_REL_PATH = Path('histology', 'ATLAS', 'Needles', 'Allen')
-        MD5_LUT = 'a529ada7db10777bff31cf9916074663'  # if updating lut needs to update here
+        MD5_LUT = '148f297cc5aa5a3767f4aa61701f7e0b'  # if updating lut needs to update here
         regions = BrainRegions()
+        xyz2dims = np.array([1, 0, 2])  # this is the c-contiguous ordering
+        dims2xyz = np.array([1, 0, 2])
+        # we use Bregma as the origin
+        self.res_um = res_um
+        ibregma = (ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / self.res_um)
+        dxyz = self.res_um * 1e-6 * np.array([1, -1, -1]) * scaling
         if mock:
             image, label = [np.zeros((528, 456, 320), dtype=np.int16) for _ in range(2)]
             label[:, :, 100:105] = 1327  # lookup index for retina, id 304325711 (no id 1327)
@@ -733,18 +739,18 @@ class AllenAtlas(BrainAtlas):
             if not file_label_remap.exists():
                 label = self._read_volume(file_label)
                 _logger.info("computing brain atlas annotations lookup table")
+                # lateralize atlas: for this the regions of the left hemisphere have primary
+                # keys opposite to to the normal ones
+                lateral = np.zeros(label.shape[xyz2dims[0]])
+                lateral[int(np.floor(ibregma[0]))] = 1
+                lateral = np.sign(np.cumsum(lateral)[np.newaxis, :, np.newaxis] - 0.5)
+                label = label * lateral
                 _, im = ismember(label, regions.id)
                 label = np.reshape(im.astype(np.uint16), label.shape)
                 np.savez_compressed(file_label_remap, label)
             # loads the files
             label = self._read_volume(file_label_remap)
             image = self._read_volume(file_image)
-        xyz2dims = np.array([1, 0, 2])  # this is the c-contiguous ordering
-        dims2xyz = np.array([1, 0, 2])
-        dxyz = res_um * 1e-6 * np.array([1, -1, -1]) * scaling
-        # we use Bregma as the origin
-        ibregma = (ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / res_um)
-        self.res_um = res_um
         super().__init__(image, label, dxyz, regions, ibregma,
                          dims2xyz=dims2xyz, xyz2dims=xyz2dims)
 
