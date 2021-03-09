@@ -58,7 +58,7 @@ class TrainingVideoCompress(tasks.Task):
         output_files = ffmpeg.iblrig_video_compression(self.session_path, command)
 
         # Video timestamps extraction
-        data, files = camera.extract_all(self.session_path, save=True)
+        data, files = camera.extract_all(self.session_path, save=True, video_path=output_files[0])
         output_files.extend(files)
 
         # Video QC

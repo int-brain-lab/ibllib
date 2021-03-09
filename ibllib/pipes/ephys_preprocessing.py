@@ -431,13 +431,14 @@ class EphysExtractionPipeline(tasks.Pipeline):
         tasks["EphysPulses"] = EphysPulses(self.session_path)
         tasks["EphysRawQC"] = RawEphysQC(self.session_path)
         tasks["EphysAudio"] = EphysAudio(self.session_path)
-        tasks["EphysVideoCompress"] = EphysVideoCompress(self.session_path)
         tasks["EphysMtscomp"] = EphysMtscomp(self.session_path)
         # level 1
-        tasks['SpikeSorting'] = SpikeSorting_KS2_Matlab(
-            self.session_path, parents=[tasks['EphysMtscomp'], tasks['EphysPulses']])
-        tasks['EphysTrials'] = EphysTrials(self.session_path, parents=[tasks['EphysPulses']])
-        tasks['EphysDLC'] = EphysDLC(self.session_path, parents=[tasks['EphysVideoCompress']])
+        tasks["SpikeSorting"] = SpikeSorting_KS2_Matlab(
+            self.session_path, parents=[tasks["EphysMtscomp"], tasks["EphysPulses"]])
+        tasks["EphysVideoCompress"] = EphysVideoCompress(
+            self.session_path, parents=tasks["EphysPulses"])
+        tasks["EphysTrials"] = EphysTrials(self.session_path, parents=[tasks["EphysPulses"]])
+        tasks["EphysDLC"] = EphysDLC(self.session_path, parents=[tasks["EphysVideoCompress"]])
         tasks["EphysPassive"] = EphysPassive(self.session_path, parents=[tasks["EphysPulses"]])
         # level 2
         tasks["EphysCellsQc"] = EphysCellsQc(self.session_path, parents=[tasks["SpikeSorting"]])
