@@ -118,6 +118,12 @@ class TestQC(unittest.TestCase):
         qc = QC(self.eid, one=one)
         self.assertEqual(qc.outcome, 'PASS')
 
+    def test_code_to_outcome(self):
+        self.assertEqual(QC.code_to_outcome(3), 'FAIL')
+
+    def test_overall_outcome(self):
+        self.assertEqual(QC.overall_outcome(['PASS', 'NOT_SET', None, 'FAIL']), 'FAIL')
+
 
 if __name__ == '__main__':
     unittest.main()

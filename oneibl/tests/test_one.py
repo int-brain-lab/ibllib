@@ -13,7 +13,8 @@ from alf.io import remove_uuid_file
 from oneibl.one import ONE
 
 
-one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
+one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
+          username='test_user',
           password='TapetesBloc18')
 
 
@@ -161,7 +162,7 @@ class TestLoad(unittest.TestCase):
         filename = one.load(eid, dataset_types=dataset_types, download_only=True)
         self.assertTrue(filename[0] == remove_uuid_file(uuid_fn))
         self.assertFalse(Path(uuid_fn).exists())
-        filename = one.load(eid, dataset_types=dataset_types, download_only=True, keep_uuid=True)
+        one.load(eid, dataset_types=dataset_types, download_only=True, keep_uuid=True)
         self.assertTrue(Path(uuid_fn).exists())
 
     def test_load(self):
@@ -229,6 +230,10 @@ class TestLoad(unittest.TestCase):
                       data={'file_size': fsize, 'hash': hash})
         data = one.load(eid, dataset_types=['channels.localCoordinates'])[0]
         self.assertTrue(data.shape == data_server.shape)
+        # Verify new hash / filesizes added to cache table
+        rec, = one._make_dataclass_offline(eid, dataset_types='channels.localCoordinates')
+        self.assertEqual(rec.file_size, fsize)
+        self.assertEqual(rec.hash, hash)
         # here we patch a dataset and make sure it overwrites if the checksum is different
         np.save(file, data_server * 2)
         data = one.load(eid, dataset_types=['channels.localCoordinates'])[0]
@@ -315,6 +320,8 @@ class TestMisc(unittest.TestCase):
         eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
         dsets = one.datasets_from_type(eid, 'eye.blink')
         self.assertCountEqual(dsets, ['eye.blink.npy'])
+        dsets, = one.datasets_from_type(eid, 'eye.blink', full=True)
+        self.assertIsInstance(dsets, dict)
 
 
 if __name__ == '__main__':

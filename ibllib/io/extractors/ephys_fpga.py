@@ -329,24 +329,6 @@ def _clean_frame2ttl(frame2ttl, display=False):
     return frame2ttl_
 
 
-def extract_camera_sync(sync, chmap=None):
-    """
-    Extract camera timestamps from the sync matrix
-
-    :param sync: dictionary 'times', 'polarities' of fronts detected on sync trace
-    :param chmap: dictionary containing channel indices. Default to constant.
-    :return: dictionary containing camera timestamps
-    """
-    # NB: should we check we opencv the expected number of frames ?
-    assert(chmap)
-    sr = _get_sync_fronts(sync, chmap['right_camera'])
-    sl = _get_sync_fronts(sync, chmap['left_camera'])
-    sb = _get_sync_fronts(sync, chmap['body_camera'])
-    return {'right_camera': sr.times[::2],
-            'left_camera': sl.times[::2],
-            'body_camera': sb.times[::2]}
-
-
 def extract_wheel_sync(sync, chmap=None):
     """
     Extract wheel positions and times from sync fronts dictionary for all 16 chans
@@ -585,16 +567,6 @@ class ProbaContrasts(BaseBpodTrialsExtractor):
                 'contrastRight': contrastRight, 'contrastLeft': contrastLeft}
 
 
-class CameraTimestamps(BaseExtractor):
-    save_names = ['_ibl_rightCamera.times.npy', '_ibl_leftCamera.times.npy',
-                  '_ibl_bodyCamera.times.npy']
-    var_names = ['right_camera_timestamps', 'left_camera_timestamps', 'body_camera_timestamps']
-
-    def _extract(self, sync=None, chmap=None):
-        ts = extract_camera_sync(sync=sync, chmap=chmap)
-        return ts['right_camera'], ts['left_camera'], ts['body_camera']
-
-
 class FpgaTrials(BaseExtractor):
     save_names = (ProbaContrasts.save_names +
                   ('_ibl_trials.feedbackType.npy', '_ibl_trials.choice.npy',
@@ -686,7 +658,6 @@ def extract_all(session_path, save=True, bin_exists=False):
     :return: outputs, files
     """
     sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
-    outputs, files = run_extractor_classes(
-        [CameraTimestamps, FpgaTrials], session_path=session_path,
-        save=save, sync=sync, chmap=chmap)
+    outputs, files = run_extractor_classes([FpgaTrials], session_path=session_path,
+                                           save=save, sync=sync, chmap=chmap)
     return outputs, files

@@ -3,7 +3,7 @@ import numpy as np
 
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.training_trials import (
-    CameraTimestamps, Choice, FeedbackTimes, FeedbackType, GoCueTimes, GoCueTriggerTimes,
+    Choice, FeedbackTimes, FeedbackType, GoCueTimes, GoCueTriggerTimes,
     IncludedTrials, Intervals, ItiDuration, ProbabilityLeft, ResponseTimes, RewardVolume,
     StimOnTimes, StimOnTriggerTimes, StimOnOffFreezeTimes, ItiInTimes, StimOffTriggerTimes,
     StimFreezeTriggerTimes, ErrorCueTriggerTimes, LaserBool)
@@ -33,8 +33,7 @@ def extract_all(session_path, save=False, bpod_trials=False, settings=False):
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
     base = [FeedbackType, ContrastLR, ProbabilityLeft, Choice, RewardVolume,
-            FeedbackTimes, Intervals, ResponseTimes, GoCueTriggerTimes, GoCueTimes,
-            CameraTimestamps, LaserBool]
+            FeedbackTimes, Intervals, ResponseTimes, GoCueTriggerTimes, GoCueTimes, LaserBool]
 
     # Version specific extractions
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
