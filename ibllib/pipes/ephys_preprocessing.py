@@ -231,7 +231,7 @@ class EphysVideoCompress(tasks.Task):
                    '-loglevel 0 -codec:a copy {file_out}')
         output_files = ffmpeg.iblrig_video_compression(self.session_path, command)
 
-        if len(output_files) == 1:
+        if len(output_files) == 0:
             _logger.info('No compressed videos found; skipping timestamp extraction')
             return
 
@@ -404,7 +404,7 @@ class EphysDLC(tasks.Task):
     gpu = 1
     cpu = 4
     io_charge = 90
-    level = 1
+    level = 2
 
     def _run(self):
         """empty placeholder for job creation only"""
@@ -444,8 +444,9 @@ class EphysExtractionPipeline(tasks.Pipeline):
         tasks["EphysVideoCompress"] = EphysVideoCompress(
             self.session_path, parents=[tasks["EphysPulses"]])
         tasks["EphysTrials"] = EphysTrials(self.session_path, parents=[tasks["EphysPulses"]])
-        tasks["EphysDLC"] = EphysDLC(self.session_path, parents=[tasks["EphysVideoCompress"]])
+
         tasks["EphysPassive"] = EphysPassive(self.session_path, parents=[tasks["EphysPulses"]])
         # level 2
         tasks["EphysCellsQc"] = EphysCellsQc(self.session_path, parents=[tasks["SpikeSorting"]])
+        tasks["EphysDLC"] = EphysDLC(self.session_path, parents=[tasks["EphysVideoCompress"]])
         self.tasks = tasks

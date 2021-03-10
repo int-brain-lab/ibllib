@@ -1,5 +1,6 @@
 """
-TODO Document
+A module for aligning the wheel motion with the rotary encoder.  Currently used by the camera QC
+in order to check timestamp alignment.
 """
 import matplotlib
 import matplotlib.pyplot as plt

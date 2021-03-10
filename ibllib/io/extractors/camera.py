@@ -12,7 +12,7 @@ from oneibl.stream import VideoStreamer
 import ibllib.dsp.utils as dsp
 from ibllib.plots import squares, vertical_lines
 from ibllib.io.video import assert_valid_label
-from brainbox.behavior.wheel import within_ranges
+from brainbox.numerical import within_ranges
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io.extractors.ephys_fpga import _get_sync_fronts, get_main_probe_sync
 import ibllib.io.raw_data_loaders as raw

@@ -69,16 +69,31 @@ class QC:
             self._outcome = value
 
     @staticmethod
-    def overall_outcome(outcomes):
-        # TODO Document and add test
-        # isnull = lambda x: x is None or (isinstance(x, float) and np.isnan(x))
+    def overall_outcome(outcomes: iter) -> str:
+        """
+        Given an iterable of QC outcomes, returns the overall (i.e. worst) outcome.
+
+        Example:
+          QC.overall_outcome(['PASS', 'NOT_SET', None, 'FAIL'])  # Returns 'FAIL'
+
+        :param outcomes: An iterable of QC outcomes
+        :return: The overall outcome string
+        """
         outcomes = filter(lambda x: x or (isinstance(x, float) and not np.isnan(x)), outcomes)
         code = max(CRITERIA.get(x, 0) if isinstance(x, str) else x for x in outcomes)
         return next(k for k, v in CRITERIA.items() if v == code)
 
     @staticmethod
-    def code_to_outcome(code):
-        # TODO Document and add test
+    def code_to_outcome(code: int) -> str:
+        """
+        Given an outcome id, returns the corresponding string.
+
+        Example:
+          QC.overall_outcome(['PASS', 'NOT_SET', None, 'FAIL'])  # Returns 'FAIL'
+
+        :param code: The outcome id
+        :return: The overall outcome string
+        """
         return next(k for k, v in CRITERIA.items() if v == code)
 
     def _set_eid_or_path(self, session_path_or_eid):
