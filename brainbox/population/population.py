@@ -267,7 +267,7 @@ def classify(population_activity, trial_labels, classifier, cross_validation=Non
         return accuracy, pred, prob
 
 
-def regress(population_activity, trial_targets, cross_validation=None):
+def regress(population_activity, trial_targets, cross_validation=None, return_training=False):
     """
     Perform linear regression to predict a continuous variable from neural data
 
@@ -285,11 +285,15 @@ def regress(population_activity, trial_targets, cross_validation=None):
         which cross-validation method to use, for example 5-fold:
                     from sklearn.model_selection import KFold
                     cross_validation = KFold(n_splits=5)
+    return_training : bool
+        if set to True the classifier will also return the performance on the training set
 
     Returns
     -------
     pred : 1D array
         array with predictions
+    pred_training : 1D array
+        array with predictions for the training set (only if return_training is True)
     """
 
     reg = LinearRegression()
@@ -300,11 +304,22 @@ def regress(population_activity, trial_targets, cross_validation=None):
         pred = reg.predict(population_activity)
     else:
         pred = np.empty(trial_targets.shape[0])
+        if return_training:
+            pred_training = np.empty(trial_targets.shape[0])
         for train_index, test_index in cross_validation.split(population_activity):
-            # Fit the model to the training data and predict the held-out test data
+            # Fit the model to the training data
             reg.fit(population_activity[train_index], trial_targets[train_index])
+
+            # Predict the held-out test data
             pred[test_index] = reg.predict(population_activity[test_index])
-    return pred
+
+            # Predict the training data
+            if return_training:
+                pred_training[train_index] = reg.predict(population_activity[train_index])
+    if return_training:
+        return pred, pred_training
+    else:
+        return pred
 
 
 def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, post_time=0.5,
