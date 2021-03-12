@@ -13,7 +13,8 @@ from alf.io import remove_uuid_file
 from oneibl.one import ONE
 
 
-one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
+one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
+          username='test_user',
           password='TapetesBloc18')
 
 
@@ -101,11 +102,13 @@ class TestList(unittest.TestCase):
         self.eid2 = eids[1]
 
     def test_list(self):
-        # tests with a single input and a list input
+        # tests with a single input and a list input.
+        # One of the datasets has its exists flag set to False; it should be excluded from the list
         eid = self.eid
         dt = one.list(eid)  # returns dataset-type
         self.assertTrue(isinstance(dt, list))
-        self.assertEqual(29, len(dt))
+        self.assertFalse(any(str(x) == 'channels.rawRow.npy' for x in dt))
+        self.assertEqual(28, len(dt))
 
         dt = one.list(eid, details=True)  # returns dict of dataset-types
         self.assertTrue(isinstance(dt[0], dict))
@@ -159,7 +162,7 @@ class TestLoad(unittest.TestCase):
         filename = one.load(eid, dataset_types=dataset_types, download_only=True)
         self.assertTrue(filename[0] == remove_uuid_file(uuid_fn))
         self.assertFalse(Path(uuid_fn).exists())
-        filename = one.load(eid, dataset_types=dataset_types, download_only=True, keep_uuid=True)
+        one.load(eid, dataset_types=dataset_types, download_only=True, keep_uuid=True)
         self.assertTrue(Path(uuid_fn).exists())
 
     def test_load(self):
@@ -227,6 +230,10 @@ class TestLoad(unittest.TestCase):
                       data={'file_size': fsize, 'hash': hash})
         data = one.load(eid, dataset_types=['channels.localCoordinates'])[0]
         self.assertTrue(data.shape == data_server.shape)
+        # Verify new hash / filesizes added to cache table
+        rec, = one._make_dataclass_offline(eid, dataset_types='channels.localCoordinates')
+        self.assertEqual(rec.file_size, fsize)
+        self.assertEqual(rec.hash, hash)
         # here we patch a dataset and make sure it overwrites if the checksum is different
         np.save(file, data_server * 2)
         data = one.load(eid, dataset_types=['channels.localCoordinates'])[0]
@@ -241,6 +248,24 @@ class TestLoad(unittest.TestCase):
         fr = one.alyx.rest('files', 'list', django=f"dataset,{dset[0]['url'][-36:]},"
                                                    f"data_repository__globus_is_personal,False")
         self.assertTrue(fr[0]['json'] == {'mismatch_hash': True})
+
+    def test_load_object(self):
+        # Test download_only flag
+        files = one.load_object(self.eid, 'channels', collection=None, download_only=True)
+        self.assertTrue(len(files) == 4)
+        self.assertIsInstance(files[0], Path)
+
+        # Test loading
+        obj = one.load_object(self.eid, 'channels', collection=None)
+        # One of the datasets has its exists flag set to False; it should be excluded from the list
+        expected = ['brainLocation', 'probe', 'site', 'sitePositions']  # 'rawRow' missing
+        self.assertCountEqual(obj.keys(), expected)
+
+        with self.assertRaises(ALFObjectNotFound):
+            one.load_object(self.eid, 'channels', collection='alf')
+
+        with self.assertRaises(ValueError):
+            one.load_object('fake', 'channels', collection='alf')
 
 
 class TestMisc(unittest.TestCase):
@@ -295,6 +320,8 @@ class TestMisc(unittest.TestCase):
         eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
         dsets = one.datasets_from_type(eid, 'eye.blink')
         self.assertCountEqual(dsets, ['eye.blink.npy'])
+        dsets, = one.datasets_from_type(eid, 'eye.blink', full=True)
+        self.assertIsInstance(dsets, dict)
 
 
 if __name__ == '__main__':

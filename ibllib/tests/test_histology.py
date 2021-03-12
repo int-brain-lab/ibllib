@@ -7,7 +7,7 @@ from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import (EphysAlignment, TIP_SIZE_UM, _cumulative_distance)
 import ibllib.atlas as atlas
 
-
+# TODO Place this in setUpModule()
 brain_atlas = atlas.AllenAtlas(res_um=25)
 
 

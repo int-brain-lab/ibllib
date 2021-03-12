@@ -48,10 +48,14 @@ class Tests_REST(unittest.TestCase):
                    'object_id': EID,
                    'text': "gnagnagna"}
 
-        with tempfile.NamedTemporaryFile(mode="wb", suffix='.png') as png:
-            matplotlib.image.imsave(png.name, np.random.random((500, 500)))
-            files = {'image': open(Path(png.name), 'rb')}
-            ar_note = one.alyx.rest('notes', 'create', data=my_note, files=files)
+        # NB: On Windows the name can be used to open the file a second time, while the named
+        # temporary file is still open
+        with tempfile.TemporaryDirectory() as tdir:
+            png = Path(tdir) / f'img{np.random.randint(5000)}.png'
+            matplotlib.image.imsave(png, np.random.random((500, 500)))
+            with open(png, 'rb') as img_file:
+                files = {'image': img_file}
+                ar_note = one.alyx.rest('notes', 'create', data=my_note, files=files)
 
         self.assertTrue(len(ar_note['image']))
         self.assertTrue(ar_note['content_type'] == 'actions.session')

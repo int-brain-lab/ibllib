@@ -4,9 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
-from oneibl.one import ONE
+from oneibl.one import ONE, OneOffline
 from alf.io import is_session_path, is_uuid_string
-
 
 # Map for comparing QC outcomes
 CRITERIA = {'CRITICAL': 4,
@@ -19,6 +18,7 @@ CRITERIA = {'CRITICAL': 4,
 
 class QC:
     """A base class for data quality control"""
+
     def __init__(self, endpoint_id, one=None, log=None, endpoint='sessions'):
         """
         :param endpoint_id: Eid for endpoint. If using sessions can also be a session path
@@ -38,7 +38,8 @@ class QC:
             self.json = True
 
         # Ensure outcome attribute matches Alyx record
-        self._outcome = self.update('NOT_SET', namespace='') if self.eid else 'NOT_SET'
+        updatable = self.eid and self.one and not isinstance(self.one, OneOffline)
+        self._outcome = self.update('NOT_SET', namespace='') if updatable else 'NOT_SET'
         self.log.debug(f'Current QC status is {self.outcome}')
 
     @abstractmethod
@@ -66,6 +67,34 @@ class QC:
             raise ValueError('Invalid outcome; must be one of ' + ', '.join(CRITERIA.keys()))
         if CRITERIA[self._outcome] < CRITERIA[value]:
             self._outcome = value
+
+    @staticmethod
+    def overall_outcome(outcomes: iter) -> str:
+        """
+        Given an iterable of QC outcomes, returns the overall (i.e. worst) outcome.
+
+        Example:
+          QC.overall_outcome(['PASS', 'NOT_SET', None, 'FAIL'])  # Returns 'FAIL'
+
+        :param outcomes: An iterable of QC outcomes
+        :return: The overall outcome string
+        """
+        outcomes = filter(lambda x: x or (isinstance(x, float) and not np.isnan(x)), outcomes)
+        code = max(CRITERIA.get(x, 0) if isinstance(x, str) else x for x in outcomes)
+        return next(k for k, v in CRITERIA.items() if v == code)
+
+    @staticmethod
+    def code_to_outcome(code: int) -> str:
+        """
+        Given an outcome id, returns the corresponding string.
+
+        Example:
+          QC.overall_outcome(['PASS', 'NOT_SET', None, 'FAIL'])  # Returns 'FAIL'
+
+        :param code: The outcome id
+        :return: The overall outcome string
+        """
+        return next(k for k, v in CRITERIA.items() if v == code)
 
     def _set_eid_or_path(self, session_path_or_eid):
         """Parse a given eID or session path
@@ -118,6 +147,8 @@ class QC:
             qc = QC('path/to/session')
             qc.update('PASS')  # Update current QC field to 'PASS' if not set
         """
+        assert self.one and not isinstance(self.one, OneOffline), \
+            'unable to update remote QC; invalid ONE instance'
         outcome = outcome or self.outcome
         outcome = outcome.upper()  # Ensure outcome is uppercase
         if outcome not in CRITERIA:
@@ -148,10 +179,12 @@ class QC:
         :return: the updated extended_qc field
         """
         assert self.eid, 'Unable to update Alyx; eID not set'
+        assert self.one and not isinstance(self.one, OneOffline), \
+            'unable to update remote QC; invalid ONE instance'
 
         # Ensure None instead of NaNs
         for k, v in data.items():
-            if (v is not None and not isinstance(v, str)) and np.isnan(v):
+            if (v is not None and not isinstance(v, str)) and np.isnan(v).all():
                 data[k] = None
 
         if self.json:
