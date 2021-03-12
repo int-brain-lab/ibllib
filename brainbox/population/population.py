@@ -196,7 +196,8 @@ def xcorr(spike_times, spike_clusters, bin_size=None, window_size=None):
     return _symmetrize_correlograms(correlograms)
 
 
-def classify(population_activity, trial_labels, classifier, cross_validation=None):
+def classify(population_activity, trial_labels, classifier, cross_validation=None,
+             return_training=False):
     """
     Classify trial identity (e.g. stim left/right) from neural population activity.
 
@@ -214,6 +215,8 @@ def classify(population_activity, trial_labels, classifier, cross_validation=Non
         which cross-validation method to use, for example 5-fold:
                     from sklearn.model_selection import KFold
                     cross_validation = KFold(n_splits=5)
+    return_training : bool
+        if set to True the classifier will also return the performance on the training set
 
     Returns
     -------
@@ -223,6 +226,8 @@ def classify(population_activity, trial_labels, classifier, cross_validation=Non
         predictions of the classifier
     prob : 1D array
         probablity of classification
+    training_accuracy : float
+        accuracy of the classifier on the training set (only if return_training is True)
     """
 
     # Check input
@@ -237,16 +242,29 @@ def classify(population_activity, trial_labels, classifier, cross_validation=Non
     else:
         pred = np.empty(trial_labels.shape[0])
         prob = np.empty(trial_labels.shape[0])
+        if return_training:
+            pred_training = np.empty(trial_labels.shape[0])
+
         for train_index, test_index in cross_validation.split(population_activity):
-            # Fit the model to the training data and predict the held-out test data
+            # Fit the model to the training data
             classifier.fit(population_activity[train_index], trial_labels[train_index])
+
+            # Predict the held-out test data
             pred[test_index] = classifier.predict(population_activity[test_index])
             proba = classifier.predict_proba(population_activity[test_index])
             prob[test_index] = proba[:, 1]
 
-    # Calcualte accuracy
+            # Predict the training data
+            if return_training:
+                pred_training[train_index] = classifier.predict(population_activity[train_index])
+
+    # Calculate accuracy
     accuracy = accuracy_score(trial_labels, pred)
-    return accuracy, pred, prob
+    if return_training:
+        training_accuracy = accuracy_score(trial_labels, pred_training)
+        return accuracy, pred, prob, training_accuracy
+    else:
+        return accuracy, pred, prob
 
 
 def regress(population_activity, trial_targets, cross_validation=None):
