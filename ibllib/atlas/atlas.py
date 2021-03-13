@@ -8,7 +8,7 @@ import nrrd
 
 from brainbox.numerical import ismember
 from ibllib.atlas.regions import BrainRegions, regions_from_allen_csv  # noqa
-from ibllib.io import params, hashfile
+from ibllib.io import params
 from oneibl.webclient import http_download_file
 
 _logger = logging.getLogger('ibllib')
@@ -711,7 +711,7 @@ class AllenAtlas(BrainAtlas):
         """
         par = params.read('one_params')
         FLAT_IRON_ATLAS_REL_PATH = Path('histology', 'ATLAS', 'Needles', 'Allen')
-        MD5_LUT = '148f297cc5aa5a3767f4aa61701f7e0b'  # if updating lut needs to update here
+        LUT_VERSION = "v01"  # version 01 is the lateralized version
         regions = BrainRegions()
         xyz2dims = np.array([1, 0, 2])  # this is the c-contiguous ordering
         dims2xyz = np.array([1, 0, 2])
@@ -732,10 +732,7 @@ class AllenAtlas(BrainAtlas):
             file_label = path_atlas.joinpath(f'annotation_{res_um}.nrrd')
             if not file_label.exists():
                 _download_atlas_flatiron(file_label, FLAT_IRON_ATLAS_REL_PATH, par)
-            file_label_remap = path_atlas.joinpath(f'annotation_{res_um}_lut.npz')
-            # check the md5 of the remap to overwrite if the remapping algorithm changed
-            if file_label_remap.exists() and hashfile.md5(file_label_remap) != MD5_LUT:
-                file_label_remap.unlink()
+            file_label_remap = path_atlas.joinpath(f'annotation_{res_um}_lut_{LUT_VERSION}.npz')
             if not file_label_remap.exists():
                 label = self._read_volume(file_label)
                 _logger.info("computing brain atlas annotations lookup table")
@@ -747,6 +744,7 @@ class AllenAtlas(BrainAtlas):
                 label = label * lateral
                 _, im = ismember(label, regions.id)
                 label = np.reshape(im.astype(np.uint16), label.shape)
+                _logger.info(f"saving {file_label_remap} ...")
                 np.savez_compressed(file_label_remap, label)
             # loads the files
             label = self._read_volume(file_label_remap)
