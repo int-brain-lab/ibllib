@@ -9,8 +9,8 @@ from ibllib.misc import print_progress
 def sync_timestamps(tsa, tsb, tbin=0.1, return_indices=False):
     """
     Sync two arrays of time stamps
-    :param tsa: vector of timstamps
-    :param tsb: vector of timstamps
+    :param tsa: vector of timestamps
+    :param tsb: vector of timestamps
     :param tbin: time bin length
     :param return_indices (bool), if True returns 2 sets of indices for tsa and tsb with
     identified matches
@@ -49,6 +49,8 @@ def sync_timestamps(tsa, tsb, tbin=0.1, return_indices=False):
             candidates = inds[~np.isin(inds, ib[:m])]
             if candidates.size == 1:
                 ib[m] = candidates[0]
+            elif candidates.size > 1:
+                ib[m] = inds[np.argmin(dt[inds])]
 
     fcn_a2b, _ = _interp_fcn(tsa, tsb, ib)
     # do a second assignment - this time a full matrix of candidate matches is computed
@@ -137,7 +139,7 @@ def fronts(x, axis=-1, step=1):
 
     :param x: array on which to compute RMS
     :param axis: (optional, -1) negative value
-    :param step: (optional, -1) value of the step to detect
+    :param step: (optional, 1) value of the step to detect
     :return: numpy array of indices, numpy array of rises (1) and falls (-1)
     """
     d = np.diff(x, axis=axis)
@@ -148,7 +150,6 @@ def fronts(x, axis=-1, step=1):
         return ind[0], sign
     else:
         return ind, sign
-    return rises(np.abs(x), axis=axis, step=step)
 
 
 def falls(x, axis=-1, step=-1):

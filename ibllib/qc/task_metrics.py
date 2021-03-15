@@ -122,15 +122,15 @@ class TaskQC(base.QC):
         :param bpod_only: if True no data is extracted from the FPGA for ephys sessions
         :param download_data: if True, any missing raw data is downloaded via ONE.  By default
         data are not downloaded if a session path was provided to the constructor.
-        :return: session outcome (str), a dict for extended QC
+        :return: QC outcome (str), a dict for extended QC
         """
         if self.metrics is None:
             self.compute(**kwargs)
-        self.outcome, results, _ = self.compute_session_status()
+        outcome, results, _ = self.compute_session_status()
         if update:
             self.update_extended_qc(results)
-            self.update(self.outcome, 'task')
-        return self.outcome, results
+            self.update(outcome, 'task')
+        return outcome, results
 
     def compute_session_status(self):
         """

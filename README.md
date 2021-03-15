@@ -1,7 +1,7 @@
-# IBL Python Libraries
-[![Build Status on master](https://travis-ci.org/int-brain-lab/ibllib.svg?branch=master)](https://travis-ci.org/int-brain-lab/ibllib) 
+# IBL Python Libraries 
 [![Coverage badge](https://img.shields.io/endpoint.svg?url=https%3A%2F%2Fibllib.hooks.internationalbrainlab.org%2Fcoverage%2Fibllib%2Fmaster)](https://ibllib.hooks.internationalbrainlab.org/coverage/master) 
-[![Tests status badge](https://img.shields.io/endpoint.svg?url=https%3A%2F%2Fibllib.hooks.internationalbrainlab.org%2Ftests%2Fibllib%2Fmaster)](https://ibllib.hooks.internationalbrainlab.org/logs/records/master) 
+[![Tests status badge](https://img.shields.io/endpoint.svg?url=https%3A%2F%2Fibllib.hooks.internationalbrainlab.org%2Ftests%2Fibllib%2Fmaster)](https://ibllib.hooks.internationalbrainlab.org/logs/records/master)
+[![Tests status badge](https://img.shields.io/endpoint.svg?url=https%3A%2F%2Fibllib.hooks.internationalbrainlab.org%2Ftests%2Fibllib%2Fmaster)](https://ibllib.hooks.internationalbrainlab.org/logs/records/develop)
 
 ## Description
 Library used to implement the International Brain Laboratory data pipeline. Currently in active development.
@@ -16,7 +16,7 @@ The library as currently 4 main modules:
 ## Requirements
 **OS**: Deployed on Linux and Windows. Minimally tested for Mac.
 
-**Python Module**: Python 3.6 or higher, we develop on 3.7.
+**Python Module**: Python 3.7 or higher, we develop on 3.8.
 
 ## Installation, documentation and examples
 https://docs.internationalbrainlab.org

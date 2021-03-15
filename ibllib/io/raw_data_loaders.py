@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
-# @Author: Niccolò Bonacchi
+# @Author: Niccolò Bonacchi, Miles Wells
 # @Date: Monday, July 16th 2018, 1:28:46 pm
 """
 Raw Data Loader functions for PyBpod rig
@@ -10,6 +10,7 @@ Module contains one loader function per raw datafile
 import json
 import logging
 import wave
+from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
 from typing import Union
@@ -18,6 +19,8 @@ import numpy as np
 import pandas as pd
 
 from ibllib.io import jsonable
+from ibllib.dsp.utils import fronts
+from ibllib.io.video import assert_valid_label
 from ibllib.misc import version
 from ibllib.time import uncycle_pgts, convert_pgts
 
@@ -101,27 +104,111 @@ def load_data(session_path: Union[str, Path], time='absolute'):
     return data
 
 
-def load_camera_ssv_times(session_path, camera):
+def load_camera_ssv_times(session_path, camera: str):
     """
     Load the bonsai frame and camera timestamps from Camera.timestamps.ssv
+
+    NB: For some sessions the frame times are in the first column, in others the order is reversed.
+
     :param session_path: Absolute path of session folder
     :param camera: Name of the camera to load, e.g. 'left'
     :return: array of datetimes, array of frame times in seconds
     """
-    camera_labels = ('left', 'right', 'body')
-    if camera.lower() not in camera_labels:
-        raise ValueError(f"camera must be one of ({', '.join(('left', 'right', 'body'))})")
+    camera = assert_valid_label(camera)
     file = Path(session_path) / 'raw_video_data' / f'_iblrig_{camera.lower()}Camera.timestamps.ssv'
     assert file.exists()
     # NB: Numpy has deprecated support for non-naive timestamps.
     # Converting them is extremely slow: 6000 timestamps takes 0.8615s vs 0.0352s.
     # from datetime import timezone
     # c = {0: lambda x: datetime.fromisoformat(x).astimezone(timezone.utc).replace(tzinfo=None)}
-    ssv_params = dict(names=('bonsai', 'camera'), dtype='<M8[ns],<u4', delimiter=' ')
+
+    # Determine the order of the columns by reading one line and testing whether the first value
+    # is an integer or not.
+    with open(file, 'r') as f:
+        line = f.readline()
+    type_map = OrderedDict(bonsai='<M8[ns]', camera='<u4')
+    try:
+        int(line.split(' ')[1])
+    except ValueError:
+        type_map.move_to_end('bonsai')
+    ssv_params = dict(names=type_map.keys(), dtype=','.join(type_map.values()), delimiter=' ')
     ssv_times = np.genfromtxt(file, **ssv_params)  # np.loadtxt is slower for some reason
     bonsai_times = ssv_times['bonsai']
     camera_times = uncycle_pgts(convert_pgts(ssv_times['camera']))
     return bonsai_times, camera_times
+
+
+def load_embedded_frame_data(session_path, label: str, raw=False):
+    """
+    Load the embedded frame count and GPIO for a given session.  If the file doesn't exist,
+    or is empty, None values are returned.
+    :param session_path: Absolute path of session folder
+    :param label: The specific video to load, one of ('left', 'right', 'body')
+    :param raw: If True the raw data are returned without preprocessing, otherwise frame count is
+    returned starting from 0 and the GPIO is returned as a dict of indices
+    :return: The frame count, GPIO
+    """
+    count = load_camera_frame_count(session_path, label, raw=raw)
+    gpio = load_camera_gpio(session_path, label, as_dict=not raw)
+    return count, gpio
+
+
+def load_camera_frame_count(session_path, label: str, raw=True):
+    """
+    Load the embedded frame count for a given session.  If the file doesn't exist, or is empty,
+    a None value is returned.
+    :param session_path: Absolute path of session folder
+    :param label: The specific video to load, one of ('left', 'right', 'body')
+    :param raw: If True the raw data are returned without preprocessing, otherwise frame count is
+    returned starting from 0
+    :return: The frame count
+    """
+    if session_path is None:
+        return
+    raw_path = Path(session_path).joinpath('raw_video_data')
+
+    # Load frame count
+    count_file = raw_path / f'_iblrig_{assert_valid_label(label)}Camera.frame_counter.bin'
+    count = np.fromfile(count_file, dtype=np.float64).astype(int) if count_file.exists() else []
+    if len(count) == 0:
+        return
+    if not raw:
+        count -= count[0]  # start from zero
+    return count
+
+
+def load_camera_gpio(session_path, label: str, as_dict=False):
+    """
+    Load the GPIO for a given session.  If the file doesn't exist, or is empty, a None value is
+    returned.
+    :param session_path: Absolute path of session folder
+    :param label: The specific video to load, one of ('left', 'right', 'body')
+    :param as_dict: If False the raw data are returned without preprocessing, otherwise GPIO is
+    returned as dictionary of front indices and polarities
+    :return: The GPIO pin state
+    """
+    if session_path is None:
+        return
+    raw_path = Path(session_path).joinpath('raw_video_data')
+
+    # Load pin state
+    GPIO_file = raw_path / f'_iblrig_{assert_valid_label(label)}Camera.GPIO.bin'
+    gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(int) if GPIO_file.exists() else []
+
+    if len(gpio) == 0:
+        return
+    if as_dict:
+        n_states = np.unique(gpio).size
+        if n_states == 1:
+            _logger.error('No GPIO changes')
+            return None
+        elif np.unique(gpio).size != 2:
+            _logger.warning('GPIO noisy')
+        thresh = int((gpio.max() - gpio.min()) / 2)
+        gpio = dict(zip(('indices', 'polarities'), fronts(gpio, step=thresh)))
+        gpio['polarities'] = np.sign(gpio['polarities'])
+
+    return gpio
 
 
 def load_settings(session_path: Union[str, Path]):
@@ -538,14 +625,14 @@ def sync_trials_robust(t0, t1, diff_threshold=0.001, drift_threshold_ppm=200, ma
         return t0[ind0], t1[ind1]
 
 
-def load_bpod_fronts(session_path: str, data: dict = False) -> list:
+def load_bpod_fronts(session_path: str, data: list = False) -> list:
     """load_bpod_fronts
     Loads BNC1 and BNC2 bpod channels times and polarities from session_path
 
     :param session_path: a valid session_path
     :type session_path: str
     :param data: pre-loaded raw data dict, defaults to False
-    :type data: dict, optional
+    :type data: list, optional
     :return: List of dicts BNC1 and BNC2 {"times": np.array, "polarities":np.array}
     :rtype: list
     """

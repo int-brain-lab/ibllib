@@ -20,7 +20,7 @@ class VideoStreamer(object):
         self.url = url_vid
         self._par = oneibl.params.get(silent=True)
         self.cap = cv2.VideoCapture(self._url)
-        self.total_frames = self.cap.get(cv2.CAP_PROP_FRAME_COUNT)
+        self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     @property
     def _url(self):
