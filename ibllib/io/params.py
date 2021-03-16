@@ -87,7 +87,9 @@ def write(str_params, par):
     :param par: dictionary containing parameters values
     :return: None
     """
-    pfile = getfile(str_params)
+    pfile = Path(getfile(str_params))
+    if not pfile.parent.exists():
+        pfile.parent.mkdir()
     dpar = as_dict(par)
     for k in dpar:
         if isinstance(dpar[k], Path):

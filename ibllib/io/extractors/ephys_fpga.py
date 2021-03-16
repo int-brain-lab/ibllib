@@ -30,7 +30,8 @@ SYNC_BATCH_SIZE_SECS = 100  # number of samples to read at once in bin file for 
 WHEEL_RADIUS_CM = 1  # stay in radians
 WHEEL_TICKS = 1024
 
-BPOD_FPGA_DRIFT_THRESHOLD_PPM = 150
+BPOD_FPGA_DRIFT_THRESHOLD_PPM = 150  # throws an error if bpod to fpga clock drift is higher
+F2TTL_THRESH = 0.01  # consecutive pulses with less than this threshold ignored
 
 CHMAPS = {'3A':
           {'ap':
@@ -303,22 +304,29 @@ def _get_sync_fronts(sync, channel_nb, tmin=None, tmax=None):
                   'polarities': sync['polarities'][selection]})
 
 
-def extract_camera_sync(sync, chmap=None):
+def _clean_frame2ttl(frame2ttl, display=False):
     """
-    Extract camera timestamps from the sync matrix
+    Frame 2ttl calibration can be unstable and the fronts may be flickering at an unrealistic
+    pace. This removes the consecutive frame2ttl pulses happening too fast, below a threshold
+    of F2TTL_THRESH
+    """
+    dt = np.diff(frame2ttl['times'])
+    iko = np.where(np.logical_and(dt < F2TTL_THRESH, frame2ttl['polarities'][:-1] == -1))[0]
+    iko = np.unique(np.r_[iko, iko + 1])
+    frame2ttl_ = {'times': np.delete(frame2ttl['times'], iko),
+                  'polarities': np.delete(frame2ttl['polarities'], iko)}
+    if iko.size > (0.1 * frame2ttl['times'].size):
+        _logger.warning(f'{iko.size} ({iko.size / frame2ttl["times"].size * 100} %) '
+                        f'frame to TTL polarity switches below {F2TTL_THRESH} secs')
+    if display:
+        from ibllib.plots import squares
+        plt.figure()
+        squares(frame2ttl['times'] * 1000, frame2ttl['polarities'], yrange=[0.1, 0.9])
+        squares(frame2ttl_['times'] * 1000, frame2ttl_['polarities'], yrange=[1.1, 1.9])
+        import seaborn as sns
+        sns.displot(dt[dt < 0.05], binwidth=0.0005)
 
-    :param sync: dictionary 'times', 'polarities' of fronts detected on sync trace
-    :param chmap: dictionary containing channel indices. Default to constant.
-    :return: dictionary containing camera timestamps
-    """
-    # NB: should we check we opencv the expected number of frames ?
-    assert(chmap)
-    sr = _get_sync_fronts(sync, chmap['right_camera'])
-    sl = _get_sync_fronts(sync, chmap['left_camera'])
-    sb = _get_sync_fronts(sync, chmap['body_camera'])
-    return {'right_camera': sr.times[::2],
-            'left_camera': sl.times[::2],
-            'body_camera': sb.times[::2]}
+    return frame2ttl_
 
 
 def extract_wheel_sync(sync, chmap=None):
@@ -356,10 +364,10 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tm
         raise err.SyncBpodFpgaException('No Bpod event found in FPGA. No behaviour extraction. '
                                         'Check channel maps.')
     frame2ttl = _get_sync_fronts(sync, chmap['frame2ttl'], tmax=tmax)
+    frame2ttl = _clean_frame2ttl(frame2ttl)
     audio = _get_sync_fronts(sync, chmap['audio'], tmax=tmax)
     # extract events from the fronts for each trace
-    t_trial_start, t_valve_open, t_iti_in = _assign_events_bpod(
-        bpod['times'], bpod['polarities'])
+    t_trial_start, t_valve_open, t_iti_in = _assign_events_bpod(bpod['times'], bpod['polarities'])
     # one issue is that sometimes bpod pulses may not have been detected, in this case
     # perform the sync bpod/FPGA, and add the start that have not been detected
     if bpod_trials:
@@ -559,16 +567,6 @@ class ProbaContrasts(BaseBpodTrialsExtractor):
                 'contrastRight': contrastRight, 'contrastLeft': contrastLeft}
 
 
-class CameraTimestamps(BaseExtractor):
-    save_names = ['_ibl_rightCamera.times.npy', '_ibl_leftCamera.times.npy',
-                  '_ibl_bodyCamera.times.npy']
-    var_names = ['right_camera_timestamps', 'left_camera_timestamps', 'body_camera_timestamps']
-
-    def _extract(self, sync=None, chmap=None):
-        ts = extract_camera_sync(sync=sync, chmap=chmap)
-        return ts['right_camera'], ts['left_camera'], ts['body_camera']
-
-
 class FpgaTrials(BaseExtractor):
     save_names = (ProbaContrasts.save_names +
                   ('_ibl_trials.feedbackType.npy', '_ibl_trials.choice.npy',
@@ -660,7 +658,6 @@ def extract_all(session_path, save=True, bin_exists=False):
     :return: outputs, files
     """
     sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
-    outputs, files = run_extractor_classes(
-        [CameraTimestamps, FpgaTrials], session_path=session_path,
-        save=save, sync=sync, chmap=chmap)
+    outputs, files = run_extractor_classes([FpgaTrials], session_path=session_path,
+                                           save=save, sync=sync, chmap=chmap)
     return outputs, files

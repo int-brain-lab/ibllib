@@ -14,11 +14,17 @@ class TestUtils(unittest.TestCase):
         # test the date input
         date_range = [datetime.datetime.strptime(d, '%Y-%m-%d') for d in date_range]
         self.assertTrue(ibllib.time.format_date_range(date_range) == date_range_out)
+        # test input validation
+        date_range[-1] = date_range_out[-1]  # noqa [datetime, str]
+        with self.assertRaises(ValueError):
+            ibllib.time.format_date_range(date_range)
 
     def test_isostr2date(self):
         # test the full string
         a = ibllib.time.isostr2date('2018-03-01T12:34:56.99999')
         self.assertTrue(a == datetime.datetime(2018, 3, 1, 12, 34, 56, 999990))
+        # test UTC offset
+        # a = ibllib.time.isostr2date('2018-03-01T12:34:56+02:00')  # FAILS!
         # if ms is rounded, test without the F field
         b = ibllib.time.isostr2date('2018-03-01T12:34:56')
         self.assertTrue(b == datetime.datetime(2018, 3, 1, 12, 34, 56))

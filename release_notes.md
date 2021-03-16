@@ -1,3 +1,14 @@
+## Release Notes 1.6
+### Release Notes 1.6.0 - 2020-03-16
+- ibllib.atlas: backend region mapping is a lateralized version of the Allen atlas "Allen-lr"
+The default behviour in the Atlas is to remap according to the orignal mapping "Allen"
+- camera timestamps: extraction of the exact camera time stamps by cross-examination of bonsai timestamps, audio pulses
+and camera pulses
+
+## Release Notes 1.5
+### Release Notes 1.5.39
+- ephys extraction: remove short TTL pulses of frame2ttl in task extraction 
+
 ### Release Notes 1.5.38
 - ibllib.atlas.regions remapping option
 - optogenetics pybpod: extraction of laser probabilities

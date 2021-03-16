@@ -25,9 +25,6 @@ class TestBrainRegions(unittest.TestCase):
     def setUpClass(self):
         self.brs = BrainRegions()
 
-    def test_init(self):
-        pass
-
     def test_get(self):
         ctx = self.brs.get(688)
         self.assertTrue(len(ctx.acronym) == 1 and ctx.acronym == 'CTX')
@@ -36,12 +33,26 @@ class TestBrainRegions(unittest.TestCase):
         # here we use the same brain region as in the alyx test
         self.assertTrue(self.brs.descendants(ids=688).id.size == 567)
         self.assertTrue(self.brs.ancestors(ids=688).id.size == 4)
+        # the leaves have no descendants but themselves
+        leaves = self.brs.leaves()
+        d = self.brs.descendants(ids=leaves['id'])
+        self.assertTrue(np.all(np.sort(leaves['id']) == np.sort(d['id'])))
 
-    def test_mappings(self):
+    def test_mappings_lateralized(self):
         # the mapping assigns all non found regions to root (1:997), except for the void (0:0)
-        # here we're looking at the retina (1327:304325711)
-        inds = self.brs._mapping_from_regions_list(np.array([304325711]))
+        # here we're looking at the retina (1327:304325711), so we expect 1327 at index 1327
+        inds = self.brs._mapping_from_regions_list(np.array([304325711]), lateralize=True)
         inds_ = np.zeros_like(self.brs.id) + 1
+        inds_[int((inds.size - 1) / 2)] = 1327
+        inds_[-1] = 1327 * 2
+        inds_[0] = 0
+        assert np.all(inds == inds_)
+
+    def test_mappings_not_lateralized(self):
+        # if it's not lateralize, retina for both eyes should be in the
+        inds = self.brs._mapping_from_regions_list(np.array([304325711]), lateralize=False)
+        inds_ = np.zeros_like(self.brs.id) + 1
+        inds_[int((inds.size - 1) / 2)] = 1327
         inds_[-1] = 1327
         inds_[0] = 0
         assert np.all(inds == inds_)

@@ -1,4 +1,7 @@
-from brainbox.population import xcorr
+from pathlib import Path
+import pickle
+from sklearn.naive_bayes import MultinomialNB
+from brainbox.population import xcorr, classify, regress, get_spike_counts_in_bins
 import unittest
 import numpy as np
 
@@ -11,6 +14,57 @@ def _random_data(max_cluster):
 
 
 class TestPopulation(unittest.TestCase):
+
+    def setUp(self):
+        # Test data is a dictionary of spike times and clusters and event times and groups
+        pickle_file = Path(__file__).parent.joinpath('fixtures', 'ephys_test.p')
+        if not pickle_file.exists():
+            self.test_data = None
+        else:
+            with open(pickle_file, 'rb') as f:
+                self.test_data = pickle.load(f)
+
+    def test_get_spike_counts_in_bins(self):
+        if self.test_data is None:
+            return
+        spike_times = self.test_data['spike_times']
+        spike_clusters = self.test_data['spike_clusters']
+        event_times = self.test_data['event_times']
+        times = np.column_stack(((event_times - 0.5), (event_times + 0.5)))
+        counts, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters, times)
+        num_clusters = np.size(np.unique(spike_clusters))
+        self.assertEqual(counts.shape, (num_clusters, np.size(event_times)))
+        self.assertTrue(np.size(cluster_ids) == num_clusters)
+
+    def test_classify(self):
+        if self.test_data is None:
+            return
+        spike_times = self.test_data['spike_times']
+        spike_clusters = self.test_data['spike_clusters']
+        event_times = self.test_data['event_times']
+        event_groups = self.test_data['event_groups']
+        clf = MultinomialNB()
+        times = np.column_stack(((event_times - 0.5), (event_times + 0.5)))
+        counts, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters, times)
+        counts = counts.T
+        accuracy, pred, prob = classify(counts, event_groups, clf)
+        self.assertTrue(accuracy == 0.8888888888888888)
+        self.assertEqual(pred.shape, event_groups.shape)
+        self.assertEqual(prob.shape, event_groups.shape)
+
+    def test_regress(self):
+        if self.test_data is None:
+            return
+        spike_times = self.test_data['spike_times']
+        spike_clusters = self.test_data['spike_clusters']
+        event_times = self.test_data['event_times']
+        event_groups = self.test_data['event_groups']
+        times = np.column_stack(((event_times - 0.5), (event_times + 0.5)))
+        counts, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters, times)
+        counts = counts.T
+        pred = regress(counts, event_groups)
+        self.assertEqual(pred.shape, event_groups.shape)
+
     def test_xcorr_0(self):
         # 0: 0, 10
         # 1: 10, 20

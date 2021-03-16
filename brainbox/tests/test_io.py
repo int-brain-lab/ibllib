@@ -2,11 +2,15 @@ import json
 from pathlib import Path
 import unittest
 import uuid
+import tempfile
+import shutil
 
 import numpy as np
 
 from brainbox.numerical import ismember, ismember2d, intersect2d
-from brainbox.io.parquet import uuid2np, np2uuid, rec2col, np2str
+from brainbox.io.parquet import uuid2np, np2uuid, rec2col, np2str, str2np
+from brainbox.io import one as bbone
+from oneibl.one import ONE
 
 
 class TestParquet(unittest.TestCase):
@@ -19,6 +23,10 @@ class TestParquet(unittest.TestCase):
         self.assertTrue(all(map(lambda x: x == str_uuid, np2str(two_np_uuid))))
         # single uuid gives a string
         self.assertTrue(np2str(one_np_uuid) == str_uuid)
+        # list uuids with some None entries
+        uuid_list = ['bc74f49f33ec0f7545ebc03f0490bdf6', 'c5779e6d02ae6d1d6772df40a1a94243',
+                     None, '643371c81724378d34e04a60ef8769f4']
+        assert np.all(str2np(uuid_list)[2, :] == 0)
 
     def test_rec2col(self):
         json_fixture = Path(__file__).parent.joinpath('fixtures', 'parquet_records.json')
@@ -74,3 +82,60 @@ class TestParquet(unittest.TestCase):
         uuids = [uuid.uuid4() for _ in np.arange(4)]
         np_uuids = uuid2np(uuids)
         assert np2uuid(np_uuids) == uuids
+
+
+class TestIO_ALF(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
+                      username='test_user', password='TapetesBloc18')
+
+    def setUp(self) -> None:
+        """
+        Creates a mock ephsy alf data folder with minimal spikes info for loading
+        :return:
+        """
+        self.tmpdir = Path(tempfile.gettempdir()) / 'test_bbio'
+        self.tmpdir.mkdir(exist_ok=True)
+        self.alf_path = self.tmpdir.joinpath('subject', '2019-08-12', '001', 'alf')
+        self.session_path = self.alf_path.parent
+        self.probes = ['probe00', 'probe01']
+        nspi = [10000, 10001]
+        nclusters = [420, 421]
+        nch = [64, 62]
+        probe_description = []
+        for i, prb in enumerate(self.probes):
+            prb_path = self.alf_path.joinpath(prb)
+            prb_path.mkdir(exist_ok=True, parents=True)
+            np.save(prb_path.joinpath('clusters.channels.npy'),
+                    np.random.randint(0, nch[i], nclusters[i]))
+            np.save(prb_path.joinpath('spikes.depths.npy'),
+                    np.random.rand(nspi[i]) * 3200)
+            np.save(prb_path.joinpath('spikes.clusters.npy'),
+                    np.random.randint(0, nclusters[i], nspi[i]))
+            np.save(prb_path.joinpath('spikes.times.npy'),
+                    np.sort(np.random.random(nspi[i]) * 1200))
+
+            probe_description.append({'label': prb,
+                                      'model': '3B1',
+                                      'serial': int(456248),
+                                      'raw_file_name': 'gnagnagnaga',
+                                      })
+        # create session level
+        with open(self.alf_path.joinpath('probes.description.json'), 'w+') as fid:
+            fid.write(json.dumps(probe_description))
+        np.save(self.alf_path.joinpath('trials.gnagnag.npy'), np.random.rand(50))
+
+    def test_load_ephys(self):
+        # straight test
+        spikes, clusters, trials = bbone.load_ephys_session(self.session_path, one=self.one)
+        self.assertTrue(list(spikes.keys()) == self.probes)
+        self.assertTrue(list(clusters.keys()) == self.probes)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmpdir)
+
+
+if __name__ == "__main__":
+    unittest.main(exit=False)

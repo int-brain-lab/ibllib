@@ -11,6 +11,8 @@ from brainbox.core import Bunch
 from oneibl.stream import VideoStreamer
 from oneibl.one import ONE
 
+VIDEO_LABELS = ('left', 'right', 'body')
+
 
 def get_video_frame(video_path, frame_number):
     """
@@ -91,7 +93,7 @@ def get_video_meta(video_path, one=None):
     meta.fps = int(cap.get(cv2.CAP_PROP_FPS))
     meta.width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     meta.height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    meta.duration = timedelta(seconds=meta.length / meta.fps)
+    meta.duration = timedelta(seconds=meta.length / meta.fps) if meta.fps > 0 else 0
     if is_url and one:
         eid = one.eid_from_path(video_path)
         name = re.match(r'.*(_iblrig_[a-z]+Camera\.raw\.)(?:[\w-]{36}\.)?(mp4)$', video_path)
@@ -142,5 +144,21 @@ def label_from_path(video_name):
     :param video_name: A file path, URL or file name for the video
     :return: The string label or None if the video doesn't match
     """
-    result = re.search(r'(?<=_iblrig_)([a-z]+)(?=Camera)', str(video_name))
+    result = re.search(r'(?<=_)([a-z]+)(?=Camera)', str(video_name))
     return result.group() if result else None
+
+
+def assert_valid_label(label):
+    """
+    Raises a value error is the provided label is not supported.
+    :param label: A video label to verify
+    :return: the label in lowercase
+    """
+    if not isinstance(label, str):
+        try:
+            return tuple(map(assert_valid_label, label))
+        except AttributeError:
+            raise ValueError('label must be string or iterable of strings')
+    if label.lower() not in VIDEO_LABELS:
+        raise ValueError(f"camera must be one of ({', '.join(VIDEO_LABELS)})")
+    return label.lower()

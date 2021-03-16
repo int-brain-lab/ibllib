@@ -67,5 +67,5 @@ def motion_energy(frames, diff=2, kernel=None, normalize=True):
     # Feature scaling
     df_ = df.sum(axis=(1, 2))
     if normalize:
-        df_ = df_ - df_.min() / df_.max() - df_.min()
+        df_ = (df_ - df_.min()) / (df_.max() - df_.min())
     return df_, stDev

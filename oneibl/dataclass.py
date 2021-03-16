@@ -36,6 +36,8 @@ class SessionDataInfo:
             eid=self.eid[ind],
             url=self.url[ind],
             data=self.data[ind],
+            hash=self.hash[ind],
+            file_size=self.file_size[ind]
         )
 
     def __len__(self):
