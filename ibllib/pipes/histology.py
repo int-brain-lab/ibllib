@@ -478,7 +478,7 @@ def detect_missing_histology_tracks(path_tracks=None, one=None, subject=None):
                     continue
 
 
-def coverage(trajs, ba=None):
+def coverage(trajs, ba=None, dist_fcn=[100, 150]):
     """
     Computes a coverage volume from
     :param trajs: dictionary of trajectories from Alyx rest endpoint (one.alyx.rest...)
@@ -486,9 +486,8 @@ def coverage(trajs, ba=None):
     :return: 3D np.array the same size as the volume provided in the brain atlas
     """
     # in um. Coverage = 1 below the first value, 0 after the second, cosine taper in between
-    DIST_FCN = [100, 150]
     ACTIVE_LENGTH_UM = 3.5 * 1e3
-    MAX_DIST_UM = DIST_FCN[1]  # max distance around the probe to be searched for
+    MAX_DIST_UM = dist_fcn[1]  # max distance around the probe to be searched for
     if ba is None:
         ba = atlas.AllenAtlas()
 
@@ -542,7 +541,7 @@ def coverage(trajs, ba=None):
         sites_bounds = crawl_up_from_tip(
             ins, (np.array([ACTIVE_LENGTH_UM, 0]) + TIP_SIZE_UM) / 1e6)
         mdist = ins.trajectory.mindist(xyz, bounds=sites_bounds)
-        coverage = 1 - fcn_cosine(np.array(DIST_FCN) / 1e6)(mdist)
+        coverage = 1 - fcn_cosine(np.array(dist_fcn) / 1e6)(mdist)
         # remap to the coverage volume
         full_coverage[ba._lookup_inds(ixyz)] += coverage
 
