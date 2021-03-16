@@ -18,7 +18,7 @@ def as_globus_path(path):
     Examples:
         # A Windows path
         >>> as_globus_path('E:\\FlatIron\\integration')
-        >>> '/~/E/FlatIron/integration'
+        >>> '/E/FlatIron/integration'
 
         # A relative POSIX path
         >>> as_globus_path('../data/integration')

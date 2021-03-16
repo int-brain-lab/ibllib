@@ -384,7 +384,9 @@ def add_uuid_string(file_path, uuid):
     if isinstance(uuid, str) and not is_uuid_string(uuid):
         raise ValueError('Should provide a valid UUID v4')
     uuid = str(uuid)
-    file_path = Path(file_path)
+    # NB: Only instantiate as Path if not already a Path, otherwise we risk changing the class
+    if isinstance(file_path, str):
+        file_path = Path(file_path)
     name_parts = file_path.stem.split('.')
     if uuid == name_parts[-1]:
         _logger.warning(f'UUID already found in file name: {file_path.name}: IGNORE')
