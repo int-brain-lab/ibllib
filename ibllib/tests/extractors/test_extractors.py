@@ -664,14 +664,17 @@ class MockExtracor(BaseExtractor):
 
 class TestBaseExtractorSavingMethods(unittest.TestCase):
     def setUp(self) -> None:
-        tempdir = tempfile.TemporaryDirectory()
-        self.session_path = tempdir.name
-        self.addClassCleanup(tempdir.cleanup)
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.session_path = self.tempdir.name
+        # self.addClassCleanup(tempdir.cleanup)  # py3.8
         self.mock_extractor = MockExtracor(self.session_path)
 
     def test_saving_method(self):
         data, paths = self.mock_extractor.extract(save=True)
         self.assertTrue(all([x.exists() for x in paths]))
+
+    def tearDown(self):
+        self.tempdir.cleanup()
 
 
 if __name__ == "__main__":

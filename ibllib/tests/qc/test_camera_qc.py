@@ -13,7 +13,31 @@ from ibllib.tests.fixtures import utils
 from brainbox.core import Bunch
 
 
+class TestGnagnagnagnagan(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        print('stup_class')
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        print('tdclass')
+
+    def setUp(self) -> None:
+        print("setup")
+
+    def tearDown(self) -> None:
+        print('teardown')
+
+    def test_toto(self):
+        print('toto')
+
+    def test_titi(self):
+        print('titi')
+
+
 class TestCameraQC(unittest.TestCase):
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.one = ONE(
@@ -21,9 +45,12 @@ class TestCameraQC(unittest.TestCase):
             username="test_user",
             password="TapetesBloc18",
         )
-        backend = matplotlib.get_backend()
+        cls.backend = matplotlib.get_backend()
         matplotlib.use('Agg')
-        cls.addClassCleanup(matplotlib.use, backend)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        matplotlib.use(cls.backend)
 
     def setUp(self) -> None:
         self.tempdir = TemporaryDirectory()
@@ -33,7 +60,10 @@ class TestCameraQC(unittest.TestCase):
         self.qc = CameraQC(self.session_path, one=self.one, n_samples=5,
                            side='left', stream=False, download_data=False)
         self.qc._type = 'ephys'
-        self.addCleanup(plt.close, 'all')
+
+    def tearDown(self) -> None:
+        self.tempdir.cleanup()
+        plt.close('all')
 
     def test_check_brightness(self):
         self.qc.data['frame_samples'] = self.qc.load_reference_frames('left')
@@ -231,9 +261,6 @@ class TestCameraQC(unittest.TestCase):
             self.qc.one.download_datasets = lambda _: None
         with self.assertRaises(AssertionError):
             self.qc.run(update=False)
-
-    def tearDown(self) -> None:
-        self.tempdir.cleanup()
 
 
 if __name__ == '__main__':

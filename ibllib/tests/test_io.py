@@ -363,7 +363,7 @@ class TestsSpikeGLX_compress(unittest.TestCase):
 
     def setUp(self):
         self._tempdir = tempfile.TemporaryDirectory()
-        self.addClassCleanup(self._tempdir.cleanup)
+        # self.addClassCleanup(self._tempdir.cleanup)  # py3.8
         self.workdir = Path(self._tempdir.name)
         file_meta = Path(__file__).parent.joinpath('fixtures', 'io', 'spikeglx',
                                                    'sample3A_short_g0_t0.imec.ap.meta')
@@ -371,6 +371,9 @@ class TestsSpikeGLX_compress(unittest.TestCase):
             self.workdir.joinpath('sample3A_short_g0_t0.imec.ap.bin'), file_meta, ns=76104,
             nc=385, sync_depth=16, random=True)['bin_file']
         self.sr = spikeglx.Reader(self.file_bin)
+
+    def tearDown(self):
+        self._tempdir.cleanup
 
     def test_read_slices(self):
         sr = self.sr
@@ -657,9 +660,9 @@ class TestsHardwareParameters(unittest.TestCase):
 class TestsMisc(unittest.TestCase):
 
     def setUp(self):
-        tmpdir = tempfile.TemporaryDirectory()
-        self.addClassCleanup(tmpdir.cleanup)
-        self.tempdir = Path(tmpdir.name)
+        self._tdir = tempfile.TemporaryDirectory()
+        # self.addClassCleanup(tmpdir.cleanup)  # py3.8
+        self.tempdir = Path(self._tdir.name)
         self.subdirs = [
             self.tempdir / 'test_empty_parent',
             self.tempdir / 'test_empty_parent' / 'test_empty',
@@ -670,6 +673,9 @@ class TestsMisc(unittest.TestCase):
 
         _ = [x.mkdir() for x in self.subdirs]
         self.file.touch()
+
+    def tearDown(self) -> None:
+        self._tdir.cleanup()
 
     def _resetup_folders(self):
         self.file.unlink()
