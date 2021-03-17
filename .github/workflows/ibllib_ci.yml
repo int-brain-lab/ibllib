@@ -29,15 +29,13 @@ jobs:
         with:
           auto-update-conda: true
           python-version: ${{ matrix.python-version }}
-      #     activate-environment: iblenv
-      #     environment-file: environment.yaml
       - name: Commands
         shell: bash -l {0}
         env:
           HTTP_DATA_SERVER_PWD: ${{ secrets.HTTP_DATA_SERVER_PWD }}
         run: |
           conda activate base
-          conda create-y -n test
+          conda create -y -n test
           conda activate test
           python -V
           pip -V
