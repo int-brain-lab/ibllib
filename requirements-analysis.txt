@@ -1,6 +1,5 @@
 click>=7.0.0
 colorlog>=4.0.2
-dataclasses>=0.6; python_version <= '3.6'
 flake8>=3.7.8
 globus-sdk>=1.7.1
 jupyter>=1.0
