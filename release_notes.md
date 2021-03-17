@@ -1,4 +1,7 @@
 ## Release Notes 1.6
+### Release Notes 1.6.0 - 2020-03-17
+- hotfix: maintain compatibility with Python 3.7
+
 ### Release Notes 1.6.0 - 2020-03-16
 - ibllib.atlas: backend region mapping is a lateralized version of the Allen atlas "Allen-lr"
 The default behviour in the Atlas is to remap according to the orignal mapping "Allen"
