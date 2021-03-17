@@ -72,16 +72,21 @@ class CameraTimestampsFPGA(BaseExtractor):
     def _extract(self, sync=None, chmap=None, video_path=None,
                  display=False, extrapolate_missing=True):
         """
-        The raw timestamps are taken from the FPGA.  These are the times of the camera's frame
-        TTLs.
+        The raw timestamps are taken from the FPGA. These are the times of the camera's frame TTLs.
         If the pin state file exists, these timestamps are aligned to the video frames using the
         audio TTLs.  Frames missing from the embedded frame count are removed from the timestamps
         array.
-        If the pin state file does not exist, the left and right camera timestamps are aligned
+        If the pin state file does not exist, the left and right camera timestamps may be aligned
         using the wheel data.
-        :param sync:
-        :param chmap:
-        :return:
+        :param sync: dictionary 'times', 'polarities' of fronts detected on sync trace.
+        :param chmap: dictionary containing channel indices. Default to constant.
+        :param video_path: an optional path for fetching the number of frames.  If None,
+        the video is loaded from the session path.  If an int is provided this is taken to be
+        the total number of frames.
+        :param display: if True, the audio and GPIO fronts are plotted.
+        :param extrapolate_missing: if True, any missing timestamps at the beginning and end of
+        the session are extrapolated based on the median frame rate, otherwise they will be NaNs.
+        :return: a numpy array of camera timestamps
         """
         fpga_times = extract_camera_sync(sync=sync, chmap=chmap)
         count, gpio = raw.load_embedded_frame_data(self.session_path, self.label)
@@ -107,7 +112,9 @@ class CameraTimestampsFPGA(BaseExtractor):
             if video_path is None:
                 filename = f'_iblrig_{self.label}Camera.raw.mp4'
                 video_path = self.session_path.joinpath('raw_video_data', filename)
-            length = get_video_length(video_path)
+            # Permit the video path to be the length for development and debugging purposes
+            length = video_path if isinstance(video_path, int) else get_video_length(video_path)
+            _logger.debug(f'Number of video frames = {length}')
             if count.size > length:
                 count = count[:length]
             else:
@@ -141,12 +148,29 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
         _logger.setLevel(self._log_level)
 
     def _extract(self, video_path=None, display=False, extrapolate_missing=True):
+        """
+        The raw timestamps are taken from the Bpod. These are the times of the camera's frame TTLs.
+        If the pin state file exists, these timestamps are aligned to the video frames using the
+        audio TTLs.  Frames missing from the embedded frame count are removed from the timestamps
+        array.
+        If the pin state file does not exist, the left camera timestamps may be aligned using the
+        wheel data.
+        :param video_path: an optional path for fetching the number of frames.  If None,
+        the video is loaded from the session path.  If an int is provided this is taken to be
+        the total number of frames.
+        :param display: if True, the audio and GPIO fronts are plotted.
+        :param extrapolate_missing: if True, any missing timestamps at the beginning and end of
+        the session are extrapolated based on the median frame rate, otherwise they will be NaNs.
+        :return: a numpy array of camera timestamps
+        """
         raw_ts = self._times_from_bpod()
         count, gpio = raw.load_embedded_frame_data(self.session_path, 'left')
         if video_path is None:
             filename = '_iblrig_leftCamera.raw.mp4'
             video_path = self.session_path.joinpath('raw_video_data', filename)
-        length = get_video_length(video_path)
+        # Permit the video path to be the length for development and debugging purposes
+        length = video_path if isinstance(video_path, int) else get_video_length(video_path)
+        _logger.debug(f'Number of video frames = {length}')
 
         # Check if the GPIO is usable for extraction.  GPIO is None if the file does not exist,
         # is empty, or contains only one value (i.e. doesn't change)
