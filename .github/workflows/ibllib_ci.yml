@@ -1,0 +1,46 @@
+# This is a basic workflow to help you get started with Actions
+
+name: CI
+
+# Controls when the action will run. Triggers the workflow on push or pull request
+# events but only for the selected branches
+on:
+  push:
+    branches: [ master, develop ]
+  pull_request:
+    branches: [ master, develop ]
+  workflow_dispatch:  # For manual trigegring
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  incubator:
+    name: build (${{ matrix.python-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        os: ["ubuntu-latest", "windows-latest"]  # "macos-latest",
+        python-version: ["3.7", "3.8"]
+    steps:
+      - name: Clone ibllib repo
+        uses: actions/checkout@v2
+      # - uses: conda-incubator/setup-miniconda@v2
+      #   with:
+      #     auto-update-conda: true
+      #     python-version: ${{ matrix.python-version }}
+      #     activate-environment: iblenv
+      #     environment-file: environment.yaml
+      - name: Commands
+        shell: bash -l {0}
+        env:
+          HTTP_DATA_SERVER_PWD: ${{ secrets.HTTP_DATA_SERVER_PWD }}
+        run: |
+          python -V
+          pip -V
+          pip install setuptools wheel packaging
+          pip install -e .
+          python -c "from oneibl.one import ONE; ONE(silent=True)"
+          python ibllib/pipes/set_pass.py "$HTTP_DATA_SERVER_PWD"
+          python -m unittest discover
+          flake8
