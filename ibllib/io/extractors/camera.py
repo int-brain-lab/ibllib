@@ -348,7 +348,9 @@ def align_with_audio(timestamps, audio, pin_state, count,
     # Remove the extraneous timestamps from the beginning and end
     end = count[-1] + 1 + start
     ts = timestamps[start:end]
-    if (n_missing := count[-1] - ts.size + 1) > 0:
+    n_missing = count[-1] - ts.size + 1
+    if n_missing > 0:
+        # if (n_missing := count[-1] - ts.size + 1) > 0:  # py3.8
         """
         For ephys sessions there may be fewer FPGA times than frame counts if SpikeGLX is turned
         off before the video acquisition workflow.  For Bpod this always occurs because Bpod
@@ -497,7 +499,9 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
         if unassigned.size > 0:
             _logger.debug(f'{unassigned.size} audio TTL rises were not detected by the camera')
         # Check that all pin state upticks could be attributed to an onset TTL
-        if np.any(missed := assigned == -1):
+        missed = assigned == -1
+        if np.any(missed):
+            # if np.any(missed := assigned == -1):  # py3.8
             _logger.warning(f'{sum(missed)} pin state rises could '
                             f'not be attributed to an audio TTL')
             if display:
@@ -528,7 +532,9 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
         if unassigned.size > 0:
             _logger.debug(f'{unassigned.size} audio TTL falls were not detected by the camera')
         # Check that all pin state downticks could be attributed to an offset TTL
-        if np.any(missed := assigned == -1):
+        missed = assigned == -1
+        if np.any(missed):
+            # if np.any(missed := assigned == -1):  # py3.8
             _logger.warning(f'{sum(missed)} pin state falls could '
                             f'not be attributed to an audio TTL')
             # Remove the missed fronts
