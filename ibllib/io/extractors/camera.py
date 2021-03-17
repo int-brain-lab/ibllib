@@ -544,8 +544,28 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
 
         # Audio groomed
         if np.any(to_remove):
-            gpio = {k: v[~to_remove] for k, v in gpio.items()}
+            # Check for any orphaned fronts (only one pin state edge was assigned)
+            to_remove = np.pad(to_remove, (0, to_remove.size % 2), 'edge')  # Ensure even size
+            # Perform xor to find GPIOs where only onset or offset is marked for removal
+            orphaned = to_remove.reshape(-1, 2).sum(axis=1) == 1
+            if orphaned.any():
+                """If there are orphaned GPIO fronts (i.e. only one edge was assigned to an 
+                audio front), remove the orphaned front its assigned audio TTL.  In other words 
+                if both edges cannot be assigned to an audio TTL, we ignore the TTL entirely.  
+                This is a sign that the assignment was bad and extraction may fail."""
+                _logger.warning('Some onsets but not offsets (or vice versa) were not assigned; '
+                                'this may be a sign of faulty wiring or clock drift')
+                # Remove orphaned onsets and offsets
+                orphaned_onsets, =  np.where(~to_remove.reshape(-1, 2)[:, 0] & orphaned)
+                orphaned_offsets, =  np.where(~to_remove.reshape(-1, 2)[:, 1] & orphaned)
+                onsets_ = np.delete(onsets_, orphaned_onsets)
+                offsets_ = np.delete(offsets_, orphaned_offsets)
+                to_remove.reshape(-1, 2)[orphaned] = True
+
+            # Remove those unassigned GPIOs
+            gpio = {k: v[~to_remove[:v.size]] for k, v in gpio.items()}
             ifronts = gpio['indices']
+
             # Assert that we've removed discrete TTLs
             # A failure means e.g. an up-going front of one TTL was missed
             # but not the down-going one.
