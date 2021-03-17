@@ -17,18 +17,18 @@ jobs:
     name: build (${{ matrix.python-version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
-      max-parallel: 3
+      fail-fast: true
+      max-parallel: 4
       matrix:
         os: ["ubuntu-latest", "windows-latest"]  # "macos-latest",
         python-version: ["3.7", "3.8"]
     steps:
       - name: Clone ibllib repo
         uses: actions/checkout@v2
-      # - uses: conda-incubator/setup-miniconda@v2
-      #   with:
-      #     auto-update-conda: true
-      #     python-version: ${{ matrix.python-version }}
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          auto-update-conda: true
+          python-version: ${{ matrix.python-version }}
       #     activate-environment: iblenv
       #     environment-file: environment.yaml
       - name: Commands
@@ -36,6 +36,9 @@ jobs:
         env:
           HTTP_DATA_SERVER_PWD: ${{ secrets.HTTP_DATA_SERVER_PWD }}
         run: |
+          conda activate base
+          conda create-y -n test
+          conda activate test
           python -V
           pip -V
           pip install setuptools wheel packaging
