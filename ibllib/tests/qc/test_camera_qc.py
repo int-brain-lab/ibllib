@@ -13,29 +13,6 @@ from ibllib.tests.fixtures import utils
 from brainbox.core import Bunch
 
 
-class TestGnagnagnagnagan(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        print('stup_class')
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        print('tdclass')
-
-    def setUp(self) -> None:
-        print("setup")
-
-    def tearDown(self) -> None:
-        print('teardown')
-
-    def test_toto(self):
-        print('toto')
-
-    def test_titi(self):
-        print('titi')
-
-
 class TestCameraQC(unittest.TestCase):
 
     @classmethod

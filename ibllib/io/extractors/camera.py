@@ -549,9 +549,9 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
             # Perform xor to find GPIOs where only onset or offset is marked for removal
             orphaned = to_remove.reshape(-1, 2).sum(axis=1) == 1
             if orphaned.any():
-                """If there are orphaned GPIO fronts (i.e. only one edge was assigned to an 
-                audio front), remove the orphaned front its assigned audio TTL.  In other words 
-                if both edges cannot be assigned to an audio TTL, we ignore the TTL entirely.  
+                """If there are orphaned GPIO fronts (i.e. only one edge was assigned to an
+                audio front), remove the orphaned front its assigned audio TTL. In other words
+                if both edges cannot be assigned to an audio TTL, we ignore the TTL entirely.
                 This is a sign that the assignment was bad and extraction may fail."""
                 _logger.warning('Some onsets but not offsets (or vice versa) were not assigned; '
                                 'this may be a sign of faulty wiring or clock drift')
