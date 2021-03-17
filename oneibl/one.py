@@ -980,8 +980,7 @@ class OneAlyx(OneAbstract):
             eq = np.logical_and(heq, feq)
             # update new hash / filesizes
             if not np.all(eq):
-                self._cache.iloc[icache, 4:6] = \
-                    pqt_dsets.iloc[np.where(isin)[0]].loc[:, ['file_size', 'hash']]
+                self._cache.iloc[icache, 4:6] = pqt_dsets.iloc[np.where(isin)[0], 4:6].to_numpy()
                 save = True
             # append datasets that haven't been found
             if not np.all(isin):

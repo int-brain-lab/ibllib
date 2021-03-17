@@ -122,7 +122,9 @@ def _path_from_filerecord(fr, root_path=SDSC_ROOT_PATH, uuid=None):
     import alf.io
     if isinstance(fr, list):
         return [_path_from_filerecord(f) for f in fr]
-    repo_path = (p := fr['data_repository_path'])[p[0] == '/':]  # Remove any slash at start
+    repo_path = fr['data_repository_path']
+    repo_path = repo_path[repo_path.startswith('/'):]  # remove starting / if any
+    # repo_path = (p := fr['data_repository_path'])[p[0] == '/':]  # py3.8 Remove slash at start
     file_path = PurePosixPath(repo_path, fr['relative_path'])
     if root_path:
         # NB: By checking for string we won't cast any PurePaths
