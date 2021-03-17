@@ -578,7 +578,7 @@ def extract_all(session_path, session_type=None, save=True, **kwargs):
         if 'sync' not in kwargs:
             kwargs['sync'], kwargs['chmap'] = \
                 get_main_probe_sync(session_path, bin_exists=kwargs.pop('bin_exists', False))
-    elif session_type in ['biased', 'training']:
+    elif session_type in ['biased', 'training', 'habituation']:
         assert kwargs.pop('labels', 'left'), 'only left camera is currently supported'
         extractor = CameraTimestampsBpod
     else:

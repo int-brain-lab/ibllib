@@ -122,7 +122,7 @@ class CameraQC(base.QC):
             try:
                 self.stream = True
                 self.video_path = self.one.url_from_path(self.video_path)
-            except StopIteration:
+            except (StopIteration, ALFObjectNotFound):
                 _log.error('No remote or local video file found')
                 self.video_path = None
 
