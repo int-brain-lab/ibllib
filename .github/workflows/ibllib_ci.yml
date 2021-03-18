@@ -34,11 +34,10 @@ jobs:
         env:
           HTTP_DATA_SERVER_PWD: ${{ secrets.HTTP_DATA_SERVER_PWD }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb
           conda activate base
           conda create -y -n test
           conda activate test
+          conda install -y -c anaconda tk
           python -V
           pip -V
           pip install setuptools wheel packaging
