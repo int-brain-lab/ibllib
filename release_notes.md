@@ -1,5 +1,8 @@
 ## Release Notes 1.6
-### Release Notes 1.6.0 - 2020-03-17
+### Release Notes 1.6.2 - 2020-03-18
+- hotfix: fix test_modelling error after removing pytorch
+
+### Release Notes 1.6.1 - 2020-03-17
 - hotfix: maintain compatibility with Python 3.7
 
 ### Release Notes 1.6.0 - 2020-03-16
