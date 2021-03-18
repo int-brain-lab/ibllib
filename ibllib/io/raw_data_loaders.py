@@ -497,7 +497,7 @@ def _clean_wheel_dataframe(data, label, path):
         _logger.warning(label + ' has missing/incomplete records \n %s', path)
     # first step is to re-interpret as numeric objects if not already done
     for col in data.columns:
-        if data[col].dtype == np.object and col not in ['bns_ts']:
+        if data[col].dtype == object and col not in ['bns_ts']:
             data[col] = pd.to_numeric(data[col], errors='coerce')
     # then drop Nans and duplicates
     data.dropna(inplace=True)
