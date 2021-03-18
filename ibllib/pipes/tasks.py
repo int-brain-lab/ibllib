@@ -31,7 +31,7 @@ class Task(abc.ABC):
     time_out_secs = None
     version = version.ibllib()
 
-    def __init__(self, session_path, parents=None, taskid=None, one=None):
+    def __init__(self, session_path, parents=None, taskid=None, one=None, machine=None):
         self.taskid = taskid
         self.one = one
         self.session_path = session_path
@@ -40,6 +40,7 @@ class Task(abc.ABC):
             self.parents = parents
         else:
             self.parents = []
+        self.machine = machine
 
     @property
     def name(self):
@@ -66,6 +67,8 @@ class Task(abc.ABC):
         ch.setFormatter(logging.Formatter(str_format))
         _logger.addHandler(ch)
         _logger.info(f"Starting job {self.__class__}")
+        if self.machine:
+            _logger.info(f"Running on machine {self.machine}")
         # run
         start_time = time.time()
         self.status = 0
