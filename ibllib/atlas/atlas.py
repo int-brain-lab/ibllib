@@ -86,7 +86,7 @@ class BrainCoordinates:
     def _round(i, round=True):
         nanval = 0
         if round:
-            ii = np.array(np.round(i)).astype(np.int)
+            ii = np.array(np.round(i)).astype(int)
             ii[np.isnan(i)] = nanval
             return ii
         else:
@@ -103,7 +103,7 @@ class BrainCoordinates:
 
     def xyz2i(self, xyz, round=True):
         xyz = np.array(xyz)
-        dt = np.int if round else np.float
+        dt = int if round else np.float
         out = np.zeros_like(xyz, dtype=dt)
         out[..., 0] = self.x2i(xyz[..., 0], round=round)
         out[..., 1] = self.y2i(xyz[..., 1], round=round)
