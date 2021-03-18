@@ -163,7 +163,7 @@ def xcorr(spike_times, spike_clusters, bin_size=None, window_size=None):
 
     # At a given shift, the mask precises which spikes have matching spikes
     # within the correlogram time window.
-    mask = np.ones_like(spike_times, dtype=np.bool)
+    mask = np.ones_like(spike_times, dtype=bool)
 
     correlograms = _create_correlograms_array(n_clusters, winsize_bins)
 

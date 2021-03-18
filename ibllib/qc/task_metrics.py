@@ -737,7 +737,7 @@ def check_n_trial_events(data, **_):
     for i, (start, end) in enumerate(intervals):
         metric[i] = (all([start < data[k][i] < end for k in events]) and
                      (np.isnan(err_trig[i]) if correct[i] else start < err_trig[i] < end))
-    passed = metric.astype(np.bool)
+    passed = metric.astype(bool)
     assert intervals.shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -859,7 +859,7 @@ def check_reward_volumes(data, **_):
     """
     metric = data['rewardVolume']
     correct = data['correct']
-    passed = np.zeros_like(metric, dtype=np.bool)
+    passed = np.zeros_like(metric, dtype=bool)
     # Check correct trials within correct range
     passed[correct] = (1.5 <= metric[correct]) & (metric[correct] <= 3.)
     # Check incorrect trials are 0

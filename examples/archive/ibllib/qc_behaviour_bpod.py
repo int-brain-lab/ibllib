@@ -34,7 +34,7 @@ def qc_behaviour_bpod_session(ses_path):
 
     # init the QC dictionary: one row per trial
     qc_trials = Bunch({
-        'xor': np.zeros(n_trials, np.bool),  # a trial is either an error, correct or a no-go
+        'xor': np.zeros(n_trials, bool),  # a trial is either an error, correct or a no-go
         'correct_rewarded': np.zeros(n_trials) * np.nan,  # a correct trial needs to be rewarded
         'n_bnc1_high': np.zeros(n_trials) * np.nan,  # number of bnc1 fronts
         'n_bnc2_high': np.zeros(n_trials) * np.nan,  # number of bnc2 fronts
