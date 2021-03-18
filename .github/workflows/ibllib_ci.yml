@@ -34,6 +34,7 @@ jobs:
         env:
           HTTP_DATA_SERVER_PWD: ${{ secrets.HTTP_DATA_SERVER_PWD }}
         run: |
+          apt install build-essential zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev python-tk python3-tk tk-dev
           conda activate base
           conda create -y -n test
           conda activate test
