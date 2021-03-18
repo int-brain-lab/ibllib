@@ -34,13 +34,14 @@ jobs:
         env:
           HTTP_DATA_SERVER_PWD: ${{ secrets.HTTP_DATA_SERVER_PWD }}
         run: |
-          apt install build-essential zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev python-tk python3-tk tk-dev
+          apt-get update
+          apt-get install -y xvfb
           conda activate base
           conda create -y -n test
           conda activate test
           python -V
           pip -V
-          pip install setuptools wheel packaging tk
+          pip install setuptools wheel packaging
           pip install -e .
           python -c "from oneibl.one import ONE; ONE(silent=True)"
           python ibllib/pipes/set_pass.py "$HTTP_DATA_SERVER_PWD"
