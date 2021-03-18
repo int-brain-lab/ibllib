@@ -44,7 +44,6 @@ class Bunch(dict):
         Loads a npz file containing the arrays of the bunch.
 
         :param npz_file: output file
-        :param compress: bool (False) use compression
         :return: Bunch
         """
         if not Path(npz_file).exists():

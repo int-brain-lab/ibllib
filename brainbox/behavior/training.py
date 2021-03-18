@@ -378,7 +378,7 @@ def get_signed_contrast(trials):
     returns: array of signed contrasts in percent, where -ve values are on the left
     """
     # Replace NaNs with zeros, stack and take the difference
-    contrast = np.nan_to_num(np.c_[trials.contrastLeft, trials.contrastRight])
+    contrast = np.nan_to_num(np.c_[trials['contrastLeft'], trials['contrastRight']])
     return np.diff(contrast).flatten() * 100
 
 
@@ -393,7 +393,7 @@ def compute_performance_easy(trials):
     """
     signed_contrast = get_signed_contrast(trials)
     easy_trials = np.where(np.abs(signed_contrast) >= 50)[0]
-    return np.sum(trials.feedbackType[easy_trials] == 1) / easy_trials.shape[0]
+    return np.sum(trials['feedbackType'][easy_trials] == 1) / easy_trials.shape[0]
 
 
 def compute_n_trials(trials):
@@ -404,7 +404,7 @@ def compute_n_trials(trials):
     :type trials: dict
     returns: int containing number of trials in session
     """
-    return trials.choice.shape[0]
+    return trials['choice'].shape[0]
 
 
 def compute_psychometric(trials, signed_contrast=None, block=None):
