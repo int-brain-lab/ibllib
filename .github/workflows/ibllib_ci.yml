@@ -34,8 +34,8 @@ jobs:
         env:
           HTTP_DATA_SERVER_PWD: ${{ secrets.HTTP_DATA_SERVER_PWD }}
         run: |
-          apt-get update
-          apt-get install -y xvfb
+          sudo apt-get update
+          sudo apt-get install -y xvfb
           conda activate base
           conda create -y -n test
           conda activate test
