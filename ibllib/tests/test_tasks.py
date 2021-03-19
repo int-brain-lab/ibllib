@@ -124,7 +124,7 @@ class TestPipelineAlyx(unittest.TestCase):
 
     def test_pipeline_alyx(self):
         eid = self.eid
-        pipeline = SomePipeline(self.session_path, one=one)
+        pipeline = SomePipeline(self.session_path, one=one, machine='testmachine')
 
         # prepare by deleting all jobs/tasks related
         tasks = one.alyx.rest('tasks', 'list', session=eid)
@@ -146,6 +146,10 @@ class TestPipelineAlyx(unittest.TestCase):
         # [(t['name'], t['status'], desired_statuses[t['name']]) for t in task_deck]
         self.assertTrue(all(check_statuses))
         self.assertTrue(set([d['name'] for d in datasets]) == set(desired_datasets))
+        # check that machine gets registered
+        check_logs = ['Running on machine testmachine' in t['log'] for t in task_deck
+                      if t['log'] is not None]
+        self.assertTrue(all(check_logs))
 
         # also checks that the datasets have been labeled with the proper version
         dsets = one.alyx.rest('datasets', 'list', session=eid)

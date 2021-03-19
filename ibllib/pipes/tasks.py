@@ -149,7 +149,7 @@ class Pipeline(abc.ABC):
     tasks = OrderedDict()
     one = None
 
-    def __init__(self, session_path=None, one=None, eid=None):
+    def __init__(self, session_path=None, one=None, eid=None, machine=None):
         assert session_path or eid
         self.one = one
         self.eid = eid
@@ -157,6 +157,7 @@ class Pipeline(abc.ABC):
             self.session_path = session_path
             self.eid = one.eid_from_path(session_path) if self.one else None
         self.label = self.__module__ + '.' + type(self).__name__
+        self.machine = machine
 
     def make_graph(self, out_dir=None, show=True):
         if not out_dir:
@@ -249,7 +250,8 @@ class Pipeline(abc.ABC):
                 continue
             # here we update the status in-place to avoid another hit to the database
             task_deck[i], dsets = run_alyx_task(tdict=j, session_path=self.session_path,
-                                                one=self.one, job_deck=task_deck, **kwargs)
+                                                one=self.one, job_deck=task_deck,
+                                                machine=self.machine, **kwargs)
             if dsets is not None:
                 all_datasets.extend(dsets)
         return task_deck, all_datasets
@@ -265,7 +267,8 @@ class Pipeline(abc.ABC):
         return self.__class__.__name__
 
 
-def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None, max_md5_size=None):
+def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
+                  max_md5_size=None, machine=None, **kwargs):
     """
     Runs a single Alyx job and registers output datasets
     :param tdict:
@@ -276,6 +279,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None, max_md
     job_deck is not entered, will query the database
     :param max_md5_size: in bytes, if specified, will not compute the md5 checksum above a given
     filesize to save time
+    :param machine: string identifying the machine the task is run on, optional
     :return:
     """
     registered_dsets = []
@@ -299,7 +303,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None, max_md
     exec_name = tdict['executable']
     strmodule, strclass = exec_name.rsplit('.', 1)
     classe = getattr(importlib.import_module(strmodule), strclass)
-    task = classe(session_path, one=one, taskid=tdict['id'])
+    task = classe(session_path, one=one, taskid=tdict['id'], machine=machine)
     # sets the status flag to started before running
     one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data={'status': 'Started'})
     status = task.run()
