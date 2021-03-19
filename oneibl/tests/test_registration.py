@@ -105,7 +105,7 @@ class TestRegistration(unittest.TestCase):
         r = registration.register_dataset(file_list=flist, one=one)
         dsets = one.alyx.rest('datasets', 'list', session=ses['url'][-36:])
         self.assertTrue(len(dsets) == 2)
-        self.assertTrue(all(d['revision'] == 'unknown' for d in r))
+        self.assertTrue(all(d['revision'] == 'no_revision' for d in r))
         self.assertTrue(all(d['default'] for d in r))
         self.assertTrue(all(d['collection'] == 'alf' for d in r))
 

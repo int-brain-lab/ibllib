@@ -50,7 +50,7 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
     :param repository: optional: (string) name of the repository in Alyx
     :param server_only: optional: (bool) if True only creates on the Flatiron (defaults to False)
     :param versions: optional (list of strings): versions tags (defaults to ibllib version)
-    :param revisions: optional (list of strings): revision name (defaults to unknown revision)
+    :param revisions: optional (list of strings): revision name (defaults to no revision)
     :param default: optional (bool) whether to set as default dataset (defaults to True)
     :param dry: (bool) False by default
     :param verbose: (bool) logs
@@ -74,7 +74,7 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
     assert isinstance(versions, list) and len(versions) == len(file_list)
 
     if revisions is None:
-        revisions = ['unknown' for _ in file_list]
+        revisions = ['no_revision' for _ in file_list]
     else:
         if isinstance(revisions, str):
             revisions = [revisions for _ in file_list]
