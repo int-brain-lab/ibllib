@@ -1,7 +1,8 @@
 from pathlib import Path
 import pickle
 from sklearn.naive_bayes import MultinomialNB
-from brainbox.population import xcorr, classify, regress, get_spike_counts_in_bins
+from brainbox.population import (xcorr, classify, regress, get_spike_counts_in_bins,
+                                 sigtest_pseudosessions, sigtest_linshift)
 import unittest
 import numpy as np
 
@@ -109,6 +110,35 @@ class TestPopulation(unittest.TestCase):
         c = xcorr(spike_times, spike_clusters, bin_size=bin_size, window_size=winsize_bins)
 
         self.assertEqual(c.shape, (max_cluster, max_cluster, 51))
+
+
+    def test_sigtest_pseudosessions(self):
+        X = np.zeros((200,700))
+        y = np.zeros(700)
+        fStatMeas = lambda X, y: np.random.rand()
+        genPseudo = lambda : np.zeros(700)
+
+        self.assertRaises(AssertionError, sigtest_pseudosessions(X, y, fStatMeas, genPseudo, npseuds=200))
+
+        acount = 0
+        for i in range(100):
+            if sigtest_pseudosessions(X, y, fStatMeas, genPseudo, npseuds=100)[0] < .1:
+                acount += 1
+        self.assertTrue(acount <= 50)
+
+
+    def test_sigtest_linshift(self):
+        X = np.zeros((200,700))
+        y = np.zeros(700)
+        fStatMeas = lambda X, y: np.random.rand()
+
+        self.assertRaises(AssertionError, sigtest_linshift(X, y, fStatMeas, D=699))
+
+        acount = 0
+        for i in range(100):
+            if sigtest_linshift(X, y, fStatMeas, D=600)[0] < .1:
+                acount += 1
+        self.assertTrue(acount <= 50)
 
 
 if __name__ == "__main__":
