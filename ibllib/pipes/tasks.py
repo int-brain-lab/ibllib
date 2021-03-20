@@ -30,8 +30,10 @@ class Task(abc.ABC):
     time_elapsed_secs = None
     time_out_secs = None
     version = version.ibllib()
+    log = ''
 
-    def __init__(self, session_path, parents=None, taskid=None, one=None, machine=None):
+    def __init__(self, session_path, parents=None, taskid=None, one=None,
+                 machine=None, clobber=False):
         self.taskid = taskid
         self.one = one
         self.session_path = session_path
@@ -41,6 +43,7 @@ class Task(abc.ABC):
         else:
             self.parents = []
         self.machine = machine
+        self.clobber = clobber
 
     @property
     def name(self):
@@ -58,6 +61,8 @@ class Task(abc.ABC):
         if use_alyx:
             self.one.alyx.rest('tasks', 'partial_update',
                                id=self.taskid, data={'status': 'Started'})
+            pre_log = self.one.alyx.rest('tasks', 'list', id=self.taskid)[0]['log']
+            self.log = pre_log + '\n\n' if pre_log else ''
         # setup
         self.setUp()
         # Setup the console handler with a StringIO object
@@ -68,7 +73,7 @@ class Task(abc.ABC):
         _logger.addHandler(ch)
         _logger.info(f"Starting job {self.__class__}")
         if self.machine:
-            _logger.info(f"Running on machine {self.machine}")
+            _logger.info(f"Running on machine: {self.machine}")
         # run
         start_time = time.time()
         self.status = 0
@@ -89,8 +94,9 @@ class Task(abc.ABC):
             nout = 1
         _logger.info(f"N outputs: {nout}")
         _logger.info(f"--- {self.time_elapsed_secs} seconds run-time ---")
-        # after the run, capture the log output
-        self.log = log_capture_string.getvalue()
+        # after the run, capture the log output, amend to any existing logs if not overwrite
+        new_log = log_capture_string.getvalue()
+        self.log = new_log if self.clobber else self.log + new_log
         log_capture_string.close()
         _logger.removeHandler(ch)
         # tear down
@@ -149,7 +155,7 @@ class Pipeline(abc.ABC):
     tasks = OrderedDict()
     one = None
 
-    def __init__(self, session_path=None, one=None, eid=None, machine=None):
+    def __init__(self, session_path=None, one=None, eid=None):
         assert session_path or eid
         self.one = one
         self.eid = eid
@@ -157,7 +163,6 @@ class Pipeline(abc.ABC):
             self.session_path = session_path
             self.eid = one.eid_from_path(session_path) if self.one else None
         self.label = self.__module__ + '.' + type(self).__name__
-        self.machine = machine
 
     def make_graph(self, out_dir=None, show=True):
         if not out_dir:
@@ -228,7 +233,7 @@ class Pipeline(abc.ABC):
             tasks_alyx.append(talyx)
         return tasks_alyx
 
-    def run(self, status__in=['Waiting'], **kwargs):
+    def run(self, status__in=['Waiting'], machine=None, clobber=False, **kwargs):
         """
         Get all the session related jobs from alyx and run them
         :param status__in: lists of status strings to run in
@@ -251,16 +256,17 @@ class Pipeline(abc.ABC):
             # here we update the status in-place to avoid another hit to the database
             task_deck[i], dsets = run_alyx_task(tdict=j, session_path=self.session_path,
                                                 one=self.one, job_deck=task_deck,
-                                                machine=self.machine, **kwargs)
+                                                machine=machine, clobber=clobber)
             if dsets is not None:
                 all_datasets.extend(dsets)
         return task_deck, all_datasets
 
-    def rerun_failed(self):
-        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty'])
+    def rerun_failed(self, **kwargs):
+        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty'], **kwargs)
 
-    def rerun(self):
-        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete'])
+    def rerun(self, **kwargs):
+        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete'],
+                        **kwargs)
 
     @property
     def name(self):
@@ -268,7 +274,7 @@ class Pipeline(abc.ABC):
 
 
 def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
-                  max_md5_size=None, machine=None, **kwargs):
+                  max_md5_size=None, machine=None, clobber=False):
     """
     Runs a single Alyx job and registers output datasets
     :param tdict:
@@ -303,7 +309,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     exec_name = tdict['executable']
     strmodule, strclass = exec_name.rsplit('.', 1)
     classe = getattr(importlib.import_module(strmodule), strclass)
-    task = classe(session_path, one=one, taskid=tdict['id'], machine=machine)
+    task = classe(session_path, one=one, taskid=tdict['id'], machine=machine, clobber=clobber)
     # sets the status flag to started before running
     one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data={'status': 'Started'})
     status = task.run()
