@@ -143,9 +143,9 @@ class DlcQC(base.QC):
         dlc_coords = self.data['dlc_coords']
         times = self.data['camera_times']
         for target in dlc_coords.keys():
-            if times.shape[0] != dlc_coords[target].shape[1]:
+            if times.shape[0] < dlc_coords[target].shape[1]:
                 _log.error(f'{self.side}Camera length of camera.times does not match '
-                           'length of camera.dlc {target}')
+                           f'length of camera.dlc {target}')
                 return 'FAIL'
         return 'PASS'
 
