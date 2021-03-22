@@ -140,41 +140,75 @@ def load_camera_ssv_times(session_path, camera: str):
 
 def load_embedded_frame_data(session_path, label: str, raw=False):
     """
-    Load the embedded frame count and GPIO for a given session.  If the files don't exist,
-    or are empty, None values are returned
+    Load the embedded frame count and GPIO for a given session.  If the file doesn't exist,
+    or is empty, None values are returned.
     :param session_path: Absolute path of session folder
     :param label: The specific video to load, one of ('left', 'right', 'body')
-    :param raw: If True the raw data are returned without preprocessing, otherwise GPIO is
-    returned as dictionary of front indices and polarities; frame count returned starting from 0
-    :return: The frame count, the GPIO pin state
+    :param raw: If True the raw data are returned without preprocessing, otherwise frame count is
+    returned starting from 0 and the GPIO is returned as a dict of indices
+    :return: The frame count, GPIO
     """
-    label = assert_valid_label(label)
+    count = load_camera_frame_count(session_path, label, raw=raw)
+    gpio = load_camera_gpio(session_path, label, as_dict=not raw)
+    return count, gpio
+
+
+def load_camera_frame_count(session_path, label: str, raw=True):
+    """
+    Load the embedded frame count for a given session.  If the file doesn't exist, or is empty,
+    a None value is returned.
+    :param session_path: Absolute path of session folder
+    :param label: The specific video to load, one of ('left', 'right', 'body')
+    :param raw: If True the raw data are returned without preprocessing, otherwise frame count is
+    returned starting from 0
+    :return: The frame count
+    """
     if session_path is None:
-        return None, None
+        return
     raw_path = Path(session_path).joinpath('raw_video_data')
 
     # Load frame count
-    count_file = raw_path / f'_iblrig_{label}Camera.frame_counter.bin'
+    count_file = raw_path / f'_iblrig_{assert_valid_label(label)}Camera.frame_counter.bin'
     count = np.fromfile(count_file, dtype=np.float64).astype(int) if count_file.exists() else []
     if len(count) == 0:
-        count = None
-    elif not raw:
+        return
+    if not raw:
         count -= count[0]  # start from zero
+    return count
+
+
+def load_camera_gpio(session_path, label: str, as_dict=False):
+    """
+    Load the GPIO for a given session.  If the file doesn't exist, or is empty, a None value is
+    returned.
+    :param session_path: Absolute path of session folder
+    :param label: The specific video to load, one of ('left', 'right', 'body')
+    :param as_dict: If False the raw data are returned without preprocessing, otherwise GPIO is
+    returned as dictionary of front indices and polarities
+    :return: The GPIO pin state
+    """
+    if session_path is None:
+        return
+    raw_path = Path(session_path).joinpath('raw_video_data')
 
     # Load pin state
-    GPIO_file = raw_path / f'_iblrig_{label}Camera.GPIO.bin'
+    GPIO_file = raw_path / f'_iblrig_{assert_valid_label(label)}Camera.GPIO.bin'
     gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(int) if GPIO_file.exists() else []
 
     if len(gpio) == 0:
-        gpio = None
-    elif not raw:
-        if np.unique(gpio).size != 2:
-            _logger.warning('pin state noisy')
+        return
+    if as_dict:
+        n_states = np.unique(gpio).size
+        if n_states == 1:
+            _logger.error('No GPIO changes')
+            return None
+        elif np.unique(gpio).size != 2:
+            _logger.warning('GPIO noisy')
         thresh = int((gpio.max() - gpio.min()) / 2)
         gpio = dict(zip(('indices', 'polarities'), fronts(gpio, step=thresh)))
         gpio['polarities'] = np.sign(gpio['polarities'])
 
-    return count, gpio
+    return gpio
 
 
 def load_settings(session_path: Union[str, Path]):

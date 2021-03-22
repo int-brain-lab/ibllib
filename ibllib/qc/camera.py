@@ -32,11 +32,11 @@ from matplotlib.patches import Rectangle
 from ibllib.io.extractors.camera import extract_camera_sync, extract_all
 from ibllib.exceptions import ALFObjectNotFound
 from ibllib.io.extractors import ephys_fpga, training_wheel
+from ibllib.io.extractors.video_motion import MotionAlignment
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io import raw_data_loaders as raw
 import alf.io as alfio
 from brainbox.core import Bunch
-from brainbox.video.motion import MotionAlignment
 import brainbox.behavior.wheel as wh
 from ibllib.io.video import get_video_meta, get_video_frames_preload
 from oneibl.one import OneOffline
@@ -66,8 +66,8 @@ class CameraQC(base.QC):
         'ephysData.raw.meta',
         'ephysData.raw.wiring'
     ]
-    """Recall that for the training rig there is only one side camera at 30 Hz and 1280 x 1024 px. 
-    For the recording rig there are two side cameras (left: 60 Hz, 1280 x 1024 px; 
+    """Recall that for the training rig there is only one side camera at 30 Hz and 1280 x 1024 px.
+    For the recording rig there are two side cameras (left: 60 Hz, 1280 x 1024 px;
     right: 150 Hz, 640 x 512 px) and one body camera (30 Hz, 640 x 512 px). """
     video_meta = {
         'training': {
@@ -122,7 +122,7 @@ class CameraQC(base.QC):
             try:
                 self.stream = True
                 self.video_path = self.one.url_from_path(self.video_path)
-            except StopIteration:
+            except (StopIteration, ALFObjectNotFound):
                 _log.error('No remote or local video file found')
                 self.video_path = None
 
@@ -170,9 +170,10 @@ class CameraQC(base.QC):
         :param extract_times: if True, the camera.times are re-extracted from the raw data
         :param load_video: if True, calls the load_video_data method
         """
+        assert self.session_path, 'no session path set'
         if download_data is not None:
             self.download_data = download_data
-        if self.one and not isinstance(self.one, OneOffline):
+        if self.eid and self.one and not isinstance(self.one, OneOffline):
             self._ensure_required_data()
         _log.info('Gathering data for QC')
 
@@ -281,6 +282,7 @@ class CameraQC(base.QC):
         any missing data are downloaded.  If all the data are not present locally at the end of
         it an exception is raised.  If the stream attribute is True, the video file is not
         required to be local, however it must be remotely accessible.
+        NB: Requires a valid instance of ONE and a valid session eid.
         :return:
         """
         assert self.one is not None, 'ONE required to download data'
@@ -317,7 +319,6 @@ class CameraQC(base.QC):
         :param download_data: if True, downloads any missing data if required
         :param extract_times: if True, re-extracts the camera timestamps from the raw data
         :returns: overall outcome as a str, a dict of checks and their outcomes
-        TODO Ensure that when pin state QC NOT_SET it is not used in overall outcome
         """
         # TODO Use exp ref here
         _log.info(f'Computing QC outcome for {self.side} camera, session {self.eid}')
@@ -385,7 +386,7 @@ class CameraQC(base.QC):
             for i, idx in enumerate((np.argmax(brightness), np.argmin(brightness))):
                 a = f.add_subplot(gs[i, 2])
                 ax.annotate('*', (indices[idx], brightness[idx]),  # this is the point to label
-                            textcoords="offset points", xytext=(0, 1),  ha='center')
+                            textcoords="offset points", xytext=(0, 1), ha='center')
                 frame = self.data['frame_samples'][idx]
                 title = ('min' if i else 'max') + ' mean luminance = %.2f' % brightness[idx]
                 self.imshow(frame, ax=a, title=title)
@@ -598,7 +599,7 @@ class CameraQC(base.QC):
                     t_y = (h / 100) * thresh
                     t_x = (w / 100) * thresh
                     xy = (x1 - t_x, y1 - t_y)
-                    ax0.add_patch(Rectangle(xy, x2 - x1 + (t_x * 2), y2 - y1 +(t_y * 2),
+                    ax0.add_patch(Rectangle(xy, x2 - x1 + (t_x * 2), y2 - y1 + (t_y * 2),
                                             fill=True, facecolor=c, lw=0, alpha=0.05))
             else:
                 for c, thresh in zip(('green', 'yellow'), pos_thresh):
@@ -606,7 +607,7 @@ class CameraQC(base.QC):
                     ax0.add_patch(Rectangle(xy, x2 - x1 + (thresh * 2), y2 - y1 + (thresh * 2),
                                             fill=True, facecolor=c, lw=0, alpha=0.05))
             xy = (x1 - err[0], y1 - err[1])
-            ax0.add_patch(Rectangle(xy, x2-x1, y2-y1,
+            ax0.add_patch(Rectangle(xy, x2 - x1, y2 - y1,
                                     edgecolor='pink', fill=False, hatch='//', lw=1))
             ax0.set(xlim=(0, img.shape[1]), ylim=(img.shape[0], 0))
             ax0.set_axis_off()
@@ -665,7 +666,7 @@ class CameraQC(base.QC):
         if not test and self.data['frame_samples'] is None:
             return 'NOT_SET'
 
-        if roi == False:
+        if roi is False:
             top_left, roi, _ = self.find_face(test=test)
             h, w = map(lambda x: np.diff(x).item(), roi)
             y, x = np.median(np.array(top_left), axis=0).round().astype(int)
@@ -684,8 +685,9 @@ class CameraQC(base.QC):
             """
             idx = (0,)
             ref = self.load_reference_frames(self.side)[idx]
-            img = np.empty((n, *ref.shape), dtype=np.uint8)
             kernal_sz = np.unique(np.linspace(0, 15, n, dtype=int))
+            n = kernal_sz.size  # Size excluding repeated kernels
+            img = np.empty((n, *ref.shape), dtype=np.uint8)
             for i, k in enumerate(kernal_sz):
                 img[i] = ref.copy() if k == 0 else cv2.blur(ref, (k, k))
             if equalize:

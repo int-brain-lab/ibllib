@@ -13,6 +13,7 @@ import mtscomp
 import alf.io
 from ibllib.ephys import ephysqc, spikes, sync_probes
 from ibllib.io import ffmpeg, spikeglx
+from ibllib.io.video import label_from_path
 from ibllib.io.extractors import ephys_fpga, ephys_passive, camera
 from ibllib.pipes import tasks
 from ibllib.pipes.training_preprocessing import TrainingRegisterRaw as EphysRegisterRaw
@@ -230,12 +231,17 @@ class EphysVideoCompress(tasks.Task):
                    '-loglevel 0 -codec:a copy {file_out}')
         output_files = ffmpeg.iblrig_video_compression(self.session_path, command)
 
+        if len(output_files) == 0:
+            _logger.info('No compressed videos found; skipping timestamp extraction')
+            return
+
+        labels = [label_from_path(x) for x in output_files]
         # Video timestamps extraction
-        data, files = camera.extract_all(self.session_path, save=True)
+        data, files = camera.extract_all(self.session_path, save=True, labels=labels)
         output_files.extend(files)
 
         # Video QC
-        run_camera_qc(self.session_path, update=True, one=self.one)
+        run_camera_qc(self.session_path, update=True, one=self.one, cameras=labels)
 
         return output_files
 
@@ -398,7 +404,7 @@ class EphysDLC(tasks.Task):
     gpu = 1
     cpu = 4
     io_charge = 90
-    level = 1
+    level = 2
 
     def _run(self):
         """empty placeholder for job creation only"""
@@ -431,14 +437,16 @@ class EphysExtractionPipeline(tasks.Pipeline):
         tasks["EphysPulses"] = EphysPulses(self.session_path)
         tasks["EphysRawQC"] = RawEphysQC(self.session_path)
         tasks["EphysAudio"] = EphysAudio(self.session_path)
-        tasks["EphysVideoCompress"] = EphysVideoCompress(self.session_path)
         tasks["EphysMtscomp"] = EphysMtscomp(self.session_path)
         # level 1
-        tasks['SpikeSorting'] = SpikeSorting_KS2_Matlab(
-            self.session_path, parents=[tasks['EphysMtscomp'], tasks['EphysPulses']])
-        tasks['EphysTrials'] = EphysTrials(self.session_path, parents=[tasks['EphysPulses']])
-        tasks['EphysDLC'] = EphysDLC(self.session_path, parents=[tasks['EphysVideoCompress']])
+        tasks["SpikeSorting"] = SpikeSorting_KS2_Matlab(
+            self.session_path, parents=[tasks["EphysMtscomp"], tasks["EphysPulses"]])
+        tasks["EphysVideoCompress"] = EphysVideoCompress(
+            self.session_path, parents=[tasks["EphysPulses"]])
+        tasks["EphysTrials"] = EphysTrials(self.session_path, parents=[tasks["EphysPulses"]])
+
         tasks["EphysPassive"] = EphysPassive(self.session_path, parents=[tasks["EphysPulses"]])
         # level 2
         tasks["EphysCellsQc"] = EphysCellsQc(self.session_path, parents=[tasks["SpikeSorting"]])
+        tasks["EphysDLC"] = EphysDLC(self.session_path, parents=[tasks["EphysVideoCompress"]])
         self.tasks = tasks

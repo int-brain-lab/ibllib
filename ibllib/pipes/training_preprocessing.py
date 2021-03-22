@@ -57,15 +57,16 @@ class TrainingVideoCompress(tasks.Task):
                    '-nostats -codec:a copy {file_out}')
         output_files = ffmpeg.iblrig_video_compression(self.session_path, command)
 
+        if len(output_files) == 0:
+            _logger.info('No compressed videos found; skipping timestamp extraction')
+            return  # labels the task as empty if no output
+
         # Video timestamps extraction
-        data, files = camera.extract_all(self.session_path, save=True)
+        data, files = camera.extract_all(self.session_path, save=True, video_path=output_files[0])
         output_files.extend(files)
 
         # Video QC
         CameraQC(self.session_path, 'left', one=self.one, stream=False).run(update=True)
-
-        if len(output_files) == 0:
-            output_files = None  # labels the task as empty if no output
         return output_files
 
 

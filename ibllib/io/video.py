@@ -93,7 +93,7 @@ def get_video_meta(video_path, one=None):
     meta.fps = int(cap.get(cv2.CAP_PROP_FPS))
     meta.width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     meta.height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    meta.duration = timedelta(seconds=meta.length / meta.fps)
+    meta.duration = timedelta(seconds=meta.length / meta.fps) if meta.fps > 0 else 0
     if is_url and one:
         eid = one.eid_from_path(video_path)
         name = re.match(r'.*(_iblrig_[a-z]+Camera\.raw\.)(?:[\w-]{36}\.)?(mp4)$', video_path)

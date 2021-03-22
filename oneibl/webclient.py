@@ -5,13 +5,14 @@ import os
 import re
 import urllib.request
 from collections.abc import Mapping
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import hashlib
 
 import requests
 
 from ibllib.misc import pprint, print_progress
 
+SDSC_ROOT_PATH = PurePosixPath('/mnt/ibl')
 _logger = logging.getLogger('ibllib')
 
 
@@ -51,6 +52,88 @@ class _PaginatedResponse(Mapping):
     def __iter__(self):
         for i in range(self.count):
             yield self.__getitem__(i)
+
+
+def sdsc_globus_path_from_dataset(dset):
+    """
+    :param dset: dset dictionary or list of dictionaries from ALyx rest endpoint
+    Returns SDSC globus file path from a dset record or a list of dsets records from REST
+    """
+    return _path_from_dataset(dset, root_path=PurePosixPath('/'), repository=None, uuid=True)
+
+
+def globus_path_from_dataset(dset, repository=None, uuid=False):
+    """
+    Returns local one file path from a dset record or a list of dsets records from REST
+    :param dset: dset dictionary or list of dictionaries from ALyx rest endpoint
+    :param repository: (optional) repository name of the file record (if None, will take
+     the first filerecord with an URL)
+    """
+    return _path_from_dataset(dset, root_path=PurePosixPath('/'), repository=repository, uuid=uuid)
+
+
+def one_path_from_dataset(dset, one_cache):
+    """
+    Returns local one file path from a dset record or a list of dsets records from REST
+    :param dset: dset dictionary or list of dictionaries from ALyx rest endpoint
+    :param one_cache: the one cache directory
+    """
+    return _path_from_dataset(dset, root_path=one_cache, uuid=False)
+
+
+def sdsc_path_from_dataset(dset, root_path=SDSC_ROOT_PATH):
+    """
+    Returns sdsc file path from a dset record or a list of dsets records from REST
+    :param dset: dset dictionary or list of dictionaries from ALyx rest endpoint
+    :param root_path: (optional) the prefix path such as one download directory or sdsc root
+    """
+    return _path_from_dataset(dset, root_path=root_path, uuid=True)
+
+
+def _path_from_dataset(dset, root_path=None, repository=None, uuid=False):
+    """
+    returns the local file path from a dset record from a REST query
+    :param dset: dset dictionary or list of dictionaries from ALyx rest endpoint
+    :param root_path: (optional) the prefix path such as one download directory or sdsc root
+    :param repository:
+    :param uuid: (optional bool) if True, will add UUID before the file extension
+    :return: Path or list of Path
+    """
+    if isinstance(dset, list):
+        return [_path_from_dataset(d) for d in dset]
+    if repository:
+        fr = next((fr for fr in dset['file_records'] if fr['data_repository'] == repository))
+    else:
+        fr = next((fr for fr in dset['file_records'] if fr['data_url']))
+    uuid = dset['url'][-36:] if uuid else None
+    return _path_from_filerecord(fr, root_path=root_path, uuid=uuid)
+
+
+def _path_from_filerecord(fr, root_path=SDSC_ROOT_PATH, uuid=None):
+    """
+    Returns a data file Path constructed from an Alyx file record.  The Path type returned
+    depends on the type of root_path: If root_path is a string a Path object is returned,
+    otherwise if the root_path is a PurePath, the same path type is returned.
+    :param fr: An Alyx file record dict
+    :param root_path: An optional root path
+    :param uuid: An optional UUID to add to the file name
+    :return: A filepath as a pathlib object
+    """
+    import alf.io
+    if isinstance(fr, list):
+        return [_path_from_filerecord(f) for f in fr]
+    repo_path = fr['data_repository_path']
+    repo_path = repo_path[repo_path.startswith('/'):]  # remove starting / if any
+    # repo_path = (p := fr['data_repository_path'])[p[0] == '/':]  # py3.8 Remove slash at start
+    file_path = PurePosixPath(repo_path, fr['relative_path'])
+    if root_path:
+        # NB: By checking for string we won't cast any PurePaths
+        if isinstance(root_path, str):
+            root_path = Path(root_path)
+        file_path = root_path / file_path
+    if uuid:
+        file_path = alf.io.add_uuid_string(file_path, uuid)
+    return file_path
 
 
 def http_download_file_list(links_to_file_list, **kwargs):

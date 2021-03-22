@@ -14,6 +14,7 @@ from brainbox.core import Bunch
 
 
 class TestCameraQC(unittest.TestCase):
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.one = ONE(
@@ -21,9 +22,12 @@ class TestCameraQC(unittest.TestCase):
             username="test_user",
             password="TapetesBloc18",
         )
-        backend = matplotlib.get_backend()
+        cls.backend = matplotlib.get_backend()
         matplotlib.use('Agg')
-        cls.addClassCleanup(matplotlib.use, backend)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        matplotlib.use(cls.backend)
 
     def setUp(self) -> None:
         self.tempdir = TemporaryDirectory()
@@ -33,7 +37,10 @@ class TestCameraQC(unittest.TestCase):
         self.qc = CameraQC(self.session_path, one=self.one, n_samples=5,
                            side='left', stream=False, download_data=False)
         self.qc._type = 'ephys'
-        self.addCleanup(plt.close, 'all')
+
+    def tearDown(self) -> None:
+        self.tempdir.cleanup()
+        plt.close('all')
 
     def test_check_brightness(self):
         self.qc.data['frame_samples'] = self.qc.load_reference_frames('left')
@@ -135,13 +142,13 @@ class TestCameraQC(unittest.TestCase):
         figs = plt.get_fignums()
         self.assertEqual(len(plt.figure(figs[0]).axes), 16)
         # Verify Laplacian on blurred images
-        expected = np.array([0.0, 0.0, 0.0, 0.0, 13.19, 14.24, 15.44, 16.64, 18.67, 21.51, 25.99,
-                             31.77, 40.75, 52.52, 71.12, 98.26, 149.85, 229.96, 563.53, 563.53])
+        expected = np.array([13.19, 14.24, 15.44, 16.64, 18.67, 21.51, 25.99, 31.77,
+                             40.75, 52.52, 71.12, 98.26, 149.85, 229.96, 563.53, 563.53])
         actual = [round(x, 2) for x in plt.figure(figs[1]).axes[3].lines[0]._y.tolist()]
         np.testing.assert_array_equal(expected, actual)
         # Verify fft on blurred images
-        expected = np.array([0.0, 0.0, 0.0, 0.0, 6.91, 7.2, 7.61, 8.08, 8.76, 9.47, 10.35,
-                             11.22, 11.04, 11.42, 11.35, 11.94, 12.45, 13.22, 13.6, 13.6])
+        expected = np.array([6.91, 7.2, 7.61, 8.08, 8.76, 9.47, 10.35, 11.22,
+                             11.04, 11.42, 11.35, 11.94, 12.45, 13.22, 13.6, 13.6])
         actual = [round(x, 2) for x in plt.figure(figs[2]).axes[3].lines[0]._y.tolist()]
         np.testing.assert_array_equal(expected, actual)
 
@@ -231,9 +238,6 @@ class TestCameraQC(unittest.TestCase):
             self.qc.one.download_datasets = lambda _: None
         with self.assertRaises(AssertionError):
             self.qc.run(update=False)
-
-    def tearDown(self) -> None:
-        self.tempdir.cleanup()
 
 
 if __name__ == '__main__':

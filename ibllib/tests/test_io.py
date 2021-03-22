@@ -179,28 +179,65 @@ class TestsRawDataLoaders(unittest.TestCase):
             self.assertEqual(camera.dtype.str, '<f8')
             self.assertAlmostEqual(69.466875, camera[0])
 
-    def test_load_embedded_frame_data(self):
+    def test_load_camera_gpio(self):
         """
         Embedded frame data comes from 057e25ef-3f80-42e8-aa9f-e259df8bc9ad, left camera
         :return:
         """
         session = Path(__file__).parent.joinpath('extractors', 'data', 'session_ephys')
-        count, gpio = raw.load_embedded_frame_data(session, 'body')
-        np.testing.assert_array_equal(count, np.arange(510, dtype=np.int32))
-        self.assertEqual(count.dtype, np.int32)
+        gpio = raw.load_camera_gpio(session, 'body', as_dict=True)
         self.assertTrue(all(k in ('indices', 'polarities') for k in gpio.keys()))
         np.testing.assert_array_equal(gpio['indices'], np.array([166, 172], dtype=np.int64))
         np.testing.assert_array_equal(gpio['polarities'], np.array([1, -1]))
 
         # Test raw flag
-        count, gpio = raw.load_embedded_frame_data(session, 'body', raw=True)
-        self.assertEqual(count[0], int(16696704))
-        self.assertEqual(gpio.dtype, np.int32)
+        gpio = raw.load_camera_gpio(session, 'body', as_dict=False)
+        self.assertEqual(gpio.dtype, int)
         np.testing.assert_array_equal(np.unique(gpio), np.array([0, 268435456]))
 
         # Test empty / None
-        [self.assertIsNone(x) for x in raw.load_embedded_frame_data(None, 'body')]
-        [self.assertIsNone(x) for x in raw.load_embedded_frame_data(session, 'right')]
+        self.assertIsNone(raw.load_camera_gpio(None, 'body'))
+        self.assertIsNone(raw.load_camera_gpio(session, 'right'))
+
+        # Test noisy GPIO data
+        side = 'right'
+        with tempfile.TemporaryDirectory() as tdir:
+            session_path = Path(tdir).joinpath('mouse', '2020-06-01', '001')
+            session_path.joinpath('raw_video_data').mkdir(parents=True)
+            filename = session_path / 'raw_video_data' / f'_iblrig_{side}Camera.GPIO.bin'
+            np.full(1000, 1.87904819e+09, dtype=np.float64).tofile(filename)
+            with self.assertLogs('ibllib', level='ERROR'):
+                raw.load_camera_gpio(session_path, side, as_dict=True)
+            np.array([1.87904819e+09, 0, 1e9], dtype=np.float64).tofile(filename)
+            with self.assertLogs('ibllib', level='WARNING'):
+                raw.load_camera_gpio(session_path, side, as_dict=True)
+
+    def test_load_camera_frame_count(self):
+        """
+        Embedded frame data comes from 057e25ef-3f80-42e8-aa9f-e259df8bc9ad, left camera
+        :return:
+        """
+        session = Path(__file__).parent.joinpath('extractors', 'data', 'session_ephys')
+        count = raw.load_camera_frame_count(session, 'body', raw=False)
+        np.testing.assert_array_equal(count, np.arange(510, dtype=np.int32))
+        self.assertEqual(count.dtype, int)
+
+        # Test raw flag
+        count = raw.load_camera_frame_count(session, 'body', raw=True)
+        self.assertEqual(count[0], int(16696704))
+
+        # Test empty / None
+        self.assertIsNone(raw.load_camera_gpio(None, 'body'))
+        self.assertIsNone(raw.load_camera_gpio(session, 'right'))
+
+    def test_load_embedded_frame_data(self):
+        session = Path(__file__).parent.joinpath('extractors', 'data', 'session_ephys')
+        count, gpio = raw.load_embedded_frame_data(session, 'body')
+        self.assertEqual(count[0], 0)
+        self.assertIsInstance(gpio, dict)
+        count, gpio = raw.load_embedded_frame_data(session, 'body', raw=True)
+        self.assertNotEqual(count[0], 0)
+        self.assertNotIsInstance(gpio, dict)
 
     def tearDown(self):
         self.tempfile.close()
@@ -326,7 +363,7 @@ class TestsSpikeGLX_compress(unittest.TestCase):
 
     def setUp(self):
         self._tempdir = tempfile.TemporaryDirectory()
-        self.addClassCleanup(self._tempdir.cleanup)
+        # self.addClassCleanup(self._tempdir.cleanup)  # py3.8
         self.workdir = Path(self._tempdir.name)
         file_meta = Path(__file__).parent.joinpath('fixtures', 'io', 'spikeglx',
                                                    'sample3A_short_g0_t0.imec.ap.meta')
@@ -334,6 +371,9 @@ class TestsSpikeGLX_compress(unittest.TestCase):
             self.workdir.joinpath('sample3A_short_g0_t0.imec.ap.bin'), file_meta, ns=76104,
             nc=385, sync_depth=16, random=True)['bin_file']
         self.sr = spikeglx.Reader(self.file_bin)
+
+    def tearDown(self):
+        self._tempdir.cleanup
 
     def test_read_slices(self):
         sr = self.sr
@@ -620,9 +660,9 @@ class TestsHardwareParameters(unittest.TestCase):
 class TestsMisc(unittest.TestCase):
 
     def setUp(self):
-        tmpdir = tempfile.TemporaryDirectory()
-        self.addClassCleanup(tmpdir.cleanup)
-        self.tempdir = Path(tmpdir.name)
+        self._tdir = tempfile.TemporaryDirectory()
+        # self.addClassCleanup(tmpdir.cleanup)  # py3.8
+        self.tempdir = Path(self._tdir.name)
         self.subdirs = [
             self.tempdir / 'test_empty_parent',
             self.tempdir / 'test_empty_parent' / 'test_empty',
@@ -633,6 +673,9 @@ class TestsMisc(unittest.TestCase):
 
         _ = [x.mkdir() for x in self.subdirs]
         self.file.touch()
+
+    def tearDown(self) -> None:
+        self._tdir.cleanup()
 
     def _resetup_folders(self):
         self.file.unlink()
@@ -763,7 +806,6 @@ class TestVideo(unittest.TestCase):
         self.assertEqual(labels, ('right', 'body'))
         with self.assertRaises(TypeError):
             video.assert_valid_label(None)
-
 
 
 if __name__ == "__main__":
