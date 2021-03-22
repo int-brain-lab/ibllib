@@ -1,6 +1,7 @@
 from pathlib import Path
 import pickle
 import unittest
+
 import numpy as np
 import brainbox as bb
 import pandas as pd
@@ -11,19 +12,15 @@ class TestTask(unittest.TestCase):
     def setUp(self):
         # Test ephys data is a dictionary of spike times and clusters and event times and groups
         pickle_file = Path(__file__).parent.joinpath('fixtures', 'ephys_test.p')
-        if not pickle_file.exists():
-            self.test_data = None
-        else:
-            with open(pickle_file, 'rb') as f:
-                self.test_data = pickle.load(f)
+        assert pickle_file.exists()
+        with open(pickle_file, 'rb') as f:
+            self.test_data = pickle.load(f)
 
         # Test trials data is pandas dataframe with trials
         csv_file = Path(__file__).parent.joinpath('fixtures', 'trials_df_test.csv')
         self.test_trials = pd.read_csv(csv_file)
 
     def test_responsive_units(self):
-        if self.test_data is None:
-            return
         spike_times = self.test_data['spike_times']
         spike_clusters = self.test_data['spike_clusters']
         event_times = self.test_data['event_times']
@@ -40,8 +37,6 @@ class TestTask(unittest.TestCase):
         self.assertTrue(np.size(cluster_ids) == num_clusters)
 
     def test_differentiate_units(self):
-        if self.test_data is None:
-            return
         spike_times = self.test_data['spike_times']
         spike_clusters = self.test_data['spike_clusters']
         event_times = self.test_data['event_times']
@@ -60,8 +55,6 @@ class TestTask(unittest.TestCase):
         self.assertTrue(np.size(cluster_ids) == num_clusters)
 
     def test_roc_single_event(self):
-        if self.test_data is None:
-            return
         spike_times = self.test_data['spike_times']
         spike_clusters = self.test_data['spike_clusters']
         event_times = self.test_data['event_times']
@@ -76,8 +69,6 @@ class TestTask(unittest.TestCase):
         self.assertTrue(np.size(cluster_ids) == num_clusters)
 
     def test_roc_between_two_events(self):
-        if self.test_data is None:
-            return
         spike_times = self.test_data['spike_times']
         spike_clusters = self.test_data['spike_clusters']
         event_times = self.test_data['event_times']

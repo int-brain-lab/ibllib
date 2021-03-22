@@ -5,14 +5,14 @@ import os
 import re
 import urllib.request
 from collections.abc import Mapping
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import hashlib
 
 import requests
 
 from ibllib.misc import pprint, print_progress
 
-SDSC_ROOT_PATH = Path('/mnt/ibl')
+SDSC_ROOT_PATH = PurePosixPath('/mnt/ibl')
 _logger = logging.getLogger('ibllib')
 
 
@@ -59,7 +59,7 @@ def sdsc_globus_path_from_dataset(dset):
     :param dset: dset dictionary or list of dictionaries from ALyx rest endpoint
     Returns SDSC globus file path from a dset record or a list of dsets records from REST
     """
-    return _path_from_dataset(dset, root_path=None, repository=None, uuid=True)
+    return _path_from_dataset(dset, root_path=PurePosixPath('/'), repository=None, uuid=True)
 
 
 def globus_path_from_dataset(dset, repository=None, uuid=False):
@@ -69,7 +69,7 @@ def globus_path_from_dataset(dset, repository=None, uuid=False):
     :param repository: (optional) repository name of the file record (if None, will take
      the first filerecord with an URL)
     """
-    return _path_from_dataset(dset, root_path=None, repository=repository, uuid=uuid)
+    return _path_from_dataset(dset, root_path=PurePosixPath('/'), repository=repository, uuid=uuid)
 
 
 def one_path_from_dataset(dset, one_cache):
@@ -110,13 +110,27 @@ def _path_from_dataset(dset, root_path=None, repository=None, uuid=False):
 
 
 def _path_from_filerecord(fr, root_path=SDSC_ROOT_PATH, uuid=None):
+    """
+    Returns a data file Path constructed from an Alyx file record.  The Path type returned
+    depends on the type of root_path: If root_path is a string a Path object is returned,
+    otherwise if the root_path is a PurePath, the same path type is returned.
+    :param fr: An Alyx file record dict
+    :param root_path: An optional root path
+    :param uuid: An optional UUID to add to the file name
+    :return: A filepath as a pathlib object
+    """
     import alf.io
     if isinstance(fr, list):
         return [_path_from_filerecord(f) for f in fr]
-    file_path = Path(fr['data_repository_path']).joinpath(fr['relative_path'])
+    repo_path = fr['data_repository_path']
+    repo_path = repo_path[repo_path.startswith('/'):]  # remove starting / if any
+    # repo_path = (p := fr['data_repository_path'])[p[0] == '/':]  # py3.8 Remove slash at start
+    file_path = PurePosixPath(repo_path, fr['relative_path'])
     if root_path:
-        file_system_root = Path(Path('.').absolute().parts[0])  # TODO: windows check
-        file_path = Path(root_path).joinpath(file_path.relative_to(file_system_root))
+        # NB: By checking for string we won't cast any PurePaths
+        if isinstance(root_path, str):
+            root_path = Path(root_path)
+        file_path = root_path / file_path
     if uuid:
         file_path = alf.io.add_uuid_string(file_path, uuid)
     return file_path

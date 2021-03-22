@@ -58,3 +58,13 @@ ins = one.alyx.rest('insertions', 'list', django='json__extended_qc__alignment_r
 # Get names of users who have aligned specified insertion
 names = one.alyx.rest('trajectories', 'list', provenance='Ephys aligned histology track',
                       probe_insertion='341ef9bb-25f9-4eeb-8f1d-bdd054b22ba8')[0]['json'].keys()
+
+##################################################################################################
+# List all sessions which any video QC set
+keys = ('videoLeft', 'videoRight', 'videoBody')
+one.alyx.rest('sessions', 'list', django=f'extended_qc__has_any_keys,{keys}')
+
+##################################################################################################
+# List all weighings for a given date
+date = '2021-02-05'
+one.alyx.rest('weighings', 'list', django=f'date_time__date,{date}')
