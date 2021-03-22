@@ -497,7 +497,7 @@ def _clean_wheel_dataframe(data, label, path):
         _logger.warning(label + ' has missing/incomplete records \n %s', path)
     # first step is to re-interpret as numeric objects if not already done
     for col in data.columns:
-        if data[col].dtype == np.object and col not in ['bns_ts']:
+        if data[col].dtype == object and col not in ['bns_ts']:
             data[col] = pd.to_numeric(data[col], errors='coerce')
     # then drop Nans and duplicates
     data.dropna(inplace=True)
@@ -616,7 +616,7 @@ def sync_trials_robust(t0, t1, diff_threshold=0.001, drift_threshold_ppm=200, ma
             cdt = t0[i0 + 1] - t1[i1 + ii1]
         i0 += 1
     it0 = np.where(~np.isnan(ind))[0]
-    it1 = ind[it0].astype(np.int)
+    it1 = ind[it0].astype(int)
     ind0 = np.unique(np.r_[it0, it0 + 1])
     ind1 = np.unique(np.r_[it1, it1 + 1])
     if return_index:

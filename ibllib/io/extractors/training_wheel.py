@@ -104,7 +104,7 @@ def get_wheel_position(session_path, bp_data=None, display=False):
         _logger.error('No wheel data for ' + str(session_path))
         return None, None
     data = structarr(['re_ts', 're_pos', 'bns_ts'],
-                     shape=(df.shape[0],), formats=['f8', 'f8', np.object])
+                     shape=(df.shape[0],), formats=['f8', 'f8', object])
     data['re_ts'] = df.re_ts.values
     data['re_pos'] = df.re_pos.values * -1  # anti-clockwise is positive in our output
     data['re_pos'] = data['re_pos'] / 1024 * 2 * np.pi  # convert positions to radians
