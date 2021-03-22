@@ -11,7 +11,7 @@ def get_on_off_times_and_positions(rf_map):
 
     Prepares passive receptive field mapping into format for analysis
     ----------
-    rf_map: output from alf.io.load_object(alf_path, object='passiveRFM', namespace='ibl')
+    rf_map: output from brainbox.io.one.load_passive_rfmap
 
     Returns
     -------
