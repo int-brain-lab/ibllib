@@ -106,6 +106,11 @@ def get_rf_map_over_depth(rf_map_times, rf_map_pos, rf_stim_frames, spike_times,
             x_pos = pos[0]
             y_pos = pos[1]
 
+            # Case where there is no stimulus at this position
+            if len(stim_frame[0]) == 0:
+                _rf_map[:, x_pos, y_pos, :] = np.zeros((depths.shape[0], n_bins))
+                continue
+
             stim_on_times = rf_map_times[stim_frame[0]]
             stim_intervals = np.c_[stim_on_times - pre_stim, stim_on_times + post_stim]
 
@@ -205,7 +210,9 @@ def get_stim_aligned_activity(stim_events, spike_times, spike_depths, z_score_fl
         if z_score_flag:
             # Average across trials and time
             avg_base_trials = np.mean(np.mean(noise_trials, axis=2), axis=1)[:, np.newaxis]
+            print(avg_base_trials)
             std_base_trials = np.std(np.mean(noise_trials, axis=2), axis=1)[:, np.newaxis]
+            print(std_base_trials)
             z_score = (avg_stim_trials - avg_base_trials) / std_base_trials
             z_score[np.isnan(z_score)] = 0
             avg_stim_trials = z_score

@@ -5,7 +5,7 @@ from brainbox.numerical import ismember2d
 
 
 class TestPassive(unittest.TestCase):
-    def setUp(self):
+    def test_rf_map(self):
         """
 
         """
@@ -45,16 +45,42 @@ class TestPassive(unittest.TestCase):
 
         # Next test that the firing rate function works
         # Basically just make one square responsive
-        spike_times = np.arange(25, 35, 0.1)
+        spike_times = np.arange(25, 35, 0.01)
         spike_depths = 500 * np.ones_like(spike_times)
 
-        rara, depths = passive.get_rf_map_over_depth(rf_map_times, rf_map_pos, rf_stim_frames,spike_times, spike_depths)
+        rf_map_avg, depths = passive.get_rf_map_over_depth(rf_map_times, rf_map_pos,
+                                                           rf_stim_frames, spike_times,
+                                                           spike_depths, x_lim=[0, 60])
+        non_zero = np.where(rf_map_avg['on'] != 0)
+        assert(np.argmin(np.abs(depths - 500)) == non_zero[0][0])
+        assert(all(non_zero[1] == 10))
+        assert (all(non_zero[2] == 13))
 
+        assert(np.all(rf_map_avg['off'] == 0))
 
-        pickle_file = Path(__file__).parent.joinpath('fixtures', 'trials_test.pickle')
-        if not pickle_file.exists():
-            self.trial_data = None
-        else:
-            with open(pickle_file, 'rb') as f:
-                self.trial_data = pickle.load(f)
-        np.random.seed(0)
+        rf_svd = passive.get_svd_map(rf_map_avg)
+        # Make sure that the one responsive element is non-zero
+        assert(rf_svd['on'][non_zero[0][0]][non_zero[1][0], non_zero[2][0]] != 0)
+        # But that all the rest are zero
+        rf_svd['on'][non_zero[0][0]][non_zero[1][0], non_zero[2][0]] = 0
+        assert(np.all(np.isclose(np.vstack(rf_svd['on']), 0)))
+        assert(np.all(np.vstack(rf_svd['off']) == 0))
+
+    def test_stim_aligned(self):
+
+        # Make random times
+        aud_stim = {}
+        aud_stim['valveOn'] = np.array([10, 20, 30])
+        spike_times = np.r_[np.arange(8, 9.6, 0.01), np.arange(9.6, 15, 0.002),
+                            np.arange(18, 19.6, 0.005), np.arange(19.6, 25, 0.002),
+                            np.arange(28, 29.6, 0.01), np.arange(29.6, 35, 0.002)]
+        spike_depths = np.zeros_like(spike_times)
+
+        stim_activity = passive.get_stim_aligned_activity(aud_stim, spike_times, spike_depths,
+                                                          z_score_flag=False, x_lim=[0, 40])
+
+        assert(list(stim_activity.keys()) == ['valveOn'])
+        # The first may be a bit different due to overlap with noice floor
+        assert(all(stim_activity['valveOn'][0][1:] == 5))
+        # make sure the rest of the depths are all zero
+        assert(np.all(stim_activity['valveOn'][1:] == 0))
