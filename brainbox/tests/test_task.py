@@ -3,7 +3,6 @@ import pickle
 import unittest
 
 import numpy as np
-
 import brainbox as bb
 import pandas as pd
 

@@ -221,10 +221,6 @@ class TestLoad(unittest.TestCase):
         fsize = file.stat().st_size
         hash = hashfile.md5(file)
         data_server = np.load(file)
-        esize, ehash = one._cache.iloc[244, 4:6].values
-        # Verify new hash / filesizes added to cache table
-        self.assertEqual(esize, fsize)
-        self.assertEqual(ehash, '5d1d13589934440a9947c2477b2e61ea')
         # overwrite the local file
         np.save(file, np.zeros([25, 0]))
         # here we patch the dataset with the server filesize and hash
