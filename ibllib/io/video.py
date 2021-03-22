@@ -53,8 +53,16 @@ def get_video_frames_preload(video_path, frame_numbers=None, mask=Ellipsis, as_l
     cap = VideoStreamer(video_path).cap if is_url else cv2.VideoCapture(str(video_path))
     assert cap.isOpened(), 'Failed to open video'
 
-    if frame_numbers is None:
-        frame_numbers = range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frame_numbers = frame_numbers or range(frame_count)
+    # Check that frame numbers don't exceed video size, else remove the frames that do
+    if max(frame_numbers) >= frame_count:
+        print(f'Frame numbers exceed frame count, removing frames above {frame_count}')
+        if isinstance(frame_numbers, range):
+            frame_numbers = range(frame_numbers.start, frame_count, frame_numbers.step)
+        else:
+            frame_numbers = [i for i in frame_numbers if i < frame_count]
+
     # Setting the index is extremely slow; determine where frame index must be set
     # The first index is always explicitly set.
     to_set = np.insert(np.diff(frame_numbers), 0, 0) != 1
@@ -65,7 +73,6 @@ def get_video_frames_preload(video_path, frame_numbers=None, mask=Ellipsis, as_l
         ret, frame = cap.read()
         frame_images = np.empty((len(frame_numbers), *func(frame[mask or ...], **kwargs).shape),
                                 np.uint8)
-
     for ii, i in enumerate(frame_numbers):
         sys.stdout.write(f'\rloading frame {ii}/{len(frame_numbers)}')
         sys.stdout.flush()
@@ -73,7 +80,7 @@ def get_video_frames_preload(video_path, frame_numbers=None, mask=Ellipsis, as_l
             cap.set(cv2.CAP_PROP_POS_FRAMES, i)
         ret, frame = cap.read()
         if ret:
-            frame_images[ii] = func(frame[mask], **kwargs)
+            frame_images[ii] = func(frame[mask or ...], **kwargs)
         else:
             print(f'failed to read frame #{i}')
     cap.release()
