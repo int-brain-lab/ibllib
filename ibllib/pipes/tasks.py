@@ -59,10 +59,10 @@ class Task(abc.ABC):
         # if taskid of one properties are not available, local run only without alyx
         use_alyx = self.one is not None and self.taskid is not None
         if use_alyx:
-            self.one.alyx.rest('tasks', 'partial_update',
-                               id=self.taskid, data={'status': 'Started'})
-            pre_log = self.one.alyx.rest('tasks', 'list', id=self.taskid)[0]['log']
-            self.log = pre_log + '\n\n' if pre_log else ''
+            tdict = self.one.alyx.rest('tasks', 'partial_update', id=self.taskid,
+                                       data={'status': 'Started'})
+            self.log = ('' if not tdict['log'] else tdict['log'] +
+                        '\n\n=============================RERUN=============================\n')
         # setup
         self.setUp()
         # Setup the console handler with a StringIO object
