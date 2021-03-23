@@ -28,8 +28,8 @@ class TestPassive(unittest.TestCase):
         rf_map_times, rf_map_pos, rf_stim_frames = passive.get_on_off_times_and_positions(rf_map)
 
         assert(all(rf_map_times == test_times))
-        assert(rf_map_pos.shape == (15*15, 2))
-        assert(len(rf_stim_frames['on']) == 15*15)
+        assert(rf_map_pos.shape == (15 * 15, 2))
+        assert(len(rf_stim_frames['on']) == 15 * 15)
         assert(len(rf_stim_frames['off']) == 15 * 15)
 
         # Off is for the 0 ones
@@ -41,7 +41,6 @@ class TestPassive(unittest.TestCase):
         # On is for the 255 ones
         assert(rf_stim_frames['on'][ismember2d(rf_map_pos, np.array([[10, 13]]))[0]][0][0] == 25)
         assert(rf_stim_frames['on'][ismember2d(rf_map_pos, np.array([[6, 10]]))[0]][0][0] == 42)
-
 
         # Next test that the firing rate function works
         # Basically just make one square responsive
@@ -80,7 +79,7 @@ class TestPassive(unittest.TestCase):
                                                           z_score_flag=False, x_lim=[0, 40])
 
         assert(list(stim_activity.keys()) == ['valveOn'])
-        # The first may be a bit different due to overlap with noice floor
+        # The first may be a bit different due to overlap with noise floor
         assert(all(stim_activity['valveOn'][0][1:] == 5))
         # make sure the rest of the depths are all zero
         assert(np.all(stim_activity['valveOn'][1:] == 0))

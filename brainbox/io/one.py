@@ -412,6 +412,7 @@ def load_passive_rfmap(eid, one=None):
 
     return rf_map
 
+
 def load_wheel_reaction_times(eid, one=None):
     """
     Return the calculated reaction times for session.  Reaction times are defined as the time
