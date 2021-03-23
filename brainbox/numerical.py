@@ -25,7 +25,7 @@ def between_sorted(sorted_v, bounds=None):
     sel[np.searchsorted(sorted_v, starts)] = 1
     istops = np.searchsorted(sorted_v, stops, side='right')
     sel[istops[istops < sorted_v.size]] = -1
-    return np.cumsum(sel).astype(np.bool)
+    return np.cumsum(sel).astype(bool)
 
 
 def ismember(a, b):
@@ -53,10 +53,10 @@ def ismember2d(a, b):
     :param b: 2d array
     :return: isin, locb
     """
-    amask = np.ones(a.shape[0], dtype=np.bool)
-    ia = np.zeros(a.shape, dtype=np.bool)
+    amask = np.ones(a.shape[0], dtype=bool)
+    ia = np.zeros(a.shape, dtype=bool)
     ib = np.zeros(a.shape, dtype=np.int32) - 1
-    ina = np.zeros(a.shape[0], dtype=np.bool)
+    ina = np.zeros(a.shape[0], dtype=bool)
     bind = np.zeros(a.shape[0], dtype=np.int32) - 1
     # get a 1d ismember first for each column
     for n in np.arange(a.shape[1]):

@@ -344,7 +344,7 @@ def qc_fpga_task(fpga_trials, alf_trials):
         np.abs(
             fpga_trials['stimOff_times'] - fpga_trials['valveOpen_times'] - VALVE_STIM_OFF_DELAY
         ),
-        VALVE_STIM_OFF_JITTER, out=np.ones(ntrials, dtype=np.bool),
+        VALVE_STIM_OFF_JITTER, out=np.ones(ntrials, dtype=bool),
         where=~np.isnan(fpga_trials['valveOpen_times']))
 
     # iti_in whithin 0.01 sec of stimOff
@@ -357,7 +357,7 @@ def qc_fpga_task(fpga_trials, alf_trials):
         np.abs(
             fpga_trials['stimOff_times'] - fpga_trials['errorCue_times'] - ERROR_STIM_OFF_DELAY
         ),
-        ERROR_STIM_OFF_JITTER, out=np.ones(ntrials, dtype=np.bool),
+        ERROR_STIM_OFF_JITTER, out=np.ones(ntrials, dtype=bool),
         where=~np.isnan(fpga_trials['errorCue_times']))
 
     """
