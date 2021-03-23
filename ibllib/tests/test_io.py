@@ -240,7 +240,7 @@ class TestsRawDataLoaders(unittest.TestCase):
         session = Path(__file__).parent.joinpath('extractors', 'data', 'session_ephys')
         count, gpio = raw.load_embedded_frame_data(session, 'body')
         self.assertEqual(count[0], 0)
-        self.assertIsInstance(gpio[0], dict)
+        self.assertIsInstance(gpio[-1], dict)
         count, gpio = raw.load_embedded_frame_data(session, 'body', raw=True)
         self.assertNotEqual(count[0], 0)
         self.assertIsInstance(gpio, np.ndarray)

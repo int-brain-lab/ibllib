@@ -180,12 +180,18 @@ def load_camera_gpio(session_path, label: str, as_dicts=False):
     """
     Load the GPIO for a given session.  If the file doesn't exist, or is empty, a None value is
     returned.
+
+    The raw binary file contains uint32 values (saved as doubles) where the first 4 bits
+    represent the state of each of the 4 GPIO pins. The array is expanded to an n x 4 array by
+    shifting each bit to the end and checking whether it is 0 (low state) or 1 (high state).
+
     :param session_path: Absolute path of session folder
     :param label: The specific video to load, one of ('left', 'right', 'body')
-    :param as_dicts: If False the raw data are returned without preprocessing, otherwise GPIO is
-    returned as dictionary of front indices and polarities
+    :param as_dicts: If False the raw data are returned boolean array with shape (n_frames, n_pins)
+     otherwise GPIO is returned as a list of dictionaries with keys ('indices', 'polarities').
     :return: An nx4 boolean array where columns represent state of GPIO pins 1-4.
-    If as_dict is True, a tuple of dicts is returned with 'indices' and 'polarities' keys, or Nones
+     If as_dicts is True, a list of dicts is returned with keys ('indices', 'polarities'),
+     or None if the dictionary is empty.
     """
     if session_path is None:
         return
