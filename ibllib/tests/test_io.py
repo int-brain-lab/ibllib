@@ -233,8 +233,8 @@ class TestsRawDataLoaders(unittest.TestCase):
         self.assertEqual(count[0], int(16696704))
 
         # Test empty / None
-        self.assertIsNone(raw.load_camera_gpio(None, 'body'))
-        self.assertIsNone(raw.load_camera_gpio(session, 'right'))
+        self.assertIsNone(raw.load_camera_frame_count(None, 'body'))
+        self.assertIsNone(raw.load_camera_frame_count(session, 'right'))
 
     def test_load_embedded_frame_data(self):
         session = Path(__file__).parent.joinpath('extractors', 'data', 'session_ephys')
