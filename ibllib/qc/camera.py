@@ -418,12 +418,9 @@ class CameraQC(base.QC):
         """
         if not data_for_keys(('video', 'pin_state', 'audio'), self.data):
             return 'NOT_SET'
-        size_diff = int(self.data['pin_state'].size - self.data['video']['length'])
-        # There should be only one value below our threshold
-        binary = np.unique(self.data['pin_state']).size == 2
-        state = self.data['pin_state'] > PIN_STATE_THRESHOLD
+        size_diff = int(self.data['pin_state'].shape[0] - self.data['video']['length'])
         # NB: The pin state to be high for 2 consecutive frames
-        low2high = np.insert(np.diff(state.astype(int)) == 1, 0, False)
+        low2high = np.insert(np.diff(self.data['pin_state'][:, -1].astype(int)) == 1, 0, False)
         # NB: Time between two consecutive TTLs can be sub-frame, so this will fail
         ndiff_low2high = int(self.data['audio'][::2].size - sum(low2high))
         state_ttl_matches = ndiff_low2high == 0
@@ -438,12 +435,10 @@ class CameraQC(base.QC):
             plt.gca().set(yticklabels=[])
             plt.gca().tick_params(left=False)
             plt.legend()
-        # idx = [i for i, x in enumerate(self.data['audio'])
-        #        if np.abs(x - self.data['fpga_times'][low2high]).min() > 0.01]
-        # mins = [np.abs(x - self.data['fpga_times'][low2high]).min() for x in self.data['audio']]
+
         outcome = self.overall_outcome(
             ('PASS' if size_diff == 0 else 'WARNING' if np.abs(size_diff) < 5 else 'FAIL',
-             'PASS' if binary and state_ttl_matches else 'WARNING')
+             'PASS' if state_ttl_matches else 'WARNING')
         )
         return outcome, ndiff_low2high, size_diff
 

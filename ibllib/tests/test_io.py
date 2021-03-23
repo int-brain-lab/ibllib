@@ -186,18 +186,21 @@ class TestsRawDataLoaders(unittest.TestCase):
         """
         session = Path(__file__).parent.joinpath('extractors', 'data', 'session_ephys')
         gpio = raw.load_camera_gpio(session, 'body', as_dict=True)
-        self.assertTrue(all(k in ('indices', 'polarities') for k in gpio.keys()))
-        np.testing.assert_array_equal(gpio['indices'], np.array([166, 172], dtype=np.int64))
-        np.testing.assert_array_equal(gpio['polarities'], np.array([1, -1]))
+        self.assertEqual(len(gpio), 4)  # One dict per pin
+        *gpio_, gpio_4 = gpio  # Check last dict; pin 4 should have one pulse
+        self.assertTrue(all(k in ('indices', 'polarities') for k in gpio_4.keys()))
+        np.testing.assert_array_equal(gpio_4['indices'], np.array([166, 172], dtype=np.int64))
+        np.testing.assert_array_equal(gpio_4['polarities'], np.array([1, -1]))
 
         # Test raw flag
         gpio = raw.load_camera_gpio(session, 'body', as_dict=False)
-        self.assertEqual(gpio.dtype, int)
-        np.testing.assert_array_equal(np.unique(gpio), np.array([0, 268435456]))
+        self.assertEqual(gpio.dtype, bool)
+        self.assertEqual(gpio.shape, (510, 4))
 
         # Test empty / None
         self.assertIsNone(raw.load_camera_gpio(None, 'body'))
         self.assertIsNone(raw.load_camera_gpio(session, 'right'))
+        [self.assertIsNone(x) for x in raw.load_camera_gpio(session, 'right', as_dict=True)]
 
         # Test noisy GPIO data
         side = 'right'
@@ -206,11 +209,14 @@ class TestsRawDataLoaders(unittest.TestCase):
             session_path.joinpath('raw_video_data').mkdir(parents=True)
             filename = session_path / 'raw_video_data' / f'_iblrig_{side}Camera.GPIO.bin'
             np.full(1000, 1.87904819e+09, dtype=np.float64).tofile(filename)
+            with self.assertRaises(AssertionError):
+                raw.load_camera_gpio(session_path, side, as_dict=True)
+
+            # Test dead pin array
+            np.zeros(3000, dtype=np.float64).tofile(filename)
             with self.assertLogs('ibllib', level='ERROR'):
-                raw.load_camera_gpio(session_path, side, as_dict=True)
-            np.array([1.87904819e+09, 0, 1e9], dtype=np.float64).tofile(filename)
-            with self.assertLogs('ibllib', level='WARNING'):
-                raw.load_camera_gpio(session_path, side, as_dict=True)
+                gpio = raw.load_camera_gpio(session_path, side, as_dict=True)
+                [self.assertIsNone(x) for x in gpio]
 
     def test_load_camera_frame_count(self):
         """
@@ -234,10 +240,10 @@ class TestsRawDataLoaders(unittest.TestCase):
         session = Path(__file__).parent.joinpath('extractors', 'data', 'session_ephys')
         count, gpio = raw.load_embedded_frame_data(session, 'body')
         self.assertEqual(count[0], 0)
-        self.assertIsInstance(gpio, dict)
+        self.assertIsInstance(gpio[0], dict)
         count, gpio = raw.load_embedded_frame_data(session, 'body', raw=True)
         self.assertNotEqual(count[0], 0)
-        self.assertNotIsInstance(gpio, dict)
+        self.assertIsInstance(gpio, np.ndarray)
 
     def tearDown(self):
         self.tempfile.close()

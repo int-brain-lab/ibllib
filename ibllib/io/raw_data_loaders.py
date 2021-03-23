@@ -19,7 +19,6 @@ import numpy as np
 import pandas as pd
 
 from ibllib.io import jsonable
-from ibllib.dsp.utils import fronts
 from ibllib.io.video import assert_valid_label
 from ibllib.misc import version
 from ibllib.time import uncycle_pgts, convert_pgts
@@ -185,7 +184,8 @@ def load_camera_gpio(session_path, label: str, as_dict=False):
     :param label: The specific video to load, one of ('left', 'right', 'body')
     :param as_dict: If False the raw data are returned without preprocessing, otherwise GPIO is
     returned as dictionary of front indices and polarities
-    :return: The GPIO pin state
+    :return: An nx4 boolean array where columns represent state of GPIO pins 1-4.
+    If as_dict is True, a tuple of dicts is returned with 'indices' and 'polarities' keys, or Nones
     """
     if session_path is None:
         return
@@ -193,20 +193,29 @@ def load_camera_gpio(session_path, label: str, as_dict=False):
 
     # Load pin state
     GPIO_file = raw_path / f'_iblrig_{assert_valid_label(label)}Camera.GPIO.bin'
-    gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(int) if GPIO_file.exists() else []
-
+    # This deals with missing and empty files the same
+    gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(np.uint32) if GPIO_file.exists() else []
     if len(gpio) == 0:
-        return
+        return [None] * 4 if as_dict else None
+
+    # Check values make sense (4 pins = 16 possible values)
+    assert np.isin(gpio, np.left_shift(np.arange(2 ** 4, dtype=np.uint32), 32 - 4)).all()
+    # 4 pins represented as int32. For each pin, shift its bit to the end and check the bit is set.
+    gpio = (np.right_shift(np.tile(gpio, (4, 1)).T, np.arange(31, 27, -1)) & 0x1) == 1
+
     if as_dict:
-        n_states = np.unique(gpio).size
-        if n_states == 1:
+        if not gpio.any():
             _logger.error('No GPIO changes')
-            return None
-        elif np.unique(gpio).size != 2:
-            _logger.warning('GPIO noisy')
-        thresh = int((gpio.max() - gpio.min()) / 2)
-        gpio = dict(zip(('indices', 'polarities'), fronts(gpio, step=thresh)))
-        gpio['polarities'] = np.sign(gpio['polarities'])
+            return [None] * 4
+        # Find state changes for each pin and construct a dict of indices and polarities for each
+        edges = np.vstack((gpio[0,:], np.diff(gpio.astype(int), axis=0)))
+        # gpio = [(ind := np.where(edges[:, i])[0], edges[ind, i]) for i in range(4)]
+        # gpio = [dict(zip(('indices', 'polarities'), x)) for x in gpio_]  # py3.8
+        gpio = [{'indices': np.where(edges[:, i])[0],
+                 'polarities': edges[edges[:, i] != 0, i]}
+                for i in range(4)]
+        # Replace empty dicts with None
+        gpio = [None if x['indices'].size == 0 else x for x in gpio]
 
     return gpio
 
