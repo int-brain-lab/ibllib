@@ -148,7 +148,7 @@ def load_embedded_frame_data(session_path, label: str, raw=False):
     :return: The frame count, GPIO
     """
     count = load_camera_frame_count(session_path, label, raw=raw)
-    gpio = load_camera_gpio(session_path, label, as_dict=not raw)
+    gpio = load_camera_gpio(session_path, label, as_dicts=not raw)
     return count, gpio
 
 
@@ -176,13 +176,13 @@ def load_camera_frame_count(session_path, label: str, raw=True):
     return count
 
 
-def load_camera_gpio(session_path, label: str, as_dict=False):
+def load_camera_gpio(session_path, label: str, as_dicts=False):
     """
     Load the GPIO for a given session.  If the file doesn't exist, or is empty, a None value is
     returned.
     :param session_path: Absolute path of session folder
     :param label: The specific video to load, one of ('left', 'right', 'body')
-    :param as_dict: If False the raw data are returned without preprocessing, otherwise GPIO is
+    :param as_dicts: If False the raw data are returned without preprocessing, otherwise GPIO is
     returned as dictionary of front indices and polarities
     :return: An nx4 boolean array where columns represent state of GPIO pins 1-4.
     If as_dict is True, a tuple of dicts is returned with 'indices' and 'polarities' keys, or Nones
@@ -196,19 +196,19 @@ def load_camera_gpio(session_path, label: str, as_dict=False):
     # This deals with missing and empty files the same
     gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(np.uint32) if GPIO_file.exists() else []
     if len(gpio) == 0:
-        return [None] * 4 if as_dict else None
+        return [None] * 4 if as_dicts else None
 
     # Check values make sense (4 pins = 16 possible values)
     assert np.isin(gpio, np.left_shift(np.arange(2 ** 4, dtype=np.uint32), 32 - 4)).all()
-    # 4 pins represented as int32. For each pin, shift its bit to the end and check the bit is set.
+    # 4 pins represented as uint32. For each pin, shift its bit to the end and check the bit is set
     gpio = (np.right_shift(np.tile(gpio, (4, 1)).T, np.arange(31, 27, -1)) & 0x1) == 1
 
-    if as_dict:
+    if as_dicts:
         if not gpio.any():
             _logger.error('No GPIO changes')
             return [None] * 4
         # Find state changes for each pin and construct a dict of indices and polarities for each
-        edges = np.vstack((gpio[0,:], np.diff(gpio.astype(int), axis=0)))
+        edges = np.vstack((gpio[0, :], np.diff(gpio.astype(int), axis=0)))
         # gpio = [(ind := np.where(edges[:, i])[0], edges[ind, i]) for i in range(4)]
         # gpio = [dict(zip(('indices', 'polarities'), x)) for x in gpio_]  # py3.8
         gpio = [{'indices': np.where(edges[:, i])[0],
