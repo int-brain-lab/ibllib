@@ -95,6 +95,25 @@ def create_fake_raw_video_data_folder(session_path, populate=True):
             fpath.touch()
 
 
+def create_fake_alf_folder_dlc_data(session_path, populate=True):
+    session_path = Path(session_path)
+    alf_path = session_path / "alf"
+    alf_path.mkdir(exist_ok=True, parents=True)
+    if populate:
+        file_list = [
+            "_ibl_leftCamera.dlc.pqt",
+            "_ibl_rightCamera.dlc.pqt",
+            "_ibl_bodyCamera.dlc.pqt",
+            "_ibl_leftCamera.times.npy",
+            "_ibl_rightCamera.times.npy",
+            "_ibl_bodyCamera.times.npy",
+        ]
+        for f in file_list:
+            fpath = alf_path / Path(f)
+            fpath.parent.mkdir(parents=True, exist_ok=True)
+            fpath.touch()
+
+
 def create_fake_raw_behavior_data_folder(
     session_path, populate=True, task="ephysCW", folder="raw_behavior_data"
 ):
