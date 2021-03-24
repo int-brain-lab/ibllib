@@ -328,18 +328,6 @@ class TestWindowGenerator(unittest.TestCase):
 
 class TestVoltage(unittest.TestCase):
 
-    def test_agc(self):
-        """
-        automatic gain control
-        """
-        data = np.random.randn(50, 2000)
-        data[0:25, 500:600] += scipy.signal.ricker(100, 4) * 100
-        agc, g = voltage.agc(data, si=.002, wl=0.25)
-        assert np.any(~np.isclose(rms(data), 1, atol=0.1))
-        assert np.all(np.isclose(rms(agc), 1, atol=0.1))
-        # test the reverse option
-        assert np.all(np.isclose(rms(agc / g), rms(data)))
-
     def test_fk(self):
         """
         creates a couple of plane waves and separate them using the velocity HP filter
@@ -360,6 +348,12 @@ class TestVoltage(unittest.TestCase):
         # at least 90% of the traces should be below 50dB and 98% below 40 dB
         assert np.mean(20 * np.log10(rms(fk - data_v1 - fknoise)) < -50) > .9
         assert np.mean(20 * np.log10(rms(fk - data_v1 - fknoise)) < -40) > .98
+        # test the K option
+        kbands = np.sin(np.arange(ns) / ns * 8 * np.pi)
+        fk = voltage.fk(data_v1 + data_v2 + noise + kbands, si=sr, dx=dx, vbounds=[1200, 1500],
+                        ntr_pad=10, ntr_tap=15, lagc=.25,
+                        kfilt={'bounds': [0, .01], 'btype': 'hp'})
+        assert np.mean(20 * np.log10(rms(fk - data_v1 - fknoise)) < -40) > .9
 
 
 if __name__ == "__main__":

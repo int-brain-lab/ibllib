@@ -2,8 +2,35 @@
 Module to work with raw voltage traces. Spike sorting pre-processing functions.
 """
 import numpy as np
+import scipy.signal
 
 import ibllib.dsp.fourier as fdsp
+from ibllib.dsp import fshift, voltage
+from ibllib.ephys import neuropixel
+
+
+def reject_channels(x, fs, butt_kwargs=None, threshold=0.6, trx=1):
+    """
+    Computes the
+    :param x: demultiplexed array (ntraces, nsample)
+    :param fs: sampling frequency (Hz)
+    :param trx: number of traces each side (1)
+    :param butt kwargs (optional, None), butt_kwargs = {'N': 4, 'Wn': 0.05, 'btype': 'lp'}
+    :param threshold: r value below which a channel is rejected
+    :return:
+    """
+    ntr, ns = x.shape
+    # mirror padding by taking care of not repeating first/last trace
+    x = np.r_[x[1:trx + 1, :], x, x[-2 - trx:-2, :]]
+    # apply butterworth
+    if butt_kwargs is not None:
+        sos = scipy.signal.butter(**butt_kwargs, output='sos')
+        x = scipy.signal.sosfiltfilt(sos, x)
+    r = np.zeros(ntr)
+    for ix in np.arange(trx, ntr + trx):
+        ref = np.median(x[ix - trx: ix + trx + 1, :], axis=0)
+        r[ix - trx] = np.corrcoef(x[ix, :], ref)[1, 0]
+    return r >= threshold, r
 
 
 def agc(x, wl=.5, si=.002, epsilon=1e-8):
@@ -25,9 +52,8 @@ def agc(x, wl=.5, si=.002, epsilon=1e-8):
 
 
 def fk(x, si=.002, dx=1, vbounds=None, btype='highpass', ntr_pad=0, ntr_tap=None, lagc=.5,
-       collection=None):
-    """
-    Frequency-wavenumber filter: filters apparent plane-waves velocity
+       collection=None, kfilt=None):
+    """Frequency-wavenumber filter: filters apparent plane-waves velocity
     :param x: the input array to be filtered. dimension, the filtering is considering
     axis=0: spatial dimension, axis=1 temporal dimension. (ntraces, ns)
     :param si: sampling interval (secs)
@@ -37,7 +63,8 @@ def fk(x, si=.002, dx=1, vbounds=None, btype='highpass', ntr_pad=0, ntr_tap=None
     :param ntr_pad: padding will add ntr_padd mirrored traces to each side
     :param ntr_tap: taper (if None, set to ntr_pad)
     :param lagc: length of agc in seconds. If set to None or 0, no agc
-
+    :param kfilt: optional (None) if kfilter is applied, parameters as dict (bounds are in m-1
+    according to the dx parameter) kfilt = {'bounds': [0.05, 0.1], 'btype', 'highpass'}
     :param collection: vector length ntraces. Each unique value set of traces is a collection
     on which the FK filter will run separately (shot gaters, receiver gathers)
     :return:
@@ -63,10 +90,15 @@ def fk(x, si=.002, dx=1, vbounds=None, btype='highpass', ntr_pad=0, ntr_tap=None
     kscale = fdsp.fscale(nxp, dx)
     kscale[0] = 1e-6
     v = fscale[np.newaxis, :] / kscale[:, np.newaxis]
-    if btype.lower() == 'highpass':
+    if btype.lower() in ['highpass', 'hp']:
         fk_att = fdsp.fcn_cosine(vbounds)(np.abs(v))
-    elif btype.lower() == 'lowpass':
+    elif btype.lower() in ['lowpass', 'lp']:
         fk_att = (1 - fdsp.fcn_cosine(vbounds)(np.abs(v)))
+
+    # if a k-filter is also provided, apply it
+    if kfilt is not None:
+        katt = fdsp._freq_vector(np.abs(kscale), kfilt['bounds'], typ=kfilt['btype'])
+        fk_att *= katt[:, np.newaxis]
 
     # import matplotlib.pyplot as plt
     # plt.imshow(np.fft.fftshift(np.abs(v), axes=0).T, aspect='auto', vmin=0, vmax=1e5,
@@ -92,3 +124,39 @@ def fk(x, si=.002, dx=1, vbounds=None, btype='highpass', ntr_pad=0, ntr_tap=None
     if ntr_pad > 0:
         xf = xf[ntr_pad:-ntr_pad, :]
     return xf / gain
+
+
+def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, fk_kwargs=None):
+    """Super Car (super slow also...) - far from being set in stone but a good workflow example
+    :param x: demultiplexed array (ntraces, nsample)
+    :param fs: sampling frequency
+    :param neuropixel_version (optional): 1 or 2. Useful for the ADC shift correction. If None,
+     no correction is applied
+    :param tr_sel: index array for the first axis of x indicating the selected traces.
+     On a full workflow, one should scan sparingly the full file to get a robust estimate of the
+     selection. If None, and estimation is done using only the current batch is provided for
+     convenience but should be avoided in production.
+    :param butter_kwargs: (optional, None) butterworth params, see the code for the defaults dict
+    :param fk_kwargs: (optional, None) FK params, see the code for the defaults dict
+    :return: x, filtered array
+    """
+    if butter_kwargs is None:
+        butter_kwargs = {'N': 3, 'Wn': 300 / fs / 2, 'btype': 'highpass'}
+    if fk_kwargs is None:
+        fk_kwargs = {'dx': 1, 'vbounds': [0, 1e6], 'ntr_pad': 60, 'ntr_tap': 0,
+                     'lagc': .01, 'btype': 'lowpass'}
+    h = neuropixel.trace_header(version=neuropixel_version)
+    # butterworth
+    sos = scipy.signal.butter(**butter_kwargs, output='sos')
+    x = scipy.signal.sosfiltfilt(sos, x)
+    # apply ADC shift
+    if neuropixel_version is not None:
+        x = fshift(x, h['sample_shift'], axis=1)
+    # detect faulty channels if single batch
+    if tr_sel is None:
+        reject_channel_kwargs = {'butt_kwargs': {'N': 4, 'Wn': 0.05, 'btype': 'lp'}, 'trx': 1}
+        sel_ok, _ = reject_channels(x, fs, **reject_channel_kwargs)
+    # apply spatial filter on good channel selection only
+    x_ = np.zeros_like(x)
+    x_[sel_ok, :] = voltage.fk(x[sel_ok, :], si=1 / fs, **fk_kwargs)
+    return x_
