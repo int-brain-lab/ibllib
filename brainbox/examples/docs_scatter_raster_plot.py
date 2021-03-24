@@ -1,3 +1,10 @@
+"""
+Plot raster across session
+==========================
+Example of how to plot scatter plot of spike depths vs spike times with colour and size of scatter
+points scaled by spike amplitude
+"""
+
 import numpy as np
 from brainbox.plot.ephys_plots import scatter_raster_plot
 from brainbox.plot.plot_base import plot_scatter
