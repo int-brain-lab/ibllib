@@ -79,7 +79,7 @@ def _index_of(arr, lookup):
     # values
     lookup = np.asarray(lookup, dtype=np.int32)
     m = (lookup.max() if len(lookup) else 0) + 1
-    tmp = np.zeros(m + 1, dtype=np.int)
+    tmp = np.zeros(m + 1, dtype=int)
     # Ensure that -1 values are kept.
     tmp[-1] = -1
     if len(lookup):
@@ -163,7 +163,7 @@ def xcorr(spike_times, spike_clusters, bin_size=None, window_size=None):
 
     # At a given shift, the mask precises which spikes have matching spikes
     # within the correlogram time window.
-    mask = np.ones_like(spike_times, dtype=np.bool)
+    mask = np.ones_like(spike_times, dtype=bool)
 
     correlograms = _create_correlograms_array(n_clusters, winsize_bins)
 
