@@ -87,8 +87,8 @@ class TestCameraQC(unittest.TestCase):
         self.assertEqual('NOT_SET', self.qc.check_pin_state())
         # Add some dummy data
         self.qc.data.timestamps = np.array([round(1 / FPS, 4)] * 5).cumsum()
-        self.qc.data.pin_state = np.zeros_like(self.qc.data.timestamps, dtype=int)
-        self.qc.data.pin_state[1:-1] = 10000
+        self.qc.data.pin_state = np.zeros((self.qc.data.timestamps.size, 4), dtype=bool)
+        self.qc.data.pin_state[1:-1, -1] = True  # Pulse on 4th pin
         self.qc.data['video'] = {'fps': FPS, 'length': len(self.qc.data.timestamps)}
         self.qc.data.audio = self.qc.data.timestamps[[0, -1]] - 10e-3
 
@@ -100,7 +100,7 @@ class TestCameraQC(unittest.TestCase):
         np.testing.assert_array_equal(b, self.qc.data.audio)
 
         # Fudge some numbers
-        self.qc.data.pin_state[2] = 11e3
+        self.qc.data['video']['length'] = self.qc.data.pin_state.shape[0] - 3
         self.assertEqual('WARNING', self.qc.check_pin_state()[0])
         self.qc.data['video']['length'] = 10
         outcome, *dTTL = self.qc.check_pin_state()

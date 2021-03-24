@@ -34,7 +34,7 @@ def qc_behaviour_bpod_session(ses_path):
 
     # init the QC dictionary: one row per trial
     qc_trials = Bunch({
-        'xor': np.zeros(n_trials, np.bool),  # a trial is either an error, correct or a no-go
+        'xor': np.zeros(n_trials, bool),  # a trial is either an error, correct or a no-go
         'correct_rewarded': np.zeros(n_trials) * np.nan,  # a correct trial needs to be rewarded
         'n_bnc1_high': np.zeros(n_trials) * np.nan,  # number of bnc1 fronts
         'n_bnc2_high': np.zeros(n_trials) * np.nan,  # number of bnc2 fronts
@@ -47,12 +47,12 @@ def qc_behaviour_bpod_session(ses_path):
     for m, raw_trial in enumerate(raw_trials):
         states = raw_trial['behavior_data']['States timestamps']
         #  a trial is either an error, correct or a no-go. No in-between
-        qc_trials.xor[m] = np.sum(np.int(np.all(np.isnan(states['error'][0]))) +
-                                  np.int(np.all(np.isnan(states['correct'][0]))) +
-                                  np.int(np.all(np.isnan(states['no_go'][0])))) == 2
+        qc_trials.xor[m] = np.sum(int(np.all(np.isnan(states['error'][0]))) +
+                                  int(np.all(np.isnan(states['correct'][0]))) +
+                                  int(np.all(np.isnan(states['no_go'][0])))) == 2
 
-        qc_trials.correct_rewarded[m] = (np.int(np.all(np.isnan(states['correct'][0]))) ==
-                                         np.int(np.all(np.isnan(states['reward'][0]))))
+        qc_trials.correct_rewarded[m] = (int(np.all(np.isnan(states['correct'][0]))) ==
+                                         int(np.all(np.isnan(states['reward'][0]))))
 
         timestamps = raw_trial['behavior_data']['Events timestamps']
         qc_trials.n_bnc1_high[m] = len(timestamps['BNC1High'])

@@ -1,8 +1,10 @@
 from pathlib import Path
 import logging
+import os
+import traceback
+
 import numpy as np
 import pandas as pd
-import os
 
 import alf.io
 from ibllib.io import spikeglx
@@ -308,10 +310,12 @@ def _load_spike_sorting_local(session_path, probe):
     try:
         spikes = alf.io.load_object(probe_path, object='spikes')
     except Exception:
+        logger.error(traceback.format_exc())
         spikes = {}
     try:
         clusters = alf.io.load_object(probe_path, object='clusters')
     except Exception:
+        logger.error(traceback.format_exc())
         clusters = {}
 
     return spikes, clusters
