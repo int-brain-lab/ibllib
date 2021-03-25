@@ -5,7 +5,7 @@ Computes properties of single-cells, e.g. the autocorrelation and firing rate.
 import numpy as np
 from scipy.signal import convolve, gaussian
 from brainbox.core import Bunch
-from brainbox.population.population import xcorr
+from brainbox.population.decode import xcorr
 
 
 def acorr(spike_times, bin_size=None, window_size=None):

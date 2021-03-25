@@ -40,12 +40,3 @@ def flatten(x, generator=False):
     if generator:
         return gflatten(x)
     return iflatten(x)
-
-
-if __name__ == '__main__':
-    x = (1, 2, 3, [1, 2], 'string', 0.1, {1: None}, [[1, 2, 3], {1: 1}, 1])
-    print(flatten(x))
-    assert iflatten(x) == flatten(x)
-    assert list(gflatten(x)) == list(flatten(x, generator=True))
-
-    print("Done!")
