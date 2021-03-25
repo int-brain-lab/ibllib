@@ -1,14 +1,11 @@
 import unittest
 from tempfile import TemporaryDirectory
-from pathlib import Path
 
 import numpy as np
 
 from oneibl.one import ONE
 from ibllib.qc.dlc import DlcQC
-from ibllib.io.raw_data_loaders import load_camera_ssv_times
 from ibllib.tests.fixtures import utils
-from brainbox.core import Bunch
 
 
 class TestDlcQC(unittest.TestCase):
