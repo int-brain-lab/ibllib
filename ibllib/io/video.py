@@ -54,7 +54,7 @@ def get_video_frames_preload(video_path, frame_numbers=None, mask=Ellipsis, as_l
     assert cap.isOpened(), 'Failed to open video'
 
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    frame_numbers = frame_numbers or range(frame_count)
+    frame_numbers = frame_numbers if frame_numbers is not None else range(frame_count)
     # Check that frame numbers don't exceed video size, else remove the frames that do
     if max(frame_numbers) >= frame_count:
         print(f'Frame numbers exceed frame count, removing frames above {frame_count}')
