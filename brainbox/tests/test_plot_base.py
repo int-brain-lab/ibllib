@@ -1,7 +1,9 @@
 import unittest
+
 import numpy as np
-from brainbox.plot.plot_base import (DefaultPlot, ImagePlot, ScatterPlot, ProbePlot, LinePlot,
-                                     scatter_xyc_plot, arrange_channels2banks)
+
+from brainbox.plot_base import (DefaultPlot, ImagePlot, ScatterPlot, ProbePlot, LinePlot,
+                                scatter_xyc_plot, arrange_channels2banks)
 
 
 class TestPlotBase(unittest.TestCase):
