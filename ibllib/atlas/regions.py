@@ -15,8 +15,8 @@ FILE_REGIONS = str(Path(__file__).parent.joinpath('allen_structure_tree.csv'))
 @dataclass
 class _BrainRegions:
     id: np.ndarray
-    name: np.object
-    acronym: np.object
+    name: object
+    acronym: object
     rgb: np.uint8
     level: np.ndarray
     parent: np.ndarray

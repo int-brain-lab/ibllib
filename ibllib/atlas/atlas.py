@@ -26,7 +26,7 @@ def cart2sph(x, y, z):
     iok = r != 0
     theta[iok] = np.arccos(z[iok] / r[iok]) * 180 / np.pi
     if theta.size == 1:
-        theta = np.float(theta)
+        theta = float(theta)
     return r, theta, phi
 
 
@@ -86,7 +86,7 @@ class BrainCoordinates:
     def _round(i, round=True):
         nanval = 0
         if round:
-            ii = np.array(np.round(i)).astype(np.int)
+            ii = np.array(np.round(i)).astype(int)
             ii[np.isnan(i)] = nanval
             return ii
         else:
@@ -103,7 +103,7 @@ class BrainCoordinates:
 
     def xyz2i(self, xyz, round=True):
         xyz = np.array(xyz)
-        dt = np.int if round else np.float
+        dt = int if round else float
         out = np.zeros_like(xyz, dtype=dt)
         out[..., 0] = self.x2i(xyz[..., 0], round=round)
         out[..., 1] = self.y2i(xyz[..., 1], round=round)
@@ -203,9 +203,9 @@ class BrainAtlas:
         axz = self.xyz2dims[2]  # this is the dv axis
         _surface = (self.label == 0).astype(np.int8) * 2
         l0 = np.diff(_surface, axis=axz, append=2)
-        _top = np.argmax(l0 == -2, axis=axz).astype(np.float)
+        _top = np.argmax(l0 == -2, axis=axz).astype(float)
         _top[_top == 0] = np.nan
-        _bottom = self.bc.nz - np.argmax(np.flip(l0, axis=axz) == 2, axis=axz).astype(np.float)
+        _bottom = self.bc.nz - np.argmax(np.flip(l0, axis=axz) == 2, axis=axz).astype(float)
         _bottom[_bottom == self.bc.nz] = np.nan
         self.top = self.bc.i2z(_top + 1)
         self.bottom = self.bc.i2z(_bottom - 1)
@@ -213,7 +213,7 @@ class BrainAtlas:
         idx_srf = np.where(self.surface != 0)
         self.surface[idx_srf] = 1
         self.srf_xyz = self.bc.i2xyz(np.c_[idx_srf[self.xyz2dims[0]], idx_srf[self.xyz2dims[1]],
-                                           idx_srf[self.xyz2dims[2]]].astype(np.float))
+                                           idx_srf[self.xyz2dims[2]]].astype(float))
 
     def _lookup_inds(self, ixyz):
         """
@@ -679,7 +679,7 @@ class Insertion:
             _xyz = brain_atlas.srf_xyz[dist_lim[ma], :]
             _ixyz = brain_atlas.bc.xyz2i(_xyz)
 
-        xyz = brain_atlas.bc.i2xyz(_ixyz.astype(np.float))
+        xyz = brain_atlas.bc.i2xyz(_ixyz.astype(float))
 
         return xyz
 
@@ -785,7 +785,7 @@ class AllenAtlas(BrainAtlas):
          of the data volume
         """
         ordre = self._ccf_order(ccf_order, reverse=True)
-        ccf = self.bc.xyz2i(xyz, round=False) * np.float(self.res_um)
+        ccf = self.bc.xyz2i(xyz, round=False) * float(self.res_um)
         return ccf[..., ordre]
 
     def ccf2xyz(self, ccf, ccf_order='mlapdv'):
@@ -797,7 +797,7 @@ class AllenAtlas(BrainAtlas):
         :return: xyz: mlapdv coordinates in um, origin Bregma
         """
         ordre = self._ccf_order(ccf_order)
-        return self.bc.i2xyz((ccf[..., ordre] / np.float(self.res_um)))
+        return self.bc.i2xyz((ccf[..., ordre] / float(self.res_um)))
 
     @staticmethod
     def _ccf_order(ccf_order, reverse=False):

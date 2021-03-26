@@ -89,7 +89,7 @@ class CameraTimestampsFPGA(BaseExtractor):
         :return: a numpy array of camera timestamps
         """
         fpga_times = extract_camera_sync(sync=sync, chmap=chmap)
-        count, gpio = raw.load_embedded_frame_data(self.session_path, self.label)
+        count, (*_, gpio) = raw.load_embedded_frame_data(self.session_path, self.label)
 
         if gpio is not None and gpio['indices'].size > 1:
             _logger.info('Aligning to audio TTLs')
@@ -164,7 +164,7 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
         :return: a numpy array of camera timestamps
         """
         raw_ts = self._times_from_bpod()
-        count, gpio = raw.load_embedded_frame_data(self.session_path, 'left')
+        count, (*_, gpio) = raw.load_embedded_frame_data(self.session_path, 'left')
         if video_path is None:
             filename = '_iblrig_leftCamera.raw.mp4'
             video_path = self.session_path.joinpath('raw_video_data', filename)
