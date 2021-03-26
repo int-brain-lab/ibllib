@@ -1,7 +1,8 @@
 import numpy as np
 from matplotlib import cm
-from brainbox.plot.plot_base import (ImagePlot, ScatterPlot, ProbePlot, LinePlot, plot_line,
-                                     plot_image, plot_probe, plot_scatter, arrange_channels2banks)
+
+from brainbox.plot_base import (ImagePlot, ScatterPlot, ProbePlot, LinePlot, plot_line,
+                                plot_image, plot_probe, plot_scatter, arrange_channels2banks)
 from brainbox.processing import bincount2D, compute_cluster_average
 
 

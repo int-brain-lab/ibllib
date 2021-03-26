@@ -1,4 +1,4 @@
-from brainbox import core, processing
+from brainbox import processing, core
 import unittest
 import numpy as np
 

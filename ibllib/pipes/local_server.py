@@ -88,7 +88,6 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
         _logger.info(f'creating session for {session_path}')
         if dry:
             continue
-        flag_file.unlink()
         # if the subject doesn't exist in the database, skip
         try:
             rc.create_session(session_path)
@@ -112,6 +111,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
         else:
             rerun__status__in = ['Waiting']
         pipe.create_alyx_tasks(rerun__status__in=rerun__status__in)
+        flag_file.unlink()
     return all_datasets
 
 

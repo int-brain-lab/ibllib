@@ -125,6 +125,8 @@ class TestTraining(unittest.TestCase):
         else:
             with open(pickle_file, 'rb') as f:
                 self.trial_data = pickle.load(f)
+            # Convert to Bunch
+
         np.random.seed(0)
 
     def _get_trials(self, sess_dates):
@@ -145,7 +147,7 @@ class TestTraining(unittest.TestCase):
         trials, _ = self._get_trials(sess_dates=['2020-08-25', '2020-08-24', '2020-08-21'])
         trials_total = np.sum([len(trials[k]['contrastRight']) for k in trials.keys()])
         trials_all = train.concatenate_trials(trials)
-        assert (len(trials_all.contrastRight) == trials_total)
+        assert (len(trials_all['contrastRight']) == trials_total)
 
         perf_easy = np.array([train.compute_performance_easy(trials[k]) for k in trials.keys()])
         n_trials = np.array([train.compute_n_trials(trials[k]) for k in trials.keys()])
