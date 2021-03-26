@@ -38,6 +38,7 @@ SYNC_PIN_OUT = {'3A': {"pin01": 0,
                        }
                 }
 
+# after moving to ks2.5, this should be deprecated
 SITES_COORDINATES = np.array([
     [43., 20.],
     [11., 20.],
@@ -414,6 +415,8 @@ SITES_COORDINATES = np.array([
     [59., 3840.],
     [27., 3840.]])
 
+NC = 384
+
 
 def rc2xy(row, col):
     "converts the row/col indices from "
@@ -424,8 +427,43 @@ def rc2xy(row, col):
 
 def dense_layout():
     """Dictionary containing local coordinates of a Neuropixel 3 dense layout"""
-    ch = {'ind': np.arange(384),
-          'col': np.tile(np.array([2, 0, 3, 1]), int(384 / 4)),
-          'row': np.floor(np.arange(384) / 2)}
+    ch = {'ind': np.arange(NC),
+          'col': np.tile(np.array([2, 0, 3, 1]), int(NC / 4)),
+          'row': np.floor(np.arange(NC) / 2)}
     ch.update(rc2xy(ch['row'], ch['col']))
     return ch
+
+
+def adc_shifts(version=1):
+    """
+    The sampling is serial within the same ADC, but it happens at the same time in all ADCs.
+    The ADC to channel mapping is done per odd and even channels:
+    ADC1: ch1, ch3, ch5, ch7...
+    ADC2: ch2, ch4, ch6....
+    ADC3: ch33, ch35, ch37...
+    ADC4: ch34, ch36, ch38...
+    Therefore, channels 1, 2, 33, 34 get sample at the same time. I hope this is more or
+    less clear. In 1.0, it is similar, but there we have 32 ADC that sample each 12 channels."
+    - Nick on Slack after talking to Carolina - ;-)
+    """
+    if version == 1:
+        adc_channels = 12
+        # version 1 uses 32 ADC that sample 12 channels each
+    elif version == 2:
+        # version 2 uses 24 ADC that sample 16 channels each
+        adc_channels = 16
+    adc = np.floor(np.arange(NC) / (adc_channels * 2)) * 2 + np.mod(np.arange(NC), 2)
+    sample_shift = np.zeros_like(adc)
+    for a in adc:
+        sample_shift[adc == a] = np.arange(adc_channels) / adc_channels
+    return sample_shift, adc
+
+
+def trace_header(version=1):
+    """
+    For the dense layout used at IBL, returns a dictionary with keys
+    x, y, row, col, ind, adc and sampleshift vectors corresponding to each site
+    """
+    h = dense_layout()
+    h['sample_shift'], h['adc'] = adc_shifts(version=version)
+    return h

@@ -167,7 +167,7 @@ def missed_spikes_est(feat, feat_name, spks_per_bin=20, sigma=5, min_num_bins=50
     if ax is None:  # create two axes
         fig, ax = plt.subplots(nrows=1, ncols=2)
     if ax is None or len(ax) == 2:  # plot histogram and pdf on two separate axes
-        num_bins = np.int(feat.size / spks_per_bin)
+        num_bins = int(feat.size / spks_per_bin)
         ax[0].hist(feat, bins=num_bins)
         ax[0].set_xlabel('{0}'.format(feat_name))
         ax[0].set_ylabel('Count')
@@ -460,7 +460,7 @@ def firing_rate(ts, hist_win=0.01, fr_win=0.5, n_bins=10, show_fr_cv=True, ax=No
         return fr
     else:  # show coefficients of variation
         y_max = np.max(fr) * 1.05
-        x_l = x[np.int(x.size / n_bins)]
+        x_l = x[int(x.size / n_bins)]
         # Plot vertical lines separating plots into `n_bins`.
         [ax.vlines((x_l * i), 0, y_max, linestyles='dashed', linewidth=2)
          for i in range(1, n_bins)]

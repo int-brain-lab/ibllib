@@ -1,8 +1,10 @@
 from pathlib import Path
 import logging
+import os
+import traceback
+
 import numpy as np
 import pandas as pd
-import os
 
 import alf.io
 from ibllib.io import spikeglx
@@ -110,7 +112,7 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
                 # Otherwise we just get the channels from alyx. Shouldn't happen often, only if
                 # data is still inbetween ftp and flatiron after being resolved
                 else:
-                    traj_id = one.alyx.rest('trajectories', 'list', session=eid, probe_name=label,
+                    traj_id = one.alyx.rest('trajectories', 'list', session=eid, probe=label,
                                             provenance='Ephys aligned histology track')[0]['id']
                     chans = one.alyx.rest('channels', 'list', trajectory_estimate=traj_id)
 
@@ -130,7 +132,7 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
                             f' locations will be obtained from latest available ephys aligned '
                             f'histology track.')
                 # get the latest user aligned channels
-                traj_id = one.alyx.rest('trajectories', 'list', session=eid, probe_name=label,
+                traj_id = one.alyx.rest('trajectories', 'list', session=eid, probe=label,
                                         provenance='Ephys aligned histology track')[0]['id']
                 chans = one.alyx.rest('channels', 'list', trajectory_estimate=traj_id)
 
@@ -147,7 +149,7 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
                 logger.info(f'Channel locations for {label} have not been resolved. '
                             f'Channel and cluster locations obtained from histology track.')
                 # get the channels from histology tracing
-                traj_id = one.alyx.rest('trajectories', 'list', session=eid, probe_name=label,
+                traj_id = one.alyx.rest('trajectories', 'list', session=eid, probe=label,
                                         provenance='Histology track')[0]['id']
                 chans = one.alyx.rest('channels', 'list', trajectory_estimate=traj_id)
 
@@ -308,17 +310,19 @@ def _load_spike_sorting_local(session_path, probe):
     try:
         spikes = alf.io.load_object(probe_path, object='spikes')
     except Exception:
+        logger.error(traceback.format_exc())
         spikes = {}
     try:
         clusters = alf.io.load_object(probe_path, object='clusters')
     except Exception:
+        logger.error(traceback.format_exc())
         clusters = {}
 
     return spikes, clusters
 
 
 def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
-    '''
+    """
     Takes (default and any extra) values in given keys from channels and assign them to clusters.
     If channels does not contain any data, the new keys are added to clusters but left empty.
     :param dic_clus: dict of bunch, 1 bunch per probe, containing cluster information
@@ -326,7 +330,7 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
     :param keys_to_add_extra: Any extra keys contained in channels (will be added to default
     ['acronym', 'atlas_id'])
     :return: clusters (dict of bunch, 1 bunch per probe), with new keys values.
-    '''
+    """
     probe_labels = list(channels.keys())  # Convert dict_keys into list
     keys_to_add_default = ['acronym', 'atlas_id', 'x', 'y', 'z']
 

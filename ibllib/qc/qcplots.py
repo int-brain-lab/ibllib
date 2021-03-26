@@ -1,3 +1,15 @@
+"""Plots for trial QC
+
+Example:
+    one = ONE()
+    # Load data
+    eid = 'c8ef527b-6f7f-4f08-8b99-5aeb9d2b3740
+    # Run QC
+    qc = TaskQC(eid, one=one)
+    plot_results(qc)
+    plt.show()
+
+"""
 from collections import Counter, Sized
 from pathlib import Path
 from datetime import datetime
@@ -7,8 +19,6 @@ import pandas as pd
 import seaborn as sns
 
 from ibllib.qc.task_metrics import TaskQC
-import ibllib.qc.oneutils as oneutils
-from oneibl.one import ONE
 
 
 def plot_results(qc_obj, save_path=None):
@@ -67,13 +77,3 @@ def plot_results(qc_obj, save_path=None):
             fig.savefig(save_path.joinpath(f"{ref}_QC.png"))
         else:
             fig.savefig(save_path)
-
-
-if __name__ == "__main__":
-    one = ONE(printout=False)
-    # Load data
-    eid, det = oneutils.random_ephys_session()
-    # Run QC
-    qc = TaskQC(eid, one=one)
-    plot_results(qc)
-    plt.show()

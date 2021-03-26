@@ -41,6 +41,8 @@ class TestBunch(unittest.TestCase):
             abunch.save(npz_filec, compress=True)
             another_bunch = core.Bunch.load(npz_filec)
             [self.assertTrue(np.all(abunch[k]) == np.all(another_bunch[k])) for k in abunch]
+            with self.assertRaises(FileNotFoundError):
+                core.Bunch.load(Path(td) / 'fake.npz')
 
 
 if __name__ == "__main__":

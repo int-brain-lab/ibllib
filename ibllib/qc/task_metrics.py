@@ -122,15 +122,15 @@ class TaskQC(base.QC):
         :param bpod_only: if True no data is extracted from the FPGA for ephys sessions
         :param download_data: if True, any missing raw data is downloaded via ONE.  By default
         data are not downloaded if a session path was provided to the constructor.
-        :return: session outcome (str), a dict for extended QC
+        :return: QC outcome (str), a dict for extended QC
         """
         if self.metrics is None:
             self.compute(**kwargs)
-        self.outcome, results, _ = self.compute_session_status()
+        outcome, results, _ = self.compute_session_status()
         if update:
             self.update_extended_qc(results)
-            self.update(self.outcome, 'task')
-        return self.outcome, results
+            self.update(outcome, 'task')
+        return outcome, results
 
     def compute_session_status(self):
         """
@@ -237,7 +237,7 @@ class HabituationQC(TaskQC):
         d = np.less(data["valveOpen_times"], data["stimOff_times"], where=~nans)
 
         metrics[check] = a & b & c & d & ~nans
-        passed[check] = metrics[check].astype(np.float)
+        passed[check] = metrics[check].astype(float)
 
         # Check that the time difference between the visual stimulus center-command being
         # triggered and the stimulus effectively appearing in the center is smaller than 150 ms.
@@ -301,7 +301,7 @@ def get_bpodqc_metrics_frame(data, **kwargs):
                           if isinstance(m, Sized) and len(m) == n_trials]
     name = prefix + 'passed_trial_checks'
     metrics[name] = reduce(np.logical_and, trial_level_passed or (None, None))
-    passed[name] = metrics[name].astype(np.float) if trial_level_passed else None
+    passed[name] = metrics[name].astype(float) if trial_level_passed else None
 
     return metrics, passed
 
@@ -356,7 +356,7 @@ def check_response_stimFreeze_delays(data, **_):
     """
     metric = np.nan_to_num(data["stimFreeze_times"] - data["response_times"], nan=np.inf)
     # Test for valid values
-    passed = ((metric < 0.1) & (metric > 0)).astype(np.float)
+    passed = ((metric < 0.1) & (metric > 0)).astype(float)
     # Finally remove no_go trials (stimFreeze triggered differently in no_go trials)
     # should account for all the nans
     passed[data["choice"] == 0] = np.nan
@@ -375,7 +375,7 @@ def check_stimOff_itiIn_delays(data, **_):
     'choice')
     """
     metric = np.nan_to_num(data["itiIn_times"] - data["stimOff_times"], nan=np.inf)
-    passed = ((metric < 0.01) & (metric >= 0)).astype(np.float)
+    passed = ((metric < 0.01) & (metric >= 0)).astype(float)
     # Remove no_go trials (stimOff triggered differently in no_go trials)
     metric[data["choice"] == 0] = passed[data["choice"] == 0] = np.nan
     assert data["intervals"].shape[0] == len(metric) == len(passed)
@@ -416,7 +416,7 @@ def check_positive_feedback_stimOff_delays(data, **_):
     'correct')
     """
     metric = np.nan_to_num(data["stimOff_times"] - data["feedback_times"] - 1, nan=np.inf)
-    passed = (np.abs(metric) < 0.15).astype(np.float)
+    passed = (np.abs(metric) < 0.15).astype(float)
     metric[~data["correct"]] = passed[~data["correct"]] = np.nan
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
@@ -434,7 +434,7 @@ def check_negative_feedback_stimOff_delays(data, **_):
     """
     metric = np.nan_to_num(data["stimOff_times"] - data["errorCue_times"] - 2, nan=np.inf)
     # Apply criteria
-    passed = (np.abs(metric) < 0.15).astype(np.float)
+    passed = (np.abs(metric) < 0.15).astype(float)
     # Remove none negative feedback trials
     metric[data["correct"]] = passed[data["correct"]] = np.nan
     assert data["intervals"].shape[0] == len(metric) == len(passed)
@@ -472,7 +472,7 @@ def check_wheel_move_before_feedback(data, **_):
     nans = np.isnan(metric)
     passed = np.zeros_like(metric) * np.nan
 
-    passed[~nans] = (metric[~nans] != 0).astype(np.float)
+    passed[~nans] = (metric[~nans] != 0).astype(float)
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -521,7 +521,7 @@ def _wheel_move_during_closed_loop(re_ts, re_pos, data, wheel_gain=None, tol=1, 
     criterion = cm_to_rad(s_mm * 1e-1)  # convert abs displacement to radians (wheel pos is in rad)
     metric = metric - criterion  # difference should be close to 0
     rad_per_deg = cm_to_rad(1 / wheel_gain * 1e-1)
-    passed = (np.abs(metric) < rad_per_deg * tol).astype(np.float)  # less than 1 visual degree off
+    passed = (np.abs(metric) < rad_per_deg * tol).astype(float)  # less than 1 visual degree off
     metric[data["choice"] == 0] = passed[data["choice"] == 0] = np.nan  # except no-go trials
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
@@ -631,7 +631,7 @@ def check_detected_wheel_moves(data, min_qt=0, **_):
     metric = data['firstMovement_times']
     qevt_start = data['goCueTrigger_times'] - np.array(min_qt)
     response = data['response_times']
-    passed = np.array([a < m < b for m, a, b in zip(metric, qevt_start, response)], dtype=np.float)
+    passed = np.array([a < m < b for m, a, b in zip(metric, qevt_start, response)], dtype=float)
     nogo = data['choice'] == 0
     passed[nogo] = np.nan  # No go trial may have no movement times and that's fine
     return metric, passed
@@ -666,7 +666,7 @@ def check_error_trial_event_sequence(data, **_):
 
     metric = a & b & c & d & ~nans
 
-    passed = metric.astype(np.float)
+    passed = metric.astype(float)
     passed[data["correct"]] = np.nan  # Look only at incorrect trials
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
@@ -697,7 +697,7 @@ def check_correct_trial_event_sequence(data, **_):
     d = np.less(data["itiIn_times"], data["intervals"][:, 1], where=~nans)
     metric = a & b & c & d & ~nans
 
-    passed = metric.astype(np.float)
+    passed = metric.astype(float)
     passed[~data["correct"]] = np.nan  # Look only at correct trials
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
@@ -737,7 +737,7 @@ def check_n_trial_events(data, **_):
     for i, (start, end) in enumerate(intervals):
         metric[i] = (all([start < data[k][i] < end for k in events]) and
                      (np.isnan(err_trig[i]) if correct[i] else start < err_trig[i] < end))
-    passed = metric.astype(np.bool)
+    passed = metric.astype(bool)
     assert intervals.shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -787,7 +787,7 @@ def check_errorCue_delays(data, **_):
     'intervals', 'correct')
     """
     metric = np.nan_to_num(data["errorCue_times"] - data["errorCueTrigger_times"], nan=np.inf)
-    passed = ((metric <= 0.0015) & (metric > 0)).astype(np.float)
+    passed = ((metric <= 0.0015) & (metric > 0)).astype(float)
     passed[data["correct"]] = metric[data["correct"]] = np.nan
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
@@ -859,7 +859,7 @@ def check_reward_volumes(data, **_):
     """
     metric = data['rewardVolume']
     correct = data['correct']
-    passed = np.zeros_like(metric, dtype=np.bool)
+    passed = np.zeros_like(metric, dtype=bool)
     # Check correct trials within correct range
     passed[correct] = (1.5 <= metric[correct]) & (metric[correct] <= 3.)
     # Check incorrect trials are 0
@@ -932,7 +932,7 @@ def check_stimulus_move_before_goCue(data, photodiode=None, **_):
     for i, c in zip(data["intervals"][:, 0], data["goCue_times"]):
         metric = np.append(metric, np.count_nonzero(s[s > i] < (c - 0.02)))
 
-    passed = (metric == 0).astype(np.float)
+    passed = (metric == 0).astype(float)
     # Remove no go trials
     passed[data["choice"] == 0] = np.nan
     assert data["intervals"].shape[0] == len(metric) == len(passed)

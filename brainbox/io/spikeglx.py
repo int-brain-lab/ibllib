@@ -72,7 +72,7 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
     # Get memmapped array of `ephys_file`
     s_reader = spikeglx.Reader(ephys_file)
     file_m = s_reader.data  # the memmapped array
-    n_wf_samples = np.int(sr / 1000 * (t / 2))  # number of samples to return on each side of a ts
+    n_wf_samples = int(sr / 1000 * (t / 2))  # number of samples to return on each side of a ts
     ts_samples = np.array(ts * sr).astype(int)  # the samples corresponding to `ts`
     t_sample_first = ts_samples[0] - n_wf_samples
 

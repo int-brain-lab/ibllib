@@ -37,7 +37,7 @@ class TaskQCExtractor(object):
             raise ValueError('Invalid session path')
         self.session_path = session_path
         self.one = one
-        self.log = logging.getLogger("ibllib")
+        self.log = _logger
 
         self.data = None
         self.settings = None

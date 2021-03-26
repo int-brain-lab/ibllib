@@ -16,7 +16,7 @@ def lp(ts, fac, pad=0.2):
     :return: smoothed time series
     """
     # keep at least two periods for the padding
-    lpad = np.int(np.ceil(ts.shape[0] * pad))
+    lpad = int(np.ceil(ts.shape[0] * pad))
     ts_ = np.pad(ts, lpad, mode='edge')
     ts_ = ft.lp(ts_, 1, np.array(fac) / 2)
     return ts_[lpad:-lpad]
@@ -29,7 +29,7 @@ def rolling_window(x, window_len=11, window='blackman'):
     This method is based on the convolution of a scaled window with the signal.
     The signal is prepared by introducing reflected copies of the signal
     (with the window size) in both ends so that transient parts are minimized
-    in the begining and end part of the output signal.
+    in the beginning and end part of the output signal.
 
     :param x: The input signal
     :type x: list or numpy.array

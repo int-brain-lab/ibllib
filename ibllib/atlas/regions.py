@@ -15,8 +15,8 @@ FILE_REGIONS = str(Path(__file__).parent.joinpath('allen_structure_tree.csv'))
 @dataclass
 class _BrainRegions:
     id: np.ndarray
-    name: np.object
-    acronym: np.object
+    name: object
+    acronym: object
     rgb: np.uint8
     level: np.ndarray
     parent: np.ndarray
@@ -25,9 +25,18 @@ class _BrainRegions:
 class BrainRegions(_BrainRegions):
     """
     ibllib.atlas.regions.BrainRegions(brainmap='Allen')
+    The Allen atlas ids are kept intact but lateralized as follows: labels are duplicated
+     and ids multiplied by -1, with the understanding that left hemisphere regions have negative
+     ids.
     """
     def __init__(self):
         df_regions = pd.read_csv(FILE_REGIONS)
+        # lateralize
+        df_regions_left = df_regions.iloc[np.array(df_regions.id > 0), :].copy()
+        df_regions_left['id'] = - df_regions_left['id']
+        df_regions_left['parent_structure_id'] = - df_regions_left['parent_structure_id']
+        df_regions_left['name'] = df_regions_left['name'].apply(lambda x: x + ' (left)')
+        df_regions = pd.concat((df_regions, df_regions_left), axis=0)
         # converts colors to RGB uint8 array
         c = np.uint32(df_regions.color_hex_triplet.map(
             lambda x: int(x, 16) if isinstance(x, str) else 256 ** 3 - 1))
@@ -42,8 +51,10 @@ class BrainRegions(_BrainRegions):
                          parent=df_regions.parent_structure_id.to_numpy())
         # mappings are indices not ids: they range from 0 to n regions -1
         self.mappings = {
-            'Allen': np.arange(self.id.size),
-            'Beryl': self._mapping_from_regions_list(BERYL),
+            'Allen': self._mapping_from_regions_list(np.unique(np.abs(self.id)), lateralize=False),
+            'Allen-lr': np.arange(self.id.size),
+            'Beryl': self._mapping_from_regions_list(BERYL, lateralize=False),
+            'Beryl-lr': self._mapping_from_regions_list(BERYL, lateralize=True),
         }
 
     def get(self, ids) -> Bunch:
@@ -103,7 +114,7 @@ class BrainRegions(_BrainRegions):
         leaves = np.setxor1d(self.id, self.parent)
         return self.get(np.int64(leaves[~np.isnan(leaves)]))
 
-    def _mapping_from_regions_list(self, new_map):
+    def _mapping_from_regions_list(self, new_map, lateralize=False):
         """
         From a vector of regions id, creates a mapping such as
         newids = self.mapping
@@ -111,9 +122,13 @@ class BrainRegions(_BrainRegions):
         """
         I_ROOT = 1
         I_VOID = 0
-        assert np.all(np.sort(new_map) == np.unique(new_map)), "Mapping ids should be unique"
-        _, iid, inm = np.intersect1d(self.id, new_map, return_indices=True)
-        assert (iid.size == new_map.size), "All mapping ids should be represented in the Allen ids"
+        # to lateralize we make sure all regions are represented in + and -
+        new_map = np.unique(np.r_[-new_map, new_map])
+        assert np.all(np.isin(new_map, self.id)), \
+            "All mapping ids should be represented in the Allen ids"
+        # with the lateralization, self.id may have duplicate values so ismember is necessary
+        iid, inm = ismember(self.id, new_map)
+        iid = np.where(iid)[0]
         mapind = np.zeros_like(self.id) + I_ROOT  # non assigned regions are root
         mapind[iid] = iid  # regions present in the list have the same index
         # Starting by the higher up levels in the hierarchy, assign all descendants to the mapping
@@ -122,6 +137,10 @@ class BrainRegions(_BrainRegions):
             _, idesc, _ = np.intersect1d(self.id, descendants, return_indices=True)
             mapind[idesc] = iid[i]
         mapind[0] = I_VOID  # void stays void
+        # to delateralize the regions, assign the positive index to all mapind elements
+        if lateralize is False:
+            _, iregion = ismember(np.abs(self.id), self.id)
+            mapind = mapind[iregion]
         return mapind
 
 

@@ -3,7 +3,10 @@ Population functions.
 
 Code from https://github.com/cortex-lab/phylib/blob/master/phylib/stats/ccg.py by C. Rossant.
 Code for decoding by G. Meijer
+<<<<<<< HEAD:brainbox/population/population.py
 Code from sigtest_pseudosessions and sigtest_linshift by B. Benson
+=======
+>>>>>>> develop:brainbox/population/decode.py
 '''
 
 import numpy as np
@@ -81,7 +84,7 @@ def _index_of(arr, lookup):
     # values
     lookup = np.asarray(lookup, dtype=np.int32)
     m = (lookup.max() if len(lookup) else 0) + 1
-    tmp = np.zeros(m + 1, dtype=np.int)
+    tmp = np.zeros(m + 1, dtype=int)
     # Ensure that -1 values are kept.
     tmp[-1] = -1
     if len(lookup):
@@ -142,7 +145,7 @@ def xcorr(spike_times, spike_clusters, bin_size=None, window_size=None):
     cross-correlograms.
 
     """
-    assert np.all(np.diff(spike_times) >= 0), ("The spike times must be increasing.")
+    assert np.all(np.diff(spike_times) >= 0), "The spike times must be increasing."
     assert spike_times.ndim == 1
     assert spike_times.shape == spike_clusters.shape
 
@@ -165,7 +168,7 @@ def xcorr(spike_times, spike_clusters, bin_size=None, window_size=None):
 
     # At a given shift, the mask precises which spikes have matching spikes
     # within the correlogram time window.
-    mask = np.ones_like(spike_times, dtype=np.bool)
+    mask = np.ones_like(spike_times, dtype=bool)
 
     correlograms = _create_correlograms_array(n_clusters, winsize_bins)
 
@@ -224,7 +227,7 @@ def classify(population_activity, trial_labels, classifier, cross_validation=Non
     pred : 1D array
         predictions of the classifier
     prob : 1D array
-        probablity of classification
+        probability of classification
     """
 
     # Check input
@@ -246,7 +249,7 @@ def classify(population_activity, trial_labels, classifier, cross_validation=Non
             proba = classifier.predict_proba(population_activity[test_index])
             prob[test_index] = proba[:, 1]
 
-    # Calcualte accuracy
+    # Calculate accuracy
     accuracy = accuracy_score(trial_labels, pred)
     return accuracy, pred, prob
 
@@ -261,10 +264,13 @@ def regress(population_activity, trial_targets, cross_validation=None):
         population activity of all neurons in the population for each trial.
     trial_targets : 1D or 2D array
         the decoding target per trial as a continuous variable
+<<<<<<< HEAD:brainbox/population/population.py
     pre_time : float
         time (in seconds) preceding the event times
     post_time : float
         time (in seconds) following the event times
+=======
+>>>>>>> develop:brainbox/population/decode.py
     cross_validation : None or scikit-learn object
         which cross-validation method to use, for example 5-fold:
                     from sklearn.model_selection import KFold
@@ -296,12 +302,20 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
            custom_validation=None, n_neurons='all', iterations=1, shuffle=False, phase_rand=False):
     """
 
+<<<<<<< HEAD:brainbox/population/population.py
     WILL BE DEPRICATED
+=======
+    WILL BE DEPRECATED
+>>>>>>> develop:brainbox/population/decode.py
 
     Use decoding to classify groups of trials (e.g. stim left/right). Classification is done using
     the population vector of summed spike counts from the specified time window. Cross-validation
     is achieved using n-fold cross validation or leave-one-out cross validation. Decoders can
+<<<<<<< HEAD:brainbox/population/population.py
     decode any number of groups. When providing the classfier with an imbalanced dataset (not
+=======
+    decode any number of groups. When providing the classifier with an imbalanced dataset (not
+>>>>>>> develop:brainbox/population/decode.py
     the same number of trials in each group) the chance level will not be 1/groups. In that case,
     to compare the classification performance against change one has to either determine chance
     level by decoding a shuffled dataset or use the 'auroc' metric as readout (this metric is
@@ -357,7 +371,11 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
     n_neurons : string or integer
         number of neurons to randomly subselect from the population (default is 'all')
     iterations : int
+<<<<<<< HEAD:brainbox/population/population.py
         number of times to repeat the decoding (especially usefull when subselecting neurons)
+=======
+        number of times to repeat the decoding (especially useful when subselecting neurons)
+>>>>>>> develop:brainbox/population/decode.py
     shuffle : boolean
         whether to shuffle the trial labels each decoding iteration
     phase_rand : boolean

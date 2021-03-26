@@ -30,8 +30,10 @@ class Task(abc.ABC):
     time_elapsed_secs = None
     time_out_secs = None
     version = version.ibllib()
+    log = ''
 
-    def __init__(self, session_path, parents=None, taskid=None, one=None):
+    def __init__(self, session_path, parents=None, taskid=None, one=None,
+                 machine=None, clobber=False):
         self.taskid = taskid
         self.one = one
         self.session_path = session_path
@@ -40,6 +42,8 @@ class Task(abc.ABC):
             self.parents = parents
         else:
             self.parents = []
+        self.machine = machine
+        self.clobber = clobber
 
     @property
     def name(self):
@@ -55,8 +59,10 @@ class Task(abc.ABC):
         # if taskid of one properties are not available, local run only without alyx
         use_alyx = self.one is not None and self.taskid is not None
         if use_alyx:
-            self.one.alyx.rest('tasks', 'partial_update',
-                               id=self.taskid, data={'status': 'Started'})
+            tdict = self.one.alyx.rest('tasks', 'partial_update', id=self.taskid,
+                                       data={'status': 'Started'})
+            self.log = ('' if not tdict['log'] else tdict['log'] +
+                        '\n\n=============================RERUN=============================\n')
         # setup
         self.setUp()
         # Setup the console handler with a StringIO object
@@ -66,6 +72,9 @@ class Task(abc.ABC):
         ch.setFormatter(logging.Formatter(str_format))
         _logger.addHandler(ch)
         _logger.info(f"Starting job {self.__class__}")
+        if self.machine:
+            _logger.info(f"Running on machine: {self.machine}")
+        _logger.info(f"running ibllib version {version.ibllib()}")
         # run
         start_time = time.time()
         self.status = 0
@@ -86,8 +95,9 @@ class Task(abc.ABC):
             nout = 1
         _logger.info(f"N outputs: {nout}")
         _logger.info(f"--- {self.time_elapsed_secs} seconds run-time ---")
-        # after the run, capture the log output
-        self.log = log_capture_string.getvalue()
+        # after the run, capture the log output, amend to any existing logs if not overwrite
+        new_log = log_capture_string.getvalue()
+        self.log = new_log if self.clobber else self.log + new_log
         log_capture_string.close()
         _logger.removeHandler(ch)
         # tear down
@@ -224,7 +234,7 @@ class Pipeline(abc.ABC):
             tasks_alyx.append(talyx)
         return tasks_alyx
 
-    def run(self, status__in=['Waiting'], **kwargs):
+    def run(self, status__in=['Waiting'], machine=None, clobber=False, **kwargs):
         """
         Get all the session related jobs from alyx and run them
         :param status__in: lists of status strings to run in
@@ -246,23 +256,26 @@ class Pipeline(abc.ABC):
                 continue
             # here we update the status in-place to avoid another hit to the database
             task_deck[i], dsets = run_alyx_task(tdict=j, session_path=self.session_path,
-                                                one=self.one, job_deck=task_deck, **kwargs)
+                                                one=self.one, job_deck=task_deck,
+                                                machine=machine, clobber=clobber)
             if dsets is not None:
                 all_datasets.extend(dsets)
         return task_deck, all_datasets
 
-    def rerun_failed(self):
-        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty'])
+    def rerun_failed(self, **kwargs):
+        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty'], **kwargs)
 
-    def rerun(self):
-        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete'])
+    def rerun(self, **kwargs):
+        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete'],
+                        **kwargs)
 
     @property
     def name(self):
         return self.__class__.__name__
 
 
-def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None, max_md5_size=None):
+def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
+                  max_md5_size=None, machine=None, clobber=False):
     """
     Runs a single Alyx job and registers output datasets
     :param tdict:
@@ -273,6 +286,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None, max_md
     job_deck is not entered, will query the database
     :param max_md5_size: in bytes, if specified, will not compute the md5 checksum above a given
     filesize to save time
+    :param machine: string identifying the machine the task is run on, optional
     :return:
     """
     registered_dsets = []
@@ -296,7 +310,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None, max_md
     exec_name = tdict['executable']
     strmodule, strclass = exec_name.rsplit('.', 1)
     classe = getattr(importlib.import_module(strmodule), strclass)
-    task = classe(session_path, one=one, taskid=tdict['id'])
+    task = classe(session_path, one=one, taskid=tdict['id'], machine=machine, clobber=clobber)
     # sets the status flag to started before running
     one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data={'status': 'Started'})
     status = task.run()
