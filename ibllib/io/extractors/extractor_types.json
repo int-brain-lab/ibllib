@@ -1,6 +1,7 @@
 {
  "ephysChoiceWorld": "ephys",
  "ephyskarolinaChoiceWorld": "ephys",
+ "trainingChoiceWorldWidefield": "ephys",
  "passive_opto": "ephys",
  "opto_ephysChoiceWorld": "ephys",
  "widefieldChoiceWorld": "ephys",

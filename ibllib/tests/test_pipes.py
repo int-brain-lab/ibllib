@@ -10,15 +10,18 @@ from oneibl.one import ONE
 import ibllib.pipes.scan_fix_passive_files as fix
 
 
-class TestExtractors(unittest.TestCase):
+class TestExtractors2Tasks(unittest.TestCase):
     def test_task_names_extractors(self):
         """
         This is to test against regressions
         """
+        # input a tuple task /
         task_out = [
             ("_iblrig_tasks_biasedChoiceWorld3.7.0", "biased"),
             ("_iblrig_tasks_biasedScanningChoiceWorld5.2.3", "biased"),
             ("_iblrig_tasks_trainingChoiceWorld3.6.0", "training"),
+            ("_iblrig_tasks_trainingChoiceWorldWidefield", "ephys"),
+            ("_iblrig_tasks_widefieldChoiceWorld", "ephys"),
             ("_iblrig_tasks_ephysChoiceWorld5.1.3", "ephys"),
             ("_iblrig_calibration_frame2TTL4.1.3", None),
             ("_iblrig_tasks_habituationChoiceWorld3.6.0", "habituation"),
@@ -32,7 +35,6 @@ class TestExtractors(unittest.TestCase):
             ("passive_opto", "ephys"),
             ("_iblrig_tasks_opto_ephysChoiceWorld", "ephys"),
             ("_iblrig_tasks_opto_biasedChoiceWorld", "biased"),
-            ("_iblrig_tasks_widefieldChoiceWorld", "ephys")
         ]
         for to in task_out:
             out = ibllib.io.extractors.base.get_task_extractor_type(to[0])

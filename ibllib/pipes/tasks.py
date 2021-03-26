@@ -74,6 +74,7 @@ class Task(abc.ABC):
         _logger.info(f"Starting job {self.__class__}")
         if self.machine:
             _logger.info(f"Running on machine: {self.machine}")
+        _logger.info(f"running ibllib version {version.ibllib()}")
         # run
         start_time = time.time()
         self.status = 0
