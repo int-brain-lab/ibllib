@@ -341,9 +341,11 @@ def _alyx_procedure_from_task(task_protocol):
 
 def _alyx_procedure_from_task_type(task_type):
     lookup = {'biased': 'Behavior training/tasks',
+              'biased_opto': 'Behavior training/tasks',
               'habituation': 'Behavior training/tasks',
               'training': 'Behavior training/tasks',
               'ephys': 'Ephys recording with acute probe(s)',
+              'ephys_opto': 'Ephys recording with acute probe(s)',
               'mock_ephys': 'Ephys recording with acute probe(s)',
               'sync_ephys': 'Ephys recording with acute probe(s)'}
     if task_type in lookup:
