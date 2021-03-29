@@ -55,7 +55,6 @@ class DlcQC(base.QC):
 
         # QC outcomes map
         self.metrics = None
-        self.outcome = 'NOT_SET'
 
     def load_data(self, download_data: bool = None) -> None:
         """Extract the data from data files
