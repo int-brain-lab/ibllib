@@ -45,7 +45,7 @@ class TestDlcQC(unittest.TestCase):
         self.assertEqual('PASS', outcome)
         self.qc.data['dlc_coords']['nose_tip'] = np.ones((2, 19))
         outcome = self.qc.check_time_trace_length_match()
-        self.assertEqual('PASS', outcome)
+        self.assertEqual('FAIL', outcome)
         self.qc.data['dlc_coords']['pupil_r'] = np.ones((2, 21))
         outcome = self.qc.check_time_trace_length_match()
         self.assertEqual('FAIL', outcome)
