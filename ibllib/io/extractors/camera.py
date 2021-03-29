@@ -423,7 +423,8 @@ def attribute_times(arr, events, tol=.1, injective=True, take='first'):
 def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', min_diff=0.):
     """
     Align the GPIO pin state to the FPGA audio TTLs.  Any audio TTLs not reflected in the pin
-    state are removed from the dict and the times of the detected fronts are converted to FPGA time
+    state are removed from the dict and the times of the detected fronts are converted to FPGA
+    time.  At the end of this the number of GPIO fronts should equal the number of audio fronts.
 
     Note:
       - This function is ultra safe: we probably don't need assign all the ups and down fronts
@@ -450,7 +451,7 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
         gpio = {k: gpio[k][keep] for k, v in gpio.items()}
     assert audio['times'].size == audio['polarities'].size, 'audio data dimension mismatch'
     # make sure that there are no 2 consecutive fall or consecutive rise events
-    assert (np.all(np.abs(np.diff(audio['polarities'])) == 2)), 'consecutive high/low audio events'
+    assert np.all(np.abs(np.diff(audio['polarities'])) == 2), 'consecutive high/low audio events'
     # make sure first TTL is high
     assert audio['polarities'][0] == 1
     # make sure audio times in order
@@ -538,7 +539,7 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
             _logger.warning(f'{sum(missed)} pin state falls could '
                             f'not be attributed to an audio TTL')
             # Remove the missed fronts
-            to_remove = np.logical_or(to_remove, np.in1d(gpio['indices'], high2low[missed]))
+            to_remove |= np.in1d(gpio['indices'], high2low[missed])
             assigned = assigned[~missed]
         offsets_ = audio_times[1::2][assigned]
 
@@ -555,11 +556,20 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
                 This is a sign that the assignment was bad and extraction may fail."""
                 _logger.warning('Some onsets but not offsets (or vice versa) were not assigned; '
                                 'this may be a sign of faulty wiring or clock drift')
-                # Remove orphaned onsets and offsets
+                # Find indices of GPIO upticks where only the downtick was marked for removal
                 orphaned_onsets, =  np.where(~to_remove.reshape(-1, 2)[:, 0] & orphaned)
+                # The onsets_ array already has the other TTLs removed (same size as to_remove ==
+                # False) so subtract the number of removed elements from index.
+                for i, v in enumerate(orphaned_onsets):
+                    orphaned_onsets[i] -= to_remove.reshape(-1, 2)[:v, 0].sum()
+                # Same for offsets...
                 orphaned_offsets, =  np.where(~to_remove.reshape(-1, 2)[:, 1] & orphaned)
+                for i, v in enumerate(orphaned_offsets):
+                    orphaned_offsets[i] -= to_remove.reshape(-1, 2)[:v, 1].sum()
+                # Remove orphaned onsets and offsets
                 onsets_ = np.delete(onsets_, orphaned_onsets)
                 offsets_ = np.delete(offsets_, orphaned_offsets)
+                _logger.debug(f'{orphaned.sum()} orphaned TTLs removed')
                 to_remove.reshape(-1, 2)[orphaned] = True
 
             # Remove those unassigned GPIOs
@@ -569,7 +579,7 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
             # Assert that we've removed discrete TTLs
             # A failure means e.g. an up-going front of one TTL was missed
             # but not the down-going one.
-            assert (np.all(np.abs(np.diff(gpio['polarities'])) == 2))
+            assert np.all(np.abs(np.diff(gpio['polarities'])) == 2)
             assert gpio['polarities'][0] == 1
 
         audio_ = {'times': np.empty(ifronts.size), 'polarities': gpio['polarities']}
