@@ -31,7 +31,7 @@ def get_video_frame(video_path, frame_number):
 
 
 def get_video_frames_preload(video_path, frame_numbers=None, mask=Ellipsis, as_list=False,
-                             func=lambda x, **kwargs: x, **kwargs):
+                             func=lambda x: x,):
     """
     Obtain numpy array corresponding to a particular video frame in video_path.
     Fetching and returning a list is about 33% faster but may be less memory controlled. NB: Any
@@ -42,7 +42,6 @@ def get_video_frames_preload(video_path, frame_numbers=None, mask=Ellipsis, as_l
     :param as_list: if true the frames are returned as a list, this is faster but may be less
     memory efficient
     :param func: Function to be applied to each frame. Applied after masking if applicable.
-    :param **kwargs: Keyword arguments to be passed to func.
     :return: numpy array corresponding to frame of interest, or list if as_list is True.
     Default dimensions are (n, w, h, 3) where n = len(frame_numbers)
 
@@ -71,7 +70,7 @@ def get_video_frames_preload(video_path, frame_numbers=None, mask=Ellipsis, as_l
         frame_images = [None] * len(frame_numbers)
     else:
         ret, frame = cap.read()
-        frame_images = np.empty((len(frame_numbers), *func(frame[mask or ...], **kwargs).shape),
+        frame_images = np.empty((len(frame_numbers), *func(frame[mask or ...]).shape),
                                 np.uint8)
     for ii, i in enumerate(frame_numbers):
         sys.stdout.write(f'\rloading frame {ii}/{len(frame_numbers)}')
@@ -80,7 +79,7 @@ def get_video_frames_preload(video_path, frame_numbers=None, mask=Ellipsis, as_l
             cap.set(cv2.CAP_PROP_POS_FRAMES, i)
         ret, frame = cap.read()
         if ret:
-            frame_images[ii] = func(frame[mask or ...], **kwargs)
+            frame_images[ii] = func(frame[mask or ...])
         else:
             print(f'failed to read frame #{i}')
     cap.release()
