@@ -155,8 +155,8 @@ def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, fk_kw
     # detect faulty channels if single batch
     if tr_sel is None:
         reject_channel_kwargs = {'butt_kwargs': {'N': 4, 'Wn': 0.05, 'btype': 'lp'}, 'trx': 1}
-        sel_ok, _ = reject_channels(x, fs, **reject_channel_kwargs)
+        tr_sel, _ = reject_channels(x, fs, **reject_channel_kwargs)
     # apply spatial filter on good channel selection only
     x_ = np.zeros_like(x)
-    x_[sel_ok, :] = voltage.fk(x[sel_ok, :], si=1 / fs, **fk_kwargs)
+    x_[tr_sel, :] = voltage.fk(x[tr_sel, :], si=1 / fs, **fk_kwargs)
     return x_
