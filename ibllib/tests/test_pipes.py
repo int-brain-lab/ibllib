@@ -38,7 +38,7 @@ class TestExtractors2Tasks(unittest.TestCase):
         ]
         for to in task_out:
             out = ibllib.io.extractors.base.get_task_extractor_type(to[0])
-            self.assertEqual(out, to[1])
+            assert out == to[1]
 
 
 class TestPipesMisc(unittest.TestCase):

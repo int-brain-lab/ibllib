@@ -4,7 +4,8 @@ i.e. habituation, training or biased.
 """
 import logging
 
-from ibllib.io.extractors import habituation_trials, training_trials, biased_trials, training_wheel
+from ibllib.io.extractors import (habituation_trials, training_trials, biased_trials,
+                                  training_wheel, opto_trials)
 import ibllib.io.extractors.base
 import ibllib.io.raw_data_loaders as rawio
 from ibllib.misc import version
@@ -34,17 +35,15 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None):
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
         trials, files_trials = training_trials.extract_all(
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
-    elif extractor_type in ['biased_opto']:
-        # biased extraction with extra laser datasets
-        wheel, files_wheel = training_wheel.extract_all(
-            session_path, bpod_trials=bpod_trials, settings=settings, save=save)
-        trials, files_trials = biased_trials.extract_all(
-            session_path, bpod_trials=bpod_trials, settings=settings, save=save,
-            extra_classes=[training_trials.LaserBool])
     elif extractor_type in ['biased', 'ephys']:
         wheel, files_wheel = training_wheel.extract_all(
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
         trials, files_trials = biased_trials.extract_all(
+            session_path, bpod_trials=bpod_trials, settings=settings, save=save)
+    elif extractor_type in ['biased_opto', 'ephys_biased_opto']:
+        wheel, files_wheel = training_wheel.extract_all(
+            session_path, bpod_trials=bpod_trials, settings=settings, save=save)
+        trials, files_trials = opto_trials.extract_all(
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
     elif extractor_type == 'habituation':
         if version.le(settings['IBLRIG_VERSION_TAG'], '5.0.0'):

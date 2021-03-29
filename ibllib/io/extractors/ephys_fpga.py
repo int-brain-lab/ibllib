@@ -660,7 +660,7 @@ def extract_all(session_path, save=True, bin_exists=False):
     basecls = [FpgaTrials]
     if extractor_type in ['ephys', 'mock_ephys', 'sync_ephys']:
         basecls.extend([ProbaContrasts])
-    elif extractor_type in ['ephys_biased']:
+    elif extractor_type in ['ephys_biased_opto']:
         basecls.extend([biased_trials.ProbabilityLeft, FpgaLaser])
 
     sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
