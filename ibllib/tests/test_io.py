@@ -813,22 +813,6 @@ class TestVideo(unittest.TestCase):
         with self.assertRaises(TypeError):
             video.assert_valid_label(None)
 
-    def test_get_video_frames_preload_stream(self):
-        video_path = self.url
-        frames_array = video.get_video_frames_preload(video_path, frame_numbers=range(4),
-                                                      mask=np.s_[:10, :5, :])
-        self.assertEqual(frames_array.shape, (4, 10, 5, 3))
-
-        frames_list = video.get_video_frames_preload(video_path, frame_numbers=[0, 1],
-                                                     mask=np.s_[:10, :5, :], as_list=True)
-        self.assertEqual(len(frames_list), 2)
-        self.assertIsInstance(frames_list, list)
-
-        return frames_array
-        frames_func = video.get_video_frames_preload(video_path, frame_numbers=[0, 1, 2],
-                                                     func=np.mean(), axis=3)
-        self.assertEqual(len(frames_func.shape), 3)
-
 
 if __name__ == "__main__":
     unittest.main(exit=False)
