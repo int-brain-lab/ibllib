@@ -11,7 +11,7 @@ from scipy import signal
 
 import alf.io
 from brainbox.core import Bunch
-from brainbox.metrics import spike_sorting_metrics
+from brainbox.metrics.single_units import spike_sorting_metrics
 from ibllib.ephys import sync_probes
 from ibllib.io import spikeglx, raw_data_loaders
 import ibllib.dsp as dsp

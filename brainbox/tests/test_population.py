@@ -1,7 +1,7 @@
 from pathlib import Path
 import pickle
 from sklearn.naive_bayes import MultinomialNB
-from brainbox.population import xcorr, classify, regress, get_spike_counts_in_bins
+from brainbox.population.decode import xcorr, classify, regress, get_spike_counts_in_bins
 import unittest
 import numpy as np
 

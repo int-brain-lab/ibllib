@@ -7,7 +7,7 @@ from scipy.stats import ranksums, wilcoxon, ttest_ind, ttest_rel
 from ._statsmodels import multipletests
 from sklearn.metrics import roc_auc_score
 import pandas as pd
-from brainbox.population import get_spike_counts_in_bins
+from brainbox.population.decode import get_spike_counts_in_bins
 
 
 def responsive_units(spike_times, spike_clusters, event_times,
