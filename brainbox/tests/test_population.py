@@ -132,7 +132,7 @@ class TestPopulation(unittest.TestCase):
         y = np.zeros(700)
 
         def fStatMeas(X, y):
-            np.random.rand()
+            return np.random.rand()
 
         with self.assertRaises(AssertionError):
             sigtest_linshift(X, y, fStatMeas, D=699)
