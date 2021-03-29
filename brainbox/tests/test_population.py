@@ -121,9 +121,6 @@ class TestPopulation(unittest.TestCase):
         def genPseudo():
             return np.zeros(700)
 
-        with self.assertRaises(AssertionError):
-            sigtest_pseudosessions(X, y, fStatMeas, genPseudo, npseuds=200)
-
         acount = 0
         for i in range(100):
             if sigtest_pseudosessions(X, y, fStatMeas, genPseudo, npseuds=100)[0] < .1:
