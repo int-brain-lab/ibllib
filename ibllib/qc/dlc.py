@@ -139,16 +139,22 @@ class DlcQC(base.QC):
         return outcome, self.metrics
 
     def check_time_trace_length_match(self):
+        '''
+        Check that the length of the DLC traces is the same length as the video.
+        '''
         dlc_coords = self.data['dlc_coords']
         times = self.data['camera_times']
         for target in dlc_coords.keys():
-            if times.shape[0] < dlc_coords[target].shape[1]:
+            if times.shape[0] != dlc_coords[target].shape[1]:
                 _log.error(f'{self.side}Camera length of camera.times does not match '
                            f'length of camera.dlc {target}')
                 return 'FAIL'
         return 'PASS'
 
     def check_trace_all_nan(self):
+        '''
+        Check that none of the dlc traces, except for the 'tube' traces, are all NaN.
+        '''
         dlc_coords = self.data['dlc_coords']
         for target in dlc_coords.keys():
             if 'tube' not in target:
