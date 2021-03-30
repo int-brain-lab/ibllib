@@ -9,7 +9,6 @@ import traceback
 
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.pipes import ephys_preprocessing, training_preprocessing, tasks
-import ibllib.exceptions
 from ibllib.time import date2isostr
 
 import oneibl.registration as registration
