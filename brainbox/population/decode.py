@@ -1,13 +1,10 @@
-'''
+"""
 Population functions.
 
 Code from https://github.com/cortex-lab/phylib/blob/master/phylib/stats/ccg.py by C. Rossant.
 Code for decoding by G. Meijer
-<<<<<<< HEAD:brainbox/population/population.py
 Code from sigtest_pseudosessions and sigtest_linshift by B. Benson
-=======
->>>>>>> develop:brainbox/population/decode.py
-'''
+"""
 
 import numpy as np
 import scipy as sp
@@ -70,7 +67,7 @@ def get_spike_counts_in_bins(spike_times, spike_clusters, intervals):
 def _index_of(arr, lookup):
     """Replace scalars in an array by their indices in a lookup table.
 
-    Implicitely assume that:
+    Implicitly assume that:
 
     * All elements of arr and lookup are non-negative integers.
     * All elements or arr belong to lookup.
@@ -264,13 +261,6 @@ def regress(population_activity, trial_targets, cross_validation=None):
         population activity of all neurons in the population for each trial.
     trial_targets : 1D or 2D array
         the decoding target per trial as a continuous variable
-<<<<<<< HEAD:brainbox/population/population.py
-    pre_time : float
-        time (in seconds) preceding the event times
-    post_time : float
-        time (in seconds) following the event times
-=======
->>>>>>> develop:brainbox/population/decode.py
     cross_validation : None or scikit-learn object
         which cross-validation method to use, for example 5-fold:
                     from sklearn.model_selection import KFold
@@ -302,20 +292,12 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
            custom_validation=None, n_neurons='all', iterations=1, shuffle=False, phase_rand=False):
     """
 
-<<<<<<< HEAD:brainbox/population/population.py
-    WILL BE DEPRICATED
-=======
     WILL BE DEPRECATED
->>>>>>> develop:brainbox/population/decode.py
 
     Use decoding to classify groups of trials (e.g. stim left/right). Classification is done using
     the population vector of summed spike counts from the specified time window. Cross-validation
     is achieved using n-fold cross validation or leave-one-out cross validation. Decoders can
-<<<<<<< HEAD:brainbox/population/population.py
-    decode any number of groups. When providing the classfier with an imbalanced dataset (not
-=======
     decode any number of groups. When providing the classifier with an imbalanced dataset (not
->>>>>>> develop:brainbox/population/decode.py
     the same number of trials in each group) the chance level will not be 1/groups. In that case,
     to compare the classification performance against change one has to either determine chance
     level by decoding a shuffled dataset or use the 'auroc' metric as readout (this metric is
@@ -371,11 +353,7 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
     n_neurons : string or integer
         number of neurons to randomly subselect from the population (default is 'all')
     iterations : int
-<<<<<<< HEAD:brainbox/population/population.py
-        number of times to repeat the decoding (especially usefull when subselecting neurons)
-=======
         number of times to repeat the decoding (especially useful when subselecting neurons)
->>>>>>> develop:brainbox/population/decode.py
     shuffle : boolean
         whether to shuffle the trial labels each decoding iteration
     phase_rand : boolean
@@ -400,7 +378,7 @@ def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, p
         probabilities : 2D array with dimensions iterations x trials
             classification probability for all trials in every iteration
     """
-    print('\n WARNING: The function decode will soon be depricated, use classify instead\n')
+    print('\n WARNING: The function decode will soon be deprecated, use classify instead\n')
 
     # Check input
     if type(classifier) == str:
@@ -654,7 +632,7 @@ def lda_project(spike_times, spike_clusters, event_times, event_groups, pre_time
 
 
 def sigtest_pseudosessions(X, y, fStatMeas, genPseudo, npseuds=200):
-    '''
+    """
     Estimates significance level of any statistical measure following Harris, Arxiv, 2021
     (https://www.biorxiv.org/content/10.1101/2020.11.29.402719v2).
     fStatMeas computes a scalar statistical measure (e.g. R^2) between the data, X, and the
@@ -679,7 +657,7 @@ def sigtest_pseudosessions(X, y, fStatMeas, genPseudo, npseuds=200):
             hypothesis.
     statms_real : the value of the statistical measure evaluated on X and y
     statms_pseuds : array of statistical measures evaluated on pseudosessions
-    '''
+    """
     statms_real = fStatMeas(X, y)
     statms_pseuds = np.zeros(npseuds)
     for i in range(npseuds):
@@ -691,7 +669,7 @@ def sigtest_pseudosessions(X, y, fStatMeas, genPseudo, npseuds=200):
 
 
 def sigtest_linshift(X, y, fStatMeas, D=300):
-    '''
+    """
     Uses a provably conservative Linear Shift technique (Harris, Kenneth Arxiv 2021,
     https://arxiv.org/ftp/arxiv/papers/2012/2012.06862.pdf) to estimate
     significance level of a statistical measure. fStatMeas computes a
@@ -714,7 +692,7 @@ def sigtest_linshift(X, y, fStatMeas, D=300):
             null hypothesis.
     statms_real : the value of the statistical measure evaluated on X and y
     statms_pseuds : a 1-d array of statistical measures evaluated on shifted versions of y
-    '''
+    """
     assert len(y) >= D + 2
 
     T = len(y)
