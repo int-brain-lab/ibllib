@@ -96,37 +96,42 @@ class CameraTimestampsFPGA(BaseExtractor):
             # Extract audio TTLs
             audio = _get_sync_fronts(sync, chmap['audio'])
             _, ts = raw.load_camera_ssv_times(self.session_path, self.label)
-            """
-            NB: Some of the audio TTLs occur very close together, and are therefore not
-            reflected in the pin state.  This function removes those.  Also converts frame times to
-            FPGA time.
-            """
-            gpio, audio, ts = groom_pin_state(gpio, audio, ts, display=display)
-            """
-            The length of the count and pin state are regularly longer than the length of
-            the video file.  Here we assert that the video is either shorter or the same
-            length as the arrays, and  we make an assumption that the missing frames are
-            right at the end of the video.  We therefore simply shorten the arrays to match
-            the length of the video.
-            """
-            if video_path is None:
-                filename = f'_iblrig_{self.label}Camera.raw.mp4'
-                video_path = self.session_path.joinpath('raw_video_data', filename)
-            # Permit the video path to be the length for development and debugging purposes
-            length = video_path if isinstance(video_path, int) else get_video_length(video_path)
-            _logger.debug(f'Number of video frames = {length}')
-            if count.size > length:
-                count = count[:length]
-            else:
-                assert length == count.size, 'fewer counts than frames'
-            raw_ts = fpga_times[self.label]
-            timestamps = align_with_audio(raw_ts, audio, gpio, count,
-                                          display=display, extrapolate_missing=extrapolate_missing)
-        else:
-            _logger.warning('Alignment by wheel data not yet implemented')
-            timestamps = fpga_times[self.label]
+            try:
+                """
+                NB: Some of the audio TTLs occur very close together, and are therefore not
+                reflected in the pin state.  This function removes those.  Also converts frame
+                times to FPGA time.
+                """
+                gpio, audio, ts = groom_pin_state(gpio, audio, ts, display=display)
+                """
+                The length of the count and pin state are regularly longer than the length of
+                the video file.  Here we assert that the video is either shorter or the same
+                length as the arrays, and  we make an assumption that the missing frames are
+                right at the end of the video.  We therefore simply shorten the arrays to match
+                the length of the video.
+                """
+                if video_path is None:
+                    filename = f'_iblrig_{self.label}Camera.raw.mp4'
+                    video_path = self.session_path.joinpath('raw_video_data', filename)
+                # Permit the video path to be the length for development and debugging purposes
+                length = (video_path
+                          if isinstance(video_path, int)
+                          else get_video_length(video_path))
+                _logger.debug(f'Number of video frames = {length}')
+                if count.size > length:
+                    count = count[:length]
+                else:
+                    assert length == count.size, 'fewer counts than frames'
+                raw_ts = fpga_times[self.label]
+                return align_with_audio(raw_ts, audio, gpio, count,
+                                        display=display,
+                                        extrapolate_missing=extrapolate_missing)
+            except AssertionError as ex:
+                _logger.critical('Failed to extract using audio: %s', ex)
 
-        return timestamps
+        # If you reach here extracting using audio TTLs was not possible
+        _logger.warning('Alignment by wheel data not yet implemented')
+        return fpga_times[self.label]
 
 
 class CameraTimestampsBpod(BaseBpodTrialsExtractor):
@@ -186,31 +191,35 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
             the nearest TTL within 500ms.  The go cue TTLs comprise two short pulses ~3ms apart.
             We will fuse any TTLs less than 5ms apart to make assignment more accurate.
             """
-            gpio, audio, ts = groom_pin_state(gpio, audio, ts, take='nearest',
-                                              tolerance=.5, min_diff=5e-3, display=display)
-            if count.size > length:
-                count = count[:length]
-            else:
-                assert length == count.size, 'fewer counts than frames'
+            try:
+                gpio, audio, ts = groom_pin_state(gpio, audio, ts, take='nearest',
+                                                  tolerance=.5, min_diff=5e-3, display=display)
+                if count.size > length:
+                    count = count[:length]
+                else:
+                    assert length == count.size, 'fewer counts than frames'
 
-            return align_with_audio(raw_ts, audio, gpio, count,
-                                    extrapolate_missing, display=display)
-        else:
-            _logger.warning('Alignment by wheel data not yet implemented')
-            # Extrapolate at median frame rate
-            n_missing = length - raw_ts.size
-            if n_missing > 0:
-                _logger.warning(f'{n_missing} fewer Bpod timestamps than frames; '
-                                f'{"extrapolating" if extrapolate_missing else "appending nans"}')
-                frate = np.median(np.diff(raw_ts))
-                to_app = ((np.arange(n_missing, ) + 1) / frate + raw_ts[-1]
-                          if extrapolate_missing
-                          else np.full(n_missing, np.nan))
-                raw_ts = np.r_[raw_ts, to_app]  # Append the missing times
-            elif n_missing < 0:
-                _logger.warning(f'{abs(n_missing)} fewer frames than Bpod timestamps')
+                return align_with_audio(raw_ts, audio, gpio, count,
+                                        extrapolate_missing, display=display)
+            except AssertionError as ex:
+                _logger.critical('Failed to extract using audio: %s', ex)
 
-            return raw_ts
+        # If you reach here extracting using audio TTLs was not possible
+        _logger.warning('Alignment by wheel data not yet implemented')
+        # Extrapolate at median frame rate
+        n_missing = length - raw_ts.size
+        if n_missing > 0:
+            _logger.warning(f'{n_missing} fewer Bpod timestamps than frames; '
+                            f'{"extrapolating" if extrapolate_missing else "appending nans"}')
+            frate = np.median(np.diff(raw_ts))
+            to_app = ((np.arange(n_missing, ) + 1) / frate + raw_ts[-1]
+                      if extrapolate_missing
+                      else np.full(n_missing, np.nan))
+            raw_ts = np.r_[raw_ts, to_app]  # Append the missing times
+        elif n_missing < 0:
+            _logger.warning(f'{abs(n_missing)} fewer frames than Bpod timestamps')
+
+        return raw_ts
 
     def _times_from_bpod(self):
         ntrials = len(self.bpod_trials)
@@ -362,12 +371,13 @@ def align_with_audio(timestamps, audio, pin_state, count,
                   if extrapolate_missing
                   else np.full(n_missing, np.nan))
         ts = np.r_[ts, to_app]  # Append the missing times
-    assert ts.size >= count.size
-    assert ts.size == count[-1] + 1
+    assert ts.size >= count.size, 'fewer timestamps than frame counts'
+    assert ts.size == count[-1] + 1, 'more frames recorded in frame count than timestamps '
 
     # Remove the rest of the dropped frames
     ts = ts[count]
-    assert np.searchsorted(ts, audio['times'][0]) == first_uptick
+    assert np.searchsorted(ts, audio['times'][0]) == first_uptick,\
+           'time of first audio TTL doesn\'t match after alignment'
     if ts.size != count.size:
         _logger.error('number of timestamps and frames don\'t match after alignment')
 
@@ -449,6 +459,7 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
         _logger.warning('GPIO events occurring beyond timestamps array length')
         keep = gpio['indices'] < ts.size
         gpio = {k: gpio[k][keep] for k, v in gpio.items()}
+    assert audio and audio['times'].size > 0, 'no audio TTLs for session'
     assert audio['times'].size == audio['polarities'].size, 'audio data dimension mismatch'
     # make sure that there are no 2 consecutive fall or consecutive rise events
     assert np.all(np.abs(np.diff(audio['polarities'])) == 2), 'consecutive high/low audio events'
@@ -490,6 +501,7 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
             audio_times = np.delete(audio['times'], np.r_[short, short + 1])
             _logger.debug(f'Removed {short.size * 2} fronts TLLs less than '
                           f'{min_diff * 1e3:.0f}ms apart')
+            assert audio_times.size > 0, f'all audio TTLs less than {min_diff}s'
 
         # Onsets
         ups = ts[low2high] - ts[low2high][0]  # times relative to first GPIO high
