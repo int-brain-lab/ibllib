@@ -21,6 +21,7 @@ from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
 from ibllib.dsp import rms
+from oneibl.one import OneOffline
 
 _logger = logging.getLogger("ibllib")
 
@@ -265,6 +266,8 @@ class EphysTrials(tasks.Task):
             n_trials=trials["intervals"].shape[0],
             perf_easy=training.compute_performance_easy(trials),
         )
+        if isinstance(self.one, OneOffline):
+            return
         eid = self.one.eid_from_path(self.session_path)
         self.one.alyx.json_field_update(
             "sessions", eid, "extended_qc", {"behavior": int(good_enough)}

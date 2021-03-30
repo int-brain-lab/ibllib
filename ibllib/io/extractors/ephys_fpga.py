@@ -568,7 +568,12 @@ class ProbaContrasts(BaseBpodTrialsExtractor):
 
 
 class FpgaLaser(BaseExtractor):
-    pass
+
+    save_names = ()
+    var_names = ()
+
+    def _extract(self, **kwargs):
+        return []
 
 
 class FpgaTrials(BaseExtractor):
@@ -661,8 +666,7 @@ def extract_all(session_path, save=True, bin_exists=False):
     if extractor_type in ['ephys', 'mock_ephys', 'sync_ephys']:
         basecls.extend([ProbaContrasts])
     elif extractor_type in ['ephys_biased_opto']:
-        basecls.extend([biased_trials.ProbabilityLeft, FpgaLaser])
-
+        basecls.extend([biased_trials.ProbabilityLeft, biased_trials.ContrastLR, FpgaLaser])
     sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
     outputs, files = run_extractor_classes(basecls, session_path=session_path,
                                            save=save, sync=sync, chmap=chmap)

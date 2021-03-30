@@ -69,7 +69,7 @@ class ProbabilityLeft(BaseBpodTrialsExtractor):
     save_names = '_ibl_trials.probabilityLeft.npy'
     var_names = 'probabilityLeft'
 
-    def _extract(self):
+    def _extract(self, **kwargs):
         return np.array([t['stim_probability_left'] for t in self.bpod_trials])
 
 

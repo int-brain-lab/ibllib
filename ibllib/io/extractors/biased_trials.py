@@ -17,7 +17,7 @@ class ContrastLR(BaseBpodTrialsExtractor):
     save_names = ('_ibl_trials.contrastLeft.npy', '_ibl_trials.contrastRight.npy')
     var_names = ('contrastLeft', 'contrastRight')
 
-    def _extract(self):
+    def _extract(self, **kwargs):
         contrastLeft = np.array([t['contrast'] if np.sign(
             t['position']) < 0 else np.nan for t in self.bpod_trials])
         contrastRight = np.array([t['contrast'] if np.sign(
