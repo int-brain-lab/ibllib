@@ -259,15 +259,11 @@ class EphysTrials(tasks.Task):
         import alf.io
         from brainbox.behavior import training
 
-        if self.one is None:  # if no instance of Alyx is provided, do not touch any database
-            return
         trials = alf.io.load_object(self.session_path.joinpath("alf"), "trials")
         good_enough = training.criterion_delay(
             n_trials=trials["intervals"].shape[0],
             perf_easy=training.compute_performance_easy(trials),
         )
-        if isinstance(self.one, OneOffline):
-            return
         eid = self.one.eid_from_path(self.session_path)
         self.one.alyx.json_field_update(
             "sessions", eid, "extended_qc", {"behavior": int(good_enough)}
@@ -275,8 +271,11 @@ class EphysTrials(tasks.Task):
 
     def _run(self):
         dsets, out_files = ephys_fpga.extract_all(self.session_path, save=True)
-        self._behaviour_criterion()
 
+        if self.one is None or isinstance(self.one, OneOffline):
+            return out_files
+
+        self._behaviour_criterion()
         # Run the task QC
         qc = TaskQC(self.session_path, one=self.one, log=_logger)
         qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one)
