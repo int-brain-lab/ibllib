@@ -33,12 +33,12 @@ class TestExtractors2Tasks(unittest.TestCase):
             ("karolinaChoiceWorld5.34", "biased"),
             ("ephyskarolinaChoiceWorld4.34", "ephys"),
             ("passive_opto", "ephys"),
-            ("_iblrig_tasks_opto_ephysChoiceWorld", "ephys"),
-            ("_iblrig_tasks_opto_biasedChoiceWorld", "biased"),
+            ("_iblrig_tasks_opto_ephysChoiceWorld", "ephys_biased_opto"),
+            ("_iblrig_tasks_opto_biasedChoiceWorld", "biased_opto"),
         ]
         for to in task_out:
             out = ibllib.io.extractors.base.get_task_extractor_type(to[0])
-            self.assertEqual(out, to[1])
+            assert out == to[1]
 
 
 class TestPipesMisc(unittest.TestCase):
