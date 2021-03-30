@@ -1,14 +1,16 @@
 import logging
 
 import numpy as np
+from scipy.interpolate import interp1d
 
 from ibllib.io.extractors import bpod_trials
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io.extractors.training_wheel import get_wheel_position
-from ibllib.io.extractors.ephys_fpga import get_main_probe_sync, FpgaTrials
+from ibllib.io.extractors import ephys_fpga
 import ibllib.io.raw_data_loaders as raw
 from alf.io import is_session_path
 from oneibl.one import ONE
+
 
 _logger = logging.getLogger("ibllib")
 
@@ -104,7 +106,7 @@ class TaskQCExtractor(object):
             self.frame_ttls, self.audio_ttls = raw.load_bpod_fronts(
                 self.session_path, data=self.raw_data)
         else:  # Extract from FPGA
-            sync, chmap = get_main_probe_sync(self.session_path)
+            sync, chmap = ephys_fpga.get_main_probe_sync(self.session_path)
 
             def channel_events(name):
                 """Fetches the polarities and times for a given channel"""
@@ -127,15 +129,14 @@ class TaskQCExtractor(object):
 
         if not self.raw_data:
             self.load_raw_data()
-
         # Run extractors
         if self.type == 'ephys' and not self.bpod_only:
-            trials_extractor = FpgaTrials(self.session_path)
-            data, _ = trials_extractor.extract(save=False)
-            data = dict(zip(trials_extractor.var_names, data))
+            data, _ = ephys_fpga.extract_all(self.session_path)
+            bpod2fpga = interp1d(data['intervals_bpod'][:, 0], data['intervals'][:, 0],
+                                 fill_value="extrapolate")
             # Add Bpod wheel data
             re_ts, pos = get_wheel_position(self.session_path, self.raw_data)
-            data['wheel_timestamps_bpod'] = trials_extractor.bpod2fpga(re_ts)
+            data['wheel_timestamps_bpod'] = bpod2fpga(re_ts)
             data['wheel_position_bpod'] = pos
         else:
             kwargs = dict(save=False, bpod_trials=self.raw_data, settings=self.settings)
