@@ -16,11 +16,7 @@ import ibllib.dsp as dsp
 import ibllib.exceptions as err
 from ibllib.io import raw_data_loaders, spikeglx
 from ibllib.io.extractors import biased_trials
-from ibllib.io.extractors.base import (
-    BaseBpodTrialsExtractor,
-    BaseExtractor,
-    run_extractor_classes,
-)
+import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 import ibllib.plots as plots
 
@@ -509,7 +505,7 @@ def get_main_probe_sync(session_path, bin_exists=False):
     return sync, sync_chmap
 
 
-class ProbaContrasts(BaseBpodTrialsExtractor):
+class ProbaContrasts(extractors_base.BaseBpodTrialsExtractor):
     """
     Bpod pre-generated values for probabilityLeft, contrastLR, phase, quiescence
     """
@@ -567,16 +563,7 @@ class ProbaContrasts(BaseBpodTrialsExtractor):
                 'contrastRight': contrastRight, 'contrastLeft': contrastLeft}
 
 
-class FpgaLaser(BaseExtractor):
-
-    save_names = ()
-    var_names = ()
-
-    def _extract(self, **kwargs):
-        return []
-
-
-class FpgaTrials(BaseExtractor):
+class FpgaTrials(extractors_base.BaseExtractor):
     save_names = ('_ibl_trials.feedbackType.npy', '_ibl_trials.choice.npy',
                   '_ibl_trials.rewardVolume.npy', '_ibl_trials.intervals_bpod.npy',
                   '_ibl_trials.intervals.npy', '_ibl_trials.response_times.npy',
@@ -659,15 +646,16 @@ def extract_all(session_path, save=True, bin_exists=False):
     :param save: Bool, defaults to False
     :return: outputs, files
     """
-    import ibllib.io.extractors.base
-    extractor_type = ibllib.io.extractors.base.get_session_extractor_type(session_path)
+    extractor_type = extractors_base.get_session_extractor_type(session_path)
     _logger.info(f"Extracting {session_path} as {extractor_type}")
     basecls = [FpgaTrials]
     if extractor_type in ['ephys', 'mock_ephys', 'sync_ephys']:
         basecls.extend([ProbaContrasts])
     elif extractor_type in ['ephys_biased_opto']:
-        basecls.extend([biased_trials.ProbabilityLeft, biased_trials.ContrastLR, FpgaLaser])
+        from ibllib.io.extractors import opto_trials
+        basecls.extend([biased_trials.ProbabilityLeft, biased_trials.ContrastLR,
+                        opto_trials.LaserBool])
     sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
-    outputs, files = run_extractor_classes(basecls, session_path=session_path,
-                                           save=save, sync=sync, chmap=chmap)
+    outputs, files = extractors_base.run_extractor_classes(
+        basecls, session_path=session_path, save=save, sync=sync, chmap=chmap)
     return outputs, files

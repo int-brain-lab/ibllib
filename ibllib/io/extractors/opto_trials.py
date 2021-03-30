@@ -8,10 +8,13 @@ _logger = logging.getLogger('ibllib')
 
 
 class LaserBool(BaseBpodTrialsExtractor):
+    """
+    Extracts the laser probabilities from the bpod jsonable
+    """
     save_names = ('_ibl_trials.laser_stimulation.npy', '_ibl_trials.laser_probability.npy')
     var_names = ('laser_stimulation', 'laser_probability')
 
-    def _extract(self):
+    def _extract(self, **kwargs):
         lstim = np.array([np.float(t.get('laser_stimulation', np.NaN)) for t in self.bpod_trials])
         lprob = np.array([np.float(t.get('laser_probability', np.NaN)) for t in self.bpod_trials])
         _logger.info('Extracting laser datasets')
@@ -27,6 +30,9 @@ class LaserBool(BaseBpodTrialsExtractor):
 
 
 def extract_all(*args, extra_classes=None, **kwargs):
+    """
+    Extracts the biased trials for a training session
+    """
     if extra_classes is not None:
         extra_classes.append(LaserBool)
     else:

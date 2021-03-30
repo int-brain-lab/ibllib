@@ -610,8 +610,8 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
     """
     Extracts stim on / off and freeze times from Bpod BNC1 detected fronts
     """
-    save_names = ["_ibl_trials.stimOn_times.npy", None, None]
-    var_names = ['stimOn_times', 'stimOff_times', 'stimFreeze_times']
+    save_names = ("_ibl_trials.stimOn_times.npy", None, None)
+    var_names = ('stimOn_times', 'stimOff_times', 'stimFreeze_times')
 
     def _extract(self):
         choice = Choice(self.session_path).extract(
