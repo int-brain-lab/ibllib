@@ -1,3 +1,9 @@
+## Release Notes 1.8
+### Release Notes 1.8.0 - 2020-03-30
+- opto-ephys tasks
+- DLC QC
+- Do not block session creation if error
+
 ## Release Notes 1.7
 ### Release Notes 1.7.0 - 2020-03-16
 - Removed deprecated numpy dtypes
