@@ -1,4 +1,7 @@
 from pathlib import Path
+import logging
+
+log = logging.getLogger('ibllib')
 
 
 # Remove empty folders
@@ -22,14 +25,14 @@ def delete_empty_folders(path, rglob_pattern='*', dry=True, recursive=False):
     path = Path(path)
     all_dirs = {p for p in path.rglob(rglob_pattern) if p.is_dir()}
     empty_dirs = {p for p in all_dirs if not list(p.glob('*'))}
-    print(f'Empty folders: {len(empty_dirs)}')
+    log.info(f'Empty folders: {len(empty_dirs)}')
     if dry:
-        print('Empty folder names:', empty_dirs)
+        log.info(f'Empty folder names: {empty_dirs}')
     elif not dry:
         for d in empty_dirs:
-            print('Deleting empty folder: ', d)
+            log.info(f'Deleting empty folder: {d}')
             d.rmdir()
-        print(f'Deleted folders: {len(empty_dirs)}\n')
+        log.info(f'Deleted folders: {len(empty_dirs)}\n')
         if recursive:
             return delete_empty_folders(path, rglob_pattern=rglob_pattern, dry=dry)
 
