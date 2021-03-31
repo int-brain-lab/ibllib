@@ -5,11 +5,13 @@ name: CI
 # Controls when the action will run. Triggers the workflow on push or pull request
 # events but only for the selected branches
 on:
+  schedule:
+    - cron:  '0 0 * * *'  # every day at midnight
+  workflow_dispatch:  # For manual trigegring
   push:
     branches: [ master, develop ]
   pull_request:
     branches: [ master, develop ]
-  workflow_dispatch:  # For manual trigegring
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 #           conda install -y -c anaconda tk
@@ -29,7 +31,8 @@ jobs:
         uses: actions/checkout@v2
       - uses: conda-incubator/setup-miniconda@v2
         with:
-          auto-update-conda: false
+          auto-update-conda: true
+          auto-activate-base: true
           python-version: ${{ matrix.python-version }}
       - name: Commands
         shell: bash -l {0}
@@ -43,5 +46,5 @@ jobs:
           pip install -e .
           python -c "from oneibl.one import ONE; ONE(silent=True)"
           python ibllib/pipes/set_pass.py "$HTTP_DATA_SERVER_PWD"
-          python -m unittest discover
           flake8
+          python -m unittest discover
