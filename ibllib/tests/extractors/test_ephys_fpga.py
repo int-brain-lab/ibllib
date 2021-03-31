@@ -308,3 +308,7 @@ class TestEphysFPGA_TTLsExtraction(unittest.TestCase):
                     'polarities': np.array([1, -1, 1, -1, 1])}
         frame2ttl_ = ephys_fpga._clean_frame2ttl(frame2ttl, display=DISPLAY)
         assert all([np.all(frame2ttl_[k] == expected[k]) for k in frame2ttl_])
+
+
+if __name__ == "__main__":
+    unittest.main(exit=False, verbosity=2)
