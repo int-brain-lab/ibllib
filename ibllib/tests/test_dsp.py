@@ -3,8 +3,8 @@ import numpy as np
 import scipy.signal
 
 import ibllib.dsp.fourier as ft
-from ibllib.dsp import WindowGenerator, rms, rises, falls, fronts, smooth, shift, fit_phase,\
-    fcn_cosine
+from ibllib.dsp import (WindowGenerator, rms, rises, falls, fronts, smooth, fshift, fit_phase,
+                        fcn_cosine)
 from ibllib.dsp.utils import parabolic_max, sync_timestamps
 
 
@@ -96,14 +96,19 @@ class TestShift(unittest.TestCase):
     def test_shift_1d(self):
         ns = 500
         w = scipy.signal.ricker(ns, 10)
-        self.assertTrue(np.all(np.isclose(shift(w, 1), np.roll(w, 1))))
+        self.assertTrue(np.all(np.isclose(fshift(w, 1), np.roll(w, 1))))
 
     def test_shift_2d(self):
         ns = 500
         w = scipy.signal.ricker(ns, 10)
         w = np.tile(w, (100, 1)).transpose()
-        self.assertTrue(np.all(np.isclose(shift(w, 1, axis=0), np.roll(w, 1, axis=0))))
-        self.assertTrue(np.all(np.isclose(shift(w, 1, axis=1), np.roll(w, 1, axis=1))))
+        self.assertTrue(np.all(np.isclose(fshift(w, 1, axis=0), np.roll(w, 1, axis=0))))
+        self.assertTrue(np.all(np.isclose(fshift(w, 1, axis=1), np.roll(w, 1, axis=1))))
+        # # test with individual shifts for each trace
+        self.assertTrue(
+            np.all(np.isclose(fshift(w, np.ones(w.shape[1]), axis=0), np.roll(w, 1, axis=0))))
+        self.assertTrue(
+            np.all(np.isclose(fshift(w, np.ones(w.shape[0]), axis=1), np.roll(w, 1, axis=1))))
 
 
 class TestSmooth(unittest.TestCase):

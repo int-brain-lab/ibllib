@@ -1,8 +1,8 @@
-'''
+"""
 Functions which map metrics to the Allen atlas.
 
 Code by G. Meijer
-'''
+"""
 
 import numpy as np
 import seaborn as sns

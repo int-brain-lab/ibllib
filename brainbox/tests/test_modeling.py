@@ -7,7 +7,7 @@ from scipy.interpolate import interp1d
 
 try:
     from brainbox.modeling import glm
-except OSError as ex:
+except (OSError, ModuleNotFoundError, ImportError) as ex:
     raise unittest.SkipTest(f"Importing pytorch failed: {ex}")
 
 

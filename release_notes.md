@@ -1,5 +1,23 @@
+## Release Notes 1.8
+### Release Notes 1.8.0 - 2020-03-30
+- opto-ephys tasks
+- DLC QC
+- Do not block session creation if error
+
+## Release Notes 1.7
+### Release Notes 1.7.0 - 2020-03-16
+- Removed deprecated numpy dtypes
+- Fix trajectory query bug
+- GPIO pin states loaded as bool array
+- Machine info and log append in Task class
+- Only delete session flag file after processing
+- Extractor support for widefield imaging protocol
+
 ## Release Notes 1.6
-### Release Notes 1.6.0 - 2020-03-17
+### Release Notes 1.6.2 - 2020-03-18
+- hotfix: fix test_modelling error after removing pytorch
+
+### Release Notes 1.6.1 - 2020-03-17
 - hotfix: maintain compatibility with Python 3.7
 
 ### Release Notes 1.6.0 - 2020-03-16

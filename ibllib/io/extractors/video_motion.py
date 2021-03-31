@@ -16,7 +16,7 @@ from pathlib import Path
 from oneibl.one import ONE, OneOffline
 import ibllib.io.video as vidio
 from brainbox.core import Bunch
-import brainbox.video.video as video
+import brainbox.video as video
 import brainbox.behavior.wheel as wh
 from ibllib.misc.exp_ref import eid2ref
 import alf.io as alfio

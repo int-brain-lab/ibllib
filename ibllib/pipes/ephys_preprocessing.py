@@ -21,6 +21,7 @@ from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
 from ibllib.dsp import rms
+from oneibl.one import OneOffline
 
 _logger = logging.getLogger("ibllib")
 
@@ -258,8 +259,6 @@ class EphysTrials(tasks.Task):
         import alf.io
         from brainbox.behavior import training
 
-        if self.one is None:  # if no instance of Alyx is provided, do not touch any database
-            return
         trials = alf.io.load_object(self.session_path.joinpath("alf"), "trials")
         good_enough = training.criterion_delay(
             n_trials=trials["intervals"].shape[0],
@@ -272,8 +271,11 @@ class EphysTrials(tasks.Task):
 
     def _run(self):
         dsets, out_files = ephys_fpga.extract_all(self.session_path, save=True)
-        self._behaviour_criterion()
 
+        if self.one is None or isinstance(self.one, OneOffline):
+            return out_files
+
+        self._behaviour_criterion()
         # Run the task QC
         qc = TaskQC(self.session_path, one=self.one, log=_logger)
         qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one)
