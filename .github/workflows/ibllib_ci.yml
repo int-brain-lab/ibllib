@@ -61,5 +61,5 @@ jobs:
         python -m unittest discover --verbose
     - name: ibllib tests
       run: |
-        cd ibllib
+        cd ibllib/tests
         python -m unittest discover --verbose
