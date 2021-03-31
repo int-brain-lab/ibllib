@@ -25,7 +25,7 @@ jobs:
       max-parallel: 4
       matrix:
         os: ["ubuntu-latest"]  #  , "windows-latest", "macos-latest"
-        python-version: ["3.7", "3.8"]
+        python-version: ["3.7"]  # , "3.8"
     steps:
       - name: Clone ibllib repo
         uses: actions/checkout@v2
@@ -34,17 +34,35 @@ jobs:
           auto-update-conda: true
           auto-activate-base: true
           python-version: ${{ matrix.python-version }}
-      - name: Commands
+      - name: Install, initialize ONE and set secret
         shell: bash -l {0}
         env:
           HTTP_DATA_SERVER_PWD: ${{ secrets.HTTP_DATA_SERVER_PWD }}
         run: |
-          conda activate base
-          python -V
-          pip -V
           pip install -r requirements.txt
           pip install -e .
           python -c "from oneibl.one import ONE; ONE(silent=True)"
           python ibllib/pipes/set_pass.py "$HTTP_DATA_SERVER_PWD"
-          flake8
+      - name: Flake8
+        shell: bash -l {0}
+        run: flake8
+      - name: ALF tests
+        shell: bash -l {0}
+        run: |
+          cd alf
+          python -m unittest discover --verbose
+      - name: Brainbox tests
+        shell: bash -l {0}
+        run: |
+          cd brainbox
+          python -m unittest discover --verbose
+      - name: ibllib tests
+        shell: bash -l {0}
+        run: |
+          cd ibllib
+          python -m unittest discover --verbose
+      - name: oneibl tests
+        shell: bash -l {0}
+        run: |
+          cd oneibl
           python -m unittest discover --verbose
