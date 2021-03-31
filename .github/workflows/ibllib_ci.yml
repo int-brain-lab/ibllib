@@ -44,7 +44,7 @@ jobs:
           python ibllib/pipes/set_pass.py "$HTTP_DATA_SERVER_PWD"
       - name: Flake8
         run: |
-          flake8
+          python -m flake8
       - name: ALF tests
         run: |
           cd alf
