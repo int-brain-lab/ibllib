@@ -53,11 +53,11 @@ jobs:
         run: |
           cd brainbox
           python -m unittest discover --verbose
-      - name: ibllib tests
-        run: |
-          cd ibllib
-          python -m unittest discover --verbose
       - name: oneibl tests
         run: |
           cd oneibl
+          python -m unittest discover --verbose
+      - name: ibllib tests
+        run: |
+          cd ibllib
           python -m unittest discover --verbose
