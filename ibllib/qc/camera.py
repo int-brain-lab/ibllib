@@ -514,7 +514,7 @@ class CameraQC(base.QC):
         if not wheel_present or self.side == 'body':
             return 'NOT_SET'
 
-        aln = MotionAlignment(self.eid, self.one, self.log)
+        aln = MotionAlignment(self.eid, self.one, self.log, session_path=self.session_path)
         aln.data = self.data.copy()
         aln.data['camera_times'] = {self.side: self.data['timestamps']}
         aln.video_paths = {self.side: self.video_path}
