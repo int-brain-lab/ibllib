@@ -35,6 +35,7 @@ jobs:
         run: |
           pip install -r requirements.txt
           pip install -e .
+          pip install tk
           python -c "from oneibl.one import ONE; ONE(silent=True)"
           python ibllib/pipes/set_pass.py "$HTTP_DATA_SERVER_PWD"
       - name: Flake8
