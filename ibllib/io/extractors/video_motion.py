@@ -38,7 +38,7 @@ class MotionAlignment:
     def __init__(self, eid, one=None, log=logging.getLogger('ibllib'), **kwargs):
         self.one = one or ONE()
         self.eid = eid
-        self.session_path = self.one.path_from_eid(eid)
+        self.session_path = kwargs.pop('session_path', self.one.path_from_eid(eid))
         if self.one and not isinstance(self.one, OneOffline):
             self.ref = eid2ref(self.eid, as_dict=False, one=self.one)
         else:
