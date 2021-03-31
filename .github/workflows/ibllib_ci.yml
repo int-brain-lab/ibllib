@@ -9,7 +9,7 @@ on:
     - cron:  '0 0 * * *'  # every day at midnight
   workflow_dispatch:  # For manual trigegring
   push:
-    branches: [ master, develop ]
+    branches: [ master, develop, github-actions ]
   pull_request:
     branches: [ master, develop ]
 
