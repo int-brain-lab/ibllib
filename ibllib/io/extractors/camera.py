@@ -578,9 +578,9 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
                 orphaned_offsets, =  np.where(~to_remove.reshape(-1, 2)[:, 1] & orphaned)
                 for i, v in enumerate(orphaned_offsets):
                     orphaned_offsets[i] -= to_remove.reshape(-1, 2)[:v, 1].sum()
-                # Remove orphaned onsets and offsets
-                onsets_ = np.delete(onsets_, orphaned_onsets)
-                offsets_ = np.delete(offsets_, orphaned_offsets)
+                # Remove orphaned audio onsets and offsets
+                onsets_ = np.delete(onsets_, orphaned_onsets[orphaned_onsets < onsets_.size])
+                offsets_ = np.delete(offsets_, orphaned_offsets[orphaned_offsets < offsets_.size])
                 _logger.debug(f'{orphaned.sum()} orphaned TTLs removed')
                 to_remove.reshape(-1, 2)[orphaned] = True
 
