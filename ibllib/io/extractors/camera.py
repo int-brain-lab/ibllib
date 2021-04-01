@@ -647,18 +647,18 @@ def extract_all(session_path, session_type=None, save=True, **kwargs):
     """
     if session_type is None:
         session_type = get_session_extractor_type(session_path)
-    if session_type == 'ephys':
+    if not session_type:
+        raise ValueError(f"Session type {session_type} as no matching extractor {session_path}")
+    elif 'ephys' in session_type:  # assume ephys == FPGA
         labels = assert_valid_label(kwargs.pop('labels', ('left', 'right', 'body')))
         labels = (labels,) if isinstance(labels, str) else labels  # Ensure list/tuple
         extractor = [partial(CameraTimestampsFPGA, label) for label in labels]
         if 'sync' not in kwargs:
             kwargs['sync'], kwargs['chmap'] = \
                 get_main_probe_sync(session_path, bin_exists=kwargs.pop('bin_exists', False))
-    elif session_type in ['biased', 'training', 'habituation']:
+    else:  # assume Bpod otherwise
         assert kwargs.pop('labels', 'left'), 'only left camera is currently supported'
         extractor = CameraTimestampsBpod
-    else:
-        raise ValueError(f"Session type {session_type} as no matching extractor {session_path}")
 
     outputs, files = run_extractor_classes(
         extractor, session_path=session_path, save=save, **kwargs)
