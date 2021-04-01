@@ -30,14 +30,13 @@ def get_video_frame(video_path, frame_number):
     return frame_image
 
 
-def get_video_frames_preload(video_path, frame_numbers=None, mask=Ellipsis, as_list=False,
+def get_video_frames_preload(vid, frame_numbers=None, mask=Ellipsis, as_list=False,
                              func=lambda x: x, quiet=False):
     """
-    Obtain numpy array corresponding to a particular video frame in video_path.
+    Obtain numpy array corresponding to a particular video frame in video.
     Fetching and returning a list is about 33% faster but may be less memory controlled. NB: Any
     gain in speed will be lost if subsequently converted to array.
-    :param video_path: URL or local path to mp4 file or cv2.VideoCapture object or
-                              oneibl.stream.VideoStreamer object
+    :param vid: URL or local path to mp4 file or cv2.VideoCapture instance.
     :param frame_numbers: video frames to be returned. If None, return all frames.
     :param mask: a logical mask or slice to apply to frames
     :param as_list: if true the frames are returned as a list, this is faster but may be less
@@ -48,14 +47,14 @@ def get_video_frames_preload(video_path, frame_numbers=None, mask=Ellipsis, as_l
     Default dimensions are (n, w, h, 3) where n = len(frame_numbers)
 
     Example - Load first 1000 frames, keeping only the first colour channel:
-        frames = get_video_frames_preload(video_path, range(1000), mask=np.s_[:, :, 0])
+        frames = get_video_frames_preload(vid, range(1000), mask=np.s_[:, :, 0])
     """
-    is_cap = isinstance(video_path, (cv2.VideoCapture, VideoStreamer))
+    is_cap = isinstance(vid, cv2.VideoCapture)
     if is_cap:
-        cap = video_path
+        cap = vid
     else:
-        is_url = isinstance(video_path, str) and video_path.startswith('http')
-        cap = VideoStreamer(video_path).cap if is_url else cv2.VideoCapture(str(video_path))
+        is_url = isinstance(vid, str) and vid.startswith('http')
+        cap = VideoStreamer(vid).cap if is_url else cv2.VideoCapture(str(vid))
     assert cap.isOpened(), 'Failed to open video'
 
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
