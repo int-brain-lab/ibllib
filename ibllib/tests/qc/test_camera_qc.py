@@ -14,6 +14,7 @@ from brainbox.core import Bunch
 
 
 class TestCameraQC(unittest.TestCase):
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.one = ONE(
@@ -21,9 +22,12 @@ class TestCameraQC(unittest.TestCase):
             username="test_user",
             password="TapetesBloc18",
         )
-        backend = matplotlib.get_backend()
+        cls.backend = matplotlib.get_backend()
         matplotlib.use('Agg')
-        cls.addClassCleanup(matplotlib.use, backend)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        matplotlib.use(cls.backend)
 
     def setUp(self) -> None:
         self.tempdir = TemporaryDirectory()
@@ -33,7 +37,10 @@ class TestCameraQC(unittest.TestCase):
         self.qc = CameraQC(self.session_path, one=self.one, n_samples=5,
                            side='left', stream=False, download_data=False)
         self.qc._type = 'ephys'
-        self.addCleanup(plt.close, 'all')
+
+    def tearDown(self) -> None:
+        self.tempdir.cleanup()
+        plt.close('all')
 
     def test_check_brightness(self):
         self.qc.data['frame_samples'] = self.qc.load_reference_frames('left')
@@ -80,8 +87,8 @@ class TestCameraQC(unittest.TestCase):
         self.assertEqual('NOT_SET', self.qc.check_pin_state())
         # Add some dummy data
         self.qc.data.timestamps = np.array([round(1 / FPS, 4)] * 5).cumsum()
-        self.qc.data.pin_state = np.zeros_like(self.qc.data.timestamps, dtype=int)
-        self.qc.data.pin_state[1:-1] = 10000
+        self.qc.data.pin_state = np.zeros((self.qc.data.timestamps.size, 4), dtype=bool)
+        self.qc.data.pin_state[1:-1, -1] = True  # Pulse on 4th pin
         self.qc.data['video'] = {'fps': FPS, 'length': len(self.qc.data.timestamps)}
         self.qc.data.audio = self.qc.data.timestamps[[0, -1]] - 10e-3
 
@@ -93,7 +100,7 @@ class TestCameraQC(unittest.TestCase):
         np.testing.assert_array_equal(b, self.qc.data.audio)
 
         # Fudge some numbers
-        self.qc.data.pin_state[2] = 11e3
+        self.qc.data['video']['length'] = self.qc.data.pin_state.shape[0] - 3
         self.assertEqual('WARNING', self.qc.check_pin_state()[0])
         self.qc.data['video']['length'] = 10
         outcome, *dTTL = self.qc.check_pin_state()
@@ -231,9 +238,6 @@ class TestCameraQC(unittest.TestCase):
             self.qc.one.download_datasets = lambda _: None
         with self.assertRaises(AssertionError):
             self.qc.run(update=False)
-
-    def tearDown(self) -> None:
-        self.tempdir.cleanup()
 
 
 if __name__ == '__main__':

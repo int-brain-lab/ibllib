@@ -1,5 +1,5 @@
 # flake8: noqa
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import unittest
 
 from oneibl import webclient as wc
@@ -85,7 +85,36 @@ class TestAlyx2Path(unittest.TestCase):
         globus_path_sdsc = '/hoferlab/Subjects/SWC_014/2019-12-11/001/alf/probe00/channels.localCoordinates.00059298-1b33-429c-a802-fa51bb662d72.npy'
         globus_path_sr = '/mnt/s0/Data/Subjects/SWC_014/2019-12-11/001/alf/probe00/channels.localCoordinates.npy'
 
-        assert wc.sdsc_path_from_dataset(dsets[0]) == Path(sdsc_path)
-        assert wc.one_path_from_dataset(dsets[0], one_cache='/one_root') == Path(one_path)
-        assert wc.sdsc_globus_path_from_dataset(dsets[0]) == Path(globus_path_sdsc)
-        assert wc.globus_path_from_dataset(dsets[0], repository='ibl_floferlab_SR') == Path(globus_path_sr)
+        # Test sdsc_path_from_dataset
+        testable = wc.sdsc_path_from_dataset(dsets[0])
+        self.assertEqual(str(testable), sdsc_path)
+        self.assertIsInstance(testable, PurePosixPath)
+
+        # Test one_path_from_dataset
+        testable = wc.one_path_from_dataset(dsets[0], one_cache=PurePosixPath('/one_root'))
+        self.assertEqual(str(testable), one_path)
+        # Check handles string inputs
+        testable = wc.one_path_from_dataset(dsets[0], one_cache='/one_root')
+        self.assertTrue(hasattr(testable, 'is_absolute'), 'Failed to return Path object')
+        self.assertEqual(str(testable).replace('\\', '/'), one_path)
+
+        # Test one_path_from_dataset using Windows path
+        one_path = PureWindowsPath(r'C:/Users/User/')
+        testable = wc.one_path_from_dataset(dsets[0], one_cache=one_path)
+        self.assertIsInstance(testable, PureWindowsPath)
+        self.assertTrue(str(testable).startswith(str(one_path)))
+
+        # Test sdsc_globus_path_from_dataset
+        testable = wc.sdsc_globus_path_from_dataset(dsets[0])
+        self.assertEqual(str(testable), globus_path_sdsc)
+        self.assertIsInstance(testable, PurePosixPath)
+
+        # Test globus_path_from_dataset
+        testable = wc.globus_path_from_dataset(dsets[0], repository='ibl_floferlab_SR')
+        self.assertEqual(str(testable), globus_path_sr)
+        self.assertIsInstance(testable, PurePosixPath)
+
+        # Tests _path_from_filerecord: when given a string, a system path object should be returned
+        fr = dsets[0]['file_records'][0]
+        testable = wc._path_from_filerecord(fr, root_path='C:\\')
+        self.assertIsInstance(testable, Path)
