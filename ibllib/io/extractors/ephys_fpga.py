@@ -16,11 +16,7 @@ import ibllib.dsp as dsp
 import ibllib.exceptions as err
 from ibllib.io import raw_data_loaders, spikeglx
 from ibllib.io.extractors import biased_trials
-from ibllib.io.extractors.base import (
-    BaseBpodTrialsExtractor,
-    BaseExtractor,
-    run_extractor_classes,
-)
+import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 import ibllib.plots as plots
 
@@ -509,7 +505,7 @@ def get_main_probe_sync(session_path, bin_exists=False):
     return sync, sync_chmap
 
 
-class ProbaContrasts(BaseBpodTrialsExtractor):
+class ProbaContrasts(extractors_base.BaseBpodTrialsExtractor):
     """
     Bpod pre-generated values for probabilityLeft, contrastLR, phase, quiescence
     """
@@ -567,25 +563,23 @@ class ProbaContrasts(BaseBpodTrialsExtractor):
                 'contrastRight': contrastRight, 'contrastLeft': contrastLeft}
 
 
-class FpgaTrials(BaseExtractor):
-    save_names = (ProbaContrasts.save_names +
-                  ('_ibl_trials.feedbackType.npy', '_ibl_trials.choice.npy',
-                   '_ibl_trials.rewardVolume.npy', '_ibl_trials.intervals_bpod.npy',
-                   '_ibl_trials.intervals.npy', '_ibl_trials.response_times.npy',
-                   '_ibl_trials.goCueTrigger_times.npy', None, None, None, None, None,
-                   '_ibl_trials.feedback_times.npy', '_ibl_trials.goCue_times.npy', None, None,
-                   '_ibl_trials.stimOff_times.npy', '_ibl_trials.stimOn_times.npy', None,
-                   '_ibl_trials.firstMovement_times.npy', '_ibl_wheel.timestamps.npy',
-                   '_ibl_wheel.position.npy', '_ibl_wheelMoves.intervals.npy',
-                   '_ibl_wheelMoves.peakAmplitude.npy'))
-    var_names = (ProbaContrasts.var_names +
-                 ('feedbackType', 'choice', 'rewardVolume', 'intervals_bpod', 'intervals',
-                  'response_times', 'goCueTrigger_times', 'stimOnTrigger_times',
-                  'stimOffTrigger_times', 'stimFreezeTrigger_times', 'errorCueTrigger_times',
-                  'errorCue_times', 'feedback_times', 'goCue_times', 'itiIn_times',
-                  'stimFreeze_times', 'stimOff_times', 'stimOn_times', 'valveOpen_times',
-                  'firstMovement_times', 'wheel_timestamps', 'wheel_position',
-                  'wheelMoves_intervals', 'wheelMoves_peakAmplitude'))
+class FpgaTrials(extractors_base.BaseExtractor):
+    save_names = ('_ibl_trials.feedbackType.npy', '_ibl_trials.choice.npy',
+                  '_ibl_trials.rewardVolume.npy', '_ibl_trials.intervals_bpod.npy',
+                  '_ibl_trials.intervals.npy', '_ibl_trials.response_times.npy',
+                  '_ibl_trials.goCueTrigger_times.npy', None, None, None, None, None,
+                  '_ibl_trials.feedback_times.npy', '_ibl_trials.goCue_times.npy', None, None,
+                  '_ibl_trials.stimOff_times.npy', '_ibl_trials.stimOn_times.npy', None,
+                  '_ibl_trials.firstMovement_times.npy', '_ibl_wheel.timestamps.npy',
+                  '_ibl_wheel.position.npy', '_ibl_wheelMoves.intervals.npy',
+                  '_ibl_wheelMoves.peakAmplitude.npy')
+    var_names = ('feedbackType', 'choice', 'rewardVolume', 'intervals_bpod', 'intervals',
+                 'response_times', 'goCueTrigger_times', 'stimOnTrigger_times',
+                 'stimOffTrigger_times', 'stimFreezeTrigger_times', 'errorCueTrigger_times',
+                 'errorCue_times', 'feedback_times', 'goCue_times', 'itiIn_times',
+                 'stimFreeze_times', 'stimOff_times', 'stimOn_times', 'valveOpen_times',
+                 'firstMovement_times', 'wheel_timestamps', 'wheel_position',
+                 'wheelMoves_intervals', 'wheelMoves_peakAmplitude')
 
     def __init__(self, *args, **kwargs):
         """An extractor for all ephys trial data, in FPGA time"""
@@ -624,15 +618,10 @@ class FpgaTrials(BaseExtractor):
         bpod_rsync_fields = ['intervals', 'response_times', 'goCueTrigger_times',
                              'stimOnTrigger_times', 'stimOffTrigger_times',
                              'stimFreezeTrigger_times', 'errorCueTrigger_times']
-        # get ('probabilityLeft', 'contrastLeft', 'contrastRight') from the custom ephys extractors
-        pclcr, _ = ProbaContrasts(self.session_path).extract(bpod_trials=bpod_raw, save=False)
-        # build trials output
         out = OrderedDict()
-        out.update({k: pclcr[i][ibpod] for i, k in enumerate(ProbaContrasts.var_names)})
         out.update({k: bpod_trials[k][ibpod] for k in bpod_fields})
         out.update({k: self.bpod2fpga(bpod_trials[k][ibpod]) for k in bpod_rsync_fields})
         out.update({k: fpga_trials[k][ifpga] for k in sorted(fpga_trials.keys())})
-
         # extract the wheel data
         from ibllib.io.extractors.training_wheel import extract_first_movement_times
         ts, pos = extract_wheel_sync(sync=sync, chmap=chmap)
@@ -657,7 +646,16 @@ def extract_all(session_path, save=True, bin_exists=False):
     :param save: Bool, defaults to False
     :return: outputs, files
     """
+    extractor_type = extractors_base.get_session_extractor_type(session_path)
+    _logger.info(f"Extracting {session_path} as {extractor_type}")
+    basecls = [FpgaTrials]
+    if extractor_type in ['ephys', 'mock_ephys', 'sync_ephys']:
+        basecls.extend([ProbaContrasts])
+    elif extractor_type in ['ephys_biased_opto']:
+        from ibllib.io.extractors import opto_trials
+        basecls.extend([biased_trials.ProbabilityLeft, biased_trials.ContrastLR,
+                        opto_trials.LaserBool])
     sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
-    outputs, files = run_extractor_classes([FpgaTrials], session_path=session_path,
-                                           save=save, sync=sync, chmap=chmap)
+    outputs, files = extractors_base.run_extractor_classes(
+        basecls, session_path=session_path, save=save, sync=sync, chmap=chmap)
     return outputs, files
