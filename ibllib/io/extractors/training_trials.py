@@ -584,8 +584,8 @@ class StimOnTimes(BaseBpodTrialsExtractor):
                 bnc_l.append(np.array([np.NINF]))
 
         stim_on = np.array(stim_on)
-        bnc_h = np.array(bnc_h)
-        bnc_l = np.array(bnc_l)
+        bnc_h = np.array(bnc_h, dtype=object)
+        bnc_l = np.array(bnc_l, dtype=object)
 
         count_missing = 0
         stimOn_times = np.zeros_like(stim_on)
