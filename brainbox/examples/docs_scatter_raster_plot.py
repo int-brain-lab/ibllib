@@ -6,8 +6,8 @@ points scaled by spike amplitude
 """
 
 import numpy as np
-from brainbox.plot.ephys_plots import scatter_raster_plot
-from brainbox.plot.plot_base import plot_scatter
+from brainbox.ephys_plots import scatter_raster_plot
+from brainbox.plot_base import plot_scatter
 from oneibl.one import ONE
 import matplotlib.pyplot as plt
 import matplotlib

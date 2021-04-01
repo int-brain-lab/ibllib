@@ -10,6 +10,7 @@ def get_on_off_times_and_positions(rf_map):
     """
 
     Prepares passive receptive field mapping into format for analysis
+    Parameters
     ----------
     rf_map: output from brainbox.io.one.load_passive_rfmap
 

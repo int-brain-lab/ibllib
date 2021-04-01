@@ -639,7 +639,7 @@ def sigtest_pseudosessions(X, y, fStatMeas, genPseudo, npseuds=200):
     decoded variable, y.  pseudosessions are generated npseuds times to create a null
     distribution of statistical measures.  Significance level is reported relative to this
     null distribution.
-    -------
+
     X : 2-d array
         Data of size (elements, timetrials)
     y : 1-d array
@@ -651,8 +651,9 @@ def sigtest_pseudosessions(X, y, fStatMeas, genPseudo, npseuds=200):
         experimentally known null-distribution of y
     npseuds : int
         the number of pseudosessions used to estimate the significance level
+
+    Returns
     -------
-    returns
     alpha : p-value e.g. at a significance level of b, if alpha <= b then reject the null
             hypothesis.
     statms_real : the value of the statistical measure evaluated on X and y
@@ -676,7 +677,7 @@ def sigtest_linshift(X, y, fStatMeas, D=300):
     scalar statistical measure (e.g. R^2) from the data matrix, X, and the variable, y.
     A central window of X and y of size, D, is linearly shifted to generate a null distribution
     of statistical measures.  Significance level is reported relative to this null distribution.
-    -------
+
     X : 2-d array
         Data of size (elements, timetrials)
     y : 1-d array
@@ -686,8 +687,9 @@ def sigtest_linshift(X, y, fStatMeas, D=300):
     D : int
         the window length along the center of y used to compute the statistical measure.
         must have room to shift both right and left: len(y) >= D+2
+
+    Returns
     -------
-    returns
     alpha : conservative p-value e.g. at a significance level of b, if alpha <= b then reject the
             null hypothesis.
     statms_real : the value of the statistical measure evaluated on X and y
