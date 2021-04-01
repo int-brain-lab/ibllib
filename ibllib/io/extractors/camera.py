@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 
 from oneibl.stream import VideoStreamer
 import ibllib.dsp.utils as dsp
+from ibllib.misc import range_str
 from ibllib.plots import squares, vertical_lines
 from ibllib.io.video import assert_valid_label
 from brainbox.numerical import within_ranges
@@ -227,6 +228,7 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
         cam_times = []
         n_frames = 0
         n_out_of_sync = 0
+        missed_trials = []
         for ind in np.arange(ntrials):
             # get upgoing and downgoing fronts
             pin = np.array(self.bpod_trials[ind]['behavior_data']
@@ -235,7 +237,7 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
                             ['Events timestamps'].get('Port1Out'))
             # some trials at startup may not have the camera working, discard
             if np.all(pin) is None:
-                _logger.debug('trial %i missing TTL events', ind)
+                missed_trials.append(ind)
                 continue
             # if the trial starts in the middle of a square, discard the first downgoing front
             if pout[0] < pin[0]:
@@ -257,6 +259,8 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
             cam_times.append(pin)
             n_frames += pin.size
 
+        if missed_trials:
+            _logger.debug('trial(s) %s missing TTL events', range_str(missed_trials))
         if n_out_of_sync > 0:
             _logger.warning(f"{n_out_of_sync} trials with bpod camera frame times not within"
                             f" 10% of the expected sampling rate")
