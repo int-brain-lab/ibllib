@@ -1,5 +1,4 @@
 """Functions for fetching video frames, meta data and file locations"""
-import sys
 import re
 from datetime import timedelta
 from pathlib import Path
@@ -31,7 +30,7 @@ def get_video_frame(video_path, frame_number):
 
 
 def get_video_frames_preload(video_path, frame_numbers=None, mask=Ellipsis, as_list=False,
-                             func=lambda x: x,):
+                             func=lambda x: x, cap=None):
     """
     Obtain numpy array corresponding to a particular video frame in video_path.
     Fetching and returning a list is about 33% faster but may be less memory controlled. NB: Any
@@ -49,7 +48,9 @@ def get_video_frames_preload(video_path, frame_numbers=None, mask=Ellipsis, as_l
         frames = get_video_frames_preload(video_path, range(1000), mask=np.s_[:, :, 0])
     """
     is_url = isinstance(video_path, str) and video_path.startswith('http')
-    cap = VideoStreamer(video_path).cap if is_url else cv2.VideoCapture(str(video_path))
+    cap_release = True if cap is None else False
+    if cap is None:
+        cap = VideoStreamer(video_path).cap if is_url else cv2.VideoCapture(str(video_path))
     assert cap.isOpened(), 'Failed to open video'
 
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -63,11 +64,9 @@ def get_video_frames_preload(video_path, frame_numbers=None, mask=Ellipsis, as_l
         frame_images = [None] * len(frame_numbers)
     else:
         ret, frame = cap.read()
-        frame_images = np.empty((len(frame_numbers), *func(frame[mask or ...]).shape),
-                                np.uint8)
+        frame_images = np.zeros((len(frame_numbers), *func(frame[mask or ...]).shape), np.uint8)
+    print(f"Loading {len(frame_numbers)} frames")
     for ii, i in enumerate(frame_numbers):
-        sys.stdout.write(f'\rloading frame {ii}/{len(frame_numbers)}')
-        sys.stdout.flush()
         if to_set[ii]:
             cap.set(cv2.CAP_PROP_POS_FRAMES, i)
         ret, frame = cap.read()
@@ -75,8 +74,8 @@ def get_video_frames_preload(video_path, frame_numbers=None, mask=Ellipsis, as_l
             frame_images[ii] = func(frame[mask or ...])
         else:
             print(f'failed to read frame #{i}')
-    cap.release()
-    sys.stdout.write('\x1b[2K\r')  # Erase current line in stdout
+    if cap_release:
+        cap.release()
     return frame_images
 
 
