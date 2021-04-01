@@ -52,17 +52,17 @@ jobs:
     - name: ALF tests
       run: |
         cd alf
-        python -m unittest discover --verbose
+        pytest
     - name: Brainbox tests
       run: |
         cd brainbox
-        python -m unittest discover --verbose
+        pytest
     - name: oneibl tests
       run: |
         cd oneibl
-        python -m unittest discover --verbose
+        pytest
     - name: ibllib tests
       run: |
         cd ibllib
         cd tests
-        python -m unittest discover --verbose
+        pytest
