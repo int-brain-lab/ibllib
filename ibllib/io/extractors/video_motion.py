@@ -147,6 +147,9 @@ class MotionAlignment:
         cam_mask = self.alignment.to_mask(camera_times)
         frame_numbers, = np.where(cam_mask)
 
+        if frame_numbers.size == 0:
+            raise ValueError('No frames during given period')
+
         # Motion Energy
         camera_path = self.video_paths[side]
         roi = (*[slice(*r) for r in self.roi[side]], 0)
