@@ -2,7 +2,7 @@
  "opto_ephysChoiceWorld": "ephys_biased_opto",
  "ephysChoiceWorld": "ephys",
  "ephyskarolinaChoiceWorld": "ephys",
- "trainingChoiceWorldWidefield": "ephys",
+ "trainingChoiceWorldWidefield": "ephys_training",
  "passive_opto": "ephys",
  "widefieldChoiceWorld": "ephys",
  "opto_biasedChoiceWorld": "biased_opto",
