@@ -428,6 +428,8 @@ class BrainAtlas:
             return _take(self.image, index, axis=self.xyz2dims[axis])
         elif volume in ['surface', 'edges']:
             return _take(self.surface, index, axis=self.xyz2dims[axis])
+        elif volume == 'volume':
+            return _take(region_values, index, axis=self.xyz2dims[axis])
 
     def plot_cslice(self, ap_coordinate, volume='image', mapping='Allen', **kwargs):
         """
