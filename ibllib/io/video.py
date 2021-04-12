@@ -49,7 +49,7 @@ def get_video_frames_preload(vid, frame_numbers=None, mask=Ellipsis, as_list=Fal
     Example - Load first 1000 frames, keeping only the first colour channel:
         frames = get_video_frames_preload(vid, range(1000), mask=np.s_[:, :, 0])
     """
-    is_cap = isinstance(vid, cv2.VideoCapture)
+    is_cap = not isinstance(vid, (str, Path))
     if is_cap:
         cap = vid
     else:
