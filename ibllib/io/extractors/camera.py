@@ -21,6 +21,7 @@ from ibllib.io.extractors.base import (
     BaseBpodTrialsExtractor,
     BaseExtractor,
     run_extractor_classes,
+    _get_task_types_json_config
 )
 
 _logger = logging.getLogger('ibllib')
@@ -647,8 +648,8 @@ def extract_all(session_path, session_type=None, save=True, **kwargs):
     """
     if session_type is None:
         session_type = get_session_extractor_type(session_path)
-    if not session_type:
-        raise ValueError(f"Session type {session_type} as no matching extractor {session_path}")
+    if not session_type or session_type not in _get_task_types_json_config().values():
+        raise ValueError(f"Session type {session_type} has no matching extractor")
     elif 'ephys' in session_type:  # assume ephys == FPGA
         labels = assert_valid_label(kwargs.pop('labels', ('left', 'right', 'body')))
         labels = (labels,) if isinstance(labels, str) else labels  # Ensure list/tuple
