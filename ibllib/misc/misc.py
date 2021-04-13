@@ -74,3 +74,31 @@ def print_progress(iteration, total, prefix='', suffix='', decimals=1, length=10
     # Print New Line on Complete
     if iteration == total:
         print()
+
+
+def range_str(values: iter) -> str:
+    """
+    Given a list of integers, returns a terse string expressing the unique values.
+
+    Example:
+        indices = [0, 1, 2, 3, 4, 7, 8, 11, 15, 20]
+        range_str(indices)
+        >> '0-4, 7-8, 11, 15 & 20'
+    :param values: An iterable of ints
+    :return:
+    """
+    trial_str = ''
+    values = list(set(values))
+    for i in range(len(values)):
+        if i == 0:
+            trial_str += str(values[i])
+        elif values[i] - (values[i - 1]) == 1:
+            if i == len(values) - 1 or values[i + 1] - values[i] > 1:
+                trial_str += f'-{values[i]}'
+        else:
+            trial_str += f', {values[i]}'
+    # Replace final comma with an ampersand
+    k = trial_str.rfind(',')
+    if k > -1:
+        trial_str = f'{trial_str[:k]} &{trial_str[k + 1:]}'
+    return trial_str
