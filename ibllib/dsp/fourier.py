@@ -199,7 +199,8 @@ def fshift(w, s, axis=-1):
     # apply the shift (s) to the fft angle to get the phase shift
     dephas = np.exp(1j * np.angle(dephas) * s)
     # apply phase shift by broadcasting
-    return np.real(scipy.fft.ifft(fexpand(W * dephas, ns[axis], axis=axis), axis=axis))
+    out = np.real(scipy.fft.ifft(fexpand(W * dephas, ns[axis], axis=axis), axis=axis))
+    return out.astype(w.dtype)
 
 
 def fit_phase(w, si=1, fmin=0, fmax=None, axis=-1):
