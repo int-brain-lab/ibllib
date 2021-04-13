@@ -346,6 +346,7 @@ def _alyx_procedure_from_task_type(task_type):
               'training': 'Behavior training/tasks',
               'ephys': 'Ephys recording with acute probe(s)',
               'ephys_biased_opto': 'Ephys recording with acute probe(s)',
+              'ephys_training': 'Ephys recording with acute probe(s)',
               'mock_ephys': 'Ephys recording with acute probe(s)',
               'sync_ephys': 'Ephys recording with acute probe(s)'}
     if task_type in lookup:
