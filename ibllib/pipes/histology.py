@@ -498,8 +498,9 @@ def coverage(trajs, ba=None, dist_fcn=[100, 150]):
     full_coverage = np.zeros(ba.image.shape, dtype=np.float32).flatten()
 
     for p in np.arange(len(trajs)):
-        if p % 20 == 0:
-            print(p / len(trajs))
+        if len(trajs) > 20:
+            if p % 20 == 0:
+                print(p / len(trajs))
         traj = trajs[p]
 
         ins = atlas.Insertion.from_dict(traj)
@@ -547,4 +548,4 @@ def coverage(trajs, ba=None, dist_fcn=[100, 150]):
 
     full_coverage = full_coverage.reshape(ba.image.shape)
     full_coverage[ba.label == 0] = np.nan
-    return full_coverage
+    return full_coverage, np.mean(xyz,0)
