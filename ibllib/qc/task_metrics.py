@@ -367,8 +367,8 @@ def check_response_stimFreeze_delays(data, **_):
     # Test for valid values
     passed = ((metric < 0.1) & (metric > 0)).astype(float)
     # Finally remove no_go trials (stimFreeze triggered differently in no_go trials)
-    # should account for all the nans
-    passed[data["choice"] == 0] = np.nan  # NaN values are in calculation of proportion passed
+    # These values are ignored in calculation of proportion passed
+    passed[data["choice"] == 0] = np.nan
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
