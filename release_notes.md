@@ -19,15 +19,15 @@
 - Extractor support for widefield imaging protocol
 
 ## Release Notes 1.6
-### Release Notes 1.6.2 - 2020-03-18
+### Release Notes 1.6.2 - 2021-03-18
 - hotfix: fix test_modelling error after removing pytorch
 
-### Release Notes 1.6.1 - 2020-03-17
+### Release Notes 1.6.1 - 2021-03-17
 - hotfix: maintain compatibility with Python 3.7
 
-### Release Notes 1.6.0 - 2020-03-16
+### Release Notes 1.6.0 - 2021-03-16
 - ibllib.atlas: backend region mapping is a lateralized version of the Allen atlas "Allen-lr"
-The default behviour in the Atlas is to remap according to the orignal mapping "Allen"
+The default behaviour in the Atlas is to remap according to the original mapping "Allen"
 - camera timestamps: extraction of the exact camera time stamps by cross-examination of bonsai timestamps, audio pulses
 and camera pulses
 

@@ -5,7 +5,7 @@ non-overlapping bins and convolving spike times with a gaussian kernel.
 
 import numpy as np
 import pandas as pd
-from scipy import interpolate
+from scipy import interpolate, sparse
 from brainbox import core
 
 
@@ -169,6 +169,22 @@ def bincount2D(x, y, xbin=0, ybin=0, xlim=None, ylim=None, weights=None):
         yscale = ybin
 
     return r, xscale, yscale
+
+
+def compute_cluster_average(spike_clusters, spike_var):
+    """
+    Quickish way to compute the average of some quantity across spikes in each cluster given
+    quantity for each spike
+
+    :param spike_clusters: cluster idx of each spike
+    :param spike_var: variable of each spike (e.g spike amps or spike depths)
+    :return: cluster id, average of quantity for each cluster, no. of spikes per cluster
+    """
+    clust, inverse, counts = np.unique(spike_clusters, return_inverse=True, return_counts=True)
+    _spike_var = sparse.csr_matrix((spike_var, (inverse, np.zeros(inverse.size, dtype=int))))
+    spike_var_avg = np.ravel(_spike_var.toarray()) / counts
+
+    return clust, spike_var_avg, counts
 
 
 def bin_spikes(spikes, binsize, interval_indices=False):
