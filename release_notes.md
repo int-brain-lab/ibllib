@@ -2,6 +2,9 @@
 - Video QC optimization
 - New task types for widefield imaging
 - Add revision and default dataset to register dataset 
+- Fix for camera extraction failure for novel protocols
+- CameraQC wheel alignment check more robust to short videos and large alignment failures
+- Parameters raises FileNotFound error if no defaults are provided
 
 ## Release Notes 1.8
 ### Release Notes 1.8.0 - 2020-03-30
