@@ -544,8 +544,9 @@ def coverage(trajs, ba=None, dist_fcn=[100, 150]):
         mdist = ins.trajectory.mindist(xyz, bounds=sites_bounds)
         coverage = 1 - fcn_cosine(np.array(dist_fcn) / 1e6)(mdist)
         # remap to the coverage volume
-        full_coverage[ba._lookup_inds(ixyz)] += coverage
+        flat_ind = ba._lookup_inds(ixyz)
+        full_coverage[flat_ind] += coverage
 
     full_coverage = full_coverage.reshape(ba.image.shape)
     full_coverage[ba.label == 0] = np.nan
-    return full_coverage, np.mean(xyz, 0)
+    return full_coverage, np.mean(xyz, 0), flat_ind
