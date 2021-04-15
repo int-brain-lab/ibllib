@@ -211,9 +211,7 @@ def get_stim_aligned_activity(stim_events, spike_times, spike_depths, z_score_fl
         if z_score_flag:
             # Average across trials and time
             avg_base_trials = np.mean(np.mean(noise_trials, axis=2), axis=1)[:, np.newaxis]
-            print(avg_base_trials)
             std_base_trials = np.std(np.mean(noise_trials, axis=2), axis=1)[:, np.newaxis]
-            print(std_base_trials)
             z_score = (avg_stim_trials - avg_base_trials) / std_base_trials
             z_score[np.isnan(z_score)] = 0
             avg_stim_trials = z_score
