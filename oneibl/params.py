@@ -1,7 +1,7 @@
 import os
 from ibllib.io import params as iopar
 from getpass import getpass
-from pathlib import Path, PurePath
+from pathlib import Path
 from ibllib.graphic import login
 
 
