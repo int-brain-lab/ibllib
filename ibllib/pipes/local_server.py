@@ -1,15 +1,14 @@
 import logging
 from datetime import datetime
 from pathlib import Path
-
 import pkg_resources
 import re
 import subprocess
 import sys
+import traceback
 
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.pipes import ephys_preprocessing, training_preprocessing, tasks
-import ibllib.exceptions
 from ibllib.time import date2isostr
 
 import oneibl.registration as registration
@@ -88,14 +87,15 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
         _logger.info(f'creating session for {session_path}')
         if dry:
             continue
-        flag_file.unlink()
         # if the subject doesn't exist in the database, skip
         try:
             rc.create_session(session_path)
-        except ibllib.exceptions.AlyxSubjectNotFound:
+            files, dsets = registration.register_session_raw_data(
+                session_path, one=one, max_md5_size=max_md5_size)
+        except BaseException:
+            _logger.error(traceback.format_exc())
+            _logger.warning(f"Creating session / registering raw datasets {session_path} errored")
             continue
-        files, dsets = registration.register_session_raw_data(
-            session_path, one=one, max_md5_size=max_md5_size)
         if dsets is not None:
             all_datasets.extend(dsets)
         session_type = get_session_extractor_type(session_path)
@@ -112,6 +112,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
         else:
             rerun__status__in = ['Waiting']
         pipe.create_alyx_tasks(rerun__status__in=rerun__status__in)
+        flag_file.unlink()
     return all_datasets
 
 

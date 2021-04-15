@@ -5,7 +5,7 @@ Computes properties of single-cells, e.g. the autocorrelation and firing rate.
 import numpy as np
 from scipy.signal import convolve, gaussian
 from brainbox.core import Bunch
-from brainbox.population import xcorr
+from brainbox.population.decode import xcorr
 
 
 def acorr(spike_times, bin_size=None, window_size=None):
@@ -182,11 +182,11 @@ def firing_rate(ts, hist_win=0.01, fr_win=0.5):
 
     # Compute histogram of spike counts.
     t_tot = ts[-1] - ts[0]
-    n_bins_hist = np.int(t_tot / hist_win)
+    n_bins_hist = int(t_tot / hist_win)
     counts = np.histogram(ts, n_bins_hist)[0]
     # Compute moving average of spike counts to get instantaneous firing rate in s.
-    n_bins_fr = np.int(t_tot / fr_win)
-    step_sz = np.int(len(counts) / n_bins_fr)
+    n_bins_fr = int(t_tot / fr_win)
+    step_sz = int(len(counts) / n_bins_fr)
     fr = np.convolve(counts, np.ones(step_sz)) / fr_win
     fr = fr[step_sz - 1:- step_sz]
     return fr

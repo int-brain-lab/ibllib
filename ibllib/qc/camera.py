@@ -37,6 +37,7 @@ from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io import raw_data_loaders as raw
 import alf.io as alfio
 from brainbox.core import Bunch
+from brainbox.numerical import within_ranges
 import brainbox.behavior.wheel as wh
 from ibllib.io.video import get_video_meta, get_video_frames_preload
 from oneibl.one import OneOffline
@@ -220,10 +221,7 @@ class CameraQC(base.QC):
                 wheel_data = training_wheel.get_wheel_position(self.session_path)
             self.data['wheel'] = Bunch(zip(wheel_keys, wheel_data))
 
-        # Find short period of wheel motion for motion correlation.  For speed start with the
-        # fist 2 minutes (nearly always enough), extract wheel movements and pick one.
-        # TODO Pick movement towards the end of the session (but not right at the end as some
-        #  are extrapolated).  Make sure the movement isn't too long.
+        # Find short period of wheel motion for motion correlation.
         if data_for_keys(wheel_keys, self.data['wheel']) and self.data['timestamps'] is not None:
             self.data['wheel'].period = self.get_active_wheel_period(self.data['wheel'])
 
@@ -418,12 +416,9 @@ class CameraQC(base.QC):
         """
         if not data_for_keys(('video', 'pin_state', 'audio'), self.data):
             return 'NOT_SET'
-        size_diff = int(self.data['pin_state'].size - self.data['video']['length'])
-        # There should be only one value below our threshold
-        binary = np.unique(self.data['pin_state']).size == 2
-        state = self.data['pin_state'] > PIN_STATE_THRESHOLD
+        size_diff = int(self.data['pin_state'].shape[0] - self.data['video']['length'])
         # NB: The pin state to be high for 2 consecutive frames
-        low2high = np.insert(np.diff(state.astype(int)) == 1, 0, False)
+        low2high = np.insert(np.diff(self.data['pin_state'][:, -1].astype(int)) == 1, 0, False)
         # NB: Time between two consecutive TTLs can be sub-frame, so this will fail
         ndiff_low2high = int(self.data['audio'][::2].size - sum(low2high))
         state_ttl_matches = ndiff_low2high == 0
@@ -438,12 +433,10 @@ class CameraQC(base.QC):
             plt.gca().set(yticklabels=[])
             plt.gca().tick_params(left=False)
             plt.legend()
-        # idx = [i for i, x in enumerate(self.data['audio'])
-        #        if np.abs(x - self.data['fpga_times'][low2high]).min() > 0.01]
-        # mins = [np.abs(x - self.data['fpga_times'][low2high]).min() for x in self.data['audio']]
+
         outcome = self.overall_outcome(
             ('PASS' if size_diff == 0 else 'WARNING' if np.abs(size_diff) < 5 else 'FAIL',
-             'PASS' if binary and state_ttl_matches else 'WARNING')
+             'PASS' if state_ttl_matches else 'WARNING')
         )
         return outcome, ndiff_low2high, size_diff
 
@@ -519,9 +512,24 @@ class CameraQC(base.QC):
         if not wheel_present or self.side == 'body':
             return 'NOT_SET'
 
-        aln = MotionAlignment(self.eid, self.one, self.log)
+        # Check the selected wheel movement period occurred within camera timestamp time
+        camera_times = self.data['timestamps']
+        in_range = within_ranges(camera_times, self.data['wheel']['period'].reshape(-1, 2))
+        if not in_range.any():
+            # Check if any camera timestamps overlap with the wheel times
+            if np.any(np.logical_and(
+                camera_times > self.data['wheel']['timestamps'][0],
+                camera_times < self.data['wheel']['timestamps'][-1])
+            ):
+                _log.warning('Unable to check wheel alignment: '
+                             'chosen movement is not during video')
+                return 'NOT_SET'
+            else:
+                # No overlap, return fail
+                return 'FAIL'
+        aln = MotionAlignment(self.eid, self.one, self.log, session_path=self.session_path)
         aln.data = self.data.copy()
-        aln.data['camera_times'] = {self.side: self.data['timestamps']}
+        aln.data['camera_times'] = {self.side: camera_times}
         aln.video_paths = {self.side: self.video_path}
         offset, *_ = aln.align_motion(period=self.data['wheel'].period,
                                       display=display, side=self.side)

@@ -134,13 +134,14 @@ class TaskQC(base.QC):
 
     def compute_session_status(self):
         """
+        Compute the overall session status for the task QC from the individual checks.
         :return: Overall session QC outcome as a string
         :return: A map of QC tests and the proportion of data points that passed them
         :return: A map of QC tests and their outcomes
         """
         if self.passed is None:
             raise AttributeError('passed is None; compute QC first')
-        MAX_BOUND, MIN_BOUND = (1, 0)
+        MAX_BOUND, MIN_BOUND = (1, 0)  # Expect outcomes to be between 0 and 1
         # Get mean passed of each check, or None if passed is None or all NaN
         results = {k: None if v is None or np.isnan(v).all() else np.nanmean(v)
                    for k, v in self.passed.items()}
@@ -150,6 +151,7 @@ class TaskQC(base.QC):
         criteria = {k: v for k, v in sorted(criteria, key=lambda x: x[1], reverse=True)}
         indices = []
 
+        # Apply the outcome thresholds to each of the results
         for v in results.values():
             if v is None or np.isnan(v):
                 indices.append(int(-1))
@@ -237,7 +239,7 @@ class HabituationQC(TaskQC):
         d = np.less(data["valveOpen_times"], data["stimOff_times"], where=~nans)
 
         metrics[check] = a & b & c & d & ~nans
-        passed[check] = metrics[check].astype(np.float)
+        passed[check] = metrics[check].astype(float)
 
         # Check that the time difference between the visual stimulus center-command being
         # triggered and the stimulus effectively appearing in the center is smaller than 150 ms.
@@ -285,8 +287,10 @@ def get_bpodqc_metrics_frame(data, **kwargs):
     """
     def is_metric(x):
         return isfunction(x) and x.__name__.startswith('check_')
+    # Find all methods that begin with 'check_'
     checks = getmembers(sys.modules[__name__], is_metric)
-    prefix = '_task_'
+    prefix = '_task_'  # Extended QC fields will start with this
+    # Method 'check_foobar' stored with key '_task_foobar' in metrics map
     qc_metrics_map = {prefix + k[6:]: fn(data, **kwargs) for k, fn in checks}
 
     # Split metrics and passed frames
@@ -297,11 +301,12 @@ def get_bpodqc_metrics_frame(data, **kwargs):
 
     # Add a check for trial level pass: did a given trial pass all checks?
     n_trials = data['intervals'].shape[0]
+    # Trial-level checks return an array the length that equals the number of trials
     trial_level_passed = [m for m in passed.values()
                           if isinstance(m, Sized) and len(m) == n_trials]
     name = prefix + 'passed_trial_checks'
     metrics[name] = reduce(np.logical_and, trial_level_passed or (None, None))
-    passed[name] = metrics[name].astype(np.float) if trial_level_passed else None
+    passed[name] = metrics[name].astype(float) if trial_level_passed else None
 
     return metrics, passed
 
@@ -321,6 +326,8 @@ def check_stimOn_goCue_delays(data, **_):
 
     :param data: dict of trial data with keys ('goCue_times', 'stimOn_times', 'intervals')
     """
+    # Calculate the difference between stimOn and goCue times.
+    # If either are NaN, the result will be Inf to ensure that it crosses the failure threshold.
     metric = np.nan_to_num(data["goCue_times"] - data["stimOn_times"], nan=np.inf)
     passed = (metric < 0.01) & (metric > 0)
     assert data["intervals"].shape[0] == len(metric) == len(passed)
@@ -354,11 +361,13 @@ def check_response_stimFreeze_delays(data, **_):
     :param data: dict of trial data with keys ('stimFreeze_times', 'response_times', 'intervals',
     'choice')
     """
+    # Calculate the difference between stimOn and goCue times.
+    # If either are NaN, the result will be Inf to ensure that it crosses the failure threshold.
     metric = np.nan_to_num(data["stimFreeze_times"] - data["response_times"], nan=np.inf)
     # Test for valid values
-    passed = ((metric < 0.1) & (metric > 0)).astype(np.float)
+    passed = ((metric < 0.1) & (metric > 0)).astype(float)
     # Finally remove no_go trials (stimFreeze triggered differently in no_go trials)
-    # should account for all the nans
+    # These values are ignored in calculation of proportion passed
     passed[data["choice"] == 0] = np.nan
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
@@ -374,9 +383,11 @@ def check_stimOff_itiIn_delays(data, **_):
     :param data: dict of trial data with keys ('stimOff_times', 'itiIn_times', 'intervals',
     'choice')
     """
+    # If either are NaN, the result will be Inf to ensure that it crosses the failure threshold.
     metric = np.nan_to_num(data["itiIn_times"] - data["stimOff_times"], nan=np.inf)
-    passed = ((metric < 0.01) & (metric >= 0)).astype(np.float)
+    passed = ((metric < 0.01) & (metric >= 0)).astype(float)
     # Remove no_go trials (stimOff triggered differently in no_go trials)
+    # NaN values are ignored in calculation of proportion passed
     metric[data["choice"] == 0] = passed[data["choice"] == 0] = np.nan
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
@@ -415,8 +426,10 @@ def check_positive_feedback_stimOff_delays(data, **_):
     :param data: dict of trial data with keys ('stimOff_times', 'feedback_times', 'intervals',
     'correct')
     """
+    # If either are NaN, the result will be Inf to ensure that it crosses the failure threshold.
     metric = np.nan_to_num(data["stimOff_times"] - data["feedback_times"] - 1, nan=np.inf)
-    passed = (np.abs(metric) < 0.15).astype(np.float)
+    passed = (np.abs(metric) < 0.15).astype(float)
+    # NaN values are ignored in calculation of proportion passed; ignore incorrect trials here
     metric[~data["correct"]] = passed[~data["correct"]] = np.nan
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
@@ -434,7 +447,7 @@ def check_negative_feedback_stimOff_delays(data, **_):
     """
     metric = np.nan_to_num(data["stimOff_times"] - data["errorCue_times"] - 2, nan=np.inf)
     # Apply criteria
-    passed = (np.abs(metric) < 0.15).astype(np.float)
+    passed = (np.abs(metric) < 0.15).astype(float)
     # Remove none negative feedback trials
     metric[data["correct"]] = passed[data["correct"]] = np.nan
     assert data["intervals"].shape[0] == len(metric) == len(passed)
@@ -468,11 +481,11 @@ def check_wheel_move_before_feedback(data, **_):
             metric[i] = pos[-1] - pos[0]
 
     # except no-go trials
-    metric[data["choice"] == 0] = np.nan
+    metric[data["choice"] == 0] = np.nan  # NaN = trial ignored for this check
     nans = np.isnan(metric)
     passed = np.zeros_like(metric) * np.nan
 
-    passed[~nans] = (metric[~nans] != 0).astype(np.float)
+    passed[~nans] = (metric[~nans] != 0).astype(float)
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -521,7 +534,7 @@ def _wheel_move_during_closed_loop(re_ts, re_pos, data, wheel_gain=None, tol=1, 
     criterion = cm_to_rad(s_mm * 1e-1)  # convert abs displacement to radians (wheel pos is in rad)
     metric = metric - criterion  # difference should be close to 0
     rad_per_deg = cm_to_rad(1 / wheel_gain * 1e-1)
-    passed = (np.abs(metric) < rad_per_deg * tol).astype(np.float)  # less than 1 visual degree off
+    passed = (np.abs(metric) < rad_per_deg * tol).astype(float)  # less than 1 visual degree off
     metric[data["choice"] == 0] = passed[data["choice"] == 0] = np.nan  # except no-go trials
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
@@ -631,7 +644,8 @@ def check_detected_wheel_moves(data, min_qt=0, **_):
     metric = data['firstMovement_times']
     qevt_start = data['goCueTrigger_times'] - np.array(min_qt)
     response = data['response_times']
-    passed = np.array([a < m < b for m, a, b in zip(metric, qevt_start, response)], dtype=np.float)
+    # First movement time for each trial should be after the quiescent period and before feedback
+    passed = np.array([a < m < b for m, a, b in zip(metric, qevt_start, response)], dtype=float)
     nogo = data['choice'] == 0
     passed[nogo] = np.nan  # No go trial may have no movement times and that's fine
     return metric, passed
@@ -651,6 +665,7 @@ def check_error_trial_event_sequence(data, **_):
     :param data: dict of trial data with keys ('errorCue_times', 'goCue_times', 'intervals',
     'itiIn_times', 'correct')
     """
+    # An array the length of N trials where True means at least one event time was NaN (bad)
     nans = (
         np.isnan(data["intervals"][:, 0]) |
         np.isnan(data["goCue_times"])     |  # noqa
@@ -659,14 +674,16 @@ def check_error_trial_event_sequence(data, **_):
         np.isnan(data["intervals"][:, 1])
     )
 
-    a = np.less(data["intervals"][:, 0], data["goCue_times"], where=~nans)
-    b = np.less(data["goCue_times"], data["errorCue_times"], where=~nans)
-    c = np.less(data["errorCue_times"], data["itiIn_times"], where=~nans)
-    d = np.less(data["itiIn_times"], data["intervals"][:, 1], where=~nans)
+    # For each trial check that the events happened in the correct order (ignore NaN values)
+    a = np.less(data["intervals"][:, 0], data["goCue_times"], where=~nans)  # Start time < go cue
+    b = np.less(data["goCue_times"], data["errorCue_times"], where=~nans)  # Go cue < error cue
+    c = np.less(data["errorCue_times"], data["itiIn_times"], where=~nans)  # Error cue < ITI start
+    d = np.less(data["itiIn_times"], data["intervals"][:, 1], where=~nans)  # ITI start < end time
 
+    # For each trial check all events were in order AND all event times were not NaN
     metric = a & b & c & d & ~nans
 
-    passed = metric.astype(np.float)
+    passed = metric.astype(float)
     passed[data["correct"]] = np.nan  # Look only at incorrect trials
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
@@ -683,6 +700,7 @@ def check_correct_trial_event_sequence(data, **_):
     :param data: dict of trial data with keys ('valveOpen_times', 'goCue_times', 'intervals',
     'itiIn_times', 'correct')
     """
+    # An array the length of N trials where True means at least one event time was NaN (bad)
     nans = (
         np.isnan(data["intervals"][:, 0]) |
         np.isnan(data["goCue_times"])     |  # noqa
@@ -691,13 +709,16 @@ def check_correct_trial_event_sequence(data, **_):
         np.isnan(data["intervals"][:, 1])
     )
 
-    a = np.less(data["intervals"][:, 0], data["goCue_times"], where=~nans)
-    b = np.less(data["goCue_times"], data["valveOpen_times"], where=~nans)
-    c = np.less(data["valveOpen_times"], data["itiIn_times"], where=~nans)
-    d = np.less(data["itiIn_times"], data["intervals"][:, 1], where=~nans)
+    # For each trial check that the events happened in the correct order (ignore NaN values)
+    a = np.less(data["intervals"][:, 0], data["goCue_times"], where=~nans)  # Start time < go cue
+    b = np.less(data["goCue_times"], data["valveOpen_times"], where=~nans)  # Go cue < feedback
+    c = np.less(data["valveOpen_times"], data["itiIn_times"], where=~nans)  # Feedback < ITI start
+    d = np.less(data["itiIn_times"], data["intervals"][:, 1], where=~nans)  # ITI start < end time
+
+    # For each trial True means all events were in order AND all event times were not NaN
     metric = a & b & c & d & ~nans
 
-    passed = metric.astype(np.float)
+    passed = metric.astype(float)
     passed[~data["correct"]] = np.nan  # Look only at correct trials
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
@@ -737,7 +758,7 @@ def check_n_trial_events(data, **_):
     for i, (start, end) in enumerate(intervals):
         metric[i] = (all([start < data[k][i] < end for k in events]) and
                      (np.isnan(err_trig[i]) if correct[i] else start < err_trig[i] < end))
-    passed = metric.astype(np.bool)
+    passed = metric.astype(bool)
     assert intervals.shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -752,6 +773,7 @@ def check_trial_length(data, **_):
 
     :param data: dict of trial data with keys ('feedback_times', 'goCue_times', 'intervals')
     """
+    # NaN values are usually ignored so replace them with Inf so they fail the threshold
     metric = np.nan_to_num(data["feedback_times"] - data["goCue_times"], nan=np.inf)
     passed = (metric < 60.1) & (metric > 0)
     assert data["intervals"].shape[0] == len(metric) == len(passed)
@@ -787,7 +809,7 @@ def check_errorCue_delays(data, **_):
     'intervals', 'correct')
     """
     metric = np.nan_to_num(data["errorCue_times"] - data["errorCueTrigger_times"], nan=np.inf)
-    passed = ((metric <= 0.0015) & (metric > 0)).astype(np.float)
+    passed = ((metric <= 0.0015) & (metric > 0)).astype(float)
     passed[data["correct"]] = metric[data["correct"]] = np.nan
     assert data["intervals"].shape[0] == len(metric) == len(passed)
     return metric, passed
@@ -859,7 +881,7 @@ def check_reward_volumes(data, **_):
     """
     metric = data['rewardVolume']
     correct = data['correct']
-    passed = np.zeros_like(metric, dtype=np.bool)
+    passed = np.zeros_like(metric, dtype=bool)
     # Check correct trials within correct range
     passed[correct] = (1.5 <= metric[correct]) & (metric[correct] <= 3.)
     # Check incorrect trials are 0
@@ -932,7 +954,7 @@ def check_stimulus_move_before_goCue(data, photodiode=None, **_):
     for i, c in zip(data["intervals"][:, 0], data["goCue_times"]):
         metric = np.append(metric, np.count_nonzero(s[s > i] < (c - 0.02)))
 
-    passed = (metric == 0).astype(np.float)
+    passed = (metric == 0).astype(float)
     # Remove no go trials
     passed[data["choice"] == 0] = np.nan
     assert data["intervals"].shape[0] == len(metric) == len(passed)

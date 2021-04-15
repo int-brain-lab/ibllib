@@ -16,7 +16,7 @@ from pathlib import Path
 from oneibl.one import ONE, OneOffline
 import ibllib.io.video as vidio
 from brainbox.core import Bunch
-import brainbox.video.video as video
+import brainbox.video as video
 import brainbox.behavior.wheel as wh
 from ibllib.misc.exp_ref import eid2ref
 import alf.io as alfio
@@ -38,7 +38,7 @@ class MotionAlignment:
     def __init__(self, eid, one=None, log=logging.getLogger('ibllib'), **kwargs):
         self.one = one or ONE()
         self.eid = eid
-        self.session_path = self.one.path_from_eid(eid)
+        self.session_path = kwargs.pop('session_path', self.one.path_from_eid(eid))
         if self.one and not isinstance(self.one, OneOffline):
             self.ref = eid2ref(self.eid, as_dict=False, one=self.one)
         else:
@@ -146,6 +146,9 @@ class MotionAlignment:
         camera_times = self.data['camera_times'][side]
         cam_mask = self.alignment.to_mask(camera_times)
         frame_numbers, = np.where(cam_mask)
+
+        if frame_numbers.size == 0:
+            raise ValueError('No frames during given period')
 
         # Motion Energy
         camera_path = self.video_paths[side]

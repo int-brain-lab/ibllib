@@ -16,7 +16,7 @@ def lp(ts, fac, pad=0.2):
     :return: smoothed time series
     """
     # keep at least two periods for the padding
-    lpad = np.int(np.ceil(ts.shape[0] * pad))
+    lpad = int(np.ceil(ts.shape[0] * pad))
     ts_ = np.pad(ts, lpad, mode='edge')
     ts_ = ft.lp(ts_, 1, np.array(fac) / 2)
     return ts_[lpad:-lpad]

@@ -147,8 +147,10 @@ class QC:
             qc = QC('path/to/session')
             qc.update('PASS')  # Update current QC field to 'PASS' if not set
         """
-        assert self.one and not isinstance(self.one, OneOffline), \
-            'unable to update remote QC; invalid ONE instance'
+        assert self.one, "instance of one should be provided"
+        if isinstance(self.one, OneOffline):
+            self.log.warning('Running on OneOffline instance, unable to update remote QC')
+            return
         outcome = outcome or self.outcome
         outcome = outcome.upper()  # Ensure outcome is uppercase
         if outcome not in CRITERIA:
@@ -179,8 +181,10 @@ class QC:
         :return: the updated extended_qc field
         """
         assert self.eid, 'Unable to update Alyx; eID not set'
-        assert self.one and not isinstance(self.one, OneOffline), \
-            'unable to update remote QC; invalid ONE instance'
+        assert self.one, "instance of one should be provided"
+        if isinstance(self.one, OneOffline):
+            self.log.warning('Running on OneOffline instance, unable to update remote QC')
+            return
 
         # Ensure None instead of NaNs
         for k, v in data.items():

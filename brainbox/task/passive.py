@@ -32,7 +32,7 @@ def get_on_off_times_and_positions(rf_map):
 
     stim_on_frames = np.zeros((x_bin * y_bin, 1), dtype=np.ndarray)
     stim_off_frames = np.zeros((x_bin * y_bin, 1), dtype=np.ndarray)
-    rf_map_pos = np.zeros((x_bin * y_bin, 2), dtype=np.int)
+    rf_map_pos = np.zeros((x_bin * y_bin, 2), dtype=int)
 
     i = 0
     for x_pos in np.arange(x_bin):
