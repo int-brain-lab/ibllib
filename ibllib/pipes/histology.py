@@ -548,4 +548,4 @@ def coverage(trajs, ba=None, dist_fcn=[100, 150]):
 
     full_coverage = full_coverage.reshape(ba.image.shape)
     full_coverage[ba.label == 0] = np.nan
-    return full_coverage, np.mean(xyz,0)
+    return full_coverage, np.mean(xyz, 0)
