@@ -15,7 +15,7 @@ from brainbox.core import Bunch
 import ibllib.dsp as dsp
 import ibllib.exceptions as err
 from ibllib.io import raw_data_loaders, spikeglx
-from ibllib.io.extractors import biased_trials
+from ibllib.io.extractors import biased_trials, training_trials
 import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 import ibllib.plots as plots
@@ -651,6 +651,10 @@ def extract_all(session_path, save=True, bin_exists=False):
     basecls = [FpgaTrials]
     if extractor_type in ['ephys', 'mock_ephys', 'sync_ephys']:
         basecls.extend([ProbaContrasts])
+    elif extractor_type in ['ephys_biased']:
+        basecls.extend([biased_trials.ProbabilityLeft, biased_trials.ContrastLR])
+    elif extractor_type in ['ephys_training']:
+        basecls.extend([training_trials.ProbabilityLeft, training_trials.ContrastLR])
     elif extractor_type in ['ephys_biased_opto']:
         from ibllib.io.extractors import opto_trials
         basecls.extend([biased_trials.ProbabilityLeft, biased_trials.ContrastLR,

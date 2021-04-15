@@ -1,3 +1,8 @@
+## Release Notes Develop
+- Video QC optimization
+- New task types for widefield imaging
+- Add revision and default dataset to register dataset 
+
 ## Release Notes 1.8
 ### Release Notes 1.8.0 - 2020-03-30
 - opto-ephys tasks

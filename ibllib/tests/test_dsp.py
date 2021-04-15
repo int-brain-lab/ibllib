@@ -93,6 +93,12 @@ class TestPhaseRegression(unittest.TestCase):
 
 class TestShift(unittest.TestCase):
 
+    def test_shift_floats(self):
+        ns = 500
+        w = scipy.signal.ricker(ns, 10)
+        w_ = fshift(w.astype(np.float32), 1)
+        assert w_.dtype == np.float32
+
     def test_shift_1d(self):
         ns = 500
         w = scipy.signal.ricker(ns, 10)
