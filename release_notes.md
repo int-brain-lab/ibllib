@@ -1,4 +1,5 @@
-## Release Notes Develop
+## Release Notes 1.9
+### Release Notes 1.9.0 - 2021-04-15
 - Video QC optimization
 - New task types for widefield imaging
 - Add revision and default dataset to register dataset 
@@ -7,13 +8,13 @@
 - Parameters raises FileNotFound error if no defaults are provided
 
 ## Release Notes 1.8
-### Release Notes 1.8.0 - 2020-03-30
+### Release Notes 1.8.0 - 2021-03-30
 - opto-ephys tasks
 - DLC QC
 - Do not block session creation if error
 
 ## Release Notes 1.7
-### Release Notes 1.7.0 - 2020-03-16
+### Release Notes 1.7.0 - 2021-03-16
 - Removed deprecated numpy dtypes
 - Fix trajectory query bug
 - GPIO pin states loaded as bool array
