@@ -169,7 +169,7 @@ def within_ranges(x: np.ndarray, ranges: Array, labels: Optional[Array] = None,
     np.all(within_ranges(x, ranges) <= 1)
 
     Tests
-    -------
+    -----
     >>> import numpy as np
     >>> within_ranges(np.arange(11), [(1, 2), (5, 8)])
     array([0, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0], dtype=int8)

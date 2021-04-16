@@ -10,8 +10,9 @@ def get_on_off_times_and_positions(rf_map):
     """
 
     Prepares passive receptive field mapping into format for analysis
+    Parameters
     ----------
-    rf_map: output from alf.io.load_object(alf_path, object='passiveRFM', namespace='ibl')
+    rf_map: output from brainbox.io.one.load_passive_rfmap
 
     Returns
     -------
@@ -105,6 +106,11 @@ def get_rf_map_over_depth(rf_map_times, rf_map_pos, rf_stim_frames, spike_times,
 
             x_pos = pos[0]
             y_pos = pos[1]
+
+            # Case where there is no stimulus at this position
+            if len(stim_frame[0]) == 0:
+                _rf_map[:, x_pos, y_pos, :] = np.zeros((depths.shape[0], n_bins))
+                continue
 
             stim_on_times = rf_map_times[stim_frame[0]]
             stim_intervals = np.c_[stim_on_times - pre_stim, stim_on_times + post_stim]
