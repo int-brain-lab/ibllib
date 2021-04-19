@@ -1,3 +1,5 @@
+- TaskQC: exclude stim_freeze from overall session qc
+
 ## Release Notes 1.9
 ### Release Notes 1.9.0 - 2021-04-15
 - Video QC optimization
