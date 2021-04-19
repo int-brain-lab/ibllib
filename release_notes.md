@@ -1,4 +1,7 @@
 ## Release Notes 1.9
+### Release Notes 1.9.1 - 2021-04-19
+- Successful ONE setup on instantiation when params file doesn't exist
+
 ### Release Notes 1.9.0 - 2021-04-15
 - Video QC optimization
 - New task types for widefield imaging

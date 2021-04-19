@@ -6,9 +6,7 @@ import json
 
 
 def as_dict(par):
-    if not par:
-        return None
-    if isinstance(par, dict):
+    if not par or isinstance(par, dict):
         return par
     else:
         return dict(par._asdict())

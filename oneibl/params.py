@@ -76,9 +76,9 @@ def setup():
 
 
 def get(silent=False):
-    par = iopar.read(_PAR_ID_STR)
-    if par is None and not silent:
+    par = iopar.read(_PAR_ID_STR, {})
+    if not par and not silent:
         setup()
-    elif par is None and silent:
+    elif not par and silent:
         setup_silent()
     return iopar.read(_PAR_ID_STR, default=default())

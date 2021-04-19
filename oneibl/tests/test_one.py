@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 from uuid import UUID
 import requests
 from pathlib import Path
@@ -10,12 +11,42 @@ import numpy as np
 import ibllib.io.hashfile as hashfile
 from ibllib.exceptions import ALFObjectNotFound
 from alf.io import remove_uuid_file
+import oneibl.params as params
 from oneibl.one import ONE
 
 
 one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
           username='test_user',
           password='TapetesBloc18')
+
+
+class TestOneSetup(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.pars_file = Path.home().joinpath('.fake_pars', '.oneibl')
+
+    def tearDown(self) -> None:
+        self.pars_file.unlink(missing_ok=True)
+        self.pars_file.parent.rmdir()
+
+    def test_setup_silent(self):
+        # Mock getfile function to return a path to non-existent file instead of usual one pars
+        with mock.patch('oneibl.params.iopar.getfile') as mock_getfile:
+            mock_getfile.return_value = str(self.pars_file)
+            one = ONE(offline=True, silent=True)
+        self.assertCountEqual(one._par.as_dict(), params.default().as_dict())
+        self.assertTrue(self.pars_file.exists())
+
+    def test_setup(self):
+        params.input = lambda prompt: 'mock_input'
+        params.getpass = lambda prompt: 'mock_pwd'
+        params.print = lambda text: 'mock_print'
+        # Mock getfile function to return a path to non-existent file instead of usual one pars
+        with mock.patch('oneibl.params.iopar.getfile') as mock_getfile:
+            mock_getfile.return_value = str(self.pars_file)
+            one = ONE(offline=True, silent=False)
+        self.assertEqual(one._par.ALYX_PWD, 'mock_pwd')
+        self.assertTrue(self.pars_file.exists())
 
 
 class TestOneOffline(unittest.TestCase):
