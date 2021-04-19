@@ -383,7 +383,7 @@ class BrainAtlas:
         return extent
 
     def slice(self, coordinate, axis, volume='image', mode='raise', region_values=None,
-              mapping="Allen"):
+              mapping="Allen", bc=None):
         """
         :param coordinate: float
         :param axis: xyz convention:  0 for ml, 1 for ap, 2 for dv
@@ -429,6 +429,8 @@ class BrainAtlas:
         elif volume in ['surface', 'edges']:
             return _take(self.surface, index, axis=self.xyz2dims[axis])
         elif volume == 'volume':
+            if bc is not None:
+                index = bc.xyz2i(np.array([coordinate] * 3))[axis]
             return _take(region_values, index, axis=self.xyz2dims[axis])
 
     def plot_cslice(self, ap_coordinate, volume='image', mapping='Allen', **kwargs):
