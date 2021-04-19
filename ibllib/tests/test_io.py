@@ -78,10 +78,18 @@ class TestsParams(unittest.TestCase):
         # even if this default is a Params named tuple
         par = params.read(pstring, default=par)
         self.assertEqual(par, params.from_dict(default))
+        # check default empty dict
+        pstring = 'foobar'
+        filename = Path(params.getfile(pstring))
+        self.assertFalse(filename.exists())
+        par = params.read(pstring, default={})
+        self.assertIsNone(par)
+        self.assertTrue(filename.exists())
 
     def tearDown(self):
         # at last delete the param file
-        os.remove(params.getfile('toto'))
+        Path(params.getfile('toto')).unlink(missing_ok=True)
+        Path(params.getfile('foobar')).unlink(missing_ok=True)
 
 
 class TestsRawDataLoaders(unittest.TestCase):
