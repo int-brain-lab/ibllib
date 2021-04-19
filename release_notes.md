@@ -1,3 +1,5 @@
+- TaskQC: exclude stim_freeze from overall session qc
+
 ## Release Notes 1.9
 ### Release Notes 1.9.1 - 2021-04-19
 - Successful ONE setup on instantiation when params file doesn't exist
