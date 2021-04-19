@@ -500,7 +500,7 @@ def _wheel_move_during_closed_loop(re_ts, re_pos, data, wheel_gain=None, tol=1, 
     Criterion: displacement < tol visual degree
     Units: degrees angle of wheel turn
 
-    :param re_ts: extarcted wheel timestamps in seconds
+    :param re_ts: extracted wheel timestamps in seconds
     :param re_pos: extracted wheel positions in radians
     :param data: a dict with the keys (goCueTrigger_times, response_times, feedback_times,
     position, choice, intervals)
