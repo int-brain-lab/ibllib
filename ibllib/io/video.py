@@ -30,26 +30,31 @@ def get_video_frame(video_path, frame_number):
     return frame_image
 
 
-def get_video_frames_preload(video_path, frame_numbers=None, mask=Ellipsis, as_list=False,
-                             func=lambda x: x,):
+def get_video_frames_preload(vid, frame_numbers=None, mask=Ellipsis, as_list=False,
+                             func=lambda x: x, quiet=False):
     """
-    Obtain numpy array corresponding to a particular video frame in video_path.
+    Obtain numpy array corresponding to a particular video frame in video.
     Fetching and returning a list is about 33% faster but may be less memory controlled. NB: Any
     gain in speed will be lost if subsequently converted to array.
-    :param video_path: URL or local path to mp4 file
+    :param vid: URL or local path to mp4 file or cv2.VideoCapture instance.
     :param frame_numbers: video frames to be returned. If None, return all frames.
     :param mask: a logical mask or slice to apply to frames
     :param as_list: if true the frames are returned as a list, this is faster but may be less
     memory efficient
     :param func: Function to be applied to each frame. Applied after masking if applicable.
+    :param quiet: if true, suppress frame loading progress output.
     :return: numpy array corresponding to frame of interest, or list if as_list is True.
     Default dimensions are (n, w, h, 3) where n = len(frame_numbers)
 
     Example - Load first 1000 frames, keeping only the first colour channel:
-        frames = get_video_frames_preload(video_path, range(1000), mask=np.s_[:, :, 0])
+        frames = get_video_frames_preload(vid, range(1000), mask=np.s_[:, :, 0])
     """
-    is_url = isinstance(video_path, str) and video_path.startswith('http')
-    cap = VideoStreamer(video_path).cap if is_url else cv2.VideoCapture(str(video_path))
+    is_cap = not isinstance(vid, (str, Path))
+    if is_cap:
+        cap = vid
+    else:
+        is_url = isinstance(vid, str) and vid.startswith('http')
+        cap = VideoStreamer(vid).cap if is_url else cv2.VideoCapture(str(vid))
     assert cap.isOpened(), 'Failed to open video'
 
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -58,16 +63,15 @@ def get_video_frames_preload(video_path, frame_numbers=None, mask=Ellipsis, as_l
     # Setting the index is extremely slow; determine where frame index must be set
     # The first index is always explicitly set.
     to_set = np.insert(np.diff(frame_numbers), 0, 0) != 1
-
     if as_list:
         frame_images = [None] * len(frame_numbers)
     else:
         ret, frame = cap.read()
-        frame_images = np.empty((len(frame_numbers), *func(frame[mask or ...]).shape),
-                                np.uint8)
+        frame_images = np.zeros((len(frame_numbers), *func(frame[mask or ...]).shape), np.uint8)
     for ii, i in enumerate(frame_numbers):
-        sys.stdout.write(f'\rloading frame {ii}/{len(frame_numbers)}')
-        sys.stdout.flush()
+        if not quiet:
+            sys.stdout.write(f'\rloading frame {ii}/{len(frame_numbers)}')
+            sys.stdout.flush()
         if to_set[ii]:
             cap.set(cv2.CAP_PROP_POS_FRAMES, i)
         ret, frame = cap.read()
@@ -75,8 +79,10 @@ def get_video_frames_preload(video_path, frame_numbers=None, mask=Ellipsis, as_l
             frame_images[ii] = func(frame[mask or ...])
         else:
             print(f'failed to read frame #{i}')
-    cap.release()
-    sys.stdout.write('\x1b[2K\r')  # Erase current line in stdout
+    if not is_cap:
+        cap.release()
+    if not quiet:
+        sys.stdout.write('\x1b[2K\r')  # Erase current line in stdout
     return frame_images
 
 

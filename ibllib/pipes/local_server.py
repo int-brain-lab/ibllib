@@ -94,7 +94,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
                 session_path, one=one, max_md5_size=max_md5_size)
         except BaseException:
             _logger.error(traceback.format_exc())
-            _logger.info(f"Creating session / registering raw datasets {session_path} errored")
+            _logger.warning(f"Creating session / registering raw datasets {session_path} errored")
             continue
         if dsets is not None:
             all_datasets.extend(dsets)

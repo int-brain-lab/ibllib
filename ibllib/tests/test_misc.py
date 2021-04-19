@@ -3,8 +3,8 @@ import logging
 import time
 import types
 
-from ibllib.misc import (version, print_progress)
 from ibllib.misc import flatten as flt
+from ibllib.misc import (version, print_progress, range_str)
 
 
 class TestPrintProgress(unittest.TestCase):
@@ -74,6 +74,18 @@ class TestFlatten(unittest.TestCase):
         self.assertEqual(flt.flatten(x)[:5], [1, 2, 3, 1, 2])
         self.assertEqual(list(flt.gflatten(x)), list(flt.flatten(x, generator=True)))
         self.assertIsInstance(flt.flatten(x, generator=True), types.GeneratorType)
+
+
+class TestRangeStr(unittest.TestCase):
+
+    def test_range_str(self):
+        x = [1, 2, 3, 4, 5, 6, 7, 8, 12, 17]
+        self.assertEqual(range_str(x), '1-8, 12 & 17')
+
+        x = [0, 6, 7, 10, 11, 12, 30, 30]
+        self.assertEqual(range_str(x), '0, 6-7, 10-12 & 30')
+
+        self.assertEqual(range_str([]), '')
 
 
 if __name__ == "__main__":
