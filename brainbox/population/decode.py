@@ -11,13 +11,10 @@ import scipy as sp
 import scipy.stats
 import types
 from itertools import groupby
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.naive_bayes import GaussianNB, MultinomialNB
-from sklearn.linear_model import LogisticRegression, LinearRegression
+from sklearn.linear_model import LinearRegression
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.model_selection import KFold, LeaveOneOut, LeaveOneGroupOut
-from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, roc_auc_score
-from sklearn.utils import shuffle as sklearn_shuffle
+from sklearn.metrics import accuracy_score
 
 
 def get_spike_counts_in_bins(spike_times, spike_clusters, intervals):
