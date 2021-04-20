@@ -200,7 +200,7 @@ class EphysAlignment:
         return region, region_label
 
     @staticmethod
-    def get_histology_regions(xyz_coords, depth_coords, brain_atlas=None):
+    def get_histology_regions(xyz_coords, depth_coords, brain_atlas=None, mapping='Allen'):
         """
         Find all brain regions and their boundaries along the depth of probe or track
         :param xyz_coords: 3D coordinates of points along probe or track
@@ -219,7 +219,7 @@ class EphysAlignment:
         if not brain_atlas:
             brain_atlas = atlas.AllenAtlas(25)
 
-        region_ids = brain_atlas.get_labels(xyz_coords)
+        region_ids = brain_atlas.get_labels(xyz_coords, mapping=mapping)
         region_info = brain_atlas.regions.get(region_ids)
         boundaries = np.where(np.diff(region_info.id))[0]
         region = np.empty((boundaries.size + 1, 2))
