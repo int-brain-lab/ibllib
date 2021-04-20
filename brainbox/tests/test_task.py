@@ -16,12 +16,6 @@ class TestTask(unittest.TestCase):
         with open(pickle_file, 'rb') as f:
             self.test_data = pickle.load(f)
 
-        # Create more fake trials for accurate statistics
-        self.test_data['event_times'] = np.append(self.test_data['event_times'],
-                                                  self.test_data['event_times'] + 100)
-        self.test_data['event_groups'] = np.append(self.test_data['event_groups'],
-                                                   self.test_data['event_groups'])
-
         # Test trials data is pandas dataframe with trials
         csv_file = Path(__file__).parent.joinpath('fixtures', 'trials_df_test.csv')
         self.test_trials = pd.read_csv(csv_file)
@@ -38,8 +32,8 @@ class TestTask(unittest.TestCase):
                                                                         post_time=[0, 0.5],
                                                                         alpha=alpha)
         num_clusters = np.size(np.unique(spike_clusters))
-        self.assertTrue(np.size(sig_units) == 221)
         self.assertTrue(np.sum(p_values < alpha) == np.size(sig_units))
+        self.assertTrue(np.size(p_values) == np.size(cluster_ids))
         self.assertTrue(np.size(cluster_ids) == num_clusters)
 
     def test_differentiate_units(self):
@@ -56,8 +50,8 @@ class TestTask(unittest.TestCase):
                                                                            post_time=0.5,
                                                                            alpha=alpha)
         num_clusters = np.size(np.unique(spike_clusters))
-        self.assertTrue(np.size(sig_units) == 0)
         self.assertTrue(np.sum(p_values < alpha) == np.size(sig_units))
+        self.assertTrue(np.size(p_values) == np.size(cluster_ids))
         self.assertTrue(np.size(cluster_ids) == num_clusters)
 
     def test_roc_single_event(self):
@@ -70,8 +64,8 @@ class TestTask(unittest.TestCase):
                                                      pre_time=[0.5, 0],
                                                      post_time=[0, 0.5])
         num_clusters = np.size(np.unique(spike_clusters))
-        self.assertTrue(np.sum(auc_roc < 0.4) == 4)
-        self.assertTrue(np.sum(auc_roc > 0.6) == 1)
+        self.assertTrue(np.sum(auc_roc < 0.3) == 4)
+        self.assertTrue(np.sum(auc_roc > 0.6) == 25)
         self.assertTrue(np.size(cluster_ids) == num_clusters)
 
     def test_roc_between_two_events(self):
@@ -86,8 +80,8 @@ class TestTask(unittest.TestCase):
                                                            pre_time=0.5,
                                                            post_time=0.5)
         num_clusters = np.size(np.unique(spike_clusters))
-        self.assertTrue(np.sum(auc_roc < 0.4) == 16)
-        self.assertTrue(np.sum(auc_roc > 0.6) == 4)
+        self.assertTrue(np.sum(auc_roc < 0.3) == 24)
+        self.assertTrue(np.sum(auc_roc > 0.7) == 10)
         self.assertTrue(np.size(cluster_ids) == num_clusters)
 
     def test_generate_pseudo_blocks(self):
