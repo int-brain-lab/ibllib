@@ -234,6 +234,8 @@ def classify(population_activity, trial_labels, classifier, cross_validation=Non
 
     # Check input
     assert population_activity.shape[0] == trial_labels.shape[0]
+    if (cross_validation is None) and (return_training is True):
+        print('Warning: cannot return training accuracy without cross-validation')
 
     if cross_validation is None:
         # Fit the model on all the data
@@ -298,6 +300,11 @@ def regress(population_activity, trial_targets, cross_validation=None, return_tr
         array with predictions for the training set (only if return_training is True)
     """
 
+    # Check input
+    if (cross_validation is None) and (return_training is True):
+        print('Warning: cannot return training accuracy without cross-validation')
+
+    # Initialize regression
     reg = LinearRegression()
 
     if cross_validation is None:
