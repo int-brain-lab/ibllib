@@ -1,11 +1,25 @@
+- TaskQC: exclude stim_freeze from overall session qc
+
+## Release Notes 1.9
+### Release Notes 1.9.1 - 2021-04-19
+- Successful ONE setup on instantiation when params file doesn't exist
+
+### Release Notes 1.9.0 - 2021-04-15
+- Video QC optimization
+- New task types for widefield imaging
+- Add revision and default dataset to register dataset 
+- Fix for camera extraction failure for novel protocols
+- CameraQC wheel alignment check more robust to short videos and large alignment failures
+- Parameters raises FileNotFound error if no defaults are provided
+
 ## Release Notes 1.8
-### Release Notes 1.8.0 - 2020-03-30
+### Release Notes 1.8.0 - 2021-03-30
 - opto-ephys tasks
 - DLC QC
 - Do not block session creation if error
 
 ## Release Notes 1.7
-### Release Notes 1.7.0 - 2020-03-16
+### Release Notes 1.7.0 - 2021-03-16
 - Removed deprecated numpy dtypes
 - Fix trajectory query bug
 - GPIO pin states loaded as bool array
@@ -14,15 +28,15 @@
 - Extractor support for widefield imaging protocol
 
 ## Release Notes 1.6
-### Release Notes 1.6.2 - 2020-03-18
+### Release Notes 1.6.2 - 2021-03-18
 - hotfix: fix test_modelling error after removing pytorch
 
-### Release Notes 1.6.1 - 2020-03-17
+### Release Notes 1.6.1 - 2021-03-17
 - hotfix: maintain compatibility with Python 3.7
 
-### Release Notes 1.6.0 - 2020-03-16
+### Release Notes 1.6.0 - 2021-03-16
 - ibllib.atlas: backend region mapping is a lateralized version of the Allen atlas "Allen-lr"
-The default behviour in the Atlas is to remap according to the orignal mapping "Allen"
+The default behaviour in the Atlas is to remap according to the original mapping "Allen"
 - camera timestamps: extraction of the exact camera time stamps by cross-examination of bonsai timestamps, audio pulses
 and camera pulses
 
