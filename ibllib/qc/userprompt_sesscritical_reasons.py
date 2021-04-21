@@ -147,8 +147,6 @@ def main_function(eid, one=None):
     # Retrieve Alyx note to test
     one = ONE(base_url='https://dev.alyx.internationalbrainlab.org')
     eid = '2ffd3ed5-477e-4153-9af7-7fdad3c6946b'
-    notes = one.alyx.rest('notes', 'list',
-                          django=f'object_id,{eid}')
     main_function(eid=eid, one=one)
 
     # Get notes with pattern
