@@ -15,7 +15,7 @@ import json
 from oneibl.one import ONE
 
 # Global var
-STR_NOTES_STATIC = '=== REASON(S) FOR MARKING THE SESSION AS CRITICAL ==='
+STR_NOTES_STATIC = '=== EXPERIMENTER REASON(S) FOR MARKING THE SESSION AS CRITICAL ==='
 
 REASONS_SESS_CRIT = [
     'within experiment system crash',
