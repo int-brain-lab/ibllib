@@ -38,11 +38,6 @@ def reason_addnumberstr(reason_list=REASONS_SESS_CRIT):
     return list_out
 
 
-def test_reason_addnumberstr():
-    outstr = reason_addnumberstr(reason_list=['a', 'b'])
-    assert(outstr == ['0) a', '1) b'])
-
-
 REASONS_WITH_NUMBERS = reason_addnumberstr()
 
 
