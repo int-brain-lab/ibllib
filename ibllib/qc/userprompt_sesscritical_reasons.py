@@ -1,5 +1,5 @@
 '''
-Promput experimenter for reason for marking session as CRITICAL
+Prompt experimenter for reason for marking session as CRITICAL
 Choices are:
 - within experiment system crash
 - synching impossible
@@ -8,7 +8,7 @@ Choices are:
 - other
 
 Multiple reasons can be selected
-Place info in Alyx session note in a format that is machine retrievable
+Place info in Alyx session note in a format that is machine retrievable (text->json)
 '''
 # Author: Gaelle
 import json
