@@ -273,38 +273,6 @@ class TestsJsonable(unittest.TestCase):
         os.unlink(tfile.name)
 
 
-class TestsHardwareParameters(unittest.TestCase):
-
-    def setUp(self):
-        self.workdir = Path(__file__).parent / 'fixtures' / 'io' / 'spikeglx'
-        self.map3A = {'left_camera': 2,
-                      'right_camera': 3,
-                      'body_camera': 4,
-                      'bpod': 7,
-                      'frame2ttl': 12,
-                      'rotary_encoder_0': 13,
-                      'rotary_encoder_1': 14,
-                      'audio': 15}
-        self.map3B = {'left_camera': 0,
-                      'right_camera': 1,
-                      'body_camera': 2,
-                      'imec_sync': 3,
-                      'frame2ttl': 4,
-                      'rotary_encoder_0': 5,
-                      'rotary_encoder_1': 6,
-                      'audio': 7,
-                      'bpod': 16,
-                      'laser': 17,
-                      'laser_ttl': 18}
-        self.file3a = self.workdir / 'sample3A_g0_t0.imec.wiring.json'
-        self.file3b = self.workdir / 'sample3B_g0_t0.nidq.wiring.json'
-
-    def test_default_values(self):
-        from ibllib.io.extractors import ephys_fpga
-        self.assertEqual(ephys_fpga.CHMAPS['3A']['ap'], self.map3A)
-        self.assertEqual(ephys_fpga.CHMAPS['3B']['nidq'], self.map3B)
-
-
 class TestsMisc(unittest.TestCase):
 
     def setUp(self):
