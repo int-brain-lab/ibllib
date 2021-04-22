@@ -498,8 +498,9 @@ def coverage(trajs, ba=None, dist_fcn=[100, 150]):
     full_coverage = np.zeros(ba.image.shape, dtype=np.float32).flatten()
 
     for p in np.arange(len(trajs)):
-        if p % 20 == 0:
-            print(p / len(trajs))
+        if len(trajs) > 20:
+            if p % 20 == 0:
+                print(p / len(trajs))
         traj = trajs[p]
 
         ins = atlas.Insertion.from_dict(traj)
@@ -543,8 +544,53 @@ def coverage(trajs, ba=None, dist_fcn=[100, 150]):
         mdist = ins.trajectory.mindist(xyz, bounds=sites_bounds)
         coverage = 1 - fcn_cosine(np.array(dist_fcn) / 1e6)(mdist)
         # remap to the coverage volume
-        full_coverage[ba._lookup_inds(ixyz)] += coverage
+        flat_ind = ba._lookup_inds(ixyz)
+        full_coverage[flat_ind] += coverage
 
     full_coverage = full_coverage.reshape(ba.image.shape)
     full_coverage[ba.label == 0] = np.nan
-    return full_coverage
+    return full_coverage, np.mean(xyz, 0), flat_ind
+
+
+def coverage_grid(xyz_channels, spacing=500, ba=None):
+
+    if ba is None:
+        ba = atlas.AllenAtlas()
+
+    def _get_scale_and_indices(v, bin, lim):
+        _lim = [np.min(lim), np.max(lim)]
+        # if bin is a nonzero scalar, this is a bin size: create scale and indices
+        if np.isscalar(bin) and bin != 0:
+            scale = np.arange(_lim[0], _lim[1] + bin / 2, bin)
+            ind = (np.floor((v - _lim[0]) / bin)).astype(np.int64)
+            if lim[0] > lim[1]:
+                scale = scale[::-1]
+                ind = (scale.size - 1) - ind
+        # if bin == 0, aggregate over unique values
+        else:
+            scale, ind = np.unique(v, return_inverse=True)
+        return scale, ind
+
+    xlim = ba.bc.xlim
+    ylim = ba.bc.ylim
+    zlim = ba.bc.zlim
+
+    xscale, xind = _get_scale_and_indices(xyz_channels[:, 0], spacing / 1e6, xlim)
+    yscale, yind = _get_scale_and_indices(xyz_channels[:, 1], spacing / 1e6, ylim)
+    zscale, zind = _get_scale_and_indices(xyz_channels[:, 2], spacing / 1e6, zlim)
+
+    # aggregate by using bincount on absolute indices for a 2d array
+    nx, ny, nz = [xscale.size, yscale.size, zscale.size]
+    ind2d = np.ravel_multi_index(np.c_[yind, xind, zind].transpose(), dims=(ny, nx, nz))
+    r = np.bincount(ind2d, minlength=nx * ny * nz).reshape(ny, nx, nz)
+
+    # Make things analagous to AllenAtlas
+    dxyz = spacing / 1e6 * np.array([1, -1, -1])
+    dims2xyz = np.array([1, 0, 2])
+    nxyz = np.array(r.shape)[dims2xyz]
+    iorigin = (atlas.ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / spacing)
+
+    bc = atlas.BrainCoordinates(nxyz=nxyz, xyz0=(0, 0, 0), dxyz=dxyz)
+    bc = atlas.BrainCoordinates(nxyz=nxyz, xyz0=- bc.i2xyz(iorigin), dxyz=dxyz)
+
+    return r, bc
