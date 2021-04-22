@@ -761,7 +761,7 @@ def check_n_trial_events(data, **_):
     Units: -none-, boolean
 
     :param data: dict of trial data with keys ('intervals', 'stimOnTrigger_times',
-                 'stimOffTrigger_times', 'stimOn_times', 'stimOff_times', 'stimFreeze_times',
+                 'stimOffTrigger_times', 'stimOn_times', 'stimOff_times',
                  'stimFreezeTrigger_times', 'errorCueTrigger_times', 'itiIn_times',
                  'goCueTrigger_times', 'goCue_times', 'response_times', 'feedback_times')
     """
@@ -772,10 +772,11 @@ def check_n_trial_events(data, **_):
 
     # Exclude these fields; valve and errorCue times are the same as feedback_times and we must
     # test errorCueTrigger_times separately
+    # stimFreeze_times fails often due to TTL flicker
     exclude = ['camera_timestamps', 'errorCueTrigger_times', 'errorCue_times',
                'firstMovement_times', 'peakVelocity_times', 'valveOpen_times',
                'wheel_moves_peak_amplitude', 'wheel_moves_intervals', 'wheel_timestamps',
-               'wheel_intervals']
+               'wheel_intervals', 'stimFreeze_times']
     events = [k for k in data.keys() if k.endswith('_times') and k not in exclude]
     metric = np.zeros(data["intervals"].shape[0], dtype=bool)
 
