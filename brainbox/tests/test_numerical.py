@@ -37,6 +37,18 @@ class TestBetweeenSorted(unittest.TestCase):
         ind_ = np.logical_or(bnum.between_sorted(t, bounds[0]), bnum.between_sorted(t, bounds[1]))
         ind = bnum.between_sorted(t, bounds)
         assert np.all(ind == ind_)
+        # case when one range starts exactly where another stops
+        bounds = np.array([[10.4, 83.2], [83.2, 84]])
+        ind = bnum.between_sorted(t, bounds)
+        ind_ = np.logical_or(bnum.between_sorted(t, bounds[0]), bnum.between_sorted(t, bounds[1]))
+        assert np.all(ind == ind_)
+
+    def test_between_sorted_out_of_range(selfs):
+        # np searchsorted was returning out of range index when the start time
+        # was greater than the max or the end time lower than the min
+        bounds = np.array([[-10.4, -3], [10.4, 20], [34, 78]])
+        array = np.arange(30)
+        assert np.sum(bnum.between_sorted(array, bounds)) == 10
 
 
 class TestIsmember(unittest.TestCase):

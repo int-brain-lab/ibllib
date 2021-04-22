@@ -7,7 +7,17 @@ import numpy as np
 from brainbox.core import Bunch
 from oneibl.one import ONE
 from ibllib.qc import task_metrics as qcmetrics
+
 from brainbox.behavior.wheel import cm_to_rad
+
+
+class TestAggregateOutcome(unittest.TestCase):
+    def test_outcome_from_dict(self):
+        qc_dict = {'gnap': .99, 'gnop': np.nan, '_task_stimFreeze_delays': .1}
+        expect = {'gnap': 'PASS', 'gnop': 'NOT_SET', '_task_stimFreeze_delays': 'NOT_SET'}
+        outcome, outcome_dict = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict)
+        self.assertEqual(outcome, 'PASS')
+        self.assertEqual(expect, outcome_dict)
 
 
 class TestTaskMetrics(unittest.TestCase):

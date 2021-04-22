@@ -7,6 +7,7 @@ import fnmatch
 import re
 from functools import wraps
 from pathlib import Path, PurePath
+import shutil
 from typing import Any, Sequence, Union, Optional, List, Dict
 from uuid import UUID
 
@@ -22,7 +23,7 @@ from alf.files import is_valid, alf_parts
 # from ibllib.misc.exp_ref import is_exp_ref
 from ibllib.exceptions import \
     ALFMultipleObjectsFound, ALFObjectNotFound, ALFMultipleCollectionsFound
-from ibllib.io import hashfile
+from ibllib.io import hashfile, spikeglx
 from ibllib.misc import pprint
 from oneibl.dataclass import SessionDataInfo
 from brainbox.io import parquet
@@ -995,32 +996,44 @@ class OneAlyx(OneAbstract):
             parquet.save(self._cache_file, self._cache)
 
     def download_raw_partial(self, url_cbin, url_ch, first_chunk=0, last_chunk=0):
-        assert url_cbin.endswith('.cbin')
-        assert url_ch.endswith('.ch')
+        assert str(url_cbin).endswith('.cbin')
+        assert str(url_ch).endswith('.ch')
 
         relpath = Path(url_cbin.replace(self._par.HTTP_DATA_SERVER, '.')).parents[0]
         target_dir = Path(self._get_cache_dir(None), relpath)
         Path(target_dir).mkdir(parents=True, exist_ok=True)
 
-        # First, download the .ch file.
-        ch_local_path = Path(wc.http_download_file(
-            url_ch,
-            username=self._par.HTTP_DATA_SERVER_LOGIN,
-            password=self._par.HTTP_DATA_SERVER_PWD,
-            cache_dir=target_dir, clobber=True, offline=False, return_md5=False))
-        ch_local_path = alfio.remove_uuid_file(ch_local_path)
-        ch_local_path_renamed = ch_local_path.with_suffix('.chopped.ch')
-        ch_local_path.rename(ch_local_path_renamed)
-        assert ch_local_path_renamed.exists()
-        ch_local_path = ch_local_path_renamed
-
+        # First, download the .ch file if necessary
+        if isinstance(url_ch, Path):
+            ch_file = url_ch
+        else:
+            ch_file = Path(wc.http_download_file(
+                url_ch,
+                username=self._par.HTTP_DATA_SERVER_LOGIN,
+                password=self._par.HTTP_DATA_SERVER_PWD,
+                cache_dir=target_dir, clobber=True, return_md5=False))
+            ch_file = alfio.remove_uuid_file(ch_file)
+        ch_file_stream = ch_file.with_suffix('.stream.ch')
         # Load the .ch file.
-        with open(ch_local_path, 'r') as f:
+        with open(ch_file, 'r') as f:
             cmeta = json.load(f)
 
         # Get the first byte and number of bytes to download.
-        total_n_samples = cmeta['chunk_bounds'][-1]
         i0 = cmeta['chunk_bounds'][first_chunk]
+        ns_stream = cmeta['chunk_bounds'][last_chunk + 1] - i0
+
+        # if the cached version happens to be the same as the one on disk, just load it
+        if ch_file_stream.exists():
+            with open(ch_file_stream, 'r') as f:
+                cmeta_stream = json.load(f)
+            if (cmeta_stream.get('chopped_first_sample', None) == i0 and
+                    cmeta_stream.get('chopped_total_samples', None) == ns_stream):
+                return spikeglx.Reader(ch_file_stream.with_suffix('.cbin'))
+        else:
+            shutil.copy(ch_file, ch_file_stream)
+        assert ch_file_stream.exists()
+
+        # prepare the metadata file
         cmeta['chunk_bounds'] = cmeta['chunk_bounds'][first_chunk:last_chunk + 2]
         cmeta['chunk_bounds'] = [_ - i0 for _ in cmeta['chunk_bounds']]
         assert len(cmeta['chunk_bounds']) >= 2
@@ -1039,8 +1052,9 @@ class OneAlyx(OneAbstract):
         cmeta['sha1_uncompressed'] = None
         cmeta['chopped'] = True
         cmeta['chopped_first_sample'] = i0
-        cmeta['chopped_total_samples'] = total_n_samples
-        with open(ch_local_path, 'w') as f:
+        cmeta['chopped_total_samples'] = ns_stream
+
+        with open(ch_file_stream, 'w') as f:
             json.dump(cmeta, f, indent=2, sort_keys=True)
 
         # Download the requested chunks
@@ -1048,17 +1062,16 @@ class OneAlyx(OneAbstract):
             url_cbin,
             username=self._par.HTTP_DATA_SERVER_LOGIN,
             password=self._par.HTTP_DATA_SERVER_PWD,
-            cache_dir=target_dir, clobber=True, offline=False, return_md5=False,
+            cache_dir=target_dir, clobber=True, return_md5=False,
             chunks=(first_byte, n_bytes))
         cbin_local_path = alfio.remove_uuid_file(cbin_local_path)
-        cbin_local_path_renamed = cbin_local_path.with_suffix(
-            '.chopped.cbin').with_suffix('.chopped.cbin')
+        cbin_local_path_renamed = cbin_local_path.with_suffix('.stream.cbin')
         cbin_local_path.rename(cbin_local_path_renamed)
         assert cbin_local_path_renamed.exists()
-        cbin_local_path = cbin_local_path_renamed
 
-        import mtscomp
-        reader = mtscomp.decompress(cbin_local_path, cmeta=ch_local_path)
+        shutil.copy(cbin_local_path.with_suffix('.meta'),
+                    cbin_local_path_renamed.with_suffix('.meta'))
+        reader = spikeglx.Reader(cbin_local_path_renamed)
         return reader
 
 

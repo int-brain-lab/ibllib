@@ -1,6 +1,7 @@
 from pathlib import Path
 import pickle
 from sklearn.naive_bayes import MultinomialNB
+from sklearn.model_selection import KFold
 from brainbox.population.decode import (xcorr, classify, regress, get_spike_counts_in_bins,
                                         sigtest_pseudosessions, sigtest_linshift)
 import unittest
@@ -45,11 +46,14 @@ class TestPopulation(unittest.TestCase):
         event_times = self.test_data['event_times']
         event_groups = self.test_data['event_groups']
         clf = MultinomialNB()
+        cv = KFold(n_splits=2)
         times = np.column_stack(((event_times - 0.5), (event_times + 0.5)))
         counts, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters, times)
         counts = counts.T
-        accuracy, pred, prob = classify(counts, event_groups, clf)
-        self.assertTrue(accuracy == 0.8888888888888888)
+        accuracy, pred, prob, acc_training = classify(counts, event_groups, clf,
+                                                      cross_validation=cv, return_training=True)
+        self.assertTrue(accuracy == 0.2222222222222222)
+        self.assertTrue(acc_training == 0.9444444444444444)
         self.assertEqual(pred.shape, event_groups.shape)
         self.assertEqual(prob.shape, event_groups.shape)
 
@@ -60,11 +64,14 @@ class TestPopulation(unittest.TestCase):
         spike_clusters = self.test_data['spike_clusters']
         event_times = self.test_data['event_times']
         event_groups = self.test_data['event_groups']
+        cv = KFold(n_splits=2)
         times = np.column_stack(((event_times - 0.5), (event_times + 0.5)))
         counts, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters, times)
         counts = counts.T
-        pred = regress(counts, event_groups)
+        pred, pred_training = regress(counts, event_groups, cross_validation=cv,
+                                      return_training=True)
         self.assertEqual(pred.shape, event_groups.shape)
+        self.assertEqual(pred_training.shape, event_groups.shape)
 
     def test_xcorr_0(self):
         # 0: 0, 10
