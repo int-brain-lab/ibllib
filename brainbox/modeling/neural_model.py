@@ -9,6 +9,7 @@ International Brain Lab, 2020
 """
 import numpy as np
 from brainbox.processing import bincount2D
+from utils import *
 
 
 class NeuralModel:
@@ -19,7 +20,7 @@ class NeuralModel:
     """
 
     def __init__(self, design_matrix, spk_times, spk_clu,
-                 train=0.8, blocktrain=False, mintrials=100, subset=False):
+                 train, blocktrain, mintrials, subset):
         """
         Construct GLM object using information about all trials, and the relevant spike times.
         Only ingests data, and further object methods must be called to describe kernels, gain
@@ -97,18 +98,16 @@ class NeuralModel:
             print('Training fraction set to 1. Training on all data.')
             traininds = trialsdf.index
             testinds = trialsdf.index
-        elif blocktrain:
-            trainlen = int(np.floor(len(trialsdf) * train))
-            testlen = len(trialsdf) - trainlen
-            midpoint = len(trialsdf) // 2
-            starttest = midpoint - (testlen // 2)
-            endtest = midpoint + (testlen // 2)
-            testinds = trialsdf.index[starttest:endtest]
-            traininds = trialsdf.index[~np.isin(trialsdf.index, testinds)]
         else:
             trainlen = int(np.floor(len(trialsdf) * train))
-            traininds = sorted(np.random.choice(trialsdf.index, trainlen, replace=False))
-            testinds = trialsdf.index[~trialsdf.index.isin(traininds)]
+            if blocktrain:
+                testlen, midpoint = len(trialsdf) - trainlen, len(trialsdf) // 2
+                starttest, endtest = midpoint - (testlen // 2), midpoint + (testlen // 2)
+                testinds = trialsdf.index[starttest:endtest]
+                traininds = trialsdf.index[~np.isin(trialsdf.index, testinds)]
+            else:
+                traininds = sorted(np.random.choice(trialsdf.index, trainlen, replace=False))
+                testinds = trialsdf.index[~trialsdf.index.isin(traininds)]                
 
         # Set model parameters to begin with
         self.design_matrix = design_matrix
@@ -128,17 +127,12 @@ class NeuralModel:
             raise UserWarning('No neuron fired a spike in a minimum number.')
 
         # Bin spikes
-        self._bin_spike_trains()
-        return
-
-    def _bin_spike_trains(self):
         """
         Bins spike times passed to class at instantiation. Will not bin spike trains which did
         not meet the criteria for minimum number of spiking trials. Must be run before the
         NeuralGLM.fit() method is called.
         """
-        spkarrs = []
-        arrdiffs = []
+        spkarrs, arrdiffs = [], []
         for i in self.trialsdf.index:
             duration = self.trialsdf.loc[i, 'duration']
             durmod = duration % self.binwidth
@@ -158,4 +152,146 @@ class NeuralModel:
         if hasattr(self, 'dm'):
             assert y.shape[0] == self.dm.shape[0], "Oh shit. Indexing error."
         self.binnedspikes = y
+
+    def combine_weights(self):
+        """
+        Combined fit coefficients and intercepts to produce kernels where appropriate, which
+        describe activity.
+
+        Returns
+        -------
+        pandas.DataFrame
+            DataFrame in which each row is the fit weights for a given spiking unit. Columns are
+            individual covariates added during the construction process. Indices are the cluster
+            IDs for each of the cells that were fit (NOT a simple range(start, stop) index.)
+        """
+        outputs = {}
+        varoutputs = {}
+        for var in self.covar.keys():
+            if self.covar[var]['bases'] is None:
+                wind = self.covar[var]['dmcol_idx']
+                outputs[var] = self.coefs.apply(lambda w: w[wind])
+                continue
+            winds = self.covar[var]['dmcol_idx']
+            bases = self.covar[var]['bases']
+            weights = self.coefs.apply(lambda w: np.sum(w[winds] * bases, axis=1))
+            offset = self.covar[var]['offset']
+            tlen = bases.shape[0] * self.binwidth
+            tstamps = np.linspace(0 + offset, tlen + offset, bases.shape[0])
+            outputs[var] = pd.DataFrame(weights.values.tolist(),
+                                        index=weights.index,
+                                        columns=tstamps)
+        self.combined_weights = outputs
+        return outputs
+
+    def score(self, metric, **kwargs):
+        return NotImplemented
+
+    def fit(self, printcond=True):
+        """
+        Fit the current set of binned spikes as a function of the current design matrix. Requires
+        NeuralGLM.bin_spike_trains and NeuralGLM.compile_design_matrix to be run first. Will store
+        the fit weights to an internal variable. To access these fit weights in a pandas DataFrame
+        use the NeuralGLM.combine_weights method.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Regularization strength for scikit-learn implementation of GLM fitting, where 0 is
+            effectively unregularized weights. Does not function in the minimize
+            option, by default 1
+        epochs : int
+            Used for _fit_pytorch funtion, see details there
+        optim : string
+            Used for _fit_pytorch funtion, see details there
+        lr : float
+            Used for _fit_pytorch funtion, see details there
+        fit_intercept : bool
+            Only works when using 'sklearn' method. Whether or not to fit the bias term of the GLM
+        printcond : bool
+            Whether or not to print the condition number of the design matrix. Defaults to True
+
+        Returns
+        -------
+        coefs : list
+            List of coefficients fit. Not recommended to use these for interpretation. Use
+            the .combine_weights() method instead.
+        intercepts : list
+            List of intercepts (bias terms) fit. Not recommended to use these for interpretation.
+        """
+        if not self.compiled:
+            raise AttributeError('Design matrix has not been compiled yet. Please run '
+                                 'neuroglm.compile_design_matrix() before fitting.')
+        trainmask = np.isin(self.trlabels, self.traininds).flatten()  # Mask for training data
+        trainbinned = self.binnedspikes[trainmask]
+        if printcond:
+            print(f'Condition of design matrix is {np.linalg.cond(self.dm[trainmask])}')
+
+        if not self.subset:
+            traindm = self.dm[trainmask]
+            coefs, intercepts, = self._fit_sklearn(traindm, trainbinned)
+        else:
+            # Get testing matrices for scoring in submodels
+            testmask = np.isin(self.trlabels, self.testinds).flatten()
+            testbinned = self.binnedspikes[testmask]
+
+            # Build single-parameter-group models first:
+            singlepar_scores = pd.DataFrame(columns=['cell', 'covar', 'scores'])
+            for cov in tqdm(self.covar, desc='Fitting single-cov models:', leave=False):
+                colmask = np.zeros(self.dm.shape[1], dtype=bool)
+                colmask[self.covar[cov]['dmcol_idx']] = True
+                traindm = self.dm[np.ix_(trainmask, colmask)]
+                testdm = self.dm[np.ix_(testmask, colmask)]
+                coefs, intercepts, = self._fit_sklearn(traindm, trainbinned)
+                scores = self.score(metric=self.fitting_metric, weights=coefs, intercepts=intercepts, dm=testdm, binned=testbinned)
+                scoresdf = pd.DataFrame(scores).reset_index()
+                scoresdf.rename(columns={'index': 'cell'}, inplace=True)
+                scoresdf['covar'] = cov
+                singlepar_scores = pd.concat([singlepar_scores, scoresdf], sort=False)
+            singlepar_scores.set_index(['cell', 'covar'], inplace=True)
+            singlepar_scores.sort_values(by=['cell', 'scores'], ascending=False, inplace=True)
+            fitcells = singlepar_scores.index.levels[0]
+            # Iteratively build model with 2 through K parameter groups:
+            submodel_scores = singlepar_scores.unstack()
+            submodel_scores.columns = submodel_scores.columns.droplevel()
+            for i in tqdm(range(2, len(self.covar) + 1), desc='Fitting submodels', leave=False):
+                cellcovars = {cell: tuple(singlepar_scores.loc[cell].iloc[:i].index)
+                              for cell in fitcells}
+                covarsets = [frozenset(cov) for cov in cellcovars.values()]
+                # Iterate through unique unordered combinations of covariates
+                iscores = []
+                altiscores = []
+                progressdesc = f'Fitting covariate sets for {i} parameter groups'
+                for covarset in tqdm(set(covarsets), desc=progressdesc, leave=False):
+                    currcells = [cell for cell, covar in cellcovars.items()
+                                 if set(covar) == covarset]
+                    currcols = np.hstack([self.covar[cov]['dmcol_idx'] for cov in covarset])
+                    colmask = np.zeros(self.dm.shape[1], dtype=bool)
+                    colmask[currcols] = True
+                    traindm = self.dm[np.ix_(trainmask, colmask)]
+                    testdm = self.dm[np.ix_(testmask, colmask)]
+                    coefs, intercepts = self._fit_sklearn(traindm, trainbinned,
+                                                                 cells=currcells)
+                    iscores.append(self.score(metric=self.fitting_metric, weights=coefs, intercepts=intercepts, dm=testdm, binned=testbinned))
+                submodel_scores[f'{i}cov'] = pd.concat(iscores).sort_index()
+            self.submodel_scores = submodel_scores
+        self.coefs, self.intercepts = coefs, intercepts
         return
+
+    def binf(self, t):
+        """
+        Bin function for a given timestep. Returns the number of bins after trial start a given t
+        would occur at.
+
+        Parameters
+        ----------
+        t : float
+            Seconds after trial start
+
+        Returns
+        -------
+        int
+            Number of bins corresponding to t using the binwidth of the model.
+        """
+        return np.ceil(t / self.binwidth).astype(int)
+
