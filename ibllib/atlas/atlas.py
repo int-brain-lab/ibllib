@@ -784,11 +784,12 @@ class AllenAtlas(BrainAtlas):
         Converts coordinates to the CCF coordinates, which is assumed to be the cube indices
         times the spacing.
         :param xyz: mlapdv coordinates in um, origin Bregma
-        :param ccf_order: 'mlapdv' (ibl) or 'apdvml' (Allen mcc vertices)
-        :return: coordinates in um (mlapdv by default), origin is the front left top corner
-         of the data volume
+        :param ccf_order: order that you want values returned 'mlapdv' (ibl) or 'apdvml'
+        (Allen mcc vertices)
+        :return: coordinates in CCF space um, origin is the front left top corner of the data
+        volume, order determined by ccf_order
         """
-        ordre = self._ccf_order(ccf_order, reverse=True)
+        ordre = self._ccf_order(ccf_order)
         ccf = self.bc.xyz2i(xyz, round=False) * float(self.res_um)
         return ccf[..., ordre]
 
@@ -796,11 +797,13 @@ class AllenAtlas(BrainAtlas):
         """
         Converts coordinates from the CCF coordinates, which is assumed to be the cube indices
         times the spacing.
-        :param mlapdv coordinates in um, origin is the front left top corner of the data volume
-        :param ccf_order: 'mlapdv' (ibl) or 'apdvml' (Allen mcc vertices)
+        :param ccf coordinates in CCF space in um, origin is the front left top corner of the data
+        volume
+        :param ccf_order: order of ccf coordinates given 'mlapdv' (ibl) or 'apdvml'
+        (Allen mcc vertices)
         :return: xyz: mlapdv coordinates in um, origin Bregma
         """
-        ordre = self._ccf_order(ccf_order)
+        ordre = self._ccf_order(ccf_order, reverse=True)
         return self.bc.i2xyz((ccf[..., ordre] / float(self.res_um)))
 
     @staticmethod
