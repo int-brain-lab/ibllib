@@ -17,31 +17,28 @@ from oneibl.one import ONE
 # Global var
 STR_NOTES_STATIC = '=== EXPERIMENTER REASON(S) FOR MARKING THE SESSION AS CRITICAL ==='
 
-REASONS_SESS_CRIT = [
+REASONS_SESS_CRIT = (
     'within experiment system crash',
     'synching impossible',
     'dud or mock session',
     'essential dataset missing',
     'other'
-]
+)
 
 
 # Util functions
-def reason_addnumberstr(reason_list=REASONS_SESS_CRIT):
+def _reason_addnumberstr(reason_list=REASONS_SESS_CRIT):
     """
     Adding number at the beginning of the str for ease of selection by user
     :param reason_list : list of str ; default: REASONS_SESS_CRIT
     """
-    list_out = [None] * len(reason_list)
-    for i_reason in range(0, len(reason_list)):
-        list_out[i_reason] = f'{i_reason}) ' + reason_list[i_reason]
-    return list_out
+    return [f'{i}) {r}' for i, r in enumerate(reason_list)]
 
 
-REASONS_WITH_NUMBERS = reason_addnumberstr()
+REASONS_WITH_NUMBERS = _reason_addnumberstr()
 
 
-def reason_question_prompt():
+def _reason_question_prompt():
     """
     Function asking the user to enter the criteria for marking a sess as CRITICAL.
     """
@@ -57,7 +54,7 @@ def reason_question_prompt():
         integer_list = list(integer_map)
     except ValueError:
         print(f'{ans} is invalid, please try again...')
-        return reason_question_prompt()
+        return _reason_question_prompt()
 
     if all(elem in range(0, len(REASONS_WITH_NUMBERS)) for elem in integer_list):
         reasons_out = [REASONS_SESS_CRIT[integer_n] for integer_n in integer_list]
@@ -65,25 +62,25 @@ def reason_question_prompt():
         return reasons_out
     else:
         print(f'{ans} is invalid, please try again...')
-        return reason_question_prompt()
+        return _reason_question_prompt()
 
 
-def enquire_why_other():
+def _enquire_why_other():
     prompt = 'Explain why you selected "other" (free text): '
     ans = input(prompt).strip().lower()
     return ans
 
 
-def create_note_json(reasons_selected, reason_for_other, note_title=STR_NOTES_STATIC):
-    note_session = \
-        {"title": note_title,
-         "reasons_selected": reasons_selected,
-         "reason_for_other": reason_for_other
-         }
+def _create_note_json(reasons_selected, reason_for_other, note_title=STR_NOTES_STATIC):
+    note_session = {
+        "title": note_title,
+        "reasons_selected": reasons_selected,
+        "reason_for_other": reason_for_other
+    }
     return json.dumps(note_session)
 
 
-def delete_note_yesno(notes):
+def _delete_note_yesno(notes):
     """
     Function asking user whether notes are to be deleted.
     :param notes: Alyx notes, from ONE query
@@ -94,12 +91,12 @@ def delete_note_yesno(notes):
     ans = input(prompt).strip().lower()
     if ans not in ['y', 'n']:
         print(f'{ans} is invalid, please try again...')
-        return delete_note_yesno()
+        return _delete_note_yesno()
     else:
         return ans
 
 
-def upload_note_alyx(eid, note_text, one=None, str_notes_static=STR_NOTES_STATIC):
+def _upload_note_alyx(eid, note_text, one=None, str_notes_static=STR_NOTES_STATIC):
     """
     Function to upload a note to Alyx.
     It will check if notes with STR_NOTES_STATIC already exists for this session,
@@ -124,7 +121,7 @@ def upload_note_alyx(eid, note_text, one=None, str_notes_static=STR_NOTES_STATIC
         one.alyx.rest('notes', 'create', data=my_note)
         print('The selected reasons were saved on Alyx.')
     else:
-        ans = delete_note_yesno(notes=notes)
+        ans = _delete_note_yesno(notes=notes)
         if ans == 'y':
             for note in notes:
                 one.alyx.rest('notes', 'delete', id=note['id'])
@@ -134,7 +131,7 @@ def upload_note_alyx(eid, note_text, one=None, str_notes_static=STR_NOTES_STATIC
             print('The selected reasons were NOT saved in Alyx ; old notes remain.')
 
 
-def main_function(eid, one=None):
+def main(eid, one=None):
     """
     Main function to call to input a reason for marking a session as CRITICAL. It will:
     - ask reasons for selection of critical status
@@ -147,7 +144,7 @@ def main_function(eid, one=None):
     # Retrieve Alyx note to test
     one = ONE(base_url='https://dev.alyx.internationalbrainlab.org')
     eid = '2ffd3ed5-477e-4153-9af7-7fdad3c6946b'
-    main_function(eid=eid, one=one)
+    main(eid=eid, one=one)
 
     # Get notes with pattern
     notes = one.alyx.rest('notes', 'list',
@@ -162,17 +159,16 @@ def main_function(eid, one=None):
     if one is None:
         one = ONE()
     # ask reasons for selection of critical status
-    reasons_selected = reason_question_prompt()
+    reasons_selected = _reason_question_prompt()
 
     # check if 'other' reason has been selected, inquire why
     if 'other' in reasons_selected:
-        reason_for_other = enquire_why_other()
+        reason_for_other = _enquire_why_other()
     else:
         reason_for_other = []
 
     # create note text
-    note_text = create_note_json(reasons_selected=reasons_selected,
-                                 reason_for_other=reason_for_other)
+    note_text = _create_note_json(reasons_selected=reasons_selected, reason_for_other=reason_for_other)
 
     # upload note to Alyx
-    upload_note_alyx(eid, note_text, one=one)
+    _upload_note_alyx(eid, note_text, one=one)
