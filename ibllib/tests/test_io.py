@@ -87,8 +87,8 @@ class TestsParams(unittest.TestCase):
 
     def tearDown(self):
         # at last delete the param file
-        Path(params.getfile('toto')).unlink()
-        Path(params.getfile('foobar')).unlink()
+        Path(params.getfile('toto')).unlink(missing_ok=True)
+        Path(params.getfile('foobar')).unlink(missing_ok=True)
 
 
 class TestsRawDataLoaders(unittest.TestCase):

@@ -26,7 +26,7 @@ class TestOneSetup(unittest.TestCase):
         self.pars_file = Path.home().joinpath('.fake_pars', '.oneibl')
 
     def tearDown(self) -> None:
-        self.pars_file.unlink()
+        self.pars_file.unlink(missing_ok=True)
         self.pars_file.parent.rmdir()
 
     def test_setup_silent(self):
