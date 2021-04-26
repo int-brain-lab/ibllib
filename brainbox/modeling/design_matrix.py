@@ -61,6 +61,7 @@ class DesignMatrix:
         self.vartypes = vartypes
         if vartypes is not None:
             self.vartypes['duration'] = 'value'
+        base_df = trialsdf.copy()
         trialsdf = trialsdf.copy()  # Make sure we don't modify the original dataframe
         trbounds = trialsdf[['trial_start', 'trial_end']]  # Get the start/end of trials
         # Empty trial duration value to use later
@@ -80,6 +81,7 @@ class DesignMatrix:
         self.binwidth = binwidth
         self.covar = {}
         self.trialsdf = trialsdf
+        self.base_df = base_df
         self.compiled = False
         return
 

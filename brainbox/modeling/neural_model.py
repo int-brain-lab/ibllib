@@ -8,8 +8,9 @@ Berk Gercek
 International Brain Lab, 2020
 """
 import numpy as np
+import pandas as pd
+from tqdm import tqdm
 from brainbox.processing import bincount2D
-from utils import *
 
 
 class NeuralModel:
@@ -20,7 +21,7 @@ class NeuralModel:
     """
 
     def __init__(self, design_matrix, spk_times, spk_clu,
-                 train, blocktrain, mintrials, subset):
+                 train=0.8, blocktrain=False, mintrials=100, stepwise=False):
         """
         Construct GLM object using information about all trials, and the relevant spike times.
         Only ingests data, and further object methods must be called to describe kernels, gain
@@ -28,38 +29,25 @@ class NeuralModel:
 
         Parameters
         ----------
-        design_matrix: NeuralDesignMatrix
+        design_matrix: brainbox.modeling.design_matrix.DesignMatrix
             Design matrix object which has already been compiled for use with neural data.
         spk_times: numpy.array of floats
             1-D array of times at which spiking events were detected, in seconds.
         spk_clu: numpy.array of integers
             1-D array of same shape as spk_times, with integer cluster IDs identifying which
             cluster a spike time belonged to.
-        vartypes: dict
-            Dict with column names in trialsdf as keys, values are the type of covariate the column
-            contains. e.g. {'stimOn_times': 'timing', 'wheel', 'continuous', 'correct': 'value'}
-            Valid values are:
-                'timing' : A timestamp relative to trial start (e.g. stimulus onset)
-                'continuous' : A continuous covariate sampled throughout the trial (e.g. eye pos)
-                'value' : A single value for the given trial (e.g. contrast or difficulty)
         train: float
             Float in (0, 1] indicating proportion of data to use for training GLM vs testing
-            (using the NeuralGLM.score method). Trials to keep will be randomly sampled.
-        binwidth: float
-            Width, in seconds, of the bins which will be used to count spikes. Defaults to 20ms.
+            (using the NeuralGLM.score method). Trials to keep will be randomly sampled, by default
+            0.8
         mintrials: int
             Minimum number of trials in which neurons fired a spike in order to be fit. Defaults
             to 100 trials.
-        subset: bool
-            Whether or not to perform model subsetting, in which the model is built iteratively
+        stepwise: bool
+            Whether or not to perform stepwise regression, in which the model is built iteratively
             from only the mean rate, up. This allows comparison of D^2 scores for sub-models which
             incorporate only some parameters, to see which regressors actually improve
-            explainability. Default to False.
-
-        Returns
-        -------
-        glm: object
-            GLM object with methods for adding regressors and fitting
+            explainability. Defaults to False.
         """
         # Data checks #
         if not len(spk_times) == len(spk_clu):
@@ -73,11 +61,11 @@ class NeuralModel:
 
         # Filter out cells which don't meet the criteria for minimum spiking, while doing trial
         # assignment
-        trialsdf = design_matrix.trialsdf
+        base_df = design_matrix.base_df
         clu_ids = np.unique(spk_clu)
-        trbounds = trialsdf[['trial_start', 'trial_end']]  # Get the start/end of trials
+        trbounds = base_df[['trial_start', 'trial_end']]  # Get the start/end of trials
         # Initialize a Cells x Trials bool array to easily see how many trials a clu spiked
-        trialspiking = np.zeros((trialsdf.index.max() + 1, clu_ids.max() + 1), dtype=bool)
+        trialspiking = np.zeros((base_df.index.max() + 1, clu_ids.max() + 1), dtype=bool)
         # Empty trial duration value to use later
         # Iterate through each trial, and store the relevant spikes for that trial into a dict
         # Along with the cluster labels. This makes binning spikes and accessing spikes easier.
@@ -96,21 +84,21 @@ class NeuralModel:
         # Break the data into test and train sections for cross-validation
         if train == 1:
             print('Training fraction set to 1. Training on all data.')
-            traininds = trialsdf.index
-            testinds = trialsdf.index
+            traininds = base_df.index
+            testinds = base_df.index
         else:
-            trainlen = int(np.floor(len(trialsdf) * train))
+            trainlen = int(np.floor(len(base_df) * train))
             if blocktrain:
-                testlen, midpoint = len(trialsdf) - trainlen, len(trialsdf) // 2
+                testlen, midpoint = len(base_df) - trainlen, len(base_df) // 2
                 starttest, endtest = midpoint - (testlen // 2), midpoint + (testlen // 2)
-                testinds = trialsdf.index[starttest:endtest]
-                traininds = trialsdf.index[~np.isin(trialsdf.index, testinds)]
+                testinds = base_df.index[starttest:endtest]
+                traininds = base_df.index[~np.isin(base_df.index, testinds)]
             else:
-                traininds = sorted(np.random.choice(trialsdf.index, trainlen, replace=False))
-                testinds = trialsdf.index[~trialsdf.index.isin(traininds)]                
+                traininds = sorted(np.random.choice(base_df.index, trainlen, replace=False))
+                testinds = base_df.index[~base_df.index.isin(traininds)]
 
         # Set model parameters to begin with
-        self.design_matrix = design_matrix
+        self.design = design_matrix
         self.dm = design_matrix.dm
         self.covar = design_matrix.covar
         self.spikes = spks
@@ -118,20 +106,15 @@ class NeuralModel:
         self.clu_ids = np.argwhere(np.sum(trialspiking, axis=0) > mintrials)
         self.binwidth = design_matrix.binwidth
         self.covar = {}
-        self.trialsdf = trialsdf
+        self.trialsdf = design_matrix.trialsdf
         self.traininds = traininds
+        self.trlabels = design_matrix.trlabels
         self.testinds = testinds
-        self.compiled = False
-        self.subset = subset
+        self.stepwise = stepwise
         if len(self.clu_ids) == 0:
             raise UserWarning('No neuron fired a spike in a minimum number.')
 
         # Bin spikes
-        """
-        Bins spike times passed to class at instantiation. Will not bin spike trains which did
-        not meet the criteria for minimum number of spiking trials. Must be run before the
-        NeuralGLM.fit() method is called.
-        """
         spkarrs, arrdiffs = [], []
         for i in self.trialsdf.index:
             duration = self.trialsdf.loc[i, 'duration']
@@ -166,7 +149,6 @@ class NeuralModel:
             IDs for each of the cells that were fit (NOT a simple range(start, stop) index.)
         """
         outputs = {}
-        varoutputs = {}
         for var in self.covar.keys():
             if self.covar[var]['bases'] is None:
                 wind = self.covar[var]['dmcol_idx']
@@ -219,15 +201,12 @@ class NeuralModel:
         intercepts : list
             List of intercepts (bias terms) fit. Not recommended to use these for interpretation.
         """
-        if not self.compiled:
-            raise AttributeError('Design matrix has not been compiled yet. Please run '
-                                 'neuroglm.compile_design_matrix() before fitting.')
         trainmask = np.isin(self.trlabels, self.traininds).flatten()  # Mask for training data
         trainbinned = self.binnedspikes[trainmask]
         if printcond:
             print(f'Condition of design matrix is {np.linalg.cond(self.dm[trainmask])}')
 
-        if not self.subset:
+        if not self.stepwise:
             traindm = self.dm[trainmask]
             coefs, intercepts, = self._fit_sklearn(traindm, trainbinned)
         else:
@@ -243,7 +222,8 @@ class NeuralModel:
                 traindm = self.dm[np.ix_(trainmask, colmask)]
                 testdm = self.dm[np.ix_(testmask, colmask)]
                 coefs, intercepts, = self._fit_sklearn(traindm, trainbinned)
-                scores = self.score(metric=self.fitting_metric, weights=coefs, intercepts=intercepts, dm=testdm, binned=testbinned)
+                scores = self.score(metric=self.fitting_metric, weights=coefs,
+                                    intercepts=intercepts, dm=testdm, binned=testbinned)
                 scoresdf = pd.DataFrame(scores).reset_index()
                 scoresdf.rename(columns={'index': 'cell'}, inplace=True)
                 scoresdf['covar'] = cov
@@ -260,7 +240,6 @@ class NeuralModel:
                 covarsets = [frozenset(cov) for cov in cellcovars.values()]
                 # Iterate through unique unordered combinations of covariates
                 iscores = []
-                altiscores = []
                 progressdesc = f'Fitting covariate sets for {i} parameter groups'
                 for covarset in tqdm(set(covarsets), desc=progressdesc, leave=False):
                     currcells = [cell for cell, covar in cellcovars.items()
@@ -271,8 +250,9 @@ class NeuralModel:
                     traindm = self.dm[np.ix_(trainmask, colmask)]
                     testdm = self.dm[np.ix_(testmask, colmask)]
                     coefs, intercepts = self._fit_sklearn(traindm, trainbinned,
-                                                                 cells=currcells)
-                    iscores.append(self.score(metric=self.fitting_metric, weights=coefs, intercepts=intercepts, dm=testdm, binned=testbinned))
+                                                          cells=currcells)
+                    iscores.append(self.score(metric=self.fitting_metric, weights=coefs,
+                                   intercepts=intercepts, dm=testdm, binned=testbinned))
                 submodel_scores[f'{i}cov'] = pd.concat(iscores).sort_index()
             self.submodel_scores = submodel_scores
         self.coefs, self.intercepts = coefs, intercepts

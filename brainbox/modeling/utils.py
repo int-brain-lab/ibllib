@@ -1,4 +1,6 @@
 import numpy as np
+from numpy.matlib import repmat
+
 
 def raised_cosine(duration, nbases, binfun):
     nbins = binfun(duration)
