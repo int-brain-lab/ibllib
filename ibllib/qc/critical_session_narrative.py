@@ -168,7 +168,8 @@ def main(eid, one=None):
         reason_for_other = []
 
     # create note text
-    note_text = _create_note_json(reasons_selected=reasons_selected, reason_for_other=reason_for_other)
+    note_text = _create_note_json(reasons_selected=reasons_selected,
+                                  reason_for_other=reason_for_other)
 
     # upload note to Alyx
     _upload_note_alyx(eid, note_text, one=one)
