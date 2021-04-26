@@ -314,7 +314,7 @@ def _clean_frame2ttl(frame2ttl, display=False):
     if iko.size > (0.1 * frame2ttl['times'].size):
         _logger.warning(f'{iko.size} ({iko.size / frame2ttl["times"].size * 100} %) '
                         f'frame to TTL polarity switches below {F2TTL_THRESH} secs')
-    if display:
+    if display:  # pragma: no cover
         from ibllib.plots import squares
         plt.figure()
         squares(frame2ttl['times'] * 1000, frame2ttl['polarities'], yrange=[0.1, 0.9])
@@ -395,7 +395,7 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tm
     trials['feedback_times'][ind_err] = trials['errorCue_times'][ind_err]
     trials['intervals'] = np.c_[t_trial_start, trials['itiIn_times']]
 
-    if display:
+    if display:  # pragma: no cover
         width = 0.5
         ymax = 5
         if isinstance(display, bool):

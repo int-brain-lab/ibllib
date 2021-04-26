@@ -230,9 +230,11 @@ def classify(population_activity, trial_labels, classifier, cross_validation=Non
     """
 
     # Check input
-    assert population_activity.shape[0] == trial_labels.shape[0]
     if (cross_validation is None) and (return_training is True):
-        print('Warning: cannot return training accuracy without cross-validation')
+        raise RuntimeError('cannot return training accuracy without cross-validation')
+    if population_activity.shape[0] != trial_labels.shape[0]:
+        raise ValueError('trial_labels is not the same length as the first dimension of '
+                         'population_activity')
 
     if cross_validation is None:
         # Fit the model on all the data
@@ -299,7 +301,10 @@ def regress(population_activity, trial_targets, cross_validation=None, return_tr
 
     # Check input
     if (cross_validation is None) and (return_training is True):
-        print('Warning: cannot return training accuracy without cross-validation')
+        raise RuntimeError('cannot return training accuracy without cross-validation')
+    if population_activity.shape[0] != trial_targets.shape[0]:
+        raise ValueError('trial_targets is not the same length as the first dimension of '
+                         'population_activity')
 
     # Initialize regression
     reg = LinearRegression()

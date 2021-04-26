@@ -675,6 +675,8 @@ def driftmap(ts, feat, ax=None, plot_style='bincount',
         # plot raster map
         ax.imshow(R, aspect='auto', cmap='binary', vmin=0, vmax=np.std(R) * 4,
                   extent=np.r_[times[[0, -1]], depths[[0, -1]]], origin='lower', **kwargs)
+    ax.set_xlabel('time (secs)')
+    ax.set_ylabel('depth (um)')
     return ax
 
 
