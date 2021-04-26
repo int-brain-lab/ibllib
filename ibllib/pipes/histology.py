@@ -584,6 +584,9 @@ def coverage_grid(xyz_channels, spacing=500, ba=None):
     ind2d = np.ravel_multi_index(np.c_[yind, xind, zind].transpose(), dims=(ny, nx, nz))
     r = np.bincount(ind2d, minlength=nx * ny * nz).reshape(ny, nx, nz)
 
+
+
+
     # Make things analagous to AllenAtlas
     dxyz = spacing / 1e6 * np.array([1, -1, -1])
     dims2xyz = np.array([1, 0, 2])
