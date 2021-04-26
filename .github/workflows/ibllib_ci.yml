@@ -65,4 +65,4 @@ jobs:
       run: |
         cd ibllib
         cd tests
-        pytest
+        python -m unittest discover
