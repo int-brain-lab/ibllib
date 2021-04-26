@@ -56,7 +56,7 @@ class TestJsonFieldMethods(unittest.TestCase):
         self.assertTrue(written1 == written2)
         self.assertTrue(written1 == self.data_dict)
         print(self.ac.rest(self.endpoint, 'list', extended_qc='some__lt,0.5'))
-        print(len(len(self.ac.rest(self.endpoint, 'list', extended_qc='some__lt,0.5'))))
+        print(len(self.ac.rest(self.endpoint, 'list', extended_qc='some__lt,0.5')))
         self.assertTrue(len(self.ac.rest(self.endpoint, 'list', extended_qc='some__lt,0.5')) == 2)
 
     def _json_field_update(self):
