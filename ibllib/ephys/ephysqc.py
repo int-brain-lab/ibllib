@@ -161,7 +161,7 @@ def validate_ttl_test(ses_path, display=False):
     # get upgoing fronts for each
     sync = Bunch({})
     for k in sync_map:
-        fronts = ephys_fpga._get_sync_fronts(rawsync, sync_map[k])
+        fronts = ephys_fpga.get_sync_fronts(rawsync, sync_map[k])
         sync[k] = fronts['times'][fronts['polarities'] == 1]
     wheel = ephys_fpga.extract_wheel_sync(rawsync, chmap=sync_map)
 

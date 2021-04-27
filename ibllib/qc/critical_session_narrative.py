@@ -1,15 +1,15 @@
-'''
+"""
 Prompt experimenter for reason for marking session as CRITICAL
 Choices are:
 - within experiment system crash
-- synching impossible
+- syncing impossible
 - dud or mock session
 - essential dataset missing
 - other
 
 Multiple reasons can be selected
 Place info in Alyx session note in a format that is machine retrievable (text->json)
-'''
+"""
 # Author: Gaelle
 import json
 from oneibl.one import ONE
@@ -168,7 +168,8 @@ def main(eid, one=None):
         reason_for_other = []
 
     # create note text
-    note_text = _create_note_json(reasons_selected=reasons_selected, reason_for_other=reason_for_other)
+    note_text = _create_note_json(reasons_selected=reasons_selected,
+                                  reason_for_other=reason_for_other)
 
     # upload note to Alyx
     _upload_note_alyx(eid, note_text, one=one)

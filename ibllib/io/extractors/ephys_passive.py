@@ -146,7 +146,7 @@ def _get_passive_spacers(session_path, sync=None, sync_map=None):
         sync, sync_map = ephys_fpga.get_main_probe_sync(session_path, bin_exists=False)
     meta = _load_passive_stim_meta()
     # t_end_ephys = passive.ephysCW_end(session_path=session_path)
-    fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=None)
+    fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=None)
     spacer_template = (
         np.array(meta["VISUAL_STIM_0"]["ttl_frame_nums"], dtype=np.float32) / FRAME_FS
     )
@@ -392,7 +392,7 @@ def extract_rfmapping(
         passivePeriods_df = extract_passive_periods(session_path, sync=sync, sync_map=sync_map)
         trfm = passivePeriods_df.RFM.values
 
-    fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=trfm[0], tmax=trfm[1])
+    fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=trfm[0], tmax=trfm[1])
 
     RF_file = Path().joinpath(session_path, "raw_passive_data", "_iblrig_RFMapStim.raw.bin")
     passiveRFM_frames, RF_ttl_trace = _reshape_RF(RF_file=RF_file, meta_stim=meta[mkey])
@@ -424,13 +424,13 @@ def extract_task_replay(
         passivePeriods_df = extract_passive_periods(session_path, sync=sync, sync_map=sync_map)
         treplay = passivePeriods_df.taskReplay.values
 
-    fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0])
+    fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0])
     passiveGabor_df = _extract_passiveGabor_df(fttl, session_path)
 
-    bpod = ephys_fpga._get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
+    bpod = ephys_fpga.get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
     passiveValve_intervals = _extract_passiveValve_intervals(bpod)
 
-    audio = ephys_fpga._get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
+    audio = ephys_fpga.get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
     passiveTone_intervals, passiveNoise_intervals = _extract_passiveAudio_intervals(audio)
 
     passiveStims_df = np.concatenate(
@@ -471,15 +471,15 @@ def extract_replay_debug(
 
     plot_passive_periods(passivePeriods_df, ax=ax)
 
-    fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0])
+    fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0])
     passiveGabor_df = _extract_passiveGabor_df(fttl, session_path)
     plot_gabor_times(passiveGabor_df, ax=ax)
 
-    bpod = ephys_fpga._get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
+    bpod = ephys_fpga.get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
     passiveValve_intervals = _extract_passiveValve_intervals(bpod)
     plot_valve_times(passiveValve_intervals, ax=ax)
 
-    audio = ephys_fpga._get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
+    audio = ephys_fpga.get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
     passiveTone_intervals, passiveNoise_intervals = _extract_passiveAudio_intervals(audio)
     plot_audio_times(passiveTone_intervals, passiveNoise_intervals, ax=ax)
 

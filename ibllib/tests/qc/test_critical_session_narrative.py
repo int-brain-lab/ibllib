@@ -9,6 +9,7 @@ one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
           username='test_user',
           password='TapetesBloc18')
 
+
 def mock_input(prompt):
     if "Select from this list the reason(s)" in prompt:
         return "1,3"
@@ -30,10 +31,11 @@ class TestUserPmtSess(unittest.TestCase):
         note = one.alyx.rest('notes', 'list', django=f'object_id,{eid}')
         critical_dict = json.loads(note[0]['text'])
         expected_dict = {
-            'title': '=== EXPERIMENTER REASON(S) FOR MARKING THE SESSION AS CRITICAL ===',
+            'title': usrpmt.STR_NOTES_STATIC,
             'reasons_selected': ['synching impossible', 'essential dataset missing'],
             'reason_for_other': []}
         assert expected_dict == critical_dict
+
 
 if __name__ == '__main__':
     unittest.main()
