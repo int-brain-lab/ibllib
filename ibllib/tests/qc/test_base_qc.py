@@ -125,5 +125,5 @@ class TestQC(unittest.TestCase):
         self.assertEqual(QC.overall_outcome(['PASS', 'NOT_SET', None, 'FAIL']), 'FAIL')
 
 
-if __name__ == '__main__':
-    unittest.main()
+if __name__ == "__main__":
+    unittest.main(exit=False, verbosity=2)

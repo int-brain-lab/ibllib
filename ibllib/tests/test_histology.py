@@ -159,3 +159,7 @@ class TestsEphysReconstruction(unittest.TestCase):
         self.assertTrue(np.all(np.isclose(xyz_channels[-1, :], xyz_channels_ref[-1])))
         brain_regions = self.ephysalign.get_brain_locations(xyz_channels)
         self.assertTrue(np.all(np.equal(np.unique(brain_regions.acronym), brain_regions_ref)))
+
+
+if __name__ == "__main__":
+    unittest.main(exit=False, verbosity=2)

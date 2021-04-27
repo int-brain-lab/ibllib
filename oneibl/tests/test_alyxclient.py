@@ -55,7 +55,8 @@ class TestJsonFieldMethods(unittest.TestCase):
         )
         self.assertTrue(written1 == written2)
         self.assertTrue(written1 == self.data_dict)
-        self.assertTrue(len(self.ac.rest(self.endpoint, 'list', extended_qc='some__lt,0.5')) == 2)
+        sess_dict = self.ac.rest(self.endpoint, 'list', extended_qc='some__lt,0.5')
+        self.assertTrue(len(sess_dict) == 2)
 
     def _json_field_update(self):
         modified = self.ac.json_field_update(
@@ -240,4 +241,4 @@ class TestDownloadHTTP(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main(exit=False)
+    unittest.main(exit=False, verbosity=2)

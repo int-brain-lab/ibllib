@@ -194,7 +194,6 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
 
     for session_path in src_session_paths:
         print(f"\nFound session: {session_path}")
-        flag_file = session_path / "transfer_me.flag"
         msg = f"Transfer to {remote_folder} with the same name?"
         resp = input(msg + "\n[y]es/[r]ename/[s]kip/[e]xit\n ^\n> ") or "y"
         resp = resp.lower()
@@ -219,6 +218,7 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
         transfer_folder(
             session_path / "raw_video_data", remote_session_path / "raw_video_data", force=force
         )
+        flag_file = session_path / "transfer_me.flag"
         flag_file.unlink()
         create_video_transfer_done_flag(remote_session_path)
         check_create_raw_session_flag(remote_session_path)
