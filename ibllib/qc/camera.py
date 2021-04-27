@@ -37,6 +37,7 @@ from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io import raw_data_loaders as raw
 import alf.io as alfio
 from brainbox.core import Bunch
+from brainbox.numerical import within_ranges
 import brainbox.behavior.wheel as wh
 from ibllib.io.video import get_video_meta, get_video_frames_preload
 from oneibl.one import OneOffline
@@ -220,10 +221,7 @@ class CameraQC(base.QC):
                 wheel_data = training_wheel.get_wheel_position(self.session_path)
             self.data['wheel'] = Bunch(zip(wheel_keys, wheel_data))
 
-        # Find short period of wheel motion for motion correlation.  For speed start with the
-        # fist 2 minutes (nearly always enough), extract wheel movements and pick one.
-        # TODO Pick movement towards the end of the session (but not right at the end as some
-        #  are extrapolated).  Make sure the movement isn't too long.
+        # Find short period of wheel motion for motion correlation.
         if data_for_keys(wheel_keys, self.data['wheel']) and self.data['timestamps'] is not None:
             self.data['wheel'].period = self.get_active_wheel_period(self.data['wheel'])
 
@@ -514,9 +512,24 @@ class CameraQC(base.QC):
         if not wheel_present or self.side == 'body':
             return 'NOT_SET'
 
-        aln = MotionAlignment(self.eid, self.one, self.log)
+        # Check the selected wheel movement period occurred within camera timestamp time
+        camera_times = self.data['timestamps']
+        in_range = within_ranges(camera_times, self.data['wheel']['period'].reshape(-1, 2))
+        if not in_range.any():
+            # Check if any camera timestamps overlap with the wheel times
+            if np.any(np.logical_and(
+                camera_times > self.data['wheel']['timestamps'][0],
+                camera_times < self.data['wheel']['timestamps'][-1])
+            ):
+                _log.warning('Unable to check wheel alignment: '
+                             'chosen movement is not during video')
+                return 'NOT_SET'
+            else:
+                # No overlap, return fail
+                return 'FAIL'
+        aln = MotionAlignment(self.eid, self.one, self.log, session_path=self.session_path)
         aln.data = self.data.copy()
-        aln.data['camera_times'] = {self.side: self.data['timestamps']}
+        aln.data['camera_times'] = {self.side: camera_times}
         aln.video_paths = {self.side: self.video_path}
         offset, *_ = aln.align_motion(period=self.data['wheel'].period,
                                       display=display, side=self.side)

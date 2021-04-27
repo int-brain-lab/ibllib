@@ -1,6 +1,7 @@
 import unittest
 from tempfile import TemporaryDirectory
 from pathlib import Path
+import logging
 
 import numpy as np
 import matplotlib
@@ -150,7 +151,7 @@ class TestCameraQC(unittest.TestCase):
         expected = np.array([6.91, 7.2, 7.61, 8.08, 8.76, 9.47, 10.35, 11.22,
                              11.04, 11.42, 11.35, 11.94, 12.45, 13.22, 13.6, 13.6])
         actual = [round(x, 2) for x in plt.figure(figs[2]).axes[3].lines[0]._y.tolist()]
-        np.testing.assert_array_equal(expected, actual)
+        np.testing.assert_array_almost_equal(expected, actual, 1)
 
         # Verify not set outcome
         outcome = self.qc.check_focus()
@@ -228,6 +229,27 @@ class TestCameraQC(unittest.TestCase):
 
         self.assertEqual('WARNING', outcome)
         self.assertEqual(n_over, actual)
+
+    def test_check_wheel_alignment(self):
+        """This just checks data validation.  Integration tests test the MotionAlignment class"""
+        outcome = self.qc.check_wheel_alignment()
+        self.assertEqual('NOT_SET', outcome)
+
+        # Expect FAIL when no overlapping timestamps between wheel and camera
+        self.qc.data['wheel'] = {
+            'timestamps': np.arange(4000),
+            'position': np.random.random(4000),
+            'period': np.array([3000, 3050])
+        }
+        self.qc.data['timestamps'] = np.arange(5000, 6000)
+        outcome = self.qc.check_wheel_alignment()
+        self.assertEqual('FAIL', outcome)
+
+        # Expect NOT_SET when some overlapping timestamps but chosen period out of range
+        self.qc.data['timestamps'] -= 1500
+        with self.assertLogs(logging.getLogger('ibllib'), logging.WARNING):
+            outcome = self.qc.check_wheel_alignment()
+        self.assertEqual('NOT_SET', outcome)
 
     def test_ensure_data(self):
         self.qc.eid = self.eid

@@ -387,6 +387,36 @@ def load_spike_sorting_with_channel(eid, one=None, probe=None, dataset_types=Non
     return dic_spk_bunch, dic_clus, channels
 
 
+def load_passive_rfmap(eid, one=None):
+    """
+    For a given eid load in the passive receptive field mapping protocol data
+    :param eid: eid or pathlib.Path of the local session
+    :param one:
+    :return: rf_map
+    """
+    if isinstance(eid, Path):
+        alf_path = eid.joinpath('alf')
+    else:
+        one = one or ONE()
+        dtypes = {
+            '_iblrig_RFMapStim.raw',
+            '_ibl_passiveRFM.times',
+        }
+
+        _ = one.load(eid, dataset_types=dtypes, download_only=True)
+        alf_path = one.path_from_eid(eid).joinpath('alf')
+
+    # Load in the receptive field mapping data
+    rf_map = alf.io.load_object(alf_path, object='passiveRFM', namespace='ibl')
+    frames = np.fromfile(alf_path.parent.joinpath('raw_passive_data', '_iblrig_RFMapStim.raw.bin'),
+                         dtype="uint8")
+    y_pix, x_pix = 15, 15
+    frames = np.transpose(np.reshape(frames, [y_pix, x_pix, -1], order="F"), [2, 1, 0])
+    rf_map['frames'] = frames
+
+    return rf_map
+
+
 def load_wheel_reaction_times(eid, one=None):
     """
     Return the calculated reaction times for session.  Reaction times are defined as the time

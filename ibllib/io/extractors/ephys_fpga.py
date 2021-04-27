@@ -15,7 +15,7 @@ from brainbox.core import Bunch
 import ibllib.dsp as dsp
 import ibllib.exceptions as err
 from ibllib.io import raw_data_loaders, spikeglx
-from ibllib.io.extractors import biased_trials
+from ibllib.io.extractors import biased_trials, training_trials
 import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 import ibllib.plots as plots
@@ -314,7 +314,7 @@ def _clean_frame2ttl(frame2ttl, display=False):
     if iko.size > (0.1 * frame2ttl['times'].size):
         _logger.warning(f'{iko.size} ({iko.size / frame2ttl["times"].size * 100} %) '
                         f'frame to TTL polarity switches below {F2TTL_THRESH} secs')
-    if display:
+    if display:  # pragma: no cover
         from ibllib.plots import squares
         plt.figure()
         squares(frame2ttl['times'] * 1000, frame2ttl['polarities'], yrange=[0.1, 0.9])
@@ -395,7 +395,7 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tm
     trials['feedback_times'][ind_err] = trials['errorCue_times'][ind_err]
     trials['intervals'] = np.c_[t_trial_start, trials['itiIn_times']]
 
-    if display:
+    if display:  # pragma: no cover
         width = 0.5
         ymax = 5
         if isinstance(display, bool):
@@ -651,6 +651,10 @@ def extract_all(session_path, save=True, bin_exists=False):
     basecls = [FpgaTrials]
     if extractor_type in ['ephys', 'mock_ephys', 'sync_ephys']:
         basecls.extend([ProbaContrasts])
+    elif extractor_type in ['ephys_biased']:
+        basecls.extend([biased_trials.ProbabilityLeft, biased_trials.ContrastLR])
+    elif extractor_type in ['ephys_training']:
+        basecls.extend([training_trials.ProbabilityLeft, training_trials.ContrastLR])
     elif extractor_type in ['ephys_biased_opto']:
         from ibllib.io.extractors import opto_trials
         basecls.extend([biased_trials.ProbabilityLeft, biased_trials.ContrastLR,

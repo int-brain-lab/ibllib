@@ -32,8 +32,8 @@ class TestTask(unittest.TestCase):
                                                                         post_time=[0, 0.5],
                                                                         alpha=alpha)
         num_clusters = np.size(np.unique(spike_clusters))
-        self.assertTrue(np.size(sig_units) == 232)
         self.assertTrue(np.sum(p_values < alpha) == np.size(sig_units))
+        self.assertTrue(np.size(p_values) == np.size(cluster_ids))
         self.assertTrue(np.size(cluster_ids) == num_clusters)
 
     def test_differentiate_units(self):
@@ -50,8 +50,8 @@ class TestTask(unittest.TestCase):
                                                                            post_time=0.5,
                                                                            alpha=alpha)
         num_clusters = np.size(np.unique(spike_clusters))
-        self.assertTrue(np.size(sig_units) == 0)
         self.assertTrue(np.sum(p_values < alpha) == np.size(sig_units))
+        self.assertTrue(np.size(p_values) == np.size(cluster_ids))
         self.assertTrue(np.size(cluster_ids) == num_clusters)
 
     def test_roc_single_event(self):

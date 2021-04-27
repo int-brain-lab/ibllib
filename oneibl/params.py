@@ -1,7 +1,7 @@
 import os
 from ibllib.io import params as iopar
 from getpass import getpass
-from pathlib import Path, PurePath
+from pathlib import Path
 from ibllib.graphic import login
 
 
@@ -12,7 +12,7 @@ def default():
     par = {"ALYX_LOGIN": "test_user",
            "ALYX_PWD": "TapetesBloc18",
            "ALYX_URL": "https://test.alyx.internationalbrainlab.org",
-           "CACHE_DIR": str(PurePath(Path.home(), "Downloads", "FlatIron")),
+           "CACHE_DIR": str(Path.home() / "Downloads" / "FlatIron"),
            "HTTP_DATA_SERVER": "https://ibl.flatironinstitute.org",
            "HTTP_DATA_SERVER_LOGIN": "iblmember",
            "HTTP_DATA_SERVER_PWD": None,
@@ -28,20 +28,9 @@ def _get_current_par(k, par_current):
 
 
 def setup_silent():
-    par_current = iopar.read(_PAR_ID_STR)
-    par_default = default()
-    if par_current is None:
-        par = par_default
-    else:
-        par = iopar.as_dict(par_default)
-        for k in par.keys():
-            cpar = _get_current_par(k, par_current)
-            par[k] = cpar
-        par = iopar.from_dict(par)
-
+    par = iopar.read(_PAR_ID_STR, default())
     if par.CACHE_DIR:
         Path(par.CACHE_DIR).mkdir(parents=True, exist_ok=True)
-    iopar.write(_PAR_ID_STR, par)
 
 
 def setup_alyx_params():
@@ -55,10 +44,8 @@ def setup_alyx_params():
 
 # first get current and default parameters
 def setup():
-    par_current = iopar.read(_PAR_ID_STR)
     par_default = default()
-    if par_current is None:
-        par_current = par_default
+    par_current = iopar.read(_PAR_ID_STR, par_default)
 
     par = iopar.as_dict(par_default)
     for k in par.keys():
@@ -77,7 +64,7 @@ def setup():
 
     # default to home dir if empty dir somehow made it here
     if len(par['CACHE_DIR']) == 0:
-        par['CACHE_DIR'] = str(PurePath(Path.home(), "Downloads", "FlatIron"))
+        par['CACHE_DIR'] = str(Path.home() / "Downloads" / "FlatIron")
 
     par = iopar.from_dict(par)
 
@@ -89,9 +76,9 @@ def setup():
 
 
 def get(silent=False):
-    par = iopar.read(_PAR_ID_STR)
-    if par is None and not silent:
+    par = iopar.read(_PAR_ID_STR, {})
+    if not par and not silent:
         setup()
-    elif par is None and silent:
+    elif not par and silent:
         setup_silent()
     return iopar.read(_PAR_ID_STR, default=default())

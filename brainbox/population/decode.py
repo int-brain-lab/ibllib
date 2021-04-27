@@ -11,13 +11,10 @@ import scipy as sp
 import scipy.stats
 import types
 from itertools import groupby
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.naive_bayes import GaussianNB, MultinomialNB
-from sklearn.linear_model import LogisticRegression, LinearRegression
+from sklearn.linear_model import LinearRegression
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.model_selection import KFold, LeaveOneOut, LeaveOneGroupOut
-from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, roc_auc_score
-from sklearn.utils import shuffle as sklearn_shuffle
+from sklearn.metrics import accuracy_score
 
 
 def get_spike_counts_in_bins(spike_times, spike_clusters, intervals):
@@ -198,7 +195,8 @@ def xcorr(spike_times, spike_clusters, bin_size=None, window_size=None):
     return _symmetrize_correlograms(correlograms)
 
 
-def classify(population_activity, trial_labels, classifier, cross_validation=None):
+def classify(population_activity, trial_labels, classifier, cross_validation=None,
+             return_training=False):
     """
     Classify trial identity (e.g. stim left/right) from neural population activity.
 
@@ -216,6 +214,8 @@ def classify(population_activity, trial_labels, classifier, cross_validation=Non
         which cross-validation method to use, for example 5-fold:
                     from sklearn.model_selection import KFold
                     cross_validation = KFold(n_splits=5)
+    return_training : bool
+        if set to True the classifier will also return the performance on the training set
 
     Returns
     -------
@@ -224,11 +224,17 @@ def classify(population_activity, trial_labels, classifier, cross_validation=Non
     pred : 1D array
         predictions of the classifier
     prob : 1D array
-        probability of classification
+        probablity of classification
+    training_accuracy : float
+        accuracy of the classifier on the training set (only if return_training is True)
     """
 
     # Check input
-    assert population_activity.shape[0] == trial_labels.shape[0]
+    if (cross_validation is None) and (return_training is True):
+        raise RuntimeError('cannot return training accuracy without cross-validation')
+    if population_activity.shape[0] != trial_labels.shape[0]:
+        raise ValueError('trial_labels is not the same length as the first dimension of '
+                         'population_activity')
 
     if cross_validation is None:
         # Fit the model on all the data
@@ -239,19 +245,32 @@ def classify(population_activity, trial_labels, classifier, cross_validation=Non
     else:
         pred = np.empty(trial_labels.shape[0])
         prob = np.empty(trial_labels.shape[0])
+        if return_training:
+            pred_training = np.empty(trial_labels.shape[0])
+
         for train_index, test_index in cross_validation.split(population_activity):
-            # Fit the model to the training data and predict the held-out test data
+            # Fit the model to the training data
             classifier.fit(population_activity[train_index], trial_labels[train_index])
+
+            # Predict the held-out test data
             pred[test_index] = classifier.predict(population_activity[test_index])
             proba = classifier.predict_proba(population_activity[test_index])
             prob[test_index] = proba[:, 1]
 
+            # Predict the training data
+            if return_training:
+                pred_training[train_index] = classifier.predict(population_activity[train_index])
+
     # Calculate accuracy
     accuracy = accuracy_score(trial_labels, pred)
-    return accuracy, pred, prob
+    if return_training:
+        training_accuracy = accuracy_score(trial_labels, pred_training)
+        return accuracy, pred, prob, training_accuracy
+    else:
+        return accuracy, pred, prob
 
 
-def regress(population_activity, trial_targets, cross_validation=None):
+def regress(population_activity, trial_targets, cross_validation=None, return_training=False):
     """
     Perform linear regression to predict a continuous variable from neural data
 
@@ -261,17 +280,33 @@ def regress(population_activity, trial_targets, cross_validation=None):
         population activity of all neurons in the population for each trial.
     trial_targets : 1D or 2D array
         the decoding target per trial as a continuous variable
+    pre_time : float
+        time (in seconds) preceding the event times
+    post_time : float
+        time (in seconds) following the event times
     cross_validation : None or scikit-learn object
         which cross-validation method to use, for example 5-fold:
                     from sklearn.model_selection import KFold
                     cross_validation = KFold(n_splits=5)
+    return_training : bool
+        if set to True the classifier will also return the performance on the training set
 
     Returns
     -------
     pred : 1D array
         array with predictions
+    pred_training : 1D array
+        array with predictions for the training set (only if return_training is True)
     """
 
+    # Check input
+    if (cross_validation is None) and (return_training is True):
+        raise RuntimeError('cannot return training accuracy without cross-validation')
+    if population_activity.shape[0] != trial_targets.shape[0]:
+        raise ValueError('trial_targets is not the same length as the first dimension of '
+                         'population_activity')
+
+    # Initialize regression
     reg = LinearRegression()
 
     if cross_validation is None:
@@ -280,257 +315,22 @@ def regress(population_activity, trial_targets, cross_validation=None):
         pred = reg.predict(population_activity)
     else:
         pred = np.empty(trial_targets.shape[0])
+        if return_training:
+            pred_training = np.empty(trial_targets.shape[0])
         for train_index, test_index in cross_validation.split(population_activity):
-            # Fit the model to the training data and predict the held-out test data
+            # Fit the model to the training data
             reg.fit(population_activity[train_index], trial_targets[train_index])
+
+            # Predict the held-out test data
             pred[test_index] = reg.predict(population_activity[test_index])
-    return pred
 
-
-def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, post_time=0.5,
-           classifier='bayes-multinomial', cross_validation='kfold', num_splits=5, prob_left=None,
-           custom_validation=None, n_neurons='all', iterations=1, shuffle=False, phase_rand=False):
-    """
-
-    WILL BE DEPRECATED
-
-    Use decoding to classify groups of trials (e.g. stim left/right). Classification is done using
-    the population vector of summed spike counts from the specified time window. Cross-validation
-    is achieved using n-fold cross validation or leave-one-out cross validation. Decoders can
-    decode any number of groups. When providing the classifier with an imbalanced dataset (not
-    the same number of trials in each group) the chance level will not be 1/groups. In that case,
-    to compare the classification performance against change one has to either determine chance
-    level by decoding a shuffled dataset or use the 'auroc' metric as readout (this metric is
-    robust against imbalanced datasets)
-
-    Parameters
-    ----------
-    spike_times : 1D array
-        spike times (in seconds)
-    spike_clusters : 1D array
-        cluster ids corresponding to each event in `spikes`
-    event_times : 1D or 2D array
-        times (in seconds) of the events from the two groups, if it's a 2D array every row will
-    event_groups : 1D or 2D array
-        group identities of the events, can be any number of groups, accepts integers and strings
-    pre_time : float
-        time (in seconds) preceding the event times
-    post_time : float
-        time (in seconds) following the event times
-    classifier : string or sklearn object
-        which decoder to use, either input a scikit learn clf object directly or a string.
-        When it's a string options are (all classifiers are used with default options):
-            'bayes-multinomal'      Naive Bayes with multinomial likelihood
-            'bayes-gaussian'        Naive Bayes with gaussian likelihood
-            'forest'                Random forest
-            'regression'            Logistic regression
-            'lda'                   Linear Discriminant Analysis
-    cross_validation : string of generator object
-        which cross-validation method to use
-        you can input the .split method of any sklearn cross-validation method
-        or a string. If it's a string, options are:
-            'none'              No cross-validation
-            'kfold'             K-fold cross-validation
-            'kfold-interleaved' K-fold cross validation with interleaved trial selection
-            'leave-one-out'     Leave out the trial that is being decoded
-            'block'             Leave out the block the to-be-decoded trial is in
-    num_splits : integer
-        ** only for 'kfold' cross-validation **
-        Number of splits to use for k-fold cross validation, a value of 5 means that the decoder
-        will be trained on 4/5th of the data and used to predict the remaining 1/5th. This process
-        is repeated five times so that all data has been used as both training and test set.
-    prob_left : 1D array
-        ** only for 'block' cross-validation **
-        the probability of the stimulus appearing on the left for each trial in event_times
-    custom_validation : generator
-        ** only for 'custom' cross-validation **
-        a generator object with the splits to be used for cross validation using this format:
-            (
-                (split1_train_idxs, split1_test_idxs),
-                (split2_train_idxs, split2_test_idxs),
-                (split3_train_idxs, split3_test_idxs),
-             ...)
-    n_neurons : string or integer
-        number of neurons to randomly subselect from the population (default is 'all')
-    iterations : int
-        number of times to repeat the decoding (especially useful when subselecting neurons)
-    shuffle : boolean
-        whether to shuffle the trial labels each decoding iteration
-    phase_rand : boolean
-        whether to use phase randomization of the activity over trials to use as a "chance"
-        predictor
-
-    Returns
-    -------
-    results : dict
-        dictionary with decoding results
-
-        accuracy : float
-            accuracy of the classifier in percentage correct
-        f1 : float
-            F1 score of the classifier
-        auroc : float
-            the area under the ROC curve of the classification performance
-        confusion_matrix : 2D array
-            normalized confusion matrix
-        predictions : 2D array with dimensions iterations x trials
-            predicted group label for all trials in every iteration
-        probabilities : 2D array with dimensions iterations x trials
-            classification probability for all trials in every iteration
-    """
-    print('\n WARNING: The function decode will soon be deprecated, use classify instead\n')
-
-    # Check input
-    if type(classifier) == str:
-        assert classifier in ['bayes-multinomial', 'bayes-gaussian', 'forest', 'regression', 'lda']
-    assert (type(cross_validation) == str) or (isinstance(cross_validation, types.GeneratorType))
-    if type(cross_validation) == str:
-        assert cross_validation in ['none', 'kfold', 'kfold-interleaved', 'leave-one-out', 'block']
-    assert event_times.shape[0] == event_groups.shape[0]
-    if cross_validation == 'block':
-        assert event_times.shape[0] == prob_left.shape[0]
-
-    # Get matrix of all neuronal responses
-    times = np.column_stack(((event_times - pre_time), (event_times + post_time)))
-    pop_vector, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters, times)
-    pop_vector = pop_vector.T
-
-    # Exclude last trial if the number of trials is even and phase shuffling
-    if (phase_rand is True) & (event_groups.shape[0] % 2 == 0):
-        event_groups = event_groups[:-1]
-        pop_vector = pop_vector[:-1]
-
-    # Initialize classifier
-    if type(classifier) == str:
-        if classifier == 'forest':
-            clf = RandomForestClassifier()
-        elif classifier == 'bayes-multinomial':
-            clf = MultinomialNB()
-        elif classifier == 'bayes-gaussian':
-            clf = GaussianNB()
-        elif classifier == 'regression':
-            clf = LogisticRegression(solver='liblinear')
-        elif classifier == 'lda':
-            clf = LinearDiscriminantAnalysis()
+            # Predict the training data
+            if return_training:
+                pred_training[train_index] = reg.predict(population_activity[train_index])
+    if return_training:
+        return pred, pred_training
     else:
-        clf = classifier
-
-    # Pre-allocate variables
-    acc = np.zeros(iterations)
-    f1 = np.zeros(iterations)
-    auroc = np.zeros(iterations)
-    conf_matrix_norm = np.zeros((np.shape(np.unique(event_groups))[0],
-                                 np.shape(np.unique(event_groups))[0],
-                                 iterations))
-    pred = np.zeros([iterations, pop_vector.shape[0]])
-    prob = np.zeros([iterations, pop_vector.shape[0]])
-
-    for i in range(iterations):
-
-        # Pre-allocate variables for this iteration
-        y_pred = np.zeros(event_groups.shape)
-        y_probs = np.zeros(event_groups.shape)
-
-        # Get neurons to use for this iteration
-        if n_neurons == 'all':
-            sub_pop_vector = pop_vector
-        else:
-            use_neurons = np.random.choice(pop_vector.shape[1], n_neurons, replace=False)
-            sub_pop_vector = pop_vector[:, use_neurons]
-
-        # Shuffle trail labels if necessary
-        if shuffle is True:
-            event_groups = sklearn_shuffle(event_groups)
-
-        # Perform phase randomization of activity over trials if necessary
-        if phase_rand is True:
-            if i == 0:
-                original_pop_vector = sub_pop_vector
-            rand_pop_vector = np.empty(original_pop_vector.shape)
-            frequencies = int((original_pop_vector.shape[0] - 1) / 2)
-            fsignal = sp.fft.fft(original_pop_vector, axis=0)
-            power = np.abs(fsignal[1:1 + frequencies])
-            phases = 2 * np.pi * np.random.rand(frequencies)
-            for k in range(original_pop_vector.shape[1]):
-                newfsignal = fsignal[0, k]
-                newfsignal = np.append(newfsignal, np.exp(1j * phases) * power[:, k])
-                newfsignal = np.append(newfsignal, np.flip(np.exp(-1j * phases) * power[:, k]))
-                newsignal = sp.fft.ifft(newfsignal)
-                rand_pop_vector[:, k] = np.abs(newsignal.real)
-            sub_pop_vector = rand_pop_vector
-
-        if cross_validation == 'none':
-
-            # Fit the model on all the data and predict
-            clf.fit(sub_pop_vector, event_groups)
-            y_pred = clf.predict(sub_pop_vector)
-
-            #  Get the probability of the prediction for ROC analysis
-            probs = clf.predict_proba(sub_pop_vector)
-            y_probs = probs[:, 1]  # keep positive only
-
-        else:
-            # Perform cross-validation
-            if cross_validation == 'leave-one-out':
-                cv = LeaveOneOut().split(sub_pop_vector)
-            elif cross_validation == 'kfold':
-                cv = KFold(n_splits=num_splits).split(sub_pop_vector)
-            elif cross_validation == 'kfold-interleaved':
-                cv = KFold(n_splits=num_splits, shuffle=True).split(sub_pop_vector)
-            elif cross_validation == 'block':
-                block_lengths = [sum(1 for i in g) for k, g in groupby(prob_left)]
-                blocks = np.repeat(np.arange(len(block_lengths)), block_lengths)
-                cv = LeaveOneGroupOut().split(sub_pop_vector, groups=blocks)
-            elif cross_validation == 'custom':
-                cv = cross_validation
-
-            # Loop over the splits into train and test
-            for train_index, test_index in cv:
-
-                # Fit the model to the training data
-                clf.fit(sub_pop_vector[train_index], event_groups[train_index])
-
-                # Predict the test data
-                y_pred[test_index] = clf.predict(sub_pop_vector[test_index])
-
-                # Get the probability of the prediction for ROC analysis
-                probs = clf.predict_proba(sub_pop_vector[test_index])
-                y_probs[test_index] = probs[:, 1]  # keep positive only
-
-        # Calculate performance metrics and confusion matrix
-        acc[i] = accuracy_score(event_groups, y_pred)
-        f1[i] = f1_score(event_groups, y_pred)
-        auroc[i] = roc_auc_score(event_groups[~np.isnan(y_probs)], y_probs[~np.isnan(y_probs)])
-        conf_matrix = confusion_matrix(event_groups, y_pred)
-        conf_matrix_norm[:, :, i] = conf_matrix / conf_matrix.sum(axis=1)[:, np.newaxis]
-
-        # Add prediction and probability to matrix
-        pred[i, :] = y_pred
-        prob[i, :] = y_probs
-
-    # Make integers from arrays when there's only one iteration
-    if iterations == 1:
-        acc = acc[0]
-        f1 = f1[0]
-        auroc = auroc[0]
-
-    # Add to results dictionary
-    if cross_validation == 'kfold':
-        results = dict({'accuracy': acc, 'f1': f1, 'auroc': auroc,
-                        'predictions': pred, 'probabilities': prob,
-                        'confusion_matrix': conf_matrix_norm,
-                        'n_groups': np.shape(np.unique(event_groups))[0],
-                        'classifier': classifier, 'cross_validation': '%d-fold' % num_splits,
-                        'iterations': iterations, 'shuffle': shuffle, 'phase_rand': phase_rand})
-
-    else:
-        results = dict({'accuracy': acc, 'f1': f1, 'auroc': auroc,
-                        'predictions': pred, 'probabilities': prob,
-                        'confusion_matrix': conf_matrix_norm,
-                        'n_groups': np.shape(np.unique(event_groups))[0],
-                        'classifier': classifier, 'cross_validation': cross_validation,
-                        'iterations': iterations, 'shuffle': shuffle, 'phase_rand': phase_rand})
-    return results
+        return pred
 
 
 def lda_project(spike_times, spike_clusters, event_times, event_groups, pre_time=0, post_time=0.5,
@@ -639,7 +439,7 @@ def sigtest_pseudosessions(X, y, fStatMeas, genPseudo, npseuds=200):
     decoded variable, y.  pseudosessions are generated npseuds times to create a null
     distribution of statistical measures.  Significance level is reported relative to this
     null distribution.
-    -------
+
     X : 2-d array
         Data of size (elements, timetrials)
     y : 1-d array
@@ -651,8 +451,9 @@ def sigtest_pseudosessions(X, y, fStatMeas, genPseudo, npseuds=200):
         experimentally known null-distribution of y
     npseuds : int
         the number of pseudosessions used to estimate the significance level
+
+    Returns
     -------
-    returns
     alpha : p-value e.g. at a significance level of b, if alpha <= b then reject the null
             hypothesis.
     statms_real : the value of the statistical measure evaluated on X and y
@@ -676,7 +477,7 @@ def sigtest_linshift(X, y, fStatMeas, D=300):
     scalar statistical measure (e.g. R^2) from the data matrix, X, and the variable, y.
     A central window of X and y of size, D, is linearly shifted to generate a null distribution
     of statistical measures.  Significance level is reported relative to this null distribution.
-    -------
+
     X : 2-d array
         Data of size (elements, timetrials)
     y : 1-d array
@@ -686,8 +487,9 @@ def sigtest_linshift(X, y, fStatMeas, D=300):
     D : int
         the window length along the center of y used to compute the statistical measure.
         must have room to shift both right and left: len(y) >= D+2
+
+    Returns
     -------
-    returns
     alpha : conservative p-value e.g. at a significance level of b, if alpha <= b then reject the
             null hypothesis.
     statms_real : the value of the statistical measure evaluated on X and y

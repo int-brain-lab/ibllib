@@ -1,9 +1,9 @@
 """
 Plots metrics that assess quality of single units. Some functions here generate plots for the
-output of functions in the brainbox `metrics.py` module.
+output of functions in the brainbox `single_units.py` module.
 
 Run the following to set-up the workspace to run the docstring examples:
->>> import brainbox as bb
+>>> from brainbox import processing
 >>> import alf.io as aio
 >>> import numpy as np
 >>> import matplotlib.pyplot as plt
@@ -13,7 +13,7 @@ Run the following to set-up the workspace to run the docstring examples:
 # Load the alf spikes bunch and clusters bunch, and get a units bunch.
 >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
 >>> clstrs_b = aio.load_object(path_to_alf_out, 'clusters')
->>> units_b = bb.processing.get_units_bunch(spks_b)  # may take a few mins to compute
+>>> units_b = processing.get_units_bunch(spks_b)  # may take a few mins to compute
 """
 
 import time
@@ -24,7 +24,10 @@ import seaborn as sns
 import numpy as np
 
 # from matplotlib.ticker import StrMethodFormatter
-import brainbox as bb
+from brainbox import singlecell
+from brainbox.metrics import single_units
+from brainbox.processing import bincount2D
+from brainbox.io.spikeglx import extract_waveforms
 from ibllib.io import spikeglx
 
 
@@ -81,7 +84,7 @@ def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cma
     unit_list = list(units_b['depths'].keys())  # get new `unit_list` after removing unit
 
     # Calculate coefficients of variation for all units
-    p_vals_b, cv_b = bb.metrics.unit_stability(
+    p_vals_b, cv_b = single_units.unit_stability(
         units_b, units=units, feat_names=[feat_name], dist=dist, test=test)
     cv_vals = np.array(tuple(cv_b[feat_name].values()))
     cv_vals = cv_vals * 1e6 if feat_name == 'amps' else cv_vals  # convert to uV if amps
@@ -149,7 +152,7 @@ def missed_spikes_est(feat, feat_name, spks_per_bin=20, sigma=5, min_num_bins=50
 
     See Also
     --------
-    metrics.feature_cutoff
+    single_units.feature_cutoff
 
     Examples
     --------
@@ -161,7 +164,7 @@ def missed_spikes_est(feat, feat_name, spks_per_bin=20, sigma=5, min_num_bins=50
 
     # Calculate the feature distribution histogram and fraction of spikes missing.
     fraction_missing, pdf, cutoff_idx = \
-        bb.metrics.missed_spikes_est(feat, spks_per_bin, sigma, min_num_bins)
+        single_units.missed_spikes_est(feat, spks_per_bin, sigma, min_num_bins)
 
     # Plot.
     if ax is None:  # create two axes
@@ -229,12 +232,12 @@ def wf_comp(ephys_file, ts1, ts2, ch, sr=30000, n_ch_probe=385, dtype='int16', c
         The waveforms for the spikes in `ts2`: an array of shape (#spikes, #samples, #channels).
     s : float
         The similarity score between the two sets of waveforms, calculated by
-        `metrics.wf_similarity`
+        `single_units.wf_similarity`
 
     See Also
     --------
     io.extract_waveforms
-    metrics.wf_similarity
+    single_units.wf_similarity
 
     Examples
     --------
@@ -271,11 +274,11 @@ def wf_comp(ephys_file, ts1, ts2, ch, sr=30000, n_ch_probe=385, dtype='int16', c
     ch = ch.reshape((ch.size, 1)) if ch.size == 1 else ch
 
     # Extract the waveforms for these timestamps and compute similarity score.
-    wf1 = bb.io.extract_waveforms(ephys_file, ts1, ch, sr=sr, n_ch_probe=n_ch_probe, dtype=dtype,
-                                  car=car)
-    wf2 = bb.io.extract_waveforms(ephys_file, ts2, ch, sr=sr, n_ch_probe=n_ch_probe, dtype=dtype,
-                                  car=car)
-    s = bb.metrics.wf_similarity(wf1, wf2)
+    wf1 = extract_waveforms(ephys_file, ts1, ch, sr=sr, n_ch_probe=n_ch_probe, dtype=dtype,
+                            car=car)
+    wf2 = extract_waveforms(ephys_file, ts2, ch, sr=sr, n_ch_probe=n_ch_probe, dtype=dtype,
+                            car=car)
+    s = single_units.wf_similarity(wf1, wf2)
 
     # Plot these waveforms against each other.
     n_ch = ch.size
@@ -432,7 +435,7 @@ def firing_rate(ts, hist_win=0.01, fr_win=0.5, n_bins=10, show_fr_cv=True, ax=No
 
     See Also
     --------
-    metrics.firing_rate_cv
+    single_units.firing_rate_cv
     singecell.firing_rate
 
     Examples
@@ -446,10 +449,10 @@ def firing_rate(ts, hist_win=0.01, fr_win=0.5, n_bins=10, show_fr_cv=True, ax=No
     if ax is None:
         fig, ax = plt.subplots()
     if not (show_fr_cv):  # compute just the firing rate
-        fr = bb.singlecell.firing_rate(ts, hist_win=hist_win, fr_win=fr_win)
+        fr = singlecell.firing_rate(ts, hist_win=hist_win, fr_win=fr_win)
     else:  # compute firing rate and coefficients of variation
-        cv, cvs, fr = bb.metrics.firing_rate_cv(ts, hist_win=hist_win, fr_win=fr_win,
-                                                n_bins=n_bins)
+        cv, cvs, fr = single_units.firing_rate_coeff_var(ts, hist_win=hist_win, fr_win=fr_win,
+                                                         n_bins=n_bins)
     x = np.arange(fr.size) * hist_win
     ax.plot(x, fr)
     ax.set_title('Firing Rate')
@@ -557,9 +560,9 @@ def peri_event_time_histogram(
                          ' Please remove non-finite data points and try again.')
 
     # Compute peths
-    peths, binned_spikes = bb.singlecell.calculate_peths(spike_times, spike_clusters, [cluster_id],
-                                                         events, t_before, t_after, bin_size,
-                                                         smoothing, as_rate)
+    peths, binned_spikes = singlecell.calculate_peths(spike_times, spike_clusters, [cluster_id],
+                                                      events, t_before, t_after, bin_size,
+                                                      smoothing, as_rate)
     # Construct an axis object if none passed
     if ax is None:
         plt.figure()
@@ -667,11 +670,13 @@ def driftmap(ts, feat, ax=None, plot_style='bincount',
         ax.plot(ts, feat, **kwargs)
     else:
         # compute raster map as a function of site depth
-        R, times, depths = bb.processing.bincount2D(
+        R, times, depths = bincount2D(
             ts[iok], feat[iok], t_bin, d_bin, weights=weights)
         # plot raster map
         ax.imshow(R, aspect='auto', cmap='binary', vmin=0, vmax=np.std(R) * 4,
                   extent=np.r_[times[[0, -1]], depths[[0, -1]]], origin='lower', **kwargs)
+    ax.set_xlabel('time (secs)')
+    ax.set_ylabel('depth (um)')
     return ax
 
 
@@ -707,7 +712,7 @@ def pres_ratio(ts, hist_win=10, ax=None):
         >>> pr, pr_bins = bb.plot.pres_ratio(ts)
     '''
 
-    pr, spks_bins = bb.metrics.pres_ratio(ts, hist_win)
+    pr, spks_bins = single_units.pres_ratio(ts, hist_win)
     pr_bins = np.where(spks_bins > 0, 1, 0)
 
     if ax is None:

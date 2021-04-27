@@ -21,10 +21,13 @@ def between_sorted(sorted_v, bounds=None):
     """
     bounds = np.array(bounds)
     starts, stops = (np.take(bounds, 0, axis=-1), np.take(bounds, 1, axis=-1))
+    sbounds = np.logical_and(starts <= sorted_v[-1], stops >= sorted_v[0])
+    starts = starts[sbounds]
+    stops = stops[sbounds]
     sel = sorted_v * 0
     sel[np.searchsorted(sorted_v, starts)] = 1
     istops = np.searchsorted(sorted_v, stops, side='right')
-    sel[istops[istops < sorted_v.size]] = -1
+    sel[istops[istops < sorted_v.size]] += -1
     return np.cumsum(sel).astype(bool)
 
 
@@ -169,7 +172,7 @@ def within_ranges(x: np.ndarray, ranges: Array, labels: Optional[Array] = None,
     np.all(within_ranges(x, ranges) <= 1)
 
     Tests
-    -------
+    -----
     >>> import numpy as np
     >>> within_ranges(np.arange(11), [(1, 2), (5, 8)])
     array([0, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0], dtype=int8)
