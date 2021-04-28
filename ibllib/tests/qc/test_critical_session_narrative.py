@@ -36,6 +36,25 @@ class TestUserPmtSess(unittest.TestCase):
             'reason_for_other': []}
         assert expected_dict == critical_dict
 
+    def test_make_probe_ins(self):
+        eid = '440d02a4-b6dc-4de0-b487-ed64f7a59375'  # probe id
+        content_type = 'probeinsertion'
+        note_text = 'USING A FAKE SINGLE STRING HERE KSROI283IF982HKJFHWRY'
+
+        my_note = {'user': one._par.ALYX_LOGIN,
+                   'content_type': content_type,
+                   'object_id': eid,
+                   'text': f'{note_text}'}
+
+        one.alyx.rest('notes', 'create', data=my_note)
+
+        STR_NOTES_STATIC = 'EXPERIMENTER REASON(S) FOR MARKING THE INSERTION'
+
+        notes = one.alyx.rest('notes', 'list',
+                              django=f'text__icontains,{note_text},'
+                                     f'object_id,{eid}')
+        assert len(notes) == 1
+
 
 if __name__ == '__main__':
     unittest.main()

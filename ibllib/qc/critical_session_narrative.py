@@ -191,9 +191,11 @@ def main(eid, one=None):
         reason_list = REASONS_SESS_CRIT
         reasons_with_numbers = REASONS_SESS_WITH_NUMBERS
         ins_or_sess = 'session'
+        content_type = 'session'
     elif len(ins_list) > 0 and len(sess_list) == 0:  # insertion
         reason_list = REASONS_INS_CRIT
         reasons_with_numbers = REASONS_INS_WITH_NUMBERS
+        content_type = 'probeinsertion'
         ins_or_sess = 'insertion'
     else:
         raise ValueError(f'Inadequate number of session (n={len(sess_list)}) '
@@ -218,4 +220,4 @@ def main(eid, one=None):
                                   note_title=note_title)
 
     # upload note to Alyx
-    _upload_note_alyx(eid, note_text, content_type=ins_or_sess, str_notes_static=note_title, one=one)
+    _upload_note_alyx(eid, note_text, content_type=content_type, str_notes_static=note_title, one=one)
