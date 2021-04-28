@@ -119,7 +119,7 @@ def _delete_note_yesno(notes):
         return ans
 
 
-def _upload_note_alyx(eid, note_text, content_type, str_notes_static, one=None):
+def _upload_note_alyx(eid, note_text, content_type, str_notes_static, one=None, overwrite=False):
     """
     Function to upload a note to Alyx.
     It will check if notes with STR_NOTES_STATIC already exists for this session,
@@ -129,6 +129,8 @@ def _upload_note_alyx(eid, note_text, content_type, str_notes_static, one=None):
     :param one: default: None -> ONE()
     :param str_notes_static: string within the notes that will be searched for
     :param content_type: 'session' or 'insertion'
+    :param overwrite: if set to False, will check whether other notes exists and ask if deleting is OK.
+    If set to True, will delete any previous note without asking.
     :return:
     """
     if one is None:
@@ -145,24 +147,25 @@ def _upload_note_alyx(eid, note_text, content_type, str_notes_static, one=None):
         one.alyx.rest('notes', 'create', data=my_note)
         print('The selected reasons were saved on Alyx.')
     else:
-        ans = _delete_note_yesno(notes=notes)
+        if overwrite:
+            ans = 'y'
+        else:
+            ans = _delete_note_yesno(notes=notes)
         if ans == 'y':
             for note in notes:
                 one.alyx.rest('notes', 'delete', id=note['id'])
             one.alyx.rest('notes', 'create', data=my_note)
-            print('The selected reasons were saved on Alyx; old notes were deleted')
+            print('The selected reasons were saved on Alyx ; old notes were deleted')
         else:
-            print('The selected reasons were NOT saved in Alyx ; old notes remain.')
+            print('The selected reasons were NOT saved on Alyx ; old notes remain.')
+
 
 
 def main_gui(eid, reasons_selected, one=None):
     """
     Main function to call to input a reason for marking an insertion as
-    CRITICAL from the GUI. It will:
-    - create note text, checking whether similar notes exist already
-    - upload note to Alyx if none exist previously or if overwrite is chosen
-    Q&A are prompted via the Python terminal.
-    # TODO check whether user prompting is compatible with GUI
+    CRITICAL from the alignment GUI. It will:
+    - create note text, after deleting any similar notes existing already
 
     :param: eid: insertion id
     :param: reasons_selected: list of str, str are picked within REASONS_INS_CRIT_GUI
@@ -180,7 +183,7 @@ def main_gui(eid, reasons_selected, one=None):
 
     # upload note to Alyx
     _upload_note_alyx(eid, note_text, content_type='probeinsertion',
-                      str_notes_static=note_title, one=one)
+                      str_notes_static=note_title, one=one, overwrite=True)
 
 
 def main(eid, one=None):
