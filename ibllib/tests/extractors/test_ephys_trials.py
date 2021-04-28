@@ -125,3 +125,7 @@ class TestEphysBehaviorExtraction(unittest.TestCase):
         self.assertTrue(all(pLeft0 == pLeft1))
         # Test if only generative prob values in data
         self.assertTrue(all([x in [0.2, 0.5, 0.8] for x in np.unique(pLeft1)]))
+
+
+if __name__ == "__main__":
+    unittest.main(exit=False, verbosity=2)

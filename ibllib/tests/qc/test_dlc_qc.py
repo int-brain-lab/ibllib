@@ -105,5 +105,5 @@ class TestDlcQC(unittest.TestCase):
         self.assertEqual('FAIL', outcome)
 
 
-if __name__ == '__main__':
-    unittest.main()
+if __name__ == "__main__":
+    unittest.main(exit=False, verbosity=2)

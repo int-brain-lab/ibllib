@@ -22,3 +22,7 @@ class TestsAlfPartsFilters(unittest.TestCase):
 
     def tearDown(self) -> None:
         shutil.rmtree(self.tmpdir)
+
+
+if __name__ == "__main__":
+    unittest.main(exit=False, verbosity=2)

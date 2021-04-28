@@ -15,8 +15,8 @@ class LaserBool(BaseBpodTrialsExtractor):
     var_names = ('laser_stimulation', 'laser_probability')
 
     def _extract(self, **kwargs):
-        lstim = np.array([np.float(t.get('laser_stimulation', np.NaN)) for t in self.bpod_trials])
-        lprob = np.array([np.float(t.get('laser_probability', np.NaN)) for t in self.bpod_trials])
+        lstim = np.array([float(t.get('laser_stimulation', np.NaN)) for t in self.bpod_trials])
+        lprob = np.array([float(t.get('laser_probability', np.NaN)) for t in self.bpod_trials])
         _logger.info('Extracting laser datasets')
         if np.all(np.isnan(lprob)):
             # this prevents the file from being saved when no data
