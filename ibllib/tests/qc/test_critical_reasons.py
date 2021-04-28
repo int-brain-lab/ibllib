@@ -24,7 +24,7 @@ class TestUserPmtSess(unittest.TestCase):
         outstr = usrpmt._reason_addnumberstr(reason_list=['a', 'b'])
         self.assertEqual(outstr, ['0) a', '1) b'])
 
-    def test_userinput(self):
+    def test_userinput_sess(self):
         eid = 'd3372b15-f696-4279-9be5-98f15783b5bb'
         with mock.patch('builtins.input', mock_input):
             usrpmt.main(eid=eid, one=one)
@@ -33,6 +33,18 @@ class TestUserPmtSess(unittest.TestCase):
         expected_dict = {
             'title': '=== EXPERIMENTER REASON(S) FOR MARKING THE SESSION AS CRITICAL ===',
             'reasons_selected': ['synching impossible', 'essential dataset missing'],
+            'reason_for_other': []}
+        assert expected_dict == critical_dict
+
+    def test_userinput_ins(self):
+        eid = '440d02a4-b6dc-4de0-b487-ed64f7a59375'  # probe id
+        with mock.patch('builtins.input', mock_input):
+            usrpmt.main(eid=eid, one=one)
+        note = one.alyx.rest('notes', 'list', django=f'object_id,{eid}')
+        critical_dict = json.loads(note[0]['text'])
+        expected_dict = {
+            'title': '=== EXPERIMENTER REASON(S) FOR MARKING THE INSERTION AS CRITICAL ===',
+            'reasons_selected': ['Track not visible on imaging data', 'Drift'],
             'reason_for_other': []}
         assert expected_dict == critical_dict
 
