@@ -25,7 +25,7 @@ class TestUserPmtSess(unittest.TestCase):
         self.assertEqual(outstr, ['0) a', '1) b'])
 
     def test_userinput_sess(self):
-        eid = 'd3372b15-f696-4279-9be5-98f15783b5bb'
+        eid = 'd3372b15-f696-4279-9be5-98f15783b5bb'  # sess id
         with mock.patch('builtins.input', mock_input):
             usrpmt.main(eid=eid, one=one)
         note = one.alyx.rest('notes', 'list', django=f'object_id,{eid}')

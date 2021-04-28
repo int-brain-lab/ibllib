@@ -40,7 +40,8 @@ def _create_note_str(ins_or_sess):
     :param ins_or_sess: str containing either 'insertion' or 'session'
     :return:
     '''
-    str_static = f'=== EXPERIMENTER REASON(S) FOR MARKING THE {ins_or_sess.upper()} AS CRITICAL ==='
+    str_static = f'=== EXPERIMENTER REASON(S) FOR MARKING THE ' \
+                 f'{ins_or_sess.upper()} AS CRITICAL ==='
     return str_static
 
 
@@ -64,7 +65,8 @@ def _reason_question_prompt(reason_list, reasons_with_numbers, ins_or_sess):
     :param ins_or_sess: str containing either 'insertion' or 'session'
     """
 
-    prompt = f'Select from this list the reason(s) why you are marking the {ins_or_sess} as CRITICAL:' \
+    prompt = f'Select from this list the reason(s) why you are marking the ' \
+             f'{ins_or_sess} as CRITICAL:' \
              f' \n {reasons_with_numbers} \n' \
              f'and enter the corresponding numbers separated by commas, e.g. 1,3 -> enter: '
     ans = input(prompt).strip().lower()
@@ -153,9 +155,38 @@ def _upload_note_alyx(eid, note_text, content_type, str_notes_static, one=None):
             print('The selected reasons were NOT saved in Alyx ; old notes remain.')
 
 
+def main_gui(eid, reasons_selected, one=None):
+    """
+    Main function to call to input a reason for marking a session/insertion as
+    CRITICAL from the GUI. It will:
+    - create note text, checking whether similar notes exist already
+    - upload note to Alyx if none exist previously or if overwrite is chosen
+    Q&A are prompted via the Python terminal.
+    # TODO check whether user prompting is compatible with GUI
+
+    :param: eid: insertion id
+    :param: reasons_selected: list of str, str are picked within REASONS_INS_CRIT_GUI
+    """
+    # assert that reasons are all within REASONS_INS_CRIT_GUI
+    for item_str in reasons_selected:
+        assert item_str in REASONS_INS_CRIT_GUI
+
+    # create note title and text
+    note_title = _create_note_str('insertion')
+
+    note_text = _create_note_json(reasons_selected=reasons_selected,
+                                  reason_for_other=[],
+                                  note_title=note_title)
+
+    # upload note to Alyx
+    _upload_note_alyx(eid, note_text, content_type='probeinsertion',
+                      str_notes_static=note_title, one=one)
+
+
 def main(eid, one=None):
     """
-    Main function to call to input a reason for marking a session/insertion as CRITICAL. It will:
+    Main function to call to input a reason for marking a session/insertion
+    as CRITICAL programmatically. It will:
     - ask reasons for selection of critical status
     - check if 'other' reason has been selected, inquire why (free text)
     - create note text, checking whether similar notes exist already
@@ -220,4 +251,5 @@ def main(eid, one=None):
                                   note_title=note_title)
 
     # upload note to Alyx
-    _upload_note_alyx(eid, note_text, content_type=content_type, str_notes_static=note_title, one=one)
+    _upload_note_alyx(eid, note_text, content_type=content_type,
+                      str_notes_static=note_title, one=one)
