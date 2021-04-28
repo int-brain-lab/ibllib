@@ -102,13 +102,13 @@ class CameraQC(base.QC):
 
     def __init__(self, session_path_or_eid, camera, **kwargs):
         """
-        :param session_path_or_eid: A session eid or path
-        :param log: A logging.Logger instance, if None the 'ibllib' logger is used
-        :param one: An ONE instance for fetching and setting the QC on Alyx
+        :param session_path_or_eid: A session id or path
         :param camera: The camera to run QC on, if None QC is run for all three cameras
+        :param n_samples: The number of frames to sample for the position and brightness QC
         :param stream: If true and local video files not available, the data are streamed from
         the remote source.
-        :param n_samples: The number of frames to sample for the position and brightness QC
+        :param log: A logging.Logger instance, if None the 'ibllib' logger is used
+        :param one: An ONE instance for fetching and setting the QC on Alyx
         """
         # When an eid is provided, we will download the required data by default (if necessary)
         download_data = not alfio.is_session_path(session_path_or_eid)
@@ -861,6 +861,6 @@ def run_all_qc(session, cameras=('left', 'right', 'body'), **kwargs):
     run_args = {k: kwargs.pop(k) for k in ('download_data', 'extract_times', 'update')
                 if k in kwargs.keys()}
     for camera in cameras:
-        qc[camera] = CameraQC(session, side=camera, **kwargs)
+        qc[camera] = CameraQC(session, camera, **kwargs)
         qc[camera].run(**run_args)
     return qc
