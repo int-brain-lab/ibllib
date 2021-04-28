@@ -157,7 +157,7 @@ def _upload_note_alyx(eid, note_text, content_type, str_notes_static, one=None):
 
 def main_gui(eid, reasons_selected, one=None):
     """
-    Main function to call to input a reason for marking a session/insertion as
+    Main function to call to input a reason for marking an insertion as
     CRITICAL from the GUI. It will:
     - create note text, checking whether similar notes exist already
     - upload note to Alyx if none exist previously or if overwrite is chosen
