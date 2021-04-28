@@ -3,7 +3,7 @@ from unittest import mock
 import json
 from oneibl.one import ONE
 
-import ibllib.qc.critical_session_narrative as usrpmt
+import ibllib.qc.critical_reasons as usrpmt
 
 one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
           username='test_user',
@@ -36,7 +36,7 @@ class TestUserPmtSess(unittest.TestCase):
             'reason_for_other': []}
         assert expected_dict == critical_dict
 
-    def test_make_probe_ins(self):
+    def test_note_probe_ins(self):
         eid = '440d02a4-b6dc-4de0-b487-ed64f7a59375'  # probe id
         content_type = 'probeinsertion'
         note_text = 'USING A FAKE SINGLE STRING HERE KSROI283IF982HKJFHWRY'
@@ -47,8 +47,6 @@ class TestUserPmtSess(unittest.TestCase):
                    'text': f'{note_text}'}
 
         one.alyx.rest('notes', 'create', data=my_note)
-
-        STR_NOTES_STATIC = 'EXPERIMENTER REASON(S) FOR MARKING THE INSERTION'
 
         notes = one.alyx.rest('notes', 'list',
                               django=f'text__icontains,{note_text},'
