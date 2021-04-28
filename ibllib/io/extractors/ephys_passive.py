@@ -495,7 +495,7 @@ def extract_replay_debug(
     )  # _ibl_passiveGabor.table.csv, _ibl_passiveStims.table.csv
 
 
-# Maan passiveCWe xtractor, calls all others
+# Main passiveCW extractor, calls all others
 class PassiveChoiceWorld(BaseExtractor):
     save_names = (
         "_ibl_passivePeriods.intervalsTable.csv",
@@ -516,20 +516,12 @@ class PassiveChoiceWorld(BaseExtractor):
         if sync is None or sync_map is None:
             sync, sync_map = ephys_fpga.get_main_probe_sync(self.session_path, bin_exists=False)
 
-        try:
-            # Passive periods
-            passivePeriods_df = extract_passive_periods(
-                self.session_path, sync=sync, sync_map=sync_map
-            )
-            trfm = passivePeriods_df.RFM.values
-            treplay = passivePeriods_df.taskReplay.values
-
-        except BaseException as e:
-            log.error(f"Failed to extract passive periods: {e}")
-            passivePeriods_df = None
-            trfm = None
-            treplay = None
-            return (None, None, None, None)
+        # Passive periods
+        passivePeriods_df = extract_passive_periods(
+            self.session_path, sync=sync, sync_map=sync_map
+        )
+        trfm = passivePeriods_df.RFM.values
+        treplay = passivePeriods_df.taskReplay.values
 
         try:
             # RFMapping
@@ -546,10 +538,8 @@ class PassiveChoiceWorld(BaseExtractor):
             )
         except Exception as e:
             log.error(f"Failed to extract task replay stimuli: {e}")
-            (passiveGabor_df, passiveStims_df,) = (
-                None,
-                None,
-            )
+            passiveGabor_df, passiveStims_df = (None, None)
+
         if plot:
             f, ax = plt.subplots(1, 1)
             f.suptitle("/".join(str(self.session_path).split("/")[-5:]))
@@ -560,59 +550,13 @@ class PassiveChoiceWorld(BaseExtractor):
             plot_stims_times(passiveStims_df, ax=ax)
             plt.show()
 
-        return (
+        data = (
             passivePeriods_df,  # _ibl_passivePeriods.intervalsTable.csv
             passiveRFM_times,  # _ibl_passiveRFM.times.npy
             passiveGabor_df,  # _ibl_passiveGabor.table.csv,
-            passiveStims_df,  # _ibl_passiveStims.table.csv
+            passiveStims_df  # _ibl_passiveStims.table.csv
         )
 
-
-if __name__ == "__main__":
-    # Working session
-    session_path = "/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_054/2020-10-10/001"
-    # # Broken session
-    #     session_path = "/home/nico/Downloads/FlatIron/integration/ephys/\
-    # choice_world/KS022/2019-12-10/001"
-    pcw = PassiveChoiceWorld(session_path)
-    data, paths = pcw.extract(save=False)
-    (
-        passivePeriods_df,
-        passiveRFM_times,
-        passiveGabor_df,
-        passiveStims_df
-    ) = data
-    # sp = '/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_029/2020-10-07/001'
-    # extract_passive_choice_world(sp)
-    # extract_passive_choice_world(sp, plot=True)
-    # from oneibl.one import ONE
-    # import alf.io
-
-    # one = ONE()
-
-    # eids = one.search(dataset_types=min_dataset_types)
-    # session_paths = []
-    # for i, eid in enumerate(eids):
-    #     try:
-    #         local_paths = one.load(eid, dataset_types=dataset_types, download_only=True)
-    #         session_paths.append(alf.io.get_session_path(local_paths[0]))
-    #     except BaseException as e:
-    #         print(f"{i+1}/{len(eids)} - Failed to DL session: {eid}\n\n{e}")
-    #     print(f"\n\n{i+1}/{len(eids)}\n\n")
-
-    # failed = []
-    # for i, sp in enumerate(session_paths):
-    #     try:
-    #         extract_passive_choice_world(sp)
-    #     except BaseException as e:
-    #         failed.append((sp, e))
-    #     print(f"\n{i+1}/{len(session_paths)}")
-    # print(f"nfailed = {len(failed)} / {len(session_paths)}")
-
-    # for s in all_session_paths[:20]:
-    #     try:
-    #         extract_passive_choice_world_plot(s)
-    #     except BaseException as e:
-    #         print(e)
-    #         continue
-    print(".")
+        # Set save names to None if data not extracted - these will not be saved or registered
+        self.save_names = tuple(None if y is None else x for x, y in zip(self.save_names, data))
+        return data
