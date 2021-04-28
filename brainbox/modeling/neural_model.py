@@ -9,7 +9,6 @@ International Brain Lab, 2020
 """
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 from brainbox.processing import bincount2D
 
 
@@ -21,7 +20,7 @@ class NeuralModel:
     """
 
     def __init__(self, design_matrix, spk_times, spk_clu,
-                 train=0.8, blocktrain=False, mintrials=100, stepwise=False):
+                 binwidth=0.02, train=0.8, blocktrain=False, mintrials=100, stepwise=False):
         """
         Construct GLM object using information about all trials, and the relevant spike times.
         Only ingests data, and further object methods must be called to describe kernels, gain
@@ -99,25 +98,21 @@ class NeuralModel:
 
         # Set model parameters to begin with
         self.design = design_matrix
-        self.dm = design_matrix.dm
-        self.covar = design_matrix.covar
         self.spikes = spks
         self.clu = clu
         self.clu_ids = np.argwhere(np.sum(trialspiking, axis=0) > mintrials)
-        self.binwidth = design_matrix.binwidth
-        self.covar = {}
-        self.trialsdf = design_matrix.trialsdf
         self.traininds = traininds
-        self.trlabels = design_matrix.trlabels
         self.testinds = testinds
         self.stepwise = stepwise
+        self.binwidth = binwidth
+
         if len(self.clu_ids) == 0:
             raise UserWarning('No neuron fired a spike in a minimum number.')
 
         # Bin spikes
         spkarrs, arrdiffs = [], []
-        for i in self.trialsdf.index:
-            duration = self.trialsdf.loc[i, 'duration']
+        for i in self.design.trialsdf.index:
+            duration = self.design.trialsdf.loc[i, 'duration']
             durmod = duration % self.binwidth
             if durmod > (self.binwidth / 2):
                 duration = duration - (self.binwidth / 2)
@@ -132,8 +127,8 @@ class NeuralModel:
             arrdiffs.append(arr.shape[1] - self.binf(duration))
             spkarrs.append(arr.T)
         y = np.vstack(spkarrs)
-        if hasattr(self, 'dm'):
-            assert y.shape[0] == self.dm.shape[0], "Oh shit. Indexing error."
+        if hasattr(self.design, 'dm'):
+            assert y.shape[0] == self.design.dm.shape[0], "Oh shit. Indexing error."
         self.binnedspikes = y
 
     def combine_weights(self):
@@ -149,15 +144,15 @@ class NeuralModel:
             IDs for each of the cells that were fit (NOT a simple range(start, stop) index.)
         """
         outputs = {}
-        for var in self.covar.keys():
-            if self.covar[var]['bases'] is None:
-                wind = self.covar[var]['dmcol_idx']
+        for var in self.design.covar.keys():
+            if self.design.covar[var]['bases'] is None:
+                wind = self.design.covar[var]['dmcol_idx']
                 outputs[var] = self.coefs.apply(lambda w: w[wind])
                 continue
-            winds = self.covar[var]['dmcol_idx']
-            bases = self.covar[var]['bases']
+            winds = self.design.covar[var]['dmcol_idx']
+            bases = self.design.covar[var]['bases']
             weights = self.coefs.apply(lambda w: np.sum(w[winds] * bases, axis=1))
-            offset = self.covar[var]['offset']
+            offset = self.design.covar[var]['offset']
             tlen = bases.shape[0] * self.binwidth
             tstamps = np.linspace(0 + offset, tlen + offset, bases.shape[0])
             outputs[var] = pd.DataFrame(weights.values.tolist(),
@@ -178,18 +173,6 @@ class NeuralModel:
 
         Parameters
         ----------
-        alpha : float, optional
-            Regularization strength for scikit-learn implementation of GLM fitting, where 0 is
-            effectively unregularized weights. Does not function in the minimize
-            option, by default 1
-        epochs : int
-            Used for _fit_pytorch funtion, see details there
-        optim : string
-            Used for _fit_pytorch funtion, see details there
-        lr : float
-            Used for _fit_pytorch funtion, see details there
-        fit_intercept : bool
-            Only works when using 'sklearn' method. Whether or not to fit the bias term of the GLM
         printcond : bool
             Whether or not to print the condition number of the design matrix. Defaults to True
 
@@ -201,60 +184,14 @@ class NeuralModel:
         intercepts : list
             List of intercepts (bias terms) fit. Not recommended to use these for interpretation.
         """
-        trainmask = np.isin(self.trlabels, self.traininds).flatten()  # Mask for training data
+        # Mask for training data
+        trainmask = np.isin(self.design.trlabels, self.traininds).flatten()
         trainbinned = self.binnedspikes[trainmask]
         if printcond:
-            print(f'Condition of design matrix is {np.linalg.cond(self.dm[trainmask])}')
+            print(f'Condition of design matrix is {np.linalg.cond(self.design[trainmask])}')
 
-        if not self.stepwise:
-            traindm = self.dm[trainmask]
-            coefs, intercepts, = self._fit_sklearn(traindm, trainbinned)
-        else:
-            # Get testing matrices for scoring in submodels
-            testmask = np.isin(self.trlabels, self.testinds).flatten()
-            testbinned = self.binnedspikes[testmask]
-
-            # Build single-parameter-group models first:
-            singlepar_scores = pd.DataFrame(columns=['cell', 'covar', 'scores'])
-            for cov in tqdm(self.covar, desc='Fitting single-cov models:', leave=False):
-                colmask = np.zeros(self.dm.shape[1], dtype=bool)
-                colmask[self.covar[cov]['dmcol_idx']] = True
-                traindm = self.dm[np.ix_(trainmask, colmask)]
-                testdm = self.dm[np.ix_(testmask, colmask)]
-                coefs, intercepts, = self._fit_sklearn(traindm, trainbinned)
-                scores = self.score(metric=self.fitting_metric, weights=coefs,
-                                    intercepts=intercepts, dm=testdm, binned=testbinned)
-                scoresdf = pd.DataFrame(scores).reset_index()
-                scoresdf.rename(columns={'index': 'cell'}, inplace=True)
-                scoresdf['covar'] = cov
-                singlepar_scores = pd.concat([singlepar_scores, scoresdf], sort=False)
-            singlepar_scores.set_index(['cell', 'covar'], inplace=True)
-            singlepar_scores.sort_values(by=['cell', 'scores'], ascending=False, inplace=True)
-            fitcells = singlepar_scores.index.levels[0]
-            # Iteratively build model with 2 through K parameter groups:
-            submodel_scores = singlepar_scores.unstack()
-            submodel_scores.columns = submodel_scores.columns.droplevel()
-            for i in tqdm(range(2, len(self.covar) + 1), desc='Fitting submodels', leave=False):
-                cellcovars = {cell: tuple(singlepar_scores.loc[cell].iloc[:i].index)
-                              for cell in fitcells}
-                covarsets = [frozenset(cov) for cov in cellcovars.values()]
-                # Iterate through unique unordered combinations of covariates
-                iscores = []
-                progressdesc = f'Fitting covariate sets for {i} parameter groups'
-                for covarset in tqdm(set(covarsets), desc=progressdesc, leave=False):
-                    currcells = [cell for cell, covar in cellcovars.items()
-                                 if set(covar) == covarset]
-                    currcols = np.hstack([self.covar[cov]['dmcol_idx'] for cov in covarset])
-                    colmask = np.zeros(self.dm.shape[1], dtype=bool)
-                    colmask[currcols] = True
-                    traindm = self.dm[np.ix_(trainmask, colmask)]
-                    testdm = self.dm[np.ix_(testmask, colmask)]
-                    coefs, intercepts = self._fit_sklearn(traindm, trainbinned,
-                                                          cells=currcells)
-                    iscores.append(self.score(metric=self.fitting_metric, weights=coefs,
-                                   intercepts=intercepts, dm=testdm, binned=testbinned))
-                submodel_scores[f'{i}cov'] = pd.concat(iscores).sort_index()
-            self.submodel_scores = submodel_scores
+        traindm = self.design[trainmask]
+        coefs, intercepts, = self._fit(traindm, trainbinned)
         self.coefs, self.intercepts = coefs, intercepts
         return
 

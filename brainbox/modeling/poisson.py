@@ -12,10 +12,10 @@ from .utils import neglog
 
 class PoissonGLM(NeuralModel):
     def __init__(self, design_matrix, spk_times, spk_clu,
-                 fitting_metric='dsq', model='default', alpha=0,
+                 binwidth=0.02, fitting_metric='dsq', model='default', alpha=0,
                  train=0.8, blocktrain=False, mintrials=100, subset=False):
         super().__init__(design_matrix, spk_times, spk_clu,
-                         train, blocktrain, mintrials, subset)
+                         binwidth, train, blocktrain, mintrials, subset)
         self.fitting_metric = fitting_metric
         if model == 'default':
             self.fit_intercept = True

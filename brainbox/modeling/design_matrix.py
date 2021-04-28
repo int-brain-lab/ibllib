@@ -358,6 +358,11 @@ class DesignMatrix:
         self.compiled = True
         return
 
+    def __getitem__(self, key):
+        if not self.compiled:
+            raise AttributeError('Cannot index uncompiled design matrix')
+        return self.dm[key]
+
     def _compile_check(self):
         if self.compiled:
             warn('Design matrix was already compiled once. Be sure to compile again if adding'

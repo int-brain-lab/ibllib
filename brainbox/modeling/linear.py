@@ -17,11 +17,11 @@ from .neural_model import NeuralModel
 
 class LinearGLM(NeuralModel):
 
-    def __init__(self, design_matrix, spk_times, spk_clu, fitting_metric='rsq',
-                 model='default', alpha=None,
+    def __init__(self, design_matrix, spk_times, spk_clu,
+                 binwidth=0.02, fitting_metric='rsq', model='default', alpha=None,
                  train=0.8, blocktrain=False, mintrials=100, stepwise=False):
         super().__init__(design_matrix, spk_times, spk_clu,
-                         train, blocktrain, mintrials, stepwise)
+                         binwidth, train, blocktrain, mintrials, stepwise)
         assert(model in ['default', 'ridge']), 'model but be default or ridge'
         if model == 'default' and alpha is not None:
             assert('problem in model specification')
@@ -55,7 +55,7 @@ class LinearGLM(NeuralModel):
     def score(self, metric='rsq', **kwargs):
         assert(metric in ['dsq', 'rsq', 'msespike']), 'metric must be dsq, rsq or msespike'
         assert(len(kwargs) == 0 or len(kwargs) == 4), 'wrong input specification in score'
-        if not hasattr(self, 'coefs') or 'weights' not in kwargs.keys():
+        if not hasattr(self, 'coefs') and 'weights' not in kwargs.keys():
             raise AttributeError('Fit was not run. Please run fit first.')
         if hasattr(self, 'submodel_scores'):
             return self.submodel_scores
@@ -64,9 +64,9 @@ class LinearGLM(NeuralModel):
             weights, intercepts, dm, binned = kwargs['weights'], kwargs['intercepts'], \
                 kwargs['dm'], kwargs['binned']
         else:
-            testmask = np.isin(self.trlabels, self.testinds).flatten()
+            testmask = np.isin(self.design.trlabels, self.testinds).flatten()
             weights, intercepts, dm, binned = self.coefs, self.intercepts,\
-                self.dm[testmask, :], self.binnedspikes[testmask]
+                self.design[testmask, :], self.binnedspikes[testmask]
 
         scores = pd.Series(index=weights.index, name='scores')
         for cell in weights.index:
