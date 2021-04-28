@@ -339,6 +339,7 @@ class TestPipesMisc(unittest.TestCase):
         )
         # Verify it's been inserted
         alyx_insertion = one.alyx.rest("insertions", "list", session=eid)
+        alyx_insertion = [x for x in alyx_insertion if x["model"] == "3A"]
         self.assertTrue(alyx_insertion[0]["model"] == "3A")
         self.assertTrue(alyx_insertion[0]["name"] in ["probe00", "probe01"])
         self.assertTrue(alyx_insertion[1]["model"] == "3A")
@@ -420,4 +421,4 @@ class TestScanFixPassiveFiles(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main(exit=False)
+    unittest.main(exit=False, verbosity=2)

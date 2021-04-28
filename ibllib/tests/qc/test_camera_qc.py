@@ -262,5 +262,5 @@ class TestCameraQC(unittest.TestCase):
             self.qc.run(update=False)
 
 
-if __name__ == '__main__':
-    unittest.main()
+if __name__ == "__main__":
+    unittest.main(exit=False, verbosity=2)

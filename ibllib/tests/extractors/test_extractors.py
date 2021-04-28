@@ -677,11 +677,6 @@ class TestBaseExtractorSavingMethods(unittest.TestCase):
         self.tempdir.cleanup()
 
 
-if __name__ == "__main__":
-    unittest.main(exit=False)
-    print('.')
-
-
 class TestCameraExtractors(unittest.TestCase):
     def test_groom_pin_state(self):
         # UNIT DATA
@@ -774,3 +769,7 @@ class TestCameraExtractors(unittest.TestCase):
         # Check input validation
         with self.assertRaises(ValueError):
             camera.attribute_times(tsa, tsb, injective=False, take='closest')
+
+
+if __name__ == "__main__":
+    unittest.main(exit=False, verbosity=2)

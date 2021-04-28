@@ -188,3 +188,7 @@ class TestPipelineAlyx(unittest.TestCase):
         check_rerun = ['===RERUN===' not in t['log'] if t['log'] else True for t in task_deck]
         self.assertTrue(all(check_logs))
         self.assertTrue(all(check_rerun))
+
+
+if __name__ == "__main__":
+    unittest.main(exit=False, verbosity=2)
