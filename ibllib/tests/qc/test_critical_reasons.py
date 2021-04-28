@@ -48,11 +48,39 @@ class TestUserPmtSess(unittest.TestCase):
             'reason_for_other': []}
         assert expected_dict == critical_dict
 
+    def test_guiinput_ins(self):
+        eid = '440d02a4-b6dc-4de0-b487-ed64f7a59375'  # probe id
+        str_notes_static = '=== EXPERIMENTER REASON(S) FOR MARKING THE INSERTION AS CRITICAL ==='
+        notes = one.alyx.rest('notes', 'list', django=f'text__icontains,{str_notes_static},'
+                                                      f'object_id,{eid}')
+        # delete any previous notes
+        for note in notes:
+            one.alyx.rest('notes', 'delete', id=note['id'])
+        # write a new note and make sure it is found
+        usrpmt.main_gui(eid=eid, reasons_selected=['Drift'], one=one)
+        note = one.alyx.rest('notes', 'list', django=f'text__icontains,{str_notes_static},'
+                                                     f'object_id,{eid}')
+        assert len(note) == 1
+        critical_dict = json.loads(note[0]['text'])
+        expected_dict = {
+            'title': '=== EXPERIMENTER REASON(S) FOR MARKING THE INSERTION AS CRITICAL ===',
+            'reasons_selected': ['Drift'], 'reason_for_other': []}
+        assert expected_dict == critical_dict
+
     def test_note_probe_ins(self):
+        # Note: this test is redundant with the above, but it tests specifically whether
+        # the nomenclature of writing notes in insertion is correct.
         eid = '440d02a4-b6dc-4de0-b487-ed64f7a59375'  # probe id
         content_type = 'probeinsertion'
         note_text = 'USING A FAKE SINGLE STRING HERE KSROI283IF982HKJFHWRY'
 
+        notes = one.alyx.rest('notes', 'list', django=f'text__icontains,{note_text},'
+                                                      f'object_id,{eid}')
+        # delete any previous notes
+        for note in notes:
+            one.alyx.rest('notes', 'delete', id=note['id'])
+
+        # create new note
         my_note = {'user': one._par.ALYX_LOGIN,
                    'content_type': content_type,
                    'object_id': eid,

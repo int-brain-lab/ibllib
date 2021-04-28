@@ -129,7 +129,8 @@ def _upload_note_alyx(eid, note_text, content_type, str_notes_static, one=None, 
     :param one: default: None -> ONE()
     :param str_notes_static: string within the notes that will be searched for
     :param content_type: 'session' or 'insertion'
-    :param overwrite: if set to False, will check whether other notes exists and ask if deleting is OK.
+    :param overwrite: if set to False, will check whether other notes exists and ask
+    if deleting is OK.
     If set to True, will delete any previous note without asking.
     :return:
     """
@@ -160,7 +161,6 @@ def _upload_note_alyx(eid, note_text, content_type, str_notes_static, one=None, 
             print('The selected reasons were NOT saved on Alyx ; old notes remain.')
 
 
-
 def main_gui(eid, reasons_selected, one=None):
     """
     Main function to call to input a reason for marking an insertion as
@@ -170,6 +170,11 @@ def main_gui(eid, reasons_selected, one=None):
     :param: eid: insertion id
     :param: reasons_selected: list of str, str are picked within REASONS_INS_CRIT_GUI
     """
+    # hit the database to check if eid is insertion eid
+    ins_list = one.alyx.rest('insertions', 'list', id=eid)
+    if len(ins_list) != 1:
+        raise ValueError(f'N={len(ins_list)} insertion found, expected N=1. Check eid provided.')
+
     # assert that reasons are all within REASONS_INS_CRIT_GUI
     for item_str in reasons_selected:
         assert item_str in REASONS_INS_CRIT_GUI
