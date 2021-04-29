@@ -118,5 +118,6 @@ class TestUserPmtSess(unittest.TestCase):
     def tearDown(self) -> None:
         one.alyx.rest('insertions', 'delete', id=self.ins_id)
 
+
 if __name__ == '__main__':
     unittest.main()
