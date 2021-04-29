@@ -9,9 +9,6 @@ one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
           username='test_user',
           password='TapetesBloc18')
 
-INS_EID = ''
-SESS_EID = one.alyx.rest('sessions', 'list', task_protocol='ephys')[0]['url'][-36:]
-
 
 def mock_input(prompt):
     if "Select from this list the reason(s)" in prompt:
@@ -25,7 +22,10 @@ def mock_input(prompt):
 class TestUserPmtSess(unittest.TestCase):
 
     def setUp(self) -> None:
-        # Make sure tests start with an insertion created on the test database
+        # Make sure tests use correct session ID
+        self.sess_id = one.alyx.rest('sessions', 'list', task_protocol='ephys')[0]['url'][-36:]
+
+        # Make sure tests use correct insertion ID
         # 1. Find and delete any previous insertions
         ins = one.alyx.rest('insertions', 'list')
         if len(ins) > 0:
@@ -34,21 +34,20 @@ class TestUserPmtSess(unittest.TestCase):
                 one.alyx.rest('insertions', 'delete', id=ins_id_i)
         # 2. Create new insertion
         data = {'name': 'probe01',
-                'session': SESS_EID,
+                'session': self.sess_id,
                 'model': '3A',
                 'json': None,
                 'datasets': []}
         one.alyx.rest('insertions', 'create', data=data)
         # 3. Save ins id in global variable for test access
-        global INS_EID
-        INS_EID = one.alyx.rest('insertions', 'list')[0]['id']
+        self.ins_id = one.alyx.rest('insertions', 'list')[0]['id']
 
     def test_reason_addnumberstr(self):
         outstr = usrpmt._reason_addnumberstr(reason_list=['a', 'b'])
         self.assertEqual(outstr, ['0) a', '1) b'])
 
     def test_userinput_sess(self):
-        eid = SESS_EID  # sess id
+        eid = self.sess_id  # sess id
         with mock.patch('builtins.input', mock_input):
             usrpmt.main(eid=eid, one=one)
         note = one.alyx.rest('notes', 'list', django=f'object_id,{eid}')
@@ -60,7 +59,7 @@ class TestUserPmtSess(unittest.TestCase):
         assert expected_dict == critical_dict
 
     def test_userinput_ins(self):
-        eid = INS_EID  # probe id
+        eid = self.ins_id  # probe id
         with mock.patch('builtins.input', mock_input):
             usrpmt.main(eid=eid, one=one)
         note = one.alyx.rest('notes', 'list', django=f'object_id,{eid}')
@@ -72,7 +71,7 @@ class TestUserPmtSess(unittest.TestCase):
         assert expected_dict == critical_dict
 
     def test_guiinput_ins(self):
-        eid = INS_EID  # probe id
+        eid = self.ins_id  # probe id
         str_notes_static = '=== EXPERIMENTER REASON(S) FOR MARKING THE INSERTION AS CRITICAL ==='
         notes = one.alyx.rest('notes', 'list', django=f'text__icontains,{str_notes_static},'
                                                       f'object_id,{eid}')
@@ -93,7 +92,7 @@ class TestUserPmtSess(unittest.TestCase):
     def test_note_probe_ins(self):
         # Note: this test is redundant with the above, but it tests specifically whether
         # the nomenclature of writing notes in insertion is correct.
-        eid = INS_EID  # probe id
+        eid = self.ins_id  # probe id
         content_type = 'probeinsertion'
         note_text = 'USING A FAKE SINGLE STRING HERE KSROI283IF982HKJFHWRY'
 
@@ -116,6 +115,8 @@ class TestUserPmtSess(unittest.TestCase):
                                      f'object_id,{eid}')
         assert len(notes) == 1
 
+    def tearDown(self) -> None:
+        one.alyx.rest('insertions', 'delete', id=self.ins_id)
 
 if __name__ == '__main__':
     unittest.main()
