@@ -12,6 +12,7 @@ one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
 INS_EID = ''
 SESS_EID = one.alyx.rest('sessions', 'list', task_protocol='ephys')[0]['url'][-36:]
 
+
 def mock_input(prompt):
     if "Select from this list the reason(s)" in prompt:
         return "1,3"
@@ -41,7 +42,6 @@ class TestUserPmtSess(unittest.TestCase):
         # 3. Save ins id in global variable for test access
         global INS_EID
         INS_EID = one.alyx.rest('insertions', 'list')[0]['id']
-
 
     def test_reason_addnumberstr(self):
         outstr = usrpmt._reason_addnumberstr(reason_list=['a', 'b'])
