@@ -70,7 +70,7 @@ class MotionAlignment:
     def set_roi(video_path):
         """Manually set the ROIs for a given set of videos
         TODO Improve docstring
-        TODO A method for setting ROIs by side
+        TODO A method for setting ROIs by label
         """
         frame = vidio.get_video_frame(str(video_path), 0)
 

@@ -15,7 +15,7 @@ from ibllib.plots import squares, vertical_lines
 from ibllib.io.video import assert_valid_label
 from brainbox.numerical import within_ranges
 from ibllib.io.extractors.base import get_session_extractor_type
-from ibllib.io.extractors.ephys_fpga import _get_sync_fronts, get_main_probe_sync
+from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_main_probe_sync
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.base import (
     BaseBpodTrialsExtractor,
@@ -36,9 +36,9 @@ def extract_camera_sync(sync, chmap=None):
     :return: dictionary containing camera timestamps
     """
     assert(chmap)
-    sr = _get_sync_fronts(sync, chmap['right_camera'])
-    sl = _get_sync_fronts(sync, chmap['left_camera'])
-    sb = _get_sync_fronts(sync, chmap['body_camera'])
+    sr = get_sync_fronts(sync, chmap['right_camera'])
+    sl = get_sync_fronts(sync, chmap['left_camera'])
+    sb = get_sync_fronts(sync, chmap['body_camera'])
     return {'right': sr.times[::2],
             'left': sl.times[::2],
             'body': sb.times[::2]}
@@ -96,7 +96,7 @@ class CameraTimestampsFPGA(BaseExtractor):
         if gpio is not None and gpio['indices'].size > 1:
             _logger.info('Aligning to audio TTLs')
             # Extract audio TTLs
-            audio = _get_sync_fronts(sync, chmap['audio'])
+            audio = get_sync_fronts(sync, chmap['audio'])
             _, ts = raw.load_camera_ssv_times(self.session_path, self.label)
             try:
                 """
