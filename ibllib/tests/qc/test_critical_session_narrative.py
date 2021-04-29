@@ -31,7 +31,7 @@ class TestUserPmtSess(unittest.TestCase):
         note = one.alyx.rest('notes', 'list', django=f'object_id,{eid}')
         critical_dict = json.loads(note[0]['text'])
         expected_dict = {
-            'title': '=== EXPERIMENTER REASON(S) FOR MARKING THE SESSION AS CRITICAL ===',
+            'title': usrpmt.STR_NOTES_STATIC,
             'reasons_selected': ['synching impossible', 'essential dataset missing'],
             'reason_for_other': []}
         assert expected_dict == critical_dict

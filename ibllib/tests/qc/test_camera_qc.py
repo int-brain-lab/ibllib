@@ -15,6 +15,7 @@ from brainbox.core import Bunch
 
 
 class TestCameraQC(unittest.TestCase):
+    backend = ''
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -28,15 +29,16 @@ class TestCameraQC(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
-        matplotlib.use(cls.backend)
+        if cls.backend:
+            matplotlib.use(cls.backend)
 
     def setUp(self) -> None:
         self.tempdir = TemporaryDirectory()
         self.session_path = utils.create_fake_session_folder(self.tempdir.name)
         utils.create_fake_raw_video_data_folder(self.session_path)
         self.eid = 'd3372b15-f696-4279-9be5-98f15783b5bb'
-        self.qc = CameraQC(self.session_path, one=self.one, n_samples=5,
-                           side='left', stream=False, download_data=False)
+        self.qc = CameraQC(self.session_path, 'left', one=self.one, n_samples=5,
+                           stream=False, download_data=False)
         self.qc._type = 'ephys'
 
     def tearDown(self) -> None:
@@ -135,7 +137,7 @@ class TestCameraQC(unittest.TestCase):
         self.assertEqual('NOT_SET', self.qc.check_dropped_frames())
 
     def test_check_focus(self):
-        self.qc.side = 'left'
+        self.qc.label = 'left'
         self.qc.frame_samples_idx = np.linspace(0, 100, 20, dtype=int)
         outcome = self.qc.check_focus(test=True, display=True)
         self.assertEqual('FAIL', outcome)
@@ -213,9 +215,9 @@ class TestCameraQC(unittest.TestCase):
         self.assertEqual('NOT_SET', outcome)
 
         # Verify passes
-        self.qc.side = 'body'
+        self.qc.label = 'body'
         ts_path = Path(__file__).parents[1].joinpath('extractors', 'data', 'session_ephys')
-        ssv_times = load_camera_ssv_times(ts_path, self.qc.side)
+        ssv_times = load_camera_ssv_times(ts_path, self.qc.label)
         self.qc.data.bonsai_times, self.qc.data.camera_times = ssv_times
         self.qc.data.video = Bunch({'length': self.qc.data.bonsai_times.size})
 

@@ -1,15 +1,15 @@
-'''
+"""
 Prompt experimenter for reason for marking session as CRITICAL
 Choices are:
 - within experiment system crash
-- synching impossible
+- syncing impossible
 - dud or mock session
 - essential dataset missing
 - other
 
 Multiple reasons can be selected
 Place info in Alyx session note in a format that is machine retrievable (text->json)
-'''
+"""
 # Author: Gaelle
 import json
 from oneibl.one import ONE
