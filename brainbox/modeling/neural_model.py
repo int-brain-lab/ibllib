@@ -61,7 +61,7 @@ class NeuralModel:
         # Filter out cells which don't meet the criteria for minimum spiking, while doing trial
         # assignment
         base_df = design_matrix.base_df
-        clu_ids = np.unique(spk_clu)
+        clu_ids = np.unique(spk_clu).flatten()
         trbounds = base_df[['trial_start', 'trial_end']]  # Get the start/end of trials
         # Initialize a Cells x Trials bool array to easily see how many trials a clu spiked
         trialspiking = np.zeros((base_df.index.max() + 1, clu_ids.max() + 1), dtype=bool)
@@ -211,4 +211,3 @@ class NeuralModel:
             Number of bins corresponding to t using the binwidth of the model.
         """
         return np.ceil(t / self.binwidth).astype(int)
-

@@ -18,14 +18,14 @@ from .neural_model import NeuralModel
 class LinearGLM(NeuralModel):
 
     def __init__(self, design_matrix, spk_times, spk_clu,
-                 binwidth=0.02, fitting_metric='rsq', model='default', alpha=None,
+                 binwidth=0.02, metric='rsq', model='default', alpha=None,
                  train=0.8, blocktrain=False, mintrials=100, stepwise=False):
         super().__init__(design_matrix, spk_times, spk_clu,
                          binwidth, train, blocktrain, mintrials, stepwise)
         assert(model in ['default', 'ridge']), 'model but be default or ridge'
         if model == 'default' and alpha is not None:
             assert('problem in model specification')
-        self.fitting_metric = fitting_metric
+        self.metric = metric
         if model == 'ridge':
             if alpha is None:
                 print('alpha is None in ridge model.'
@@ -52,6 +52,20 @@ class LinearGLM(NeuralModel):
             intercepts.at[cell] = intercept[cell_idx]
         return coefs, intercepts
 
+    def _scorer(self, wt, bias, dm, y):
+        pred = (dm @ wt + bias).flatten()
+        if self.metric == 'dsq':
+            null_pred = np.ones_like(pred) * np.mean(y)
+            null_deviance = 2 * np.sum(xlogy(y, y / null_pred.flat) - y + null_pred.flat)
+            with np.errstate(invalid='ignore', divide='ignore'):
+                full_deviance = 2 * np.sum(xlogy(y, y / pred.flat) - y + pred.flat)
+            return 1 - (full_deviance / null_deviance)
+        elif self.metric == 'msespike':
+            residuals = (y - pred) ** 2
+            return residuals.sum() / y.sum()
+        else:
+            return r2_score(y, pred)
+
     def score(self, metric='rsq', **kwargs):
         assert(metric in ['dsq', 'rsq', 'msespike']), 'metric must be dsq, rsq or msespike'
         assert(len(kwargs) == 0 or len(kwargs) == 4), 'wrong input specification in score'
@@ -74,18 +88,5 @@ class LinearGLM(NeuralModel):
             wt = weights.loc[cell].reshape(-1, 1)
             bias = intercepts.loc[cell]
             y = binned[:, cell_idx]
-            pred = (dm @ wt + bias).flatten()
-            if metric == 'dsq':
-                null_pred = np.ones_like(pred) * np.mean(y)
-                null_deviance = 2 * np.sum(xlogy(y, y / null_pred.flat) - y + null_pred.flat)
-                with np.errstate(invalid='ignore', divide='ignore'):
-                    full_deviance = 2 * np.sum(xlogy(y, y / pred.flat) - y + pred.flat)
-                d_sq = 1 - (full_deviance / null_deviance)
-                scores.at[cell] = d_sq
-            elif metric == 'msespike':
-                residuals = (y - pred) ** 2
-                msespike = residuals.sum() / y.sum()
-                scores.at[cell] = msespike
-            else:
-                scores.at[cell] = r2_score(y, pred)
+            scores.at[cell] = self._scorer(wt, bias, dm, y)
         return scores

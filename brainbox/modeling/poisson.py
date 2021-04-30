@@ -12,11 +12,11 @@ from .utils import neglog
 
 class PoissonGLM(NeuralModel):
     def __init__(self, design_matrix, spk_times, spk_clu,
-                 binwidth=0.02, fitting_metric='dsq', model='default', alpha=0,
+                 binwidth=0.02, metric='dsq', model='default', alpha=0,
                  train=0.8, blocktrain=False, mintrials=100, subset=False):
         super().__init__(design_matrix, spk_times, spk_clu,
                          binwidth, train, blocktrain, mintrials, subset)
-        self.fitting_metric = fitting_metric
+        self.metric = metric
         if model == 'default':
             self.fit_intercept = True
         elif model == 'no_intercept':
@@ -25,7 +25,7 @@ class PoissonGLM(NeuralModel):
             raise ValueError('model must be \'default\' or \'no_intercept\'')
         self.alpha = alpha
 
-    def _fit(self, dm, binned, cells=None, noncovwarn=True):
+    def _fit(self, dm, binned, cells=None, noncovwarn=False):
         """
         Fit a GLM using scikit-learn implementation of PoissonRegressor. Uses a regularization
         strength parameter alpha, which is the strength of ridge regularization term.
@@ -68,6 +68,22 @@ class PoissonGLM(NeuralModel):
                 warn(f'Fitting did not converge for some units: {nonconverged}')
 
         return coefs, intercepts
+
+    def _scorer(self, wt, bias, dm, y):
+        if self.metric in ('dsq', 'rsq'):
+            pred = np.exp(dm @ wt + bias)
+
+        if self.metric == 'dsq':
+            null_pred = np.ones_like(pred) * np.mean(y)
+            null_deviance = 2 * np.sum(xlogy(y, y / null_pred.flat) - y + null_pred.flat)
+            with np.errstate(invalid='ignore', divide='ignore'):
+                full_deviance = 2 * np.sum(xlogy(y, y / pred.flat) - y + pred.flat)
+            return 1 - (full_deviance / null_deviance)
+        elif self.metric == 'rsq':
+            return r2_score(y, pred)
+        else:
+            biasdm = np.pad(dm, ((0, 0), (1, 0)), constant_values=1)
+            return -neglog(np.vstack((bias, wt)).flatten(), biasdm, y) / np.sum(y)
 
     def score(self, metric='dsq', **kwargs):
         """
@@ -121,18 +137,5 @@ class PoissonGLM(NeuralModel):
             wt = weights.loc[cell].reshape(-1, 1)
             bias = intercepts.loc[cell]
             y = binned[:, cell_idx]
-            if metric in ['dsq', 'rsq']:
-                pred = np.exp(dm @ wt + bias)
-                if metric == 'dsq':
-                    null_pred = np.ones_like(pred) * np.mean(y)
-                    null_deviance = 2 * np.sum(xlogy(y, y / null_pred.flat) - y + null_pred.flat)
-                    with np.errstate(invalid='ignore', divide='ignore'):
-                        full_deviance = 2 * np.sum(xlogy(y, y / pred.flat) - y + pred.flat)
-                    d_sq = 1 - (full_deviance / null_deviance)
-                    scores.at[cell] = d_sq
-                else:
-                    scores.at[cell] = r2_score(y, pred)
-            else:
-                biasdm = np.pad(dm, ((0, 0), (1, 0)), constant_values=1)
-                scores.at[cell] = -neglog(np.vstack((bias, wt)).flatten(), biasdm, y) / np.sum(y)
+            scores.at[cell] = self._scorer(wt, bias, dm, y)
         return scores
