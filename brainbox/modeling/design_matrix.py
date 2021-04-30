@@ -14,7 +14,7 @@ class DesignMatrix:
     def __init__(self, trialsdf, vartypes=None, binwidth=0.02):
         """
         Class for generating design matrices to model neural data. Provides handy routines for
-        describing neural spiking activity using basis functions and other primitives. 
+        describing neural spiking activity using basis functions and other primitives.
 
         Based on work by Memming Park in:
         Il Memming Park, Miriam LR Meister, Alex C Huk, & Jonathan W Pillow Nature Neuroscience 17,

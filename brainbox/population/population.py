@@ -308,7 +308,8 @@ def regress(population_activity, trial_targets, cross_validation=None):
 
 def decode(spike_times, spike_clusters, event_times, event_groups, pre_time=0, post_time=0.5,
            classifier='bayes-multinomial', cross_validation='kfold', num_splits=5, prob_left=None,
-           custom_validation=None, n_neurons='all', iterations=1, shuffle=False, phase_rand=False):
+           custom_validation=None, n_neurons='all', iterations=1, shuffle=False, phase_rand=False,
+           pseudo_blocks=True):
     """
 
     WILL BE DEPRICATED
