@@ -9,7 +9,10 @@ International Brain Lab, 2020
 """
 import numpy as np
 import pandas as pd
+from sklearn.metrics import r2_score
+from scipy.special import xlogy
 from brainbox.processing import bincount2D
+from .utils import neglog
 
 
 class NeuralModel:
@@ -161,8 +164,27 @@ class NeuralModel:
         self.combined_weights = outputs
         return outputs
 
-    def score(self, metric, **kwargs):
-        return NotImplemented
+    def _scorer(self, wt, bias, dm, y):
+        """
+        Score a single target y
+        """
+        pred = (dm @ wt + bias).flatten()
+        if self.metric == 'dsq':
+            null_pred = np.ones_like(pred) * np.mean(y)
+            null_deviance = 2 * np.sum(xlogy(y, y / null_pred.flat) - y + null_pred.flat)
+            with np.errstate(invalid='ignore', divide='ignore'):
+                full_deviance = 2 * np.sum(xlogy(y, y / pred.flat) - y + pred.flat)
+            return 1 - (full_deviance / null_deviance)
+        elif self.metric == 'msespike':
+            residuals = (y - pred) ** 2
+            return residuals.sum() / y.sum()
+        elif self.metric == 'rsq':
+            return r2_score(y, pred)
+        elif self.metric == 'nllspike':
+            biasdm = np.pad(dm, ((0, 0), (1, 0)), constant_values=1)
+            return -neglog(np.vstack((bias, wt)).flatten(), biasdm, y) / np.sum(y)
+        else:
+            raise AttributeError('No valid metric exists in the instance for use by _scorer()')
 
     def fit(self, printcond=True):
         """

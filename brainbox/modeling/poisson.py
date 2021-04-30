@@ -4,10 +4,7 @@ from warnings import warn, catch_warnings
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import PoissonRegressor
-from sklearn.metrics import r2_score
-from scipy.special import xlogy
 from tqdm import tqdm
-from .utils import neglog
 
 
 class PoissonGLM(NeuralModel):
@@ -68,22 +65,6 @@ class PoissonGLM(NeuralModel):
                 warn(f'Fitting did not converge for some units: {nonconverged}')
 
         return coefs, intercepts
-
-    def _scorer(self, wt, bias, dm, y):
-        if self.metric in ('dsq', 'rsq'):
-            pred = np.exp(dm @ wt + bias)
-
-        if self.metric == 'dsq':
-            null_pred = np.ones_like(pred) * np.mean(y)
-            null_deviance = 2 * np.sum(xlogy(y, y / null_pred.flat) - y + null_pred.flat)
-            with np.errstate(invalid='ignore', divide='ignore'):
-                full_deviance = 2 * np.sum(xlogy(y, y / pred.flat) - y + pred.flat)
-            return 1 - (full_deviance / null_deviance)
-        elif self.metric == 'rsq':
-            return r2_score(y, pred)
-        else:
-            biasdm = np.pad(dm, ((0, 0), (1, 0)), constant_values=1)
-            return -neglog(np.vstack((bias, wt)).flatten(), biasdm, y) / np.sum(y)
 
     def score(self, metric='dsq', **kwargs):
         """

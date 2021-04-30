@@ -72,6 +72,14 @@ class SequentialSelector:
         self.features = np.array(list(self.design.covar.keys()))
 
     def fit(self, progress=False):
+        """
+        Fit the sequential feature selection
+
+        Parameters
+        ----------
+        progress : bool, optional
+            Whether to show a progress bar, by default False
+        """
         n_features = len(self.features)
         maskdf = pd.DataFrame(index=self.model.clu_ids, columns=self.features, dtype=bool)
         maskdf.loc[:, :] = False
@@ -86,7 +94,7 @@ class SequentialSelector:
             self.n_features_to_select if self.direction == 'forward'
             else n_features - self.n_features_to_select
         )
-        for i in tqdm(range(n_iterations), desc='step', leave=False):
+        for i in tqdm(range(n_iterations), desc='step', leave=False, disable=not progress):
             masks_set = maskdf.groupby(self.features.tolist()).groups
             for current_mask in tqdm(masks_set, desc='feature subset', leave=False):
                 cells = masks_set[current_mask]
