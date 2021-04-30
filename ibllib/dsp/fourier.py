@@ -169,28 +169,38 @@ def _freq_vector(f, b, typ='lp'):
         :return: amplitude modulated frequency vector
     """
     filc = fcn_cosine(b)(f)
-    if typ == 'hp':
+    if typ.lower() in ['hp', 'highpass']:
         return filc
-    elif typ == 'lp':
+    elif typ.lower() in ['lp', 'lowpass']:
         return 1 - filc
 
 
-def shift(w, s, axis=-1):
+def fshift(w, s, axis=-1):
     """
-    Shifts a signal in frequency domain, to allow for accurate non-integer shifts
+    Shifts a 1D or 2D signal in frequency domain, to allow for accurate non-integer shifts
     :param w: input signal
     :param s: shift in samples, positive shifts forward
-    :param axis: axis along which to shift
+    :param axis: axis along which to shift (last axis by default)
     :return: w
     """
+    # create a vector that contains a 1 sample shift on the axis
     ns = np.array(w.shape) * 0 + 1
     ns[axis] = w.shape[axis]
     dephas = np.zeros(ns)
     np.put(dephas, 1, 1)
+    # fft the data along the axis and the dephas
     W = freduce(scipy.fft.fft(w, axis=axis), axis=axis)
     dephas = freduce(scipy.fft.fft(dephas, axis=axis), axis=axis)
+    # if multiple shifts, broadcast along the other dimensions, otherwise keep a single vector
+    if not np.isscalar(s):
+        s_shape = np.array(w.shape)
+        s_shape[axis] = 1
+        s = s.reshape(s_shape)
+    # apply the shift (s) to the fft angle to get the phase shift
     dephas = np.exp(1j * np.angle(dephas) * s)
-    return np.real(scipy.fft.ifft(fexpand(W * dephas, ns[axis], axis=axis), axis=axis))
+    # apply phase shift by broadcasting
+    out = np.real(scipy.fft.ifft(fexpand(W * dephas, ns[axis], axis=axis), axis=axis))
+    return out.astype(w.dtype)
 
 
 def fit_phase(w, si=1, fmin=0, fmax=None, axis=-1):

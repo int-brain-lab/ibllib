@@ -11,7 +11,7 @@ from scipy import signal
 
 import alf.io
 from brainbox.core import Bunch
-from brainbox.metrics import spike_sorting_metrics
+from brainbox.metrics.single_units import spike_sorting_metrics
 from ibllib.ephys import sync_probes
 from ibllib.io import spikeglx, raw_data_loaders
 import ibllib.dsp as dsp
@@ -161,7 +161,7 @@ def validate_ttl_test(ses_path, display=False):
     # get upgoing fronts for each
     sync = Bunch({})
     for k in sync_map:
-        fronts = ephys_fpga._get_sync_fronts(rawsync, sync_map[k])
+        fronts = ephys_fpga.get_sync_fronts(rawsync, sync_map[k])
         sync[k] = fronts['times'][fronts['polarities'] == 1]
     wheel = ephys_fpga.extract_wheel_sync(rawsync, chmap=sync_map)
 
@@ -344,7 +344,7 @@ def qc_fpga_task(fpga_trials, alf_trials):
         np.abs(
             fpga_trials['stimOff_times'] - fpga_trials['valveOpen_times'] - VALVE_STIM_OFF_DELAY
         ),
-        VALVE_STIM_OFF_JITTER, out=np.ones(ntrials, dtype=np.bool),
+        VALVE_STIM_OFF_JITTER, out=np.ones(ntrials, dtype=bool),
         where=~np.isnan(fpga_trials['valveOpen_times']))
 
     # iti_in whithin 0.01 sec of stimOff
@@ -357,7 +357,7 @@ def qc_fpga_task(fpga_trials, alf_trials):
         np.abs(
             fpga_trials['stimOff_times'] - fpga_trials['errorCue_times'] - ERROR_STIM_OFF_DELAY
         ),
-        ERROR_STIM_OFF_JITTER, out=np.ones(ntrials, dtype=np.bool),
+        ERROR_STIM_OFF_JITTER, out=np.ones(ntrials, dtype=bool),
         where=~np.isnan(fpga_trials['errorCue_times']))
 
     """

@@ -1,6 +1,7 @@
 import unittest
 from tempfile import TemporaryDirectory
 from pathlib import Path
+import logging
 
 import numpy as np
 import matplotlib
@@ -14,6 +15,8 @@ from brainbox.core import Bunch
 
 
 class TestCameraQC(unittest.TestCase):
+    backend = ''
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.one = ONE(
@@ -21,19 +24,26 @@ class TestCameraQC(unittest.TestCase):
             username="test_user",
             password="TapetesBloc18",
         )
-        backend = matplotlib.get_backend()
+        cls.backend = matplotlib.get_backend()
         matplotlib.use('Agg')
-        cls.addClassCleanup(matplotlib.use, backend)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        if cls.backend:
+            matplotlib.use(cls.backend)
 
     def setUp(self) -> None:
         self.tempdir = TemporaryDirectory()
         self.session_path = utils.create_fake_session_folder(self.tempdir.name)
         utils.create_fake_raw_video_data_folder(self.session_path)
         self.eid = 'd3372b15-f696-4279-9be5-98f15783b5bb'
-        self.qc = CameraQC(self.session_path, one=self.one, n_samples=5,
-                           side='left', stream=False, download_data=False)
+        self.qc = CameraQC(self.session_path, 'left', one=self.one, n_samples=5,
+                           stream=False, download_data=False)
         self.qc._type = 'ephys'
-        self.addCleanup(plt.close, 'all')
+
+    def tearDown(self) -> None:
+        self.tempdir.cleanup()
+        plt.close('all')
 
     def test_check_brightness(self):
         self.qc.data['frame_samples'] = self.qc.load_reference_frames('left')
@@ -80,8 +90,8 @@ class TestCameraQC(unittest.TestCase):
         self.assertEqual('NOT_SET', self.qc.check_pin_state())
         # Add some dummy data
         self.qc.data.timestamps = np.array([round(1 / FPS, 4)] * 5).cumsum()
-        self.qc.data.pin_state = np.zeros_like(self.qc.data.timestamps, dtype=int)
-        self.qc.data.pin_state[1:-1] = 10000
+        self.qc.data.pin_state = np.zeros((self.qc.data.timestamps.size, 4), dtype=bool)
+        self.qc.data.pin_state[1:-1, -1] = True  # Pulse on 4th pin
         self.qc.data['video'] = {'fps': FPS, 'length': len(self.qc.data.timestamps)}
         self.qc.data.audio = self.qc.data.timestamps[[0, -1]] - 10e-3
 
@@ -93,7 +103,7 @@ class TestCameraQC(unittest.TestCase):
         np.testing.assert_array_equal(b, self.qc.data.audio)
 
         # Fudge some numbers
-        self.qc.data.pin_state[2] = 11e3
+        self.qc.data['video']['length'] = self.qc.data.pin_state.shape[0] - 3
         self.assertEqual('WARNING', self.qc.check_pin_state()[0])
         self.qc.data['video']['length'] = 10
         outcome, *dTTL = self.qc.check_pin_state()
@@ -127,7 +137,7 @@ class TestCameraQC(unittest.TestCase):
         self.assertEqual('NOT_SET', self.qc.check_dropped_frames())
 
     def test_check_focus(self):
-        self.qc.side = 'left'
+        self.qc.label = 'left'
         self.qc.frame_samples_idx = np.linspace(0, 100, 20, dtype=int)
         outcome = self.qc.check_focus(test=True, display=True)
         self.assertEqual('FAIL', outcome)
@@ -143,7 +153,7 @@ class TestCameraQC(unittest.TestCase):
         expected = np.array([6.91, 7.2, 7.61, 8.08, 8.76, 9.47, 10.35, 11.22,
                              11.04, 11.42, 11.35, 11.94, 12.45, 13.22, 13.6, 13.6])
         actual = [round(x, 2) for x in plt.figure(figs[2]).axes[3].lines[0]._y.tolist()]
-        np.testing.assert_array_equal(expected, actual)
+        np.testing.assert_array_almost_equal(expected, actual, 1)
 
         # Verify not set outcome
         outcome = self.qc.check_focus()
@@ -205,9 +215,9 @@ class TestCameraQC(unittest.TestCase):
         self.assertEqual('NOT_SET', outcome)
 
         # Verify passes
-        self.qc.side = 'body'
+        self.qc.label = 'body'
         ts_path = Path(__file__).parents[1].joinpath('extractors', 'data', 'session_ephys')
-        ssv_times = load_camera_ssv_times(ts_path, self.qc.side)
+        ssv_times = load_camera_ssv_times(ts_path, self.qc.label)
         self.qc.data.bonsai_times, self.qc.data.camera_times = ssv_times
         self.qc.data.video = Bunch({'length': self.qc.data.bonsai_times.size})
 
@@ -222,6 +232,27 @@ class TestCameraQC(unittest.TestCase):
         self.assertEqual('WARNING', outcome)
         self.assertEqual(n_over, actual)
 
+    def test_check_wheel_alignment(self):
+        """This just checks data validation.  Integration tests test the MotionAlignment class"""
+        outcome = self.qc.check_wheel_alignment()
+        self.assertEqual('NOT_SET', outcome)
+
+        # Expect FAIL when no overlapping timestamps between wheel and camera
+        self.qc.data['wheel'] = {
+            'timestamps': np.arange(4000),
+            'position': np.random.random(4000),
+            'period': np.array([3000, 3050])
+        }
+        self.qc.data['timestamps'] = np.arange(5000, 6000)
+        outcome = self.qc.check_wheel_alignment()
+        self.assertEqual('FAIL', outcome)
+
+        # Expect NOT_SET when some overlapping timestamps but chosen period out of range
+        self.qc.data['timestamps'] -= 1500
+        with self.assertLogs(logging.getLogger('ibllib'), logging.WARNING):
+            outcome = self.qc.check_wheel_alignment()
+        self.assertEqual('NOT_SET', outcome)
+
     def test_ensure_data(self):
         self.qc.eid = self.eid
         self.qc.download_data = False
@@ -232,9 +263,6 @@ class TestCameraQC(unittest.TestCase):
         with self.assertRaises(AssertionError):
             self.qc.run(update=False)
 
-    def tearDown(self) -> None:
-        self.tempdir.cleanup()
 
-
-if __name__ == '__main__':
-    unittest.main()
+if __name__ == "__main__":
+    unittest.main(exit=False, verbosity=2)

@@ -17,6 +17,10 @@ class TestNeuropixel(unittest.TestCase):
         assert np.all(np.diff(yu) == 20)
         assert xu.size == 4 and yu.size == 384 / 2
 
+    def tests_headers(self):
+        th = neuropixel.trace_header()
+        assert set(th.keys()) == set(['x', 'y', 'row', 'col', 'ind', 'adc', 'sample_shift'])
+
 
 class TestFpgaTask(unittest.TestCase):
 
@@ -53,4 +57,4 @@ class TestFpgaTask(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main(exit=False)
+    unittest.main(exit=False, verbosity=2)

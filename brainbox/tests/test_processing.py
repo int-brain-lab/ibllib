@@ -1,4 +1,4 @@
-from brainbox import core, processing
+from brainbox import processing, core
 import unittest
 import numpy as np
 
@@ -97,6 +97,37 @@ class TestProcessing(unittest.TestCase):
         self.assertTrue(np.all(xscale == np.arange(5) + 10))
         self.assertTrue(np.all(yscale == np.arange(3) + 10))
         self.assertTrue(np.all(r.shape == (3, 5)))
+
+    def test_compute_cluster_averag(self):
+        # Create fake data for 3 clusters
+        clust1 = np.ones(40)
+        clust1_vals = np.ones(40) * 200
+        clust2 = 2 * np.ones(40)
+        clust2_vals = np.r_[np.ones(20) * 300, np.ones(20) * 500]
+        clust100 = 100 * np.ones(50)
+        clust100_vals = np.r_[np.ones(25) * 0.5, np.ones(25) * 1.0]
+
+        # Concatenate data for 3 clusters together
+        spike_clust = np.r_[clust1, clust2, clust100]
+        spike_val = np.r_[clust1_vals, clust2_vals, clust100_vals]
+
+        # Shuffle the data to make order random
+        ind = np.arange(len(spike_clust))
+        np.random.shuffle(ind)
+        spike_clust = spike_clust[ind]
+        spike_val = spike_val[ind]
+        # Make sure the data you have created is correct dimension
+        assert(len(spike_clust) == len(spike_val))
+
+        # Compute the average value across clusters
+        clust, avg_val, count = processing.compute_cluster_average(spike_clust, spike_val)
+
+        # Check output is as expected
+        assert(np.all(clust == (1, 2, 100)))
+        assert(avg_val[0] == 200)
+        assert(avg_val[1] == 400)
+        assert (avg_val[2] == 0.75)
+        assert(np.all(count == (40, 40, 50)))
 
 
 def test_get_unit_bunches():

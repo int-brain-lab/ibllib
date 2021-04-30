@@ -1,8 +1,10 @@
 from pathlib import Path
 import logging
+import os
+import traceback
+
 import numpy as np
 import pandas as pd
-import os
 
 import alf.io
 from ibllib.io import spikeglx
@@ -110,7 +112,7 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
                 # Otherwise we just get the channels from alyx. Shouldn't happen often, only if
                 # data is still inbetween ftp and flatiron after being resolved
                 else:
-                    traj_id = one.alyx.rest('trajectories', 'list', session=eid, probe_name=label,
+                    traj_id = one.alyx.rest('trajectories', 'list', session=eid, probe=label,
                                             provenance='Ephys aligned histology track')[0]['id']
                     chans = one.alyx.rest('channels', 'list', trajectory_estimate=traj_id)
 
@@ -130,7 +132,7 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
                             f' locations will be obtained from latest available ephys aligned '
                             f'histology track.')
                 # get the latest user aligned channels
-                traj_id = one.alyx.rest('trajectories', 'list', session=eid, probe_name=label,
+                traj_id = one.alyx.rest('trajectories', 'list', session=eid, probe=label,
                                         provenance='Ephys aligned histology track')[0]['id']
                 chans = one.alyx.rest('channels', 'list', trajectory_estimate=traj_id)
 
@@ -147,7 +149,7 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
                 logger.info(f'Channel locations for {label} have not been resolved. '
                             f'Channel and cluster locations obtained from histology track.')
                 # get the channels from histology tracing
-                traj_id = one.alyx.rest('trajectories', 'list', session=eid, probe_name=label,
+                traj_id = one.alyx.rest('trajectories', 'list', session=eid, probe=label,
                                         provenance='Histology track')[0]['id']
                 chans = one.alyx.rest('channels', 'list', trajectory_estimate=traj_id)
 
@@ -308,10 +310,12 @@ def _load_spike_sorting_local(session_path, probe):
     try:
         spikes = alf.io.load_object(probe_path, object='spikes')
     except Exception:
+        logger.error(traceback.format_exc())
         spikes = {}
     try:
         clusters = alf.io.load_object(probe_path, object='clusters')
     except Exception:
+        logger.error(traceback.format_exc())
         clusters = {}
 
     return spikes, clusters
@@ -381,6 +385,36 @@ def load_spike_sorting_with_channel(eid, one=None, probe=None, dataset_types=Non
 
     dic_clus = merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None)
     return dic_spk_bunch, dic_clus, channels
+
+
+def load_passive_rfmap(eid, one=None):
+    """
+    For a given eid load in the passive receptive field mapping protocol data
+    :param eid: eid or pathlib.Path of the local session
+    :param one:
+    :return: rf_map
+    """
+    if isinstance(eid, Path):
+        alf_path = eid.joinpath('alf')
+    else:
+        one = one or ONE()
+        dtypes = {
+            '_iblrig_RFMapStim.raw',
+            '_ibl_passiveRFM.times',
+        }
+
+        _ = one.load(eid, dataset_types=dtypes, download_only=True)
+        alf_path = one.path_from_eid(eid).joinpath('alf')
+
+    # Load in the receptive field mapping data
+    rf_map = alf.io.load_object(alf_path, object='passiveRFM', namespace='ibl')
+    frames = np.fromfile(alf_path.parent.joinpath('raw_passive_data', '_iblrig_RFMapStim.raw.bin'),
+                         dtype="uint8")
+    y_pix, x_pix = 15, 15
+    frames = np.transpose(np.reshape(frames, [y_pix, x_pix, -1], order="F"), [2, 1, 0])
+    rf_map['frames'] = frames
+
+    return rf_map
 
 
 def load_wheel_reaction_times(eid, one=None):

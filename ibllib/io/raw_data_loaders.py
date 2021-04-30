@@ -19,7 +19,6 @@ import numpy as np
 import pandas as pd
 
 from ibllib.io import jsonable
-from ibllib.dsp.utils import fronts
 from ibllib.io.video import assert_valid_label
 from ibllib.misc import version
 from ibllib.time import uncycle_pgts, convert_pgts
@@ -149,7 +148,7 @@ def load_embedded_frame_data(session_path, label: str, raw=False):
     :return: The frame count, GPIO
     """
     count = load_camera_frame_count(session_path, label, raw=raw)
-    gpio = load_camera_gpio(session_path, label, as_dict=not raw)
+    gpio = load_camera_gpio(session_path, label, as_dicts=not raw)
     return count, gpio
 
 
@@ -177,15 +176,22 @@ def load_camera_frame_count(session_path, label: str, raw=True):
     return count
 
 
-def load_camera_gpio(session_path, label: str, as_dict=False):
+def load_camera_gpio(session_path, label: str, as_dicts=False):
     """
     Load the GPIO for a given session.  If the file doesn't exist, or is empty, a None value is
     returned.
+
+    The raw binary file contains uint32 values (saved as doubles) where the first 4 bits
+    represent the state of each of the 4 GPIO pins. The array is expanded to an n x 4 array by
+    shifting each bit to the end and checking whether it is 0 (low state) or 1 (high state).
+
     :param session_path: Absolute path of session folder
     :param label: The specific video to load, one of ('left', 'right', 'body')
-    :param as_dict: If False the raw data are returned without preprocessing, otherwise GPIO is
-    returned as dictionary of front indices and polarities
-    :return: The GPIO pin state
+    :param as_dicts: If False the raw data are returned boolean array with shape (n_frames, n_pins)
+     otherwise GPIO is returned as a list of dictionaries with keys ('indices', 'polarities').
+    :return: An nx4 boolean array where columns represent state of GPIO pins 1-4.
+     If as_dicts is True, a list of dicts is returned with keys ('indices', 'polarities'),
+     or None if the dictionary is empty.
     """
     if session_path is None:
         return
@@ -193,20 +199,29 @@ def load_camera_gpio(session_path, label: str, as_dict=False):
 
     # Load pin state
     GPIO_file = raw_path / f'_iblrig_{assert_valid_label(label)}Camera.GPIO.bin'
-    gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(int) if GPIO_file.exists() else []
-
+    # This deals with missing and empty files the same
+    gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(np.uint32) if GPIO_file.exists() else []
     if len(gpio) == 0:
-        return
-    if as_dict:
-        n_states = np.unique(gpio).size
-        if n_states == 1:
+        return [None] * 4 if as_dicts else None
+
+    # Check values make sense (4 pins = 16 possible values)
+    assert np.isin(gpio, np.left_shift(np.arange(2 ** 4, dtype=np.uint32), 32 - 4)).all()
+    # 4 pins represented as uint32. For each pin, shift its bit to the end and check the bit is set
+    gpio = (np.right_shift(np.tile(gpio, (4, 1)).T, np.arange(31, 27, -1)) & 0x1) == 1
+
+    if as_dicts:
+        if not gpio.any():
             _logger.error('No GPIO changes')
-            return None
-        elif np.unique(gpio).size != 2:
-            _logger.warning('GPIO noisy')
-        thresh = int((gpio.max() - gpio.min()) / 2)
-        gpio = dict(zip(('indices', 'polarities'), fronts(gpio, step=thresh)))
-        gpio['polarities'] = np.sign(gpio['polarities'])
+            return [None] * 4
+        # Find state changes for each pin and construct a dict of indices and polarities for each
+        edges = np.vstack((gpio[0, :], np.diff(gpio.astype(int), axis=0)))
+        # gpio = [(ind := np.where(edges[:, i])[0], edges[ind, i]) for i in range(4)]
+        # gpio = [dict(zip(('indices', 'polarities'), x)) for x in gpio_]  # py3.8
+        gpio = [{'indices': np.where(edges[:, i])[0],
+                 'polarities': edges[edges[:, i] != 0, i]}
+                for i in range(4)]
+        # Replace empty dicts with None
+        gpio = [None if x['indices'].size == 0 else x for x in gpio]
 
     return gpio
 
@@ -497,7 +512,7 @@ def _clean_wheel_dataframe(data, label, path):
         _logger.warning(label + ' has missing/incomplete records \n %s', path)
     # first step is to re-interpret as numeric objects if not already done
     for col in data.columns:
-        if data[col].dtype == np.object and col not in ['bns_ts']:
+        if data[col].dtype == object and col not in ['bns_ts']:
             data[col] = pd.to_numeric(data[col], errors='coerce')
     # then drop Nans and duplicates
     data.dropna(inplace=True)
@@ -616,7 +631,7 @@ def sync_trials_robust(t0, t1, diff_threshold=0.001, drift_threshold_ppm=200, ma
             cdt = t0[i0 + 1] - t1[i1 + ii1]
         i0 += 1
     it0 = np.where(~np.isnan(ind))[0]
-    it1 = ind[it0].astype(np.int)
+    it1 = ind[it0].astype(int)
     ind0 = np.unique(np.r_[it0, it0 + 1])
     ind1 = np.unique(np.r_[it1, it1 + 1])
     if return_index:

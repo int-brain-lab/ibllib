@@ -69,7 +69,7 @@ class ProbabilityLeft(BaseBpodTrialsExtractor):
     save_names = '_ibl_trials.probabilityLeft.npy'
     var_names = 'probabilityLeft'
 
-    def _extract(self):
+    def _extract(self, **kwargs):
         return np.array([t['stim_probability_left'] for t in self.bpod_trials])
 
 
@@ -584,8 +584,8 @@ class StimOnTimes(BaseBpodTrialsExtractor):
                 bnc_l.append(np.array([np.NINF]))
 
         stim_on = np.array(stim_on)
-        bnc_h = np.array(bnc_h)
-        bnc_l = np.array(bnc_l)
+        bnc_h = np.array(bnc_h, dtype=object)
+        bnc_l = np.array(bnc_l, dtype=object)
 
         count_missing = 0
         stimOn_times = np.zeros_like(stim_on)
@@ -610,8 +610,8 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
     """
     Extracts stim on / off and freeze times from Bpod BNC1 detected fronts
     """
-    save_names = ["_ibl_trials.stimOn_times.npy", None, None]
-    var_names = ['stimOn_times', 'stimOff_times', 'stimFreeze_times']
+    save_names = ("_ibl_trials.stimOn_times.npy", None, None)
+    var_names = ('stimOn_times', 'stimOff_times', 'stimFreeze_times')
 
     def _extract(self):
         choice = Choice(self.session_path).extract(
@@ -647,20 +647,6 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
         return stimOn_times, stimOff_times, stimFreeze_times
 
 
-class LaserBool(BaseBpodTrialsExtractor):
-    save_names = ['_ibl_trials.laser_stimulation.npy', '_ibl_trials.laser_probability.npy']
-    var_names = ['laser_stimulation', 'laser_probability']
-
-    def _extract(self):
-        lstim = np.array([np.float(t.get('laser_stimulation', np.NaN)) for t in self.bpod_trials])
-        lprob = np.array([np.float(t.get('laser_probability', np.NaN)) for t in self.bpod_trials])
-        if np.all(np.isnan(lprob)):
-            self.save_names[1] = None  # this prevents the file from being saved when no data
-        if np.all(np.isnan(lstim)):
-            self.save_names[0] = None  # this prevents the file from being saved when no data
-        return lstim, lprob
-
-
 def extract_all(session_path, save=False, bpod_trials=None, settings=None):
     if not bpod_trials:
         bpod_trials = raw.load_data(session_path)
@@ -669,7 +655,7 @@ def extract_all(session_path, save=False, bpod_trials=None, settings=None):
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
 
-    base = [FeedbackType, ContrastLR, ProbabilityLeft, Choice, RepNum, RewardVolume, LaserBool,
+    base = [FeedbackType, ContrastLR, ProbabilityLeft, Choice, RepNum, RewardVolume,
             FeedbackTimes, Intervals, ResponseTimes, GoCueTriggerTimes, GoCueTimes]
     # Version check
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):

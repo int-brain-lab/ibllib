@@ -41,7 +41,7 @@ def _check_filename_for_registration(full_file, patterns):
 
 
 def register_dataset(file_list, one=None, created_by=None, repository=None, server_only=False,
-                     versions=None, dry=False, max_md5_size=None):
+                     versions=None, revisions=None, default=True, dry=False, max_md5_size=None):
     """
     Registers a set of files belonging to a session only on the server
     :param file_list: (list of pathlib.Path or pathlib.Path)
@@ -50,6 +50,8 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
     :param repository: optional: (string) name of the repository in Alyx
     :param server_only: optional: (bool) if True only creates on the Flatiron (defaults to False)
     :param versions: optional (list of strings): versions tags (defaults to ibllib version)
+    :param revisions: optional (list of strings): revision name (defaults to no revision)
+    :param default: optional (bool) whether to set as default dataset (defaults to True)
     :param dry: (bool) False by default
     :param verbose: (bool) logs
     :param max_md5_size: (int) maximum file in bytes to compute md5 sum (always compute if Npne)
@@ -62,6 +64,7 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
         return
     elif not isinstance(file_list, list):
         file_list = [Path(file_list)]
+
     assert len(set([alf.io.get_session_path(f) for f in file_list])) == 1
     assert all([Path(f).exists() for f in file_list])
     if versions is None:
@@ -69,6 +72,13 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
     if isinstance(versions, str):
         versions = [versions for _ in file_list]
     assert isinstance(versions, list) and len(versions) == len(file_list)
+
+    if revisions is None:
+        revisions = [None for _ in file_list]
+    else:
+        if isinstance(revisions, str):
+            revisions = [revisions for _ in file_list]
+    assert isinstance(revisions, list) and len(revisions) == len(file_list)
 
     # computing the md5 can be very long, so this is an option to skip if the file is bigger
     # than a certain threshold
@@ -87,7 +97,9 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
          'server_only': server_only,
          'hashes': hashes,
          'filesizes': [p.stat().st_size for p in file_list],
-         'versions': versions}
+         'versions': versions,
+         'revisions': revisions,
+         'default': default}
     if not dry:
         if one is None:
             one = ONE()
@@ -341,9 +353,12 @@ def _alyx_procedure_from_task(task_protocol):
 
 def _alyx_procedure_from_task_type(task_type):
     lookup = {'biased': 'Behavior training/tasks',
+              'biased_opto': 'Behavior training/tasks',
               'habituation': 'Behavior training/tasks',
               'training': 'Behavior training/tasks',
               'ephys': 'Ephys recording with acute probe(s)',
+              'ephys_biased_opto': 'Ephys recording with acute probe(s)',
+              'ephys_training': 'Ephys recording with acute probe(s)',
               'mock_ephys': 'Ephys recording with acute probe(s)',
               'sync_ephys': 'Ephys recording with acute probe(s)'}
     if task_type in lookup:

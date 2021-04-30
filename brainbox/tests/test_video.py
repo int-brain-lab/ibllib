@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from brainbox.video import video
+from brainbox import video
 
 
 class TestVideo(unittest.TestCase):

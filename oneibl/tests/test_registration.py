@@ -2,7 +2,7 @@ import unittest
 import tempfile
 from pathlib import Path
 import json
-
+from requests import HTTPError
 import numpy as np
 
 import ibllib.io.extractors.base
@@ -88,6 +88,12 @@ class TestRegistration(unittest.TestCase):
         self.alf_path.mkdir(parents=True)
         np.save(self.alf_path.joinpath('spikes.times.npy'), np.random.random(500))
         np.save(self.alf_path.joinpath('spikes.amps.npy'), np.random.random(500))
+        self.rev_path = self.alf_path.joinpath('v1')
+        self.rev_path.mkdir(parents=True)
+        np.save(self.rev_path.joinpath('spikes.times.npy'), np.random.random(300))
+        np.save(self.rev_path.joinpath('spikes.amps.npy'), np.random.random(300))
+        self.rev = one.alyx.rest('revisions', 'create', data={'name': 'v1'})
+        self.tag = one.alyx.rest('tags', 'create', data={'name': 'test_tag', 'protected': True})
 
     def test_registration_datasets(self):
         # registers a single file
@@ -101,6 +107,10 @@ class TestRegistration(unittest.TestCase):
         r = registration.register_dataset(file_list=flist, one=one)
         dsets = one.alyx.rest('datasets', 'list', session=ses['url'][-36:])
         self.assertTrue(len(dsets) == 2)
+        self.assertTrue(all(not d['revision'] for d in r))
+        self.assertTrue(all(d['default'] for d in r))
+        self.assertTrue(all(d['collection'] == 'alf' for d in r))
+
         # simulate all the datasets exists, re-register and asserts that exists is set to True
         # as the files haven't changed
         frs = one.alyx.rest('files', 'list', django=f"dataset__session,{ses['url'][-36:]}")
@@ -113,6 +123,27 @@ class TestRegistration(unittest.TestCase):
         np.save(self.alf_path.joinpath('spikes.amps.npy'), np.random.random(500))
         r = registration.register_dataset(file_list=flist, one=one)
         self.assertTrue(all([all([not(fr['exists']) for fr in rr['file_records']]) for rr in r]))
+
+        # Test registering with a revision
+        # Test that if we don't have the correct file structure it won't register
+        flist = list(self.alf_path.glob('*.npy'))
+        with self.assertRaises(HTTPError):
+            registration.register_dataset(file_list=flist, one=one, revisions='v1')
+#
+        # Check with correct folder it registers correctly
+        flist = list(self.rev_path.glob('*.npy'))
+        r = registration.register_dataset(file_list=flist, one=one, revisions='v1')
+        self.assertTrue(all(d['revision'] == 'v1' for d in r))
+        self.assertTrue(all(d['default'] for d in r))
+        self.assertTrue(all(d['collection'] == 'alf' for d in r))
+        dsets = one.alyx.rest('datasets', 'list', session=ses['url'][-36:], revision='v1')
+
+        # Add a protected tag to a dataset
+        for d in dsets:
+            one.alyx.rest('datasets', 'partial_update', id=d['url'][-36:],
+                          data={'tags': ['test_tag']})
+        with self.assertRaises(HTTPError):
+            registration.register_dataset(file_list=flist, one=one, revisions='v1')
 
     def test_registration_session(self):
         behavior_path = self.session_path.joinpath('raw_behavior_data')
@@ -153,7 +184,9 @@ class TestRegistration(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.td.cleanup()
+        one.alyx.rest('revisions', 'delete', id=self.rev['id'])
+        one.alyx.rest('tags', 'delete', id=self.tag['id'])
 
 
 if __name__ == '__main__':
-    unittest.main(exit=False)
+    unittest.main(exit=False, verbosity=2)

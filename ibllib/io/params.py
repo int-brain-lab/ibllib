@@ -6,9 +6,7 @@ import json
 
 
 def as_dict(par):
-    if not par:
-        return None
-    if isinstance(par, dict):
+    if not par or isinstance(par, dict):
         return par
     else:
         return dict(par._asdict())
@@ -46,36 +44,42 @@ def getfile(str_params):
     if sys.platform == 'win32' or sys.platform == 'cygwin':
         pfile = str(PurePath(os.environ['APPDATA'], *parts))
     else:
-        pfile = str(PurePath(Path.home(), *parts))
+        pfile = str(Path.home().joinpath(*parts))
     return pfile
 
 
 def read(str_params, default=None):
     """
-    Reads in and parse Json parameter file into dictionary
+    Reads in and parse Json parameter file into dictionary.  If the parameter file doesn't
+    exist and no defaults are provided, a FileNotFound error is raised, otherwise any extra
+    default parameters will be written into the file.
+
+    Examples:
+        # Load parameters, raise error if file not found
+        par = read('globus/admin')
+
+        # Load with defaults
+        par = read('globus/admin', {'local_endpoint': None, 'remote_endpoint': None})
+
+        # Return empty dict if file not found (i.e. touch new param file)
+        par = read('new_pars', {})
 
     :param str_params: path to text json file
     :param default: default values for missing parameters
     :return: named tuple containing parameters
     """
     pfile = getfile(str_params)
+    par_dict = as_dict(default) or {}
     if Path(pfile).exists():
         with open(pfile) as fil:
-            par_dict = json.loads(fil.read())
-    else:
-        par_dict = as_dict(default)
-    # without default parameters
-    default = as_dict(default)
-    # TODO : behaviour for non existing file
-    # tat = params.read('rijafa', default={'toto': 'titi', 'tata': 1})
-    if not default or default.keys() == par_dict.keys():
-        return from_dict(par_dict)
-    # if default parameters bring in a new parameter
-    new_keys = set(default.keys()).difference(set(par_dict.keys()))
-    for nk in new_keys:
-        par_dict[nk] = default[nk]
-    # write the new parameter file with the extra param
-    write(str_params, par_dict)
+            file_pars = json.loads(fil.read())
+        par_dict.update(file_pars)
+    elif default is None:  # No defaults provided
+        raise FileNotFoundError(f'Parameter file {pfile} not found')
+
+    if not Path(pfile).exists() or par_dict.keys() > file_pars.keys():
+        # write the new parameter file with the extra param
+        write(str_params, par_dict)
     return from_dict(par_dict)
 
 

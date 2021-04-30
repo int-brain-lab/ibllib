@@ -34,6 +34,14 @@ desired_datasets = ['spikes.times.npy', 'spikes.amps.npy', 'spikes.clusters.npy'
 desired_versions = {'spikes.times.npy': 'custom_job00',
                     'spikes.amps.npy': version.ibllib(),
                     'spikes.clusters.npy': version.ibllib()}
+desired_logs = 'Running on machine: testmachine'
+desired_logs_rerun = {
+    'Task00': 1,
+    'Task01_void': 2,
+    'Task02_error': 2,
+    'Task10': 1,
+    'Task11': None
+}
 
 
 #  job to output a single file (pathlib.Path)
@@ -141,11 +149,14 @@ class TestPipelineAlyx(unittest.TestCase):
         self.assertTrue(len(tasks) == NTASKS)
 
         # run them and make sure their statuses got updated appropriately
-        task_deck, datasets = pipeline.run()
+        task_deck, datasets = pipeline.run(machine='testmachine')
         check_statuses = [desired_statuses[t['name']] == t['status'] for t in task_deck]
         # [(t['name'], t['status'], desired_statuses[t['name']]) for t in task_deck]
         self.assertTrue(all(check_statuses))
         self.assertTrue(set([d['name'] for d in datasets]) == set(desired_datasets))
+        # check logs
+        check_logs = [desired_logs in t['log'] if t['log'] else True for t in task_deck]
+        self.assertTrue(all(check_logs))
 
         # also checks that the datasets have been labeled with the proper version
         dsets = one.alyx.rest('datasets', 'list', session=eid)
@@ -159,6 +170,25 @@ class TestPipelineAlyx(unittest.TestCase):
         self.assertTrue(all(check_statuses))
 
         # test the rerun option
-        task_deck, dsets = pipeline.rerun_failed()
+        task_deck, dsets = pipeline.rerun_failed(machine='testmachine')
         check_statuses = [desired_statuses[t['name']] == t['status'] for t in task_deck]
         self.assertTrue(all(check_statuses))
+
+        # check that logs were correctly amended
+        check_logs = [t['log'].count(desired_logs) == desired_logs_rerun[t['name']] if t['log']
+                      else t['log'] == desired_logs_rerun[t['name']] for t in task_deck]
+        check_rerun = ['===RERUN===' in t['log'] if desired_logs_rerun[t['name']] == 2
+                       else True for t in task_deck]
+        self.assertTrue(all(check_logs))
+        self.assertTrue(all(check_rerun))
+
+        # Rerun with clobber and check that logs are overwritten
+        task_deck, dsets = pipeline.rerun_failed(machine='testmachine', clobber=True)
+        check_logs = [t['log'].count(desired_logs) == 1 if t['log'] else True for t in task_deck]
+        check_rerun = ['===RERUN===' not in t['log'] if t['log'] else True for t in task_deck]
+        self.assertTrue(all(check_logs))
+        self.assertTrue(all(check_rerun))
+
+
+if __name__ == "__main__":
+    unittest.main(exit=False, verbosity=2)

@@ -26,7 +26,7 @@ def cart2sph(x, y, z):
     iok = r != 0
     theta[iok] = np.arccos(z[iok] / r[iok]) * 180 / np.pi
     if theta.size == 1:
-        theta = np.float(theta)
+        theta = float(theta)
     return r, theta, phi
 
 
@@ -86,7 +86,7 @@ class BrainCoordinates:
     def _round(i, round=True):
         nanval = 0
         if round:
-            ii = np.array(np.round(i)).astype(np.int)
+            ii = np.array(np.round(i)).astype(int)
             ii[np.isnan(i)] = nanval
             return ii
         else:
@@ -103,7 +103,7 @@ class BrainCoordinates:
 
     def xyz2i(self, xyz, round=True):
         xyz = np.array(xyz)
-        dt = np.int if round else np.float
+        dt = int if round else float
         out = np.zeros_like(xyz, dtype=dt)
         out[..., 0] = self.x2i(xyz[..., 0], round=round)
         out[..., 1] = self.y2i(xyz[..., 1], round=round)
@@ -203,9 +203,9 @@ class BrainAtlas:
         axz = self.xyz2dims[2]  # this is the dv axis
         _surface = (self.label == 0).astype(np.int8) * 2
         l0 = np.diff(_surface, axis=axz, append=2)
-        _top = np.argmax(l0 == -2, axis=axz).astype(np.float)
+        _top = np.argmax(l0 == -2, axis=axz).astype(float)
         _top[_top == 0] = np.nan
-        _bottom = self.bc.nz - np.argmax(np.flip(l0, axis=axz) == 2, axis=axz).astype(np.float)
+        _bottom = self.bc.nz - np.argmax(np.flip(l0, axis=axz) == 2, axis=axz).astype(float)
         _bottom[_bottom == self.bc.nz] = np.nan
         self.top = self.bc.i2z(_top + 1)
         self.bottom = self.bc.i2z(_bottom - 1)
@@ -213,7 +213,7 @@ class BrainAtlas:
         idx_srf = np.where(self.surface != 0)
         self.surface[idx_srf] = 1
         self.srf_xyz = self.bc.i2xyz(np.c_[idx_srf[self.xyz2dims[0]], idx_srf[self.xyz2dims[1]],
-                                           idx_srf[self.xyz2dims[2]]].astype(np.float))
+                                           idx_srf[self.xyz2dims[2]]].astype(float))
 
     def _lookup_inds(self, ixyz):
         """
@@ -366,8 +366,24 @@ class BrainAtlas:
         ax.imshow(im, extent=extent, cmap=cmap, **kwargs)
         return ax
 
+    def extent(self, axis):
+        """
+        :param axis: direction along which the volume is stacked:
+         (2 = z for horizontal slice)
+         (1 = y for coronal slice)
+         (0 = x for sagittal slice)
+        :return:
+        """
+        if axis == 0:
+            extent = np.r_[self.bc.ylim, np.flip(self.bc.zlim)] * 1e6
+        elif axis == 1:
+            extent = np.r_[self.bc.xlim, np.flip(self.bc.zlim)] * 1e6
+        elif axis == 2:
+            extent = np.r_[self.bc.xlim, np.flip(self.bc.ylim)] * 1e6
+        return extent
+
     def slice(self, coordinate, axis, volume='image', mode='raise', region_values=None,
-              mapping="Allen"):
+              mapping="Allen", bc=None):
         """
         :param coordinate: float
         :param axis: xyz convention:  0 for ml, 1 for ap, 2 for dv
@@ -412,39 +428,40 @@ class BrainAtlas:
             return _take(self.image, index, axis=self.xyz2dims[axis])
         elif volume in ['surface', 'edges']:
             return _take(self.surface, index, axis=self.xyz2dims[axis])
+        elif volume == 'volume':
+            if bc is not None:
+                index = bc.xyz2i(np.array([coordinate] * 3))[axis]
+            return _take(region_values, index, axis=self.xyz2dims[axis])
 
-    def plot_cslice(self, ap_coordinate, volume='image', **kwargs):
+    def plot_cslice(self, ap_coordinate, volume='image', mapping='Allen', **kwargs):
         """
         Imshow a coronal slice
         :param: ap_coordinate (m)
         :param volume: 'image' or 'annotation'
         :return: ax
         """
-        cslice = self.slice(ap_coordinate, axis=1, volume=volume)
-        extent = np.r_[self.bc.xlim, np.flip(self.bc.zlim)] * 1e6
-        return self._plot_slice(cslice.T, extent=extent, **kwargs)
+        cslice = self.slice(ap_coordinate, axis=1, volume=volume, mapping=mapping)
+        return self._plot_slice(cslice.T, extent=self.extent(axis=1), **kwargs)
 
-    def plot_hslice(self, dv_coordinate, volume='image', **kwargs):
+    def plot_hslice(self, dv_coordinate, volume='image', mapping='Allen', **kwargs):
         """
         Imshow a horizontal slice
         :param: dv_coordinate (m)
         :param volume: 'image' or 'annotation'
         :return: ax
         """
-        hslice = self.slice(dv_coordinate, axis=2, volume=volume)
-        extent = np.r_[self.bc.xlim, np.flip(self.bc.ylim)] * 1e6
-        return self._plot_slice(hslice, extent=extent, **kwargs)
+        hslice = self.slice(dv_coordinate, axis=2, volume=volume, mapping=mapping)
+        return self._plot_slice(hslice, extent=self.extent(axis=2), **kwargs)
 
-    def plot_sslice(self, ml_coordinate, volume='image', **kwargs):
+    def plot_sslice(self, ml_coordinate, volume='image', mapping='Allen', **kwargs):
         """
         Imshow a sagittal slice
         :param: ml_coordinate (m)
         :param volume: 'image' or 'annotation'
         :return: ax
         """
-        sslice = self.slice(ml_coordinate, axis=0, volume=volume)
-        extent = np.r_[self.bc.ylim, np.flip(self.bc.zlim)] * 1e6
-        return self._plot_slice(np.swapaxes(sslice, 0, 1), extent=extent, **kwargs)
+        sslice = self.slice(ml_coordinate, axis=0, volume=volume, mapping=mapping)
+        return self._plot_slice(np.swapaxes(sslice, 0, 1), extent=self.extent(axis=0), **kwargs)
 
     def plot_top(self, ax=None):
         ix, iy = np.meshgrid(np.arange(self.bc.nx), np.arange(self.bc.ny))
@@ -454,7 +471,7 @@ class BrainAtlas:
             ax = plt.gca()
             ax.axis('equal')
         ax.imshow(self._label2rgb(self.label.flat[inds]),
-                  extent=np.r_[self.bc.xlim, np.flip(self.bc.ylim)] * 1e6, origin='upper')
+                  extent=self.extent(axis=2), origin='upper')
         return ax
 
 
@@ -666,7 +683,7 @@ class Insertion:
             _xyz = brain_atlas.srf_xyz[dist_lim[ma], :]
             _ixyz = brain_atlas.bc.xyz2i(_xyz)
 
-        xyz = brain_atlas.bc.i2xyz(_ixyz.astype(np.float))
+        xyz = brain_atlas.bc.i2xyz(_ixyz.astype(float))
 
         return xyz
 
@@ -767,24 +784,27 @@ class AllenAtlas(BrainAtlas):
         Converts coordinates to the CCF coordinates, which is assumed to be the cube indices
         times the spacing.
         :param xyz: mlapdv coordinates in um, origin Bregma
-        :param ccf_order: 'mlapdv' (ibl) or 'apdvml' (Allen mcc vertices)
-        :return: coordinates in um (mlapdv by default), origin is the front left top corner
-         of the data volume
+        :param ccf_order: order that you want values returned 'mlapdv' (ibl) or 'apdvml'
+        (Allen mcc vertices)
+        :return: coordinates in CCF space um, origin is the front left top corner of the data
+        volume, order determined by ccf_order
         """
-        ordre = self._ccf_order(ccf_order, reverse=True)
-        ccf = self.bc.xyz2i(xyz, round=False) * np.float(self.res_um)
+        ordre = self._ccf_order(ccf_order)
+        ccf = self.bc.xyz2i(xyz, round=False) * float(self.res_um)
         return ccf[..., ordre]
 
     def ccf2xyz(self, ccf, ccf_order='mlapdv'):
         """
         Converts coordinates from the CCF coordinates, which is assumed to be the cube indices
         times the spacing.
-        :param mlapdv coordinates in um, origin is the front left top corner of the data volume
-        :param ccf_order: 'mlapdv' (ibl) or 'apdvml' (Allen mcc vertices)
+        :param ccf coordinates in CCF space in um, origin is the front left top corner of the data
+        volume
+        :param ccf_order: order of ccf coordinates given 'mlapdv' (ibl) or 'apdvml'
+        (Allen mcc vertices)
         :return: xyz: mlapdv coordinates in um, origin Bregma
         """
-        ordre = self._ccf_order(ccf_order)
-        return self.bc.i2xyz((ccf[..., ordre] / np.float(self.res_um)))
+        ordre = self._ccf_order(ccf_order, reverse=True)
+        return self.bc.i2xyz((ccf[..., ordre] / float(self.res_um)))
 
     @staticmethod
     def _ccf_order(ccf_order, reverse=False):

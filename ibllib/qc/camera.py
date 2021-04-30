@@ -1,24 +1,28 @@
 """Camera QC
 This module runs a list of quality control metrics on the camera and extracted video data.
 
-Example - Run camera QC, downloading all but video file
-    qc = CameraQC(eid, download_data=True, stream=True)
+Example - Run right camera QC, downloading all but video file
+    qc = CameraQC(eid, 'right', download_data=True, stream=True)
     qc.run()
 
-Example - Run camera QC with session path, update QC field in Alyx
-    qc = CameraQC(session_path)
+Example - Run left camera QC with session path, update QC field in Alyx
+    qc = CameraQC(session_path, 'left')
     outcome, extended = qc.run(update=True)  # Returns outcome of videoQC only
     print(f'video QC = {outcome}; overall session QC = {qc.outcome}')  # NB difference outcomes
 
-Example - Run only video QC (no timestamp/alignment checks) on 20 frames
-    qc = CameraQC(eid, n_samples=20)
+Example - Run only video QC (no timestamp/alignment checks) on 20 frames for the body camera
+    qc = CameraQC(eid, 'body', n_samples=20)
     qc.load_video_data()  # Quicker than loading all data
     qc.run()
 
 Example - Run specific video QC check and display the plots
-    qc = CameraQC(eid)
+    qc = CameraQC(eid, 'left;)
     qc.load_data(download_data=True)
     qc.check_position(display=True)  # NB: Not all checks make plots
+
+Example - Run the QC for all cameras
+    qcs = run_all_qc(eid)
+    qcs['left'].metrics  # Dict of checks and outcomes for left camera
 """
 import logging
 from inspect import getmembers, isfunction
@@ -37,13 +41,13 @@ from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io import raw_data_loaders as raw
 import alf.io as alfio
 from brainbox.core import Bunch
+from brainbox.numerical import within_ranges
 import brainbox.behavior.wheel as wh
-from ibllib.io.video import get_video_meta, get_video_frames_preload
+from ibllib.io.video import get_video_meta, get_video_frames_preload, assert_valid_label
 from oneibl.one import OneOffline
 from . import base
 
 _log = logging.getLogger('ibllib')
-PIN_STATE_THRESHOLD = 1
 
 
 class CameraQC(base.QC):
@@ -67,7 +71,7 @@ class CameraQC(base.QC):
         'ephysData.raw.wiring'
     ]
     """Recall that for the training rig there is only one side camera at 30 Hz and 1280 x 1024 px.
-    For the recording rig there are two side cameras (left: 60 Hz, 1280 x 1024 px;
+    For the recording rig there are two label cameras (left: 60 Hz, 1280 x 1024 px;
     right: 150 Hz, 640 x 512 px) and one body camera (30 Hz, 640 x 512 px). """
     video_meta = {
         'training': {
@@ -96,15 +100,15 @@ class CameraQC(base.QC):
         }
     }
 
-    def __init__(self, session_path_or_eid, side, **kwargs):
+    def __init__(self, session_path_or_eid, camera, **kwargs):
         """
-        :param session_path_or_eid: A session eid or path
-        :param log: A logging.Logger instance, if None the 'ibllib' logger is used
-        :param one: An ONE instance for fetching and setting the QC on Alyx
+        :param session_path_or_eid: A session id or path
         :param camera: The camera to run QC on, if None QC is run for all three cameras
+        :param n_samples: The number of frames to sample for the position and brightness QC
         :param stream: If true and local video files not available, the data are streamed from
         the remote source.
-        :param n_samples: The number of frames to sample for the position and brightness QC
+        :param log: A logging.Logger instance, if None the 'ibllib' logger is used
+        :param one: An ONE instance for fetching and setting the QC on Alyx
         """
         # When an eid is provided, we will download the required data by default (if necessary)
         download_data = not alfio.is_session_path(session_path_or_eid)
@@ -114,15 +118,15 @@ class CameraQC(base.QC):
         super().__init__(session_path_or_eid, **kwargs)
 
         # Data
-        self.side = side
-        filename = f'_iblrig_{self.side}Camera.raw.mp4'
+        self.label = assert_valid_label(camera)
+        filename = f'_iblrig_{self.label}Camera.raw.mp4'
         self.video_path = self.session_path / 'raw_video_data' / filename
         # If local video doesn't exist, change video path to URL
         if not self.video_path.exists() and self.stream is not False and self.one is not None:
             try:
                 self.stream = True
                 self.video_path = self.one.url_from_path(self.video_path)
-            except StopIteration:
+            except (StopIteration, ALFObjectNotFound):
                 _log.error('No remote or local video file found')
                 self.video_path = None
 
@@ -179,16 +183,16 @@ class CameraQC(base.QC):
 
         # Get frame count and pin state
         self.data['count'], self.data['pin_state'] = \
-            raw.load_embedded_frame_data(self.session_path, self.side, raw=True)
+            raw.load_embedded_frame_data(self.session_path, self.label, raw=True)
 
         # Load the audio and raw FPGA times
         if self.type == 'ephys':
             sync, chmap = ephys_fpga.get_main_probe_sync(self.session_path)
-            audio_ttls = ephys_fpga._get_sync_fronts(sync, chmap['audio'])
+            audio_ttls = ephys_fpga.get_sync_fronts(sync, chmap['audio'])
             self.data['audio'] = audio_ttls['times']  # Get rises
             # Load raw FPGA times
             cam_ts = extract_camera_sync(sync, chmap)
-            self.data['fpga_times'] = cam_ts[self.side]
+            self.data['fpga_times'] = cam_ts[self.label]
         else:
             bpod_data = raw.load_data(self.session_path)
             _, audio_ttls = raw.load_bpod_fronts(self.session_path, bpod_data)
@@ -198,13 +202,13 @@ class CameraQC(base.QC):
         alf_path = self.session_path / 'alf'
         try:
             assert not extract_times
-            self.data['timestamps'] = alfio.load_object(alf_path, f'{self.side}Camera')['times']
+            self.data['timestamps'] = alfio.load_object(alf_path, f'{self.label}Camera')['times']
         except AssertionError:  # Re-extract
-            kwargs = dict(video_path=self.video_path, labels=self.side)
+            kwargs = dict(video_path=self.video_path, labels=self.label)
             if self.type == 'ephys':
                 kwargs = {**kwargs, 'sync': sync, 'chmap': chmap}  # noqa
             outputs, _ = extract_all(self.session_path, self.type, save=False, **kwargs)
-            self.data['timestamps'] = outputs[f'{self.side}_camera_timestamps']
+            self.data['timestamps'] = outputs[f'{self.label}_camera_timestamps']
         except ALFObjectNotFound:
             _log.warning('no camera.times ALF found for session')
 
@@ -220,16 +224,13 @@ class CameraQC(base.QC):
                 wheel_data = training_wheel.get_wheel_position(self.session_path)
             self.data['wheel'] = Bunch(zip(wheel_keys, wheel_data))
 
-        # Find short period of wheel motion for motion correlation.  For speed start with the
-        # fist 2 minutes (nearly always enough), extract wheel movements and pick one.
-        # TODO Pick movement towards the end of the session (but not right at the end as some
-        #  are extrapolated).  Make sure the movement isn't too long.
+        # Find short period of wheel motion for motion correlation.
         if data_for_keys(wheel_keys, self.data['wheel']) and self.data['timestamps'] is not None:
             self.data['wheel'].period = self.get_active_wheel_period(self.data['wheel'])
 
         # Load Bonsai frame timestamps
         try:
-            ssv_times = raw.load_camera_ssv_times(self.session_path, self.side)
+            ssv_times = raw.load_camera_ssv_times(self.session_path, self.label)
             self.data['bonsai_times'], self.data['camera_times'] = ssv_times
         except AssertionError:
             _log.warning('No Bonsai video timestamps file found')
@@ -294,12 +295,12 @@ class CameraQC(base.QC):
         for dstype in dtypes:
             dataset = self.one.datasets_from_type(self.eid, dstype, full=True)
             if 'camera' in dstype.lower():  # Download individual camera file
-                dataset = [d for d in dataset if self.side in d['name']]
+                dataset = [d for d in dataset if self.label in d['name']]
             else:  # Ignore probe datasets, etc.
                 dataset = [d for d in dataset if d['collection'] in collections]
             if any(x['name'].endswith('.mp4') for x in dataset) and self.stream:
                 names = [x.name for x in self.one.list(self.eid)]
-                assert f'_iblrig_{self.side}Camera.raw.mp4' in names, 'No remote video file found'
+                assert f'_iblrig_{self.label}Camera.raw.mp4' in names, 'No remote video file found'
                 continue
             optional = ('camera.times', '_iblrig_Camera.raw', 'wheel.position',
                         'wheel.timestamps', '_iblrig_Camera.frame_counter', '_iblrig_Camera.GPIO')
@@ -321,8 +322,8 @@ class CameraQC(base.QC):
         :returns: overall outcome as a str, a dict of checks and their outcomes
         """
         # TODO Use exp ref here
-        _log.info(f'Computing QC outcome for {self.side} camera, session {self.eid}')
-        namespace = f'video{self.side.capitalize()}'
+        _log.info(f'Computing QC outcome for {self.label} camera, session {self.eid}')
+        namespace = f'video{self.label.capitalize()}'
         if all(x is None for x in self.data.values()):
             self.load_data(**kwargs)
         if self.data['frame_samples'] is None:
@@ -396,7 +397,7 @@ class CameraQC(base.QC):
         """Check reported frame rate matches FPGA frame rate"""
         if None in (self.data['video'], self.video_meta):
             return 'NOT_SET'
-        expected = self.video_meta[self.type][self.side]
+        expected = self.video_meta[self.type][self.label]
         return 'PASS' if self.data['video']['fps'] == expected['fps'] else 'FAIL'
 
     def check_framerate(self, threshold=1.):
@@ -407,23 +408,18 @@ class CameraQC(base.QC):
         """
         if any(x is None for x in (self.data['timestamps'], self.video_meta)):
             return 'NOT_SET'
-        fps = self.video_meta[self.type][self.side]['fps']
+        fps = self.video_meta[self.type][self.label]['fps']
         Fs = 1 / np.median(np.diff(self.data['timestamps']))  # Approx. frequency of camera
         return 'PASS' if abs(Fs - fps) < threshold else 'FAIL', float(round(Fs, 3))
 
     def check_pin_state(self, display=False):
         """Check the pin state reflects Bpod TTLs
-        TODO Return WARNING if more GPIOs elements than timestamps, FAIL if fewer GPIO elements
-         than frame times, or check audio events don't happen at end
         """
         if not data_for_keys(('video', 'pin_state', 'audio'), self.data):
             return 'NOT_SET'
-        size_diff = int(self.data['pin_state'].size - self.data['video']['length'])
-        # There should be only one value below our threshold
-        binary = np.unique(self.data['pin_state']).size == 2
-        state = self.data['pin_state'] > PIN_STATE_THRESHOLD
+        size_diff = int(self.data['pin_state'].shape[0] - self.data['video']['length'])
         # NB: The pin state to be high for 2 consecutive frames
-        low2high = np.insert(np.diff(state.astype(int)) == 1, 0, False)
+        low2high = np.insert(np.diff(self.data['pin_state'][:, -1].astype(int)) == 1, 0, False)
         # NB: Time between two consecutive TTLs can be sub-frame, so this will fail
         ndiff_low2high = int(self.data['audio'][::2].size - sum(low2high))
         state_ttl_matches = ndiff_low2high == 0
@@ -438,12 +434,10 @@ class CameraQC(base.QC):
             plt.gca().set(yticklabels=[])
             plt.gca().tick_params(left=False)
             plt.legend()
-        # idx = [i for i, x in enumerate(self.data['audio'])
-        #        if np.abs(x - self.data['fpga_times'][low2high]).min() > 0.01]
-        # mins = [np.abs(x - self.data['fpga_times'][low2high]).min() for x in self.data['audio']]
+
         outcome = self.overall_outcome(
             ('PASS' if size_diff == 0 else 'WARNING' if np.abs(size_diff) < 5 else 'FAIL',
-             'PASS' if binary and state_ttl_matches else 'WARNING')
+             'PASS' if state_ttl_matches else 'WARNING')
         )
         return outcome, ndiff_low2high, size_diff
 
@@ -475,7 +469,7 @@ class CameraQC(base.QC):
         if not data_for_keys(('timestamps', 'video'), self.data):
             return 'NOT_SET'
         # Check frame rate matches what we expect
-        expected = 1 / self.video_meta[self.type][self.side]['fps']
+        expected = 1 / self.video_meta[self.type][self.label]['fps']
         # TODO Remove dropped frames from test
         frame_delta = np.diff(self.data['timestamps'])
         fps_matches = np.isclose(np.median(frame_delta), expected, atol=0.01)
@@ -501,7 +495,7 @@ class CameraQC(base.QC):
         if self.data['video'] is None:
             return 'NOT_SET'
         actual = self.data['video']
-        expected = self.video_meta[self.type][self.side]
+        expected = self.video_meta[self.type][self.label]
         match = actual['width'] == expected['width'] and actual['height'] == expected['height']
         return 'PASS' if match else 'FAIL'
 
@@ -516,15 +510,30 @@ class CameraQC(base.QC):
         :returns: outcome string, frame offset
         """
         wheel_present = data_for_keys(('position', 'timestamps', 'period'), self.data['wheel'])
-        if not wheel_present or self.side == 'body':
+        if not wheel_present or self.label == 'body':
             return 'NOT_SET'
 
-        aln = MotionAlignment(self.eid, self.one, self.log)
+        # Check the selected wheel movement period occurred within camera timestamp time
+        camera_times = self.data['timestamps']
+        in_range = within_ranges(camera_times, self.data['wheel']['period'].reshape(-1, 2))
+        if not in_range.any():
+            # Check if any camera timestamps overlap with the wheel times
+            if np.any(np.logical_and(
+                camera_times > self.data['wheel']['timestamps'][0],
+                camera_times < self.data['wheel']['timestamps'][-1])
+            ):
+                _log.warning('Unable to check wheel alignment: '
+                             'chosen movement is not during video')
+                return 'NOT_SET'
+            else:
+                # No overlap, return fail
+                return 'FAIL'
+        aln = MotionAlignment(self.eid, self.one, self.log, session_path=self.session_path)
         aln.data = self.data.copy()
-        aln.data['camera_times'] = {self.side: self.data['timestamps']}
-        aln.video_paths = {self.side: self.video_path}
+        aln.data['camera_times'] = {self.label: camera_times}
+        aln.video_paths = {self.label: self.video_path}
         offset, *_ = aln.align_motion(period=self.data['wheel'].period,
-                                      display=display, side=self.side)
+                                      display=display, side=self.label)
         if offset is None:
             return 'NOT_SET'
         if display:
@@ -559,7 +568,7 @@ class CameraQC(base.QC):
         """
         if not test and self.data['frame_samples'] is None:
             return 'NOT_SET'
-        refs = self.load_reference_frames(self.side)
+        refs = self.load_reference_frames(self.label)
         # ensure iterable
         pos_thresh = np.sort(np.array(pos_thresh))
         hist_thresh = np.sort(np.array(hist_thresh))
@@ -677,14 +686,14 @@ class CameraQC(base.QC):
                 'right': (np.s_[:196, 397:], np.s_[221:, 255:]),
                 'body': (np.s_[143:274, 84:433],)  # body holder
             }
-            roi = roi or ROI[self.side]
+            roi = roi or ROI[self.label]
 
         if test:
             """In test mode load a reference frame and run it through a normalized box filter with
             increasing kernel size.
             """
             idx = (0,)
-            ref = self.load_reference_frames(self.side)[idx]
+            ref = self.load_reference_frames(self.label)[idx]
             kernal_sz = np.unique(np.linspace(0, 15, n, dtype=int))
             n = kernal_sz.size  # Size excluding repeated kernels
             img = np.empty((n, *ref.shape), dtype=np.uint8)
@@ -789,8 +798,8 @@ class CameraQC(base.QC):
             'right': ((14, 174), (430, 618)),
             'body': ((141, 272), (90, 339))
         }
-        roi = roi or ROI[self.side]
-        refs = self.load_reference_frames(self.side) if refs is None else refs
+        roi = roi or ROI[self.label]
+        refs = self.load_reference_frames(self.label) if refs is None else refs
 
         frames = refs if test else self.data['frame_samples']
         template = refs[0][tuple(slice(*r) for r in roi)]
@@ -852,6 +861,6 @@ def run_all_qc(session, cameras=('left', 'right', 'body'), **kwargs):
     run_args = {k: kwargs.pop(k) for k in ('download_data', 'extract_times', 'update')
                 if k in kwargs.keys()}
     for camera in cameras:
-        qc[camera] = CameraQC(session, side=camera, **kwargs)
+        qc[camera] = CameraQC(session, camera, **kwargs)
         qc[camera].run(**run_args)
     return qc

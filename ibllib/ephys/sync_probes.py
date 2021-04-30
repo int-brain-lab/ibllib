@@ -9,7 +9,7 @@ import alf.io
 from brainbox.core import Bunch
 from ibllib.exceptions import Neuropixel3BSyncFrontsNonMatching
 import ibllib.io.spikeglx as spikeglx
-from ibllib.io.extractors.ephys_fpga import _get_sync_fronts, get_ibl_sync_map
+from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_ibl_sync_map
 
 _logger = logging.getLogger('ibllib')
 
@@ -132,12 +132,12 @@ def version3B(ses_path, display=True, type=None, tol=2.5):
     # should have at least 2 probes and only one nidq
     assert(len(nidq_file) == 1)
     nidq_file = nidq_file[0]
-    sync_nidq = _get_sync_fronts(nidq_file.sync, nidq_file.sync_map['imec_sync'])
+    sync_nidq = get_sync_fronts(nidq_file.sync, nidq_file.sync_map['imec_sync'])
 
     qc_all = True
     out_files = []
     for ef in ephys_files:
-        sync_probe = _get_sync_fronts(ef.sync, ef.sync_map['imec_sync'])
+        sync_probe = get_sync_fronts(ef.sync, ef.sync_map['imec_sync'])
         sr = _get_sr(ef)
         try:
             assert(sync_nidq.times.size == sync_probe.times.size)

@@ -3,9 +3,10 @@ import numpy as np
 import scipy.signal
 
 import ibllib.dsp.fourier as ft
-from ibllib.dsp import WindowGenerator, rms, rises, falls, fronts, smooth, shift, fit_phase,\
-    fcn_cosine
+from ibllib.dsp import (WindowGenerator, rms, rises, falls, fronts, smooth, fshift, fit_phase,
+                        fcn_cosine)
 from ibllib.dsp.utils import parabolic_max, sync_timestamps
+import ibllib.dsp.voltage as voltage
 
 
 class TestSyncTimestamps(unittest.TestCase):
@@ -93,17 +94,28 @@ class TestPhaseRegression(unittest.TestCase):
 
 class TestShift(unittest.TestCase):
 
+    def test_shift_floats(self):
+        ns = 500
+        w = scipy.signal.ricker(ns, 10)
+        w_ = fshift(w.astype(np.float32), 1)
+        assert w_.dtype == np.float32
+
     def test_shift_1d(self):
         ns = 500
         w = scipy.signal.ricker(ns, 10)
-        self.assertTrue(np.all(np.isclose(shift(w, 1), np.roll(w, 1))))
+        self.assertTrue(np.all(np.isclose(fshift(w, 1), np.roll(w, 1))))
 
     def test_shift_2d(self):
         ns = 500
         w = scipy.signal.ricker(ns, 10)
         w = np.tile(w, (100, 1)).transpose()
-        self.assertTrue(np.all(np.isclose(shift(w, 1, axis=0), np.roll(w, 1, axis=0))))
-        self.assertTrue(np.all(np.isclose(shift(w, 1, axis=1), np.roll(w, 1, axis=1))))
+        self.assertTrue(np.all(np.isclose(fshift(w, 1, axis=0), np.roll(w, 1, axis=0))))
+        self.assertTrue(np.all(np.isclose(fshift(w, 1, axis=1), np.roll(w, 1, axis=1))))
+        # # test with individual shifts for each trace
+        self.assertTrue(
+            np.all(np.isclose(fshift(w, np.ones(w.shape[1]), axis=0), np.roll(w, 1, axis=0))))
+        self.assertTrue(
+            np.all(np.isclose(fshift(w, np.ones(w.shape[0]), axis=1), np.roll(w, 1, axis=1))))
 
 
 class TestSmooth(unittest.TestCase):
@@ -314,5 +326,35 @@ class TestWindowGenerator(unittest.TestCase):
         self.assertTrue(all(val == np.array([1, -1, 1, -1, 1, -1, 1, -1])))
 
 
+class TestVoltage(unittest.TestCase):
+
+    def test_fk(self):
+        """
+        creates a couple of plane waves and separate them using the velocity HP filter
+        """
+        ntr, ns, sr, dx, v1, v2 = (500, 2000, 0.002, 5, 2000, 1000)
+        data = np.zeros((ntr, ns), np.float32)
+        data[:, :100] = scipy.signal.ricker(100, 4)
+        offset = np.arange(ntr) * dx
+        offset = np.abs(offset - np.mean(offset))
+        data_v1 = fshift(data, offset / v1 / sr)
+        data_v2 = fshift(data, offset / v2 / sr)
+
+        noise = np.random.randn(ntr, ns) / 40
+        fk = voltage.fk(data_v1 + data_v2 + noise, si=sr, dx=dx, vbounds=[1200, 1500],
+                        ntr_pad=10, ntr_tap=15, lagc=.25)
+        fknoise = voltage.fk(noise, si=sr, dx=dx, vbounds=[1200, 1500],
+                             ntr_pad=10, ntr_tap=15, lagc=.25)
+        # at least 90% of the traces should be below 50dB and 98% below 40 dB
+        assert np.mean(20 * np.log10(rms(fk - data_v1 - fknoise)) < -50) > .9
+        assert np.mean(20 * np.log10(rms(fk - data_v1 - fknoise)) < -40) > .98
+        # test the K option
+        kbands = np.sin(np.arange(ns) / ns * 8 * np.pi)
+        fk = voltage.fk(data_v1 + data_v2 + noise + kbands, si=sr, dx=dx, vbounds=[1200, 1500],
+                        ntr_pad=10, ntr_tap=15, lagc=.25,
+                        kfilt={'bounds': [0, .01], 'btype': 'hp'})
+        assert np.mean(20 * np.log10(rms(fk - data_v1 - fknoise)) < -40) > .9
+
+
 if __name__ == "__main__":
-    unittest.main(exit=False)
+    unittest.main(exit=False, verbosity=2)

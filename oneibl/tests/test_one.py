@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 from uuid import UUID
 import requests
 from pathlib import Path
@@ -10,6 +11,7 @@ import numpy as np
 import ibllib.io.hashfile as hashfile
 from ibllib.exceptions import ALFObjectNotFound
 from alf.io import remove_uuid_file
+import oneibl.params as params
 from oneibl.one import ONE
 
 
@@ -18,49 +20,33 @@ one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
           password='TapetesBloc18')
 
 
-class TestOneOffline(unittest.TestCase):
+class TestOneSetup(unittest.TestCase):
 
     def setUp(self) -> None:
-        # init: create a temp directory and copy the fixtures
-        init_cache_file = Path(__file__).parent.joinpath('fixtures', '.one_cache.parquet')
-
-        # Create a temporary directory
-        self.test_dir = tempfile.TemporaryDirectory()
-
-        cache_dir = Path(self.test_dir.name)
-        shutil.copyfile(init_cache_file, cache_dir.joinpath(init_cache_file.name))
-
-        # test the constructor
-        self.one = ONE(offline=True)
-        self.assertTrue(self.one._cache.shape[1] == 14)
-
-        self.eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
-
-    def test_one_offline(self) -> None:
-        # test the load with download false so it returns only file paths
-        one.list(self.eid)
-        dtypes = ['_spikeglx_sync.channels',
-                  '_spikeglx_sync.polarities',
-                  '_spikeglx_sync.times',
-                  '_iblrig_taskData.raw',
-                  '_iblrig_taskSettings.raw',
-                  'ephysData.raw.meta',
-                  'camera.times',
-                  'ephysData.raw.wiring']
-        one.load(self.eid, dataset_types=dtypes, dclass_output=False,
-                 download_only=True, offline=False)
-
-    def test_path_eid(self):
-        """Test `path_from_eid` and `eid_from_path` methods"""
-        eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
-        # path from eid
-        session_path = self.one.path_from_eid(eid)
-        self.assertEqual(session_path.parts[-3:], ('clns0730', '2018-08-24', '002'))
-        # eid from path
-        self.assertEqual(eid, one.eid_from_path(session_path))
+        self.pars_file = Path.home().joinpath('.fake_pars', '.oneibl')
 
     def tearDown(self) -> None:
-        self.test_dir.cleanup()
+        self.pars_file.unlink(missing_ok=True)
+        self.pars_file.parent.rmdir()
+
+    def test_setup_silent(self):
+        # Mock getfile function to return a path to non-existent file instead of usual one pars
+        with mock.patch('oneibl.params.iopar.getfile') as mock_getfile:
+            mock_getfile.return_value = str(self.pars_file)
+            one = ONE(offline=True, silent=True)
+        self.assertCountEqual(one._par.as_dict(), params.default().as_dict())
+        self.assertTrue(self.pars_file.exists())
+
+    def test_setup(self):
+        params.input = lambda prompt: 'mock_input'
+        params.getpass = lambda prompt: 'mock_pwd'
+        params.print = lambda text: 'mock_print'
+        # Mock getfile function to return a path to non-existent file instead of usual one pars
+        with mock.patch('oneibl.params.iopar.getfile') as mock_getfile:
+            mock_getfile.return_value = str(self.pars_file)
+            one = ONE(offline=True, silent=False)
+        self.assertEqual(one._par.ALYX_PWD, 'mock_pwd')
+        self.assertTrue(self.pars_file.exists())
 
 
 class TestSearch(unittest.TestCase):
@@ -324,5 +310,50 @@ class TestMisc(unittest.TestCase):
         self.assertIsInstance(dsets, dict)
 
 
+class TestOneOffline(unittest.TestCase):
+
+    def setUp(self) -> None:
+        # init: create a temp directory and copy the fixtures
+        init_cache_file = Path(__file__).parent.joinpath('fixtures', '.one_cache.parquet')
+
+        # Create a temporary directory
+        self.test_dir = tempfile.TemporaryDirectory()
+
+        cache_dir = Path(self.test_dir.name)
+        shutil.copyfile(init_cache_file, cache_dir.joinpath(init_cache_file.name))
+
+        # test the constructor
+        self.one = ONE(offline=True)
+        self.assertTrue(self.one._cache.shape[1] == 14)
+
+        self.eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
+
+    def test_one_offline(self) -> None:
+        # test the load with download false so it returns only file paths
+        one.list(self.eid)
+        dtypes = ['_spikeglx_sync.channels',
+                  '_spikeglx_sync.polarities',
+                  '_spikeglx_sync.times',
+                  '_iblrig_taskData.raw',
+                  '_iblrig_taskSettings.raw',
+                  'ephysData.raw.meta',
+                  'camera.times',
+                  'ephysData.raw.wiring']
+        one.load(self.eid, dataset_types=dtypes, dclass_output=False,
+                 download_only=True, offline=False)
+
+    def test_path_eid(self):
+        """Test `path_from_eid` and `eid_from_path` methods"""
+        eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
+        # path from eid
+        session_path = self.one.path_from_eid(eid)
+        self.assertEqual(session_path.parts[-3:], ('clns0730', '2018-08-24', '002'))
+        # eid from path
+        self.assertEqual(eid, one.eid_from_path(session_path))
+
+    def tearDown(self) -> None:
+        self.test_dir.cleanup()
+
+
 if __name__ == '__main__':
-    unittest.main(exit=False)
+    unittest.main(exit=False, verbosity=2)
