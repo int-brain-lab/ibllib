@@ -1,4 +1,6 @@
 - TaskQC: exclude stim_freeze from overall session qc
+- brainbox.modeling: New API for using linear and poisson models, doing
+  sequential feature selection.
 
 ## Release Notes 1.9
 ### Release Notes 1.9.1 - 2021-04-19
