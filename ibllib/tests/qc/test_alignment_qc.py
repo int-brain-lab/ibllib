@@ -101,7 +101,7 @@ class TestAlignmentQcExisting(unittest.TestCase):
         cls.trajectory.update({'probe_insertion': cls.probe_id})
 
     def test_alignments(self):
-        checks = getmembers(self, lambda x: isfunction(x) and re.match('^_\d{2}_.*', x.__name__))
+        checks = getmembers(self, lambda x: isfunction(x) and re.match(r'^_\d{2}_.*', x.__name__))
         # Run numbered functions in order
         for _, fn in sorted(checks, key=lambda x: x[0]):
             self._get_prev_traj_id()
@@ -236,7 +236,7 @@ class TestAlignmentQcManual(unittest.TestCase):
         cls.traj = one.alyx.rest('trajectories', 'create', data=cls.trajectory)
 
     def test_alignments(self):
-        checks = getmembers(self, lambda x: isfunction(x) and re.match('^_\d{2}_.*', x.__name__))
+        checks = getmembers(self, lambda x: isfunction(x) and re.match(r'^_\d{2}_.*', x.__name__))
         # Run numbered functions in order
         for _, fn in sorted(checks, key=lambda x: x[0]):
             self._get_prev_traj_id()

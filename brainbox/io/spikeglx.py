@@ -80,9 +80,9 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
         ch = np.asarray(ch)
         ch = ch.reshape((ch.size, 1)) if ch.size == 1 else ch
         if np.any(ch < 0) or np.any(ch > n_ch_probe):
-            raise Exception(f'At least one specified channel number is impossible. '
-                            'The minimum channel number was {np.min(ch)}, '
-                            'and the maximum channel number was {np.max(ch)}. '
+            raise Exception('At least one specified channel number is impossible. '
+                            f'The minimum channel number was {np.min(ch)}, '
+                            f'and the maximum channel number was {np.max(ch)}. '
                             'Check specified channel numbers and try again.')
 
         if car:  # compute spatial noise in chunks
