@@ -7,7 +7,7 @@ import subprocess
 import sys
 import traceback
 
-from ibllib.io.extractors.base import get_session_extractor_type
+from ibllib.io.extractors.base import get_session_extractor_type, get_pipeline
 from ibllib.pipes import ephys_preprocessing, training_preprocessing, tasks
 from ibllib.time import date2isostr
 
@@ -98,15 +98,16 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
             continue
         if dsets is not None:
             all_datasets.extend(dsets)
-        session_type = get_session_extractor_type(session_path)
-        if session_type in ['biased', 'habituation', 'training']:
+        pipeline = get_pipeline(session_path)
+        if pipeline == 'training':
             pipe = training_preprocessing.TrainingExtractionPipeline(session_path, one=one)
         # only start extracting ephys on a raw_session.flag
-        elif session_type in ['ephys'] and flag_file.name == 'raw_session.flag':
+        elif pipeline == 'ephys' and flag_file.name == 'raw_session.flag':
             pipe = ephys_preprocessing.EphysExtractionPipeline(session_path, one=one)
         else:
-            _logger.info(f"Session type {session_type} as no matching extractor {session_path}")
-            return
+            _logger.info(f"Session type {get_session_extractor_type(session_path)} as no matching"
+                         f" pipeline pattern {session_path}")
+            continue
         if rerun:
             rerun__status__in = '__all__'
         else:
