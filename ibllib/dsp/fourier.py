@@ -169,9 +169,9 @@ def _freq_vector(f, b, typ='lp'):
         :return: amplitude modulated frequency vector
     """
     filc = fcn_cosine(b)(f)
-    if typ == 'hp':
+    if typ.lower() in ['hp', 'highpass']:
         return filc
-    elif typ == 'lp':
+    elif typ.lower() in ['lp', 'lowpass']:
         return 1 - filc
 
 

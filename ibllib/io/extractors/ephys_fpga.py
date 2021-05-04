@@ -292,7 +292,7 @@ def _assign_events_to_trial(t_trial_start, t_event, take='last'):
     return t_event_nans
 
 
-def _get_sync_fronts(sync, channel_nb, tmin=None, tmax=None):
+def get_sync_fronts(sync, channel_nb, tmin=None, tmax=None):
     selection = sync['channels'] == channel_nb
     selection = np.logical_and(selection, sync['times'] <= tmax) if tmax else selection
     selection = np.logical_and(selection, sync['times'] >= tmin) if tmin else selection
@@ -314,7 +314,7 @@ def _clean_frame2ttl(frame2ttl, display=False):
     if iko.size > (0.1 * frame2ttl['times'].size):
         _logger.warning(f'{iko.size} ({iko.size / frame2ttl["times"].size * 100} %) '
                         f'frame to TTL polarity switches below {F2TTL_THRESH} secs')
-    if display:
+    if display:  # pragma: no cover
         from ibllib.plots import squares
         plt.figure()
         squares(frame2ttl['times'] * 1000, frame2ttl['polarities'], yrange=[0.1, 0.9])
@@ -336,8 +336,8 @@ def extract_wheel_sync(sync, chmap=None):
     :return: positions (np.array)
     """
     wheel = {}
-    channela = _get_sync_fronts(sync, chmap['rotary_encoder_0'])
-    channelb = _get_sync_fronts(sync, chmap['rotary_encoder_1'])
+    channela = get_sync_fronts(sync, chmap['rotary_encoder_0'])
+    channelb = get_sync_fronts(sync, chmap['rotary_encoder_1'])
     wheel['re_ts'], wheel['re_pos'] = _rotary_encoder_positions_from_fronts(
         channela['times'], channela['polarities'], channelb['times'], channelb['polarities'],
         ticks=WHEEL_TICKS, radius=1, coding='x4')
@@ -355,13 +355,13 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tm
     defaults to False
     :return: trials dictionary
     """
-    bpod = _get_sync_fronts(sync, chmap['bpod'], tmax=tmax)
+    bpod = get_sync_fronts(sync, chmap['bpod'], tmax=tmax)
     if bpod.times.size == 0:
         raise err.SyncBpodFpgaException('No Bpod event found in FPGA. No behaviour extraction. '
                                         'Check channel maps.')
-    frame2ttl = _get_sync_fronts(sync, chmap['frame2ttl'], tmax=tmax)
+    frame2ttl = get_sync_fronts(sync, chmap['frame2ttl'], tmax=tmax)
     frame2ttl = _clean_frame2ttl(frame2ttl)
-    audio = _get_sync_fronts(sync, chmap['audio'], tmax=tmax)
+    audio = get_sync_fronts(sync, chmap['audio'], tmax=tmax)
     # extract events from the fronts for each trace
     t_trial_start, t_valve_open, t_iti_in = _assign_events_bpod(bpod['times'], bpod['polarities'])
     # one issue is that sometimes bpod pulses may not have been detected, in this case
@@ -395,7 +395,7 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tm
     trials['feedback_times'][ind_err] = trials['errorCue_times'][ind_err]
     trials['intervals'] = np.c_[t_trial_start, trials['itiIn_times']]
 
-    if display:
+    if display:  # pragma: no cover
         width = 0.5
         ymax = 5
         if isinstance(display, bool):
@@ -403,7 +403,7 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tm
             ax = plt.gca()
         else:
             ax = display
-        r0 = _get_sync_fronts(sync, chmap['rotary_encoder_0'])
+        r0 = get_sync_fronts(sync, chmap['rotary_encoder_0'])
         plots.squares(bpod['times'], bpod['polarities'] * 0.4 + 1, ax=ax, color='k')
         plots.squares(frame2ttl['times'], frame2ttl['polarities'] * 0.4 + 2, ax=ax, color='k')
         plots.squares(audio['times'], audio['polarities'] * 0.4 + 3, ax=ax, color='k')
@@ -422,11 +422,11 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tm
                              ax=ax, label='stim off', color='c', linewidth=width)
         plots.vertical_lines(trials['stimOn_times'], ymin=0, ymax=ymax,
                              ax=ax, label='stimOn_times', color='tab:orange', linewidth=width)
-        c = _get_sync_fronts(sync, chmap['left_camera'])
+        c = get_sync_fronts(sync, chmap['left_camera'])
         plots.squares(c['times'], c['polarities'] * 0.4 + 5, ax=ax, color='k')
-        c = _get_sync_fronts(sync, chmap['right_camera'])
+        c = get_sync_fronts(sync, chmap['right_camera'])
         plots.squares(c['times'], c['polarities'] * 0.4 + 6, ax=ax, color='k')
-        c = _get_sync_fronts(sync, chmap['body_camera'])
+        c = get_sync_fronts(sync, chmap['body_camera'])
         plots.squares(c['times'], c['polarities'] * 0.4 + 7, ax=ax, color='k')
         ax.legend()
         ax.set_yticklabels(['', 'bpod', 'f2ttl', 'audio', 're_0', ''])

@@ -62,9 +62,30 @@ _log = logging.getLogger('ibllib')
 
 class TaskQC(base.QC):
     """A class for computing task QC metrics"""
-    criteria = {"PASS": 0.99,
-                "WARNING": 0.95,
-                "FAIL": 0}
+    criteria = {"PASS": 0.99, "WARNING": 0.95, "FAIL": 0}
+    fcns_value2status = {'default': lambda x: TaskQC._thresholding(x),
+                         '_task_stimFreeze_delays': lambda x: - 1,
+                         '_task_response_stimFreeze_delays': lambda x: -1}
+
+    @staticmethod
+    def _thresholding(qc_value, thresholds=None):
+        """
+        Computes the outcome of a single key by applying thresholding.
+        :param qc_value: proportion of passing qcs, between 0 and 1
+        :param thresholds: dictionary with keys 'PASS', 'WARNING', 'FAIL'
+         (cf. TaskQC.criteria attribute)
+        :return: int where -1: NOT_SET, 0: FAIL, 1: WARNING, 2: PASS
+        """
+        MAX_BOUND, MIN_BOUND = (1, 0)
+        if not thresholds:
+            thresholds = TaskQC.criteria.copy()
+        if qc_value is None or np.isnan(qc_value):
+            return int(-1)
+        elif (qc_value > MAX_BOUND) or (qc_value < MIN_BOUND):
+            raise ValueError("Values out of bound")
+        else:
+            passed = qc_value >= np.fromiter(thresholds.values(), dtype=float)
+            return int(np.argmax(passed))
 
     def __init__(self, session_path_or_eid, **kwargs):
         """
@@ -132,41 +153,46 @@ class TaskQC(base.QC):
             self.update(outcome, 'task')
         return outcome, results
 
-    def compute_session_status(self):
+    @staticmethod
+    def compute_session_status_from_dict(results):
         """
-        Compute the overall session status for the task QC from the individual checks.
+        Given a dictionary of results, computes the overall session QC for each key and aggregates
+        in a single value
+        :param results: a dictionary of qc keys containing (usually scalar) values
         :return: Overall session QC outcome as a string
-        :return: A map of QC tests and the proportion of data points that passed them
-        :return: A map of QC tests and their outcomes
+        :return: A dict of QC tests and their outcomes
         """
-        if self.passed is None:
-            raise AttributeError('passed is None; compute QC first')
-        MAX_BOUND, MIN_BOUND = (1, 0)  # Expect outcomes to be between 0 and 1
-        # Get mean passed of each check, or None if passed is None or all NaN
-        results = {k: None if v is None or np.isnan(v).all() else np.nanmean(v)
-                   for k, v in self.passed.items()}
-
-        # Ensure criteria are in order
-        criteria = self.criteria.items()
-        criteria = {k: v for k, v in sorted(criteria, key=lambda x: x[1], reverse=True)}
-        indices = []
-
-        # Apply the outcome thresholds to each of the results
-        for v in results.values():
-            if v is None or np.isnan(v):
-                indices.append(int(-1))
-            elif (v > MAX_BOUND) or (v < MIN_BOUND):
-                raise ValueError("Values out of bound")
+        v2status_fcns = TaskQC.fcns_value2status  # the need to have this as a parameter may arise
+        indices = np.zeros(len(results), dtype=int)
+        for i, k in enumerate(results):
+            if k in v2status_fcns:
+                indices[i] = v2status_fcns[k](results[k])
             else:
-                passed = v >= np.fromiter(criteria.values(), dtype=float)
-                indices.append(int(np.argmax(passed)))
+                indices[i] = v2status_fcns['default'](results[k])
 
         def key_map(x):
-            return 'NOT_SET' if x < 0 else list(criteria.keys())[x]
+            return 'NOT_SET' if x < 0 else list(TaskQC.criteria.keys())[x]
         # Criteria map is in order of severity so the max index is our overall QC outcome
         session_outcome = key_map(max(indices))
         outcomes = dict(zip(results.keys(), map(key_map, indices)))
+        return session_outcome, outcomes
 
+    def compute_session_status(self):
+        """
+        Computes the overall session QC for each key and aggregates in a single value
+        :return: Overall session QC outcome as a string
+        :return: A dict of QC tests and the proportion of data points that passed them
+        :return: A dict of QC tests and their outcomes
+        """
+        if self.passed is None:
+            raise AttributeError('passed is None; compute QC first')
+        # Get mean passed of each check, or None if passed is None or all NaN
+        results = {k: None if v is None or np.isnan(v).all() else np.nanmean(v)
+                   for k, v in self.passed.items()}
+        # Ensure criteria are in order
+        criteria = self.criteria.items()
+        criteria = {k: v for k, v in sorted(criteria, key=lambda x: x[1], reverse=True)}
+        session_outcome, outcomes = self.compute_session_status_from_dict(results)
         return session_outcome, results, outcomes
 
 

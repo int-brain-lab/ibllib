@@ -11,6 +11,28 @@ import ibllib.pipes.scan_fix_passive_files as fix
 
 
 class TestExtractors2Tasks(unittest.TestCase):
+
+    def test_task_to_pipeline(self):
+        dd = ibllib.io.extractors.base._get_task_types_json_config()
+        types = list(set([dd[k] for k in dd]))
+        # makes sure that for every defined task type there is an acutal pipeline
+        for type in types:
+            assert ibllib.io.extractors.base._get_pipeline_from_task_type(type)
+            print(type, ibllib.io.extractors.base._get_pipeline_from_task_type(type))
+        pipe_out = [
+            ("ephys_biased_opto", "ephys"),
+            ("ephys_training", "ephys"),
+            ("training", "training"),
+            ("biased_opto", "training"),
+            ("habituation", "training"),
+            ("biased", "training"),
+            ("mock_ephys", "ephys"),
+            ("sync_ephys", "ephys"),
+            ("ephys", "ephys"),
+        ]
+        for typ, exp in pipe_out:
+            assert ibllib.io.extractors.base._get_pipeline_from_task_type(typ) == exp
+
     def test_task_names_extractors(self):
         """
         This is to test against regressions
@@ -339,6 +361,7 @@ class TestPipesMisc(unittest.TestCase):
         )
         # Verify it's been inserted
         alyx_insertion = one.alyx.rest("insertions", "list", session=eid)
+        alyx_insertion = [x for x in alyx_insertion if x["model"] == "3A"]
         self.assertTrue(alyx_insertion[0]["model"] == "3A")
         self.assertTrue(alyx_insertion[0]["name"] in ["probe00", "probe01"])
         self.assertTrue(alyx_insertion[1]["model"] == "3A")
@@ -420,4 +443,4 @@ class TestScanFixPassiveFiles(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main(exit=False)
+    unittest.main(exit=False, verbosity=2)

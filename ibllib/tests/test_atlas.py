@@ -121,6 +121,39 @@ class TestAtlasSlicesConversion(unittest.TestCase):
         vxyz = self.ba.ccf2xyz(vertices, ccf_order='apdvml')
         self.assertTrue(np.all(np.isclose(self.ba.xyz2ccf(vxyz, ccf_order='apdvml'), vertices)))
 
+        # check if we have the ccf origin we get extremes of bregma atlas
+        ccf_apdvml = np.array([0, 0, 0])
+        xyz_mlapdv = self.ba.ccf2xyz(ccf_apdvml, ccf_order='apdvml')
+        assert np.all(np.isclose(xyz_mlapdv, np.array([self.ba.bc.xlim[0], self.ba.bc.ylim[0],
+                                                       self.ba.bc.zlim[0]])))
+        # check that if we move in one direction in ccf the correct dimension in xyz change
+        # Move in ML
+        ccf_apdvml = np.array([0, 0, 1000])
+        xyz_mlapdv = self.ba.ccf2xyz(ccf_apdvml, ccf_order='apdvml')
+        assert np.all(np.isclose(xyz_mlapdv[1:], np.array([self.ba.bc.ylim[0],
+                                                           self.ba.bc.zlim[0]])))
+        self.assertFalse(xyz_mlapdv[0] == self.ba.bc.xlim[0])
+        self.assertTrue(self.ba.bc.xlim[0] < xyz_mlapdv[0] < self.ba.bc.xlim[1])
+        assert np.all(np.isclose(self.ba.xyz2ccf(xyz_mlapdv, 'apdvml'), ccf_apdvml))
+
+        # Move in DV
+        ccf_apdvml = np.array([0, 1000, 0])
+        xyz_mlapdv = self.ba.ccf2xyz(ccf_apdvml, ccf_order='apdvml')
+        assert np.all(np.isclose(xyz_mlapdv[0:2], np.array([self.ba.bc.xlim[0],
+                                                            self.ba.bc.ylim[0]])))
+        self.assertFalse(xyz_mlapdv[2] == self.ba.bc.zlim[0])
+        self.assertTrue(self.ba.bc.zlim[0] > xyz_mlapdv[2] > self.ba.bc.zlim[1])
+        assert np.all(np.isclose(self.ba.xyz2ccf(xyz_mlapdv, 'apdvml'), ccf_apdvml))
+
+        # Move in AP
+        ccf_apdvml = np.array([1000, 0, 0])
+        xyz_mlapdv = self.ba.ccf2xyz(ccf_apdvml, ccf_order='apdvml')
+        assert np.all(np.isclose(xyz_mlapdv[[0, 2]], np.array([self.ba.bc.xlim[0],
+                                                               self.ba.bc.zlim[0]])))
+        self.assertFalse(xyz_mlapdv[1] == self.ba.bc.ylim[0])
+        self.assertTrue(self.ba.bc.ylim[0] > xyz_mlapdv[1] > self.ba.bc.ylim[1])
+        assert np.all(np.isclose(self.ba.xyz2ccf(xyz_mlapdv, 'apdvml'), ccf_apdvml))
+
 
 class TestInsertion(unittest.TestCase):
 
@@ -287,4 +320,4 @@ class TestsCoordinatesSimples(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main(exit=False)
+    unittest.main(exit=False, verbosity=2)

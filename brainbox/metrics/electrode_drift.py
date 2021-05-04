@@ -61,7 +61,7 @@ def estimate_drift(spike_times, spike_amps, spike_depths, display=False):
     drift = smooth.rolling_window(raw_drift, window_len=NT_SMOOTH, window='hanning')
     drift = drift - np.mean(drift)
     ts = DT_SECS * np.arange(drift.size)
-    if display:
+    if display:  # pragma: no cover
         import matplotlib.pyplot as plt
         from brainbox.plot import driftmap
         fig1, axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [.15, .85]},
