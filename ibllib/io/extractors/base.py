@@ -209,3 +209,20 @@ def get_session_extractor_type(session_path):
         _logger.warning(str(session_path) +
                         f" No extractors were found for {extractor_type} ChoiceWorld")
         return False
+
+
+def get_pipeline(session_path):
+    """
+    Get the pre-processinf pipeline name from a session path
+    :param session_path:
+    :return:
+    """
+    stype = get_session_extractor_type(session_path)
+    return _get_pipeline_from_task_type(stype)
+
+
+def _get_pipeline_from_task_type(stype):
+    if 'ephys' in stype:
+        return 'ephys'
+    elif stype in ['habituation', 'training', 'biased', 'biased_opto']:
+        return 'training'
