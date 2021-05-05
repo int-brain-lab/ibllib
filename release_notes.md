@@ -1,6 +1,14 @@
-- TaskQC: exclude stim_freeze from overall session qc
+## Release Notes 1.11
+### Release Notes 1.11.0
 - brainbox.modeling: New API for using linear and poisson models, doing
   sequential feature selection.
+
+## Release Notes 1.10
+### Release Notes 1.10.0 - 2021-05-04
+- TaskQC: exclude stim_freeze from overall session qc
+- Get modality from task type to include personal projects
+- Bugfix Atlas ccf coordinates order
+- Tool to label Critical sessions / insertions reasons
 
 ## Release Notes 1.9
 ### Release Notes 1.9.1 - 2021-04-19
