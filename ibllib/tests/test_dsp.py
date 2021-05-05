@@ -1,6 +1,7 @@
 import unittest
 import numpy as np
 import scipy.signal
+import scipy.fft
 
 import ibllib.dsp.fourier as ft
 from ibllib.dsp import (WindowGenerator, rms, rises, falls, fronts, smooth, fshift, fit_phase,
@@ -93,6 +94,13 @@ class TestPhaseRegression(unittest.TestCase):
 
 
 class TestShift(unittest.TestCase):
+
+    def test_shift_already_fft(self):
+        for ns in [500, 501]:
+            w = scipy.signal.ricker(ns, 10)
+            W = scipy.fft.rfft(w)
+            ws = np.real(scipy.fft.irfft(fshift(W, 1, ns=np.shape(w)[0]), n=ns))
+            self.assertTrue(np.all(np.isclose(ws, np.roll(w, 1))))
 
     def test_shift_floats(self):
         ns = 500
