@@ -540,6 +540,10 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
         trialsdf.set_index(np.nonzero(keeptrials)[0], inplace=True)
     trialsdf['trial_start'] = trialsdf['stimOn_times'] - t_before
     trialsdf['trial_end'] = trialsdf['feedback_times'] + t_after
+    tdiffs = trialsdf['trial_end'] - np.roll(trialsdf['trial_start'], -1)
+    if np.any(tdiffs[:-1] > 0):
+        logging.warn(f'{sum(tdiffs[:-1] > 0)} trials overlapping due to t_before and t_after '
+                     'values. Try reducing one or both!')
     if not ret_wheel and not ret_abswheel:
         return trialsdf
 
