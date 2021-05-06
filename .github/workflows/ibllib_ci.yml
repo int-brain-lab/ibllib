@@ -10,6 +10,7 @@ on:
     branches: [ master, develop ]
 env:
   HTTP_DATA_SERVER_PWD: ${{ secrets.HTTP_DATA_SERVER_PWD }}
+  ALYX_PWD: ${{ secrets.HTTP_DATA_SERVER_PWD }}
 
 jobs:
   build:
@@ -40,11 +41,11 @@ jobs:
       if: matrix.os == 'windows-latest'
       shell: powershell
       run: |
-        python ibllib/pipes/set_pass.py "$env:HTTP_DATA_SERVER_PWD"
+        python ibllib/pipes/set_pass.py "$env:HTTP_DATA_SERVER_PWD" "$env:ALYX_PWD"
     - name: Set secret Ubuntu
       if: matrix.os == 'ubuntu-latest'
       run: |
-        python ibllib/pipes/set_pass.py "$HTTP_DATA_SERVER_PWD"
+        python ibllib/pipes/set_pass.py "$HTTP_DATA_SERVER_PWD" "$ALYX_PWD"
 
     - name: Flake8
       run: |
