@@ -101,7 +101,7 @@ class SequentialSelector:
                 new_feature_idx, nf_score = self._get_best_new_feature(current_mask, cells)
                 for cell in cells:
                     maskdf.at[cell, self.features[new_feature_idx.loc[cell]]] = True
-                    seqdf.loc[cell, i] = self.features[new_feature_idx]
+                    seqdf.loc[cell, i] = self.features[new_feature_idx.loc[cell]]
                     scoredf.loc[cell, i] = nf_score.loc[cell]
         self.support_ = maskdf
         self.sequences_ = seqdf
