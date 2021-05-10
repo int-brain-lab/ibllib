@@ -177,6 +177,7 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
         if process.returncode != 0:
             raise RuntimeError(error.decode("utf-8"))
         elif "run_ks2_ibl.m failed" in info_str:
+            _logger.info(info_str)
             raise RuntimeError("Matlab error ks2 log below:")
 
         # clean up and copy: output to session/spike_sorters/ks2_matlab/probeXX (ks2_dir)
