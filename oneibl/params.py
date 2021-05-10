@@ -9,8 +9,8 @@ _PAR_ID_STR = 'one_params'
 
 
 def default():
-    par = {"ALYX_LOGIN": "public_user",
-           "ALYX_PWD": "public_password",
+    par = {"ALYX_LOGIN": "intbrainlab",
+           "ALYX_PWD": "international",
            "ALYX_URL": "https://openalyx.internationalbrainlab.org",
            "CACHE_DIR": str(Path.home() / "Downloads" / "FlatIron"),
            "HTTP_DATA_SERVER": "https://ibl.flatironinstitute.org",
