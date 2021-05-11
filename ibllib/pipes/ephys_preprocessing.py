@@ -86,7 +86,6 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
     """
     Computes raw electrophysiology QC
     """
-
     gpu = 1
     io_charge = 70  # this jobs reads raw ap files
     priority = 60
@@ -150,6 +149,14 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
             shutil.rmtree(scratch_dir, ignore_errors=True)
         scratch_dir.mkdir(parents=True, exist_ok=True)
 
+        # check the nvidia status before decompressing so as to fail quicker
+        process = subprocess.Popen('nvidia-smi', shell=True, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, executable="/bin/bash")
+        info, error = process.communicate()
+        if process.returncode != 0:
+            raise RuntimeError(f"Nvida drivers not ready. \n {error.decode('utf-8')}")
+        _logger.info("nvidia-smi command successful")
+
         # decompresses using mtscomp
         tmp_ap_file = scratch_dir.joinpath(ap_file.name).with_suffix(".bin")
         mtscomp.decompress(cdata=ap_file, out=tmp_ap_file)
@@ -170,8 +177,8 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
         if process.returncode != 0:
             raise RuntimeError(error.decode("utf-8"))
         elif "run_ks2_ibl.m failed" in info_str:
-            raise RuntimeError("Matlab error ks2 log below:")
             _logger.info(info_str)
+            raise RuntimeError("Matlab error ks2 log below:")
 
         # clean up and copy: output to session/spike_sorters/ks2_matlab/probeXX (ks2_dir)
         tmp_ap_file.unlink()  # remove the uncompressed temp binary file
