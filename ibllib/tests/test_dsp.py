@@ -8,6 +8,7 @@ from ibllib.dsp import (WindowGenerator, rms, rises, falls, fronts, smooth, fshi
                         fcn_cosine)
 from ibllib.dsp.utils import parabolic_max, sync_timestamps
 import ibllib.dsp.voltage as voltage
+import ibllib.dsp.cadzow as cadzow
 
 
 class TestSyncTimestamps(unittest.TestCase):
@@ -362,6 +363,13 @@ class TestVoltage(unittest.TestCase):
                         ntr_pad=10, ntr_tap=15, lagc=.25,
                         kfilt={'bounds': [0, .01], 'btype': 'hp'})
         assert np.mean(20 * np.log10(rms(fk - data_v1 - fknoise)) < -40) > .9
+
+
+class TestCadzow(unittest.TestCase):
+
+    def trajectory_matrixes(self):
+        assert np.all(cadzow.traj_matrix_indices(4) == np.array([[1, 0], [2, 1], [3, 2]]))
+        assert np.all(cadzow.traj_matrix_indices(3) == np.array([[1, 0], [2, 1]]))
 
 
 if __name__ == "__main__":

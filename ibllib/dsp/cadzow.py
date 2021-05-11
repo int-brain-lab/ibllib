@@ -1,0 +1,53 @@
+import numpy as np
+
+from brainbox.numerical import ismember2d
+
+
+def derank(T, r):
+    u, s, v = np.linalg.svd(T)
+    # try non-integer rank as a proportion of singular values ?
+    # ik = np.searchsorted(np.cumsum(s) / np.sum(s), KEEP)
+    T_ = np.zeros_like(T)
+    for i in np.arange(r):
+        T_ += s[i] * np.outer(u.T[i], v[i])
+    return T_
+
+
+def traj_matrix_indices(n):
+    nrows = int(np.floor(n / 2 + 1))
+    ncols = int(np.ceil(n / 2))
+    itraj = np.tile(np.arange(nrows), (ncols, 1)).T + np.flipud(np.arange(ncols))
+    return itraj
+
+
+def trajectory(x, y):
+    xu, ix = np.unique(x, return_inverse=True)
+    yu, iy = np.unique(y, return_inverse=True)
+    nx, ny = (np.size(xu), np.size(yu))
+
+    tiy_ = traj_matrix_indices(ny)
+    tix_ = traj_matrix_indices(nx)
+    tiy = np.tile(tiy_, tix_.shape)
+    tix = np.repeat(np.repeat(tix_, tiy_.shape[0], axis=0), tiy_.shape[1], axis=1)
+
+    it, itr = ismember2d(np.c_[tix.flatten(), tiy.flatten()], np.c_[ix, iy])
+    it = np.unravel_index(np.where(it)[0], tiy.shape)
+
+    T = np.zeros(tix.shape, dtype=np.complex128)
+
+    trcount = np.bincount(itr)
+    return T, it, itr, trcount
+
+
+def denoise(WAV, x, y, imax=None, niter=1):
+    WAV_ = np.zeros_like(WAV)
+    imax = np.minimum(WAV.shape[-1], imax) if imax else WAV.shape[-1]
+    T, it, itr, trcount = trajectory(x, y)
+    for ind_f in np.arange(imax):
+        T[it] = WAV[itr, ind_f]
+        T_ = derank(T, 8)
+        WAV_[:, ind_f] = np.bincount(itr, weights=np.real(T_[it]))
+        WAV_[:, ind_f] += 1j * np.bincount(itr, weights=np.imag(T_[it]))
+        WAV_[:, ind_f] /= trcount
+
+    return WAV_
