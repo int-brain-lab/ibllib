@@ -1,4 +1,7 @@
 ## Release Notes 1.11
+### Release Notes 1.11.1
+- fix ks2 logging output
+- set default one params to public credentials
 ### Release Notes 1.11.0
 - brainbox.modeling: New API for using linear and poisson models, doing
   sequential feature selection.
