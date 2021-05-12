@@ -14,8 +14,8 @@ def default():
            "ALYX_URL": "https://openalyx.internationalbrainlab.org",
            "CACHE_DIR": str(Path.home() / "Downloads" / "FlatIron"),
            "HTTP_DATA_SERVER": "https://ibl.flatironinstitute.org",
-           "HTTP_DATA_SERVER_LOGIN": "iblmember",
-           "HTTP_DATA_SERVER_PWD": None,
+           "HTTP_DATA_SERVER_LOGIN": "",
+           "HTTP_DATA_SERVER_PWD": "",
            }
     return iopar.from_dict(par)
 
