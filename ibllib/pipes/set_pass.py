@@ -9,6 +9,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     pars = iopar.read('one_params').as_dict()
+    pars['HTTP_DATA_SERVER_LOGIN'] = "iblmember"
     pars['HTTP_DATA_SERVER_PWD'] = args.secret
     pars['HTTP_DATA_SERVER'] = "https://ibl.flatironinstitute.org"
     pars['ALYX_PWD'] = args.secret2
