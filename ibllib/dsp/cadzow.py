@@ -14,6 +14,11 @@ def derank(T, r):
 
 
 def traj_matrix_indices(n):
+    """
+    Computes the single spatial dimension Toeplitz-like indices from a number of spatial traces
+    :param n: number of dimensions
+    :return: 2-D int matrix whose elements are indices of the spatial dimension
+    """
     nrows = int(np.floor(n / 2 + 1))
     ncols = int(np.ceil(n / 2))
     itraj = np.tile(np.arange(nrows), (ncols, 1)).T + np.flipud(np.arange(ncols))
@@ -21,6 +26,9 @@ def traj_matrix_indices(n):
 
 
 def trajectory(x, y):
+    """
+    Computes the 2 spatial dimensions block-Toeplitz indices from x and y coordinates
+    """
     xu, ix = np.unique(x, return_inverse=True)
     yu, iy = np.unique(y, return_inverse=True)
     nx, ny = (np.size(xu), np.size(yu))
@@ -39,13 +47,13 @@ def trajectory(x, y):
     return T, it, itr, trcount
 
 
-def denoise(WAV, x, y, imax=None, niter=1):
+def denoise(WAV, x, y, r, imax=None, niter=1):
     WAV_ = np.zeros_like(WAV)
     imax = np.minimum(WAV.shape[-1], imax) if imax else WAV.shape[-1]
     T, it, itr, trcount = trajectory(x, y)
     for ind_f in np.arange(imax):
         T[it] = WAV[itr, ind_f]
-        T_ = derank(T, 8)
+        T_ = derank(T, r)
         WAV_[:, ind_f] = np.bincount(itr, weights=np.real(T_[it]))
         WAV_[:, ind_f] += 1j * np.bincount(itr, weights=np.imag(T_[it]))
         WAV_[:, ind_f] /= trcount
