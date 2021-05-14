@@ -190,7 +190,7 @@ def get_task_extractor_type(task_name):
     task_types = _get_task_types_json_config()
     task_type = next((task_types[tt] for tt in task_types if tt in task_name), None)
     if task_type is None:
-        raise ValueError(f"No extractor type found for {task_name}")
+        _logger.warning(f"No extractor type found for {task_name}")
     return task_type
 
 
