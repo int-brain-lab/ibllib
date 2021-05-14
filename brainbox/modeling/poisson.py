@@ -38,8 +38,8 @@ class PoissonGLM(NeuralModel):
         alpha : float
             Regularization strength, applied as multiplicative constant on ridge regularization.
         cells : list
-            List of cells which should be fit. If None is passed, will default to fitting all cells
-            in clu_ids
+            List of cells labels for columns in binned. Will default to all cells in model if None
+            is passed. Must be of the same length as columns in binned. By default None.
         """
         if cells is None:
             cells = self.clu_ids.flatten()

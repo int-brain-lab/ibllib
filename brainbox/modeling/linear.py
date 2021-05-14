@@ -59,6 +59,25 @@ class LinearGLM(NeuralModel):
     def _fit(self, dm, binned, cells=None):
         """
         Fitting primitive that brainbox.NeuralModel.fit method will call
+
+        Parameters
+        ----------
+        dm : np.ndarray
+            Design matrix to use for fitting
+        binned : np.ndarray
+            Array of binned spike times. Must share first dimension with dm
+        cells : iterable with .shape attribute, optional
+            List of cells which are being fit. Use to generate index for output
+            coefficients and intercepts, must share shape with second dimension
+            of binned. When None will default to a list of all cells in the model object, 
+            by default None
+
+        Returns
+        -------
+        coefs, pd.Series
+            Series containing fit coefficients for cells
+        intercepts, pd.Series
+            Series containing intercepts for fits.
         """
         if cells is None:
             cells = self.clu_ids.flatten()
