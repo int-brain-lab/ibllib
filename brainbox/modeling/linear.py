@@ -69,7 +69,7 @@ class LinearGLM(NeuralModel):
         cells : iterable with .shape attribute, optional
             List of cells which are being fit. Use to generate index for output
             coefficients and intercepts, must share shape with second dimension
-            of binned. When None will default to a list of all cells in the model object, 
+            of binned. When None will default to a list of all cells in the model object,
             by default None
 
         Returns
