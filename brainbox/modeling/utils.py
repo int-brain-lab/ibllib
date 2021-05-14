@@ -110,7 +110,8 @@ class SequentialSelector:
     def _get_best_new_feature(self, mask, cells):
         mask = np.array(mask)
         candidate_features = np.flatnonzero(~mask)
-        my = self.model.binnedspikes[self.train]
+        cell_idxs = np.argwhere(np.isin(self.model.clu_ids, cells)).flatten()
+        my = self.model.binnedspikes[np.ix_(self.train, cell_idxs)]
         scores = pd.DataFrame(index=cells, columns=candidate_features, dtype=float)
         for feature_idx in candidate_features:
             candidate_mask = mask.copy()

@@ -62,13 +62,16 @@ class LinearGLM(NeuralModel):
         """
         if cells is None:
             cells = self.clu_ids.flatten()
+        if cells.shape[0] != binned.shape[1]:
+            raise ValueError('Length of cells does not match shape of binned')
+
         coefs = pd.Series(index=cells, name='coefficients', dtype=object)
         intercepts = pd.Series(index=cells, name='intercepts')
 
         lm = self.estimator.fit(dm, binned)
         weight, intercept = lm.coef_, lm.intercept_
         for cell in cells:
-            cell_idx = np.argwhere(self.clu_ids == cell)[0, 0]
+            cell_idx = np.argwhere(cells == cell)[0, 0]
             coefs.at[cell] = weight[cell_idx, :]
             intercepts.at[cell] = intercept[cell_idx]
         return coefs, intercepts
