@@ -4,6 +4,11 @@
   sequential feature selection.
 
 ## Release Notes 1.10
+### Release Notes 1.10.2
+- fix public one params
+### Release Notes 1.10.1
+- fix ks2 logging output
+- set default one params to public credentials
 ### Release Notes 1.10.0 - 2021-05-04
 - TaskQC: exclude stim_freeze from overall session qc
 - Get modality from task type to include personal projects
