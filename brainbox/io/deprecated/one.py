@@ -1,29 +1,25 @@
 from pathlib import Path
 import logging
 import os
+import traceback
 
 import numpy as np
 import pandas as pd
 
-import one.alf.io as alfio
-import one.alf.exceptions as alferr
+import alf.io
 from ibllib.io import spikeglx
 from ibllib.atlas.regions import BrainRegions
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
-from oneibl.one import OneAlyx as OneOld
-from one.api import ONE
+from oneibl.one import ONE
 
-from ibl_util.util import Bunch
-from brainbox.core import TimeSeries
+from brainbox.core import Bunch, TimeSeries
 from brainbox.processing import sync
-from .deprecated import one as old
 
 logger = logging.getLogger('ibllib')
 
 
 def load_lfp(eid, one=None, dataset_types=None):
     """
-    TODO Verify works
     From an eid, hits the Alyx database and downloads the standard set of datasets
     needed for LFP
     :param eid:
@@ -33,8 +29,8 @@ def load_lfp(eid, one=None, dataset_types=None):
     if dataset_types is None:
         dataset_types = []
     dtypes = dataset_types + ['ephysData.raw.lf', 'ephysData.raw.meta', 'ephysData.raw.ch']
-    [one.load_session_dataset(eid, dset, download_only=True) for dset in dtypes]
-    session_path = one.eid2path(eid)
+    one.load(eid, dataset_types=dtypes, download_only=True)
+    session_path = one.path_from_eid(eid)
 
     efiles = [ef for ef in spikeglx.glob_ephys_files(session_path, bin_exists=False)
               if ef.get('lf', None)]
@@ -49,17 +45,11 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
     :param dataset_types: additional spikes/clusters objects to add to the standard list
     :return: channels
     """
-    one = one or ONE()
-
-    if isinstance(one, OneOld):
-        logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
-        return old.load_channel_locations(eid, one=one, probe=probe, aligned=aligned)
-
     if isinstance(eid, dict):
         ses = eid
         eid = ses['url'][-36:]
-    else:
-        eid = one.to_eid(eid)  # Ensure eid
+
+    one = one or ONE()
 
     # When a specific probe has been requested
     if isinstance(probe, str):
@@ -90,9 +80,9 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
             counts = [ins.get('json', {'temp': 0}).get('extended_qc', {'temp': 0}).
                       get('alignment_count', 0) for ins in insertions]
         except Exception:
-            tracing = [False] * len(insertions)
-            resolved = [False] * len(insertions)
-            counts = [0] * len(insertions)
+            tracing = [False for ins in insertions]
+            resolved = [False for ins in insertions]
+            counts = [0 for ins in insertions]
 
         probe_id = [ins['id'] for ins in insertions]
 
@@ -179,7 +169,7 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
     return channels
 
 
-def load_ephys_session(eid, one=None):
+def load_ephys_session(eid, one=None, dataset_types=None):
     """
     From an eid, hits the Alyx database and downloads a standard default set of dataset types
     From a local session Path (pathlib.Path), loads a standard default set of dataset types
@@ -192,24 +182,24 @@ def load_ephys_session(eid, one=None):
         'probes.description'
     :param eid: experiment UUID or pathlib.Path of the local session
     :param one: one instance
+    :param dataset_types: additional spikes/clusters objects to add to the standard default list
     :return: spikes, clusters, trials (dict of bunch, 1 bunch per probe)
     """
     assert one
-
-    if isinstance(one, OneOld):
-        logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
-        return old.load_ephys_session(eid, one=one)
-
-    spikes, clusters = load_spike_sorting(eid, one=one)
-    trials = one.load_object(eid, 'trials')
+    spikes, clusters = load_spike_sorting(eid, one=one, dataset_types=dataset_types)
+    if isinstance(eid, Path):
+        trials = alf.io.load_object(eid.joinpath('alf'), object='trials')
+    else:
+        trials = one.load_object(eid, obj='trials')
 
     return spikes, clusters, trials
 
 
-def load_spike_sorting(eid, one=None, probe=None):
+def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, force=False):
     """
-    From an eid, loads spikes and clusters for all probes
-    The following set of dataset types are loaded:
+    From an eid, hits the Alyx database and downloads a standard default set of dataset types
+    From a local session Path (pathlib.Path), loads a standard default set of dataset types
+     to perform analysis:
         'clusters.channels',
         'clusters.depths',
         'clusters.metrics',
@@ -217,42 +207,96 @@ def load_spike_sorting(eid, one=None, probe=None):
         'spikes.times',
         'probes.description'
     :param eid: experiment UUID or pathlib.Path of the local session
-    :param one: an instance of OneAlyx
+    :param one:
     :param probe: name of probe to load in, if not given all probes for session will be loaded
+    :param dataset_types: additional spikes/clusters objects to add to the standard default list
+    :param force: by default function looks for data on local computer and loads this in. If you
+    want to connect to database and make sure files are still the same set force=True
     :return: spikes, clusters (dict of bunch, 1 bunch per probe)
     """
-    one = one or ONE()
-    if isinstance(one, OneOld):
-        logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
-        return old.load_spike_sorting(eid, one=one, probe=probe)
+    if isinstance(eid, Path):
+        # Do everything locally without ONE
+        session_path = eid
+        if isinstance(probe, str):
+            labels = [probe]
+        else:
+            probes = alf.io.load_object(session_path.joinpath('alf'), 'probes')
+            labels = [pr['label'] for pr in probes['description']]
+        spikes = Bunch({})
+        clusters = Bunch({})
+        for label in labels:
+            _spikes, _clusters = _load_spike_sorting_local(session_path, label)
+            spikes[label] = _spikes
+            clusters[label] = _clusters
 
-    if isinstance(probe, str):
-        labels = [probe]
+        return spikes, clusters
+
     else:
-        insertions = one.alyx.rest('insertions', 'list', session=eid)
-        labels = [ins['name'] for ins in insertions]
+        session_path = one.path_from_eid(eid)
+        if not session_path:
+            logger.warning('Session not found')
+            return (None, None), 'no session path'
 
-    spikes = Bunch.fromkeys(labels)
-    clusters = Bunch.fromkeys(labels)
-    for label in labels:
-        try:
-            spikes[label] = one.load_object(eid, 'spikes', collection=label)
-        except alferr.ALFError:
-            logger.warning(
-                f'Could not load spikes datasets for session {eid}. '
-                f'Spikes for {label} will return an empty dict')
+        one = one or ONE()
+        dtypes_default = [
+            'clusters.channels',
+            'clusters.depths',
+            'clusters.metrics',
+            'spikes.clusters',
+            'spikes.times',
+            'probes.description'
+        ]
+        if dataset_types is None:
+            dtypes = dtypes_default
+        else:
+            # Append extra optional DS
+            dtypes = list(set(dataset_types + dtypes_default))
 
-        _remove_old_clusters(one.eid2path(one.to_eid(eid)), label)
-        try:
-            clusters[label] = one.load_object(eid, 'clusters', collection=label)
-        except alferr.ALFError:
-            logger.warning(
-                f'Could not load clusters datasets for session {eid}. '
-                f'Clusters for {label} will return an empty dict')
-    return spikes, clusters
+        if isinstance(probe, str):
+            labels = [probe]
+        else:
+            insertions = one.alyx.rest('insertions', 'list', session=eid)
+            labels = [ins['name'] for ins in insertions]
+
+        spikes = Bunch({})
+        clusters = Bunch({})
+        for label in labels:
+            _spikes, _clusters = _load_spike_sorting_local(session_path, label)
+            spike_dtypes = [sp for sp in dtypes if 'spikes.' in sp]
+            spike_local = ['spikes.' + sp for sp in list(_spikes.keys())]
+            spike_exists = all([sp in spike_local for sp in spike_dtypes])
+            cluster_dtypes = [cl for cl in dtypes if 'clusters.' in cl]
+            cluster_local = ['clusters.' + cl for cl in list(_clusters.keys())]
+            cluster_exists = all([cl in cluster_local for cl in cluster_dtypes])
+
+            if not spike_exists or not cluster_exists or force:
+                logger.info(f'Did not find local files for spikes and clusters for {session_path} '
+                            f'and {label}. Downloading....')
+                one.load(eid, dataset_types=dtypes, download_only=True)
+                _spikes, _clusters = _load_spike_sorting_local(session_path, label)
+                if not _spikes:
+                    logger.warning(
+                        f'Could not load spikes datasets for session {session_path} and {label}. '
+                        f'Spikes for {probe} will return an empty dict')
+                else:
+                    spikes[label] = _spikes
+                if not _clusters:
+                    logger.warning(
+                        f'Could not load clusters datasets for session {session_path} and {label}.'
+                        f' Clusters for {label} will return an empty dict')
+                else:
+                    clusters[label] = _clusters
+            else:
+                logger.info(f'Local files for spikes and clusters for {session_path} '
+                            f'and {label} found. To re-download set force=True')
+
+                spikes[label] = _spikes
+                clusters[label] = _clusters
+
+        return spikes, clusters
 
 
-def _remove_old_clusters(session_path, probe):
+def _load_spike_sorting_local(session_path, probe):
     # gets clusters and spikes from a local session folder
     probe_path = session_path.joinpath('alf', probe)
 
@@ -262,6 +306,19 @@ def _remove_old_clusters(session_path, probe):
     if cluster_file.exists():
         os.remove(cluster_file)
         logger.info('Deleting old clusters.metrics.csv file')
+
+    try:
+        spikes = alf.io.load_object(probe_path, object='spikes')
+    except Exception:
+        logger.error(traceback.format_exc())
+        spikes = {}
+    try:
+        clusters = alf.io.load_object(probe_path, object='clusters')
+    except Exception:
+        logger.error(traceback.format_exc())
+        clusters = {}
+
+    return spikes, clusters
 
 
 def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
@@ -307,24 +364,22 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
     return dic_clus
 
 
-def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False):
+def load_spike_sorting_with_channel(eid, one=None, probe=None, dataset_types=None, aligned=False,
+                                    force=False):
     """
     For a given eid, get spikes, clusters and channels information, and merges clusters
     and channels information before returning all three variables.
     :param eid:
     :param one:
+    :param dataset_types: additional dataset_types to load
     :param aligned: whether to get the latest user aligned channel when not resolved or use
     histology track
     :return: spikes, clusters, channels (dict of bunch, 1 bunch per probe)
     """
     # --- Get spikes and clusters data
     one = one or ONE()
-
-    if isinstance(one, OneOld):
-        logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
-        return old.load_spike_sorting_with_channel(eid, one=one, probe=probe, aligned=aligned)
-
-    dic_spk_bunch, dic_clus = load_spike_sorting(eid, one=one, probe=probe)
+    dic_spk_bunch, dic_clus = load_spike_sorting(eid, one=one, probe=probe,
+                                                 dataset_types=dataset_types, force=force)
     # -- Get brain regions and assign to clusters
     channels = load_channel_locations(eid, one=one, probe=probe, aligned=aligned)
 
@@ -334,7 +389,6 @@ def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False):
 
 def load_passive_rfmap(eid, one=None):
     """
-    TODO Update for new ONE
     For a given eid load in the passive receptive field mapping protocol data
     :param eid: eid or pathlib.Path of the local session
     :param one:
@@ -353,7 +407,7 @@ def load_passive_rfmap(eid, one=None):
         alf_path = one.path_from_eid(eid).joinpath('alf')
 
     # Load in the receptive field mapping data
-    rf_map = alfio.load_object(alf_path, object='passiveRFM', namespace='ibl')
+    rf_map = alf.io.load_object(alf_path, object='passiveRFM', namespace='ibl')
     frames = np.fromfile(alf_path.parent.joinpath('raw_passive_data', '_iblrig_RFMapStim.raw.bin'),
                          dtype="uint8")
     y_pix, x_pix = 15, 15
@@ -407,7 +461,6 @@ def load_wheel_reaction_times(eid, one=None):
 def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_wheel=False,
                    ret_abswheel=False, wheel_binsize=0.02):
     """
-    TODO Update for new ONE
     Generate a pandas dataframe of per-trial timing information about a given session.
     Each row in the frame will correspond to a single trial, with timing values indicating timing
     session-wide (i.e. time in seconds since session start). Can optionally return a resampled
