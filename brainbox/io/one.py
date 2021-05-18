@@ -405,9 +405,9 @@ def load_wheel_reaction_times(eid, one=None):
 
 
 def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_wheel=False,
-                   ret_abswheel=False, wheel_binsize=0.02):
+                   ret_abswheel=False, wheel_binsize=0.02, addtl_types=[]):
     """
-    TODO Update for new ONE
+    TODO Test this with new ONE
     Generate a pandas dataframe of per-trial timing information about a given session.
     Each row in the frame will correspond to a single trial, with timing values indicating timing
     session-wide (i.e. time in seconds since session start). Can optionally return a resampled
@@ -438,6 +438,9 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
         Whether to return the time-resampled absolute wheel velocity trace, by default False
     wheel_binsize : float, optional
         Time bins to resample wheel velocity to, by default 0.02
+    addtl_types : list, optional
+        List of additional types from an ONE trials object to include in the dataframe. Must be
+        valid keys to the dict produced by one.load_object(eid, 'trials'), by default empty.
 
     Returns
     -------
@@ -454,14 +457,15 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
         raise ValueError('ret_wheel and ret_abswheel cannot both be true.')
 
     # Define which datatypes we want to pull out
-    trialstypes = ['trials.choice',
-                   'trials.probabilityLeft',
-                   'trials.feedbackType',
-                   'trials.feedback_times',
-                   'trials.contrastLeft',
-                   'trials.contrastRight',
-                   'trials.goCue_times',
-                   'trials.stimOn_times', ]
+    trialstypes = ['choice',
+                   'probabilityLeft',
+                   'feedbackType',
+                   'feedback_times',
+                   'contrastLeft',
+                   'contrastRight',
+                   'goCue_times',
+                   'stimOn_times']
+    trialstypes.extend(addtl_types)
 
     # A quick function to remap probabilities in those sessions where it was not computed correctly
     def remap_trialp(probs):
@@ -471,16 +475,17 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
         maps = diffs.argmin(axis=1)
         return validvals[maps]
 
-    starttimes = one.load(eid, dataset_types=['trials.stimOn_times'])[0]
-    endtimes = one.load(eid, dataset_types=['trials.feedback_times'])[0]
-    tmp = one.load(eid, dataset_types=trialstypes)
+    trials = one.load_object(eid, 'trials')
+    starttimes = trials.stimOn_times
+    endtimes = trials.feedback_times
+    tmp = {key: value for key, value in trials.items() if key in trialstypes}
 
     if maxlen is not None:
         with np.errstate(invalid='ignore'):
             keeptrials = (endtimes - starttimes) <= maxlen
     else:
         keeptrials = range(len(starttimes))
-    trialdata = {x.split('.')[1]: tmp[i][keeptrials] for i, x in enumerate(trialstypes)}
+    trialdata = {x: tmp[x][keeptrials] for x in trialstypes}
     trialdata['probabilityLeft'] = remap_trialp(trialdata['probabilityLeft'])
     trialsdf = pd.DataFrame(trialdata)
     if maxlen is not None:
