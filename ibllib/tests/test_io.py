@@ -95,6 +95,8 @@ class TestsRawDataLoaders(unittest.TestCase):
 
     def setUp(self):
         self.tempfile = tempfile.NamedTemporaryFile(delete=False)
+        self.bin_session_path = Path(__file__).parent.joinpath(
+            'fixtures', 'io', 'data_loaders', "_iblrig_test_mouse_2020-01-01_001")
 
     def testFlagFileRead(self):
         # empty file should return True
@@ -251,6 +253,34 @@ class TestsRawDataLoaders(unittest.TestCase):
         count, gpio = raw.load_embedded_frame_data(session, 'body', raw=True)
         self.assertNotEqual(count[0], 0)
         self.assertIsInstance(gpio, np.ndarray)
+
+    def test_load_camera_FrameData(self):
+        import pandas as pd
+        fd_raw = raw.load_camera_FrameData(self.bin_session_path, raw=True)
+        fd = raw.load_camera_FrameData(self.bin_session_path)
+        # Wrong camera input file not found
+        with self.assertRaises(AssertionError):
+            raw.load_camera_FrameData(self.bin_session_path, camera='right')
+        # Shape
+        self.assertTrue(fd.shape[1] == 4)
+        self.assertTrue(fd_raw.shape[1] == 4)
+        # Type
+        self.assertTrue(isinstance(fd, pd.DataFrame))
+        self.assertTrue(isinstance(fd_raw, pd.DataFrame))
+        # Column names
+        df_cols = ["Timestamp", "embeddedTimeStamp",
+                   "embeddedFrameCounter", "embeddedGPIOPinState"]
+        self.assertTrue(np.all([x in fd.columns for x in df_cols]))
+        self.assertTrue(np.all([x in fd_raw.columns for x in df_cols]))
+        # Column types
+        parsed_dtypes = {
+            "Timestamp": np.float64,
+            "embeddedTimeStamp": np.float64,
+            "embeddedFrameCounter": np.int64,
+            "embeddedGPIOPinState": object
+        }
+        self.assertTrue(fd.dtypes.to_dict() == parsed_dtypes)
+        self.assertTrue(all([x == np.int64 for x in fd_raw.dtypes]))
 
     def tearDown(self):
         self.tempfile.close()
