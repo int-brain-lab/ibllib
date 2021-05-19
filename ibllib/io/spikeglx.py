@@ -72,11 +72,11 @@ class Reader:
             self._raw = np.memmap(sglx_file, dtype='int16', mode='r', shape=(self.ns, self.nc))
 
     def close(self):
-        if self._raw is not None:
+        if self.is_open:
             getattr(self._raw, '_mmap', self._raw).close()
 
     def __enter__(self):
-        if self._raw is None:
+        if not self.is_open:
             self.open()
         return self
 
@@ -92,6 +92,10 @@ class Reader:
     @property
     def shape(self):
         return self.ns, self.nc
+
+    @property
+    def is_open(self):
+        return self._raw is not None
 
     @property
     def is_mtscomp(self):

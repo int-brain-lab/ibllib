@@ -91,7 +91,10 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
         sr = raw_ephys_apfile
     else:
         raw_ephys_apfile = Path(raw_ephys_apfile)
-        sr = spikeglx.Reader(raw_ephys_apfile, open=True)
+        sr = spikeglx.Reader(raw_ephys_apfile)
+    opened = sr.is_open
+    if not opened:  # if not (opened := sr.is_open)  # py3.8
+        sr.open()
     # if no output, need a temp folder to swap for big files
     if not output_path:
         output_path = raw_ephys_apfile.parent
@@ -116,7 +119,9 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
     sync = {'times': tim_chan_pol[:, 0],
             'channels': tim_chan_pol[:, 1],
             'polarities': tim_chan_pol[:, 2]}
-    sr.close()
+    # If opened Reader was passed into function, leave open
+    if not opened:
+        sr.close()
     if save:
         out_files = alf.io.save_object_npy(output_path, sync, '_spikeglx_sync', parts=parts)
         return Bunch(sync), out_files
