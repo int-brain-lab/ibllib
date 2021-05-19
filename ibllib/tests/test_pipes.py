@@ -11,6 +11,28 @@ import ibllib.pipes.scan_fix_passive_files as fix
 
 
 class TestExtractors2Tasks(unittest.TestCase):
+
+    def test_task_to_pipeline(self):
+        dd = ibllib.io.extractors.base._get_task_types_json_config()
+        types = list(set([dd[k] for k in dd]))
+        # makes sure that for every defined task type there is an acutal pipeline
+        for type in types:
+            assert ibllib.io.extractors.base._get_pipeline_from_task_type(type)
+            print(type, ibllib.io.extractors.base._get_pipeline_from_task_type(type))
+        pipe_out = [
+            ("ephys_biased_opto", "ephys"),
+            ("ephys_training", "ephys"),
+            ("training", "training"),
+            ("biased_opto", "training"),
+            ("habituation", "training"),
+            ("biased", "training"),
+            ("mock_ephys", "ephys"),
+            ("sync_ephys", "ephys"),
+            ("ephys", "ephys"),
+        ]
+        for typ, exp in pipe_out:
+            assert ibllib.io.extractors.base._get_pipeline_from_task_type(typ) == exp
+
     def test_task_names_extractors(self):
         """
         This is to test against regressions
@@ -29,12 +51,14 @@ class TestExtractors2Tasks(unittest.TestCase):
             ("_iblrig_tasks_RewardChoiceWorld4.1.3", None),
             ("_iblrig_calibration_screen4.1.3", None),
             ("_iblrig_tasks_ephys_certification4.1.3", "sync_ephys"),
-            ("optokarolinaChoiceWorld5.34", "biased"),
-            ("karolinaChoiceWorld5.34", "biased"),
-            ("ephyskarolinaChoiceWorld4.34", "ephys"),
             ("passive_opto", "ephys"),
             ("_iblrig_tasks_opto_ephysChoiceWorld", "ephys_biased_opto"),
             ("_iblrig_tasks_opto_biasedChoiceWorld", "biased_opto"),
+            # personal projects: Karolina
+            ("_iblrig_tasks_optoChoiceWorld", 'biased_opto'),  # legacy not used anymore
+            ("optokarolinaChoiceWorld5.34", "biased_opto"),
+            ("karolinaChoiceWorld5.34", "biased_opto"),
+            ("ephyskarolinaChoiceWorld4.34", "ephys_biased_opto")
         ]
         for to in task_out:
             out = ibllib.io.extractors.base.get_task_extractor_type(to[0])

@@ -9,13 +9,13 @@ _PAR_ID_STR = 'one_params'
 
 
 def default():
-    par = {"ALYX_LOGIN": "test_user",
-           "ALYX_PWD": "TapetesBloc18",
-           "ALYX_URL": "https://test.alyx.internationalbrainlab.org",
+    par = {"ALYX_LOGIN": "intbrainlab",
+           "ALYX_PWD": "international",
+           "ALYX_URL": "https://openalyx.internationalbrainlab.org",
            "CACHE_DIR": str(Path.home() / "Downloads" / "FlatIron"),
            "HTTP_DATA_SERVER": "https://ibl.flatironinstitute.org",
-           "HTTP_DATA_SERVER_LOGIN": "iblmember",
-           "HTTP_DATA_SERVER_PWD": None,
+           "HTTP_DATA_SERVER_LOGIN": "",
+           "HTTP_DATA_SERVER_PWD": "",
            }
     return iopar.from_dict(par)
 

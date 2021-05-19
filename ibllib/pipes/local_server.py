@@ -7,7 +7,7 @@ import subprocess
 import sys
 import traceback
 
-from ibllib.io.extractors.base import get_session_extractor_type
+from ibllib.io.extractors.base import get_session_extractor_type, get_pipeline
 from ibllib.pipes import ephys_preprocessing, training_preprocessing, tasks
 from ibllib.time import date2isostr
 
@@ -87,32 +87,35 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
         _logger.info(f'creating session for {session_path}')
         if dry:
             continue
-        # if the subject doesn't exist in the database, skip
+
         try:
+            # if the subject doesn't exist in the database, skip
             rc.create_session(session_path)
             files, dsets = registration.register_session_raw_data(
                 session_path, one=one, max_md5_size=max_md5_size)
+            if dsets is not None:
+                all_datasets.extend(dsets)
+            pipeline = get_pipeline(session_path)
+            if pipeline == 'training':
+                pipe = training_preprocessing.TrainingExtractionPipeline(session_path, one=one)
+            # only start extracting ephys on a raw_session.flag
+            elif pipeline == 'ephys' and flag_file.name == 'raw_session.flag':
+                pipe = ephys_preprocessing.EphysExtractionPipeline(session_path, one=one)
+            else:
+                _logger.info(f"Session type {get_session_extractor_type(session_path)}"
+                             f"as no matching pipeline pattern {session_path}")
+                continue
+            if rerun:
+                rerun__status__in = '__all__'
+            else:
+                rerun__status__in = ['Waiting']
+            pipe.create_alyx_tasks(rerun__status__in=rerun__status__in)
+            flag_file.unlink()
         except BaseException:
             _logger.error(traceback.format_exc())
             _logger.warning(f"Creating session / registering raw datasets {session_path} errored")
             continue
-        if dsets is not None:
-            all_datasets.extend(dsets)
-        session_type = get_session_extractor_type(session_path)
-        if session_type in ['biased', 'habituation', 'training']:
-            pipe = training_preprocessing.TrainingExtractionPipeline(session_path, one=one)
-        # only start extracting ephys on a raw_session.flag
-        elif session_type in ['ephys'] and flag_file.name == 'raw_session.flag':
-            pipe = ephys_preprocessing.EphysExtractionPipeline(session_path, one=one)
-        else:
-            _logger.info(f"Session type {session_type} as no matching extractor {session_path}")
-            return
-        if rerun:
-            rerun__status__in = '__all__'
-        else:
-            rerun__status__in = ['Waiting']
-        pipe.create_alyx_tasks(rerun__status__in=rerun__status__in)
-        flag_file.unlink()
+
     return all_datasets
 
 
