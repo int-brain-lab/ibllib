@@ -20,8 +20,15 @@ class Reader:
     Class for SpikeGLX reading purposes
     Some format description was found looking at the Matlab SDK here
     https://github.com/billkarsh/SpikeGLX/blob/master/MATLAB-SDK/DemoReadSGLXData.m
+
+    Note: To release system resources the close method must be called
     """
-    def __init__(self, sglx_file):
+    def __init__(self, sglx_file, open=False):
+        """
+        An interface for reading data from a SpikeGLX file
+        :param sglx_file: Path to a SpikeGLX file (compressed or otherwise)
+        :param open: when True the file is opened
+        """
         self.file_bin = Path(sglx_file)
         self.nbytes = self.file_bin.stat().st_size
         file_meta_data = Path(sglx_file).with_suffix('.meta')
@@ -35,7 +42,13 @@ class Reader:
         self.file_meta_data = file_meta_data
         self.meta = read_meta_data(file_meta_data)
         self.channel_conversion_sample2v = _conversion_sample2v_from_meta(self.meta)
+        self._raw = None
+        if open:
+            self.open()
+
+    def open(self):
         # if we are not looking at a compressed file, use a memmap, otherwise instantiate mtscomp
+        sglx_file = str(self.file_bin)
         if self.is_mtscomp:
             self._raw = mtscomp.Reader()
             self._raw.open(self.file_bin, self.file_bin.with_suffix('.ch'))
@@ -58,6 +71,18 @@ class Reader:
                 self.meta['fileTimeSecs'] = ftsec
             self._raw = np.memmap(sglx_file, dtype='int16', mode='r', shape=(self.ns, self.nc))
 
+    def close(self):
+        if self.is_open:
+            getattr(self._raw, '_mmap', self._raw).close()
+
+    def __enter__(self):
+        if not self.is_open:
+            self.open()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
     def __getitem__(self, item):
         if isinstance(item, int) or isinstance(item, slice):
             return self.read(nsel=item, sync=False)
@@ -67,6 +92,10 @@ class Reader:
     @property
     def shape(self):
         return self.ns, self.nc
+
+    @property
+    def is_open(self):
+        return self._raw is not None
 
     @property
     def is_mtscomp(self):
@@ -212,8 +241,10 @@ class Reader:
         if 'out' not in kwargs:
             kwargs['out'] = self.file_bin.with_suffix('.bin')
         assert self.is_mtscomp
-        mtscomp.decompress(self.file_bin, self.file_bin.with_suffix('.ch'), **kwargs)
+        r = mtscomp.decompress(self.file_bin, self.file_bin.with_suffix('.ch'), **kwargs)
+        r.close()
         if not keep_original:
+            self.close()
             self.file_bin.unlink()
             self.file_bin.with_suffix('.ch').unlink()
             self.file_bin = kwargs['out']
@@ -257,8 +288,8 @@ def read(sglx_file, first_sample=0, last_sample=10000):
     :param last_sample: last sample to be read, python slice-wise
     :return: Data array, sync trace, meta-data
     """
-    sglxr = Reader(sglx_file)
-    D, sync = sglxr.read_samples(first_sample=first_sample, last_sample=last_sample)
+    with Reader(sglx_file) as sglxr:
+        D, sync = sglxr.read_samples(first_sample=first_sample, last_sample=last_sample)
     return D, sync, sglxr.meta
 
 
