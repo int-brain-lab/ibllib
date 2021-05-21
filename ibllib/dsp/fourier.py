@@ -3,7 +3,7 @@ Low-level functions to work in frequency domain for n-dim arrays
 """
 
 import numpy as np
-import scipy
+import scipy.fft
 from ibllib.dsp.utils import fcn_cosine
 
 
@@ -194,7 +194,7 @@ def fshift(w, s, axis=-1, ns=None):
     np.put(dephas, 1, 1)
     dephas = scipy.fft.rfft(dephas, axis=axis)
     # fft the data along the axis and the dephas
-    do_fft = np.all(np.isreal(w))
+    do_fft = w.dtype not in [np.complex128, np.complex64, np.complex256]
     if do_fft:
         W = scipy.fft.rfft(w, axis=axis)
     else:
@@ -208,7 +208,8 @@ def fshift(w, s, axis=-1, ns=None):
     W *= np.exp(1j * np.angle(dephas) * s)
     if do_fft:
         W = np.real(scipy.fft.irfft(W, ns, axis=axis))
-    return W.astype(w.dtype)
+        W = W.astype(w.dtype)
+    return W
 
 
 def fit_phase(w, si=1, fmin=0, fmax=None, axis=-1):

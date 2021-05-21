@@ -159,7 +159,9 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
 
         # decompresses using mtscomp
         tmp_ap_file = scratch_dir.joinpath(ap_file.name).with_suffix(".bin")
+
         mtscomp.decompress(cdata=ap_file, out=tmp_ap_file)
+
 
         # run matlab spike sorting: with R2019a, it would be much easier to run with
         # -batch option as matlab errors are redirected to stderr automatically
