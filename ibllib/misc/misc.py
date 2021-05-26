@@ -87,6 +87,9 @@ def range_str(values: iter) -> str:
     :param values: An iterable of ints
     :return:
     """
+    import logging
+    logging.getLogger('ibllib').warning(
+        'This function has moved to iblutil.util.range_str')  # iblrplate
     trial_str = ''
     values = list(set(values))
     for i in range(len(values)):
