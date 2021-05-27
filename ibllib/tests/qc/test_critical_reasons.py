@@ -1,7 +1,7 @@
 import unittest
 from unittest import mock
 import json
-from oneibl.one import ONE
+from one.api import ONE
 
 import ibllib.qc.critical_reasons as usrpmt
 

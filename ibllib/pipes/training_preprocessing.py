@@ -9,7 +9,6 @@ from ibllib.qc.camera import CameraQC
 from ibllib.qc.task_metrics import TaskQC, HabituationQC
 from ibllib.qc.task_extractors import TaskQCExtractor
 from oneibl.registration import register_session_raw_data
-from oneibl.one import OneOffline
 
 _logger = logging.getLogger('ibllib')
 
@@ -34,7 +33,7 @@ class TrainingTrials(tasks.Task):
         trials, wheel, output_files = bpod_trials.extract_all(self.session_path, save=True)
         if trials is None:
             return None
-        if self.one is None or isinstance(self.one, OneOffline):
+        if self.one is None or self.one.offline:
             return output_files
         # Run the task QC
         # Compile task data for QC

@@ -3,7 +3,7 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 
-from oneibl.one import ONE
+from one.api import ONE
 from ibllib.qc.dlc import DlcQC
 from ibllib.tests.fixtures import utils
 

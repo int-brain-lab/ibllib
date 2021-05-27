@@ -54,7 +54,7 @@ from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.io.extractors.training_wheel import WHEEL_RADIUS_CM
 from ibllib.io.extractors.ephys_fpga import WHEEL_TICKS
-from alf.io import is_session_path
+from one.alf.io import is_session_path
 from . import base
 
 _log = logging.getLogger('ibllib')

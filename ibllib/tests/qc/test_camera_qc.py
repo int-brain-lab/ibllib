@@ -7,11 +7,11 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 
-from oneibl.one import ONE
+from one.api import ONE
 from ibllib.qc.camera import CameraQC
 from ibllib.io.raw_data_loaders import load_camera_ssv_times
 from ibllib.tests.fixtures import utils
-from brainbox.core import Bunch
+from iblutil.util import Bunch
 
 
 class TestCameraQC(unittest.TestCase):

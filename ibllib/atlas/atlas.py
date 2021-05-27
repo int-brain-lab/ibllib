@@ -6,10 +6,10 @@ from pathlib import Path
 import numpy as np
 import nrrd
 
-from brainbox.numerical import ismember
+from iblutil.numerical import ismember
 from ibllib.atlas.regions import BrainRegions, regions_from_allen_csv  # noqa
 from ibllib.io import params
-from oneibl.webclient import http_download_file
+from one.webclient import http_download_file
 
 _logger = logging.getLogger('ibllib')
 ALLEN_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5739, 5400, 332])}

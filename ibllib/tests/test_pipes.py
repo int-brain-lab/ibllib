@@ -6,7 +6,7 @@ from pathlib import Path
 import ibllib.io.extractors.base
 import ibllib.tests.fixtures.utils as fu
 from ibllib.pipes import misc
-from oneibl.one import ONE
+from one.api import ONE
 import ibllib.pipes.scan_fix_passive_files as fix
 
 

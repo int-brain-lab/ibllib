@@ -1,11 +1,11 @@
-'''
+"""
 Prompt experimenter for reason for marking session/insertion as CRITICAL
 Choices are listed in the global variables. Multiple reasons can be selected.
 Places info in Alyx session note in a format that is machine retrievable (text->json)
-'''
+"""
 # Author: Gaelle
 import json
-from oneibl.one import ONE
+from one.api import ONE
 
 # Global var
 

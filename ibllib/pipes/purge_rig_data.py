@@ -10,9 +10,9 @@ Purge data from RIG
 sessions and files on Flatiron
 - Delete local raw file if found on Flatiron
 """
-from alf.folders import session_name
+from one.alf.folders import session_name
 from pathlib import Path
-from oneibl.one import ONE
+from one.api import ONE
 import argparse
 
 

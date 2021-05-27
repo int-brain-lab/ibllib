@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import pickle
 import copy
-from brainbox.core import Bunch
+from iblutil.util import Bunch
 import brainbox.behavior.wheel as wheel
 import brainbox.behavior.training as train
 import brainbox.behavior.pyschofit as psy

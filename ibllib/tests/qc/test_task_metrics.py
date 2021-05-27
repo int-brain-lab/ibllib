@@ -4,8 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
-from brainbox.core import Bunch
-from oneibl.one import ONE
+from iblutil.util import Bunch
+from one.api import ONE
 from ibllib.qc import task_metrics as qcmetrics
 
 from brainbox.behavior.wheel import cm_to_rad

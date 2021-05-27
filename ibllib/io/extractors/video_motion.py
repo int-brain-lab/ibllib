@@ -13,13 +13,12 @@ import matplotlib.animation as animation
 import logging
 from pathlib import Path
 
-from oneibl.one import ONE, OneOffline
+from one.api import ONE
 import ibllib.io.video as vidio
-from brainbox.core import Bunch
+from iblutil.util import Bunch
 import brainbox.video as video
 import brainbox.behavior.wheel as wh
-from ibllib.misc.exp_ref import eid2ref
-import alf.io as alfio
+import one.alf.io as alfio
 
 
 def find_nearest(array, value):
@@ -39,10 +38,7 @@ class MotionAlignment:
         self.one = one or ONE()
         self.eid = eid
         self.session_path = kwargs.pop('session_path', self.one.path_from_eid(eid))
-        if self.one and not isinstance(self.one, OneOffline):
-            self.ref = eid2ref(self.eid, as_dict=False, one=self.one)
-        else:
-            self.ref = None
+        self.ref = self.one.eid2ref(self.eid, as_dict=False)
         self.log = log
         self.trials = self.wheel = self.camera_times = None
         raw_cam_path = self.session_path.joinpath('raw_video_data')

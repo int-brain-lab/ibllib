@@ -7,6 +7,8 @@ import pandas as pd
 
 from brainbox.core import Bunch
 
+import warnings
+warnings.warn('Please use iblutil.io.parquet instead', category=DeprecationWarning)
 
 def load(file):
     """

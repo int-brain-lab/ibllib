@@ -13,9 +13,8 @@ from inspect import getmembers, isfunction
 import numpy as np
 
 from ibllib.qc import base
-import alf.io as alfio
-from brainbox.core import Bunch
-from oneibl.one import OneOffline
+import one.alf.io as alfio
+from iblutil.util import Bunch
 
 _log = logging.getLogger('ibllib')
 
@@ -69,7 +68,7 @@ class DlcQC(base.QC):
         """
         if download_data is not None:
             self.download_data = download_data
-        if self.one and not isinstance(self.one, OneOffline):
+        if self.one and not self.one.offline:
             self._ensure_required_data()
         _log.info('Gathering data for QC')
 

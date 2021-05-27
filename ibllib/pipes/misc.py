@@ -8,8 +8,8 @@ import ibllib.io.flags as flags
 import ibllib.io.params as params
 import ibllib.io.raw_data_loaders as raw
 import ibllib.io.spikeglx as spikeglx
-from alf.io import is_uuid_string
-from oneibl.one import ONE
+from one.alf.io import is_uuid_string
+from one.api import ONE
 
 log = logging.getLogger("ibllib")
 

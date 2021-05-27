@@ -3,7 +3,7 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 from brainbox.io import parquet
-from ibl_util.flatten import flatten
+from iblutil.util import flatten
 
 
 @dataclass

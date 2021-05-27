@@ -1,7 +1,7 @@
 import numpy as np
 from brainbox.metrics import electrode_drift
 from brainbox.metrics.single_units import quick_unit_metrics
-from brainbox.numerical import ismember
+from iblutil.numerical import ismember
 
 REC_LEN_SECS = 1000
 fr = 200

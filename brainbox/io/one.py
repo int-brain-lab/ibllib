@@ -13,7 +13,7 @@ from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_fir
 from oneibl.one import OneAlyx as OneOld
 from one.api import ONE
 
-from ibl_util.util import Bunch
+from iblutil.util import Bunch
 from brainbox.core import TimeSeries
 from brainbox.processing import sync
 from .deprecated import one as old

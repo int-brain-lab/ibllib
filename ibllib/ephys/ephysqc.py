@@ -9,8 +9,8 @@ import numpy as np
 import pandas as pd
 from scipy import signal
 
-import alf.io
-from brainbox.core import Bunch
+import one.alf.io as alfio
+from iblutil.util import Bunch
 from brainbox.metrics.single_units import spike_sorting_metrics
 from ibllib.ephys import sync_probes
 from ibllib.io import spikeglx, raw_data_loaders
@@ -101,9 +101,9 @@ def extract_rmsmap(fbin, out_folder=None, overwrite=False):
     tdict = {'rms': rms['TRMS'].astype(np.single), 'timestamps': rms['tscale'].astype(np.single)}
     fdict = {'power': rms['spectral_density'].astype(np.single),
              'freqs': rms['fscale'].astype(np.single)}
-    out_time = alf.io.save_object_npy(
+    out_time = alfio.save_object_npy(
         out_folder, object=alf_object_time, dico=tdict, namespace='iblqc')
-    out_freq = alf.io.save_object_npy(
+    out_freq = alfio.save_object_npy(
         out_folder, object=alf_object_freq, dico=fdict, namespace='iblqc')
     return out_time + out_freq
 
@@ -427,4 +427,4 @@ def _qc_from_path(sess_path, display=True):
             axes[1].plot(bpod2fpga(bpod_wheel['re_ts']), bpod_wheel['re_pos'] + dy)
             axes[1].title.set_text('Bpod')
 
-    return alf.io.dataframe({**fpga_trials, **alf_trials, **qct})
+    return alfio.dataframe({**fpga_trials, **alf_trials, **qct})

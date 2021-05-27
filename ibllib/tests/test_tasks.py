@@ -5,7 +5,7 @@ from collections import OrderedDict
 
 from ibllib.misc import version
 import ibllib.pipes.tasks
-from oneibl.one import ONE
+from one.api import ONE
 
 one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
           username='test_user', password='TapetesBloc18')

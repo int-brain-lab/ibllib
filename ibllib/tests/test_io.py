@@ -8,7 +8,7 @@ import sys
 
 import numpy as np
 
-from oneibl.one import ONE
+from one.api import ONE
 from ibllib.io import params, flags, jsonable, misc, globus, video
 import ibllib.io.raw_data_loaders as raw
 

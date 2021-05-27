@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from ibllib.ephys.neuropixel import SITES_COORDINATES
-from oneibl.one import ONE
-import alf.io
+from one.api import ONE
+import one.alf.io as alfio
 import ibllib.atlas as atlas
 from ibllib.ephys.spikes import probes_description as extract_probes
 from ibllib.dsp.utils import fcn_cosine
@@ -66,7 +66,7 @@ def get_micro_manipulator_data(subject, one=None, force_extract=False):
         one = ONE()
 
     eids, sessions = one.search(subject=subject, task_protocol='ephys', details=True)
-    probes = alf.io.AlfBunch({})
+    probes = alfio.AlfBunch({})
     for ses in sessions:
         sess_path = Path(ses['local_path'])
         probe = None
@@ -81,7 +81,7 @@ def get_micro_manipulator_data(subject, one=None, force_extract=False):
                                 f" {ses['local_path']}. Skip this session.")
                 continue
             extract_probes(sess_path, bin_exists=False)
-            probe = alf.io.load_object(sess_path.joinpath('alf'), 'probes')
+            probe = alfio.load_object(sess_path.joinpath('alf'), 'probes')
         one.load(ses['url'], dataset_types='channels.localCoordinates', download_only=True)
         # get for each insertion the sites local mapping: if not found assumes checkerboard pattern
         probe['sites_coordinates'] = []

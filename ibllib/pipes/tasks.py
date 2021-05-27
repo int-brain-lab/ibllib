@@ -10,7 +10,7 @@ import traceback
 from graphviz import Digraph
 
 from ibllib.misc import version
-from ibllib.io import params
+import one.params
 from oneibl.registration import register_dataset
 
 
@@ -167,7 +167,7 @@ class Pipeline(abc.ABC):
 
     def make_graph(self, out_dir=None, show=True):
         if not out_dir:
-            par = params.read('one_params')
+            par = one.params.get()
             out_dir = par.CACHE_DIR
         m = Digraph('G', filename=str(Path(out_dir).joinpath(self.__module__ + '_graphs.gv')))
         m.attr(rankdir='TD')

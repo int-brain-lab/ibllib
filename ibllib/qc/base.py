@@ -4,8 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
-from oneibl.one import ONE, OneOffline
-from alf.io import is_session_path, is_uuid_string
+from one.api import ONE
+from one.alf.io import is_session_path, is_uuid_string
 
 # Map for comparing QC outcomes
 CRITERIA = {'CRITICAL': 4,
@@ -38,7 +38,7 @@ class QC:
             self.json = True
 
         # Ensure outcome attribute matches Alyx record
-        updatable = self.eid and self.one and not isinstance(self.one, OneOffline)
+        updatable = self.eid and self.one and not self.one.offline
         self._outcome = self.update('NOT_SET', namespace='') if updatable else 'NOT_SET'
         self.log.debug(f'Current QC status is {self.outcome}')
 
@@ -148,7 +148,7 @@ class QC:
             qc.update('PASS')  # Update current QC field to 'PASS' if not set
         """
         assert self.one, "instance of one should be provided"
-        if isinstance(self.one, OneOffline):
+        if self.one.offline:
             self.log.warning('Running on OneOffline instance, unable to update remote QC')
             return
         outcome = outcome or self.outcome
@@ -182,7 +182,7 @@ class QC:
         """
         assert self.eid, 'Unable to update Alyx; eID not set'
         assert self.one, "instance of one should be provided"
-        if isinstance(self.one, OneOffline):
+        if self.one.offline:
             self.log.warning('Running on OneOffline instance, unable to update remote QC')
             return
 

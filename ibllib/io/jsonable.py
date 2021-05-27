@@ -1,4 +1,7 @@
 import json
+import warnings
+
+warnings.warn('This module has moved to iblutil.io.jsonable', DeprecationWarning)
 
 
 def read(file):

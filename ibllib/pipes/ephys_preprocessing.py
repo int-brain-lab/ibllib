@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 import mtscomp
-import alf.io
+import one.alf.io as alfio
 from ibllib.ephys import ephysqc, spikes, sync_probes
 from ibllib.io import ffmpeg, spikeglx
 from ibllib.io.video import label_from_path
@@ -21,7 +21,6 @@ from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
 from ibllib.dsp import rms
-from oneibl.one import OneOffline
 
 _logger = logging.getLogger("ibllib")
 
@@ -279,7 +278,7 @@ class EphysTrials(tasks.Task):
     def _run(self):
         dsets, out_files = ephys_fpga.extract_all(self.session_path, save=True)
 
-        if self.one is None or isinstance(self.one, OneOffline):
+        if not self.one or self.one.offline:
             return out_files
 
         self._behaviour_criterion()
@@ -306,8 +305,8 @@ class EphysCellsQc(tasks.Task):
         """
         # compute the straight qc
         _logger.info(f"Computing cluster qc for {folder_probe}")
-        spikes = alf.io.load_object(folder_probe, 'spikes')
-        clusters = alf.io.load_object(folder_probe, 'clusters')
+        spikes = alfio.load_object(folder_probe, 'spikes')
+        clusters = alfio.load_object(folder_probe, 'clusters')
         df_units, drift = ephysqc.spike_sorting_metrics(
             spikes.times, spikes.clusters, spikes.amps, spikes.depths,
             cluster_ids=np.arange(clusters.channels.size))

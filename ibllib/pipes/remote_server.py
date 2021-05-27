@@ -7,7 +7,7 @@ import os
 from ibllib.ephys import sync_probes
 from ibllib.pipes import ephys_preprocessing as ephys
 from oneibl.patcher import FTPPatcher
-from oneibl.one import ONE
+from one.api import ONE
 
 _logger = logging.getLogger('ibllib')
 

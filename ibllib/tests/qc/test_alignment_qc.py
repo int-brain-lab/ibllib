@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 import copy
 
-from oneibl.one import ONE
+from one.api import ONE
 from ibllib.atlas import AllenAtlas
 from ibllib.pipes.misc import create_alyx_probe_insertions
 from ibllib.qc.alignment_qc import AlignmentQC

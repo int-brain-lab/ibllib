@@ -1,7 +1,7 @@
 import numpy as np
 
 from ibllib.qc import base
-from alf.io import is_uuid_string
+from one.alf.io import is_uuid_string
 
 
 class ONEQC(base.QC):

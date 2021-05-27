@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 from ibllib.qc.base import QC
-from oneibl.one import ONE
+from one.api import ONE
 
 one = ONE(
     base_url="https://test.alyx.internationalbrainlab.org",

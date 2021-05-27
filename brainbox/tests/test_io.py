@@ -7,10 +7,10 @@ import shutil
 
 import numpy as np
 
-from brainbox.numerical import ismember, ismember2d, intersect2d
+from iblutil.numerical import ismember, ismember2d, intersect2d
 from brainbox.io.parquet import uuid2np, np2uuid, rec2col, np2str, str2np
 from brainbox.io import one as bbone
-from oneibl.one import ONE
+from one.api import ONE
 
 
 class TestParquet(unittest.TestCase):

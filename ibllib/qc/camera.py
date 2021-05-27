@@ -39,12 +39,11 @@ from ibllib.io.extractors import ephys_fpga, training_wheel
 from ibllib.io.extractors.video_motion import MotionAlignment
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io import raw_data_loaders as raw
-import alf.io as alfio
-from brainbox.core import Bunch
-from brainbox.numerical import within_ranges
+import one.alf.io as alfio
+from iblutil.util import Bunch
+from iblutil.numerical import within_ranges
 import brainbox.behavior.wheel as wh
 from ibllib.io.video import get_video_meta, get_video_frames_preload, assert_valid_label
-from oneibl.one import OneOffline
 from . import base
 
 _log = logging.getLogger('ibllib')
@@ -177,7 +176,7 @@ class CameraQC(base.QC):
         assert self.session_path, 'no session path set'
         if download_data is not None:
             self.download_data = download_data
-        if self.eid and self.one and not isinstance(self.one, OneOffline):
+        if self.eid and self.one and not self.one.offline:
             self._ensure_required_data()
         _log.info('Gathering data for QC')
 

@@ -5,7 +5,7 @@ import numpy as np
 import scipy.signal
 
 import ibllib.dsp.fourier as fdsp
-from ibllib.dsp import fshift, voltage
+from ibllib.dsp import fshift
 from ibllib.ephys import neuropixel
 
 
@@ -158,5 +158,5 @@ def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, fk_kw
         tr_sel, _ = reject_channels(x, fs, **reject_channel_kwargs)
     # apply spatial filter on good channel selection only
     x_ = np.zeros_like(x)
-    x_[tr_sel, :] = voltage.fk(x[tr_sel, :], si=1 / fs, **fk_kwargs)
+    x_[tr_sel, :] = fk(x[tr_sel, :], si=1 / fs, **fk_kwargs)
     return x_

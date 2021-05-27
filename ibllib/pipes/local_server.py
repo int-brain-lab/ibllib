@@ -12,7 +12,7 @@ from ibllib.pipes import ephys_preprocessing, training_preprocessing, tasks
 from ibllib.time import date2isostr
 
 import oneibl.registration as registration
-from oneibl.one import ONE
+from one.api import ONE
 
 _logger = logging.getLogger('ibllib')
 

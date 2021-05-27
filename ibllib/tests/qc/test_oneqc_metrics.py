@@ -1,7 +1,7 @@
 import unittest
 
 from ibllib.qc.oneqc_metrics import ONEQC
-from oneibl.one import ONE
+from one.api import ONE
 
 
 one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
