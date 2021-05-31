@@ -950,7 +950,8 @@ def check_wheel_integrity(data, re_encoding='X1', enc_res=None, **_):
     if isinstance(re_encoding, str):
         re_encoding = int(re_encoding[-1])
     # The expected difference between samples in the extracted units
-    resolution = 1 / (enc_res or ephys_fpga.WHEEL_TICKS) * np.pi * 2 * ephys_fpga.WHEEL_RADIUS_CM / re_encoding
+    resolution = 1 / (enc_res or ephys_fpga.WHEEL_TICKS
+                      ) * np.pi * 2 * ephys_fpga.WHEEL_RADIUS_CM / re_encoding
     # We expect the difference of neighbouring positions to be close to the resolution
     pos_check = np.abs(np.diff(data['wheel_position']))
     # Timestamps should be strictly increasing
