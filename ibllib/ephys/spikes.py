@@ -65,7 +65,7 @@ def probes_description(ses_path, one=None, bin_exists=True):
     bpod_meta = raw_data_loaders.load_settings(ses_path)
     if not bpod_meta.get('PROBE_DATA'):
         _logger.error('No probe information in settings JSON. Skipping probes.trajectory')
-        return
+        return []
 
     def prb2alf(prb, label):
         return {'label': label, 'x': prb['X'], 'y': prb['Y'], 'z': prb['Z'], 'phi': prb['A'],
