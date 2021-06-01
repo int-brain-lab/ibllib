@@ -23,7 +23,7 @@ class Reader:
 
     Note: To release system resources the close method must be called
     """
-    def __init__(self, sglx_file, open=False):
+    def __init__(self, sglx_file, open=True):
         """
         An interface for reading data from a SpikeGLX file
         :param sglx_file: Path to a SpikeGLX file (compressed or otherwise)

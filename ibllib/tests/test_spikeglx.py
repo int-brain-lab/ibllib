@@ -172,7 +172,9 @@ class TestsSpikeGLX_compress(unittest.TestCase):
         self.file_bin = spikeglx._mock_spikeglx_file(
             self.workdir.joinpath('sample3A_short_g0_t0.imec.ap.bin'), file_meta, ns=76104,
             nc=385, sync_depth=16, random=True)['bin_file']
-        self.sr = spikeglx.Reader(self.file_bin, open=True)
+        self.sr = spikeglx.Reader(self.file_bin)
+        assert self.sr._raw is not None
+        assert self.sr.is_open
 
     def tearDown(self):
         self.sr.close()
@@ -211,8 +213,8 @@ class TestsSpikeGLX_compress(unittest.TestCase):
         shutil.copy(self.file_bin.with_suffix('.meta'), ref_meta)
 
         # test file compression copy
-        with spikeglx.Reader(ref_file) as sr_ref:
-            with spikeglx.Reader(self.file_cbin) as sc:
+        with spikeglx.Reader(ref_file, open=False) as sr_ref:
+            with spikeglx.Reader(self.file_cbin, open=False) as sc:
                 self.assertTrue(sc.is_mtscomp)
                 compare_data(sr_ref, sc)
 
@@ -244,7 +246,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
                 self.workdir / 'sample3A_g0_t0.imec.ap.meta', ns=32, nc=385, sync_depth=16)
             with open(bin_3a['bin_file'], 'wb') as fp:
                 np.random.randint(-20000, 20000, 385 * 22, dtype=np.int16).tofile(fp)
-            with spikeglx.Reader(bin_3a['bin_file']) as sr:
+            with spikeglx.Reader(bin_3a['bin_file'], open=False) as sr:
                 verifiable = sr.meta['fileTimeSecs'] * 30000
             self.assertEqual(verifiable, 22)
 
@@ -294,7 +296,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
         self.assertEqual(hashfile.md5(bin_3b['bin_file']), "207ba1666b866a091e5bb8b26d19733f")
         self.assertEqual(hashfile.sha1(bin_3b['bin_file']),
                          '1bf3219c35dea15409576f6764dd9152c3f8a89c')
-        sr = spikeglx.Reader(bin_3b['bin_file'])
+        sr = spikeglx.Reader(bin_3b['bin_file'], open=False)
         self.assertTrue(sr.verify_hash())
 
     def assert_read_glx(self, tglx):
