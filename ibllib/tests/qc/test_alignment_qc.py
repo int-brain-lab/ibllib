@@ -1,5 +1,8 @@
 import unittest
 from pathlib import Path
+import re
+from inspect import getmembers, isfunction
+
 import numpy as np
 import copy
 
@@ -97,20 +100,27 @@ class TestAlignmentQcExisting(unittest.TestCase):
         cls.trajectory = data['trajectory'].tolist()
         cls.trajectory.update({'probe_insertion': cls.probe_id})
 
-    def setUp(self):
+    def test_alignments(self):
+        checks = getmembers(self, lambda x: isfunction(x) and re.match(r'^_\d{2}_.*', x.__name__))
+        # Run numbered functions in order
+        for _, fn in sorted(checks, key=lambda x: x[0]):
+            self._get_prev_traj_id()
+            fn(self)
+
+    def _get_prev_traj_id(self):
         traj = one.alyx.rest('trajectories', 'list', probe_id=self.probe_id,
                              provenance='Ephys aligned histology track')
         if traj:
             self.prev_traj_id = traj[0]['id']
 
-    def test_01_no_alignments(self):
+    def _01_no_alignments(self):
         align_qc = AlignmentQC(self.probe_id, one=one, brain_atlas=brain_atlas, channels=False)
         align_qc.run(update=True, upload_alyx=True, upload_flatiron=False)
         insertion = one.alyx.rest('insertions', 'read', id=self.probe_id)
         assert (insertion['json']['qc'] == 'NOT_SET')
         assert (len(insertion['json']['extended_qc']) == 0)
 
-    def test_02_one_alignment(self):
+    def _02_one_alignment(self):
         alignments = {'2020-06-26T16:40:14_Karolina_Socha':
                       self.alignments['2020-06-26T16:40:14_Karolina_Socha']}
         trajectory = copy.deepcopy(self.trajectory)
@@ -125,7 +135,7 @@ class TestAlignmentQcExisting(unittest.TestCase):
                 '2020-06-26T16:40:14_Karolina_Socha')
         assert (insertion['json']['extended_qc']['alignment_resolved'] == 0)
 
-    def test_03_alignments_disagree(self):
+    def _03_alignments_disagree(self):
         alignments = {'2020-06-26T16:40:14_Karolina_Socha':
                       self.alignments['2020-06-26T16:40:14_Karolina_Socha'],
                       '2020-06-12T00:39:15_nate': self.alignments['2020-06-12T00:39:15_nate']}
@@ -150,7 +160,7 @@ class TestAlignmentQcExisting(unittest.TestCase):
                              provenance='Ephys aligned histology track')
         assert(traj_id == traj[0]['id'])
 
-    def test_04_alignments_agree(self):
+    def _04_alignments_agree(self):
         alignments = {'2020-06-19T10:52:36_noam.roth':
                       self.alignments['2020-06-19T10:52:36_noam.roth'],
                       '2020-06-12T00:39:15_nate': self.alignments['2020-06-12T00:39:15_nate']}
@@ -174,7 +184,7 @@ class TestAlignmentQcExisting(unittest.TestCase):
                              provenance='Ephys aligned histology track')
         assert(self.prev_traj_id == traj[0]['id'])
 
-    def test_05_not_latest_alignments_agree(self):
+    def _05_not_latest_alignments_agree(self):
         alignments = copy.deepcopy(self.alignments)
         trajectory = copy.deepcopy(self.trajectory)
         trajectory.update({'json': alignments})
@@ -225,13 +235,20 @@ class TestAlignmentQcManual(unittest.TestCase):
         cls.trajectory.update({'json': cls.alignments})
         cls.traj = one.alyx.rest('trajectories', 'create', data=cls.trajectory)
 
-    def setUp(self) -> None:
+    def test_alignments(self):
+        checks = getmembers(self, lambda x: isfunction(x) and re.match(r'^_\d{2}_.*', x.__name__))
+        # Run numbered functions in order
+        for _, fn in sorted(checks, key=lambda x: x[0]):
+            self._get_prev_traj_id()
+            fn(self)
+
+    def _get_prev_traj_id(self):
         traj = one.alyx.rest('trajectories', 'list', probe_id=self.probe_id,
                              provenance='Ephys aligned histology track')
         if traj:
             self.prev_traj_id = traj[0]['id']
 
-    def test_01_normal_computation(self):
+    def _01_normal_computation(self):
         align_qc = AlignmentQC(self.probe_id, one=one, brain_atlas=brain_atlas, channels=False)
         align_qc.load_data(prev_alignments=self.traj['json'],
                            xyz_picks=np.array(self.xyz_picks) / 1e6,
@@ -249,7 +266,7 @@ class TestAlignmentQcManual(unittest.TestCase):
                              provenance='Ephys aligned histology track')
         assert(self.prev_traj_id == traj[0]['id'])
 
-    def test_02_manual_resolution_latest(self):
+    def _02_manual_resolution_latest(self):
         align_qc = AlignmentQC(self.probe_id, one=one, brain_atlas=brain_atlas, channels=False)
         align_qc.load_data(prev_alignments=self.traj['json'],
                            xyz_picks=np.array(self.xyz_picks) / 1e6,
@@ -269,7 +286,7 @@ class TestAlignmentQcManual(unittest.TestCase):
                              provenance='Ephys aligned histology track')
         assert(self.prev_traj_id == traj[0]['id'])
 
-    def test_03_manual_resolution_not_latest(self):
+    def _03_manual_resolution_not_latest(self):
         align_qc = AlignmentQC(self.probe_id, one=one, brain_atlas=brain_atlas, channels=False)
         align_qc.load_data(prev_alignments=self.traj['json'],
                            xyz_picks=np.array(self.xyz_picks) / 1e6,

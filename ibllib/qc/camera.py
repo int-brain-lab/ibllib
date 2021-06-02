@@ -342,7 +342,7 @@ class CameraQC(base.QC):
             extended = {
                 k: None if v is None or v == 'NOT_SET'
                 else base.CRITERIA[v] < 3 if isinstance(v, str)
-                else v[1:] if len(v) > 2 else v[-1]  # Otherwise store custom value(s)
+                else (base.CRITERIA[v[0]] < 3, *v[1:])  # Convert first value to bool if array
                 for k, v in self.metrics.items()
             }
             self.update_extended_qc(extended)

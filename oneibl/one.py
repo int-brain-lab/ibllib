@@ -1031,7 +1031,7 @@ class OneAlyx(OneAbstract):
                 cmeta_stream = json.load(f)
             if (cmeta_stream.get('chopped_first_sample', None) == i0 and
                     cmeta_stream.get('chopped_total_samples', None) == ns_stream):
-                return spikeglx.Reader(ch_file_stream.with_suffix('.cbin'))
+                return spikeglx.Reader(ch_file_stream.with_suffix('.cbin'), open=True)
         else:
             shutil.copy(ch_file, ch_file_stream)
         assert ch_file_stream.exists()
@@ -1069,13 +1069,13 @@ class OneAlyx(OneAbstract):
             chunks=(first_byte, n_bytes))
         cbin_local_path = alfio.remove_uuid_file(cbin_local_path)
         cbin_local_path_renamed = cbin_local_path.with_suffix('.stream.cbin')
-        cbin_local_path.rename(cbin_local_path_renamed)
+        cbin_local_path.replace(cbin_local_path_renamed)
         assert cbin_local_path_renamed.exists()
 
         shutil.copy(cbin_local_path.with_suffix('.meta'),
                     cbin_local_path_renamed.with_suffix('.meta'))
-        reader = spikeglx.Reader(cbin_local_path_renamed)
-        return reader
+
+        return spikeglx.Reader(cbin_local_path_renamed, open=True)
 
 
 def _validate_date_range(date_range):

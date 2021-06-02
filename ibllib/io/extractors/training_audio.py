@@ -115,13 +115,9 @@ def extract_sound(ses_path, save=True, force=False, delete=False):
                  'onset_times': out_folder / '_iblmic_audioOnsetGoCue.times_mic.npy',
                  'times_microphone': out_folder / '_iblmic_audioSpectrogram.times_mic.npy',
                  }
-    # if they exist and the option Force is set to false, do not recompute and exit
-    if all([files_out[f].exists() for f in files_out]) and not force:
-        logger_.warning(f'Output exists. Skipping {wav_file}. Use force flag to override')
-        return [files_out[k] for k in files_out]
     if not wav_file.exists():
         logger_.warning(f"Wav file doesn't exist: {wav_file}")
-        return []
+        return [files_out[k] for k in files_out if files_out[k].exists()]
     # crunch the wav file
     fs, wav = wavfile.read(wav_file, mmap=False)
     if len(wav) == 0:
@@ -142,6 +138,8 @@ def extract_sound(ses_path, save=True, force=False, delete=False):
     # for the time scale, attempt to synchronize using onset sound detection and task data
     data = ioraw.load_data(ses_path)
     if data is None:  # if no session data, we're done
+        if delete:
+            wav_file.unlink()
         return
     tgocue, _ = GoCueTimes(ses_path).extract(save=False, bpod_trials=data)
     ilast = min(len(tgocue), len(detect))

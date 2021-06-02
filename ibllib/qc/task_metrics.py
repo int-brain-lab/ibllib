@@ -52,8 +52,7 @@ from scipy.stats import chisquare
 
 from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
 from ibllib.qc.task_extractors import TaskQCExtractor
-from ibllib.io.extractors.training_wheel import WHEEL_RADIUS_CM
-from ibllib.io.extractors.ephys_fpga import WHEEL_TICKS
+from ibllib.io.extractors import ephys_fpga
 from one.alf.io import is_session_path
 from . import base
 
@@ -65,7 +64,9 @@ class TaskQC(base.QC):
     criteria = {"PASS": 0.99, "WARNING": 0.95, "FAIL": 0}
     fcns_value2status = {'default': lambda x: TaskQC._thresholding(x),
                          '_task_stimFreeze_delays': lambda x: - 1,
-                         '_task_response_stimFreeze_delays': lambda x: -1}
+                         '_task_response_stimFreeze_delays': lambda x: -1,
+                         '_task_passed_trial_checks': lambda x: -1,
+                         '_task_iti_delays': lambda x: -1}
 
     @staticmethod
     def _thresholding(qc_value, thresholds=None):
@@ -761,7 +762,7 @@ def check_n_trial_events(data, **_):
     Units: -none-, boolean
 
     :param data: dict of trial data with keys ('intervals', 'stimOnTrigger_times',
-                 'stimOffTrigger_times', 'stimOn_times', 'stimOff_times', 'stimFreeze_times',
+                 'stimOffTrigger_times', 'stimOn_times', 'stimOff_times',
                  'stimFreezeTrigger_times', 'errorCueTrigger_times', 'itiIn_times',
                  'goCueTrigger_times', 'goCue_times', 'response_times', 'feedback_times')
     """
@@ -772,10 +773,11 @@ def check_n_trial_events(data, **_):
 
     # Exclude these fields; valve and errorCue times are the same as feedback_times and we must
     # test errorCueTrigger_times separately
+    # stimFreeze_times fails often due to TTL flicker
     exclude = ['camera_timestamps', 'errorCueTrigger_times', 'errorCue_times',
                'firstMovement_times', 'peakVelocity_times', 'valveOpen_times',
                'wheel_moves_peak_amplitude', 'wheel_moves_intervals', 'wheel_timestamps',
-               'wheel_intervals']
+               'wheel_intervals', 'stimFreeze_times']
     events = [k for k in data.keys() if k.endswith('_times') and k not in exclude]
     metric = np.zeros(data["intervals"].shape[0], dtype=bool)
 
@@ -948,7 +950,8 @@ def check_wheel_integrity(data, re_encoding='X1', enc_res=None, **_):
     if isinstance(re_encoding, str):
         re_encoding = int(re_encoding[-1])
     # The expected difference between samples in the extracted units
-    resolution = 1 / (enc_res or WHEEL_TICKS) * np.pi * 2 * WHEEL_RADIUS_CM / re_encoding
+    resolution = 1 / (enc_res or ephys_fpga.WHEEL_TICKS
+                      ) * np.pi * 2 * ephys_fpga.WHEEL_RADIUS_CM / re_encoding
     # We expect the difference of neighbouring positions to be close to the resolution
     pos_check = np.abs(np.diff(data['wheel_position']))
     # Timestamps should be strictly increasing
@@ -959,7 +962,6 @@ def check_wheel_integrity(data, re_encoding='X1', enc_res=None, **_):
 
 
 # === Pre-stimulus checks ===
-
 def check_stimulus_move_before_goCue(data, photodiode=None, **_):
     """ Check that there are no visual stimulus change(s) between the start of the trial and the
     go cue sound onset - 20 ms.
@@ -974,7 +976,8 @@ def check_stimulus_move_before_goCue(data, photodiode=None, **_):
     if photodiode is None:
         _log.warning("No photodiode TTL input in function call, returning None")
         return None
-    s = photodiode["times"]
+    photodiode_clean = ephys_fpga._clean_frame2ttl(photodiode)
+    s = photodiode_clean["times"]
     s = s[~np.isnan(s)]  # Remove NaNs
     metric = np.array([])
     for i, c in zip(data["intervals"][:, 0], data["goCue_times"]):
