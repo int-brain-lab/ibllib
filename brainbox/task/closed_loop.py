@@ -336,7 +336,7 @@ def generate_pseudo_stimuli(n_trials, contrast_set=[0.06, 0.12, 0.25, 1], first5
     contrast_right[:] = np.nan
 
     # Generate block structure
-    p_left = generate_pseudo_blocks(n_trials)
+    p_left = generate_pseudo_blocks(n_trials, first5050=first5050)
 
     for i in range(n_trials):
 
