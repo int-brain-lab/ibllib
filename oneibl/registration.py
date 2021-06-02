@@ -7,15 +7,16 @@ import ibllib.io.extractors.base
 from dateutil import parser as dateparser
 import re
 
-import alf.io
-from oneibl.one import ONE
+import one.alf.io as alfio
+from one.api import ONE
 from ibllib.misc import version
 import ibllib.time
 import ibllib.io.raw_data_loaders as raw
-from ibllib.io import flags, hashfile
+from ibllib.io import flags
+from iblutil.io import hashfile
 import ibllib.exceptions
 
-_logger = logging.getLogger('ibllib.alf')
+_logger = logging.getLogger('ibllib')
 EXCLUDED_EXTENSIONS = ['.flag', '.error', '.avi']
 REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
                               'raw_behavior_data/**/_iblrig_*.*',
@@ -45,7 +46,7 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
     """
     Registers a set of files belonging to a session only on the server
     :param file_list: (list of pathlib.Path or pathlib.Path)
-    :param one: optional (oneibl.ONE), current one object, will create an instance if not provided
+    :param one: optional (one.api.One), current one object, will create an instance if not provided
     :param created_by: (string) name of user in Alyx (defaults to 'root')
     :param repository: optional: (string) name of the repository in Alyx
     :param server_only: optional: (bool) if True only creates on the Flatiron (defaults to False)
@@ -53,19 +54,18 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
     :param revisions: optional (list of strings): revision name (defaults to no revision)
     :param default: optional (bool) whether to set as default dataset (defaults to True)
     :param dry: (bool) False by default
-    :param verbose: (bool) logs
     :param max_md5_size: (int) maximum file in bytes to compute md5 sum (always compute if Npne)
     defaults to None
     :return:
     """
     if created_by is None:
-        created_by = one._par.ALYX_LOGIN
+        created_by = one.alyx.user
     if file_list is None or file_list == '' or file_list == []:
         return
     elif not isinstance(file_list, list):
         file_list = [Path(file_list)]
 
-    assert len(set([alf.io.get_session_path(f) for f in file_list])) == 1
+    assert len(set([alfio.get_session_path(f) for f in file_list])) == 1
     assert all([Path(f).exists() for f in file_list])
     if versions is None:
         versions = version.ibllib()
@@ -88,7 +88,7 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
     else:
         hashes = [hashfile.md5(p) for p in file_list]
 
-    session_path = alf.io.get_session_path(file_list[0])
+    session_path = alfio.get_session_path(file_list[0])
     # first register the file
     r = {'created_by': created_by,
          'path': session_path.relative_to((session_path.parents[2])).as_posix(),
@@ -122,7 +122,7 @@ def register_session_raw_data(session_path, one=None, overwrite=False, dry=False
     :return: Alyx response: dictionary of registered files
     """
     session_path = Path(session_path)
-    eid = one.eid_from_path(session_path, use_cache=False)  # needs to make sure we're up to date
+    eid = one.path2eid(session_path, use_cache=False)  # needs to make sure we're up to date
     # query the database for existing datasets on the session and allowed dataset types
     dsets = one.alyx.rest('datasets', 'list', session=eid)
     already_registered = [
@@ -213,7 +213,6 @@ class RegistrationClient:
 
         :param ses_path: path to the session
         :param file_list: bool. Set to False will only create the session and skip registration
-        :param repository_name: Optional, repository on which to register the data
         :return: Status string on error
         """
         if isinstance(ses_path, str):

@@ -10,6 +10,7 @@ from brainbox.core import Bunch
 import warnings
 warnings.warn('Please use iblutil.io.parquet instead', category=DeprecationWarning)
 
+
 def load(file):
     """
     Loads parquet file into pandas dataframe

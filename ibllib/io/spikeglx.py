@@ -7,7 +7,7 @@ import shutil
 import numpy as np
 
 import mtscomp
-from brainbox.core import Bunch
+from iblutil.util import Bunch
 from ibllib.ephys import neuropixel as neuropixel
 from ibllib.io import hashfile
 from one.alf.io import remove_uuid_file

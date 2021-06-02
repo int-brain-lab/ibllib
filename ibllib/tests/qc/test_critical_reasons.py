@@ -2,6 +2,7 @@ import unittest
 from unittest import mock
 import json
 from one.api import ONE
+from one.params import get_params_dir
 
 import ibllib.qc.critical_reasons as usrpmt
 
@@ -23,11 +24,12 @@ class TestUserPmtSess(unittest.TestCase):
 
     def setUp(self) -> None:
         # Make sure tests use correct session ID
+        one.alyx.clear_rest_cache()
         self.sess_id = one.alyx.rest('sessions', 'list', task_protocol='ephys')[0]['url'][-36:]
 
         # Make sure tests use correct insertion ID
         # 1. Find and delete any previous insertions
-        ins = one.alyx.rest('insertions', 'list')
+        ins = one.alyx.get('/insertions', clobber=True)
         if len(ins) > 0:
             ins_id = [item['id'] for item in ins]
             for ins_id_i in ins_id:
@@ -41,6 +43,7 @@ class TestUserPmtSess(unittest.TestCase):
         one.alyx.rest('insertions', 'create', data=data)
         # 3. Save ins id in global variable for test access
         self.ins_id = one.alyx.rest('insertions', 'list')[0]['id']
+        one.alyx.clear_rest_cache()
 
     def test_reason_addnumberstr(self):
         outstr = usrpmt._reason_addnumberstr(reason_list=['a', 'b'])

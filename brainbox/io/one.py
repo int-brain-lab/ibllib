@@ -10,8 +10,7 @@ import one.alf.exceptions as alferr
 from ibllib.io import spikeglx
 from ibllib.atlas.regions import BrainRegions
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
-from oneibl.one import OneAlyx as OneOld
-from one.api import ONE
+from one.api import ONE, One, OneAlyx
 
 from iblutil.util import Bunch
 from brainbox.core import TimeSeries
@@ -46,14 +45,14 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
     From an eid, get brain locations from Alyx database
     analysis.
     :param eid: session eid or dictionary returned by one.alyx.rest('sessions', 'read', id=eid)
-    :param dataset_types: additional spikes/clusters objects to add to the standard list
     :return: channels
     """
     one = one or ONE()
 
-    if isinstance(one, OneOld):
+    if not isinstance(one, One):
         logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
         return old.load_channel_locations(eid, one=one, probe=probe, aligned=aligned)
+    assert isinstance(one, OneAlyx), 'ONE much be in remote mode'
 
     if isinstance(eid, dict):
         ses = eid
@@ -196,7 +195,7 @@ def load_ephys_session(eid, one=None):
     """
     assert one
 
-    if isinstance(one, OneOld):
+    if not isinstance(one, One):
         logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
         return old.load_ephys_session(eid, one=one)
 
@@ -222,15 +221,20 @@ def load_spike_sorting(eid, one=None, probe=None):
     :return: spikes, clusters (dict of bunch, 1 bunch per probe)
     """
     one = one or ONE()
-    if isinstance(one, OneOld):
+    if not isinstance(one, One):
         logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
         return old.load_spike_sorting(eid, one=one, probe=probe)
+    assert isinstance(one, OneAlyx), 'ONE much be in remote mode'
 
     if isinstance(probe, str):
         labels = [probe]
     else:
-        insertions = one.alyx.rest('insertions', 'list', session=eid)
-        labels = [ins['name'] for ins in insertions]
+        if alfio.is_session_path(eid):
+            probes = alfio.load_object(Path(eid).joinpath('alf'), 'probes')
+            labels = [pr['label'] for pr in probes['description']]
+        else:
+            insertions = one.alyx.rest('insertions', 'list', session=one.to_eid(eid))
+            labels = [ins['name'] for ins in insertions]
 
     spikes = Bunch.fromkeys(labels)
     clusters = Bunch.fromkeys(labels)
@@ -242,7 +246,8 @@ def load_spike_sorting(eid, one=None, probe=None):
                 f'Could not load spikes datasets for session {eid}. '
                 f'Spikes for {label} will return an empty dict')
 
-        _remove_old_clusters(one.eid2path(one.to_eid(eid)), label)
+        session_path = eid if alfio.is_session_path(eid) else one.eid2path(one.to_eid(eid))
+        _remove_old_clusters(session_path, label)
         try:
             clusters[label] = one.load_object(eid, 'clusters', collection=label)
         except alferr.ALFError:
@@ -320,7 +325,7 @@ def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False):
     # --- Get spikes and clusters data
     one = one or ONE()
 
-    if isinstance(one, OneOld):
+    if isinstance(one, One):
         logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
         return old.load_spike_sorting_with_channel(eid, one=one, probe=probe, aligned=aligned)
 
@@ -349,7 +354,7 @@ def load_passive_rfmap(eid, one=None):
             '_ibl_passiveRFM.times',
         }
 
-        _ = one.load(eid, dataset_types=dtypes, download_only=True)
+        _ = one.load_dataset(eid, dataset_types=dtypes, download_only=True)
         alf_path = one.path_from_eid(eid).joinpath('alf')
 
     # Load in the receptive field mapping data
@@ -405,7 +410,7 @@ def load_wheel_reaction_times(eid, one=None):
 
 
 def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_wheel=False,
-                   ret_abswheel=False, wheel_binsize=0.02, addtl_types=[]):
+                   ret_abswheel=False, wheel_binsize=0.02, addtl_types=()):
     """
     TODO Test this with new ONE
     Generate a pandas dataframe of per-trial timing information about a given session.
@@ -494,8 +499,8 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
     trialsdf['trial_end'] = trialsdf['feedback_times'] + t_after
     tdiffs = trialsdf['trial_end'] - np.roll(trialsdf['trial_start'], -1)
     if np.any(tdiffs[:-1] > 0):
-        logging.warn(f'{sum(tdiffs[:-1] > 0)} trials overlapping due to t_before and t_after '
-                     'values. Try reducing one or both!')
+        logging.warning(f'{sum(tdiffs[:-1] > 0)} trials overlapping due to t_before and t_after '
+                        'values. Try reducing one or both!')
     if not ret_wheel and not ret_abswheel:
         return trialsdf
 
