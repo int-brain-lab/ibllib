@@ -36,8 +36,7 @@ def rmsmap(fbin):
     :return: a dictionary with amplitudes in channeltime space, channelfrequency space, time
      and frequency scales
     """
-    if not isinstance(fbin, spikeglx.Reader):
-        sglx = spikeglx.Reader(fbin)
+    sglx = spikeglx.Reader(fbin, open=True)
     rms_win_length_samples = 2 ** np.ceil(np.log2(sglx.fs * RMS_WIN_LENGTH_SECS))
     # the window generator will generates window indices
     wingen = dsp.WindowGenerator(ns=sglx.ns, nswin=rms_win_length_samples, overlap=0)
@@ -65,6 +64,7 @@ def rmsmap(fbin):
         # print at least every 20 windows
         if (iw % min(20, max(int(np.floor(wingen.nwin / 75)), 1))) == 0:
             print_progress(iw, wingen.nwin)
+    sglx.close()
     return win
 
 

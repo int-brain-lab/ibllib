@@ -24,12 +24,13 @@ from brainbox.processing import sync
 logger = logging.getLogger('ibllib')
 
 
-def load_lfp(eid, one=None, dataset_types=None):
+def load_lfp(eid, one=None, dataset_types=None, **kwargs):
     """
     From an eid, hits the Alyx database and downloads the standard set of datasets
     needed for LFP
     :param eid:
     :param dataset_types: additional dataset types to add to the list
+    :param open: if True, spikeglx readers are opened
     :return: spikeglx.Reader
     """
     if dataset_types is None:
@@ -40,7 +41,7 @@ def load_lfp(eid, one=None, dataset_types=None):
 
     efiles = [ef for ef in spikeglx.glob_ephys_files(session_path, bin_exists=False)
               if ef.get('lf', None)]
-    return [spikeglx.Reader(ef['lf']) for ef in efiles]
+    return [spikeglx.Reader(ef['lf'], **kwargs) for ef in efiles]
 
 
 def load_channel_locations(eid, one=None, probe=None, aligned=False):

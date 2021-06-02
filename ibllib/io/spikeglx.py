@@ -23,7 +23,7 @@ class Reader:
 
     Note: To release system resources the close method must be called
     """
-    def __init__(self, sglx_file, open=True):
+    def __init__(self, sglx_file, open=False):
         """
         An interface for reading data from a SpikeGLX file
         :param sglx_file: Path to a SpikeGLX file (compressed or otherwise)
@@ -143,6 +143,8 @@ class Reader:
         :param slice_c: slice or channel indices
         :return: float32 array
         """
+        if not self.is_open:
+            raise IOError('Reader not open; call `open` before `read`')
         darray = np.float32(self._raw[nsel, csel])
         darray *= self.channel_conversion_sample2v[self.type][csel]
         if sync:
@@ -170,6 +172,8 @@ class Reader:
         Reads only the digital sync trace at specified samples using slicing syntax
         >>> sync_samples = sr.read_sync_digital(slice(0,10000))
         """
+        if not self.is_open:
+            raise IOError('Reader not open; call `open` before `read`')
         if not self.meta:
             _logger.warning('Sync trace not labeled in metadata. Assuming last trace')
         return split_sync(self._raw[_slice, _get_sync_trace_indices_from_meta(self.meta)])

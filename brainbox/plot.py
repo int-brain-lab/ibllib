@@ -348,7 +348,7 @@ def amp_heatmap(ephys_file, ts, ch, sr=30000, n_ch_probe=385, dtype='int16', cma
     ch = ch.reshape((ch.size, 1)) if ch.size == 1 else ch
 
     # Get memmapped array of `ephys_file`
-    s_reader = spikeglx.Reader(ephys_file)
+    s_reader = spikeglx.Reader(ephys_file, open=True)
     file_m = s_reader.data
 
     # Get voltage values for each peak amplitude sample for `ch`.
@@ -382,6 +382,7 @@ def amp_heatmap(ephys_file, ts, ch, sr=30000, n_ch_probe=385, dtype='int16', cma
         noise_s = np.median(noise_s_chunks, axis=0)
         v_vals -= noise_s[None, :]
         print('Done. ({})'.format(time.ctime()))
+    s_reader.close()
 
     # Plot heatmap.
     if ax is None:
