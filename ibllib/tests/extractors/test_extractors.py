@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-import one.alf.io
+import one.alf.io as alfio
 from ibllib.io.extractors import training_trials, biased_trials, camera
 from ibllib.io import raw_data_loaders as raw
 from ibllib.io.extractors.base import BaseExtractor
@@ -554,14 +554,14 @@ class TestExtractTrialData(unittest.TestCase):
         # check the output dimensions
         from ibllib.io.extractors.bpod_trials import extract_all
         extract_all(self.training_ge5['path'])
-        trials = alf.io.load_object(self.training_ge5['path'] / 'alf', object='trials')
-        self.assertTrue(alf.io.check_dimensions(trials) == 0)
+        trials = alfio.load_object(self.training_ge5['path'] / 'alf', object='trials')
+        self.assertTrue(alfio.check_dimensions(trials) == 0)
         extract_all(self.training_lt5['path'])
-        trials = alf.io.load_object(self.training_lt5['path'] / 'alf', object='trials')
-        self.assertTrue(alf.io.check_dimensions(trials) == 0)
+        trials = alfio.load_object(self.training_lt5['path'] / 'alf', object='trials')
+        self.assertTrue(alfio.check_dimensions(trials) == 0)
         extract_all(self.biased_ge5['path'])
-        trials = alf.io.load_object(self.biased_ge5['path'] / 'alf', object='trials')
-        self.assertTrue(alf.io.check_dimensions(trials) == 0)
+        trials = alfio.load_object(self.biased_ge5['path'] / 'alf', object='trials')
+        self.assertTrue(alfio.check_dimensions(trials) == 0)
         # Wheel moves extraction fails for these wheel data; skipping
         # extract_training(self.biased_lt5['path'])
         # trials = alf.io.load_object(self.biased_lt5['path'] / 'alf', object='_ibl_trials')
