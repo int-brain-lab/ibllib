@@ -270,23 +270,23 @@ class TestExtractTrialData(unittest.TestCase):
 
     def test_get_stimOn_times_lt5(self):
         # TRAINING SESSIONS
-        st = training_trials.StimOnTimes(
+        st = training_trials.StimOnTimes_deprecated(
             self.training_lt5['path']).extract()[0]
         self.assertTrue(isinstance(st, np.ndarray))
 
         # BIASED SESSIONS
-        st = biased_trials.StimOnTimes(
+        st = biased_trials.StimOnTimes_deprecated(
             self.biased_lt5['path']).extract()[0]
         self.assertTrue(isinstance(st, np.ndarray))
 
     def test_get_stimOn_times_ge5(self):
         # TRAINING SESSIONS
-        st = training_trials.StimOnTimes(
+        st = training_trials.StimOnTimes_deprecated(
             self.training_ge5['path']).extract()[0]
         self.assertTrue(isinstance(st, np.ndarray))
 
         # BIASED SESSIONS
-        st = biased_trials.StimOnTimes(
+        st = biased_trials.StimOnTimes_deprecated(
             self.biased_ge5['path']).extract()[0]
         self.assertTrue(isinstance(st, np.ndarray))
 
@@ -310,33 +310,6 @@ class TestExtractTrialData(unittest.TestCase):
         st = biased_trials.StimOnOffFreezeTimes(
             self.biased_ge5['path']).extract()[0]
         self.assertTrue(isinstance(st[0], np.ndarray))
-
-    @unittest.skip("not there yet")
-    def test_stimOn_extractor_values(self):
-        # Training lt5
-        st_old = training_trials.StimOnTimes(
-            self.training_lt5['path']).extract()[0]
-        st_new = training_trials.StimOnOffFreezeTimes(
-            self.training_lt5['path']).extract()[0]
-        self.assertTrue(np.all(st_old == st_new[0]))
-        # Training ge5
-        st_old = training_trials.StimOnTimes(
-            self.training_ge5['path']).extract()[0]
-        st_new = training_trials.StimOnOffFreezeTimes(
-            self.training_ge5['path']).extract()[0]
-        self.assertTrue(np.all(st_old == st_new[0]))
-        # Biased lt5
-        st_old = biased_trials.StimOnTimes(
-            self.biased_lt5['path']).extract()[0]
-        st_new = biased_trials.StimOnOffFreezeTimes(
-            self.biased_lt5['path']).extract()[0]
-        self.assertTrue(np.all(st_old == st_new[0]))
-        # Biased ge5
-        st_old = biased_trials.StimOnTimes(
-            self.biased_ge5['path']).extract()[0]
-        st_new = biased_trials.StimOnOffFreezeTimes(
-            self.biased_ge5['path']).extract()[0]
-        self.assertTrue(np.all(st_old == st_new[0]))
 
     def test_get_intervals(self):
         # TRAINING SESSIONS
