@@ -233,7 +233,7 @@ def register_track(probe_id, picks=None, one=None, overwrite=False, channels=Tru
         hist_qc = base.QC(probe_id, one=one, endpoint='insertions')
         hist_qc.update_extended_qc({'tracing_exists': False})
         hist_qc.update('CRITICAL', namespace='tracing')
-
+        insertion_histology = None
         # Here need to change the track qc to critical and also extended qc to zero
     else:
         brain_locations, insertion_histology = get_brain_regions(picks)
@@ -247,9 +247,9 @@ def register_track(probe_id, picks=None, one=None, overwrite=False, channels=Tru
         # 2) patch or create the trajectory coming from histology track
         tdict = create_trajectory_dict(probe_id, insertion_histology, provenance='Histology track')
 
-    hist_traj = one.alyx.rest('trajectories', 'list',
-                              probe_insertion=probe_id,
-                              provenance='Histology track')
+    hist_traj = one.alyx.get('/trajectories?'
+                             f'&probe_insertion={probe_id}'
+                             '&provenance=Histology track', clobber=True)
     # if the trajectory exists, remove it, this will cascade delete existing channel locations
     if len(hist_traj):
         if overwrite:
@@ -286,7 +286,8 @@ def register_aligned_track(probe_id, xyz_channels, chn_coords=None, one=None, ov
 
     hist_traj = one.alyx.rest('trajectories', 'list',
                               probe_insertion=probe_id,
-                              provenance='Ephys aligned histology track')
+                              provenance='Ephys aligned histology track',
+                              no_cache=True)
     # if the trajectory exists, remove it, this will cascade delete existing channel locations
     if len(hist_traj):
         if overwrite:
@@ -393,7 +394,7 @@ def register_track_files(path_tracks, one=None, overwrite=False):
         # beware: there may be underscores in the subject nickname
 
         search_filter = _parse_filename(track_file)
-        probe = one.alyx.rest('insertions', 'list', **search_filter)
+        probe = one.alyx.rest('insertions', 'list', no_cache=True, **search_filter)
         if len(probe) == 0:
             eid = one.search(subject=search_filter['subject'], date_range=search_filter['date'],
                              number=search_filter['experiment_number'])
@@ -448,9 +449,9 @@ def detect_missing_histology_tracks(path_tracks=None, one=None, subject=None):
         return
 
     for subj in unique_subjects:
-        insertions = one.alyx.rest('insertions', 'list', subject=subj)
+        insertions = one.alyx.rest('insertions', 'list', subject=subj, no_cache=True)
         trajectories = one.alyx.rest('trajectories', 'list', subject=subj,
-                                     provenance='Histology track')
+                                     provenance='Histology track', no_cache=True)
         if len(insertions) != len(trajectories):
             ins_sess = np.array([ins['session'] + ins['name'] for ins in insertions])
             traj_sess = np.array([traj['session']['id'] + traj['probe_name']

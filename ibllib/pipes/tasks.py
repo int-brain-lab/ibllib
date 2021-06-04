@@ -162,7 +162,9 @@ class Pipeline(abc.ABC):
         self.eid = eid
         if session_path:
             self.session_path = session_path
-            self.eid = one.eid_from_path(session_path) if self.one else None
+            if not self.eid:
+                # eID for newer sessions may not be in cache so use remote query
+                self.eid = one.path2eid(session_path, query_type='remote') if self.one else None
         self.label = self.__module__ + '.' + type(self).__name__
 
     def make_graph(self, out_dir=None, show=True):
@@ -209,7 +211,8 @@ class Pipeline(abc.ABC):
         if self.one is None:
             _logger.warning("No ONE instance found for Alyx connection, set the one property")
             return
-        tasks_alyx_pre = self.one.alyx.rest('tasks', 'list', session=self.eid, graph=self.name)
+        tasks_alyx_pre = self.one.alyx.rest('tasks', 'list',
+                                            session=self.eid, graph=self.name, no_cache=True)
         tasks_alyx = []
         # creates all the tasks by iterating through the ordered dict
         for k, t in self.tasks.items():
@@ -248,7 +251,7 @@ class Pipeline(abc.ABC):
         if self.one is None:
             _logger.warning("No ONE instance found for Alyx connection, set the one property")
             return
-        task_deck = self.one.alyx.rest('tasks', 'list', session=self.eid)
+        task_deck = self.one.alyx.rest('tasks', 'list', session=self.eid, no_cache=True)
         # [(t['name'], t['level']) for t in task_deck]
         all_datasets = []
         for i, j in enumerate(task_deck):
@@ -293,7 +296,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     if len(tdict['parents']):
         # here we need to check parents status, get the job_deck if not available
         if not job_deck:
-            job_deck = one.alyx.rest('tasks', 'list', session=tdict['session'])
+            job_deck = one.alyx.rest('tasks', 'list', session=tdict['session'], no_cache=True)
         # check the dependencies
         parent_tasks = filter(lambda x: x['id'] in tdict['parents'], job_deck)
         parent_statuses = [j['status'] for j in parent_tasks]

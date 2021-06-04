@@ -70,7 +70,7 @@ class TestSyncExtraction(unittest.TestCase):
                                    np.arange(0, nidq['sync_depth'])))
             with self.assertLogs(level='INFO') as log:
                 ephys_fpga.extract_sync(tdir)
-                self.assertEqual(len(log.output), 1)
+                self.assertEqual(1, len(log.output))
                 self.assertIn('SGLX sync found', log.output[0])
 
 

@@ -388,7 +388,7 @@ class TestVideo(unittest.TestCase):
 
     def test_label_from_path(self):
         # Test file path
-        session_path = self.one.path_from_eid(self.eid)
+        session_path = self.one.eid2path(self.eid)
         video_path = session_path / 'raw_video_data' / '_iblrig_bodyCamera.raw.mp4'
         label = video.label_from_path(video_path)
         self.assertEqual('body', label)
@@ -403,6 +403,7 @@ class TestVideo(unittest.TestCase):
         self.assertIsNone(label)
 
     def test_url_from_eid(self):
+        assert self.one.mode != 'remote'
         actual = video.url_from_eid(self.eid, 'left', self.one)
         self.assertEqual(self.url, actual)
         actual = video.url_from_eid(self.eid, one=self.one)
@@ -411,6 +412,17 @@ class TestVideo(unittest.TestCase):
         actual = video.url_from_eid(self.eid, label=('left', 'right'), one=self.one)
         expected = {'left': self.url, 'right': None}
         self.assertEqual(expected, actual)
+
+        # Test remote mode
+        old_mode = self.one.mode
+        self.one.mode = 'remote'
+        actual = video.url_from_eid(self.eid, label='left', one=self.one)
+        self.assertEqual(self.url, actual)
+        self.one.mode = old_mode
+
+        # Test arg checks
+        with self.assertRaises(ValueError):
+            video.url_from_eid(self.eid, 'back')
 
     def test_assert_valid_label(self):
         with self.assertRaises(ValueError):

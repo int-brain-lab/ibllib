@@ -305,7 +305,7 @@ def load_object(alfpath, object=None, short_keys=False, **kwargs):
     return out
 
 
-def save_object_npy(alfpath, dico, object, parts=None, namespace=None, timescale=None):
+def save_object_npy(alfpath, dico, object_name, parts=None, namespace=None, timescale=None):
     """
     Saves a dictionary in alf format using object as object name and dictionary keys as attribute
     names. Dimensions have to be consistent.
@@ -314,7 +314,7 @@ def save_object_npy(alfpath, dico, object, parts=None, namespace=None, timescale
 
     :param alfpath: path of the folder to save data to
     :param dico: dictionary to save to npy; keys correspond to ALF attributes
-    :param object: name of the object to save
+    :param object_name: name of the object to save
     :param parts: extra parts to the ALF name
     :param namespace: the optional namespace of the object
     :param timescale: the optional timescale of the object
@@ -329,7 +329,7 @@ def save_object_npy(alfpath, dico, object, parts=None, namespace=None, timescale
                          str([(k, v.shape) for k, v in dico.items()]))
     out_files = []
     for k, v in dico.items():
-        out_file = alfpath / files.to_alf(object, k, 'npy',
+        out_file = alfpath / files.to_alf(object_name, k, 'npy',
                                           extra=parts, namespace=namespace, timescale=timescale)
         np.save(out_file, v)
         out_files.append(out_file)

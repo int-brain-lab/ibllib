@@ -362,7 +362,7 @@ class TestPipesMisc(unittest.TestCase):
             eid, one=one, model="3A", labels=["probe00", "probe01"], force=True
         )
         # Verify it's been inserted
-        alyx_insertion = one.alyx.rest("insertions", "list", session=eid)
+        alyx_insertion = one.alyx.rest("insertions", "list", session=eid, no_cache=True)
         alyx_insertion = [x for x in alyx_insertion if x["model"] == "3A"]
         self.assertTrue(alyx_insertion[0]["model"] == "3A")
         self.assertTrue(alyx_insertion[0]["name"] in ["probe00", "probe01"])
@@ -374,7 +374,7 @@ class TestPipesMisc(unittest.TestCase):
         # Force probe insertion 3B
         misc.create_alyx_probe_insertions(eid, one=one, model="3B2", labels=["probe00", "probe01"])
         # Verify it's been inserted
-        alyx_insertion = one.alyx.rest("insertions", "list", session=eid)
+        alyx_insertion = one.alyx.rest("insertions", "list", session=eid, no_cache=True)
         self.assertTrue(alyx_insertion[0]["model"] == "3B2")
         self.assertTrue(alyx_insertion[0]["name"] in ["probe00", "probe01"])
         self.assertTrue(alyx_insertion[1]["model"] == "3B2")

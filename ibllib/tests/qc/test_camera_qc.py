@@ -31,6 +31,8 @@ class TestCameraQC(unittest.TestCase):
     def tearDownClass(cls) -> None:
         if cls.backend:
             matplotlib.use(cls.backend)
+        # Clear overwritten methods by destroying cached instance
+        ONE.cache_clear()
 
     def setUp(self) -> None:
         self.tempdir = TemporaryDirectory()
@@ -257,7 +259,7 @@ class TestCameraQC(unittest.TestCase):
         self.qc.eid = self.eid
         self.qc.download_data = False
         # If data for this session exists locally, overwrite the methods so it is not found
-        if self.one.path_from_eid(self.eid).exists():
+        if self.one.eid2path(self.eid).exists():
             self.qc.one.to_eid = lambda _: self.eid
             self.qc.one.download_datasets = lambda _: None
         with self.assertRaises(AssertionError):

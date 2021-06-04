@@ -36,10 +36,10 @@ REASONS_INS_CRIT = tuple(['Histological images missing',
 
 # Util functions
 def _create_note_str(ins_or_sess):
-    '''
+    """
     :param ins_or_sess: str containing either 'insertion' or 'session'
     :return:
-    '''
+    """
     str_static = f'=== EXPERIMENTER REASON(S) FOR MARKING THE ' \
                  f'{ins_or_sess.upper()} AS CRITICAL ==='
     return str_static
@@ -136,14 +136,14 @@ def _upload_note_alyx(eid, note_text, content_type, str_notes_static, one=None, 
     """
     if one is None:
         one = ONE()
-    my_note = {'user': one._par.ALYX_LOGIN,
+    my_note = {'user': one.alyx.user,
                'content_type': content_type,
                'object_id': eid,
                'text': f'{note_text}'}
     # check if such a note already exists, ask if OK to overwrite
     notes = one.alyx.rest('notes', 'list',
-                          django=f'text__icontains,{str_notes_static},'
-                                 f'object_id,{eid}')
+                          django=f'text__icontains,{str_notes_static},object_id,{eid}',
+                          no_cache=True)
     if len(notes) == 0:
         one.alyx.rest('notes', 'create', data=my_note)
         print('The selected reasons were saved on Alyx.')
@@ -156,9 +156,9 @@ def _upload_note_alyx(eid, note_text, content_type, str_notes_static, one=None, 
             for note in notes:
                 one.alyx.rest('notes', 'delete', id=note['id'])
             one.alyx.rest('notes', 'create', data=my_note)
-            print('The selected reasons were saved on Alyx ; old notes were deleted')
+            print('The selected reasons were saved on Alyx; old notes were deleted')
         else:
-            print('The selected reasons were NOT saved on Alyx ; old notes remain.')
+            print('The selected reasons were NOT saved on Alyx; old notes remain.')
 
 
 def main_gui(eid, reasons_selected, one=None):
@@ -171,7 +171,7 @@ def main_gui(eid, reasons_selected, one=None):
     :param: reasons_selected: list of str, str are picked within REASONS_INS_CRIT_GUI
     """
     # hit the database to check if eid is insertion eid
-    ins_list = one.alyx.rest('insertions', 'list', id=eid)
+    ins_list = one.alyx.rest('insertions', 'list', id=eid, no_cache=True)
     if len(ins_list) != 1:
         raise ValueError(f'N={len(ins_list)} insertion found, expected N=1. Check eid provided.')
 
@@ -222,9 +222,8 @@ def main(eid, one=None):
     # ask reasons for selection of critical status
 
     # hit the database to know if eid is insertion or session eid
-
-    sess_list = one.alyx.rest('sessions', 'list', id=eid)
-    ins_list = one.alyx.rest('insertions', 'list', id=eid)
+    sess_list = one.alyx.get('/sessions?&django=pk,' + eid, clobber=True)
+    ins_list = one.alyx.get('/insertions?&django=pk,' + eid, clobber=True)
 
     if len(sess_list) > 0 and len(ins_list) == 0:  # session
         reason_list = REASONS_SESS_CRIT

@@ -123,7 +123,8 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
     if not opened:
         sr.close()
     if save:
-        out_files = alfio.save_object_npy(output_path, sync, '_spikeglx_sync', parts=parts)
+        out_files = alfio.save_object_npy(output_path, sync, 'sync',
+                                          namespace='spikeglx', parts=parts)
         return Bunch(sync), out_files
     else:
         return Bunch(sync)
@@ -318,7 +319,7 @@ def _clean_frame2ttl(frame2ttl, display=False):
     frame2ttl_ = {'times': np.delete(frame2ttl['times'], iko),
                   'polarities': np.delete(frame2ttl['polarities'], iko)}
     if iko.size > (0.1 * frame2ttl['times'].size):
-        _logger.warning(f'{iko.size} ({iko.size / frame2ttl["times"].size * 100} %) '
+        _logger.warning(f'{iko.size} ({iko.size / frame2ttl["times"].size:.2%} %) '
                         f'frame to TTL polarity switches below {F2TTL_THRESH} secs')
     if display:  # pragma: no cover
         from ibllib.plots import squares
@@ -465,7 +466,7 @@ def extract_sync(session_path, overwrite=False, ephys_files=None):
             alfname['extra'] = efi.label
         file_exists = alfio.exists(bin_file.parent, **alfname)
         if not overwrite and file_exists:
-            _logger.warning(f'Skipping raw sync: SGLX sync found for probe {efi.label} !')
+            _logger.warning(f'Skipping raw sync: SGLX sync found for probe {efi.label}!')
             sync = alfio.load_object(bin_file.parent, **alfname)
             out_files, _ = alfio._ls(bin_file.parent, **alfname)
         else:

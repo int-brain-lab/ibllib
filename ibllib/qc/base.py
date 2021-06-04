@@ -119,7 +119,7 @@ class QC:
 
     def _confirm_endpoint_id(self, endpoint_id):
         # Have as read for now since 'list' isn't working
-        target_obj = self.one.alyx.get(f'{self.endpoint}/{endpoint_id}', clobber=True) or None
+        target_obj = self.one.alyx.get(f'/{self.endpoint}/{endpoint_id}', clobber=True) or None
         if target_obj:
             self.eid = endpoint_id
             json_field = target_obj.get('json')
@@ -158,7 +158,7 @@ class QC:
         assert self.eid, 'Unable to update Alyx; eID not set'
         if namespace:  # Record in extended qc
             self.update_extended_qc({namespace: outcome})
-        details = self.one.alyx.get(f'{self.endpoint}/{self.eid}', clobber=True)
+        details = self.one.alyx.get(f'/{self.endpoint}/{self.eid}', clobber=True)
         current_status = (details['json'] if self.json else details)['qc']
 
         if CRITERIA[current_status] < CRITERIA[outcome] or override:
@@ -191,7 +191,7 @@ class QC:
             if (v is not None and not isinstance(v, str)) and np.isnan(v).all():
                 data[k] = None
 
-        details = self.one.alyx.get(f'{self.endpoint}/{self.eid}', clobber=True)
+        details = self.one.alyx.get(f'/{self.endpoint}/{self.eid}', clobber=True)
         if self.json:
             extended_qc = details['json']['extended_qc'] or {}
             extended_qc.update(data)
