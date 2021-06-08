@@ -262,15 +262,14 @@ class EphysTrials(tasks.Task):
         """
         Computes and update the behaviour criterion on Alyx
         """
-        import alf.io
         from brainbox.behavior import training
 
-        trials = alf.io.load_object(self.session_path.joinpath("alf"), "trials")
+        trials = alfio.load_object(self.session_path.joinpath("alf"), "trials")
         good_enough = training.criterion_delay(
             n_trials=trials["intervals"].shape[0],
             perf_easy=training.compute_performance_easy(trials),
         )
-        eid = self.one.eid_from_path(self.session_path)
+        eid = self.one.path2eid(self.session_path, query_type='remote')
         self.one.alyx.json_field_update(
             "sessions", eid, "extended_qc", {"behavior": int(good_enough)}
         )
@@ -329,7 +328,7 @@ class EphysCellsQc(tasks.Task):
         :param drift:
         :return:
         """
-        eid = self.one.eid_from_path(self.session_path)
+        eid = self.one.path2eid(self.session_path, query_type='remote')
         pdict = self.one.alyx.rest('insertions', 'list', session=eid, name=folder_probe.parts[-1])
         if len(pdict) != 1:
             return
@@ -367,7 +366,7 @@ class EphysCellsQc(tasks.Task):
                 qc_file, df_units, drift = self._compute_cell_qc(folder_probe)
                 out_files.append(qc_file)
                 self._label_probe_qc(folder_probe, df_units, drift)
-            except BaseException:
+            except Exception:
                 _logger.error(traceback.format_exc())
                 self.status = -1
                 continue

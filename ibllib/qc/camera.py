@@ -34,12 +34,12 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
 from ibllib.io.extractors.camera import extract_camera_sync, extract_all
-from ibllib.exceptions import ALFObjectNotFound
 from ibllib.io.extractors import ephys_fpga, training_wheel
 from ibllib.io.extractors.video_motion import MotionAlignment
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io import raw_data_loaders as raw
 import one.alf.io as alfio
+from one.alf.exceptions import ALFObjectNotFound
 from iblutil.util import Bunch
 from iblutil.numerical import within_ranges
 import brainbox.behavior.wheel as wh

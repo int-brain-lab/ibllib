@@ -7,7 +7,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from brainbox.core import Bunch
+from iblutil.util import Bunch
 from one.api import ONE, One
 from one import params
 

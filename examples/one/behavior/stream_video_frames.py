@@ -1,4 +1,4 @@
-from oneibl.stream import VideoStreamer
+from ibllib.io.video import VideoStreamer
 
 FRAME_ID = 4000
 

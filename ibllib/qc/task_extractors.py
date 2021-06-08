@@ -9,6 +9,7 @@ from ibllib.io.extractors.training_wheel import get_wheel_position
 from ibllib.io.extractors import ephys_fpga
 import ibllib.io.raw_data_loaders as raw
 from one.alf.io import is_session_path
+from one.alf.exceptions import ALFObjectNotFound
 from one.api import ONE
 
 
@@ -73,18 +74,22 @@ class TaskQCExtractor(object):
             "_iblrig_encoderTrialInfo.raw",
             "_iblrig_ambientSensorData.raw",
         ]
-        eid = self.one.eid_from_path(self.session_path)
+        eid = self.one.path2eid(self.session_path)
+        self.log.info(f"Downloading data for session {eid}")
+        collections = ['raw_behavior_data'] * len(dstypes)
         # Ensure we have the settings
-        settings = self.one.load(eid, ["_iblrig_taskSettings.raw"], download_only=True)
+        settings, _ = self.one.load_datasets(eid, ["_iblrig_taskSettings.raw"],
+                                             download_only=True, assert_present=False)
         if settings and get_session_extractor_type(self.session_path) == 'ephys':
             dstypes.extend(['_spikeglx_sync.channels',
                             '_spikeglx_sync.polarities',
                             '_spikeglx_sync.times',
-                            'ephysData.raw.meta',
-                            'ephysData.raw.wiring'])
-        self.log.info(f"Downloading data for session {eid}")
-        files = self.one.load(eid, dataset_types=dstypes, download_only=True)
-        missing = [True for _ in dstypes] if not files else [x is None for x in files]
+                            '_spikeglx_ephysData_g0_t0.nidq.meta',
+                            '_spikeglx_ephysData_g0_t0.nidq.wiring.json'])
+            collections = collections + ['raw_ephys_data'] * 5
+        files, _ = self.one.load_datasets(eid, dstypes, collections=collections,
+                                          download_only=True, assert_present=False)
+        missing = [True] * len(dstypes) if not files else [x is None for x in files]
         if self.session_path is None or all(missing):
             self.lazy = True
             self.log.error("Data not found on server, can't calculate QC.")

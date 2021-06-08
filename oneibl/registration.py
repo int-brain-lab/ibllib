@@ -122,7 +122,8 @@ def register_session_raw_data(session_path, one=None, overwrite=False, dry=False
     :return: Alyx response: dictionary of registered files
     """
     session_path = Path(session_path)
-    eid = one.path2eid(session_path, use_cache=False)  # needs to make sure we're up to date
+    one.alyx.clear_rest_cache()  # Ensure data are from database
+    eid = one.path2eid(session_path, query_type='remote')  # needs to make sure we're up to date
     # query the database for existing datasets on the session and allowed dataset types
     dsets = one.alyx.rest('datasets', 'list', session=eid)
     already_registered = [
@@ -237,7 +238,7 @@ class RegistrationClient:
             raise ibllib.exceptions.AlyxSubjectNotFound(md['SUBJECT_NAME'])
 
         # look for a session from the same subject, same number on the same day
-        session_id, session = self.one.search(subjects=subject['nickname'],
+        session_id, session = self.one.search(subject=subject['nickname'],
                                               date_range=md['SESSION_DATE'],
                                               number=md['SESSION_NUMBER'],
                                               details=True)

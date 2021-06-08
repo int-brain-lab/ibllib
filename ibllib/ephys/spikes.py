@@ -27,7 +27,7 @@ def probes_description(ses_path, one=None, bin_exists=True):
         alf/probes.trajectory.npy
     """
 
-    eid = one.eid_from_path(ses_path)
+    eid = one.path2eid(ses_path, query_type='remote')
     ses_path = Path(ses_path)
     ephys_files = spikeglx.glob_ephys_files(ses_path, ext='meta')
     subdirs, labels, efiles_sorted = zip(

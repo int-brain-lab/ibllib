@@ -8,11 +8,10 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
-from oneibl.stream import VideoStreamer
 import ibllib.dsp.utils as dsp
 from iblutil.util import range_str
 from ibllib.plots import squares, vertical_lines
-from ibllib.io.video import assert_valid_label
+from ibllib.io.video import assert_valid_label, VideoStreamer
 from iblutil.numerical import within_ranges
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_main_probe_sync

@@ -37,7 +37,7 @@ class MotionAlignment:
     def __init__(self, eid, one=None, log=logging.getLogger('ibllib'), **kwargs):
         self.one = one or ONE()
         self.eid = eid
-        self.session_path = kwargs.pop('session_path', self.one.path_from_eid(eid))
+        self.session_path = kwargs.pop('session_path', self.one.eid2path(eid))
         self.ref = self.one.eid2ref(self.eid, as_dict=False)
         self.log = log
         self.trials = self.wheel = self.camera_times = None
@@ -123,11 +123,11 @@ class MotionAlignment:
         if alfio.is_uuid_string(str(session_path_or_eid)):
             self.eid = session_path_or_eid
             # Try to set session_path if data is found locally
-            self.session_path = self.one.path_from_eid(self.eid)
+            self.session_path = self.one.eid2path(self.eid)
         elif alfio.is_session_path(session_path_or_eid):
             self.session_path = Path(session_path_or_eid)
             if self.one is not None:
-                self.eid = self.one.eid_from_path(self.session_path)
+                self.eid = self.one.path2eid(self.session_path)
                 if not self.eid:
                     self.log.warning('Failed to determine eID from session path')
         else:
