@@ -123,7 +123,8 @@ def load_camera_FrameData(session_path, camera: str = 'left', raw: bool = False)
             }
         raw:
             pandas.DataFrame: 4 int64 columns: {
-                Timestamp,              # UTC ticks from BehaviorPC (100's of ns since midnight 1/1/0001)
+                Timestamp,              # UTC ticks from BehaviorPC
+                                        # (100's of ns since midnight 1/1/0001)
                 embeddedTimeStamp,      # Camera timestamp (Needs unclycling and conversion)
                 embeddedFrameCounter,   # Frame counter (int)
                 embeddedGPIOPinState    # GPIO pin state integer representation of 4 pins
@@ -131,7 +132,7 @@ def load_camera_FrameData(session_path, camera: str = 'left', raw: bool = False)
     """
     camera = assert_valid_label(camera)
     fpath = Path(session_path).joinpath("raw_video_data", f"_iblrig_{camera}Camera.FrameData.bin")
-    assert fpath.exists(), f"{fpath}\nFile not Found: Could not find bin file for camera <{camera}>"
+    assert fpath.exists(), f"{fpath}\nFile not Found: Could not find bin file for cam <{camera}>"
     rdata = np.fromfile(fpath, dtype=np.float64)
     assert len(rdata) % 4 == 0, "Dimension mismatch: bin file length is not mod 4"
     rows = int(len(rdata) / 4)
