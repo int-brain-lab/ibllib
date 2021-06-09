@@ -261,7 +261,7 @@ class TestCameraQC(unittest.TestCase):
         # If data for this session exists locally, overwrite the methods so it is not found
         if self.one.eid2path(self.eid).exists():
             self.qc.one.to_eid = lambda _: self.eid
-            self.qc.one.download_datasets = lambda _: None
+            self.qc.one._download_datasets = lambda _: None
         with self.assertRaises(AssertionError):
             self.qc.run(update=False)
 

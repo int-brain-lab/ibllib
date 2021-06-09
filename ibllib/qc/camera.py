@@ -298,14 +298,15 @@ class CameraQC(base.QC):
             else:  # Ignore probe datasets, etc.
                 dataset = [d for d in dataset if d['collection'] in collections]
             if any(x['name'].endswith('.mp4') for x in dataset) and self.stream:
-                names = [x.name for x in self.one.list(self.eid)]
+                names = [x.split('/')[-1] for x in self.one.list_datasets(self.eid, details=False)]
                 assert f'_iblrig_{self.label}Camera.raw.mp4' in names, 'No remote video file found'
                 continue
             optional = ('camera.times', '_iblrig_Camera.raw', 'wheel.position',
-                        'wheel.timestamps', '_iblrig_Camera.frame_counter', '_iblrig_Camera.GPIO')
+                        'wheel.timestamps', '_iblrig_Camera.frame_counter', '_iblrig_Camera.GPIO',
+                        '_spikeglx_sync.channels', 'ephysData.raw.wiring')
             required = (dstype not in optional)
             present = (
-                self.one.download_datasets(dataset)
+                self.one._download_datasets(dataset)
                 if self.download_data
                 else (next(self.session_path.rglob(d['name']), None) for d in dataset)
             )
