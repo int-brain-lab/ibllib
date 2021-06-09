@@ -15,6 +15,6 @@ else:
     logging.getLogger('ibllib').addHandler(logging.NullHandler())
 
 try:
-    import iblutill
+    import iblutil
 except ModuleNotFoundError:
     logging.getLogger('ibllib').error('Missing dependency, please run `pip install iblutil`')

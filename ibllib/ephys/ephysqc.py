@@ -283,7 +283,7 @@ def qc_fpga_task(fpga_trials, alf_trials):
     :fpga_task is the dictionary output of
     ibllib.io.extractors.ephys_fpga.extract_behaviour_sync
     : bpod_trials is the dictionary output of ibllib.io.extractors.ephys_trials.extract_all
-    : alf_trials is the ALF _ibl_trials object after extraction (alf.io.load_object)
+    : alf_trials is the ALF _ibl_trials object after extraction (alfio.load_object)
     :return: qc_session, qc_trials, True means QC passes while False indicates a failure
     """
 
@@ -403,7 +403,7 @@ def _qc_from_path(sess_path, display=True):
                                                     chmap=chmap, save=True, display=display)
     # align with the bpod
     bpod2fpga = ephys_fpga.align_with_bpod(temp_alf_folder.parent)
-    alf_trials = alf.io.load_object(temp_alf_folder, 'trials')
+    alf_trials = alfio.load_object(temp_alf_folder, 'trials')
     shutil.rmtree(temp_alf_folder)
     # do the QC
     qcs, qct = qc_fpga_task(fpga_trials, alf_trials)
