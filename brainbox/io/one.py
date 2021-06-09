@@ -15,7 +15,6 @@ from one.api import ONE, One, OneAlyx
 from iblutil.util import Bunch
 from brainbox.core import TimeSeries
 from brainbox.processing import sync
-from .deprecated import one as old
 
 logger = logging.getLogger('ibllib')
 
@@ -51,6 +50,7 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
 
     if not isinstance(one, One):
         logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
+        from .deprecated import one as old
         return old.load_channel_locations(eid, one=one, probe=probe, aligned=aligned)
     assert isinstance(one, OneAlyx), 'ONE much be in remote mode'
 
@@ -197,6 +197,7 @@ def load_ephys_session(eid, one=None):
 
     if not isinstance(one, One):
         logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
+        from .deprecated import one as old
         return old.load_ephys_session(eid, one=one)
 
     spikes, clusters = load_spike_sorting(eid, one=one)
@@ -223,14 +224,15 @@ def load_spike_sorting(eid, one=None, probe=None):
     one = one or ONE()
     if not isinstance(one, One):
         logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
+        from .deprecated import one as old
         return old.load_spike_sorting(eid, one=one, probe=probe)
     assert isinstance(one, OneAlyx), 'ONE much be in remote mode'
 
     if isinstance(probe, str):
         labels = [probe]
     else:
-        if alfio.is_session_path(eid):
-            probes = alfio.load_object(Path(eid).joinpath('alf'), 'probes')
+        if one.mode == 'local':
+            probes = one.load_object(eid, 'probes')
             labels = [pr['label'] for pr in probes['description']]
         else:
             insertions = one.alyx.rest('insertions', 'list', session=one.to_eid(eid))
@@ -327,6 +329,7 @@ def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False):
 
     if isinstance(one, One):
         logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
+        from .deprecated import one as old
         return old.load_spike_sorting_with_channel(eid, one=one, probe=probe, aligned=aligned)
 
     dic_spk_bunch, dic_clus = load_spike_sorting(eid, one=one, probe=probe)

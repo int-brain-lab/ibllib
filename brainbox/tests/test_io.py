@@ -6,19 +6,14 @@ import tempfile
 import shutil
 
 import numpy as np
-import pandas as pd
 
 from iblutil.io.parquet import uuid2np
 from brainbox.io import one as bbone
 from one.api import ONE
+from one.alf.onepqt import make_parquet_db
 
 
 class TestIO_ALF(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls.one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
-                      username='test_user', password='TapetesBloc18', mode='local')
 
     def setUp(self) -> None:
         """
@@ -27,7 +22,11 @@ class TestIO_ALF(unittest.TestCase):
         """
         self.tmpdir = Path(tempfile.gettempdir()) / 'test_bbio'
         self.tmpdir.mkdir(exist_ok=True)
-        self.alf_path = self.tmpdir.joinpath('subject', '2019-08-12', '001', 'alf')
+        self.one = ONE(base_url='https://test.alyx.internationalbrainlab.org', mode='local',
+                       username='test_user', password='TapetesBloc18', cache_dir=self.tmpdir)
+        self.alf_path = self.tmpdir.joinpath(
+            'lab', 'Subjects', 'subject', '2019-08-12', '001', 'alf'
+        )
         self.session_path = self.alf_path.parent
         self.probes = ['probe00', 'probe01']
         nspi = [10000, 10001]
@@ -72,18 +71,8 @@ class TestIO_ALF(unittest.TestCase):
                     .append(session_rec, ignore_index=True)
                     .set_index(['id_0', 'id_1'])
             )
-            rec = []
-            session_path = self.session_path.as_posix()
-            for dset in self.alf_path.glob('*.*'):
-                dID = uuid2np([uuid.uuid4()])
-                rec.append({
-                    'id_0': dID[0, 0],
-                    'id_1': dID[0, 1],
-                    'rel_path': dset.as_posix().replace(session_path, '').strip('/')
-                })
-            df = pd.DataFrame(rec).set_index(['id_0', 'id_1'])
-            df[['exists', 'session_path', 'eid_0', 'eid_1']] = (True, session_path, *eid[0])
-            self.one._cache['datasets'] = self.one._cache['datasets'].append(df)
+            make_parquet_db(self.tmpdir)
+            self.one._load_cache(cache_dir=self.tmpdir)
 
     def test_load_ephys(self):
         # straight test
