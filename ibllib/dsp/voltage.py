@@ -126,6 +126,44 @@ def fk(x, si=.002, dx=1, vbounds=None, btype='highpass', ntr_pad=0, ntr_tap=None
     return xf / gain
 
 
+def kfilt(x, collection=None, ntr_pad=0, ntr_tap=None, lagc=300, butter_kwargs=None):
+
+    if butter_kwargs is None:
+        butter_kwargs = {'N': 3, 'Wn': 0.1, 'btype': 'highpass'}
+    if collection is not None:
+        xout = np.zeros_like(x)
+        for c in np.unique(collection):
+            sel = collection == c
+            xout[sel, :] = kfilt(x=x[sel, :], ntr_pad=0, ntr_tap=None, collection=None, butter_kwargs=butter_kwargs)
+        return xout
+    nx, nt = x.shape
+
+    # lateral padding left and right
+    ntr_pad = int(ntr_pad)
+    ntr_tap = ntr_pad if ntr_tap is None else ntr_tap
+    nxp = nx + ntr_pad * 2
+
+    # apply agc and keep the gain in handy
+    if not lagc:
+        xf = np.copy(x)
+        gain = 1
+    else:
+        xf, gain = agc(x, wl=lagc, si=1.0)
+    if ntr_pad > 0:
+        # pad the array with a mirrored version of itself and apply a cosine taper
+        xf = np.r_[np.flipud(xf[:ntr_pad]), xf, np.flipud(xf[-ntr_pad:])]
+    if ntr_tap > 0:
+        taper = fdsp.fcn_cosine([0, ntr_tap])(np.arange(nxp))  # taper up
+        taper *= 1 - fdsp.fcn_cosine([nxp - ntr_tap, nxp])(np.arange(nxp))   # taper down
+        xf = xf * taper[:, np.newaxis]
+    sos = scipy.signal.butter(**butter_kwargs, output='sos')
+    xf = scipy.signal.sosfiltfilt(sos, xf, axis=0)
+
+    if ntr_pad > 0:
+        xf = xf[ntr_pad:-ntr_pad, :]
+    return xf / gain
+
+
 def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, fk_kwargs=None):
     """Super Car (super slow also...) - far from being set in stone but a good workflow example
     :param x: demultiplexed array (ntraces, nsample)
