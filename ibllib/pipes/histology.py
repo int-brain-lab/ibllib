@@ -460,7 +460,7 @@ def detect_missing_histology_tracks(path_tracks=None, one=None, subject=None):
 
             for idx in miss_idx:
 
-                info = one.path_from_eid(ins_sess[idx][:36]).parts
+                info = one.eid2path(ins_sess[idx][:36], query_type='remote').parts
                 print(ins_sess[idx][:36])
                 msg = f"Histology tracing missing for {info[-3]}, {info[-2]}, {info[-1]}," \
                       f" {ins_sess[idx][36:]}.\nEnter [y]es to register an empty track for " \

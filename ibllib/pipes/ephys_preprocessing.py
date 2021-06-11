@@ -329,7 +329,8 @@ class EphysCellsQc(tasks.Task):
         :return:
         """
         eid = self.one.path2eid(self.session_path, query_type='remote')
-        pdict = self.one.alyx.rest('insertions', 'list', session=eid, name=folder_probe.parts[-1])
+        pdict = self.one.alyx.rest('insertions', 'list',
+                                   session=eid, name=folder_probe.parts[-1], no_cache=True)
         if len(pdict) != 1:
             return
         isok = df_units['label'] == 1
