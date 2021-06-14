@@ -305,7 +305,7 @@ def generate_pseudo_blocks(n_trials, factor=60, min_=20, max_=100, first5050=90)
     return np.array([0.5] * first5050 + block_ids[:n_trials - first5050])
 
 
-def generate_pseudo_stimuli(n_trials, contrast_set=[0.06, 0.12, 0.25, 1], first5050=90):
+def generate_pseudo_stimuli(n_trials, contrast_set=[0, 0.06, 0.12, 0.25, 1], first5050=90):
     """
     Generate a block structure with stimuli
 
