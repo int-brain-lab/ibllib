@@ -3,7 +3,7 @@ Low-level functions to work in frequency domain for n-dim arrays
 """
 
 import numpy as np
-import scipy
+import scipy.fft
 from ibllib.dsp.utils import fcn_cosine
 
 
@@ -175,32 +175,41 @@ def _freq_vector(f, b, typ='lp'):
         return 1 - filc
 
 
-def fshift(w, s, axis=-1):
+def fshift(w, s, axis=-1, ns=None):
     """
     Shifts a 1D or 2D signal in frequency domain, to allow for accurate non-integer shifts
-    :param w: input signal
+    :param w: input signal (if complex, need to provide ns too)
     :param s: shift in samples, positive shifts forward
     :param axis: axis along which to shift (last axis by default)
+    :param axis: axis along which to shift (last axis by default)
+    :param ns: if a rfft frequency domain array is provided, give a number of samples as there
+     is an ambiguity
     :return: w
     """
     # create a vector that contains a 1 sample shift on the axis
-    ns = np.array(w.shape) * 0 + 1
-    ns[axis] = w.shape[axis]
-    dephas = np.zeros(ns)
+    ns = ns or w.shape[axis]
+    shape = np.array(w.shape) * 0 + 1
+    shape[axis] = ns
+    dephas = np.zeros(shape)
     np.put(dephas, 1, 1)
+    dephas = scipy.fft.rfft(dephas, axis=axis)
     # fft the data along the axis and the dephas
-    W = freduce(scipy.fft.fft(w, axis=axis), axis=axis)
-    dephas = freduce(scipy.fft.fft(dephas, axis=axis), axis=axis)
+    do_fft = w.dtype not in [np.complex128, np.complex64, np.complex256]
+    if do_fft:
+        W = scipy.fft.rfft(w, axis=axis)
+    else:
+        W = w
     # if multiple shifts, broadcast along the other dimensions, otherwise keep a single vector
     if not np.isscalar(s):
         s_shape = np.array(w.shape)
         s_shape[axis] = 1
         s = s.reshape(s_shape)
-    # apply the shift (s) to the fft angle to get the phase shift
-    dephas = np.exp(1j * np.angle(dephas) * s)
-    # apply phase shift by broadcasting
-    out = np.real(scipy.fft.ifft(fexpand(W * dephas, ns[axis], axis=axis), axis=axis))
-    return out.astype(w.dtype)
+    # apply the shift (s) to the fft angle to get the phase shift and broadcast
+    W *= np.exp(1j * np.angle(dephas) * s)
+    if do_fft:
+        W = np.real(scipy.fft.irfft(W, ns, axis=axis))
+        W = W.astype(w.dtype)
+    return W
 
 
 def fit_phase(w, si=1, fmin=0, fmax=None, axis=-1):

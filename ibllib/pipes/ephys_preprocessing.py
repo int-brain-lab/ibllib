@@ -159,6 +159,7 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
 
         # decompresses using mtscomp
         tmp_ap_file = scratch_dir.joinpath(ap_file.name).with_suffix(".bin")
+
         mtscomp.decompress(cdata=ap_file, out=tmp_ap_file)
 
         # run matlab spike sorting: with R2019a, it would be much easier to run with
@@ -396,13 +397,13 @@ class EphysMtscomp(tasks.Task):
                 if not bin_file:
                     continue
                 if bin_file.suffix.find("bin") == 1:
-                    sr = spikeglx.Reader(bin_file)
-                    if sr.is_mtscomp:
-                        out_files.append(bin_file)
-                    else:
-                        _logger.info(f"Compressing binary file {bin_file}")
-                        out_files.append(sr.compress_file(keep_original=False))
-                        out_files.append(bin_file.with_suffix('.ch'))
+                    with spikeglx.Reader(bin_file) as sr:
+                        if sr.is_mtscomp:
+                            out_files.append(bin_file)
+                        else:
+                            _logger.info(f"Compressing binary file {bin_file}")
+                            out_files.append(sr.compress_file(keep_original=False))
+                            out_files.append(bin_file.with_suffix('.ch'))
                 else:
                     out_files.append(bin_file)
 

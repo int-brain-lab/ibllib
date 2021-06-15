@@ -496,7 +496,7 @@ class StimOnTriggerTimes(BaseBpodTrialsExtractor):
         return stim_on_state[:, 0].T
 
 
-class StimOnTimes(BaseBpodTrialsExtractor):
+class StimOnTimes_deprecated(BaseBpodTrialsExtractor):
     save_names = '_ibl_trials.stimOn_times.npy'
     var_names = 'stimOn_times'
 
@@ -509,6 +509,8 @@ class StimOnTimes(BaseBpodTrialsExtractor):
         (Frame changes are in BNC1 High and BNC1 Low)
         """
         # Version check
+        _logger.warning("Deprecation Warning: this is an old version of stimOn extraction."
+                        "From version 5., use StimOnOffFreezeTimes")
         if version.ge(self.settings['IBLRIG_VERSION_TAG'], '5.0.0'):
             stimOn_times = self.get_stimOn_times_ge5(self.session_path, data=self.bpod_trials)
         else:
@@ -662,7 +664,7 @@ def extract_all(session_path, save=False, bpod_trials=None, settings=None):
         base.extend([StimOnTriggerTimes, StimOnOffFreezeTimes, ItiInTimes,
                      StimOffTriggerTimes, StimFreezeTriggerTimes, ErrorCueTriggerTimes])
     else:
-        base.extend([IncludedTrials, ItiDuration, StimOnTimes])
+        base.extend([IncludedTrials, ItiDuration, StimOnTimes_deprecated])
 
     out, fil = run_extractor_classes(
         base, save=save, session_path=session_path, bpod_trials=bpod_trials, settings=settings)

@@ -1,12 +1,14 @@
 import unittest
 import numpy as np
 import scipy.signal
+import scipy.fft
 
 import ibllib.dsp.fourier as ft
 from ibllib.dsp import (WindowGenerator, rms, rises, falls, fronts, smooth, fshift, fit_phase,
                         fcn_cosine)
 from ibllib.dsp.utils import parabolic_max, sync_timestamps
 import ibllib.dsp.voltage as voltage
+import ibllib.dsp.cadzow as cadzow
 
 
 class TestSyncTimestamps(unittest.TestCase):
@@ -93,6 +95,13 @@ class TestPhaseRegression(unittest.TestCase):
 
 
 class TestShift(unittest.TestCase):
+
+    def test_shift_already_fft(self):
+        for ns in [500, 501]:
+            w = scipy.signal.ricker(ns, 10)
+            W = scipy.fft.rfft(w)
+            ws = np.real(scipy.fft.irfft(fshift(W, 1, ns=np.shape(w)[0]), n=ns))
+            self.assertTrue(np.all(np.isclose(ws, np.roll(w, 1))))
 
     def test_shift_floats(self):
         ns = 500
@@ -354,6 +363,13 @@ class TestVoltage(unittest.TestCase):
                         ntr_pad=10, ntr_tap=15, lagc=.25,
                         kfilt={'bounds': [0, .01], 'btype': 'hp'})
         assert np.mean(20 * np.log10(rms(fk - data_v1 - fknoise)) < -40) > .9
+
+
+class TestCadzow(unittest.TestCase):
+
+    def trajectory_matrixes(self):
+        assert np.all(cadzow.traj_matrix_indices(4) == np.array([[1, 0], [2, 1], [3, 2]]))
+        assert np.all(cadzow.traj_matrix_indices(3) == np.array([[1, 0], [2, 1]]))
 
 
 if __name__ == "__main__":

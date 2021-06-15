@@ -5,7 +5,7 @@ import numpy as np
 import scipy.signal
 
 import ibllib.dsp.fourier as fdsp
-from ibllib.dsp import fshift, voltage
+from ibllib.dsp import fshift
 from ibllib.ephys import neuropixel
 
 
@@ -126,7 +126,46 @@ def fk(x, si=.002, dx=1, vbounds=None, btype='highpass', ntr_pad=0, ntr_tap=None
     return xf / gain
 
 
-def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, fk_kwargs=None):
+def kfilt(x, collection=None, ntr_pad=0, ntr_tap=None, lagc=300, butter_kwargs=None):
+
+    if butter_kwargs is None:
+        butter_kwargs = {'N': 3, 'Wn': 0.1, 'btype': 'highpass'}
+    if collection is not None:
+        xout = np.zeros_like(x)
+        for c in np.unique(collection):
+            sel = collection == c
+            xout[sel, :] = kfilt(x=x[sel, :], ntr_pad=0, ntr_tap=None, collection=None,
+                                 butter_kwargs=butter_kwargs)
+        return xout
+    nx, nt = x.shape
+
+    # lateral padding left and right
+    ntr_pad = int(ntr_pad)
+    ntr_tap = ntr_pad if ntr_tap is None else ntr_tap
+    nxp = nx + ntr_pad * 2
+
+    # apply agc and keep the gain in handy
+    if not lagc:
+        xf = np.copy(x)
+        gain = 1
+    else:
+        xf, gain = agc(x, wl=lagc, si=1.0)
+    if ntr_pad > 0:
+        # pad the array with a mirrored version of itself and apply a cosine taper
+        xf = np.r_[np.flipud(xf[:ntr_pad]), xf, np.flipud(xf[-ntr_pad:])]
+    if ntr_tap > 0:
+        taper = fdsp.fcn_cosine([0, ntr_tap])(np.arange(nxp))  # taper up
+        taper *= 1 - fdsp.fcn_cosine([nxp - ntr_tap, nxp])(np.arange(nxp))   # taper down
+        xf = xf * taper[:, np.newaxis]
+    sos = scipy.signal.butter(**butter_kwargs, output='sos')
+    xf = scipy.signal.sosfiltfilt(sos, xf, axis=0)
+
+    if ntr_pad > 0:
+        xf = xf[ntr_pad:-ntr_pad, :]
+    return xf / gain
+
+
+def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, k_kwargs=None):
     """Super Car (super slow also...) - far from being set in stone but a good workflow example
     :param x: demultiplexed array (ntraces, nsample)
     :param fs: sampling frequency
@@ -137,14 +176,14 @@ def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, fk_kw
      selection. If None, and estimation is done using only the current batch is provided for
      convenience but should be avoided in production.
     :param butter_kwargs: (optional, None) butterworth params, see the code for the defaults dict
-    :param fk_kwargs: (optional, None) FK params, see the code for the defaults dict
+    :param k_kwargs: (optional, None) K-filter params, see the code for the defaults dict
     :return: x, filtered array
     """
     if butter_kwargs is None:
         butter_kwargs = {'N': 3, 'Wn': 300 / fs / 2, 'btype': 'highpass'}
-    if fk_kwargs is None:
-        fk_kwargs = {'dx': 1, 'vbounds': [0, 1e6], 'ntr_pad': 60, 'ntr_tap': 0,
-                     'lagc': .01, 'btype': 'lowpass'}
+    if k_kwargs is None:
+        k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
+                    'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
     h = neuropixel.trace_header(version=neuropixel_version)
     # butterworth
     sos = scipy.signal.butter(**butter_kwargs, output='sos')
@@ -152,11 +191,6 @@ def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, fk_kw
     # apply ADC shift
     if neuropixel_version is not None:
         x = fshift(x, h['sample_shift'], axis=1)
-    # detect faulty channels if single batch
-    if tr_sel is None:
-        reject_channel_kwargs = {'butt_kwargs': {'N': 4, 'Wn': 0.05, 'btype': 'lp'}, 'trx': 1}
-        tr_sel, _ = reject_channels(x, fs, **reject_channel_kwargs)
     # apply spatial filter on good channel selection only
-    x_ = np.zeros_like(x)
-    x_[tr_sel, :] = voltage.fk(x[tr_sel, :], si=1 / fs, **fk_kwargs)
+    x_ = kfilt(x, **k_kwargs)
     return x_
