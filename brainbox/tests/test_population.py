@@ -68,8 +68,29 @@ class TestPopulation(unittest.TestCase):
         times = np.column_stack(((event_times - 0.5), (event_times + 0.5)))
         counts, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters, times)
         counts = counts.T
+
+        # Test all regularization methods WITHOUT cross-validation
+        pred = regress(counts, event_groups, cross_validation=None,
+                       return_training=False, regularization=None)
+        self.assertEqual(pred.shape, event_groups.shape)
+        pred = regress(counts, event_groups, cross_validation=None,
+                       return_training=False, regularization='L1')
+        self.assertEqual(pred.shape, event_groups.shape)
+        pred = regress(counts, event_groups, cross_validation=None,
+                       return_training=False, regularization='L2')
+        self.assertEqual(pred.shape, event_groups.shape)
+
+        # Test all regularization methods WITH cross-validation
         pred, pred_training = regress(counts, event_groups, cross_validation=cv,
-                                      return_training=True)
+                                      return_training=True, regularization=None)
+        self.assertEqual(pred.shape, event_groups.shape)
+        self.assertEqual(pred_training.shape, event_groups.shape)
+        pred, pred_training = regress(counts, event_groups, cross_validation=cv,
+                                      return_training=True, regularization='L1')
+        self.assertEqual(pred.shape, event_groups.shape)
+        self.assertEqual(pred_training.shape, event_groups.shape)
+        pred, pred_training = regress(counts, event_groups, cross_validation=cv,
+                                      return_training=True, regularization='L2')
         self.assertEqual(pred.shape, event_groups.shape)
         self.assertEqual(pred_training.shape, event_groups.shape)
 
