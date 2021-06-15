@@ -6,6 +6,7 @@
  "passive_opto": "ephys",
  "widefieldChoiceWorld": "ephys",
  "opto_biasedChoiceWorld": "biased_opto",
+ "opto_biased_ChoiceWord": "biased_opto",
  "optoChoiceWorld": "biased_opto",
  "_biasedChoiceWorld": "biased",
  "biasedScanningChoiceWorld": "biased",
