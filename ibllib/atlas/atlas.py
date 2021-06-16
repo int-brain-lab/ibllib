@@ -716,17 +716,24 @@ class AllenAtlas(BrainAtlas):
     using the IBL Bregma and coordinate system
     """
 
-    def __init__(self, res_um=25, brainmap='Allen', scaling=np.array([1, 1, 1]),
+    def __init__(self, res_um=25, scaling=np.array([1, 1, 1]),
                  mock=False, hist_path=None):
         """
         :param res_um: 10, 25 or 50 um
-        :param brainmap: defaults to 'Allen', see ibllib.atlas.BrainRegion for re-mappings
         :param scaling: scale factor along ml, ap, dv for squeeze and stretch ([1, 1, 1])
         :param mock: for testing purpose
         :param hist_path
         :return: atlas.BrainAtlas
         """
-        par = params.read('one_params')
+        try:
+            par = params.read('one_params')
+        except FileNotFoundError:
+            _logger.info("Did not find existing one params, creating one params with default "
+                         "public credentials")
+            from oneibl.one import ONE # noqa
+            ONE(silent=True)
+            par = params.read('one_params')
+
         FLAT_IRON_ATLAS_REL_PATH = Path('histology', 'ATLAS', 'Needles', 'Allen')
         LUT_VERSION = "v01"  # version 01 is the lateralized version
         regions = BrainRegions()
@@ -744,11 +751,11 @@ class AllenAtlas(BrainAtlas):
             file_image = hist_path or path_atlas.joinpath(f'average_template_{res_um}.nrrd')
             # get the image volume
             if not file_image.exists():
-                _download_atlas_flatiron(file_image, FLAT_IRON_ATLAS_REL_PATH, par)
+                _download_atlas_allen(file_image, FLAT_IRON_ATLAS_REL_PATH, par)
             # get the remapped label volume
             file_label = path_atlas.joinpath(f'annotation_{res_um}.nrrd')
             if not file_label.exists():
-                _download_atlas_flatiron(file_label, FLAT_IRON_ATLAS_REL_PATH, par)
+                _download_atlas_allen(file_label, FLAT_IRON_ATLAS_REL_PATH, par)
             file_label_remap = path_atlas.joinpath(f'annotation_{res_um}_lut_{LUT_VERSION}.npz')
             if not file_label_remap.exists():
                 label = self._read_volume(file_label)
@@ -848,3 +855,28 @@ def _download_atlas_flatiron(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
     http_download_file(url, cache_dir=Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH),
                        username=par.HTTP_DATA_SERVER_LOGIN,
                        password=par.HTTP_DATA_SERVER_PWD)
+
+
+def _download_atlas_allen(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
+    """
+    © 2015 Allen Institute for Brain Science. Allen Mouse Brain Atlas (2015)
+    with region annotations (2017).
+    Available from: http://download.alleninstitute.org/informatics-archive/current-release/
+    mouse_ccf/annotation/
+
+    See Allen Mouse Common Coordinate Framework Technical White Paper for details
+    http://help.brain-map.org/download/attachments/8323525/
+    Mouse_Common_Coordinate_Framework.pdf?version=3&modificationDate=1508178848279&api=v2
+    """
+
+    template_url = ('http://download.alleninstitute.org/informatics-archive/'
+                    'current-release/mouse_ccf/average_template')
+    annotation_url = ('http://download.alleninstitute.org/informatics-archive/'
+                      'current-release/mouse_ccf/annotation/ccf_2017')
+
+    if file_image.name.split('_')[0] == 'average':
+        url = template_url + '/' + file_image.name
+    elif file_image.name.split('_')[0] == 'annotation':
+        url = annotation_url + '/' + file_image.name
+
+    http_download_file(url, cache_dir=Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH))
