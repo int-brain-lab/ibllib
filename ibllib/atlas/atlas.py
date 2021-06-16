@@ -869,6 +869,8 @@ def _download_atlas_allen(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
     Mouse_Common_Coordinate_Framework.pdf?version=3&modificationDate=1508178848279&api=v2
     """
 
+    file_image.parent.mkdir(exist_ok=True, parents=True)
+
     template_url = ('http://download.alleninstitute.org/informatics-archive/'
                     'current-release/mouse_ccf/average_template')
     annotation_url = ('http://download.alleninstitute.org/informatics-archive/'
