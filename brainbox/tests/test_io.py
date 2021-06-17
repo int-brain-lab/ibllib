@@ -8,7 +8,7 @@ import numpy as np
 
 from brainbox.io import one as bbone
 from one.api import ONE
-from one.alf.onepqt import make_parquet_db
+from one.alf.cache import make_parquet_db
 
 
 class TestIO_ALF(unittest.TestCase):

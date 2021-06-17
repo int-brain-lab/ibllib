@@ -38,7 +38,7 @@ class MotionAlignment:
         self.one = one or ONE()
         self.eid = eid
         self.session_path = kwargs.pop('session_path', self.one.eid2path(eid))
-        self.ref = self.one.eid2ref(self.eid, as_dict=False)
+        self.ref = self.one.dict2ref(self.one.path2ref(self.session_path))
         self.log = log
         self.trials = self.wheel = self.camera_times = None
         raw_cam_path = self.session_path.joinpath('raw_video_data')
