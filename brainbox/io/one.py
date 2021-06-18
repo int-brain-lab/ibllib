@@ -4,28 +4,35 @@ import os
 
 import numpy as np
 import pandas as pd
+from iblutil.util import Bunch
 
 import one.alf.io as alfio
 import one.alf.exceptions as alferr
-from ibllib.io import spikeglx
-from ibllib.atlas.regions import BrainRegions
-from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
 from one.api import ONE, One, OneAlyx
 
-from iblutil.util import Bunch
+from ibllib.io import spikeglx
+from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
+from ibllib.ephys.neuropixel import SITES_COORDINATES, TIP_SIZE_UM
+from ibllib.atlas import atlas
+from ibllib.pipes import histology
+from ibllib.pipes.ephys_alignment import EphysAlignment
+
+from oneibl.one import ONE
+
 from brainbox.core import TimeSeries
 from brainbox.processing import sync
 
 logger = logging.getLogger('ibllib')
 
 
-def load_lfp(eid, one=None, dataset_types=None):
+def load_lfp(eid, one=None, dataset_types=None, **kwargs):
     """
     TODO Verify works
     From an eid, hits the Alyx database and downloads the standard set of datasets
     needed for LFP
     :param eid:
     :param dataset_types: additional dataset types to add to the list
+    :param open: if True, spikeglx readers are opened
     :return: spikeglx.Reader
     """
     if dataset_types is None:
@@ -36,7 +43,7 @@ def load_lfp(eid, one=None, dataset_types=None):
 
     efiles = [ef for ef in spikeglx.glob_ephys_files(session_path, bin_exists=False)
               if ef.get('lf', None)]
-    return [spikeglx.Reader(ef['lf']) for ef in efiles]
+    return [spikeglx.Reader(ef['lf'], **kwargs) for ef in efiles]
 
 
 def load_channel_locations(eid, one=None, probe=None, aligned=False):
@@ -535,3 +542,43 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
             trials.append(np.abs(whlvel))
     trialsdf['wheel_velocity'] = trials
     return trialsdf
+
+
+def load_channels_from_insertion(ins, depths=None, one=None, ba=None):
+
+    PROV_2_VAL = {
+        'Resolved': 90,
+        'Ephys aligned histology track': 70,
+        'Histology track': 50,
+        'Micro-manipulator': 30,
+        'Planned': 10}
+
+    one = one or ONE()
+    ba = ba or atlas.AllenAtlas()
+    traj = one.alyx.rest('trajectories', 'list', probe_insertion=ins['id'])
+    val = [PROV_2_VAL[tr['provenance']] for tr in traj]
+    idx = np.argmax(val)
+    traj = traj[idx]
+    if depths is None:
+        depths = SITES_COORDINATES[:, 1]
+    if traj['provenance'] == 'Planned' or traj['provenance'] == 'Micro-manipulator':
+        ins = atlas.Insertion.from_dict(traj)
+        # Deepest coordinate first
+        xyz = np.c_[ins.tip, ins.entry].T
+        xyz_channels = histology.interpolate_along_track(xyz, (depths +
+                                                               TIP_SIZE_UM) / 1e6)
+    else:
+        xyz = np.array(ins['json']['xyz_picks']) / 1e6
+        if traj['provenance'] == 'Histology track':
+            xyz = xyz[np.argsort(xyz[:, 2]), :]
+            xyz_channels = histology.interpolate_along_track(xyz, (depths +
+                                                                   TIP_SIZE_UM) / 1e6)
+        else:
+            align_key = ins['json']['extended_qc']['alignment_stored']
+            feature = traj['json'][align_key][0]
+            track = traj['json'][align_key][1]
+            ephysalign = EphysAlignment(xyz, depths, track_prev=track,
+                                        feature_prev=feature,
+                                        brain_atlas=ba, speedy=True)
+            xyz_channels = ephysalign.get_channel_locations(feature, track)
+    return xyz_channels

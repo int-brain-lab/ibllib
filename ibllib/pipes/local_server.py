@@ -90,7 +90,12 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
 
         try:
             # if the subject doesn't exist in the database, skip
-            rc.create_session(session_path)
+            ses = rc.create_session(session_path)
+            eid = ses['url'][36:]
+            if one.eid_from_path(session_path) is None:
+                raise ValueError(f"Session ALF path mismatch: {ses['url'][36:]} \n "
+                                 f"{one.path_from_eid(eid=eid)} in params \n"
+                                 f"{session_path} on disk \n")
             files, dsets = registration.register_session_raw_data(
                 session_path, one=one, max_md5_size=max_md5_size)
             if dsets is not None:

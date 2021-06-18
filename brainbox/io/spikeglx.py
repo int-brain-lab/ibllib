@@ -5,8 +5,7 @@ import numpy as np
 from ibllib.io import spikeglx
 
 
-def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='int16',
-                      offset=0, car=True):
+def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, car=True):
     """
     Extracts spike waveforms from binary ephys data file, after (optionally)
     common-average-referencing (CAR) spatial noise.
@@ -25,10 +24,6 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
         The sampling rate (in hz) that the ephys data was acquired at.
     n_ch_probe : int (optional)
         The number of channels of the recording.
-    dtype: str (optional)
-        The datatype represented by the bytes in `ephys_file`.
-    offset: int (optional)
-        The offset (in bytes) from the start of `ephys_file`.
     car: bool (optional)
         A flag to perform CAR before extracting waveforms.
 
@@ -63,11 +58,6 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
         >>> wf = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, car=False)
         >>> wf_car = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, car=True)
     """
-
-    # (Previously memmaped the file manually, but now use `spikeglx.Reader`)
-    # item_bytes = np.dtype(dtype).itemsize
-    # n_samples = (op.getsize(ephys_file) - offset) // (item_bytes * n_ch_probe)
-    # file_m = np.memmap(ephys_file, shape=(n_samples, n_ch_probe), dtype=dtype, mode='r')
 
     # Get memmapped array of `ephys_file`
     with spikeglx.Reader(ephys_file) as s_reader:

@@ -5,8 +5,8 @@ import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.training_trials import (
     Choice, FeedbackTimes, FeedbackType, GoCueTimes, GoCueTriggerTimes,
     IncludedTrials, Intervals, ItiDuration, ProbabilityLeft, ResponseTimes, RewardVolume,
-    StimOnTimes, StimOnTriggerTimes, StimOnOffFreezeTimes, ItiInTimes, StimOffTriggerTimes,
-    StimFreezeTriggerTimes, ErrorCueTriggerTimes)
+    StimOnTimes_deprecated, StimOnTriggerTimes, StimOnOffFreezeTimes, ItiInTimes,
+    StimOffTriggerTimes, StimFreezeTriggerTimes, ErrorCueTriggerTimes)
 from ibllib.misc import version
 
 
@@ -48,7 +48,7 @@ def extract_all(session_path, save=False, bpod_trials=False, settings=False, ext
         base.extend([StimOnTriggerTimes, IncludedTrials, StimOnOffFreezeTimes, ItiInTimes,
                      StimOffTriggerTimes, StimFreezeTriggerTimes, ErrorCueTriggerTimes])
     else:
-        base.extend([ItiDuration, StimOnTimes])
+        base.extend([ItiDuration, StimOnTimes_deprecated])
 
     if extra_classes:
         base.extend(extra_classes)
