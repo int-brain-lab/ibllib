@@ -33,7 +33,7 @@ class Task(abc.ABC):
     log = ''
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
-                 machine=None, clobber=False):
+                 machine=None, clobber=True):
         self.taskid = taskid
         self.one = one
         self.session_path = session_path
@@ -234,7 +234,7 @@ class Pipeline(abc.ABC):
             tasks_alyx.append(talyx)
         return tasks_alyx
 
-    def run(self, status__in=['Waiting'], machine=None, clobber=False, **kwargs):
+    def run(self, status__in=['Waiting'], machine=None, clobber=True, **kwargs):
         """
         Get all the session related jobs from alyx and run them
         :param status__in: lists of status strings to run in
@@ -275,7 +275,7 @@ class Pipeline(abc.ABC):
 
 
 def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
-                  max_md5_size=None, machine=None, clobber=False):
+                  max_md5_size=None, machine=None, clobber=True):
     """
     Runs a single Alyx job and registers output datasets
     :param tdict:
