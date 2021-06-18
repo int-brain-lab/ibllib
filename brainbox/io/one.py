@@ -14,10 +14,9 @@ from ibllib.io import spikeglx
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
 from ibllib.ephys.neuropixel import SITES_COORDINATES, TIP_SIZE_UM
 from ibllib.atlas import atlas
+from ibllib.atlas.regions import BrainRegions
 from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
-
-from oneibl.one import ONE
 
 from brainbox.core import TimeSeries
 from brainbox.processing import sync
