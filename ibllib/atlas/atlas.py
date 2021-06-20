@@ -7,7 +7,7 @@ import numpy as np
 import nrrd
 
 from iblutil.numerical import ismember
-from ibllib.atlas.regions import BrainRegions, regions_from_allen_csv  # noqa
+from ibllib.atlas.regions import BrainRegions
 from one.webclient import http_download_file
 import one.params
 

@@ -8,6 +8,7 @@ from iblutil.util import Bunch
 from iblutil.numerical import ismember
 
 _logger = logging.getLogger('ibllib')
+# 'Beryl' is the name given to an atlas containing a subset of the most relevant allen annotations
 FILE_BERYL = str(Path(__file__).parent.joinpath('beryl.npy'))
 FILE_REGIONS = str(Path(__file__).parent.joinpath('allen_structure_tree.csv'))
 

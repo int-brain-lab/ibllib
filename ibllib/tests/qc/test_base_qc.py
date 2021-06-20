@@ -26,7 +26,7 @@ class TestQC(unittest.TestCase):
         """Test setting both the eid and session path when providing one or the other"""
         # Check that eid was set by constructor
         self.assertEqual(self.qc.eid, self.eid, 'failed to set eid in constructor')
-        expected_path = one.path_from_eid(self.eid)
+        expected_path = one.eid2path(self.eid)
         self.assertEqual(self.qc.session_path, expected_path, 'failed to set path in constructor')
         self.qc.eid = self.qc.session_path = None  # Reset both properties
 
