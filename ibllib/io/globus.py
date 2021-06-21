@@ -63,7 +63,7 @@ def _login(globus_client_id, refresh_tokens=False):
 
 def login(globus_client_id):
     token = _login(globus_client_id, refresh_tokens=False)
-    authorizer = globus.AccessTokenAuthorizer(token['transfer_token'])
+    authorizer = globus.AccessTokenAuthorizer(token['access_token'])
     tc = globus.TransferClient(authorizer=authorizer)
     return tc
 
