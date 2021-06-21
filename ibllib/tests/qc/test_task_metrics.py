@@ -6,6 +6,7 @@ import numpy as np
 
 from iblutil.util import Bunch
 from one.api import ONE
+from one.tests import TEST_DB_1
 from ibllib.qc import task_metrics as qcmetrics
 
 from brainbox.behavior.wheel import cm_to_rad
@@ -499,8 +500,7 @@ class TestHabituationQC(unittest.TestCase):
     """
     def setUp(self):
         eid = '8dd0fcb0-1151-4c97-ae35-2e2421695ad7'
-        one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
-                  username='test_user', password='TapetesBloc18')
+        one = ONE(**TEST_DB_1)
         self.qc = qcmetrics.HabituationQC(eid, one=one)
         self.qc.extractor = Bunch({'data': self.load_fake_bpod_data()})  # Dummy extractor obj
 

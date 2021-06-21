@@ -7,6 +7,7 @@ import numpy as np
 import copy
 
 from one.api import ONE
+from one.tests import TEST_DB_1
 from ibllib.atlas import AllenAtlas
 from ibllib.pipes.misc import create_alyx_probe_insertions
 from ibllib.qc.alignment_qc import AlignmentQC
@@ -14,8 +15,7 @@ from ibllib.pipes.histology import register_track
 
 
 EPHYS_SESSION = 'b1c968ad-4874-468d-b2e4-5ffa9b9964e9'
-one = ONE(username='test_user', password='TapetesBloc18',
-          base_url='https://test.alyx.internationalbrainlab.org')
+one = ONE(**TEST_DB_1)
 brain_atlas = AllenAtlas(25)
 
 

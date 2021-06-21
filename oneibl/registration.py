@@ -102,7 +102,7 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
          'default': default}
     if not dry:
         if one is None:
-            one = ONE()
+            one = ONE(cache_rest=None)
         response = one.alyx.rest('register-file', 'create', data=r)
         for p in file_list:
             _logger.info(f"ALYX REGISTERED DATA: {p}")
@@ -153,12 +153,12 @@ class RegistrationClient:
     def __init__(self, one=None):
         self.one = one
         if not one:
-            self.one = ONE()
+            self.one = ONE(cache_rest=None)
         self.dtypes = self.one.alyx.rest('dataset-types', 'list')
         self.registration_patterns = [
             dt['filename_pattern'] for dt in self.dtypes if dt['filename_pattern']]
         self.file_extensions = [df['file_extension'] for df in
-                                self.one.alyx.rest('data-formats', 'list')]
+                                self.one.alyx.rest('data-formats', 'list', no_cache=True)]
 
     def create_sessions(self, root_data_folder, glob_pattern='**/create_me.flag', dry=False):
         """

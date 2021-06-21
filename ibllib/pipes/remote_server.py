@@ -108,7 +108,7 @@ def job_run_ks2():
     flag_files[0].unlink()
 
     # Instantiate one
-    one = ONE()
+    one = ONE(cache_rest=None)
 
     # sync the probes
     status, sync_files = sync_probes.sync(session_path)

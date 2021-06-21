@@ -8,6 +8,7 @@ import numpy as np
 
 from brainbox.io import one as bbone
 from one.api import ONE
+# from one.tests import TEST_DB_1
 from one.alf.cache import make_parquet_db
 
 
@@ -20,9 +21,7 @@ class TestIO_ALF(unittest.TestCase):
         """
         self.tmpdir = Path(tempfile.gettempdir()) / 'test_bbio'
         self.tmpdir.mkdir(exist_ok=True)
-        self.one = ONE(base_url='https://test.alyx.internationalbrainlab.org', mode='local',
-                       username='test_user', password='TapetesBloc18', cache_dir=self.tmpdir,
-                       silent=True)
+        self.one = ONE(mode='local', cache_dir=self.tmpdir)
         self.alf_path = self.tmpdir.joinpath(
             'lab', 'Subjects', 'subject', '2019-08-12', '001', 'alf'
         )

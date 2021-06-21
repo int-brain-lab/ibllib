@@ -8,6 +8,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 
 from one.api import ONE
+from one.tests import TEST_DB_1
 from ibllib.qc.camera import CameraQC
 from ibllib.io.raw_data_loaders import load_camera_ssv_times
 from ibllib.tests.fixtures import utils
@@ -19,11 +20,7 @@ class TestCameraQC(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.one = ONE(
-            base_url="https://test.alyx.internationalbrainlab.org",
-            username="test_user",
-            password="TapetesBloc18",
-        )
+        cls.one = ONE(**TEST_DB_1)
         cls.backend = matplotlib.get_backend()
         matplotlib.use('Agg')
 

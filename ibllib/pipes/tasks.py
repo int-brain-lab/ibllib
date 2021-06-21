@@ -159,6 +159,8 @@ class Pipeline(abc.ABC):
     def __init__(self, session_path=None, one=None, eid=None):
         assert session_path or eid
         self.one = one
+        if one and one.alyx.cache_mode and one.alyx.default_expiry.seconds > 1:
+            _logger.warning('Alyx client REST cache active; this may cause issues with jobs')
         self.eid = eid
         if session_path:
             self.session_path = session_path
@@ -169,8 +171,7 @@ class Pipeline(abc.ABC):
 
     def make_graph(self, out_dir=None, show=True):
         if not out_dir:
-            par = one.params.get()
-            out_dir = par.CACHE_DIR
+            out_dir = self.one._cache_dir if self.one else one.params.get().CACHE_DIR
         m = Digraph('G', filename=str(Path(out_dir).joinpath(self.__module__ + '_graphs.gv')))
         m.attr(rankdir='TD')
 

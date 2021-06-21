@@ -9,6 +9,7 @@ import sys
 import numpy as np
 
 from one.api import ONE
+from one.tests import TEST_DB_1
 from ibllib.io import params, flags, jsonable, misc, globus, video
 import ibllib.io.raw_data_loaders as raw
 
@@ -374,11 +375,7 @@ class TestsGlobus(unittest.TestCase):
 class TestVideo(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.one = ONE(
-            base_url="https://test.alyx.internationalbrainlab.org",
-            username="test_user",
-            password="TapetesBloc18"
-        )
+        cls.one = ONE(**TEST_DB_1)
 
     def setUp(self) -> None:
         self.eid = '8dd0fcb0-1151-4c97-ae35-2e2421695ad7'

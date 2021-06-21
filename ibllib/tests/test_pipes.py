@@ -7,6 +7,7 @@ import ibllib.io.extractors.base
 import ibllib.tests.fixtures.utils as fu
 from ibllib.pipes import misc
 from one.api import ONE
+from one.tests import TEST_DB_1
 import ibllib.pipes.scan_fix_passive_files as fix
 
 
@@ -350,11 +351,7 @@ class TestPipesMisc(unittest.TestCase):
 
     def test_create_alyx_probe_insertions(self):
         # Connect to test DB
-        one = ONE(
-            username="test_user",
-            password="TapetesBloc18",
-            base_url="https://test.alyx.internationalbrainlab.org",
-        )
+        one = ONE(**TEST_DB_1)
         # Use existing session on test database
         eid = "b1c968ad-4874-468d-b2e4-5ffa9b9964e9"
         # Force probe insertion 3A

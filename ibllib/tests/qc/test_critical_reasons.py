@@ -2,12 +2,11 @@ import unittest
 from unittest import mock
 import json
 from one.api import ONE
+from one.tests import TEST_DB_1
 
 import ibllib.qc.critical_reasons as usrpmt
 
-one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
-          username='test_user',
-          password='TapetesBloc18')
+one = ONE(**TEST_DB_1)
 
 
 def mock_input(prompt):

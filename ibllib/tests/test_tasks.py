@@ -6,14 +6,11 @@ from collections import OrderedDict
 from ibllib.misc import version
 import ibllib.pipes.tasks
 from one.api import ONE
+from one.tests import TEST_DB_1
 
-one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
-          username='test_user', password='TapetesBloc18')
+one = ONE(**TEST_DB_1)
 SUBJECT_NAME = 'algernon'
 USER_NAME = 'test_user'
-# one = ONE(base_url='http://localhost:8000')
-# SUBJECT_NAME = 'CSP014'
-# USER_NAME = 'olivier'
 
 ses_dict = {
     'subject': SUBJECT_NAME,

@@ -232,15 +232,15 @@ def load_spike_sorting(eid, one=None, probe=None):
         logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
         from .deprecated import one as old
         return old.load_spike_sorting(eid, one=one, probe=probe)
-    assert isinstance(one, OneAlyx), 'ONE much be in remote mode'
 
     if isinstance(probe, str):
         labels = [probe]
     else:
-        if one.mode == 'local':
-            probes = one.load_object(eid, 'probes')
+        if one.offline:
+            probes = one.load_object(eid, 'probes', collection='alf')
             labels = [pr['label'] for pr in probes['description']]
         else:
+            assert isinstance(one, OneAlyx), 'ONE much be in remote mode'
             insertions = one.alyx.rest('insertions', 'list', session=one.to_eid(eid))
             labels = [ins['name'] for ins in insertions]
 

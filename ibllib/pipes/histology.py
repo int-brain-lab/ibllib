@@ -63,7 +63,7 @@ def get_micro_manipulator_data(subject, one=None, force_extract=False):
     and task settings file.
     """
     if not one:
-        one = ONE()
+        one = ONE(cache_rest=None)
 
     eids, sessions = one.search(subject=subject, task_protocol='ephys', details=True)
     probes = alfio.AlfBunch({})

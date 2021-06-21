@@ -78,7 +78,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
     :return:
     """
     if not one:
-        one = ONE()
+        one = ONE(cache_rest=None)
     rc = registration.RegistrationClient(one=one)
     flag_files = list(Path(root_path).glob('**/raw_session.flag'))
     all_datasets = []
@@ -92,7 +92,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
             # if the subject doesn't exist in the database, skip
             ses = rc.create_session(session_path)
             eid = ses['url'][-36:]
-            if one.path2eid(session_path, query_type='remote', no_cache=True) is None:
+            if one.path2eid(session_path, query_type='remote') is None:
                 raise ValueError(f'Session ALF path mismatch: {ses["url"][-36:]} \n '
                                  f'{one.eid2path(eid, query_type="remote")} in params \n'
                                  f'{session_path} on disk \n')
@@ -135,7 +135,7 @@ def job_runner(subjects_path, lab=None, dry=False, one=None, count=5):
     :return:
     """
     if one is None:
-        one = ONE()
+        one = ONE(cache_rest=None)
     if lab is None:
         lab = _get_lab(one)
     if lab is None:
@@ -158,7 +158,7 @@ def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, count=5, time_o
     :return: list of dataset dictionaries
     """
     if one is None:
-        one = ONE()
+        one = ONE(cache_rest=None)
     import time
     tstart = time.time()
     c = 0
