@@ -60,14 +60,13 @@ class CameraQC(base.QC):
         '_iblrig_Camera.raw',
         'camera.times',
         'wheel.position',
-        'wheel.timestamps',
+        'wheel.timestamps'
     ]
     dstypes_fpga = [
         '_spikeglx_sync.channels',
         '_spikeglx_sync.polarities',
         '_spikeglx_sync.times',
-        'ephysData.raw.meta',
-        'ephysData.raw.wiring'
+        'ephysData.raw.meta'
     ]
     """Recall that for the training rig there is only one side camera at 30 Hz and 1280 x 1024 px.
     For the recording rig there are two label cameras (left: 60 Hz, 1280 x 1024 px;
@@ -291,6 +290,13 @@ class CameraQC(base.QC):
         # Get extractor type
         is_ephys = 'ephys' in (self.type or self.one.get_details(self.eid)['task_protocol'])
         dtypes = self.dstypes + self.dstypes_fpga if is_ephys else self.dstypes
+        # Check we have raw ephys data for session
+        if is_ephys and len(self.one.list_datasets(self.eid, collection='raw_ephys_data')) == 0:
+            # Assert 3A probe model; if so download all probe data
+            det = self.one.get_details(self.eid, full=True)
+            probe_model = next(x['model'] for x in det['probe_insertion'])
+            assert probe_model == '3A', 'raw ephys data not missing'
+            collections += ('raw_ephys_data/probe00', 'raw_ephys_data/probe01')
         for dstype in dtypes:
             dataset = self.one.datasets_from_type(self.eid, dstype, full=True)
             if 'camera' in dstype.lower():  # Download individual camera file
@@ -302,14 +308,14 @@ class CameraQC(base.QC):
                 assert f'_iblrig_{self.label}Camera.raw.mp4' in names, 'No remote video file found'
                 continue
             optional = ('camera.times', '_iblrig_Camera.raw', 'wheel.position',
-                        'wheel.timestamps', '_iblrig_Camera.frame_counter', '_iblrig_Camera.GPIO',
-                        '_spikeglx_sync.channels', 'ephysData.raw.wiring')
-            required = (dstype not in optional)
+                        'wheel.timestamps', '_iblrig_Camera.frame_counter', '_iblrig_Camera.GPIO')
             present = (
                 self.one._download_datasets(dataset)
                 if self.download_data
                 else (next(self.session_path.rglob(d['name']), None) for d in dataset)
             )
+
+            required = (dstype not in optional)
             assert (dataset and all(present)) or not required, f'Dataset {dstype} not found'
         self._type = get_session_extractor_type(self.session_path)
 

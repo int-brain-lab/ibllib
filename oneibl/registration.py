@@ -54,7 +54,7 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
     :param revisions: optional (list of strings): revision name (defaults to no revision)
     :param default: optional (bool) whether to set as default dataset (defaults to True)
     :param dry: (bool) False by default
-    :param max_md5_size: (int) maximum file in bytes to compute md5 sum (always compute if Npne)
+    :param max_md5_size: (int) maximum file in bytes to compute md5 sum (always compute if None)
     defaults to None
     :return:
     """
@@ -74,7 +74,7 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
     assert isinstance(versions, list) and len(versions) == len(file_list)
 
     if revisions is None:
-        revisions = [None for _ in file_list]
+        revisions = [None] * len(file_list)
     else:
         if isinstance(revisions, str):
             revisions = [revisions for _ in file_list]
