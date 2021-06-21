@@ -6,9 +6,9 @@ from collections import OrderedDict
 from ibllib.misc import version
 import ibllib.pipes.tasks
 from one.api import ONE
-from one.tests import TEST_DB_1
+from ibllib.tests import TEST_DB
 
-one = ONE(**TEST_DB_1)
+one = ONE(**TEST_DB)
 SUBJECT_NAME = 'algernon'
 USER_NAME = 'test_user'
 

@@ -4,9 +4,9 @@ import numpy as np
 
 from ibllib.qc.base import QC
 from one.api import ONE
-from one.tests import TEST_DB_1
+from ibllib.tests import TEST_DB
 
-one = ONE(**TEST_DB_1)
+one = ONE(**TEST_DB)
 
 
 class TestQC(unittest.TestCase):

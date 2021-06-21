@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 import numpy as np
 
 from one.api import ONE
-from one.tests import TEST_DB_1
+from ibllib.tests import TEST_DB
 from ibllib.qc.dlc import DlcQC
 from ibllib.tests.fixtures import utils
 
@@ -13,7 +13,7 @@ class TestDlcQC(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.one = ONE(**TEST_DB_1)
+        cls.one = ONE(**TEST_DB)
 
     def setUp(self) -> None:
         self.tempdir = TemporaryDirectory()

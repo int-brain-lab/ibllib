@@ -8,7 +8,6 @@ import numpy as np
 
 from brainbox.io import one as bbone
 from one.api import ONE
-# from one.tests import TEST_DB_1
 from one.alf.cache import make_parquet_db
 
 

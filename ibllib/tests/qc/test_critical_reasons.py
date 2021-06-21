@@ -2,11 +2,11 @@ import unittest
 from unittest import mock
 import json
 from one.api import ONE
-from one.tests import TEST_DB_1
+from ibllib.tests import TEST_DB
 
 import ibllib.qc.critical_reasons as usrpmt
 
-one = ONE(**TEST_DB_1)
+one = ONE(**TEST_DB)
 
 
 def mock_input(prompt):

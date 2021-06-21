@@ -175,7 +175,8 @@ class TestWheelMovesExtraction(unittest.TestCase):
         the functions.  For details, see help on TestWheel.setUp method in module
         brainbox.tests.test_behavior
         """
-        pickle_file = Path(__file__).parents[3] / 'brainbox' / 'tests' / 'wheel_test.p'
+        pickle_file = Path(__file__).parents[3].joinpath(
+            'brainbox', 'tests', 'fixtures', 'wheel_test.p')
         if not pickle_file.exists():
             self.test_data = None
         else:
