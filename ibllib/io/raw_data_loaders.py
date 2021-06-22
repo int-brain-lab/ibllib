@@ -274,7 +274,8 @@ def load_camera_gpio(session_path, label: str, as_dicts=False):
             np.uint32)
         # Check values make sense (4 pins = 16 possible values)
         assert np.isin(gpio, np.left_shift(np.arange(2 ** 4, dtype=np.uint32), 32 - 4)).all()
-        # 4 pins represented as uint32. For each pin, shift its bit to the end and check the bit is set
+        # 4 pins represented as uint32. For each pin, shift its bit to the end
+        # and check the bit is set
         gpio = (np.right_shift(np.tile(gpio, (4, 1)).T, np.arange(31, 27, -1)) & 0x1) == 1
     elif newfile.exists():
         df = load_camera_frameData(session_path, camera=label, raw=False)
