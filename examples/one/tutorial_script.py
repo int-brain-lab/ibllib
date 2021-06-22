@@ -1,7 +1,7 @@
 ## Init
 from one.api import ONE
 
-from ibllib.misc import pprint
+from pprint import pprint
 
 one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
           username='test_user',

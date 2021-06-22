@@ -1,14 +1,9 @@
 # library of small functions
-import json
 import logging
 
 import numpy as np
 
 _logger = logging.getLogger('ibllib')
-
-
-def pprint(my_dict):
-    print(json.dumps(my_dict, indent=4))
 
 
 def _parametrized(dec):
