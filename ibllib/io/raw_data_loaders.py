@@ -161,11 +161,17 @@ def load_camera_ssv_times(session_path, camera: str):
     Load the bonsai frame and camera timestamps from Camera.timestamps.ssv
 
     NB: For some sessions the frame times are in the first column, in others the order is reversed.
-
+    NB: If using the new bin file the bonsai_times is a float in seconds since first frame
     :param session_path: Absolute path of session folder
     :param camera: Name of the camera to load, e.g. 'left'
     :return: array of datetimes, array of frame times in seconds
     """
+    newfile = Path(session_path) / 'raw_video_data' / \
+        f'_iblrig_{camera.lower()}Camera.frameData.bin'
+    if newfile.exists():
+        df = load_camera_frameData(session_path, camera=camera)
+        return df['Timestamp'].values, df['embeddedTimeStamp'].values
+
     camera = assert_valid_label(camera)
     file = Path(session_path) / 'raw_video_data' / f'_iblrig_{camera.lower()}Camera.timestamps.ssv'
     assert file.exists()
@@ -217,6 +223,12 @@ def load_camera_frame_count(session_path, label: str, raw=True):
     """
     if session_path is None:
         return
+    newfile = Path(session_path) / 'raw_video_data' / \
+        f'_iblrig_{label.lower()}Camera.frameData.bin'
+    if newfile.exists():
+        df = load_camera_frameData(session_path, camera=label)
+        return df['embeddedFrameCounter'].values
+
     raw_path = Path(session_path).joinpath('raw_video_data')
 
     # Load frame count
@@ -248,19 +260,28 @@ def load_camera_gpio(session_path, label: str, as_dicts=False):
     """
     if session_path is None:
         return
+    # if newfile.exists():
+
     raw_path = Path(session_path).joinpath('raw_video_data')
 
     # Load pin state
     GPIO_file = raw_path / f'_iblrig_{assert_valid_label(label)}Camera.GPIO.bin'
-    # This deals with missing and empty files the same
-    gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(np.uint32) if GPIO_file.exists() else []
+    newfile = raw_path / f'_iblrig_{label.lower()}Camera.frameData.bin'
+    gpio = []
+    if GPIO_file.exists():
+        # This deals with missing and empty files the same
+        gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(
+            np.uint32)
+        # Check values make sense (4 pins = 16 possible values)
+        assert np.isin(gpio, np.left_shift(np.arange(2 ** 4, dtype=np.uint32), 32 - 4)).all()
+        # 4 pins represented as uint32. For each pin, shift its bit to the end and check the bit is set
+        gpio = (np.right_shift(np.tile(gpio, (4, 1)).T, np.arange(31, 27, -1)) & 0x1) == 1
+    elif newfile.exists():
+        df = load_camera_frameData(session_path, camera=label, raw=False)
+        gpio = np.array([x for x in df['embeddedGPIOPinState'].values])
+
     if len(gpio) == 0:
         return [None] * 4 if as_dicts else None
-
-    # Check values make sense (4 pins = 16 possible values)
-    assert np.isin(gpio, np.left_shift(np.arange(2 ** 4, dtype=np.uint32), 32 - 4)).all()
-    # 4 pins represented as uint32. For each pin, shift its bit to the end and check the bit is set
-    gpio = (np.right_shift(np.tile(gpio, (4, 1)).T, np.arange(31, 27, -1)) & 0x1) == 1
 
     if as_dicts:
         if not gpio.any():

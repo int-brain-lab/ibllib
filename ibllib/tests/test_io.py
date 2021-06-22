@@ -194,7 +194,9 @@ class TestsRawDataLoaders(unittest.TestCase):
         :return:
         """
         session = Path(__file__).parent.joinpath('extractors', 'data', 'session_ephys')
+        session2 = Path(__file__).parent.joinpath('fixtures', 'io', 'data_loaders', '_iblrig_test_mouse_2020-01-01_001')
         gpio = raw.load_camera_gpio(session, 'body', as_dicts=True)
+        gpio2 = raw.load_camera_gpio(session2, 'left', as_dicts=True)
         self.assertEqual(len(gpio), 4)  # One dict per pin
         *gpio_, gpio_4 = gpio  # Check last dict; pin 4 should have one pulse
         self.assertTrue(all(k in ('indices', 'polarities') for k in gpio_4.keys()))
