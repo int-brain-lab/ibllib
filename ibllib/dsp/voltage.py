@@ -1,10 +1,13 @@
 """
 Module to work with raw voltage traces. Spike sorting pre-processing functions.
 """
+from pathlib import Path
+
 import numpy as np
 import scipy.signal
 from tqdm import tqdm
 
+from ibllib.io import spikeglx
 import ibllib.dsp.fourier as fdsp
 from ibllib.dsp import fshift
 from ibllib.ephys import neuropixel
@@ -225,6 +228,8 @@ def decompress_destripe_cbin(sr, output_file=None, h=None):
     k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
                 'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
     # handles input parameters
+    if isinstance(sr, str) or isinstance(sr, Path):
+        sr = spikeglx.Reader(sr, open=True)
     h = neuropixel.trace_header(version=1) if h is None else h
     output_file = sr.file_bin.with_suffix('.bin') if output_file is None else output_file
     assert output_file != sr.file_bin
