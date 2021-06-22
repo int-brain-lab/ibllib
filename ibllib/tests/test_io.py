@@ -254,13 +254,13 @@ class TestsRawDataLoaders(unittest.TestCase):
         self.assertNotEqual(count[0], 0)
         self.assertIsInstance(gpio, np.ndarray)
 
-    def test_load_camera_FrameData(self):
+    def test_load_camera_frameData(self):
         import pandas as pd
-        fd_raw = raw.load_camera_FrameData(self.bin_session_path, raw=True)
-        fd = raw.load_camera_FrameData(self.bin_session_path)
+        fd_raw = raw.load_camera_frameData(self.bin_session_path, raw=True)
+        fd = raw.load_camera_frameData(self.bin_session_path)
         # Wrong camera input file not found
         with self.assertRaises(AssertionError):
-            raw.load_camera_FrameData(self.bin_session_path, camera='right')
+            raw.load_camera_frameData(self.bin_session_path, camera='right')
         # Shape
         self.assertTrue(fd.shape[1] == 4)
         self.assertTrue(fd_raw.shape[1] == 4)

@@ -103,8 +103,8 @@ def load_data(session_path: Union[str, Path], time='absolute'):
     return data
 
 
-def load_camera_FrameData(session_path, camera: str = 'left', raw: bool = False) -> pd.DataFrame:
-    """ Loads binary FrameData from Bonsai camera recording workflow.
+def load_camera_frameData(session_path, camera: str = 'left', raw: bool = False) -> pd.DataFrame:
+    """ Loads binary frame data from Bonsai camera recording workflow.
 
     Args:
         session_path (StrPath): Path to session folder
@@ -131,7 +131,7 @@ def load_camera_FrameData(session_path, camera: str = 'left', raw: bool = False)
             }
     """
     camera = assert_valid_label(camera)
-    fpath = Path(session_path).joinpath("raw_video_data", f"_iblrig_{camera}Camera.FrameData.bin")
+    fpath = Path(session_path).joinpath("raw_video_data", f"_iblrig_{camera}Camera.frameData.bin")
     assert fpath.exists(), f"{fpath}\nFile not Found: Could not find bin file for cam <{camera}>"
     rdata = np.fromfile(fpath, dtype=np.float64)
     assert len(rdata) % 4 == 0, "Dimension mismatch: bin file length is not mod 4"
