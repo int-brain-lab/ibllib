@@ -5,11 +5,12 @@ This example shows how to load in passive data for a session and plot the recept
 depth
 """
 
-import brainbox.io.one as bbone
-import brainbox.task.passive as passive
-from oneibl.one import ONE
 import matplotlib.pyplot as plt
 import numpy as np
+from one.api import ONE
+
+import brainbox.io.one as bbone
+import brainbox.task.passive as passive
 
 eid = 'c7248e09-8c0d-40f2-9eb4-700a8973d8c8'
 probe = 'probe01'

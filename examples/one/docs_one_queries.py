@@ -3,7 +3,7 @@ List of useful one queries
 ===========================
 """
 
-from oneibl.one import ONE
+from one.api import ONE
 one = ONE()
 
 ##################################################################################################

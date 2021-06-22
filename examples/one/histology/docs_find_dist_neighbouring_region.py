@@ -11,13 +11,16 @@ of each structure
 
 # Author: Mayo Faulkner
 # import modules
-from oneibl.one import ONE
-from ibllib.atlas import atlas
+from pathlib import Path
+
 import numpy as np
 import matplotlib.pyplot as plt
+from one.api import ONE
+import one.alf.io as alfio
+
 from ibllib.pipes.ephys_alignment import EphysAlignment
-from pathlib import Path
-import alf.io
+from ibllib.atlas import atlas
+
 
 # Instantiate brain atlas and one
 brain_atlas = atlas.AllenAtlas(25)
@@ -42,7 +45,7 @@ region_label = ephys_align.region_label
 
 # Read in the allen structure tree csv
 allen_path = Path(Path(atlas.__file__).parent, 'allen_structure_tree.csv')
-allen = alf.io.load_file_content(allen_path)
+allen = alfio.load_file_content(allen_path)
 
 # Compute the distance to the closest neighbouring region for all xyz coordinates along probe track
 nearby_bounds = ephys_align.get_nearest_boundary(xyz_coords, allen)

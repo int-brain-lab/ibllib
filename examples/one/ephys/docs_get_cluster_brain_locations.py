@@ -10,7 +10,7 @@ the terminal. In this case no plot is generated.
 """
 
 
-from oneibl.one import ONE
+from one.api import ONE
 import numpy as np
 import matplotlib.pyplot as plt
 from ibllib.atlas import BrainRegions
@@ -24,9 +24,7 @@ sess_no = 1
 probe_label = 'probe01'
 eid = one.search(subject=subject, date=date, number=sess_no)[0]
 
-_ = one.load(eid, dataset_types=['clusters.channels'], download_only=True)
-alf_path = one.path_from_eid(eid).joinpath('alf', probe_label)
-cluster_chans = np.load(alf_path.joinpath('clusters.channels.npy'))
+cluster_chans = one.load_dataset(eid, 'clusters.channels.npy', collection=f'alf/{probe_label}')
 
 
 aligned_traj = one.alyx.rest('trajectories', 'list', subject=subject, session=eid,

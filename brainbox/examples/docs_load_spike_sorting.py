@@ -4,9 +4,10 @@ Get spikes, clusters and channels data
 Downloads and loads in spikes, clusters and channels data for a given session. Data is returned
 
 """
-
-from oneibl.one import ONE
 import brainbox.io.one as bbone
+
+from one.api import ONE
+
 one = ONE()
 
 # Find eid of interest
@@ -36,9 +37,7 @@ print(spikes.keys())
 #  'spikes.times']
 # If we also want to load for example, 'clusters.peakToTrough we can add a dataset_types argument
 
-dtypes_extra = ['clusters.peakToTrough']
-spikes, clusters, channels = bbone.load_spike_sorting_with_channel(eid, one=one, probe='probe00',
-                                                                   dataset_types=dtypes_extra)
+spikes, clusters, channels = bbone.load_spike_sorting_with_channel(eid, one=one, probe='probe00')
 print(clusters['probe00'].keys())
 
 ##################################################################################################
@@ -47,6 +46,5 @@ print(clusters['probe00'].keys())
 # local computer and if all the datasets are found it will not check for consistency with files
 # stored on flatiron (to speed up loading process). To make sure that data is always synced to
 # flatiron we can set a force flag to True
-spikes, clusters, channels = bbone.load_spike_sorting_with_channel(eid, one=one, probe='probe00',
-                                                                   force=True)
+spikes, clusters, channels = bbone.load_spike_sorting_with_channel(eid, one=one, probe='probe00')
 

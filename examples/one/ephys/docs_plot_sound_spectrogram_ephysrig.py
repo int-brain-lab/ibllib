@@ -10,21 +10,12 @@ from ibllib.io.extractors.training_audio import welchogram
 import soundfile as sf
 import numpy as np
 import matplotlib.pyplot as plt
-# import alf.io
-from oneibl.one import ONE
-
-one = ONE()
-
-dataset_types = ['_iblrig_micData.raw']
+from one.api import ONE
 
 eid = '9a7e3a4b-8b68-4817-81f1-adb0f48088eb'  # TEST EXAMPLE
 
-one.load(eid, dataset_types=dataset_types, download_only=True)
-session_path = one.path_from_eid(eid)
-
 # -- Get raw data
-filename = session_path.joinpath('raw_behavior_data', '_iblrig_micData.raw.flac')
-
+filename = ONE().load_dataset(eid, '_iblrig_micData.raw.flac', download_only=True)
 with open(filename, 'rb') as f:
     wav, fs = sf.read(f)
 

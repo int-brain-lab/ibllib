@@ -6,9 +6,9 @@ functions for loading individual or groups of frames efficiently.  The video may
 remotely or loaded from a local file.  In these examples a remote URL is used.
 """
 import numpy as np
+from one.api import ONE
 
 import ibllib.io.video as vidio
-from oneibl.one import ONE
 
 one = ONE(silent=True)
 eid = 'edd22318-216c-44ff-bc24-49ce8be78374'  # 2020-08-19_1_CSH_ZAD_019
@@ -54,3 +54,11 @@ with a number of fields.
 meta = vidio.get_video_meta(url, one=one)
 for k, v in meta.items():
     print(f'The video {k} = {v}')
+
+# Example 6: load video timestamps
+ts = one.load_dataset(eid, f'_ibl_{label}Camera.times.npy', collection='alf')
+
+# Example 7: load dlc
+cam = one.load_object(eid, f'{label}Camera', collection='alf')
+print(cam.keys())
+print(cam.dlc.columns)

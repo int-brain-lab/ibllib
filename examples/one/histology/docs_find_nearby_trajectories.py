@@ -8,10 +8,11 @@ their location in a 3D image. Additionally prints out the information of closeby
 # Author: Mayo Faulkner
 # import modules
 import numpy as np
+from one.api import ONE
+from mayavi import mlab
+
 import ibllib.pipes.histology as histology
 import ibllib.atlas as atlas
-from oneibl.one import ONE
-from mayavi import mlab
 from atlaselectrophysiology import rendering
 
 mlab.init_notebook()
@@ -26,7 +27,6 @@ sess_with_hist = [sess for sess in all_hist if sess['x'] is not None]
 traj_ids = [sess['id'] for sess in sess_with_hist]
 # Compute trajectory objects for each of the trajectories
 trajectories = [atlas.Insertion.from_dict(sess) for sess in sess_with_hist]
-
 
 # Find the trajectory of the id that you want to find closeby probe insertions for
 subject = 'SWC_023'

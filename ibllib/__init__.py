@@ -15,6 +15,6 @@ else:
     logging.getLogger('ibllib').addHandler(logging.NullHandler())
 
 try:
-    import iblutil
+    import one
 except ModuleNotFoundError:
-    logging.getLogger('ibllib').error('Missing dependency, please run `pip install iblutil`')
+    logging.getLogger('ibllib').error('Missing dependency, please run `pip install ONE-api`')

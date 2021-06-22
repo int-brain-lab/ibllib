@@ -5,9 +5,9 @@ Use ONE to get the training status of a chosen subject or all subjects within a 
 Training status is computed based on performance over latest 3 sessions (default) or last 3
 sessions before a specified date.
 """
+from one.api import ONE
 
 import brainbox.behavior.training as training
-from oneibl.one import ONE
 one = ONE(silent=True)
 # Get training status of a specific subject
 training.get_subject_training_status('SWC_055', one=one)
