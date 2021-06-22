@@ -225,7 +225,7 @@ class RegistrationClient:
             settings_json_file = list(ses_path.glob('**/_iblrig_taskSettings.raw*.json'))
             if not settings_json_file:
                 _logger.error(['could not find _iblrig_taskSettings.raw.json. Abort.'])
-                return
+                raise ValueError(f'_iblrig_taskSettings.raw.json not found in {ses_path} Abort.')
             _logger.warning([f'Settings found in a strange place: {settings_json_file}'])
         else:
             settings_json_file = settings_json_file[0]
@@ -303,7 +303,7 @@ class RegistrationClient:
             self.one.alyx.rest('water-administrations', 'create', data=wa_)
         # at this point the session has been created. If create only, exit
         if not file_list:
-            return
+            return session
         # register all files that match the Alyx patterns, warn user when files are encountered
         rename_files_compatibility(ses_path, md['IBLRIG_VERSION_TAG'])
         F = []  # empty list whose keys will be relative paths and content filenames
@@ -344,6 +344,7 @@ class RegistrationClient:
               'versions': [version.ibllib() for _ in F]
               }
         self.one.alyx.post('/register-file', data=r_)
+        return session
 
 
 def _alyx_procedure_from_task(task_protocol):
