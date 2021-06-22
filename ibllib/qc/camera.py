@@ -34,17 +34,16 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
 from ibllib.io.extractors.camera import extract_camera_sync, extract_all
-from ibllib.exceptions import ALFObjectNotFound
 from ibllib.io.extractors import ephys_fpga, training_wheel
 from ibllib.io.extractors.video_motion import MotionAlignment
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io import raw_data_loaders as raw
-import alf.io as alfio
-from brainbox.core import Bunch
-from brainbox.numerical import within_ranges
+import one.alf.io as alfio
+from one.alf.exceptions import ALFObjectNotFound
+from iblutil.util import Bunch
+from iblutil.numerical import within_ranges
 import brainbox.behavior.wheel as wh
 from ibllib.io.video import get_video_meta, get_video_frames_preload, assert_valid_label
-from oneibl.one import OneOffline
 from . import base
 
 _log = logging.getLogger('ibllib')
@@ -61,14 +60,13 @@ class CameraQC(base.QC):
         '_iblrig_Camera.raw',
         'camera.times',
         'wheel.position',
-        'wheel.timestamps',
+        'wheel.timestamps'
     ]
     dstypes_fpga = [
         '_spikeglx_sync.channels',
         '_spikeglx_sync.polarities',
         '_spikeglx_sync.times',
-        'ephysData.raw.meta',
-        'ephysData.raw.wiring'
+        'ephysData.raw.meta'
     ]
     """Recall that for the training rig there is only one side camera at 30 Hz and 1280 x 1024 px.
     For the recording rig there are two label cameras (left: 60 Hz, 1280 x 1024 px;
@@ -177,7 +175,7 @@ class CameraQC(base.QC):
         assert self.session_path, 'no session path set'
         if download_data is not None:
             self.download_data = download_data
-        if self.eid and self.one and not isinstance(self.one, OneOffline):
+        if self.eid and self.one and not self.one.offline:
             self._ensure_required_data()
         _log.info('Gathering data for QC')
 
@@ -292,6 +290,13 @@ class CameraQC(base.QC):
         # Get extractor type
         is_ephys = 'ephys' in (self.type or self.one.get_details(self.eid)['task_protocol'])
         dtypes = self.dstypes + self.dstypes_fpga if is_ephys else self.dstypes
+        # Check we have raw ephys data for session
+        if is_ephys and len(self.one.list_datasets(self.eid, collection='raw_ephys_data')) == 0:
+            # Assert 3A probe model; if so download all probe data
+            det = self.one.get_details(self.eid, full=True)
+            probe_model = next(x['model'] for x in det['probe_insertion'])
+            assert probe_model == '3A', 'raw ephys data not missing'
+            collections += ('raw_ephys_data/probe00', 'raw_ephys_data/probe01')
         for dstype in dtypes:
             dataset = self.one.datasets_from_type(self.eid, dstype, full=True)
             if 'camera' in dstype.lower():  # Download individual camera file
@@ -299,17 +304,18 @@ class CameraQC(base.QC):
             else:  # Ignore probe datasets, etc.
                 dataset = [d for d in dataset if d['collection'] in collections]
             if any(x['name'].endswith('.mp4') for x in dataset) and self.stream:
-                names = [x.name for x in self.one.list(self.eid)]
+                names = [x.split('/')[-1] for x in self.one.list_datasets(self.eid, details=False)]
                 assert f'_iblrig_{self.label}Camera.raw.mp4' in names, 'No remote video file found'
                 continue
             optional = ('camera.times', '_iblrig_Camera.raw', 'wheel.position',
                         'wheel.timestamps', '_iblrig_Camera.frame_counter', '_iblrig_Camera.GPIO')
-            required = (dstype not in optional)
             present = (
-                self.one.download_datasets(dataset)
+                self.one._download_datasets(dataset)
                 if self.download_data
                 else (next(self.session_path.rglob(d['name']), None) for d in dataset)
             )
+
+            required = (dstype not in optional)
             assert (dataset and all(present)) or not required, f'Dataset {dstype} not found'
         self._type = get_session_extractor_type(self.session_path)
 

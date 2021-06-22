@@ -6,16 +6,13 @@ processed data from raw hardware files and optionally save them.
 import abc
 from collections import OrderedDict
 import json
-import logging
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from alf.io import get_session_path
+from one.alf.io import get_session_path
 from ibllib.io import raw_data_loaders as raw
 from ibllib.io.raw_data_loaders import load_settings, _logger
-
-log = logging.getLogger("ibllib")
 
 
 class BaseExtractor(abc.ABC):
@@ -66,7 +63,7 @@ class BaseExtractor(abc.ABC):
                 np.save(file_path, data)
             elif file_path.suffix in [".parquet", ".pqt"]:
                 if not isinstance(data, pd.DataFrame):
-                    log.error("Data is not a panda's DataFrame object")
+                    _logger.error("Data is not a panda's DataFrame object")
                     raise TypeError("Data is not a panda's DataFrame object")
                 data.to_parquet(file_path)
             elif file_path.suffix in [".csv", ".ssv", ".tsv"]:
@@ -74,7 +71,7 @@ class BaseExtractor(abc.ABC):
                 data.to_csv(file_path, sep=sep)
                 # np.savetxt(file_path, data, delimiter=sep)
             else:
-                log.error(f"Don't know how to save {file_path.suffix} files yet")
+                _logger.error(f"Don't know how to save {file_path.suffix} files yet")
 
         if self.save_names is None:
             file_paths = []

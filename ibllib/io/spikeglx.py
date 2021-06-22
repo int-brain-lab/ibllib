@@ -2,13 +2,16 @@ import json
 import logging
 from pathlib import Path
 import re
+import shutil
 
 import numpy as np
 
 import mtscomp
-from brainbox.core import Bunch
+from iblutil.util import Bunch
 from ibllib.ephys import neuropixel as neuropixel
 from ibllib.io import hashfile
+from one.alf.io import remove_uuid_file
+from one.api import ONE
 
 SAMPLE_SIZE = 2  # int16
 DEFAULT_BATCH_SIZE = 1e6
@@ -630,3 +633,87 @@ def get_sync_map(folder_ephys):
         return None
     else:
         return _sync_map_from_hardware_config(hc)
+
+
+def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None):
+    """
+    TODO Document
+    :param url_cbin:
+    :param url_ch:
+    :param first_chunk:
+    :param last_chunk:
+    :return:
+    """
+    assert str(url_cbin).endswith('.cbin')
+    assert str(url_ch).endswith('.ch')
+    webclient = (one or ONE()).alyx
+
+    relpath = Path(url_cbin.replace(webclient._par.HTTP_DATA_SERVER, '.')).parents[0]
+    target_dir = Path(webclient.cache_dir, relpath)
+    Path(target_dir).mkdir(parents=True, exist_ok=True)
+
+    # First, download the .ch file if necessary
+    if isinstance(url_ch, Path):
+        ch_file = url_ch
+    else:
+        ch_file = Path(webclient.download_file(
+            url_ch, cache_dir=target_dir, clobber=True, return_md5=False))
+        ch_file = remove_uuid_file(ch_file)
+    ch_file_stream = ch_file.with_suffix('.stream.ch')
+
+    # Load the .ch file.
+    with open(ch_file, 'r') as f:
+        cmeta = json.load(f)
+
+    # Get the first byte and number of bytes to download.
+    i0 = cmeta['chunk_bounds'][first_chunk]
+    ns_stream = cmeta['chunk_bounds'][last_chunk + 1] - i0
+
+    # if the cached version happens to be the same as the one on disk, just load it
+    if ch_file_stream.exists():
+        with open(ch_file_stream, 'r') as f:
+            cmeta_stream = json.load(f)
+        if (cmeta_stream.get('chopped_first_sample', None) == i0 and
+                cmeta_stream.get('chopped_total_samples', None) == ns_stream):
+            return Reader(ch_file_stream.with_suffix('.cbin'))
+    else:
+        shutil.copy(ch_file, ch_file_stream)
+    assert ch_file_stream.exists()
+
+    # prepare the metadata file
+    cmeta['chunk_bounds'] = cmeta['chunk_bounds'][first_chunk:last_chunk + 2]
+    cmeta['chunk_bounds'] = [_ - i0 for _ in cmeta['chunk_bounds']]
+    assert len(cmeta['chunk_bounds']) >= 2
+    assert cmeta['chunk_bounds'][0] == 0
+
+    first_byte = cmeta['chunk_offsets'][first_chunk]
+    cmeta['chunk_offsets'] = cmeta['chunk_offsets'][first_chunk:last_chunk + 2]
+    cmeta['chunk_offsets'] = [_ - first_byte for _ in cmeta['chunk_offsets']]
+    assert len(cmeta['chunk_offsets']) >= 2
+    assert cmeta['chunk_offsets'][0] == 0
+    n_bytes = cmeta['chunk_offsets'][-1]
+    assert n_bytes > 0
+
+    # Save the chopped chunk bounds and offsets.
+    cmeta['sha1_compressed'] = None
+    cmeta['sha1_uncompressed'] = None
+    cmeta['chopped'] = True
+    cmeta['chopped_first_sample'] = i0
+    cmeta['chopped_total_samples'] = ns_stream
+
+    with open(ch_file_stream, 'w') as f:
+        json.dump(cmeta, f, indent=2, sort_keys=True)
+
+    # Download the requested chunks
+    cbin_local_path = webclient.download_file(
+        url_cbin, chunks=(first_byte, n_bytes),
+        cache_dir=target_dir, clobber=True, return_md5=False)
+    cbin_local_path = remove_uuid_file(cbin_local_path)
+    cbin_local_path_renamed = cbin_local_path.with_suffix('.stream.cbin')
+    cbin_local_path.rename(cbin_local_path_renamed)
+    assert cbin_local_path_renamed.exists()
+
+    shutil.copy(cbin_local_path.with_suffix('.meta'),
+                cbin_local_path_renamed.with_suffix('.meta'))
+    reader = Reader(cbin_local_path_renamed)
+    return reader

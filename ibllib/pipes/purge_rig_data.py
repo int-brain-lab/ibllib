@@ -10,9 +10,9 @@ Purge data from RIG
 sessions and files on Flatiron
 - Delete local raw file if found on Flatiron
 """
-from alf.folders import session_name
+from one.alf.folders import session_name
 from pathlib import Path
-from oneibl.one import ONE
+from one.api import ONE
 import argparse
 
 
@@ -28,7 +28,7 @@ def purge_local_data(local_folder, file_name, lab=None, dry=False):
     print(f'Found {len(files)} files')
     print(f'Checking on Flatiron for datsetType: {dstype}...')
     # Get all sessions and details from Alyx that have the dstype
-    one = ONE()
+    one = ONE(cache_rest=None)
     if lab is None:
         eid, det = one.search(dataset_types=[dstype], details=True)
     else:

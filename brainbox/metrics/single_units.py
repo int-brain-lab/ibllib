@@ -25,10 +25,10 @@ import pandas as pd
 
 from ibllib.io import spikeglx
 from phylib.stats import correlograms
+from iblutil.util import Bunch
+from iblutil.numerical import ismember, between_sorted
 from brainbox import singlecell
 from brainbox.io.spikeglx import extract_waveforms
-from brainbox.core import Bunch
-from brainbox.numerical import ismember
 from brainbox.processing import bincount2D
 from brainbox.metrics import electrode_drift
 
@@ -942,7 +942,6 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         'slidingRP_viol',
         'spike_count'
     ]
-    from brainbox.numerical import between_sorted
     if tbounds:
         ispi = between_sorted(spike_times, tbounds)
         spike_times = spike_times[ispi]

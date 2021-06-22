@@ -8,8 +8,8 @@ import ibllib.io.flags as flags
 import ibllib.io.params as params
 import ibllib.io.raw_data_loaders as raw
 import ibllib.io.spikeglx as spikeglx
-from alf.io import is_uuid_string
-from oneibl.one import ONE
+from one.alf.io import is_uuid_string
+from one.api import ONE
 
 log = logging.getLogger("ibllib")
 
@@ -311,11 +311,8 @@ def create_alyx_probe_insertions(
     labels: list = None,
 ):
     if one is None:
-        one = ONE()
-    if is_uuid_string(session_path):
-        eid = session_path
-    else:
-        eid = one.eid_from_path(session_path)
+        one = ONE(cache_rest=None)
+    eid = session_path if is_uuid_string(session_path) else one.eid_from_path(session_path)
     if eid is None:
         print("Session not found on Alyx: please create session before creating insertions")
     if model is None:
@@ -339,12 +336,11 @@ def create_alyx_probe_insertions(
     qc_dict.update({"extended_qc": {}})
 
     # create the dictionary
+    insertions = []
     for plabel in probe_labels:
         insdict = {"session": eid, "name": plabel, "model": pmodel, "json": qc_dict}
         # search for the corresponding insertion in Alyx
-        alyx_insertion = one.alyx.rest(
-            "insertions", "list", session=insdict["session"], name=insdict["name"]
-        )
+        alyx_insertion = one.alyx.get(f'/insertions?&session={eid}&name={plabel}', clobber=True)
         # if it doesn't exist, create it
         if len(alyx_insertion) == 0:
             alyx_insertion = one.alyx.rest("insertions", "create", data=insdict)
@@ -354,6 +350,8 @@ def create_alyx_probe_insertions(
                 alyx_insertion = one.alyx.rest("insertions", "update", id=iid, data=insdict)
             else:
                 alyx_insertion = alyx_insertion[0]
+        insertions.append(alyx_insertion)
+    return insertions
 
 
 def create_ephys_flags(session_folder: str):

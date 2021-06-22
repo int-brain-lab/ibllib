@@ -1,13 +1,12 @@
 import unittest
 from unittest import mock
 import json
-from oneibl.one import ONE
+from one.api import ONE
+from ibllib.tests import TEST_DB
 
 import ibllib.qc.critical_reasons as usrpmt
 
-one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
-          username='test_user',
-          password='TapetesBloc18')
+one = ONE(**TEST_DB)
 
 
 def mock_input(prompt):
@@ -23,11 +22,12 @@ class TestUserPmtSess(unittest.TestCase):
 
     def setUp(self) -> None:
         # Make sure tests use correct session ID
+        one.alyx.clear_rest_cache()
         self.sess_id = one.alyx.rest('sessions', 'list', task_protocol='ephys')[0]['url'][-36:]
 
         # Make sure tests use correct insertion ID
         # 1. Find and delete any previous insertions
-        ins = one.alyx.rest('insertions', 'list')
+        ins = one.alyx.get('/insertions', clobber=True)
         if len(ins) > 0:
             ins_id = [item['id'] for item in ins]
             for ins_id_i in ins_id:
@@ -40,7 +40,7 @@ class TestUserPmtSess(unittest.TestCase):
                 'datasets': []}
         one.alyx.rest('insertions', 'create', data=data)
         # 3. Save ins id in global variable for test access
-        self.ins_id = one.alyx.rest('insertions', 'list')[0]['id']
+        self.ins_id = one.alyx.rest('insertions', 'list', no_cache=True)[0]['id']
 
     def test_reason_addnumberstr(self):
         outstr = usrpmt._reason_addnumberstr(reason_list=['a', 'b'])
@@ -50,7 +50,7 @@ class TestUserPmtSess(unittest.TestCase):
         eid = self.sess_id  # sess id
         with mock.patch('builtins.input', mock_input):
             usrpmt.main(eid=eid, one=one)
-        note = one.alyx.rest('notes', 'list', django=f'object_id,{eid}')
+        note = one.alyx.rest('notes', 'list', django=f'object_id,{eid}', no_cache=True)
         critical_dict = json.loads(note[0]['text'])
         expected_dict = {
             'title': '=== EXPERIMENTER REASON(S) FOR MARKING THE SESSION AS CRITICAL ===',
@@ -62,7 +62,7 @@ class TestUserPmtSess(unittest.TestCase):
         eid = self.ins_id  # probe id
         with mock.patch('builtins.input', mock_input):
             usrpmt.main(eid=eid, one=one)
-        note = one.alyx.rest('notes', 'list', django=f'object_id,{eid}')
+        note = one.alyx.rest('notes', 'list', django=f'object_id,{eid}', no_cache=True)
         critical_dict = json.loads(note[0]['text'])
         expected_dict = {
             'title': '=== EXPERIMENTER REASON(S) FOR MARKING THE INSERTION AS CRITICAL ===',
@@ -73,15 +73,17 @@ class TestUserPmtSess(unittest.TestCase):
     def test_guiinput_ins(self):
         eid = self.ins_id  # probe id
         str_notes_static = '=== EXPERIMENTER REASON(S) FOR MARKING THE INSERTION AS CRITICAL ==='
-        notes = one.alyx.rest('notes', 'list', django=f'text__icontains,{str_notes_static},'
-                                                      f'object_id,{eid}')
+        notes = one.alyx.rest('notes', 'list',
+                              django=f'text__icontains,{str_notes_static},object_id,{eid}',
+                              no_cache=True)
         # delete any previous notes
         for note in notes:
             one.alyx.rest('notes', 'delete', id=note['id'])
         # write a new note and make sure it is found
         usrpmt.main_gui(eid=eid, reasons_selected=['Drift'], one=one)
-        note = one.alyx.rest('notes', 'list', django=f'text__icontains,{str_notes_static},'
-                                                     f'object_id,{eid}')
+        note = one.alyx.rest('notes', 'list',
+                             django=f'text__icontains,{str_notes_static},object_id,{eid}',
+                             no_cache=True)
         assert len(note) == 1
         critical_dict = json.loads(note[0]['text'])
         expected_dict = {
@@ -96,14 +98,15 @@ class TestUserPmtSess(unittest.TestCase):
         content_type = 'probeinsertion'
         note_text = 'USING A FAKE SINGLE STRING HERE KSROI283IF982HKJFHWRY'
 
-        notes = one.alyx.rest('notes', 'list', django=f'text__icontains,{note_text},'
-                                                      f'object_id,{eid}')
+        notes = one.alyx.rest('notes', 'list',
+                              django=f'text__icontains,{note_text},object_id,{eid}',
+                              no_cache=True)
         # delete any previous notes
         for note in notes:
             one.alyx.rest('notes', 'delete', id=note['id'])
 
         # create new note
-        my_note = {'user': one._par.ALYX_LOGIN,
+        my_note = {'user': one.alyx.user,
                    'content_type': content_type,
                    'object_id': eid,
                    'text': f'{note_text}'}
@@ -111,8 +114,8 @@ class TestUserPmtSess(unittest.TestCase):
         one.alyx.rest('notes', 'create', data=my_note)
 
         notes = one.alyx.rest('notes', 'list',
-                              django=f'text__icontains,{note_text},'
-                                     f'object_id,{eid}')
+                              django=f'text__icontains,{note_text},object_id,{eid}',
+                              no_cache=True)
         assert len(notes) == 1
 
     def tearDown(self) -> None:

@@ -9,7 +9,12 @@ import logging
 USE_LOGGING = True
 #%(asctime)s,%(msecs)d
 if USE_LOGGING:
-   logger_config(name='ibllib')
+    logger_config(name='ibllib')
 else:
-   # deactivate all log calls for use as a library
-   logging.getLogger('ibllib').addHandler(logging.NullHandler())
+    # deactivate all log calls for use as a library
+    logging.getLogger('ibllib').addHandler(logging.NullHandler())
+
+try:
+    import iblutil
+except ModuleNotFoundError:
+    logging.getLogger('ibllib').error('Missing dependency, please run `pip install iblutil`')

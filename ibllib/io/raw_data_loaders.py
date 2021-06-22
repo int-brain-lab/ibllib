@@ -258,7 +258,7 @@ def load_stim_position_screen(session_path):
 
     data = pd.read_csv(path, sep=',', header=None, error_bad_lines=False)
     data.columns = ['contrast', 'position', 'bns_ts']
-    data[2] = pd.to_datetime(data[2])
+    data['bns_ts'] = pd.to_datetime(data['bns_ts'])
     return data
 
 

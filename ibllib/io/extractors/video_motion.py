@@ -13,13 +13,12 @@ import matplotlib.animation as animation
 import logging
 from pathlib import Path
 
-from oneibl.one import ONE, OneOffline
+from one.api import ONE
 import ibllib.io.video as vidio
-from brainbox.core import Bunch
+from iblutil.util import Bunch
 import brainbox.video as video
 import brainbox.behavior.wheel as wh
-from ibllib.misc.exp_ref import eid2ref
-import alf.io as alfio
+import one.alf.io as alfio
 
 
 def find_nearest(array, value):
@@ -35,14 +34,11 @@ class MotionAlignment:
         'body': ((402, 481), (31, 103))
     }
 
-    def __init__(self, eid, one=None, log=logging.getLogger('ibllib'), **kwargs):
+    def __init__(self, eid=None, one=None, log=logging.getLogger('ibllib'), **kwargs):
         self.one = one or ONE()
         self.eid = eid
-        self.session_path = kwargs.pop('session_path', self.one.path_from_eid(eid))
-        if self.one and not isinstance(self.one, OneOffline):
-            self.ref = eid2ref(self.eid, as_dict=False, one=self.one)
-        else:
-            self.ref = None
+        self.session_path = kwargs.pop('session_path', None) or self.one.eid2path(eid)
+        self.ref = self.one.dict2ref(self.one.path2ref(self.session_path))
         self.log = log
         self.trials = self.wheel = self.camera_times = None
         raw_cam_path = self.session_path.joinpath('raw_video_data')
@@ -127,11 +123,11 @@ class MotionAlignment:
         if alfio.is_uuid_string(str(session_path_or_eid)):
             self.eid = session_path_or_eid
             # Try to set session_path if data is found locally
-            self.session_path = self.one.path_from_eid(self.eid)
+            self.session_path = self.one.eid2path(self.eid)
         elif alfio.is_session_path(session_path_or_eid):
             self.session_path = Path(session_path_or_eid)
             if self.one is not None:
-                self.eid = self.one.eid_from_path(self.session_path)
+                self.eid = self.one.path2eid(self.session_path)
                 if not self.eid:
                     self.log.warning('Failed to determine eID from session path')
         else:
