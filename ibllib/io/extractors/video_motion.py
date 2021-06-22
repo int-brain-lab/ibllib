@@ -34,10 +34,10 @@ class MotionAlignment:
         'body': ((402, 481), (31, 103))
     }
 
-    def __init__(self, eid, one=None, log=logging.getLogger('ibllib'), **kwargs):
+    def __init__(self, eid=None, one=None, log=logging.getLogger('ibllib'), **kwargs):
         self.one = one or ONE()
         self.eid = eid
-        self.session_path = kwargs.pop('session_path', self.one.eid2path(eid))
+        self.session_path = kwargs.pop('session_path', None) or self.one.eid2path(eid)
         self.ref = self.one.dict2ref(self.one.path2ref(self.session_path))
         self.log = log
         self.trials = self.wheel = self.camera_times = None
