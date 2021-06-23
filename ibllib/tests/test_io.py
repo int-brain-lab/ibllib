@@ -8,7 +8,8 @@ import sys
 
 import numpy as np
 
-from oneibl.one import ONE
+from one.api import ONE
+from ibllib.tests import TEST_DB
 from ibllib.io import params, flags, jsonable, misc, globus, video
 import ibllib.io.raw_data_loaders as raw
 
@@ -374,11 +375,7 @@ class TestsGlobus(unittest.TestCase):
 class TestVideo(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.one = ONE(
-            base_url="https://test.alyx.internationalbrainlab.org",
-            username="test_user",
-            password="TapetesBloc18"
-        )
+        cls.one = ONE(**TEST_DB)
 
     def setUp(self) -> None:
         self.eid = '8dd0fcb0-1151-4c97-ae35-2e2421695ad7'
@@ -388,7 +385,7 @@ class TestVideo(unittest.TestCase):
 
     def test_label_from_path(self):
         # Test file path
-        session_path = self.one.path_from_eid(self.eid)
+        session_path = self.one.eid2path(self.eid)
         video_path = session_path / 'raw_video_data' / '_iblrig_bodyCamera.raw.mp4'
         label = video.label_from_path(video_path)
         self.assertEqual('body', label)
@@ -403,6 +400,7 @@ class TestVideo(unittest.TestCase):
         self.assertIsNone(label)
 
     def test_url_from_eid(self):
+        assert self.one.mode != 'remote'
         actual = video.url_from_eid(self.eid, 'left', self.one)
         self.assertEqual(self.url, actual)
         actual = video.url_from_eid(self.eid, one=self.one)
@@ -411,6 +409,17 @@ class TestVideo(unittest.TestCase):
         actual = video.url_from_eid(self.eid, label=('left', 'right'), one=self.one)
         expected = {'left': self.url, 'right': None}
         self.assertEqual(expected, actual)
+
+        # Test remote mode
+        old_mode = self.one.mode
+        self.one.mode = 'remote'
+        actual = video.url_from_eid(self.eid, label='left', one=self.one)
+        self.assertEqual(self.url, actual)
+        self.one.mode = old_mode
+
+        # Test arg checks
+        with self.assertRaises(ValueError):
+            video.url_from_eid(self.eid, 'back')
 
     def test_assert_valid_label(self):
         with self.assertRaises(ValueError):

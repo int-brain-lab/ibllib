@@ -4,8 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
-from oneibl.one import ONE, OneOffline
-from alf.io import is_session_path, is_uuid_string
+from one.api import ONE
+from one.alf.io import is_session_path, is_uuid_string
 
 # Map for comparing QC outcomes
 CRITERIA = {'CRITICAL': 4,
@@ -38,7 +38,7 @@ class QC:
             self.json = True
 
         # Ensure outcome attribute matches Alyx record
-        updatable = self.eid and self.one and not isinstance(self.one, OneOffline)
+        updatable = self.eid and self.one and not self.one.offline
         self._outcome = self.update('NOT_SET', namespace='') if updatable else 'NOT_SET'
         self.log.debug(f'Current QC status is {self.outcome}')
 
@@ -106,11 +106,11 @@ class QC:
         if is_uuid_string(str(session_path_or_eid)):
             self.eid = session_path_or_eid
             # Try to set session_path if data is found locally
-            self.session_path = self.one.path_from_eid(self.eid)
+            self.session_path = self.one.eid2path(self.eid)
         elif is_session_path(session_path_or_eid):
             self.session_path = Path(session_path_or_eid)
             if self.one is not None:
-                self.eid = self.one.eid_from_path(self.session_path)
+                self.eid = self.one.path2eid(self.session_path)
                 if not self.eid:
                     self.log.warning('Failed to determine eID from session path')
         else:
@@ -119,7 +119,7 @@ class QC:
 
     def _confirm_endpoint_id(self, endpoint_id):
         # Have as read for now since 'list' isn't working
-        target_obj = self.one.alyx.rest(self.endpoint, 'read', id=endpoint_id) or None
+        target_obj = self.one.alyx.get(f'/{self.endpoint}/{endpoint_id}', clobber=True) or None
         if target_obj:
             self.eid = endpoint_id
             json_field = target_obj.get('json')
@@ -148,7 +148,7 @@ class QC:
             qc.update('PASS')  # Update current QC field to 'PASS' if not set
         """
         assert self.one, "instance of one should be provided"
-        if isinstance(self.one, OneOffline):
+        if self.one.offline:
             self.log.warning('Running on OneOffline instance, unable to update remote QC')
             return
         outcome = outcome or self.outcome
@@ -158,8 +158,8 @@ class QC:
         assert self.eid, 'Unable to update Alyx; eID not set'
         if namespace:  # Record in extended qc
             self.update_extended_qc({namespace: outcome})
-        current_status = self.one.alyx.rest(self.endpoint, 'read', id=self.eid)['json']['qc'] \
-            if self.json else self.one.alyx.rest(self.endpoint, 'read', id=self.eid)['qc']
+        details = self.one.alyx.get(f'/{self.endpoint}/{self.eid}', clobber=True)
+        current_status = (details['json'] if self.json else details)['qc']
 
         if CRITERIA[current_status] < CRITERIA[outcome] or override:
             r = self.one.alyx.json_field_update(endpoint=self.endpoint, uuid=self.eid,
@@ -182,7 +182,7 @@ class QC:
         """
         assert self.eid, 'Unable to update Alyx; eID not set'
         assert self.one, "instance of one should be provided"
-        if isinstance(self.one, OneOffline):
+        if self.one.offline:
             self.log.warning('Running on OneOffline instance, unable to update remote QC')
             return
 
@@ -191,20 +191,18 @@ class QC:
             if (v is not None and not isinstance(v, str)) and np.isnan(v).all():
                 data[k] = None
 
+        details = self.one.alyx.get(f'/{self.endpoint}/{self.eid}', clobber=True)
         if self.json:
-            extended_qc = (self.one.alyx.rest(self.endpoint, 'read', id=self.eid)['json']
-                           ['extended_qc']) or {}
+            extended_qc = details['json']['extended_qc'] or {}
             extended_qc.update(data)
             extended_qc_dict = {'extended_qc': extended_qc}
             out = self.one.alyx.json_field_update(
                 endpoint=self.endpoint, uuid=self.eid, field_name='json', data=extended_qc_dict)
         else:
-            extended_qc = self.one.alyx.rest(
-                self.endpoint, 'read', id=self.eid)['extended_qc'] or {}
+            extended_qc = details['extended_qc'] or {}
             extended_qc.update(data)
             out = self.one.alyx.json_field_update(
-                endpoint=self.endpoint, uuid=self.eid, field_name='extended_qc',
-                data=extended_qc)
+                endpoint=self.endpoint, uuid=self.eid, field_name='extended_qc', data=extended_qc)
 
         self.log.info(f'Extended QC field successfully updated for {self.endpoint[:-1]} '
                       f'{self.eid}')

@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 import brainbox.task.passive as passive
-from brainbox.numerical import ismember2d
+from iblutil.numerical import ismember2d
 
 
 class TestPassive(unittest.TestCase):

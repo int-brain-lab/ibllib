@@ -7,11 +7,41 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from brainbox.core import Bunch
-from oneibl.stream import VideoStreamer
-from oneibl.one import ONE
+from iblutil.util import Bunch
+from one.api import ONE, One
+from one import params
 
 VIDEO_LABELS = ('left', 'right', 'body')
+
+
+class VideoStreamer:
+    """
+    Provides a wrapper to stream a video from a password protected HTTP server using opencv
+    """
+
+    def __init__(self, url_vid):
+        """
+        TODO Allow auth as input
+        :param url_vid: full url of the video or dataset dictionary as output by alyx rest datasets
+        :returns cv2.VideoCapture object
+        """
+        # pop the data url from the dataset record if the input is a dictionary
+        if isinstance(url_vid, dict):
+            url_vid = next(fr['data_url'] for fr in url_vid['file_records'] if fr['data_url'])
+        self.url = url_vid
+        self._par = params.get(silent=True)
+        self.cap = cv2.VideoCapture(self._url)
+        self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    @property
+    def _url(self):
+        username = self._par.HTTP_DATA_SERVER_LOGIN
+        password = self._par.HTTP_DATA_SERVER_PWD
+        return re.sub(r'(^https?://)', r'\1' + f'{username}:{password}@', self.url)
+
+    def get_frame(self, frame_index):
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+        return self.cap.read()
 
 
 def get_video_frame(video_path, frame_number):
@@ -94,6 +124,9 @@ def get_video_meta(video_path, one=None):
     :param one: An instance of ONE
     :return: A Bunch of video mata data
     """
+    if one and not isinstance(one, One):
+        import ibllib.io.deprecated.video as video_legacy
+        return video_legacy.get_video_meta(video_path, one)
     is_url = isinstance(video_path, str) and video_path.startswith('http')
     cap = VideoStreamer(video_path).cap if is_url else cv2.VideoCapture(str(video_path))
     assert cap.isOpened(), f'Failed to open video file {video_path}'
@@ -106,10 +139,12 @@ def get_video_meta(video_path, one=None):
     meta.height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     meta.duration = timedelta(seconds=meta.length / meta.fps) if meta.fps > 0 else 0
     if is_url and one:
-        eid = one.eid_from_path(video_path)
-        name = re.match(r'.*(_iblrig_[a-z]+Camera\.raw\.)(?:[\w-]{36}\.)?(mp4)$', video_path)
-        det, = one.alyx.rest('datasets', 'list', session=eid, name=''.join(name.groups()))
-        meta.size = det['file_size']
+        eid = one.path2eid(video_path)
+        datasets = one.list_datasets(eid, details=True)
+        label = label_from_path(video_path)
+        record = datasets[datasets['rel_path'].str.contains(f'_iblrig_{label}Camera.raw')]
+        assert len(record) == 1
+        meta.size = record['file_size'].iloc[0]
     elif is_url and not one:
         meta.size = None
     else:
@@ -130,18 +165,25 @@ def url_from_eid(eid, label=None, one=None):
     if not (label is None or np.isin(label, ('left', 'right', 'body')).all()):
         raise ValueError('labels must be one of ("%s")' % '", "'.join(valid_labels))
     one = one or ONE()
-    datasets = one.list(eid, details=True)
+    if not isinstance(one, One):
+        import ibllib.io.deprecated.video as video_legacy
+        return video_legacy.url_from_eid(eid, label, one)
+    session_path = one.eid2path(one.to_eid(eid))
 
+    # Filter the video files
     def match(dataset):
-        if dataset['dataset_type'] != '_iblrig_Camera.raw':
-            return False
-        if label:
-            name = re.match(r'(?:_iblrig_)([a-z]+)(?=Camera.raw.mp4$)', dataset['name']).group(1)
-            return name in label
-        else:
-            return True
-    datasets = [ds for ds in datasets if match(ds)]
-    urls = [next(r['data_url'] for r in ds['file_records'] if r['data_url']) for ds in datasets]
+        matched = re.match(r'(?:_iblrig_)([a-z]+)(?=Camera.raw.mp4$)', dataset.rsplit('/')[-1])
+        return matched and matched.group(1) in (label or valid_labels)
+
+    if one.mode != 'remote':
+        datasets = one.list_datasets(eid, details=False)
+        datasets = [ds for ds in datasets if match(ds)]
+        urls = [one.path2url(session_path / ds) for ds in datasets]
+    else:
+        datasets = one.get_details(eid, full=True)['data_dataset_session_related']
+        urls = [ds['data_url'] for ds in datasets
+                if ds['dataset_type'] == '_iblrig_Camera.raw' and match(ds['name'])]
+
     # If one label specified, return the url, otherwise return a dict
     if isinstance(label, str):
         return urls[0]

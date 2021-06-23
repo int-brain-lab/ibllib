@@ -1,9 +1,9 @@
 import logging
-from oneibl.one import ONE
+from one.api import ONE
 import datetime
 import re
 import numpy as np
-from brainbox.core import Bunch
+from iblutil.util import Bunch
 import brainbox.behavior.pyschofit as psy
 
 logger = logging.getLogger('ibllib')

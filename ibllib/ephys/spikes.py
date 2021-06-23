@@ -6,7 +6,7 @@ import tarfile
 
 import numpy as np
 
-import alf.io
+import alf.io as alfio
 import phylib.io.alf
 from ibllib.ephys.sync_probes import apply_sync
 import ibllib.ephys.ephysqc as ephysqc
@@ -27,7 +27,7 @@ def probes_description(ses_path, one=None, bin_exists=True):
         alf/probes.trajectory.npy
     """
 
-    eid = one.eid_from_path(ses_path)
+    eid = one.path2eid(ses_path, query_type='remote')
     ses_path = Path(ses_path)
     ephys_files = spikeglx.glob_ephys_files(ses_path, ext='meta')
     subdirs, labels, efiles_sorted = zip(
@@ -121,7 +121,7 @@ def sync_spike_sorting(ap_file, out_path):
         ap_file.name.replace('.ap.', '.sync.')).with_suffix('.npy')
     # try to get probe sync if it doesn't exist
     if not sync_file.exists():
-        _, sync_files = sync_probes.sync(alf.io.get_session_path(ap_file))
+        _, sync_files = sync_probes.sync(alfio.get_session_path(ap_file))
         out_files.extend(sync_files)
     # if it still not there, full blown error
     if not sync_file.exists():

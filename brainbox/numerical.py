@@ -1,10 +1,16 @@
 from typing import TypeVar, Sequence, Union, Optional, Type
+import logging
+import warnings
 
 import numpy as np
 from numba import jit
 
 D = TypeVar('D', bound=np.generic)
 Array = Union[np.ndarray, Sequence]
+
+logger = logging.getLogger('ibllib')
+warnings.warn('brainbox.numerical is deprecated; use iblutil.numerical',
+              category=DeprecationWarning, stacklevel=2)  # iblrplate
 
 
 def between_sorted(sorted_v, bounds=None):

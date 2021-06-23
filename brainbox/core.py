@@ -10,6 +10,8 @@ class Bunch(dict):
     """A subclass of dictionary with an additional dot syntax."""
 
     def __init__(self, *args, **kwargs):
+        import logging
+        logging.getLogger('ibllib').warning('Bunch has moved to ibl_util.util')  # iblrplate
         super(Bunch, self).__init__(*args, **kwargs)
         self.__dict__ = self
 
