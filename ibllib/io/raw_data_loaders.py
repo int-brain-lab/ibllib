@@ -137,13 +137,12 @@ def load_camera_frameData(session_path, camera: str = 'left', raw: bool = False)
     assert len(rdata) % 4 == 0, "Dimension mismatch: bin file length is not mod 4"
     rows = int(len(rdata) / 4)
     data = np.reshape(rdata.astype(np.int64), (rows, 4))
-    df_dict = {
-        "Timestamp": None,
-        "embeddedTimeStamp": None,
-        "embeddedFrameCounter": None,
-        "embeddedGPIOPinState": None
-    }
+    df_dict = dict.fromkeys(
+        ["Timestamp", "embeddedTimeStamp", "embeddedFrameCounter", "embeddedGPIOPinState"]
+    )
     df = pd.DataFrame(data, columns=df_dict.keys())
+    if raw:
+        return df
 
     df_dict["Timestamp"] = (data[:, 0] - data[0, 0]) / 10_000_000  # in seconds from start
     camerats = uncycle_pgts(convert_pgts(data[:, 1]))
@@ -153,7 +152,7 @@ def load_camera_frameData(session_path, camera: str = 'left', raw: bool = False)
     df_dict["embeddedGPIOPinState"] = [np.array(x) for x in gpio.tolist()]
 
     parsed_df = pd.DataFrame.from_dict(df_dict)
-    return df if raw else parsed_df
+    return parsed_df
 
 
 def load_camera_ssv_times(session_path, camera: str):
@@ -260,7 +259,6 @@ def load_camera_gpio(session_path, label: str, as_dicts=False):
     """
     if session_path is None:
         return
-    # if newfile.exists():
 
     raw_path = Path(session_path).joinpath('raw_video_data')
 
