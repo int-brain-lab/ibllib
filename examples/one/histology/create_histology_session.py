@@ -42,6 +42,7 @@ from one.api import ONE
 
 import ibllib.time
 
+
 # override default method of JSONEncoder to implement custom NumPy JSON serialization.
 # see https://pynative.com/python-serialize-numpy-ndarray-into-json/
 class NumpyArrayEncoder(JSONEncoder):
