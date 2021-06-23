@@ -239,6 +239,8 @@ class Pipeline(abc.ABC):
         Get all the session related jobs from alyx and run them
         :param status__in: lists of status strings to run in
         ['Waiting', 'Started', 'Errored', 'Empty', 'Complete']
+        :param machine: string identifying the machine the task is run on, optional
+        :param clobber: bool, if True any existing logs are overwritten, default is True
         :param kwargs: arguments passed downstream to run_alyx_task
         :return: jalyx: list of REST dictionaries of the job endpoints
         :return: job_deck: list of REST dictionaries of the jobs endpoints
@@ -287,6 +289,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     :param max_md5_size: in bytes, if specified, will not compute the md5 checksum above a given
     filesize to save time
     :param machine: string identifying the machine the task is run on, optional
+    :param clobber: bool, if True any existing logs are overwritten, default is True
     :return:
     """
     registered_dsets = []
