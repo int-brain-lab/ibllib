@@ -223,13 +223,12 @@ def decompress_destripe_cbin(sr, output_file=None, h=None):
 
     SAMPLES_TAPER = 128
     NBATCH = 65536
-
-    butter_kwargs = {'N': 3, 'Wn': 300 / sr.fs / 2, 'btype': 'highpass'}
-    k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
-                'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
     # handles input parameters
     if isinstance(sr, str) or isinstance(sr, Path):
         sr = spikeglx.Reader(sr, open=True)
+    butter_kwargs = {'N': 3, 'Wn': 300 / sr.fs / 2, 'btype': 'highpass'}
+    k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
+                'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
     h = neuropixel.trace_header(version=1) if h is None else h
     output_file = sr.file_bin.with_suffix('.bin') if output_file is None else output_file
     assert output_file != sr.file_bin
