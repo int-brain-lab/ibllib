@@ -74,3 +74,18 @@ def get_DLC(eid, video_type):
         XYs[point] = np.array([x, y])
 
     return Times, XYs
+
+
+def get_all_sess_with_GPIO_files():
+    '''
+    sessions with GPIO files have guaranteed
+    temporal alignement between DLC traces and timestamps
+    '''
+    # get all bwm sessions with GPIO files
+    one = ONE()
+    all_sess = one.alyx.rest('sessions', 'list', 
+                              project='ibl_neuropixel_brainwide_01',
+                              task_protocol="ephys", 
+                              dataset_types='_iblrig_Camera.GPIO')
+    eids = [s['url'].split('/')[-1] for s in all_sess]
+    return eids
