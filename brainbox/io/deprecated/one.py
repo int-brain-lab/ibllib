@@ -239,12 +239,12 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, force=Fals
 
         one = one or ONE()
         dtypes_default = [
-            'clusters.channels',
-            'clusters.depths',
-            'clusters.metrics',
-            'spikes.clusters',
-            'spikes.times',
-            'probes.description'
+            'clusters.channels.npy',
+            'clusters.depths.npy',
+            'clusters.metrics.pqt',
+            'spikes.clusters.npy',
+            'spikes.times.npy',
+            'probes.description.json'
         ]
         if dataset_types is None:
             dtypes = dtypes_default
@@ -272,7 +272,7 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, force=Fals
             if not spike_exists or not cluster_exists or force:
                 logger.info(f'Did not find local files for spikes and clusters for {session_path} '
                             f'and {label}. Downloading....')
-                one.load(eid, dataset_types=dtypes, download_only=True)
+                one.load_datasets(eid, datasets=dtypes, download_only=True)
                 _spikes, _clusters = _load_spike_sorting_local(session_path, label)
                 if not _spikes:
                     logger.warning(

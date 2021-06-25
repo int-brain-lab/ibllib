@@ -212,7 +212,7 @@ def load_ephys_session(eid, one=None):
     return spikes, clusters, trials
 
 
-def load_spike_sorting(eid, one=None, probe=None):
+def load_spike_sorting(eid, one=None, probe=None, dataset_types=None):
     """
     From an eid, loads spikes and clusters for all probes
     The following set of dataset types are loaded:
@@ -225,6 +225,7 @@ def load_spike_sorting(eid, one=None, probe=None):
     :param eid: experiment UUID or pathlib.Path of the local session
     :param one: an instance of OneAlyx
     :param probe: name of probe to load in, if not given all probes for session will be loaded
+    :param dataset_types: additional spikes/clusters objects to add to the standard default list
     :return: spikes, clusters (dict of bunch, 1 bunch per probe)
     """
     one = one or ONE()
@@ -240,15 +241,33 @@ def load_spike_sorting(eid, one=None, probe=None):
             probes = one.load_object(eid, 'probes', collection='alf')
             labels = [pr['label'] for pr in probes['description']]
         else:
-            assert isinstance(one, OneAlyx), 'ONE much be in remote mode'
+            assert isinstance(one, OneAlyx), 'ONE must be in remote mode'
             insertions = one.alyx.rest('insertions', 'list', session=one.to_eid(eid))
             labels = [ins['name'] for ins in insertions]
 
     spikes = Bunch.fromkeys(labels)
     clusters = Bunch.fromkeys(labels)
+    dtypes_default = [
+        'clusters.channels',
+        'clusters.depths',
+        'clusters.metrics',
+        'spikes.clusters',
+        'spikes.times',
+        'probes.description'
+    ]
+    if dataset_types is None:
+        dtypes = dtypes_default
+    else:
+        # Append extra optional DS
+        dtypes = list(set(dataset_types + dtypes_default))
+
+    spike_attributes = '|'.join([sp.split('.')[1] for sp in dtypes if 'spikes.' in sp])
+    cluster_attributes = '|'.join([cl.split('.')[1] for cl in dtypes if 'clusters.' in cl])
+
     for label in labels:
         try:
-            spikes[label] = one.load_object(eid, 'spikes', collection=label)
+            spikes[label] = one.load_object(eid, 'spikes', collection=f'alf/{label}',
+                                            attribute=spike_attributes)
         except alferr.ALFError:
             logger.warning(
                 f'Could not load spikes datasets for session {eid}. '
@@ -257,7 +276,8 @@ def load_spike_sorting(eid, one=None, probe=None):
         session_path = eid if alfio.is_session_path(eid) else one.eid2path(one.to_eid(eid))
         _remove_old_clusters(session_path, label)
         try:
-            clusters[label] = one.load_object(eid, 'clusters', collection=label)
+            clusters[label] = one.load_object(eid, 'clusters', collection=f'alf/{label}',
+                                              attribute=cluster_attributes)
         except alferr.ALFError:
             logger.warning(
                 f'Could not load clusters datasets for session {eid}. '
@@ -320,7 +340,7 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
     return dic_clus
 
 
-def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False):
+def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False, dataset_types=None):
     """
     For a given eid, get spikes, clusters and channels information, and merges clusters
     and channels information before returning all three variables.
@@ -328,17 +348,19 @@ def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False):
     :param one:
     :param aligned: whether to get the latest user aligned channel when not resolved or use
     histology track
+    :param dataset_types: additional spikes/clusters objects to add to the standard default list
     :return: spikes, clusters, channels (dict of bunch, 1 bunch per probe)
     """
     # --- Get spikes and clusters data
     one = one or ONE()
 
-    if isinstance(one, One):
+    if not isinstance(one, One):
         logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
         from .deprecated import one as old
         return old.load_spike_sorting_with_channel(eid, one=one, probe=probe, aligned=aligned)
 
-    dic_spk_bunch, dic_clus = load_spike_sorting(eid, one=one, probe=probe)
+    dic_spk_bunch, dic_clus = load_spike_sorting(eid, one=one, probe=probe,
+                                                 dataset_types=dataset_types)
     # -- Get brain regions and assign to clusters
     channels = load_channel_locations(eid, one=one, probe=probe, aligned=aligned)
 
@@ -359,11 +381,11 @@ def load_passive_rfmap(eid, one=None):
     else:
         one = one or ONE()
         dtypes = {
-            '_iblrig_RFMapStim.raw',
-            '_ibl_passiveRFM.times',
+            '_iblrig_RFMapStim.raw.bin',
+            '_ibl_passiveRFM.times.npy',
         }
 
-        _ = one.load_dataset(eid, dataset_types=dtypes, download_only=True)
+        _ = one.load_datasets(eid, datasets=dtypes, download_only=True)
         alf_path = one.path_from_eid(eid).joinpath('alf')
 
     # Load in the receptive field mapping data

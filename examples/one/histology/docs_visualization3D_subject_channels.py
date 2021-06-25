@@ -20,8 +20,8 @@ import ibllib.plots
 from atlaselectrophysiology import rendering
 import ibllib.atlas as atlas
 
-one = ONE()
-subject = 'KS003'
+one = ONE(base_url='https://openalyx.internationalbrainlab.org')
+subject = 'KS023'
 
 ba = atlas.AllenAtlas(25)
 channels_rest = one.alyx.rest('channels', 'list', subject=subject)

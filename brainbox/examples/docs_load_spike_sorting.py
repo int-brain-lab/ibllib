@@ -8,10 +8,10 @@ import brainbox.io.one as bbone
 
 from one.api import ONE
 
-one = ONE()
+one = ONE(base_url='https://openalyx.internationalbrainlab.org')
 
 # Find eid of interest
-eid = one.search(subject='CSH_ZAD_001', date='2020-01-14')[0]
+eid = one.search(subject='CSH_ZAD_029', date='2020-09-19')[0]
 
 ##################################################################################################
 # Example 1:
@@ -19,12 +19,12 @@ eid = one.search(subject='CSH_ZAD_001', date='2020-01-14')[0]
 # The data for each probe is returned as a dict
 spikes, clusters, channels = bbone.load_spike_sorting_with_channel(eid, one=one)
 print(spikes.keys())
-print(spikes['probe00'].keys())
+print(spikes['probe01'].keys())
 
 ##################################################################################################
 # Example 2:
 # Download spikes, clusters and channels data for a single probe
-spikes, clusters, channels = bbone.load_spike_sorting_with_channel(eid, one=one, probe='probe00')
+spikes, clusters, channels = bbone.load_spike_sorting_with_channel(eid, one=one, probe='probe01')
 print(spikes.keys())
 
 ##################################################################################################
@@ -37,14 +37,7 @@ print(spikes.keys())
 #  'spikes.times']
 # If we also want to load for example, 'clusters.peakToTrough we can add a dataset_types argument
 
-spikes, clusters, channels = bbone.load_spike_sorting_with_channel(eid, one=one, probe='probe00')
-print(clusters['probe00'].keys())
-
-##################################################################################################
-# Example 4:
-# By default, load_spike_sorting_with_channel will look for available data on your
-# local computer and if all the datasets are found it will not check for consistency with files
-# stored on flatiron (to speed up loading process). To make sure that data is always synced to
-# flatiron we can set a force flag to True
-spikes, clusters, channels = bbone.load_spike_sorting_with_channel(eid, one=one, probe='probe00')
+spikes, clusters, channels = bbone.load_spike_sorting_with_channel(eid, one=one, probe='probe01',
+                                                                   dataset_types=['clusters.peakToTrough'])
+print(clusters['probe01'].keys())
 

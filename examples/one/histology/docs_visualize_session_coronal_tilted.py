@@ -14,13 +14,13 @@ import ibllib.atlas as atlas
 import brainbox.io.one as bbone
 
 # === Parameters section (edit) ===
-eid = '614e1937-4b24-4ad3-9055-c8253d089919'
-probe_label = 'probe00'
+eid = 'c7bd79c9-c47e-4ea5-aea3-74dda991b48e'
+probe_label = 'probe01'
 # === Code (do not edit) ===
 ba = atlas.AllenAtlas(25)
-one = ONE()
+one = ONE(base_url='https://openalyx.internationalbrainlab.org')
 traj = one.alyx.rest('trajectories', 'list', session=eid,
-                     provenance='Histology track', probe=probe_label)[0]
+                     provenance='Ephys aligned histology track', probe=probe_label)[0]
 channels = bbone.load_channel_locations(eid=eid, one=one, probe=probe_label)
 
 picks = one.alyx.rest('insertions', 'read', id=traj['probe_insertion'])['json']

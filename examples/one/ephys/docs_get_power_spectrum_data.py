@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # instantiate ONE
-one = ONE()
+one = ONE(base_url='https://openalyx.internationalbrainlab.org')
 
 # Specify subject, date and probe we are interested in
 subject = 'CSHL049'

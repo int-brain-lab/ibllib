@@ -14,9 +14,9 @@ from pprint import pprint
 from ibllib.io import spikeglx
 from one.api import ONE
 
-one = ONE()
+one = ONE(base_url='https://openalyx.internationalbrainlab.org')
 # Download a dataset of interest
-eid = one.search(subject='ZM_2240', date_range='2020-01-22')[0]
+eid = one.search(subject='KS023', date_range='2019-12-10')[0]
 
 # Optionally list the raw ephys data for this session
 pprint([x for x in one.list_datasets(eid) if 'ephysData' in x])
