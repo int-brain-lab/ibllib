@@ -114,8 +114,10 @@ def load_camera_ssv_times(session_path, camera: str):
     :return: array of datetimes, array of frame times in seconds
     """
     camera = assert_valid_label(camera)
-    file = Path(session_path) / 'raw_video_data' / f'_iblrig_{camera.lower()}Camera.timestamps.ssv'
-    assert file.exists()
+    path = Path(session_path) / 'raw_video_data'
+    file = next(path.glob(f'_iblrig_{camera.lower()}Camera.timestamps*.ssv'), None)
+    if not file:
+        raise FileNotFoundError()
     # NB: Numpy has deprecated support for non-naive timestamps.
     # Converting them is extremely slow: 6000 timestamps takes 0.8615s vs 0.0352s.
     # from datetime import timezone
@@ -167,8 +169,9 @@ def load_camera_frame_count(session_path, label: str, raw=True):
     raw_path = Path(session_path).joinpath('raw_video_data')
 
     # Load frame count
-    count_file = raw_path / f'_iblrig_{assert_valid_label(label)}Camera.frame_counter.bin'
-    count = np.fromfile(count_file, dtype=np.float64).astype(int) if count_file.exists() else []
+    glob = raw_path.glob(f'_iblrig_{assert_valid_label(label)}Camera.frame_counter*.bin')
+    count_file = next(glob, None)
+    count = np.fromfile(count_file, dtype=np.float64).astype(int) if count_file else []
     if len(count) == 0:
         return
     if not raw:
@@ -198,9 +201,9 @@ def load_camera_gpio(session_path, label: str, as_dicts=False):
     raw_path = Path(session_path).joinpath('raw_video_data')
 
     # Load pin state
-    GPIO_file = raw_path / f'_iblrig_{assert_valid_label(label)}Camera.GPIO.bin'
+    GPIO_file = next(raw_path.glob(f'_iblrig_{assert_valid_label(label)}Camera.GPIO*.bin'), None)
     # This deals with missing and empty files the same
-    gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(np.uint32) if GPIO_file.exists() else []
+    gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(np.uint32) if GPIO_file else []
     if len(gpio) == 0:
         return [None] * 4 if as_dicts else None
 
