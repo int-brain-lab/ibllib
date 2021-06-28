@@ -139,13 +139,13 @@ class DlcQC(base.QC):
 
     def check_time_trace_length_match(self):
         '''
-        Check that the length of the DLC traces is the same length as the video.
+        Check that there are less DLC traces thank time stamps.
         '''
         dlc_coords = self.data['dlc_coords']
         times = self.data['camera_times']
         for target in dlc_coords.keys():
-            if times.shape[0] != dlc_coords[target].shape[1]:
-                _log.error(f'{self.side}Camera length of camera.times does not match '
+            if times.shape[0] < dlc_coords[target].shape[1]:
+                _log.error(f'{self.side}Camera camera.times less than '
                            f'length of camera.dlc {target}')
                 return 'FAIL'
         return 'PASS'
