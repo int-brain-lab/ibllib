@@ -493,17 +493,17 @@ def glob_ephys_files(session_path, suffix='.meta', ext='bin', recursive=True, bi
     Associated to the subfolders where they are
     the expected folder tree is:
     ├── 3A
-    │        ├── imec0
-    │                ├── sync_testing_g0_t0.imec0.ap.bin
-    │        │        └── sync_testing_g0_t0.imec0.lf.bin
-    │        └── imec1
-    │            ├── sync_testing_g0_t0.imec1.ap.bin
-    │            └── sync_testing_g0_t0.imec1.lf.bin
+    │   ├── imec0
+    │   ├── sync_testing_g0_t0.imec0.ap.bin
+    │   │   └── sync_testing_g0_t0.imec0.lf.bin
+    │   └── imec1
+    │      ├── sync_testing_g0_t0.imec1.ap.bin
+    │      └── sync_testing_g0_t0.imec1.lf.bin
     └── 3B
         ├── sync_testing_g0_t0.nidq.bin
         ├── imec0
-        │        ├── sync_testing_g0_t0.imec0.ap.bin
-        │        └── sync_testing_g0_t0.imec0.lf.bin
+        │   ├── sync_testing_g0_t0.imec0.ap.bin
+        │   └── sync_testing_g0_t0.imec0.lf.bin
         └── imec1
             ├── sync_testing_g0_t0.imec1.ap.bin
             └── sync_testing_g0_t0.imec1.lf.bin
