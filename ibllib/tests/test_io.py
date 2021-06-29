@@ -10,7 +10,8 @@ import numpy as np
 
 from one.api import ONE
 from ibllib.tests import TEST_DB
-from ibllib.io import params, flags, jsonable, misc, globus, video
+from ibllib.io import flags, misc, globus, video
+from iblutil.io import params, jsonable
 import ibllib.io.raw_data_loaders as raw
 
 
