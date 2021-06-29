@@ -139,7 +139,7 @@ class DlcQC(base.QC):
 
     def check_time_trace_length_match(self):
         '''
-        Check that there are less DLC traces thank time stamps.
+        Check if there are less DLC traces thank time stamps.
         '''
         dlc_coords = self.data['dlc_coords']
         times = self.data['camera_times']
