@@ -59,7 +59,7 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
     :return:
     """
     if created_by is None:
-        created_by = getattr(one.alyx, 'user', one._par.ALYX_LOGIN)
+        created_by = getattr(one.alyx, 'user', None) or one._par.ALYX_LOGIN
     if file_list is None or file_list == '' or file_list == []:
         return
     elif not isinstance(file_list, list):
@@ -103,7 +103,7 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
     if not dry:
         if one is None:
             one = ONE(cache_rest=None)
-        response = one.alyx.rest('register-file', 'create', data=r)
+        response = one.alyx.rest('register-file', 'create', data=r, no_cache=True)
         for p in file_list:
             _logger.info(f"ALYX REGISTERED DATA: {p}")
         return response
