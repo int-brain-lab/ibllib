@@ -144,7 +144,7 @@ class TestPipesMisc(unittest.TestCase):
         # Test for 3B
         self._test_rename_ephys_files(self.session_path_3B, 14)
         misc.move_ephys_files(self.session_path_3B)
-        probe_folders = list(self.session_path_3B.rglob("*probe*"))
+        probe_folders = sorted(self.session_path_3B.rglob("*probe*"))
         # Check moved into 'probexx' folders
         self.assertTrue(len(probe_folders) == 3)
         self.assertCountEqual((f'probe0{x}' for x in range(3)),

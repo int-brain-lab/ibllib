@@ -174,7 +174,7 @@ def create_ephyspc_params(force=False, silent=False):
             r"\\iblserver.champalimaud.pt\ibldata\Subjects",
         )
         n_probes = int(cli_ask_default("How many probes are you using?", '2'))
-        assert 10 > n_probes > 0, 'Please enter number between 1, 9 inclusive'
+        assert 100 > n_probes > 0, 'Please enter number between 1, 99 inclusive'
         probe_types = {}
         for i in range(n_probes):
             probe_types[f'PROBE_TYPE_{i:02}'] = cli_ask_options(
