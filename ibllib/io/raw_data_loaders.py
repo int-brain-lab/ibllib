@@ -18,7 +18,7 @@ from typing import Union
 import numpy as np
 import pandas as pd
 
-from ibllib.io import jsonable
+from iblutil.io import jsonable
 from ibllib.io.video import assert_valid_label
 from ibllib.misc import version
 from ibllib.time import uncycle_pgts, convert_pgts
@@ -37,7 +37,7 @@ def trial_times_to_times(raw_trial):
     Bpod timestamps are in microseconds (µs)
     PyBpod timestamps are is seconds (s)
 
-    :param raw_trial: raw tiral data
+    :param raw_trial: raw trial data
     :type raw_trial: dict
     :return: trial data with modified timestamps
     :rtype: dict

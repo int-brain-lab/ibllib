@@ -9,7 +9,7 @@ import numpy as np
 import mtscomp
 from iblutil.util import Bunch
 from ibllib.ephys import neuropixel as neuropixel
-from ibllib.io import hashfile
+from iblutil.io import hashfile
 from one.alf.io import remove_uuid_file
 from one.api import ONE
 

@@ -117,13 +117,15 @@ class CameraQC(base.QC):
 
         # Data
         self.label = assert_valid_label(camera)
-        filename = f'_iblrig_{self.label}Camera.raw.mp4'
-        self.video_path = self.session_path / 'raw_video_data' / filename
+        filename = f'_iblrig_{self.label}Camera.raw*.mp4'
+        raw_video_path = self.session_path.joinpath('raw_video_data')
+        self.video_path = next(raw_video_path.glob(filename), None)
+
         # If local video doesn't exist, change video path to URL
-        if not self.video_path.exists() and self.stream is not False and self.one is not None:
+        if not self.video_path and self.stream is not False and self.one is not None:
             try:
                 self.stream = True
-                self.video_path = self.one.url_from_path(self.video_path)
+                self.video_path = self.one.path2url(raw_video_path / filename.replace('*', ''))
             except (StopIteration, ALFObjectNotFound):
                 _log.error('No remote or local video file found')
                 self.video_path = None
@@ -200,7 +202,8 @@ class CameraQC(base.QC):
         alf_path = self.session_path / 'alf'
         try:
             assert not extract_times
-            self.data['timestamps'] = alfio.load_object(alf_path, f'{self.label}Camera')['times']
+            self.data['timestamps'] = alfio.load_object(
+                alf_path, f'{self.label}Camera', short_keys=True)['times']
         except AssertionError:  # Re-extract
             kwargs = dict(video_path=self.video_path, labels=self.label)
             if self.type == 'ephys':
@@ -213,7 +216,7 @@ class CameraQC(base.QC):
         # Get audio and wheel data
         wheel_keys = ('timestamps', 'position')
         try:
-            self.data['wheel'] = alfio.load_object(alf_path, 'wheel')
+            self.data['wheel'] = alfio.load_object(alf_path, 'wheel', short_keys=True)
         except ALFObjectNotFound:
             # Extract from raw data
             if self.type == 'ephys':

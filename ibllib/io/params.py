@@ -8,6 +8,7 @@ import warnings
 warnings.warn('Support for ibllib.io.params will soon be removed, use iblutil.io.params instead',
               category=DeprecationWarning)
 
+
 def as_dict(par):
     if not par or isinstance(par, dict):
         return par

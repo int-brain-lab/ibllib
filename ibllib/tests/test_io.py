@@ -10,7 +10,7 @@ import numpy as np
 
 from one.api import ONE
 from ibllib.tests import TEST_DB
-from ibllib.io import params, flags, jsonable, misc, globus, video
+from ibllib.io import params, flags, misc, globus, video
 import ibllib.io.raw_data_loaders as raw
 
 
@@ -256,22 +256,6 @@ class TestsRawDataLoaders(unittest.TestCase):
     def tearDown(self):
         self.tempfile.close()
         os.unlink(self.tempfile.name)
-
-
-class TestsJsonable(unittest.TestCase):
-
-    def testReadWrite(self):
-        tfile = tempfile.NamedTemporaryFile(delete=False)
-        data = [{'a': 'thisisa', 'b': 1, 'c': [1, 2, 3]},
-                {'a': 'thisisb', 'b': 2, 'c': [2, 3, 4]}]
-        jsonable.write(tfile.name, data)
-        data2 = jsonable.read(tfile.name)
-        self.assertEqual(data, data2)
-        jsonable.append(tfile.name, data)
-        data3 = jsonable.read(tfile.name)
-        self.assertEqual(data + data, data3)
-        tfile.close()
-        os.unlink(tfile.name)
 
 
 class TestsMisc(unittest.TestCase):
