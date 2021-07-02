@@ -8,8 +8,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
 import one.alf.io as alfio
+
 from ibllib.ephys import ephysqc, spikes, sync_probes
 from ibllib.io import ffmpeg, spikeglx
 from ibllib.io.video import label_from_path

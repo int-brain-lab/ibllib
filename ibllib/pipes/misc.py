@@ -476,7 +476,7 @@ def move_ephys_files(session_folder: str) -> None:
     imec_files = session_path.rglob("*.imec*")
     for imf in imec_files:
         # For 3B system probe0x == imecx
-        probe_number = re.match(r'_spikeglx_ephysData_g0_t0.imec(\d+).*', imf.name)
+        probe_number = re.match(r'_spikeglx_ephysData_g\d_t\d.imec(\d+).*', imf.name)
         if not probe_number:
             # For 3A system imec files must be in a 'probexx' folder
             probe_label = re.search(r'probe\d+', str(imf))

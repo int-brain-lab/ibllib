@@ -171,14 +171,15 @@ class CameraQC(base.QC):
             - frame_samples (h x w x n array): array of evenly sampled frames (1 colour channel)
 
         :param download_data: if True, any missing raw data is downloaded via ONE.
+        Missing data will raise an AssertionError
         :param extract_times: if True, the camera.times are re-extracted from the raw data
         :param load_video: if True, calls the load_video_data method
         """
         assert self.session_path, 'no session path set'
         if download_data is not None:
             self.download_data = download_data
-        if self.eid and self.one and not self.one.offline:
-            self._ensure_required_data()
+        if self.download_data and self.eid and self.one and not self.one.offline:
+            self.ensure_required_data()
         _log.info('Gathering data for QC')
 
         # Get frame count and pin state
@@ -255,12 +256,13 @@ class CameraQC(base.QC):
             self._outcome = 'CRITICAL'
 
     @staticmethod
-    def get_active_wheel_period(wheel, range=(3., 20.), display=False):
+    def get_active_wheel_period(wheel, duration_range=(3., 20.), display=False):
         """
         Attempts to find a period of movement where the wheel accelerates and decelerates for
         the wheel motion alignment QC.
         :param wheel: A Bunch of wheel timestamps and position data
-        :param range: The candidates must be within min/max duration range
+        :param duration_range: The candidates must be within min/max duration range
+        :param display: If true, plot the selected wheel movement
         :return: 2-element array comprising the start and end times of the active period
         """
         pos, ts = wh.interpolate_position(wheel.timestamps, wheel.position)
@@ -268,7 +270,7 @@ class CameraQC(base.QC):
         on, off, *_ = wh.movements(ts, acc, pos_thresh=.1, make_plots=False)
         edges = np.c_[on, off]
         indices, _ = np.where(np.logical_and(
-            np.diff(edges) > range[0], np.diff(edges) < range[1]))
+            np.diff(edges) > duration_range[0], np.diff(edges) < duration_range[1]))
         # Pick movement somewhere in the middle
         i = indices[int(indices.size / 2)]
         if display:
@@ -278,7 +280,7 @@ class CameraQC(base.QC):
             ax1.plot(ts[mask], acc[mask])
         return edges[i]
 
-    def _ensure_required_data(self):
+    def ensure_required_data(self):
         """
         Ensures the datasets required for QC are local.  If the download_data attribute is True,
         any missing data are downloaded.  If all the data are not present locally at the end of
