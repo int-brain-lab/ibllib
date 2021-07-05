@@ -248,7 +248,7 @@ def load_spike_sorting(eid, one=None, probe=None):
     clusters = Bunch.fromkeys(labels)
     for label in labels:
         try:
-            spikes[label] = one.load_object(eid, 'spikes', collection=label)
+            spikes[label] = one.load_object(eid, 'spikes', collection=f'alf/{label}')
         except alferr.ALFError:
             logger.warning(
                 f'Could not load spikes datasets for session {eid}. '
@@ -257,7 +257,7 @@ def load_spike_sorting(eid, one=None, probe=None):
         session_path = eid if alfio.is_session_path(eid) else one.eid2path(one.to_eid(eid))
         _remove_old_clusters(session_path, label)
         try:
-            clusters[label] = one.load_object(eid, 'clusters', collection=label)
+            clusters[label] = one.load_object(eid, 'clusters', collection=f'alf/{label}')
         except alferr.ALFError:
             logger.warning(
                 f'Could not load clusters datasets for session {eid}. '
