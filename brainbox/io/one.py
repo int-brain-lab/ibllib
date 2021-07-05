@@ -333,7 +333,7 @@ def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False):
     # --- Get spikes and clusters data
     one = one or ONE()
 
-    if isinstance(one, One):
+    if not isinstance(one, One):
         logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
         from .deprecated import one as old
         return old.load_spike_sorting_with_channel(eid, one=one, probe=probe, aligned=aligned)
