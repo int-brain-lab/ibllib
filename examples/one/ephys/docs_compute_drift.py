@@ -9,7 +9,6 @@ on the channels along probe against frequency
 # import modules
 from one.api import ONE
 from brainbox.metrics import electrode_drift
-import matplotlib.pyplot as plt
 
 # instantiate one
 one = ONE(base_url='https://openalyx.internationalbrainlab.org')
