@@ -4,9 +4,9 @@ import matplotlib.axes
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import interp1d
-
 import one.alf.io as alfio
 from iblutil.util import Bunch
+
 from ibllib.exceptions import Neuropixel3BSyncFrontsNonMatching
 import ibllib.io.spikeglx as spikeglx
 from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_ibl_sync_map
