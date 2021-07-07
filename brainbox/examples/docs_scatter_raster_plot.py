@@ -11,7 +11,7 @@ from one.api import ONE
 from brainbox.ephys_plots import scatter_raster_plot
 from brainbox.plot_base import plot_scatter
 
-one = ONE(base_url='https://openalyx.internationalbrainlab.org')
+one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
 
 eid = '4ecb5d24-f5cc-402c-be28-9d0f7cb14b3a'
 probe = 'probe00'

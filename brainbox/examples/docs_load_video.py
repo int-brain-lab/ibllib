@@ -10,7 +10,7 @@ from one.api import ONE
 
 import ibllib.io.video as vidio
 
-one = ONE(base_url='https://openalyx.internationalbrainlab.org')
+one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
 eid = 'c7bd79c9-c47e-4ea5-aea3-74dda991b48e'  # 2020-09-19_1_CSH_ZAD_029
 
 # Example 1: get the remote video URL from eid

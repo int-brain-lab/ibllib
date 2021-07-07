@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from one.api import ONE
 
 eid = '4ecb5d24-f5cc-402c-be28-9d0f7cb14b3a'  # TEST EXAMPLE
-one = ONE(base_url='https://openalyx.internationalbrainlab.org')
+one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
 # -- Get raw data
 filename = one.load_dataset(eid, '_iblrig_micData.raw.flac', download_only=True)
 with open(filename, 'rb') as f:

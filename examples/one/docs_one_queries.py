@@ -4,7 +4,7 @@ List of useful one queries
 """
 
 from one.api import ONE
-one = ONE(base_url='https://openalyx.internationalbrainlab.org')
+one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
 
 ##################################################################################################
 # Query session for several subjects

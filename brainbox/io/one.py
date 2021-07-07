@@ -370,28 +370,22 @@ def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False, da
 
 def load_passive_rfmap(eid, one=None):
     """
-    TODO Update for new ONE
     For a given eid load in the passive receptive field mapping protocol data
     :param eid: eid or pathlib.Path of the local session
     :param one:
     :return: rf_map
     """
-    if isinstance(eid, Path):
-        alf_path = eid.joinpath('alf')
-    else:
-        one = one or ONE()
-        dtypes = {
-            '_iblrig_RFMapStim.raw.bin',
-            '_ibl_passiveRFM.times.npy',
-        }
+    one = one or ONE()
 
-        _ = one.load_datasets(eid, datasets=dtypes, download_only=True)
-        alf_path = one.path_from_eid(eid).joinpath('alf')
+    if not isinstance(one, One):
+        logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
+        from .deprecated import one as old
+        return old.load_passive_rfmap(eid, one=one)
 
     # Load in the receptive field mapping data
-    rf_map = alfio.load_object(alf_path, object='passiveRFM', namespace='ibl')
-    frames = np.fromfile(alf_path.parent.joinpath('raw_passive_data', '_iblrig_RFMapStim.raw.bin'),
-                         dtype="uint8")
+    rf_map = one.load_object(eid, obj='passiveRFM', collection='alf')
+    frames = np.fromfile(one.load_dataset(eid, '_iblrig_RFMapStim.raw.bin',
+                                          collection='raw_passive_data'), dtype="uint8")
     y_pix, x_pix = 15, 15
     frames = np.transpose(np.reshape(frames, [y_pix, x_pix, -1], order="F"), [2, 1, 0])
     rf_map['frames'] = frames

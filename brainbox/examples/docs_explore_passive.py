@@ -14,7 +14,7 @@ import brainbox.task.passive as passive
 
 eid = '4ecb5d24-f5cc-402c-be28-9d0f7cb14b3a'
 probe = 'probe00'
-one = ONE(base_url='https://openalyx.internationalbrainlab.org')
+one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
 
 # Load in the receptive field map data
 rf_map = bbone.load_passive_rfmap(eid, one=one)

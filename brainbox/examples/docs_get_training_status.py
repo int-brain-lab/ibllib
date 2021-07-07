@@ -8,7 +8,7 @@ sessions before a specified date.
 from one.api import ONE
 
 import brainbox.behavior.training as training
-one = ONE(base_url='https://openalyx.internationalbrainlab.org')
+one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
 # Get training status of a specific subject
 training.get_subject_training_status('SWC_043', one=one)
 

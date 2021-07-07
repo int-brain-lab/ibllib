@@ -15,7 +15,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from ibllib.atlas import BrainRegions
 
-one = ONE(base_url='https://openalyx.internationalbrainlab.org')
+one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
 
 # Specify subject, date and probe we are interested in
 subject = 'CSHL049'

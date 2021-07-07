@@ -14,7 +14,7 @@ from pprint import pprint
 from ibllib.io import spikeglx
 from one.api import ONE
 
-one = ONE(base_url='https://openalyx.internationalbrainlab.org')
+one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
 # Download a dataset of interest
 eid = one.search(subject='KS023', date_range='2019-12-10')[0]
 

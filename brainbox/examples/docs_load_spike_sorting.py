@@ -8,7 +8,7 @@ import brainbox.io.one as bbone
 
 from one.api import ONE
 
-one = ONE(base_url='https://openalyx.internationalbrainlab.org')
+one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
 
 # Find eid of interest
 eid = one.search(subject='CSH_ZAD_029', date='2020-09-19')[0]

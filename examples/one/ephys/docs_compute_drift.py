@@ -11,7 +11,7 @@ from one.api import ONE
 from brainbox.metrics import electrode_drift
 
 # instantiate one
-one = ONE(base_url='https://openalyx.internationalbrainlab.org')
+one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
 
 # Specify subject, date and probe we are interested in
 subject = 'CSHL049'
