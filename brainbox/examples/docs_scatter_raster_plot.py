@@ -11,13 +11,13 @@ from one.api import ONE
 from brainbox.ephys_plots import scatter_raster_plot
 from brainbox.plot_base import plot_scatter
 
-one = ONE()
+one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
 
-eid = '671c7ea7-6726-4fbe-adeb-f89c2c8e489b'
+eid = '4ecb5d24-f5cc-402c-be28-9d0f7cb14b3a'
 probe = 'probe00'
 
 spikes = one.load_object(eid, obj='spikes', collection=f'alf/{probe}')
-metrics = one.load_dataset(eid, dataset='clusters.metrics', collection=f'alf/{probe}')
+metrics = one.load_dataset(eid, dataset='clusters.metrics.pqt', collection=f'alf/{probe}')
 
 # Find the clusters that have been labelled as good and their corresponding spike indices
 good_clusters = np.where(metrics.label == 1)

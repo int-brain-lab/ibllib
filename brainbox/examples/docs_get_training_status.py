@@ -8,13 +8,13 @@ sessions before a specified date.
 from one.api import ONE
 
 import brainbox.behavior.training as training
-one = ONE(silent=True)
+one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
 # Get training status of a specific subject
-training.get_subject_training_status('SWC_055', one=one)
+training.get_subject_training_status('SWC_043', one=one)
 
 # Get training status of a specific subject on a chosen date
-training.get_subject_training_status('SWC_055', date='2020-09-01', one=one)
+training.get_subject_training_status('KS023', date='2019-12-10', one=one)
 
 # Get training status of all mice within a lab
 # (N.B. only looks for alive and water restricted subjects)
-training.get_lab_training_status('danlab', one=one)
+training.get_lab_training_status('churchlandlab', one=one)

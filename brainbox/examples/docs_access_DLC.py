@@ -9,13 +9,11 @@ each camera ('left' only for training sessions, 'left',
 'right' and 'body' for ephys sessions).
 See also
 
-https://github.com/int-brain-lab/iblapps/blob/
-develop/dlc/DLC_labeled_video.py to
+https://github.com/int-brain-lab/iblapps/blob/develop/dlc/DLC_labeled_video.py
 
-make a labeled video, and
+to make a labeled video, and
 
-https://github.com/int-brain-lab/ibllib/blob/
-camera_extractor/ibllib/qc/stream_dlc_labeled_frames.py
+https://github.com/int-brain-lab/ibllib/blob/camera_extractor/ibllib/qc/stream_dlc_labeled_frames.py
 
 to stream some frames and paint dlc labels on top.
 """

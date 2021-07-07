@@ -12,10 +12,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from one.api import ONE
 
-eid = '9a7e3a4b-8b68-4817-81f1-adb0f48088eb'  # TEST EXAMPLE
-
+eid = '4ecb5d24-f5cc-402c-be28-9d0f7cb14b3a'  # TEST EXAMPLE
+one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
 # -- Get raw data
-filename = ONE().load_dataset(eid, '_iblrig_micData.raw.flac', download_only=True)
+filename = one.load_dataset(eid, '_iblrig_micData.raw.flac', download_only=True)
 with open(filename, 'rb') as f:
     wav, fs = sf.read(f)
 

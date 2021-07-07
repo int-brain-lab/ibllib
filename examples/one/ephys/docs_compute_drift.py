@@ -9,10 +9,9 @@ on the channels along probe against frequency
 # import modules
 from one.api import ONE
 from brainbox.metrics import electrode_drift
-import matplotlib.pyplot as plt
 
 # instantiate one
-one = ONE()
+one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
 
 # Specify subject, date and probe we are interested in
 subject = 'CSHL049'
@@ -27,4 +26,3 @@ spikes = one.load_object(eid, 'spikes', collection=f'alf/{probe_label}')
 # Use brainbox function to compute drift over session
 drift = electrode_drift.estimate_drift(spikes['times'], spikes['amps'], spikes['depths'],
                                        display=True)
-plt.show()

@@ -15,13 +15,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from ibllib.atlas import BrainRegions
 
-one = ONE()
+one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
 
 # Specify subject, date and probe we are interested in
 subject = 'CSHL049'
 date = '2020-01-08'
 sess_no = 1
-probe_label = 'probe01'
+probe_label = 'probe00'
 eid = one.search(subject=subject, date=date, number=sess_no)[0]
 
 cluster_chans = one.load_dataset(eid, 'clusters.channels.npy', collection=f'alf/{probe_label}')

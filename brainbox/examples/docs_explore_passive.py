@@ -12,14 +12,14 @@ from one.api import ONE
 import brainbox.io.one as bbone
 import brainbox.task.passive as passive
 
-eid = 'c7248e09-8c0d-40f2-9eb4-700a8973d8c8'
-probe = 'probe01'
-one = ONE()
+eid = '4ecb5d24-f5cc-402c-be28-9d0f7cb14b3a'
+probe = 'probe00'
+one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
 
 # Load in the receptive field map data
 rf_map = bbone.load_passive_rfmap(eid, one=one)
-spike_times = one.load_dataset(eid, dataset='spikes.times', collection=f'alf/{probe}')
-spike_depths = one.load_dataset(eid, dataset='spikes.depths', collection=f'alf/{probe}')
+spike_times = one.load_dataset(eid, dataset='spikes.times.npy', collection=f'alf/{probe}')
+spike_depths = one.load_dataset(eid, dataset='spikes.depths.npy', collection=f'alf/{probe}')
 # Remove any nan depths
 kp_idx = np.where(~np.isnan(spike_depths))[0]
 spike_times = spike_times[kp_idx]
