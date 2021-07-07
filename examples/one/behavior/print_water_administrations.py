@@ -1,12 +1,12 @@
-'''
+"""
 Print water administration values from behavior data downloaded via ONE.
-'''
+"""
 #  Author: Olivier Winter
 
-from ibllib.misc import pprint
-from oneibl.one import ONE
+from pprint import pprint
+from one.api import ONE
 
-one = ONE(base_url='https://dev.alyx.internationalbrainlab.org')
+one = ONE()
 
 # -- Get saved water administration --
 # List all water administrations

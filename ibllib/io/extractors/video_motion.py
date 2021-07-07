@@ -107,7 +107,7 @@ class MotionAlignment:
                                       for ts, url in zip(cam.data, cam.url)}
         else:
             alf_path = self.session_path / 'alf'
-            self.data.wheel = alfio.load_object(alf_path, 'wheel')
+            self.data.wheel = alfio.load_object(alf_path, 'wheel', short_keys=True)
             self.data.trials = alfio.load_object(alf_path, 'trials')
             self.data.camera_times = {vidio.label_from_path(x): alfio.load_file_content(x)
                                       for x in alf_path.glob('*Camera.times*')}

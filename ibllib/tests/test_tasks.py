@@ -152,6 +152,7 @@ class TestPipelineAlyx(unittest.TestCase):
         # [(t['name'], t['status'], desired_statuses[t['name']]) for t in task_deck]
         self.assertTrue(all(check_statuses))
         self.assertTrue(set([d['name'] for d in datasets]) == set(desired_datasets))
+
         # check logs
         check_logs = [desired_logs in t['log'] if t['log'] else True for t in task_deck]
         self.assertTrue(all(check_logs))

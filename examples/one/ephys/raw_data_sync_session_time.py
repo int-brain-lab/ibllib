@@ -6,8 +6,8 @@ Reads in and display a chunk of raw LFP synchronized on session time.
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.interpolate
-
 from oneibl.one import ONE
+
 from ibllib.io import spikeglx
 
 

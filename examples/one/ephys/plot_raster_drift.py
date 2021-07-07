@@ -6,18 +6,18 @@ and display raster plot below
 # Authors: Gaelle, Olivier
 
 from brainbox.metrics.electrode_drift import estimate_drift
-from oneibl.one import ONE
+from one.api import ONE
 import brainbox.plot as bbplot
 import matplotlib.pyplot as plt
 
 one = ONE()
 
 # Find sessions
-dataset_types = ['spikes.times',
-                 'spikes.amps',
-                 'spikes.depths']
+dsets = ['spikes.times.npy',
+         'spikes.amps.npy',
+         'spikes.depths.npy']
 
-# eids = one.search(dataset_types=dataset_types,
+# eids = one.search(dataset=dsets,
 #                   project='ibl_neuropixel_brainwide_01',
 #                   task_protocol='_iblrig_tasks_ephysChoiceWorld')
 #
@@ -27,10 +27,9 @@ eid = '89f0d6ff-69f4-45bc-b89e-72868abb042a'  # Test with huge drift
 
 # Get dataset
 
-spike_times, spike_amps, spike_depths = \
-    one.load(eid, dataset_types=dataset_types)
+spikes = one.load_object(eid, 'spikes', collection='alf/probe00')
 
-drift = estimate_drift(spike_times, spike_amps, spike_depths, display=False)
+drift = estimate_drift(spikes.times, spikes.amps, spikes.depths, display=False)
 
 # PLOT
 # Tight layout
@@ -39,7 +38,7 @@ gs = fig3.add_gridspec(3, 3)
 f3_ax0 = fig3.add_subplot(gs[0, :])
 f3_ax0.plot(drift)
 f3_ax1 = fig3.add_subplot(gs[1:, :])
-bbplot.driftmap(spike_times,
-                spike_depths,
+bbplot.driftmap(spikes.times,
+                spikes.depths,
                 ax=f3_ax1, plot_style='bincount')
 f3_ax0.set_xlim(f3_ax1.get_xlim())

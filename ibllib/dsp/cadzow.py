@@ -1,6 +1,6 @@
 import numpy as np
 
-from brainbox.numerical import ismember2d
+from iblutil.numerical import ismember2d
 
 
 def derank(T, r):

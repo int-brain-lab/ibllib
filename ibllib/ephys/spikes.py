@@ -5,8 +5,8 @@ import shutil
 import tarfile
 
 import numpy as np
+import one.alf.io as alfio
 
-import alf.io as alfio
 import phylib.io.alf
 from ibllib.ephys.sync_probes import apply_sync
 import ibllib.ephys.ephysqc as ephysqc
