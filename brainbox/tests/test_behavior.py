@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import pickle
 import copy
-from brainbox.core import Bunch
+from iblutil.util import Bunch
 import brainbox.behavior.wheel as wheel
 import brainbox.behavior.training as train
 import brainbox.behavior.pyschofit as psy
@@ -25,7 +25,7 @@ class TestWheel(unittest.TestCase):
         of unevenly sampled wheel data from a 1024 ppr device with X2 encoding, in linear cm units.
         test_data[1] = ((t, pos), (onsets, offsets, amps, peak_vel))
         """
-        pickle_file = Path(__file__).parent.joinpath('wheel_test.p')
+        pickle_file = Path(__file__).parent.joinpath('fixtures', 'wheel_test.p')
         if not pickle_file.exists():
             self.test_data = None
         else:

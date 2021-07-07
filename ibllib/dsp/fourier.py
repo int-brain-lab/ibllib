@@ -195,7 +195,6 @@ def fshift(w, s, axis=-1, ns=None):
     dephas = scipy.fft.rfft(dephas, axis=axis)
     # fft the data along the axis and the dephas
     do_fft = np.invert(np.iscomplexobj(w))
-
     if do_fft:
         W = scipy.fft.rfft(w, axis=axis)
     else:

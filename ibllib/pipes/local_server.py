@@ -12,7 +12,7 @@ from ibllib.pipes import ephys_preprocessing, training_preprocessing, tasks
 from ibllib.time import date2isostr
 
 import oneibl.registration as registration
-from oneibl.one import ONE
+from one.api import ONE
 
 _logger = logging.getLogger('ibllib')
 
@@ -78,7 +78,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
     :return:
     """
     if not one:
-        one = ONE()
+        one = ONE(cache_rest=None)
     rc = registration.RegistrationClient(one=one)
     flag_files = list(Path(root_path).glob('**/raw_session.flag'))
     all_datasets = []
@@ -91,11 +91,11 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
         try:
             # if the subject doesn't exist in the database, skip
             ses = rc.create_session(session_path)
-            eid = ses['url'][36:]
-            if one.eid_from_path(session_path) is None:
-                raise ValueError(f"Session ALF path mismatch: {ses['url'][36:]} \n "
-                                 f"{one.path_from_eid(eid=eid)} in params \n"
-                                 f"{session_path} on disk \n")
+            eid = ses['url'][-36:]
+            if one.path2eid(session_path, query_type='remote') is None:
+                raise ValueError(f'Session ALF path mismatch: {ses["url"][-36:]} \n '
+                                 f'{one.eid2path(eid, query_type="remote")} in params \n'
+                                 f'{session_path} on disk \n')
             files, dsets = registration.register_session_raw_data(
                 session_path, one=one, max_md5_size=max_md5_size)
             if dsets is not None:
@@ -107,8 +107,8 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
             elif pipeline == 'ephys' and flag_file.name == 'raw_session.flag':
                 pipe = ephys_preprocessing.EphysExtractionPipeline(session_path, one=one)
             else:
-                _logger.info(f"Session type {get_session_extractor_type(session_path)}"
-                             f"as no matching pipeline pattern {session_path}")
+                _logger.info(f'Session type {get_session_extractor_type(session_path)}'
+                             f'as no matching pipeline pattern {session_path}')
                 continue
             if rerun:
                 rerun__status__in = '__all__'
@@ -118,7 +118,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
             flag_file.unlink()
         except BaseException:
             _logger.error(traceback.format_exc())
-            _logger.warning(f"Creating session / registering raw datasets {session_path} errored")
+            _logger.warning(f'Creating session / registering raw datasets {session_path} errored')
             continue
 
     return all_datasets
@@ -135,7 +135,7 @@ def job_runner(subjects_path, lab=None, dry=False, one=None, count=5):
     :return:
     """
     if one is None:
-        one = ONE()
+        one = ONE(cache_rest=None)
     if lab is None:
         lab = _get_lab(one)
     if lab is None:
@@ -158,7 +158,7 @@ def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, count=5, time_o
     :return: list of dataset dictionaries
     """
     if one is None:
-        one = ONE()
+        one = ONE(cache_rest=None)
     import time
     tstart = time.time()
     c = 0

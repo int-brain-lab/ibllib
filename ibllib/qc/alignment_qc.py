@@ -37,7 +37,7 @@ class AlignmentQC(base.QC):
         # Flag for uploading channels to alyx. For testing purposes
         self.channels = channels
 
-        self.insertion = self.one.alyx.rest('insertions', 'read', id=self.eid)
+        self.insertion = self.one.alyx.get(f'/insertions/{self.eid}', clobber=True)
         self.resolved = (self.insertion.get('json', {'temp': 0}).get('extended_qc').
                          get('alignment_resolved', False))
 
@@ -47,8 +47,9 @@ class AlignmentQC(base.QC):
         are given load_data will fetch all the relevant data required
         """
         if not np.any(prev_alignments):
-            aligned_traj = self.one.alyx.rest('trajectories', 'list', probe_insertion=self.eid,
-                                              provenance='Ephys aligned histology track')
+            aligned_traj = self.one.alyx.get(f'/trajectories?&probe_insertion={self.eid}'
+                                             '&provenance=Ephys aligned histology track',
+                                             clobber=True)
             if len(aligned_traj) > 0:
                 self.alignments = aligned_traj[0].get('json', {})
             else:
@@ -278,7 +279,7 @@ class AlignmentQC(base.QC):
         files_to_register = []
         if upload_flatiron:
             ftp_patcher = FTPPatcher(one=self.one)
-            insertion = self.one.alyx.rest('insertions', 'read', id=self.eid)
+            insertion = self.one.alyx.get(f'/insertions/{self.eid}', clobber=True)
             alf_path = self.one.path_from_eid(insertion['session']).joinpath('alf',
                                                                              insertion['name'])
             alf_path.mkdir(exist_ok=True, parents=True)
@@ -319,8 +320,9 @@ class AlignmentQC(base.QC):
                                                  chn_coords=SITES_COORDINATES, one=self.one,
                                                  overwrite=True, channels=self.channels)
 
-                ephys_traj = self.one.alyx.rest('trajectories', 'list', probe_insertion=self.eid,
-                                                provenance='Ephys aligned histology track')
+                ephys_traj = self.one.alyx.get(f'/trajectories?&probe_insertion={self.eid}'
+                                               '&provenance=Ephys aligned histology track',
+                                               clobber=True)
                 patch_dict = {'json': self.alignments}
                 self.one.alyx.rest('trajectories', 'partial_update', id=ephys_traj[0]['id'],
                                    data=patch_dict)
@@ -330,8 +332,9 @@ class AlignmentQC(base.QC):
     def update_experimenter_evaluation(self, prev_alignments=None, override=False):
 
         if not np.any(prev_alignments) and not np.any(self.alignments):
-            aligned_traj = self.one.alyx.rest('trajectories', 'list', probe_insertion=self.eid,
-                                              provenance='Ephys aligned histology track')
+            aligned_traj = self.one.alyx.get(f'/trajectories?&probe_insertion={self.eid}'
+                                             '&provenance=Ephys aligned histology track',
+                                             clobber=True)
             if len(aligned_traj) > 0:
                 self.alignments = aligned_traj[0].get('json', {})
             else:

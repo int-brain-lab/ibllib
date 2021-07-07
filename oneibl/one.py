@@ -996,6 +996,9 @@ class OneAlyx(OneAbstract):
             parquet.save(self._cache_file, self._cache)
 
     def download_raw_partial(self, url_cbin, url_ch, first_chunk=0, last_chunk=0):
+        import warnings
+        warnings.warn('This function has been moved to ibllib.io.spikeglx', DeprecationWarning)
+
         assert str(url_cbin).endswith('.cbin')
         assert str(url_ch).endswith('.ch')
 

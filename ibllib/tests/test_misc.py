@@ -1,10 +1,8 @@
 import unittest
 import logging
 import time
-import types
 
-from ibllib.misc import flatten as flt
-from ibllib.misc import (version, print_progress, range_str)
+from ibllib.misc import (version, print_progress)
 
 
 class TestPrintProgress(unittest.TestCase):
@@ -64,28 +62,6 @@ class TestLoggingSystem(unittest.TestCase):
         logger.warning('ROOT This is a warning message')
         logger.info('ROOT This is an info message')
         logger.debug('ROOT This is a debug message')
-
-
-class TestFlatten(unittest.TestCase):
-
-    def test_flatten(self):
-        x = (1, 2, 3, [1, 2], 'string', 0.1, {1: None}, [[1, 2, 3], {1: 1}, 1])
-        self.assertEqual(flt.iflatten(x), flt.flatten(x))
-        self.assertEqual(flt.flatten(x)[:5], [1, 2, 3, 1, 2])
-        self.assertEqual(list(flt.gflatten(x)), list(flt.flatten(x, generator=True)))
-        self.assertIsInstance(flt.flatten(x, generator=True), types.GeneratorType)
-
-
-class TestRangeStr(unittest.TestCase):
-
-    def test_range_str(self):
-        x = [1, 2, 3, 4, 5, 6, 7, 8, 12, 17]
-        self.assertEqual(range_str(x), '1-8, 12 & 17')
-
-        x = [0, 6, 7, 10, 11, 12, 30, 30]
-        self.assertEqual(range_str(x), '0, 6-7, 10-12 & 30')
-
-        self.assertEqual(range_str([]), '')
 
 
 if __name__ == "__main__":

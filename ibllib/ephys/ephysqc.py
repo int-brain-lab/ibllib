@@ -9,8 +9,8 @@ import numpy as np
 import pandas as pd
 from scipy import signal
 
-import alf.io
-from brainbox.core import Bunch
+import one.alf.io as alfio
+from iblutil.util import Bunch
 from brainbox.metrics.single_units import spike_sorting_metrics
 from ibllib.ephys import sync_probes
 from ibllib.io import spikeglx, raw_data_loaders
@@ -101,9 +101,9 @@ def extract_rmsmap(fbin, out_folder=None, overwrite=False):
     tdict = {'rms': rms['TRMS'].astype(np.single), 'timestamps': rms['tscale'].astype(np.single)}
     fdict = {'power': rms['spectral_density'].astype(np.single),
              'freqs': rms['fscale'].astype(np.single)}
-    out_time = alf.io.save_object_npy(
+    out_time = alfio.save_object_npy(
         out_folder, object=alf_object_time, dico=tdict, namespace='iblqc')
-    out_freq = alf.io.save_object_npy(
+    out_freq = alfio.save_object_npy(
         out_folder, object=alf_object_freq, dico=fdict, namespace='iblqc')
     return out_time + out_freq
 
@@ -283,7 +283,7 @@ def qc_fpga_task(fpga_trials, alf_trials):
     :fpga_task is the dictionary output of
     ibllib.io.extractors.ephys_fpga.extract_behaviour_sync
     : bpod_trials is the dictionary output of ibllib.io.extractors.ephys_trials.extract_all
-    : alf_trials is the ALF _ibl_trials object after extraction (alf.io.load_object)
+    : alf_trials is the ALF _ibl_trials object after extraction (alfio.load_object)
     :return: qc_session, qc_trials, True means QC passes while False indicates a failure
     """
 
@@ -403,7 +403,7 @@ def _qc_from_path(sess_path, display=True):
                                                     chmap=chmap, save=True, display=display)
     # align with the bpod
     bpod2fpga = ephys_fpga.align_with_bpod(temp_alf_folder.parent)
-    alf_trials = alf.io.load_object(temp_alf_folder, 'trials')
+    alf_trials = alfio.load_object(temp_alf_folder, 'trials')
     shutil.rmtree(temp_alf_folder)
     # do the QC
     qcs, qct = qc_fpga_task(fpga_trials, alf_trials)
@@ -427,4 +427,4 @@ def _qc_from_path(sess_path, display=True):
             axes[1].plot(bpod2fpga(bpod_wheel['re_ts']), bpod_wheel['re_pos'] + dy)
             axes[1].title.set_text('Bpod')
 
-    return alf.io.dataframe({**fpga_trials, **alf_trials, **qct})
+    return alfio.dataframe({**fpga_trials, **alf_trials, **qct})
