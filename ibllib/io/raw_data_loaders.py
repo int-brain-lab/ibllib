@@ -144,9 +144,9 @@ def load_camera_frameData(session_path, camera: str = 'left', raw: bool = False)
     if raw:
         return df
 
-    df_dict["Timestamp"] = (data[:, 0] - data[0, 0]) / 10_000_000  # in seconds from start
+    df_dict["Timestamp"] = (data[:, 0] - data[0, 0]) / 10_000_000  # in seconds from first frame
     camerats = uncycle_pgts(convert_pgts(data[:, 1]))
-    df_dict["embeddedTimeStamp"] = camerats - camerats[0]  # in seconds from start
+    df_dict["embeddedTimeStamp"] = camerats - camerats[0]  # in seconds from first frame
     df_dict["embeddedFrameCounter"] = data[:, 2] - data[0, 2]  # from start
     gpio = (np.right_shift(np.tile(data[:, 3], (4, 1)).T, np.arange(31, 27, -1)) & 0x1) == 1
     df_dict["embeddedGPIOPinState"] = [np.array(x) for x in gpio.tolist()]
