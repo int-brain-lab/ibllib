@@ -1,15 +1,16 @@
 import numpy as np
-from brainbox.population import get_spike_counts_in_bins, classify
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.model_selection import KFold
-from oneibl.one import ONE
+from one.api import ONE
+
+from brainbox.population import get_spike_counts_in_bins, classify
 import brainbox.io.one as bbone
 
 # %% Load in data
 one = ONE()
 eid = one.search(subject='ZM_2240', date_range=['2020-01-23', '2020-01-23'])
 spikes, clusters = bbone.load_spike_sorting(eid[0], one=one)
-trials = one.load_object(eid[0], 'trials')
+trials = one.load_object(eid[0], 'trials', collection='alf')
 
 # Use probe00
 spikes = spikes['probe00']

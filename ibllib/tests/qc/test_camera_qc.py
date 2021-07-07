@@ -260,7 +260,7 @@ class TestCameraQC(unittest.TestCase):
             self.qc.one.to_eid = lambda _: self.eid
             self.qc.one._download_datasets = lambda _: None
         with self.assertRaises(AssertionError):
-            self.qc.run(update=False)
+            self.qc.ensure_required_data()
 
 
 if __name__ == "__main__":

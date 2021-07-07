@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-'''
+"""
 Created on Mon Apr  6 14:35:43 2020
 
 Create Histology Session on IBL Alyx
@@ -28,17 +28,19 @@ affine_matrix : str
 Returns
 -------
 none
-'''
+"""
 # Author: Steven West (main), Olivier Winter, Gaelle Chapuis
 
 import sys
 import math
 import datetime
-from oneibl.one import ONE
-import ibllib.time
-import numpy as np
 import json
 from json import JSONEncoder
+
+import numpy as np
+from one.api import ONE
+
+import ibllib.time
 
 
 # override default method of JSONEncoder to implement custom NumPy JSON serialization.
@@ -198,7 +200,7 @@ ses_ = {
 # overwrites the session if it already exists
 ses_date = ibllib.time.date2isostr(sample_imaging_date)[:10]
 ses = one.alyx.rest('sessions', 'list', subject=subject, number=1,
-                    date_range=[ses_date, ses_date])
+                    date_range=[ses_date, ses_date], no_cache=True)
 if len(ses) > 0:
     one.alyx.rest('sessions', 'delete', ses[0]['url'])
 

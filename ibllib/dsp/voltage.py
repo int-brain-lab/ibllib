@@ -1,9 +1,13 @@
 """
 Module to work with raw voltage traces. Spike sorting pre-processing functions.
 """
+from pathlib import Path
+
 import numpy as np
 import scipy.signal
+from tqdm import tqdm
 
+from ibllib.io import spikeglx
 import ibllib.dsp.fourier as fdsp
 from ibllib.dsp import fshift
 from ibllib.ephys import neuropixel
@@ -127,7 +131,17 @@ def fk(x, si=.002, dx=1, vbounds=None, btype='highpass', ntr_pad=0, ntr_tap=None
 
 
 def kfilt(x, collection=None, ntr_pad=0, ntr_tap=None, lagc=300, butter_kwargs=None):
-
+    """
+    Applies a butterworth filter on the 0-axis with tapering / padding
+    :param x: the input array to be filtered. dimension, the filtering is considering
+    axis=0: spatial dimension, axis=1 temporal dimension. (ntraces, ns)
+    :param collection:
+    :param ntr_pad: traces added to each side (mirrored)
+    :param ntr_tap: n traces for apodizatin on each side
+    :param lagc: window size for time domain automatic gain control (no agc otherwise)
+    :param butter_kwargs: filtering parameters: defaults: {'N': 3, 'Wn': 0.1, 'btype': 'highpass'}
+    :return:
+    """
     if butter_kwargs is None:
         butter_kwargs = {'N': 3, 'Wn': 0.1, 'btype': 'highpass'}
     if collection is not None:
@@ -194,3 +208,75 @@ def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, k_kwa
     # apply spatial filter on good channel selection only
     x_ = kfilt(x, **k_kwargs)
     return x_
+
+
+def decompress_destripe_cbin(sr, output_file=None, h=None):
+    """
+    From a spikeglx Reader object, decompresses and apply ADC
+    Production version with optimized FFTs - requires pyfftw
+    :param sr: seismic reader object (spikeglx.Reader)
+    :param output_file: (optional, defaults to .bin extension of the compressed bin file)
+    :param h: (optional)
+    :return:
+    """
+    import pyfftw
+
+    SAMPLES_TAPER = 128
+    NBATCH = 65536
+    # handles input parameters
+    if isinstance(sr, str) or isinstance(sr, Path):
+        sr = spikeglx.Reader(sr, open=True)
+    butter_kwargs = {'N': 3, 'Wn': 300 / sr.fs / 2, 'btype': 'highpass'}
+    k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
+                'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
+    h = neuropixel.trace_header(version=1) if h is None else h
+    output_file = sr.file_bin.with_suffix('.bin') if output_file is None else output_file
+    assert output_file != sr.file_bin
+    taper = np.r_[0, scipy.signal.windows.cosine((SAMPLES_TAPER - 1) * 2), 0]
+    # create the FFT stencils
+    ncv = h['x'].size  # number of channels
+    # compute LP filter coefficients
+    sos = scipy.signal.butter(**butter_kwargs, output='sos')
+    # compute fft stencil for batchsize
+    win = pyfftw.empty_aligned((ncv, NBATCH), dtype='float32')
+    WIN = pyfftw.empty_aligned((ncv, int(NBATCH / 2 + 1)), dtype='complex64')
+    fft_object = pyfftw.FFTW(win, WIN, axes=(1,), direction='FFTW_FORWARD', threads=4)
+    ifft_object = pyfftw.FFTW(WIN, win, axes=(1,), direction='FFTW_BACKWARD', threads=4)
+    dephas = np.zeros((ncv, NBATCH), dtype=np.float32)
+    dephas[:, 1] = 1.
+    DEPHAS = np.exp(1j * np.angle(fft_object(dephas)) * h['sample_shift'][:, np.newaxis])
+
+    pbar = tqdm(total=sr.ns / sr.fs)
+    with open(output_file, 'wb') as fid:
+        first_s = 0
+        while True:
+            last_s = np.minimum(NBATCH + first_s, sr.ns)
+            # transpose to get faster processing for all trace based process
+            chunk = sr[first_s:last_s, :ncv].T
+            chunk[:, :SAMPLES_TAPER] *= taper[:SAMPLES_TAPER]
+            chunk[:, -SAMPLES_TAPER:] *= taper[SAMPLES_TAPER:]
+            # apply butterworth
+            chunk = scipy.signal.sosfiltfilt(sos, chunk)
+            # apply adc
+            ind2save = [SAMPLES_TAPER, NBATCH - SAMPLES_TAPER]
+            if last_s == sr.ns:
+                # for the last batch just use the normal fft as the stencil doesn't fit
+                chunk = fshift(chunk, s=h['sample_shift'])
+                ind2save[1] = NBATCH
+            else:
+                # apply precomputed fshift of the proper length
+                chunk = ifft_object(fft_object(chunk) * DEPHAS)
+            if first_s == 0:
+                # for the first batch save the start with taper applied
+                ind2save[0] = 0
+            # apply K-filter
+            chunk = kfilt(chunk, **k_kwargs)
+            # add back sync trace and save
+            chunk = np.r_[chunk, sr[first_s:last_s, ncv:].T].T
+            (chunk[slice(*ind2save), :] / sr.channel_conversion_sample2v['ap']
+             ).astype(np.int16).tofile(fid)
+            first_s += NBATCH - SAMPLES_TAPER * 2
+            pbar.update(NBATCH / sr.fs)
+            if last_s == sr.ns:
+                break
+    pbar.close()

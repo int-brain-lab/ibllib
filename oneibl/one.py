@@ -10,6 +10,7 @@ from pathlib import Path, PurePath
 import shutil
 from typing import Any, Sequence, Union, Optional, List, Dict
 from uuid import UUID
+from pprint import pprint
 
 import requests
 import tqdm
@@ -24,7 +25,6 @@ from alf.files import is_valid, alf_parts
 from ibllib.exceptions import \
     ALFMultipleObjectsFound, ALFObjectNotFound, ALFMultipleCollectionsFound
 from ibllib.io import hashfile, spikeglx
-from ibllib.misc import pprint
 from oneibl.dataclass import SessionDataInfo
 from brainbox.io import parquet
 from brainbox.numerical import ismember, ismember2d, find_first_2d

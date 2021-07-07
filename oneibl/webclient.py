@@ -7,10 +7,11 @@ import urllib.request
 from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 import hashlib
+from pprint import pprint
 
 import requests
 
-from ibllib.misc import pprint, print_progress
+from ibllib.misc import print_progress
 
 SDSC_ROOT_PATH = PurePosixPath('/mnt/ibl')
 _logger = logging.getLogger('ibllib')

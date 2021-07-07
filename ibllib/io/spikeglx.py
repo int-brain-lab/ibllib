@@ -9,7 +9,7 @@ import numpy as np
 import mtscomp
 from iblutil.util import Bunch
 from ibllib.ephys import neuropixel as neuropixel
-from ibllib.io import hashfile
+from iblutil.io import hashfile
 from one.alf.io import remove_uuid_file
 from one.api import ONE
 
@@ -493,17 +493,17 @@ def glob_ephys_files(session_path, suffix='.meta', ext='bin', recursive=True, bi
     Associated to the subfolders where they are
     the expected folder tree is:
     ├── 3A
-    │        ├── imec0
-    │                ├── sync_testing_g0_t0.imec0.ap.bin
-    │        │        └── sync_testing_g0_t0.imec0.lf.bin
-    │        └── imec1
-    │            ├── sync_testing_g0_t0.imec1.ap.bin
-    │            └── sync_testing_g0_t0.imec1.lf.bin
+    │   ├── imec0
+    │   ├── sync_testing_g0_t0.imec0.ap.bin
+    │   │   └── sync_testing_g0_t0.imec0.lf.bin
+    │   └── imec1
+    │      ├── sync_testing_g0_t0.imec1.ap.bin
+    │      └── sync_testing_g0_t0.imec1.lf.bin
     └── 3B
         ├── sync_testing_g0_t0.nidq.bin
         ├── imec0
-        │        ├── sync_testing_g0_t0.imec0.ap.bin
-        │        └── sync_testing_g0_t0.imec0.lf.bin
+        │   ├── sync_testing_g0_t0.imec0.ap.bin
+        │   └── sync_testing_g0_t0.imec0.lf.bin
         └── imec1
             ├── sync_testing_g0_t0.imec1.ap.bin
             └── sync_testing_g0_t0.imec1.lf.bin
@@ -513,7 +513,6 @@ def glob_ephys_files(session_path, suffix='.meta', ext='bin', recursive=True, bi
     :param ext: file extension to look for, default 'bin' but could also be 'meta' or 'ch'
     :param recursive:
     :param session_path: folder, string or pathlib.Path
-    :param glob_pattern: pattern to look recursively for (defaults to '*.ap.*bin)
     :returns: a list of dictionaries with keys 'ap': apfile, 'lf': lffile and 'label'
     """
     def get_label(raw_ephys_apfile):
@@ -524,7 +523,7 @@ def glob_ephys_files(session_path, suffix='.meta', ext='bin', recursive=True, bi
 
     recurse = '**/' if recursive else ''
     ephys_files = []
-    for raw_ephys_file in Path(session_path).glob(f'{recurse}*.ap{suffix}'):
+    for raw_ephys_file in Path(session_path).glob(f'{recurse}*.ap*{suffix}'):
         raw_ephys_apfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + f'.*{ext}'), None)
         if not raw_ephys_apfile and bin_exists:
             continue
@@ -601,7 +600,7 @@ def get_hardware_config(config_file):
     """
     config_file = Path(config_file)
     if config_file.is_dir():
-        config_file = list(config_file.glob('*.wiring.json'))
+        config_file = list(config_file.glob('*.wiring*.json'))
         if config_file:
             config_file = config_file[0]
     if not config_file or not config_file.exists():
