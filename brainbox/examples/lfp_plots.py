@@ -1,10 +1,11 @@
 import numpy as np
-import brainbox as bb
 import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.gridspec import GridSpec
 from oneibl.one import ONE
 from ibllib.io import spikeglx
+
+from brainbox import lfp
 
 # Download data
 one = ONE()
@@ -22,9 +23,9 @@ ts = one.load(eid[0], 'ephysData.raw.timestamps')
 
 # %% Calculate power spectrum and coherence between two random channels
 raw = spikeglx.Reader(lf_paths[0], open=True)
-ps_freqs, ps = bb.lfp.power_spectrum(signal, fs=raw.fs, segment_length=1, segment_overlap=0.5)
+ps_freqs, ps = lfp.power_spectrum(signal, fs=raw.fs, segment_length=1, segment_overlap=0.5)
 random_ch = np.random.choice(raw.nc, 2)
-coh_freqs, coh, phase_lag = bb.lfp.coherence(signal[random_ch[0], :],
+coh_freqs, coh, phase_lag = lfp.coherence(signal[random_ch[0], :],
                                              signal[random_ch[1], :], fs=raw.fs)
 raw.close()
 

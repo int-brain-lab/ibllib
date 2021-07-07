@@ -1,4 +1,8 @@
+import warnings
+
 from ibllib.misc import logger_config
+
+warnings.filterwarnings('always', category=DeprecationWarning, module='ibllib')
 
 # if this becomes a full-blown library we should let the logging configuration to the discretion of the dev
 # who uses the library. However since it can also be provided as an app, the end-users should be provided
@@ -15,6 +19,6 @@ else:
     logging.getLogger('ibllib').addHandler(logging.NullHandler())
 
 try:
-    import iblutil
+    import one
 except ModuleNotFoundError:
-    logging.getLogger('ibllib').error('Missing dependency, please run `pip install iblutil`')
+    logging.getLogger('ibllib').error('Missing dependency, please run `pip install ONE-api`')

@@ -5,15 +5,13 @@ Plot weight curve from behavior data downloaded via ONE.
 
 import matplotlib.pyplot as plt
 import pandas as pd
-
 from oneibl.one import ONE
-from ibllib.time import isostr2date
 
-one = ONE()
+from ibllib.time import isostr2date
 
 # Get the subject information.
 # We want in particular weighings, that is only accessible through the rest endpoint.
-subject_details = one.alyx.rest('subjects', 'read', 'IBL_14')
+subject_details = ONE().alyx.rest('subjects', 'read', 'IBL_14')
 
 # Get and show list of keys, check 'weighings' is present
 k = subject_details.keys()

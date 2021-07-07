@@ -3,6 +3,10 @@ from pathlib import Path, PurePath
 import sys
 import os
 import json
+import warnings
+
+warnings.warn('Support for ibllib.io.params will soon be removed, use iblutil.io.params instead',
+              category=DeprecationWarning)
 
 
 def as_dict(par):

@@ -64,25 +64,26 @@ class TaskQCExtractor(object):
         :return:
         """
         dstypes = [
-            "_iblrig_taskData.raw",
-            "_iblrig_taskSettings.raw",
-            "_iblrig_encoderPositions.raw",
-            "_iblrig_encoderEvents.raw",
-            "_iblrig_stimPositionScreen.raw",
-            "_iblrig_syncSquareUpdate.raw",
-            "_iblrig_encoderTrialInfo.raw",
-            "_iblrig_ambientSensorData.raw",
+            "_iblrig_taskData.raw.jsonable",
+            "_iblrig_taskSettings.raw.json",
+            "_iblrig_encoderPositions.raw.ssv",
+            "_iblrig_encoderEvents.raw.ssv",
+            "_iblrig_stimPositionScreen.raw.csv",
+            "_iblrig_syncSquareUpdate.raw.csv",
+            "_iblrig_encoderTrialInfo.raw.ssv",
+            "_iblrig_ambientSensorData.raw.jsonable",
         ]
         eid = self.one.path2eid(self.session_path)
         self.log.info(f"Downloading data for session {eid}")
         collections = ['raw_behavior_data'] * len(dstypes)
         # Ensure we have the settings
-        settings, _ = self.one.load_datasets(eid, ["_iblrig_taskSettings.raw"],
+        settings, _ = self.one.load_datasets(eid, ["_iblrig_taskSettings.raw.json"],
+                                             collections=['raw_behavior_data'],
                                              download_only=True, assert_present=False)
         if settings and get_session_extractor_type(self.session_path) == 'ephys':
-            dstypes.extend(['_spikeglx_sync.channels',
-                            '_spikeglx_sync.polarities',
-                            '_spikeglx_sync.times',
+            dstypes.extend(['_spikeglx_sync.channels.npy',
+                            '_spikeglx_sync.polarities.npy',
+                            '_spikeglx_sync.times.npy',
                             '_spikeglx_ephysData_g0_t0.nidq.meta',
                             '_spikeglx_ephysData_g0_t0.nidq.wiring.json'])
             collections = collections + ['raw_ephys_data'] * 5

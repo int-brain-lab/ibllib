@@ -6,15 +6,15 @@ distribution whose mean is given by the psychometric function.
 The data can be expressed in fraction correct (from .5 to 1) or in
 fraction of one specific choice (from 0 to 1). To fit them you can use
 these functions:
-  weibull50          - Weibull function from 0.5 to 1, with lapse rate
-  weibull            - Weibull function from 0 to 1, with lapse rate
-  erf_psycho         - erf function from 0 to 1, with lapse rate
-  erf_psycho_2gammas - erf function from 0 to 1, with two lapse rates
+  - weibull50:          Weibull function from 0.5 to 1, with lapse rate
+  - weibull:            Weibull function from 0 to 1, with lapse rate
+  - erf_psycho:         erf function from 0 to 1, with lapse rate
+  - erf_psycho_2gammas: erf function from 0 to 1, with two lapse rates
 Functions in the toolbox are:
-  mle_fit_psycho     - Maximumum likelihood fit of psychometric function
-  neg_likelihood     - Negative likelihood of a psychometric function
+  - mle_fit_psycho:     Maximumum likelihood fit of psychometric function
+  - neg_likelihood:      Negative likelihood of a psychometric function
 For more info, see:
-  Examples           - Examples of use of psychofit toolbox
+  - Examples:           Examples of use of psychofit toolbox
 Matteo Carandini, 2000-2015
 """
 

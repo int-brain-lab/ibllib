@@ -152,6 +152,7 @@ class TestPipelineAlyx(unittest.TestCase):
         # [(t['name'], t['status'], desired_statuses[t['name']]) for t in task_deck]
         self.assertTrue(all(check_statuses))
         self.assertTrue(set([d['name'] for d in datasets]) == set(desired_datasets))
+
         # check logs
         check_logs = [desired_logs in t['log'] if t['log'] else True for t in task_deck]
         self.assertTrue(all(check_logs))
@@ -172,18 +173,18 @@ class TestPipelineAlyx(unittest.TestCase):
         check_statuses = [desired_statuses[t['name']] == t['status'] for t in task_deck]
         self.assertTrue(all(check_statuses))
 
-        # check that logs were correctly amended
+        # check that logs were correctly overwritten
+        check_logs = [t['log'].count(desired_logs) == 1 if t['log'] else True for t in task_deck]
+        check_rerun = ['===RERUN===' not in t['log'] if t['log'] else True for t in task_deck]
+        self.assertTrue(all(check_logs))
+        self.assertTrue(all(check_rerun))
+
+        # Rerun without clobber and check that logs are overwritten
+        task_deck, dsets = pipeline.rerun_failed(machine='testmachine', clobber=False)
         check_logs = [t['log'].count(desired_logs) == desired_logs_rerun[t['name']] if t['log']
                       else t['log'] == desired_logs_rerun[t['name']] for t in task_deck]
         check_rerun = ['===RERUN===' in t['log'] if desired_logs_rerun[t['name']] == 2
                        else True for t in task_deck]
-        self.assertTrue(all(check_logs))
-        self.assertTrue(all(check_rerun))
-
-        # Rerun with clobber and check that logs are overwritten
-        task_deck, dsets = pipeline.rerun_failed(machine='testmachine', clobber=True)
-        check_logs = [t['log'].count(desired_logs) == 1 if t['log'] else True for t in task_deck]
-        check_rerun = ['===RERUN===' not in t['log'] if t['log'] else True for t in task_deck]
         self.assertTrue(all(check_logs))
         self.assertTrue(all(check_rerun))
 

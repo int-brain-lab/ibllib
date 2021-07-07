@@ -1,53 +1,55 @@
 ## Init
-from oneibl.one import ONE
-from ibllib.misc import pprint
-one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
+from one.api import ONE
+
+from pprint import pprint
+
+one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
+          username='test_user',
           password='TapetesBloc18')
 
 ## Find an experiment
 eid = one.search(users='olivier', date_range=['2018-08-24', '2018-08-24'])
 pprint(eid)
-one.search_terms()
+pprint(one.search_terms)
 
 ## List dataset types for a session
 eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
-one.list(eid)
+one.list_datasets(eid)
 
-## List #1
-one.list()
+## List all datasets for a given collection
+one.list_datasets(eid, collection='alf/probe00')
 
-## Load #1
-dataset_types = ['clusters.templateWaveforms', 'clusters.probes', 'clusters.depths']
+## List all datasets
+one.list_datasets()
+
+## Load object
 eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
-wf, pr, d = one.load(eid, dataset_types=dataset_types)
+probe_label = 'probe00'
+clusters = one.load_object(eid, 'clusters', collection=f'alf/{probe_label}')
 
-## Load #2
-my_data = one.load(eid, dataset_types=dataset_types, dclass_output=True)
-from ibllib.misc import pprint
-pprint(str(my_data.local_path))
-pprint(my_data.dataset_type)
+## Load one dataset
+depths = one.load_dataset(eid, 'clusters.depths.npy', collection=f'alf/{probe_label}')
 
+## Load datasets
+eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
+dsets = ['clusters.probes.npy', 'thisDataset.IveJustMadeUp', 'clusters.depths.npy']
+t, empty, cl = one.load_datasets(eid, dsets,
+                                 collections=f'alf/{probe_label}',
+                                 assert_present=False)
 ## Load everything
 eid = one.search(subjects='flowers')
-my_data = one.load(eid[0])
-pprint(my_data.dataset_type)
+all_datasets = one.list_datasets(eid, details=True)
+files = one._download_datasets(all_datasets)
+pprint(files)
 
-## Load
-eid = 'cf264653-2deb-44cb-aa84-89b82507028a'
-dataset_types = ['clusters.probes', 'thisDataset.IveJustMadeUp', 'clusters.depths']
-t, empty, cl = one.load(eid, dataset_types=dataset_types)
-
-
-
+# FIXME Doesn't work yet
 ## Search users
-eid = one.search(users=['olivier'])
+eid = one.search(users='olivier', query_type='remote')
+eid = one.search(users=['nbonacchi', 'olivier'], query_type='remote')
 
-eid = one.search(users=['nbonacchi', 'olivier'])
 # with details
-eid, session_details = one.search(users=['test_user', 'olivier'], details=True)
+eid, session_details = one.search(user=['test_user', 'olivier'], details=True)
 pprint(session_details)
 
 ## Search by date
-eid = one.search(users='olivier', date_range=['2018-08-24', '2018-08-24'])
-
-
+eid, details = one.search(date_range=['2018-08-24', '2018-08-24'], details=True)

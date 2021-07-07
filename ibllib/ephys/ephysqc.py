@@ -8,9 +8,9 @@ import shutil
 import numpy as np
 import pandas as pd
 from scipy import signal
-
 import one.alf.io as alfio
 from iblutil.util import Bunch
+
 from brainbox.metrics.single_units import spike_sorting_metrics
 from ibllib.ephys import sync_probes
 from ibllib.io import spikeglx, raw_data_loaders
