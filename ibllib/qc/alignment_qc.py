@@ -75,9 +75,10 @@ class AlignmentQC(base.QC):
             self.depths = depths
 
         if not np.any(cluster_chns):
-            _ = self.one.load(self.insertion['session'], dataset_types='clusters.channels',
-                              download_only=True)
-            self.cluster_chns = np.load(self.one.path_from_eid(self.insertion['session']).
+            _ = self.one.load_dataset(self.insertion['session'], 'clusters.channels.npy',
+                                      collection=f'alf/{self.insertion["name"]}',
+                                      download_only=True)
+            self.cluster_chns = np.load(self.one.eid2path(self.insertion['session']).
                                         joinpath('alf', self.insertion['name'],
                                                  'clusters.channels.npy'))
         else:
@@ -280,8 +281,7 @@ class AlignmentQC(base.QC):
         if upload_flatiron:
             ftp_patcher = FTPPatcher(one=self.one)
             insertion = self.one.alyx.get(f'/insertions/{self.eid}', clobber=True)
-            alf_path = self.one.path_from_eid(insertion['session']).joinpath('alf',
-                                                                             insertion['name'])
+            alf_path = self.one.eid2path(insertion['session']).joinpath('alf', insertion['name'])
             alf_path.mkdir(exist_ok=True, parents=True)
 
             # Make the channels.mlapdv dataset
@@ -310,7 +310,8 @@ class AlignmentQC(base.QC):
             files_to_register.append(f_name)
 
             self.log.info("Writing datasets to FlatIron")
-            ftp_patcher.create_dataset(path=files_to_register, created_by=self.one._par.ALYX_LOGIN)
+            ftp_patcher.create_dataset(path=files_to_register,
+                                       created_by=self.one.alyx._par.ALYX_LOGIN)
 
         # Need to change channels stored on alyx as well as the stored key is not the same as the
         # latest key
