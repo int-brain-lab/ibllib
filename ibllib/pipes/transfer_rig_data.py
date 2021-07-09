@@ -10,6 +10,7 @@ from shutil import ignore_patterns as ig
 
 import ibllib.io.extractors.base
 import ibllib.io.flags as flags
+import ibllib.io.raw_data_loaders as raw
 
 log = logging.getLogger('ibllib')
 log.setLevel(logging.INFO)
@@ -49,6 +50,9 @@ def main(local_folder: str, remote_folder: str, force: bool = False) -> None:
             task_type = ibllib.io.extractors.base.get_session_extractor_type(Path(src))
             if task_type not in ['ephys', 'ephys_sync', 'ephys_mock']:
                 flags.write_flag_file(dst.joinpath('raw_session.flag'))
+                settings = raw.load_settings(dst)
+                if 'ephys' in settings['PYBPOD_BOARD']:  # Any traing task on an ephys rig
+                    dst.joinpath('raw_session.flag').unlink()
             log.info(f"Copied to {remote_folder}: Session {src_flag_file.parent}")
             src_flag_file.unlink()
 
