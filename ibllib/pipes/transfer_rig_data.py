@@ -57,10 +57,10 @@ def main(local_folder: str, remote_folder: str, force: bool = False) -> None:
             src_flag_file.unlink()
 
         # Cleanup
-        src_audio_file = src / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
         src_video_file = src / 'raw_video_data' / '_iblrig_leftCamera.raw.avi'
-        dst_audio_file = dst / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
         dst_video_file = dst / 'raw_video_data' / '_iblrig_leftCamera.raw.avi'
+        src_audio_file = src / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
+        dst_audio_file = dst / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
 
         if src_audio_file.exists() and \
                 src_audio_file.stat().st_size == dst_audio_file.stat().st_size:
