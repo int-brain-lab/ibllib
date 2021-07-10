@@ -11,7 +11,7 @@ import one.alf.io as alfio
 from one import params
 
 from ibllib.io import globus
-from oneibl.registration import register_dataset
+from ibllib.oneibl.registration import register_dataset
 
 _logger = logging.getLogger('ibllib')
 
@@ -340,8 +340,9 @@ class FTPPatcher(Patcher):
     """
     def __init__(self, one=None):
         super().__init__(one=one)
-        if not getattr(one.alyx._par, 'FTP_DATA_SERVER_LOGIN', False):
-            self.one.alyx._par = self.setup(par=one.alyx._par)
+        alyx = self.one.alyx
+        if not getattr(alyx._par, 'FTP_DATA_SERVER_LOGIN', False):
+            alyx._par = self.setup(par=alyx._par, silent=alyx.silent)
         login, pwd = (one.alyx._par.FTP_DATA_SERVER_LOGIN, one.alyx._par.FTP_DATA_SERVER_PWD)
         self.ftp = ftplib.FTP_TLS(host=FTP_HOST, user=login, passwd=pwd)
         # self.ftp.ssl_version = ssl.PROTOCOL_TLSv1
@@ -370,7 +371,8 @@ class FTPPatcher(Patcher):
         par = iopar.as_dict(par)
 
         if silent:
-            par = DEFAULTS.update(par)
+            DEFAULTS.update(par)
+            par = DEFAULTS
         else:
             for k in DEFAULTS.keys():
                 cpar = par.get(k, DEFAULTS[k])

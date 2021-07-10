@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import warnings
+warnings.warn('`oneibl.onelight` will be removed in future version', DeprecationWarning)
 
 """ONE light."""
 
