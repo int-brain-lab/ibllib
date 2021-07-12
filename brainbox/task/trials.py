@@ -129,11 +129,13 @@ def get_event_aligned_raster(times, events, tbin=0.02, values=None, epoch=[-0.4,
         vals, bin_times, _ = bincount2D(times, np.ones_like(times), xbin=tbin, weights=values)
         vals = vals[0]
         t = np.arange(epoch[0], epoch[1] + tbin, tbin)
+        nbin = t.shape[0]
     else:
         vals = values
         bin_times = times
         tbin = np.mean(np.diff(bin_times))
         t = np.arange(epoch[0], epoch[1], tbin)
+        nbin = t.shape[0]
 
     # remove nan trials
     events = events[~np.isnan(events)]
@@ -143,7 +145,8 @@ def get_event_aligned_raster(times, events, tbin=0.02, values=None, epoch=[-0.4,
     out_intervals = intervals[:, 1] > bin_times[-1]
     epoch_idx = np.searchsorted(bin_times, intervals)[np.invert(out_intervals)]
 
-    for ep in range(np.median(epoch_idx[:, 1] - epoch_idx[:, 0]).astype(int) + 1):
+    # print(np.unique(epoch_idx[:, 1] - epoch_idx[:, 0]))
+    for ep in range(nbin):
         if ep == 0:
             event_raster = (vals[epoch_idx[:, 0] + ep]).astype(float)
         else:
