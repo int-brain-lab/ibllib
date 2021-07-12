@@ -48,7 +48,7 @@ def find_trial_ids(trials, side='all', choice='all', order='trial num', sort='id
         np.bitwise_and(cont, np.bitwise_and(trials['feedbackType'][idx] == -1,
                                             np.isfinite(trials['contrastLeft'][idx]))))[0]
 
-    reaction_time = trials.response_times[idx] - trials.goCue_times[idx]
+    reaction_time = trials['response_times'][idx] - trials['goCue_times'][idx]
 
     def _order_by(_trials, order):
         # Returns subset of trials either ordered by trial number or by reaction time
