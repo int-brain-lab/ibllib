@@ -89,10 +89,6 @@ class TaskQCExtractor(object):
                             'ephysData.raw.wiring'])
 
             if len(self.one.list_datasets(eid, collection='raw_ephys_data')) == 0:
-                # Assert 3A probe model; if so download all probe data
-                det = self.one.get_details(eid, full=True)
-                probe_model = next(x['model'] for x in det['probe_insertion'])
-                assert probe_model == '3A', 'raw ephys data not missing'
                 collections += ('raw_ephys_data/probe00', 'raw_ephys_data/probe01')
             else:
                 collections += ('raw_ephys_data',)
