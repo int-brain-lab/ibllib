@@ -399,8 +399,7 @@ def _qc_from_path(sess_path, display=True):
     sync, chmap = ephys_fpga.get_main_probe_sync(sess_path, bin_exists=False)
     _ = ephys_fpga.extract_all(sess_path, output_path=temp_alf_folder, save=True)
     # check that the output is complete
-    fpga_trials = ephys_fpga.extract_behaviour_sync(sync, output_path=temp_alf_folder, tmax=tmax,
-                                                    chmap=chmap, save=True, display=display)
+    fpga_trials = ephys_fpga.extract_behaviour_sync(sync, chmap=chmap, display=display)
     # align with the bpod
     bpod2fpga = ephys_fpga.align_with_bpod(temp_alf_folder.parent)
     alf_trials = alfio.load_object(temp_alf_folder, 'trials')
