@@ -64,31 +64,46 @@ class TaskQCExtractor(object):
         :return:
         """
         dstypes = [
-            "_iblrig_taskData.raw.jsonable",
-            "_iblrig_taskSettings.raw.json",
-            "_iblrig_encoderPositions.raw.ssv",
-            "_iblrig_encoderEvents.raw.ssv",
-            "_iblrig_stimPositionScreen.raw.csv",
-            "_iblrig_syncSquareUpdate.raw.csv",
-            "_iblrig_encoderTrialInfo.raw.ssv",
-            "_iblrig_ambientSensorData.raw.jsonable",
+            "_iblrig_taskData.raw",
+            "_iblrig_taskSettings.raw",
+            "_iblrig_encoderPositions.raw",
+            "_iblrig_encoderEvents.raw",
+            "_iblrig_stimPositionScreen.raw",
+            "_iblrig_syncSquareUpdate.raw",
+            "_iblrig_encoderTrialInfo.raw",
+            "_iblrig_ambientSensorData.raw",
         ]
         eid = self.one.path2eid(self.session_path)
         self.log.info(f"Downloading data for session {eid}")
-        collections = ['raw_behavior_data'] * len(dstypes)
+        collections = ('raw_behavior_data',)
         # Ensure we have the settings
         settings, _ = self.one.load_datasets(eid, ["_iblrig_taskSettings.raw.json"],
                                              collections=['raw_behavior_data'],
                                              download_only=True, assert_present=False)
         if settings and get_session_extractor_type(self.session_path) == 'ephys':
-            dstypes.extend(['_spikeglx_sync.channels.npy',
-                            '_spikeglx_sync.polarities.npy',
-                            '_spikeglx_sync.times.npy',
-                            '_spikeglx_ephysData_g0_t0.nidq.meta',
-                            '_spikeglx_ephysData_g0_t0.nidq.wiring.json'])
-            collections = collections + ['raw_ephys_data'] * 5
-        files, _ = self.one.load_datasets(eid, dstypes, collections=collections,
-                                          download_only=True, assert_present=False)
+
+            dstypes.extend(['_spikeglx_sync.channels',
+                            '_spikeglx_sync.polarities',
+                            '_spikeglx_sync.times',
+                            'ephysData.raw.meta',
+                            'ephysData.raw.wiring'])
+
+            if len(self.one.list_datasets(eid, collection='raw_ephys_data')) == 0:
+                # Assert 3A probe model; if so download all probe data
+                det = self.one.get_details(eid, full=True)
+                probe_model = next(x['model'] for x in det['probe_insertion'])
+                assert probe_model == '3A', 'raw ephys data not missing'
+                collections += ('raw_ephys_data/probe00', 'raw_ephys_data/probe01')
+            else:
+                collections += ('raw_ephys_data',)
+
+        files = []
+        for dstype in dstypes:
+            dataset = self.one.datasets_from_type(eid, dstype, full=True)
+            dataset = [d for d in dataset if d['collection'] in collections]
+            present = self.one._download_datasets(dataset)
+            files.append(present)
+
         missing = [True] * len(dstypes) if not files else [x is None for x in files]
         if self.session_path is None or all(missing):
             self.lazy = True
