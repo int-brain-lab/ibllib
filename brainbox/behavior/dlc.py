@@ -78,16 +78,19 @@ def get_sniffs(dlc, dlc_t):
 
 def get_dlc_everything(dlc_cam, camera):
 
+    aligned = True
     if dlc_cam.times.shape[0] != dlc_cam.dlc.shape[0]:
         # logger warning and print out status of the qc, specific serializer django!
         logger.warning('Dimension mismatch between dlc points and timestamps')
         min_samps = min(dlc_cam.times.shape[0], dlc_cam.dlc.shape[0])
         dlc_cam.times = dlc_cam.times[:min_samps]
         dlc_cam.dlc = dlc_cam.dlc[:min_samps]
+        aligned = False
 
     dlc_cam.dlc = likelihood_threshold(dlc_cam.dlc)
     dlc_cam.dlc = get_speed_for_features(dlc_cam.dlc, dlc_cam.times, camera)
     dlc_cam['licks'] = get_licks(dlc_cam.dlc, dlc_cam.times)
     dlc_cam['sniffs'] = get_sniffs(dlc_cam.dlc, dlc_cam.times)
+    dlc_cam['aligned'] = aligned
 
     return dlc_cam
