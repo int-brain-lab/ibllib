@@ -19,6 +19,12 @@ RESOLUTION = {'left': 2,
 
 
 def likelihood_threshold(dlc, threshold=0.9):
+    """
+    Set dlc points with likelihood less than threshold to nan
+    :param dlc: dlc pqt object
+    :param threshold: likelihood threshold
+    :return:
+    """
     features = np.unique(['_'.join(x.split('_')[:-1]) for x in dlc.keys()])
     for feat in features:
         nan_fill = dlc[f'{feat}_likelihood'] < threshold
@@ -29,6 +35,14 @@ def likelihood_threshold(dlc, threshold=0.9):
 
 
 def get_speed(dlc, dlc_t, camera, feature='paw_r'):
+    """
+
+    :param dlc: dlc pqt table
+    :param dlc_t: dlc time points
+    :param camera: camera type e.g 'left', 'right', 'body'
+    :param feature: dlc feature to compute speed over
+    :return:
+    """
     x = dlc[f'{feature}_x'] / RESOLUTION[camera]
     y = dlc[f'{feature}_y'] / RESOLUTION[camera]
 
@@ -45,6 +59,14 @@ def get_speed(dlc, dlc_t, camera, feature='paw_r'):
 
 
 def get_speed_for_features(dlc, dlc_t, camera, features=['paw_r', 'paw_l', 'nose_tip']):
+    """
+    Wrapper to compute speed for a number of dlc features and add them to dlc table
+    :param dlc: dlc pqt table
+    :param dlc_t: dlc time points
+    :param camera: camera type e.g 'left', 'right', 'body'
+    :param features: dlc features to compute speed for
+    :return:
+    """
     for feat in features:
         dlc[f'{feat}_speed'] = get_speed(dlc, dlc_t, camera, feat)
 
@@ -52,6 +74,13 @@ def get_speed_for_features(dlc, dlc_t, camera, features=['paw_r', 'paw_l', 'nose
 
 
 def get_feature_event_times(dlc, dlc_t, features):
+    """
+    Detect events from the dlc traces. Based on the standard deviation between frames
+    :param dlc: dlc pqt table
+    :param dlc_t: dlc times
+    :param features: features to consider
+    :return:
+    """
 
     for i, feat in enumerate(features):
         f = dlc[feat]
@@ -65,18 +94,36 @@ def get_feature_event_times(dlc, dlc_t, features):
 
 
 def get_licks(dlc, dlc_t):
+    """
+    Compute lick times from the toungue dlc points
+    :param dlc: dlc pqt table
+    :param dlc_t: dlc times
+    :return:
+    """
     lick_times = get_feature_event_times(dlc, dlc_t, ['tongue_end_l_x', 'tongue_end_l_y',
                                                       'tongue_end_r_x', 'tongue_end_r_y'])
     return lick_times
 
 
 def get_sniffs(dlc, dlc_t):
+    """
+    Compute sniff times from the nose tip
+    :param dlc: dlc pqt table
+    :param dlc_t: dlc times
+    :return:
+    """
 
     sniff_times = get_feature_event_times(dlc, dlc_t, ['nose_tip_y'])
     return sniff_times
 
 
 def get_dlc_everything(dlc_cam, camera):
+    """
+    Get out features of interest for dlc
+    :param dlc_cam: dlc object
+    :param camera: camera type e.g 'left', 'right'
+    :return:
+    """
 
     aligned = True
     if dlc_cam.times.shape[0] != dlc_cam.dlc.shape[0]:

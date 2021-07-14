@@ -25,7 +25,6 @@ def find_trial_ids(trials, side='all', choice='all', order='trial num', sort='id
     else:
         idx = np.ones_like(trials['feedbackType'], dtype=bool)
 
-    # TODO write tests for this
     # Find trials that have specified contrasts
     cont = np.bitwise_or(ismember(trials['contrastLeft'][idx], np.array(contrast))[0],
                          ismember(trials['contrastRight'][idx], np.array(contrast))[0])
@@ -124,6 +123,16 @@ def find_trial_ids(trials, side='all', choice='all', order='trial num', sort='id
 
 
 def get_event_aligned_raster(times, events, tbin=0.02, values=None, epoch=[-0.4, 1], bin=True):
+    """
+    Get event aligned raster
+    :param times: array of times e.g spike times or dlc points
+    :param events: array of events to epoch around
+    :param tbin: bin size to over which to count events
+    :param values: values to scale counts by
+    :param epoch: window around each event
+    :param bin: whether to bin times in tbin windows or not
+    :return:
+    """
 
     if bin:
         vals, bin_times, _ = bincount2D(times, np.ones_like(times), xbin=tbin, weights=values)
@@ -145,7 +154,6 @@ def get_event_aligned_raster(times, events, tbin=0.02, values=None, epoch=[-0.4,
     out_intervals = intervals[:, 1] > bin_times[-1]
     epoch_idx = np.searchsorted(bin_times, intervals)[np.invert(out_intervals)]
 
-    # print(np.unique(epoch_idx[:, 1] - epoch_idx[:, 0]))
     for ep in range(nbin):
         if ep == 0:
             event_raster = (vals[epoch_idx[:, 0] + ep]).astype(float)
@@ -159,7 +167,6 @@ def get_event_aligned_raster(times, events, tbin=0.02, values=None, epoch=[-0.4,
 
     # Add back in the trials that were later than last value with nans
     if np.sum(out_intervals) > 0:
-        print('doing the extra nans')
         event_raster = np.r_[event_raster, np.full((np.sum(out_intervals),
                                                     event_raster.shape[1]), np.nan)]
         assert(event_raster.shape[0] == intervals.shape[0])
@@ -168,6 +175,12 @@ def get_event_aligned_raster(times, events, tbin=0.02, values=None, epoch=[-0.4,
 
 
 def get_psth(raster, trial_ids=None):
+    """
+    Compute psth averaged over chosen trials
+    :param raster: output from event aligned raster, window of activity around event
+    :param trial_ids: the trials from the raster to average over
+    :return:
+    """
     if trial_ids is None:
         mean = np.nanmean(raster, axis=0)
         err = np.nanstd(raster, axis=0) / np.sqrt(raster.shape[0])
@@ -180,10 +193,25 @@ def get_psth(raster, trial_ids=None):
 
 
 def filter_by_trial(raster, trial_id):
+    """
+    Select trials of interest for raster
+    :param raster:
+    :param trial_id:
+    :return:
+    """
     return raster[trial_id, :]
 
 
 def filter_correct_incorrect_left_right(trials, event_raster, event, order='trial num'):
+    """
+    Return psth for left correct, left incorrect, right correct, right incorrect and raster
+    sorted by these trials
+    :param trials: trials object
+    :param event_raster: output from get_event_aligned_activity
+    :param event: event to align to e.g 'goCue_times', 'stimOn_times'
+    :param order: order to sort trials by either 'trial num' or 'reaction time'
+    :return:
+    """
     trials_sorted, div = find_trial_ids(trials, sort='choice and side', event=event, order=order)
     trials_lc, _ = find_trial_ids(trials, side='left', choice='correct', event=event, order=order)
     trials_li, _ = find_trial_ids(trials, side='left', choice='incorrect', event=event,
@@ -214,6 +242,14 @@ def filter_correct_incorrect_left_right(trials, event_raster, event, order='tria
 
 
 def filter_correct_incorrect(trials, event_raster, event, order='trial num'):
+    """
+    Return psth for correct and incorrect trials and raster sorted by correct incorrect
+    :param trials: trials object
+    :param event_raster: output from get_event_aligned_activity
+    :param event: event to align to e.g 'goCue_times', 'stimOn_times'
+    :param order: order to sort trials by either 'trial num' or 'reaction time'
+    :return:
+    """
     trials_sorted, div = find_trial_ids(trials, sort='choice', event=event, order=order)
     trials_c, _ = find_trial_ids(trials, side='all', choice='correct', event=event, order=order)
     trials_i, _ = find_trial_ids(trials, side='all', choice='incorrect', event=event, order=order)
@@ -232,6 +268,14 @@ def filter_correct_incorrect(trials, event_raster, event, order='trial num'):
 
 
 def filter_left_right(trials, event_raster, event, order='trial num'):
+    """
+    Return psth for left and right trials and raster sorted by left right
+    :param trials: trials object
+    :param event_raster: output from get_event_aligned_activity
+    :param event: event to align to e.g 'goCue_times', 'stimOn_times'
+    :param order: order to sort trials by either 'trial num' or 'reaction time'
+    :return:
+    """
     trials_sorted, div = find_trial_ids(trials, sort='choice', event=event, order=order)
     trials_l, _ = find_trial_ids(trials, side='left', choice='all', event=event, order=order)
     trials_r, _ = find_trial_ids(trials, side='right', choice='all', event=event, order=order)
@@ -250,6 +294,16 @@ def filter_left_right(trials, event_raster, event, order='trial num'):
 
 
 def filter_trials(trials, event_raster, event, order='trial num', sort='choice'):
+    """
+    Wrapper to get out psth and raster for trial choice
+    :param trials: trials object
+    :param event_raster: output from get_event_aligned_activity
+    :param event: event to align to e.g 'goCue_times', 'stimOn_times'
+    :param order: order to sort trials by either 'trial num' or 'reaction time'
+    :param sort: how to divide trials options are 'choice' (e.g correct vs incorrect), 'side'
+    (e.g left vs right') and 'choice and side' (e.g correct vs incorrect and left vs right)
+    :return:
+    """
     if sort == 'choice':
         raster, psth = filter_correct_incorrect(trials, event_raster, event, order)
     elif sort == 'side':
