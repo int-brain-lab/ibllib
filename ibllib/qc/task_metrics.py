@@ -190,9 +190,6 @@ class TaskQC(base.QC):
         # Get mean passed of each check, or None if passed is None or all NaN
         results = {k: None if v is None or np.isnan(v).all() else np.nanmean(v)
                    for k, v in self.passed.items()}
-        # Ensure criteria are in order
-        criteria = self.criteria.items()
-        criteria = {k: v for k, v in sorted(criteria, key=lambda x: x[1], reverse=True)}
         session_outcome, outcomes = self.compute_session_status_from_dict(results)
         return session_outcome, results, outcomes
 

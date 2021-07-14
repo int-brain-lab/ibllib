@@ -2,18 +2,18 @@ from pathlib import Path
 import json
 import datetime
 import logging
-
-import ibllib.io.extractors.base
-from dateutil import parser as dateparser
 import re
 
+from dateutil import parser as dateparser
+from iblutil.io import hashfile
 import one.alf.io as alfio
 from one.api import ONE
+
+import ibllib.io.extractors.base
 from ibllib.misc import version
 import ibllib.time
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io import flags
-from iblutil.io import hashfile
 import ibllib.exceptions
 
 _logger = logging.getLogger('ibllib')

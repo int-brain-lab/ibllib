@@ -9,6 +9,7 @@ import globus_sdk
 import iblutil.io.params as iopar
 import one.alf.io as alfio
 from one import params
+from one.converters import path_from_dataset
 
 from ibllib.io import globus
 from ibllib.oneibl.registration import register_dataset
@@ -23,6 +24,7 @@ FLATIRON_MOUNT = '/mnt/ibl'
 FTP_HOST = 'test.alyx.internationalbrainlab.org'
 FTP_PORT = 21
 DMZ_REPOSITORY = 'ibl_patcher'  # in alyx, the repository name containing the patched filerecords
+SDSC_ROOT_PATH = PurePosixPath('/mnt/ibl')
 
 
 def _run_command(cmd, dry=True):
@@ -35,6 +37,33 @@ def _run_command(cmd, dry=True):
         _logger.error(error)
         raise RuntimeError(error)
     return p.returncode, info, error
+
+
+def sdsc_globus_path_from_dataset(dset):
+    """
+    :param dset: dset dictionary or list of dictionaries from ALyx rest endpoint
+    Returns SDSC globus file path from a dset record or a list of dsets records from REST
+    """
+    return path_from_dataset(dset, root_path=PurePosixPath('/'), repository=None, uuid=True)
+
+
+def sdsc_path_from_dataset(dset, root_path=SDSC_ROOT_PATH):
+    """
+    Returns sdsc file path from a dset record or a list of dsets records from REST
+    :param dset: dset dictionary or list of dictionaries from ALyx rest endpoint
+    :param root_path: (optional) the prefix path such as one download directory or sdsc root
+    """
+    return path_from_dataset(dset, root_path=root_path, uuid=True)
+
+
+def globus_path_from_dataset(dset, repository=None, uuid=False):
+    """
+    Returns local one file path from a dset record or a list of dsets records from REST
+    :param dset: dset dictionary or list of dictionaries from ALyx rest endpoint
+    :param repository: (optional) repository name of the file record (if None, will take
+     the first filerecord with an URL)
+    """
+    return path_from_dataset(dset, root_path=PurePosixPath('/'), repository=repository, uuid=uuid)
 
 
 class Patcher(abc.ABC):
