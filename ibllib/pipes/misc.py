@@ -5,7 +5,6 @@ from pathlib import Path
 import re
 
 import iblutil.io.params as params
-import one.alf.folders as folders
 from one.alf.io import is_uuid_string, is_session_path, get_session_path
 from one.api import ONE
 
@@ -15,6 +14,30 @@ import ibllib.io.spikeglx as spikeglx
 from ibllib.io.misc import delete_empty_folders
 
 log = logging.getLogger("ibllib")
+
+
+def subjects_data_folder(folder: Path, rglob: bool = False) -> Path:
+    """Given a root_data_folder will try to find a 'Subjects' data folder.
+    If Subjects folder is passed will return it directly."""
+    if not isinstance(folder, Path):
+        folder = Path(folder)
+    if rglob:
+        func = folder.rglob
+    else:
+        func = folder.glob
+
+    # Try to find Subjects folder one level
+    if folder.name.lower() != 'subjects':
+        # Try to find Subjects folder if folder.glob
+        spath = [x for x in func('*') if x.name.lower() == 'subjects']
+        if not spath:
+            raise ValueError('No "Subjects" folder in children folders')
+        elif len(spath) > 1:
+            raise ValueError(f'Multiple "Subjects" folder in children folders: {spath}')
+        else:
+            folder = folder / spath[0]
+
+    return folder
 
 
 def cli_ask_default(prompt: str, default: str):
@@ -200,8 +223,8 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
     local_folder = Path(local_folder)
     remote_folder = Path(remote_folder)
     # Check for Subjects folder
-    local_folder = folders.subjects_data_folder(local_folder, rglob=True)
-    remote_folder = folders.subjects_data_folder(remote_folder, rglob=True)
+    local_folder = subjects_data_folder(local_folder, rglob=True)
+    remote_folder = subjects_data_folder(remote_folder, rglob=True)
 
     print("LOCAL:", local_folder)
     print("REMOTE:", remote_folder)
@@ -255,8 +278,8 @@ def confirm_ephys_remote_folder(
     local_folder = Path(local_folder)
     remote_folder = Path(remote_folder)
     # Check for Subjects folder
-    local_folder = folders.subjects_data_folder(local_folder, rglob=True)
-    remote_folder = folders.subjects_data_folder(remote_folder, rglob=True)
+    local_folder = subjects_data_folder(local_folder, rglob=True)
+    remote_folder = subjects_data_folder(remote_folder, rglob=True)
 
     print("LOCAL:", local_folder)
     print("REMOTE:", remote_folder)
