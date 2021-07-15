@@ -75,7 +75,6 @@ class TaskQCExtractor(object):
         ]
         eid = self.one.path2eid(self.session_path)
         self.log.info(f"Downloading data for session {eid}")
-        collections = ('raw_behavior_data',)
         # Ensure we have the settings
         settings, _ = self.one.load_datasets(eid, ["_iblrig_taskSettings.raw.json"],
                                              collections=['raw_behavior_data'],
