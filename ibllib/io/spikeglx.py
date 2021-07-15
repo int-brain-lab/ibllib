@@ -709,7 +709,7 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
         cache_dir=target_dir, clobber=True, return_md5=False)
     cbin_local_path = remove_uuid_file(cbin_local_path)
     cbin_local_path_renamed = cbin_local_path.with_suffix('.stream.cbin')
-    cbin_local_path.rename(cbin_local_path_renamed)
+    cbin_local_path.replace(cbin_local_path_renamed)
     assert cbin_local_path_renamed.exists()
 
     shutil.copy(cbin_local_path.with_suffix('.meta'),
