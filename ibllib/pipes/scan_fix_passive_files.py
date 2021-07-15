@@ -46,12 +46,12 @@ def find_pairs(root_data_folder):
         # if CORRESPONDING_EPHYS_SESSION does not exist, it's not a passive session
         if ces is None:
             continue
-        # Convert windows path to corresponsding session name (csn) in native Path format
+        # Convert windows path to corresponding session name (csn) in native Path format
         csn = Path(*PureWindowsPath(ces).parts[-3:])
-        target_spath = str(subjects_folder_path / csn)
+        target_spath = subjects_folder_path / csn
 
         pairs.append((source_spath, target_spath))
-    # Remove sessions that are already transfered i.e. source and destination files are ==
+    # Remove sessions that are already transferred i.e. source and destination files are equal
     from_to_pairs = [(x, y) for x, y in pairs if x != y]
     n_pairs = len(from_to_pairs)
     if n_pairs == 0:
@@ -87,6 +87,6 @@ def move_rename_pairs(from_to_pairs):
 def execute(root_data_folder, dry=True):
     from_to_pairs = find_pairs(root_data_folder)
     if dry:
-        return from_to_pairs, [False for x in from_to_pairs]
+        return from_to_pairs, [False] * len(from_to_pairs)
     moved_ok = move_rename_pairs(from_to_pairs)
     return from_to_pairs, moved_ok

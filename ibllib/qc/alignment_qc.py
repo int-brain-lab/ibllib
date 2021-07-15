@@ -75,12 +75,10 @@ class AlignmentQC(base.QC):
             self.depths = depths
 
         if not np.any(cluster_chns):
-            _ = self.one.load_dataset(self.insertion['session'], 'clusters.channels.npy',
-                                      collection=f'alf/{self.insertion["name"]}',
-                                      download_only=True)
-            self.cluster_chns = np.load(self.one.eid2path(self.insertion['session']).
-                                        joinpath('alf', self.insertion['name'],
-                                                 'clusters.channels.npy'))
+            self.cluster_chns = self.one.load_dataset(self.insertion['session'],
+                                                      'clusters.channels.npy',
+                                                      collection=f'alf/{self.insertion["name"]}',
+                                                      download_only=True)
         else:
             self.cluster_chns = cluster_chns
 
@@ -311,7 +309,7 @@ class AlignmentQC(base.QC):
 
             self.log.info("Writing datasets to FlatIron")
             ftp_patcher.create_dataset(path=files_to_register,
-                                       created_by=self.one.alyx._par.ALYX_LOGIN)
+                                       created_by=self.one.alyx.user)
 
         # Need to change channels stored on alyx as well as the stored key is not the same as the
         # latest key

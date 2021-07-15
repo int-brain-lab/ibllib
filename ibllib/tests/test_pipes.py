@@ -372,7 +372,7 @@ class TestScanFixPassiveFiles(unittest.TestCase):
         # Same as execute
         from_to_pairs = fix.find_pairs(self.tmp_dir.name)
         moved_ok = fix.move_rename_pairs(from_to_pairs)
-        self.assertTrue(sum(moved_ok) == 1)
+        self.assertTrue(sum(moved_ok) == 2)
 
     def tearDown(self):
         self.tmp_dir.cleanup()
