@@ -1,13 +1,4 @@
-# -*- coding: utf-8 -*-
-import warnings
-warnings.warn('`oneibl.onelight` will be removed in future version', DeprecationWarning)
-
 """ONE light."""
-
-
-# -------------------------------------------------------------------------------------------------
-# Imports
-# -------------------------------------------------------------------------------------------------
 
 import csv
 from collections import defaultdict
@@ -22,6 +13,7 @@ import re
 import sys
 import tempfile
 import urllib.parse
+import warnings
 
 import click
 import requests
@@ -30,6 +22,8 @@ from requests.exceptions import HTTPError
 import alf.io
 
 logger = logging.getLogger(__name__)
+
+warnings.warn('`oneibl.onelight` will be removed in future version', DeprecationWarning)
 
 
 # -------------------------------------------------------------------------------------------------
