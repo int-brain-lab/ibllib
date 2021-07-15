@@ -101,9 +101,9 @@ class DlcQC(base.QC):
             present = (
                 self.one._download_datasets(dataset)
                 if self.download_data
-                else (next(self.session_path.rglob(d['name']), None) for d in dataset)
+                else (next(self.session_path.rglob(d), None) for d in dataset['rel_path'])
             )
-            assert (dataset and all(present)), f'Dataset {dstype} not found'
+            assert (not dataset.empty and all(present)), f'Dataset {dstype} not found'
 
     def run(self, update: bool = False, **kwargs) -> (str, dict):
         """
