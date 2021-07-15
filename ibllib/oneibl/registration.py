@@ -2,18 +2,18 @@ from pathlib import Path
 import json
 import datetime
 import logging
-
-import ibllib.io.extractors.base
-from dateutil import parser as dateparser
 import re
 
-from one.alf.files import get_session_path
+from dateutil import parser as dateparser
+from iblutil.io import hashfile
+import one.alf.io as alfio
 from one.api import ONE
+
+import ibllib.io.extractors.base
 from ibllib.misc import version
 import ibllib.time
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io import flags
-from iblutil.io import hashfile
 import ibllib.exceptions
 
 _logger = logging.getLogger('ibllib')
@@ -65,7 +65,7 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
     elif not isinstance(file_list, list):
         file_list = [Path(file_list)]
 
-    assert len(set([get_session_path(f) for f in file_list])) == 1
+    assert len(set([alfio.get_session_path(f) for f in file_list])) == 1
     assert all([Path(f).exists() for f in file_list])
     if versions is None:
         versions = version.ibllib()
@@ -88,7 +88,7 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
     else:
         hashes = [hashfile.md5(p) for p in file_list]
 
-    session_path = get_session_path(file_list[0])
+    session_path = alfio.get_session_path(file_list[0])
     # first register the file
     r = {'created_by': created_by,
          'path': session_path.relative_to((session_path.parents[2])).as_posix(),

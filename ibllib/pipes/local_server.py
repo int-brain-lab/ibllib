@@ -1,4 +1,5 @@
 import logging
+import time
 from datetime import datetime
 from pathlib import Path
 import pkg_resources
@@ -127,7 +128,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
 def job_runner(subjects_path, lab=None, dry=False, one=None, count=5):
     """
     Function to be used as a process to run the jobs as they are created on the database
-    THis will query waiting jobs from the specified Lab
+    This will query waiting jobs from the specified Lab
     :param subjects_path: on servers: /mnt/s0/Data/Subjects. Contains sessions
     :param lab: lab name as per Alyx
     :param dry:
@@ -159,7 +160,6 @@ def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, count=5, time_o
     """
     if one is None:
         one = ONE(cache_rest=None)
-    import time
     tstart = time.time()
     c = 0
     last_session = None

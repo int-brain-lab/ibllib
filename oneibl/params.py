@@ -3,8 +3,9 @@ from ibllib.io import params as iopar
 from getpass import getpass
 from pathlib import Path
 from ibllib.graphic import login
+import warnings
 
-
+warnings.warn('Use `import one.params` instead of `import oneibl.params`', DeprecationWarning)
 _PAR_ID_STR = 'one_params'
 
 

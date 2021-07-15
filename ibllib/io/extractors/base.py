@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from one.alf.io import get_session_path
+from one.alf.files import get_session_path
 from ibllib.io import raw_data_loaders as raw
 from ibllib.io.raw_data_loaders import load_settings, _logger
 

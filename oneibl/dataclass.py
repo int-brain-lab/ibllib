@@ -4,6 +4,9 @@ from pathlib import Path
 
 from brainbox.io import parquet
 from iblutil.util import flatten
+import warnings
+
+warnings.warn('`oneibl.dataclass` will be removed in future version', DeprecationWarning)
 
 
 @dataclass

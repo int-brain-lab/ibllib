@@ -7,12 +7,13 @@ from getpass import getpass
 
 import globus_sdk
 import iblutil.io.params as iopar
-from one.alf.spec import is_uuid_string
 from one.alf.files import get_session_path, add_uuid_string
+from one.alf.spec import is_uuid_string
 from one import params
+from one.converters import path_from_dataset
 
 from ibllib.io import globus
-from oneibl.registration import register_dataset
+from ibllib.oneibl.registration import register_dataset
 
 _logger = logging.getLogger('ibllib')
 
@@ -24,6 +25,7 @@ FLATIRON_MOUNT = '/mnt/ibl'
 FTP_HOST = 'test.alyx.internationalbrainlab.org'
 FTP_PORT = 21
 DMZ_REPOSITORY = 'ibl_patcher'  # in alyx, the repository name containing the patched filerecords
+SDSC_ROOT_PATH = PurePosixPath('/mnt/ibl')
 
 
 def _run_command(cmd, dry=True):
@@ -36,6 +38,33 @@ def _run_command(cmd, dry=True):
         _logger.error(error)
         raise RuntimeError(error)
     return p.returncode, info, error
+
+
+def sdsc_globus_path_from_dataset(dset):
+    """
+    :param dset: dset dictionary or list of dictionaries from ALyx rest endpoint
+    Returns SDSC globus file path from a dset record or a list of dsets records from REST
+    """
+    return path_from_dataset(dset, root_path=PurePosixPath('/'), repository=None, uuid=True)
+
+
+def sdsc_path_from_dataset(dset, root_path=SDSC_ROOT_PATH):
+    """
+    Returns sdsc file path from a dset record or a list of dsets records from REST
+    :param dset: dset dictionary or list of dictionaries from ALyx rest endpoint
+    :param root_path: (optional) the prefix path such as one download directory or sdsc root
+    """
+    return path_from_dataset(dset, root_path=root_path, uuid=True)
+
+
+def globus_path_from_dataset(dset, repository=None, uuid=False):
+    """
+    Returns local one file path from a dset record or a list of dsets records from REST
+    :param dset: dset dictionary or list of dictionaries from ALyx rest endpoint
+    :param repository: (optional) repository name of the file record (if None, will take
+     the first filerecord with an URL)
+    """
+    return path_from_dataset(dset, root_path=PurePosixPath('/'), repository=repository, uuid=uuid)
 
 
 class Patcher(abc.ABC):
@@ -341,8 +370,9 @@ class FTPPatcher(Patcher):
     """
     def __init__(self, one=None):
         super().__init__(one=one)
-        if not getattr(one.alyx._par, 'FTP_DATA_SERVER_LOGIN', False):
-            self.one.alyx._par = self.setup(par=one.alyx._par)
+        alyx = self.one.alyx
+        if not getattr(alyx._par, 'FTP_DATA_SERVER_LOGIN', False):
+            alyx._par = self.setup(par=alyx._par, silent=alyx.silent)
         login, pwd = (one.alyx._par.FTP_DATA_SERVER_LOGIN, one.alyx._par.FTP_DATA_SERVER_PWD)
         self.ftp = ftplib.FTP_TLS(host=FTP_HOST, user=login, passwd=pwd)
         # self.ftp.ssl_version = ssl.PROTOCOL_TLSv1
@@ -371,7 +401,8 @@ class FTPPatcher(Patcher):
         par = iopar.as_dict(par)
 
         if silent:
-            par = DEFAULTS.update(par)
+            DEFAULTS.update(par)
+            par = DEFAULTS
         else:
             for k in DEFAULTS.keys():
                 cpar = par.get(k, DEFAULTS[k])
