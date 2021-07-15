@@ -430,7 +430,9 @@ def check_create_raw_session_flag(session_folder: str) -> None:
         return
 
     is_biased = True if "biased" in sett["PYBPOD_PROTOCOL"] else False
-    if video.exists() and is_biased:
+    is_training = True if "training" in sett["PYBPOD_PROTOCOL"] else False
+    is_habituation = True if "habituation" in sett["PYBPOD_PROTOCOL"] else False
+    if video.exists() and (is_biased or is_training or is_habituation):
         flags.write_flag_file(session_path.joinpath("raw_session.flag"))
         video.unlink()
     if video.exists() and ephys.exists():

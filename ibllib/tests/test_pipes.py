@@ -224,6 +224,24 @@ class TestPipesMisc(unittest.TestCase):
         self.assertTrue(raw_session.exists())
         self.assertFalse(video.exists())
         raw_session.unlink()
+        # Check if training session
+        fu.populate_task_settings(
+            fpath, patch={"PYBPOD_PROTOCOL": "some_trainingChoiceWorld_task"}
+        )
+        misc.create_video_transfer_done_flag(self.session_path_3B)
+        misc.check_create_raw_session_flag(self.session_path_3B)
+        self.assertTrue(raw_session.exists())
+        self.assertFalse(video.exists())
+        raw_session.unlink()
+        # Check if habituation session
+        fu.populate_task_settings(
+            fpath, patch={"PYBPOD_PROTOCOL": "some_habituationChoiceWorld_task"}
+        )
+        misc.create_video_transfer_done_flag(self.session_path_3B)
+        misc.check_create_raw_session_flag(self.session_path_3B)
+        self.assertTrue(raw_session.exists())
+        self.assertFalse(video.exists())
+        raw_session.unlink()
 
     def test_create_ephys_flags(self):
         extract = self.session_path_3B.joinpath('extract_ephys.flag')
