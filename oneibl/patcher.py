@@ -7,7 +7,8 @@ from getpass import getpass
 
 import globus_sdk
 import iblutil.io.params as iopar
-import one.alf.io as alfio
+from one.alf.spec import is_uuid_string
+from one.alf.files import get_session_path, add_uuid_string
 from one import params
 
 from ibllib.io import globus
@@ -50,15 +51,15 @@ class Patcher(abc.ABC):
         path = Path(path)
         if dset_id is None:
             dset_id = path.name.split('.')[-2]
-            if not alfio.is_uuid_string(dset_id):
+            if not is_uuid_string(dset_id):
                 dset_id = None
         assert dset_id
-        assert alfio.is_uuid_string(dset_id)
+        assert is_uuid_string(dset_id)
         assert path.exists()
         dset = self.one.alyx.rest('datasets', "read", id=dset_id)
         fr = next(fr for fr in dset['file_records'] if 'flatiron' in fr['data_repository'])
         remote_path = Path(fr['data_repository_path']).joinpath(fr['relative_path'])
-        remote_path = alfio.add_uuid_string(remote_path, dset_id).as_posix()
+        remote_path = add_uuid_string(remote_path, dset_id).as_posix()
         if remote_path.startswith('/'):
             full_remote_path = PurePosixPath(FLATIRON_MOUNT + remote_path)
         else:
@@ -88,7 +89,7 @@ class Patcher(abc.ABC):
         register_dict = {}
         # creates a dictionary of sessions with one file list per session
         for f in file_list:
-            session_path = alfio.get_session_path(f)
+            session_path = get_session_path(f)
             label = '_'.join(session_path.parts[-3:])
             if label in register_dict:
                 register_dict[label]['files'].append(f)
@@ -119,7 +120,7 @@ class Patcher(abc.ABC):
         # first register the file
         if not isinstance(file_list, list):
             file_list = [Path(file_list)]
-        assert len(set([alfio.get_session_path(f) for f in file_list])) == 1
+        assert len(set([get_session_path(f) for f in file_list])) == 1
         assert all([Path(f).exists() for f in file_list])
         response = self.register_dataset(file_list, dry=dry, **kwargs)
         if dry:
@@ -136,7 +137,7 @@ class Patcher(abc.ABC):
         register_dict = {}
         # creates a dictionary of sessions with one file list per session
         for f in file_list:
-            session_path = alfio.get_session_path(f)
+            session_path = get_session_path(f)
             label = '_'.join(session_path.parts[-3:])
             if label in register_dict:
                 register_dict[label]['files'].append(f)
@@ -224,7 +225,7 @@ class GlobusPatcher(Patcher):
             fr = next(fr for fr in dset['file_records'] if 'flatiron' in fr['data_repository'])
             flatiron_path = self.repos[fr['data_repository']]['globus_path']
             flatiron_path = Path(flatiron_path).joinpath(fr['relative_path'])
-            flatiron_path = alfio.add_uuid_string(flatiron_path, dset['id']).as_posix()
+            flatiron_path = add_uuid_string(flatiron_path, dset['id']).as_posix()
             # loop over the remaining repositories (local servers) and create a transfer
             # from flatiron to the local server
             for fr in dset['file_records']:

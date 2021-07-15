@@ -8,7 +8,7 @@ from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io.extractors.training_wheel import get_wheel_position
 from ibllib.io.extractors import ephys_fpga
 import ibllib.io.raw_data_loaders as raw
-from one.alf.io import is_session_path
+from one.alf.spec import is_session_path
 from one.api import ONE
 
 

@@ -7,7 +7,7 @@ import logging
 import shutil
 from pathlib import Path, PureWindowsPath
 
-from one.alf.folders import session_path
+from one.alf.files import get_session_path
 
 log = logging.getLogger("ibllib")
 
@@ -36,7 +36,7 @@ def find_pairs(root_data_folder):
     pairs = []
     for sf in settings_files:
         # Get session path form settings file
-        source_spath = session_path(sf)
+        source_spath = get_session_path(sf)
         if source_spath is None:
             continue
         # Find the root_data_path for session

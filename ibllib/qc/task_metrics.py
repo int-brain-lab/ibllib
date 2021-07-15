@@ -53,7 +53,7 @@ from scipy.stats import chisquare
 from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.io.extractors import ephys_fpga
-from one.alf.io import is_session_path
+from one.alf.spec import is_session_path
 from . import base
 
 _log = logging.getLogger('ibllib')

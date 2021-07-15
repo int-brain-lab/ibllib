@@ -10,10 +10,16 @@ Purge data from RIG
 sessions and files on Flatiron
 - Delete local raw file if found on Flatiron
 """
-from one.alf.folders import session_name
+from one.alf.files import get_session_path
 from pathlib import Path
 from one.api import ONE
 import argparse
+
+
+def session_name(path) -> str:
+    """Returns the session name (subject/date/number) string for any filepath
+    using session_path"""
+    return '/'.join(get_session_path(path).parts[-3:])
 
 
 def purge_local_data(local_folder, file_name, lab=None, dry=False):

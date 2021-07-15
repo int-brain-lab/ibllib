@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from one.api import ONE
-from one.alf.io import is_session_path, is_uuid_string
+from one.alf.spec import is_session_path, is_uuid_string
 
 # Map for comparing QC outcomes
 CRITERIA = {'CRITICAL': 4,

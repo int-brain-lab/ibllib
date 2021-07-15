@@ -5,7 +5,8 @@ from pathlib import Path
 import re
 
 import iblutil.io.params as params
-from one.alf.io import is_uuid_string, is_session_path, get_session_path
+from one.alf.spec import is_uuid_string, is_session_path
+from one.alf.files import get_session_path
 from one.api import ONE
 
 import ibllib.io.flags as flags

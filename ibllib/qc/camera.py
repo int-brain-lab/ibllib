@@ -39,6 +39,7 @@ from ibllib.io.extractors.video_motion import MotionAlignment
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io import raw_data_loaders as raw
 import one.alf.io as alfio
+from one.alf.spec import is_session_path
 from one.alf.exceptions import ALFObjectNotFound
 from iblutil.util import Bunch
 from iblutil.numerical import within_ranges
@@ -109,7 +110,7 @@ class CameraQC(base.QC):
         :param one: An ONE instance for fetching and setting the QC on Alyx
         """
         # When an eid is provided, we will download the required data by default (if necessary)
-        download_data = not alfio.is_session_path(session_path_or_eid)
+        download_data = not is_session_path(session_path_or_eid)
         self.download_data = kwargs.pop('download_data', download_data)
         self.stream = kwargs.pop('stream', None)
         self.n_samples = kwargs.pop('n_samples', 100)
@@ -303,7 +304,7 @@ class CameraQC(base.QC):
             assert probe_model == '3A', 'raw ephys data not missing'
             collections += ('raw_ephys_data/probe00', 'raw_ephys_data/probe01')
         for dstype in dtypes:
-            dataset = self.one.datasets_from_type(self.eid, dstype, full=True)
+            dataset = self.one.type2datasets(self.eid, dstype, details=True)
             if 'camera' in dstype.lower():  # Download individual camera file
                 dataset = [d for d in dataset if self.label in d['name']]
             else:  # Ignore probe datasets, etc.
