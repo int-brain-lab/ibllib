@@ -1,4 +1,5 @@
 import abc
+import warnings
 import concurrent.futures
 import json
 import logging
@@ -30,6 +31,8 @@ from brainbox.io import parquet
 from brainbox.numerical import ismember, ismember2d, find_first_2d
 
 _logger = logging.getLogger('ibllib')
+
+warnings.warn('Use `import one` instead of `import oneibl`', DeprecationWarning)
 
 
 def Listable(t): return Union[t, Sequence[t]]  # noqa

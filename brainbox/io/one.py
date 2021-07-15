@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from iblutil.util import Bunch
 
-import one.alf.io as alfio
+from one.alf.spec import is_session_path
 import one.alf.exceptions as alferr
 from one.api import ONE, One, OneAlyx
 
@@ -272,7 +272,7 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None):
                 f'Could not load spikes datasets for session {eid}. '
                 f'Spikes for {label} will return an empty dict')
 
-        session_path = eid if alfio.is_session_path(eid) else one.eid2path(one.to_eid(eid))
+        session_path = eid if is_session_path(eid) else one.eid2path(one.to_eid(eid))
         _remove_old_clusters(session_path, label)
         try:
             clusters[label] = one.load_object(eid, 'clusters', collection=f'alf/{label}',

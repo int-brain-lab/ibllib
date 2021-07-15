@@ -19,6 +19,7 @@ from iblutil.util import Bunch
 import brainbox.video as video
 import brainbox.behavior.wheel as wh
 import one.alf.io as alfio
+from one.alf.spec import is_session_path, is_uuid_string
 
 
 def find_nearest(array, value):
@@ -120,11 +121,11 @@ class MotionAlignment:
         :return:
         """
         self.eid = None
-        if alfio.is_uuid_string(str(session_path_or_eid)):
+        if is_uuid_string(str(session_path_or_eid)):
             self.eid = session_path_or_eid
             # Try to set session_path if data is found locally
             self.session_path = self.one.eid2path(self.eid)
-        elif alfio.is_session_path(session_path_or_eid):
+        elif is_session_path(session_path_or_eid):
             self.session_path = Path(session_path_or_eid)
             if self.one is not None:
                 self.eid = self.one.path2eid(self.session_path)

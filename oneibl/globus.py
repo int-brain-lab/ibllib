@@ -1,21 +1,18 @@
 from ibllib.io import globus
-from oneibl.one import ONE
-import oneibl.params
-
-par = oneibl.params.get()
+from one.api import OneAlyx
 
 
-class OneGlobus(ONE):
+class OneGlobus(OneAlyx):
 
     def __init__(self, **kwargs):
         # Init connection to the database
         super(OneGlobus, self).__init__(**kwargs)
         # Init connection to Globus if needed
-        self._tc = globus.login_auto(par.GLOBUS['CLIENT_ID'], str_app='globus_one')
+        self._tc = globus.login_auto(self.alyx._par.GLOBUS['CLIENT_ID'], str_app='globus_one')
 
     def setup(self):
         super(OneGlobus, self).setup()
-        globus.login_auto(par.GLOBUS['CLIENT_ID'], str_app='globus_one')
+        globus.login_auto(self.alyx._par.GLOBUS['CLIENT_ID'], str_app='globus_one')
 
     def download(self, eids):
         pass
