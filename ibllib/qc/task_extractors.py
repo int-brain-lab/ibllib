@@ -88,17 +88,8 @@ class TaskQCExtractor(object):
                             'ephysData.raw.meta',
                             'ephysData.raw.wiring'])
 
-            if len(self.one.list_datasets(eid, collection='raw_ephys_data')) == 0:
-                collections += ('raw_ephys_data/probe00', 'raw_ephys_data/probe01')
-            else:
-                collections += ('raw_ephys_data',)
-
-        files = []
-        for dstype in dstypes:
-            dataset = self.one.datasets_from_type(eid, dstype, full=True)
-            dataset = [d for d in dataset if d['collection'] in collections]
-            present = self.one._download_datasets(dataset)
-            files.append(present)
+        dataset = self.one.type2datasets(eid, dstypes, details=True)
+        files = self.one._download_datasets(dataset)
 
         missing = [True] * len(dstypes) if not files else [x is None for x in files]
         if self.session_path is None or all(missing):
