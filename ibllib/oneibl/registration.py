@@ -241,7 +241,8 @@ class RegistrationClient:
         session_id, session = self.one.search(subject=subject['nickname'],
                                               date_range=md['SESSION_DATE'],
                                               number=md['SESSION_NUMBER'],
-                                              details=True)
+                                              details=True,
+                                              query_type='remote')
         try:
             user = self.one.alyx.rest('users', 'read', id=md["PYBPOD_CREATOR"][0])
         except Exception as e:
