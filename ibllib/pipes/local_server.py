@@ -8,12 +8,12 @@ import subprocess
 import sys
 import traceback
 
+from one.api import ONE
+
 from ibllib.io.extractors.base import get_session_extractor_type, get_pipeline
 from ibllib.pipes import ephys_preprocessing, training_preprocessing, tasks
 from ibllib.time import date2isostr
-
-import oneibl.registration as registration
-from one.api import ONE
+import ibllib.oneibl.registration as registration
 
 _logger = logging.getLogger('ibllib')
 

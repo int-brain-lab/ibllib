@@ -6,7 +6,7 @@ import re
 
 from dateutil import parser as dateparser
 from iblutil.io import hashfile
-import one.alf.io as alfio
+from one.alf.files import get_session_path
 from one.api import ONE
 
 import ibllib.io.extractors.base
@@ -59,13 +59,13 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
     :return:
     """
     if created_by is None:
-        created_by = getattr(one.alyx, 'user', None) or one._par.ALYX_LOGIN
+        created_by = one.alyx.user
     if file_list is None or file_list == '' or file_list == []:
         return
     elif not isinstance(file_list, list):
         file_list = [Path(file_list)]
 
-    assert len(set([alfio.get_session_path(f) for f in file_list])) == 1
+    assert len(set([get_session_path(f) for f in file_list])) == 1
     assert all([Path(f).exists() for f in file_list])
     if versions is None:
         versions = version.ibllib()
@@ -88,7 +88,7 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
     else:
         hashes = [hashfile.md5(p) for p in file_list]
 
-    session_path = alfio.get_session_path(file_list[0])
+    session_path = get_session_path(file_list[0])
     # first register the file
     r = {'created_by': created_by,
          'path': session_path.relative_to((session_path.parents[2])).as_posix(),
@@ -232,7 +232,8 @@ class RegistrationClient:
         md = _read_settings_json_compatibility_enforced(settings_json_file)
         # query alyx endpoints for subject, error if not found
         try:
-            subject = self.one.alyx.rest('subjects?nickname=' + md['SUBJECT_NAME'], 'list')[0]
+            subject = self.one.alyx.rest('subjects?nickname=' + md['SUBJECT_NAME'], 'list',
+                                         no_cache=True)[0]
         except IndexError:
             _logger.error(f"Subject: {md['SUBJECT_NAME']} doesn't exist in Alyx. ABORT.")
             raise ibllib.exceptions.AlyxSubjectNotFound(md['SUBJECT_NAME'])
@@ -241,9 +242,9 @@ class RegistrationClient:
         session_id, session = self.one.search(subject=subject['nickname'],
                                               date_range=md['SESSION_DATE'],
                                               number=md['SESSION_NUMBER'],
-                                              details=True)
+                                              details=True, query_type='remote')
         try:
-            user = self.one.alyx.rest('users', 'read', id=md["PYBPOD_CREATOR"][0])
+            user = self.one.alyx.rest('users', 'read', id=md["PYBPOD_CREATOR"][0], no_cache=True)
         except Exception as e:
             _logger.error(f"User: {md['PYBPOD_CREATOR'][0]} doesn't exist in Alyx. ABORT")
             raise e
@@ -287,7 +288,7 @@ class RegistrationClient:
                         }
                 self.one.alyx.rest('weighings', 'create', data=wei_)
         else:  # TODO: if session exists and no json partial_upgrade it
-            session = self.one.alyx.rest('sessions', 'read', id=session_id[0])
+            session = self.one.alyx.rest('sessions', 'read', id=session_id[0], no_cache=True)
 
         _logger.info(session['url'] + ' ')
         # create associated water administration if not found
