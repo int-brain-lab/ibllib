@@ -1,12 +1,15 @@
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
+
+from one.api import ONE
 
 import ibllib.io.extractors.base
 import ibllib.tests.fixtures.utils as fu
 from ibllib.pipes import misc
-from oneibl.one import ONE
+from ibllib.tests import TEST_DB
 import ibllib.pipes.scan_fix_passive_files as fix
 
 
@@ -69,292 +72,197 @@ class TestPipesMisc(unittest.TestCase):
     """"""
 
     def setUp(self):
-        # Define folders
-        self.root_test_folder = Path(tempfile.gettempdir()) / "ibllib_test"
-        self.local_data_path = self.root_test_folder / "local" / "iblrig_data" / "Subjects"
-        self.remote_data_path = self.root_test_folder / "remote" / "iblrig_data" / "Subjects"
-        self.local_session_path_3A = self.local_data_path / "test_subject" / "1900-01-01" / "001"
-        self.local_session_path_3B = self.local_data_path / "test_subject" / "1900-01-02" / "001"
-        self.raw_ephys_data_path_3A = self.local_session_path_3A / "raw_ephys_data"
-        self.raw_ephys_data_path_3B = self.local_session_path_3B / "raw_ephys_data"
-        self.probe00_path_3A = self.raw_ephys_data_path_3A / "probe00"
-        self.probe01_path_3A = self.raw_ephys_data_path_3A / "probe01"
-        self.probe00_path_3B = self.raw_ephys_data_path_3B / "probe00"
-        self.probe01_path_3B = self.raw_ephys_data_path_3B / "probe01"
+        # Data emulating local rig data
+        self.root_test_folder = tempfile.TemporaryDirectory()
 
-        self.bad_ephys_folder_3A = self.raw_ephys_data_path_3A / "bad_ephys_folder"
-        self.bad_probe00_folder_3A = self.bad_ephys_folder_3A / "some_probe00_folder"
-        self.bad_probe01_folder_3A = self.bad_ephys_folder_3A / "some_probe01_folder"
+        # Create two rig sessions, one with 3A probe data and one with 3B probe data
+        self.session_path_3A = fu.create_fake_session_folder(self.root_test_folder.name)
+        # fu.create_fake_raw_behavior_data_folder(self.session_path_3A)
+        self.session_path_3B = fu.create_fake_session_folder(self.root_test_folder.name)
+        fu.create_fake_raw_behavior_data_folder(self.session_path_3B)
 
-        self.bad_ephys_folder_3B = self.raw_ephys_data_path_3B / "bad_folder_g0_t0"
-        self.bad_probe00_folder_3B = self.bad_ephys_folder_3B / "bad_folder_g0_t0.imec0"
-        self.bad_probe01_folder_3B = self.bad_ephys_folder_3B / "bad_folder_g0_t0.imec1"
-        # Make folders
-        (self.local_session_path_3A / "raw_behavior_data").mkdir(exist_ok=True, parents=True)
-        (self.local_session_path_3B / "raw_behavior_data").mkdir(exist_ok=True, parents=True)
-        self.probe00_path_3A.mkdir(exist_ok=True, parents=True)
-        self.probe00_path_3B.mkdir(exist_ok=True, parents=True)
-        self.probe01_path_3A.mkdir(exist_ok=True, parents=True)
-        self.probe01_path_3B.mkdir(exist_ok=True, parents=True)
-
-        self.bad_probe00_folder_3A.mkdir(exist_ok=True, parents=True)
-        self.bad_probe01_folder_3A.mkdir(exist_ok=True, parents=True)
-        self.bad_probe00_folder_3B.mkdir(exist_ok=True, parents=True)
-        self.bad_probe01_folder_3B.mkdir(exist_ok=True, parents=True)
         # Make some files
-        self.populate_bad_folders()
+        fu.populate_raw_spikeglx(self.session_path_3B / 'raw_ephys_data', '3B', n_probes=3)
 
-    def populate_bad_folders(self):
-        # 3A
-        (self.bad_probe00_folder_3A / "blabla_g0_t0.imec.ap.bin").touch()
-        (self.bad_probe00_folder_3A / "blabla_g0_t0.imec.lf.bin").touch()
-        (self.bad_probe00_folder_3A / "blabla_g0_t0.imec.ap.meta").touch()
-        (self.bad_probe00_folder_3A / "blabla_g0_t0.imec.lf.meta").touch()
-
-        (self.bad_probe01_folder_3A / "blabla_g0_t0.imec.ap.bin").touch()
-        (self.bad_probe01_folder_3A / "blabla_g0_t0.imec.lf.bin").touch()
-        (self.bad_probe01_folder_3A / "blabla_g0_t0.imec.ap.meta").touch()
-        (self.bad_probe01_folder_3A / "blabla_g0_t0.imec.lf.meta").touch()
-        # 3B
-        (self.bad_probe00_folder_3B / "blabla_g0_t0.imec0.ap.bin").touch()
-        (self.bad_probe00_folder_3B / "blabla_g0_t0.imec0.lf.bin").touch()
-        (self.bad_probe00_folder_3B / "blabla_g0_t0.imec0.ap.meta").touch()
-        (self.bad_probe00_folder_3B / "blabla_g0_t0.imec0.lf.meta").touch()
-
-        (self.bad_probe01_folder_3B / "blabla_g0_t0.imec1.ap.bin").touch()
-        (self.bad_probe01_folder_3B / "blabla_g0_t0.imec1.lf.bin").touch()
-        (self.bad_probe01_folder_3B / "blabla_g0_t0.imec1.ap.meta").touch()
-        (self.bad_probe01_folder_3B / "blabla_g0_t0.imec1.lf.meta").touch()
-
-        (self.bad_ephys_folder_3B / "blabla_g0_t0.nidq.bin").touch()
-        (self.bad_ephys_folder_3B / "blabla_g0_t0.nidq.meta").touch()
+        ephys_folder = self.session_path_3A / 'raw_ephys_data'
+        fu.populate_raw_spikeglx(ephys_folder, '3A', legacy=True, n_probes=1)
+        # IBL protocol is for users to copy data to the right probe folder
+        shutil.move(ephys_folder.joinpath('raw_ephys_folder'),
+                    ephys_folder.joinpath('my_run_probe00'))
 
     def test_behavior_exists(self):
-        assert misc.behavior_exists(".") is False
-        assert misc.behavior_exists(self.local_session_path_3A) is True
+        self.assertFalse(misc.behavior_exists(self.session_path_3A))
+        self.assertTrue(misc.behavior_exists(self.session_path_3B))
 
     def test_check_transfer(self):
-        misc.check_transfer(self.bad_probe00_folder_3A, self.bad_probe00_folder_3A)
-        misc.check_transfer(str(self.bad_probe00_folder_3A), self.bad_probe00_folder_3A)
-        with self.assertRaises(AssertionError) as cm:
-            misc.check_transfer(self.bad_probe00_folder_3A, self.bad_probe00_folder_3B)
-        err = cm.exception
-        self.assertEqual(str(err), "src_files != dst_files")
+        misc.check_transfer(self.session_path_3A, self.session_path_3A)
+        misc.check_transfer(str(self.session_path_3A), self.session_path_3A)
+        with self.assertRaises(AssertionError):
+            misc.check_transfer(self.session_path_3A, self.session_path_3B)
 
     def test_get_new_filename(self):
-        binFname3A = "ignoreThisPart_g0_t0.imec.ap.bin"
-        binFname3B = "ignoreThisPart_g0_t0.imec0.ap.bin"
-        metaFname3A = "ignoreThisPart_g0_t0.imec.ap.meta"
-        metaFname3B = "ignoreThisPart_g0_t0.imec0.ap.meta"
-        probe1_3B_Meta = "ignoreThisPart_g0_t0.imec1.ap.meta"
-        different_gt = "ignoreThisPart_g1_t2.imec0.ap.meta"
+        different_gt = "ignoreThisPart_g1_t2.imec.ap.meta"
+        nidaq = 'foobar_g0_t0.nidq.cbin'
 
-        newfname = misc.get_new_filename(binFname3A)
-        self.assertTrue(newfname == "_spikeglx_ephysData_g0_t0.imec.ap.bin")
-        newfname = misc.get_new_filename(binFname3B)
-        self.assertTrue(newfname == "_spikeglx_ephysData_g0_t0.imec0.ap.bin")
-        newfname = misc.get_new_filename(metaFname3A)
-        self.assertTrue(newfname == "_spikeglx_ephysData_g0_t0.imec.ap.meta")
-        newfname = misc.get_new_filename(metaFname3B)
-        self.assertTrue(newfname == "_spikeglx_ephysData_g0_t0.imec0.ap.meta")
-        newfname = misc.get_new_filename(probe1_3B_Meta)
-        self.assertTrue(newfname == "_spikeglx_ephysData_g0_t0.imec1.ap.meta")
+        for suf in ('.ap.bin', '0.ap.bin', '1.ap.meta'):
+            newfname = misc.get_new_filename(f'ignoreThisPart_g0_t0.imec{suf}')
+            self.assertEqual(f'_spikeglx_ephysData_g0_t0.imec{suf}', newfname)
         newfname = misc.get_new_filename(different_gt)
-        self.assertTrue(newfname == "_spikeglx_ephysData_g1_t2.imec0.ap.meta")
+        self.assertEqual('_spikeglx_ephysData_g1_t2.imec.ap.meta', newfname)
+        self.assertEqual('_spikeglx_ephysData_g0_t0.nidq.cbin', misc.get_new_filename(nidaq))
 
-    def _test_rename_ephys_files(self):
-        # Test 3A
-        misc.rename_ephys_files(self.local_session_path_3A)
-        ap_files = list(self.local_session_path_3A.rglob("*.ap.*"))
-        lf_files = list(self.local_session_path_3A.rglob("*.lf.*"))
-        self.assertTrue(len(ap_files) >= 1)
-        self.assertTrue(len(lf_files) >= 1)
-        for f in ap_files:
-            print(f.parent.name, f.name)
-            self.assertTrue("_spikeglx_ephysData_g" in str(f))
-            self.assertTrue("_t" in str(f))
-            self.assertTrue(".imec.ap" in str(f))
-            self.assertTrue((".bin" in str(f) or ".meta" in str(f)))
-            self.assertTrue(("probe00" in str(f) or "probe01" in str(f)))
-        for f in lf_files:
-            print(f.parent.name, f.name)
-            self.assertTrue("_spikeglx_ephysData_g" in str(f))
-            self.assertTrue("_t" in str(f))
-            self.assertTrue(".imec.lf" in str(f))
-            self.assertTrue((".bin" in str(f) or ".meta" in str(f)))  # Test 3B
-            self.assertTrue(("probe00" in str(f) or "probe01" in str(f)))
-        # Test 3B
-        misc.rename_ephys_files(self.local_session_path_3B)
-        ap_files = list(self.local_session_path_3B.rglob("*.ap.*"))
-        lf_files = list(self.local_session_path_3B.rglob("*.lf.*"))
-        nidq_files = list(self.local_session_path_3B.rglob("*.nidq.*"))
-        for f in ap_files:
-            print(f.name)
-            self.assertTrue("_spikeglx_ephysData_g" in str(f))
-            self.assertTrue("_t" in str(f))
-            self.assertTrue((".imec0.ap" in str(f) or "imec1.ap" in str(f)))
-            self.assertTrue((".bin" in str(f) or ".meta" in str(f)))
-        for f in lf_files:
-            print(f.name)
-            self.assertTrue("_spikeglx_ephysData_g" in str(f))
-            self.assertTrue("_t" in str(f))
-            self.assertTrue((".imec0.lf" in str(f) or "imec1.lf" in str(f)))
-            self.assertTrue((".bin" in str(f) or ".meta" in str(f)))  # Test 3B
-        for f in nidq_files:
-            print(f.name)
-            self.assertTrue("_spikeglx_ephysData_g" in str(f))
-            self.assertTrue("_t" in str(f))
-            self.assertTrue(".nidq" in str(f))
-            self.assertTrue((".bin" in str(f) or ".meta" in str(f)))
+        # Test errors
+        with self.assertRaises(ValueError):
+            misc.get_new_filename('_spikeglx_ephysData_g0_t0.wiring')
+        with self.assertRaises(ValueError):
+            misc.get_new_filename('_spikeglx_ephysData.meta.cbin')
+
+    def _test_rename_ephys_files(self, path, expected_n):
+        """Test SpikeGLX output files are correctly renamed"""
+        misc.rename_ephys_files(path)
+        n = 0
+        for f in path.rglob("*.*.*"):
+            if any(x in f.name for x in ('.ap.', '.lf.', '.nidq.')):
+                self.assertTrue(f.name.startswith('_spikeglx_ephysData_g'))
+                n += 1
+        self.assertEqual(expected_n, n)
 
     def test_rename_and_move(self):
-        self._test_rename_ephys_files()
         # Test for 3A
-        misc.move_ephys_files(self.local_session_path_3A)
-        probe00_files = list(self.probe00_path_3A.rglob("*"))
-        probe00_file_names = [x.name for x in probe00_files]
-        probe01_files = list(self.probe01_path_3A.rglob("*"))
-        probe01_file_names = [x.name for x in probe01_files]
+        self._test_rename_ephys_files(self.session_path_3A, 4)
+        misc.move_ephys_files(self.session_path_3A)
+        probe_folders = list(self.session_path_3A.rglob("*probe*"))
+        self.assertTrue(len(probe_folders) == 1 and probe_folders[0].parts[-1] == 'probe00')
+        expected = [
+            '_spikeglx_ephysData_g0_t0.imec.ap.bin',
+            '_spikeglx_ephysData_g0_t0.imec.ap.meta',
+            '_spikeglx_ephysData_g0_t0.imec.lf.bin',
+            '_spikeglx_ephysData_g0_t0.imec.lf.meta'
+        ]
+        self.assertCountEqual(expected, [x.name for x in probe_folders[0].glob('*')])
 
-        self.assertTrue(
-            "_spikeglx_ephysData_g0_t0.imec.ap.bin" in probe00_file_names
-            and "_spikeglx_ephysData_g0_t0.imec.ap.meta" in probe00_file_names
-            and "_spikeglx_ephysData_g0_t0.imec.lf.bin" in probe00_file_names
-            and "_spikeglx_ephysData_g0_t0.imec.lf.meta" in probe00_file_names
-        )
-        self.assertTrue(
-            "_spikeglx_ephysData_g0_t0.imec.ap.bin" in probe01_file_names
-            and "_spikeglx_ephysData_g0_t0.imec.ap.meta" in probe01_file_names
-            and "_spikeglx_ephysData_g0_t0.imec.lf.bin" in probe01_file_names
-            and "_spikeglx_ephysData_g0_t0.imec.lf.meta" in probe01_file_names
-        )
         # Test for 3B
-        misc.move_ephys_files(self.local_session_path_3B)
-        probe00_files = list(self.probe00_path_3B.rglob("*"))
-        probe00_file_names = [x.name for x in probe00_files]
-        probe01_files = list(self.probe01_path_3B.rglob("*"))
-        probe01_file_names = [x.name for x in probe01_files]
-        nidq_files = list(self.raw_ephys_data_path_3B.glob("*.nidq.*"))
-        nidq_file_names = [x.name for x in nidq_files]
-        self.assertTrue(
-            "_spikeglx_ephysData_g0_t0.imec0.ap.bin" in probe00_file_names
-            and "_spikeglx_ephysData_g0_t0.imec0.ap.meta" in probe00_file_names
-            and "_spikeglx_ephysData_g0_t0.imec0.lf.bin" in probe00_file_names
-            and "_spikeglx_ephysData_g0_t0.imec0.lf.meta" in probe00_file_names
-        )
-        self.assertTrue(
-            "_spikeglx_ephysData_g0_t0.imec1.ap.bin" in probe01_file_names
-            and "_spikeglx_ephysData_g0_t0.imec1.ap.meta" in probe01_file_names
-            and "_spikeglx_ephysData_g0_t0.imec1.lf.bin" in probe01_file_names
-            and "_spikeglx_ephysData_g0_t0.imec1.lf.meta" in probe01_file_names
-        )
-        self.assertTrue(
-            "_spikeglx_ephysData_g0_t0.nidq.bin" in nidq_file_names
-            and "_spikeglx_ephysData_g0_t0.nidq.meta" in nidq_file_names
-        )
+        self._test_rename_ephys_files(self.session_path_3B, 14)
+        misc.move_ephys_files(self.session_path_3B)
+        probe_folders = sorted(self.session_path_3B.rglob("*probe*"))
+        # Check moved into 'probexx' folders
+        self.assertTrue(len(probe_folders) == 3)
+        self.assertCountEqual((f'probe0{x}' for x in range(3)),
+                              [x.parts[-1] for x in probe_folders])
+        for i in range(3):
+            expected = [
+                f'_spikeglx_ephysData_g0_t0.imec{i}.ap.bin',
+                f'_spikeglx_ephysData_g0_t0.imec{i}.ap.meta',
+                f'_spikeglx_ephysData_g0_t0.imec{i}.lf.bin',
+                f'_spikeglx_ephysData_g0_t0.imec{i}.lf.meta'
+            ]
+            self.assertCountEqual(expected, [x.name for x in probe_folders[i].glob('*')])
+
+        nidq_files = self.session_path_3B.joinpath('raw_ephys_data').glob("*.nidq.*")
+        expected = ['_spikeglx_ephysData_g0_t0.nidq.bin', '_spikeglx_ephysData_g0_t0.nidq.meta']
+        self.assertCountEqual(expected, [x.name for x in nidq_files])
 
     def test_create_ephys_transfer_done_flag(self):
         # Create ephys flag file for completed transfer
-        misc.create_ephys_transfer_done_flag(self.local_session_path_3A)
+        misc.create_ephys_transfer_done_flag(self.session_path_3A)
         # Check it was created
-        ephys = Path(self.local_session_path_3A).joinpath("ephys_data_transferred.flag")
+        ephys = Path(self.session_path_3A).joinpath("ephys_data_transferred.flag")
         self.assertTrue(ephys.exists())
         # Remove it
         ephys.unlink()
 
     def test_create_video_transfer_done_flag(self):
         # Create video flag file for completed transfer
-        misc.create_video_transfer_done_flag(self.local_session_path_3A)
+        misc.create_video_transfer_done_flag(self.session_path_3A)
         # Check it was created
-        video = Path(self.local_session_path_3A).joinpath("video_data_transferred.flag")
+        video = Path(self.session_path_3A).joinpath("video_data_transferred.flag")
         self.assertTrue(video.exists())
         # Remove it
         video.unlink()
 
     def test_check_create_raw_session_flag(self):
-        from ibllib.tests.fixtures import utils as futils
 
-        raw_session = Path(self.local_session_path_3A).joinpath("raw_session.flag")
-        ephys = Path(self.local_session_path_3A).joinpath("ephys_data_transferred.flag")
-        video = Path(self.local_session_path_3A).joinpath("video_data_transferred.flag")
+        raw_session = Path(self.session_path_3B).joinpath("raw_session.flag")
+        ephys = Path(self.session_path_3B).joinpath("ephys_data_transferred.flag")
+        video = Path(self.session_path_3B).joinpath("video_data_transferred.flag")
         # Add settings file
-        fpath = self.local_session_path_3A / "raw_behavior_data" / "_iblrig_taskSettings.raw.json"
-        fpath.touch()
-        futils.populate_task_settings(
+        fpath = self.session_path_3B / "raw_behavior_data" / "_iblrig_taskSettings.raw.json"
+        fu.populate_task_settings(
             fpath, patch={"PYBPOD_PROTOCOL": "some_ephysChoiceWorld_task"}
         )
-        ""
         # Check not created
-        misc.check_create_raw_session_flag(self.local_session_path_3A)
+        misc.check_create_raw_session_flag(self.session_path_3B)
         self.assertFalse(raw_session.exists())
         # Create only ephys flag
-        misc.create_ephys_transfer_done_flag(self.local_session_path_3A)
+        misc.create_ephys_transfer_done_flag(self.session_path_3B)
         # Check not created
-        misc.check_create_raw_session_flag(self.local_session_path_3A)
+        misc.check_create_raw_session_flag(self.session_path_3B)
         self.assertFalse(raw_session.exists())
         ephys.unlink()
         # Create only video flag
-        misc.create_video_transfer_done_flag(self.local_session_path_3A)
+        misc.create_video_transfer_done_flag(self.session_path_3B)
         # Check not created
-        misc.check_create_raw_session_flag(self.local_session_path_3A)
+        misc.check_create_raw_session_flag(self.session_path_3B)
         self.assertFalse(raw_session.exists())
         video.unlink()
         # Create ephys and video flag file for completed transfer
-        misc.create_ephys_transfer_done_flag(self.local_session_path_3A)
-        misc.create_video_transfer_done_flag(self.local_session_path_3A)
+        misc.create_ephys_transfer_done_flag(self.session_path_3B)
+        misc.create_video_transfer_done_flag(self.session_path_3B)
         # Check it was created
-        misc.check_create_raw_session_flag(self.local_session_path_3A)
+        misc.check_create_raw_session_flag(self.session_path_3B)
         self.assertTrue(raw_session.exists())
         # Check other flags deleted
         self.assertFalse(ephys.exists())
         self.assertFalse(video.exists())
         raw_session.unlink()
         # Check if biased session
-        futils.populate_task_settings(
+        fu.populate_task_settings(
             fpath, patch={"PYBPOD_PROTOCOL": "some_biasedChoiceWorld_task"}
         )
-        misc.create_video_transfer_done_flag(self.local_session_path_3A)
-        misc.check_create_raw_session_flag(self.local_session_path_3A)
+        misc.create_video_transfer_done_flag(self.session_path_3B)
+        misc.check_create_raw_session_flag(self.session_path_3B)
+        self.assertTrue(raw_session.exists())
+        self.assertFalse(video.exists())
+        raw_session.unlink()
+        # Check if training session
+        fu.populate_task_settings(
+            fpath, patch={"PYBPOD_PROTOCOL": "some_trainingChoiceWorld_task"}
+        )
+        misc.create_video_transfer_done_flag(self.session_path_3B)
+        misc.check_create_raw_session_flag(self.session_path_3B)
+        self.assertTrue(raw_session.exists())
+        self.assertFalse(video.exists())
+        raw_session.unlink()
+        # Check if habituation session
+        fu.populate_task_settings(
+            fpath, patch={"PYBPOD_PROTOCOL": "some_habituationChoiceWorld_task"}
+        )
+        misc.create_video_transfer_done_flag(self.session_path_3B)
+        misc.check_create_raw_session_flag(self.session_path_3B)
         self.assertTrue(raw_session.exists())
         self.assertFalse(video.exists())
         raw_session.unlink()
 
     def test_create_ephys_flags(self):
-        extract = self.local_session_path_3A.joinpath("extract_ephys.flag")
-        qc = self.local_session_path_3A.joinpath("raw_ephys_qc.flag")
-        spike_sorting0 = self.local_session_path_3A / "raw_ephys_data" / "probe00"
-        spike_sorting1 = self.local_session_path_3A / "raw_ephys_data" / "probe01"
-        spike_sorting0 = spike_sorting0.joinpath("spike_sorting.flag")
-        spike_sorting1 = spike_sorting1.joinpath("spike_sorting.flag")
-        misc.create_ephys_flags(self.local_session_path_3A)
+        extract = self.session_path_3B.joinpath('extract_ephys.flag')
+        qc = self.session_path_3B.joinpath('raw_ephys_qc.flag')
+        # Create some probe folders for test
+        raw_ephys = self.session_path_3B.joinpath('raw_ephys_data')
+        probe_dirs = [raw_ephys.joinpath(f'probe{i:02}') for i in range(3)]
+        [x.mkdir(exist_ok=True) for x in probe_dirs]
+        misc.create_ephys_flags(self.session_path_3B)
         self.assertTrue(extract.exists())
         self.assertTrue(qc.exists())
-        self.assertTrue(spike_sorting0.exists())
-        self.assertTrue(spike_sorting1.exists())
+        self.assertTrue(all(x.joinpath('spike_sorting.flag').exists() for x in probe_dirs))
         # Test recreate
-        misc.create_ephys_flags(self.local_session_path_3A)
+        misc.create_ephys_flags(self.session_path_3B)
         self.assertTrue(extract.exists())
         self.assertTrue(qc.exists())
-        self.assertTrue(spike_sorting0.exists())
-        self.assertTrue(spike_sorting1.exists())
-        # Remove flags after test
-        extract.unlink()
-        qc.unlink()
-        spike_sorting0.unlink()
-        spike_sorting1.unlink()
-        # test removal
-        self.assertFalse(extract.exists())
-        self.assertFalse(qc.exists())
-        self.assertFalse(spike_sorting0.exists())
-        self.assertFalse(spike_sorting1.exists())
+        self.assertTrue(all(x.joinpath('spike_sorting.flag').exists() for x in probe_dirs))
 
     def test_create_alyx_probe_insertions(self):
         # Connect to test DB
-        one = ONE(
-            username="test_user",
-            password="TapetesBloc18",
-            base_url="https://test.alyx.internationalbrainlab.org",
-        )
+        one = ONE(**TEST_DB)
         # Use existing session on test database
         eid = "b1c968ad-4874-468d-b2e4-5ffa9b9964e9"
         # Force probe insertion 3A
@@ -362,7 +270,7 @@ class TestPipesMisc(unittest.TestCase):
             eid, one=one, model="3A", labels=["probe00", "probe01"], force=True
         )
         # Verify it's been inserted
-        alyx_insertion = one.alyx.rest("insertions", "list", session=eid)
+        alyx_insertion = one.alyx.rest("insertions", "list", session=eid, no_cache=True)
         alyx_insertion = [x for x in alyx_insertion if x["model"] == "3A"]
         self.assertTrue(alyx_insertion[0]["model"] == "3A")
         self.assertTrue(alyx_insertion[0]["name"] in ["probe00", "probe01"])
@@ -374,7 +282,7 @@ class TestPipesMisc(unittest.TestCase):
         # Force probe insertion 3B
         misc.create_alyx_probe_insertions(eid, one=one, model="3B2", labels=["probe00", "probe01"])
         # Verify it's been inserted
-        alyx_insertion = one.alyx.rest("insertions", "list", session=eid)
+        alyx_insertion = one.alyx.rest("insertions", "list", session=eid, no_cache=True)
         self.assertTrue(alyx_insertion[0]["model"] == "3B2")
         self.assertTrue(alyx_insertion[0]["name"] in ["probe00", "probe01"])
         self.assertTrue(alyx_insertion[1]["model"] == "3B2")
@@ -383,8 +291,34 @@ class TestPipesMisc(unittest.TestCase):
         one.alyx.rest("insertions", "delete", id=alyx_insertion[0]["id"])
         one.alyx.rest("insertions", "delete", id=alyx_insertion[1]["id"])
 
+    def test_rename_session(self):
+        self._inputs = ('foo', '2020-02-02', '002')
+        with mock.patch('builtins.input', self._input_side_effect):
+            new_path = misc.rename_session(self.session_path_3B)
+        self.assertEqual(self.session_path_3B.parents[2].joinpath(*self._inputs), new_path)
+        self.assertTrue(new_path.exists())
+        # Test assertions
+        self._inputs = ('foo', 'May-21', '000')
+        with mock.patch('builtins.input', self._input_side_effect):
+            with self.assertRaises(AssertionError):
+                misc.rename_session(self.session_path_3B)
+        with self.assertRaises(ValueError):
+            misc.rename_session(self.root_test_folder.name)  # Not a valid session path
+
+    def _input_side_effect(self, prompt):
+        """input mock function to verify prompts"""
+        if 'NAME' in prompt:
+            self.assertTrue('fakemouse' in prompt)
+            return self._inputs[0]
+        elif 'DATE' in prompt:
+            self.assertTrue('1900-01-01' in prompt)
+            return self._inputs[1]
+        else:
+            self.assertTrue('002' in prompt)
+            return self._inputs[2]
+
     def tearDown(self):
-        shutil.rmtree(self.root_test_folder, ignore_errors=True)
+        self.root_test_folder.cleanup()
 
 
 class TestScanFixPassiveFiles(unittest.TestCase):

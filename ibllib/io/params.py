@@ -3,6 +3,10 @@ from pathlib import Path, PurePath
 import sys
 import os
 import json
+import warnings
+
+warnings.warn('Support for ibllib.io.params will soon be removed, use iblutil.io.params instead',
+              category=DeprecationWarning)
 
 
 def as_dict(par):
@@ -15,7 +19,6 @@ def as_dict(par):
 def from_dict(par_dict):
     if not par_dict:
         return None
-    # par = collections.namedtuple('Params', par_dict.keys())(**par_dict)
     par = collections.namedtuple('Params', par_dict.keys())
 
     class IBLParams(par):

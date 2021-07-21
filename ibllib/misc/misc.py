@@ -1,14 +1,9 @@
 # library of small functions
-import json
 import logging
 
 import numpy as np
 
 _logger = logging.getLogger('ibllib')
-
-
-def pprint(my_dict):
-    print(json.dumps(my_dict, indent=4))
 
 
 def _parametrized(dec):
@@ -87,6 +82,9 @@ def range_str(values: iter) -> str:
     :param values: An iterable of ints
     :return:
     """
+    import logging
+    logging.getLogger('ibllib').warning(
+        'This function has moved to iblutil.util.range_str')  # iblrplate
     trial_str = ''
     values = list(set(values))
     for i in range(len(values)):

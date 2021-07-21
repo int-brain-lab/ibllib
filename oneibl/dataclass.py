@@ -3,7 +3,10 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 from brainbox.io import parquet
-from ibllib.misc import flatten
+from iblutil.util import flatten
+import warnings
+
+warnings.warn('`oneibl.dataclass` will be removed in future version', DeprecationWarning)
 
 
 @dataclass

@@ -7,11 +7,12 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 
-from oneibl.one import ONE
+from one.api import ONE
+from ibllib.tests import TEST_DB
 from ibllib.qc.camera import CameraQC
 from ibllib.io.raw_data_loaders import load_camera_ssv_times
 from ibllib.tests.fixtures import utils
-from brainbox.core import Bunch
+from iblutil.util import Bunch
 
 
 class TestCameraQC(unittest.TestCase):
@@ -19,11 +20,7 @@ class TestCameraQC(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.one = ONE(
-            base_url="https://test.alyx.internationalbrainlab.org",
-            username="test_user",
-            password="TapetesBloc18",
-        )
+        cls.one = ONE(**TEST_DB)
         cls.backend = matplotlib.get_backend()
         matplotlib.use('Agg')
 
@@ -31,6 +28,8 @@ class TestCameraQC(unittest.TestCase):
     def tearDownClass(cls) -> None:
         if cls.backend:
             matplotlib.use(cls.backend)
+        # Clear overwritten methods by destroying cached instance
+        ONE.cache_clear()
 
     def setUp(self) -> None:
         self.tempdir = TemporaryDirectory()
@@ -257,11 +256,11 @@ class TestCameraQC(unittest.TestCase):
         self.qc.eid = self.eid
         self.qc.download_data = False
         # If data for this session exists locally, overwrite the methods so it is not found
-        if self.one.path_from_eid(self.eid).exists():
+        if self.one.eid2path(self.eid).exists():
             self.qc.one.to_eid = lambda _: self.eid
-            self.qc.one.download_datasets = lambda _: None
+            self.qc.one._download_datasets = lambda _: None
         with self.assertRaises(AssertionError):
-            self.qc.run(update=False)
+            self.qc.ensure_required_data()
 
 
 if __name__ == "__main__":

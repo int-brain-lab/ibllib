@@ -8,9 +8,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import one.alf.io as alfio
 
-import mtscomp
-import alf.io
 from ibllib.ephys import ephysqc, spikes, sync_probes
 from ibllib.io import ffmpeg, spikeglx
 from ibllib.io.video import label_from_path
@@ -20,8 +19,7 @@ from ibllib.pipes.training_preprocessing import TrainingRegisterRaw as EphysRegi
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
-from ibllib.dsp import rms
-from oneibl.one import OneOffline
+from ibllib.dsp import rms, voltage
 
 _logger = logging.getLogger("ibllib")
 
@@ -159,7 +157,9 @@ class SpikeSorting_KS2_Matlab(tasks.Task):
 
         # decompresses using mtscomp
         tmp_ap_file = scratch_dir.joinpath(ap_file.name).with_suffix(".bin")
-        mtscomp.decompress(cdata=ap_file, out=tmp_ap_file)
+
+        voltage.decompress_destripe_cbin(sr=ap_file, output_file=tmp_ap_file)
+        # mtscomp.decompress(cdata=ap_file, out=tmp_ap_file)
 
         # run matlab spike sorting: with R2019a, it would be much easier to run with
         # -batch option as matlab errors are redirected to stderr automatically
@@ -263,15 +263,14 @@ class EphysTrials(tasks.Task):
         """
         Computes and update the behaviour criterion on Alyx
         """
-        import alf.io
         from brainbox.behavior import training
 
-        trials = alf.io.load_object(self.session_path.joinpath("alf"), "trials")
+        trials = alfio.load_object(self.session_path.joinpath("alf"), "trials")
         good_enough = training.criterion_delay(
             n_trials=trials["intervals"].shape[0],
             perf_easy=training.compute_performance_easy(trials),
         )
-        eid = self.one.eid_from_path(self.session_path)
+        eid = self.one.path2eid(self.session_path, query_type='remote')
         self.one.alyx.json_field_update(
             "sessions", eid, "extended_qc", {"behavior": int(good_enough)}
         )
@@ -279,7 +278,7 @@ class EphysTrials(tasks.Task):
     def _run(self):
         dsets, out_files = ephys_fpga.extract_all(self.session_path, save=True)
 
-        if self.one is None or isinstance(self.one, OneOffline):
+        if not self.one or self.one.offline:
             return out_files
 
         self._behaviour_criterion()
@@ -306,8 +305,8 @@ class EphysCellsQc(tasks.Task):
         """
         # compute the straight qc
         _logger.info(f"Computing cluster qc for {folder_probe}")
-        spikes = alf.io.load_object(folder_probe, 'spikes')
-        clusters = alf.io.load_object(folder_probe, 'clusters')
+        spikes = alfio.load_object(folder_probe, 'spikes')
+        clusters = alfio.load_object(folder_probe, 'clusters')
         df_units, drift = ephysqc.spike_sorting_metrics(
             spikes.times, spikes.clusters, spikes.amps, spikes.depths,
             cluster_ids=np.arange(clusters.channels.size))
@@ -330,8 +329,9 @@ class EphysCellsQc(tasks.Task):
         :param drift:
         :return:
         """
-        eid = self.one.eid_from_path(self.session_path)
-        pdict = self.one.alyx.rest('insertions', 'list', session=eid, name=folder_probe.parts[-1])
+        eid = self.one.path2eid(self.session_path, query_type='remote')
+        pdict = self.one.alyx.rest('insertions', 'list',
+                                   session=eid, name=folder_probe.parts[-1], no_cache=True)
         if len(pdict) != 1:
             return
         isok = df_units['label'] == 1
@@ -368,7 +368,7 @@ class EphysCellsQc(tasks.Task):
                 qc_file, df_units, drift = self._compute_cell_qc(folder_probe)
                 out_files.append(qc_file)
                 self._label_probe_qc(folder_probe, df_units, drift)
-            except BaseException:
+            except Exception:
                 _logger.error(traceback.format_exc())
                 self.status = -1
                 continue
@@ -396,13 +396,13 @@ class EphysMtscomp(tasks.Task):
                 if not bin_file:
                     continue
                 if bin_file.suffix.find("bin") == 1:
-                    sr = spikeglx.Reader(bin_file)
-                    if sr.is_mtscomp:
-                        out_files.append(bin_file)
-                    else:
-                        _logger.info(f"Compressing binary file {bin_file}")
-                        out_files.append(sr.compress_file(keep_original=False))
-                        out_files.append(bin_file.with_suffix('.ch'))
+                    with spikeglx.Reader(bin_file) as sr:
+                        if sr.is_mtscomp:
+                            out_files.append(bin_file)
+                        else:
+                            _logger.info(f"Compressing binary file {bin_file}")
+                            out_files.append(sr.compress_file(keep_original=False))
+                            out_files.append(bin_file.with_suffix('.ch'))
                 else:
                     out_files.append(bin_file)
 

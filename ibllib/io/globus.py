@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 import globus_sdk as globus
-from ibllib.io import params
+from iblutil.io import params
 
 
 def as_globus_path(path):
@@ -63,7 +63,7 @@ def _login(globus_client_id, refresh_tokens=False):
 
 def login(globus_client_id):
     token = _login(globus_client_id, refresh_tokens=False)
-    authorizer = globus.AccessTokenAuthorizer(token['transfer_token'])
+    authorizer = globus.AccessTokenAuthorizer(token['access_token'])
     tc = globus.TransferClient(authorizer=authorizer)
     return tc
 
@@ -76,7 +76,7 @@ def setup(globus_client_id, str_app='globus/default'):
 
 
 def login_auto(globus_client_id, str_app='globus/default'):
-    token = params.read(str_app)
+    token = params.read(str_app, {})
     required_fields = {'refresh_token', 'access_token', 'expires_at_seconds'}
     if not (token and required_fields.issubset(token.as_dict())):
         raise ValueError("Token file doesn't exist, run ibllib.io.globus.setup first")

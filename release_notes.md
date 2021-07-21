@@ -1,8 +1,16 @@
-## Release Notes 1.11 (not released yet)
+## Release Notes 1.12 (not released yet)
+### Release Notes 1.12.0
+- oneibl and alf now deprecated; moved to separate repository
+- other ibllib miscellanea moved to iblutil repository 
+- test database is now configurable with an env var
+
+## Release Notes 1.11
 ### Release Notes 1.11.0
 - brainbox.modeling: New API for using linear and poisson models, doing
   sequential feature selection.
-
+- bugfix: spike sorting continues even if probe information not entered (personal projects)
+- TaskQC iteration: aggregation excludes iti delays, frame2ttl clean signal used to compute QC instead of raw
+    
 ## Release Notes 1.10
 ### Release Notes 1.10.4 - 2021-05-15
 - optogenetics for UCL task variant

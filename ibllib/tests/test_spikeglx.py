@@ -1,5 +1,4 @@
 from pathlib import Path
-import os
 import shutil
 import tempfile
 import unittest
@@ -174,9 +173,12 @@ class TestsSpikeGLX_compress(unittest.TestCase):
             self.workdir.joinpath('sample3A_short_g0_t0.imec.ap.bin'), file_meta, ns=76104,
             nc=385, sync_depth=16, random=True)['bin_file']
         self.sr = spikeglx.Reader(self.file_bin)
+        assert self.sr._raw is not None
+        assert self.sr.is_open
 
     def tearDown(self):
-        self._tempdir.cleanup
+        self.sr.close()
+        self._tempdir.cleanup()
 
     def test_read_slices(self):
         sr = self.sr
@@ -189,7 +191,6 @@ class TestsSpikeGLX_compress(unittest.TestCase):
         self.assertTrue(np.all(np.isclose(sr._raw[55] * s2mv, sr[55])))
         self.assertTrue(np.all(np.isclose(sr._raw[5:500] * s2mv, sr[5:500])[:, :-1]))
 
-    @unittest.skipIf(os.name == 'nt', 'SpikeGLX compression fails on Windows')
     def test_compress(self):
 
         def compare_data(sr0, sr1):
@@ -201,34 +202,34 @@ class TestsSpikeGLX_compress(unittest.TestCase):
             self.assertTrue(np.all(d0 == d1))
             self.assertTrue(np.all(s0 == s1))
 
+        self.assertFalse(self.sr.is_mtscomp)
+        self.file_cbin = self.sr.compress_file()
+        self.sr.close()
+
         # create a reference file that will serve to compare for inplace operations
         ref_file = self.file_bin.parent.joinpath('REF_' + self.file_bin.name)
         ref_meta = self.file_bin.parent.joinpath('REF_' + self.file_bin.with_suffix('.meta').name)
         shutil.copy(self.file_bin, ref_file)
         shutil.copy(self.file_bin.with_suffix('.meta'), ref_meta)
-        sr_ref = spikeglx.Reader(ref_file)
 
         # test file compression copy
-        self.assertFalse(self.sr.is_mtscomp)
-        self.file_cbin = self.sr.compress_file()
-        self.sc = spikeglx.Reader(self.file_cbin)
-        self.assertTrue(self.sc.is_mtscomp)
-        compare_data(sr_ref, self.sc)
+        with spikeglx.Reader(ref_file, open=False) as sr_ref:
+            with spikeglx.Reader(self.file_cbin, open=False) as sc:
+                self.assertTrue(sc.is_mtscomp)
+                compare_data(sr_ref, sc)
 
-        # test decompression in-place
-        self.sc.decompress_file(keep_original=False, overwrite=True)
-        compare_data(sr_ref, self.sc)
-        self.assertFalse(self.sr.is_mtscomp)
-        self.assertFalse(self.file_cbin.exists())
-        compare_data(sr_ref, self.sc)
+            # test decompression in-place
+            sc.decompress_file(keep_original=False, overwrite=True)
+            self.assertFalse(self.sr.is_mtscomp)
+            self.assertFalse(self.file_cbin.exists())
+            compare_data(sr_ref, sc)
 
-        # test compression in-place
-        self.sc.compress_file(keep_original=False, overwrite=True)
-        compare_data(sr_ref, self.sc)
-        self.assertTrue(self.sc.is_mtscomp)
-        self.assertTrue(self.file_cbin.exists())
-        self.assertFalse(self.file_bin.exists())
-        compare_data(sr_ref, self.sc)
+            # test compression in-place
+            sc.compress_file(keep_original=False, overwrite=True)
+            self.assertTrue(sc.is_mtscomp)
+            self.assertTrue(self.file_cbin.exists())
+            self.assertFalse(self.file_bin.exists())
+            compare_data(sr_ref, sc)
 
 
 class TestsSpikeGLX_Meta(unittest.TestCase):
@@ -245,8 +246,9 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
                 self.workdir / 'sample3A_g0_t0.imec.ap.meta', ns=32, nc=385, sync_depth=16)
             with open(bin_3a['bin_file'], 'wb') as fp:
                 np.random.randint(-20000, 20000, 385 * 22, dtype=np.int16).tofile(fp)
-            sr = spikeglx.Reader(bin_3a['bin_file'])
-            assert sr.meta['fileTimeSecs'] * 30000 == 22
+            with spikeglx.Reader(bin_3a['bin_file'], open=False) as sr:
+                verifiable = sr.meta['fileTimeSecs'] * 30000
+            self.assertEqual(verifiable, 22)
 
     def test_read_corrupt(self):
         # nidq has 1 analog and 1 digital sync channels
@@ -294,61 +296,61 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
         self.assertEqual(hashfile.md5(bin_3b['bin_file']), "207ba1666b866a091e5bb8b26d19733f")
         self.assertEqual(hashfile.sha1(bin_3b['bin_file']),
                          '1bf3219c35dea15409576f6764dd9152c3f8a89c')
-        sr = spikeglx.Reader(bin_3b['bin_file'])
+        sr = spikeglx.Reader(bin_3b['bin_file'], open=False)
         self.assertTrue(sr.verify_hash())
 
     def assert_read_glx(self, tglx):
-        sr = spikeglx.Reader(tglx['bin_file'])
-        dexpected = sr.channel_conversion_sample2v[sr.type] * tglx['D']
-        d, sync = sr.read_samples(0, tglx['ns'])
-        # could be rounding errors with non-integer sampling rates
-        self.assertTrue(sr.nc == tglx['nc'])
-        self.assertTrue(sr.ns == tglx['ns'])
-        # test the data reading with gain
-        self.assertTrue(np.all(np.isclose(dexpected, d)))
-        # test the sync reading, one front per channel
-        self.assertTrue(np.sum(sync) == tglx['sync_depth'])
-        for m in np.arange(tglx['sync_depth']):
-            self.assertTrue(sync[m + 1, m] == 1)
-        if sr.type in ['ap', 'lf']:  # exclude nidq from the slicing circus
-            # teast reading only one channel
-            d, _ = sr.read(slice(None), 10)
-            self.assertTrue(np.all(np.isclose(d, dexpected[:, 10])))
-            # test reading only one time
-            d, _ = sr.read(5, slice(None))
-            self.assertTrue(np.all(np.isclose(d, dexpected[5, :])))
-            # test reading a few times
-            d, _ = sr.read(slice(5, 7), slice(None))
-            self.assertTrue(np.all(np.isclose(d, dexpected[5:7, :])))
-            d, _ = sr.read([5, 6], slice(None))
-            self.assertTrue(np.all(np.isclose(d, dexpected[5:7, :])))
-            # test reading a few channels
-            d, _ = sr.read(slice(None), slice(300, 310))
-            self.assertTrue(np.all(np.isclose(d, dexpected[:, 300:310])))
-            # test reading a few channels with a numpy array of indices
-            ind = np.array([300, 302])
-            d, _ = sr.read(slice(None), ind)
-            self.assertTrue(np.all(np.isclose(d, dexpected[:, ind])))
-            # test double slicing
-            d, _ = sr.read(slice(5, 10), slice(300, 310))
-            self.assertTrue(np.all(np.isclose(d, dexpected[5:10, 300:310])))
-            # test empty slices
-            d, _ = sr.read(slice(5, 10), [])
-            self.assertTrue(d.size == 0)
-            d, _ = sr.read([], [])
-            self.assertTrue(d.size == 0)
-            d, _ = sr.read([], slice(300, 310))
-            self.assertTrue(d.size == 0)
-            a = sr.read_sync_analog()
-            self.assertIsNone(a)
-            # test the read_samples method (should be deprecated ?)
-            d, _ = sr.read_samples(0, 500, ind)
-            self.assertTrue(np.all(np.isclose(d, dexpected[0:500, ind])))
-            d, _ = sr.read_samples(0, 500)
-            self.assertTrue(np.all(np.isclose(d, dexpected[0:500, :])))
-        else:
-            s = sr.read_sync()
-            self.assertTrue(s.shape[1] == 17)
+        with spikeglx.Reader(tglx['bin_file']) as sr:
+            dexpected = sr.channel_conversion_sample2v[sr.type] * tglx['D']
+            d, sync = sr.read_samples(0, tglx['ns'])
+            # could be rounding errors with non-integer sampling rates
+            self.assertTrue(sr.nc == tglx['nc'])
+            self.assertTrue(sr.ns == tglx['ns'])
+            # test the data reading with gain
+            self.assertTrue(np.all(np.isclose(dexpected, d)))
+            # test the sync reading, one front per channel
+            self.assertTrue(np.sum(sync) == tglx['sync_depth'])
+            for m in np.arange(tglx['sync_depth']):
+                self.assertTrue(sync[m + 1, m] == 1)
+            if sr.type in ['ap', 'lf']:  # exclude nidq from the slicing circus
+                # teast reading only one channel
+                d, _ = sr.read(slice(None), 10)
+                self.assertTrue(np.all(np.isclose(d, dexpected[:, 10])))
+                # test reading only one time
+                d, _ = sr.read(5, slice(None))
+                self.assertTrue(np.all(np.isclose(d, dexpected[5, :])))
+                # test reading a few times
+                d, _ = sr.read(slice(5, 7), slice(None))
+                self.assertTrue(np.all(np.isclose(d, dexpected[5:7, :])))
+                d, _ = sr.read([5, 6], slice(None))
+                self.assertTrue(np.all(np.isclose(d, dexpected[5:7, :])))
+                # test reading a few channels
+                d, _ = sr.read(slice(None), slice(300, 310))
+                self.assertTrue(np.all(np.isclose(d, dexpected[:, 300:310])))
+                # test reading a few channels with a numpy array of indices
+                ind = np.array([300, 302])
+                d, _ = sr.read(slice(None), ind)
+                self.assertTrue(np.all(np.isclose(d, dexpected[:, ind])))
+                # test double slicing
+                d, _ = sr.read(slice(5, 10), slice(300, 310))
+                self.assertTrue(np.all(np.isclose(d, dexpected[5:10, 300:310])))
+                # test empty slices
+                d, _ = sr.read(slice(5, 10), [])
+                self.assertTrue(d.size == 0)
+                d, _ = sr.read([], [])
+                self.assertTrue(d.size == 0)
+                d, _ = sr.read([], slice(300, 310))
+                self.assertTrue(d.size == 0)
+                a = sr.read_sync_analog()
+                self.assertIsNone(a)
+                # test the read_samples method (should be deprecated ?)
+                d, _ = sr.read_samples(0, 500, ind)
+                self.assertTrue(np.all(np.isclose(d, dexpected[0:500, ind])))
+                d, _ = sr.read_samples(0, 500)
+                self.assertTrue(np.all(np.isclose(d, dexpected[0:500, :])))
+            else:
+                s = sr.read_sync()
+                self.assertTrue(s.shape[1] == 17)
 
     def testGetSerialNumber(self):
         self.meta_files.sort()

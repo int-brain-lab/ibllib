@@ -3,7 +3,7 @@ Quick search through the Alyx database to see all mice/sessions
 ever used in training.
 """
 # Author: Gaelle Chapuis, Olivier
-from oneibl.one import ONE
+from one.api import ONE
 
 one = ONE()
 

@@ -5,10 +5,10 @@ import pickle
 
 import numpy as np
 from mayavi import mlab
+from oneibl.one import ONE
 
 import ibllib.plots
-from oneibl.one import ONE
-from brainbox.core import Bunch
+from iblutil.util import Bunch
 import ibllib.atlas as atlas
 from atlaselectrophysiology import rendering
 import brainbox.io.one as bbone

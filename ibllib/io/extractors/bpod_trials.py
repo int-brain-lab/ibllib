@@ -46,7 +46,7 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None):
         trials, files_trials = opto_trials.extract_all(
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
     elif extractor_type == 'habituation':
-        if version.le(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+        if settings['IBLRIG_VERSION_TAG'] and version.le(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
             _logger.warning("No extraction of legacy habituation sessions")
             return None, None, None
         trials, files_trials = habituation_trials.extract_all(

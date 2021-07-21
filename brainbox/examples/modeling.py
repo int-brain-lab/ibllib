@@ -1,17 +1,18 @@
 import numpy as np
+from one.api import ONE
+
 import brainbox.io.one as bbone
 import brainbox.modeling.utils as mut
 from brainbox.modeling.design_matrix import DesignMatrix
 from brainbox.modeling.linear import LinearGLM
 from brainbox.modeling.poisson import PoissonGLM
-from oneibl import one
 
 BINSIZE = 0.02
 KERNLEN = 0.6
 SHORT_KL = 0.4
 NBASES = 10
 
-one = one.ONE()
+one = ONE()
 
 eid = '4d8c7767-981c-4347-8e5e-5d5fffe38534'
 

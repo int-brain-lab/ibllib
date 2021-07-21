@@ -18,7 +18,7 @@ from typing import Union
 import numpy as np
 import pandas as pd
 
-from ibllib.io import jsonable
+from iblutil.io import jsonable
 from ibllib.io.video import assert_valid_label
 from ibllib.misc import version
 from ibllib.time import uncycle_pgts, convert_pgts
@@ -37,7 +37,7 @@ def trial_times_to_times(raw_trial):
     Bpod timestamps are in microseconds (µs)
     PyBpod timestamps are is seconds (s)
 
-    :param raw_trial: raw tiral data
+    :param raw_trial: raw trial data
     :type raw_trial: dict
     :return: trial data with modified timestamps
     :rtype: dict
@@ -103,19 +103,79 @@ def load_data(session_path: Union[str, Path], time='absolute'):
     return data
 
 
+def load_camera_frameData(session_path, camera: str = 'left', raw: bool = False) -> pd.DataFrame:
+    """ Loads binary frame data from Bonsai camera recording workflow.
+
+    Args:
+        session_path (StrPath): Path to session folder
+        camera (str, optional): Load FramsData for specific camera. Defaults to 'left'.
+        raw (bool, optional): Whether to return raw or parsed data. Defaults to False.
+
+    Returns:
+        parsed: (raw=False, Default)
+        pandas.DataFrame: 4 int64 columns: {
+                Timestamp,              # float64 (seconds from session start)
+                embeddedTimeStamp,      # float64 (seconds from session start)
+                embeddedFrameCounter,   # int64 (Frame number from session start)
+                embeddedGPIOPinState    # object (State of each of the 4 GPIO pins as a
+                                        # list of numpy boolean arrays
+                                        # e.g. np.array([True, False, False, False])
+            }
+        raw:
+            pandas.DataFrame: 4 int64 columns: {
+                Timestamp,              # UTC ticks from BehaviorPC
+                                        # (100's of ns since midnight 1/1/0001)
+                embeddedTimeStamp,      # Camera timestamp (Needs unclycling and conversion)
+                embeddedFrameCounter,   # Frame counter (int)
+                embeddedGPIOPinState    # GPIO pin state integer representation of 4 pins
+            }
+    """
+    camera = assert_valid_label(camera)
+    fpath = Path(session_path).joinpath("raw_video_data", f"_iblrig_{camera}Camera.frameData.bin")
+    assert fpath.exists(), f"{fpath}\nFile not Found: Could not find bin file for cam <{camera}>"
+    rdata = np.fromfile(fpath, dtype=np.float64)
+    assert len(rdata) % 4 == 0, "Dimension mismatch: bin file length is not mod 4"
+    rows = int(len(rdata) / 4)
+    data = np.reshape(rdata.astype(np.int64), (rows, 4))
+    df_dict = dict.fromkeys(
+        ["Timestamp", "embeddedTimeStamp", "embeddedFrameCounter", "embeddedGPIOPinState"]
+    )
+    df = pd.DataFrame(data, columns=df_dict.keys())
+    if raw:
+        return df
+
+    df_dict["Timestamp"] = (data[:, 0] - data[0, 0]) / 10_000_000  # in seconds from first frame
+    camerats = uncycle_pgts(convert_pgts(data[:, 1]))
+    df_dict["embeddedTimeStamp"] = camerats - camerats[0]  # in seconds from first frame
+    df_dict["embeddedFrameCounter"] = data[:, 2] - data[0, 2]  # from start
+    gpio = (np.right_shift(np.tile(data[:, 3], (4, 1)).T, np.arange(31, 27, -1)) & 0x1) == 1
+    df_dict["embeddedGPIOPinState"] = [np.array(x) for x in gpio.tolist()]
+
+    parsed_df = pd.DataFrame.from_dict(df_dict)
+    return parsed_df
+
+
 def load_camera_ssv_times(session_path, camera: str):
     """
     Load the bonsai frame and camera timestamps from Camera.timestamps.ssv
 
     NB: For some sessions the frame times are in the first column, in others the order is reversed.
-
+    NB: If using the new bin file the bonsai_times is a float in seconds since first frame
     :param session_path: Absolute path of session folder
     :param camera: Name of the camera to load, e.g. 'left'
     :return: array of datetimes, array of frame times in seconds
     """
+    newfile = Path(session_path) / 'raw_video_data' / \
+        f'_iblrig_{camera.lower()}Camera.frameData.bin'
+    if newfile.exists():
+        df = load_camera_frameData(session_path, camera=camera)
+        return df['Timestamp'].values, df['embeddedTimeStamp'].values
+
     camera = assert_valid_label(camera)
-    file = Path(session_path) / 'raw_video_data' / f'_iblrig_{camera.lower()}Camera.timestamps.ssv'
-    assert file.exists()
+    path = Path(session_path) / 'raw_video_data'
+    file = next(path.glob(f'_iblrig_{camera.lower()}Camera.timestamps*.ssv'), None)
+    if not file:
+        raise FileNotFoundError()
     # NB: Numpy has deprecated support for non-naive timestamps.
     # Converting them is extremely slow: 6000 timestamps takes 0.8615s vs 0.0352s.
     # from datetime import timezone
@@ -164,11 +224,18 @@ def load_camera_frame_count(session_path, label: str, raw=True):
     """
     if session_path is None:
         return
+    newfile = Path(session_path) / 'raw_video_data' / \
+        f'_iblrig_{label.lower()}Camera.frameData.bin'
+    if newfile.exists():
+        df = load_camera_frameData(session_path, camera=label)
+        return df['embeddedFrameCounter'].values
+
     raw_path = Path(session_path).joinpath('raw_video_data')
 
     # Load frame count
-    count_file = raw_path / f'_iblrig_{assert_valid_label(label)}Camera.frame_counter.bin'
-    count = np.fromfile(count_file, dtype=np.float64).astype(int) if count_file.exists() else []
+    glob = raw_path.glob(f'_iblrig_{assert_valid_label(label)}Camera.frame_counter*.bin')
+    count_file = next(glob, None)
+    count = np.fromfile(count_file, dtype=np.float64).astype(int) if count_file else []
     if len(count) == 0:
         return
     if not raw:
@@ -195,19 +262,28 @@ def load_camera_gpio(session_path, label: str, as_dicts=False):
     """
     if session_path is None:
         return
+
     raw_path = Path(session_path).joinpath('raw_video_data')
 
     # Load pin state
     GPIO_file = raw_path / f'_iblrig_{assert_valid_label(label)}Camera.GPIO.bin'
-    # This deals with missing and empty files the same
-    gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(np.uint32) if GPIO_file.exists() else []
+    newfile = raw_path / f'_iblrig_{label.lower()}Camera.frameData.bin'
+    gpio = []
+    if GPIO_file.exists():
+        # This deals with missing and empty files the same
+        gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(
+            np.uint32)
+        # Check values make sense (4 pins = 16 possible values)
+        assert np.isin(gpio, np.left_shift(np.arange(2 ** 4, dtype=np.uint32), 32 - 4)).all()
+        # 4 pins represented as uint32. For each pin, shift its bit to the end
+        # and check the bit is set
+        gpio = (np.right_shift(np.tile(gpio, (4, 1)).T, np.arange(31, 27, -1)) & 0x1) == 1
+    elif newfile.exists():
+        df = load_camera_frameData(session_path, camera=label, raw=False)
+        gpio = np.array([x for x in df['embeddedGPIOPinState'].values])
+
     if len(gpio) == 0:
         return [None] * 4 if as_dicts else None
-
-    # Check values make sense (4 pins = 16 possible values)
-    assert np.isin(gpio, np.left_shift(np.arange(2 ** 4, dtype=np.uint32), 32 - 4)).all()
-    # 4 pins represented as uint32. For each pin, shift its bit to the end and check the bit is set
-    gpio = (np.right_shift(np.tile(gpio, (4, 1)).T, np.arange(31, 27, -1)) & 0x1) == 1
 
     if as_dicts:
         if not gpio.any():
@@ -258,7 +334,7 @@ def load_stim_position_screen(session_path):
 
     data = pd.read_csv(path, sep=',', header=None, error_bad_lines=False)
     data.columns = ['contrast', 'position', 'bns_ts']
-    data[2] = pd.to_datetime(data[2])
+    data['bns_ts'] = pd.to_datetime(data['bns_ts'])
     return data
 
 

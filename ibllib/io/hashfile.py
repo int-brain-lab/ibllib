@@ -4,6 +4,10 @@ from pathlib import Path
 import numpy as np
 from tqdm import tqdm
 
+import warnings
+
+warnings.warn('This module has moved to iblutil.io.hashfile', DeprecationWarning)
+
 BUF_SIZE = 2 ** 28  # 256 megs
 
 

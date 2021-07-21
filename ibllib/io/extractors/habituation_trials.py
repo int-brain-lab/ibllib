@@ -4,8 +4,9 @@ import numpy as np
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
 from ibllib.io.extractors.biased_trials import ContrastLR
-from ibllib.io.extractors.training_trials import (FeedbackTimes, StimOnTriggerTimes, Intervals,
-                                                  GoCueTimes)
+from ibllib.io.extractors.training_trials import (
+    FeedbackTimes, StimOnTriggerTimes, Intervals, GoCueTimes
+)
 
 _logger = logging.getLogger('ibllib')
 

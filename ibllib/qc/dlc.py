@@ -13,9 +13,9 @@ from inspect import getmembers, isfunction
 import numpy as np
 
 from ibllib.qc import base
-import alf.io as alfio
-from brainbox.core import Bunch
-from oneibl.one import OneOffline
+import one.alf.io as alfio
+from one.alf.spec import is_session_path
+from iblutil.util import Bunch
 
 _log = logging.getLogger('ibllib')
 
@@ -47,7 +47,7 @@ class DlcQC(base.QC):
         :param camera: The camera to run QC on, if None QC is run for all three cameras.
         """
         # When an eid is provided, we will download the required data by default (if necessary)
-        download_data = not alfio.is_session_path(session_path_or_eid)
+        download_data = not is_session_path(session_path_or_eid)
         self.download_data = kwargs.pop('download_data', download_data)
         super().__init__(session_path_or_eid, **kwargs)
         self.data = Bunch()
@@ -64,12 +64,12 @@ class DlcQC(base.QC):
             - camera_times (float array): camera frame timestamps extracted from frame headers
             - dlc_coords (dict): keys are the points traced by dlc, items are x-y coordinates of
                                  these points over time, those with likelihood <0.9 set to NaN
-​
+
         :param download_data: if True, any missing raw data is downloaded via ONE.
         """
         if download_data is not None:
             self.download_data = download_data
-        if self.one and not isinstance(self.one, OneOffline):
+        if self.one and not self.one.offline:
             self._ensure_required_data()
         _log.info('Gathering data for QC')
 
@@ -97,13 +97,13 @@ class DlcQC(base.QC):
         """
         assert self.one is not None, 'ONE required to download data'
         for dstype in self.dstypes:
-            dataset = self.one.datasets_from_type(self.eid, dstype, full=True)
+            dataset = self.one.type2datasets(self.eid, dstype, details=True)
             present = (
-                self.one.download_datasets(dataset)
+                self.one._download_datasets(dataset)
                 if self.download_data
-                else (next(self.session_path.rglob(d['name']), None) for d in dataset)
+                else (next(self.session_path.rglob(d), None) for d in dataset['rel_path'])
             )
-            assert (dataset and all(present)), f'Dataset {dstype} not found'
+            assert (not dataset.empty and all(present)), f'Dataset {dstype} not found'
 
     def run(self, update: bool = False, **kwargs) -> (str, dict):
         """

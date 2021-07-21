@@ -2,15 +2,17 @@ import unittest
 import tempfile
 from pathlib import Path
 import json
+
 from requests import HTTPError
 import numpy as np
+from one.api import ONE
 
 import ibllib.io.extractors.base
 from ibllib.misc import version
-from oneibl import one, registration
+from ibllib.oneibl import registration
 
-one = one.ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
-              password='TapetesBloc18')
+one = ONE(base_url='https://test.alyx.internationalbrainlab.org', username='test_user',
+          password='TapetesBloc18')
 SUBJECT = 'clns0730'
 USER = 'test_user'
 

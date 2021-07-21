@@ -11,7 +11,7 @@ import scipy as sp
 import scipy.stats
 import types
 from itertools import groupby
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, Lasso, Ridge
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.model_selection import KFold, LeaveOneOut, LeaveOneGroupOut
 from sklearn.metrics import accuracy_score
@@ -270,7 +270,8 @@ def classify(population_activity, trial_labels, classifier, cross_validation=Non
         return accuracy, pred, prob
 
 
-def regress(population_activity, trial_targets, cross_validation=None, return_training=False):
+def regress(population_activity, trial_targets, regularization=None,
+            cross_validation=None, return_training=False):
     """
     Perform linear regression to predict a continuous variable from neural data
 
@@ -280,10 +281,10 @@ def regress(population_activity, trial_targets, cross_validation=None, return_tr
         population activity of all neurons in the population for each trial.
     trial_targets : 1D or 2D array
         the decoding target per trial as a continuous variable
-    pre_time : float
-        time (in seconds) preceding the event times
-    post_time : float
-        time (in seconds) following the event times
+    regularization : None or string
+        None = no regularization using ordinary least squares linear regression
+        'L1' = L1 regularization using Lasso
+        'L2' = L2 regularization using Ridge regression
     cross_validation : None or scikit-learn object
         which cross-validation method to use, for example 5-fold:
                     from sklearn.model_selection import KFold
@@ -307,7 +308,12 @@ def regress(population_activity, trial_targets, cross_validation=None, return_tr
                          'population_activity')
 
     # Initialize regression
-    reg = LinearRegression()
+    if regularization is None:
+        reg = LinearRegression()
+    elif regularization == 'L1':
+        reg = Lasso()
+    elif regularization == 'L2':
+        reg = Ridge()
 
     if cross_validation is None:
         # Fit the model on all the data
@@ -348,10 +354,6 @@ def lda_project(spike_times, spike_clusters, event_times, event_groups, pre_time
         times (in seconds) of the events from the two groups
     event_groups : 1D array
         group identities of the events, can be any number of groups, accepts integers and strings
-    pre_time : float
-        time (in seconds) preceding the event times
-    post_time : float
-        time (in seconds) following the event times
     cross_validation : string
         which cross-validation method to use, options are:
             'none'              No cross-validation

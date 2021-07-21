@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pkg_resources import parse_version
 
-import alf.io
-from brainbox.core import Bunch
+import one.alf.io as alfio
+from iblutil.util import Bunch
 import ibllib.dsp as dsp
 import ibllib.exceptions as err
 from ibllib.io import raw_data_loaders, spikeglx
@@ -92,6 +92,9 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
     else:
         raw_ephys_apfile = Path(raw_ephys_apfile)
         sr = spikeglx.Reader(raw_ephys_apfile)
+    opened = sr.is_open
+    if not opened:  # if not (opened := sr.is_open)  # py3.8
+        sr.open()
     # if no output, need a temp folder to swap for big files
     if not output_path:
         output_path = raw_ephys_apfile.parent
@@ -116,8 +119,12 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
     sync = {'times': tim_chan_pol[:, 0],
             'channels': tim_chan_pol[:, 1],
             'polarities': tim_chan_pol[:, 2]}
+    # If opened Reader was passed into function, leave open
+    if not opened:
+        sr.close()
     if save:
-        out_files = alf.io.save_object_npy(output_path, sync, '_spikeglx_sync', parts=parts)
+        out_files = alfio.save_object_npy(output_path, sync, 'sync',
+                                          namespace='spikeglx', parts=parts)
         return Bunch(sync), out_files
     else:
         return Bunch(sync)
@@ -312,7 +319,7 @@ def _clean_frame2ttl(frame2ttl, display=False):
     frame2ttl_ = {'times': np.delete(frame2ttl['times'], iko),
                   'polarities': np.delete(frame2ttl['polarities'], iko)}
     if iko.size > (0.1 * frame2ttl['times'].size):
-        _logger.warning(f'{iko.size} ({iko.size / frame2ttl["times"].size * 100} %) '
+        _logger.warning(f'{iko.size} ({iko.size / frame2ttl["times"].size:.2%} %) '
                         f'frame to TTL polarity switches below {F2TTL_THRESH} secs')
     if display:  # pragma: no cover
         from ibllib.plots import squares
@@ -457,11 +464,11 @@ def extract_sync(session_path, overwrite=False, ephys_files=None):
         alfname = dict(object='sync', namespace='spikeglx')
         if efi.label:
             alfname['extra'] = efi.label
-        file_exists = alf.io.exists(bin_file.parent, **alfname)
+        file_exists = alfio.exists(bin_file.parent, **alfname)
         if not overwrite and file_exists:
-            _logger.warning(f'Skipping raw sync: SGLX sync found for probe {efi.label} !')
-            sync = alf.io.load_object(bin_file.parent, **alfname)
-            out_files, _ = alf.io._ls(bin_file.parent, **alfname)
+            _logger.warning(f'Skipping raw sync: SGLX sync found for probe {efi.label}!')
+            sync = alfio.load_object(bin_file.parent, **alfname)
+            out_files, _ = alfio._ls(bin_file.parent, **alfname)
         else:
             sr = spikeglx.Reader(bin_file)
             sync, out_files = _sync_to_alf(sr, bin_file.parent, save=True, parts=efi.label)
@@ -477,7 +484,7 @@ def _get_all_probes_sync(session_path, bin_exists=True):
     version = spikeglx.get_neuropixel_version_from_files(ephys_files)
     # attach the sync information to each binary file found
     for ef in ephys_files:
-        ef['sync'] = alf.io.load_object(ef.path, 'sync', namespace='spikeglx', short_keys=True)
+        ef['sync'] = alfio.load_object(ef.path, 'sync', namespace='spikeglx', short_keys=True)
         ef['sync_map'] = get_ibl_sync_map(ef, version)
     return ephys_files
 

@@ -6,8 +6,8 @@ Reads in and display a chunk of raw LFP synchronized on session time.
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.interpolate
-
 from oneibl.one import ONE
+
 from ibllib.io import spikeglx
 
 
@@ -33,16 +33,15 @@ efile = efiles[0]['lf']
 #            'raw_ephys_data/probe01/_spikeglx_ephysData_g0_t0.imec.lf.cbin')
 
 # === Read the files and get the data ===
-sr = spikeglx.Reader(efile)
+with spikeglx.Reader(efile) as sr:
+    sync_file = sr.file_bin.parent.joinpath(sr.file_bin.stem.replace('.lf', '.sync.npy'))
+    sync = np.load(sync_file)
+    sample2time = scipy.interpolate.interp1d(sync[:, 0] * sr.fs, sync[:, 1])
 
-sync_file = sr.file_bin.parent.joinpath(sr.file_bin.stem.replace('.lf', '.sync.npy'))
-sync = np.load(sync_file)
-sample2time = scipy.interpolate.interp1d(sync[:, 0] * sr.fs, sync[:, 1])
-
-# Read and plot chunk of data
-data = sr[105000:109000, :-1]
-data = data - np.mean(data)
-tscale = sample2time(np.array([105000, 109000]))
+    # Read and plot chunk of data
+    data = sr[105000:109000, :-1]
+    data = data - np.mean(data)
+    tscale = sample2time(np.array([105000, 109000]))
 
 plt.figure()
 im = plt.imshow(data.transpose(), aspect='auto',
