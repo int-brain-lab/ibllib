@@ -103,7 +103,7 @@ class NeuralModel:
         self.design = design_matrix
         self.spikes = spks
         self.clu = clu
-        self.clu_ids = np.argwhere(np.sum(trialspiking, axis=0) > mintrials)
+        self.clu_ids = np.argwhere(np.sum(trialspiking, axis=0) > mintrials).flatten()
         self.traininds = traininds
         self.testinds = testinds
         self.stepwise = stepwise
