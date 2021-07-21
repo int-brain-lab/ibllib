@@ -211,7 +211,7 @@ def load_ephys_session(eid, one=None):
     return spikes, clusters, trials
 
 
-def load_spike_sorting(eid, one=None, probe=None, dataset_types=None):
+def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sorter=None):
     """
     From an eid, loads spikes and clusters for all probes
     The following set of dataset types are loaded:
@@ -225,6 +225,7 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None):
     :param one: an instance of OneAlyx
     :param probe: name of probe to load in, if not given all probes for session will be loaded
     :param dataset_types: additional spikes/clusters objects to add to the standard default list
+    :param spike_sorter: name of the spike sorting you want to load
     :return: spikes, clusters (dict of bunch, 1 bunch per probe)
     """
     one = one or ONE()
@@ -260,12 +261,18 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None):
         # Append extra optional DS
         dtypes = list(set(dataset_types + dtypes_default))
 
-    spike_attributes = '|'.join([sp.split('.')[1] for sp in dtypes if 'spikes.' in sp])
-    cluster_attributes = '|'.join([cl.split('.')[1] for cl in dtypes if 'clusters.' in cl])
+    spike_attributes = [sp.split('.')[1] for sp in dtypes if 'spikes.' in sp]
+    cluster_attributes = [cl.split('.')[1] for cl in dtypes if 'clusters.' in cl]
 
     for label in labels:
+
+        if spike_sorter is None:
+            collection = f'alf/{label}'
+        else:
+            collection = f'alf/{label}/{spike_sorter}'
+
         try:
-            spikes[label] = one.load_object(eid, 'spikes', collection=f'alf/{label}',
+            spikes[label] = one.load_object(eid, 'spikes', collection=collection,
                                             attribute=spike_attributes)
         except alferr.ALFError:
             logger.warning(
@@ -275,7 +282,7 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None):
         session_path = eid if is_session_path(eid) else one.eid2path(one.to_eid(eid))
         _remove_old_clusters(session_path, label)
         try:
-            clusters[label] = one.load_object(eid, 'clusters', collection=f'alf/{label}',
+            clusters[label] = one.load_object(eid, 'clusters', collection=collection,
                                               attribute=cluster_attributes)
         except alferr.ALFError:
             logger.warning(
@@ -339,7 +346,8 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
     return dic_clus
 
 
-def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False, dataset_types=None):
+def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False, dataset_types=None,
+                                    spike_sorter=None):
     """
     For a given eid, get spikes, clusters and channels information, and merges clusters
     and channels information before returning all three variables.
@@ -348,6 +356,7 @@ def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False, da
     :param aligned: whether to get the latest user aligned channel when not resolved or use
     histology track
     :param dataset_types: additional spikes/clusters objects to add to the standard default list
+    :param spike_sorter: name of the spike sorting you want to load
     :return: spikes, clusters, channels (dict of bunch, 1 bunch per probe)
     """
     # --- Get spikes and clusters data
@@ -359,7 +368,8 @@ def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False, da
         return old.load_spike_sorting_with_channel(eid, one=one, probe=probe, aligned=aligned)
 
     dic_spk_bunch, dic_clus = load_spike_sorting(eid, one=one, probe=probe,
-                                                 dataset_types=dataset_types)
+                                                 dataset_types=dataset_types,
+                                                 spike_sorter=spike_sorter)
     # -- Get brain regions and assign to clusters
     channels = load_channel_locations(eid, one=one, probe=probe, aligned=aligned)
 
