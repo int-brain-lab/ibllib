@@ -106,7 +106,6 @@ class LinearGLM(NeuralModel):
         """
         if not hasattr(self, 'coefs'):
             raise AttributeError('Model has not been fit yet.')
-
         testmask = np.isin(self.design.trlabels, self.testinds).flatten()
         dm, binned = self.design[testmask, :], self.binnedspikes[testmask]
 
