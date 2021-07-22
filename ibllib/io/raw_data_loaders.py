@@ -134,8 +134,8 @@ def load_camera_frameData(session_path, camera: str = 'left', raw: bool = False)
     fpath = Path(session_path).joinpath("raw_video_data", f"_iblrig_{camera}Camera.frameData.bin")
     assert fpath.exists(), f"{fpath}\nFile not Found: Could not find bin file for cam <{camera}>"
     rdata = np.fromfile(fpath, dtype=np.float64)
-    assert len(rdata) % 4 == 0, "Dimension mismatch: bin file length is not mod 4"
-    rows = int(len(rdata) / 4)
+    assert rdata.size % 4 == 0, "Dimension mismatch: bin file length is not mod 4"
+    rows = int(rdata.size / 4)
     data = np.reshape(rdata.astype(np.int64), (rows, 4))
     df_dict = dict.fromkeys(
         ["Timestamp", "embeddedTimeStamp", "embeddedFrameCounter", "embeddedGPIOPinState"]
