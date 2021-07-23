@@ -337,7 +337,7 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
                           f' the right element number compared to cluster.'
                           f' Data in new cluster key {key} is thus returned empty.')
                     dic_clus[label][key] = []
-        except KeyError:
+        except TypeError:
             logger.warning(
                 f'Either clusters or channels does not have key {label}, could not'
                 f' merge')
