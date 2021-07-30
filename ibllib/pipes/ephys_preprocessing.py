@@ -88,6 +88,11 @@ class SpikeSorting(tasks.Task):
     io_charge = 70  # this jobs reads raw ap files
     priority = 60
     level = 1  # this job doesn't depend on anything
+    SHELL_SCRIPT = Path.home().joinpath(
+        "Documents/PYTHON/iblscripts/deploy/serverpc/kilosort2/run_pykilosort.sh"
+    )
+    SPIKE_SORTER_NAME = 'pykilosort'
+    PYKILOSORT_REPO = '~/Documents/PYTHON/SPIKE_SORTING/pykilosort'
 
     @staticmethod
     def _sample2v(ap_file):
@@ -96,8 +101,8 @@ class SpikeSorting(tasks.Task):
         return s2v["ap"][0]
 
     @staticmethod
-    def _fetch_ks2_commit_hash():
-        command2run = "git --git-dir ~/Documents/PYTHON/SPIKE_SORTING/pykilsort/.git rev-parse --verify HEAD"
+    def _fetch_ks2_commit_hash(repo_path):
+        command2run = f"git --git-dir {repo_path}/.git rev-parse --verify HEAD"
         process = subprocess.Popen(
             command2run, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
@@ -123,25 +128,21 @@ class SpikeSorting(tasks.Task):
     def _run_pykilosort(self, ap_file):
         f"""
         Runs the ks2 matlab spike sorting for one probe dataset
-        the spike sorting output can either be with the probe (<1.5.5) or in the
-        session_path/spike_sorters/{SPIKE_SORTER_NAME}/probeXX folder
+        the raw spike sorting output can either be with the probe (<1.5.5) or in the
+        session_path/spike_sorters/{self.SPIKE_SORTER_NAME}/probeXX folder
         :return: path of the folder containing ks2 spike sorting output
         """
-        SHELL_SCRIPT = Path.home().joinpath(
-            "Documents/PYTHON/iblscripts/deploy/serverpc/kilosort2/run_pykilosort.sh"
-        )
-        SPIKE_SORTER_NAME = 'pykilosort'
 
-        label = ap_file.parts[-2]
-        if ap_file.parent.joinpath(f"spike_sorting_{SPIKE_SORTER_NAME}.log").exists():
-            _logger.info(f"Already ran: spike_sorting_{SPIKE_SORTER_NAME}.log found for {ap_file}, skipping.")
+        label = ap_file.parts[-2]  # this is usually the probe name
+        if ap_file.parent.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log").exists():
+            _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log found for {ap_file}, skipping.")
             return ap_file.parent
-        sorter_dir = self.session_path.joinpath("spike_sorters", SPIKE_SORTER_NAME, label)
-        if sorter_dir.joinpath(f"spike_sorting_{SPIKE_SORTER_NAME}.log").exists():
-            _logger.info(f"Already ran: spike_sorting_{SPIKE_SORTER_NAME}.log found in {sorter_dir}, skipping.")
+        sorter_dir = self.session_path.joinpath("spike_sorters", self.SPIKE_SORTER_NAME, label)
+        if sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log").exists():
+            _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log found in {sorter_dir}, skipping.")
             return sorter_dir
         # get the scratch drive from the shell script
-        with open(SHELL_SCRIPT) as fid:
+        with open(self.SHELL_SCRIPT) as fid:
             lines = fid.readlines()
         line = [line for line in lines if line.startswith("SCRATCH_DRIVE=")][0]
         m = re.search(r"\=(.*?)(\#|\n)", line)[0]
@@ -155,12 +156,13 @@ class SpikeSorting(tasks.Task):
         scratch_dir = scratch_drive.joinpath(
             ".kilosort", "_".join(list(self.session_path.parts[-3:]) + [label])
         )
-        if scratch_dir.exists():
+        if scratch_dir.exists():  # hmmm this has to be decided, we may want to restart ?
+            # But failed sessions may then clog the scratch directory and have users run out of space
             shutil.rmtree(scratch_dir, ignore_errors=True)
         scratch_dir.mkdir(parents=True, exist_ok=True)
 
         self._check_nvidia()
-        command2run = f"{SHELL_SCRIPT} {scratch_dir}"
+        command2run = f"{self.SHELL_SCRIPT} {scratch_dir}"
         _logger.info(command2run)
         process = subprocess.Popen(
             command2run,
@@ -175,10 +177,10 @@ class SpikeSorting(tasks.Task):
             raise RuntimeError(error.decode("utf-8"))
         else:
             _logger.info(info_str)
-            raise RuntimeError(f"{SPIKE_SORTER_NAME} error log below:")
+            raise RuntimeError(f"{self.SPIKE_SORTER_NAME} error log below:")
 
         shutil.move(scratch_dir, sorter_dir)
-        self.version = self._fetch_ks2_commit_hash()
+        self.version = self._fetch_ks2_commit_hash(self.PYKILOSORT_REPO)
         return sorter_dir
 
     def _run(self, overwrite=False):
@@ -210,7 +212,7 @@ class SpikeSorting(tasks.Task):
                 # convert ks2_output into tar file and also register
                 # Make this in case spike sorting is in old raw_ephys_data folders, for new
                 # sessions it should already exist
-                tar_dir = self.session_path.joinpath('spike_sorters', 'ks2_matlab', label)
+                tar_dir = self.session_path.joinpath('spike_sorters', self.SPIKE_SORTER_NAME, label)
                 tar_dir.mkdir(parents=True, exist_ok=True)
                 out = spikes.ks2_to_tar(ks2_dir, tar_dir)
                 out_files.extend(out)
