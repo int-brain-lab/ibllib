@@ -162,7 +162,7 @@ class SpikeSorting(tasks.Task):
         scratch_dir.mkdir(parents=True, exist_ok=True)
 
         self._check_nvidia()
-        command2run = f"{self.SHELL_SCRIPT} {scratch_dir}"
+        command2run = f"{self.SHELL_SCRIPT} {ap_file}"
         _logger.info(command2run)
         process = subprocess.Popen(
             command2run,
@@ -173,11 +173,10 @@ class SpikeSorting(tasks.Task):
         )
         info, error = process.communicate()
         info_str = info.decode("utf-8").strip()
+        _logger.info(info_str)
         if process.returncode != 0:
-            raise RuntimeError(error.decode("utf-8"))
-        else:
-            _logger.info(info_str)
-            raise RuntimeError(f"{self.SPIKE_SORTER_NAME} error log below:")
+            _logger.error(error_str)
+            raise RuntimeError(f"{self.SPIKE_SORTER_NAME}")
 
         shutil.move(scratch_dir, sorter_dir)
         self.version = self._fetch_ks2_commit_hash(self.PYKILOSORT_REPO)
