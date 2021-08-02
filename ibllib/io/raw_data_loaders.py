@@ -131,8 +131,9 @@ def load_camera_frameData(session_path, camera: str = 'left', raw: bool = False)
             }
     """
     camera = assert_valid_label(camera)
-    fpath = Path(session_path).joinpath("raw_video_data", f"_iblrig_{camera}Camera.frameData.bin")
-    assert fpath.exists(), f"{fpath}\nFile not Found: Could not find bin file for cam <{camera}>"
+    fpath = Path(session_path).joinpath("raw_video_data")
+    fpath = next(fpath.glob(f"_iblrig_{camera}Camera.frameData*.bin"), None)
+    assert fpath, f"{fpath}\nFile not Found: Could not find bin file for cam <{camera}>"
     rdata = np.fromfile(fpath, dtype=np.float64)
     assert rdata.size % 4 == 0, "Dimension mismatch: bin file length is not mod 4"
     rows = int(rdata.size / 4)
@@ -165,15 +166,13 @@ def load_camera_ssv_times(session_path, camera: str):
     :param camera: Name of the camera to load, e.g. 'left'
     :return: array of datetimes, array of frame times in seconds
     """
-    newfile = Path(session_path) / 'raw_video_data' / \
-        f'_iblrig_{camera.lower()}Camera.frameData.bin'
-    if newfile.exists():
+    camera = assert_valid_label(camera)
+    video_path = Path(session_path).joinpath('raw_video_data')
+    if next(video_path.glob(f'_iblrig_{camera}Camera.frameData*.bin'), None):
         df = load_camera_frameData(session_path, camera=camera)
         return df['Timestamp'].values, df['embeddedTimeStamp'].values
 
-    camera = assert_valid_label(camera)
-    path = Path(session_path) / 'raw_video_data'
-    file = next(path.glob(f'_iblrig_{camera.lower()}Camera.timestamps*.ssv'), None)
+    file = next(video_path.glob(f'_iblrig_{camera.lower()}Camera.timestamps*.ssv'), None)
     if not file:
         raise FileNotFoundError()
     # NB: Numpy has deprecated support for non-naive timestamps.
@@ -224,16 +223,15 @@ def load_camera_frame_count(session_path, label: str, raw=True):
     """
     if session_path is None:
         return
-    newfile = Path(session_path) / 'raw_video_data' / \
-        f'_iblrig_{label.lower()}Camera.frameData.bin'
-    if newfile.exists():
+
+    label = assert_valid_label(label)
+    video_path = Path(session_path).joinpath('raw_video_data')
+    if next(video_path.glob(f'_iblrig_{label}Camera.frameData*.bin'), None):
         df = load_camera_frameData(session_path, camera=label)
         return df['embeddedFrameCounter'].values
 
-    raw_path = Path(session_path).joinpath('raw_video_data')
-
     # Load frame count
-    glob = raw_path.glob(f'_iblrig_{assert_valid_label(label)}Camera.frame_counter*.bin')
+    glob = video_path.glob(f'_iblrig_{label}Camera.frame_counter*.bin')
     count_file = next(glob, None)
     count = np.fromfile(count_file, dtype=np.float64).astype(int) if count_file else []
     if len(count) == 0:
@@ -264,26 +262,23 @@ def load_camera_gpio(session_path, label: str, as_dicts=False):
         return
 
     raw_path = Path(session_path).joinpath('raw_video_data')
+    label = assert_valid_label(label)
 
     # Load pin state
-    GPIO_file = raw_path / f'_iblrig_{assert_valid_label(label)}Camera.GPIO.bin'
-    newfile = raw_path / f'_iblrig_{label.lower()}Camera.frameData.bin'
-    gpio = []
-    if GPIO_file.exists():
-        # This deals with missing and empty files the same
-        gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(
-            np.uint32)
-        # Check values make sense (4 pins = 16 possible values)
-        assert np.isin(gpio, np.left_shift(np.arange(2 ** 4, dtype=np.uint32), 32 - 4)).all()
-        # 4 pins represented as uint32. For each pin, shift its bit to the end
-        # and check the bit is set
-        gpio = (np.right_shift(np.tile(gpio, (4, 1)).T, np.arange(31, 27, -1)) & 0x1) == 1
-    elif newfile.exists():
+    if next(raw_path.glob(f'_iblrig_{label}Camera.frameData*.bin'), False):
         df = load_camera_frameData(session_path, camera=label, raw=False)
         gpio = np.array([x for x in df['embeddedGPIOPinState'].values])
-
+    else:
+        GPIO_file = next(raw_path.glob(f'_iblrig_{label}Camera.GPIO*.bin'), None)
+        # This deals with missing and empty files the same
+        gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(np.uint32) if GPIO_file else []
     if len(gpio) == 0:
         return [None] * 4 if as_dicts else None
+
+    # Check values make sense (4 pins = 16 possible values)
+    assert np.isin(gpio, np.left_shift(np.arange(2 ** 4, dtype=np.uint32), 32 - 4)).all()
+    # 4 pins represented as uint32. For each pin, shift its bit to the end and check the bit is set
+    gpio = (np.right_shift(np.tile(gpio, (4, 1)).T, np.arange(31, 27, -1)) & 0x1) == 1
 
     if as_dicts:
         if not gpio.any():
