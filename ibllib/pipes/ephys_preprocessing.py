@@ -19,7 +19,7 @@ from ibllib.pipes.training_preprocessing import TrainingRegisterRaw as EphysRegi
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
-from ibllib.dsp import rms, voltage
+from ibllib.dsp import rms
 
 _logger = logging.getLogger("ibllib")
 
@@ -135,11 +135,13 @@ class SpikeSorting(tasks.Task):
 
         label = ap_file.parts[-2]  # this is usually the probe name
         if ap_file.parent.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log").exists():
-            _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log found for {ap_file}, skipping.")
+            _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
+                         f" found for {ap_file}, skipping.")
             return ap_file.parent
         sorter_dir = self.session_path.joinpath("spike_sorters", self.SPIKE_SORTER_NAME, label)
         if sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log").exists():
-            _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log found in {sorter_dir}, skipping.")
+            _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
+                         f" found in {sorter_dir}, skipping.")
             return sorter_dir
         # get the scratch drive from the shell script
         with open(self.SHELL_SCRIPT) as fid:
@@ -157,7 +159,7 @@ class SpikeSorting(tasks.Task):
             ".kilosort", "_".join(list(self.session_path.parts[-3:]) + [label])
         )
         if scratch_dir.exists():  # hmmm this has to be decided, we may want to restart ?
-            # But failed sessions may then clog the scratch directory and have users run out of space
+            # But failed sessions may then clog the scratch dir and have users run out of space
             shutil.rmtree(scratch_dir, ignore_errors=True)
         scratch_dir.mkdir(parents=True, exist_ok=True)
 
@@ -175,6 +177,7 @@ class SpikeSorting(tasks.Task):
         info_str = info.decode("utf-8").strip()
         _logger.info(info_str)
         if process.returncode != 0:
+            error_str = info.decode("utf-8").strip()
             _logger.error(error_str)
             raise RuntimeError(f"{self.SPIKE_SORTER_NAME}")
 
@@ -211,7 +214,8 @@ class SpikeSorting(tasks.Task):
                 # convert ks2_output into tar file and also register
                 # Make this in case spike sorting is in old raw_ephys_data folders, for new
                 # sessions it should already exist
-                tar_dir = self.session_path.joinpath('spike_sorters', self.SPIKE_SORTER_NAME, label)
+                tar_dir = self.session_path.joinpath(
+                    'spike_sorters', self.SPIKE_SORTER_NAME, label)
                 tar_dir.mkdir(parents=True, exist_ok=True)
                 out = spikes.ks2_to_tar(ks2_dir, tar_dir)
                 out_files.extend(out)
