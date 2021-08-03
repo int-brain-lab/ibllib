@@ -46,3 +46,8 @@ class ALFObjectNotFound(IblError):
     explanation = ('The ALF object was not found.  This may occur if the object or namespace or '
                    'incorrectly formatted e.g. the object "_ibl_trials.intervals.npy" would be '
                    'found with the filters `object="trials", namespace="ibl"`')
+
+
+class NvidiaDriverNotReady(IblError):
+    explanation = ('Nvidia driver does not respond. This usually means the GPU is inaccessible and needs to be '
+                   'recovered through a system reboot.')
