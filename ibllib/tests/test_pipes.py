@@ -46,7 +46,7 @@ class TestExtractors2Tasks(unittest.TestCase):
             ("_iblrig_tasks_biasedScanningChoiceWorld5.2.3", "biased"),
             ("_iblrig_tasks_trainingChoiceWorld3.6.0", "training"),
             ("_iblrig_tasks_trainingChoiceWorldWidefield", "ephys_training"),
-            ("_iblrig_tasks_widefieldChoiceWorld", "ephys"),
+            ("_iblrig_tasks_widefieldChoiceWorld", "ephys_biased_opto"),
             ("_iblrig_tasks_ephysChoiceWorld5.1.3", "ephys"),
             ("_iblrig_calibration_frame2TTL4.1.3", None),
             ("_iblrig_tasks_habituationChoiceWorld3.6.0", "habituation"),
