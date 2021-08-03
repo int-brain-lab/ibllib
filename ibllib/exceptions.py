@@ -49,5 +49,5 @@ class ALFObjectNotFound(IblError):
 
 
 class NvidiaDriverNotReady(IblError):
-    explanation = ('Nvidia driver does not respond. This usually means the GPU is inaccessible and needs to be '
-                   'recovered through a system reboot.')
+    explanation = ('Nvidia driver does not respond. This usually means the GPU is inaccessible '
+                   'and needs to be recovered through a system reboot.')
