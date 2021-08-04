@@ -46,7 +46,7 @@ class TestExtractors2Tasks(unittest.TestCase):
             ("_iblrig_tasks_biasedScanningChoiceWorld5.2.3", "biased"),
             ("_iblrig_tasks_trainingChoiceWorld3.6.0", "training"),
             ("_iblrig_tasks_trainingChoiceWorldWidefield", "ephys_training"),
-            ("_iblrig_tasks_widefieldChoiceWorld", "ephys"),
+            ("_iblrig_tasks_widefieldChoiceWorld", "ephys_biased_opto"),
             ("_iblrig_tasks_ephysChoiceWorld5.1.3", "ephys"),
             ("_iblrig_calibration_frame2TTL4.1.3", None),
             ("_iblrig_tasks_habituationChoiceWorld3.6.0", "habituation"),
@@ -61,11 +61,20 @@ class TestExtractors2Tasks(unittest.TestCase):
             ("_iblrig_tasks_optoChoiceWorld", 'biased_opto'),  # legacy not used anymore
             ("optokarolinaChoiceWorld5.34", "biased_opto"),
             ("karolinaChoiceWorld5.34", "biased_opto"),
-            ("ephyskarolinaChoiceWorld4.34", "ephys_biased_opto")
+            ("ephyskarolinaChoiceWorld4.34", "ephys_biased_opto"),
+            ("_iblrig_tasks_ksocha_ephysOptoStimulation", "ephys_passive_opto"),
+            ("_iblrig_tasks_ksocha_ephysOptoChoiceWorld", "ephys_biased_opto"),
+            ("_iblrig_tasks_passiveChoiceWorld", "ephys_replay"),
         ]
+        # first test that the function returns expected output
         for to in task_out:
             out = ibllib.io.extractors.base.get_task_extractor_type(to[0])
             assert out == to[1]
+        # then check that all task types are represented in the modality choice
+        for to in task_out:
+            if to[1] is None:
+                continue
+            assert ibllib.io.extractors.base._get_pipeline_from_task_type(to[1]) is not None
 
 
 class TestPipesMisc(unittest.TestCase):

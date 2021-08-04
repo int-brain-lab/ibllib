@@ -351,7 +351,7 @@ def extract_wheel_sync(sync, chmap=None):
     return wheel['re_ts'], wheel['re_pos']
 
 
-def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tmax=np.inf):
+def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None):
     """
     Extract wheel positions and times from sync fronts dictionary
 
@@ -362,13 +362,13 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tm
     defaults to False
     :return: trials dictionary
     """
-    bpod = get_sync_fronts(sync, chmap['bpod'], tmax=tmax)
+    bpod = get_sync_fronts(sync, chmap['bpod'])
     if bpod.times.size == 0:
         raise err.SyncBpodFpgaException('No Bpod event found in FPGA. No behaviour extraction. '
                                         'Check channel maps.')
-    frame2ttl = get_sync_fronts(sync, chmap['frame2ttl'], tmax=tmax)
+    frame2ttl = get_sync_fronts(sync, chmap['frame2ttl'])
     frame2ttl = _clean_frame2ttl(frame2ttl)
-    audio = get_sync_fronts(sync, chmap['audio'], tmax=tmax)
+    audio = get_sync_fronts(sync, chmap['audio'])
     # extract events from the fronts for each trace
     t_trial_start, t_valve_open, t_iti_in = _assign_events_bpod(bpod['times'], bpod['polarities'])
     # one issue is that sometimes bpod pulses may not have been detected, in this case
@@ -606,8 +606,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         bpod_trials, _ = biased_trials.extract_all(
             session_path=self.session_path, save=False, bpod_trials=bpod_raw)
         bpod_trials['intervals_bpod'] = np.copy(bpod_trials['intervals'])
-        fpga_trials = extract_behaviour_sync(sync=sync, chmap=chmap, bpod_trials=bpod_trials,
-                                             tmax=bpod_trials['intervals'][-1, -1] + 60)
+        fpga_trials = extract_behaviour_sync(sync=sync, chmap=chmap, bpod_trials=bpod_trials)
         # checks consistency and compute dt with bpod
         self.bpod2fpga, drift_ppm, ibpod, ifpga = dsp.utils.sync_timestamps(
             bpod_trials['intervals_bpod'][:, 0], fpga_trials.pop('intervals')[:, 0],
