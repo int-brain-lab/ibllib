@@ -1,3 +1,8 @@
+## Release Notes 2.0.0
+### Release Notes 2.0.0
+- ONE2 released on the master branch
+- Pykilosort is the new default spike sorter in the pipeline
+
 ## Release Notes 1.12 (not released yet)
 ### Release Notes 1.12.0
 - oneibl and alf now deprecated; moved to separate repository
