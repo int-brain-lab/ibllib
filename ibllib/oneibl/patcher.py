@@ -347,7 +347,7 @@ class SSHPatcher(Patcher):
     """
     Requires SSH keys access on the FlatIron
     """
-    def __init__(self, one=None, globus_client=None):
+    def __init__(self, one=None):
         res = _run_command(f"ssh -p {FLATIRON_PORT} {FLATIRON_USER}@{FLATIRON_HOST} ls")
         if res[0] != 0:
             raise PermissionError("Could not connect to the Flatiron via SSH. Check your RSA keys")

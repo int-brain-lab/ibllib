@@ -176,8 +176,9 @@ class TestsRawDataLoaders(unittest.TestCase):
         # fixture file to another file in a temporary folder, with the columns swapped.
         from_file = session.joinpath('raw_video_data', '_iblrig_bodyCamera.timestamps.ssv')
         with tempfile.TemporaryDirectory() as tempdir:
-            # New file with columns swapped
-            to_file = Path(tempdir).joinpath('raw_video_data', '_iblrig_leftCamera.timestamps.ssv')
+            # New file with columns swapped (also checks loading files with UUID in name)
+            filename = f'_iblrig_leftCamera.timestamps.{uuid.uuid4()}.ssv'
+            to_file = Path(tempdir).joinpath('raw_video_data', filename)
             to_file.parent.mkdir(exist_ok=True)
             with open(from_file, 'r') as a, open(to_file, 'w') as b:
                 for i in range(5):
@@ -223,9 +224,11 @@ class TestsRawDataLoaders(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tdir:
             session_path = Path(tdir).joinpath('mouse', '2020-06-01', '001')
             session_path.joinpath('raw_video_data').mkdir(parents=True)
-            filename = session_path / 'raw_video_data' / f'_iblrig_{side}Camera.GPIO.bin'
+            # Test loads file with UUID
+            did = uuid.uuid4()  # Random uuid
+            filename = session_path / 'raw_video_data' / f'_iblrig_{side}Camera.GPIO.{did}.bin'
             np.full(1000, 1.87904819e+09, dtype=np.float64).tofile(filename)
-            with self.assertRaises(AssertionError):
+            with self.assertLogs('ibllib', level='WARNING'):
                 raw.load_camera_gpio(session_path, side, as_dicts=True)
 
             # Test dead pin array
