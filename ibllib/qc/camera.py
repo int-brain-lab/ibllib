@@ -298,6 +298,7 @@ class CameraQC(base.QC):
         # Get extractor type
         is_ephys = 'ephys' in (self.type or self.one.get_details(self.eid)['task_protocol'])
         dtypes = self.dstypes + self.dstypes_fpga if is_ephys else self.dstypes
+        assert_unique = True
         # Check we have raw ephys data for session
         if is_ephys and len(self.one.list_datasets(self.eid, collection='raw_ephys_data')) == 0:
             # Assert 3A probe model; if so download all probe data
@@ -305,12 +306,14 @@ class CameraQC(base.QC):
             probe_model = next(x['model'] for x in det['probe_insertion'])
             assert probe_model == '3A', 'raw ephys data not missing'
             collections += ('raw_ephys_data/probe00', 'raw_ephys_data/probe01')
+            assert_unique = False
         for dstype in dtypes:
             datasets = self.one.type2datasets(self.eid, dstype, details=True)
             if 'camera' in dstype.lower():  # Download individual camera file
                 datasets = filter_datasets(datasets, filename=f'.*{self.label}.*')
             else:  # Ignore probe datasets, etc.
-                datasets = filter_datasets(datasets, collection='|'.join(collections))
+                datasets = filter_datasets(datasets, collection=collections,
+                                           assert_unique=assert_unique)
             if any(x.endswith('.mp4') for x in datasets.rel_path) and self.stream:
                 names = [x.split('/')[-1] for x in self.one.list_datasets(self.eid, details=False)]
                 assert f'_iblrig_{self.label}Camera.raw.mp4' in names, 'No remote video file found'
@@ -465,7 +468,7 @@ class CameraQC(base.QC):
             return 'NOT_SET'
         size_diff = int(self.data['count'].size - self.data['video']['length'])
         strict_increase = np.all(np.diff(self.data['count']) > 0)
-        if not np.all(strict_increase):
+        if not strict_increase:
             n_effected = np.sum(np.invert(strict_increase))
             _log.info(f'frame count not strictly increasing: '
                       f'{n_effected} frames effected ({n_effected / strict_increase.size:.2%})')
@@ -687,7 +690,8 @@ class CameraQC(base.QC):
         increased the global contrast and linear CDF.  This makes check robust to low light
         conditions.
         """
-        if not test and self.data['frame_samples'] is None:
+        no_frames = self.data['frame_samples'] is None or len(self.data['frame_samples']) == 0
+        if not test and no_frames:
             return 'NOT_SET'
 
         if roi is False:
