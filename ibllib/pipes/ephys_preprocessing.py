@@ -152,19 +152,19 @@ class SpikeSorting(tasks.Task):
         assert scratch_drive.exists()
 
         # clean up and create directory, this also checks write permissions
-        # scratch dir has the following shape: .kilosort/ZM_3003_2020-07-29_001_probe00
+        # temp_dir has the following shape: pykilosort/ZM_3003_2020-07-29_001_probe00
         # first makes sure the tmp dir is clean
-        shutil.rmtree(scratch_drive.joinpath(".kilosort"), ignore_errors=True)
-        scratch_dir = scratch_drive.joinpath(
-            ".kilosort", "_".join(list(self.session_path.parts[-3:]) + [label])
+        shutil.rmtree(scratch_drive.joinpath(self.SPIKE_SORTER_NAME), ignore_errors=True)
+        temp_dir = scratch_drive.joinpath(
+            self.SPIKE_SORTER_NAME, "_".join(list(self.session_path.parts[-3:]) + [label])
         )
-        if scratch_dir.exists():  # hmmm this has to be decided, we may want to restart ?
+        if temp_dir.exists():  # hmmm this has to be decided, we may want to restart ?
             # But failed sessions may then clog the scratch dir and have users run out of space
-            shutil.rmtree(scratch_dir, ignore_errors=True)
-        scratch_dir.mkdir(parents=True, exist_ok=True)
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        temp_dir.mkdir(parents=True, exist_ok=True)
 
         self._check_nvidia()
-        command2run = f"{self.SHELL_SCRIPT} {ap_file}"
+        command2run = f"{self.SHELL_SCRIPT} {ap_file} {temp_dir}"
         _logger.info(command2run)
         process = subprocess.Popen(
             command2run,
@@ -181,7 +181,8 @@ class SpikeSorting(tasks.Task):
             _logger.error(error_str)
             raise RuntimeError(f"{self.SPIKE_SORTER_NAME}")
 
-        shutil.move(scratch_dir, sorter_dir)
+        shutil.move(temp_dir.joinpath('output'), sorter_dir)
+        shutil.rmtree(temp_dir, ignore_errors=True)
         self.version = self._fetch_ks2_commit_hash(self.PYKILOSORT_REPO)
         return sorter_dir
 
