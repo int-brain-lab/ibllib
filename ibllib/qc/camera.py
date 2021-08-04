@@ -690,7 +690,8 @@ class CameraQC(base.QC):
         increased the global contrast and linear CDF.  This makes check robust to low light
         conditions.
         """
-        if not test and self.data['frame_samples'] is None or len(self.data['frame_samples']) == 0:
+        no_frames = self.data['frame_samples'] is None or len(self.data['frame_samples']) == 0
+        if not test and no_frames:
             return 'NOT_SET'
 
         if roi is False:

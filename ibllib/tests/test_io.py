@@ -225,7 +225,7 @@ class TestsRawDataLoaders(unittest.TestCase):
             session_path.joinpath('raw_video_data').mkdir(parents=True)
             filename = session_path / 'raw_video_data' / f'_iblrig_{side}Camera.GPIO.bin'
             np.full(1000, 1.87904819e+09, dtype=np.float64).tofile(filename)
-            with self.assertRaises(AssertionError):
+            with self.assertLogs('ibllib', level='WARNING'):
                 raw.load_camera_gpio(session_path, side, as_dicts=True)
 
             # Test dead pin array

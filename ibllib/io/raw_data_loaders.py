@@ -260,7 +260,6 @@ def load_camera_gpio(session_path, label: str, as_dicts=False):
     """
     if session_path is None:
         return
-
     raw_path = Path(session_path).joinpath('raw_video_data')
     label = assert_valid_label(label)
 
@@ -268,17 +267,20 @@ def load_camera_gpio(session_path, label: str, as_dicts=False):
     if next(raw_path.glob(f'_iblrig_{label}Camera.frameData*.bin'), False):
         df = load_camera_frameData(session_path, camera=label, raw=False)
         gpio = np.array([x for x in df['embeddedGPIOPinState'].values])
+        if len(gpio) == 0:
+            return [None] * 4 if as_dicts else None
     else:
         GPIO_file = next(raw_path.glob(f'_iblrig_{label}Camera.GPIO*.bin'), None)
         # This deals with missing and empty files the same
         gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(np.uint32) if GPIO_file else []
-    if len(gpio) == 0:
-        return [None] * 4 if as_dicts else None
-
-    # Check values make sense (4 pins = 16 possible values)
-    assert np.isin(gpio, np.left_shift(np.arange(2 ** 4, dtype=np.uint32), 32 - 4)).all()
-    # 4 pins represented as uint32. For each pin, shift its bit to the end and check the bit is set
-    gpio = (np.right_shift(np.tile(gpio, (4, 1)).T, np.arange(31, 27, -1)) & 0x1) == 1
+        # Check values make sense (4 pins = 16 possible values)
+        if not np.isin(gpio, np.left_shift(np.arange(2 ** 4, dtype=np.uint32), 32 - 4)).all():
+            _logger.warning('Unexpected GPIO values; decoding may fail')
+        if len(gpio) == 0:
+            return [None] * 4 if as_dicts else None
+        # 4 pins represented as uint32
+        # For each pin, shift its bit to the end and check the bit is set
+        gpio = (np.right_shift(np.tile(gpio, (4, 1)).T, np.arange(31, 27, -1)) & 0x1) == 1
 
     if as_dicts:
         if not gpio.any():
