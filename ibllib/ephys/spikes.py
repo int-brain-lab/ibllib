@@ -5,7 +5,7 @@ import shutil
 import tarfile
 
 import numpy as np
-import one.alf.io as alfio
+from one.alf.files import get_session_path
 
 import phylib.io.alf
 from ibllib.ephys.sync_probes import apply_sync
@@ -121,7 +121,7 @@ def sync_spike_sorting(ap_file, out_path):
         ap_file.name.replace('.ap.', '.sync.')).with_suffix('.npy')
     # try to get probe sync if it doesn't exist
     if not sync_file.exists():
-        _, sync_files = sync_probes.sync(alfio.get_session_path(ap_file))
+        _, sync_files = sync_probes.sync(get_session_path(ap_file))
         out_files.extend(sync_files)
     # if it still not there, full blown error
     if not sync_file.exists():
