@@ -178,8 +178,7 @@ class SpikeSorting(tasks.Task):
         _logger.info(info_str)
         if process.returncode != 0:
             error_str = info.decode("utf-8").strip()
-            _logger.error(error_str)
-            raise RuntimeError(f"{self.SPIKE_SORTER_NAME}")
+            raise RuntimeError(f"{self.SPIKE_SORTER_NAME} {info_str}, {error_str}")
 
         shutil.move(temp_dir.joinpath('output'), sorter_dir)
         shutil.rmtree(temp_dir, ignore_errors=True)
