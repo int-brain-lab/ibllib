@@ -139,6 +139,7 @@ class SpikeSorting(tasks.Task):
                          f" found for {ap_file}, skipping.")
             return ap_file.parent
         sorter_dir = self.session_path.joinpath("spike_sorters", self.SPIKE_SORTER_NAME, label)
+        print(sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log"))
         if sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log").exists():
             _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
                          f" found in {sorter_dir}, skipping.")
@@ -180,7 +181,7 @@ class SpikeSorting(tasks.Task):
             error_str = info.decode("utf-8").strip()
             raise RuntimeError(f"{self.SPIKE_SORTER_NAME} {info_str}, {error_str}")
 
-        shutil.move(temp_dir.joinpath('output'), sorter_dir)
+        shutil.copytree(temp_dir.joinpath('output'), sorter_dir, dirs_exist_ok=True)
         shutil.rmtree(temp_dir, ignore_errors=True)
         self.version = self._fetch_ks2_commit_hash(self.PYKILOSORT_REPO)
         return sorter_dir
@@ -201,6 +202,7 @@ class SpikeSorting(tasks.Task):
             try:
                 ks2_dir = self._run_pykilosort(ap_file)  # runs ks2, skips if it already ran
                 probe_out_path = self.session_path.joinpath("alf", label)
+                shutil.rmtree(probe_out_path, ignore_errors=True)
                 probe_out_path.mkdir(parents=True, exist_ok=True)
                 spikes.ks2_to_alf(
                     ks2_dir,
