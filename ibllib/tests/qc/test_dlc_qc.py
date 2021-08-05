@@ -3,7 +3,8 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 
-from oneibl.one import ONE
+from one.api import ONE
+from ibllib.tests import TEST_DB
 from ibllib.qc.dlc import DlcQC
 from ibllib.tests.fixtures import utils
 
@@ -12,11 +13,7 @@ class TestDlcQC(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.one = ONE(
-            base_url="https://test.alyx.internationalbrainlab.org",
-            username="test_user",
-            password="TapetesBloc18",
-        )
+        cls.one = ONE(**TEST_DB)
 
     def setUp(self) -> None:
         self.tempdir = TemporaryDirectory()
@@ -28,13 +25,18 @@ class TestDlcQC(unittest.TestCase):
     def tearDown(self) -> None:
         self.tempdir.cleanup()
 
+    @classmethod
+    def tearDownClass(cls) -> None:
+        # Clear overwritten methods by destroying cached instance
+        ONE.cache_clear()
+
     def test_ensure_data(self):
         self.qc.eid = self.eid
         self.qc.download_data = False
         # If data for this session exists locally, overwrite the methods so it is not found
-        if self.one.path_from_eid(self.eid).exists():
+        if self.one.eid2path(self.eid).exists():
             self.qc.one.to_eid = lambda _: self.eid
-            self.qc.one.download_datasets = lambda _: None
+            self.qc.one._download_datasets = lambda _: None
         with self.assertRaises(AssertionError):
             self.qc.run(update=False)
 

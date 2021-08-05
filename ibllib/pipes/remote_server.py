@@ -7,7 +7,7 @@ import os
 from ibllib.ephys import sync_probes
 from ibllib.pipes import ephys_preprocessing as ephys
 from oneibl.patcher import FTPPatcher
-from oneibl.one import ONE
+from one.api import ONE
 
 _logger = logging.getLogger('ibllib')
 
@@ -108,7 +108,7 @@ def job_run_ks2():
     flag_files[0].unlink()
 
     # Instantiate one
-    one = ONE()
+    one = ONE(cache_rest=None)
 
     # sync the probes
     status, sync_files = sync_probes.sync(session_path)

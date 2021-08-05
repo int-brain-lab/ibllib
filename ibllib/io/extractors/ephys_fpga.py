@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pkg_resources import parse_version
 
-import alf.io
-from brainbox.core import Bunch
+import one.alf.io as alfio
+from iblutil.util import Bunch
 import ibllib.dsp as dsp
 import ibllib.exceptions as err
 from ibllib.io import raw_data_loaders, spikeglx
@@ -123,7 +123,8 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
     if not opened:
         sr.close()
     if save:
-        out_files = alf.io.save_object_npy(output_path, sync, '_spikeglx_sync', parts=parts)
+        out_files = alfio.save_object_npy(output_path, sync, 'sync',
+                                          namespace='spikeglx', parts=parts)
         return Bunch(sync), out_files
     else:
         return Bunch(sync)
@@ -318,7 +319,7 @@ def _clean_frame2ttl(frame2ttl, display=False):
     frame2ttl_ = {'times': np.delete(frame2ttl['times'], iko),
                   'polarities': np.delete(frame2ttl['polarities'], iko)}
     if iko.size > (0.1 * frame2ttl['times'].size):
-        _logger.warning(f'{iko.size} ({iko.size / frame2ttl["times"].size * 100} %) '
+        _logger.warning(f'{iko.size} ({iko.size / frame2ttl["times"].size:.2%} %) '
                         f'frame to TTL polarity switches below {F2TTL_THRESH} secs')
     if display:  # pragma: no cover
         from ibllib.plots import squares
@@ -350,7 +351,7 @@ def extract_wheel_sync(sync, chmap=None):
     return wheel['re_ts'], wheel['re_pos']
 
 
-def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tmax=np.inf):
+def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None):
     """
     Extract wheel positions and times from sync fronts dictionary
 
@@ -361,13 +362,13 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tm
     defaults to False
     :return: trials dictionary
     """
-    bpod = get_sync_fronts(sync, chmap['bpod'], tmax=tmax)
+    bpod = get_sync_fronts(sync, chmap['bpod'])
     if bpod.times.size == 0:
         raise err.SyncBpodFpgaException('No Bpod event found in FPGA. No behaviour extraction. '
                                         'Check channel maps.')
-    frame2ttl = get_sync_fronts(sync, chmap['frame2ttl'], tmax=tmax)
+    frame2ttl = get_sync_fronts(sync, chmap['frame2ttl'])
     frame2ttl = _clean_frame2ttl(frame2ttl)
-    audio = get_sync_fronts(sync, chmap['audio'], tmax=tmax)
+    audio = get_sync_fronts(sync, chmap['audio'])
     # extract events from the fronts for each trace
     t_trial_start, t_valve_open, t_iti_in = _assign_events_bpod(bpod['times'], bpod['polarities'])
     # one issue is that sometimes bpod pulses may not have been detected, in this case
@@ -463,11 +464,11 @@ def extract_sync(session_path, overwrite=False, ephys_files=None):
         alfname = dict(object='sync', namespace='spikeglx')
         if efi.label:
             alfname['extra'] = efi.label
-        file_exists = alf.io.exists(bin_file.parent, **alfname)
+        file_exists = alfio.exists(bin_file.parent, **alfname)
         if not overwrite and file_exists:
-            _logger.warning(f'Skipping raw sync: SGLX sync found for probe {efi.label} !')
-            sync = alf.io.load_object(bin_file.parent, **alfname)
-            out_files, _ = alf.io._ls(bin_file.parent, **alfname)
+            _logger.warning(f'Skipping raw sync: SGLX sync found for probe {efi.label}!')
+            sync = alfio.load_object(bin_file.parent, **alfname)
+            out_files, _ = alfio._ls(bin_file.parent, **alfname)
         else:
             sr = spikeglx.Reader(bin_file)
             sync, out_files = _sync_to_alf(sr, bin_file.parent, save=True, parts=efi.label)
@@ -483,7 +484,7 @@ def _get_all_probes_sync(session_path, bin_exists=True):
     version = spikeglx.get_neuropixel_version_from_files(ephys_files)
     # attach the sync information to each binary file found
     for ef in ephys_files:
-        ef['sync'] = alf.io.load_object(ef.path, 'sync', namespace='spikeglx', short_keys=True)
+        ef['sync'] = alfio.load_object(ef.path, 'sync', namespace='spikeglx', short_keys=True)
         ef['sync_map'] = get_ibl_sync_map(ef, version)
     return ephys_files
 
@@ -605,8 +606,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         bpod_trials, _ = biased_trials.extract_all(
             session_path=self.session_path, save=False, bpod_trials=bpod_raw)
         bpod_trials['intervals_bpod'] = np.copy(bpod_trials['intervals'])
-        fpga_trials = extract_behaviour_sync(sync=sync, chmap=chmap, bpod_trials=bpod_trials,
-                                             tmax=bpod_trials['intervals'][-1, -1] + 60)
+        fpga_trials = extract_behaviour_sync(sync=sync, chmap=chmap, bpod_trials=bpod_trials)
         # checks consistency and compute dt with bpod
         self.bpod2fpga, drift_ppm, ibpod, ifpga = dsp.utils.sync_timestamps(
             bpod_trials['intervals_bpod'][:, 0], fpga_trials.pop('intervals')[:, 0],

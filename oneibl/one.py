@@ -1,4 +1,5 @@
 import abc
+import warnings
 import concurrent.futures
 import json
 import logging
@@ -10,6 +11,7 @@ from pathlib import Path, PurePath
 import shutil
 from typing import Any, Sequence, Union, Optional, List, Dict
 from uuid import UUID
+from pprint import pprint
 
 import requests
 import tqdm
@@ -24,12 +26,13 @@ from alf.files import is_valid, alf_parts
 from ibllib.exceptions import \
     ALFMultipleObjectsFound, ALFObjectNotFound, ALFMultipleCollectionsFound
 from ibllib.io import hashfile, spikeglx
-from ibllib.misc import pprint
 from oneibl.dataclass import SessionDataInfo
 from brainbox.io import parquet
 from brainbox.numerical import ismember, ismember2d, find_first_2d
 
 _logger = logging.getLogger('ibllib')
+
+warnings.warn('Use `import one` instead of `import oneibl`', DeprecationWarning)
 
 
 def Listable(t): return Union[t, Sequence[t]]  # noqa
@@ -996,6 +999,9 @@ class OneAlyx(OneAbstract):
             parquet.save(self._cache_file, self._cache)
 
     def download_raw_partial(self, url_cbin, url_ch, first_chunk=0, last_chunk=0):
+        import warnings
+        warnings.warn('This function has been moved to ibllib.io.spikeglx', DeprecationWarning)
+
         assert str(url_cbin).endswith('.cbin')
         assert str(url_ch).endswith('.ch')
 

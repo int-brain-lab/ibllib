@@ -1,14 +1,10 @@
 # library of small functions
-import json
 import logging
-
+import subprocess
 import numpy as np
+from ibllib.exceptions import NvidiaDriverNotReady
 
 _logger = logging.getLogger('ibllib')
-
-
-def pprint(my_dict):
-    print(json.dumps(my_dict, indent=4))
 
 
 def _parametrized(dec):
@@ -87,6 +83,9 @@ def range_str(values: iter) -> str:
     :param values: An iterable of ints
     :return:
     """
+    import logging
+    logging.getLogger('ibllib').warning(
+        'This function has moved to iblutil.util.range_str')  # iblrplate
     trial_str = ''
     values = list(set(values))
     for i in range(len(values)):
@@ -102,3 +101,16 @@ def range_str(values: iter) -> str:
     if k > -1:
         trial_str = f'{trial_str[:k]} &{trial_str[k + 1:]}'
     return trial_str
+
+
+def check_nvidia_driver():
+    """
+    Checks if the GPU driver reacts and otherwise raises a custom error.
+    Useful to check before long GPU-dependent processes.
+    """
+    process = subprocess.Popen('nvidia-smi', shell=True, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, executable="/bin/bash")
+    info, error = process.communicate()
+    if process.returncode != 0:
+        raise NvidiaDriverNotReady(f"{error.decode('utf-8')}")
+    _logger.info("nvidia-smi command successful")

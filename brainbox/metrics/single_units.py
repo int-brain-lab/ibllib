@@ -25,9 +25,10 @@ import pandas as pd
 
 from ibllib.io import spikeglx
 from phylib.stats import correlograms
-import brainbox as bb
-from brainbox.core import Bunch
-from brainbox.numerical import ismember
+from iblutil.util import Bunch
+from iblutil.numerical import ismember, between_sorted
+from brainbox import singlecell
+from brainbox.io.spikeglx import extract_waveforms
 from brainbox.processing import bincount2D
 from brainbox.metrics import electrode_drift
 
@@ -336,7 +337,7 @@ def firing_rate_coeff_var(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
     '''
 
     # Compute overall instantaneous firing rate and firing rate for each bin.
-    fr = bb.singlecell.firing_rate(ts, hist_win=hist_win, fr_win=fr_win)
+    fr = singlecell.firing_rate(ts, hist_win=hist_win, fr_win=fr_win)
     bin_sz = int(fr.size / n_bins)
     fr_binned = np.array([fr[(b * bin_sz):(b * bin_sz + bin_sz)] for b in range(n_bins)])
 
@@ -393,7 +394,7 @@ def firing_rate_fano_factor(ts, hist_win=0.01, fr_win=0.5, n_bins=10):
     '''
 
     # Compute overall instantaneous firing rate and firing rate for each bin.
-    fr = bb.singlecell.firing_rate(ts, hist_win=hist_win, fr_win=fr_win)
+    fr = singlecell.firing_rate(ts, hist_win=hist_win, fr_win=fr_win)
     # this procedure can cut off data at the end, up to n_bins last timesteps
     bin_sz = int(fr.size / n_bins)
     fr_binned = np.array([fr[(b * bin_sz):(b * bin_sz + bin_sz)] for b in range(n_bins)])
@@ -476,8 +477,7 @@ def pres_ratio(ts, hist_win=10):
     return pr, spks_bins
 
 
-def ptp_over_noise(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='int16', offset=0,
-                   car=True):
+def ptp_over_noise(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, car=True):
     """
     For specified channels, for specified timestamps, computes the mean (peak-to-peak amplitudes /
     the MADs of the background noise).
@@ -496,10 +496,6 @@ def ptp_over_noise(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='i
         The sampling rate (in hz) that the ephys data was acquired at.
     n_ch_probe : int (optional)
         The number of channels of the recording.
-    dtype: str (optional)
-        The datatype represented by the bytes in `ephys_file`.
-    offset: int (optional)
-        The offset (in bytes) from the start of `ephys_file`.
     car: bool (optional)
         A flag to perform common-average-referencing before extracting waveforms.
 
@@ -528,8 +524,7 @@ def ptp_over_noise(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='i
     ch = ch.reshape((ch.size, 1)) if ch.size == 1 else ch
 
     # Get waveforms.
-    wf = bb.io.extract_waveforms(ephys_file, ts, ch, t=t, sr=sr, n_ch_probe=n_ch_probe,
-                                 dtype=dtype, offset=offset, car=car)
+    wf = extract_waveforms(ephys_file, ts, ch, t=t, sr=sr, n_ch_probe=n_ch_probe, car=car)
 
     # Initialize `mean_ptp` based on `ch`, and compute mean ptp of all spikes for each ch.
     mean_ptp = np.zeros((ch.size,))
@@ -538,25 +533,25 @@ def ptp_over_noise(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='i
                                    np.min(wf[:, :, cur_ch], axis=1))
 
     # Compute MAD for `ch` in chunks.
-    s_reader = spikeglx.Reader(ephys_file)
-    file_m = s_reader.data  # the memmapped array
-    n_chunk_samples = 5e6  # number of samples per chunk
-    n_chunks = np.ceil(file_m.shape[0] / n_chunk_samples).astype('int')
-    # Get samples that make up each chunk. e.g. `chunk_sample[1] - chunk_sample[0]` are the
-    # samples that make up the first chunk.
-    chunk_sample = np.arange(0, file_m.shape[0], n_chunk_samples, dtype=int)
-    chunk_sample = np.append(chunk_sample, file_m.shape[0])
-    # Give time estimate for computing MAD.
-    t0 = time.perf_counter()
-    stats.median_absolute_deviation(file_m[chunk_sample[0]:chunk_sample[1], ch], axis=0)
-    dt = time.perf_counter() - t0
-    print('Performing MAD computation. Estimated time is {:.2f} mins.'
-          ' ({})'.format(dt * n_chunks / 60, time.ctime()))
-    # Compute MAD for each chunk, then take the median MAD of all chunks.
-    mad_chunks = np.zeros((n_chunks, ch.size), dtype=np.int16)
-    for chunk in range(n_chunks):
-        mad_chunks[chunk, :] = stats.median_absolute_deviation(
-            file_m[chunk_sample[chunk]:chunk_sample[chunk + 1], ch], axis=0, scale=1)
+    with spikeglx.Reader(ephys_file) as s_reader:
+        file_m = s_reader.data  # the memmapped array
+        n_chunk_samples = 5e6  # number of samples per chunk
+        n_chunks = np.ceil(file_m.shape[0] / n_chunk_samples).astype('int')
+        # Get samples that make up each chunk. e.g. `chunk_sample[1] - chunk_sample[0]` are the
+        # samples that make up the first chunk.
+        chunk_sample = np.arange(0, file_m.shape[0], n_chunk_samples, dtype=int)
+        chunk_sample = np.append(chunk_sample, file_m.shape[0])
+        # Give time estimate for computing MAD.
+        t0 = time.perf_counter()
+        stats.median_absolute_deviation(file_m[chunk_sample[0]:chunk_sample[1], ch], axis=0)
+        dt = time.perf_counter() - t0
+        print('Performing MAD computation. Estimated time is {:.2f} mins.'
+              ' ({})'.format(dt * n_chunks / 60, time.ctime()))
+        # Compute MAD for each chunk, then take the median MAD of all chunks.
+        mad_chunks = np.zeros((n_chunks, ch.size), dtype=np.int16)
+        for chunk in range(n_chunks):
+            mad_chunks[chunk, :] = stats.median_absolute_deviation(
+                file_m[chunk_sample[chunk]:chunk_sample[chunk + 1], ch], axis=0, scale=1)
     print('Done. ({})'.format(time.ctime()))
 
     # Return `mean_ptp` over `mad`
@@ -947,7 +942,6 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         'slidingRP_viol',
         'spike_count'
     ]
-    from brainbox.numerical import between_sorted
     if tbounds:
         ispi = between_sorted(spike_times, tbounds)
         spike_times = spike_times[ispi]

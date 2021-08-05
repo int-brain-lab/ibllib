@@ -1,9 +1,9 @@
-'''
+"""
 Get all probe trajectory, or filter by provenance, for a given session eID.
-'''
+"""
 # Author: Olivier Winter
 
-from oneibl.one import ONE
+from one.api import ONE
 
 one = ONE()
 

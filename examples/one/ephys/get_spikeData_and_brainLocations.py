@@ -1,13 +1,11 @@
-'''
+"""
 Get spikes data and associate brain regions for all probes in a single session via
 ONE and brainbox.
 TODO return dict of bunch via one.load_object
-'''
+"""
 # Author: Gaelle Chapuis
 
-# import alf.io as aio
-# import brainbox as bb
-from oneibl.one import ONE
+from one.api import ONE
 import brainbox.io.one as bbone
 
 one = ONE()
@@ -36,48 +34,23 @@ clusters_brain = bbone.merge_clusters_channels(clusters, channels, keys_to_add_e
 del spikes, clusters, clusters_brain, channels  # Delete for the purpose of the example
 
 # ---------------------------------------------
-# 3. I don't want to connect to ONE and I already know my session path
+# 3. Can also use a session path
 session_path = one.path_from_eid(eid)  # replace by your local path
 spikes, clusters = bbone.load_spike_sorting(session_path, one=one)
-# TODO offline loading of channel locations ? Probably by caching the queries.
-
-# ---------------- WIP ---------------------
-
-# TODO one.load_object(): return dict of bunch
 
 # --- Download spikes data
 # 1. either a specific subset of dataset types via the one command
 # 2. either the whole spikes object via the one
-'''
-# Option 1 -- Download only subset of dataset in spike object
-dataset_types = ['spikes.times',
-                 'spikes.clusters']
-one.load(eid, dataset_types=dataset_types)
+"""
+# Option 1 -- Download only subset of dataset in spike object for 1 probe
+datasets = ['spikes.times.npy',
+            'spikes.clusters.npy']
+spike_times, clusters = one.load_datasets(eid, datasets, collections='alf/probe00')
 
 
-# Option 2 -- Download and load into memory the whole spikes object
-spks_b1 = one.load_object(eid, 'spikes')
-# TODO OUTPUT DOES NOT WORK for multiple probes,  which probe returned unknown
-# TODO return dict of bunch
-
-
-# --- Get single probe directory filename either by
-# 1. getting probe description in alf
-# 2. using alyx rest end point
-
-# Option 1.
-prob_des = one.load(eid, dataset_types=['probes.description'])
-n_probe = len(prob_des[0])
-# i_probe can be 0:n_probe-1 ; in this example = 1 (2 probes)
-i_probe = 1
-label1 = prob_des[0][i_probe].get('label')
-#channels[label1]
-
-# -- Set single probe directory path
-session_path = one.path_from_eid(eid)
-probe_dir = session_path.joinpath('alf', label1)
+# Option 2 -- Download and load into memory the whole spikes object for a given probe
+spikes = one.load_object(eid, 'spikes', collection='alf/probe00')
 
 # Make bunch per probe using brainbox
-spks_b = aio.load_object(probe_dir, 'spikes')
-units_b = bb.processing.get_units_bunch(spks_b)
-'''
+units_b = bb.processing.get_units_bunch(spikes)
+"""

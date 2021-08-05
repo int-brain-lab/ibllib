@@ -14,6 +14,9 @@ class VideoStreamer(object):
         :param url_vid: full url of the video or dataset dictionary as output by alyx rest datasets
         :returns cv2.VideoCapture object
         """
+        import warnings
+        warnings.warn('Please use ibllib.io.video.VideoStreamer instead', DeprecationWarning)
+
         # pop the data url from the dataset record if the input is a dictionary
         if isinstance(url_vid, dict):
             url_vid = next(fr['data_url'] for fr in url_vid['file_records'] if fr['data_url'])

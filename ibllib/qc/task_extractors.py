@@ -8,8 +8,8 @@ from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io.extractors.training_wheel import get_wheel_position
 from ibllib.io.extractors import ephys_fpga
 import ibllib.io.raw_data_loaders as raw
-from alf.io import is_session_path
-from oneibl.one import ONE
+from one.alf.spec import is_session_path
+from one.api import ONE
 
 
 _logger = logging.getLogger("ibllib")
@@ -73,18 +73,24 @@ class TaskQCExtractor(object):
             "_iblrig_encoderTrialInfo.raw",
             "_iblrig_ambientSensorData.raw",
         ]
-        eid = self.one.eid_from_path(self.session_path)
+        eid = self.one.path2eid(self.session_path)
+        self.log.info(f"Downloading data for session {eid}")
         # Ensure we have the settings
-        settings = self.one.load(eid, ["_iblrig_taskSettings.raw"], download_only=True)
+        settings, _ = self.one.load_datasets(eid, ["_iblrig_taskSettings.raw.json"],
+                                             collections=['raw_behavior_data'],
+                                             download_only=True, assert_present=False)
         if settings and get_session_extractor_type(self.session_path) == 'ephys':
+
             dstypes.extend(['_spikeglx_sync.channels',
                             '_spikeglx_sync.polarities',
                             '_spikeglx_sync.times',
                             'ephysData.raw.meta',
                             'ephysData.raw.wiring'])
-        self.log.info(f"Downloading data for session {eid}")
-        files = self.one.load(eid, dataset_types=dstypes, download_only=True)
-        missing = [True for _ in dstypes] if not files else [x is None for x in files]
+
+        dataset = self.one.type2datasets(eid, dstypes, details=True)
+        files = self.one._download_datasets(dataset)
+
+        missing = [True] * len(dstypes) if not files else [x is None for x in files]
         if self.session_path is None or all(missing):
             self.lazy = True
             self.log.error("Data not found on server, can't calculate QC.")

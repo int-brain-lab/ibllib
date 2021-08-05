@@ -1,4 +1,15 @@
-## Release Notes 1.11 (not released yet)
+## Release Notes 2.0.0
+### Release Notes 2.0.0
+- ONE2 released on the master branch
+- Pykilosort is the new default spike sorter in the pipeline
+
+## Release Notes 1.12 (not released yet)
+### Release Notes 1.12.0
+- oneibl and alf now deprecated; moved to separate repository
+- other ibllib miscellanea moved to iblutil repository 
+- test database is now configurable with an env var
+
+## Release Notes 1.11
 ### Release Notes 1.11.0
 - brainbox.modeling: New API for using linear and poisson models, doing
   sequential feature selection.

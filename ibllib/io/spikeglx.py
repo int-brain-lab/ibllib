@@ -2,13 +2,16 @@ import json
 import logging
 from pathlib import Path
 import re
+import shutil
 
 import numpy as np
 
 import mtscomp
-from brainbox.core import Bunch
+from iblutil.util import Bunch
 from ibllib.ephys import neuropixel as neuropixel
-from ibllib.io import hashfile
+from iblutil.io import hashfile
+from one.alf.io import remove_uuid_file
+from one.api import ONE
 
 SAMPLE_SIZE = 2  # int16
 DEFAULT_BATCH_SIZE = 1e6
@@ -143,6 +146,8 @@ class Reader:
         :param slice_c: slice or channel indices
         :return: float32 array
         """
+        if not self.is_open:
+            raise IOError('Reader not open; call `open` before `read`')
         darray = np.float32(self._raw[nsel, csel])
         darray *= self.channel_conversion_sample2v[self.type][csel]
         if sync:
@@ -170,6 +175,8 @@ class Reader:
         Reads only the digital sync trace at specified samples using slicing syntax
         >>> sync_samples = sr.read_sync_digital(slice(0,10000))
         """
+        if not self.is_open:
+            raise IOError('Reader not open; call `open` before `read`')
         if not self.meta:
             _logger.warning('Sync trace not labeled in metadata. Assuming last trace')
         return split_sync(self._raw[_slice, _get_sync_trace_indices_from_meta(self.meta)])
@@ -486,17 +493,17 @@ def glob_ephys_files(session_path, suffix='.meta', ext='bin', recursive=True, bi
     Associated to the subfolders where they are
     the expected folder tree is:
     ├── 3A
-    │        ├── imec0
-    │                ├── sync_testing_g0_t0.imec0.ap.bin
-    │        │        └── sync_testing_g0_t0.imec0.lf.bin
-    │        └── imec1
-    │            ├── sync_testing_g0_t0.imec1.ap.bin
-    │            └── sync_testing_g0_t0.imec1.lf.bin
+    │   ├── imec0
+    │   ├── sync_testing_g0_t0.imec0.ap.bin
+    │   │   └── sync_testing_g0_t0.imec0.lf.bin
+    │   └── imec1
+    │      ├── sync_testing_g0_t0.imec1.ap.bin
+    │      └── sync_testing_g0_t0.imec1.lf.bin
     └── 3B
         ├── sync_testing_g0_t0.nidq.bin
         ├── imec0
-        │        ├── sync_testing_g0_t0.imec0.ap.bin
-        │        └── sync_testing_g0_t0.imec0.lf.bin
+        │   ├── sync_testing_g0_t0.imec0.ap.bin
+        │   └── sync_testing_g0_t0.imec0.lf.bin
         └── imec1
             ├── sync_testing_g0_t0.imec1.ap.bin
             └── sync_testing_g0_t0.imec1.lf.bin
@@ -506,7 +513,6 @@ def glob_ephys_files(session_path, suffix='.meta', ext='bin', recursive=True, bi
     :param ext: file extension to look for, default 'bin' but could also be 'meta' or 'ch'
     :param recursive:
     :param session_path: folder, string or pathlib.Path
-    :param glob_pattern: pattern to look recursively for (defaults to '*.ap.*bin)
     :returns: a list of dictionaries with keys 'ap': apfile, 'lf': lffile and 'label'
     """
     def get_label(raw_ephys_apfile):
@@ -517,7 +523,7 @@ def glob_ephys_files(session_path, suffix='.meta', ext='bin', recursive=True, bi
 
     recurse = '**/' if recursive else ''
     ephys_files = []
-    for raw_ephys_file in Path(session_path).glob(f'{recurse}*.ap{suffix}'):
+    for raw_ephys_file in Path(session_path).glob(f'{recurse}*.ap*{suffix}'):
         raw_ephys_apfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + f'.*{ext}'), None)
         if not raw_ephys_apfile and bin_exists:
             continue
@@ -535,7 +541,7 @@ def glob_ephys_files(session_path, suffix='.meta', ext='bin', recursive=True, bi
         ephys_files[-1].label = get_label(raw_ephys_apfile)
         ephys_files[-1].path = raw_ephys_apfile.parent
     # for 3b probes, need also to get the nidq dataset type
-    for raw_ephys_file in Path(session_path).rglob(f'{recurse}*.nidq{suffix}'):
+    for raw_ephys_file in Path(session_path).rglob(f'{recurse}*.nidq*{suffix}'):
         raw_ephys_nidqfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + f'.*{ext}'),
                                   None)
         if not bin_exists and ext == 'bin':
@@ -594,7 +600,7 @@ def get_hardware_config(config_file):
     """
     config_file = Path(config_file)
     if config_file.is_dir():
-        config_file = list(config_file.glob('*.wiring.json'))
+        config_file = list(config_file.glob('*.wiring*.json'))
         if config_file:
             config_file = config_file[0]
     if not config_file or not config_file.exists():
@@ -626,3 +632,87 @@ def get_sync_map(folder_ephys):
         return None
     else:
         return _sync_map_from_hardware_config(hc)
+
+
+def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None):
+    """
+    TODO Document
+    :param url_cbin:
+    :param url_ch:
+    :param first_chunk:
+    :param last_chunk:
+    :return:
+    """
+    assert str(url_cbin).endswith('.cbin')
+    assert str(url_ch).endswith('.ch')
+    webclient = (one or ONE()).alyx
+
+    relpath = Path(url_cbin.replace(webclient._par.HTTP_DATA_SERVER, '.')).parents[0]
+    target_dir = Path(webclient.cache_dir, relpath)
+    Path(target_dir).mkdir(parents=True, exist_ok=True)
+
+    # First, download the .ch file if necessary
+    if isinstance(url_ch, Path):
+        ch_file = url_ch
+    else:
+        ch_file = Path(webclient.download_file(
+            url_ch, cache_dir=target_dir, clobber=True, return_md5=False))
+        ch_file = remove_uuid_file(ch_file)
+    ch_file_stream = ch_file.with_suffix('.stream.ch')
+
+    # Load the .ch file.
+    with open(ch_file, 'r') as f:
+        cmeta = json.load(f)
+
+    # Get the first byte and number of bytes to download.
+    i0 = cmeta['chunk_bounds'][first_chunk]
+    ns_stream = cmeta['chunk_bounds'][last_chunk + 1] - i0
+
+    # if the cached version happens to be the same as the one on disk, just load it
+    if ch_file_stream.exists():
+        with open(ch_file_stream, 'r') as f:
+            cmeta_stream = json.load(f)
+        if (cmeta_stream.get('chopped_first_sample', None) == i0 and
+                cmeta_stream.get('chopped_total_samples', None) == ns_stream):
+            return Reader(ch_file_stream.with_suffix('.cbin'))
+    else:
+        shutil.copy(ch_file, ch_file_stream)
+    assert ch_file_stream.exists()
+
+    # prepare the metadata file
+    cmeta['chunk_bounds'] = cmeta['chunk_bounds'][first_chunk:last_chunk + 2]
+    cmeta['chunk_bounds'] = [_ - i0 for _ in cmeta['chunk_bounds']]
+    assert len(cmeta['chunk_bounds']) >= 2
+    assert cmeta['chunk_bounds'][0] == 0
+
+    first_byte = cmeta['chunk_offsets'][first_chunk]
+    cmeta['chunk_offsets'] = cmeta['chunk_offsets'][first_chunk:last_chunk + 2]
+    cmeta['chunk_offsets'] = [_ - first_byte for _ in cmeta['chunk_offsets']]
+    assert len(cmeta['chunk_offsets']) >= 2
+    assert cmeta['chunk_offsets'][0] == 0
+    n_bytes = cmeta['chunk_offsets'][-1]
+    assert n_bytes > 0
+
+    # Save the chopped chunk bounds and offsets.
+    cmeta['sha1_compressed'] = None
+    cmeta['sha1_uncompressed'] = None
+    cmeta['chopped'] = True
+    cmeta['chopped_first_sample'] = i0
+    cmeta['chopped_total_samples'] = ns_stream
+
+    with open(ch_file_stream, 'w') as f:
+        json.dump(cmeta, f, indent=2, sort_keys=True)
+
+    # Download the requested chunks
+    cbin_local_path = webclient.download_file(
+        url_cbin, chunks=(first_byte, n_bytes),
+        cache_dir=target_dir, clobber=True, return_md5=False)
+    cbin_local_path = remove_uuid_file(cbin_local_path)
+    cbin_local_path_renamed = cbin_local_path.with_suffix('.stream.cbin')
+    cbin_local_path.replace(cbin_local_path_renamed)
+    assert cbin_local_path_renamed.exists()
+
+    shutil.copy(cbin_local_path.with_suffix('.meta'),
+                cbin_local_path_renamed.with_suffix('.meta'))
+    reader = Reader(cbin_local_path_renamed)
+    return reader

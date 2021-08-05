@@ -1,22 +1,21 @@
-'''
+"""
 Get all trajectories from given provenance,
 that have better QC than given status,
 plot as scatter
-'''
+"""
 
 from ibl_pipeline import acquisition
 from ibl_pipeline.analyses import behavior as behavior_analysis
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-from oneibl.one import ONE
+from one.api import ONE
 
-one = ONE()
 
-traj = one.alyx.rest('trajectories', 'list', provenance='Planned',
-                     django='probe_insertion__session__project__name__'
-                            'icontains,ibl_neuropixel_brainwide_01,'
-                            'probe_insertion__session__qc__lt,50')
+traj = ONE().alyx.rest('trajectories', 'list', provenance='Planned',
+                       django='probe_insertion__session__project__name__'
+                              'icontains,ibl_neuropixel_brainwide_01,'
+                              'probe_insertion__session__qc__lt,50')
 
 # Ephys aligned histology track, Histology track, Micro-manipulator, Planned
 

@@ -5,15 +5,12 @@ from collections import OrderedDict
 
 from ibllib.misc import version
 import ibllib.pipes.tasks
-from oneibl.one import ONE
+from one.api import ONE
+from ibllib.tests import TEST_DB
 
-one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
-          username='test_user', password='TapetesBloc18')
+one = ONE(**TEST_DB)
 SUBJECT_NAME = 'algernon'
 USER_NAME = 'test_user'
-# one = ONE(base_url='http://localhost:8000')
-# SUBJECT_NAME = 'CSP014'
-# USER_NAME = 'olivier'
 
 ses_dict = {
     'subject': SUBJECT_NAME,
@@ -115,7 +112,8 @@ class TestPipelineAlyx(unittest.TestCase):
 
         ses = one.alyx.rest('sessions', 'list', subject=ses_dict['subject'],
                             date_range=[ses_dict['start_time'][:10]] * 2,
-                            number=ses_dict['number'])
+                            number=ses_dict['number'],
+                            no_cache=True)
         if len(ses):
             one.alyx.rest('sessions', 'delete', ses[0]['url'][-36:])
 
@@ -132,10 +130,10 @@ class TestPipelineAlyx(unittest.TestCase):
 
     def test_pipeline_alyx(self):
         eid = self.eid
-        pipeline = SomePipeline(self.session_path, one=one)
+        pipeline = SomePipeline(self.session_path, one=one, eid=eid)
 
         # prepare by deleting all jobs/tasks related
-        tasks = one.alyx.rest('tasks', 'list', session=eid)
+        tasks = one.alyx.rest('tasks', 'list', session=eid, no_cache=True)
         assert(len(tasks) == 0)
 
         # create tasks and jobs from scratch
@@ -145,7 +143,7 @@ class TestPipelineAlyx(unittest.TestCase):
         self.assertTrue(len(alyx_tasks) == NTASKS)
 
         # get the pending jobs from alyx
-        tasks = one.alyx.rest('tasks', 'list', session=eid, status='Waiting')
+        tasks = one.alyx.rest('tasks', 'list', session=eid, status='Waiting', no_cache=True)
         self.assertTrue(len(tasks) == NTASKS)
 
         # run them and make sure their statuses got updated appropriately
@@ -154,18 +152,19 @@ class TestPipelineAlyx(unittest.TestCase):
         # [(t['name'], t['status'], desired_statuses[t['name']]) for t in task_deck]
         self.assertTrue(all(check_statuses))
         self.assertTrue(set([d['name'] for d in datasets]) == set(desired_datasets))
+
         # check logs
         check_logs = [desired_logs in t['log'] if t['log'] else True for t in task_deck]
         self.assertTrue(all(check_logs))
 
         # also checks that the datasets have been labeled with the proper version
-        dsets = one.alyx.rest('datasets', 'list', session=eid)
+        dsets = one.alyx.rest('datasets', 'list', session=eid, no_cache=True)
         check_versions = [desired_versions[d['name']] == d['version'] for d in dsets]
         self.assertTrue(all(check_versions))
 
         # make sure that re-running the make job by default doesn't change complete jobs
         pipeline.create_alyx_tasks()
-        task_deck = one.alyx.rest('tasks', 'list', session=eid)
+        task_deck = one.alyx.rest('tasks', 'list', session=eid, no_cache=True)
         check_statuses = [desired_statuses[t['name']] == t['status'] for t in task_deck]
         self.assertTrue(all(check_statuses))
 
@@ -174,18 +173,18 @@ class TestPipelineAlyx(unittest.TestCase):
         check_statuses = [desired_statuses[t['name']] == t['status'] for t in task_deck]
         self.assertTrue(all(check_statuses))
 
-        # check that logs were correctly amended
+        # check that logs were correctly overwritten
+        check_logs = [t['log'].count(desired_logs) == 1 if t['log'] else True for t in task_deck]
+        check_rerun = ['===RERUN===' not in t['log'] if t['log'] else True for t in task_deck]
+        self.assertTrue(all(check_logs))
+        self.assertTrue(all(check_rerun))
+
+        # Rerun without clobber and check that logs are overwritten
+        task_deck, dsets = pipeline.rerun_failed(machine='testmachine', clobber=False)
         check_logs = [t['log'].count(desired_logs) == desired_logs_rerun[t['name']] if t['log']
                       else t['log'] == desired_logs_rerun[t['name']] for t in task_deck]
         check_rerun = ['===RERUN===' in t['log'] if desired_logs_rerun[t['name']] == 2
                        else True for t in task_deck]
-        self.assertTrue(all(check_logs))
-        self.assertTrue(all(check_rerun))
-
-        # Rerun with clobber and check that logs are overwritten
-        task_deck, dsets = pipeline.rerun_failed(machine='testmachine', clobber=True)
-        check_logs = [t['log'].count(desired_logs) == 1 if t['log'] else True for t in task_deck]
-        check_rerun = ['===RERUN===' not in t['log'] if t['log'] else True for t in task_deck]
         self.assertTrue(all(check_logs))
         self.assertTrue(all(check_rerun))
 

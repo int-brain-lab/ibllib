@@ -1,17 +1,14 @@
 import matplotlib.pyplot as plt
-
-import alf.io
-import brainbox.plot as bbp
-
 from oneibl.one import ONE
 
-one = ONE()
-eid = one.search(lab='wittenlab', date='2019-08-04')
-datasets = one.load(eid, download_only=True)
-ses_path = datasets[0].local_path.parent  # local path where the data has been downloaded
+import brainbox.plot as bbp
 
-spikes = alf.io.load_object(ses_path, 'spikes')
-trials = alf.io.load_object(ses_path, 'trials')
+one = ONE()
+eid = one.search(lab='wittenlab', date='2019-08-04')[0]
+probe_label = 'probe00'
+
+spikes = one.load_object(eid, 'spikes', collection=f'alf/{probe_label}')
+trials = one.load_object(eid, 'trials', collection='alf')
 
 # For a simple peth plot without a raster, all we need to input is spike times, clusters, event
 # times, and the identity of the cluster we want to plot, e.g. in this case cluster 121

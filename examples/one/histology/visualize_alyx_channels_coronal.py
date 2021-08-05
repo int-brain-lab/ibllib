@@ -1,15 +1,14 @@
-
-'''
+"""
 Plot a coronal slice (best fit) that contains a given probe track.
 As input, use an eID and probe label.
 environment installation guide https://github.com/int-brain-lab/iblenv
-'''
+"""
 # Author: Olivier Winter
 
 import numpy as np
+from one.api import ONE
 
 import ibllib.atlas as atlas
-from oneibl.one import ONE
 import brainbox.io.one as bbone
 
 # === Parameters section (edit) ===
@@ -20,7 +19,6 @@ FULL_BLOWN_GUI = True  # set to False for simple matplotlib view
 # === Code (do not edit) ===
 ba = atlas.AllenAtlas(25)
 one = ONE(base_url="https://alyx.internationalbrainlab.org")
-one.path_from_eid(eid)
 traj = one.alyx.rest('trajectories', 'list', session=eid,
                      provenance='Histology track', probe=probe_label)[0]
 channels = bbone.load_channel_locations(eid=eid, one=one, probe=probe_label)

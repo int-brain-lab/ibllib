@@ -10,7 +10,7 @@ import traceback
 from graphviz import Digraph
 
 from ibllib.misc import version
-from ibllib.io import params
+import one.params
 from oneibl.registration import register_dataset
 
 
@@ -33,7 +33,7 @@ class Task(abc.ABC):
     log = ''
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
-                 machine=None, clobber=False):
+                 machine=None, clobber=True):
         self.taskid = taskid
         self.one = one
         self.session_path = session_path
@@ -159,16 +159,19 @@ class Pipeline(abc.ABC):
     def __init__(self, session_path=None, one=None, eid=None):
         assert session_path or eid
         self.one = one
+        if one and one.alyx.cache_mode and one.alyx.default_expiry.seconds > 1:
+            _logger.warning('Alyx client REST cache active; this may cause issues with jobs')
         self.eid = eid
         if session_path:
             self.session_path = session_path
-            self.eid = one.eid_from_path(session_path) if self.one else None
+            if not self.eid:
+                # eID for newer sessions may not be in cache so use remote query
+                self.eid = one.path2eid(session_path, query_type='remote') if self.one else None
         self.label = self.__module__ + '.' + type(self).__name__
 
     def make_graph(self, out_dir=None, show=True):
         if not out_dir:
-            par = params.read('one_params')
-            out_dir = par.CACHE_DIR
+            out_dir = self.one._cache_dir if self.one else one.params.get().CACHE_DIR
         m = Digraph('G', filename=str(Path(out_dir).joinpath(self.__module__ + '_graphs.gv')))
         m.attr(rankdir='TD')
 
@@ -209,7 +212,8 @@ class Pipeline(abc.ABC):
         if self.one is None:
             _logger.warning("No ONE instance found for Alyx connection, set the one property")
             return
-        tasks_alyx_pre = self.one.alyx.rest('tasks', 'list', session=self.eid, graph=self.name)
+        tasks_alyx_pre = self.one.alyx.rest('tasks', 'list',
+                                            session=self.eid, graph=self.name, no_cache=True)
         tasks_alyx = []
         # creates all the tasks by iterating through the ordered dict
         for k, t in self.tasks.items():
@@ -234,11 +238,13 @@ class Pipeline(abc.ABC):
             tasks_alyx.append(talyx)
         return tasks_alyx
 
-    def run(self, status__in=['Waiting'], machine=None, clobber=False, **kwargs):
+    def run(self, status__in=['Waiting'], machine=None, clobber=True, **kwargs):
         """
         Get all the session related jobs from alyx and run them
         :param status__in: lists of status strings to run in
         ['Waiting', 'Started', 'Errored', 'Empty', 'Complete']
+        :param machine: string identifying the machine the task is run on, optional
+        :param clobber: bool, if True any existing logs are overwritten, default is True
         :param kwargs: arguments passed downstream to run_alyx_task
         :return: jalyx: list of REST dictionaries of the job endpoints
         :return: job_deck: list of REST dictionaries of the jobs endpoints
@@ -248,7 +254,7 @@ class Pipeline(abc.ABC):
         if self.one is None:
             _logger.warning("No ONE instance found for Alyx connection, set the one property")
             return
-        task_deck = self.one.alyx.rest('tasks', 'list', session=self.eid)
+        task_deck = self.one.alyx.rest('tasks', 'list', session=self.eid, no_cache=True)
         # [(t['name'], t['level']) for t in task_deck]
         all_datasets = []
         for i, j in enumerate(task_deck):
@@ -275,7 +281,7 @@ class Pipeline(abc.ABC):
 
 
 def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
-                  max_md5_size=None, machine=None, clobber=False):
+                  max_md5_size=None, machine=None, clobber=True):
     """
     Runs a single Alyx job and registers output datasets
     :param tdict:
@@ -287,13 +293,14 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     :param max_md5_size: in bytes, if specified, will not compute the md5 checksum above a given
     filesize to save time
     :param machine: string identifying the machine the task is run on, optional
+    :param clobber: bool, if True any existing logs are overwritten, default is True
     :return:
     """
     registered_dsets = []
     if len(tdict['parents']):
         # here we need to check parents status, get the job_deck if not available
         if not job_deck:
-            job_deck = one.alyx.rest('tasks', 'list', session=tdict['session'])
+            job_deck = one.alyx.rest('tasks', 'list', session=tdict['session'], no_cache=True)
         # check the dependencies
         parent_tasks = filter(lambda x: x['id'] in tdict['parents'], job_deck)
         parent_statuses = [j['status'] for j in parent_tasks]

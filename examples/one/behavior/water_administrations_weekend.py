@@ -3,7 +3,7 @@ Programmatically add new water administrations for the week-end onto the Alyx da
 '''
 #  Author: Olivier Winter
 
-from oneibl.one import ONE
+from one.api import ONE
 
 one = ONE(base_url='https://dev.alyx.internationalbrainlab.org')
 
@@ -19,7 +19,7 @@ def _example_change_wa(dates, sub):
                 'user': 'valeria',
                 'adlib': True}
             # Do not use the example on anything else than alyx-dev !
-            if one.alyx._base_url == 'https://dev.alyx.internationalbrainlab.org':
+            if one.alyx.base_url == 'https://dev.alyx.internationalbrainlab.org':
                 one.alyx.rest('water-administrations', 'create', data=wa_)
 
 

@@ -1,4 +1,4 @@
-'''
+"""
 Register on Alyx the set of tracked traces (after histology) for a given mouse.
 
 All your tracks should be in a single folder, and the files names should follow the nomenclature
@@ -21,12 +21,13 @@ and re-run.
 
 With EXAMPLE_OVERWRITE = True, the script downloads an example dataset and runs
 the registration (used for automatic testing of the example).
-'''
+"""
 # Author: Olivier, Gaelle
+from pathlib import Path
+
+from one.api import ONE
 
 from ibllib.pipes import histology
-from oneibl.one import ONE
-from pathlib import Path
 
 # ======== EDIT FOR USERS ====
 
@@ -44,7 +45,7 @@ one = ONE(base_url=ALYX_URL)
 
 if EXAMPLE_OVERWRITE:
     # TODO Olivier : Function to download examples folder
-    cachepath = Path(one._par.CACHE_DIR)
+    cachepath = Path(one.alyx.cache_dir)
     path_tracks = cachepath.joinpath('examples', 'histology', 'tracks_to_add')
 
 histology.register_track_files(path_tracks=path_tracks, one=one, overwrite=True)

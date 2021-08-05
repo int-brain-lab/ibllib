@@ -1,40 +1,47 @@
-from pathlib import Path
 import logging
 import os
-import traceback
 
 import numpy as np
 import pandas as pd
+from iblutil.util import Bunch
 
-import alf.io
+from one.alf.spec import is_session_path
+import one.alf.exceptions as alferr
+from one.api import ONE, One, OneAlyx
+
 from ibllib.io import spikeglx
-from ibllib.atlas.regions import BrainRegions
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
-from oneibl.one import ONE
+from ibllib.ephys.neuropixel import SITES_COORDINATES, TIP_SIZE_UM
+from ibllib.atlas import atlas
+from ibllib.atlas.regions import BrainRegions
+from ibllib.pipes import histology
+from ibllib.pipes.ephys_alignment import EphysAlignment
 
-from brainbox.core import Bunch, TimeSeries
+from brainbox.core import TimeSeries
 from brainbox.processing import sync
 
 logger = logging.getLogger('ibllib')
 
 
-def load_lfp(eid, one=None, dataset_types=None):
+def load_lfp(eid, one=None, dataset_types=None, **kwargs):
     """
+    TODO Verify works
     From an eid, hits the Alyx database and downloads the standard set of datasets
     needed for LFP
     :param eid:
     :param dataset_types: additional dataset types to add to the list
+    :param open: if True, spikeglx readers are opened
     :return: spikeglx.Reader
     """
     if dataset_types is None:
         dataset_types = []
     dtypes = dataset_types + ['ephysData.raw.lf', 'ephysData.raw.meta', 'ephysData.raw.ch']
-    one.load(eid, dataset_types=dtypes, download_only=True)
-    session_path = one.path_from_eid(eid)
+    [one.load_session_dataset(eid, dset, download_only=True) for dset in dtypes]
+    session_path = one.eid2path(eid)
 
     efiles = [ef for ef in spikeglx.glob_ephys_files(session_path, bin_exists=False)
               if ef.get('lf', None)]
-    return [spikeglx.Reader(ef['lf']) for ef in efiles]
+    return [spikeglx.Reader(ef['lf'], **kwargs) for ef in efiles]
 
 
 def load_channel_locations(eid, one=None, probe=None, aligned=False):
@@ -42,14 +49,21 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
     From an eid, get brain locations from Alyx database
     analysis.
     :param eid: session eid or dictionary returned by one.alyx.rest('sessions', 'read', id=eid)
-    :param dataset_types: additional spikes/clusters objects to add to the standard list
     :return: channels
     """
+    one = one or ONE()
+
+    if not isinstance(one, One):
+        logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
+        from .deprecated import one as old
+        return old.load_channel_locations(eid, one=one, probe=probe, aligned=aligned)
+    assert isinstance(one, OneAlyx), 'ONE much be in remote mode'
+
     if isinstance(eid, dict):
         ses = eid
         eid = ses['url'][-36:]
-
-    one = one or ONE()
+    else:
+        eid = one.to_eid(eid)  # Ensure eid
 
     # When a specific probe has been requested
     if isinstance(probe, str):
@@ -80,9 +94,9 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
             counts = [ins.get('json', {'temp': 0}).get('extended_qc', {'temp': 0}).
                       get('alignment_count', 0) for ins in insertions]
         except Exception:
-            tracing = [False for ins in insertions]
-            resolved = [False for ins in insertions]
-            counts = [0 for ins in insertions]
+            tracing = [False] * len(insertions)
+            resolved = [False] * len(insertions)
+            counts = [0] * len(insertions)
 
         probe_id = [ins['id'] for ins in insertions]
 
@@ -169,7 +183,7 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
     return channels
 
 
-def load_ephys_session(eid, one=None, dataset_types=None):
+def load_ephys_session(eid, one=None):
     """
     From an eid, hits the Alyx database and downloads a standard default set of dataset types
     From a local session Path (pathlib.Path), loads a standard default set of dataset types
@@ -182,24 +196,25 @@ def load_ephys_session(eid, one=None, dataset_types=None):
         'probes.description'
     :param eid: experiment UUID or pathlib.Path of the local session
     :param one: one instance
-    :param dataset_types: additional spikes/clusters objects to add to the standard default list
     :return: spikes, clusters, trials (dict of bunch, 1 bunch per probe)
     """
     assert one
-    spikes, clusters = load_spike_sorting(eid, one=one, dataset_types=dataset_types)
-    if isinstance(eid, Path):
-        trials = alf.io.load_object(eid.joinpath('alf'), object='trials')
-    else:
-        trials = one.load_object(eid, obj='trials')
+
+    if not isinstance(one, One):
+        logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
+        from .deprecated import one as old
+        return old.load_ephys_session(eid, one=one)
+
+    spikes, clusters = load_spike_sorting(eid, one=one)
+    trials = one.load_object(eid, 'trials')
 
     return spikes, clusters, trials
 
 
-def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, force=False):
+def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sorter=None):
     """
-    From an eid, hits the Alyx database and downloads a standard default set of dataset types
-    From a local session Path (pathlib.Path), loads a standard default set of dataset types
-     to perform analysis:
+    From an eid, loads spikes and clusters for all probes
+    The following set of dataset types are loaded:
         'clusters.channels',
         'clusters.depths',
         'clusters.metrics',
@@ -207,96 +222,76 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, force=Fals
         'spikes.times',
         'probes.description'
     :param eid: experiment UUID or pathlib.Path of the local session
-    :param one:
+    :param one: an instance of OneAlyx
     :param probe: name of probe to load in, if not given all probes for session will be loaded
     :param dataset_types: additional spikes/clusters objects to add to the standard default list
-    :param force: by default function looks for data on local computer and loads this in. If you
-    want to connect to database and make sure files are still the same set force=True
+    :param spike_sorter: name of the spike sorting you want to load
     :return: spikes, clusters (dict of bunch, 1 bunch per probe)
     """
-    if isinstance(eid, Path):
-        # Do everything locally without ONE
-        session_path = eid
-        if isinstance(probe, str):
-            labels = [probe]
-        else:
-            probes = alf.io.load_object(session_path.joinpath('alf'), 'probes')
-            labels = [pr['label'] for pr in probes['description']]
-        spikes = Bunch({})
-        clusters = Bunch({})
-        for label in labels:
-            _spikes, _clusters = _load_spike_sorting_local(session_path, label)
-            spikes[label] = _spikes
-            clusters[label] = _clusters
+    one = one or ONE()
+    if not isinstance(one, One):
+        logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
+        from .deprecated import one as old
+        return old.load_spike_sorting(eid, one=one, probe=probe)
 
-        return spikes, clusters
-
+    if isinstance(probe, str):
+        labels = [probe]
     else:
-        session_path = one.path_from_eid(eid)
-        if not session_path:
-            logger.warning('Session not found')
-            return (None, None), 'no session path'
-
-        one = one or ONE()
-        dtypes_default = [
-            'clusters.channels',
-            'clusters.depths',
-            'clusters.metrics',
-            'spikes.clusters',
-            'spikes.times',
-            'probes.description'
-        ]
-        if dataset_types is None:
-            dtypes = dtypes_default
+        if one.offline:
+            probes = one.load_object(eid, 'probes', collection='alf')
+            labels = [pr['label'] for pr in probes['description']]
         else:
-            # Append extra optional DS
-            dtypes = list(set(dataset_types + dtypes_default))
-
-        if isinstance(probe, str):
-            labels = [probe]
-        else:
-            insertions = one.alyx.rest('insertions', 'list', session=eid)
+            assert isinstance(one, OneAlyx), 'ONE must be in remote mode'
+            insertions = one.alyx.rest('insertions', 'list', session=one.to_eid(eid))
             labels = [ins['name'] for ins in insertions]
 
-        spikes = Bunch({})
-        clusters = Bunch({})
-        for label in labels:
-            _spikes, _clusters = _load_spike_sorting_local(session_path, label)
-            spike_dtypes = [sp for sp in dtypes if 'spikes.' in sp]
-            spike_local = ['spikes.' + sp for sp in list(_spikes.keys())]
-            spike_exists = all([sp in spike_local for sp in spike_dtypes])
-            cluster_dtypes = [cl for cl in dtypes if 'clusters.' in cl]
-            cluster_local = ['clusters.' + cl for cl in list(_clusters.keys())]
-            cluster_exists = all([cl in cluster_local for cl in cluster_dtypes])
+    spikes = Bunch.fromkeys(labels)
+    clusters = Bunch.fromkeys(labels)
+    dtypes_default = [
+        'clusters.channels',
+        'clusters.depths',
+        'clusters.metrics',
+        'spikes.clusters',
+        'spikes.times',
+        'probes.description'
+    ]
+    if dataset_types is None:
+        dtypes = dtypes_default
+    else:
+        # Append extra optional DS
+        dtypes = list(set(dataset_types + dtypes_default))
 
-            if not spike_exists or not cluster_exists or force:
-                logger.info(f'Did not find local files for spikes and clusters for {session_path} '
-                            f'and {label}. Downloading....')
-                one.load(eid, dataset_types=dtypes, download_only=True)
-                _spikes, _clusters = _load_spike_sorting_local(session_path, label)
-                if not _spikes:
-                    logger.warning(
-                        f'Could not load spikes datasets for session {session_path} and {label}. '
-                        f'Spikes for {probe} will return an empty dict')
-                else:
-                    spikes[label] = _spikes
-                if not _clusters:
-                    logger.warning(
-                        f'Could not load clusters datasets for session {session_path} and {label}.'
-                        f' Clusters for {label} will return an empty dict')
-                else:
-                    clusters[label] = _clusters
-            else:
-                logger.info(f'Local files for spikes and clusters for {session_path} '
-                            f'and {label} found. To re-download set force=True')
+    spike_attributes = [sp.split('.')[1] for sp in dtypes if 'spikes.' in sp]
+    cluster_attributes = [cl.split('.')[1] for cl in dtypes if 'clusters.' in cl]
 
-                spikes[label] = _spikes
-                clusters[label] = _clusters
+    for label in labels:
 
-        return spikes, clusters
+        if spike_sorter is None:
+            collection = f'alf/{label}'
+        else:
+            collection = f'alf/{label}/{spike_sorter}'
+
+        try:
+            spikes[label] = one.load_object(eid, 'spikes', collection=collection,
+                                            attribute=spike_attributes)
+        except alferr.ALFError:
+            logger.warning(
+                f'Could not load spikes datasets for session {eid}. '
+                f'Spikes for {label} will return an empty dict')
+
+        session_path = eid if is_session_path(eid) else one.eid2path(one.to_eid(eid))
+        _remove_old_clusters(session_path, label)
+        try:
+            clusters[label] = one.load_object(eid, 'clusters', collection=collection,
+                                              attribute=cluster_attributes)
+        except alferr.ALFError:
+            logger.warning(
+                f'Could not load clusters datasets for session {eid}. '
+                f'Clusters for {label} will return an empty dict')
+    return spikes, clusters
 
 
-def _load_spike_sorting_local(session_path, probe):
+def _remove_old_clusters(session_path, probe):
     # gets clusters and spikes from a local session folder
     probe_path = session_path.joinpath('alf', probe)
 
@@ -306,19 +301,6 @@ def _load_spike_sorting_local(session_path, probe):
     if cluster_file.exists():
         os.remove(cluster_file)
         logger.info('Deleting old clusters.metrics.csv file')
-
-    try:
-        spikes = alf.io.load_object(probe_path, object='spikes')
-    except Exception:
-        logger.error(traceback.format_exc())
-        spikes = {}
-    try:
-        clusters = alf.io.load_object(probe_path, object='clusters')
-    except Exception:
-        logger.error(traceback.format_exc())
-        clusters = {}
-
-    return spikes, clusters
 
 
 def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
@@ -355,7 +337,7 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
                           f' the right element number compared to cluster.'
                           f' Data in new cluster key {key} is thus returned empty.')
                     dic_clus[label][key] = []
-        except KeyError:
+        except TypeError:
             logger.warning(
                 f'Either clusters or channels does not have key {label}, could not'
                 f' merge')
@@ -364,22 +346,30 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
     return dic_clus
 
 
-def load_spike_sorting_with_channel(eid, one=None, probe=None, dataset_types=None, aligned=False,
-                                    force=False):
+def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False, dataset_types=None,
+                                    spike_sorter=None):
     """
     For a given eid, get spikes, clusters and channels information, and merges clusters
     and channels information before returning all three variables.
     :param eid:
     :param one:
-    :param dataset_types: additional dataset_types to load
     :param aligned: whether to get the latest user aligned channel when not resolved or use
     histology track
+    :param dataset_types: additional spikes/clusters objects to add to the standard default list
+    :param spike_sorter: name of the spike sorting you want to load
     :return: spikes, clusters, channels (dict of bunch, 1 bunch per probe)
     """
     # --- Get spikes and clusters data
     one = one or ONE()
+
+    if not isinstance(one, One):
+        logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
+        from .deprecated import one as old
+        return old.load_spike_sorting_with_channel(eid, one=one, probe=probe, aligned=aligned)
+
     dic_spk_bunch, dic_clus = load_spike_sorting(eid, one=one, probe=probe,
-                                                 dataset_types=dataset_types, force=force)
+                                                 dataset_types=dataset_types,
+                                                 spike_sorter=spike_sorter)
     # -- Get brain regions and assign to clusters
     channels = load_channel_locations(eid, one=one, probe=probe, aligned=aligned)
 
@@ -394,22 +384,17 @@ def load_passive_rfmap(eid, one=None):
     :param one:
     :return: rf_map
     """
-    if isinstance(eid, Path):
-        alf_path = eid.joinpath('alf')
-    else:
-        one = one or ONE()
-        dtypes = {
-            '_iblrig_RFMapStim.raw',
-            '_ibl_passiveRFM.times',
-        }
+    one = one or ONE()
 
-        _ = one.load(eid, dataset_types=dtypes, download_only=True)
-        alf_path = one.path_from_eid(eid).joinpath('alf')
+    if not isinstance(one, One):
+        logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
+        from .deprecated import one as old
+        return old.load_passive_rfmap(eid, one=one)
 
     # Load in the receptive field mapping data
-    rf_map = alf.io.load_object(alf_path, object='passiveRFM', namespace='ibl')
-    frames = np.fromfile(alf_path.parent.joinpath('raw_passive_data', '_iblrig_RFMapStim.raw.bin'),
-                         dtype="uint8")
+    rf_map = one.load_object(eid, obj='passiveRFM', collection='alf')
+    frames = np.fromfile(one.load_dataset(eid, '_iblrig_RFMapStim.raw.bin',
+                                          collection='raw_passive_data'), dtype="uint8")
     y_pix, x_pix = 15, 15
     frames = np.transpose(np.reshape(frames, [y_pix, x_pix, -1], order="F"), [2, 1, 0])
     rf_map['frames'] = frames
@@ -459,8 +444,9 @@ def load_wheel_reaction_times(eid, one=None):
 
 
 def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_wheel=False,
-                   ret_abswheel=False, wheel_binsize=0.02):
+                   ret_abswheel=False, wheel_binsize=0.02, addtl_types=()):
     """
+    TODO Test this with new ONE
     Generate a pandas dataframe of per-trial timing information about a given session.
     Each row in the frame will correspond to a single trial, with timing values indicating timing
     session-wide (i.e. time in seconds since session start). Can optionally return a resampled
@@ -491,6 +477,9 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
         Whether to return the time-resampled absolute wheel velocity trace, by default False
     wheel_binsize : float, optional
         Time bins to resample wheel velocity to, by default 0.02
+    addtl_types : list, optional
+        List of additional types from an ONE trials object to include in the dataframe. Must be
+        valid keys to the dict produced by one.load_object(eid, 'trials'), by default empty.
 
     Returns
     -------
@@ -507,14 +496,15 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
         raise ValueError('ret_wheel and ret_abswheel cannot both be true.')
 
     # Define which datatypes we want to pull out
-    trialstypes = ['trials.choice',
-                   'trials.probabilityLeft',
-                   'trials.feedbackType',
-                   'trials.feedback_times',
-                   'trials.contrastLeft',
-                   'trials.contrastRight',
-                   'trials.goCue_times',
-                   'trials.stimOn_times', ]
+    trialstypes = ['choice',
+                   'probabilityLeft',
+                   'feedbackType',
+                   'feedback_times',
+                   'contrastLeft',
+                   'contrastRight',
+                   'goCue_times',
+                   'stimOn_times']
+    trialstypes.extend(addtl_types)
 
     # A quick function to remap probabilities in those sessions where it was not computed correctly
     def remap_trialp(probs):
@@ -524,16 +514,17 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
         maps = diffs.argmin(axis=1)
         return validvals[maps]
 
-    starttimes = one.load(eid, dataset_types=['trials.stimOn_times'])[0]
-    endtimes = one.load(eid, dataset_types=['trials.feedback_times'])[0]
-    tmp = one.load(eid, dataset_types=trialstypes)
+    trials = one.load_object(eid, 'trials')
+    starttimes = trials.stimOn_times
+    endtimes = trials.feedback_times
+    tmp = {key: value for key, value in trials.items() if key in trialstypes}
 
     if maxlen is not None:
         with np.errstate(invalid='ignore'):
             keeptrials = (endtimes - starttimes) <= maxlen
     else:
         keeptrials = range(len(starttimes))
-    trialdata = {x.split('.')[1]: tmp[i][keeptrials] for i, x in enumerate(trialstypes)}
+    trialdata = {x: tmp[x][keeptrials] for x in trialstypes}
     trialdata['probabilityLeft'] = remap_trialp(trialdata['probabilityLeft'])
     trialsdf = pd.DataFrame(trialdata)
     if maxlen is not None:
@@ -542,8 +533,8 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
     trialsdf['trial_end'] = trialsdf['feedback_times'] + t_after
     tdiffs = trialsdf['trial_end'] - np.roll(trialsdf['trial_start'], -1)
     if np.any(tdiffs[:-1] > 0):
-        logging.warn(f'{sum(tdiffs[:-1] > 0)} trials overlapping due to t_before and t_after '
-                     'values. Try reducing one or both!')
+        logging.warning(f'{sum(tdiffs[:-1] > 0)} trials overlapping due to t_before and t_after '
+                        'values. Try reducing one or both!')
     if not ret_wheel and not ret_abswheel:
         return trialsdf
 
@@ -575,3 +566,43 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
             trials.append(np.abs(whlvel))
     trialsdf['wheel_velocity'] = trials
     return trialsdf
+
+
+def load_channels_from_insertion(ins, depths=None, one=None, ba=None):
+
+    PROV_2_VAL = {
+        'Resolved': 90,
+        'Ephys aligned histology track': 70,
+        'Histology track': 50,
+        'Micro-manipulator': 30,
+        'Planned': 10}
+
+    one = one or ONE()
+    ba = ba or atlas.AllenAtlas()
+    traj = one.alyx.rest('trajectories', 'list', probe_insertion=ins['id'])
+    val = [PROV_2_VAL[tr['provenance']] for tr in traj]
+    idx = np.argmax(val)
+    traj = traj[idx]
+    if depths is None:
+        depths = SITES_COORDINATES[:, 1]
+    if traj['provenance'] == 'Planned' or traj['provenance'] == 'Micro-manipulator':
+        ins = atlas.Insertion.from_dict(traj)
+        # Deepest coordinate first
+        xyz = np.c_[ins.tip, ins.entry].T
+        xyz_channels = histology.interpolate_along_track(xyz, (depths +
+                                                               TIP_SIZE_UM) / 1e6)
+    else:
+        xyz = np.array(ins['json']['xyz_picks']) / 1e6
+        if traj['provenance'] == 'Histology track':
+            xyz = xyz[np.argsort(xyz[:, 2]), :]
+            xyz_channels = histology.interpolate_along_track(xyz, (depths +
+                                                                   TIP_SIZE_UM) / 1e6)
+        else:
+            align_key = ins['json']['extended_qc']['alignment_stored']
+            feature = traj['json'][align_key][0]
+            track = traj['json'][align_key][1]
+            ephysalign = EphysAlignment(xyz, depths, track_prev=track,
+                                        feature_prev=feature,
+                                        brain_atlas=ba, speedy=True)
+            xyz_channels = ephysalign.get_channel_locations(feature, track)
+    return xyz_channels

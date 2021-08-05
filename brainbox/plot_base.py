@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.image import NonUniformImage
 import matplotlib
 from matplotlib import cm
-from brainbox.core import Bunch
+from iblutil.util import Bunch
 
 
 axis_dict = {'x': 0, 'y': 1, 'z': 2}

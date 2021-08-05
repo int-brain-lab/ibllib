@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from scipy import interpolate, sparse
 from brainbox import core
+from iblutil.util import Bunch
 
 
 def sync(dt, times=None, values=None, timeseries=None, offsets=None, interp='zero',
@@ -261,7 +262,7 @@ def get_units_bunch(spks_b, *args):
     '''
 
     # Initialize `units`
-    units_b = core.Bunch()
+    units_b = Bunch()
     # Get the keys to return for `units`:
     if not args:
         feat_keys = list(spks_b.keys())
@@ -276,7 +277,7 @@ def get_units_bunch(spks_b, *args):
     # `feat_bunch`. After iterating through all units, add `feat_bunch` as a key to `units`:
     for feat in feat_keys:
         # Initialize `feat_bunch` with a key for each unit.
-        feat_bunch = core.Bunch((str(unit), np.array([])) for unit in np.arange(n_units))
+        feat_bunch = Bunch((str(unit), np.array([])) for unit in np.arange(n_units))
         for unit in units:
             unit_idxs = np.where(spks_unit_id == unit)[0]
             feat_bunch[str(unit)] = spks_b[feat][unit_idxs]

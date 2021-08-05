@@ -1,15 +1,16 @@
-'''
+"""
 For a given eID, plot the PLANNED (blue) and HISTOLOGY (red)
 probe(s) track(s) in 3D template brain, sagittal and coronal view.
 NB: coronal and sagittal views are done using tilted slices.
-'''
+"""
 # Author: Gaelle Chapuis
 
-import ibllib.atlas as atlas
-from oneibl.one import ONE
-from mayavi import mlab
-from atlaselectrophysiology import rendering
 import matplotlib.pyplot as plt
+from one.api import ONE
+from mayavi import mlab
+
+from atlaselectrophysiology import rendering
+import ibllib.atlas as atlas
 
 # === Parameters section (edit) ===
 
@@ -47,7 +48,7 @@ def _plot3d_traj(traj, color, label, fig_handle,
 
 
 ba = atlas.AllenAtlas(25)
-prob_des = one.load(eid, dataset_types=['probes.description'])
+prob_des = one.load_dataset(eid, 'probes.description.json')
 n_probe = len(prob_des[0])
 
 # Plot empty atlas template

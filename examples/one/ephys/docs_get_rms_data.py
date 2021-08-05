@@ -6,15 +6,13 @@ Downloads rms data for a given session and probe and plots a heatmap of rms in A
 on the channels along probe for duration of ephys recording.
 """
 
-
 # import modules
-from oneibl.one import ONE
+from one.api import ONE
 import matplotlib.pyplot as plt
-import alf.io
 import numpy as np
 
 # instantiate ONE
-one = ONE()
+one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
 
 # Specify subject, date and probe we are interested in
 subject = 'CSHL049'
@@ -23,27 +21,18 @@ sess_no = 1
 probe_label = 'probe00'
 eid = one.search(subject=subject, date=date, number=sess_no)[0]
 
-# Specify the dataset types of interest
-dtypes = ['_iblqc_ephysTimeRms.rms',
-          '_iblqc_ephysTimeRms.timestamps',
-          'channels.rawInd',
-          'channels.localCoordinates']
+# Download the data
+# channels.rawInd: Index of good recording channels along probe
+# channels.localCoordinates: Position of each recording channel along probe
+channels = one.load_object(eid, 'channels', collection=f'alf/{probe_label}')
 
-# Download the data and get paths to downloaded data
-_ = one.load(eid, dataset_types=dtypes, download_only=True)
-ephys_path = one.path_from_eid(eid).joinpath('raw_ephys_data', probe_label)
-alf_path = one.path_from_eid(eid).joinpath('alf', probe_label)
-
-# Index of good recording channels along probe
-chn_inds = np.load(alf_path.joinpath('channels.rawInd.npy'))
-# Position of each recording channel along probe
-chn_pos = np.load(alf_path.joinpath('channels.localCoordinates.npy'))
 # Get range for y-axis
-depth_range = [np.min(chn_pos[:, 1]), np.max(chn_pos[:, 1])]
+depth_range = [np.min(channels.localCoordinates[:, 1]),
+               np.max(channels.localCoordinates[:, 1])]
 
 # RMS data associated with AP band of data
-rms_ap = alf.io.load_object(ephys_path, 'ephysTimeRmsAP', namespace='iblqc')
-rms_ap_data = rms_ap['rms'][:, chn_inds] * 1e6  # convert to uV
+rms_ap = one.load_object(eid, 'ephysTimeRmsAP', collection=f'raw_ephys_data/{probe_label}')
+rms_ap_data = rms_ap['rms'][:, channels.rawInd] * 1e6  # convert to uV
 
 # Median subtract to clean up the data
 median = np.mean(np.apply_along_axis(lambda x: np.median(x), 1, rms_ap_data))
@@ -55,8 +44,8 @@ ap_levels = np.quantile(rms_ap_data_median, [0.1, 0.9])
 ap_time_range = [rms_ap['timestamps'][0], rms_ap['timestamps'][-1]]
 
 # RMS data associated with LFP band of data
-rms_lf = alf.io.load_object(ephys_path, 'ephysTimeRmsLF', namespace='iblqc')
-rms_lf_data = rms_lf['rms'][:, chn_inds] * 1e6  # convert to uV
+rms_lf = one.load_object(eid, 'ephysTimeRmsLF', collection=f'raw_ephys_data/{probe_label}')
+rms_lf_data = rms_lf['rms'][:, channels.rawInd] * 1e6  # convert to uV
 # Median subtract to clean up the data
 median = np.mean(np.apply_along_axis(lambda x: np.median(x), 1, rms_lf_data))
 rms_lf_data_median = np.apply_along_axis(lambda x: x - np.median(x), 1, rms_lf_data) + median
