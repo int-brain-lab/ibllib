@@ -1,5 +1,8 @@
 ## Release Notes 2.0.0
-### Release Notes 2.0.0
+### Release Notes 2.0.1 2021-08-07
+- pykilosort error handling
+
+### Release Notes 2.0.0 2021-08-04
 - ONE2 released on the master branch
 - Pykilosort is the new default spike sorter in the pipeline
 
