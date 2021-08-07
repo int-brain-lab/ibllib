@@ -44,7 +44,7 @@ trajs = one.alyx.rest('trajectories', 'list', django='channels__brain_region__na
 ##################################################################################################
 # Query spikesorting tasks that have errored in angelaki lab
 errored = one.alyx.rest('tasks', 'list', status='Errored', lab='angelakilab',
-                        name='SpikeSorting_KS2_Matlab')
+                        name='SpikeSorting')
 
 ##################################################################################################
 # Query ephys sessions that have errored tasks

@@ -120,7 +120,7 @@ def job_run_ks2():
         _logger.info(f'{session}: Probes successfully synced')
 
     # run ks2
-    task = ephys.SpikeSorting_KS2_Matlab(session_path, one=one)
+    task = ephys.SpikeSorting(session_path, one=one)
     status = task.run()
 
     if status != 0:
