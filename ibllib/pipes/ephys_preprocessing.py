@@ -178,7 +178,13 @@ class SpikeSorting(tasks.Task):
         info_str = info.decode("utf-8").strip()
         _logger.info(info_str)
         if process.returncode != 0:
-            error_str = info.decode("utf-8").strip()
+            error_str = error.decode("utf-8").strip()
+            # try and get the kilosort log if any
+            for log_file in temp_dir.rglob('*_kilosort.log'):
+                with open(log_file) as fid:
+                    log = fid.read()
+                    _logger.error(log)
+                break
             raise RuntimeError(f"{self.SPIKE_SORTER_NAME} {info_str}, {error_str}")
 
         shutil.copytree(temp_dir.joinpath('output'), sorter_dir, dirs_exist_ok=True)
