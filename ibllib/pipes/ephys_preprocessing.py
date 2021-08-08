@@ -101,6 +101,20 @@ class SpikeSorting(tasks.Task):
         return s2v["ap"][0]
 
     @staticmethod
+    def _fetch_pykilosort_version(repo_path):
+        init_file = Path(repo_path).joinpath('pykilosort', '__init__.py')
+        version = SpikeSorting._fetch_ks2_commit_hash(repo_path)  # default
+        try:
+            with open(init_file) as fid:
+                lines = fid.readlines()
+                for line in lines:
+                    if line.startswith("__version__ = "):
+                        version = line.split('=')[-1].strip().replace('"', '').replace("'", '')
+        except Exception:
+            pass
+        return version
+
+    @staticmethod
     def _fetch_ks2_commit_hash(repo_path):
         command2run = f"git --git-dir {repo_path}/.git rev-parse --verify HEAD"
         process = subprocess.Popen(
