@@ -222,6 +222,9 @@ class SpikeSorting(tasks.Task):
                     bin_file=ap_file,
                     ampfactor=self._sample2v(ap_file),
                 )
+                logfile = ks2_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
+                if logfile.exists():
+                    shutil.copyfile(logfile, probe_out_path.joinpath(logfile.name))
                 out, _ = spikes.sync_spike_sorting(ap_file=ap_file, out_path=probe_out_path)
                 out_files.extend(out)
                 # convert ks2_output into tar file and also register
