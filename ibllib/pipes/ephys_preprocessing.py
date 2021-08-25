@@ -212,7 +212,7 @@ class SpikeSorting(tasks.Task):
         for ap_file, label in ap_files:
             try:
                 ks2_dir = self._run_pykilosort(ap_file)  # runs ks2, skips if it already ran
-                probe_out_path = self.session_path.joinpath("alf", label)
+                probe_out_path = self.session_path.joinpath("alf", label, self.SPIKE_SORTER_NAME)
                 shutil.rmtree(probe_out_path, ignore_errors=True)
                 probe_out_path.mkdir(parents=True, exist_ok=True)
                 spikes.ks2_to_alf(
