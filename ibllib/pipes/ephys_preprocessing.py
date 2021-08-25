@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import one.alf.io as alfio
 
+from ibllib.misc import check_nvidia_driver
 from ibllib.ephys import ephysqc, spikes, sync_probes
 from ibllib.io import ffmpeg, spikeglx
 from ibllib.io.video import label_from_path
@@ -129,16 +130,6 @@ class SpikeSorting(tasks.Task):
             return ""
         return info.decode("utf-8").strip()
 
-    @staticmethod
-    def _check_nvidia():
-        # check the nvidia status before doing anything and raise an error if driver not ready
-        process = subprocess.Popen('nvidia-smi', shell=True, stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE, executable="/bin/bash")
-        info, error = process.communicate()
-        if process.returncode != 0:
-            raise RuntimeError(f"Nvida drivers not ready. \n {error.decode('utf-8')}")
-        _logger.info("nvidia-smi command successful")
-
     def _run_pykilosort(self, ap_file):
         f"""
         Runs the ks2 matlab spike sorting for one probe dataset
@@ -178,7 +169,7 @@ class SpikeSorting(tasks.Task):
             shutil.rmtree(temp_dir, ignore_errors=True)
         temp_dir.mkdir(parents=True, exist_ok=True)
 
-        self._check_nvidia()
+        check_nvidia_driver()
         command2run = f"{self.SHELL_SCRIPT} {ap_file} {temp_dir}"
         _logger.info(command2run)
         process = subprocess.Popen(
