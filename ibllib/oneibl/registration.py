@@ -7,6 +7,7 @@ import re
 from dateutil import parser as dateparser
 from iblutil.io import hashfile
 from one.alf.files import get_session_path
+import one.alf.exceptions as alferr
 from one.api import ONE
 
 import ibllib.io.extractors.base
@@ -14,7 +15,6 @@ from ibllib.misc import version
 import ibllib.time
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io import flags
-import ibllib.exceptions
 
 _logger = logging.getLogger('ibllib')
 EXCLUDED_EXTENSIONS = ['.flag', '.error', '.avi']
@@ -236,7 +236,7 @@ class RegistrationClient:
                                          no_cache=True)[0]
         except IndexError:
             _logger.error(f"Subject: {md['SUBJECT_NAME']} doesn't exist in Alyx. ABORT.")
-            raise ibllib.exceptions.AlyxSubjectNotFound(md['SUBJECT_NAME'])
+            raise alferr.AlyxSubjectNotFound(md['SUBJECT_NAME'])
 
         # look for a session from the same subject, same number on the same day
         session_id, session = self.one.search(subject=subject['nickname'],
