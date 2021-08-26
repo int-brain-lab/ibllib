@@ -1,12 +1,14 @@
 import logging
+
+import numpy as np
+
 from ibllib.atlas import AllenAtlas
 from ibllib.atlas.regions import BrainRegions
 from ibllib.pipes import histology
 from ibllib.ephys.neuropixel import SITES_COORDINATES
-import numpy as np
 from ibllib.pipes.ephys_alignment import EphysAlignment
 from ibllib.qc import base
-from oneibl.patcher import FTPPatcher
+from ibllib.oneibl.patcher import FTPPatcher
 from ibllib.qc.base import CRITERIA as CRITERIA_BASE
 
 _log = logging.getLogger('ibllib')
