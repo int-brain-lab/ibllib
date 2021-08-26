@@ -4,8 +4,9 @@ import tempfile
 import unittest
 
 import numpy as np
+from iblutil.io import hashfile
 
-from ibllib.io import spikeglx, hashfile
+from ibllib.io import spikeglx
 
 
 class TestSpikeGLX_hardwareInfo(unittest.TestCase):
