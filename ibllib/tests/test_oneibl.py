@@ -99,10 +99,6 @@ class TestAlyx2Path(unittest.TestCase):
 SUBJECT = 'clns0730'
 USER = 'test_user'
 
-# one = one.ONE(base_url='http://localhost:8000')
-# SUBJECT = 'CSP013'
-# USER = 'olivier'
-
 md5_0 = 'add2ab27dbf8428f8140-0870d5080c7f'
 r = {'created_by': 'olivier',
      'path': f'{SUBJECT}/2018-08-24/002',
@@ -174,13 +170,23 @@ class TestRegistration(unittest.TestCase):
         self.alf_path.mkdir(parents=True)
         np.save(self.alf_path.joinpath('spikes.times.npy'), np.random.random(500))
         np.save(self.alf_path.joinpath('spikes.amps.npy'), np.random.random(500))
-        self.rev_path = self.alf_path.joinpath('v1')
+        self.rev_path = self.alf_path.joinpath('#v1#')
         self.rev_path.mkdir(parents=True)
         np.save(self.rev_path.joinpath('spikes.times.npy'), np.random.random(300))
         np.save(self.rev_path.joinpath('spikes.amps.npy'), np.random.random(300))
-        self.rev = self.one.alyx.rest('revisions', 'create', data={'name': 'v1'})
-        self.tag = self.one.alyx.rest('tags', 'create',
-                                      data={'name': 'test_tag', 'protected': True})
+
+        # Create a revision if doesn't already exist
+        try:
+            self.rev = self.one.alyx.rest('revisions', 'read', id='v1')
+        except HTTPError:
+            self.rev = self.one.alyx.rest('revisions', 'create', data={'name': 'v1'})
+        # Create a tag if doesn't already exist
+        try:
+            self.tag = next(x for x in self.one.alyx.rest('tags', 'list')
+                            if x['name'] == 'test_tag')
+        except StopIteration:
+            self.tag = self.one.alyx.rest('tags', 'create',
+                                          data={'name': 'test_tag', 'protected': True})
 
     def test_registration_datasets(self):
         # registers a single file
@@ -210,17 +216,11 @@ class TestRegistration(unittest.TestCase):
         np.save(self.alf_path.joinpath('spikes.times.npy'), np.random.random(500))
         np.save(self.alf_path.joinpath('spikes.amps.npy'), np.random.random(500))
         r = registration.register_dataset(file_list=flist, one=self.one)
-        self.assertTrue(all([all([not(fr['exists']) for fr in rr['file_records']]) for rr in r]))
+        self.assertTrue(all(all(not(fr['exists']) for fr in rr['file_records']) for rr in r))
 
         # Test registering with a revision
-        # Test that if we don't have the correct file structure it won't register
-        flist = list(self.alf_path.glob('*.npy'))
-        with self.assertRaises(HTTPError):
-            registration.register_dataset(file_list=flist, one=self.one, revisions='v1')
-#
-        # Check with correct folder it registers correctly
         flist = list(self.rev_path.glob('*.npy'))
-        r = registration.register_dataset(file_list=flist, one=self.one, revisions='v1')
+        r = registration.register_dataset(file_list=flist, one=self.one)
         self.assertTrue(all(d['revision'] == 'v1' for d in r))
         self.assertTrue(all(d['default'] for d in r))
         self.assertTrue(all(d['collection'] == 'alf' for d in r))
@@ -231,7 +231,7 @@ class TestRegistration(unittest.TestCase):
             self.one.alyx.rest('datasets', 'partial_update',
                                id=d['url'][-36:], data={'tags': ['test_tag']})
         with self.assertRaises(HTTPError):
-            registration.register_dataset(file_list=flist, one=self.one, revisions='v1')
+            registration.register_dataset(file_list=flist, one=self.one)
 
     def test_registration_session(self):
         behavior_path = self.session_path.joinpath('raw_behavior_data')
@@ -275,7 +275,7 @@ class TestRegistration(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.td.cleanup()
-        self.one.alyx.rest('revisions', 'delete', id=self.rev['id'])
+        self.one.alyx.rest('revisions', 'delete', id=self.rev['name'])
         self.one.alyx.rest('tags', 'delete', id=self.tag['id'])
 
 
