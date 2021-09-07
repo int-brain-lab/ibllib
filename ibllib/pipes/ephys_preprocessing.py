@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import one.alf.io as alfio
 
+from ibllib.misc import check_nvidia_driver
 from ibllib.ephys import ephysqc, spikes, sync_probes
 from ibllib.io import ffmpeg, spikeglx
 from ibllib.io.video import label_from_path
@@ -101,6 +102,20 @@ class SpikeSorting(tasks.Task):
         return s2v["ap"][0]
 
     @staticmethod
+    def _fetch_pykilosort_version(repo_path):
+        init_file = Path(repo_path).joinpath('pykilosort', '__init__.py')
+        version = SpikeSorting._fetch_ks2_commit_hash(repo_path)  # default
+        try:
+            with open(init_file) as fid:
+                lines = fid.readlines()
+                for line in lines:
+                    if line.startswith("__version__ = "):
+                        version = line.split('=')[-1].strip().replace('"', '').replace("'", '')
+        except Exception:
+            pass
+        return version
+
+    @staticmethod
     def _fetch_ks2_commit_hash(repo_path):
         command2run = f"git --git-dir {repo_path}/.git rev-parse --verify HEAD"
         process = subprocess.Popen(
@@ -114,16 +129,6 @@ class SpikeSorting(tasks.Task):
             )
             return ""
         return info.decode("utf-8").strip()
-
-    @staticmethod
-    def _check_nvidia():
-        # check the nvidia status before doing anything and raise an error if driver not ready
-        process = subprocess.Popen('nvidia-smi', shell=True, stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE, executable="/bin/bash")
-        info, error = process.communicate()
-        if process.returncode != 0:
-            raise RuntimeError(f"Nvida drivers not ready. \n {error.decode('utf-8')}")
-        _logger.info("nvidia-smi command successful")
 
     def _run_pykilosort(self, ap_file):
         f"""
@@ -164,7 +169,7 @@ class SpikeSorting(tasks.Task):
             shutil.rmtree(temp_dir, ignore_errors=True)
         temp_dir.mkdir(parents=True, exist_ok=True)
 
-        self._check_nvidia()
+        check_nvidia_driver()
         command2run = f"{self.SHELL_SCRIPT} {ap_file} {temp_dir}"
         _logger.info(command2run)
         process = subprocess.Popen(
@@ -207,7 +212,7 @@ class SpikeSorting(tasks.Task):
         for ap_file, label in ap_files:
             try:
                 ks2_dir = self._run_pykilosort(ap_file)  # runs ks2, skips if it already ran
-                probe_out_path = self.session_path.joinpath("alf", label)
+                probe_out_path = self.session_path.joinpath("alf", label, self.SPIKE_SORTER_NAME)
                 shutil.rmtree(probe_out_path, ignore_errors=True)
                 probe_out_path.mkdir(parents=True, exist_ok=True)
                 spikes.ks2_to_alf(
@@ -217,6 +222,10 @@ class SpikeSorting(tasks.Task):
                     bin_file=ap_file,
                     ampfactor=self._sample2v(ap_file),
                 )
+                logfile = ks2_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
+                if logfile.exists():
+                    shutil.copyfile(logfile, probe_out_path.joinpath(
+                        f"ibl_log.info_{self.SPIKE_SORTER_NAME}.log"))
                 out, _ = spikes.sync_spike_sorting(ap_file=ap_file, out_path=probe_out_path)
                 out_files.extend(out)
                 # convert ks2_output into tar file and also register

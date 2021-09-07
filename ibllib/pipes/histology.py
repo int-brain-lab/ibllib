@@ -3,10 +3,10 @@ import logging
 
 import matplotlib.pyplot as plt
 import numpy as np
-
-from ibllib.ephys.neuropixel import SITES_COORDINATES
 from one.api import ONE
 import one.alf.io as alfio
+
+from ibllib.ephys.neuropixel import SITES_COORDINATES
 import ibllib.atlas as atlas
 from ibllib.ephys.spikes import probes_description as extract_probes
 from ibllib.dsp.utils import fcn_cosine

@@ -5,13 +5,13 @@ import re
 import shutil
 
 import numpy as np
-
 import mtscomp
-from iblutil.util import Bunch
-from ibllib.ephys import neuropixel as neuropixel
 from iblutil.io import hashfile
+from iblutil.util import Bunch
 from one.alf.io import remove_uuid_file
 from one.api import ONE
+
+from ibllib.ephys import neuropixel as neuropixel
 
 SAMPLE_SIZE = 2  # int16
 DEFAULT_BATCH_SIZE = 1e6

@@ -8,7 +8,7 @@ from ibllib.io.extractors import training_audio, bpod_trials, camera
 from ibllib.qc.camera import CameraQC
 from ibllib.qc.task_metrics import TaskQC, HabituationQC
 from ibllib.qc.task_extractors import TaskQCExtractor
-from oneibl.registration import register_session_raw_data
+from ibllib.oneibl.registration import register_session_raw_data
 
 _logger = logging.getLogger('ibllib')
 
