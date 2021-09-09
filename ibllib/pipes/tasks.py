@@ -31,6 +31,7 @@ class Task(abc.ABC):
     time_out_secs = None
     version = version.ibllib()
     log = ''
+    input_files = None
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
                  machine=None, clobber=True):
@@ -339,3 +340,5 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     # update task status on Alyx
     t = one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data=patch_data)
     return t, registered_dsets
+
+

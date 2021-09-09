@@ -21,6 +21,7 @@ from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
 from ibllib.dsp import rms
+from ibllib.io.extractors import signatures
 
 _logger = logging.getLogger("ibllib")
 
@@ -274,6 +275,8 @@ class EphysVideoCompress(tasks.Task):
 class EphysTrials(tasks.Task):
     priority = 90
     level = 1
+    input_files = signatures.EPHYSTRIALS_IN
+
 
     def _behaviour_criterion(self):
         """
