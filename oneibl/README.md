@@ -1,3 +1,7 @@
+### DEPRECATION WARNING
+
+As of September 2021, this software is  deprecated - please instead use the software https://github.com/int-brain-lab/ONE
+
 # ONE light
 
 ONE light is an interface for uploading and downloading data following the [Open Neurophysiology Environment/ALF convention](https://docs.internationalbrainlab.org/en/latest/04_reference.html). The core idea is to represent arbitrarily complex datasets with individual files representing various attributes of some objects. For example, the attributes of the `spikes` object are `times` (time in seconds of each spike), `clusters` (neuron number of each spike), etc. These attributes are represented as numerical arrays saved, by default, in the [NPY format](https://numpy.org/devdocs/reference/generated/numpy.lib.format.html).
