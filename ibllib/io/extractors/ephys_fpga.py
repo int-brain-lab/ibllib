@@ -242,7 +242,8 @@ def _assign_events_audio(audio_t, audio_polarities, return_indices=False):
     # make sure that there are no 2 consecutive fall or consecutive rise events
     assert(np.all(np.abs(np.diff(audio_polarities)) == 2))
     # take only even time differences: ie. from rising to falling fronts
-    dt = np.diff(audio_t)[::2]
+    i0 = 0 if audio_polarities[0] == 1 else 1
+    dt = np.diff(audio_t)[i0::2]
     # detect ready tone by length below 110 ms
     i_ready_tone_in = np.r_[np.where(dt <= 0.11)[0] * 2]
     t_ready_tone_in = audio_t[i_ready_tone_in]
