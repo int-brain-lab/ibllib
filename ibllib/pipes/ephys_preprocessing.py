@@ -93,7 +93,7 @@ class SpikeSorting(tasks.Task):
         "Documents/PYTHON/iblscripts/deploy/serverpc/kilosort2/run_pykilosort.sh"
     )
     SPIKE_SORTER_NAME = 'pykilosort'
-    PYKILOSORT_REPO = '~/Documents/PYTHON/SPIKE_SORTING/pykilosort'
+    PYKILOSORT_REPO = Path.home().joinpath('Documents/PYTHON/SPIKE_SORTING/pykilosort')
 
     @staticmethod
     def _sample2v(ap_file):
@@ -113,7 +113,7 @@ class SpikeSorting(tasks.Task):
                         version = line.split('=')[-1].strip().replace('"', '').replace("'", '')
         except Exception:
             pass
-        return version
+        return f"pykilosort_{version}"
 
     @staticmethod
     def _fetch_ks2_commit_hash(repo_path):
@@ -137,7 +137,7 @@ class SpikeSorting(tasks.Task):
         session_path/spike_sorters/{self.SPIKE_SORTER_NAME}/probeXX folder
         :return: path of the folder containing ks2 spike sorting output
         """
-
+        self.version = self._fetch_pykilosort_version(self.PYKILOSORT_REPO)
         label = ap_file.parts[-2]  # this is usually the probe name
         if ap_file.parent.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log").exists():
             _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
@@ -194,7 +194,6 @@ class SpikeSorting(tasks.Task):
 
         shutil.copytree(temp_dir.joinpath('output'), sorter_dir, dirs_exist_ok=True)
         shutil.rmtree(temp_dir, ignore_errors=True)
-        self.version = self._fetch_ks2_commit_hash(self.PYKILOSORT_REPO)
         return sorter_dir
 
     def _run(self, overwrite=False):
