@@ -224,7 +224,7 @@ class SpikeSorting(tasks.Task):
                 logfile = ks2_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
                 if logfile.exists():
                     shutil.copyfile(logfile, probe_out_path.joinpath(
-                        f"ibl_log.info_{self.SPIKE_SORTER_NAME}.log"))
+                        f"_ibl_log.info_{self.SPIKE_SORTER_NAME}.log"))
                 out, _ = spikes.sync_spike_sorting(ap_file=ap_file, out_path=probe_out_path)
                 out_files.extend(out)
                 # convert ks2_output into tar file and also register
