@@ -7,6 +7,7 @@ import re
 from dateutil import parser as dateparser
 from iblutil.io import hashfile
 from one.alf.files import get_session_path
+import one.alf.exceptions as alferr
 from one.api import ONE
 
 import ibllib.io.extractors.base
@@ -14,7 +15,6 @@ from ibllib.misc import version
 import ibllib.time
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io import flags
-import ibllib.exceptions
 
 _logger = logging.getLogger('ibllib')
 EXCLUDED_EXTENSIONS = ['.flag', '.error', '.avi']
@@ -42,7 +42,7 @@ def _check_filename_for_registration(full_file, patterns):
 
 
 def register_dataset(file_list, one=None, created_by=None, repository=None, server_only=False,
-                     versions=None, revisions=None, default=True, dry=False, max_md5_size=None):
+                     versions=None, default=True, dry=False, max_md5_size=None):
     """
     Registers a set of files belonging to a session only on the server
     :param file_list: (list of pathlib.Path or pathlib.Path)
@@ -51,7 +51,6 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
     :param repository: optional: (string) name of the repository in Alyx
     :param server_only: optional: (bool) if True only creates on the Flatiron (defaults to False)
     :param versions: optional (list of strings): versions tags (defaults to ibllib version)
-    :param revisions: optional (list of strings): revision name (defaults to no revision)
     :param default: optional (bool) whether to set as default dataset (defaults to True)
     :param dry: (bool) False by default
     :param max_md5_size: (int) maximum file in bytes to compute md5 sum (always compute if None)
@@ -73,13 +72,6 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
         versions = [versions for _ in file_list]
     assert isinstance(versions, list) and len(versions) == len(file_list)
 
-    if revisions is None:
-        revisions = [None] * len(file_list)
-    else:
-        if isinstance(revisions, str):
-            revisions = [revisions for _ in file_list]
-    assert isinstance(revisions, list) and len(revisions) == len(file_list)
-
     # computing the md5 can be very long, so this is an option to skip if the file is bigger
     # than a certain threshold
     if max_md5_size:
@@ -98,7 +90,6 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
          'hashes': hashes,
          'filesizes': [p.stat().st_size for p in file_list],
          'versions': versions,
-         'revisions': revisions,
          'default': default}
     if not dry:
         if one is None:
@@ -236,7 +227,7 @@ class RegistrationClient:
                                          no_cache=True)[0]
         except IndexError:
             _logger.error(f"Subject: {md['SUBJECT_NAME']} doesn't exist in Alyx. ABORT.")
-            raise ibllib.exceptions.AlyxSubjectNotFound(md['SUBJECT_NAME'])
+            raise alferr.AlyxSubjectNotFound(md['SUBJECT_NAME'])
 
         # look for a session from the same subject, same number on the same day
         session_id, session = self.one.search(subject=subject['nickname'],
@@ -360,6 +351,8 @@ def _alyx_procedure_from_task_type(task_type):
               'training': 'Behavior training/tasks',
               'ephys': 'Ephys recording with acute probe(s)',
               'ephys_biased_opto': 'Ephys recording with acute probe(s)',
+              'ephys_passive_opto': 'Ephys recording with acute probe(s)',
+              'ephys_replay': 'Ephys recording with acute probe(s)',
               'ephys_training': 'Ephys recording with acute probe(s)',
               'mock_ephys': 'Ephys recording with acute probe(s)',
               'sync_ephys': 'Ephys recording with acute probe(s)'}

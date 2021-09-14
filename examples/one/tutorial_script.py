@@ -10,7 +10,7 @@ one = ONE(base_url='https://test.alyx.internationalbrainlab.org',
 ## Find an experiment
 eid = one.search(users='olivier', date_range=['2018-08-24', '2018-08-24'])
 pprint(eid)
-pprint(one.search_terms)
+pprint(one.search_terms())
 
 ## List dataset types for a session
 eid = 'cf264653-2deb-44cb-aa84-89b82507028a'

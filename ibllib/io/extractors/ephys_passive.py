@@ -125,7 +125,19 @@ def _get_spacer_times(spacer_template, jitter, ttl_signal, t_quiet):
     # adjust indices for
     # - `np.where` call above
     # - length of spacer_model
-    idxs_spacer_middle += 2 - int((np.floor(len(spacer_model) / 2)))
+    spacer_around = int((np.floor(len(spacer_model) / 2)))
+    idxs_spacer_middle += 2 - spacer_around
+
+    # for each spacer make sure the times are monotonically increasing before
+    # and monotonically decreasing afterwards
+    is_valid = np.zeros((idxs_spacer_middle.size), dtype=bool)
+    for i, t in enumerate(idxs_spacer_middle):
+        before = all(np.diff(dttl[t - spacer_around:t]) > 0)
+        after = all(np.diff(dttl[t + 1:t + 1 + spacer_around]) < 0)
+        is_valid[i] = np.bitwise_and(before, after)
+
+    idxs_spacer_middle = idxs_spacer_middle[is_valid]
+
     # pull out spacer times (middle)
     ts_spacer_middle = ttl_signal[idxs_spacer_middle]
     # put beginning/end of spacer times into an array
@@ -147,6 +159,7 @@ def _get_passive_spacers(session_path, sync=None, sync_map=None):
     meta = _load_passive_stim_meta()
     # t_end_ephys = passive.ephysCW_end(session_path=session_path)
     fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=None)
+    fttl = ephys_fpga._clean_frame2ttl(fttl, display=False)
     spacer_template = (
         np.array(meta["VISUAL_STIM_0"]["ttl_frame_nums"], dtype=np.float32) / FRAME_FS
     )
@@ -393,7 +406,7 @@ def extract_rfmapping(
         trfm = passivePeriods_df.RFM.values
 
     fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=trfm[0], tmax=trfm[1])
-
+    fttl = ephys_fpga._clean_frame2ttl(fttl)
     RF_file = Path().joinpath(session_path, "raw_passive_data", "_iblrig_RFMapStim.raw.bin")
     passiveRFM_frames, RF_ttl_trace = _reshape_RF(RF_file=RF_file, meta_stim=meta[mkey])
     rf_id_up, rf_id_dw, RF_n_ttl_expected = _get_id_raisefall_from_analogttl(RF_ttl_trace)
@@ -425,6 +438,7 @@ def extract_task_replay(
         treplay = passivePeriods_df.taskReplay.values
 
     fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0])
+    fttl = ephys_fpga._clean_frame2ttl(fttl)
     passiveGabor_df = _extract_passiveGabor_df(fttl, session_path)
 
     bpod = ephys_fpga.get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])

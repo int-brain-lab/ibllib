@@ -5,13 +5,13 @@ import re
 import shutil
 
 import numpy as np
-
 import mtscomp
-from iblutil.util import Bunch
-from ibllib.ephys import neuropixel as neuropixel
 from iblutil.io import hashfile
+from iblutil.util import Bunch
 from one.alf.io import remove_uuid_file
 from one.api import ONE
+
+from ibllib.ephys import neuropixel as neuropixel
 
 SAMPLE_SIZE = 2  # int16
 DEFAULT_BATCH_SIZE = 1e6
@@ -541,7 +541,7 @@ def glob_ephys_files(session_path, suffix='.meta', ext='bin', recursive=True, bi
         ephys_files[-1].label = get_label(raw_ephys_apfile)
         ephys_files[-1].path = raw_ephys_apfile.parent
     # for 3b probes, need also to get the nidq dataset type
-    for raw_ephys_file in Path(session_path).rglob(f'{recurse}*.nidq{suffix}'):
+    for raw_ephys_file in Path(session_path).rglob(f'{recurse}*.nidq*{suffix}'):
         raw_ephys_nidqfile = next(raw_ephys_file.parent.glob(raw_ephys_file.stem + f'.*{ext}'),
                                   None)
         if not bin_exists and ext == 'bin':

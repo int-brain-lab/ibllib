@@ -13,7 +13,7 @@ from iblutil.util import Bunch
 
 from brainbox.metrics.single_units import spike_sorting_metrics
 from ibllib.ephys import sync_probes
-from ibllib.io import spikeglx, raw_data_loaders
+from ibllib.io import spikeglx
 import ibllib.dsp as dsp
 from ibllib.io.extractors import ephys_fpga, training_wheel
 from ibllib.misc import print_progress
@@ -393,14 +393,10 @@ def _qc_from_path(sess_path, display=True):
     temp_alf_folder = sess_path.joinpath('fpga_test', 'alf')
     temp_alf_folder.mkdir(parents=True, exist_ok=True)
 
-    raw_trials = raw_data_loaders.load_data(sess_path)
-    tmax = raw_trials[-1]['behavior_data']['States timestamps']['exit_state'][0][-1] + 60
-
     sync, chmap = ephys_fpga.get_main_probe_sync(sess_path, bin_exists=False)
     _ = ephys_fpga.extract_all(sess_path, output_path=temp_alf_folder, save=True)
     # check that the output is complete
-    fpga_trials = ephys_fpga.extract_behaviour_sync(sync, output_path=temp_alf_folder, tmax=tmax,
-                                                    chmap=chmap, save=True, display=display)
+    fpga_trials = ephys_fpga.extract_behaviour_sync(sync, chmap=chmap, display=display)
     # align with the bpod
     bpod2fpga = ephys_fpga.align_with_bpod(temp_alf_folder.parent)
     alf_trials = alfio.load_object(temp_alf_folder, 'trials')
