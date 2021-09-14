@@ -11,7 +11,7 @@ from graphviz import Digraph
 
 from ibllib.misc import version
 import one.params
-from oneibl.registration import register_dataset
+from ibllib.oneibl.registration import register_dataset
 
 
 _logger = logging.getLogger('ibllib')

@@ -1,6 +1,6 @@
-from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
 import numpy as np
 
+from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.training_trials import (
     Choice, FeedbackTimes, FeedbackType, GoCueTimes, GoCueTriggerTimes,

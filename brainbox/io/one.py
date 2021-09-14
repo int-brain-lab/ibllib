@@ -7,7 +7,7 @@ from iblutil.util import Bunch
 
 from one.alf.spec import is_session_path
 import one.alf.exceptions as alferr
-from one.api import ONE, One, OneAlyx
+from one.api import ONE, OneAlyx
 
 from ibllib.io import spikeglx
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
@@ -35,8 +35,8 @@ def load_lfp(eid, one=None, dataset_types=None, **kwargs):
     """
     if dataset_types is None:
         dataset_types = []
-    dtypes = dataset_types + ['ephysData.raw.lf', 'ephysData.raw.meta', 'ephysData.raw.ch']
-    [one.load_session_dataset(eid, dset, download_only=True) for dset in dtypes]
+    dtypes = dataset_types + ['*ephysData.raw.lf*', '*ephysData.raw.meta*', '*ephysData.raw.ch*']
+    [one.load_dataset(eid, dset, download_only=True) for dset in dtypes]
     session_path = one.eid2path(eid)
 
     efiles = [ef for ef in spikeglx.glob_ephys_files(session_path, bin_exists=False)
@@ -52,11 +52,6 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
     :return: channels
     """
     one = one or ONE()
-
-    if not isinstance(one, One):
-        logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
-        from .deprecated import one as old
-        return old.load_channel_locations(eid, one=one, probe=probe, aligned=aligned)
     assert isinstance(one, OneAlyx), 'ONE much be in remote mode'
 
     if isinstance(eid, dict):
@@ -75,11 +70,11 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
             counts = [0]
         else:
             tracing = [(insertions.get('json', {'temp': 0}).get('extended_qc', {'temp': 0}).
-                       get('tracing_exists', False))]
+                        get('tracing_exists', False))]
             resolved = [(insertions.get('json', {'temp': 0}).get('extended_qc', {'temp': 0}).
-                        get('alignment_resolved', False))]
+                         get('alignment_resolved', False))]
             counts = [(insertions.get('json', {'temp': 0}).get('extended_qc', {'temp': 0}).
-                      get('alignment_count', 0))]
+                       get('alignment_count', 0))]
         probe_id = [insertions['id']]
     # No specific probe specified, load any that is available
     # Need to catch for the case where we have two of the same probe insertions
@@ -200,11 +195,6 @@ def load_ephys_session(eid, one=None):
     """
     assert one
 
-    if not isinstance(one, One):
-        logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
-        from .deprecated import one as old
-        return old.load_ephys_session(eid, one=one)
-
     spikes, clusters = load_spike_sorting(eid, one=one)
     trials = one.load_object(eid, 'trials')
 
@@ -229,10 +219,6 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sort
     :return: spikes, clusters (dict of bunch, 1 bunch per probe)
     """
     one = one or ONE()
-    if not isinstance(one, One):
-        logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
-        from .deprecated import one as old
-        return old.load_spike_sorting(eid, one=one, probe=probe)
 
     if isinstance(probe, str):
         labels = [probe]
@@ -362,11 +348,6 @@ def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False, da
     # --- Get spikes and clusters data
     one = one or ONE()
 
-    if not isinstance(one, One):
-        logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
-        from .deprecated import one as old
-        return old.load_spike_sorting_with_channel(eid, one=one, probe=probe, aligned=aligned)
-
     dic_spk_bunch, dic_clus = load_spike_sorting(eid, one=one, probe=probe,
                                                  dataset_types=dataset_types,
                                                  spike_sorter=spike_sorter)
@@ -385,11 +366,6 @@ def load_passive_rfmap(eid, one=None):
     :return: rf_map
     """
     one = one or ONE()
-
-    if not isinstance(one, One):
-        logger.warning('ONE instance deprecated; use one.api instead of oneibl.one')
-        from .deprecated import one as old
-        return old.load_passive_rfmap(eid, one=one)
 
     # Load in the receptive field mapping data
     rf_map = one.load_object(eid, obj='passiveRFM', collection='alf')
@@ -444,7 +420,7 @@ def load_wheel_reaction_times(eid, one=None):
 
 
 def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_wheel=False,
-                   ret_abswheel=False, wheel_binsize=0.02, addtl_types=()):
+                   ret_abswheel=False, ext_DLC=False, wheel_binsize=0.02, addtl_types=[]):
     """
     TODO Test this with new ONE
     Generate a pandas dataframe of per-trial timing information about a given session.
@@ -475,6 +451,8 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
         Whether to return the time-resampled wheel velocity trace, by default False
     ret_abswheel : bool, optional
         Whether to return the time-resampled absolute wheel velocity trace, by default False
+    ext_DLC : bool, optional
+        Whether to extract DLC data, by default False
     wheel_binsize : float, optional
         Time bins to resample wheel velocity to, by default 0.02
     addtl_types : list, optional
