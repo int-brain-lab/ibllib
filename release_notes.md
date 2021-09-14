@@ -7,8 +7,11 @@
 - pykilosort bugfix after low yield results
 ### Release Notes 2.0.4 2021-09-10
 - ephys trials extraction when audio FPGA starts on up state
-### Release Notes 2.0.5 2021-03-13
+### Release Notes 2.0.5 2021-09-13
 - pykilosort pipeline: output correct version number / fix log file name
+### Release Notes 2.0.6 2021-09-14
+- extraction fixes: passive extraction spacers and camera times format
+-  small bugfix for the sequential selection
 
 ### Release Notes 2.0.0 2021-08-04
 - ONE2 released on the master branch
