@@ -267,7 +267,7 @@ def _assign_events_audio(audio_t, audio_polarities, return_indices=False, displa
     # error tones are events lasting from 400ms to 1200ms
     i_error_tone_in = np.where(np.logical_and(np.logical_and(0.4 < dt, dt < 1.2), audio_polarities[:-1] == 1))[0]
     t_error_tone_in = audio_t[i_error_tone_in]
-    if display:
+    if display:  # pragma: no cover
         from ibllib.plots import squares, vertical_lines
         squares(audio_t, audio_polarities, yrange=[-1, 1],)
         vertical_lines(t_ready_tone_in, ymin=-.8, ymax=.8)
@@ -328,6 +328,37 @@ def get_sync_fronts(sync, channel_nb, tmin=None, tmax=None):
     selection = np.logical_and(selection, sync['times'] >= tmin) if tmin else selection
     return Bunch({'times': sync['times'][selection],
                   'polarities': sync['polarities'][selection]})
+
+
+def _clean_audio(audio, display=False):
+    """
+    one guy wired the 150 Hz camera output onto the soundcard. The effect is to get 150 Hz periodic
+    square pulses, 2ms up and 4.666 ms down. When this happens we remove all of the intermediate
+    pulses to repair the audio trace
+    Here is some helper code
+        dd = np.diff(audio['times'])
+        1 / np.median(dd[::2]) # 2ms up
+        1 / np.median(dd[1::2])  # 4.666 ms down
+        1 / (np.median(dd[::2]) + np.median(dd[1::2])) # both sum to 150 Hx
+    This only runs on sessions when the bug is detected and leaves others untouched
+    """
+    DISCARD_THRESHOLD = 0.01
+    average_150_hz = np.mean(1 / np.diff(audio['times'][audio['polarities'] == 1]) > 140)
+    naudio = audio['times'].size
+    if average_150_hz > 0.7 and naudio > 100:
+        _logger.warning("Soundcard signal on FPGA seems to have been mixed with 150Hz camera")
+        keep_ind = np.r_[np.diff(audio['times']) > DISCARD_THRESHOLD, False]
+        keep_ind = np.logical_and(keep_ind, audio['polarities'] == -1)
+        keep_ind = np.where(keep_ind)[0]
+        keep_ind = np.sort(np.r_[0, keep_ind, keep_ind + 1, naudio - 1])
+
+        if display:  # pragma: no cover
+            from ibllib.plots import squares
+            squares(audio['times'], audio['polarities'], ax=None, yrange=[-1, 1])
+            squares(audio['times'][keep_ind], audio['polarities'][keep_ind], yrange=[-1, 1])
+        audio = {'times': audio['times'][keep_ind],
+                 'polarities': audio['polarities'][keep_ind]}
+    return audio
 
 
 def _clean_frame2ttl(frame2ttl, display=False):
@@ -392,6 +423,7 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None):
     frame2ttl = get_sync_fronts(sync, chmap['frame2ttl'])
     frame2ttl = _clean_frame2ttl(frame2ttl)
     audio = get_sync_fronts(sync, chmap['audio'])
+    audio = _clean_audio(audio)
     # extract events from the fronts for each trace
     t_trial_start, t_valve_open, t_iti_in = _assign_events_bpod(bpod['times'], bpod['polarities'])
     # one issue is that sometimes bpod pulses may not have been detected, in this case
