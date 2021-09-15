@@ -262,13 +262,33 @@ class TestWheelMovesExtraction(unittest.TestCase):
         test_data = self.test_data[1]
         wheel_moves = ephys_fpga.extract_wheel_moves(test_data[0][0], test_data[0][1])
         first, is_final, ind = extract_first_movement_times(wheel_moves, self.trials)
-
         np.testing.assert_allclose(first, [162.48462599, 105.62562599, np.nan])
         np.testing.assert_array_equal(is_final, [False, True, False])
         np.testing.assert_array_equal(ind, [46, 18])
 
 
 class TestEphysFPGA_TTLsExtraction(unittest.TestCase):
+
+    def test_audio_ttl_start_up_down(self):
+        """
+        If the behaviour starts before FPGA, it is very unlikely but possible that the FPGA
+        starts on up state and that the first front of the audio is a downgoing one.
+        The extraction should handle both cases seemlessly
+        """
+        from ibllib.io.extractors.ephys_fpga import _assign_events_audio
+
+        def _test_audio(audio):
+            ready, error = _assign_events_audio(audio['times'], audio['polarities'])
+            assert np.all(ready == audio['times'][audio['ready_tone']])
+            assert np.all(error == audio['times'][audio['error_tone']])
+        audio = {
+            'times': np.array([1740.1032, 1740.20176667, 1741.0786, 1741.57713333, 1744.78716667, 1744.88573333]),
+            'polarities': np.array([1., -1., 1., -1., 1., -1.]),
+            'error_tone': np.array([False, False, True, False, False, False]),
+            'ready_tone': np.array([True, False, False, False, True, False])
+        }
+        _test_audio(audio)  # this tests the usual pulses
+        _test_audio({k: audio[k][1:] for k in audio})  # this tests when it starts in upstate
 
     def test_ttl_bpod_gaelle_writes_protocols_but_guido_doesnt_read_them(self):
         bpod_t = np.array([5.423290950005423, 6.397993470006398, 6.468919710006469,

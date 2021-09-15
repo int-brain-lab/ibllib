@@ -245,7 +245,7 @@ def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, rad
         return t, p
 
 
-def _assign_events_audio(audio_t, audio_polarities, return_indices=False):
+def _assign_events_audio(audio_t, audio_polarities, return_indices=False, display=False):
     """
     From detected fronts on the audio sync traces, outputs the synchronisation events
     related to tone in
@@ -253,20 +253,26 @@ def _assign_events_audio(audio_t, audio_polarities, return_indices=False):
     :param audio_t: numpy vector containing times of fronts
     :param audio_fronts: numpy vector containing polarity of fronts (1 rise, -1 fall)
     :param return_indices (False): returns indices of tones
+    :param display (False): for debug mode, displays the raw fronts overlaid with detections
     :return: numpy arrays t_ready_tone_in, t_error_tone_in
     :return: numpy arrays ind_ready_tone_in, ind_error_tone_in if return_indices=True
     """
     # make sure that there are no 2 consecutive fall or consecutive rise events
     assert(np.all(np.abs(np.diff(audio_polarities)) == 2))
     # take only even time differences: ie. from rising to falling fronts
-    i0 = 0 if audio_polarities[0] == 1 else 1
-    dt = np.diff(audio_t)[i0::2]
+    dt = np.diff(audio_t)
     # detect ready tone by length below 110 ms
-    i_ready_tone_in = np.r_[np.where(dt <= 0.11)[0] * 2]
+    i_ready_tone_in = np.where(np.logical_and(dt <= 0.11, audio_polarities[:-1] == 1))[0]
     t_ready_tone_in = audio_t[i_ready_tone_in]
-    # error tones are events lasting from 400ms to 600ms
-    i_error_tone_in = np.where(np.logical_and(0.4 < dt, dt < 1.2))[0] * 2
+    # error tones are events lasting from 400ms to 1200ms
+    i_error_tone_in = np.where(np.logical_and(np.logical_and(0.4 < dt, dt < 1.2), audio_polarities[:-1] == 1))[0]
     t_error_tone_in = audio_t[i_error_tone_in]
+    if display:
+        from ibllib.plots import squares, vertical_lines
+        squares(audio_t, audio_polarities, yrange=[-1, 1],)
+        vertical_lines(t_ready_tone_in, ymin=-.8, ymax=.8)
+        vertical_lines(t_error_tone_in, ymin=-.8, ymax=.8)
+
     if return_indices:
         return t_ready_tone_in, t_error_tone_in, i_ready_tone_in, i_error_tone_in
     else:
@@ -280,7 +286,6 @@ def _assign_events_to_trial(t_trial_start, t_event, take='last'):
     Trials without an event
     result in nan value in output time vector.
     The output has a consistent size with t_trial_start and ready to output to alf.
-
     :param t_trial_start: numpy vector of trial start times
     :param t_event: numpy vector of event times to assign to trials
     :param take: 'last' or 'first' (optional, default 'last'): index to take in case of duplicates
