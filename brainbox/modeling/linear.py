@@ -59,16 +59,38 @@ class LinearGLM(NeuralModel):
     def _fit(self, dm, binned, cells=None):
         """
         Fitting primitive that brainbox.NeuralModel.fit method will call
+
+        Parameters
+        ----------
+        dm : np.ndarray
+            Design matrix to use for fitting
+        binned : np.ndarray
+            Array of binned spike times. Must share first dimension with dm
+        cells : iterable with .shape attribute, optional
+            List of cells which are being fit. Use to generate index for output
+            coefficients and intercepts, must share shape with second dimension
+            of binned. When None will default to a list of all cells in the model object,
+            by default None
+
+        Returns
+        -------
+        coefs, pd.Series
+            Series containing fit coefficients for cells
+        intercepts, pd.Series
+            Series containing intercepts for fits.
         """
         if cells is None:
             cells = self.clu_ids.flatten()
+        if cells.shape[0] != binned.shape[1]:
+            raise ValueError('Length of cells does not match shape of binned')
+
         coefs = pd.Series(index=cells, name='coefficients', dtype=object)
         intercepts = pd.Series(index=cells, name='intercepts')
 
         lm = self.estimator.fit(dm, binned)
         weight, intercept = lm.coef_, lm.intercept_
         for cell in cells:
-            cell_idx = np.argwhere(self.clu_ids == cell)[0, 0]
+            cell_idx = np.argwhere(cells == cell)[0, 0]
             coefs.at[cell] = weight[cell_idx, :]
             intercepts.at[cell] = intercept[cell_idx]
         return coefs, intercepts
@@ -84,7 +106,6 @@ class LinearGLM(NeuralModel):
         """
         if not hasattr(self, 'coefs'):
             raise AttributeError('Model has not been fit yet.')
-
         testmask = np.isin(self.design.trlabels, self.testinds).flatten()
         dm, binned = self.design[testmask, :], self.binnedspikes[testmask]
 

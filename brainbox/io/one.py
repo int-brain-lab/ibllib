@@ -70,11 +70,11 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
             counts = [0]
         else:
             tracing = [(insertions.get('json', {'temp': 0}).get('extended_qc', {'temp': 0}).
-                       get('tracing_exists', False))]
+                        get('tracing_exists', False))]
             resolved = [(insertions.get('json', {'temp': 0}).get('extended_qc', {'temp': 0}).
-                        get('alignment_resolved', False))]
+                         get('alignment_resolved', False))]
             counts = [(insertions.get('json', {'temp': 0}).get('extended_qc', {'temp': 0}).
-                      get('alignment_count', 0))]
+                       get('alignment_count', 0))]
         probe_id = [insertions['id']]
     # No specific probe specified, load any that is available
     # Need to catch for the case where we have two of the same probe insertions
@@ -420,7 +420,7 @@ def load_wheel_reaction_times(eid, one=None):
 
 
 def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_wheel=False,
-                   ret_abswheel=False, wheel_binsize=0.02, addtl_types=()):
+                   ret_abswheel=False, ext_DLC=False, wheel_binsize=0.02, addtl_types=[]):
     """
     TODO Test this with new ONE
     Generate a pandas dataframe of per-trial timing information about a given session.
@@ -451,6 +451,8 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
         Whether to return the time-resampled wheel velocity trace, by default False
     ret_abswheel : bool, optional
         Whether to return the time-resampled absolute wheel velocity trace, by default False
+    ext_DLC : bool, optional
+        Whether to extract DLC data, by default False
     wheel_binsize : float, optional
         Time bins to resample wheel velocity to, by default 0.02
     addtl_types : list, optional

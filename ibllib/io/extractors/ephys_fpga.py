@@ -60,12 +60,18 @@ CHMAPS = {'3A':
           }
 
 
+def data_for_keys(keys, data):
+    """Check keys exist in 'data' dict and contain values other than None"""
+    return data is not None and all(k in data and data.get(k, None) is not None for k in keys)
+
+
 def get_ibl_sync_map(ef, version):
     """
     Gets default channel map for the version/binary file type combination
     :param ef: ibllib.io.spikeglx.glob_ephys_file dictionary with field 'ap' or 'nidq'
     :return: channel map dictionary
     """
+    # Determine default channel map
     if version == '3A':
         default_chmap = CHMAPS['3A']['ap']
     elif version == '3B':
@@ -73,7 +79,18 @@ def get_ibl_sync_map(ef, version):
             default_chmap = CHMAPS['3B']['nidq']
         elif ef.get('ap', None):
             default_chmap = CHMAPS['3B']['ap']
-    return spikeglx.get_sync_map(ef['path']) or default_chmap
+    # Try to load channel map from file
+    chmap = spikeglx.get_sync_map(ef['path'])
+    # If chmap provided but not with all keys, fill up with default values
+    if not chmap:
+        return default_chmap
+    else:
+        if data_for_keys(default_chmap.keys(), chmap):
+            return chmap
+        else:
+            _logger.warning("Keys missing from provided channel map, "
+                            "setting missing keys from default channel map")
+            return {**default_chmap, **chmap}
 
 
 def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
@@ -242,7 +259,8 @@ def _assign_events_audio(audio_t, audio_polarities, return_indices=False):
     # make sure that there are no 2 consecutive fall or consecutive rise events
     assert(np.all(np.abs(np.diff(audio_polarities)) == 2))
     # take only even time differences: ie. from rising to falling fronts
-    dt = np.diff(audio_t)[::2]
+    i0 = 0 if audio_polarities[0] == 1 else 1
+    dt = np.diff(audio_t)[i0::2]
     # detect ready tone by length below 110 ms
     i_ready_tone_in = np.r_[np.where(dt <= 0.11)[0] * 2]
     t_ready_tone_in = audio_t[i_ready_tone_in]

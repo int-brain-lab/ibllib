@@ -252,6 +252,18 @@ class TestCameraQC(unittest.TestCase):
             outcome = self.qc.check_wheel_alignment()
         self.assertEqual('NOT_SET', outcome)
 
+    def test_get_active_wheel_period(self):
+        """Check that warning is raised, period is returned None, and QC is NOT_SET
+         if there is active wheel period to be found"""
+        wheel_keys = ('timestamps', 'position')
+        wheel_data = (np.arange(1000), np.ones(1000))
+        self.qc.data['wheel'] = Bunch(zip(wheel_keys, wheel_data))
+        with self.assertLogs(logging.getLogger('ibllib'), logging.WARNING):
+            period = self.qc.get_active_wheel_period(self.qc.data['wheel'])
+        self.assertEqual(None, period)
+        outcome = self.qc.check_wheel_alignment()
+        self.assertEqual('NOT_SET', outcome)
+
     def test_ensure_data(self):
         self.qc.eid = self.eid
         self.qc.download_data = False

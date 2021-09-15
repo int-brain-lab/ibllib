@@ -125,7 +125,19 @@ def _get_spacer_times(spacer_template, jitter, ttl_signal, t_quiet):
     # adjust indices for
     # - `np.where` call above
     # - length of spacer_model
-    idxs_spacer_middle += 2 - int((np.floor(len(spacer_model) / 2)))
+    spacer_around = int((np.floor(len(spacer_model) / 2)))
+    idxs_spacer_middle += 2 - spacer_around
+
+    # for each spacer make sure the times are monotonically increasing before
+    # and monotonically decreasing afterwards
+    is_valid = np.zeros((idxs_spacer_middle.size), dtype=bool)
+    for i, t in enumerate(idxs_spacer_middle):
+        before = all(np.diff(dttl[t - spacer_around:t]) > 0)
+        after = all(np.diff(dttl[t + 1:t + 1 + spacer_around]) < 0)
+        is_valid[i] = np.bitwise_and(before, after)
+
+    idxs_spacer_middle = idxs_spacer_middle[is_valid]
+
     # pull out spacer times (middle)
     ts_spacer_middle = ttl_signal[idxs_spacer_middle]
     # put beginning/end of spacer times into an array

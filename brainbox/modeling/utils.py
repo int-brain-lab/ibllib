@@ -101,7 +101,7 @@ class SequentialSelector:
                 new_feature_idx, nf_score = self._get_best_new_feature(current_mask, cells)
                 for cell in cells:
                     maskdf.at[cell, self.features[new_feature_idx.loc[cell]]] = True
-                    seqdf.loc[cell, i] = self.features[new_feature_idx]
+                    seqdf.loc[cell, i] = self.features[new_feature_idx.loc[cell]]
                     scoredf.loc[cell, i] = nf_score.loc[cell]
         self.support_ = maskdf
         self.sequences_ = seqdf
@@ -110,7 +110,8 @@ class SequentialSelector:
     def _get_best_new_feature(self, mask, cells):
         mask = np.array(mask)
         candidate_features = np.flatnonzero(~mask)
-        my = self.model.binnedspikes[self.train]
+        cell_idxs = np.argwhere(np.isin(self.model.clu_ids, cells)).flatten()
+        my = self.model.binnedspikes[np.ix_(self.train, cell_idxs)]
         scores = pd.DataFrame(index=cells, columns=candidate_features, dtype=float)
         for feature_idx in candidate_features:
             candidate_mask = mask.copy()
