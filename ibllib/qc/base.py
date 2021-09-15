@@ -188,8 +188,11 @@ class QC:
 
         # Ensure None instead of NaNs
         for k, v in data.items():
-            if (v is not None and not isinstance(v, str)) and np.isnan(v).all():
-                data[k] = None
+            if v is not None and not isinstance(v, str):
+                if isinstance(v, tuple):
+                    data[k] = tuple(None if np.isnan(i) else i for i in v)
+                else:
+                    data[k] = None if np.isnan(v).all() else v
 
         details = self.one.alyx.get(f'/{self.endpoint}/{self.eid}', clobber=True)
         if self.json:

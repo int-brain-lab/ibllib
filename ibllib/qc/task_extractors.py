@@ -120,7 +120,9 @@ class TaskQCExtractor(object):
                 mask = sync['channels'] == chmap[name]
                 return dict(zip(keys, (sync[k][mask] for k in keys)))
 
-            ttls = [channel_events(ch) for ch in ('frame2ttl', 'audio', 'bpod')]
+            ttls = [ephys_fpga._clean_frame2ttl(channel_events('frame2ttl')),
+                    ephys_fpga._clean_audio(channel_events('audio')),
+                    channel_events('bpod')]
             self.frame_ttls, self.audio_ttls, self.bpod_ttls = ttls
 
     def extract_data(self):

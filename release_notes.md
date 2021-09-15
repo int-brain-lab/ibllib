@@ -11,7 +11,13 @@
 - pykilosort pipeline: output correct version number / fix log file name
 ### Release Notes 2.0.6 2021-09-14
 - extraction fixes: passive extraction spacers and camera times format
--  small bugfix for the sequential selection
+- small bugfix for the sequential selection
+### Release Notes 2.0.7 2021-09-15
+- ephys trials extraction: audio from FPGA: up-state and TTLs cleanup from camera wiring
+- passive extraction: improved spacers detection
+- ephyscellsqc: bugfix on probe creation for pykilosort subfolder
+- task version 6.2.5 specific audio extractor
+- camera times: index by video length when GPIO unstable
 
 ### Release Notes 2.0.0 2021-08-04
 - ONE2 released on the master branch
