@@ -344,9 +344,11 @@ class EphysCellsQc(tasks.Task):
         :return:
         """
         eid = self.one.path2eid(self.session_path, query_type='remote')
-        pdict = self.one.alyx.rest('insertions', 'list',
-                                   session=eid, name=folder_probe.parts[-1], no_cache=True)
+        # the probe name is the first folder after alf: {session_path}/alf/{probe_name}/{spike_sorter_name}
+        probe_name = Path(folder_probe).relative_to(self.session_path.joinpath('alf')).parts[0]
+        pdict = self.one.alyx.rest('insertions', 'list', session=eid, name=probe_name, no_cache=True)
         if len(pdict) != 1:
+            _logger.warning(f'No probe found for probe name: {probe_name}')
             return
         isok = df_units['label'] == 1
         qcdict = {'n_units': int(df_units.shape[0]),

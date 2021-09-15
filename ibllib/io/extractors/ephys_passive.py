@@ -79,6 +79,20 @@ def _load_passive_session_fixtures(session_path: str) -> dict:
     return fixture
 
 
+def _load_task_protocol(session_path: str) -> str:
+    """Find the IBL rig version used for the session
+
+    :param session_path: the path to a session
+    :type session_path: str
+    :return: ibl rig task protocol version
+    :rtype: str
+    """
+    settings = rawio.load_settings(session_path)
+    ses_ver = settings["IBLRIG_VERSION_TAG"]
+
+    return ses_ver
+
+
 def _load_passive_stim_meta() -> dict:
     """load_passive_stim_meta Loads the passive protocol metadata
 
@@ -321,38 +335,72 @@ def _extract_passiveValve_intervals(bpod: dict) -> np.array:
 
     # check all values are within bpod tolerance of 100µs
     assert np.allclose(
-        valveOff_times - valveOn_times, valveOff_times[0] - valveOn_times[0], atol=0.0001
+        valveOff_times - valveOn_times, valveOff_times[1] - valveOn_times[1], atol=0.0001
     ), "Some valve outputs are longer or shorter than others"
 
     return np.array([(x, y) for x, y in zip(valveOn_times, valveOff_times)])
 
 
-def _extract_passiveAudio_intervals(audio: dict) -> Tuple[np.array, np.array]:
-    # Get Tone and Noise cue intervals
+def _extract_passiveAudio_intervals(audio: dict, rig_version: str) -> Tuple[np.array, np.array]:
 
-    # Get all sound onsets and offsets
-    soundOn_times = audio["times"][audio["polarities"] > 0]
-    soundOff_times = audio["times"][audio["polarities"] < 0]
-    # Check they are the correct number
-    assert len(soundOn_times) == NTONES + NNOISES, "Wrong number of sound ONSETS"
-    assert len(soundOff_times) == NTONES + NNOISES, "Wrong number of sound OFFSETS"
+    # make an exception for task version = 6.2.5 where things are strange but data is recoverable
+    if rig_version == '6.2.5':
+        # Get all sound onsets and offsets
+        soundOn_times = audio["times"][audio["polarities"] > 0]
+        soundOff_times = audio["times"][audio["polarities"] < 0]
 
-    diff = soundOff_times - soundOn_times
-    # Tone is ~100ms so check if diff < 0.3
-    toneOn_times = soundOn_times[diff <= 0.3]
-    toneOff_times = soundOff_times[diff <= 0.3]
-    # Noise is ~500ms so check if diff > 0.3
-    noiseOn_times = soundOn_times[diff > 0.3]
-    noiseOff_times = soundOff_times[diff > 0.3]
+        # Have a couple that are wayyy too long!
+        time_threshold = 10
+        diff = soundOff_times - soundOn_times
+        stupid = np.where(diff > time_threshold)[0]
+        NREMOVE = len(stupid)
+        not_stupid = np.where(diff < time_threshold)[0]
 
-    assert len(toneOn_times) == NTONES
-    assert len(toneOff_times) == NTONES
-    assert len(noiseOn_times) == NNOISES
-    assert len(noiseOff_times) == NNOISES
+        assert len(soundOn_times) == NTONES + NNOISES - NREMOVE, "Wrong number of sound ONSETS"
+        assert len(soundOff_times) == NTONES + NNOISES - NREMOVE, "Wrong number of sound OFFSETS"
 
-    # Fixed delays from soundcard ~500µs
-    np.allclose(toneOff_times - toneOn_times, 0.1, atol=0.0006)
-    np.allclose(noiseOff_times - noiseOn_times, 0.5, atol=0.0006)
+        soundOn_times = soundOn_times[not_stupid]
+        soundOff_times = soundOff_times[not_stupid]
+
+        diff = soundOff_times - soundOn_times
+        # Tone is ~100ms so check if diff < 0.3
+        toneOn_times = soundOn_times[diff <= 0.3]
+        toneOff_times = soundOff_times[diff <= 0.3]
+        # Noise is ~500ms so check if diff > 0.3
+        noiseOn_times = soundOn_times[diff > 0.3]
+        noiseOff_times = soundOff_times[diff > 0.3]
+
+        # append with nans
+        toneOn_times = np.r_[toneOn_times, np.full((NTONES - len(toneOn_times)), np.NAN)]
+        toneOff_times = np.r_[toneOff_times, np.full((NTONES - len(toneOff_times)), np.NAN)]
+        noiseOn_times = np.r_[noiseOn_times, np.full((NNOISES - len(noiseOn_times)), np.NAN)]
+        noiseOff_times = np.r_[noiseOff_times, np.full((NNOISES - len(noiseOff_times)), np.NAN)]
+
+    else:
+        # Get all sound onsets and offsets
+        soundOn_times = audio["times"][audio["polarities"] > 0]
+        soundOff_times = audio["times"][audio["polarities"] < 0]
+
+        # Check they are the correct number
+        assert len(soundOn_times) == NTONES + NNOISES, "Wrong number of sound ONSETS"
+        assert len(soundOff_times) == NTONES + NNOISES, "Wrong number of sound OFFSETS"
+
+        diff = soundOff_times - soundOn_times
+        # Tone is ~100ms so check if diff < 0.3
+        toneOn_times = soundOn_times[diff <= 0.3]
+        toneOff_times = soundOff_times[diff <= 0.3]
+        # Noise is ~500ms so check if diff > 0.3
+        noiseOn_times = soundOn_times[diff > 0.3]
+        noiseOff_times = soundOff_times[diff > 0.3]
+
+        assert len(toneOn_times) == NTONES
+        assert len(toneOff_times) == NTONES
+        assert len(noiseOn_times) == NNOISES
+        assert len(noiseOff_times) == NNOISES
+
+        # Fixed delays from soundcard ~500µs
+        np.allclose(toneOff_times - toneOn_times, 0.1, atol=0.0006)
+        np.allclose(noiseOff_times - noiseOn_times, 0.5, atol=0.0006)
 
     passiveTone_intervals = np.append(
         toneOn_times.reshape((len(toneOn_times), 1)),
@@ -444,8 +492,10 @@ def extract_task_replay(
     bpod = ephys_fpga.get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
     passiveValve_intervals = _extract_passiveValve_intervals(bpod)
 
+    task_version = _load_task_protocol(session_path)
     audio = ephys_fpga.get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
-    passiveTone_intervals, passiveNoise_intervals = _extract_passiveAudio_intervals(audio)
+    passiveTone_intervals, passiveNoise_intervals = _extract_passiveAudio_intervals(audio,
+                                                                                    task_version)
 
     passiveStims_df = np.concatenate(
         [passiveValve_intervals, passiveTone_intervals, passiveNoise_intervals], axis=1
@@ -493,8 +543,10 @@ def extract_replay_debug(
     passiveValve_intervals = _extract_passiveValve_intervals(bpod)
     plot_valve_times(passiveValve_intervals, ax=ax)
 
+    task_version = _load_task_protocol(session_path)
     audio = ephys_fpga.get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
-    passiveTone_intervals, passiveNoise_intervals = _extract_passiveAudio_intervals(audio)
+    passiveTone_intervals, passiveNoise_intervals = _extract_passiveAudio_intervals(audio,
+                                                                                    task_version)
     plot_audio_times(passiveTone_intervals, passiveNoise_intervals, ax=ax)
 
     passiveStims_df = np.concatenate(

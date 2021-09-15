@@ -154,6 +154,7 @@ class MotionAlignment:
             # TODO Add function arg to make grayscale
             self.alignment.frames = \
                 vidio.get_video_frames_preload(camera_path, frame_numbers, mask=roi)
+            assert self.alignment.frames.size != 0
         except AssertionError:
             self.log.error('Failed to open video')
             return None, None, None
