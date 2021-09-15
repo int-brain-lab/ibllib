@@ -274,6 +274,9 @@ class CameraQC(base.QC):
         edges = np.c_[on, off]
         indices, _ = np.where(np.logical_and(
             np.diff(edges) > duration_range[0], np.diff(edges) < duration_range[1]))
+        if len(indices) == 0:
+            _log.warning('No period of wheel movement found for motion alignment.')
+            return None
         # Pick movement somewhere in the middle
         i = indices[int(indices.size / 2)]
         if display:
@@ -304,7 +307,7 @@ class CameraQC(base.QC):
             # Assert 3A probe model; if so download all probe data
             det = self.one.get_details(self.eid, full=True)
             probe_model = next(x['model'] for x in det['probe_insertion'])
-            assert probe_model == '3A', 'raw ephys data not missing'
+            assert probe_model == '3A', 'raw ephys data missing'
             collections += ('raw_ephys_data/probe00', 'raw_ephys_data/probe01')
             assert_unique = False
         for dstype in dtypes:

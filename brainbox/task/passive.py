@@ -115,12 +115,17 @@ def get_rf_map_over_depth(rf_map_times, rf_map_pos, rf_stim_frames, spike_times,
             stim_on_times = rf_map_times[stim_frame[0]]
             stim_intervals = np.c_[stim_on_times - pre_stim, stim_on_times + post_stim]
 
-            idx_intervals = np.searchsorted(times, stim_intervals)
+            out_intervals = stim_intervals[:, 1] > times[-1]
+            idx_intervals = np.searchsorted(times, stim_intervals)[np.invert(out_intervals)]
 
-            stim_trials = np.zeros((depths.shape[0], n_bins, idx_intervals.shape[0]))
-            for i, on in enumerate(idx_intervals):
-                stim_trials[:, :, i] = binned_array[:, on[0]:on[1]]
-            avg_stim_trials = np.mean(stim_trials, axis=2)
+            # Case when no spikes during the passive period
+            if idx_intervals.shape[0] == 0:
+                avg_stim_trials = np.zeros((depths.shape[0], n_bins))
+            else:
+                stim_trials = np.zeros((depths.shape[0], n_bins, idx_intervals.shape[0]))
+                for i, on in enumerate(idx_intervals):
+                    stim_trials[:, :, i] = binned_array[:, on[0]:on[1]]
+                avg_stim_trials = np.mean(stim_trials, axis=2)
 
             _rf_map[:, x_pos, y_pos, :] = avg_stim_trials
 
@@ -197,8 +202,10 @@ def get_stim_aligned_activity(stim_events, spike_times, spike_depths, z_score_fl
 
         stim_intervals = np.c_[stim_times - pre_stim, stim_times + post_stim]
         base_intervals = np.c_[stim_times - base_stim, stim_times - pre_stim]
-        idx_stim = np.searchsorted(times, stim_intervals)
-        idx_base = np.searchsorted(times, base_intervals)
+        out_intervals = stim_intervals[:, 1] > times[-1]
+
+        idx_stim = np.searchsorted(times, stim_intervals)[np.invert(out_intervals)]
+        idx_base = np.searchsorted(times, base_intervals)[np.invert(out_intervals)]
 
         stim_trials = np.zeros((depths.shape[0], n_bins, idx_stim.shape[0]))
         noise_trials = np.zeros((depths.shape[0], n_bins_base, idx_stim.shape[0]))
