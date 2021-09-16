@@ -342,12 +342,20 @@ def _get_neuropixel_version_from_meta(md):
     """
     if 'typeEnabled' in md.keys():
         return '3A'
-    elif 'typeImEnabled' in md.keys() and 'typeNiEnabled' in md.keys():
+
+    prb_type = md.get('imDatPrb_type')
+    # Neuropixel 1.0 either 3B1 or 3B2 (ask Olivier about 3B1)
+    if prb_type == 0:
         if 'imDatPrb_port' in md.keys() and 'imDatPrb_slot' in md.keys():
             return '3B2'
         else:
             return '3B1'
-
+    # Neuropixel 2.0 single shank
+    if prb_type == 21:
+        return 'NP2.1'
+    # Neuropixel 2.0 four shank
+    if prb_type == 24:
+        return 'NP2.4'
 
 def _get_sync_trace_indices_from_meta(md):
     """
@@ -440,24 +448,36 @@ def _conversion_sample2v_from_meta(meta_data):
             return md.get('niAiRangeMax') / 32768
 
     int2volt = int2volts(meta_data)
+    version = _get_neuropixel_version_from_meta(meta_data)
     # interprets the gain value from the metadata header:
     if 'imroTbl' in meta_data.keys():  # binary from the probes: ap or lf
         sy_gain = np.ones(int(meta_data['snsApLfSy'][-1]), dtype=np.float32)
         # imroTbl has 384 entries regardless of no of channels saved, so need to index by n_ch
         n_chn = _get_nchannels_from_meta(meta_data) - 1
-        # the sync traces are not included in the gain values, so are included for broadcast ops
-        gain = re.findall(r'([0-9]* [0-9]* [0-9]* [0-9]* [0-9]*)', meta_data['imroTbl'])[:n_chn]
-        out = {'lf': np.hstack((np.array([1 / np.float32(g.split(' ')[-1]) for g in gain]) *
-                                int2volt, sy_gain)),
-               'ap': np.hstack((np.array([1 / np.float32(g.split(' ')[-2]) for g in gain]) *
-                                int2volt, sy_gain))}
+        if 'NP2' in version:
+            # NP 2.0; APGain = 80 for all AP
+            # return 0 for LFgain (no LF channels)
+            out = {'lf': np.hstack((int2volt / 80 * np.ones(n_chn).astype(np.float32), sy_gain)),
+                   'ap': np.hstack((int2volt / 80 * np.ones(n_chn).astype(np.float32), sy_gain))}
+        else:
+            # the sync traces are not included in the gain values, so are included for
+            # broadcast ops
+            gain = re.findall(r'([0-9]* [0-9]* [0-9]* [0-9]* [0-9]*)',
+                              meta_data['imroTbl'])[:n_chn]
+            out = {'lf': np.hstack((np.array([1 / np.float32(g.split(' ')[-1]) for g in gain]) *
+                                    int2volt, sy_gain)),
+                   'ap': np.hstack((np.array([1 / np.float32(g.split(' ')[-2]) for g in gain]) *
+                                    int2volt, sy_gain))}
+
+    # nidaq gain can be read in the same way regardless of NP1.0 or NP2.0
     elif 'niMNGain' in meta_data.keys():  # binary from nidq
         gain = np.r_[
-            np.ones(int(meta_data['snsMnMaXaDw'][0],)) / meta_data['niMNGain'] * int2volt,
-            np.ones(int(meta_data['snsMnMaXaDw'][1],)) / meta_data['niMAGain'] * int2volt,
+            np.ones(int(meta_data['snsMnMaXaDw'][0], )) / meta_data['niMNGain'] * int2volt,
+            np.ones(int(meta_data['snsMnMaXaDw'][1], )) / meta_data['niMAGain'] * int2volt,
             np.ones(int(meta_data['snsMnMaXaDw'][2], )) * int2volt,  # no gain for analog sync
-            np.ones(int(np.sum(meta_data['snsMnMaXaDw'][3]),))]  # no unit for digital sync
+            np.ones(int(np.sum(meta_data['snsMnMaXaDw'][3]), ))]  # no unit for digital sync
         out = {'nidq': gain}
+
     return out
 
 
