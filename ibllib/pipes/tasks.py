@@ -176,7 +176,7 @@ class Task(abc.ABC):
                     file_path = Path(d['session_path']).joinpath(d['rel_path'])
                     file_uuid = add_uuid_string(file_path, np2str(np.r_[d.name[0], d.name[1]]))
                     file_link = SDSC_TMP.joinpath(file_path)
-                    file_link.parents.mkdir(exist_ok=True, parents=True)
+                    file_link.parent.mkdir(exist_ok=True, parents=True)
                     file_link.symlink_to(
                         Path(SDSC_ROOT_PATH.joinpath(file_uuid)))
 
