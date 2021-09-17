@@ -174,7 +174,8 @@ class Task(abc.ABC):
                 for _, d in df.iterrows():
                     file_path = Path(d['session_path']).joinpath(d['rel_path'])
                     file_uuid = add_uuid_string(file_path, np2str(np.r_[d.name[0], d.name[1]]))
-                    SDSC_TMP.joinpath(file_path).symlink_to(SDSC_ROOT_PATH.joinpath(file_uuid))
+                    Path(SDSC_TMP.joinpath(file_path)).symlink_to(
+                        Path(SDSC_ROOT_PATH.joinpath(file_uuid)))
 
                 self.session_path = SDSC_TMP.joinpath(d['session_path'])
 
