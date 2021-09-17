@@ -350,6 +350,10 @@ class CameraQC(base.QC):
         if self.data['frame_samples'] is None:
             return 'NOT_SET', {}
 
+        if self.data['timestamps'].shape[0] == 0:
+            _log.error(f'No timestamps for {self.label} camera; setting outcome to CRITICAL')
+            return 'CRITICAL', {}
+
         def is_metric(x):
             return isfunction(x) and x.__name__.startswith('check_')
 
