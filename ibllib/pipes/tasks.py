@@ -6,12 +6,18 @@ import importlib
 import time
 from _collections import OrderedDict
 import traceback
+import pandas as pd
+import numpy as np
 
 from graphviz import Digraph
 
 from ibllib.misc import version
 import one.params
+from one.alf.files import add_uuid_string
+from iblutil.io.parquet import np2str
 from ibllib.oneibl.registration import register_dataset
+from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_PATCH_PATH
+from one.util import filter_datasets
 
 
 _logger = logging.getLogger('ibllib')
@@ -34,7 +40,7 @@ class Task(abc.ABC):
     input_files = None
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
-                 machine=None, clobber=True):
+                 machine=None, clobber=True, location='local'):
         self.taskid = taskid
         self.one = one
         self.session_path = session_path
@@ -45,6 +51,7 @@ class Task(abc.ABC):
             self.parents = []
         self.machine = machine
         self.clobber = clobber
+        self.location = location
 
     @property
     def name(self):
@@ -119,7 +126,16 @@ class Task(abc.ABC):
                 versions = [self.version for _ in self.outputs]
             else:
                 versions = [self.version]
-            return register_dataset(self.outputs, one=one, versions=versions, **kwargs)
+
+            if self.location == 'local':
+                return register_dataset(self.outputs, one=one, versions=versions, **kwargs)
+            elif self.location == 'remote':
+                ftp_patcher = FTPPatcher(one=self.one)
+                return ftp_patcher.create_dataset(path=self.outputs, created_by=self.one.alyx.user,
+                                                  versions=versions)
+            elif self.location == 'SDSC':
+                sdsc_patcher = SDSCPatcher(one=one)
+                return sdsc_patcher.patch_datasets(self.outputs, dry=False, versions=versions)
 
     def rerun(self):
         self.run(overwrite=True)
@@ -142,12 +158,58 @@ class Task(abc.ABC):
         Function to optionally overload to check inputs.
         :return:
         """
+        # if on local server don't do anything
+        if self.location != 'local':
+            assert self.one
+
+            df = self._getData()
+
+            # Should we catch for missing data here? Its annoying with the 3A, 3B stuff :/
+            if self.location == 'remote':
+                self.one._download_datasets(df)
+
+            if self.location == 'SDSC':
+                SDSC_TMP = SDSC_PATCH_PATH.joinpath(__class__.__name__)
+
+                for d in df.iterrows():
+                    file_path = Path(d['session_path']).joinpath(d['rel_path'])
+                    file_uuid = add_uuid_string(file_path, np2str(np.r_[d['eid_0'], d['eid_1']]))
+                    SDSC_ROOT_PATH.joinpath(file_path).symlink_to(SDSC_TMP.joinpath(file_uuid))
+
+                self.session_path = SDSC_TMP.joinpath(d['session_path'])
 
     def tearDown(self):
         """
         Function to optionally overload to check results
         :return:
         """
+
+    def _getData(self):
+        """
+        Funtcion to optionally overload to download/ create links to data
+        Important when running tasks in remote or SDSC locations
+        :return:
+        """
+        assert self.one
+
+        # This will be improved by Olivier new filters
+        session_datasets = self.one.list_datasets(self.one.path2eid(self.session_path),
+                                                  details=True)
+        df = pd.DataFrame(columns=self.one._cache.datasets.columns)
+        for iF, file in enumerate(self.input_files):
+            df = df.append(
+                filter_datasets(session_datasets, filename=file[0], collection=file[1],
+                                wildcards=True, assert_unique=False))
+        return df
+
+    def cleanUp(self):
+        """
+        Function to optionally overload to clean up
+        :return:
+        """
+        if self.location == 'SDSC':
+            # TODO need to delete the path and files
+            pass
 
 
 class Pipeline(abc.ABC):
@@ -282,7 +344,7 @@ class Pipeline(abc.ABC):
 
 
 def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
-                  max_md5_size=None, machine=None, clobber=True):
+                  max_md5_size=None, machine=None, clobber=True, location='local'):
     """
     Runs a single Alyx job and registers output datasets
     :param tdict:
@@ -318,7 +380,8 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     exec_name = tdict['executable']
     strmodule, strclass = exec_name.rsplit('.', 1)
     classe = getattr(importlib.import_module(strmodule), strclass)
-    task = classe(session_path, one=one, taskid=tdict['id'], machine=machine, clobber=clobber)
+    task = classe(session_path, one=one, taskid=tdict['id'], machine=machine, clobber=clobber,
+                  location=location)
     # sets the status flag to started before running
     one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data={'status': 'Started'})
     status = task.run()
@@ -339,6 +402,5 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
         patch_data['status'] = 'Errored'
     # update task status on Alyx
     t = one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data=patch_data)
+    task.cleanUp()
     return t, registered_dsets
-
-

@@ -275,8 +275,7 @@ class EphysVideoCompress(tasks.Task):
 class EphysTrials(tasks.Task):
     priority = 90
     level = 1
-    input_files = signatures.EPHYSTRIALS_IN
-
+    input_files = signatures.EPHYSTRIALS
 
     def _behaviour_criterion(self):
         """
@@ -445,6 +444,7 @@ class EphysPassive(tasks.Task):
     cpu = 1
     io_charge = 90
     level = 1
+    input_files = signatures.EPHYSPASSIVE
 
     def _run(self):
         """returns a list of pathlib.Paths. """
