@@ -169,12 +169,13 @@ class Task(abc.ABC):
                 self.one._download_datasets(df)
 
             if self.location == 'SDSC':
-                SDSC_TMP = SDSC_PATCH_PATH.joinpath(__class__.__name__)
+                SDSC_TMP = Path(SDSC_PATCH_PATH.joinpath(self.__class__.__name__))
+                SDSC_TMP.mkdir(exist_ok=True, parents=True)
 
                 for _, d in df.iterrows():
                     file_path = Path(d['session_path']).joinpath(d['rel_path'])
                     file_uuid = add_uuid_string(file_path, np2str(np.r_[d.name[0], d.name[1]]))
-                    Path(SDSC_TMP.joinpath(file_path)).symlink_to(
+                    SDSC_TMP.joinpath(file_path).symlink_to(
                         Path(SDSC_ROOT_PATH.joinpath(file_uuid)))
 
                 self.session_path = SDSC_TMP.joinpath(d['session_path'])
