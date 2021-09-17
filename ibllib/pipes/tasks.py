@@ -8,6 +8,7 @@ from _collections import OrderedDict
 import traceback
 import pandas as pd
 import numpy as np
+import shutil
 
 from graphviz import Digraph
 
@@ -170,12 +171,13 @@ class Task(abc.ABC):
 
             if self.location == 'SDSC':
                 SDSC_TMP = Path(SDSC_PATCH_PATH.joinpath(self.__class__.__name__))
-                SDSC_TMP.mkdir(exist_ok=True, parents=True)
 
                 for _, d in df.iterrows():
                     file_path = Path(d['session_path']).joinpath(d['rel_path'])
                     file_uuid = add_uuid_string(file_path, np2str(np.r_[d.name[0], d.name[1]]))
-                    SDSC_TMP.joinpath(file_path).symlink_to(
+                    file_link = SDSC_TMP.joinpath(file_path)
+                    file_link.parents.mkdir(exist_ok=True, parents=True)
+                    file_link.symlink_to(
                         Path(SDSC_ROOT_PATH.joinpath(file_uuid)))
 
                 self.session_path = SDSC_TMP.joinpath(d['session_path'])
@@ -209,7 +211,9 @@ class Task(abc.ABC):
         :return:
         """
         if self.location == 'SDSC':
-            # TODO need to delete the path and files
+            # Double check we are dealing with the SDSC temp folder
+            assert SDSC_PATCH_PATH.parts[0:4] == self.session_path.parts[0:4]
+            shutil.rmtree(self.session_path)
             pass
 
 
