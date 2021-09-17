@@ -171,10 +171,10 @@ class Task(abc.ABC):
             if self.location == 'SDSC':
                 SDSC_TMP = SDSC_PATCH_PATH.joinpath(__class__.__name__)
 
-                for d in df.iterrows():
+                for _, d in df.iterrows():
                     file_path = Path(d['session_path']).joinpath(d['rel_path'])
-                    file_uuid = add_uuid_string(file_path, np2str(np.r_[d['eid_0'], d['eid_1']]))
-                    SDSC_ROOT_PATH.joinpath(file_path).symlink_to(SDSC_TMP.joinpath(file_uuid))
+                    file_uuid = add_uuid_string(file_path, np2str(np.r_[d.name[0], d.name[1]]))
+                    SDSC_TMP.joinpath(file_path).symlink_to(SDSC_ROOT_PATH.joinpath(file_uuid))
 
                 self.session_path = SDSC_TMP.joinpath(d['session_path'])
 
@@ -196,10 +196,9 @@ class Task(abc.ABC):
         session_datasets = self.one.list_datasets(self.one.path2eid(self.session_path),
                                                   details=True)
         df = pd.DataFrame(columns=self.one._cache.datasets.columns)
-        for iF, file in enumerate(self.input_files):
-            df = df.append(
-                filter_datasets(session_datasets, filename=file[0], collection=file[1],
-                                wildcards=True, assert_unique=False))
+        for file in self.input_files:
+            df = df.append(filter_datasets(session_datasets, filename=file[0], collection=file[1],
+                           wildcards=True, assert_unique=False))
         return df
 
     def cleanUp(self):
