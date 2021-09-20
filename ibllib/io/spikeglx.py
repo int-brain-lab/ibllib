@@ -326,6 +326,37 @@ def read_meta_data(md_file):
     return Bunch(d)
 
 
+def write_meta_data(meta, md_file):
+    """
+    Parses a dict into a spikeglx meta data file
+    :param meta: meta data dict
+    :param md_file: file to save meta data to
+    :return:
+    """
+    with open(md_file, 'w') as fid:
+        for key, val in meta.items():
+            if isinstance(val, list):
+                val = ','.join([str(int(v)) for v in val])
+            if isinstance(val, float):
+                if val.is_integer():
+                    val = int(val)
+            fid.write(f'{key}={val}\n')
+
+
+def _get_save_chan_subset(chns):
+    """
+    Get the subset of the original channels that are saved per shank
+    :param chns:
+    :return:
+    """
+    chn_grps = np.r_[0, np.where(np.diff(chns) != 1)[0] + 1, len(chns)]
+    chn_subset = [f'{chns[chn_grps[i]]}:{chns[chn_grps[i + 1] - 1]}'
+                  if chn_grps[i] < len(chns) - 1 else f'{chns[chn_grps[i]]}'
+                  for i in range(len(chn_grps) - 1)]
+
+    return ','.join([sub for sub in chn_subset])
+
+
 def _get_serial_number_from_meta(md):
     """
     Get neuropixel serial number from the metadata dictionary
@@ -356,6 +387,7 @@ def _get_neuropixel_version_from_meta(md):
     # Neuropixel 2.0 four shank
     if prb_type == 24:
         return 'NP2.4'
+
 
 def _get_sync_trace_indices_from_meta(md):
     """
