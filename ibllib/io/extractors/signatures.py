@@ -177,3 +177,7 @@ EPHYSPASSIVE = [('_iblrig_taskSettings.raw*', 'raw_behavior_data', True),
                 ('_spikeglx_sync.times.*', 'raw_ephys_data*', True),
                 ('*.meta', 'raw_ephys_data*', True),
                 ('_iblrig_RFMapStim.raw*', 'raw_passive_data', True)]
+
+RAWEPHYSQC = [('*.meta', 'raw_ephys_data*', True),
+              ('*.ch', 'raw_ephys_data*', True),
+              ('*.cbin', 'raw_ephys_data*', True)]

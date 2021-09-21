@@ -57,6 +57,7 @@ class RawEphysQC(tasks.Task):
     io_charge = 30  # this jobs reads raw ap files
     priority = 10  # a lot of jobs depend on this one
     level = 0  # this job doesn't depend on anything
+    input_files = signatures.RAWEPHYSQC
 
     def _run(self, overwrite=False):
         qc_files = ephysqc.raw_qc_session(self.session_path, overwrite=overwrite)
