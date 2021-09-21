@@ -634,7 +634,7 @@ def get_sync_map(folder_ephys):
         return _sync_map_from_hardware_config(hc)
 
 
-def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None):
+def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None, cache_dir=None):
     """
     TODO Document
     :param url_cbin:
@@ -645,10 +645,11 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
     """
     assert str(url_cbin).endswith('.cbin')
     assert str(url_ch).endswith('.ch')
-    webclient = (one or ONE()).alyx
-
+    one = one or ONE()
+    webclient = one.alyx
+    cache_dir = cache_dir or webclient.cache_dir
     relpath = Path(url_cbin.replace(webclient._par.HTTP_DATA_SERVER, '.')).parents[0]
-    target_dir = Path(webclient.cache_dir, relpath)
+    target_dir = Path(cache_dir, relpath)
     Path(target_dir).mkdir(parents=True, exist_ok=True)
 
     # First, download the .ch file if necessary
@@ -658,7 +659,7 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
         ch_file = Path(webclient.download_file(
             url_ch, cache_dir=target_dir, clobber=True, return_md5=False))
         ch_file = remove_uuid_file(ch_file)
-    ch_file_stream = ch_file.with_suffix('.stream.ch')
+    ch_file_stream = target_dir.joinpath(ch_file.name).with_suffix('.stream.ch')
 
     # Load the .ch file.
     with open(ch_file, 'r') as f:
