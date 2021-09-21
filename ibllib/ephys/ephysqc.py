@@ -8,6 +8,7 @@ import shutil
 import numpy as np
 import pandas as pd
 from scipy import signal
+from tqdm import tqdm
 import one.alf.io as alfio
 from iblutil.util import Bunch
 
@@ -108,6 +109,34 @@ def extract_rmsmap(fbin, out_folder=None, overwrite=False):
     return out_time + out_freq
 
 
+def extract_rms_samples(fbin, sample_length=1., sample_spacing=120, overwrite=False):
+    """
+    Calculates RMS as a quality metric for samples of sample_length at sample_spacing from
+    a raw binary ephys file. Returns vector of median RMS per channel
+    :param fbin:
+    :param sample_length:
+    :param sample_spacing:
+    :param overwrite:
+    :return: rms_vector
+    """
+    _logger.info(f"Computing QC for {fbin}")
+    sglx = spikeglx.Reader(fbin)
+    rl = sglx.ns / sglx.fs
+    t0s = np.arange(0, rl - sample_length, sample_spacing)
+    rms_matrix = np.zeros((sglx.nc - 1, t0s.shape[0]))
+    for i, t0 in enumerate(tqdm(t0s)):
+        # Get samples of sample_length every sample_spacing
+        sl = slice(int(t0 * sglx.fs), int((t0 + sample_length) * sglx.fs))
+        raw = sglx[sl, :-1].T
+        # Run preprocessing on these samples
+        destripe = dsp.destripe(raw, fs=sglx.fs, neuropixel_version=1)
+        # Calculate rms for each channel
+        rms_matrix[:, i] = dsp.rms(destripe)
+
+    rms_vector = np.nanmedian(rms_matrix, axis=1)
+    return rms_vector
+
+
 def raw_qc_session(session_path, overwrite=False):
     """
     Wrapper that exectutes QC from a session folder and outputs the results whithin the same folder
@@ -120,7 +149,7 @@ def raw_qc_session(session_path, overwrite=False):
     qc_files = []
     for efile in efiles:
         if efile.get('ap') and efile.ap.exists():
-            qc_files.extend(extract_rmsmap(efile.ap, out_folder=None, overwrite=overwrite))
+            rms_channels = extract_rms_samples(efile.ap, overwrite=overwrite)
         if efile.get('lf') and efile.lf.exists():
             qc_files.extend(extract_rmsmap(efile.lf, out_folder=None, overwrite=overwrite))
     return qc_files
