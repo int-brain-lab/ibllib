@@ -5,7 +5,6 @@ import numpy as np
 from ibllib.atlas import AllenAtlas
 from ibllib.atlas.regions import BrainRegions
 from ibllib.pipes import histology
-from ibllib.ephys.neuropixel import SITES_COORDINATES
 from ibllib.pipes.ephys_alignment import EphysAlignment
 from ibllib.qc import base
 from ibllib.oneibl.patcher import FTPPatcher
@@ -28,6 +27,7 @@ class AlignmentQC(base.QC):
         self.xyz_picks = None
         self.depths = None
         self.cluster_chns = None
+        self.chn_coords = None
         self.align_keys_sorted = None
 
         # Metrics and passed trials
@@ -45,7 +45,8 @@ class AlignmentQC(base.QC):
 
         self.probe_collection = collection
 
-    def load_data(self, prev_alignments=None, xyz_picks=None, depths=None, cluster_chns=None):
+    def load_data(self, prev_alignments=None, xyz_picks=None, depths=None, cluster_chns=None,
+                  chn_coords=None):
         """"
         Load data required to assess alignment qc and compute similarity matrix. If no arguments
         are given load_data will fetch all the relevant data required
@@ -73,17 +74,24 @@ class AlignmentQC(base.QC):
         else:
             self.xyz_picks = xyz_picks
 
-        if not np.any(depths):
-            self.depths = SITES_COORDINATES[:, 1]
-        else:
-            self.depths = depths
-
         if not self.probe_collection:
             all_collections = self.one.list_collections(self.insertion['session'])
             if f'alf/{self.insertion["name"]}/pykilosort' in all_collections:
                 self.probe_collection = f'alf/{self.insertion["name"]}/pykilosort'
             else:
                 self.probe_collection = f'alf/{self.insertion["name"]}'
+
+        if not np.any(chn_coords):
+            self.chn_coords = self.one.load_dataset(self.insertion['session'],
+                                                    'channels.localCoordinates.npy',
+                                                    collection=self.probe_collection)
+        else:
+            self.chn_coords = chn_coords
+
+        if not np.any(depths):
+            self.depths = self.chn_coords[:, 1]
+        else:
+            self.depths = depths
 
         if not np.any(cluster_chns):
             self.cluster_chns = self.one.load_dataset(self.insertion['session'],
@@ -150,7 +158,7 @@ class AlignmentQC(base.QC):
             if update:
                 self.update_extended_qc(results)
 
-            if results['alignment_resolved'] and (upload_alyx or upload_flatiron):
+            if results['alignment_resolved'] and np.bitwise_or(upload_alyx, upload_flatiron):
                 self.upload_channels(results['alignment_stored'], upload_alyx, upload_flatiron)
 
         return results
@@ -326,7 +334,7 @@ class AlignmentQC(base.QC):
         if upload_alyx:
             if alignment_key != self.align_keys_sorted[0]:
                 histology.register_aligned_track(self.eid, channels_mlapdv / 1e6,
-                                                 chn_coords=SITES_COORDINATES, one=self.one,
+                                                 chn_coords=self.chn_coords, one=self.one,
                                                  overwrite=True, channels=self.channels)
 
                 ephys_traj = self.one.alyx.get(f'/trajectories?&probe_insertion={self.eid}'
