@@ -713,7 +713,11 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
     cbin_local_path.replace(cbin_local_path_renamed)
     assert cbin_local_path_renamed.exists()
 
-    shutil.copy(cbin_local_path.with_suffix('.meta'),
-                cbin_local_path_renamed.with_suffix('.meta'))
+    # handles the meta file
+    meta_local_path = cbin_local_path.with_suffix('.meta')
+    if not meta_local_path.exists:
+        shutil.copy(cbin_local_path.with_suffix('.meta'),
+                    cbin_local_path_renamed.with_suffix('.meta'))
+
     reader = Reader(cbin_local_path_renamed)
     return reader

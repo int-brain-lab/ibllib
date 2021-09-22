@@ -1,7 +1,6 @@
 import logging
 from pathlib import Path
 import time
-import shutil
 
 import numpy as np
 
@@ -139,7 +138,7 @@ def stream(pid, t0, nsecs=1, one=None, cache_folder=None, dsets=None, typ='ap'):
     ch_rec = one.list_datasets(eid, collection=f"*{pname}", filename='*ap.ch', details=True)
     meta_rec = one.list_datasets(eid, collection=f"*{pname}", filename='*ap.meta', details=True)
     ch_file = one._download_datasets(ch_rec)[0]
-    meta_file = one._download_datasets(meta_rec)[0]
+    one._download_datasets(meta_rec)[0]
 
     first_chunk = int(t0 / CHUNK_DURATION_SECS)
     last_chunk = int((t0 + nsecs) / CHUNK_DURATION_SECS) - 1
