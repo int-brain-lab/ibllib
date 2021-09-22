@@ -329,6 +329,7 @@ def read_meta_data(md_file):
 def write_meta_data(meta, md_file):
     """
     Parses a dict into a spikeglx meta data file
+    TODO write a test for this function, (read in, write out and make sure it is the same)
     :param meta: meta data dict
     :param md_file: file to save meta data to
     :return:
@@ -475,7 +476,10 @@ def _conversion_sample2v_from_meta(meta_data):
     def int2volts(md):
         """ :return: Conversion scalar to Volts. Needs to be combined with channel gains """
         if md.get('typeThis', None) == 'imec':
-            return md.get('imAiRangeMax') / 512
+            if 'imMaxInt' in md:
+                return md.get('imAiRangeMax') / int(md['imMaxInt'])
+            else:
+                return md.get('imAiRangeMax') / 512
         else:
             return md.get('niAiRangeMax') / 32768
 
@@ -485,6 +489,7 @@ def _conversion_sample2v_from_meta(meta_data):
     if 'imroTbl' in meta_data.keys():  # binary from the probes: ap or lf
         sy_gain = np.ones(int(meta_data['snsApLfSy'][-1]), dtype=np.float32)
         # imroTbl has 384 entries regardless of no of channels saved, so need to index by n_ch
+        # TODO need to look at snsSaveChanMap and make sure be output the correct gain value
         n_chn = _get_nchannels_from_meta(meta_data) - 1
         if 'NP2' in version:
             # NP 2.0; APGain = 80 for all AP
