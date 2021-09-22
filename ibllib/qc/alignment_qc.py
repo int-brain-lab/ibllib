@@ -20,7 +20,7 @@ class AlignmentQC(base.QC):
     Class that is used to update the extended_qc of the probe insertion fields with the results
     from the ephys alignment procedure
     """
-    def __init__(self, probe_id, one=None, brain_atlas=None, channels=True):
+    def __init__(self, probe_id, one=None, brain_atlas=None, channels=True, collection=None):
         super().__init__(probe_id, one=one, log=_log, endpoint='insertions')
 
         # Data
@@ -42,6 +42,8 @@ class AlignmentQC(base.QC):
         self.insertion = self.one.alyx.get(f'/insertions/{self.eid}', clobber=True)
         self.resolved = (self.insertion.get('json', {'temp': 0}).get('extended_qc').
                          get('alignment_resolved', False))
+
+        self.probe_collection = collection
 
     def load_data(self, prev_alignments=None, xyz_picks=None, depths=None, cluster_chns=None):
         """"
@@ -76,11 +78,17 @@ class AlignmentQC(base.QC):
         else:
             self.depths = depths
 
+        if not self.probe_collection:
+            all_collections = self.one.list_collections(self.insertion['session'])
+            if f'alf/{self.insertion["name"]}/pykilosort' in all_collections:
+                self.probe_collection = f'alf/{self.insertion["name"]}/pykilosort'
+            else:
+                self.probe_collection = f'alf/{self.insertion["name"]}'
+
         if not np.any(cluster_chns):
             self.cluster_chns = self.one.load_dataset(self.insertion['session'],
                                                       'clusters.channels.npy',
-                                                      collection=f'alf/{self.insertion["name"]}',
-                                                      download_only=True)
+                                                      collection=self.probe_collection)
         else:
             self.cluster_chns = cluster_chns
 
@@ -281,7 +289,7 @@ class AlignmentQC(base.QC):
         if upload_flatiron:
             ftp_patcher = FTPPatcher(one=self.one)
             insertion = self.one.alyx.get(f'/insertions/{self.eid}', clobber=True)
-            alf_path = self.one.eid2path(insertion['session']).joinpath('alf', insertion['name'])
+            alf_path = self.one.eid2path(insertion['session']).joinpath(self.probe_collection)
             alf_path.mkdir(exist_ok=True, parents=True)
 
             # Make the channels.mlapdv dataset
