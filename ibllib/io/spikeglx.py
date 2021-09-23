@@ -660,7 +660,7 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
             url_ch, cache_dir=target_dir, clobber=True, return_md5=False))
         ch_file = remove_uuid_file(ch_file)
     ch_file_stream = target_dir.joinpath(ch_file.name).with_suffix('.stream.ch')
-
+    
     # Load the .ch file.
     with open(ch_file, 'r') as f:
         cmeta = json.load(f)
@@ -668,7 +668,12 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
     # Get the first byte and number of bytes to download.
     i0 = cmeta['chunk_bounds'][first_chunk]
     ns_stream = cmeta['chunk_bounds'][last_chunk + 1] - i0
-
+    
+    # handles the meta file
+    meta_local_path = ch_file_stream.with_suffix('.meta')
+    if not meta_local_path.exists():
+        shutil.copy(ch_file.with_suffix('.meta'), meta_local_path)
+    
     # if the cached version happens to be the same as the one on disk, just load it
     if ch_file_stream.exists():
         with open(ch_file_stream, 'r') as f:
@@ -712,12 +717,6 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
     cbin_local_path_renamed = cbin_local_path.with_suffix('.stream.cbin')
     cbin_local_path.replace(cbin_local_path_renamed)
     assert cbin_local_path_renamed.exists()
-
-    # handles the meta file
-    meta_local_path = cbin_local_path.with_suffix('.meta')
-    if not meta_local_path.exists:
-        shutil.copy(cbin_local_path.with_suffix('.meta'),
-                    cbin_local_path_renamed.with_suffix('.meta'))
 
     reader = Reader(cbin_local_path_renamed)
     return reader

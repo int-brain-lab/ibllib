@@ -146,7 +146,7 @@ def stream(pid, t0, nsecs=1, one=None, cache_folder=None, dsets=None, typ='ap'):
     samples_folder.mkdir(exist_ok=True, parents=True)
     sr = spikeglx.download_raw_partial(
         one=one,
-        url_cbin=one.record2url(cbin_rec),
+        url_cbin=one.record2url(cbin_rec)[0],
         url_ch=ch_file,
         first_chunk=first_chunk,
         last_chunk=last_chunk,
