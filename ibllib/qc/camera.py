@@ -342,7 +342,6 @@ class CameraQC(base.QC):
         :param extract_times: if True, re-extracts the camera timestamps from the raw data
         :returns: overall outcome as a str, a dict of checks and their outcomes
         """
-        # TODO Use exp ref here
         _log.info(f'Computing QC outcome for {self.label} camera, session {self.eid}')
         namespace = f'video{self.label.capitalize()}'
         if all(x is None for x in self.data.values()):
@@ -371,26 +370,36 @@ class CameraQC(base.QC):
             self.update(outcome, namespace)
         return outcome, self.metrics
 
-    def check_brightness(self, bounds=(40, 200), max_std=20, display=False):
+    def check_brightness(self, bounds=(40, 200), max_std=20, roi=True, display=False):
         """Check that the video brightness is within a given range
         The mean brightness of each frame must be with the bounds provided, and the standard
         deviation across samples frames should be less then the given value.  Assumes that the
         frame samples are 2D (no colour channels).
 
-        :param bounds: For each frame, check that: bounds[0] < M < bounds[1], where M = mean(frame)
+        :param bounds: For each frame, check that: bounds[0] < M < bounds[1],
+        where M = mean(frame). If less than 75% of sample frames outside of these bounds, the
+        outcome is WARNING. If <75% of frames within twice the bounds, the outcome is FAIL.
         :param max_std: The standard deviation of the frame luminance means must be less than this
+        :param roi: If True, check brightness on ROI of frame
         :param display: When True the mean frame luminance is plotted against sample frames.
         The sample frames with the lowest and highest mean luminance are shown.
         """
         if self.data['frame_samples'] is None:
             return 'NOT_SET'
-        brightness = self.data['frame_samples'].mean(axis=(1, 2))
+        if roi is True:
+            _, h, w = self.data['frame_samples'].shape
+            if self.label == 'body':  # Latter half
+                roi = (slice(None), slice(None), slice(int(w / 2), None, None))
+            elif self.label == 'left':  # Top left quadrant (~2/3, 1/2 height)
+                roi = (slice(None), slice(None, int(h / 2), None), slice(None, int(w * .66), None))
+            else:  # Top right quadrant (~2/3 width, 1/2 height)
+                roi = (slice(None), slice(None, int(h / 2), None), slice(int(w * .66), None, None))
+        else:
+            roi = (slice(None), slice(None), slice(None))
+        brightness = self.data['frame_samples'][roi].mean(axis=(1, 2))
         # dims = self.data['frame_samples'].shape
         # brightness /= np.array((*dims[1:], 255)).prod()  # Normalize
 
-        within_range = np.logical_and(brightness > bounds[0],
-                                      brightness < bounds[1])
-        passed = within_range.all() and np.std(brightness) < max_std
         if display:
             f = plt.figure()
             gs = f.add_gridspec(2, 3)
@@ -402,17 +411,29 @@ class CameraQC(base.QC):
                 xlabel='frame #',
                 ylabel='brightness (mean pixel)',
                 title='Brightness')
-            ax.hlines(bounds, 0, indices[-1], colors='r', linestyles=':', label='bounds')
+            ax.hlines(bounds, 0, indices[-1],
+                      colors='tab:orange', linestyles=':', label='warning bounds')
+            ax.hlines((bounds[0] / 2, bounds[1] * 2), 0, indices[-1],
+                      colors='r', linestyles=':', label='failure bounds')
             ax.legend()
             # Plot min-max frames
             for i, idx in enumerate((np.argmax(brightness), np.argmin(brightness))):
                 a = f.add_subplot(gs[i, 2])
                 ax.annotate('*', (indices[idx], brightness[idx]),  # this is the point to label
-                            textcoords="offset points", xytext=(0, 1), ha='center')
-                frame = self.data['frame_samples'][idx]
+                            textcoords='offset points', xytext=(0, 1), ha='center')
+                frame = self.data['frame_samples'][idx][roi[1:]]
                 title = ('min' if i else 'max') + ' mean luminance = %.2f' % brightness[idx]
                 self.imshow(frame, ax=a, title=title)
-        return 'PASS' if passed else 'FAIL'
+
+        PCT_PASS = .75  # Proportion of sample frames that must pass
+        # Warning if brightness not within range (3/4 of frames must be between bounds)
+        warn_range = np.logical_and(brightness > bounds[0], brightness < bounds[1])
+        warn_range = 'PASS' if sum(warn_range) / self.n_samples > PCT_PASS else 'WARNING'
+        # Fail if brightness not within twice the range or std less than threshold
+        fail_range = np.logical_and(brightness > bounds[0] / 2, brightness < bounds[1] * 2)
+        within_range = sum(fail_range) / self.n_samples > PCT_PASS
+        fail_range = 'PASS' if within_range and np.std(brightness) < max_std else 'FAIL'
+        return self.overall_outcome([warn_range, fail_range])
 
     def check_file_headers(self):
         """Check reported frame rate matches FPGA frame rate"""
@@ -595,6 +616,17 @@ class CameraQC(base.QC):
         hist_thresh = np.sort(np.array(hist_thresh))
 
         # Method 1: compareHist
+        #### Mean hist comparison
+        # ref_h = [cv2.calcHist([x], [0], None, [256], [0, 256]) for x in refs]
+        # ref_h = np.array(ref_h).mean(axis=0)
+        # frames = refs if test else self.data['frame_samples']
+        # hists = [cv2.calcHist([x], [0], None, [256], [0, 256]) for x in frames]
+        # test_h = np.array(hists).mean(axis=0)
+        # corr = cv2.compareHist(test_h, ref_h, cv2.HISTCMP_CORREL)
+        # if pct_thresh:
+        #     corr *= 100
+        # hist_passed = corr > hist_thresh
+        ####
         ref_h = cv2.calcHist([refs[0]], [0], None, [256], [0, 256])
         frames = refs if test else self.data['frame_samples']
         hists = [cv2.calcHist([x], [0], None, [256], [0, 256]) for x in frames]
@@ -663,7 +695,7 @@ class CameraQC(base.QC):
         face_aligned = pass_map[sum(face_passed)]
         hist_correlates = pass_map[sum(hist_passed)]
 
-        return self.overall_outcome([face_aligned, hist_correlates])
+        return self.overall_outcome([face_aligned, hist_correlates], agg=min)
 
     def check_focus(self, n=20, threshold=(100, 6),
                     roi=False, display=False, test=False, equalize=True):
@@ -698,9 +730,9 @@ class CameraQC(base.QC):
             return 'NOT_SET'
 
         if roi is False:
-            top_left, roi, _ = self.find_face(test=test)
+            top_left, roi, _ = self.find_face(test=test)  # (y1, y2), (x1, x2)
             h, w = map(lambda x: np.diff(x).item(), roi)
-            y, x = np.median(np.array(top_left), axis=0).round().astype(int)
+            x, y = np.median(np.array(top_left), axis=0).round().astype(int)
             roi = (np.s_[y: y + h, x: x + w],)
         else:
             ROI = {
@@ -799,7 +831,7 @@ class CameraQC(base.QC):
                 ax.set(xlabel='Frame sample', ylabel='Mean of filtered frame')
                 f.suptitle('Discrete Fourier Transform')
                 plt.show()
-        passes = np.all(lpc_var > threshold[0]) and np.all(filt_mean > threshold[1])
+        passes = np.all(lpc_var > threshold[0]) or np.all(filt_mean > threshold[1])
         return 'PASS' if passes else 'FAIL'
 
     def find_face(self, roi=None, test=False, metric=cv2.TM_CCOEFF_NORMED, refs=None):

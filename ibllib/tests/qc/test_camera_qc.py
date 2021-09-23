@@ -52,7 +52,7 @@ class TestCameraQC(unittest.TestCase):
         # Check plots
         fig = plt.gcf()
         self.assertEqual(3, len(fig.axes))
-        expected = np.array([58.07007217, 56.55802917, 46.09558182])
+        expected = np.array([105.624258, 110.925964, 92.329614])
         np.testing.assert_array_almost_equal(fig.axes[0].lines[0]._y, expected)
         # Make frames a third as bright
         self.qc.data['frame_samples'] = (self.qc.data['frame_samples'] / 3).astype(np.int32)
