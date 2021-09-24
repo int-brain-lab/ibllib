@@ -13,9 +13,11 @@ import one.alf.io as alfio
 from iblutil.util import Bunch
 
 from brainbox.metrics.single_units import spike_sorting_metrics
+from brainbox.io.spikeglx import stream as sglx_streamer
 from ibllib.ephys import sync_probes
 from ibllib.io import spikeglx
 import ibllib.dsp as dsp
+from ibllib.qc import base
 from ibllib.io.extractors import ephys_fpga, training_wheel
 from ibllib.misc import print_progress
 from phylib.io import model
@@ -26,6 +28,72 @@ _logger = logging.getLogger('ibllib')
 RMS_WIN_LENGTH_SECS = 3
 WELCH_WIN_LENGTH_SAMPLES = 1024
 NCH_WAVEFORMS = 32  # number of channels to be saved in templates.waveforms and channels.waveforms
+
+# class EphysQC(base.QC):
+#     """A class for computing Ephys QC metrics"""
+#
+#     dstypes = ['ephysData.raw.lf',
+#                'ephysData.raw.ap']
+#
+#     def __init__(self, probe_id, **kwargs):
+#         super().__init__(probe_id, endpoint='insertions,'**kwargs)
+#         self.pid = probe_id
+#         self.stream = kwargs.pop('stream', None)
+#         keys = ('sglx')
+#         self.data = Bunch.fromkeys(keys)
+#         self.metrics = None
+#         self.outcome = 'NOT_SET'
+#
+#
+#     def load_data(self, stream: bool = None) -> None:
+#         # If stream is explicitly given here, overwrite init
+#         if stream is not None:
+#             self.stream = stream
+#         self._ensure_required_data()
+#         _logger.info('Gathering data for QC')
+#
+#         # Find fbin
+#         fbin =
+#
+#         # Load spikeglx reader or streamer
+#         if self.stream is True:
+#             self.data['sglx'] = sglx_streamer(fbin)
+#         else:
+#              self.data['sglx'] = spikeglx.Reader(fbin)
+#
+#
+#     def _ensure_required_data(self):
+#         """
+#         Ensures the datasets required for QC are available locally or remotely.
+#         """
+#         assert self.one is not None, 'ONE instance is required to ensure required data'
+#         eid, pname = self.one.pid2eid(self.pid)
+#         session_path = self.one.eid2path(eid)
+#         # Check if data is available locally
+#
+#
+#
+#         for dstype in self.dstypes:
+#             dataset = self.one.alyx.rest('datasets', 'list', session=eid, dataset_type=dstype,
+#                                          collection=f'raw_ephys_data/{pname}')
+#             # check that there is any dataset
+#             assert len(dataset) != 0, f'No dataset {dstype} in database'
+#             # check if dataset is local
+#             session_path.rglob(d), None) for d in datasets['rel_path'])
+#
+#             # If not, and stream is not True, download.
+#
+#
+#     def run(self, update: bool = False, **kwargs) -> (str, dict):
+#         efiles = spikeglx.glob_ephys_files(session_path)
+#         qc_files = []
+#         if efile.get('ap') and efile.ap.exists():
+#             rms_channels = extract_rms_samples(efile.ap, overwrite=overwrite)
+#         if efile.get('lf') and efile.lf.exists():
+#             qc_files.extend(extract_rmsmap(efile.lf, out_folder=None, overwrite=overwrite))
+#
+#
+#
 
 
 def rmsmap(fbin):
@@ -109,7 +177,7 @@ def extract_rmsmap(fbin, out_folder=None, overwrite=False):
     return out_time + out_freq
 
 
-def extract_rms_samples(fbin, sample_length=1., sample_spacing=120, overwrite=False):
+def extract_rms_samples(sglx, sample_length=1., sample_spacing=120, overwrite=False):
     """
     Calculates RMS as a quality metric for samples of sample_length at sample_spacing from
     a raw binary ephys file. Returns vector of median RMS per channel
@@ -119,8 +187,6 @@ def extract_rms_samples(fbin, sample_length=1., sample_spacing=120, overwrite=Fa
     :param overwrite:
     :return: rms_vector
     """
-    _logger.info(f"Computing QC for {fbin}")
-    sglx = spikeglx.Reader(fbin)
     rl = sglx.ns / sglx.fs
     t0s = np.arange(0, rl - sample_length, sample_spacing)
     rms_matrix = np.zeros((sglx.nc - 1, t0s.shape[0]))
