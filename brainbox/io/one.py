@@ -219,6 +219,7 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sort
     :return: spikes, clusters (dict of bunch, 1 bunch per probe)
     """
     one = one or ONE()
+    details = one.get_details(eid, full=True)
 
     if isinstance(probe, str):
         labels = [probe]
@@ -252,8 +253,10 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sort
 
     for label in labels:
 
-        if spike_sorter is None:
-            collection = f'alf/{label}'
+        if (spike_sorter is None) & (f'alf/{label}/pykilosort' in one.list_collections(eid)):
+            collection = f'alf/{label}/pykilosort'
+        elif spike_sorter is None:
+            collection = f'alf/{label}/'
         else:
             collection = f'alf/{label}/{spike_sorter}'
 
