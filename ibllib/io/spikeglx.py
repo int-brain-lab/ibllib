@@ -634,17 +634,19 @@ def get_sync_map(folder_ephys):
         return _sync_map_from_hardware_config(hc)
 
 
-def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None):
+def download_raw_partial(url_cbin, url_ch, url_meta, first_chunk=0, last_chunk=0, one=None):
     """
     TODO Document
     :param url_cbin:
     :param url_ch:
+    :param url_meta:
     :param first_chunk:
     :param last_chunk:
     :return:
     """
     assert str(url_cbin).endswith('.cbin')
     assert str(url_ch).endswith('.ch')
+    assert str(url_meta).endswith('.meta')
     webclient = (one or ONE()).alyx
 
     relpath = Path(url_cbin.replace(webclient._par.HTTP_DATA_SERVER, '.')).parents[0]
@@ -660,6 +662,13 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
         ch_file = remove_uuid_file(ch_file)
     ch_file_stream = ch_file.with_suffix('.stream.ch')
 
+    # Download the .meta file.
+    meta_file = Path(webclient.download_file(
+        url_meta, cache_dir=target_dir, clobber=True, return_md5=False))
+    meta_file = remove_uuid_file(meta_file)
+    meta_file_renamed = meta_file.with_suffix('.stream.meta')
+    meta_file.replace(meta_file_renamed)
+
     # Load the .ch file.
     with open(ch_file, 'r') as f:
         cmeta = json.load(f)
@@ -668,13 +677,17 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
     i0 = cmeta['chunk_bounds'][first_chunk]
     ns_stream = cmeta['chunk_bounds'][last_chunk + 1] - i0
 
-    # if the cached version happens to be the same as the one on disk, just load it
     if ch_file_stream.exists():
         with open(ch_file_stream, 'r') as f:
             cmeta_stream = json.load(f)
+
+        # if the cached version happens to be the same as the one on disk, just load it
         if (cmeta_stream.get('chopped_first_sample', None) == i0 and
                 cmeta_stream.get('chopped_total_samples', None) == ns_stream):
-            return Reader(ch_file_stream.with_suffix('.cbin'))
+            cbin_local_path_renamed = ch_file_stream.with_suffix('.cbin')
+            assert cbin_local_path_renamed.exists()
+            return Reader(cbin_local_path_renamed)
+
     else:
         shutil.copy(ch_file, ch_file_stream)
     assert ch_file_stream.exists()
@@ -712,7 +725,5 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
     cbin_local_path.replace(cbin_local_path_renamed)
     assert cbin_local_path_renamed.exists()
 
-    shutil.copy(cbin_local_path.with_suffix('.meta'),
-                cbin_local_path_renamed.with_suffix('.meta'))
     reader = Reader(cbin_local_path_renamed)
     return reader
