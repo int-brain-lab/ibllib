@@ -256,7 +256,7 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sort
         if (spike_sorter is None) & (f'alf/{label}/pykilosort' in one.list_collections(eid)):
             collection = f'alf/{label}/pykilosort'
         elif spike_sorter is None:
-            collection = f'alf/{label}/'
+            collection = f'alf/{label}'
         else:
             collection = f'alf/{label}/{spike_sorter}'
 
