@@ -44,7 +44,7 @@ def load_lfp(eid, one=None, dataset_types=None, **kwargs):
     return [spikeglx.Reader(ef['lf'], **kwargs) for ef in efiles]
 
 
-def load_channel_locations(eid, one=None, probe=None, aligned=False):
+def load_channel_locations(eid, one=None, probe=None, aligned=False, spike_sorter=None):
     """
     From an eid, get brain locations from Alyx database
     analysis.
@@ -98,17 +98,29 @@ def load_channel_locations(eid, one=None, probe=None, aligned=False):
     channels = Bunch({})
     r = BrainRegions()
     for label, trace, resol, count, id in zip(labels, tracing, resolved, counts, probe_id):
+
+        if (spike_sorter is None) & (f'alf/{label}/pykilosort' in one.list_collections(eid)):
+            # Check if channel acronym data is available
+            chans = one.load_object(eid, 'channels', collection=f'alf/{label}/pykilosort')
+            if 'brainLocationIds_ccf_2017' in chans:
+                collection = f'alf/{label}/pykilosort'
+            else:
+                collection = f'alf/{label}'
+        elif spike_sorter is None:
+            collection = f'alf/{label}'
+        else:
+            collection = f'alf/{label}/{spike_sorter}'
+
         if trace:
             if resol:
                 logger.info(f'Channel locations for {label} have been resolved. '
                             f'Channel and cluster locations obtained from ephys aligned histology '
                             f'track.')
                 # download the data
-                chans = one.load_object(eid, 'channels', collection=f'alf/{label}')
+                chans = one.load_object(eid, 'channels', collection=collection)
 
                 # If we have successfully downloaded the data
                 if 'brainLocationIds_ccf_2017' in chans.keys():
-
                     channels[label] = Bunch({
                         'atlas_id': chans['brainLocationIds_ccf_2017'],
                         'acronym': r.get(chans['brainLocationIds_ccf_2017'])['acronym'],
@@ -215,7 +227,7 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sort
     :param one: an instance of OneAlyx
     :param probe: name of probe to load in, if not given all probes for session will be loaded
     :param dataset_types: additional spikes/clusters objects to add to the standard default list
-    :param spike_sorter: name of the spike sorting you want to load
+    :param spike_sorter: name of the spike sorting you want to load (None for default)
     :return: spikes, clusters (dict of bunch, 1 bunch per probe)
     """
     one = one or ONE()
@@ -254,7 +266,12 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sort
     for label in labels:
 
         if (spike_sorter is None) & (f'alf/{label}/pykilosort' in one.list_collections(eid)):
-            collection = f'alf/{label}/pykilosort'
+            # Check if channel acronym data is available
+            chans = one.load_object(eid, 'channels', collection=f'alf/{label}/pykilosort')
+            if 'brainLocationIds_ccf_2017' in chans:
+                collection = f'alf/{label}/pykilosort'
+            else:
+                collection = f'alf/{label}'
         elif spike_sorter is None:
             collection = f'alf/{label}'
         else:
@@ -345,7 +362,8 @@ def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False, da
     :param aligned: whether to get the latest user aligned channel when not resolved or use
     histology track
     :param dataset_types: additional spikes/clusters objects to add to the standard default list
-    :param spike_sorter: name of the spike sorting you want to load
+    :param spike_sorter: name of the spike sorting you want to load (None for default which is
+                         pykilosort if it's available otherwise the default matlab kilosort)
     :return: spikes, clusters, channels (dict of bunch, 1 bunch per probe)
     """
     # --- Get spikes and clusters data
