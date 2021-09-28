@@ -347,9 +347,8 @@ class CameraQC(base.QC):
         namespace = f'video{self.label.capitalize()}'
         if all(x is None for x in self.data.values()):
             self.load_data(**kwargs)
-        if self.data['frame_samples'] is None:
+        if self.data['frame_samples'] is None or self.data['timestamps'] is None:
             return 'NOT_SET', {}
-
         if self.data['timestamps'].shape[0] == 0:
             _log.error(f'No timestamps for {self.label} camera; setting outcome to CRITICAL')
             return 'CRITICAL', {}
