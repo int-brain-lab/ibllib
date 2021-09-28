@@ -58,7 +58,12 @@ class RawEphysQC(tasks.Task):
     level = 0  # this job doesn't depend on anything
 
     def _run(self, overwrite=False):
-        qc_files = ephysqc.raw_qc_session(self.session_path, overwrite=overwrite)
+        eid = self.one.path2eid(self.session_path)
+        pids = [x['id'] for x in self.one.alyx.rest('insertions', 'list', session=eid)]
+        qc_files = []
+        for pid in pids:
+            eqc = ephysqc.EphysQC(pid)
+            qc_files.extend(eqc.run())
         return qc_files
 
 

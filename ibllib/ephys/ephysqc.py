@@ -36,13 +36,10 @@ SAMPLE_LENGTH = 1
 class EphysQC(base.QC):
     """A class for computing Ephys QC metrics"""
 
-    dstypes = ['ephysData.raw.lf',
-               'ephysData.raw.ap']
-
     def __init__(self, probe_id, **kwargs):
         super().__init__(probe_id, endpoint='insertions', **kwargs)
         self.pid = probe_id
-        self.stream = kwargs.pop('stream', None)
+        self.stream = kwargs.pop('stream', True)
         keys = ('ap', 'ap_meta', 'lf', 'lf_meta')
         self.data = Bunch.fromkeys(keys)
         self.metrics = None
@@ -64,10 +61,8 @@ class EphysQC(base.QC):
         lf_meta = [meta for meta in meta_files if 'lf.meta' in meta.name]
         assert not len(lf_meta) > 1, f'More than one lf.meta file in {self.probe_path}. Remove redundant files to run QC'
 
-    def load_data(self, stream: bool = None) -> None:
-        # If stream is explicitly given here, overwrite init value
-        if stream is not None:
-            self.stream = stream
+    def load_data(self) -> None:
+        # First sanity check
         self._ensure_required_data()
 
         _logger.info('Gathering data for QC')
@@ -82,46 +77,51 @@ class EphysQC(base.QC):
                 bin_file = next(meta_file.parent.glob(f'*{type}.*bin'), None)
                 self.data[f'{dstype}'] = spikeglx.Reader(bin_file, open=True) if bin_file is not None else None
 
-#     def run(self, update: bool = False, **kwargs) -> (str, dict):
-#         efiles = spikeglx.glob_ephys_files(session_path)
-#         qc_files = []
-#         if efile.get('ap') and efile.ap.exists():
-#             rms_channels = extract_rms_samples(efile.ap, overwrite=overwrite)
-#         if efile.get('lf') and efile.lf.exists():
-#             qc_files.extend(extract_rmsmap(efile.lf, out_folder=None, overwrite=overwrite))
-#
-# def extract_rms_samples(sglx, sample_length=SAMPLE_LENGTH, sample_spacing=BATCHES_SPACING, tmin=TMIN, overwrite=False):
-#     """
-#     Calculates RMS as a quality metric for samples of sample_length at sample_spacing from
-#     a raw binary ephys file, before and after destriping. Returns median RMS per channel
-#     """
-#     rl = metadata.fileTimeSecs
-#     nc = spikeglx._get_nchannels_from_meta(metadata)
-#     rl = sglx.ns / sglx.fs
-#     t0s = np.arange(tmin, rl - sample_length, sample_spacing)
-#     rms_full = np.zeros((2, sglx.nc - 1, t0s.shape[0]))
-#     if isinstance(sglx, sglx_streamer):
-#         _logger.warning("Streaming data for RMS samples")
-#         for i, t0 in enumerate(tqdm(t0s)):
-#             sr, _ = stream(pid, t0=t0, nsecs=1, one=one)
-#             raw = sr[:, :-1].T
-#             destripe = voltage.destripe(raw, fs=sr.fs, neuropixel_version=1)
-#             all_rms[0, :, i] = rms(raw)
-#             all_rms[1, :, i] = rms(destripe)
-#
-#     elif isinstance(sglx, spikeglx.Reader()):
-#         for i, t0 in enumerate(tqdm(t0s)):
-#             # Get samples of sample_length every sample_spacing
-#             sl = slice(int(t0 * sglx.fs), int((t0 + sample_length) * sglx.fs))
-#             raw = sglx[sl, :-1].T
-#             # Run preprocessing on these samples
-#             destripe = dsp.destripe(raw, fs=sglx.fs, neuropixel_version=1)
-#             # Calculate rms for each channel for raw and destriped data
-#             rms_full[0, :, i] = dsp.rms(raw)
-#             rms_full[1, :, i] = dsp.rms(destripe)
-#
-#     rms_vector = np.nanmedian(rms_matrix, axis=1)
-#     return rms_vector
+    def run(self, update: bool = False, overwrite: bool = True, stream: bool = None, **kwargs) -> (str, dict):
+        # If stream is explicitly given in run, overwrite value from init
+        if stream is not None:
+            self.stream = stream
+        # Load data
+        self.load_data()
+        qc_files = []
+        # If ap meta file present, calculate median RMS per channel before and after destriping
+        # TODO: This should go a a separate function once we have a spikeglx.Streamer that behaves like the Reader
+        if self.data.ap_meta:
+            rms_file = self.probe_path.joinpath("_iblqc_ephysChannels.apRms.npy")
+            if rms_file.exists() and not overwrite:
+                _logger.info(f'File {rms_file} already exists and overwrite=False. Skipping RMS compute.')
+            else:
+                rl = self.data.ap_meta.fileTimeSecs
+                nc = spikeglx._get_nchannels_from_meta(self.data.ap_meta)
+                t0s = np.arange(TMIN, rl - SAMPLE_LENGTH, BATCHES_SPACING)
+                all_rms = np.zeros((2, nc - 1, t0s.shape[0]))
+                if self.data.ap is None and self.stream is True:
+                    _logger.warning(f'Streaming data to compute RMS for probe {self.pid}')
+                    for i, t0 in enumerate(tqdm(t0s)):
+                        sr, _ = sglx_streamer(self.pid, t0=t0, nsecs=1, one=self.one)
+                        raw = sr[:, :-1].T
+                        destripe = dsp.voltage.destripe(raw, fs=sr.fs, neuropixel_version=1)
+                        all_rms[0, :, i] = dsp.rms(raw)
+                        all_rms[1, :, i] = dsp.rms(destripe)
+                elif self.data.ap is None and self.stream is not True:
+                    _logger.warning(f'Raw ap data is not available locally. Run with stream=True in order to stream '
+                                    f'data for calculating RMS.')
+                else:
+                    _logger.info(f'Computing RMS for ap data using local data in {self.probe_path}')
+                    for i, t0 in enumerate(t0s):
+                        sl = slice(int(t0 * self.data.ap.fs), int((t0 + SAMPLE_LENGTH) * self.data.ap.fs))
+                        raw = self.data.ap[sl, :-1].T
+                        destripe = dsp.voltage.destripe(raw, fs=self.data.ap.fs, neuropixel_version=1)
+                        all_rms[0, :, i] = dsp.rms(raw)
+                        all_rms[1, :, i] = dsp.rms(destripe)
+                np.save(rms_file, np.median(all_rms, axis=-1))
+                qc_files.extend(rms_file)
+
+        # If lf meta and bin file present, run the old qc on LF data
+        if self.data.lf_meta and self.data.lf:
+            qc_files.extend(extract_rmsmap(self.data.lf, out_folder=None, overwrite=overwrite))
+
+        return qc_files
 
 
 def rmsmap(fbin):
@@ -177,7 +177,10 @@ def extract_rmsmap(fbin, out_folder=None, overwrite=False):
     :return: None
     """
     _logger.info(f"Computing QC for {fbin}")
-    sglx = spikeglx.Reader(fbin)
+    if isinstance(fbin, spikeglx.Reader):
+        sglx = fbin
+    else:
+        sglx = spikeglx.Reader(fbin)
     # check if output ALF files exist already:
     if out_folder is None:
         out_folder = Path(fbin).parent
@@ -217,7 +220,7 @@ def raw_qc_session(session_path, overwrite=False):
     qc_files = []
     for efile in efiles:
         if efile.get('ap') and efile.ap.exists():
-            rms_channels = extract_rms_samples(efile.ap, overwrite=overwrite)
+            qc_files.extend(extract_rmsmap(efile.ap, out_folder=None, overwrite=overwrite))
         if efile.get('lf') and efile.lf.exists():
             qc_files.extend(extract_rmsmap(efile.lf, out_folder=None, overwrite=overwrite))
     return qc_files
