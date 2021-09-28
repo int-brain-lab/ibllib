@@ -43,7 +43,7 @@ class EphysQC(base.QC):
         super().__init__(probe_id, endpoint='insertions', **kwargs)
         self.pid = probe_id
         self.stream = kwargs.pop('stream', None)
-        keys = ()
+        keys = ('ap', 'ap_meta', 'lf', 'lf_meta')
         self.data = Bunch.fromkeys(keys)
         self.metrics = None
         self.outcome = 'NOT_SET'
@@ -54,37 +54,33 @@ class EphysQC(base.QC):
         """
         assert self.one is not None, 'ONE instance is required to ensure required data'
         eid, pname = self.one.pid2eid(self.pid)
-        probe_path = self.one.eid2path(eid).joinpath('raw_ephys_data', pname)
-        # Check if there is at least one, but not more than one metafile of each type available locally
-        meta_files = list(probe_path.rglob(f'*.meta'))
-        assert len(meta_files) != 0, f'No meta files in raw_ephys_data/{pname} folder for session {eid}'
+        self.probe_path = self.one.eid2path(eid).joinpath('raw_ephys_data', pname)
+        # Check if there is at least one meta file available
+        meta_files = list(self.probe_path.rglob(f'*.meta'))
+        assert len(meta_files) != 0, f'No meta files in {self.probe_path}'
+        # Check if there is no more than one meta file per type
         ap_meta = [meta for meta in meta_files if 'ap.meta' in meta.name]
-        assert not len(ap_meta) > 1, f'More than one ap.meta file in raw_ephys_data/{pname} folder for session {eid}. ' \
-                                     f'Remove any redundant files to run QC'
+        assert not len(ap_meta) > 1, f'More than one ap.meta file in {self.probe_path}. Remove redundant files to run QC'
         lf_meta = [meta for meta in meta_files if 'lf.meta' in meta.name]
-        assert not len(lf_meta) > 1, f'More than one lf.meta file in raw_ephys_data/{pname} folder for session {eid}. ' \
-                                     f'Remove any redundant files to run QC'
+        assert not len(lf_meta) > 1, f'More than one lf.meta file in {self.probe_path}. Remove redundant files to run QC'
 
-    # def load_data(self, stream: bool = None) -> None:
-    #     # If stream is explicitly given here, overwrite init value
-    #     if stream is not None:
-    #         self.stream = stream
-    #     self._ensure_required_data()
-    #     for type in ['ap', 'lf']:
-    #         # Metafile should always be present
-    #         meta_files = probe_path.rglob(f'*{type}.meta')
-    #         if len(meta_files) == 0:
-    #             _logger.warning(f'No {type}.meta file in raw_ephys_data/{pname} folder for session {eid}. '
-    #                             f'Skipping QC for this data.')
-    #         elif len(meta_files) > 1:
-    #             _logger.warning(f'More than one {type}.meta file in raw_ephys_data/{pname} folder for session {eid}. '
-    #                             f'Skipping QC for this data. Please remove redundant {type}.meta files.')
-    #         else:
-    #     meta_file = meta_files[0]
-    #     self.data[f'{type}_meta'] = spikeglx.read_meta_data(meta_file)
-    #     bin_file = next(meta_file.parent.glob(f'*{type}.*bin'), None)
-    #
-    #     _logger.info('Gathering data for QC')
+    def load_data(self, stream: bool = None) -> None:
+        # If stream is explicitly given here, overwrite init value
+        if stream is not None:
+            self.stream = stream
+        self._ensure_required_data()
+
+        _logger.info('Gathering data for QC')
+        # Load metadata and, if locally present, bin file
+        for dstype in ['ap', 'lf']:
+            # We already checked that there is not more than one meta file per type
+            meta_file = next(self.probe_path.rglob(f'*{dstype}.meta'), None)
+            if meta_file is None:
+                _logger.warning(f'No {dstype}.meta file in {self.probe_path}, skipping QC for {dstype} data.')
+            else:
+                self.data[f'{dstype}_meta'] = spikeglx.read_meta_data(meta_file)
+                bin_file = next(meta_file.parent.glob(f'*{type}.*bin'), None)
+                self.data[f'{dstype}'] = spikeglx.Reader(bin_file, open=True) if bin_file is not None else None
 
 #     def run(self, update: bool = False, **kwargs) -> (str, dict):
 #         efiles = spikeglx.glob_ephys_files(session_path)
