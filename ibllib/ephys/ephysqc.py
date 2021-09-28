@@ -28,62 +28,64 @@ _logger = logging.getLogger('ibllib')
 RMS_WIN_LENGTH_SECS = 3
 WELCH_WIN_LENGTH_SAMPLES = 1024
 NCH_WAVEFORMS = 32  # number of channels to be saved in templates.waveforms and channels.waveforms
+BATCHES_SPACING = 300
+TMIN = 40
+SAMPLE_LENGTH = 1
 
-# class EphysQC(base.QC):
-#     """A class for computing Ephys QC metrics"""
-#
-#     dstypes = ['ephysData.raw.lf',
-#                'ephysData.raw.ap']
-#
-#     def __init__(self, probe_id, **kwargs):
-#         super().__init__(probe_id, endpoint='insertions,'**kwargs)
-#         self.pid = probe_id
-#         self.stream = kwargs.pop('stream', None)
-#         keys = ('sglx')
-#         self.data = Bunch.fromkeys(keys)
-#         self.metrics = None
-#         self.outcome = 'NOT_SET'
-#
-#
-#     def load_data(self, stream: bool = None) -> None:
-#         # If stream is explicitly given here, overwrite init
-#         if stream is not None:
-#             self.stream = stream
-#         self._ensure_required_data()
-#         _logger.info('Gathering data for QC')
-#
-#         # Find fbin
-#         fbin =
-#
-#         # Load spikeglx reader or streamer
-#         if self.stream is True:
-#             self.data['sglx'] = sglx_streamer(fbin)
-#         else:
-#              self.data['sglx'] = spikeglx.Reader(fbin)
-#
-#
-#     def _ensure_required_data(self):
-#         """
-#         Ensures the datasets required for QC are available locally or remotely.
-#         """
-#         assert self.one is not None, 'ONE instance is required to ensure required data'
-#         eid, pname = self.one.pid2eid(self.pid)
-#         session_path = self.one.eid2path(eid)
-#         # Check if data is available locally
-#
-#
-#
-#         for dstype in self.dstypes:
-#             dataset = self.one.alyx.rest('datasets', 'list', session=eid, dataset_type=dstype,
-#                                          collection=f'raw_ephys_data/{pname}')
-#             # check that there is any dataset
-#             assert len(dataset) != 0, f'No dataset {dstype} in database'
-#             # check if dataset is local
-#             session_path.rglob(d), None) for d in datasets['rel_path'])
-#
-#             # If not, and stream is not True, download.
-#
-#
+
+class EphysQC(base.QC):
+    """A class for computing Ephys QC metrics"""
+
+    dstypes = ['ephysData.raw.lf',
+               'ephysData.raw.ap']
+
+    def __init__(self, probe_id, **kwargs):
+        super().__init__(probe_id, endpoint='insertions', **kwargs)
+        self.pid = probe_id
+        self.stream = kwargs.pop('stream', None)
+        keys = ()
+        self.data = Bunch.fromkeys(keys)
+        self.metrics = None
+        self.outcome = 'NOT_SET'
+
+    def _ensure_required_data(self):
+        """
+        Ensures the datasets required for QC are available locally or remotely.
+        """
+        assert self.one is not None, 'ONE instance is required to ensure required data'
+        eid, pname = self.one.pid2eid(self.pid)
+        probe_path = self.one.eid2path(eid).joinpath('raw_ephys_data', pname)
+        # Check if there is at least one, but not more than one metafile of each type available locally
+        meta_files = list(probe_path.rglob(f'*.meta'))
+        assert len(meta_files) != 0, f'No meta files in raw_ephys_data/{pname} folder for session {eid}'
+        ap_meta = [meta for meta in meta_files if 'ap.meta' in meta.name]
+        assert not len(ap_meta) > 1, f'More than one ap.meta file in raw_ephys_data/{pname} folder for session {eid}. ' \
+                                     f'Remove any redundant files to run QC'
+        lf_meta = [meta for meta in meta_files if 'lf.meta' in meta.name]
+        assert not len(lf_meta) > 1, f'More than one lf.meta file in raw_ephys_data/{pname} folder for session {eid}. ' \
+                                     f'Remove any redundant files to run QC'
+
+    # def load_data(self, stream: bool = None) -> None:
+    #     # If stream is explicitly given here, overwrite init value
+    #     if stream is not None:
+    #         self.stream = stream
+    #     self._ensure_required_data()
+    #     for type in ['ap', 'lf']:
+    #         # Metafile should always be present
+    #         meta_files = probe_path.rglob(f'*{type}.meta')
+    #         if len(meta_files) == 0:
+    #             _logger.warning(f'No {type}.meta file in raw_ephys_data/{pname} folder for session {eid}. '
+    #                             f'Skipping QC for this data.')
+    #         elif len(meta_files) > 1:
+    #             _logger.warning(f'More than one {type}.meta file in raw_ephys_data/{pname} folder for session {eid}. '
+    #                             f'Skipping QC for this data. Please remove redundant {type}.meta files.')
+    #         else:
+    #     meta_file = meta_files[0]
+    #     self.data[f'{type}_meta'] = spikeglx.read_meta_data(meta_file)
+    #     bin_file = next(meta_file.parent.glob(f'*{type}.*bin'), None)
+    #
+    #     _logger.info('Gathering data for QC')
+
 #     def run(self, update: bool = False, **kwargs) -> (str, dict):
 #         efiles = spikeglx.glob_ephys_files(session_path)
 #         qc_files = []
@@ -92,8 +94,38 @@ NCH_WAVEFORMS = 32  # number of channels to be saved in templates.waveforms and 
 #         if efile.get('lf') and efile.lf.exists():
 #             qc_files.extend(extract_rmsmap(efile.lf, out_folder=None, overwrite=overwrite))
 #
+# def extract_rms_samples(sglx, sample_length=SAMPLE_LENGTH, sample_spacing=BATCHES_SPACING, tmin=TMIN, overwrite=False):
+#     """
+#     Calculates RMS as a quality metric for samples of sample_length at sample_spacing from
+#     a raw binary ephys file, before and after destriping. Returns median RMS per channel
+#     """
+#     rl = metadata.fileTimeSecs
+#     nc = spikeglx._get_nchannels_from_meta(metadata)
+#     rl = sglx.ns / sglx.fs
+#     t0s = np.arange(tmin, rl - sample_length, sample_spacing)
+#     rms_full = np.zeros((2, sglx.nc - 1, t0s.shape[0]))
+#     if isinstance(sglx, sglx_streamer):
+#         _logger.warning("Streaming data for RMS samples")
+#         for i, t0 in enumerate(tqdm(t0s)):
+#             sr, _ = stream(pid, t0=t0, nsecs=1, one=one)
+#             raw = sr[:, :-1].T
+#             destripe = voltage.destripe(raw, fs=sr.fs, neuropixel_version=1)
+#             all_rms[0, :, i] = rms(raw)
+#             all_rms[1, :, i] = rms(destripe)
 #
+#     elif isinstance(sglx, spikeglx.Reader()):
+#         for i, t0 in enumerate(tqdm(t0s)):
+#             # Get samples of sample_length every sample_spacing
+#             sl = slice(int(t0 * sglx.fs), int((t0 + sample_length) * sglx.fs))
+#             raw = sglx[sl, :-1].T
+#             # Run preprocessing on these samples
+#             destripe = dsp.destripe(raw, fs=sglx.fs, neuropixel_version=1)
+#             # Calculate rms for each channel for raw and destriped data
+#             rms_full[0, :, i] = dsp.rms(raw)
+#             rms_full[1, :, i] = dsp.rms(destripe)
 #
+#     rms_vector = np.nanmedian(rms_matrix, axis=1)
+#     return rms_vector
 
 
 def rmsmap(fbin):
@@ -175,32 +207,6 @@ def extract_rmsmap(fbin, out_folder=None, overwrite=False):
     out_freq = alfio.save_object_npy(
         out_folder, object=alf_object_freq, dico=fdict, namespace='iblqc')
     return out_time + out_freq
-
-
-def extract_rms_samples(sglx, sample_length=1., sample_spacing=120, overwrite=False):
-    """
-    Calculates RMS as a quality metric for samples of sample_length at sample_spacing from
-    a raw binary ephys file. Returns vector of median RMS per channel
-    :param fbin:
-    :param sample_length:
-    :param sample_spacing:
-    :param overwrite:
-    :return: rms_vector
-    """
-    rl = sglx.ns / sglx.fs
-    t0s = np.arange(0, rl - sample_length, sample_spacing)
-    rms_matrix = np.zeros((sglx.nc - 1, t0s.shape[0]))
-    for i, t0 in enumerate(tqdm(t0s)):
-        # Get samples of sample_length every sample_spacing
-        sl = slice(int(t0 * sglx.fs), int((t0 + sample_length) * sglx.fs))
-        raw = sglx[sl, :-1].T
-        # Run preprocessing on these samples
-        destripe = dsp.destripe(raw, fs=sglx.fs, neuropixel_version=1)
-        # Calculate rms for each channel
-        rms_matrix[:, i] = dsp.rms(destripe)
-
-    rms_vector = np.nanmedian(rms_matrix, axis=1)
-    return rms_vector
 
 
 def raw_qc_session(session_path, overwrite=False):
