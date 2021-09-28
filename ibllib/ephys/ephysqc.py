@@ -74,7 +74,7 @@ class EphysQC(base.QC):
                 _logger.warning(f'No {dstype}.meta file in {self.probe_path}, skipping QC for {dstype} data.')
             else:
                 self.data[f'{dstype}_meta'] = spikeglx.read_meta_data(meta_file)
-                bin_file = next(meta_file.parent.glob(f'*{type}.*bin'), None)
+                bin_file = next(meta_file.parent.glob(f'*{dstype}.*bin'), None)
                 self.data[f'{dstype}'] = spikeglx.Reader(bin_file, open=True) if bin_file is not None else None
 
     def run(self, update: bool = False, overwrite: bool = True, stream: bool = None, **kwargs) -> (str, dict):
@@ -100,7 +100,7 @@ class EphysQC(base.QC):
                     for i, t0 in enumerate(tqdm(t0s)):
                         sr, _ = sglx_streamer(self.pid, t0=t0, nsecs=1, one=self.one)
                         raw = sr[:, :-1].T
-                        destripe = dsp.voltage.destripe(raw, fs=sr.fs, neuropixel_version=1)
+                        destripe = dsp.destripe(raw, fs=sr.fs, neuropixel_version=1)
                         all_rms[0, :, i] = dsp.rms(raw)
                         all_rms[1, :, i] = dsp.rms(destripe)
                 elif self.data.ap is None and self.stream is not True:
@@ -111,11 +111,25 @@ class EphysQC(base.QC):
                     for i, t0 in enumerate(t0s):
                         sl = slice(int(t0 * self.data.ap.fs), int((t0 + SAMPLE_LENGTH) * self.data.ap.fs))
                         raw = self.data.ap[sl, :-1].T
-                        destripe = dsp.voltage.destripe(raw, fs=self.data.ap.fs, neuropixel_version=1)
+                        destripe = dsp.destripe(raw, fs=self.data.ap.fs, neuropixel_version=1)
                         all_rms[0, :, i] = dsp.rms(raw)
                         all_rms[1, :, i] = dsp.rms(destripe)
-                np.save(rms_file, np.median(all_rms, axis=-1))
+                median_rms = np.median(all_rms, axis=-1)
+                np.save(rms_file, median_rms)
                 qc_files.extend(rms_file)
+
+                # self.metrics['good_chan_raw'] = np.where(median_rms>30)
+                # self.metrics['good_chan_destriped'] =
+                #
+                # if update:
+                    # extended = {
+                    #     k: None if v is None or v == 'NOT_SET'
+                    #     else base.CRITERIA[v] < 3 if isinstance(v, str)
+                    #     else (base.CRITERIA[v[0]] < 3, *v[1:])  # Convert first value to bool if array
+                    #     for k, v in self.metrics.items()
+                    # }
+                    # self.update_extended_qc(extended)
+                    #self.update(outcome, namespace)
 
         # If lf meta and bin file present, run the old qc on LF data
         if self.data.lf_meta and self.data.lf:
