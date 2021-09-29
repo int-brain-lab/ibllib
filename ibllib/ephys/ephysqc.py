@@ -96,7 +96,7 @@ class EphysQC(base.QC):
                 t0s = np.arange(TMIN, rl - SAMPLE_LENGTH, BATCHES_SPACING)
                 all_rms = np.zeros((2, nc - 1, t0s.shape[0]))
                 if self.data.ap is None and self.stream is True:
-                    _logger.warning(f'Streaming data to compute RMS for probe {self.pid}')
+                    _logger.warning(f'Streaming .ap data to compute RMS samples for probe {self.pid}')
                     for i, t0 in enumerate(tqdm(t0s)):
                         sr, _ = sglx_streamer(self.pid, t0=t0, nsecs=1, one=self.one)
                         raw = sr[:, :-1].T
@@ -104,10 +104,10 @@ class EphysQC(base.QC):
                         all_rms[0, :, i] = dsp.rms(raw)
                         all_rms[1, :, i] = dsp.rms(destripe)
                 elif self.data.ap is None and self.stream is not True:
-                    _logger.warning(f'Raw ap data is not available locally. Run with stream=True in order to stream '
-                                    f'data for calculating RMS.')
+                    _logger.warning(f'Raw .ap data is not available locally. Run with stream=True in order to stream '
+                                    f'data for calculating RMS samples.')
                 else:
-                    _logger.info(f'Computing RMS for ap data using local data in {self.probe_path}')
+                    _logger.info(f'Computing RMS samples for .ap data using local data in {self.probe_path}')
                     for i, t0 in enumerate(t0s):
                         sl = slice(int(t0 * self.data.ap.fs), int((t0 + SAMPLE_LENGTH) * self.data.ap.fs))
                         raw = self.data.ap[sl, :-1].T
@@ -116,7 +116,7 @@ class EphysQC(base.QC):
                         all_rms[1, :, i] = dsp.rms(destripe)
                 median_rms = np.median(all_rms, axis=-1)
                 np.save(rms_file, median_rms)
-                qc_files.extend(rms_file)
+                qc_files.append(rms_file)
 
                 # self.metrics['good_chan_raw'] = np.where(median_rms>30)
                 # self.metrics['good_chan_destriped'] =
@@ -133,21 +133,19 @@ class EphysQC(base.QC):
 
         # If lf meta and bin file present, run the old qc on LF data
         if self.data.lf_meta and self.data.lf:
-            qc_files.extend(extract_rmsmap(self.data.lf, out_folder=None, overwrite=overwrite))
+            qc_files.extend(extract_rmsmap(self.data.lf, out_folder=self.probe_path, overwrite=overwrite))
 
         return qc_files
 
 
-def rmsmap(fbin):
+def rmsmap(sglx):
     """
     Computes RMS map in time domain and spectra for each channel of Neuropixel probe
 
-    :param fbin: binary file in spike glx format (will look for attached metatdata)
-    :type fbin: str or pathlib.Path
+    :param sglx: Open spikeglx reader
     :return: a dictionary with amplitudes in channeltime space, channelfrequency space, time
      and frequency scales
     """
-    sglx = spikeglx.Reader(fbin, open=True)
     rms_win_length_samples = 2 ** np.ceil(np.log2(sglx.fs * RMS_WIN_LENGTH_SECS))
     # the window generator will generates window indices
     wingen = dsp.WindowGenerator(ns=sglx.ns, nswin=rms_win_length_samples, overlap=0)
@@ -179,36 +177,31 @@ def rmsmap(fbin):
     return win
 
 
-def extract_rmsmap(fbin, out_folder=None, overwrite=False):
+def extract_rmsmap(sglx, out_folder=None, overwrite=False):
     """
     Wrapper for rmsmap that outputs _ibl_ephysRmsMap and _ibl_ephysSpectra ALF files
 
-    :param fbin: binary file in spike glx format (will look for attached metatdata)
+    :param sglx: Open spikeglx Reader with data for which to compute rmsmap
     :param out_folder: folder in which to store output ALF files. Default uses the folder in which
      the `fbin` file lives.
     :param overwrite: do not re-extract if all ALF files already exist
     :param label: string or list of strings that will be appended to the filename before extension
     :return: None
     """
-    _logger.info(f"Computing QC for {fbin}")
-    if isinstance(fbin, spikeglx.Reader):
-        sglx = fbin
-    else:
-        sglx = spikeglx.Reader(fbin)
-    # check if output ALF files exist already:
     if out_folder is None:
-        out_folder = Path(fbin).parent
+        out_folder = sglx.file_bin.parent
     else:
         out_folder = Path(out_folder)
+    _logger.info(f"Computing RMS map for .{sglx.type} data in {out_folder}")
     alf_object_time = f'ephysTimeRms{sglx.type.upper()}'
     alf_object_freq = f'ephysSpectralDensity{sglx.type.upper()}'
     files_time = list(out_folder.glob(f"_iblqc_{alf_object_time}*"))
     files_freq = list(out_folder.glob(f"_iblqc_{alf_object_freq}*"))
     if (len(files_time) == 2 == len(files_freq)) and not overwrite:
-        _logger.warning(f'{fbin.name} QC already exists, skipping. Use overwrite option.')
+        _logger.warning(f'RMS map already exists for .{sglx.type} data in {out_folder}, skipping. Use overwrite option.')
         return files_time + files_freq
     # crunch numbers
-    rms = rmsmap(fbin)
+    rms = rmsmap(sglx)
     # output ALF files, single precision with the optional label as suffix before extension
     if not out_folder.exists():
         out_folder.mkdir()
