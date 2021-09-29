@@ -42,7 +42,7 @@ class EphysQC(base.QC):
         self.stream = kwargs.pop('stream', True)
         keys = ('ap', 'ap_meta', 'lf', 'lf_meta')
         self.data = Bunch.fromkeys(keys)
-        self.metrics = None
+        self.metrics = {}
         self.outcome = 'NOT_SET'
 
     def _ensure_required_data(self):
@@ -89,7 +89,8 @@ class EphysQC(base.QC):
         if self.data.ap_meta:
             rms_file = self.probe_path.joinpath("_iblqc_ephysChannels.apRms.npy")
             if rms_file.exists() and not overwrite:
-                _logger.info(f'File {rms_file} already exists and overwrite=False. Skipping RMS compute.')
+                _logger.warning(f'File {rms_file} already exists and overwrite=False. Skipping RMS compute.')
+                median_rms = np.load(rms_file)
             else:
                 rl = self.data.ap_meta.fileTimeSecs
                 nc = spikeglx._get_nchannels_from_meta(self.data.ap_meta)
@@ -118,18 +119,12 @@ class EphysQC(base.QC):
                 np.save(rms_file, median_rms)
                 qc_files.append(rms_file)
 
-                # self.metrics['good_chan_raw'] = np.where(median_rms>30)
-                # self.metrics['good_chan_destriped'] =
-                #
-                # if update:
-                    # extended = {
-                    #     k: None if v is None or v == 'NOT_SET'
-                    #     else base.CRITERIA[v] < 3 if isinstance(v, str)
-                    #     else (base.CRITERIA[v[0]] < 3, *v[1:])  # Convert first value to bool if array
-                    #     for k, v in self.metrics.items()
-                    # }
-                    # self.update_extended_qc(extended)
-                    #self.update(outcome, namespace)
+            self.metrics['apRms_p10'] = np.format_float_scientific(np.percentile(median_rms, 90), precision=2)
+            self.metrics['apRms_p90'] = np.format_float_scientific(np.percentile(median_rms, 10), precision=2)
+
+            if update:
+                self.update_extended_qc(self.metrics)
+                # self.update(outcome)
 
         # If lf meta and bin file present, run the old qc on LF data
         if self.data.lf_meta and self.data.lf:

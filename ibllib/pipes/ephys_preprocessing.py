@@ -63,7 +63,7 @@ class RawEphysQC(tasks.Task):
         qc_files = []
         for pid in pids:
             eqc = ephysqc.EphysQC(pid)
-            qc_files.extend(eqc.run())
+            qc_files.extend(eqc.run(update=True, overwrite=overwrite))
         return qc_files
 
 
