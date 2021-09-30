@@ -87,7 +87,7 @@ class EphysQC(base.QC):
         # If ap meta file present, calculate median RMS per channel before and after destriping
         # TODO: This should go a a separate function once we have a spikeglx.Streamer that behaves like the Reader
         if self.data.ap_meta:
-            rms_file = self.probe_path.joinpath("_iblqc_ephysChannels.apRms.npy")
+            rms_file = self.probe_path.joinpath("_iblqc_ephysChannels.apRMS.npy")
             if rms_file.exists() and not overwrite:
                 _logger.warning(f'File {rms_file} already exists and overwrite=False. Skipping RMS compute.')
                 median_rms = np.load(rms_file)
@@ -117,7 +117,7 @@ class EphysQC(base.QC):
                         all_rms[1, :, i] = dsp.rms(destripe)
                 median_rms = np.median(all_rms, axis=-1)
                 np.save(rms_file, median_rms)
-                qc_files.append(rms_file)
+            qc_files.append(rms_file)
 
             self.metrics['apRms_p10'] = np.format_float_scientific(np.percentile(median_rms, 90), precision=2)
             self.metrics['apRms_p90'] = np.format_float_scientific(np.percentile(median_rms, 10), precision=2)
