@@ -25,7 +25,7 @@ from one.api import ONE
 from ibllib.io.video import assert_valid_label
 
 
-def get_DLC(eid, video_type):
+def get_DLC(eid, video_type, one=None):
     """load dlc traces
     load dlc traces for a given session and
     video type.
@@ -50,7 +50,7 @@ def get_DLC(eid, video_type):
     t_frame_500 = Times[500]
     """
 
-    one = ONE()
+    one = one or ONE()
     video_type = assert_valid_label(video_type)
     cam = one.load_object(eid, f'{video_type}Camera', collection='alf')
     points = np.unique(['_'.join(x.split('_')[:-1]) for x in cam.dlc.columns])
@@ -65,3 +65,11 @@ def get_DLC(eid, video_type):
         XYs[point] = np.array([x, y])
 
     return cam.times, XYs
+
+
+if __name__ == "__main__":
+    """Load some DLC data from an example session"""
+    eid = 'c7bd79c9-c47e-4ea5-aea3-74dda991b48e'  # 2020-09-19_1_CSH_ZAD_029
+    one = ONE(base_url='https://openalyx.internationalbrainlab.org')
+
+    ts, dlc = get_DLC(eid, 'left', one)

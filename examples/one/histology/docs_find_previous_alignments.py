@@ -17,12 +17,12 @@ import ibllib.atlas as atlas
 
 # Instantiate brain atlas and one
 brain_atlas = atlas.AllenAtlas(25)
-one = ONE()
+one = ONE(base_url='https://openalyx.internationalbrainlab.org')
 
 # Find eid of interest
-subject = 'CSHL047'
-date = '2020-01-22'
-sess_no = 2
+subject = 'CSH_ZAD_029'
+date = '2020-09-19'
+sess_no = 1
 probe_label = 'probe01'
 eid = one.search(subject=subject, date=date, number=sess_no)[0]
 
