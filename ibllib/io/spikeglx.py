@@ -489,7 +489,7 @@ def _conversion_sample2v_from_meta(meta_data):
     if 'imroTbl' in meta_data.keys():  # binary from the probes: ap or lf
         sy_gain = np.ones(int(meta_data['snsApLfSy'][-1]), dtype=np.float32)
         # imroTbl has 384 entries regardless of no of channels saved, so need to index by n_ch
-        # TODO need to look at snsSaveChanMap and make sure be output the correct gain value
+        # TODO need to look at snsSaveChanMap and index channels to get correct gain
         n_chn = _get_nchannels_from_meta(meta_data) - 1
         if 'NP2' in version:
             # NP 2.0; APGain = 80 for all AP
