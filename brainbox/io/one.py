@@ -408,7 +408,7 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
     return dic_clus
 
 
-def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False, dataset_types=None,
+def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=True, dataset_types=None,
                                     spike_sorter=None, brain_regions=None):
     """
     For a given eid, get spikes, clusters and channels information, and merges clusters
