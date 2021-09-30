@@ -146,7 +146,7 @@ def _load_channels_locations_from_disk(eid, collection=None, one=None, revision=
         if 'brainLocationIds_ccf_2017' not in channels[probe].keys():
             aligned_channel_collections = one.list_collections(
                 eid, filename='channels.brainLocationIds_ccf_2017*', collection=f'alf/{probe}', revision=revision)
-            if aligned_channel_collections.size == 0:
+            if len(aligned_channel_collections) == 0:
                 _logger.warning(f"no resolved alignment dataset found for {eid}/{probe}")
                 continue
             _logger.debug(f"looking for a resolved alignment dataset in {aligned_channel_collections}")
