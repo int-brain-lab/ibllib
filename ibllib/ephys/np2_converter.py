@@ -7,19 +7,40 @@ import copy
 import logging
 _logger = logging.getLogger('ibllib')
 
+
 class NP2Converter:
-    # Get out the AP, Get out the LFP, Split into shanks, write to file (all different functions)
-    # make metadata
+    """
+    Class used to 1. Extract LFP data from NP2 data and 2. If NP2.4 split the data into
+    individual shanks
+    """
 
     def __init__(self, ap_file, post_check=True, delete_original=False):
+        """
+        :param ap_file: ap.bin spikeglx file to process
+        :param post_check: whether to apply post-check integrity test to ensure split content is
+        identical to original content (only applicable to NP2.4)
+        :param delete_original: whether to delete the original ap file after data has been
+        split into shanks (only applicable to NP2.4)
+        """
         self.ap_file = Path(ap_file)
         self.sr = spikeglx.Reader(ap_file)
         self.post_check = post_check
         self.delete_original = delete_original
         self.np_version = spikeglx._get_neuropixel_version_from_meta(self.sr.meta)
+        self.check_metadata()
         self.init_params()
 
-    def init_params(self, nsamples=None, nwindow=None, nchns=None, extra=None, nshank=None):
+    def init_params(self, nsamples=None, nwindow=None, extra=None, nshank=None):
+        """
+        Initiliases parameters for processing.
+
+        :param nsamples: the number of samples to process
+        :param nwindow: the number of samples in each window when iterating through nsamples
+        :param extra: extra string to add the individual shank folder names
+        :param nshank: number of shanks to process, must be a list [0], you would only want to
+        override this for testing purposes
+        :return:
+        """
         self.fs_ap = 30000
         self.fs_lf = 2500
         self.ratio = int(self.fs_ap / self.fs_lf)
@@ -40,24 +61,108 @@ class NP2Converter:
         self.sos_lp = scipy.signal.butter(**butter_lp_kwargs, output='sos')
 
         # Number of ap channels
-        self.napch = nchns or int(self.sr.meta['snsApLfSy'][0])
+        self.napch = int(self.sr.meta['snsApLfSy'][0])
         # Position of start of sync channels in the raw data
         self.idxsyncch = int(self.sr.meta['snsApLfSy'][0])
 
         self.extra = extra or ''
         self.nshank = nshank or None
+        self.check_completed = False
 
-    def check_meta(self):
-        self.processed_meta = spikeglx.get_processed_meta(self.sr.meta)
+    def check_metadata(self):
+        """
+        Checks the keys in meta data to see if we are trying to process an ap file that has already
+        been split into shanks. If we are sets flag and prevents further processing occurring
+        :return:
+        """
+        if self.sr.meta.get(f'{self.np_version}_shank', None):
+            self.already_processed = True
+        else:
+            self.already_processed = False
 
+    def process(self, overwrite=False):
+        """
+        Function to call to process NP2 data
 
-    def _prepare_files_NP2_4(self, overwrite=False):
-        # if already a processed file we can't do anything
+        :param overwrite:
+        :return:
+        """
+        if self.np_version == 'NP2.4':
+            status = self._process_NP24(overwrite=overwrite)
+        elif self.np_version == 'NP2.1':
+            status = self._process_NP21(overwrite=overwrite)
+        else:
+            _logger.warning('Meta file is not of type NP2.1 or NP2.4, cannot process')
+            status = 0
+        return status
+
+    def _process_NP24(self, overwrite=False):
+        """
+        Splits AP signal into individual shanks and also extracts the LFP signal. Writes ap and
+        lf data to ap.bin and lf.bin files in individual shank folders. Don't call this function
+        directly but access through process() method
+
+        :param overwrite:
+        :return:
+        """
+        if self.already_processed:
+            _logger.warning('This ap file is an NP2.4 that has already been split into shanks, '
+                            'nothing to do here')
+            return 0
+
+        self.shank_info = self._prepare_files_NP24(overwrite=overwrite)
+        if self.already_exists:
+            _logger.warning('One or more of the sub shank folders already exists, '
+                            'to force reprocessing set overwrite to True')
+            return 0
+
+        # Initial checks out the way. Let's goooo!
+        wg = WindowGenerator(self.nsamples, self.samples_window, self.samples_overlap)
+
+        for first, last in wg.firstlast:
+            chunk_ap = self.sr[first:last, :self.napch].T
+            chunk_ap_sync = self.sr[first:last, self.idxsyncch:].T
+            chunk_lf = self.extract_lfp(self.sr[first:last, :self.napch].T)
+            chunk_lf_sync = self.extract_lfp_sync(self.sr[first:last, self.idxsyncch:].T)
+
+            chunk_ap2save = self._ind2save(chunk_ap, chunk_ap_sync, wg, ratio=1, etype='ap')
+            chunk_lf2save = self._ind2save(chunk_lf, chunk_lf_sync, wg, ratio=self.ratio,
+                                           etype='lf')
+
+            self._split2shanks(chunk_ap2save, etype='ap')
+            self._split2shanks(chunk_lf2save, etype='lf')
+
+            wg.print_progress(desc='Extracting LFP + Splitting:')
+
+        self._closefiles(etype='ap')
+        self._closefiles(etype='lf')
+
+        self._writemetadata_ap()
+        self._writemetadata_lf()
+
+        if self.post_check:
+            self.check_NP24()
+        if self.delete_original:
+            self.delete()
+
+        return 1
+
+    def _prepare_files_NP24(self, overwrite=False):
+        """
+        Creates folders for individual shanks and creates and opens ap.bin and lf.bin files for
+        each shank. Checks to see if and of the expected shank folders already exist
+        and will only rerun if overwrite=True. Don't call this function directly but access through
+        process() method
+
+        :param overwrite: set to True to force rerunning even if lf.bin file already exists
+        :return:
+        """
+
         chn_info = spikeglx._map_channels_from_meta(self.sr.meta)
-        n_shanks = self.nshank or np.unique(chn_info['shank'])
+        n_shanks = self.nshank or np.unique(chn_info['shank']).astype(np.int16)
         label = self.ap_file.parent.parts[-1]
         shank_info = {}
-        exists = False
+        self.already_exists = False
 
         for sh in n_shanks:
             _shank_info = {}
@@ -76,79 +181,95 @@ class NP2Converter:
                     self.ap_file.name.replace('ap', 'lf'))
                 _shank_info['lf_open_file'] = open(_shank_info['lf_file'], 'wb')
             else:
-                exists = True
-                # TODO should we check if it has ap and lf files properly or the folder existsing
-                # is enough
-                # TODO better warning message
-                _logger.warning(f'directory {probe_path} derived from file {self.ap_file} '
-                                f'already exists. To overwrite content in {probe_path}, set'
-                                f'overwrite = True')
+                self.already_exists = True
+                _logger.warning('One or more of the sub shank folders already exists, '
+                                'to force reprocessing set overwrite to True')
             shank_info[f'shank{sh}'] = _shank_info
 
-        return shank_info, exists
+        return shank_info
 
-    def _prepare_files_NP2_1(self, save=True, overwrite=False):
-        # need to see if lf files exist in the ap_file folder
-        # TODO not yet implemented
-        lf_file = self.ap_file.parent.joinpath(self.ap_file.name.replace('ap', 'lf'))
-        if not lf_file.exists():
-            lala=  1
+    def _process_NP21(self, overwrite=False):
+        """
+        Extracts LFP signal from original data and writes to lf.bin file. Also created lf.meta
+        file. Don't call this function directly but access through process() method
 
+        :param overwrite: set to True to force rerunning even if lf.bin file already exists
+        :return:
+        """
+        if self.already_processed:
+            _logger.warning('This ap file is an NP2.4 that has already been split into shanks, '
+                            'nothing to do here')
+            return 0
 
-    def process(self, overwrite=False):
-        if self.np_version == 'NP2.4':
-            self._process_NP2_4(overwrite=overwrite)
-        elif self.np_version == 'NP2.1':
-            self.info = self._prepare_files_NP2_1(overwrite=overwrite)
-        else:
-            self.info = None
+        self.shank_info = self._prepare_files_NP21(overwrite=overwrite)
+        if self.already_exists:
+            _logger.warning('One or more of the sub shank folders already exists, '
+                            'to force reprocessing set overwrite to True')
+            return 0
 
-
-    def _process_NP2_4(self, overwrite=False):
-        #if self.sr.meta.get['original_meta']
-        #    _logger.warning('This ap file is an NP2.4 that has already been split into shanks, '
-        #                    'nothing to do here')
-        #    return
-
-        self.shank_info, exists = self._prepare_files_NP2_4(overwrite=overwrite)
-        if exists:
-            _logger.warning('One or more of the sub shank folders already exists, to force reprocessing'
-                            'set overwrite to True')
-            return
-
-        # Initial checks out the way. Let's goooo!
         wg = WindowGenerator(self.nsamples, self.samples_window, self.samples_overlap)
 
-        # TODO some logging of how far in we are
         for first, last in wg.firstlast:
-            print(first)
-            print(last)
-            chunk_ap = self.sr[first:last, :self.napch].T
-            chunk_ap_sync = self.sr[first:last, self.idxsyncch:].T
             chunk_lf = self.extract_lfp(self.sr[first:last, :self.napch].T)
             chunk_lf_sync = self.extract_lfp_sync(self.sr[first:last, self.idxsyncch:].T)
 
-            chunk_ap2save = self._ind2save(chunk_ap, chunk_ap_sync, wg, ratio=1, type='ap')
             chunk_lf2save = self._ind2save(chunk_lf, chunk_lf_sync, wg, ratio=self.ratio,
-                                           type='lf')
+                                           etype='lf')
 
-            self._split2shanks(chunk_ap2save, type='ap')
-            self._split2shanks(chunk_lf2save, type='lf')
+            self._split2shanks(chunk_lf2save, etype='lf')
 
-        self._closefiles(type='ap')
-        self._closefiles(type='lf')
+            wg.print_progress(desc='Extracting LFP:')
 
-        self._writemetadata_ap()
+        self._closefiles(etype='lf')
+
         self._writemetadata_lf()
 
-        if self.post_check:
-            self.check()
-        if self.delete_original:
-            self.delete()
+        return 1
 
-    def check(self):
+    def _prepare_files_NP21(self, overwrite=False):
+        """
+        Creates and opens lf.bin file in order to extract the lfp signal from full signal. Checks
+        to see if file already exists and will only rerun if overwrite=True. Don't call this
+        function directly but access through process() method
+
+        :param overwrite: set to True to force rerunning even if lf.bin file already exists
+        :return:
+        """
+
+        chn_info = spikeglx._map_channels_from_meta(self.sr.meta)
+        n_shanks = np.unique(chn_info['shank']).astype(np.int16)
+        assert (len(n_shanks) == 1)
+        shank_info = {}
+        self.already_exists = False
+
+        lf_file = self.ap_file.parent.joinpath(self.ap_file.name.replace('ap', 'lf'))
+        if not lf_file.exists() or overwrite:
+            for sh in n_shanks:
+                _shank_info = {}
+                # channels for individual shank + sync channel
+                _shank_info['chns'] = np.r_[np.where(chn_info['shank'] == sh)[0],
+                                            np.array(spikeglx._get_sync_trace_indices_from_meta(
+                                                self.sr.meta))]
+                _shank_info['lf_file'] = lf_file
+                _shank_info['lf_open_file'] = open(_shank_info['lf_file'], 'wb')
+
+                shank_info[f'shank{sh}'] = _shank_info
+        else:
+            self.already_exists = True
+            _logger.warning('LF file for this probe already exists, '
+                            'to force reprocessing set overwrite to True')
+
+        return shank_info
+
+    def check_NP24(self):
+        """
+        Check that the splitting into shanks process has completed correctly. Compares the original
+        file to the reconstructed file from the individual shanks
+
+        :return:
+        """
         for sh in self.shank_info.keys():
-            self.shank_info[sh]['self.sr'] = spikeglx.Reader(self.shank_info[sh]['ap_file'])
+            self.shank_info[sh]['sr'] = spikeglx.Reader(self.shank_info[sh]['ap_file'])
 
         wg = WindowGenerator(self.nsamples, self.samples_window, 0)
         for first, last in wg.firstlast:
@@ -156,43 +277,58 @@ class NP2Converter:
             chunk = np.zeros_like(expected)
             for ish, sh in enumerate(self.shank_info.keys()):
                 if ish == 0:
-                    chunk[:, self.shank_info[sh]['chns']] = self.shank_info[sh]['self.sr'][first:last, :]
+                    chunk[:, self.shank_info[sh]['chns']] = self.shank_info[sh]['sr'][first:last, :]
                 else:
                     chunk[:, self.shank_info[sh]['chns'][:-1]] = \
-                        self.shank_info[sh]['self.sr'][first:last, :-1]
-            assert np.array_equal(expected, chunk)
+                        self.shank_info[sh]['sr'][first:last, :-1]
+            assert np.array_equal(expected, chunk), \
+                'data in original file and split files do no match'
 
+            wg.print_progress(desc='Checking:')
 
-    def delete(self):
-        # TODO need to delete the original wahhhhh
-        pass
-
-
-
-    def _process_NP2_1(self):
-        self.info = self._prepare_files_NP2_1()
-
-        wg = WindowGenerator(self.nsamples, self.samples_window, self.samples_overlap)
-
-        # TODO some logging of how far in we are
-        for first, last in wg.firstlast:
-            print(first)
-            print(last)
-            chunk_lf = self.extract_lfp(self.sr[first:last, :self.napch].T)
-            chunk_lf_sync = self.extract_lfp(self.sr[first:last, self.idxsyncch:].T)
-
-            chunk_lf2save = self._ind2save(chunk_lf, chunk_lf_sync, wg, ratio=self.ratio, type='lf')
-
-            self._split2shanks(chunk_lf2save, type='lf')
-
-
-    def _split2shanks(self, chunk, type='ap'):
+        # close the sglx instances once we are done checking
         for sh in self.shank_info.keys():
-            open = self.shank_info[sh][f'{type}_open_file']
+            sr = self.shank_info[sh].pop('sr')
+            sr.close()
+
+        self.check_completed = True
+
+    def delete_NP24(self):
+        """
+        Delete the original ap file that doesn't has all shanks in one file
+
+        :return:
+        """
+        if self.check_completed and self.delete_original:
+            # TODO need to delete the original wahhhhh
+            pass
+
+    def _split2shanks(self, chunk, etype='ap'):
+        """
+        Splits the signal on the 384 channels into the individual shanks and saves to file
+
+        :param chunk: portion of signal with all 384 channels
+        :param type: ephys type, either 'ap' or 'lf'
+        :return:
+        """
+
+        for sh in self.shank_info.keys():
+            open = self.shank_info[sh][f'{etype}_open_file']
             (chunk[:, self.shank_info[sh]['chns']]).tofile(open)
 
+    def _ind2save(self, chunk, chunk_sync, wg, ratio=1, etype='ap'):
+        """
+        Determines the portion of the full chunk to save based on the window and taper used. Cuts
+        off beginning and end to get rid of filtering/ decimating artefacts
 
-    def _ind2save(self, chunk, chunk_sync, wg, ratio=1, type='ap'):
+        :param chunk: chunk of ephys signal
+        :param chunk_sync: chunk of sync signal
+        :param wg: Window generator object
+        :param ratio: downsample ratio
+        :param etype: ephys type, either 'ap' or 'lf'
+        :return:
+        """
+
         ind2save = [int(self.samples_taper * 2 / ratio),
                     int((self.samples_window - self.samples_taper * 2) / ratio)]
         if wg.iw == 0:
@@ -200,14 +336,23 @@ class NP2Converter:
         if wg.iw == wg.nwin - 1:
             ind2save[1] = int(self.samples_window / ratio)
 
-        print(ind2save)
-        chunk2save = (np.c_[chunk[:, slice(*ind2save)].T / self.sr.channel_conversion_sample2v[type][:self.napch],
-                              chunk_sync[:, slice(*ind2save)].T
-                              / self.sr.channel_conversion_sample2v[type][self.idxsyncch:]]).astype(np.int16)
+        chunk2save = (np.c_[chunk[:, slice(*ind2save)].T /
+                            self.sr.channel_conversion_sample2v[etype][:self.napch],
+                            chunk_sync[:, slice(*ind2save)].T /
+                            self.sr.channel_conversion_sample2v[etype][self.idxsyncch:]]).\
+            astype(np.int16)
 
         return chunk2save
 
     def extract_lfp(self, chunk):
+        """
+        Extracts LFP signal from full band signal, first applies low pass to anti-alias and LP,
+        then downsamples
+
+        :param chunk: portion of signal to extract LFP from
+        :return: LFP signal
+        """
+
         chunk[:, :self.samples_taper] *= self.taper[:self.samples_taper]
         chunk[:, -self.samples_taper:] *= self.taper[self.samples_taper:]
         chunk = scipy.signal.sosfiltfilt(self.sos_lp, chunk)
@@ -215,115 +360,77 @@ class NP2Converter:
         return chunk
 
     def extract_lfp_sync(self, chunk_sync):
+        """
+        Extracts downsampled signal of imec sync trace
+
+        :param chunk_sync: portion of sync signal to downsample
+        :return: downsampled sync signal
+        """
+
         chunk_sync = chunk_sync[:, ::self.ratio]
         return chunk_sync
 
-    def _closefiles(self, type='ap'):
+    def _closefiles(self, etype='ap'):
+        """
+        Close .bin files that were being written to
+
+        :param etype: ephys type, either 'ap' or 'lf'
+        :return:
+        """
+
         for sh in self.shank_info.keys():
-            open = self.shank_info[sh].pop(f'{type}_open_file')
+            open = self.shank_info[sh].pop(f'{etype}_open_file')
             open.close()
 
     def _writemetadata_ap(self):
+        """
+        Function to create ap meta data file. Adapts the relevant keys in the spikeglx meta file
+        to contain the correct number of channels. Also adds key to indicate that this is not an
+        original meta data file, but one that has been adapted
+
+        :return:
+        """
+
         for sh in self.shank_info.keys():
             n_chns = len(self.shank_info[sh]['chns'])
             # First for the ap file
-            meta_shank = copy.copy(self.sr.meta)
+            meta_shank = copy.deepcopy(self.sr.meta)
             meta_shank['acqApLfSy'][0] = n_chns - 1
             meta_shank['snsApLfSy'][0] = n_chns - 1
             meta_shank['nSavedChans'] = n_chns
             meta_shank['fileSizeBytes'] = self.shank_info[sh]['ap_file'].stat().st_size
-            # TODO figure out if this is what we want
-            meta_shank['snsSaveChanSubset'] = spikeglx._get_save_chan_subset(self.shank_info[sh]['chns'])
-            # TODO do we want to remove the number of channels
-
+            meta_shank['snsSaveChanSubset_orig'] = \
+                spikeglx._get_savedChans_subset(self.shank_info[sh]['chns'])
+            meta_shank['snsSaveChanSubset'] = f'0:{n_chns-1}'
             meta_shank['original_meta'] = False
+            meta_shank[f'{self.np_version}_shank'] = int(sh[-1])
             meta_file = self.shank_info[sh]['ap_file'].with_suffix('.meta')
             spikeglx.write_meta_data(meta_shank, meta_file)
 
     def _writemetadata_lf(self):
+        """
+        Function to create lf meta data file. Adapts the relevant keys in the spikeglx meta file
+        to contain the correct number of channels. Also adds key to indicate that this is not an
+        original meta data file, but one that has been adapted
+
+        :return:
+        """
+
         for sh in self.shank_info.keys():
             n_chns = len(self.shank_info[sh]['chns'])
-            meta_shank = copy.copy(self.sr.meta)
+            meta_shank = copy.deepcopy(self.sr.meta)
             meta_shank['acqApLfSy'][0] = 0
             meta_shank['acqApLfSy'][1] = n_chns - 1
             meta_shank['snsApLfSy'][0] = 0
             meta_shank['snsApLfSy'][1] = n_chns - 1
-            meta_shank['nSavedChans'] = n_chns
             meta_shank['fileSizeBytes'] = self.shank_info[sh]['lf_file'].stat().st_size
-            meta_shank['imSampRate'] = 2500
-            meta_shank['snsSaveChanSubset'] = spikeglx._get_save_chan_subset(self.shank_info[sh]['chns'])
+            meta_shank['imSampRate'] = self.fs_lf
+            if self.np_version == 'NP2.4':
+                meta_shank['snsSaveChanSubset_orig'] = \
+                    spikeglx._get_savedChans_subset(self.shank_info[sh]['chns'])
+                meta_shank['snsSaveChanSubset'] = f'0:{n_chns-1}'
+                meta_shank['nSavedChans'] = n_chns
             meta_shank['original_meta'] = False
+            meta_shank[f'{self.np_version}_shank'] = int(sh[-1])
             meta_file = self.shank_info[sh]['lf_file'].with_suffix('.meta')
             spikeglx.write_meta_data(meta_shank, meta_file)
-
-
-
-# my tests go here
-import numpy as np
-from ibllib.io import spikeglx
-
-file_path = r'C:\Users\Mayo\Downloads\NP2\probe00\_spikeglx_ephysData_g0_t0.imec0.ap.bin'
-# check the integrity of my down sampling and windowing
-FS = 30000
-NSAMPLES = int(2 * FS)
-np0_5s = NP2Converter(file_path, post_check=False)
-np0_5s.init_params(nsamples=NSAMPLES, nwindow=0.5*FS, extra='_0_5s', nshank=[0])
-np0_5s.process()
-
-np1s = NP2Converter(file_path, post_check=False)
-np1s.init_params(nsamples=NSAMPLES, nwindow=1*FS, extra='_1s', nshank=[0])
-np1s.process()
-
-np2s = NP2Converter(file_path, post_check=False)
-np2s.init_params(nsamples=NSAMPLES, nwindow=2*FS, extra='_2s', nshank=[0])
-np2s.process()
-
-sr = spikeglx.Reader(file_path)
-sr0_5s_ap = spikeglx.Reader(np0_5s.shank_info['shank0']['ap_file'])
-sr0_5s_lf = spikeglx.Reader(np0_5s.shank_info['shank0']['lf_file'])
-sr1s_ap = spikeglx.Reader(np1s.shank_info['shank0']['ap_file'])
-sr1s_lf = spikeglx.Reader(np1s.shank_info['shank0']['lf_file'])
-sr2s_ap = spikeglx.Reader(np2s.shank_info['shank0']['ap_file'])
-sr2s_lf = spikeglx.Reader(np2s.shank_info['shank0']['lf_file'])
-
-# Make sure all the aps are the same regardless of window size we used
-assert np.array_equal(sr0_5s_ap[:, :], sr1s_ap[:, :])
-assert np.array_equal(sr0_5s_ap[:, :], sr2s_ap[:, :])
-assert np.array_equal(sr1s_ap[:, :], sr2s_ap[:, :])
-
-# Make sure all the lfps are the same regardless of window size we used
-assert np.array_equal(sr0_5s_lf[:, :], sr1s_lf[:, :])
-assert np.array_equal(sr0_5s_lf[:, :], sr2s_lf[:, :])
-assert np.array_equal(sr1s_lf[:, :], sr2s_lf[:, :])
-
-# Also check that the values are the same as the original. This is done by the check but
-# to be extra safe!
-assert np.array_equal(sr0_5s_ap[:, :], sr[:NSAMPLES, np0_5s.shank_info['shank0']['chns']])
-assert np.array_equal(sr1s_ap[:, :], sr[:NSAMPLES, np1s.shank_info['shank0']['chns']])
-assert np.array_equal(sr2s_ap[:, :], sr[:NSAMPLES, np2s.shank_info['shank0']['chns']])
-
-# clean up
-sr.close()
-sr0_5s_ap.close()
-sr0_5s_lf.close()
-sr1s_ap.close()
-sr1s_lf.close()
-sr2s_ap.close()
-sr2s_lf.close()
-
-shutil.rmtree()
-
-
-
-
-# check the whole process
-
-# check that if we change part of the file the check is no longer valid
-
-# check that overwrite flag works
-
-# check that we can override the overwrite flag
-
-# check that if we give it a processed file it doesn't do anything
-
-

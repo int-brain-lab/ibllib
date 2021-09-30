@@ -326,7 +326,7 @@ def read_meta_data(md_file):
     return Bunch(d)
 
 
-def write_meta_data(meta, md_file):
+def write_meta_data(md, md_file):
     """
     Parses a dict into a spikeglx meta data file
     TODO write a test for this function, (read in, write out and make sure it is the same)
@@ -335,7 +335,7 @@ def write_meta_data(meta, md_file):
     :return:
     """
     with open(md_file, 'w') as fid:
-        for key, val in meta.items():
+        for key, val in md.items():
             if isinstance(val, list):
                 val = ','.join([str(int(v)) for v in val])
             if isinstance(val, float):
@@ -344,7 +344,7 @@ def write_meta_data(meta, md_file):
             fid.write(f'{key}={val}\n')
 
 
-def _get_save_chan_subset(chns):
+def _get_savedChans_subset(chns):
     """
     Get the subset of the original channels that are saved per shank
     :param chns:
