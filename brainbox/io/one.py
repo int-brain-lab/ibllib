@@ -147,9 +147,9 @@ def _load_channels_locations_from_disk(eid, collection=None, one=None, revision=
             aligned_channel_collections = one.list_collections(
                 eid, filename='channels.brainLocationIds_ccf_2017*', collection=f'alf/{probe}', revision=revision)
             if aligned_channel_collections.size == 0:
-                _logger.warning(f"no alignment found for {eid}/{probe}")
+                _logger.warning(f"no resolved alignment dataset found for {eid}/{probe}")
                 continue
-            _logger.debug(f"looking for an alignment in {aligned_channel_collections}")
+            _logger.debug(f"looking for a resolved alignment dataset in {aligned_channel_collections}")
             ac_collection = _get_spike_sorting_collection(aligned_channel_collections, probe)
             channels_aligned = one.load_object(eid, 'channels', collection=ac_collection)
             # oftentimes the channel map for different spike sorters may be different so interpolate the alignment onto
