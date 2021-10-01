@@ -41,7 +41,7 @@ class Task(abc.ABC):
     input_files = None
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
-                 machine=None, clobber=True, location='local'):
+                 machine=None, clobber=True, aws=None, location='server'):
         self.taskid = taskid
         self.one = one
         self.session_path = session_path
@@ -53,6 +53,7 @@ class Task(abc.ABC):
         self.machine = machine
         self.clobber = clobber
         self.location = location
+        self.aws = aws
 
     @property
     def name(self):
@@ -122,21 +123,58 @@ class Task(abc.ABC):
         :return:
         """
         assert one
+        if self.location == 'server':
+            self._register_datasets_server(one=one, **kwargs)
+        elif self.location == 'remote':
+            self._register_datasets_remote(one=one, **kwargs)
+        elif self.location == 'SDSC':
+            self._register_datasets_SDSC(one=one, **kwargs)
+        elif self.location == 'AWS':
+            self._register_datasets_AWS(one=one, **kwargs)
+
+    def _register_datasets_server(self, one=None, **kwargs):
+
         if self.outputs:
             if isinstance(self.outputs, list):
                 versions = [self.version for _ in self.outputs]
             else:
                 versions = [self.version]
 
-            if self.location == 'local':
-                return register_dataset(self.outputs, one=one, versions=versions, **kwargs)
-            elif self.location == 'remote':
-                ftp_patcher = FTPPatcher(one=self.one)
-                return ftp_patcher.create_dataset(path=self.outputs, created_by=self.one.alyx.user,
-                                                  versions=versions)
-            elif self.location == 'SDSC':
-                sdsc_patcher = SDSCPatcher(one=one)
-                return sdsc_patcher.patch_datasets(self.outputs, dry=False, versions=versions)
+            return register_dataset(self.outputs, one=one, versions=versions, **kwargs)
+
+    def _register_datasets_remote(self, one=None, **kwargs):
+
+        if self.outputs:
+            if isinstance(self.outputs, list):
+                versions = [self.version for _ in self.outputs]
+            else:
+                versions = [self.version]
+
+            ftp_patcher = FTPPatcher(one=one)
+            return ftp_patcher.create_dataset(path=self.outputs, created_by=self.one.alyx.user,
+                                              versions=versions, **kwargs)
+
+    def _register_datasets_SDSC(self, one=None, **kwargs):
+
+        if self.outputs:
+            if isinstance(self.outputs, list):
+                versions = [self.version for _ in self.outputs]
+            else:
+                versions = [self.version]
+
+            sdsc_patcher = SDSCPatcher(one=one)
+            return sdsc_patcher.patch_datasets(self.outputs, dry=False, versions=versions,
+                                               **kwargs)
+
+    def _register_datasets_AWS(self, one=None, **kwargs):
+        # TODO should i do through normal registration or through ftp patcher?
+        if self.outputs:
+            if isinstance(self.outputs, list):
+                versions = [self.version for _ in self.outputs]
+            else:
+                versions = [self.version]
+
+            return register_dataset(self.outputs, one=one, versions=versions, **kwargs)
 
     def rerun(self):
         self.run(overwrite=True)
@@ -160,27 +198,49 @@ class Task(abc.ABC):
         :return:
         """
         # if on local server don't do anything
-        if self.location != 'local':
-            assert self.one
+        if self.location == 'server':
+            self._setUp_server()
+        elif self.location == 'remote':
+            self._setUp_remote()
+        elif self.location == 'SDSC':
+            self._setUp_SDSC()
+        elif self.location == 'AWS':
+            self._setUp_AWS()
 
-            df = self._getData()
+    def _setUp_server(self):
+        """
 
-            # Should we catch for missing data here? Its annoying with the 3A, 3B stuff :/
-            if self.location == 'remote':
-                self.one._download_datasets(df)
+        :return:
+        """
 
-            if self.location == 'SDSC':
-                SDSC_TMP = Path(SDSC_PATCH_PATH.joinpath(self.__class__.__name__))
+    def _setUp_remote(self):
 
-                for _, d in df.iterrows():
-                    file_path = Path(d['session_path']).joinpath(d['rel_path'])
-                    file_uuid = add_uuid_string(file_path, np2str(np.r_[d.name[0], d.name[1]]))
-                    file_link = SDSC_TMP.joinpath(file_path)
-                    file_link.parent.mkdir(exist_ok=True, parents=True)
-                    file_link.symlink_to(
-                        Path(SDSC_ROOT_PATH.joinpath(file_uuid)))
+        assert self.one
+        df = self._getData()
+        self.one._download_datasets(df)
 
-                self.session_path = SDSC_TMP.joinpath(d['session_path'])
+    def _setUp_SDSC(self):
+        assert self.one
+        df = self._getData()
+
+        SDSC_TMP = Path(SDSC_PATCH_PATH.joinpath(self.__class__.__name__))
+
+        for _, d in df.iterrows():
+            file_path = Path(d['session_path']).joinpath(d['rel_path'])
+            file_uuid = add_uuid_string(file_path, np2str(np.r_[d.name[0], d.name[1]]))
+            file_link = SDSC_TMP.joinpath(file_path)
+            file_link.parent.mkdir(exist_ok=True, parents=True)
+            file_link.symlink_to(
+                Path(SDSC_ROOT_PATH.joinpath(file_uuid)))
+
+        self.session_path = SDSC_TMP.joinpath(d['session_path'])
+
+    def _setUp_AWS(self):
+        assert self.aws
+        assert self.one
+
+        df = self._getData()
+        self.aws._download_datasets(df)
 
     def tearDown(self):
         """
@@ -211,10 +271,13 @@ class Task(abc.ABC):
         :return:
         """
         if self.location == 'SDSC':
-            # Double check we are dealing with the SDSC temp folder
-            assert SDSC_PATCH_PATH.parts[0:4] == self.session_path.parts[0:4]
-            shutil.rmtree(self.session_path)
-            pass
+            self._cleanUp_SDSC()
+
+    def _cleanUp_SDSC(self):
+
+        # Double check we are dealing with the SDSC temp folder
+        assert SDSC_PATCH_PATH.parts[0:4] == self.session_path.parts[0:4]
+        shutil.rmtree(self.session_path)
 
 
 class Pipeline(abc.ABC):
@@ -349,7 +412,7 @@ class Pipeline(abc.ABC):
 
 
 def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
-                  max_md5_size=None, machine=None, clobber=True, location='local'):
+                  max_md5_size=None, machine=None, clobber=True, location='server'):
     """
     Runs a single Alyx job and registers output datasets
     :param tdict:
@@ -362,6 +425,8 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     filesize to save time
     :param machine: string identifying the machine the task is run on, optional
     :param clobber: bool, if True any existing logs are overwritten, default is True
+    :param location: where you are running the task, 'server' - local lab server, 'remote' - any
+    compute node/ computer, 'SDSC' - flatiron compute node, 'AWS' - using data from aws s3
     :return:
     """
     registered_dsets = []

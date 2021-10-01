@@ -160,7 +160,7 @@ WHEEL_TASKS = ['EphysTrials']
 SPIKE_SORTING_TASKS = ['SpikeSorting', 'EphysCellsQc']
 DLC_TASKS = ['EphysDLC']
 
-# add wildcards in
+# DATA REQUIRED FOR TASKS
 EPHYSTRIALS = [('_iblrig_taskData.raw.*', 'raw_behavior_data', True),
                ('_iblrig_taskSettings.raw', 'raw_behavior_data', True),
                ('_spikeglx_sync.npy', 'raw_ephys_data/**', True),
@@ -178,6 +178,13 @@ EPHYSPASSIVE = [('_iblrig_taskSettings.raw*', 'raw_behavior_data', True),
                 ('*.meta', 'raw_ephys_data*', True),
                 ('_iblrig_RFMapStim.raw*', 'raw_passive_data', True)]
 
-RAWEPHYSQC = [('*.meta', 'raw_ephys_data/probe00', True),
-              ('*.ch', 'raw_ephys_data/probe00', True),
-              ('*.cbin', 'raw_ephys_data/probe00', True)]
+RAWEPHYSQC = [('*.meta', 'raw_ephys_data/probe*', True),
+              ('*.ch', 'raw_ephys_data/probe*', True),
+              ('*.cbin', 'raw_ephys_data/probe*', True)]
+
+SPIKESORTING = [('*ap.meta', 'raw_ephys_data/probe*', True),
+                ('*ap.ch', 'raw_ephys_data/probe*', True),
+                ('*ap.cbin', 'raw_ephys_data/probe*', True),
+                ('_spikeglx_sync.channels.*', 'raw_ephys_data*', True),
+                ('_spikeglx_sync.polarities.*', 'raw_ephys_data*', True),
+                ('_spikeglx_sync.times.*', 'raw_ephys_data*', True)]

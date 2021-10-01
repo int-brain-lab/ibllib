@@ -96,6 +96,7 @@ class SpikeSorting(tasks.Task):
     )
     SPIKE_SORTER_NAME = 'pykilosort'
     PYKILOSORT_REPO = Path.home().joinpath('Documents/PYTHON/SPIKE_SORTING/pykilosort')
+    input_files = signatures.SPIKESORTING
 
     @staticmethod
     def _sample2v(ap_file):
