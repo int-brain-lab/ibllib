@@ -14,6 +14,10 @@ _logger = logging.getLogger('ibllib')
 AWS_ROOT_PATH = Path('/mnt/ibl')
 BUCKET_NAME = 'ibl-brain-wide-map-private'
 
+# To get aws credentials follow
+# https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2-linux.html to install aws cli
+# https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html to set up
+# credentials
 
 class AWS:
     def __init__(self, s3_bucket_name=None, one=None):
