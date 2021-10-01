@@ -11,15 +11,17 @@ from iblutil.io.parquet import np2str
 
 _logger = logging.getLogger('ibllib')
 
-AWS_ROOT_PATH = Path('aws_spikesorting')
+AWS_ROOT_PATH = Path('/mnt/ibl')
+BUCKET_NAME = 'ibl-brain-wide-map-private'
 
 
 class AWS:
-    def __init__(self, s3_bucket_name, one=None):
+    def __init__(self, s3_bucket_name=None, one=None):
         # TODO some initialisation routine to set up credentials for the first time
 
         s3 = boto3.resource('s3')
-        self.bucket = s3.Bucket(s3_bucket_name)
+        self.bucket_name = s3_bucket_name or BUCKET_NAME
+        self.bucket = s3.Bucket(self.bucket_name)
         self.one = one or ONE()
 
     def _download_datasets(self, datasets):
@@ -38,11 +40,13 @@ class AWS:
             aws_path = AWS_ROOT_PATH.joinpath(add_uuid_string(rel_file_path,
                                                               np2str(np.r_[d.name[0], d.name[1]])))
             aws_path = as_aws_path(aws_path)
+            file_path = as_aws_path(file_path)
             # maybe should avoid this and do a try catch instead?, see here
             # https://boto3.amazonaws.com/v1/documentation/api/latest/guide/collections.html#filtering
             # probably better to do filter on collection ? Not for today
             objects = list(self.bucket.objects.filter(Prefix=aws_path))
             if len(objects) == 1:
+                _logger.info(f'Downloading {aws_path} to {file_path}')
                 self.bucket.download_file(aws_path, file_path)
             else:
                 _logger.warning(f'{aws_path} not found on s3 bucket: {self.bucket.name}')

@@ -167,14 +167,16 @@ class Task(abc.ABC):
                                                **kwargs)
 
     def _register_datasets_AWS(self, one=None, **kwargs):
-        # TODO should i do through normal registration or through ftp patcher?
+        # GO through FTP patcher
         if self.outputs:
             if isinstance(self.outputs, list):
                 versions = [self.version for _ in self.outputs]
             else:
                 versions = [self.version]
 
-            return register_dataset(self.outputs, one=one, versions=versions, **kwargs)
+            ftp_patcher = FTPPatcher(one=one)
+            return ftp_patcher.create_dataset(path=self.outputs, created_by=self.one.alyx.user,
+                                              versions=versions, **kwargs)
 
     def rerun(self):
         self.run(overwrite=True)
