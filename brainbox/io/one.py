@@ -202,6 +202,25 @@ def load_channel_locations(eid, probe=None, one=None, aligned=False, brain_regio
     return channels
 
 
+def load_channel_locations_traj(eid, probe=None, one=None, revision=None, aligned=False, brain_atlas=None):
+    channels = Bunch()
+    # need to find the collection bruh
+    insertion = one.alyx.rest('insertions', 'list', session=eid, name=probe)[0]
+    collection = _collection_filter_from_args(probe=probe)
+    collections = one.list_collections(eid, filename='channels*', collection=collection,
+                                       revision=revision)
+    probe_collection = _get_spike_sorting_collection(collections, probe)
+    chn_coords = one.load_dataset('channels.localCoordinates', collection=probe_collection)
+    depths = chn_coords[:, 1]
+    chans = load_channels_from_insertion(insertion, depths=depths, one=one, ba=brain_atlas)
+    channels[probe] = _channels_alyx2bunch(chans)
+    channels[probe]['acronym'] = brain_atlas.r.get(channels[probe]['atlas_id'])['acronym']
+
+    return channels
+
+
+
+
 def load_channel_locations_alyx(eid, probe=None, one=None, aligned=False, brain_regions=None):
     channels = Bunch()
     # When a specific probe has been requested
@@ -622,7 +641,8 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
     return trialsdf
 
 
-def load_channels_from_insertion(ins, depths=None, one=None, ba=None):
+def load_channels_from_insertion(ins, depths=None, one=None, ba=None, max_provenance='histology',
+                                 aligned=True):
 
     PROV_2_VAL = {
         'Resolved': 90,
@@ -640,6 +660,7 @@ def load_channels_from_insertion(ins, depths=None, one=None, ba=None):
     if depths is None:
         depths = SITES_COORDINATES[:, 1]
     if traj['provenance'] == 'Planned' or traj['provenance'] == 'Micro-manipulator':
+
         ins = atlas.Insertion.from_dict(traj)
         # Deepest coordinate first
         xyz = np.c_[ins.tip, ins.entry].T
@@ -647,6 +668,7 @@ def load_channels_from_insertion(ins, depths=None, one=None, ba=None):
                                                                TIP_SIZE_UM) / 1e6)
     else:
         xyz = np.array(ins['json']['xyz_picks']) / 1e6
+        resolved = ins['json']['extended_qc'].get('alignmnet_resolve', False)
         if traj['provenance'] == 'Histology track':
             xyz = xyz[np.argsort(xyz[:, 2]), :]
             xyz_channels = histology.interpolate_along_track(xyz, (depths +
