@@ -201,19 +201,21 @@ class SpikeSorting(tasks.Task):
         shutil.rmtree(temp_dir, ignore_errors=True)
         return sorter_dir
 
-    def _run(self, overwrite=False):
+    def _run(self, probes=None):
         """
         Multiple steps. For each probe:
         - Runs ks2 (skips if it already ran)
         - synchronize the spike sorting
         - output the probe description files
-        :param overwrite:
+        :param probes: (list of str) if provided, will only run spike sorting for specified probe names
         :return: list of files to be registered on database
         """
         efiles = spikeglx.glob_ephys_files(self.session_path)
         ap_files = [(ef.get("ap"), ef.get("label")) for ef in efiles if "ap" in ef.keys()]
         out_files = []
         for ap_file, label in ap_files:
+            if isinstance(probes, list) and label not in probes:
+                continue
             try:
                 ks2_dir = self._run_pykilosort(ap_file)  # runs ks2, skips if it already ran
                 probe_out_path = self.session_path.joinpath("alf", label, self.SPIKE_SORTER_NAME)
