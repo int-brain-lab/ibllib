@@ -210,7 +210,7 @@ def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, k_kwa
     return x_
 
 
-def decompress_destripe_cbin(sr, output_file=None, h=None, wrot=None, append=False, nc_out=None):
+def decompress_destripe_cbin(sr, output_file=None, h=None, wrot=None, append=False, nc_out=None, ns2add=0):
     """
     From a spikeglx Reader object, decompresses and apply ADC.
     Saves output as a flat binary file in int16
@@ -221,6 +221,8 @@ def decompress_destripe_cbin(sr, output_file=None, h=None, wrot=None, append=Fal
     :param wrot: (optional) whitening matrix [nc x nc] or amplitude scalar to apply to the output
     :param append: (optional, False) for chronic recordings, append to end of file
     :param nc_out: (optional, True) saves non selected channels (synchronisation trace) in output
+    :param ns2add: (optional) for kilosort, adds padding samples at the end of the file so the total
+    number of samples is a multiple of the batchsize
     :return:
     """
     import pyfftw
@@ -285,6 +287,7 @@ def decompress_destripe_cbin(sr, output_file=None, h=None, wrot=None, append=Fal
             first_s += NBATCH - SAMPLES_TAPER * 2
             pbar.update(NBATCH / sr.fs)
             if last_s == sr.ns:
-                # pad with last sample
+                if ns2add > 0:
+                    np.tile(chunk[-1, :nc_out].astype(np.int16), (ns2add, 1)).tofile(fid)
                 break
     pbar.close()
