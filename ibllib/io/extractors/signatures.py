@@ -190,7 +190,10 @@ def spike_sorting_signature(pname=None):
                  ('*ap.cbin', f'raw_ephys_data/{pname}', True),
                  ('_spikeglx_sync.channels.*', 'raw_ephys_data*', True),
                  ('_spikeglx_sync.polarities.*', 'raw_ephys_data*', True),
-                 ('_spikeglx_sync.times.*', 'raw_ephys_data*', True)]
+                 ('_spikeglx_sync.times.*', 'raw_ephys_data*', True),
+                 ('_iblrig_taskData.raw.*', 'raw_behavior_data', True),
+                 ('_iblrig_taskSettings.raw', 'raw_behavior_data', True)
+                 ]
     return signature
 
 
