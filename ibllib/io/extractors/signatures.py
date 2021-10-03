@@ -182,9 +182,15 @@ RAWEPHYSQC = [('*.meta', 'raw_ephys_data/probe*', True),
               ('*.ch', 'raw_ephys_data/probe*', True),
               ('*.cbin', 'raw_ephys_data/probe*', True)]
 
-SPIKESORTING = [('*ap.meta', 'raw_ephys_data/probe*', True),
-                ('*ap.ch', 'raw_ephys_data/probe*', True),
-                ('*ap.cbin', 'raw_ephys_data/probe*', True),
-                ('_spikeglx_sync.channels.*', 'raw_ephys_data*', True),
-                ('_spikeglx_sync.polarities.*', 'raw_ephys_data*', True),
-                ('_spikeglx_sync.times.*', 'raw_ephys_data*', True)]
+def spike_sorting_signature(pname=None):
+    pname = "probe*" if pname else None
+    signature = [('*ap.meta', f'raw_ephys_data/{pname}', True),
+                 ('*ap.ch', f'raw_ephys_data/{pname}', True),
+                 ('*ap.cbin', f'raw_ephys_data/{pname}', True),
+                 ('_spikeglx_sync.channels.*', 'raw_ephys_data*', True),
+                 ('_spikeglx_sync.polarities.*', 'raw_ephys_data*', True),
+                 ('_spikeglx_sync.times.*', 'raw_ephys_data*', True)]
+    return signature
+
+SPIKESORTING = [spike_sorting_signature()]
+
