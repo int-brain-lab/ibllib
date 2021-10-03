@@ -182,6 +182,7 @@ RAWEPHYSQC = [('*.meta', 'raw_ephys_data/probe*', True),
               ('*.ch', 'raw_ephys_data/probe*', True),
               ('*.cbin', 'raw_ephys_data/probe*', True)]
 
+
 def spike_sorting_signature(pname=None):
     pname = pname if pname is not None else "probe*"
     signature = [('*ap.meta', f'raw_ephys_data/{pname}', True),
@@ -192,5 +193,5 @@ def spike_sorting_signature(pname=None):
                  ('_spikeglx_sync.times.*', 'raw_ephys_data*', True)]
     return signature
 
-SPIKESORTING = [spike_sorting_signature()]
 
+SPIKESORTING = [spike_sorting_signature()]

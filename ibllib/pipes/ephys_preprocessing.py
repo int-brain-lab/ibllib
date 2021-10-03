@@ -134,10 +134,10 @@ class SpikeSorting(tasks.Task):
         return info.decode("utf-8").strip()
 
     def _run_pykilosort(self, ap_file):
-        f"""
+        """
         Runs the ks2 matlab spike sorting for one probe dataset
-        the raw spike sorting output can either be with the probe (<1.5.5) or in the
-        session_path/spike_sorters/{self.SPIKE_SORTER_NAME}/probeXX folder
+        the raw spike sorting output is in session_path/spike_sorters/{self.SPIKE_SORTER_NAME}/probeXX folder
+        (discontinued support for old spike sortings in the probe folder <1.5.5)
         :return: path of the folder containing ks2 spike sorting output
         """
         self.version = self._fetch_pykilosort_version(self.PYKILOSORT_REPO)
@@ -145,10 +145,6 @@ class SpikeSorting(tasks.Task):
         sorter_dir = self.session_path.joinpath("spike_sorters", self.SPIKE_SORTER_NAME, label)
         FORCE_RERUN = False
         if not FORCE_RERUN:
-            if ap_file.parent.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log").exists():
-                _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
-                             f" found for {ap_file}, skipping.")
-                return ap_file.parent
             if sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log").exists():
                 _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
                              f" found in {sorter_dir}, skipping.")

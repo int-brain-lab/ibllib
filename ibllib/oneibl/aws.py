@@ -41,7 +41,7 @@ class AWS:
             if file_path.exists():
                 # already downloaded, need to have some options for overwrite, clobber, look
                 # for file mismatch like in ONE
-                _logger.warning(f'{file_path} already exists wont redownload')
+                _logger.info(f'{file_path} already exists wont redownload')
                 continue
 
             aws_path = AWS_ROOT_PATH.joinpath(add_uuid_string(rel_file_path,
