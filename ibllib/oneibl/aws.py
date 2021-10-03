@@ -1,8 +1,10 @@
-import boto3
-from pathlib import Path
-import numpy as np
 import logging
+from pathlib import Path
 import sys
+from time import time
+
+import boto3
+import numpy as np
 
 from one.api import ONE
 from one.alf.files import add_uuid_string
@@ -18,6 +20,7 @@ BUCKET_NAME = 'ibl-brain-wide-map-private'
 # https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2-linux.html to install aws cli
 # https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html to set up
 # credentials
+
 
 class AWS:
     def __init__(self, s3_bucket_name=None, one=None):
@@ -50,8 +53,10 @@ class AWS:
             # probably better to do filter on collection ? Not for today
             objects = list(self.bucket.objects.filter(Prefix=aws_path))
             if len(objects) == 1:
+                ts = time()
                 _logger.info(f'Downloading {aws_path} to {file_path}')
                 self.bucket.download_file(aws_path, file_path)
+                _logger.debug(f'Complete. Time elapsed {time() - ts} for {file_path}')
             else:
                 _logger.warning(f'{aws_path} not found on s3 bucket: {self.bucket.name}')
 
