@@ -183,7 +183,7 @@ RAWEPHYSQC = [('*.meta', 'raw_ephys_data/probe*', True),
               ('*.cbin', 'raw_ephys_data/probe*', True)]
 
 def spike_sorting_signature(pname=None):
-    pname = "probe*" if pname else None
+    pname = pname if pname is not None else "probe*"
     signature = [('*ap.meta', f'raw_ephys_data/{pname}', True),
                  ('*ap.ch', f'raw_ephys_data/{pname}', True),
                  ('*ap.cbin', f'raw_ephys_data/{pname}', True),
