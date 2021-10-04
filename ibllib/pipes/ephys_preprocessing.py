@@ -17,6 +17,7 @@ from ibllib.io.video import label_from_path
 from ibllib.io.extractors import ephys_fpga, ephys_passive, camera
 from ibllib.pipes import tasks
 from ibllib.pipes.training_preprocessing import TrainingRegisterRaw as EphysRegisterRaw
+from ibllib.pipes.misc import create_alyx_probe_insertions
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
@@ -53,16 +54,20 @@ class RawEphysQC(tasks.Task):
     """
 
     cpu = 2
-    io_charge = 30  # this jobs reads raw ap files
-    priority = 10  # a lot of jobs depend on this one
-    level = 0  # this job doesn't depend on anything
+    io_charge = 30
+    priority = 10
+    level = 0
 
     def _run(self, overwrite=False):
         eid = self.one.path2eid(self.session_path)
         pids = [x['id'] for x in self.one.alyx.rest('insertions', 'list', session=eid)]
+        # Usually there should be two probes, if there are less, check if all probes are registered
+        if len(pids) < 2:
+            _logger.warning(f"{len(pids)} probes registered for session {eid}, trying to register from local data")
+            pids = [p['id'] for p in create_alyx_probe_insertions(self.session_path, one=self.one)]
         qc_files = []
         for pid in pids:
-            eqc = ephysqc.EphysQC(pid)
+            eqc = ephysqc.EphysQC(pid, one=self.one)
             qc_files.extend(eqc.run(update=True, overwrite=overwrite))
         return qc_files
 
