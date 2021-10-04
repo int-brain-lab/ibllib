@@ -171,7 +171,7 @@ class Pipeline(abc.ABC):
 
     def make_graph(self, out_dir=None, show=True):
         if not out_dir:
-            out_dir = self.one._cache_dir if self.one else one.params.get().CACHE_DIR
+            out_dir = self.one.alyx.cache_dir if self.one else one.params.get().CACHE_DIR
         m = Digraph('G', filename=str(Path(out_dir).joinpath(self.__module__ + '_graphs.gv')))
         m.attr(rankdir='TD')
 

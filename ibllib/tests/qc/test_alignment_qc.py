@@ -12,6 +12,7 @@ from ibllib.atlas import AllenAtlas
 from ibllib.pipes.misc import create_alyx_probe_insertions
 from ibllib.qc.alignment_qc import AlignmentQC
 from ibllib.pipes.histology import register_track
+from ibllib.ephys.neuropixel import SITES_COORDINATES
 
 
 EPHYS_SESSION = 'b1c968ad-4874-468d-b2e4-5ffa9b9964e9'
@@ -135,7 +136,8 @@ class TestAlignmentQcExisting(unittest.TestCase):
         traj = one.alyx.rest('trajectories', 'update', id=self.prev_traj_id, data=trajectory)
         align_qc = AlignmentQC(self.probe_id, one=one, brain_atlas=brain_atlas, channels=False)
         align_qc.load_data(prev_alignments=traj['json'], xyz_picks=np.array(self.xyz_picks) / 1e6,
-                           cluster_chns=self.cluster_chns)
+                           cluster_chns=self.cluster_chns, depths=SITES_COORDINATES[:, 1],
+                           chn_coords=SITES_COORDINATES)
         align_qc.run(update=True, upload_alyx=True, upload_flatiron=False)
 
         _verify(self, alignment_qc=0.782216, alignment_resolved=False,
@@ -151,7 +153,8 @@ class TestAlignmentQcExisting(unittest.TestCase):
         traj = one.alyx.rest('trajectories', 'update', id=self.prev_traj_id, data=trajectory)
         assert(self.prev_traj_id == traj['id'])
         align_qc = AlignmentQC(self.probe_id, one=one, brain_atlas=brain_atlas, channels=False)
-        align_qc.load_data(cluster_chns=self.cluster_chns)
+        align_qc.load_data(cluster_chns=self.cluster_chns, depths=SITES_COORDINATES[:, 1],
+                           chn_coords=SITES_COORDINATES)
         align_qc.run(update=True, upload_alyx=True, upload_flatiron=False)
 
         _verify(self, alignment_resolved='qc', alignment_qc=0.952319, trajectory_created=False,
@@ -165,7 +168,8 @@ class TestAlignmentQcExisting(unittest.TestCase):
         self.assertEqual(self.prev_traj_id, traj['id'])
         align_qc = AlignmentQC(self.probe_id, one=one, brain_atlas=brain_atlas, channels=False)
         align_qc.load_data(prev_alignments=traj['json'], xyz_picks=np.array(self.xyz_picks) / 1e6,
-                           cluster_chns=self.cluster_chns)
+                           cluster_chns=self.cluster_chns, depths=SITES_COORDINATES[:, 1],
+                           chn_coords=SITES_COORDINATES)
         align_qc.resolved = 0
         align_qc.run(update=True, upload_alyx=True, upload_flatiron=False)
 
@@ -220,7 +224,9 @@ class TestAlignmentQcManual(unittest.TestCase):
         align_qc = AlignmentQC(self.probe_id, one=one, brain_atlas=brain_atlas, channels=False)
         align_qc.load_data(prev_alignments=self.traj['json'],
                            xyz_picks=np.array(self.xyz_picks) / 1e6,
-                           cluster_chns=self.cluster_chns)
+                           cluster_chns=self.cluster_chns,
+                           depths=SITES_COORDINATES[:, 1],
+                           chn_coords=SITES_COORDINATES)
         align_qc.run(update=True, upload_alyx=True, upload_flatiron=False)
         _verify(self,
                 alignment_resolved=False,
@@ -233,7 +239,9 @@ class TestAlignmentQcManual(unittest.TestCase):
         align_qc = AlignmentQC(self.probe_id, one=one, brain_atlas=brain_atlas, channels=False)
         align_qc.load_data(prev_alignments=self.traj['json'],
                            xyz_picks=np.array(self.xyz_picks) / 1e6,
-                           cluster_chns=self.cluster_chns)
+                           cluster_chns=self.cluster_chns,
+                           depths=SITES_COORDINATES[:, 1],
+                           chn_coords=SITES_COORDINATES)
         align_qc.resolve_manual('2020-09-28T15:57:25_mayo', update=True, upload_alyx=True,
                                 upload_flatiron=False)
         _verify(self,
@@ -247,7 +255,9 @@ class TestAlignmentQcManual(unittest.TestCase):
         align_qc = AlignmentQC(self.probe_id, one=one, brain_atlas=brain_atlas, channels=False)
         align_qc.load_data(prev_alignments=self.traj['json'],
                            xyz_picks=np.array(self.xyz_picks) / 1e6,
-                           cluster_chns=self.cluster_chns)
+                           cluster_chns=self.cluster_chns,
+                           depths=SITES_COORDINATES[:, 1],
+                           chn_coords=SITES_COORDINATES)
         align_qc.resolve_manual('2020-09-28T10:03:06_alejandro', update=True, upload_alyx=True,
                                 upload_flatiron=False, force=True)
         _verify(self,
@@ -329,7 +339,9 @@ class TestUploadToFlatIron(unittest.TestCase):
         align_qc = AlignmentQC(cls.probe_id, one=one, brain_atlas=brain_atlas, channels=False)
         align_qc.load_data(prev_alignments=cls.traj['json'],
                            xyz_picks=np.array(cls.xyz_picks) / 1e6,
-                           cluster_chns=cls.cluster_chns)
+                           cluster_chns=cls.cluster_chns,
+                           depths=SITES_COORDINATES[:, 1],
+                           chn_coords=SITES_COORDINATES)
         cls.file_paths = align_qc.resolve_manual('2020-09-28T15:57:25_mayo', update=True,
                                                  upload_alyx=True, upload_flatiron=True)
         print(cls.file_paths)

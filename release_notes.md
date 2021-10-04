@@ -18,6 +18,10 @@
 - ephyscellsqc: bugfix on probe creation for pykilosort subfolder
 - task version 6.2.5 specific audio extractor
 - camera times: index by video length when GPIO unstable
+### Release Notes 2.0.8 2021-09-17
+- spike sorting tasks re-run fully each time
+### Release Notes 2.0.9 2021-09-19
+- spike sorting tasks re-run fully each time
 
 ### Release Notes 2.0.0 2021-08-04
 - ONE2 released on the master branch

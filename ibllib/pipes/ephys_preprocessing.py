@@ -139,16 +139,18 @@ class SpikeSorting(tasks.Task):
         """
         self.version = self._fetch_pykilosort_version(self.PYKILOSORT_REPO)
         label = ap_file.parts[-2]  # this is usually the probe name
-        if ap_file.parent.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log").exists():
-            _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
-                         f" found for {ap_file}, skipping.")
-            return ap_file.parent
         sorter_dir = self.session_path.joinpath("spike_sorters", self.SPIKE_SORTER_NAME, label)
+        FORCE_RERUN = False
+        if not FORCE_RERUN:
+            if ap_file.parent.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log").exists():
+                _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
+                             f" found for {ap_file}, skipping.")
+                return ap_file.parent
+            if sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log").exists():
+                _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
+                             f" found in {sorter_dir}, skipping.")
+                return sorter_dir
         print(sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log"))
-        if sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log").exists():
-            _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
-                         f" found in {sorter_dir}, skipping.")
-            return sorter_dir
         # get the scratch drive from the shell script
         with open(self.SHELL_SCRIPT) as fid:
             lines = fid.readlines()
