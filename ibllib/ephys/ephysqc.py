@@ -34,7 +34,13 @@ SAMPLE_LENGTH = 1
 
 
 class EphysQC(base.QC):
-    """A class for computing Ephys QC metrics"""
+    """
+    A class for computing Ephys QC metrics.
+
+    :param probe_id: An existing and registered probe insertion ID.
+    :param one: An ONE instance pointing to the database the probe_id is registered with. Optional, will instantiate
+    default database if not given.
+    """
 
     def __init__(self, probe_id, **kwargs):
         super().__init__(probe_id, endpoint='insertions', **kwargs)
@@ -62,6 +68,9 @@ class EphysQC(base.QC):
         assert not len(lf_meta) > 1, f'More than one lf.meta file in {self.probe_path}. Remove redundant files to run QC'
 
     def load_data(self) -> None:
+        """
+        Load any locally available data.
+        """
         # First sanity check
         self._ensure_required_data()
 
@@ -78,6 +87,15 @@ class EphysQC(base.QC):
                 self.data[f'{dstype}'] = spikeglx.Reader(bin_file, open=True) if bin_file is not None else None
 
     def run(self, update: bool = False, overwrite: bool = True, stream: bool = None, **kwargs) -> (str, dict):
+        """
+        Run QC on samples of the .ap file, and on the entire file for .lf data if it is present.
+
+        :param update: bool, whether to update the qc json fields for this probe. Default is False.
+        :param overwrite: bool, whether to overwrite locally existing outputs of this function. Default is False.
+        :param stream: bool, whether to stream the samples of the .ap data if not locally available. Defaults to value
+        set in class init (True if none set).
+        :return: A list of QC output files. In case of a complete run that is one file for .ap and three files for .lf.
+        """
         # If stream is explicitly given in run, overwrite value from init
         if stream is not None:
             self.stream = stream
@@ -96,6 +114,7 @@ class EphysQC(base.QC):
                 nc = spikeglx._get_nchannels_from_meta(self.data.ap_meta)
                 t0s = np.arange(TMIN, rl - SAMPLE_LENGTH, BATCHES_SPACING)
                 all_rms = np.zeros((2, nc - 1, t0s.shape[0]))
+                # If the ap.bin file is not present locally, stream it
                 if self.data.ap is None and self.stream is True:
                     _logger.warning(f'Streaming .ap data to compute RMS samples for probe {self.pid}')
                     for i, t0 in enumerate(tqdm(t0s)):
@@ -115,13 +134,16 @@ class EphysQC(base.QC):
                         destripe = dsp.destripe(raw, fs=self.data.ap.fs, neuropixel_version=1)
                         all_rms[0, :, i] = dsp.rms(raw)
                         all_rms[1, :, i] = dsp.rms(destripe)
+                # Calculate the median RMS across all samples per channel
                 median_rms = np.median(all_rms, axis=-1)
                 np.save(rms_file, median_rms)
             qc_files.append(rms_file)
 
-            self.metrics['apRms_p10'] = np.format_float_scientific(np.percentile(median_rms, 90), precision=2)
-            self.metrics['apRms_p90'] = np.format_float_scientific(np.percentile(median_rms, 10), precision=2)
-
+            for p in [10, 90]:
+                self.metrics[f'apRms_p{p}_raw'] = np.format_float_scientific(np.percentile(median_rms[0, :], p),
+                                                                             precision=2)
+                self.metrics[f'apRms_p{p}_proc'] = np.format_float_scientific(np.percentile(median_rms[1, :], p),
+                                                                              precision=2)
             if update:
                 self.update_extended_qc(self.metrics)
                 # self.update(outcome)
