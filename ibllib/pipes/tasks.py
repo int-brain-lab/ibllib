@@ -124,13 +124,13 @@ class Task(abc.ABC):
         """
         assert one
         if self.location == 'server':
-            self._register_datasets_server(one=one, **kwargs)
+            return self._register_datasets_server(one=one, **kwargs)
         elif self.location == 'remote':
-            self._register_datasets_remote(one=one, **kwargs)
+            return self._register_datasets_remote(one=one, **kwargs)
         elif self.location == 'SDSC':
-            self._register_datasets_SDSC(one=one, **kwargs)
+            return self._register_datasets_SDSC(one=one, **kwargs)
         elif self.location == 'AWS':
-            self._register_datasets_AWS(one=one, **kwargs)
+            return self._register_datasets_AWS(one=one, **kwargs)
 
     def _register_datasets_server(self, one=None, **kwargs):
 
@@ -210,10 +210,7 @@ class Task(abc.ABC):
             self._setUp_AWS()
 
     def _setUp_server(self):
-        """
-
-        :return:
-        """
+        pass
 
     def _setUp_remote(self):
 
@@ -247,8 +244,8 @@ class Task(abc.ABC):
     def tearDown(self):
         """
         Function to optionally overload to check results
-        :return:
         """
+        pass
 
     def _getData(self):
         """
