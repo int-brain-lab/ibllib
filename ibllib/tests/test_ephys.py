@@ -108,5 +108,6 @@ class TestEphysQC(unittest.TestCase):
             self.one.eid2path(self.eid).joinpath('raw_ephys_data', self.pname, fbin).unlink()
         self.qc.load_data()
 
+
 if __name__ == "__main__":
     unittest.main(exit=False, verbosity=2)

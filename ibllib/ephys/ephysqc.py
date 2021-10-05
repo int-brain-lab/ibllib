@@ -59,7 +59,7 @@ class EphysQC(base.QC):
         eid, pname = self.one.pid2eid(self.pid)
         self.probe_path = self.one.eid2path(eid).joinpath('raw_ephys_data', pname)
         # Check if there is at least one meta file available
-        meta_files = list(self.probe_path.rglob(f'*.meta'))
+        meta_files = list(self.probe_path.rglob('*.meta'))
         assert len(meta_files) != 0, f'No meta files in {self.probe_path}'
         # Check if there is no more than one meta file per type
         ap_meta = [meta for meta in meta_files if 'ap.meta' in meta.name]
@@ -124,8 +124,8 @@ class EphysQC(base.QC):
                         all_rms[0, :, i] = dsp.rms(raw)
                         all_rms[1, :, i] = dsp.rms(destripe)
                 elif self.data.ap is None and self.stream is not True:
-                    _logger.warning(f'Raw .ap data is not available locally. Run with stream=True in order to stream '
-                                    f'data for calculating RMS samples.')
+                    _logger.warning('Raw .ap data is not available locally. Run with stream=True in order to stream '
+                                    'data for calculating RMS samples.')
                 else:
                     _logger.info(f'Computing RMS samples for .ap data using local data in {self.probe_path}')
                     for i, t0 in enumerate(t0s):
