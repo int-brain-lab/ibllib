@@ -1,3 +1,7 @@
+## Release Notes 2.1
+### Release Notes 2.1.0
+- destriping as pykilosort internal pre-processing 
+- NP2 probe framework for splitting shanks and LFP band
 ## Release Notes 2.0.0
 ### Release Notes 2.0.1 2021-08-07
 - pykilosort error handling
