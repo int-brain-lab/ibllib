@@ -141,7 +141,7 @@ def sync_spike_sorting(ap_file, out_path):
     # get the list of output files
     out_files.extend([f for f in out_path.glob("*.*") if
                       f.name.startswith(('channels.', 'drift', 'clusters.', 'spikes.', 'templates.',
-                                         '_kilosort_', '_phy_spikes_subset'))])
+                                         '_kilosort_', '_phy_spikes_subset', '_ibl_log.info'))])
     return out_files, 0
 
 
