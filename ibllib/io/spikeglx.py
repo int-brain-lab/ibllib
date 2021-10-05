@@ -673,9 +673,10 @@ def download_raw_partial(url_cbin, url_ch, url_meta, first_chunk=0, last_chunk=0
     with open(ch_file, 'r') as f:
         cmeta = json.load(f)
 
-    # Get the first byte and number of bytes to download.
+    # Get the first sample index, and the number of samples to download.
     i0 = cmeta['chunk_bounds'][first_chunk]
     ns_stream = cmeta['chunk_bounds'][last_chunk + 1] - i0
+    total_samples = cmeta['chunk_bounds'][-1]
 
     if ch_file_stream.exists():
         with open(ch_file_stream, 'r') as f:
@@ -683,7 +684,7 @@ def download_raw_partial(url_cbin, url_ch, url_meta, first_chunk=0, last_chunk=0
 
         # if the cached version happens to be the same as the one on disk, just load it
         if (cmeta_stream.get('chopped_first_sample', None) == i0 and
-                cmeta_stream.get('chopped_total_samples', None) == ns_stream):
+                cmeta_stream.get('chopped_samples', None) == ns_stream):
             cbin_local_path_renamed = ch_file_stream.with_suffix('.cbin')
             assert cbin_local_path_renamed.exists()
             return Reader(cbin_local_path_renamed)
@@ -711,7 +712,8 @@ def download_raw_partial(url_cbin, url_ch, url_meta, first_chunk=0, last_chunk=0
     cmeta['sha1_uncompressed'] = None
     cmeta['chopped'] = True
     cmeta['chopped_first_sample'] = i0
-    cmeta['chopped_total_samples'] = ns_stream
+    cmeta['chopped_samples'] = ns_stream
+    cmeta['chopped_total_samples'] = total_samples
 
     with open(ch_file_stream, 'w') as f:
         json.dump(cmeta, f, indent=2, sort_keys=True)
