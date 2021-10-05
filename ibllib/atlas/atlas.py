@@ -15,6 +15,7 @@ _logger = logging.getLogger('ibllib')
 ALLEN_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5739., 5400., 332.])}
 """dict: Landmarks in Allen CCF coordinates (MLAPDV / um)."""
 
+
 def cart2sph(x, y, z):
     """
     Converts cartesian to spherical Coordinates
