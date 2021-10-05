@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory
 import numpy as np
 
 from ibllib.ephys import ephysqc, neuropixel
-from one.tests import TEST_DB_1, OFFLINE_ONLY
+from ibllib.tests import TEST_DB
 from ibllib.tests.fixtures import utils
 from one.api import ONE
 
@@ -60,12 +60,11 @@ class TestFpgaTask(unittest.TestCase):
         self.assertTrue(np.all([np.all(qct[k]) for k in qct]))
 
 
-@unittest.skipIf(OFFLINE_ONLY, 'online only test')
 class TestEphysQC(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.tempdir = TemporaryDirectory()
-        cls.one = ONE(**TEST_DB_1, cache_dir=cls.tempdir.name)
+        cls.one = ONE(**TEST_DB, cache_dir=cls.tempdir.name)
 
     @classmethod
     def tearDownClass(cls) -> None:
