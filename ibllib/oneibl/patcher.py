@@ -4,6 +4,7 @@ from pathlib import Path, PurePosixPath, WindowsPath
 import subprocess
 import logging
 from getpass import getpass
+import shutil
 
 import globus_sdk
 import iblutil.io.params as iopar
@@ -26,6 +27,7 @@ FTP_HOST = 'test.alyx.internationalbrainlab.org'
 FTP_PORT = 21
 DMZ_REPOSITORY = 'ibl_patcher'  # in alyx, the repository name containing the patched filerecords
 SDSC_ROOT_PATH = PurePosixPath('/mnt/ibl')
+SDSC_PATCH_PATH = PurePosixPath('/home/datauser/temp')
 
 
 def _run_command(cmd, dry=True):
@@ -420,10 +422,11 @@ class FTPPatcher(Patcher):
         params.save(par, client_key)  # Client params
         return iopar.from_dict(par)
 
-    def create_dataset(self, path, created_by='root', dry=False, repository=DMZ_REPOSITORY):
+    def create_dataset(self, path, created_by='root', dry=False, repository=DMZ_REPOSITORY,
+                       **kwargs):
         # overrides the superclass just to remove the server repository argument
         response = super().patch_dataset(path, created_by=created_by, dry=dry,
-                                         repository=repository, ftp=True)
+                                         repository=repository, ftp=True, **kwargs)
         # need to patch the file records to be consistent
         for ds in response:
             frs = ds['file_records']
@@ -473,3 +476,31 @@ class FTPPatcher(Patcher):
     def _rm(self, flatiron_path, dry=True):
         raise PermissionError("This Patcher does not have admin permissions to remove data "
                               "from the FlatIron server. ")
+
+
+class SDSCPatcher(Patcher):
+    """
+    This is used to patch data on the SDSC server
+    """
+    def __init__(self, one=None):
+        assert one
+        super().__init__(one=one)
+
+    def patch_datasets(self, file_list, **kwargs):
+        response = super().patch_datasets(file_list, **kwargs)
+
+        # TODO check the file records to see if they have local server ones
+        # If they do then need to remove file record and delete file from local server??
+
+        return response
+
+    def _scp(self, local_path, remote_path, dry=True):
+
+        _logger.info(f"Copy {local_path} to {remote_path}")
+        if not dry:
+            shutil.copy(local_path, remote_path)
+        return 0, ''
+
+    def _rm(self, flatiron_path, dry=True):
+        raise PermissionError("This Patcher does not have admin permissions to remove data "
+                              "from the FlatIron server")
