@@ -12,8 +12,8 @@ from one.webclient import http_download_file
 import one.params
 
 _logger = logging.getLogger('ibllib')
-ALLEN_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5739, 5400, 332])}
-
+ALLEN_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5739., 5400., 332.])}
+"""dict: Landmarks in Allen CCF coordinates (MLAPDV / um)."""
 
 def cart2sph(x, y, z):
     """
@@ -52,13 +52,13 @@ class BrainCoordinates:
     contiguous on disk assuming C-ordering: V[iap, iml, idv]
 
     nxyz: number of elements along each cartesian axis (nx, ny, nz) = (nml, nap, ndv)
-    xyz0: coordinates of the element volume[0, 0, 0]] in the coordinate space
+    xyz0: coordinates of the element volume[0, 0, 0] in the coordinate space
     dxyz: spatial interval of the volume along the 3 dimensions
     """
 
-    def __init__(self, nxyz, xyz0=[0, 0, 0], dxyz=[1, 1, 1]):
+    def __init__(self, nxyz, xyz0=(0, 0, 0), dxyz=(1, 1, 1)):
         if np.isscalar(dxyz):
-            dxyz = [dxyz for i in range(3)]
+            dxyz = [dxyz for _ in range(3)]
         self.x0, self.y0, self.z0 = list(xyz0)
         self.dx, self.dy, self.dz = list(dxyz)
         self.nx, self.ny, self.nz = list(nxyz)
@@ -71,7 +71,7 @@ class BrainCoordinates:
     def nxyz(self):
         return np.array([self.nx, self.ny, self.nz])
 
-    """Methods ratios to indice"""
+    """Methods ratios to indices"""
     def r2ix(self, r):
         return int((self.nx - 1) * r)
 
@@ -81,7 +81,7 @@ class BrainCoordinates:
     def r2iz(self, r):
         return int((self.nz - 1) * r)
 
-    """Methods distance to indice"""
+    """Methods distance to indices"""
     @staticmethod
     def _round(i, round=True):
         nanval = 0
@@ -174,8 +174,9 @@ class BrainAtlas:
     Currently this is designed for the AllenCCF at several resolutions,
     yet this class can be used for other atlases arises.
     """
-    def __init__(self, image, label, dxyz, regions, iorigin=[0, 0, 0],
-                 dims2xyz=[0, 1, 2], xyz2dims=[0, 1, 2]):
+
+    def __init__(self, image, label, dxyz, regions, iorigin=(0, 0, 0),
+                 dims2xyz=(0, 1, 2), xyz2dims=(0, 1, 2)):
         """
         self.image: image volume (ap, ml, dv)
         self.label: label volume (ap, ml, dv)
@@ -183,6 +184,8 @@ class BrainAtlas:
         self.regions: atlas.BrainRegions object
         self.top: 2d np array (ap, ml) containing the z-coordinate (m) of the surface of the brain
         self.dims2xyz and self.zyz2dims: map image axis order to xyz coordinates order
+
+        :param dxyz: spatial interval of the volume along the 3 dimensions, in meters
         """
         self.image = image
         self.label = label
@@ -194,7 +197,7 @@ class BrainAtlas:
         # create the coordinate transform object that maps volume indices to real world coordinates
         nxyz = np.array(self.image.shape)[self.dims2xyz]
         bc = BrainCoordinates(nxyz=nxyz, xyz0=(0, 0, 0), dxyz=dxyz)
-        self.bc = BrainCoordinates(nxyz=nxyz, xyz0=- bc.i2xyz(iorigin), dxyz=dxyz)
+        self.bc = BrainCoordinates(nxyz=nxyz, xyz0=-bc.i2xyz(iorigin), dxyz=dxyz)
 
         """
         Get the volume top, bottom, left and right surfaces, and from these the outer surface of
@@ -319,7 +322,7 @@ class BrainAtlas:
         """
         From line coordinates, extracts the tilted plane containing the line from the 3D volume
         :param xyz: np.array: points defining a probe trajectory in 3D space (xyz triplets)
-        if more than 2 points are provided will take the best fit
+        if more than 2 points are provided will take the best fit.  Units should be meters.
         :param axis:
             0: along ml = sagittal-slice
             1: along ap = coronal-slice
@@ -372,7 +375,7 @@ class BrainAtlas:
          (2 = z for horizontal slice)
          (1 = y for coronal slice)
          (0 = x for sagittal slice)
-        :return:
+        :return: Extent along axis, in micrometers
         """
         if axis == 0:
             extent = np.r_[self.bc.ylim, np.flip(self.bc.zlim)] * 1e6
@@ -380,6 +383,8 @@ class BrainAtlas:
             extent = np.r_[self.bc.xlim, np.flip(self.bc.zlim)] * 1e6
         elif axis == 2:
             extent = np.r_[self.bc.xlim, np.flip(self.bc.ylim)] * 1e6
+        else:
+            raise ValueError('Axis must be 0, 1, or 2')
         return extent
 
     def slice(self, coordinate, axis, volume='image', mode='raise', region_values=None,
@@ -589,8 +594,11 @@ class Insertion:
     Insertion.from_dict
     """
     x: float
+    """float: Lateral distance from bregma, in meters"""
     y: float
+    """float: Anterior distance from bregma, in meters"""
     z: float
+    """float: Ventral distance from bregma, in meters"""
     phi: float
     theta: float
     depth: float
@@ -664,13 +672,14 @@ class Insertion:
 
     @staticmethod
     def _get_surface_intersection(traj, brain_atlas, surface='top'):
-
-        distance = traj.mindist(brain_atlas.srf_xyz)
+        if not isinstance(brain_atlas, AllenAtlas):
+            raise NotImplementedError('Brain atlas type not supported')
+        distance = traj.mindist(brain_atlas.srf_xyz)  # In um
         dist_sort = np.argsort(distance)
         # In some cases the nearest two intersection points are not the top and bottom of brain
         # So we find all intersection points that fall within one voxel and take the one with
         # highest dV to be entry and lowest dV to be exit
-        idx_lim = np.sum(distance[dist_sort] * 1e6 < brain_atlas.res_um)
+        idx_lim = np.sum(distance[dist_sort] < brain_atlas.res_um)
         dist_lim = dist_sort[0:idx_lim]
         z_val = brain_atlas.srf_xyz[dist_lim, 2]
         if surface == 'top':
@@ -713,7 +722,7 @@ class Insertion:
 class AllenAtlas(BrainAtlas):
     """
     Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
-    using the IBL Bregma and coordinate system
+    using the IBL Bregma and coordinate system.  All coordinates are in micrometers.
     """
 
     def __init__(self, res_um=25, scaling=np.array([1, 1, 1]), mock=False, hist_path=None):
@@ -733,7 +742,7 @@ class AllenAtlas(BrainAtlas):
         # we use Bregma as the origin
         self.res_um = res_um
         ibregma = (ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / self.res_um)
-        dxyz = self.res_um * 1e-6 * np.array([1, -1, -1]) * scaling
+        dxyz = self.res_um * np.array([1, -1, -1]) * scaling
         if mock:
             image, label = [np.zeros((528, 456, 320), dtype=np.int16) for _ in range(2)]
             label[:, :, 100:105] = 1327  # lookup index for retina, id 304325711 (no id 1327)

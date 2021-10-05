@@ -86,7 +86,7 @@ class TestAtlasSlicesConversion(unittest.TestCase):
         self.assertTrue(ba.slice(axis=2, coordinate=.002).shape == (ny, nx))  # horizontal
         # tests out of bound
         with self.assertRaises(IndexError):
-            ba.slice(axis=1, coordinate=123)
+            ba.slice(axis=1, coordinate=123e6)
         self.assertTrue(ba.slice(axis=1, coordinate=21, mode='clip').shape == (nx, nz))
         """
         here we test the different volumes and mappings
@@ -193,7 +193,8 @@ class TestInsertion(unittest.TestCase):
                               [0.002489, -0.004275, -0.004893],
                               [0.002439, -0.004375, -0.005093],
                               [0.002364, -0.0044, -0.005418]])
-        insertion = Insertion.from_track(xyz_track, brain_atlas)
+        # brain_atlas (AllenAtlas) in um; xyz_track in m -> converted to um
+        insertion = Insertion.from_track(xyz_track * 1e6, brain_atlas)
         self.assertTrue(abs(insertion.theta - 10.58704241) < 1e6)
         # Test that the entry and exit intersection are computed properly
         brain_entry = insertion.get_brain_entry(insertion.trajectory, brain_atlas)
