@@ -75,7 +75,7 @@ class NP2Converter:
         been split into shanks. If we are sets flag and prevents further processing occurring
         :return:
         """
-        if self.sr.meta.get(f'{self.np_version}_shank', None):
+        if self.sr.meta.get(f'{self.np_version}_shank', None) is not None:
             self.already_processed = True
         else:
             self.already_processed = False
