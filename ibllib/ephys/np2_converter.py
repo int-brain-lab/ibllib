@@ -4,6 +4,7 @@ import scipy.signal
 import numpy as np
 from pathlib import Path
 import copy
+import shutil
 import logging
 _logger = logging.getLogger('ibllib')
 
@@ -14,17 +15,19 @@ class NP2Converter:
     individual shanks
     """
 
-    def __init__(self, ap_file, post_check=True, delete_original=False):
+    def __init__(self, ap_file, post_check=True, delete_original=False, compress=True):
         """
         :param ap_file: ap.bin spikeglx file to process
         :param post_check: whether to apply post-check integrity test to ensure split content is
         identical to original content (only applicable to NP2.4)
         :param delete_original: whether to delete the original ap file after data has been
+        :param compress: whether to apply mtscomp to extracted .bin files
         split into shanks (only applicable to NP2.4)
         """
         self.ap_file = Path(ap_file)
         self.sr = spikeglx.Reader(ap_file)
         self.post_check = post_check
+        self.compress = compress
         self.delete_original = delete_original
         self.np_version = spikeglx._get_neuropixel_version_from_meta(self.sr.meta)
         self.check_metadata()
@@ -75,7 +78,7 @@ class NP2Converter:
         been split into shanks. If we are sets flag and prevents further processing occurring
         :return:
         """
-        if self.sr.meta.get(f'{self.np_version}_shank', None):
+        if self.sr.meta.get(f'{self.np_version}_shank', None) is not None:
             self.already_processed = True
         else:
             self.already_processed = False
@@ -142,8 +145,10 @@ class NP2Converter:
 
         if self.post_check:
             self.check_NP24()
+        if self.compress:
+            self.compress_NP24(overwrite=overwrite)
         if self.delete_original:
-            self.delete()
+            self.delete_NP24()
 
         return 1
 
@@ -174,11 +179,15 @@ class NP2Converter:
             probe_path = self.ap_file.parent.parent.joinpath(label + chr(97 + int(sh)) + self.extra)
 
             if not probe_path.exists() or overwrite:
+                if self.sr.is_mtscomp:
+                    ap_file_bin = self.ap_file.with_suffix('.bin').name
+                else:
+                    ap_file_bin = self.ap_file.name
                 probe_path.mkdir(parents=True, exist_ok=True)
-                _shank_info['ap_file'] = probe_path.joinpath(self.ap_file.name)
+                _shank_info['ap_file'] = probe_path.joinpath(ap_file_bin)
                 _shank_info['ap_open_file'] = open(_shank_info['ap_file'], 'wb')
                 _shank_info['lf_file'] = probe_path.joinpath(
-                    self.ap_file.name.replace('ap', 'lf'))
+                    ap_file_bin.replace('ap', 'lf'))
                 _shank_info['lf_open_file'] = open(_shank_info['lf_file'], 'wb')
             else:
                 self.already_exists = True
@@ -210,6 +219,7 @@ class NP2Converter:
         wg = WindowGenerator(self.nsamples, self.samples_window, self.samples_overlap)
 
         for first, last in wg.firstlast:
+
             chunk_lf = self.extract_lfp(self.sr[first:last, :self.napch].T)
             chunk_lf_sync = self.extract_lfp_sync(self.sr[first:last, self.idxsyncch:].T)
 
@@ -223,6 +233,9 @@ class NP2Converter:
         self._closefiles(etype='lf')
 
         self._writemetadata_lf()
+
+        if self.compress:
+            self.compress_NP21(overwrite=overwrite)
 
         return 1
 
@@ -242,8 +255,9 @@ class NP2Converter:
         shank_info = {}
         self.already_exists = False
 
-        lf_file = self.ap_file.parent.joinpath(self.ap_file.name.replace('ap', 'lf'))
-        if not lf_file.exists() or overwrite:
+        lf_file = self.ap_file.parent.joinpath(self.ap_file.name.replace('ap', 'lf')).with_suffix('.bin')
+        lf_cbin_file = lf_file.with_suffix('.cbin')
+        if not (lf_file.exists() or lf_cbin_file.exists()) or overwrite:
             for sh in n_shanks:
                 _shank_info = {}
                 # channels for individual shank + sync channel
@@ -293,6 +307,58 @@ class NP2Converter:
 
         self.check_completed = True
 
+    def compress_NP24(self, overwrite=False, **kwargs):
+        """
+        Compress spikeglx files
+        :return:
+        """
+        for sh in self.shank_info.keys():
+            bin_file = self.shank_info[sh]['ap_file']
+            if overwrite:
+                cbin_file = bin_file.with_suffix('.cbin')
+                cbin_file.unlink()
+
+            sr_ap = spikeglx.Reader(bin_file)
+            cbin_file = sr_ap.compress_file(**kwargs)
+            sr_ap.close()
+            bin_file.unlink()
+            self.shank_info[sh]['ap_file'] = cbin_file
+
+            bin_file = self.shank_info[sh]['lf_file']
+            if overwrite:
+                cbin_file = bin_file.with_suffix('.cbin')
+                cbin_file.unlink()
+            sr_lf = spikeglx.Reader(bin_file)
+            cbin_file = sr_lf.compress_file(**kwargs)
+            sr_lf.close()
+            bin_file.unlink()
+            self.shank_info[sh]['lf_file'] = cbin_file
+
+
+    def compress_NP21(self, overwrite=False):
+        """
+        Compress spikeglx files
+        :return:
+        """
+        for sh in self.shank_info.keys():
+            if not self.sr.is_mtscomp:
+                cbin_file = self.sr.compress_file()
+                self.sr.close()
+                self.ap_file.unlink()
+                self.ap_file = cbin_file
+                self.sr = spikeglx.Reader(self.ap_file)
+
+            bin_file = self.shank_info[sh]['lf_file']
+            if overwrite:
+                cbin_file = bin_file.with_suffix('.cbin')
+                cbin_file.unlink()
+            sr_lf = spikeglx.Reader(bin_file)
+            cbin_file = sr_lf.compress_file()
+            sr_lf.close()
+            bin_file.unlink()
+            self.shank_info[sh]['lf_file'] = cbin_file
+
+
     def delete_NP24(self):
         """
         Delete the original ap file that doesn't has all shanks in one file
@@ -300,8 +366,10 @@ class NP2Converter:
         :return:
         """
         if self.check_completed and self.delete_original:
-            # TODO need to delete the original wahhhhh
-            pass
+            _logger.info(f'Removing original files in folder {self.ap_file.parent}')
+            self.sr.close()
+            shutil.rmtree(self.ap_file.parent)
+
 
     def _split2shanks(self, chunk, etype='ap'):
         """
