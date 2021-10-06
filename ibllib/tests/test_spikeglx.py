@@ -238,6 +238,11 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
     def setUp(self):
         self.workdir = Path(__file__).parent / 'fixtures' / 'io' / 'spikeglx'
         self.meta_files = list(Path.glob(self.workdir, '*.meta'))
+        self.tmpdir = Path(tempfile.gettempdir()) / 'test_meta'
+        self.tmpdir.mkdir(exist_ok=True)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmpdir)
 
     def test_fix_meta_file(self):
         # test the case where the meta file shows a larger amount of samples
@@ -283,6 +288,22 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='glx_test') as tdir:
             bin_3b = spikeglx._mock_spikeglx_file(
                 Path(tdir).joinpath('sample3B_g0_t0.imec1.ap.bin'),
+                self.workdir / 'sample3B_g0_t0.imec1.ap.meta',
+                ns=32, nc=385, sync_depth=16)
+            self.assert_read_glx(bin_3b)
+
+    def test_read_NP21(self):
+        with tempfile.TemporaryDirectory(prefix='glx_test') as tdir:
+            bin_3b = spikeglx._mock_spikeglx_file(
+                Path(tdir).joinpath('sampleNP2.1_g0_t0.imec.ap.bin'),
+                self.workdir / 'sample3B_g0_t0.imec1.ap.meta',
+                ns=32, nc=385, sync_depth=16)
+            self.assert_read_glx(bin_3b)
+
+    def test_read_NP24(self):
+        with tempfile.TemporaryDirectory(prefix='glx_test') as tdir:
+            bin_3b = spikeglx._mock_spikeglx_file(
+                Path(tdir).joinpath('sampleNP2.4_g0_t0.imec.ap.bin'),
                 self.workdir / 'sample3B_g0_t0.imec1.ap.meta',
                 ns=32, nc=385, sync_depth=16)
             self.assert_read_glx(bin_3b)
@@ -355,32 +376,42 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
 
     def testGetSerialNumber(self):
         self.meta_files.sort()
-        expected = [641251510, 641251510, 641251510, 17216703352, 18005116811, 18005116811, None]
+        expected = [641251510, 641251510, 641251510, 17216703352, 18005116811, 18005116811, None,
+                    19011116954, 19011110513]
         for meta_data_file, res in zip(self.meta_files, expected):
             md = spikeglx.read_meta_data(meta_data_file)
             self.assertEqual(md.serial, res)
 
     def testGetRevisionAndType(self):
         for meta_data_file in self.meta_files:
+
             md = spikeglx.read_meta_data(meta_data_file)
             self.assertTrue(len(md.keys()) >= 37)
-            # test getting revision
-            revision = meta_data_file.name[6:8]
-            self.assertEqual(spikeglx._get_neuropixel_version_from_meta(md)[0:2], revision)
-            # test getting acquisition type
+
+            if meta_data_file.name.split('.')[-2] in ['lf', 'ap']:
+                # for ap and lf look for version number
+                # test getting revision
+                revision = meta_data_file.name[6:8]
+                self.assertEqual(spikeglx._get_neuropixel_version_from_meta(md)[0:2], revision)
+
+            # test getting acquisition type for all ap, lf and nidq
             type = meta_data_file.name.split('.')[-2]
             self.assertEqual(spikeglx._get_type_from_meta(md), type)
 
     def testReadChannelGainAPLF(self):
         for meta_data_file in self.meta_files:
-            print(meta_data_file)
             if meta_data_file.name.split('.')[-2] not in ['lf', 'ap']:
                 continue
             md = spikeglx.read_meta_data(meta_data_file)
             cg = spikeglx._conversion_sample2v_from_meta(md)
-            i2v = md.get('imAiRangeMax') / 512
-            self.assertTrue(np.all(cg['lf'][0:-1] == i2v / 250))
-            self.assertTrue(np.all(cg['ap'][0:-1] == i2v / 500))
+            if 'NP2' in spikeglx._get_neuropixel_version_from_meta(md):
+                i2v = md.get('imAiRangeMax') / int(md.get('imMaxInt'))
+                self.assertTrue(np.all(cg['lf'][0:-1] == i2v / 80))
+                self.assertTrue(np.all(cg['ap'][0:-1] == i2v / 80))
+            else:
+                i2v = md.get('imAiRangeMax') / 512
+                self.assertTrue(np.all(cg['lf'][0:-1] == i2v / 250))
+                self.assertTrue(np.all(cg['ap'][0:-1] == i2v / 500))
             # also test consistent dimension with nchannels
             nc = spikeglx._get_nchannels_from_meta(md)
             self.assertTrue(len(cg['ap']) == len(cg['lf']) == nc)
@@ -418,3 +449,21 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
         for m in range(1, 16):
             self.assertEqual(np.sum(out[m]), 1)
             self.assertEqual(out[m, m - 1], 1)
+
+    def testWriteMetaData(self):
+        for meta_data_file in self.meta_files:
+            md = spikeglx.read_meta_data(meta_data_file)
+            tmp_meta = self.tmpdir.joinpath(meta_data_file.name)
+            spikeglx.write_meta_data(md, tmp_meta)
+            md_new = spikeglx.read_meta_data(tmp_meta)
+
+            self.assertEqual(md, md_new)
+
+    def testSaveSubset(self):
+        chns = np.r_[np.arange(0, 11), np.arange(50, 91), 384]
+        subset = spikeglx._get_savedChans_subset(chns)
+        self.assertEqual(subset, '0:10,50:90,384')
+
+        chns = np.r_[np.arange(30, 101), np.arange(250, 301), 384]
+        subset = spikeglx._get_savedChans_subset(chns)
+        self.assertEqual(subset, '30:100,250:300,384')

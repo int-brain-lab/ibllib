@@ -123,6 +123,9 @@ class CameraTimestampsFPGA(BaseExtractor):
                     count = count[:length]
                 else:
                     assert length == count.size, 'fewer counts than frames'
+                raw_ts = fpga_times[self.label]
+                assert raw_ts.shape[0] > 0, 'no timestamps found in channel indicated for ' \
+                                            f'{self.label} camera'
                 return align_with_audio(raw_ts, audio, gpio, count,
                                         display=display,
                                         extrapolate_missing=extrapolate_missing)
