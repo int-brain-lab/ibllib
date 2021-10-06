@@ -8,13 +8,16 @@ import shutil
 import numpy as np
 import pandas as pd
 from scipy import signal
+from tqdm import tqdm
 import one.alf.io as alfio
 from iblutil.util import Bunch
 
 from brainbox.metrics.single_units import spike_sorting_metrics
+from brainbox.io.spikeglx import stream as sglx_streamer
 from ibllib.ephys import sync_probes
 from ibllib.io import spikeglx
 import ibllib.dsp as dsp
+from ibllib.qc import base
 from ibllib.io.extractors import ephys_fpga, training_wheel
 from ibllib.misc import print_progress
 from phylib.io import model
@@ -25,18 +28,141 @@ _logger = logging.getLogger('ibllib')
 RMS_WIN_LENGTH_SECS = 3
 WELCH_WIN_LENGTH_SAMPLES = 1024
 NCH_WAVEFORMS = 32  # number of channels to be saved in templates.waveforms and channels.waveforms
+BATCHES_SPACING = 300
+TMIN = 40
+SAMPLE_LENGTH = 1
 
 
-def rmsmap(fbin):
+class EphysQC(base.QC):
+    """
+    A class for computing Ephys QC metrics.
+
+    :param probe_id: An existing and registered probe insertion ID.
+    :param one: An ONE instance pointing to the database the probe_id is registered with. Optional, will instantiate
+    default database if not given.
+    """
+
+    def __init__(self, probe_id, **kwargs):
+        super().__init__(probe_id, endpoint='insertions', **kwargs)
+        self.pid = probe_id
+        self.stream = kwargs.pop('stream', True)
+        keys = ('ap', 'ap_meta', 'lf', 'lf_meta')
+        self.data = Bunch.fromkeys(keys)
+        self.metrics = {}
+        self.outcome = 'NOT_SET'
+
+    def _ensure_required_data(self):
+        """
+        Ensures the datasets required for QC are available locally or remotely.
+        """
+        assert self.one is not None, 'ONE instance is required to ensure required data'
+        eid, pname = self.one.pid2eid(self.pid)
+        self.probe_path = self.one.eid2path(eid).joinpath('raw_ephys_data', pname)
+        # Check if there is at least one meta file available
+        meta_files = list(self.probe_path.rglob('*.meta'))
+        assert len(meta_files) != 0, f'No meta files in {self.probe_path}'
+        # Check if there is no more than one meta file per type
+        ap_meta = [meta for meta in meta_files if 'ap.meta' in meta.name]
+        assert not len(ap_meta) > 1, f'More than one ap.meta file in {self.probe_path}. Remove redundant files to run QC'
+        lf_meta = [meta for meta in meta_files if 'lf.meta' in meta.name]
+        assert not len(lf_meta) > 1, f'More than one lf.meta file in {self.probe_path}. Remove redundant files to run QC'
+
+    def load_data(self) -> None:
+        """
+        Load any locally available data.
+        """
+        # First sanity check
+        self._ensure_required_data()
+
+        _logger.info('Gathering data for QC')
+        # Load metadata and, if locally present, bin file
+        for dstype in ['ap', 'lf']:
+            # We already checked that there is not more than one meta file per type
+            meta_file = next(self.probe_path.rglob(f'*{dstype}.meta'), None)
+            if meta_file is None:
+                _logger.warning(f'No {dstype}.meta file in {self.probe_path}, skipping QC for {dstype} data.')
+            else:
+                self.data[f'{dstype}_meta'] = spikeglx.read_meta_data(meta_file)
+                bin_file = next(meta_file.parent.glob(f'*{dstype}.*bin'), None)
+                self.data[f'{dstype}'] = spikeglx.Reader(bin_file, open=True) if bin_file is not None else None
+
+    def run(self, update: bool = False, overwrite: bool = True, stream: bool = None, **kwargs) -> (str, dict):
+        """
+        Run QC on samples of the .ap file, and on the entire file for .lf data if it is present.
+
+        :param update: bool, whether to update the qc json fields for this probe. Default is False.
+        :param overwrite: bool, whether to overwrite locally existing outputs of this function. Default is False.
+        :param stream: bool, whether to stream the samples of the .ap data if not locally available. Defaults to value
+        set in class init (True if none set).
+        :return: A list of QC output files. In case of a complete run that is one file for .ap and three files for .lf.
+        """
+        # If stream is explicitly given in run, overwrite value from init
+        if stream is not None:
+            self.stream = stream
+        # Load data
+        self.load_data()
+        qc_files = []
+        # If ap meta file present, calculate median RMS per channel before and after destriping
+        # TODO: This should go a a separate function once we have a spikeglx.Streamer that behaves like the Reader
+        if self.data.ap_meta:
+            rms_file = self.probe_path.joinpath("_iblqc_ephysChannels.apRMS.npy")
+            if rms_file.exists() and not overwrite:
+                _logger.warning(f'File {rms_file} already exists and overwrite=False. Skipping RMS compute.')
+                median_rms = np.load(rms_file)
+            else:
+                rl = self.data.ap_meta.fileTimeSecs
+                nc = spikeglx._get_nchannels_from_meta(self.data.ap_meta)
+                t0s = np.arange(TMIN, rl - SAMPLE_LENGTH, BATCHES_SPACING)
+                all_rms = np.zeros((2, nc - 1, t0s.shape[0]))
+                # If the ap.bin file is not present locally, stream it
+                if self.data.ap is None and self.stream is True:
+                    _logger.warning(f'Streaming .ap data to compute RMS samples for probe {self.pid}')
+                    for i, t0 in enumerate(tqdm(t0s)):
+                        sr, _ = sglx_streamer(self.pid, t0=t0, nsecs=1, one=self.one)
+                        raw = sr[:, :-1].T
+                        destripe = dsp.destripe(raw, fs=sr.fs, neuropixel_version=1)
+                        all_rms[0, :, i] = dsp.rms(raw)
+                        all_rms[1, :, i] = dsp.rms(destripe)
+                elif self.data.ap is None and self.stream is not True:
+                    _logger.warning('Raw .ap data is not available locally. Run with stream=True in order to stream '
+                                    'data for calculating RMS samples.')
+                else:
+                    _logger.info(f'Computing RMS samples for .ap data using local data in {self.probe_path}')
+                    for i, t0 in enumerate(t0s):
+                        sl = slice(int(t0 * self.data.ap.fs), int((t0 + SAMPLE_LENGTH) * self.data.ap.fs))
+                        raw = self.data.ap[sl, :-1].T
+                        destripe = dsp.destripe(raw, fs=self.data.ap.fs, neuropixel_version=1)
+                        all_rms[0, :, i] = dsp.rms(raw)
+                        all_rms[1, :, i] = dsp.rms(destripe)
+                # Calculate the median RMS across all samples per channel
+                median_rms = np.median(all_rms, axis=-1)
+                np.save(rms_file, median_rms)
+            qc_files.append(rms_file)
+
+            for p in [10, 90]:
+                self.metrics[f'apRms_p{p}_raw'] = np.format_float_scientific(np.percentile(median_rms[0, :], p),
+                                                                             precision=2)
+                self.metrics[f'apRms_p{p}_proc'] = np.format_float_scientific(np.percentile(median_rms[1, :], p),
+                                                                              precision=2)
+            if update:
+                self.update_extended_qc(self.metrics)
+                # self.update(outcome)
+
+        # If lf meta and bin file present, run the old qc on LF data
+        if self.data.lf_meta and self.data.lf:
+            qc_files.extend(extract_rmsmap(self.data.lf, out_folder=self.probe_path, overwrite=overwrite))
+
+        return qc_files
+
+
+def rmsmap(sglx):
     """
     Computes RMS map in time domain and spectra for each channel of Neuropixel probe
 
-    :param fbin: binary file in spike glx format (will look for attached metatdata)
-    :type fbin: str or pathlib.Path
+    :param sglx: Open spikeglx reader
     :return: a dictionary with amplitudes in channeltime space, channelfrequency space, time
      and frequency scales
     """
-    sglx = spikeglx.Reader(fbin, open=True)
     rms_win_length_samples = 2 ** np.ceil(np.log2(sglx.fs * RMS_WIN_LENGTH_SECS))
     # the window generator will generates window indices
     wingen = dsp.WindowGenerator(ns=sglx.ns, nswin=rms_win_length_samples, overlap=0)
@@ -68,33 +194,31 @@ def rmsmap(fbin):
     return win
 
 
-def extract_rmsmap(fbin, out_folder=None, overwrite=False):
+def extract_rmsmap(sglx, out_folder=None, overwrite=False):
     """
     Wrapper for rmsmap that outputs _ibl_ephysRmsMap and _ibl_ephysSpectra ALF files
 
-    :param fbin: binary file in spike glx format (will look for attached metatdata)
+    :param sglx: Open spikeglx Reader with data for which to compute rmsmap
     :param out_folder: folder in which to store output ALF files. Default uses the folder in which
      the `fbin` file lives.
     :param overwrite: do not re-extract if all ALF files already exist
     :param label: string or list of strings that will be appended to the filename before extension
     :return: None
     """
-    _logger.info(f"Computing QC for {fbin}")
-    sglx = spikeglx.Reader(fbin)
-    # check if output ALF files exist already:
     if out_folder is None:
-        out_folder = Path(fbin).parent
+        out_folder = sglx.file_bin.parent
     else:
         out_folder = Path(out_folder)
+    _logger.info(f"Computing RMS map for .{sglx.type} data in {out_folder}")
     alf_object_time = f'ephysTimeRms{sglx.type.upper()}'
     alf_object_freq = f'ephysSpectralDensity{sglx.type.upper()}'
     files_time = list(out_folder.glob(f"_iblqc_{alf_object_time}*"))
     files_freq = list(out_folder.glob(f"_iblqc_{alf_object_freq}*"))
     if (len(files_time) == 2 == len(files_freq)) and not overwrite:
-        _logger.warning(f'{fbin.name} QC already exists, skipping. Use overwrite option.')
+        _logger.warning(f'RMS map already exists for .{sglx.type} data in {out_folder}, skipping. Use overwrite option.')
         return files_time + files_freq
     # crunch numbers
-    rms = rmsmap(fbin)
+    rms = rmsmap(sglx)
     # output ALF files, single precision with the optional label as suffix before extension
     if not out_folder.exists():
         out_folder.mkdir()
