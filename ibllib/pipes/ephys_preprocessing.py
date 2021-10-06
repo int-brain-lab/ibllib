@@ -21,6 +21,7 @@ from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
 from ibllib.dsp import rms
+from ibllib.io.extractors import signatures
 
 _logger = logging.getLogger("ibllib")
 
@@ -56,6 +57,7 @@ class RawEphysQC(tasks.Task):
     io_charge = 30  # this jobs reads raw ap files
     priority = 10  # a lot of jobs depend on this one
     level = 0  # this job doesn't depend on anything
+    input_files = signatures.RAWEPHYSQC
 
     def _run(self, overwrite=False):
         qc_files = ephysqc.raw_qc_session(self.session_path, overwrite=overwrite)
@@ -94,6 +96,7 @@ class SpikeSorting(tasks.Task):
     )
     SPIKE_SORTER_NAME = 'pykilosort'
     PYKILOSORT_REPO = Path.home().joinpath('Documents/PYTHON/SPIKE_SORTING/pykilosort')
+    input_files = signatures.SPIKESORTING
 
     @staticmethod
     def _sample2v(ap_file):
@@ -131,21 +134,17 @@ class SpikeSorting(tasks.Task):
         return info.decode("utf-8").strip()
 
     def _run_pykilosort(self, ap_file):
-        f"""
+        """
         Runs the ks2 matlab spike sorting for one probe dataset
-        the raw spike sorting output can either be with the probe (<1.5.5) or in the
-        session_path/spike_sorters/{self.SPIKE_SORTER_NAME}/probeXX folder
+        the raw spike sorting output is in session_path/spike_sorters/{self.SPIKE_SORTER_NAME}/probeXX folder
+        (discontinued support for old spike sortings in the probe folder <1.5.5)
         :return: path of the folder containing ks2 spike sorting output
         """
         self.version = self._fetch_pykilosort_version(self.PYKILOSORT_REPO)
         label = ap_file.parts[-2]  # this is usually the probe name
         sorter_dir = self.session_path.joinpath("spike_sorters", self.SPIKE_SORTER_NAME, label)
-        FORCE_RERUN = True
+        FORCE_RERUN = False
         if not FORCE_RERUN:
-            if ap_file.parent.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log").exists():
-                _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
-                             f" found for {ap_file}, skipping.")
-                return ap_file.parent
             if sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log").exists():
                 _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
                              f" found in {sorter_dir}, skipping.")
@@ -198,19 +197,21 @@ class SpikeSorting(tasks.Task):
         shutil.rmtree(temp_dir, ignore_errors=True)
         return sorter_dir
 
-    def _run(self, overwrite=False):
+    def _run(self, probes=None):
         """
         Multiple steps. For each probe:
         - Runs ks2 (skips if it already ran)
         - synchronize the spike sorting
         - output the probe description files
-        :param overwrite:
+        :param probes: (list of str) if provided, will only run spike sorting for specified probe names
         :return: list of files to be registered on database
         """
         efiles = spikeglx.glob_ephys_files(self.session_path)
         ap_files = [(ef.get("ap"), ef.get("label")) for ef in efiles if "ap" in ef.keys()]
         out_files = []
         for ap_file, label in ap_files:
+            if isinstance(probes, list) and label not in probes:
+                continue
             try:
                 ks2_dir = self._run_pykilosort(ap_file)  # runs ks2, skips if it already ran
                 probe_out_path = self.session_path.joinpath("alf", label, self.SPIKE_SORTER_NAME)
@@ -274,6 +275,7 @@ class EphysVideoCompress(tasks.Task):
 class EphysTrials(tasks.Task):
     priority = 90
     level = 1
+    input_files = signatures.EPHYSTRIALS
 
     def _behaviour_criterion(self):
         """
@@ -442,6 +444,7 @@ class EphysPassive(tasks.Task):
     cpu = 1
     io_charge = 90
     level = 1
+    input_files = signatures.EPHYSPASSIVE
 
     def _run(self):
         """returns a list of pathlib.Paths. """

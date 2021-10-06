@@ -261,8 +261,8 @@ class WindowGenerator(object):
         """
         return np.array([(first + (last - first - 1) / 2) / fs for first, last in self.firstlast])
 
-    def print_progress(self):
+    def print_progress(self, desc=''):
         """
         Prints progress using a terminal progress bar
         """
-        print_progress(self.iw, self.nwin)
+        print_progress(self.iw, self.nwin, prefix=desc)
