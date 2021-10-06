@@ -334,7 +334,6 @@ class NP2Converter:
             bin_file.unlink()
             self.shank_info[sh]['lf_file'] = cbin_file
 
-
     def compress_NP21(self, overwrite=False):
         """
         Compress spikeglx files
@@ -358,7 +357,6 @@ class NP2Converter:
             bin_file.unlink()
             self.shank_info[sh]['lf_file'] = cbin_file
 
-
     def delete_NP24(self):
         """
         Delete the original ap file that doesn't has all shanks in one file
@@ -369,7 +367,6 @@ class NP2Converter:
             _logger.info(f'Removing original files in folder {self.ap_file.parent}')
             self.sr.close()
             shutil.rmtree(self.ap_file.parent)
-
 
     def _split2shanks(self, chunk, etype='ap'):
         """
