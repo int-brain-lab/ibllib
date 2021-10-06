@@ -17,6 +17,7 @@ from ibllib.io.video import label_from_path
 from ibllib.io.extractors import ephys_fpga, ephys_passive, camera
 from ibllib.pipes import tasks
 from ibllib.pipes.training_preprocessing import TrainingRegisterRaw as EphysRegisterRaw
+from ibllib.pipes.misc import create_alyx_probe_insertions
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
@@ -60,7 +61,16 @@ class RawEphysQC(tasks.Task):
     input_files = signatures.RAWEPHYSQC
 
     def _run(self, overwrite=False):
-        qc_files = ephysqc.raw_qc_session(self.session_path, overwrite=overwrite)
+        eid = self.one.path2eid(self.session_path)
+        pids = [x['id'] for x in self.one.alyx.rest('insertions', 'list', session=eid)]
+        # Usually there should be two probes, if there are less, check if all probes are registered
+        if len(pids) < 2:
+            _logger.warning(f"{len(pids)} probes registered for session {eid}, trying to register from local data")
+            pids = [p['id'] for p in create_alyx_probe_insertions(self.session_path, one=self.one)]
+        qc_files = []
+        for pid in pids:
+            eqc = ephysqc.EphysQC(pid, one=self.one)
+            qc_files.extend(eqc.run(update=True, overwrite=overwrite))
         return qc_files
 
 
