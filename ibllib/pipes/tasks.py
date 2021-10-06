@@ -6,12 +6,19 @@ import importlib
 import time
 from _collections import OrderedDict
 import traceback
+import pandas as pd
+import numpy as np
+import shutil
 
 from graphviz import Digraph
 
 from ibllib.misc import version
 import one.params
+from one.alf.files import add_uuid_string
+from iblutil.io.parquet import np2str
 from ibllib.oneibl.registration import register_dataset
+from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_PATCH_PATH
+from one.util import filter_datasets
 
 
 _logger = logging.getLogger('ibllib')
@@ -31,9 +38,10 @@ class Task(abc.ABC):
     time_out_secs = None
     version = version.ibllib()
     log = ''
+    input_files = None
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
-                 machine=None, clobber=True):
+                 machine=None, clobber=True, aws=None, location='server'):
         self.taskid = taskid
         self.one = one
         self.session_path = session_path
@@ -44,6 +52,8 @@ class Task(abc.ABC):
             self.parents = []
         self.machine = machine
         self.clobber = clobber
+        self.location = location
+        self.aws = aws
 
     @property
     def name(self):
@@ -113,12 +123,60 @@ class Task(abc.ABC):
         :return:
         """
         assert one
+        if self.location == 'server':
+            return self._register_datasets_server(one=one, **kwargs)
+        elif self.location == 'remote':
+            return self._register_datasets_remote(one=one, **kwargs)
+        elif self.location == 'SDSC':
+            return self._register_datasets_SDSC(one=one, **kwargs)
+        elif self.location == 'AWS':
+            return self._register_datasets_AWS(one=one, **kwargs)
+
+    def _register_datasets_server(self, one=None, **kwargs):
+
         if self.outputs:
             if isinstance(self.outputs, list):
                 versions = [self.version for _ in self.outputs]
             else:
                 versions = [self.version]
+
             return register_dataset(self.outputs, one=one, versions=versions, **kwargs)
+
+    def _register_datasets_remote(self, one=None, **kwargs):
+
+        if self.outputs:
+            if isinstance(self.outputs, list):
+                versions = [self.version for _ in self.outputs]
+            else:
+                versions = [self.version]
+
+            ftp_patcher = FTPPatcher(one=one)
+            return ftp_patcher.create_dataset(path=self.outputs, created_by=self.one.alyx.user,
+                                              versions=versions, **kwargs)
+
+    def _register_datasets_SDSC(self, one=None, **kwargs):
+
+        if self.outputs:
+            if isinstance(self.outputs, list):
+                versions = [self.version for _ in self.outputs]
+            else:
+                versions = [self.version]
+
+            sdsc_patcher = SDSCPatcher(one=one)
+            return sdsc_patcher.patch_datasets(self.outputs, dry=False, versions=versions,
+                                               **kwargs)
+
+    def _register_datasets_AWS(self, one=None, **kwargs):
+        # GO through FTP patcher
+        if self.outputs:
+            if isinstance(self.outputs, list):
+                versions = [self.version for _ in self.outputs]
+            else:
+                versions = [self.version]
+
+            ftp_patcher = FTPPatcher(one=one)
+            return ftp_patcher.create_dataset(path=self.outputs, created_by=self.one.alyx.user,
+                                              versions=versions, **kwargs)
 
     def rerun(self):
         self.run(overwrite=True)
@@ -141,12 +199,84 @@ class Task(abc.ABC):
         Function to optionally overload to check inputs.
         :return:
         """
+        # if on local server don't do anything
+        if self.location == 'server':
+            self._setUp_server()
+        elif self.location == 'remote':
+            self._setUp_remote()
+        elif self.location == 'SDSC':
+            self._setUp_SDSC()
+        elif self.location == 'AWS':
+            self._setUp_AWS()
+
+    def _setUp_server(self):
+        pass
+
+    def _setUp_remote(self):
+
+        assert self.one
+        df = self._getData()
+        self.one._download_datasets(df)
+
+    def _setUp_SDSC(self):
+        assert self.one
+        df = self._getData()
+
+        SDSC_TMP = Path(SDSC_PATCH_PATH.joinpath(self.__class__.__name__))
+
+        for _, d in df.iterrows():
+            file_path = Path(d['session_path']).joinpath(d['rel_path'])
+            file_uuid = add_uuid_string(file_path, np2str(np.r_[d.name[0], d.name[1]]))
+            file_link = SDSC_TMP.joinpath(file_path)
+            file_link.parent.mkdir(exist_ok=True, parents=True)
+            file_link.symlink_to(
+                Path(SDSC_ROOT_PATH.joinpath(file_uuid)))
+
+        self.session_path = SDSC_TMP.joinpath(d['session_path'])
+
+    def _setUp_AWS(self):
+        assert self.aws
+        assert self.one
+
+        df = self._getData()
+        self.aws._download_datasets(df)
 
     def tearDown(self):
         """
         Function to optionally overload to check results
+        """
+        pass
+
+    def _getData(self):
+        """
+        Funtcion to optionally overload to download/ create links to data
+        Important when running tasks in remote or SDSC locations
         :return:
         """
+        assert self.one
+
+        # This will be improved by Olivier new filters
+        session_datasets = self.one.list_datasets(self.one.path2eid(self.session_path),
+                                                  details=True)
+        df = pd.DataFrame(columns=self.one._cache.datasets.columns)
+        for file in self.input_files:
+            df = df.append(filter_datasets(session_datasets, filename=file[0], collection=file[1],
+                           wildcards=True, assert_unique=False))
+        return df
+
+    def cleanUp(self):
+        """
+        Function to optionally overload to clean up
+        :return:
+        """
+        if self.location == 'SDSC':
+            self._cleanUp_SDSC()
+
+    def _cleanUp_SDSC(self):
+
+        # Double check we are dealing with the SDSC temp folder
+        assert SDSC_PATCH_PATH.parts[0:4] == self.session_path.parts[0:4]
+        shutil.rmtree(self.session_path)
 
 
 class Pipeline(abc.ABC):
@@ -281,7 +411,7 @@ class Pipeline(abc.ABC):
 
 
 def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
-                  max_md5_size=None, machine=None, clobber=True):
+                  max_md5_size=None, machine=None, clobber=True, location='server'):
     """
     Runs a single Alyx job and registers output datasets
     :param tdict:
@@ -294,6 +424,8 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     filesize to save time
     :param machine: string identifying the machine the task is run on, optional
     :param clobber: bool, if True any existing logs are overwritten, default is True
+    :param location: where you are running the task, 'server' - local lab server, 'remote' - any
+    compute node/ computer, 'SDSC' - flatiron compute node, 'AWS' - using data from aws s3
     :return:
     """
     registered_dsets = []
@@ -317,7 +449,8 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     exec_name = tdict['executable']
     strmodule, strclass = exec_name.rsplit('.', 1)
     classe = getattr(importlib.import_module(strmodule), strclass)
-    task = classe(session_path, one=one, taskid=tdict['id'], machine=machine, clobber=clobber)
+    task = classe(session_path, one=one, taskid=tdict['id'], machine=machine, clobber=clobber,
+                  location=location)
     # sets the status flag to started before running
     one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data={'status': 'Started'})
     status = task.run()
@@ -338,4 +471,5 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
         patch_data['status'] = 'Errored'
     # update task status on Alyx
     t = one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data=patch_data)
+    task.cleanUp()
     return t, registered_dsets
