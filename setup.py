@@ -57,6 +57,5 @@ setup(
     include_package_data=True,
     # external packages as dependencies
     install_requires=require,
-    entry_points={"console_scripts": ["onelight=oneibl.onelight:one",],},
     scripts={},
 )

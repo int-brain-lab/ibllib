@@ -1,21 +1,27 @@
-# Release Notes
+## Release Notes 2.1
+### Release Notes 2.1.0 2021-10-05
+- destriping as pykilosort internal pre-processing 
+- NP2 probe framework for splitting shanks and LFP band
+- Extension of task module to rerun from different locations
+### Release Notes 2.1.0 2021-10-06
+- RawEphysQC tasks computes median RMS from samples for .ap data (stored in _iblqc_ephysChannels.RMS)
+- New EphysQC class
 
-## **Release Notes 2.0**
-
-### Release Notes 2.0.10 - 2021-09-24
-
-- Single sourced ibllib version to constant **version** in ibllib/**init**.py
-
-### Release Notes 2.0.9 - 2021-09-19
-
-- spike sorting tasks re-run fully each time
-
-### Release Notes 2.0.8 - 2021-09-17
-
-- spike sorting tasks re-run fully each time
-
-### Release Notes 2.0.7 - 2021-09-15
-
+## Release Notes 2.0
+### Release Notes 2.0.1 2021-08-07
+- pykilosort error handling
+### Release Notes 2.0.2 2021-08-31
+- passive extraction robust to frame2ttl flickers
+### Release Notes 2.0.3 2021-09-03
+- pykilosort bugfix after low yield results
+### Release Notes 2.0.4 2021-09-10
+- ephys trials extraction when audio FPGA starts on up state
+### Release Notes 2.0.5 2021-09-13
+- pykilosort pipeline: output correct version number / fix log file name
+### Release Notes 2.0.6 2021-09-14
+- extraction fixes: passive extraction spacers and camera times format
+- small bugfix for the sequential selection
+### Release Notes 2.0.7 2021-09-15
 - ephys trials extraction: audio from FPGA: up-state and TTLs cleanup from camera wiring
 - passive extraction: improved spacers detection
 - ephyscellsqc: bugfix on probe creation for pykilosort subfolder

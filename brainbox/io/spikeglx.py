@@ -1,8 +1,12 @@
+import logging
+from pathlib import Path
 import time
+
 import numpy as np
-# (Previously required `os.path` to get file info before memmapping)
-# import os.path as op
+
 from ibllib.io import spikeglx
+
+_logger = logging.getLogger('ibllib')
 
 
 def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, car=True):
@@ -100,3 +104,52 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, car=T
         print('Done. ({})'.format(time.ctime()))
 
     return waveforms
+
+
+def stream(pid, t0, nsecs=1, one=None, cache_folder=None, dsets=None, typ='ap'):
+    """
+    NB: returned Reader object must be closed after use
+    :param pid: Probe UUID
+    :param t0: time of the first sample
+    :param nsecs: duration of the streamed data
+    :param one: An instance of ONE
+    :param cache_folder:
+    :param typ: 'ap' or 'lf'
+    :return: sr, dsets, t0
+    """
+    CHUNK_DURATION_SECS = 1  # the mtscomp chunk duration. Right now it's a constant
+    if nsecs > 10:
+        ValueError(f'Streamer works only with 10 or less seconds, set nsecs to lesss than {nsecs}')
+    assert one
+    assert typ in ['lf', 'ap']
+    t0 = np.floor(t0 / CHUNK_DURATION_SECS) * CHUNK_DURATION_SECS
+    if cache_folder is None:
+        samples_folder = Path(one.alyx._par.CACHE_DIR).joinpath('cache', typ)
+    sample_file_name = Path(f"{pid}_{str(int(t0)).zfill(5)}.meta")
+
+    if samples_folder.joinpath(sample_file_name).exists():
+        _logger.info(f'loading {sample_file_name} from cache')
+        sr = spikeglx.Reader(samples_folder.joinpath(sample_file_name).with_suffix('.bin'),
+                             open=True)
+        return sr, t0
+
+    eid, pname = one.pid2eid(pid)
+    cbin_rec = one.list_datasets(eid, collection=f"*{pname}", filename='*ap.*bin', details=True)
+    ch_rec = one.list_datasets(eid, collection=f"*{pname}", filename='*ap.ch', details=True)
+    meta_rec = one.list_datasets(eid, collection=f"*{pname}", filename='*ap.meta', details=True)
+    ch_file = one._download_datasets(ch_rec)[0]
+    one._download_datasets(meta_rec)[0]
+
+    first_chunk = int(t0 / CHUNK_DURATION_SECS)
+    last_chunk = int((t0 + nsecs) / CHUNK_DURATION_SECS) - 1
+
+    samples_folder.mkdir(exist_ok=True, parents=True)
+    sr = spikeglx.download_raw_partial(
+        one=one,
+        url_cbin=one.record2url(cbin_rec)[0],
+        url_ch=ch_file,
+        first_chunk=first_chunk,
+        last_chunk=last_chunk,
+        cache_dir=samples_folder)
+
+    return sr, t0
