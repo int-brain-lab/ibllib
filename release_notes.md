@@ -3,8 +3,11 @@
 - destriping as pykilosort internal pre-processing 
 - NP2 probe framework for splitting shanks and LFP band
 - Extension of task module to rerun from different locations
+### Release Notes 2.1.0 2021-10-06
+- RawEphysQC tasks computes median RMS from samples for .ap data (stored in _iblqc_ephysChannels.RMS)
+- New EphysQC class
 
-## Release Notes 2.0.0
+## Release Notes 2.0
 ### Release Notes 2.0.1 2021-08-07
 - pykilosort error handling
 ### Release Notes 2.0.2 2021-08-31
