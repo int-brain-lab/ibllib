@@ -160,16 +160,14 @@ def _get_attributes(dataset_types):
 
 
 def _load_channels_locations_from_disk(eid, collection=None, one=None, revision=None, brain_regions=None):
-    print('from disk')
+    _logger.debug('loading spike sorting from disk')
     channels = Bunch({})
     collections = one.list_collections(eid, filename='channels*', collection=collection, revision=revision)
     if len(collections) == 0:
         _logger.warning(f"eid {eid}: no collection found with collection filter: {collection}, revision: {revision}")
     probes = list(set([c.split('/')[1] for c in collections]))
-
     for probe in probes:
         probe_collection = _get_spike_sorting_collection(collections, probe)
-        print(probe_collection)
         channels[probe] = one.load_object(eid, collection=probe_collection, obj='channels')
         # if the spike sorter has not aligned data, try and get the alignment available
         if 'brainLocationIds_ccf_2017' not in channels[probe].keys():
