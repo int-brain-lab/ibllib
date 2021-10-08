@@ -220,7 +220,14 @@ def get_pipeline(session_path):
 
 
 def _get_pipeline_from_task_type(stype):
+    """
+    Returns the pipeline from the task type. Some tasks types directly define the pipeline
+    :param stype: session_type or task extractor type
+    :return:
+    """
     if 'ephys' in stype:
         return 'ephys'
     elif stype in ['habituation', 'training', 'biased', 'biased_opto']:
         return 'training'
+    else:
+        return stype
