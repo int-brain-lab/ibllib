@@ -11,7 +11,7 @@ import pandas as pd
 import one.alf.io as alfio
 
 from ibllib.misc import check_nvidia_driver
-from ibllib.ephys import ephysqc, spikes, sync_probes
+from ibllib.ephys import ephysqc, spikes, sync_probes, np2_converter
 from ibllib.io import ffmpeg, spikeglx
 from ibllib.io.video import label_from_path
 from ibllib.io.extractors import ephys_fpga, ephys_passive, camera
@@ -405,6 +405,17 @@ class EphysMtscomp(tasks.Task):
         Original bin file will be removed
         The registration flag created contains targeted file names at the root of the session
         """
+
+        # First detect all the ap files
+        ephys_files = spikeglx.glob_ephys_files(self.session_path)
+        ap_files = [file.get('ap', None) for file in ephys_files]
+
+        # Loop over them to see if any need converting
+        for ap in ap_files:
+            np_conv = np2_converter.NP2Converter(ap, delete_original=False)
+            status = np_conv.process()
+
+        # Then we do the  normal mtscomp job that will process everything
         out_files = []
         ephys_files = spikeglx.glob_ephys_files(self.session_path)
         ephys_files += spikeglx.glob_ephys_files(self.session_path, ext="ch")
