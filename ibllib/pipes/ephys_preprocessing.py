@@ -69,7 +69,7 @@ class RawEphysQC(tasks.Task):
             pids = [p['id'] for p in create_alyx_probe_insertions(self.session_path, one=self.one)]
         qc_files = []
         for pid in pids:
-            eqc = ephysqc.EphysQC(pid, one=self.one)
+            eqc = ephysqc.EphysQC(pid, session_path=self.session_path, one=self.one)
             qc_files.extend(eqc.run(update=True, overwrite=overwrite))
         return qc_files
 
