@@ -408,11 +408,12 @@ class EphysMtscomp(tasks.Task):
 
         # First detect all the ap files
         ephys_files = spikeglx.glob_ephys_files(self.session_path)
-        ap_files = [file.get('ap', None) for file in ephys_files]
+        ap_files = [file.get('ap') for file in ephys_files]
+        ap_files = [file for file in ap_files if file] # get rid of None values
 
         # Loop over them to see if any need converting
         for ap in ap_files:
-            np_conv = np2_converter.NP2Converter(ap, delete_original=False)
+            np_conv = np2_converter.NP2Converter(ap, delete_original=True)
             status = np_conv.process()
 
         # Then we do the  normal mtscomp job that will process everything
