@@ -20,6 +20,7 @@ def find_trial_ids(trials, side='all', choice='all', order='trial num', sort='id
     :return: np.array of trial ids, list of dividers to indicate how trials are sorted
     """
 
+
     if event:
         idx = ~np.isnan(trials[event])
     else:
@@ -202,23 +203,25 @@ def filter_by_trial(raster, trial_id):
     return raster[trial_id, :]
 
 
-def filter_correct_incorrect_left_right(trials, event_raster, event, order='trial num'):
+def filter_correct_incorrect_left_right(trials, event_raster, event, contrast, order='trial num'):
     """
     Return psth for left correct, left incorrect, right correct, right incorrect and raster
     sorted by these trials
     :param trials: trials object
     :param event_raster: output from get_event_aligned_activity
     :param event: event to align to e.g 'goCue_times', 'stimOn_times'
+    :param contrast: contrast of stimulus, pass in list/tuple of all contrasts that want to be
+    considered e.g [1, 0.5] would only look for trials with 100 % and 50 % contrast
     :param order: order to sort trials by either 'trial num' or 'reaction time'
     :return:
     """
-    trials_sorted, div = find_trial_ids(trials, sort='choice and side', event=event, order=order)
-    trials_lc, _ = find_trial_ids(trials, side='left', choice='correct', event=event, order=order)
+    trials_sorted, div = find_trial_ids(trials, sort='choice and side', event=event, order=order, contrast=contrast)
+    trials_lc, _ = find_trial_ids(trials, side='left', choice='correct', event=event, order=order, contrast=contrast)
     trials_li, _ = find_trial_ids(trials, side='left', choice='incorrect', event=event,
-                                  order=order)
-    trials_rc, _ = find_trial_ids(trials, side='right', choice='correct', event=event, order=order)
+                                  order=order, contrast=contrast)
+    trials_rc, _ = find_trial_ids(trials, side='right', choice='correct', event=event, order=order, contrast=contrast)
     trials_ri, _ = find_trial_ids(trials, side='right', choice='incorrect', event=event,
-                                  order=order)
+                                  order=order, contrast=contrast)
 
     psth = dict()
     mean, err = get_psth(event_raster, trials_lc)
@@ -241,18 +244,20 @@ def filter_correct_incorrect_left_right(trials, event_raster, event, order='tria
     return raster, psth
 
 
-def filter_correct_incorrect(trials, event_raster, event, order='trial num'):
+def filter_correct_incorrect(trials, event_raster, event, contrast, order='trial num'):
     """
     Return psth for correct and incorrect trials and raster sorted by correct incorrect
     :param trials: trials object
     :param event_raster: output from get_event_aligned_activity
     :param event: event to align to e.g 'goCue_times', 'stimOn_times'
+    :param contrast: contrast of stimulus, pass in list/tuple of all contrasts that want to be
+    considered e.g [1, 0.5] would only look for trials with 100 % and 50 % contrast
     :param order: order to sort trials by either 'trial num' or 'reaction time'
     :return:
     """
-    trials_sorted, div = find_trial_ids(trials, sort='choice', event=event, order=order)
-    trials_c, _ = find_trial_ids(trials, side='all', choice='correct', event=event, order=order)
-    trials_i, _ = find_trial_ids(trials, side='all', choice='incorrect', event=event, order=order)
+    trials_sorted, div = find_trial_ids(trials, sort='choice', event=event, order=order, contrast=contrast)
+    trials_c, _ = find_trial_ids(trials, side='all', choice='correct', event=event, order=order, contrast=contrast)
+    trials_i, _ = find_trial_ids(trials, side='all', choice='incorrect', event=event, order=order, contrast=contrast)
 
     psth = dict()
     mean, err = get_psth(event_raster, trials_c)
@@ -267,18 +272,20 @@ def filter_correct_incorrect(trials, event_raster, event, order='trial num'):
     return raster, psth
 
 
-def filter_left_right(trials, event_raster, event, order='trial num'):
+def filter_left_right(trials, event_raster, event, contrast, order='trial num'):
     """
     Return psth for left and right trials and raster sorted by left right
     :param trials: trials object
     :param event_raster: output from get_event_aligned_activity
     :param event: event to align to e.g 'goCue_times', 'stimOn_times'
+    :param contrast: contrast of stimulus, pass in list/tuple of all contrasts that want to be
+    considered e.g [1, 0.5] would only look for trials with 100 % and 50 % contrast
     :param order: order to sort trials by either 'trial num' or 'reaction time'
     :return:
     """
-    trials_sorted, div = find_trial_ids(trials, sort='choice', event=event, order=order)
-    trials_l, _ = find_trial_ids(trials, side='left', choice='all', event=event, order=order)
-    trials_r, _ = find_trial_ids(trials, side='right', choice='all', event=event, order=order)
+    trials_sorted, div = find_trial_ids(trials, sort='side', event=event, order=order, contrast=contrast)
+    trials_l, _ = find_trial_ids(trials, side='left', choice='all', event=event, order=order, contrast=contrast)
+    trials_r, _ = find_trial_ids(trials, side='right', choice='all', event=event, order=order, contrast=contrast)
 
     psth = dict()
     mean, err = get_psth(event_raster, trials_l)
@@ -293,22 +300,24 @@ def filter_left_right(trials, event_raster, event, order='trial num'):
     return raster, psth
 
 
-def filter_trials(trials, event_raster, event, order='trial num', sort='choice'):
+def filter_trials(trials, event_raster, event, contrast, order='trial num', sort='choice'):
     """
     Wrapper to get out psth and raster for trial choice
     :param trials: trials object
     :param event_raster: output from get_event_aligned_activity
     :param event: event to align to e.g 'goCue_times', 'stimOn_times'
+    :param contrast: contrast of stimulus, pass in list/tuple of all contrasts that want to be
+    considered e.g [1, 0.5] would only look for trials with 100 % and 50 % contrast
     :param order: order to sort trials by either 'trial num' or 'reaction time'
     :param sort: how to divide trials options are 'choice' (e.g correct vs incorrect), 'side'
     (e.g left vs right') and 'choice and side' (e.g correct vs incorrect and left vs right)
     :return:
     """
     if sort == 'choice':
-        raster, psth = filter_correct_incorrect(trials, event_raster, event, order)
+        raster, psth = filter_correct_incorrect(trials, event_raster, event, contrast, order)
     elif sort == 'side':
-        raster, psth = filter_left_right(trials, event_raster, event, order)
+        raster, psth = filter_left_right(trials, event_raster, event, contrast, order)
     elif sort == 'choice and side':
-        raster, psth = filter_correct_incorrect_left_right(trials, event_raster, event, order)
+        raster, psth = filter_correct_incorrect_left_right(trials, event_raster, event, contrast, order)
 
     return raster, psth
