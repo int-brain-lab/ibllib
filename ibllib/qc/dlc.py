@@ -42,16 +42,17 @@ class DlcQC(base.QC):
     def __init__(self, session_path_or_eid, side, **kwargs):
         """
         :param session_path_or_eid: A session eid or path
+        :param side: The camera to run QC on
         :param log: A logging.Logger instance, if None the 'ibllib' logger is used
         :param one: An ONE instance for fetching and setting the QC on Alyx
-        :param camera: The camera to run QC on, if None QC is run for all three cameras.
         """
+        # Make sure the type of camera is chosen
+        self.side = side
         # When an eid is provided, we will download the required data by default (if necessary)
         download_data = not is_session_path(session_path_or_eid)
         self.download_data = kwargs.pop('download_data', download_data)
         super().__init__(session_path_or_eid, **kwargs)
         self.data = Bunch()
-        self.side = side
 
         # QC outcomes map
         self.metrics = None
@@ -101,7 +102,7 @@ class DlcQC(base.QC):
             present = (
                 self.one._download_datasets(dataset)
                 if self.download_data
-                else (next(self.session_path.rglob(d), None) for d in dataset['rel_path'])
+                else (next(self.session_path.rglob(d), None) for d in dataset['rel_path'] if self.side in d)
             )
             assert (not dataset.empty and all(present)), f'Dataset {dstype} not found'
 
