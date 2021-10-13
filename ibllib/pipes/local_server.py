@@ -21,17 +21,16 @@ _logger = logging.getLogger('ibllib')
 def _get_pipeline_class(session_path, one):
     pipeline = get_pipeline(session_path)
     if pipeline == 'training':
-        PipelineClass = training_preprocessing.TrainingExtractionPipeline(session_path, one=one)
+        PipelineClass = training_preprocessing.TrainingExtractionPipeline
     elif pipeline == 'ephys':
-        PipelineClass = ephys_preprocessing.EphysExtractionPipeline(session_path, one=one)
+        PipelineClass = ephys_preprocessing.EphysExtractionPipeline
     else:
         # try and look if there is a custom extractor in the personal projects extraction class
         import projects.base.get_pipeline
         task_type = get_session_extractor_type(session_path)
         PipelineClass = projects.base.get_pipeline(task_type)
-        pipe = PipelineClass(session_path, one)
     _logger.info(f"Using {PipelineClass} pipeline for {session_path}")
-    return PipelineClass
+    return PipelineClass(session_path, one)
 
 
 def _get_lab(one):

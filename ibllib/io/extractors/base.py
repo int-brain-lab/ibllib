@@ -232,7 +232,7 @@ def _get_pipeline_from_task_type(stype):
     :param stype: session_type or task extractor type
     :return:
     """
-    if 'ephys' in stype:
+    if stype in ['ephys_biased_opto', 'ephys', 'ephys_training', 'mock_ephys', 'sync_ephys']:
         return 'ephys'
     elif stype in ['habituation', 'training', 'biased', 'biased_opto']:
         return 'training'
