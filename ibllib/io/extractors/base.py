@@ -189,6 +189,8 @@ def get_task_extractor_type(task_name):
     """
     if isinstance(task_name, Path):
         task_name = get_task_protocol(task_name)
+        if task_name is None:
+            return
     task_types = _get_task_types_json_config()
     task_type = next((task_types[tt] for tt in task_types if tt in task_name), None)
     if task_type is None:
