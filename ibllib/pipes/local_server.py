@@ -26,7 +26,7 @@ def _get_pipeline_class(session_path, one):
         PipelineClass = ephys_preprocessing.EphysExtractionPipeline
     else:
         # try and look if there is a custom extractor in the personal projects extraction class
-        import projects.base.get_pipeline
+        import projects.base
         task_type = get_session_extractor_type(session_path)
         PipelineClass = projects.base.get_pipeline(task_type)
     _logger.info(f"Using {PipelineClass} pipeline for {session_path}")
