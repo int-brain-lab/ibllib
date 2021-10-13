@@ -30,7 +30,7 @@ def _get_pipeline_class(session_path, one):
         task_type = get_session_extractor_type(session_path)
         PipelineClass = projects.base.get_pipeline(task_type)
         pipe = PipelineClass(session_path, one)
-    _logger(f"Using {PipelineClass} pipeline for {session_path}")
+    _logger.info(f"Using {PipelineClass} pipeline for {session_path}")
     return PipelineClass
 
 
