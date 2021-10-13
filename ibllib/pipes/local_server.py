@@ -28,8 +28,10 @@ def _get_pipeline_class(session_path, one):
         # try and look if there is a custom extractor in the personal projects extraction class
         import projects.base.get_pipeline
         task_type = get_session_extractor_type(session_path)
-        pipe = projects.base.get_pipeline(task_type)
-    return pipe
+        PipelineClass = projects.base.get_pipeline(task_type)
+        pipe = PipelineClass(session_path, one)
+    _logger(f"Using {PipelineClass} pipeline for {session_path}")
+    return pipe.__class__
 
 
 def _get_lab(one):
