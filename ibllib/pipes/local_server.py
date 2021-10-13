@@ -108,9 +108,12 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
             elif pipeline == 'ephys' and flag_file.name == 'raw_session.flag':
                 pipe = ephys_preprocessing.EphysExtractionPipeline(session_path, one=one)
             else:
-                _logger.info(f'Session type {get_session_extractor_type(session_path)}'
-                             f'as no matching pipeline pattern {session_path}')
-                continue
+                from projects.base import get_pipeline
+                task_type = get_session_extractor_type(session_path)
+                pipe = get_pipeline(task_type)
+                if pipe is None:
+                    _logger.info(f'Session type {task_type} has no matching pipeline pattern {session_path}')
+                    continue
             if rerun:
                 rerun__status__in = '__all__'
             else:
