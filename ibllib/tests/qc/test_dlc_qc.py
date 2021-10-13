@@ -33,10 +33,9 @@ class TestDlcQC(unittest.TestCase):
     def test_ensure_data(self):
         self.qc.eid = self.eid
         self.qc.download_data = False
-        # If data for this session exists locally, overwrite the methods so it is not found
-        if self.one.eid2path(self.eid).exists():
-            self.qc.one.to_eid = lambda _: self.eid
-            self.qc.one._download_datasets = lambda _: None
+        # If data for this session exists locally, remove a file so that the test fails as intended
+        if self.qc.session_path.exists():
+            self.qc.session_path.joinpath('alf/_ibl_leftCamera.dlc.pqt').unlink()
         with self.assertRaises(AssertionError):
             self.qc.run(update=False)
 
