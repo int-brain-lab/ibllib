@@ -1,6 +1,4 @@
-{
- "ksocha_ephysOptoStimulation": "ephys_passive_opto",
- "ksocha_ephysOptoChoiceWorld": "ephys_biased_opto",
+{"ksocha_ephysOptoChoiceWorld": "ephys_biased_opto",
  "passiveChoiceWorld": "ephys_replay",
  "opto_ephysChoiceWorld": "ephys_biased_opto",
  "ephysChoiceWorld": "ephys",
