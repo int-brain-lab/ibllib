@@ -21,9 +21,9 @@ _logger = logging.getLogger('ibllib')
 def _get_pipeline_class(session_path, one):
     pipeline = get_pipeline(session_path)
     if pipeline == 'training':
-        pipe = training_preprocessing.TrainingExtractionPipeline(session_path, one=one)
+        PipelineClass = training_preprocessing.TrainingExtractionPipeline(session_path, one=one)
     elif pipeline == 'ephys':
-        pipe = ephys_preprocessing.EphysExtractionPipeline(session_path, one=one)
+        PipelineClass = ephys_preprocessing.EphysExtractionPipeline(session_path, one=one)
     else:
         # try and look if there is a custom extractor in the personal projects extraction class
         import projects.base.get_pipeline
@@ -31,7 +31,7 @@ def _get_pipeline_class(session_path, one):
         PipelineClass = projects.base.get_pipeline(task_type)
         pipe = PipelineClass(session_path, one)
     _logger(f"Using {PipelineClass} pipeline for {session_path}")
-    return pipe.__class__
+    return PipelineClass
 
 
 def _get_lab(one):
@@ -121,7 +121,6 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
             if pipe is None:
                 task_protocol = get_task_protocol(session_path)
                 _logger.info(f'Session task protocol {task_protocol} has no matching pipeline pattern {session_path}')
-
             if rerun:
                 rerun__status__in = '__all__'
             else:
