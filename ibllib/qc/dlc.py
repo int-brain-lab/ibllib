@@ -14,6 +14,7 @@ import numpy as np
 
 from ibllib.qc import base
 import one.alf.io as alfio
+from one.alf.exceptions import ALFObjectNotFound
 from one.alf.spec import is_session_path
 from iblutil.util import Bunch
 
@@ -23,7 +24,6 @@ _log = logging.getLogger('ibllib')
 class DlcQC(base.QC):
     """A class for computing camera QC metrics"""
 
-    dstypes = ['camera.dlc', 'camera.times']
     bbox = {
         'body': {
             'xrange': range(201, 500),
@@ -96,15 +96,18 @@ class DlcQC(base.QC):
         it an exception is raised.
         :return:
         """
-        assert self.one is not None, 'ONE required to download data'
-        for dstype in self.dstypes:
-            dataset = self.one.type2datasets(self.eid, dstype, details=True)
-            present = (
-                self.one._download_datasets(dataset)
-                if self.download_data
-                else (next(self.session_path.rglob(d), None) for d in dataset['rel_path'] if self.side in d)
-            )
-            assert (not dataset.empty and all(present)), f'Dataset {dstype} not found'
+        # Check if data available locally
+        for ds in [f'_ibl_{self.side}Camera.dlc.*', f'_ibl_{self.side}Camera.times.*']:
+            if not next(self.session_path.rglob(ds), None):
+                # If download is allowed, try to download
+                if self.download_data is True:
+                    assert self.one is not None, 'ONE required to download data'
+                    try:
+                        self.one.load_dataset(self.eid, ds, download_only=True)
+                    except ALFObjectNotFound:
+                        raise AssertionError(f'Dataset {ds} not found locally and failed to download')
+                else:
+                    raise AssertionError(f'Dataset {ds} not found locally and download_data is False')
 
     def run(self, update: bool = False, **kwargs) -> (str, dict):
         """
