@@ -33,12 +33,19 @@ class TestDlcQC(unittest.TestCase):
     def test_ensure_data(self):
         self.qc.eid = self.eid
         self.qc.download_data = False
-        # If data for this session exists locally, overwrite the methods so it is not found
-        if self.one.eid2path(self.eid).exists():
-            self.qc.one.to_eid = lambda _: self.eid
-            self.qc.one._download_datasets = lambda _: None
-        with self.assertRaises(AssertionError):
+        # Remove file so that the test fails as intended
+        if self.qc.session_path.exists():
+            self.qc.session_path.joinpath('alf/_ibl_leftCamera.dlc.pqt').unlink()
+        with self.assertRaises(AssertionError) as excp:
             self.qc.run(update=False)
+        msg = excp.exception.args[0]
+        self.assertEqual(msg, 'Dataset _ibl_leftCamera.dlc.* not found locally and download_data is False')
+        # Set download_data to True. Data is not in the database so we expect a (different) error trying to download
+        self.qc.download_data = True
+        with self.assertRaises(AssertionError) as excp:
+            self.qc.run(update=False)
+        msg = excp.exception.args[0]
+        self.assertEqual(msg, 'Dataset _ibl_leftCamera.dlc.* not found locally and failed to download')
 
     def test_check_time_trace_length_match(self):
         self.qc.data['dlc_coords'] = {'nose_tip': np.ones((2, 20)), 'pupil_r': np.ones((2, 20))}
