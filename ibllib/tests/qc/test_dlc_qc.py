@@ -47,8 +47,6 @@ class TestDlcQC(unittest.TestCase):
         msg = excp.exception.args[0]
         self.assertEqual(msg, 'Dataset _ibl_leftCamera.dlc.* not found locally and failed to download')
 
-
-
     def test_check_time_trace_length_match(self):
         self.qc.data['dlc_coords'] = {'nose_tip': np.ones((2, 20)), 'pupil_r': np.ones((2, 20))}
         self.qc.data['camera_times'] = np.ones((20,))
