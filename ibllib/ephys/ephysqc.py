@@ -42,9 +42,10 @@ class EphysQC(base.QC):
     default database if not given.
     """
 
-    def __init__(self, probe_id, **kwargs):
+    def __init__(self, probe_id, session_path=None, **kwargs):
         super().__init__(probe_id, endpoint='insertions', **kwargs)
         self.pid = probe_id
+        self.session_path = session_path
         self.stream = kwargs.pop('stream', True)
         keys = ('ap', 'ap_meta', 'lf', 'lf_meta')
         self.data = Bunch.fromkeys(keys)
@@ -57,7 +58,9 @@ class EphysQC(base.QC):
         """
         assert self.one is not None, 'ONE instance is required to ensure required data'
         eid, pname = self.one.pid2eid(self.pid)
-        self.probe_path = self.one.eid2path(eid).joinpath('raw_ephys_data', pname)
+        if self.session_path is None:
+            self.session_path = self.one.eid2path(eid)
+        self.probe_path = Path(self.session_path).joinpath('raw_ephys_data', pname)
         # Check if there is at least one meta file available
         meta_files = list(self.probe_path.rglob('*.meta'))
         assert len(meta_files) != 0, f'No meta files in {self.probe_path}'
