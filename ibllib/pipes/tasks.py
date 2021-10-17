@@ -38,7 +38,7 @@ class Task(abc.ABC):
     time_out_secs = None
     version = version.ibllib()
     log = ''
-    input_files = None
+    signature = {'input_files': (), 'output_files': ()}  # tuple (filename, collection, required_flag)
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
                  machine=None, clobber=True, aws=None, location='server'):
@@ -254,12 +254,9 @@ class Task(abc.ABC):
         :return:
         """
         assert self.one
-
-        # This will be improved by Olivier new filters
-        session_datasets = self.one.list_datasets(self.one.path2eid(self.session_path),
-                                                  details=True)
+        session_datasets = self.one.list_datasets(self.one.path2eid(self.session_path), details=True)
         df = pd.DataFrame(columns=self.one._cache.datasets.columns)
-        for file in self.input_files:
+        for file in self.signature['input_files']:
             df = df.append(filter_datasets(session_datasets, filename=file[0], collection=file[1],
                            wildcards=True, assert_unique=False))
         return df
