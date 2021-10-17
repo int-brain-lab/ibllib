@@ -275,6 +275,24 @@ class Task(abc.ABC):
         assert SDSC_PATCH_PATH.parts[0:4] == self.session_path.parts[0:4]
         shutil.rmtree(self.session_path)
 
+    def assert_expected_outputs(self):
+        """
+        After a run, asserts that all signature files are present at least once in the output files
+        Mainly useful for integration tests
+        :return:
+        """
+        assert self.status == 0
+        everthing_is_fine = True
+        for expected_file in self.signature['output_files']:
+            actual_files = list(self.session_path.rglob(str(Path(expected_file[1]).joinpath(expected_file[0]))))
+            if len(actual_files) == 0:
+                everthing_is_fine = False
+                _logger.error(f"Signature file expected {expected_file} not found in the output")
+        if not everthing_is_fine:
+            for out in self.outputs:
+                _logger.error(f"{out}")
+            raise FileNotFoundError("Missing outputs after task completion")
+
 
 class Pipeline(abc.ABC):
     """
