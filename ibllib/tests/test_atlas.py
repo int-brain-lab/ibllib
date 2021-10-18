@@ -76,9 +76,9 @@ class TestAtlasSlicesConversion(unittest.TestCase):
         # unlike the retina, root stays root whatever the mapping
         assert self.ba.get_labels([0, 0, 0]) == 0  # void !
         assert self.ba.get_labels([0, 0, 0], mapping='Beryl') == 0  # root
-        # the cosmos mapping doesn't include individual cortex regions so should return cerebral cortex
-        assert self.ba.get_labels(self.ba.bc.i2xyz(np.array([239, 73, 113], dtype=np.float32))) == 68
-        assert self.ba.get_labels(self.ba.bc.i2xyz(np.array([239, 73, 113], dtype=np.float32)), mapping='cosmos') == 315
+        # Check the cosmos mapping too
+        assert self.ba.get_labels([0, 0, self.ba.bc.i2z(103)], mapping='Cosmos') == 997
+        assert self.ba.get_labels([0, 0, 0], mapping='Cosmos') == 0
 
     def test_slice(self):
         ba = self.ba
