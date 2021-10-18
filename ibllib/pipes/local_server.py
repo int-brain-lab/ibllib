@@ -10,12 +10,27 @@ import traceback
 
 from one.api import ONE
 
-from ibllib.io.extractors.base import get_session_extractor_type, get_pipeline
-from ibllib.pipes import ephys_preprocessing, training_preprocessing, tasks
+from ibllib.io.extractors.base import get_pipeline, get_task_protocol, get_session_extractor_type
+from ibllib.pipes import tasks, training_preprocessing, ephys_preprocessing
 from ibllib.time import date2isostr
 import ibllib.oneibl.registration as registration
 
 _logger = logging.getLogger('ibllib')
+
+
+def _get_pipeline_class(session_path, one):
+    pipeline = get_pipeline(session_path)
+    if pipeline == 'training':
+        PipelineClass = training_preprocessing.TrainingExtractionPipeline
+    elif pipeline == 'ephys':
+        PipelineClass = ephys_preprocessing.EphysExtractionPipeline
+    else:
+        # try and look if there is a custom extractor in the personal projects extraction class
+        import projects.base
+        task_type = get_session_extractor_type(session_path)
+        PipelineClass = projects.base.get_pipeline(task_type)
+    _logger.info(f"Using {PipelineClass} pipeline for {session_path}")
+    return PipelineClass(session_path=session_path, one=one)
 
 
 def _get_lab(one):
@@ -101,16 +116,10 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
                 session_path, one=one, max_md5_size=max_md5_size)
             if dsets is not None:
                 all_datasets.extend(dsets)
-            pipeline = get_pipeline(session_path)
-            if pipeline == 'training':
-                pipe = training_preprocessing.TrainingExtractionPipeline(session_path, one=one)
-            # only start extracting ephys on a raw_session.flag
-            elif pipeline == 'ephys' and flag_file.name == 'raw_session.flag':
-                pipe = ephys_preprocessing.EphysExtractionPipeline(session_path, one=one)
-            else:
-                _logger.info(f'Session type {get_session_extractor_type(session_path)}'
-                             f'as no matching pipeline pattern {session_path}')
-                continue
+            pipe = _get_pipeline_class(session_path, one)
+            if pipe is None:
+                task_protocol = get_task_protocol(session_path)
+                _logger.info(f'Session task protocol {task_protocol} has no matching pipeline pattern {session_path}')
             if rerun:
                 rerun__status__in = '__all__'
             else:
@@ -142,7 +151,7 @@ def job_runner(subjects_path, lab=None, dry=False, one=None, count=5):
     if lab is None:
         return  # if the lab is none, this will return empty tasks each time
     tasks = one.alyx.rest('tasks', 'list', status='Waiting',
-                          django=f'session__lab__name__in,{lab}')
+                          django=f'session__lab__name__in,{lab}', no_cache=True)
     tasks_runner(subjects_path, tasks, one=one, count=count, time_out=3600, dry=dry)
 
 

@@ -544,6 +544,20 @@ def _get_all_probes_sync(session_path, bin_exists=True):
     return ephys_files
 
 
+def get_wheel_positions(sync, chmap):
+    """
+    Gets the wheel position from synchronisation pulses
+    :param sync:
+    :param chmap:
+    :return:wheel: dictionary with keys 'timestamps' and 'position'
+            moves: dictionary with keys 'intervals' and 'peakAmplitude'
+    """
+    ts, pos = extract_wheel_sync(sync=sync, chmap=chmap)
+    moves = extract_wheel_moves(ts, pos)
+    wheel = {'timestamps': ts, 'position': pos}
+    return wheel, moves
+
+
 def get_main_probe_sync(session_path, bin_exists=False):
     """
     From 3A or 3B multiprobe session, returns the main probe (3A) or nidq sync pulses
@@ -561,7 +575,6 @@ def get_main_probe_sync(session_path, bin_exists=False):
     elif version == '3B':
         # the sync master is the nidq breakout box
         sync_box_ind = np.argmax([1 if ef.get('nidq') else 0 for ef in ephys_files])
-
     sync = ephys_files[sync_box_ind].sync
     sync_chmap = ephys_files[sync_box_ind].sync_map
     return sync, sync_chmap
@@ -684,16 +697,16 @@ class FpgaTrials(extractors_base.BaseExtractor):
         out.update({k: self.bpod2fpga(bpod_trials[k][ibpod]) for k in bpod_rsync_fields})
         out.update({k: fpga_trials[k][ifpga] for k in sorted(fpga_trials.keys())})
         # extract the wheel data
+        wheel, moves = get_wheel_positions(sync=sync, chmap=chmap)
         from ibllib.io.extractors.training_wheel import extract_first_movement_times
-        ts, pos = extract_wheel_sync(sync=sync, chmap=chmap)
-        moves = extract_wheel_moves(ts, pos)
         settings = raw_data_loaders.load_settings(session_path=self.session_path)
         min_qt = settings.get('QUIESCENT_PERIOD', None)
         first_move_onsets, *_ = extract_first_movement_times(moves, out, min_qt=min_qt)
         out.update({'firstMovement_times': first_move_onsets})
 
         assert tuple(filter(lambda x: 'wheel' not in x, self.var_names)) == tuple(out.keys())
-        return [out[k] for k in out] + [ts, pos, moves['intervals'], moves['peakAmplitude']]
+        return [out[k] for k in out] + [wheel['timestamps'], wheel['position'],
+                                        moves['intervals'], moves['peakAmplitude']]
 
 
 def extract_all(session_path, save=True, bin_exists=False):
