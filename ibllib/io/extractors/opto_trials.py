@@ -17,8 +17,8 @@ class LaserBool(BaseBpodTrialsExtractor):
     def _extract(self, **kwargs):
         _logger.info('Extracting laser datasets')
         # reference pybpod implementation
-        lstim = np.array([float(t.get('laserStimulation', np.NaN)) for t in self.bpod_trials])
-        lprob = np.array([float(t.get('laserProbability', np.NaN)) for t in self.bpod_trials])
+        lstim = np.array([float(t.get('laser_stimulation', np.NaN)) for t in self.bpod_trials])
+        lprob = np.array([float(t.get('laser_probability', np.NaN)) for t in self.bpod_trials])
 
         # Karolina's choice world legacy implementation - from Slack message:
         # it is possible that some versions I have used:
