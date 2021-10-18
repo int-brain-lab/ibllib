@@ -151,7 +151,7 @@ def job_runner(subjects_path, lab=None, dry=False, one=None, count=5):
     if lab is None:
         return  # if the lab is none, this will return empty tasks each time
     tasks = one.alyx.rest('tasks', 'list', status='Waiting',
-                          django=f'session__lab__name__in,{lab}')
+                          django=f'session__lab__name__in,{lab}', no_cache=True)
     tasks_runner(subjects_path, tasks, one=one, count=count, time_out=3600, dry=dry)
 
 
