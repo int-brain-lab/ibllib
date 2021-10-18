@@ -76,12 +76,15 @@ class RawEphysQC(tasks.Task):
 
 class EphysAudio(tasks.Task):
     """
-    Computes raw electrophysiology QC
+    Compresses the microphone wav file in a lossless flac file
     """
 
     cpu = 2
     priority = 10  # a lot of jobs depend on this one
     level = 0  # this job doesn't depend on anything
+    signature = {'input_files': ('_iblrig_micData.raw.wav', 'raw_behavior_data', True),
+                 'output_files': ('_iblrig_micData.raw.flac', 'raw_behavior_data', True),
+                 }
 
     def _run(self, overwrite=False):
         command = "ffmpeg -i {file_in} -y -nostdin -c:a flac -nostats {file_out}"
