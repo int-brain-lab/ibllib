@@ -6,19 +6,12 @@ import importlib
 import time
 from _collections import OrderedDict
 import traceback
-import pandas as pd
-import numpy as np
-import shutil
 
 from graphviz import Digraph
 
 from ibllib.misc import version
 import one.params
-from one.alf.files import add_uuid_string
-from iblutil.io.parquet import np2str
-from ibllib.oneibl.registration import register_dataset
-from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_PATCH_PATH
-from one.util import filter_datasets
+from ibllib.oneibl import data_handlers
 
 
 _logger = logging.getLogger('ibllib')
@@ -37,11 +30,22 @@ class Task(abc.ABC):
     time_elapsed_secs = None
     time_out_secs = None
     version = version.ibllib()
-    log = ''
     signature = {'input_files': (), 'output_files': ()}  # tuple (filename, collection, required_flag)
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
-                 machine=None, clobber=True, aws=None, location='server'):
+                 machine=None, clobber=True, location='server'):
+        """
+        Base task class
+        :param session_path: session path
+        :param parents: parents
+        :param taskid: alyx task id
+        :param one: one instance
+        :param machine:
+        :param clobber: whether or not to overwrite log on rerun
+        :param location: location where task is run. Options are 'server' (lab local servers'), 'remote' (remote compute node,
+        data required for task downloaded via one), 'AWS' (remote compute node, data required for task downloaded via AWS),
+        'Globus' (remote compute node, data required for task downloaded via Globus) or 'SDSC' (SDSC flatiron compute node)
+        """
         self.taskid = taskid
         self.one = one
         self.session_path = session_path
@@ -53,7 +57,7 @@ class Task(abc.ABC):
         self.machine = machine
         self.clobber = clobber
         self.location = location
-        self.aws = aws
+        self.data_handler = self.get_data_handler()
 
     @property
     def name(self):
@@ -114,7 +118,7 @@ class Task(abc.ABC):
         self.tearDown()
         return self.status
 
-    def register_datasets(self, one=None, **kwargs):
+    def register_datasets(self, **kwargs):
         """
         Register output datasets form the task to Alyx
         :param one:
@@ -122,61 +126,7 @@ class Task(abc.ABC):
         :param kwargs: directly passed to the register_dataset function
         :return:
         """
-        assert one
-        if self.location == 'server':
-            return self._register_datasets_server(one=one, **kwargs)
-        elif self.location == 'remote':
-            return self._register_datasets_remote(one=one, **kwargs)
-        elif self.location == 'SDSC':
-            return self._register_datasets_SDSC(one=one, **kwargs)
-        elif self.location == 'AWS':
-            return self._register_datasets_AWS(one=one, **kwargs)
-
-    def _register_datasets_server(self, one=None, **kwargs):
-
-        if self.outputs:
-            if isinstance(self.outputs, list):
-                versions = [self.version for _ in self.outputs]
-            else:
-                versions = [self.version]
-
-            return register_dataset(self.outputs, one=one, versions=versions, **kwargs)
-
-    def _register_datasets_remote(self, one=None, **kwargs):
-
-        if self.outputs:
-            if isinstance(self.outputs, list):
-                versions = [self.version for _ in self.outputs]
-            else:
-                versions = [self.version]
-
-            ftp_patcher = FTPPatcher(one=one)
-            return ftp_patcher.create_dataset(path=self.outputs, created_by=self.one.alyx.user,
-                                              versions=versions, **kwargs)
-
-    def _register_datasets_SDSC(self, one=None, **kwargs):
-
-        if self.outputs:
-            if isinstance(self.outputs, list):
-                versions = [self.version for _ in self.outputs]
-            else:
-                versions = [self.version]
-
-            sdsc_patcher = SDSCPatcher(one=one)
-            return sdsc_patcher.patch_datasets(self.outputs, dry=False, versions=versions,
-                                               **kwargs)
-
-    def _register_datasets_AWS(self, one=None, **kwargs):
-        # GO through FTP patcher
-        if self.outputs:
-            if isinstance(self.outputs, list):
-                versions = [self.version for _ in self.outputs]
-            else:
-                versions = [self.version]
-
-            ftp_patcher = FTPPatcher(one=one)
-            return ftp_patcher.create_dataset(path=self.outputs, created_by=self.one.alyx.user,
-                                              versions=versions, **kwargs)
+        self.data_handler.uploadData(self.outputs, self.version, **kwargs)
 
     def rerun(self):
         self.run(overwrite=True)
@@ -199,47 +149,7 @@ class Task(abc.ABC):
         Function to optionally overload to check inputs.
         :return:
         """
-        # if on local server don't do anything
-        if self.location == 'server':
-            self._setUp_server()
-        elif self.location == 'remote':
-            self._setUp_remote()
-        elif self.location == 'SDSC':
-            self._setUp_SDSC()
-        elif self.location == 'AWS':
-            self._setUp_AWS()
-
-    def _setUp_server(self):
-        pass
-
-    def _setUp_remote(self):
-
-        assert self.one
-        df = self._getData()
-        self.one._download_datasets(df)
-
-    def _setUp_SDSC(self):
-        assert self.one
-        df = self._getData()
-
-        SDSC_TMP = Path(SDSC_PATCH_PATH.joinpath(self.__class__.__name__))
-
-        for _, d in df.iterrows():
-            file_path = Path(d['session_path']).joinpath(d['rel_path'])
-            file_uuid = add_uuid_string(file_path, np2str(np.r_[d.name[0], d.name[1]]))
-            file_link = SDSC_TMP.joinpath(file_path)
-            file_link.parent.mkdir(exist_ok=True, parents=True)
-            file_link.symlink_to(
-                Path(SDSC_ROOT_PATH.joinpath(file_uuid)))
-
-        self.session_path = SDSC_TMP.joinpath(d['session_path'])
-
-    def _setUp_AWS(self):
-        assert self.aws
-        assert self.one
-
-        df = self._getData()
-        self.aws._download_datasets(df)
+        self.data_handler.setUp()
 
     def tearDown(self):
         """
@@ -247,33 +157,12 @@ class Task(abc.ABC):
         """
         pass
 
-    def _getData(self):
-        """
-        Funtcion to optionally overload to download/ create links to data
-        Important when running tasks in remote or SDSC locations
-        :return:
-        """
-        assert self.one
-        session_datasets = self.one.list_datasets(self.one.path2eid(self.session_path), details=True)
-        df = pd.DataFrame(columns=self.one._cache.datasets.columns)
-        for file in self.signature['input_files']:
-            df = df.append(filter_datasets(session_datasets, filename=file[0], collection=file[1],
-                           wildcards=True, assert_unique=False))
-        return df
-
     def cleanUp(self):
         """
         Function to optionally overload to clean up
         :return:
         """
-        if self.location == 'SDSC':
-            self._cleanUp_SDSC()
-
-    def _cleanUp_SDSC(self):
-
-        # Double check we are dealing with the SDSC temp folder
-        assert SDSC_PATCH_PATH.parts[0:4] == self.session_path.parts[0:4]
-        shutil.rmtree(self.session_path)
+        self.data_handler.cleanUp()
 
     def assert_expected_outputs(self):
         """
@@ -292,6 +181,18 @@ class Task(abc.ABC):
             for out in self.outputs:
                 _logger.error(f"{out}")
             raise FileNotFoundError("Missing outputs after task completion")
+
+    def get_data_handler(self):
+        if self.location == 'server':
+            dhandler = data_handlers.ServerDataHandler(self.session_path, self.signature, one=self.one)
+        elif self.location == 'remote':
+            dhandler = data_handlers.RemoteHttpDataHandler(self.session_path, self.signature, one=self.one)
+        elif self.location == 'AWS':
+            dhandler = data_handlers.RemoteAwsDataHandler(self.session_path, self.signature, one=self.one)
+        elif self.location == 'SDSC':
+            dhandler = data_handlers.SDSCDataHandler(self, self.session_path, self.signature, one=self.one)
+
+        return dhandler
 
 
 class Pipeline(abc.ABC):
