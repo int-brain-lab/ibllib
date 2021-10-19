@@ -110,7 +110,8 @@ class EphysQC(base.QC):
         if self.data.ap_meta:
             rms_file = self.probe_path.joinpath("_iblqc_ephysChannels.apRMS.npy")
             if rms_file.exists() and not overwrite:
-                _logger.warning(f'File {rms_file} already exists and overwrite=False. Skipping RMS compute.')
+                _logger.warning(f'RMS map already exists for .ap data in {self.probe_path}, skipping. '
+                                f'Use overwrite option.')
                 median_rms = np.load(rms_file)
             else:
                 rl = self.data.ap_meta.fileTimeSecs
