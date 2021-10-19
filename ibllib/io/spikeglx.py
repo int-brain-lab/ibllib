@@ -112,6 +112,10 @@ class Reader:
         return _get_neuropixel_version_from_meta(self.meta)
 
     @property
+    def rl(self):
+        return self.ns / self.fs
+
+    @property
     def type(self):
         """:return: ap, lf or nidq. Useful to index dictionaries """
         if not self.meta:
