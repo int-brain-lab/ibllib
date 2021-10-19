@@ -11,8 +11,8 @@ class LaserBool(BaseBpodTrialsExtractor):
     """
     Extracts the laser probabilities from the bpod jsonable
     """
-    save_names = ('_ibl_trials.laser_stimulation.npy', '_ibl_trials.laser_probability.npy')
-    var_names = ('laser_stimulation', 'laser_probability')
+    save_names = ('_ibl_trials.laserStimulation.npy', '_ibl_trials.laserProbability.npy')
+    var_names = ('laserStimulation', 'laserProbability')
 
     def _extract(self, **kwargs):
         _logger.info('Extracting laser datasets')
@@ -41,11 +41,11 @@ class LaserBool(BaseBpodTrialsExtractor):
 
         if np.all(np.isnan(lprob)):
             # this prevents the file from being saved when no data
-            self.save_names = ('_ibl_trials.laser_stimulation.npy', None)
+            self.save_names = ('_ibl_trials.laserStimulation.npy', None)
             _logger.warning('No laser probability found in bpod data')
         if np.all(np.isnan(lstim)):
             # this prevents the file from being saved when no data
-            self.save_names = (None, '_ibl_trials.laser_probability.npy')
+            self.save_names = (None, '_ibl_trials.laserProbability.npy')
             _logger.warning('No laser stimulation found in bpod data')
         return lstim, lprob
 

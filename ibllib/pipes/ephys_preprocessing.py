@@ -58,7 +58,7 @@ class RawEphysQC(tasks.Task):
     io_charge = 30  # this jobs reads raw ap files
     priority = 10  # a lot of jobs depend on this one
     level = 0  # this job doesn't depend on anything
-    input_files = signatures.RAWEPHYSQC
+    signature = {'input_files': signatures.RAWEPHYSQC, 'output_files': ()}
 
     def _run(self, overwrite=False):
         eid = self.one.path2eid(self.session_path)
@@ -69,19 +69,26 @@ class RawEphysQC(tasks.Task):
             pids = [p['id'] for p in create_alyx_probe_insertions(self.session_path, one=self.one)]
         qc_files = []
         for pid in pids:
-            eqc = ephysqc.EphysQC(pid, session_path=self.session_path, one=self.one)
-            qc_files.extend(eqc.run(update=True, overwrite=overwrite))
+            try:
+                eqc = ephysqc.EphysQC(pid, session_path=self.session_path, one=self.one)
+                qc_files.extend(eqc.run(update=True, overwrite=overwrite))
+            except AssertionError:
+                self.status = -1
+                continue
         return qc_files
 
 
 class EphysAudio(tasks.Task):
     """
-    Computes raw electrophysiology QC
+    Compresses the microphone wav file in a lossless flac file
     """
 
     cpu = 2
     priority = 10  # a lot of jobs depend on this one
     level = 0  # this job doesn't depend on anything
+    signature = {'input_files': ('_iblrig_micData.raw.wav', 'raw_behavior_data', True),
+                 'output_files': ('_iblrig_micData.raw.flac', 'raw_behavior_data', True),
+                 }
 
     def _run(self, overwrite=False):
         command = "ffmpeg -i {file_in} -y -nostdin -c:a flac -nostats {file_out}"
@@ -106,7 +113,7 @@ class SpikeSorting(tasks.Task):
     )
     SPIKE_SORTER_NAME = 'pykilosort'
     PYKILOSORT_REPO = Path.home().joinpath('Documents/PYTHON/SPIKE_SORTING/pykilosort')
-    input_files = signatures.SPIKESORTING
+    signature = {'input_files': signatures.SPIKESORTING, 'output_files': ()}
 
     @staticmethod
     def _sample2v(ap_file):
@@ -285,7 +292,7 @@ class EphysVideoCompress(tasks.Task):
 class EphysTrials(tasks.Task):
     priority = 90
     level = 1
-    input_files = signatures.EPHYSTRIALS
+    signature = {'input_files': signatures.EPHYSTRIALS, 'output_files': ()}
 
     def _behaviour_criterion(self):
         """
@@ -454,7 +461,7 @@ class EphysPassive(tasks.Task):
     cpu = 1
     io_charge = 90
     level = 1
-    input_files = signatures.EPHYSPASSIVE
+    signature = {'input_files': signatures.EPHYSPASSIVE, 'output_files': ()}
 
     def _run(self):
         """returns a list of pathlib.Paths. """
