@@ -4,7 +4,7 @@ from pathlib import Path
 import shutil
 import abc
 
-from one.globus import Globus
+from one.globus import Globus, get_lab_from_endpoint_id
 from one.api import ONE
 from one.util import filter_datasets
 from one.alf.files import add_uuid_string
@@ -12,7 +12,6 @@ from iblutil.io.parquet import np2str
 from ibllib.oneibl.registration import register_dataset
 from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_PATCH_PATH
 from ibllib.oneibl.aws import AWS
-from ibllib.pipes.local_server import _get_lab
 
 
 class DataHandler(abc.ABC):
@@ -82,7 +81,7 @@ class ServerDataHandler(DataHandler):
         self.globus = Globus()
 
         # Find the lab
-        labs = _get_lab(self.one)
+        labs = get_lab_from_endpoint_id(one=self.one)
         if len(labs) == 2:
             # for flofer lab
             idx = [lab in self.session_path.parts for lab in labs]
@@ -126,6 +125,13 @@ class ServerDataHandler(DataHandler):
         versions = super().uploadData(outputs, version)
 
         return register_dataset(outputs, one=self.one, versions=versions, **kwargs)
+
+    def get_lab(self):
+        with open(Path.home().joinpath(".globusonline/lta/client-id.txt"), 'r') as fid:
+            globus_id = fid.read()
+        lab = self.one.alyx.rest('labs', 'list', django=f"repositories__globus_endpoint_id,{globus_id}")
+        if len(lab):
+            return [la['name'] for la in lab]
 
 
 class RemoteHttpDataHandler(DataHandler):

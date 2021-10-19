@@ -118,7 +118,7 @@ class Task(abc.ABC):
         self.tearDown()
         return self.status
 
-    def register_datasets(self, **kwargs):
+    def register_datasets(self, one=None, **kwargs):
         """
         Register output datasets form the task to Alyx
         :param one:
@@ -183,6 +183,10 @@ class Task(abc.ABC):
             raise FileNotFoundError("Missing outputs after task completion")
 
     def get_data_handler(self):
+        """
+        Gets the relevant data handler based on location argument
+        :return:
+        """
         if self.location == 'server':
             dhandler = data_handlers.ServerDataHandler(self.session_path, self.signature, one=self.one)
         elif self.location == 'remote':
