@@ -84,8 +84,8 @@ class ServerDataHandler(DataHandler):
         labs = get_lab_from_endpoint_id(one=self.one)
         if len(labs) == 2:
             # for flofer lab
-            idx = [lab in self.session_path.parts for lab in labs]
-            self.lab = labs[np.where(idx)[0][0]]
+            subject = self.one.path2ref(self.session_path)['subject']
+            self.lab = self.one.alyx.rest('subjects', 'list', nickname=subject)[0]['lab']
         else:
             self.lab = labs[0]
 
