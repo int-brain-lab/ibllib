@@ -137,6 +137,11 @@ class Reader:
         return _get_nchannels_from_meta(self.meta)
 
     @property
+    def nsync(self):
+        """:return: number of sync channels"""
+        return len(_get_sync_trace_indices_from_meta(self.meta))
+
+    @property
     def ns(self):
         """ :return: number of samples """
         if not self.meta:

@@ -326,6 +326,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             dexpected = sr.channel_conversion_sample2v[sr.type] * tglx['D']
             d, sync = sr.read_samples(0, tglx['ns'])
             # could be rounding errors with non-integer sampling rates
+            self.assertTrue(sr.nsync == 1)
             self.assertTrue(sr.rl == sr.ns / sr.fs)
             self.assertTrue(sr.nc == tglx['nc'])
             self.assertTrue(sr.ns == tglx['ns'])
