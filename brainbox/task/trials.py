@@ -19,8 +19,6 @@ def find_trial_ids(trials, side='all', choice='all', order='trial num', sort='id
     :param event: trial event to align to (in order to remove nan trials for this event)
     :return: np.array of trial ids, list of dividers to indicate how trials are sorted
     """
-
-
     if event:
         idx = ~np.isnan(trials[event])
     else:
