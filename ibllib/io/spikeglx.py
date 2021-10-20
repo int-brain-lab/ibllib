@@ -113,6 +113,10 @@ class Reader:
         return _get_neuropixel_version_from_meta(self.meta)
 
     @property
+    def rl(self):
+        return self.ns / self.fs
+
+    @property
     def type(self):
         """:return: ap, lf or nidq. Useful to index dictionaries """
         if not self.meta:
@@ -132,6 +136,11 @@ class Reader:
         if not self.meta:
             return
         return _get_nchannels_from_meta(self.meta)
+
+    @property
+    def nsync(self):
+        """:return: number of sync channels"""
+        return len(_get_sync_trace_indices_from_meta(self.meta))
 
     @property
     def ns(self):
