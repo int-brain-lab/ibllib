@@ -747,7 +747,7 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
         with open(ch_file_stream, 'r') as f:
             cmeta_stream = json.load(f)
         if (cmeta_stream.get('chopped_first_sample', None) == i0 and
-                cmeta_stream.get('chopped_total_samples', None) == ns_stream):
+                cmeta_stream.get('chopped_total_samples', None) == total_samples):
             return Reader(ch_file_stream.with_suffix('.cbin'))
     else:
         shutil.copy(ch_file, ch_file_stream)
