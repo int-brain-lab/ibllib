@@ -26,6 +26,7 @@ class Reader:
 
     Note: To release system resources the close method must be called
     """
+
     def __init__(self, sglx_file, open=True):
         """
         An interface for reading data from a SpikeGLX file
@@ -112,6 +113,10 @@ class Reader:
         return _get_neuropixel_version_from_meta(self.meta)
 
     @property
+    def rl(self):
+        return self.ns / self.fs
+
+    @property
     def type(self):
         """:return: ap, lf or nidq. Useful to index dictionaries """
         if not self.meta:
@@ -131,6 +136,11 @@ class Reader:
         if not self.meta:
             return
         return _get_nchannels_from_meta(self.meta)
+
+    @property
+    def nsync(self):
+        """:return: number of sync channels"""
+        return len(_get_sync_trace_indices_from_meta(self.meta))
 
     @property
     def ns(self):
@@ -722,9 +732,10 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
     with open(ch_file, 'r') as f:
         cmeta = json.load(f)
 
-    # Get the first byte and number of bytes to download.
+    # Get the first sample index, and the number of samples to download.
     i0 = cmeta['chunk_bounds'][first_chunk]
     ns_stream = cmeta['chunk_bounds'][last_chunk + 1] - i0
+    total_samples = cmeta['chunk_bounds'][-1]
 
     # handles the meta file
     meta_local_path = ch_file_stream.with_suffix('.meta')
@@ -761,7 +772,8 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
     cmeta['sha1_uncompressed'] = None
     cmeta['chopped'] = True
     cmeta['chopped_first_sample'] = i0
-    cmeta['chopped_total_samples'] = ns_stream
+    cmeta['chopped_samples'] = ns_stream
+    cmeta['chopped_total_samples'] = total_samples
 
     with open(ch_file_stream, 'w') as f:
         json.dump(cmeta, f, indent=2, sort_keys=True)

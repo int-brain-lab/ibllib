@@ -16,6 +16,7 @@ from ibllib.time import date2isostr
 import ibllib.oneibl.registration as registration
 
 _logger = logging.getLogger('ibllib')
+LARGE_TASKS = ['EphysVideoCompress', 'TrainingVideoCompress', 'EphysDLC', 'TrainingDLC', 'SpikeSorting']
 
 
 def _get_pipeline_class(session_path, one):
@@ -134,11 +135,12 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
     return all_datasets
 
 
-def job_runner(subjects_path, lab=None, dry=False, one=None, count=5):
+def job_runner(subjects_path, mode='all', lab=None, dry=False, one=None, count=5):
     """
     Function to be used as a process to run the jobs as they are created on the database
     This will query waiting jobs from the specified Lab
     :param subjects_path: on servers: /mnt/s0/Data/Subjects. Contains sessions
+    :param mode: Whether to run all jobs, or only small or large (video compression, DLC, spike sorting) jobs
     :param lab: lab name as per Alyx
     :param dry:
     :param count:
@@ -150,8 +152,18 @@ def job_runner(subjects_path, lab=None, dry=False, one=None, count=5):
         lab = _get_lab(one)
     if lab is None:
         return  # if the lab is none, this will return empty tasks each time
-    tasks = one.alyx.rest('tasks', 'list', status='Waiting',
-                          django=f'session__lab__name__in,{lab}', no_cache=True)
+    # Filter for tasks
+    if mode == 'all':
+        tasks = one.alyx.rest('tasks', 'list', status='Waiting',
+                              django=f'session__lab__name__in,{lab}', no_cache=True)
+    elif mode == 'small':
+        tasks_all = one.alyx.rest('tasks', 'list', status='Waiting',
+                                  django=f'session__lab__name__in,{lab}', no_cache=True)
+        tasks = [t for t in tasks_all if t['name'] not in LARGE_TASKS]
+    elif mode == 'large':
+        tasks = one.alyx.rest('tasks', 'list', status='Waiting',
+                              django=f'session__lab__name__in,{lab},name__in,{LARGE_TASKS}', no_cache=True)
+
     tasks_runner(subjects_path, tasks, one=one, count=count, time_out=3600, dry=dry)
 
 
