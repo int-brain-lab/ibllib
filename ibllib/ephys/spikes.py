@@ -7,6 +7,7 @@ import tarfile
 import numpy as np
 from one.alf.files import get_session_path
 
+from iblutil.util import Bunch
 import phylib.io.alf
 from ibllib.ephys.sync_probes import apply_sync
 import ibllib.ephys.ephysqc as ephysqc
@@ -208,3 +209,52 @@ def ks2_to_tar(ks_path, out_path):
                 tar_dir.add(file, file.name)
 
     return [out_file]
+
+
+def detection(data, fs, h, detect_threshold=-4, time_tol=.002, distance_threshold_um=70):
+    """
+    Detects and de-duplicates negative voltage spikes based on voltage thresholding.
+    The de-duplication step locks in maximum amplitude events. To account for collisions the amplitude
+    is assumed to be decaying from the peak. If this is a multipeak event, each is labeled as a spike.
+
+    :param data: 2D numpy array nsamples x nchannels
+    :param fs: sampling frequency (Hz)
+    :param h: dictionary with neuropixel geometry header: see. ibllib.ephys.neuropixel.trace_header
+    :param detect_threshold: negative value below which the voltage is considered to be a spike
+    :param time_tol: time in seconds for which samples before and after are assumed to be part of the spike
+    :param distance_threshold_um: distance for which exceeding threshold values are assumed to part of the same spike
+    :return: spieks dictionary of vectors with keys "time", "trace", "amp" and "ispike"
+    """
+
+    time_bracket = np.array([-1, 1]) * time_tol
+    inds, indtr = np.where(data < detect_threshold)
+    picks = Bunch(time=inds / fs, trace=indtr, amp=data[inds, indtr], ispike=np.zeros(inds.size))
+    amp_order = np.argsort(picks.amp)
+
+    hxy = h['x'] + 1j * h['y']
+
+    spike_id = 1
+    while np.any(picks.ispike == 0):
+        # find the first unassigned spike with the highest amplitude
+        iamp = np.where(picks.ispike[amp_order] == 0)[0][0]
+        imax = amp_order[iamp]
+        # look only within the time range
+        itlims = np.searchsorted(picks.time, picks.time[imax] + time_bracket)
+        itlims = np.arange(itlims[0], itlims[1])
+
+        offset = np.abs(hxy[picks.trace[itlims]] - hxy[picks.trace[imax]])
+        iit = np.where(offset < distance_threshold_um)[0]
+
+        picks.ispike[itlims[iit]] = -1
+        picks.ispike[imax] = spike_id
+        # handles collision with a simple amplitude decay model: if amplitude doesn't decay
+        # as a function of offset, then it's a collision and another spike is set
+        iii = np.lexsort((picks.amp[itlims[iit]], offset[iit]))
+        idetect = np.r_[0, np.where(np.diff(picks.amp[itlims[iit[iii]]]) < 0)[0] + 1]
+        picks.ispike[itlims[iit[iii[idetect]]]] = np.arange(idetect.size) + spike_id
+
+        spike_id += idetect.size
+
+
+    detects = Bunch({k: picks[k][picks.ispike > 0] for k in picks})
+    return detects
