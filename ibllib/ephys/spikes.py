@@ -252,9 +252,7 @@ def detection(data, fs, h, detect_threshold=-4, time_tol=.002, distance_threshol
         iii = np.lexsort((picks.amp[itlims[iit]], offset[iit]))
         idetect = np.r_[0, np.where(np.diff(picks.amp[itlims[iit[iii]]]) < 0)[0] + 1]
         picks.ispike[itlims[iit[iii[idetect]]]] = np.arange(idetect.size) + spike_id
-
         spike_id += idetect.size
-
 
     detects = Bunch({k: picks[k][picks.ispike > 0] for k in picks})
     return detects

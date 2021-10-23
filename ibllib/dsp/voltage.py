@@ -210,7 +210,6 @@ def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, k_kwa
     return x_
 
 
-
 def decompress_destripe_cbin(sr, output_file=None, h=None, wrot=None, append=False, nc_out=None,
                              dtype=np.int16, ns2add=0):
     """

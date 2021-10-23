@@ -171,7 +171,7 @@ class TestDetectSpikes(unittest.TestCase):
             from easyqc.gui import viewseis
             eqc = viewseis(data, si=1 / 30000 * 1e3, taxis=0, title='data')
             eqc.ctrl.add_scatter(detects.time * 1e3, detects.trace)
-            eqco = viewseis(data_out, si=1 / 30000 * 1e3, taxis=0, title='data_out')
+            eqco = viewseis(data_out, si=1 / 30000 * 1e3, taxis=0, title='data_out')  # noqa
 
         xcor = np.zeros(nc)
         for tr in np.arange(nc):
