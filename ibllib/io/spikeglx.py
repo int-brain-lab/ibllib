@@ -716,7 +716,9 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
     webclient = one.alyx
     cache_dir = cache_dir or webclient.cache_dir
     relpath = Path(url_cbin.replace(webclient._par.HTTP_DATA_SERVER, '.')).parents[0]
-    target_dir = Path(cache_dir, relpath)
+    # write the temp file into a subdirectory
+    tdir_chunk = f"chunk_{str(first_chunk).zfill(6)}_to_{str(last_chunk).zfill(6)}"
+    target_dir = Path(cache_dir, relpath, tdir_chunk)
     Path(target_dir).mkdir(parents=True, exist_ok=True)
 
     # First, download the .ch file if necessary

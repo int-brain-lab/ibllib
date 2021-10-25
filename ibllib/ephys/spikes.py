@@ -223,7 +223,7 @@ def detection(data, fs, h, detect_threshold=-4, time_tol=.002, distance_threshol
     :param detect_threshold: negative value below which the voltage is considered to be a spike
     :param time_tol: time in seconds for which samples before and after are assumed to be part of the spike
     :param distance_threshold_um: distance for which exceeding threshold values are assumed to part of the same spike
-    :return: spieks dictionary of vectors with keys "time", "trace", "amp" and "ispike"
+    :return: spikes dictionary of vectors with keys "time", "trace", "amp" and "ispike"
     """
 
     time_bracket = np.array([-1, 1]) * time_tol
@@ -250,7 +250,8 @@ def detection(data, fs, h, detect_threshold=-4, time_tol=.002, distance_threshol
         # handles collision with a simple amplitude decay model: if amplitude doesn't decay
         # as a function of offset, then it's a collision and another spike is set
         iii = np.lexsort((picks.amp[itlims[iit]], offset[iit]))
-        idetect = np.r_[0, np.where(np.diff(picks.amp[itlims[iit[iii]]]) < 0)[0] + 1]
+        sorted_amps_db = 20 * np.log10(np.abs(picks.amp[itlims[iit][iii]]))
+        idetect = np.r_[0, np.where(np.diff(sorted_amps_db) > 12)[0] + 1]
         picks.ispike[itlims[iit[iii[idetect]]]] = np.arange(idetect.size) + spike_id
         spike_id += idetect.size
 
