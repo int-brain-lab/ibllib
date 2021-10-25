@@ -108,7 +108,8 @@ def _channels_alf2bunch(channels, brain_regions=None):
     return channels_
 
 
-def _load_spike_sorting(eid, one=None, collection=None, revision=None, return_channels=True, dataset_types=None):
+def _load_spike_sorting(eid, one=None, collection=None, revision=None, return_channels=True, dataset_types=None,
+                        brain_regions=None):
     """
     Generic function to load spike sortin according to one searchwords
     Will try to load one spike sorting for any probe present for the eid matching the collection
@@ -121,6 +122,7 @@ def _load_spike_sorting(eid, one=None, collection=None, revision=None, return_ch
     :param collection: collection filter word - accepts wildcard - can be a combination of spike sorter and probe
     :param revision: revision to load
     :param return_channels: True
+    :param brain_regions: ibllib.atlas.regions.BrainRegions object - will label acronyms if provided
     :return:
     """
     one = one or ONE()
@@ -140,7 +142,8 @@ def _load_spike_sorting(eid, one=None, collection=None, revision=None, return_ch
         clusters[pname] = one.load_object(eid, collection=probe_collection, obj='clusters',
                                           attribute=cluster_attributes)
 
-    channels = _load_channels_locations_from_disk(eid, collection=collection, one=one, revision=revision)
+    channels = _load_channels_locations_from_disk(eid, collection=collection, one=one, revision=revision,
+                                                  brain_regions=brain_regions)
 
     if return_channels:
         return spikes, clusters, channels
@@ -309,7 +312,8 @@ def load_channel_locations(eid, probe=None, one=None, aligned=False, brain_atlas
     return channels
 
 
-def load_spike_sorting_fast(eid, one=None, probe=None, dataset_types=None, spike_sorter=None, revision=None):
+def load_spike_sorting_fast(eid, one=None, probe=None, dataset_types=None, spike_sorter=None, revision=None,
+                            brain_regions=None):
     """
     From an eid, loads spikes and clusters for all probes
     The following set of dataset types are loaded:
@@ -325,16 +329,19 @@ def load_spike_sorting_fast(eid, one=None, probe=None, dataset_types=None, spike
     :param dataset_types: additional spikes/clusters objects to add to the standard default list
     :param spike_sorter: name of the spike sorting you want to load (None for default)
     :param return_channels: (bool) defaults to False otherwise tries and load channels from disk
+    :param brain_regions: ibllib.atlas.regions.BrainRegions object - will label acronyms if provided
     :return: spikes, clusters (dict of bunch, 1 bunch per probe)
     """
     collection = _collection_filter_from_args(probe, spike_sorter)
     _logger.debug(f"load spike sorting with collection filter {collection}")
-    kwargs = dict(eid=eid, one=one, collection=collection, revision=revision, dataset_types=dataset_types)
+    kwargs = dict(eid=eid, one=one, collection=collection, revision=revision, dataset_types=dataset_types,
+                  brain_regions=brain_regions)
     spikes, clusters, channels = _load_spike_sorting(**kwargs, return_channels=True)
     return spikes, clusters, channels
 
 
-def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sorter=None, revision=None):
+def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sorter=None, revision=None,
+                       brain_regions=None):
     """
     From an eid, loads spikes and clusters for all probes
     The following set of dataset types are loaded:
@@ -350,12 +357,14 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sort
     :param dataset_types: additional spikes/clusters objects to add to the standard default list
     :param spike_sorter: name of the spike sorting you want to load (None for default)
     :param return_channels: (bool) defaults to False otherwise tries and load channels from disk
+    :param brain_regions: ibllib.atlas.regions.BrainRegions object - will label acronyms if provided
     :return: spikes, clusters (dict of bunch, 1 bunch per probe)
     """
     collection = _collection_filter_from_args(probe, spike_sorter)
     _logger.debug(f"load spike sorting with collection filter {collection}")
     spikes, clusters = _load_spike_sorting(eid=eid, one=one, collection=collection, revision=revision,
-                                           return_channels=False, dataset_types=dataset_types)
+                                           return_channels=False, dataset_types=dataset_types,
+                                           brain_regions=brain_regions)
     return spikes, clusters
 
 
