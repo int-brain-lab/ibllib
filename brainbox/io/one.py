@@ -337,6 +337,7 @@ def load_spike_sorting_fast(eid, one=None, probe=None, dataset_types=None, spike
     kwargs = dict(eid=eid, one=one, collection=collection, revision=revision, dataset_types=dataset_types,
                   brain_regions=brain_regions)
     spikes, clusters, channels = _load_spike_sorting(**kwargs, return_channels=True)
+    clusters = merge_clusters_channels(clusters, channels, keys_to_add_extra=None)
     return spikes, clusters, channels
 
 
