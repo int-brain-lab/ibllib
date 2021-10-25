@@ -78,7 +78,7 @@ class Task(abc.ABC):
             self.log = ('' if not tdict['log'] else tdict['log'] +
                         '\n\n=============================RERUN=============================\n')
         # setup
-        self.setUp()
+        self.setUp(**kwargs)
         # Setup the console handler with a StringIO object
         log_capture_string = io.StringIO()
         ch = logging.StreamHandler(log_capture_string)
@@ -144,12 +144,13 @@ class Task(abc.ABC):
           returning any dataset.
         """
 
-    def setUp(self):
+    def setUp(self, **kwargs):
         """
         Function to optionally overload to check inputs.
         :return:
         """
         self.data_handler.setUp()
+        self.assert_expected_inputs(**kwargs)
 
     def tearDown(self):
         """
@@ -171,16 +172,36 @@ class Task(abc.ABC):
         :return:
         """
         assert self.status == 0
-        everthing_is_fine = True
+        everything_is_fine = True
         for expected_file in self.signature['output_files']:
             actual_files = list(self.session_path.rglob(str(Path(expected_file[1]).joinpath(expected_file[0]))))
             if len(actual_files) == 0:
-                everthing_is_fine = False
+                everything_is_fine = False
                 _logger.error(f"Signature file expected {expected_file} not found in the output")
-        if not everthing_is_fine:
+        if not everything_is_fine:
             for out in self.outputs:
                 _logger.error(f"{out}")
             raise FileNotFoundError("Missing outputs after task completion")
+
+    def assert_expected_inputs(self, **kwargs):
+        """
+        Before running a task, check that all the files necessary to run the task have been downloaded/ are on the local file
+        system already
+        :return:
+        """
+
+        # In the input_files cannot have any * collection
+        everything_is_fine = True
+        for expected_file in self.signature['input_files']:
+            actual_files = list(self.session_path.rglob(str(Path(expected_file[1]).joinpath(expected_file[0]))))
+            if len(actual_files) == 0 and expected_file[2]:
+                everything_is_fine = False
+                _logger.error(f"Signature file expected {expected_file} not found in the input")
+
+        if not everything_is_fine:
+            raise FileNotFoundError("Missing inputs to run task")
+
+        # Should be overwritten in each task
 
     def get_data_handler(self):
         """

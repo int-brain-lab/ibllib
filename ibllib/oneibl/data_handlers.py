@@ -1,8 +1,10 @@
+import logging
 import pandas as pd
 import numpy as np
 from pathlib import Path
 import shutil
 import abc
+from time import time
 
 from one.globus import Globus, get_lab_from_endpoint_id
 from one.api import ONE
@@ -12,6 +14,8 @@ from iblutil.io.parquet import np2str
 from ibllib.oneibl.registration import register_dataset
 from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_PATCH_PATH
 from ibllib.oneibl.aws import AWS
+
+_logger = logging.getLogger('ibllib')
 
 
 class DataHandler(abc.ABC):
@@ -98,6 +102,11 @@ class ServerDataHandler(DataHandler):
         """
         df = super().getData()
 
+        if len(df) == 0:
+            # If no datasets found in the cache only work off local file system do not attempt to download any missing data
+            # using globus
+            return
+
         rel_sess_path = '/'.join(df.iloc[0]['session_path'].split('/')[-3:])
         assert (rel_sess_path.split('/')[0] == self.one.path2ref(self.session_path)['subject'])
 
@@ -110,10 +119,14 @@ class ServerDataHandler(DataHandler):
                 target_paths.append(sess_path)
                 source_paths.append(add_uuid_string(sess_path, np2str(np.r_[d.name[0], d.name[1]])))
 
-        if len(target_paths) == 0:
-            return
+        if len(target_paths) != 0:
+            ts = time()
+            for sp, tp in zip(source_paths, target_paths):
+                _logger.info(f'Downloading {sp} to {tp}')
+            self.globus.mv(f'flatiron_{self.lab}', 'local', source_paths, target_paths)
+            _logger.debug(f'Complete. Time elapsed {time() - ts}')
 
-        self.globus.mv(f'flatiron_{self.lab}', 'local', source_paths, target_paths)
+
 
     def uploadData(self, outputs, version, **kwargs):
         """

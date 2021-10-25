@@ -38,6 +38,14 @@ class EphysPulses(tasks.Task):
     io_charge = 30  # this jobs reads raw ap files
     priority = 90  # a lot of jobs depend on this one
     level = 0  # this job doesn't depend on anything
+    signature = {
+        'input_files': [('*ap.meta', 'raw_ephys_data/probe*', True),  # not sure if this should be true as case where no probes are used
+                        ('*ap.ch', 'raw_ephys_data/probe*', True),
+                        ('*ap.cbin', 'raw_ephys_data/probe*', True),
+                        ('*nidq.meta', 'raw_ephys_data', False),  # not True as not required for 3A probes
+                        ('*nidq.ch', 'raw_ephys_data', False),
+                        ('*nidq.cbin', 'raw_ephys_data', False)],
+        'output_files': ()}
 
     def _run(self, overwrite=False):
         # outputs numpy
@@ -47,6 +55,26 @@ class EphysPulses(tasks.Task):
 
         status, sync_files = sync_probes.sync(self.session_path)
         return out_files + sync_files
+
+    def assert_expected_inputs(self):
+        neuropixel_version = spikeglx.get_neuropixel_version_from_folder(self.session_path)
+        probes = spikeglx.get_probes_from_folder(self.session_path)
+
+        # TODO need to test on case where no probes are used e.g like chris/nate task
+
+        full_input_files = []
+        for sig in self.signature['input_files']:
+            collection = sig[1]
+            if 'raw_ephys_data/probe**' in collection:
+                for probe in probes:
+                    full_input_files.append((sig[0], f'raw_ephys_data/{probe}', sig[2]))
+            else:
+                if neuropixel_version != '3A':
+                    full_input_files.append((sig[0], sig[1], True))
+
+        self.signature['input_files'] = full_input_files
+
+        super().assert_expected_inputs()
 
 
 class RawEphysQC(tasks.Task):
@@ -113,7 +141,23 @@ class SpikeSorting(tasks.Task):
     )
     SPIKE_SORTER_NAME = 'pykilosort'
     PYKILOSORT_REPO = Path.home().joinpath('Documents/PYTHON/SPIKE_SORTING/pykilosort')
-    signature = {'input_files': signatures.SPIKESORTING, 'output_files': ()}
+    signature = {
+        'input_files': [],  # see setUp method for declaration of inputs
+        'output_files': ()}
+
+    @staticmethod
+    def spike_sorting_signature(pname=None):
+        pname = pname if pname is not None else "probe*"
+        signature = [('*ap.meta', f'raw_ephys_data/{pname}', True),
+                     ('*ap.ch', f'raw_ephys_data/{pname}', True),
+                     ('*ap.cbin', f'raw_ephys_data/{pname}', True),
+                     ('_spikeglx_sync.channels.*', 'raw_ephys_data*', True),
+                     ('_spikeglx_sync.polarities.*', 'raw_ephys_data*', True),
+                     ('_spikeglx_sync.times.*', 'raw_ephys_data*', True),
+                     ('_iblrig_taskData.raw.*', 'raw_behavior_data', True),
+                     ('_iblrig_taskSettings.raw.*', 'raw_behavior_data', True)
+                     ]
+        return signature
 
     @staticmethod
     def _sample2v(ap_file):
@@ -149,6 +193,14 @@ class SpikeSorting(tasks.Task):
             )
             return ""
         return info.decode("utf-8").strip()
+
+    def setUp(self, probes=None):
+        if not probes or len(probes) == 2:
+            self.signature['input_files'] = self.spike_sorting_signature()
+        else:
+            self.signature['input_files'] = self.spike_sorting_signature(probes[0])
+
+        super().setUp(probes=probes)
 
     def _run_pykilosort(self, ap_file):
         """
@@ -262,6 +314,36 @@ class SpikeSorting(tasks.Task):
         probe_files = spikes.probes_description(self.session_path, one=self.one)
         return out_files + probe_files
 
+    def assert_expected_inputs(self, probes=None):
+        """
+        This transforms all wildcards in collection to exact match
+        :param probes:
+        :return:
+        """
+
+        neuropixel_version = spikeglx.get_neuropixel_version_from_folder(self.session_path)
+        probes = probes or spikeglx.get_probes_from_folder(self.session_path)
+
+        full_input_files = []
+        for sig in self.signature['input_files']:
+            collection = sig[1]
+            if 'raw_ephys_data*' in collection:
+                if neuropixel_version != '3A':
+                    full_input_files.append((sig[0], 'raw_ephys_data', sig[2]))
+                for probe in probes:
+                    full_input_files.append((sig[0], f'raw_ephys_data/{probe}', sig[2]))
+
+            elif 'raw_ephys_data/probe*' in collection:
+                for probe in probes:
+                    full_input_files.append((sig[0], f'raw_ephys_data/{probe}', sig[2]))
+
+            else:
+                full_input_files.append(sig)
+
+        self.signature['input_files'] = full_input_files
+
+        super().assert_expected_inputs()
+
 
 class EphysVideoCompress(tasks.Task):
     priority = 40
@@ -292,7 +374,17 @@ class EphysVideoCompress(tasks.Task):
 class EphysTrials(tasks.Task):
     priority = 90
     level = 1
-    signature = {'input_files': signatures.EPHYSTRIALS, 'output_files': ()}
+    signature = {
+        'input_files': [('_iblrig_taskData.raw.*', 'raw_behavior_data', True),
+                        ('_iblrig_taskSettings.raw.*', 'raw_behavior_data', True),
+                        ('_spikeglx_sync.npy', 'raw_ephys_data*', True),
+                        ('_spikeglx_sync.polarities.npy', 'raw_ephys_data*', True),
+                        ('_spikeglx_sync.times.npy', 'raw_ephys_data*', True),
+                        ('_iblrig_encoderEvents.raw', 'raw_behavior_data', True),
+                        ('_iblrig_encoderPositions.raw', 'raw_behavior_data', True),
+                        ('*wiring.json', 'raw_ephys_data*', False),
+                        ('*.meta', 'raw_ephys_data*', True)],
+        'output_files': ()}
 
     def _behaviour_criterion(self):
         """
@@ -326,6 +418,32 @@ class EphysTrials(tasks.Task):
         # Aggregate and update Alyx QC fields
         qc.run(update=True)
         return out_files
+
+    def assert_expected_inputs(self):
+        """
+        This transforms all wildcards in collection to exact match
+        :param probes:
+        :return:
+        """
+
+        neuropixel_version = spikeglx.get_neuropixel_version_from_folder(self.session_path)
+        probes = spikeglx.get_probes_from_folder(self.session_path)
+
+        full_input_files = []
+        for sig in self.signature['input_files']:
+            collection = sig[1]
+            if 'raw_ephys_data*' in collection:
+                if neuropixel_version != '3A':
+                    full_input_files.append((sig[0], 'raw_ephys_data', sig[2]))
+                for probe in probes:
+                    full_input_files.append((sig[0], f'raw_ephys_data/{probe}', sig[2]))
+            else:
+                full_input_files.append(sig)
+
+        self.signature['input_files'] = full_input_files
+
+        super().assert_expected_inputs()
+
 
 
 class EphysCellsQc(tasks.Task):
@@ -416,6 +534,7 @@ class EphysMtscomp(tasks.Task):
     priority = 50  # ideally after spike sorting
     level = 0
 
+
     def _run(self):
         """
         Compress ephys files looking for `compress_ephys.flag` within the probes folder
@@ -461,7 +580,15 @@ class EphysPassive(tasks.Task):
     cpu = 1
     io_charge = 90
     level = 1
-    signature = {'input_files': signatures.EPHYSPASSIVE, 'output_files': ()}
+    signature = {
+        'input_files': [('_iblrig_taskSettings.raw*', 'raw_behavior_data', True),
+                        ('_spikeglx_sync.channels.*', 'raw_ephys_data*', True),
+                        ('_spikeglx_sync.polarities.*', 'raw_ephys_data*', True),
+                        ('_spikeglx_sync.times.*', 'raw_ephys_data*', True),
+                        ('*.meta', 'raw_ephys_data*', True),
+                        ('*wiring.json', 'raw_ephys_data*', False),
+                        ('_iblrig_RFMapStim.raw*', 'raw_passive_data', True)],
+        'output_files': ()}
 
     def _run(self):
         """returns a list of pathlib.Paths. """
@@ -470,6 +597,26 @@ class EphysPassive(tasks.Task):
             self.status = -1
         # Register?
         return paths
+
+    def assert_expected_inputs(self):
+
+        neuropixel_version = spikeglx.get_neuropixel_version_from_folder(self.session_path)
+        probes = spikeglx.get_probes_from_folder(self.session_path)
+
+        full_input_files = []
+        for sig in self.signature['input_files']:
+            collection = sig[1]
+            if 'raw_ephys_data*' in collection:
+                if neuropixel_version != '3A':
+                    full_input_files.append((sig[0], 'raw_ephys_data', sig[2]))
+                for probe in probes:
+                    full_input_files.append((sig[0], f'raw_ephys_data/{probe}', sig[2]))
+            else:
+                full_input_files.append(sig)
+
+        self.signature['input_files'] = full_input_files
+
+        super().assert_expected_inputs()
 
 
 class EphysExtractionPipeline(tasks.Pipeline):
