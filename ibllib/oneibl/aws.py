@@ -1,6 +1,5 @@
 import logging
 from pathlib import Path
-import sys
 from time import time
 
 import boto3
