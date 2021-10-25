@@ -47,16 +47,21 @@ class TestCameraQC(unittest.TestCase):
     def test_check_brightness(self):
         self.qc.data['frame_samples'] = self.qc.load_reference_frames('left')
         n = len(self.qc.data['frame_samples'])
-        self.qc.frame_samples_idx = np.linspace(0, 1000, n, dtype=int)
+        self.qc.frame_samples_idx = np.arange(n)
+        self.qc.n_samples = 3
         self.assertEqual('PASS', self.qc.check_brightness(display=True))
         # Check plots
         fig = plt.gcf()
         self.assertEqual(3, len(fig.axes))
-        expected = np.array([105.624258, 110.925964, 92.329614])
+        expected = np.array([72.00794903, 70.98228997, 78.25575987])
         np.testing.assert_array_almost_equal(fig.axes[0].lines[0]._y, expected)
         # Make frames a third as bright
         self.qc.data['frame_samples'] = (self.qc.data['frame_samples'] / 3).astype(np.int32)
+        self.assertEqual('WARNING', self.qc.check_brightness())
+        # Change proportion of passing frames
+        self.qc.n_samples = 1000
         self.assertEqual('FAIL', self.qc.check_brightness())
+        self.qc.n_samples = 3
         # Change thresholds
         self.qc.data['frame_samples'] = self.qc.load_reference_frames('left')
         self.assertEqual('FAIL', self.qc.check_brightness(bounds=(10, 20)))
@@ -139,13 +144,13 @@ class TestCameraQC(unittest.TestCase):
         self.qc.label = 'left'
         self.qc.frame_samples_idx = np.linspace(0, 100, 20, dtype=int)
         outcome = self.qc.check_focus(test=True, display=True)
-        self.assertEqual('FAIL', outcome)
+        self.assertEqual('PASS', outcome)
         # Verify figures
         figs = plt.get_fignums()
         self.assertEqual(len(plt.figure(figs[0]).axes), 16)
         # Verify Laplacian on blurred images
-        expected = np.array([13.19, 14.24, 15.44, 16.64, 18.67, 21.51, 25.99, 31.77,
-                             40.75, 52.52, 71.12, 98.26, 149.85, 229.96, 563.53, 563.53])
+        expected = np.array([11.82, 12.94, 13.84, 14.52, 15.68, 16.76, 18.85, 21.9,
+                             25.45, 31.3, 40.48, 54.05, 81.53, 133.19, 425.15, 425.15])
         actual = [round(x, 2) for x in plt.figure(figs[1]).axes[3].lines[0]._y.tolist()]
         np.testing.assert_array_equal(expected, actual)
         # Verify fft on blurred images
