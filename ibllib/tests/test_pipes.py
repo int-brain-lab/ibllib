@@ -32,6 +32,7 @@ class TestExtractors2Tasks(unittest.TestCase):
             ("mock_ephys", "ephys"),
             ("sync_ephys", "ephys"),
             ("ephys", "ephys"),
+            ("ephys_passive_opto", "ephys_passive_opto")
         ]
         for typ, exp in pipe_out:
             assert ibllib.io.extractors.base._get_pipeline_from_task_type(typ) == exp

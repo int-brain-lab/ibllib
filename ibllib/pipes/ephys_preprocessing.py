@@ -17,10 +17,12 @@ from ibllib.io.video import label_from_path
 from ibllib.io.extractors import ephys_fpga, ephys_passive, camera
 from ibllib.pipes import tasks
 from ibllib.pipes.training_preprocessing import TrainingRegisterRaw as EphysRegisterRaw
+from ibllib.pipes.misc import create_alyx_probe_insertions
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
 from ibllib.dsp import rms
+from ibllib.io.extractors import signatures
 
 _logger = logging.getLogger("ibllib")
 
@@ -56,20 +58,39 @@ class RawEphysQC(tasks.Task):
     io_charge = 30  # this jobs reads raw ap files
     priority = 10  # a lot of jobs depend on this one
     level = 0  # this job doesn't depend on anything
+    signature = {'input_files': signatures.RAWEPHYSQC, 'output_files': ()}
 
     def _run(self, overwrite=False):
-        qc_files = ephysqc.raw_qc_session(self.session_path, overwrite=overwrite)
+        eid = self.one.path2eid(self.session_path)
+        probes = [(x['id'], x['name']) for x in self.one.alyx.rest('insertions', 'list', session=eid)]
+        # Usually there should be two probes, if there are less, check if all probes are registered
+        if len(probes) < 2:
+            _logger.warning(f"{len(probes)} probes registered for session {eid}, trying to register from local data")
+            probes = [(p['id'], p['name']) for p in create_alyx_probe_insertions(self.session_path, one=self.one)]
+        qc_files = []
+        for pid, pname in probes:
+            _logger.info(f"\nRunning QC for probe insertion {pname}")
+            try:
+                eqc = ephysqc.EphysQC(pid, session_path=self.session_path, one=self.one)
+                qc_files.extend(eqc.run(update=True, overwrite=overwrite))
+            except AssertionError:
+                _logger.error(traceback.format_exc())
+                self.status = -1
+                continue
         return qc_files
 
 
 class EphysAudio(tasks.Task):
     """
-    Computes raw electrophysiology QC
+    Compresses the microphone wav file in a lossless flac file
     """
 
     cpu = 2
     priority = 10  # a lot of jobs depend on this one
     level = 0  # this job doesn't depend on anything
+    signature = {'input_files': ('_iblrig_micData.raw.wav', 'raw_behavior_data', True),
+                 'output_files': ('_iblrig_micData.raw.flac', 'raw_behavior_data', True),
+                 }
 
     def _run(self, overwrite=False):
         command = "ffmpeg -i {file_in} -y -nostdin -c:a flac -nostats {file_out}"
@@ -94,6 +115,7 @@ class SpikeSorting(tasks.Task):
     )
     SPIKE_SORTER_NAME = 'pykilosort'
     PYKILOSORT_REPO = Path.home().joinpath('Documents/PYTHON/SPIKE_SORTING/pykilosort')
+    signature = {'input_files': signatures.SPIKESORTING, 'output_files': ()}
 
     @staticmethod
     def _sample2v(ap_file):
@@ -131,21 +153,17 @@ class SpikeSorting(tasks.Task):
         return info.decode("utf-8").strip()
 
     def _run_pykilosort(self, ap_file):
-        f"""
+        """
         Runs the ks2 matlab spike sorting for one probe dataset
-        the raw spike sorting output can either be with the probe (<1.5.5) or in the
-        session_path/spike_sorters/{self.SPIKE_SORTER_NAME}/probeXX folder
+        the raw spike sorting output is in session_path/spike_sorters/{self.SPIKE_SORTER_NAME}/probeXX folder
+        (discontinued support for old spike sortings in the probe folder <1.5.5)
         :return: path of the folder containing ks2 spike sorting output
         """
         self.version = self._fetch_pykilosort_version(self.PYKILOSORT_REPO)
         label = ap_file.parts[-2]  # this is usually the probe name
         sorter_dir = self.session_path.joinpath("spike_sorters", self.SPIKE_SORTER_NAME, label)
-        FORCE_RERUN = True
+        FORCE_RERUN = False
         if not FORCE_RERUN:
-            if ap_file.parent.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log").exists():
-                _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
-                             f" found for {ap_file}, skipping.")
-                return ap_file.parent
             if sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log").exists():
                 _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
                              f" found in {sorter_dir}, skipping.")
@@ -198,19 +216,21 @@ class SpikeSorting(tasks.Task):
         shutil.rmtree(temp_dir, ignore_errors=True)
         return sorter_dir
 
-    def _run(self, overwrite=False):
+    def _run(self, probes=None):
         """
         Multiple steps. For each probe:
         - Runs ks2 (skips if it already ran)
         - synchronize the spike sorting
         - output the probe description files
-        :param overwrite:
+        :param probes: (list of str) if provided, will only run spike sorting for specified probe names
         :return: list of files to be registered on database
         """
         efiles = spikeglx.glob_ephys_files(self.session_path)
         ap_files = [(ef.get("ap"), ef.get("label")) for ef in efiles if "ap" in ef.keys()]
         out_files = []
         for ap_file, label in ap_files:
+            if isinstance(probes, list) and label not in probes:
+                continue
             try:
                 ks2_dir = self._run_pykilosort(ap_file)  # runs ks2, skips if it already ran
                 probe_out_path = self.session_path.joinpath("alf", label, self.SPIKE_SORTER_NAME)
@@ -274,6 +294,7 @@ class EphysVideoCompress(tasks.Task):
 class EphysTrials(tasks.Task):
     priority = 90
     level = 1
+    signature = {'input_files': signatures.EPHYSTRIALS, 'output_files': ()}
 
     def _behaviour_criterion(self):
         """
@@ -442,6 +463,7 @@ class EphysPassive(tasks.Task):
     cpu = 1
     io_charge = 90
     level = 1
+    signature = {'input_files': signatures.EPHYSPASSIVE, 'output_files': ()}
 
     def _run(self):
         """returns a list of pathlib.Paths. """

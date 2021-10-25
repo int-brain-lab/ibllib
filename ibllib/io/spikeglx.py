@@ -26,6 +26,7 @@ class Reader:
 
     Note: To release system resources the close method must be called
     """
+
     def __init__(self, sglx_file, open=True):
         """
         An interface for reading data from a SpikeGLX file
@@ -112,6 +113,10 @@ class Reader:
         return _get_neuropixel_version_from_meta(self.meta)
 
     @property
+    def rl(self):
+        return self.ns / self.fs
+
+    @property
     def type(self):
         """:return: ap, lf or nidq. Useful to index dictionaries """
         if not self.meta:
@@ -131,6 +136,11 @@ class Reader:
         if not self.meta:
             return
         return _get_nchannels_from_meta(self.meta)
+
+    @property
+    def nsync(self):
+        """:return: number of sync channels"""
+        return len(_get_sync_trace_indices_from_meta(self.meta))
 
     @property
     def ns(self):
@@ -326,6 +336,38 @@ def read_meta_data(md_file):
     return Bunch(d)
 
 
+def write_meta_data(md, md_file):
+    """
+    Parses a dict into a spikeglx meta data file
+    TODO write a test for this function, (read in, write out and make sure it is the same)
+    :param meta: meta data dict
+    :param md_file: file to save meta data to
+    :return:
+    """
+    with open(md_file, 'w') as fid:
+        for key, val in md.items():
+            if isinstance(val, list):
+                val = ','.join([str(int(v)) for v in val])
+            if isinstance(val, float):
+                if val.is_integer():
+                    val = int(val)
+            fid.write(f'{key}={val}\n')
+
+
+def _get_savedChans_subset(chns):
+    """
+    Get the subset of the original channels that are saved per shank
+    :param chns:
+    :return:
+    """
+    chn_grps = np.r_[0, np.where(np.diff(chns) != 1)[0] + 1, len(chns)]
+    chn_subset = [f'{chns[chn_grps[i]]}:{chns[chn_grps[i + 1] - 1]}'
+                  if chn_grps[i] < len(chns) - 1 else f'{chns[chn_grps[i]]}'
+                  for i in range(len(chn_grps) - 1)]
+
+    return ','.join([sub for sub in chn_subset])
+
+
 def _get_serial_number_from_meta(md):
     """
     Get neuropixel serial number from the metadata dictionary
@@ -342,11 +384,20 @@ def _get_neuropixel_version_from_meta(md):
     """
     if 'typeEnabled' in md.keys():
         return '3A'
-    elif 'typeImEnabled' in md.keys() and 'typeNiEnabled' in md.keys():
+
+    prb_type = md.get('imDatPrb_type')
+    # Neuropixel 1.0 either 3B1 or 3B2 (ask Olivier about 3B1)
+    if prb_type == 0:
         if 'imDatPrb_port' in md.keys() and 'imDatPrb_slot' in md.keys():
             return '3B2'
         else:
             return '3B1'
+    # Neuropixel 2.0 single shank
+    if prb_type == 21:
+        return 'NP2.1'
+    # Neuropixel 2.0 four shank
+    if prb_type == 24:
+        return 'NP2.4'
 
 
 def _get_sync_trace_indices_from_meta(md):
@@ -435,29 +486,45 @@ def _conversion_sample2v_from_meta(meta_data):
     def int2volts(md):
         """ :return: Conversion scalar to Volts. Needs to be combined with channel gains """
         if md.get('typeThis', None) == 'imec':
-            return md.get('imAiRangeMax') / 512
+            if 'imMaxInt' in md:
+                return md.get('imAiRangeMax') / int(md['imMaxInt'])
+            else:
+                return md.get('imAiRangeMax') / 512
         else:
             return md.get('niAiRangeMax') / 32768
 
     int2volt = int2volts(meta_data)
+    version = _get_neuropixel_version_from_meta(meta_data)
     # interprets the gain value from the metadata header:
     if 'imroTbl' in meta_data.keys():  # binary from the probes: ap or lf
         sy_gain = np.ones(int(meta_data['snsApLfSy'][-1]), dtype=np.float32)
         # imroTbl has 384 entries regardless of no of channels saved, so need to index by n_ch
+        # TODO need to look at snsSaveChanMap and index channels to get correct gain
         n_chn = _get_nchannels_from_meta(meta_data) - 1
-        # the sync traces are not included in the gain values, so are included for broadcast ops
-        gain = re.findall(r'([0-9]* [0-9]* [0-9]* [0-9]* [0-9]*)', meta_data['imroTbl'])[:n_chn]
-        out = {'lf': np.hstack((np.array([1 / np.float32(g.split(' ')[-1]) for g in gain]) *
-                                int2volt, sy_gain)),
-               'ap': np.hstack((np.array([1 / np.float32(g.split(' ')[-2]) for g in gain]) *
-                                int2volt, sy_gain))}
+        if 'NP2' in version:
+            # NP 2.0; APGain = 80 for all AP
+            # return 0 for LFgain (no LF channels)
+            out = {'lf': np.hstack((int2volt / 80 * np.ones(n_chn).astype(np.float32), sy_gain)),
+                   'ap': np.hstack((int2volt / 80 * np.ones(n_chn).astype(np.float32), sy_gain))}
+        else:
+            # the sync traces are not included in the gain values, so are included for
+            # broadcast ops
+            gain = re.findall(r'([0-9]* [0-9]* [0-9]* [0-9]* [0-9]*)',
+                              meta_data['imroTbl'])[:n_chn]
+            out = {'lf': np.hstack((np.array([1 / np.float32(g.split(' ')[-1]) for g in gain]) *
+                                    int2volt, sy_gain)),
+                   'ap': np.hstack((np.array([1 / np.float32(g.split(' ')[-2]) for g in gain]) *
+                                    int2volt, sy_gain))}
+
+    # nidaq gain can be read in the same way regardless of NP1.0 or NP2.0
     elif 'niMNGain' in meta_data.keys():  # binary from nidq
         gain = np.r_[
-            np.ones(int(meta_data['snsMnMaXaDw'][0],)) / meta_data['niMNGain'] * int2volt,
-            np.ones(int(meta_data['snsMnMaXaDw'][1],)) / meta_data['niMAGain'] * int2volt,
+            np.ones(int(meta_data['snsMnMaXaDw'][0], )) / meta_data['niMNGain'] * int2volt,
+            np.ones(int(meta_data['snsMnMaXaDw'][1], )) / meta_data['niMAGain'] * int2volt,
             np.ones(int(meta_data['snsMnMaXaDw'][2], )) * int2volt,  # no gain for analog sync
-            np.ones(int(np.sum(meta_data['snsMnMaXaDw'][3]),))]  # no unit for digital sync
+            np.ones(int(np.sum(meta_data['snsMnMaXaDw'][3]), ))]  # no unit for digital sync
         out = {'nidq': gain}
+
     return out
 
 
@@ -634,7 +701,7 @@ def get_sync_map(folder_ephys):
         return _sync_map_from_hardware_config(hc)
 
 
-def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None):
+def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None, cache_dir=None):
     """
     TODO Document
     :param url_cbin:
@@ -645,10 +712,11 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
     """
     assert str(url_cbin).endswith('.cbin')
     assert str(url_ch).endswith('.ch')
-    webclient = (one or ONE()).alyx
-
+    one = one or ONE()
+    webclient = one.alyx
+    cache_dir = cache_dir or webclient.cache_dir
     relpath = Path(url_cbin.replace(webclient._par.HTTP_DATA_SERVER, '.')).parents[0]
-    target_dir = Path(webclient.cache_dir, relpath)
+    target_dir = Path(cache_dir, relpath)
     Path(target_dir).mkdir(parents=True, exist_ok=True)
 
     # First, download the .ch file if necessary
@@ -658,22 +726,28 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
         ch_file = Path(webclient.download_file(
             url_ch, cache_dir=target_dir, clobber=True, return_md5=False))
         ch_file = remove_uuid_file(ch_file)
-    ch_file_stream = ch_file.with_suffix('.stream.ch')
+    ch_file_stream = target_dir.joinpath(ch_file.name).with_suffix('.stream.ch')
 
     # Load the .ch file.
     with open(ch_file, 'r') as f:
         cmeta = json.load(f)
 
-    # Get the first byte and number of bytes to download.
+    # Get the first sample index, and the number of samples to download.
     i0 = cmeta['chunk_bounds'][first_chunk]
     ns_stream = cmeta['chunk_bounds'][last_chunk + 1] - i0
+    total_samples = cmeta['chunk_bounds'][-1]
+
+    # handles the meta file
+    meta_local_path = ch_file_stream.with_suffix('.meta')
+    if not meta_local_path.exists():
+        shutil.copy(ch_file.with_suffix('.meta'), meta_local_path)
 
     # if the cached version happens to be the same as the one on disk, just load it
     if ch_file_stream.exists():
         with open(ch_file_stream, 'r') as f:
             cmeta_stream = json.load(f)
         if (cmeta_stream.get('chopped_first_sample', None) == i0 and
-                cmeta_stream.get('chopped_total_samples', None) == ns_stream):
+                cmeta_stream.get('chopped_total_samples', None) == total_samples):
             return Reader(ch_file_stream.with_suffix('.cbin'))
     else:
         shutil.copy(ch_file, ch_file_stream)
@@ -698,7 +772,8 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
     cmeta['sha1_uncompressed'] = None
     cmeta['chopped'] = True
     cmeta['chopped_first_sample'] = i0
-    cmeta['chopped_total_samples'] = ns_stream
+    cmeta['chopped_samples'] = ns_stream
+    cmeta['chopped_total_samples'] = total_samples
 
     with open(ch_file_stream, 'w') as f:
         json.dump(cmeta, f, indent=2, sort_keys=True)
@@ -712,7 +787,5 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
     cbin_local_path.replace(cbin_local_path_renamed)
     assert cbin_local_path_renamed.exists()
 
-    shutil.copy(cbin_local_path.with_suffix('.meta'),
-                cbin_local_path_renamed.with_suffix('.meta'))
     reader = Reader(cbin_local_path_renamed)
     return reader

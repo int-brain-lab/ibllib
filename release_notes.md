@@ -1,4 +1,19 @@
-## Release Notes 2.0.0
+## Release Notes 2.1
+### Release Notes 2.1.0 2021-10-05
+- destriping as pykilosort internal pre-processing 
+- NP2 probe framework for splitting shanks and LFP band
+- Extension of task module to rerun from different locations
+### Release Notes 2.1.1 2021-10-06
+- RawEphysQC tasks computes median RMS from samples for .ap data (stored in _iblqc_ephysChannels.RMS)
+- New EphysQC class
+### Release Notes 2.1.2 2021-10-14
+- Fix issue with RawEphysQC that was not looking in local Subjects folder for data
+- Fix ensure_required_data in DlcQc
+### Release Notes 2.1.3 2021-10-19
+- Split jobs.py run function in two, one running large tasks (video compression, dlc, spike sorting), one the rest
+- Ensure RawEphysQC runs both probes if one fails
+
+## Release Notes 2.0
 ### Release Notes 2.0.1 2021-08-07
 - pykilosort error handling
 ### Release Notes 2.0.2 2021-08-31

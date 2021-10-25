@@ -210,13 +210,21 @@ def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, k_kwa
     return x_
 
 
-def decompress_destripe_cbin(sr, output_file=None, h=None):
+def decompress_destripe_cbin(sr, output_file=None, h=None, wrot=None, append=False, nc_out=None,
+                             dtype=np.int16, ns2add=0):
     """
-    From a spikeglx Reader object, decompresses and apply ADC
+    From a spikeglx Reader object, decompresses and apply ADC.
+    Saves output as a flat binary file in int16
     Production version with optimized FFTs - requires pyfftw
     :param sr: seismic reader object (spikeglx.Reader)
     :param output_file: (optional, defaults to .bin extension of the compressed bin file)
     :param h: (optional)
+    :param wrot: (optional) whitening matrix [nc x nc] or amplitude scalar to apply to the output
+    :param append: (optional, False) for chronic recordings, append to end of file
+    :param nc_out: (optional, True) saves non selected channels (synchronisation trace) in output
+    :param dtype: (optional, np.int16) output sample format
+    :param ns2add: (optional) for kilosort, adds padding samples at the end of the file so the total
+    number of samples is a multiple of the batchsize
     :return:
     """
     import pyfftw
@@ -235,6 +243,7 @@ def decompress_destripe_cbin(sr, output_file=None, h=None):
     taper = np.r_[0, scipy.signal.windows.cosine((SAMPLES_TAPER - 1) * 2), 0]
     # create the FFT stencils
     ncv = h['x'].size  # number of channels
+    nc_out = nc_out or sr.nc
     # compute LP filter coefficients
     sos = scipy.signal.butter(**butter_kwargs, output='sos')
     # compute fft stencil for batchsize
@@ -247,7 +256,7 @@ def decompress_destripe_cbin(sr, output_file=None, h=None):
     DEPHAS = np.exp(1j * np.angle(fft_object(dephas)) * h['sample_shift'][:, np.newaxis])
 
     pbar = tqdm(total=sr.ns / sr.fs)
-    with open(output_file, 'wb') as fid:
+    with open(output_file, 'ab' if append else 'wb') as fid:
         first_s = 0
         while True:
             last_s = np.minimum(NBATCH + first_s, sr.ns)
@@ -273,10 +282,15 @@ def decompress_destripe_cbin(sr, output_file=None, h=None):
             chunk = kfilt(chunk, **k_kwargs)
             # add back sync trace and save
             chunk = np.r_[chunk, sr[first_s:last_s, ncv:].T].T
-            (chunk[slice(*ind2save), :] / sr.channel_conversion_sample2v['ap']
-             ).astype(np.int16).tofile(fid)
+            intnorm = 1 / sr.channel_conversion_sample2v['ap'] if dtype == np.int16 else 1.
+            chunk = chunk[slice(*ind2save), :] * intnorm
+            if wrot is not None:
+                chunk[:, :ncv] = np.dot(chunk[:, :ncv], wrot)
+            chunk[:, :nc_out].astype(dtype).tofile(fid)
             first_s += NBATCH - SAMPLES_TAPER * 2
             pbar.update(NBATCH / sr.fs)
             if last_s == sr.ns:
+                if ns2add > 0:
+                    np.tile(chunk[-1, :nc_out].astype(dtype), (ns2add, 1)).tofile(fid)
                 break
     pbar.close()

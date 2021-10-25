@@ -355,7 +355,7 @@ def create_alyx_probe_insertions(
 ):
     if one is None:
         one = ONE(cache_rest=None)
-    eid = session_path if is_uuid_string(session_path) else one.eid_from_path(session_path)
+    eid = session_path if is_uuid_string(session_path) else one.path2eid(session_path)
     if eid is None:
         print("Session not found on Alyx: please create session before creating insertions")
     if model is None:
