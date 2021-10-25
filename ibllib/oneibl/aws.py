@@ -13,7 +13,7 @@ from iblutil.io.parquet import np2str
 
 _logger = logging.getLogger('ibllib')
 
-AWS_ROOT_PATH = Path('/mnt/ibl')
+AWS_ROOT_PATH = Path('data')
 BUCKET_NAME = 'ibl-brain-wide-map-private'
 
 # To get aws credentials follow
@@ -44,10 +44,8 @@ class AWS:
                 _logger.info(f'{file_path} already exists wont redownload')
                 continue
 
-            aws_path = AWS_ROOT_PATH.joinpath(add_uuid_string(rel_file_path,
-                                                              np2str(np.r_[d.name[0], d.name[1]])))
-            aws_path = as_aws_path(aws_path)
-            file_path = as_aws_path(file_path)
+            aws_path = AWS_ROOT_PATH.joinpath(
+                add_uuid_string(rel_file_path, np2str(np.r_[d.name[0], d.name[1]]))).as_posix()
             # maybe should avoid this and do a try catch instead?, see here
             # https://boto3.amazonaws.com/v1/documentation/api/latest/guide/collections.html#filtering
             # probably better to do filter on collection ? Not for today
@@ -55,23 +53,7 @@ class AWS:
             if len(objects) == 1:
                 ts = time()
                 _logger.info(f'Downloading {aws_path} to {file_path}')
-                self.bucket.download_file(aws_path, file_path)
+                self.bucket.download_file(aws_path, file_path.as_posix())
                 _logger.debug(f'Complete. Time elapsed {time() - ts} for {file_path}')
             else:
                 _logger.warning(f'{aws_path} not found on s3 bucket: {self.bucket.name}')
-
-
-def as_aws_path(path):
-    """
-    Convert a path into one suitable for the aws. Mainly for windows to convert // to \
-
-    :param path: A Path instance
-    :return: A formatted path string
-
-    """
-    if sys.platform == 'win32':
-        path = '/'.join(str(path).split('\\'))
-    else:
-        path = str(path)
-
-    return path
