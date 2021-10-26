@@ -309,7 +309,17 @@ def load_channel_locations(eid, probe=None, one=None, aligned=False, brain_atlas
     return channels
 
 
-def load_spike_sorting_fast(eid, one=None, probe=None, dataset_types=None, spike_sorter=None, revision=None):
+def load_spike_sorting_fast(eid, probe=None, spike_sorter=None, **kwargs):
+    """
+    Same as load_spike_sorting but with return_channels=True
+    """
+    collection = _collection_filter_from_args(probe, spike_sorter)
+    _logger.debug(f"load spike sorting with collection filter {collection}")
+    return _load_spike_sorting(eid, collection=collection, return_channels=True, **kwargs)
+
+
+def load_spike_sorting(eid, one=None, probe=None, dataset_types=None,
+                       spike_sorter=None, revision=None, return_channels=False):
     """
     From an eid, loads spikes and clusters for all probes
     The following set of dataset types are loaded:
@@ -325,38 +335,12 @@ def load_spike_sorting_fast(eid, one=None, probe=None, dataset_types=None, spike
     :param dataset_types: additional spikes/clusters objects to add to the standard default list
     :param spike_sorter: name of the spike sorting you want to load (None for default)
     :param return_channels: (bool) defaults to False otherwise tries and load channels from disk
-    :return: spikes, clusters (dict of bunch, 1 bunch per probe)
+    :return: spikes, clusters, channels (dict of bunch, 1 bunch per probe)
     """
     collection = _collection_filter_from_args(probe, spike_sorter)
     _logger.debug(f"load spike sorting with collection filter {collection}")
-    kwargs = dict(eid=eid, one=one, collection=collection, revision=revision, dataset_types=dataset_types)
-    spikes, clusters, channels = _load_spike_sorting(**kwargs, return_channels=True)
-    return spikes, clusters, channels
-
-
-def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sorter=None, revision=None):
-    """
-    From an eid, loads spikes and clusters for all probes
-    The following set of dataset types are loaded:
-        'clusters.channels',
-        'clusters.depths',
-        'clusters.metrics',
-        'spikes.clusters',
-        'spikes.times',
-        'probes.description'
-    :param eid: experiment UUID or pathlib.Path of the local session
-    :param one: an instance of OneAlyx
-    :param probe: name of probe to load in, if not given all probes for session will be loaded
-    :param dataset_types: additional spikes/clusters objects to add to the standard default list
-    :param spike_sorter: name of the spike sorting you want to load (None for default)
-    :param return_channels: (bool) defaults to False otherwise tries and load channels from disk
-    :return: spikes, clusters (dict of bunch, 1 bunch per probe)
-    """
-    collection = _collection_filter_from_args(probe, spike_sorter)
-    _logger.debug(f"load spike sorting with collection filter {collection}")
-    spikes, clusters = _load_spike_sorting(eid=eid, one=one, collection=collection, revision=revision,
-                                           return_channels=False, dataset_types=dataset_types)
-    return spikes, clusters
+    return _load_spike_sorting(eid=eid, one=one, collection=collection, revision=revision,
+                               return_channels=return_channels, dataset_types=dataset_types)
 
 
 def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False, dataset_types=None,
@@ -526,9 +510,8 @@ def load_wheel_reaction_times(eid, one=None):
 
 
 def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_wheel=False,
-                   ret_abswheel=False, ext_DLC=False, wheel_binsize=0.02, addtl_types=[]):
+                   ret_abswheel=False, wheel_binsize=0.02, addtl_types=[]):
     """
-    TODO Test this with new ONE
     Generate a pandas dataframe of per-trial timing information about a given session.
     Each row in the frame will correspond to a single trial, with timing values indicating timing
     session-wide (i.e. time in seconds since session start). Can optionally return a resampled
@@ -557,8 +540,6 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
         Whether to return the time-resampled wheel velocity trace, by default False
     ret_abswheel : bool, optional
         Whether to return the time-resampled absolute wheel velocity trace, by default False
-    ext_DLC : bool, optional
-        Whether to extract DLC data, by default False
     wheel_binsize : float, optional
         Time bins to resample wheel velocity to, by default 0.02
     addtl_types : list, optional
@@ -598,7 +579,7 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
         maps = diffs.argmin(axis=1)
         return validvals[maps]
 
-    trials = one.load_object(eid, 'trials')
+    trials = one.load_object(eid, 'trials', collection='alf')
     starttimes = trials.stimOn_times
     endtimes = trials.feedback_times
     tmp = {key: value for key, value in trials.items() if key in trialstypes}
@@ -622,7 +603,7 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
     if not ret_wheel and not ret_abswheel:
         return trialsdf
 
-    wheel = one.load_object(eid, 'wheel')
+    wheel = one.load_object(eid, 'wheel', collection='alf')
     whlpos, whlt = wheel.position, wheel.timestamps
     starttimes = trialsdf['trial_start']
     endtimes = trialsdf['trial_end']
