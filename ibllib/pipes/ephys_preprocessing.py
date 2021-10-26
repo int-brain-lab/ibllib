@@ -23,6 +23,7 @@ from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
 from ibllib.dsp import rms
 from ibllib.io.extractors import signatures
+from brainbox.behavior.dlc import get_licks, get_raw_and_smooth_pupil_diameter
 
 _logger = logging.getLogger("ibllib")
 
@@ -457,6 +458,49 @@ class EphysDLC(tasks.Task):
     def _run(self):
         """empty placeholder for job creation only"""
         pass
+
+
+class EphysPostDLC(tasks.Task):
+    """
+    The post_dlc task takes dlc traces as input and computes useful quantities, as well as qc.
+    """
+    io_charge = 90
+    level = 3
+    signature = {'input_files': [('_ibl_leftCamera.dlc.pqt', 'raw_video_data', True),
+                                 ('_ibl_bodyCamera.dlc.pqt', 'raw_video_data', True),
+                                 ('_ibl_rightCamera.dlc.pqt', 'raw_video_data', True)],
+                 'output_files': [('_ibl_leftCamera.features.pqt', 'alf', True),
+                                  ('_ibl_rightCamera.features.pqt', 'alf', True),]
+                 }
+
+    def _run(self):
+        # Find all available dlc traces
+        # cams =
+        # dlc =
+        # dlc_t =
+        output_files = []
+        combined_licks = []
+
+        for cam in cams:
+            features = pd.DataFrame()
+            if cam in ('left', 'right'):
+                # Compute lick times
+                lick_times = get_licks(dlc, dlc_t)
+                combined_licks.append(lick_times)
+
+                # Compute pupil diameter, raw and smoothed
+                features['pupilDiameter_raw'], features['pupilDiameter_smooth'] = get_raw_and_smooth_pupil_diameter(dlc, cam)
+
+            # Safe to pqt if any data has been added to the features dictionary
+            if len(features) > 0:
+                features.to_parquet(f'_ibl_{cam}Camera.features.pqt')
+
+            # Compute DLC qc for all cams
+
+        # Combined lick times
+        combined_licks = sorted(np.concatenate(combined_licks))
+
+        return output_files
 
 
 class EphysPassive(tasks.Task):
