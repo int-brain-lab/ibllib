@@ -21,9 +21,10 @@ from ibllib.pipes.misc import create_alyx_probe_insertions
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
+from ibllib.qc.dlc import DlcQC
 from ibllib.dsp import rms
 from ibllib.io.extractors import signatures
-from brainbox.behavior.dlc import get_licks, get_raw_and_smooth_pupil_diameter
+from brainbox.behavior.dlc import get_licks, get_pupil_diameter, get_smooth_pupil_diameter
 
 _logger = logging.getLogger("ibllib")
 
@@ -474,31 +475,61 @@ class EphysPostDLC(tasks.Task):
                  }
 
     def _run(self):
-        # Find all available dlc traces
-        # cams =
-        # dlc =
-        # dlc_t =
+        # Find all available dlc traces and dlc times
+        dlc_files = list(Path(self.session_path).joinpath('alf').glob('_ibl_*Camera.dlc.*'))
         output_files = []
         combined_licks = []
 
-        for cam in cams:
-            features = pd.DataFrame()
-            if cam in ('left', 'right'):
-                # Compute lick times
-                lick_times = get_licks(dlc, dlc_t)
-                combined_licks.append(lick_times)
+        for dlc_file in dlc_files:
+            # Catch unforeseen exceptions and move on to next cam
+            try:
+                cam = label_from_path(dlc_file)
+                # load dlc trace
+                dlc = pd.read_parquet(dlc_file)
+                # try to load respective camera times
+                try:
+                    dlc_t = np.load(next(Path(self.session_path).joinpath('alf').glob(f'_ibl_{cam}Camera.times.*npy')))
+                    times = True
+                except StopIteration:
+                    _logger.error(f'No camera.times found for {cam} camera. '
+                                  f'Computations using camera.times will be skipped')
+                    self.status = -1
+                    times = False
 
-                # Compute pupil diameter, raw and smoothed
-                features['pupilDiameter_raw'], features['pupilDiameter_smooth'] = get_raw_and_smooth_pupil_diameter(dlc, cam)
+                # These features are only computed from left and right cam
+                if cam in ('left', 'right'):
+                    features = pd.DataFrame()
+                    # If camera times are available, get the lick time stamps for combined array
+                    if times:
+                        combined_licks.append(get_licks(dlc, dlc_t))
+                    else:
+                        _logger.warning(f"Skipping lick times for {cam} camera as no camera.times available")
+                    # Compute pupil diameter, raw and smoothed
+                    features['pupilDiameter_raw'] = get_pupil_diameter(dlc)
+                    features['pupilDiameter_smooth'] = get_smooth_pupil_diameter(dlc, cam)
+                    # Safe to pqt
+                    features_file = Path(self.session_path).joinpath('alf', f'_ibl_{cam}Camera.features.pqt')
+                    features.to_parquet(features_file)
+                    output_files.append(features_file)
 
-            # Safe to pqt if any data has been added to the features dictionary
-            if len(features) > 0:
-                features.to_parquet(f'_ibl_{cam}Camera.features.pqt')
+                # For all cams, compute DLC qc if times available
+                if times:
+                    # Setting download_data to False because at this point the data should be there
+                    qc = DlcQC(self.session_path, side=cam, one=self.one, download_data=False)
+                    qc.run(update=True)
+                else:
+                    _logger.warning(f"Skipping QC for {cam} camera as no camera.times available")
 
-            # Compute DLC qc for all cams
-
+            except BaseException:
+                self.status = -1
+                continue
         # Combined lick times
-        combined_licks = sorted(np.concatenate(combined_licks))
+        if len(combined_licks) > 0:
+            lick_times_file = Path(self.session_path).joinpath('alf', f'_ibl_{cam}Camera.features.pqt')
+            np.save(lick_times_file, sorted(np.concatenate(combined_licks)))
+            output_files.append(lick_times_file)
+        else:
+            _logger.warning("No lick times computed for this session.")
 
         return output_files
 

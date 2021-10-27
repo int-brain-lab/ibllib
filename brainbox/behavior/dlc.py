@@ -169,7 +169,7 @@ def get_pupil_diameter(dlc):
     return np.nanmedian(diameters, axis=0)
 
 
-def get_raw_and_smooth_pupil_diameter(dlc, camera, likelihood_thresh=0.9, std_thresh=5, nan_thresh=1):
+def get_smooth_pupil_diameter(dlc, camera, likelihood_thresh=0.9, std_thresh=5, nan_thresh=1):
     """
     :param dlc:
     :param camera:
@@ -214,5 +214,5 @@ def get_raw_and_smooth_pupil_diameter(dlc, camera, likelihood_thresh=0.9, std_th
         if (e - b) > (fr * nan_thresh):
             diameter_smoothed[(b + 1):(e + 1)] = np.nan  # offset by 1 due to earlier diff
 
-    return diameter_raw, diameter_smoothed
+    return diameter_smoothed
 
