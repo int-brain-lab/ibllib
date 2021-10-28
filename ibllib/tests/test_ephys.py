@@ -180,8 +180,8 @@ class TestDetectSpikes(unittest.TestCase):
                 continue
             xcor[tr] = np.corrcoef(data[:, tr], data_out[:, tr])[1, 0]
 
-        assert np.all(xcor > .80)
-        assert np.nanmedian(xcor)
+        assert np.mean(xcor > .8) > .95
+        assert np.nanmedian(xcor) > .99
 
 
 if __name__ == "__main__":
