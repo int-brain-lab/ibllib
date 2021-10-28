@@ -1,3 +1,4 @@
+"""Functions for loading IBL ephys and trial data using the Open Neurophysiology Environment."""
 import logging
 import os
 
@@ -110,18 +111,43 @@ def _channels_alf2bunch(channels, brain_regions=None):
 
 def _load_spike_sorting(eid, one=None, collection=None, revision=None, return_channels=True, dataset_types=None):
     """
-    Generic function to load spike sortin according to one searchwords
+    Generic function to load spike sorting according data using ONE.
+
     Will try to load one spike sorting for any probe present for the eid matching the collection
     For each probe it will load a spike sorting:
         - if there is one version: loads this one
         - if there are several versions: loads pykilosort, if not found the shortest collection (alf/probeXX)
 
-    :param eid: experiment ID
-    :param one: one instance
-    :param collection: collection filter word - accepts wildcard - can be a combination of spike sorter and probe
-    :param revision: revision to load
-    :param return_channels: True
-    :return:
+    Parameters
+    ----------
+    eid : [str, UUID, Path, dict]
+        Experiment session identifier; may be a UUID, URL, experiment reference string
+        details dict or Path
+    one : one.api.OneAlyx
+        An instance of ONE (may be in 'local' mode)
+    collection : str
+        collection filter word - accepts wildcards - can be a combination of spike sorter and
+        probe.  See `ALF documentation`_ for details.
+    revision : str
+        A particular revision return (defaults to latest revision).  See `ALF documentation`_ for
+        details.
+    return_channels : bool
+        Defaults to False otherwise loads channels from disk (takes longer)
+
+    .. _ALF documentation: https://one.internationalbrainlab.org/alf_intro.html#optional-components
+
+    Returns
+    -------
+    spikes : dict of one.alf.io.AlfBunch
+        A dict with probe labels as keys, contains bunch(es) of spike data for the provided
+        session and spike sorter, with keys ('clusters', 'times')
+    clusters : dict of one.alf.io.AlfBunch
+        A dict with probe labels as keys, contains bunch(es) of cluster data, with keys
+        ('channels', 'depths', 'metrics')
+    channels : dict of one.alf.io.AlfBunch
+        A dict with probe labels as keys, contains channel locations with keys ('acronym',
+        'atlas_id', 'x', 'y', 'z').  Only returned when return_channels is True.  Atlas IDs
+        non-lateralized.
     """
     one = one or ONE()
     # enumerate probes and load according to the name
@@ -140,9 +166,9 @@ def _load_spike_sorting(eid, one=None, collection=None, revision=None, return_ch
         clusters[pname] = one.load_object(eid, collection=probe_collection, obj='clusters',
                                           attribute=cluster_attributes)
 
-    channels = _load_channels_locations_from_disk(eid, collection=collection, one=one, revision=revision)
-
     if return_channels:
+        channels = _load_channels_locations_from_disk(
+            eid, collection=collection, one=one, revision=revision)
         return spikes, clusters, channels
     else:
         return spikes, clusters
@@ -282,13 +308,27 @@ def _load_channel_locations_traj(eid, probe=None, one=None, revision=None, align
 
 def load_channel_locations(eid, probe=None, one=None, aligned=False, brain_atlas=None):
     """
-    TODO
-    :param eid:
-    :param probe:
-    :param one:
-    :param aligned:
-    :param brain_regions:
-    :return:
+    Load the brain locations of each channel for a given session/probe
+
+    Parameters
+    ----------
+    eid : [str, UUID, Path, dict]
+        Experiment session identifier; may be a UUID, URL, experiment reference string
+        details dict or Path
+    probe : [str, list of str]
+        The probe label(s), e.g. 'probe01'
+    one : one.api.OneAlyx
+        An instance of ONE (shouldn't be in 'local' mode)
+    aligned : bool
+        Whether to get the latest user aligned channel when not resolved or use histology track
+    brain_atlas : ibllib.atlas.BrainAtlas
+        Brain atlas object (default: Allen atlas)
+
+    Returns
+    -------
+    dict of one.alf.io.AlfBunch
+        A dict with probe labels as keys, contains channel locations with keys ('acronym',
+        'atlas_id', 'x', 'y', 'z').  Atlas IDs non-lateralized.
     """
     one = one or ONE()
     brain_atlas = brain_atlas or AllenAtlas()
@@ -311,7 +351,7 @@ def load_channel_locations(eid, probe=None, one=None, aligned=False, brain_atlas
 
 def load_spike_sorting_fast(eid, probe=None, spike_sorter=None, **kwargs):
     """
-    Same as load_spike_sorting but with return_channels=True
+    Calls load_spike_sorting with return_channels=True
     """
     collection = _collection_filter_from_args(probe, spike_sorter)
     _logger.debug(f"load spike sorting with collection filter {collection}")
@@ -320,8 +360,8 @@ def load_spike_sorting_fast(eid, probe=None, spike_sorter=None, **kwargs):
 
 def load_spike_sorting(eid, one=None, probe=None, dataset_types=None,
                        spike_sorter=None, revision=None, return_channels=False):
-    """
-    From an eid, loads spikes and clusters for all probes
+    """From an eid, loads spikes and clusters for all probes.
+
     The following set of dataset types are loaded:
         'clusters.channels',
         'clusters.depths',
@@ -329,13 +369,41 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None,
         'spikes.clusters',
         'spikes.times',
         'probes.description'
-    :param eid: experiment UUID or pathlib.Path of the local session
-    :param one: an instance of OneAlyx
-    :param probe: name of probe to load in, if not given all probes for session will be loaded
-    :param dataset_types: additional spikes/clusters objects to add to the standard default list
-    :param spike_sorter: name of the spike sorting you want to load (None for default)
-    :param return_channels: (bool) defaults to False otherwise tries and load channels from disk
-    :return: spikes, clusters, channels (dict of bunch, 1 bunch per probe)
+
+    Parameters
+    ----------
+    eid : [str, UUID, Path, dict]
+        Experiment session identifier; may be a UUID, URL, experiment reference string
+        details dict or Path
+    one : one.api.OneAlyx
+        An instance of ONE (may be in 'local' - offline - mode)
+    probe : [str, list of str]
+        The probe label(s), e.g. 'probe01'
+    dataset_types : list of str
+        Optional additional spikes/clusters objects to add to the standard default list
+    spike_sorter : str
+        Name of the spike sorting you want to load (None for default which is pykilosort if it's
+        available otherwise the default MATLAB kilosort)
+    revision : str
+        A particular revision return (defaults to latest revision).  See `ALF documentation`_ for
+        details.
+    return_channels : bool
+        Defaults to False otherwise loads channels from disk (takes longer)
+
+    .. _ALF documentation: https://one.internationalbrainlab.org/alf_intro.html#revisions
+
+    Returns
+    -------
+    spikes : dict of one.alf.io.AlfBunch
+        A dict with probe labels as keys, contains bunch(es) of spike data for the provided
+        session and spike sorter, with keys ('clusters', 'times')
+    clusters : dict of one.alf.io.AlfBunch
+        A dict with probe labels as keys, contains bunch(es) of cluster data, with keys
+        ('channels', 'depths', 'metrics')
+    channels : dict of one.alf.io.AlfBunch
+        A dict with probe labels as keys, contains channel locations with keys ('acronym',
+        'atlas_id', 'x', 'y', 'z').  Only returned when return_channels is True.  Atlas IDs
+        non-lateralized.
     """
     collection = _collection_filter_from_args(probe, spike_sorter)
     _logger.debug(f"load spike sorting with collection filter {collection}")
@@ -348,15 +416,37 @@ def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False, da
     """
     For a given eid, get spikes, clusters and channels information, and merges clusters
     and channels information before returning all three variables.
-    :param eid:
-    :param one:
-    :param aligned: whether to get the latest user aligned channel when not resolved or use
-    histology track
-    :param dataset_types: additional spikes/clusters objects to add to the standard default list
-    :param spike_sorter: name of the spike sorting you want to load (None for default which is
-                         pykilosort if it's available otherwise the default matlab kilosort)
-    :param brain_atlas: allen atlas object
-    :return: spikes, clusters, channels (dict of bunch, 1 bunch per probe)
+
+    Parameters
+    ----------
+    eid : [str, UUID, Path, dict]
+        Experiment session identifier; may be a UUID, URL, experiment reference string
+        details dict or Path
+    one : one.api.OneAlyx
+        An instance of ONE (shouldn't be in 'local' mode)
+    probe : [str, list of str]
+        The probe label(s), e.g. 'probe01'
+    aligned : bool
+        Whether to get the latest user aligned channel when not resolved or use histology track
+    dataset_types : list of str
+        Optional additional spikes/clusters objects to add to the standard default list
+    spike_sorter : str
+        Name of the spike sorting you want to load (None for default which is pykilosort if it's
+        available otherwise the default MATLAB kilosort)
+    brain_atlas : ibllib.atlas.BrainAtlas
+        Brain atlas object (default: Allen atlas)
+
+    Returns
+    -------
+    spikes : dict of one.alf.io.AlfBunch
+        A dict with probe labels as keys, contains bunch(es) of spike data for the provided
+        session and spike sorter, with keys ('clusters', 'times')
+    clusters : dict of one.alf.io.AlfBunch
+        A dict with probe labels as keys, contains bunch(es) of cluster data, with keys
+        ('channels', 'depths', 'metrics')
+    channels : dict of one.alf.io.AlfBunch
+        A dict with probe labels as keys, contains channel locations with keys ('acronym',
+        'atlas_id', 'x', 'y', 'z').  Atlas IDs non-lateralized.
     """
     # --- Get spikes and clusters data
     one = one or ONE()
@@ -381,15 +471,29 @@ def load_ephys_session(eid, one=None):
         'spikes.clusters',
         'spikes.times',
         'probes.description'
-    :param eid: experiment UUID or pathlib.Path of the local session
-    :param one: one instance
-    :return: spikes, clusters, trials (dict of bunch, 1 bunch per probe)
+
+    Parameters
+    ----------
+    eid : [str, UUID, Path, dict]
+        Experiment session identifier; may be a UUID, URL, experiment reference string
+        details dict or Path
+    one : oneibl.one.OneAlyx, optional
+        ONE object to use for loading. Will generate internal one if not used, by default None
+
+    Returns
+    -------
+    spikes : dict of one.alf.io.AlfBunch
+        A dict with probe labels as keys, contains bunch(es) of spike data for the provided
+        session and spike sorter, with keys ('clusters', 'times')
+    clusters : dict of one.alf.io.AlfBunch
+        A dict with probe labels as keys, contains bunch(es) of cluster data, with keys
+        ('channels', 'depths', 'metrics')
+    trials : one.alf.io.AlfBunch of numpy.ndarray
+        The session trials data
     """
     assert one
-
     spikes, clusters = load_spike_sorting(eid, one=one)
     trials = one.load_object(eid, 'trials')
-
     return spikes, clusters, trials
 
 
@@ -409,11 +513,20 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
     """
     Takes (default and any extra) values in given keys from channels and assign them to clusters.
     If channels does not contain any data, the new keys are added to clusters but left empty.
-    :param dic_clus: dict of bunch, 1 bunch per probe, containing cluster information
-    :param channels: dict of bunch, 1 bunch per probe, containing channels information
-    :param keys_to_add_extra: Any extra keys contained in channels (will be added to default
-    ['acronym', 'atlas_id'])
-    :return: clusters (dict of bunch, 1 bunch per probe), with new keys values.
+
+    Parameters
+    ----------
+    dic_clus : dict of one.alf.io.AlfBunch
+        1 bunch per probe, containing cluster information
+    channels : dict of one.alf.io.AlfBunch
+        1 bunch per probe, containing channels bunch with keys ('acronym', 'atlas_id')
+    keys_to_add_extra : list of str
+        Any extra keys to load into channels bunches
+
+    Returns
+    -------
+    dict of one.alf.io.AlfBunch
+        clusters (1 bunch per probe) with new keys values.
     """
     probe_labels = list(channels.keys())  # Convert dict_keys into list
     keys_to_add_default = ['acronym', 'atlas_id', 'x', 'y', 'z']
@@ -451,9 +564,19 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
 def load_passive_rfmap(eid, one=None):
     """
     For a given eid load in the passive receptive field mapping protocol data
-    :param eid: eid or pathlib.Path of the local session
-    :param one:
-    :return: rf_map
+
+    Parameters
+    ----------
+    eid : [str, UUID, Path, dict]
+        Experiment session identifier; may be a UUID, URL, experiment reference string
+        details dict or Path
+    one : oneibl.one.OneAlyx, optional
+        An instance of ONE (may be in 'local' - offline - mode)
+
+    Returns
+    -------
+    one.alf.io.AlfBunch
+        Passive receptive field mapping data
     """
     one = one or ONE()
 
@@ -481,10 +604,11 @@ def load_wheel_reaction_times(eid, one=None):
 
     Parameters
     ----------
-    eid : str
-        Session UUID
-    one : oneibl.ONE
-        An instance of ONE for loading data.  If None a new one is instantiated using the defaults.
+    eid : [str, UUID, Path, dict]
+        Experiment session identifier; may be a UUID, URL, experiment reference string
+        details dict or Path
+    one : oneibl.one.OneAlyx, optional
+        one object to use for loading. Will generate internal one if not used, by default None
 
     Returns
     ----------
@@ -523,8 +647,9 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
 
     Parameters
     ----------
-    eid : str
-        Session UUID string to pass to ONE
+    eid : [str, UUID, Path, dict]
+        Experiment session identifier; may be a UUID, URL, experiment reference string
+        details dict or Path
     one : oneibl.one.OneAlyx, optional
         one object to use for loading. Will generate internal one if not used, by default None
     maxlen : float, optional
