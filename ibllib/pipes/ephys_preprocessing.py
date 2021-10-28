@@ -39,13 +39,42 @@ class EphysPulses(tasks.Task):
     priority = 90  # a lot of jobs depend on this one
     level = 0  # this job doesn't depend on anything
     signature = {
-        'input_files': [('*ap.meta', 'raw_ephys_data/probe*', True),  # not sure if this should be true as case where no probes are used
-                        ('*ap.ch', 'raw_ephys_data/probe*', True),
-                        ('*ap.cbin', 'raw_ephys_data/probe*', True),
-                        ('*nidq.meta', 'raw_ephys_data', False),  # not True as not required for 3A probes
-                        ('*nidq.ch', 'raw_ephys_data', False),
-                        ('*nidq.cbin', 'raw_ephys_data', False)],
-        'output_files': ()}
+        'input_files': [('*ap.meta', 'raw_ephys_data/probe*', True),
+                        ('*ap.ch', 'raw_ephys_data/probe*', False),  # not necessary when we have .bin file
+                        ('*ap.*bin', 'raw_ephys_data/probe*', True),
+                        ('*nidq.meta', 'raw_ephys_data', True),
+                        ('*nidq.ch', 'raw_ephys_data', False),  # not necessary when we have .bin file
+                        ('*nidq.*bin', 'raw_ephys_data', True)],
+        'output_files': [('_spikeglx_sync*.npy', 'raw_ephys_data*', True),
+                         ('_spikeglx_sync.polarities*.npy', 'raw_ephys_data*', True),
+                         ('_spikeglx_sync.times*.npy', 'raw_ephys_data*', True)]
+    }
+
+    def get_signatures(self):
+        # I THINK WE ARE GOOD
+        neuropixel_version = spikeglx.get_neuropixel_version_from_folder(self.session_path)
+        probes = spikeglx.get_probes_from_folder(self.session_path)
+
+        full_input_files = []
+        for sig in self.signature['input_files']:
+            collection = sig[1]
+            if 'raw_ephys_data/probe*' in collection:
+                for probe in probes:
+                    full_input_files.append((sig[0], f'raw_ephys_data/{probe}', sig[2]))
+            else:
+                if neuropixel_version != '3A':
+                    full_input_files.append((sig[0], sig[1], sig[2]))
+
+        self.input_files = full_input_files
+
+        full_output_files = []
+        for sig in self.signature['output_files']:
+            if neuropixel_version != '3A':
+                full_output_files.append((sig[0], 'raw_ephys_data', sig[2]))
+            for probe in probes:
+                full_output_files.append((sig[0], f'raw_ephys_data/{probe}', sig[2]))
+
+        self.output_files = full_output_files
 
     def _run(self, overwrite=False):
         # outputs numpy
@@ -55,26 +84,6 @@ class EphysPulses(tasks.Task):
 
         status, sync_files = sync_probes.sync(self.session_path)
         return out_files + sync_files
-
-    def assert_expected_inputs(self):
-        neuropixel_version = spikeglx.get_neuropixel_version_from_folder(self.session_path)
-        probes = spikeglx.get_probes_from_folder(self.session_path)
-
-        # TODO need to test on case where no probes are used e.g like chris/nate task
-
-        full_input_files = []
-        for sig in self.signature['input_files']:
-            collection = sig[1]
-            if 'raw_ephys_data/probe**' in collection:
-                for probe in probes:
-                    full_input_files.append((sig[0], f'raw_ephys_data/{probe}', sig[2]))
-            else:
-                if neuropixel_version != '3A':
-                    full_input_files.append((sig[0], sig[1], True))
-
-        self.signature['input_files'] = full_input_files
-
-        super().assert_expected_inputs()
 
 
 class RawEphysQC(tasks.Task):
@@ -86,7 +95,19 @@ class RawEphysQC(tasks.Task):
     io_charge = 30  # this jobs reads raw ap files
     priority = 10  # a lot of jobs depend on this one
     level = 0  # this job doesn't depend on anything
-    signature = {'input_files': signatures.RAWEPHYSQC, 'output_files': ()}
+    signature = {
+        'input_files': [('*ap.meta', 'raw_ephys_data/probe*', True),
+                        ('*ap.ch', 'raw_ephys_data/probe*', False),  # not necessary to run task as can be streamed
+                        ('*ap.*bin', 'raw_ephys_data/probe*', False),  # not necessary to run task as can be streamed
+                        ('*lf.meta', 'raw_ephys_data/probe*', False),  # not necessary to run task as optional computation
+                        ('*lf.ch', 'raw_ephys_data/probe*', False),  # not necessary to run task as optional computation
+                        ('*lf.*bin', 'raw_ephys_data/probe*', False)],  # not necessary to run task as optional computation
+        'output_files': [('_iblqc_ephysChannels.apRMS.npy', 'raw_ephts_data/probe*', True),
+                         ('_iblqc_ephysSpectralDensity.LF.freqs.npy', 'raw_ephys_data/probe*', False),
+                         ('_iblqc_ephysSpectralDensity.LF.power.npy', 'raw_ephys_data/probe*', False),
+                         ('_iblqc_ephysTimeRms.LF.rms.npy', 'raw_ephys_data/probe*', False),
+                         ('_iblqc_ephysTimeRms.LF.timestamps.npy', 'raw_ephys_data/probe*', False)]
+    }
 
     def _run(self, overwrite=False):
         eid = self.one.path2eid(self.session_path)
@@ -105,6 +126,27 @@ class RawEphysQC(tasks.Task):
                 continue
         return qc_files
 
+    def get_signatures(self, **kwargs):
+        probes = spikeglx.get_probes_from_folder(self.session_path)
+
+        full_input_files = []
+        for sig in self.signature['input_files']:
+            collection = sig[1]
+            if 'raw_ephys_data/probe*' in collection:
+                for probe in probes:
+                    full_input_files.append((sig[0], f'raw_ephys_data/{probe}', sig[2]))
+
+        self.input_files = full_input_files
+
+        full_output_files = []
+        for sig in self.signature['output_files']:
+            collection = sig[1]
+            if 'raw_ephys_data/probe*' in collection:
+                for probe in probes:
+                    full_output_files.append((sig[0], f'raw_ephys_data/{probe}', sig[2]))
+
+        self.output_files = full_output_files
+
 
 class EphysAudio(tasks.Task):
     """
@@ -114,9 +156,10 @@ class EphysAudio(tasks.Task):
     cpu = 2
     priority = 10  # a lot of jobs depend on this one
     level = 0  # this job doesn't depend on anything
-    signature = {'input_files': ('_iblrig_micData.raw.wav', 'raw_behavior_data', True),
-                 'output_files': ('_iblrig_micData.raw.flac', 'raw_behavior_data', True),
-                 }
+    signature = {
+        'input_files': [('_iblrig_micData.raw.wav', 'raw_behavior_data', True)],
+        'output_files': [('_iblrig_micData.raw.flac', 'raw_behavior_data', True)],
+    }
 
     def _run(self, overwrite=False):
         command = "ffmpeg -i {file_in} -y -nostdin -c:a flac -nostats {file_out}"
@@ -143,7 +186,7 @@ class SpikeSorting(tasks.Task):
     PYKILOSORT_REPO = Path.home().joinpath('Documents/PYTHON/SPIKE_SORTING/pykilosort')
     signature = {
         'input_files': [],  # see setUp method for declaration of inputs
-        'output_files': ()}
+        'output_files': []}
 
     @staticmethod
     def spike_sorting_signature(pname=None):
@@ -348,6 +391,21 @@ class SpikeSorting(tasks.Task):
 class EphysVideoCompress(tasks.Task):
     priority = 40
     level = 1
+    signature = {
+        'input_files': [('_iblrig_bodyCamera.raw.*', 'raw_video_data', True),
+                        ('_iblrig_bodyCamera.frameData.*', 'raw_video_data', True),
+                        ('_iblrig_leftCamera.raw.*', 'raw_video_data', True),
+                        ('_iblrig_leftCamera.frameData.*', 'raw_video_data', True),
+                        ('_iblrig_rightCamera.raw.*', 'raw_video_data', True),
+                        ('_iblrig_rightCamera.frameData.*', 'raw_video_data', True)],
+        'output_files': [('_iblrig_bodyCamera.raw.mp4', 'raw_video_data', True),
+                        ('_iblrig_bodyCamera.timestamps.npy', 'raw_video_data', True),
+                        ('_iblrig_leftCamera.raw.mp4', 'raw_video_data', True),
+                        ('_iblrig_leftCamera.frameData.*', 'raw_video_data', True),
+                        ('_iblrig_rightCamera.raw.mp4', 'raw_video_data', True),
+                        ('_iblrig_rightCamera.frameData.*', 'raw_video_data', True)]
+    }
+
 
     def _run(self, **kwargs):
         # avi to mp4 compression
@@ -384,7 +442,7 @@ class EphysTrials(tasks.Task):
                         ('_iblrig_encoderPositions.raw', 'raw_behavior_data', True),
                         ('*wiring.json', 'raw_ephys_data*', False),
                         ('*.meta', 'raw_ephys_data*', True)],
-        'output_files': ()}
+        'output_files': []}
 
     def _behaviour_criterion(self):
         """

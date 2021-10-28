@@ -77,8 +77,7 @@ class Task(abc.ABC):
                                        data={'status': 'Started'})
             self.log = ('' if not tdict['log'] else tdict['log'] +
                         '\n\n=============================RERUN=============================\n')
-        # setup
-        self.setUp(**kwargs)
+
         # Setup the console handler with a StringIO object
         log_capture_string = io.StringIO()
         ch = logging.StreamHandler(log_capture_string)
@@ -89,17 +88,27 @@ class Task(abc.ABC):
         if self.machine:
             _logger.info(f"Running on machine: {self.machine}")
         _logger.info(f"running ibllib version {version.ibllib()}")
-        # run
-        start_time = time.time()
-        self.status = 0
-        try:
-            self.outputs = self._run(**kwargs)
-            _logger.info(f"Job {self.__class__} complete")
-        except BaseException:
-            _logger.error(traceback.format_exc())
-            _logger.info(f"Job {self.__class__} errored")
-            self.status = -1
-        self.time_elapsed_secs = time.time() - start_time
+        # setup
+        setup = self.setUp(**kwargs)
+        if not setup:
+            # case where outputs are present but don't have input files locally to rerun task
+            # label task as complete
+            self.status = 0
+            _, self.outputs = self.assert_expected_outputs()
+
+        else:
+            # run task
+            self.status = 0
+            start_time = time.time()
+            try:
+                self.outputs = self._run(**kwargs)
+                _logger.info(f"Job {self.__class__} complete")
+            except BaseException:
+                _logger.error(traceback.format_exc())
+                _logger.info(f"Job {self.__class__} errored")
+                self.status = -1
+            self.time_elapsed_secs = time.time() - start_time
+
         # log the outputs-+
         if isinstance(self.outputs, list):
             nout = len(self.outputs)
@@ -107,6 +116,7 @@ class Task(abc.ABC):
             nout = 0
         else:
             nout = 1
+
         _logger.info(f"N outputs: {nout}")
         _logger.info(f"--- {self.time_elapsed_secs} seconds run-time ---")
         # after the run, capture the log output, amend to any existing logs if not overwrite
@@ -131,6 +141,14 @@ class Task(abc.ABC):
     def rerun(self):
         self.run(overwrite=True)
 
+    def get_signatures(self):
+        """
+        This is the default but should be overwritten for each task
+        :return:
+        """
+        self.input_files = self.signature['input_files']
+        self.output_files = self.signature['output_files']
+
     @abc.abstractmethod
     def _run(self, overwrite=False):
         """
@@ -145,12 +163,40 @@ class Task(abc.ABC):
         """
 
     def setUp(self, **kwargs):
-        """
-        Function to optionally overload to check inputs.
-        :return:
-        """
-        self.data_handler.setUp()
-        self.assert_expected_inputs(**kwargs)
+        force = False
+        if self.location == 'server':
+            self.get_signatures(**kwargs)
+            _logger.info('Checking output files')
+            output_status, _ = self.assert_expected(self.output_files, silent=True)
+            input_status, _ = self.assert_expected_inputs(raise_error=False)
+
+            if output_status and input_status:
+                _logger.info('All output and all input files found: rerunning task')
+                return True
+            if output_status and not input_status:
+                if not force:
+                    _logger.info('All output files found but input files required not available locally: task not rerun')
+                    return False
+                else:
+                    _logger.info('All output files found but input files required not available locally: '
+                                 'redownloading data and rerunning task')
+                    # Get the data required and run the task
+                    self.data_handler.setup()
+                    # Double check we now have the required files to run the task
+                    self.assert_expected_inputs()
+                    return True
+            if not output_status and input_status:
+                _logger.info('All input files found: running task')
+                return True
+            if not output_status and not input_status:
+                self.data_handler.setup()
+                self.assert_expected_inputs()
+                return True
+        else:
+            self.data_handler.setUp()
+            self.get_signatures(**kwargs)
+            self.assert_expected_inputs()
+            return True
 
     def tearDown(self):
         """
@@ -165,43 +211,53 @@ class Task(abc.ABC):
         """
         self.data_handler.cleanUp()
 
-    def assert_expected_outputs(self):
+    def assert_expected_outputs(self, raise_error=True):
         """
         After a run, asserts that all signature files are present at least once in the output files
         Mainly useful for integration tests
         :return:
         """
         assert self.status == 0
-        everything_is_fine = True
-        for expected_file in self.signature['output_files']:
-            actual_files = list(self.session_path.rglob(str(Path(expected_file[1]).joinpath(expected_file[0]))))
-            if len(actual_files) == 0:
-                everything_is_fine = False
-                _logger.error(f"Signature file expected {expected_file} not found in the output")
+        _logger.info('Checking output files')
+        everything_is_fine, files = self.assert_expected(self.output_files)
+
         if not everything_is_fine:
             for out in self.outputs:
                 _logger.error(f"{out}")
-            raise FileNotFoundError("Missing outputs after task completion")
+            if raise_error:
+                raise FileNotFoundError("Missing outputs after task completion")
 
-    def assert_expected_inputs(self, **kwargs):
+        return everything_is_fine, files
+
+    def assert_expected_inputs(self, raise_error=True):
         """
         Before running a task, check that all the files necessary to run the task have been downloaded/ are on the local file
         system already
         :return:
         """
+        _logger.info('Checking input files')
+        everything_is_fine, files = self.assert_expected(self.input_files)
 
-        # In the input_files cannot have any * collection
-        everything_is_fine = True
-        for expected_file in self.signature['input_files']:
-            actual_files = list(self.session_path.rglob(str(Path(expected_file[1]).joinpath(expected_file[0]))))
-            if len(actual_files) == 0 and expected_file[2]:
-                everything_is_fine = False
-                _logger.error(f"Signature file expected {expected_file} not found in the input")
-
-        if not everything_is_fine:
+        if not everything_is_fine and raise_error:
             raise FileNotFoundError("Missing inputs to run task")
 
-        # Should be overwritten in each task
+        return everything_is_fine, files
+
+    def assert_expected(self, expected_files, silent=False):
+        everything_is_fine = True
+        files = []
+        for expected_file in expected_files:
+            actual_files = list(Path(self.session_path).rglob(str(Path(expected_file[1]).joinpath(expected_file[0]))))
+            if len(actual_files) == 0 and expected_file[2]:
+                everything_is_fine = False
+                if not silent:
+                    _logger.error(f"Signature file expected {expected_file} not found")
+            else:
+                if len(actual_files) != 0:
+                    files.append(actual_files[0])
+
+        return everything_is_fine, files
+
 
     def get_data_handler(self):
         """

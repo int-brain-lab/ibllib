@@ -85,15 +85,15 @@ class ServerDataHandler(DataHandler):
         self.globus = Globus()
 
         # Find the lab
-        labs = get_lab_from_endpoint_id(one=self.one)
-        if len(labs) == 2:
-            # for flofer lab
-            subject = self.one.path2ref(self.session_path)['subject']
-            self.lab = self.one.alyx.rest('subjects', 'list', nickname=subject)[0]['lab']
-        else:
-            self.lab = labs[0]
-
-        self.globus.add_endpoint(f'flatiron_{self.lab}')
+        #labs = get_lab_from_endpoint_id(one=self.one)
+        #if len(labs) == 2:
+        #    # for flofer lab
+        #    subject = self.one.path2ref(self.session_path)['subject']
+        #    self.lab = self.one.alyx.rest('subjects', 'list', nickname=subject)[0]['lab']
+        #else:
+        #    self.lab = labs[0]
+#
+        #self.globus.add_endpoint(f'flatiron_{self.lab}')
 
     def setUp(self):
         """
@@ -106,6 +106,8 @@ class ServerDataHandler(DataHandler):
             # If no datasets found in the cache only work off local file system do not attempt to download any missing data
             # using globus
             return
+
+        #TODO check for space
 
         rel_sess_path = '/'.join(df.iloc[0]['session_path'].split('/')[-3:])
         assert (rel_sess_path.split('/')[0] == self.one.path2ref(self.session_path)['subject'])
@@ -125,7 +127,6 @@ class ServerDataHandler(DataHandler):
                 _logger.info(f'Downloading {sp} to {tp}')
             self.globus.mv(f'flatiron_{self.lab}', 'local', source_paths, target_paths)
             _logger.debug(f'Complete. Time elapsed {time() - ts}')
-
 
 
     def uploadData(self, outputs, version, **kwargs):
