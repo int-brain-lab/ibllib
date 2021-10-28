@@ -378,13 +378,19 @@ def _get_serial_number_from_meta(md):
         return int(serial)
 
 
+def _get_neuropixel_major_version_from_meta(md):
+    MAJOR_VERSION = {'3A': 1, '3B2': 1, '3B1': 1, 'NP2.1': 2, 'NP2.4': 2}
+    version = _get_neuropixel_version_from_meta(md)
+    if version is not None:
+        return MAJOR_VERSION[version]
+
+
 def _get_neuropixel_version_from_meta(md):
     """
     Get neuropixel version tag (3A, 3B1, 3B2) from the metadata dictionary
     """
     if 'typeEnabled' in md.keys():
         return '3A'
-
     prb_type = md.get('imDatPrb_type')
     # Neuropixel 1.0 either 3B1 or 3B2 (ask Olivier about 3B1)
     if prb_type == 0:

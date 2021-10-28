@@ -394,8 +394,15 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
                 # for ap and lf look for version number
                 # test getting revision
                 revision = meta_data_file.name[6:8]
-                self.assertEqual(spikeglx._get_neuropixel_version_from_meta(md)[0:2], revision)
-
+                minor = spikeglx._get_neuropixel_version_from_meta(md)[0:2]
+                major = spikeglx._get_neuropixel_major_version_from_meta(md)
+                print(revision, minor, major)
+                self.assertEqual(minor, revision)
+                # test the major version
+                if revision.startswith('3'):
+                    assert major == 1
+                else:
+                    assert major == 2
             # test getting acquisition type for all ap, lf and nidq
             type = meta_data_file.name.split('.')[-2]
             self.assertEqual(spikeglx._get_type_from_meta(md), type)
