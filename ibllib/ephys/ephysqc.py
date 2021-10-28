@@ -14,7 +14,7 @@ from iblutil.util import Bunch
 
 from brainbox.metrics.single_units import spike_sorting_metrics
 from brainbox.io.spikeglx import stream as sglx_streamer
-from ibllib.ephys import sync_probes, neuropixel
+from ibllib.ephys import sync_probes, neuropixel, spikes
 from ibllib.io import spikeglx
 import ibllib.dsp as dsp
 from ibllib.qc import base
@@ -31,6 +31,7 @@ NCH_WAVEFORMS = 32  # number of channels to be saved in templates.waveforms and 
 BATCHES_SPACING = 300
 TMIN = 40
 SAMPLE_LENGTH = 1
+SPIKE_THRESHOLD_UV = -50  # negative, the threshold used for spike detection on pre-processed raw data
 
 
 class EphysQC(base.QC):
@@ -91,13 +92,20 @@ class EphysQC(base.QC):
 
     @staticmethod
     def _compute_metrics_array(raw, fs, h):
-        from ibllib.ephys.spikes import detection
+        """
+        From a numpy array, computes rms on raw data, destripes, computes rms on destriped data
+        and performs a simple spike detection
+        :param raw: voltage numpy.array(ntraces, nsamples)
+        :param fs: sampling frequency (Hz)
+        :param h: dictionary containing sensor coordinates, see ibllib.ephys.neuropixel.trace_header
+        :return: 3 numpy vectors nchannels length
+        """
         destripe = dsp.destripe(raw, fs=fs, neuropixel_version=1)
         rms_raw = dsp.rms(raw)
         rms_pre_proc = dsp.rms(destripe)
-        detection(data=destripe, fs=fs, h=h)
-
-        return rms_raw, rms_pre_proc
+        detections = spikes.detection(data=destripe.T, fs=fs, h=h, detect_threshold=SPIKE_THRESHOLD_UV * 1e-6)
+        spike_rate = np.bincount(detections.trace, minlength=raw.shape[0]).astype(np.float32)
+        return rms_raw, rms_pre_proc, spike_rate
 
     def run(self, update: bool = False, overwrite: bool = True, stream: bool = None, **kwargs) -> (str, dict):
         """
@@ -129,9 +137,14 @@ class EphysQC(base.QC):
                 nsync = len(spikeglx._get_sync_trace_indices_from_meta(self.data.ap_meta))
                 nc = spikeglx._get_nchannels_from_meta(self.data.ap_meta) - nsync
                 neuropixel_version = spikeglx._get_neuropixel_major_version_from_meta(self.data.ap_meta)
+                # verify that the channel layout is correct according to IBL layout
                 h = neuropixel.trace_header(neuropixel_version)
+                th = spikeglx._geometry_from_meta(self.data.ap_meta)
+                if not (np.all(h['x'] == th['x']) and np.all(h['y'] == th['y'])):
+                    _logger.critical("Channel geometry seems incorrect")
+                    raise ValueError("Wrong Neuropixel channel mapping used - ABORT")
                 t0s = np.arange(TMIN, rl - SAMPLE_LENGTH, BATCHES_SPACING)
-                all_rms, all_sr = np.zeros((2, nc, t0s.shape[0]))
+                all_rms = np.zeros((2, nc, t0s.shape[0]))
                 all_srs = np.zeros((nc, t0s.shape[0]))
                 # If the ap.bin file is not present locally, stream it
                 if self.data.ap is None and self.stream is True:
