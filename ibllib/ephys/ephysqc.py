@@ -110,7 +110,8 @@ class EphysQC(base.QC):
         if self.data.ap_meta:
             rms_file = self.probe_path.joinpath("_iblqc_ephysChannels.apRMS.npy")
             if rms_file.exists() and not overwrite:
-                _logger.warning(f'File {rms_file} already exists and overwrite=False. Skipping RMS compute.')
+                _logger.warning(f'RMS map already exists for .ap data in {self.probe_path}, skipping. '
+                                f'Use overwrite option.')
                 median_rms = np.load(rms_file)
             else:
                 rl = self.data.ap_meta.fileTimeSecs
@@ -121,7 +122,7 @@ class EphysQC(base.QC):
                 if self.data.ap is None and self.stream is True:
                     _logger.warning(f'Streaming .ap data to compute RMS samples for probe {self.pid}')
                     for i, t0 in enumerate(tqdm(t0s)):
-                        sr, _ = sglx_streamer(self.pid, t0=t0, nsecs=1, one=self.one)
+                        sr, _ = sglx_streamer(self.pid, t0=t0, nsecs=1, one=self.one, remove_cached=True)
                         raw = sr[:, :-1].T
                         destripe = dsp.destripe(raw, fs=sr.fs, neuropixel_version=1)
                         all_rms[0, :, i] = dsp.rms(raw)

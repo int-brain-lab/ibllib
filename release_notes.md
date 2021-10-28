@@ -9,6 +9,9 @@
 ### Release Notes 2.1.2 2021-10-14
 - Fix issue with RawEphysQC that was not looking in local Subjects folder for data
 - Fix ensure_required_data in DlcQc
+### Release Notes 2.1.3 2021-10-19
+- Split jobs.py run function in two, one running large tasks (video compression, dlc, spike sorting), one the rest
+- Ensure RawEphysQC runs both probes if one fails
 
 ## Release Notes 2.0
 ### Release Notes 2.0.1 2021-08-07
