@@ -553,9 +553,8 @@ def load_wheel_reaction_times(eid, one=None):
 
 
 def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_wheel=False,
-                   ret_abswheel=False, ext_DLC=False, wheel_binsize=0.02, addtl_types=[]):
+                   ret_abswheel=False, wheel_binsize=0.02, addtl_types=[]):
     """
-    TODO Test this with new ONE
     Generate a pandas dataframe of per-trial timing information about a given session.
     Each row in the frame will correspond to a single trial, with timing values indicating timing
     session-wide (i.e. time in seconds since session start). Can optionally return a resampled
@@ -584,8 +583,6 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
         Whether to return the time-resampled wheel velocity trace, by default False
     ret_abswheel : bool, optional
         Whether to return the time-resampled absolute wheel velocity trace, by default False
-    ext_DLC : bool, optional
-        Whether to extract DLC data, by default False
     wheel_binsize : float, optional
         Time bins to resample wheel velocity to, by default 0.02
     addtl_types : list, optional
@@ -625,7 +622,7 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
         maps = diffs.argmin(axis=1)
         return validvals[maps]
 
-    trials = one.load_object(eid, 'trials')
+    trials = one.load_object(eid, 'trials', collection='alf')
     starttimes = trials.stimOn_times
     endtimes = trials.feedback_times
     tmp = {key: value for key, value in trials.items() if key in trialstypes}
@@ -649,7 +646,7 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
     if not ret_wheel and not ret_abswheel:
         return trialsdf
 
-    wheel = one.load_object(eid, 'wheel')
+    wheel = one.load_object(eid, 'wheel', collection='alf')
     whlpos, whlt = wheel.position, wheel.timestamps
     starttimes = trialsdf['trial_start']
     endtimes = trialsdf['trial_end']

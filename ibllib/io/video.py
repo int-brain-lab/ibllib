@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 
 from iblutil.util import Bunch
-from one.api import ONE, One
+from one.api import ONE
 from one import params
 
 VIDEO_LABELS = ('left', 'right', 'body')
@@ -124,9 +124,6 @@ def get_video_meta(video_path, one=None):
     :param one: An instance of ONE
     :return: A Bunch of video mata data
     """
-    if one and not isinstance(one, One):
-        import ibllib.io.deprecated.video as video_legacy
-        return video_legacy.get_video_meta(video_path, one)
     is_url = isinstance(video_path, str) and video_path.startswith('http')
     cap = VideoStreamer(video_path).cap if is_url else cv2.VideoCapture(str(video_path))
     assert cap.isOpened(), f'Failed to open video file {video_path}'
@@ -165,9 +162,6 @@ def url_from_eid(eid, label=None, one=None):
     if not (label is None or np.isin(label, ('left', 'right', 'body')).all()):
         raise ValueError('labels must be one of ("%s")' % '", "'.join(valid_labels))
     one = one or ONE()
-    if not isinstance(one, One):
-        import ibllib.io.deprecated.video as video_legacy
-        return video_legacy.url_from_eid(eid, label, one)
     session_path = one.eid2path(one.to_eid(eid))
 
     # Filter the video files
