@@ -12,10 +12,10 @@ from one.api import ONE
 
 
 class TestNeuropixel(unittest.TestCase):
-
+    """Comprehensive tests about geometry are run as part of the spikeglx reader testing suite"""
     def test_layouts(self):
         dense = neuropixel.dense_layout()
-        assert set(dense.keys()) == set(['x', 'y', 'row', 'col', 'ind'])
+        assert set(dense.keys()) == set(['x', 'y', 'row', 'col', 'ind', 'shank'])
         xu = np.unique(dense['x'])
         yu = np.unique(dense['y'])
         assert np.all(np.diff(xu) == 16)
@@ -24,7 +24,7 @@ class TestNeuropixel(unittest.TestCase):
 
     def tests_headers(self):
         th = neuropixel.trace_header()
-        assert set(th.keys()) == set(['x', 'y', 'row', 'col', 'ind', 'adc', 'sample_shift'])
+        assert set(th.keys()) == set(['x', 'y', 'row', 'col', 'ind', 'adc', 'sample_shift', 'shank'])
 
 
 class TestFpgaTask(unittest.TestCase):

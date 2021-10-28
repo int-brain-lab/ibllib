@@ -94,6 +94,14 @@ class Reader:
             return self.read(nsel=item[0], csel=item[1], sync=False)
 
     @property
+    def geometry(self):
+        """
+        Gets the geometry, ie. the full trace header for the recording
+        :return: dictionary with keys 'row', 'col', 'ind', 'shank', 'adc', 'x', 'y', 'sample_shift'
+        """
+        return _geometry_from_meta(self.meta)
+
+    @property
     def shape(self):
         return self.ns, self.nc
 
@@ -107,10 +115,13 @@ class Reader:
 
     @property
     def version(self):
-        """:return: """
-        if not self.meta:
-            return None
-        return _get_neuropixel_version_from_meta(self.meta)
+        """Gets the version string: '3A', '3B2', '3B1', 'NP2.1', 'NP2.4'"""
+        return None if self.meta is None else _get_neuropixel_version_from_meta(self.meta)
+
+    @property
+    def major_version(self):
+        """Gets the the major version int: 1 or 2"""
+        return None if self.meta is None else _get_neuropixel_major_version_from_meta(self.meta)
 
     @property
     def rl(self):
@@ -379,7 +390,7 @@ def _get_serial_number_from_meta(md):
 
 
 def _get_neuropixel_major_version_from_meta(md):
-    MAJOR_VERSION = {'3A': 1, '3B2': 1, '3B1': 1, 'NP2.1': 2, 'NP2.4': 2}
+    MAJOR_VERSION = {'3A': 1, '3B2': 1, '3B1': 1, 'NP2.1': 2, 'NP2.4': 2.4}
     version = _get_neuropixel_version_from_meta(md)
     if version is not None:
         return MAJOR_VERSION[version]
@@ -457,6 +468,24 @@ def _get_type_from_meta(md):
         return 'ap'
     elif snsApLfSy == [-1, -1, -1] and md.get('typeThis', None) == 'nidq':
         return 'nidq'
+
+
+def _geometry_from_meta(meta_data):
+    """
+    Gets the geometry, ie. the full trace header for the recording
+    :param meta_data: meta_data dictionary as read by ibllib.io.spikeglx.read_meta_data
+    :return: dictionary with keys 'row', 'col', 'ind', 'shank', 'adc', 'x', 'y', 'sample_shift'
+    """
+    cm = _map_channels_from_meta(meta_data)
+    major_version = _get_neuropixel_major_version_from_meta(meta_data)
+    th = cm.copy()
+    if major_version == 1:
+        # the spike sorting channel maps have a flipped version of the channel map
+        th['col'] = - cm['col'] * 2 + 2 + np.mod(cm['row'], 2)
+    th.update(neuropixel.rc2xy(th['row'], th['col'], version=major_version))
+    th['sample_shift'], th['adc'] = neuropixel.adc_shifts(version=major_version)
+    th['ind'] = np.arange(cm['col'].size)
+    return th
 
 
 def _map_channels_from_meta(meta_data):

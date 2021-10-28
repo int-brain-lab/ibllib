@@ -14,7 +14,7 @@ from iblutil.util import Bunch
 
 from brainbox.metrics.single_units import spike_sorting_metrics
 from brainbox.io.spikeglx import stream as sglx_streamer
-from ibllib.ephys import sync_probes
+from ibllib.ephys import sync_probes, neuropixel
 from ibllib.io import spikeglx
 import ibllib.dsp as dsp
 from ibllib.qc import base
@@ -89,6 +89,16 @@ class EphysQC(base.QC):
                 bin_file = next(meta_file.parent.glob(f'*{dstype}.*bin'), None)
                 self.data[f'{dstype}'] = spikeglx.Reader(bin_file, open=True) if bin_file is not None else None
 
+    @staticmethod
+    def _compute_metrics_array(raw, fs, h):
+        from ibllib.ephys.spikes import detection
+        destripe = dsp.destripe(raw, fs=fs, neuropixel_version=1)
+        rms_raw = dsp.rms(raw)
+        rms_pre_proc = dsp.rms(destripe)
+        detection(data=destripe, fs=fs, h=h)
+
+        return rms_raw, rms_pre_proc
+
     def run(self, update: bool = False, overwrite: bool = True, stream: bool = None, **kwargs) -> (str, dict):
         """
         Run QC on samples of the .ap file, and on the entire file for .lf data if it is present.
@@ -109,24 +119,27 @@ class EphysQC(base.QC):
         # TODO: This should go a a separate function once we have a spikeglx.Streamer that behaves like the Reader
         if self.data.ap_meta:
             rms_file = self.probe_path.joinpath("_iblqc_ephysChannels.apRMS.npy")
-            if rms_file.exists() and not overwrite:
+            spike_rate_file = self.probe_path.joinpath("_iblqc_ephysChannels.rawSpikeRates.npy")
+            if all([rms_file.exists(), spike_rate_file.exists()]) and not overwrite:
                 _logger.warning(f'RMS map already exists for .ap data in {self.probe_path}, skipping. '
                                 f'Use overwrite option.')
                 median_rms = np.load(rms_file)
             else:
                 rl = self.data.ap_meta.fileTimeSecs
-                nc = spikeglx._get_nchannels_from_meta(self.data.ap_meta)
+                nsync = len(spikeglx._get_sync_trace_indices_from_meta(self.data.ap_meta))
+                nc = spikeglx._get_nchannels_from_meta(self.data.ap_meta) - nsync
+                neuropixel_version = spikeglx._get_neuropixel_major_version_from_meta(self.data.ap_meta)
+                h = neuropixel.trace_header(neuropixel_version)
                 t0s = np.arange(TMIN, rl - SAMPLE_LENGTH, BATCHES_SPACING)
-                all_rms = np.zeros((2, nc - 1, t0s.shape[0]))
+                all_rms, all_sr = np.zeros((2, nc, t0s.shape[0]))
+                all_srs = np.zeros((nc, t0s.shape[0]))
                 # If the ap.bin file is not present locally, stream it
                 if self.data.ap is None and self.stream is True:
                     _logger.warning(f'Streaming .ap data to compute RMS samples for probe {self.pid}')
                     for i, t0 in enumerate(tqdm(t0s)):
                         sr, _ = sglx_streamer(self.pid, t0=t0, nsecs=1, one=self.one, remove_cached=True)
-                        raw = sr[:, :-1].T
-                        destripe = dsp.destripe(raw, fs=sr.fs, neuropixel_version=1)
-                        all_rms[0, :, i] = dsp.rms(raw)
-                        all_rms[1, :, i] = dsp.rms(destripe)
+                        raw = sr[:, :-nsync].T
+                        all_rms[0, :, i], all_rms[1, :, i], all_srs[:, i] = self._compute_metrics_array(raw, sr.fs, h)
                 elif self.data.ap is None and self.stream is not True:
                     _logger.warning('Raw .ap data is not available locally. Run with stream=True in order to stream '
                                     'data for calculating RMS samples.')
@@ -134,14 +147,14 @@ class EphysQC(base.QC):
                     _logger.info(f'Computing RMS samples for .ap data using local data in {self.probe_path}')
                     for i, t0 in enumerate(t0s):
                         sl = slice(int(t0 * self.data.ap.fs), int((t0 + SAMPLE_LENGTH) * self.data.ap.fs))
-                        raw = self.data.ap[sl, :-1].T
-                        destripe = dsp.destripe(raw, fs=self.data.ap.fs, neuropixel_version=1)
-                        all_rms[0, :, i] = dsp.rms(raw)
-                        all_rms[1, :, i] = dsp.rms(destripe)
+                        raw = self.data.ap[sl, :-nsync].T
+                        all_rms[0, :, i], all_rms[1, :, i], all_srs[:, i] = self._compute_metrics_array(raw, self.data.ap.fs, h)
                 # Calculate the median RMS across all samples per channel
                 median_rms = np.median(all_rms, axis=-1)
+                median_spike_rate = np.median(all_srs, axis=-1)
                 np.save(rms_file, median_rms)
-            qc_files.append(rms_file)
+                np.save(spike_rate_file, median_spike_rate)
+            qc_files.extend([rms_file, spike_rate_file])
 
             for p in [10, 90]:
                 self.metrics[f'apRms_p{p}_raw'] = np.format_float_scientific(np.percentile(median_rms[0, :], p),
