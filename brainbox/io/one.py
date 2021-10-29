@@ -166,13 +166,9 @@ def _load_spike_sorting(eid, one=None, collection=None, revision=None, return_ch
                                         attribute=spike_attributes)
         clusters[pname] = one.load_object(eid, collection=probe_collection, obj='clusters',
                                           attribute=cluster_attributes)
-
-    channels = _load_channels_locations_from_disk(eid, collection=collection, one=one, revision=revision,
-                                                  brain_regions=brain_regions)
-
     if return_channels:
         channels = _load_channels_locations_from_disk(
-            eid, collection=collection, one=one, revision=revision)
+            eid, collection=collection, one=one, revision=revision, brain_regions=brain_regions)
         return spikes, clusters, channels
     else:
         return spikes, clusters
