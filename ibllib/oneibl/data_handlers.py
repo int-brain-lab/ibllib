@@ -75,6 +75,29 @@ class DataHandler(abc.ABC):
 class ServerDataHandler(DataHandler):
     def __init__(self, session_path, signatures, one=None):
         """
+        Data handler for running tasks on lab local servers when all data is available locally
+
+        :param session_path: path to session
+        :param signature: input and output file signatures
+        :param one: ONE instance
+        """
+        super().__init__(session_path, signatures, one=one)
+
+    def uploadData(self, outputs, version, **kwargs):
+        """
+        Function to upload and register data of completed task
+        :param outputs: output files from task to register
+        :param version: ibllib version
+        :return: output info of registered datasets
+        """
+        versions = super().uploadData(outputs, version)
+
+        return register_dataset(outputs, one=self.one, versions=versions, **kwargs)
+
+
+class ServerGlobusDataHandler(DataHandler):
+    def __init__(self, session_path, signatures, one=None):
+        """
         Data handler for running tasks on lab local servers. Will download missing data from SDSC using Globus
 
         :param session_path: path to session
@@ -85,15 +108,15 @@ class ServerDataHandler(DataHandler):
         self.globus = Globus()
 
         # Find the lab
-        #labs = get_lab_from_endpoint_id(one=self.one)
-        #if len(labs) == 2:
-        #    # for flofer lab
-        #    subject = self.one.path2ref(self.session_path)['subject']
-        #    self.lab = self.one.alyx.rest('subjects', 'list', nickname=subject)[0]['lab']
-        #else:
-        #    self.lab = labs[0]
-#
-        #self.globus.add_endpoint(f'flatiron_{self.lab}')
+        labs = get_lab_from_endpoint_id(one=self.one)
+        if len(labs) == 2:
+            # for flofer lab
+            subject = self.one.path2ref(self.session_path)['subject']
+            self.lab = self.one.alyx.rest('subjects', 'list', nickname=subject)[0]['lab']
+        else:
+            self.lab = labs[0]
+
+        self.globus.add_endpoint(f'flatiron_{self.lab}')
 
     def setUp(self):
         """
@@ -139,13 +162,6 @@ class ServerDataHandler(DataHandler):
         versions = super().uploadData(outputs, version)
 
         return register_dataset(outputs, one=self.one, versions=versions, **kwargs)
-
-    def get_lab(self):
-        with open(Path.home().joinpath(".globusonline/lta/client-id.txt"), 'r') as fid:
-            globus_id = fid.read()
-        lab = self.one.alyx.rest('labs', 'list', django=f"repositories__globus_endpoint_id,{globus_id}")
-        if len(lab):
-            return [la['name'] for la in lab]
 
 
 class RemoteHttpDataHandler(DataHandler):
