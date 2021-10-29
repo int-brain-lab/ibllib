@@ -443,7 +443,7 @@ class EphysVideoCompress(tasks.Task):
 
     def get_signatures(self):
         # need to detect the number of cameras
-        output_files = self.session_path.joinpath('raw_video_data').glob('*')
+        output_files = Path(self.session_path).joinpath('raw_video_data').glob('*')
         labels = np.unique([label_from_path(x) for x in output_files])
 
         full_input_files = []
@@ -501,7 +501,7 @@ class EphysVideoSyncQc(tasks.Task):
         neuropixel_version = spikeglx.get_neuropixel_version_from_folder(self.session_path)
         probes = spikeglx.get_probes_from_folder(self.session_path)
         # need to detect the number of cameras
-        output_files = self.session_path.joinpath('raw_video_data').rglob('*')
+        output_files = Path(self.session_path).joinpath('raw_video_data').rglob('*')
         labels = np.unique([label_from_path(x) for x in output_files])
 
         full_input_files = []
