@@ -20,7 +20,7 @@ class NP2Converter:
         :param ap_file: ap.bin spikeglx file to process
         :param post_check: whether to apply post-check integrity test to ensure split content is
         identical to original content (only applicable to NP2.4)
-        :param delete_original: whether to delete the original ap file after data has been
+        :param delete_original: whether to delete the original ap file after data has been split
         :param compress: whether to apply mtscomp to extracted .bin files
         split into shanks (only applicable to NP2.4)
         """
