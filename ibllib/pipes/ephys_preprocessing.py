@@ -102,10 +102,10 @@ class RawEphysQC(tasks.Task):
                         ('*lf.ch', 'raw_ephys_data/probe*', False),  # not required it .bin file
                         ('*lf.*bin', 'raw_ephys_data/probe*', True)],  # not necessary to run task as optional computation
         'output_files': [('_iblqc_ephysChannels.apRMS.npy', 'raw_ephys_data/probe*', True),
-                         ('_iblqc_ephysSpectralDensity.LF.freqs.npy', 'raw_ephys_data/probe*', True),
-                         ('_iblqc_ephysSpectralDensity.LF.power.npy', 'raw_ephys_data/probe*', True),
-                         ('_iblqc_ephysTimeRms.LF.rms.npy', 'raw_ephys_data/probe*', True),
-                         ('_iblqc_ephysTimeRms.LF.timestamps.npy', 'raw_ephys_data/probe*', True)]
+                         ('_iblqc_ephysSpectralDensityLF.freqs.npy', 'raw_ephys_data/probe*', True),
+                         ('_iblqc_ephysSpectralDensityLF.power.npy', 'raw_ephys_data/probe*', True),
+                         ('_iblqc_ephysTimeRmsLF.rms.npy', 'raw_ephys_data/probe*', True),
+                         ('_iblqc_ephysTimeRmsLF.timestamps.npy', 'raw_ephys_data/probe*', True)]
     }
 
     def _run(self, overwrite=False):
