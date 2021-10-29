@@ -30,7 +30,8 @@ class Task(abc.ABC):
     time_elapsed_secs = None
     time_out_secs = None
     version = version.ibllib()
-    signature = {'input_files': (), 'output_files': ()}  # tuple (filename, collection, required_flag)
+    signature = {'input_files': [], 'output_files': []}  # list of tuples (filename, collection, required_flag)
+    force = False  # whether or not to re-download missing input files on local server if not present
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
                  machine=None, clobber=True, location='server'):
@@ -44,7 +45,7 @@ class Task(abc.ABC):
         :param clobber: whether or not to overwrite log on rerun
         :param location: location where task is run. Options are 'server' (lab local servers'), 'remote' (remote compute node,
         data required for task downloaded via one), 'AWS' (remote compute node, data required for task downloaded via AWS),
-        'Globus' (remote compute node, data required for task downloaded via Globus) or 'SDSC' (SDSC flatiron compute node)
+        or 'SDSC' (SDSC flatiron compute node) # TODO 'Globus' (remote compute node, data required for task downloaded via Globus)
         """
         self.taskid = taskid
         self.one = one
@@ -57,7 +58,6 @@ class Task(abc.ABC):
         self.machine = machine
         self.clobber = clobber
         self.location = location
-        self.data_handler = self.get_data_handler()
 
     @property
     def name(self):
@@ -109,7 +109,7 @@ class Task(abc.ABC):
                 self.status = -1
             self.time_elapsed_secs = time.time() - start_time
 
-        # log the outputs-+
+        # log the outputs
         if isinstance(self.outputs, list):
             nout = len(self.outputs)
         elif self.outputs is None:
@@ -141,7 +141,7 @@ class Task(abc.ABC):
     def rerun(self):
         self.run(overwrite=True)
 
-    def get_signatures(self):
+    def get_signatures(self, **kwargs):
         """
         This is the default but should be overwritten for each task
         :return:
@@ -163,36 +163,41 @@ class Task(abc.ABC):
         """
 
     def setUp(self, **kwargs):
-        force = False
+        """
+        Setup method to get the data handler and ensure all data is available locally to run task
+        :param kwargs:
+        :return:
+        """
+
         if self.location == 'server':
             self.get_signatures(**kwargs)
-            _logger.info('Checking output files')
-            output_status, _ = self.assert_expected(self.output_files, silent=True)
-            input_status, _ = self.assert_expected_inputs(raise_error=False)
 
-            if output_status and input_status:
-                _logger.info('All output and all input files found: rerunning task')
-                return True
-            if output_status and not input_status:
-                if not force:
-                    _logger.info('All output files found but input files required not available locally: task not rerun')
-                    return False
-                else:
-                    _logger.info('All output files found but input files required not available locally: '
-                                 'redownloading data and rerunning task')
-                    # Get the data required and run the task
-                    self.data_handler.setup()
-                    # Double check we now have the required files to run the task
-                    self.assert_expected_inputs()
-                    return True
-            if not output_status and input_status:
+            input_status, _ = self.assert_expected_inputs(raise_error=False)
+            output_status, _ = self.assert_expected(self.output_files, silent=True)
+
+            if input_status:
+                self.data_handler = self.get_data_handler()
                 _logger.info('All input files found: running task')
                 return True
-            if not output_status and not input_status:
-                self.data_handler.setup()
-                self.assert_expected_inputs()
+
+            if not self.force:
+                self.data_handler = self.get_data_handler()
+                _logger.warning('All input files not found locally: attempting to rerun task')
+                # TODO in the future once we are sure that input output task signatures work properly should return False
+                # _logger.info('All output files found but input files required not available locally: task not rerun')
                 return True
+            else:
+                # Attempts to download missing data using globus
+                _logger.info('All input files not found locally: attempting to re-download required files')
+                self.data_handler = self.get_data_handler(location='serverglobus')
+                self.data_handler.setup()
+                # Double check we now have the required files to run the task
+                # TODO in future should raise error if even after downloading don't have the correct files
+                self.assert_expected_inputs(raise_error=False)
+                return True
+
         else:
+            self.data_handler = self.get_data_handler()
             self.data_handler.setUp()
             self.get_signatures(**kwargs)
             self.assert_expected_inputs()
@@ -258,19 +263,22 @@ class Task(abc.ABC):
 
         return everything_is_fine, files
 
-
-    def get_data_handler(self):
+    def get_data_handler(self, location=None):
         """
         Gets the relevant data handler based on location argument
         :return:
         """
-        if self.location == 'server':
+        location = location or self.location
+
+        if location == 'server':
             dhandler = data_handlers.ServerDataHandler(self.session_path, self.signature, one=self.one)
-        elif self.location == 'remote':
+        elif location == 'serverglobus':
+            dhandler = data_handlers.ServerGlobusDataHandler(self.session_path, self.signature, one=self.one)
+        elif location == 'remote':
             dhandler = data_handlers.RemoteHttpDataHandler(self.session_path, self.signature, one=self.one)
-        elif self.location == 'AWS':
+        elif location == 'AWS':
             dhandler = data_handlers.RemoteAwsDataHandler(self.session_path, self.signature, one=self.one)
-        elif self.location == 'SDSC':
+        elif location == 'SDSC':
             dhandler = data_handlers.SDSCDataHandler(self, self.session_path, self.signature, one=self.one)
 
         return dhandler
