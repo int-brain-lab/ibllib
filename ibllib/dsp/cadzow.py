@@ -48,14 +48,25 @@ def trajectory(x, y):
 
 
 def denoise(WAV, x, y, r, imax=None, niter=1):
-    WAV_ = np.zeros_like(WAV)
+    """
+    Applies cadzow denoising by de-ranking spatial matrices in frequency domain
+    :param WAV: np array nc / ns in frequency domain
+    :param x: trace spatial coordinate (np.array)
+    :param y: trace spatial coordinate (np.array)
+    :param r: rank
+    :param imax: index of the maximum frequency to keep, all frequencies are de-ranked if None (None)
+    :param niter: number of iterations (1)
+    :return: WAV_: np array nc / ns in frequency domain
+    """
+    WAV_ = np.copy(WAV)
     imax = np.minimum(WAV.shape[-1], imax) if imax else WAV.shape[-1]
     T, it, itr, trcount = trajectory(x, y)
     for ind_f in np.arange(imax):
-        T[it] = WAV[itr, ind_f]
-        T_ = derank(T, r)
-        WAV_[:, ind_f] = np.bincount(itr, weights=np.real(T_[it]))
-        WAV_[:, ind_f] += 1j * np.bincount(itr, weights=np.imag(T_[it]))
-        WAV_[:, ind_f] /= trcount
+        for _ in np.arange(niter):
+            T[it] = WAV_[itr, ind_f]
+            T_ = derank(T, r)
+            WAV_[:, ind_f] = np.bincount(itr, weights=np.real(T_[it]))
+            WAV_[:, ind_f] += 1j * np.bincount(itr, weights=np.imag(T_[it]))
+            WAV_[:, ind_f] /= trcount
 
     return WAV_

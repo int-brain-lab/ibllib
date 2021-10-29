@@ -1,3 +1,10 @@
+## Develop
+- brainbox.io.one load_spike_sorting fast: merge channel info in clusters
+- brainbox.io.one generic function to interpolate channels after alignment
+- dsp: spike detection by voltage thresholding and cadzow filtering docs
+- ibllib.io.spikeglx: get geometry from metadata
+- RawEphysQC outputs basic detection spike rates
+
 ## Release Notes 2.1
 ### Release Notes 2.1.0 2021-10-05
 - destriping as pykilosort internal pre-processing 
