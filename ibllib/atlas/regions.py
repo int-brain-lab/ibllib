@@ -10,6 +10,7 @@ from iblutil.numerical import ismember
 _logger = logging.getLogger('ibllib')
 # 'Beryl' is the name given to an atlas containing a subset of the most relevant allen annotations
 FILE_BERYL = str(Path(__file__).parent.joinpath('beryl.npy'))
+FILE_COSMOS = str(Path(__file__).parent.joinpath('cosmos.npy'))
 FILE_REGIONS = str(Path(__file__).parent.joinpath('allen_structure_tree.csv'))
 
 
@@ -33,6 +34,7 @@ class BrainRegions(_BrainRegions):
     def __init__(self):
         df_regions = pd.read_csv(FILE_REGIONS)
         beryl = np.load(FILE_BERYL)
+        cosmos = np.load(FILE_COSMOS)
         # lateralize
         df_regions_left = df_regions.iloc[np.array(df_regions.id > 0), :].copy()
         df_regions_left['id'] = - df_regions_left['id']
@@ -57,6 +59,8 @@ class BrainRegions(_BrainRegions):
             'Allen-lr': np.arange(self.id.size),
             'Beryl': self._mapping_from_regions_list(beryl, lateralize=False),
             'Beryl-lr': self._mapping_from_regions_list(beryl, lateralize=True),
+            'Cosmos': self._mapping_from_regions_list(cosmos, lateralize=False),
+            'Cosmos-lr': self._mapping_from_regions_list(cosmos, lateralize=True),
         }
 
     def get(self, ids) -> Bunch:

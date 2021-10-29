@@ -26,6 +26,7 @@ class Reader:
 
     Note: To release system resources the close method must be called
     """
+
     def __init__(self, sglx_file, open=True):
         """
         An interface for reading data from a SpikeGLX file
@@ -93,6 +94,14 @@ class Reader:
             return self.read(nsel=item[0], csel=item[1], sync=False)
 
     @property
+    def geometry(self):
+        """
+        Gets the geometry, ie. the full trace header for the recording
+        :return: dictionary with keys 'row', 'col', 'ind', 'shank', 'adc', 'x', 'y', 'sample_shift'
+        """
+        return _geometry_from_meta(self.meta)
+
+    @property
     def shape(self):
         return self.ns, self.nc
 
@@ -106,10 +115,17 @@ class Reader:
 
     @property
     def version(self):
-        """:return: """
-        if not self.meta:
-            return None
-        return _get_neuropixel_version_from_meta(self.meta)
+        """Gets the version string: '3A', '3B2', '3B1', 'NP2.1', 'NP2.4'"""
+        return None if self.meta is None else _get_neuropixel_version_from_meta(self.meta)
+
+    @property
+    def major_version(self):
+        """Gets the the major version int: 1 or 2"""
+        return None if self.meta is None else _get_neuropixel_major_version_from_meta(self.meta)
+
+    @property
+    def rl(self):
+        return self.ns / self.fs
 
     @property
     def type(self):
@@ -131,6 +147,11 @@ class Reader:
         if not self.meta:
             return
         return _get_nchannels_from_meta(self.meta)
+
+    @property
+    def nsync(self):
+        """:return: number of sync channels"""
+        return len(_get_sync_trace_indices_from_meta(self.meta))
 
     @property
     def ns(self):
@@ -368,13 +389,19 @@ def _get_serial_number_from_meta(md):
         return int(serial)
 
 
+def _get_neuropixel_major_version_from_meta(md):
+    MAJOR_VERSION = {'3A': 1, '3B2': 1, '3B1': 1, 'NP2.1': 2, 'NP2.4': 2.4}
+    version = _get_neuropixel_version_from_meta(md)
+    if version is not None:
+        return MAJOR_VERSION[version]
+
+
 def _get_neuropixel_version_from_meta(md):
     """
     Get neuropixel version tag (3A, 3B1, 3B2) from the metadata dictionary
     """
     if 'typeEnabled' in md.keys():
         return '3A'
-
     prb_type = md.get('imDatPrb_type')
     # Neuropixel 1.0 either 3B1 or 3B2 (ask Olivier about 3B1)
     if prb_type == 0:
@@ -441,6 +468,24 @@ def _get_type_from_meta(md):
         return 'ap'
     elif snsApLfSy == [-1, -1, -1] and md.get('typeThis', None) == 'nidq':
         return 'nidq'
+
+
+def _geometry_from_meta(meta_data):
+    """
+    Gets the geometry, ie. the full trace header for the recording
+    :param meta_data: meta_data dictionary as read by ibllib.io.spikeglx.read_meta_data
+    :return: dictionary with keys 'row', 'col', 'ind', 'shank', 'adc', 'x', 'y', 'sample_shift'
+    """
+    cm = _map_channels_from_meta(meta_data)
+    major_version = _get_neuropixel_major_version_from_meta(meta_data)
+    th = cm.copy()
+    if major_version == 1:
+        # the spike sorting channel maps have a flipped version of the channel map
+        th['col'] = - cm['col'] * 2 + 2 + np.mod(cm['row'], 2)
+    th.update(neuropixel.rc2xy(th['row'], th['col'], version=major_version))
+    th['sample_shift'], th['adc'] = neuropixel.adc_shifts(version=major_version)
+    th['ind'] = np.arange(cm['col'].size)
+    return th
 
 
 def _map_channels_from_meta(meta_data):
@@ -706,7 +751,9 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
     webclient = one.alyx
     cache_dir = cache_dir or webclient.cache_dir
     relpath = Path(url_cbin.replace(webclient._par.HTTP_DATA_SERVER, '.')).parents[0]
-    target_dir = Path(cache_dir, relpath)
+    # write the temp file into a subdirectory
+    tdir_chunk = f"chunk_{str(first_chunk).zfill(6)}_to_{str(last_chunk).zfill(6)}"
+    target_dir = Path(cache_dir, relpath, tdir_chunk)
     Path(target_dir).mkdir(parents=True, exist_ok=True)
 
     # First, download the .ch file if necessary
@@ -722,9 +769,10 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
     with open(ch_file, 'r') as f:
         cmeta = json.load(f)
 
-    # Get the first byte and number of bytes to download.
+    # Get the first sample index, and the number of samples to download.
     i0 = cmeta['chunk_bounds'][first_chunk]
     ns_stream = cmeta['chunk_bounds'][last_chunk + 1] - i0
+    total_samples = cmeta['chunk_bounds'][-1]
 
     # handles the meta file
     meta_local_path = ch_file_stream.with_suffix('.meta')
@@ -736,7 +784,7 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
         with open(ch_file_stream, 'r') as f:
             cmeta_stream = json.load(f)
         if (cmeta_stream.get('chopped_first_sample', None) == i0 and
-                cmeta_stream.get('chopped_total_samples', None) == ns_stream):
+                cmeta_stream.get('chopped_total_samples', None) == total_samples):
             return Reader(ch_file_stream.with_suffix('.cbin'))
     else:
         shutil.copy(ch_file, ch_file_stream)
@@ -761,7 +809,8 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
     cmeta['sha1_uncompressed'] = None
     cmeta['chopped'] = True
     cmeta['chopped_first_sample'] = i0
-    cmeta['chopped_total_samples'] = ns_stream
+    cmeta['chopped_samples'] = ns_stream
+    cmeta['chopped_total_samples'] = total_samples
 
     with open(ch_file_stream, 'w') as f:
         json.dump(cmeta, f, indent=2, sort_keys=True)

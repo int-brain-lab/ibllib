@@ -5,8 +5,8 @@ import unittest
 
 import numpy as np
 from iblutil.io import hashfile
-
 from ibllib.io import spikeglx
+from ibllib.ephys import neuropixel
 
 
 class TestSpikeGLX_hardwareInfo(unittest.TestCase):
@@ -296,7 +296,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='glx_test') as tdir:
             bin_3b = spikeglx._mock_spikeglx_file(
                 Path(tdir).joinpath('sampleNP2.1_g0_t0.imec.ap.bin'),
-                self.workdir / 'sample3B_g0_t0.imec1.ap.meta',
+                self.workdir / 'sampleNP2.1_g0_t0.imec.ap.meta',
                 ns=32, nc=385, sync_depth=16)
             self.assert_read_glx(bin_3b)
 
@@ -304,7 +304,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='glx_test') as tdir:
             bin_3b = spikeglx._mock_spikeglx_file(
                 Path(tdir).joinpath('sampleNP2.4_g0_t0.imec.ap.bin'),
-                self.workdir / 'sample3B_g0_t0.imec1.ap.meta',
+                self.workdir / 'sampleNP2.4_g0_t0.imec.ap.meta',
                 ns=32, nc=385, sync_depth=16)
             self.assert_read_glx(bin_3b)
 
@@ -326,6 +326,8 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             dexpected = sr.channel_conversion_sample2v[sr.type] * tglx['D']
             d, sync = sr.read_samples(0, tglx['ns'])
             # could be rounding errors with non-integer sampling rates
+            self.assertTrue(sr.nsync == 1)
+            self.assertTrue(sr.rl == sr.ns / sr.fs)
             self.assertTrue(sr.nc == tglx['nc'])
             self.assertTrue(sr.ns == tglx['ns'])
             # test the data reading with gain
@@ -373,6 +375,12 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             else:
                 s = sr.read_sync()
                 self.assertTrue(s.shape[1] == 17)
+            # test the channel geometries but skip when meta data doesn't correspond to NP
+            if sr.major_version is not None:
+                h = neuropixel.trace_header(sr.major_version)
+                th = sr.geometry
+                for k in h.keys():
+                    assert(np.all(th[k] == h[k])), print(k)
 
     def testGetSerialNumber(self):
         self.meta_files.sort()
@@ -392,8 +400,15 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
                 # for ap and lf look for version number
                 # test getting revision
                 revision = meta_data_file.name[6:8]
-                self.assertEqual(spikeglx._get_neuropixel_version_from_meta(md)[0:2], revision)
-
+                minor = spikeglx._get_neuropixel_version_from_meta(md)[0:2]
+                major = spikeglx._get_neuropixel_major_version_from_meta(md)
+                print(revision, minor, major)
+                self.assertEqual(minor, revision)
+                # test the major version
+                if revision.startswith('3'):
+                    assert major == 1
+                else:
+                    assert np.floor(major) == 2
             # test getting acquisition type for all ap, lf and nidq
             type = meta_data_file.name.split('.')[-2]
             self.assertEqual(spikeglx._get_type_from_meta(md), type)

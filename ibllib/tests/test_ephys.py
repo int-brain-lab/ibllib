@@ -3,18 +3,19 @@ import unittest
 from tempfile import TemporaryDirectory
 
 import numpy as np
+import scipy.signal
 
-from ibllib.ephys import ephysqc, neuropixel
+from ibllib.ephys import ephysqc, neuropixel, spikes
 from ibllib.tests import TEST_DB
 from ibllib.tests.fixtures import utils
 from one.api import ONE
 
 
 class TestNeuropixel(unittest.TestCase):
-
+    """Comprehensive tests about geometry are run as part of the spikeglx reader testing suite"""
     def test_layouts(self):
         dense = neuropixel.dense_layout()
-        assert set(dense.keys()) == set(['x', 'y', 'row', 'col', 'ind'])
+        assert set(dense.keys()) == set(['x', 'y', 'row', 'col', 'ind', 'shank'])
         xu = np.unique(dense['x'])
         yu = np.unique(dense['y'])
         assert np.all(np.diff(xu) == 16)
@@ -23,7 +24,7 @@ class TestNeuropixel(unittest.TestCase):
 
     def tests_headers(self):
         th = neuropixel.trace_header()
-        assert set(th.keys()) == set(['x', 'y', 'row', 'col', 'ind', 'adc', 'sample_shift'])
+        assert set(th.keys()) == set(['x', 'y', 'row', 'col', 'ind', 'adc', 'sample_shift', 'shank'])
 
 
 class TestFpgaTask(unittest.TestCase):
@@ -106,6 +107,81 @@ class TestEphysQC(unittest.TestCase):
         for fbin in ['_spikeglx_ephysData_g0_t0.imec.lf.bin', '_spikeglx_ephysData_g0_t0.imec.ap.bin']:
             self.one.eid2path(self.eid).joinpath('raw_ephys_data', self.pname, fbin).unlink()
         self.qc.load_data()
+
+
+class TestDetectSpikes(unittest.TestCase):
+
+    def test_spike_detection(self):
+        """
+        Test that creates a synthetic dataset with spikes and an amplitude decay function
+        with the probe gemetry, and then pastes spikes all around the dataset and detects and
+        de-duplicates
+        The test is feeding the detections in a new round of simulation, and then computing
+        the zero-lag cross-correlation between input and simulated output, and asserting on
+        the similarity
+        """
+        def a_little_spike(nsw=121, nc=1):
+            # creates a kind of waveform that resembles a spike
+            wav = np.zeros(nsw)
+            wav[0] = 1
+            wav[5] = -0.1
+            wav[10] = -0.3
+            wav[15] = -0.1
+            sos = scipy.signal.butter(N=3, Wn=.15, output='sos')
+            spike = scipy.signal.sosfilt(sos, wav)
+            spike = - spike / np.max(spike)
+            if nc > 1:
+                spike = spike[:, np.newaxis] * scipy.signal.hamming(nc)[np.newaxis, :]
+            return spike
+
+        def make_synthetic_data(ns, nc, nss, ncs, tr, sample):
+            icsmid = int(np.floor(ncs / 2))
+            issmid = int(np.floor(nss / 2))
+            template = a_little_spike(121)
+            data = np.zeros((ns, nc))
+            for m in np.arange(tr.size):
+                itr = np.arange(tr[m] - icsmid, tr[m] + icsmid + 1)
+                iss = np.arange(sample[m] - issmid, sample[m] + issmid + 1)
+                offset = np.abs(h['x'][itr[icsmid]] + 1j * h['y'][itr[icsmid]] - h['x'][itr] - 1j * h['y'][itr])
+                ampfac = 1 / (offset + 10) ** 1.3
+                ampfac = ampfac / np.max(ampfac)
+                tmp = template[:, np.newaxis] * ampfac[np.newaxis, :]
+                data[slice(iss[0], iss[-1] + 1), slice(itr[0], itr[-1] + 1)] += tmp
+            return data
+
+        fs = 30000
+        nspikes = 1200
+        h = neuropixel.trace_header(version=1)
+        ns, nc = (10000, len(h['x']))
+        nss, ncs = (121, 21)
+        np.random.seed(973)
+        display = False
+
+        tr = np.random.randint(np.ceil(ncs / 2), nc - np.ceil(ncs / 2), nspikes)
+        sample = np.random.randint(np.ceil(nss / 2), ns - np.ceil(nss / 2), nspikes)
+        data = make_synthetic_data(ns, nc, nss, ncs, tr, sample)
+
+        detects = spikes.detection(data, fs=fs, h=h, detect_threshold=-0.8, time_tol=.0006)
+
+        sample_out = (detects.time * fs + nss / 2 - 4).astype(np.int32)
+        tr_out = detects.trace.astype(np.int32)
+        data_out = make_synthetic_data(ns, nc, nss, ncs, tr_out, sample_out)
+
+        if display:
+            from easyqc.gui import viewseis
+            eqc = viewseis(data, si=1 / 30000 * 1e3, taxis=0, title='data')
+            eqc.ctrl.add_scatter(detects.time * 1e3, detects.trace)
+            eqco = viewseis(data_out, si=1 / 30000 * 1e3, taxis=0, title='data_out')  # noqa
+
+        xcor = np.zeros(nc)
+        for tr in np.arange(nc):
+            if np.all(data[:, tr] == 0):
+                xcor[tr] = 1
+                continue
+            xcor[tr] = np.corrcoef(data[:, tr], data_out[:, tr])[1, 0]
+
+        assert np.mean(xcor > .8) > .95
+        assert np.nanmedian(xcor) > .99
 
 
 if __name__ == "__main__":

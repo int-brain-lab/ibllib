@@ -62,17 +62,19 @@ class RawEphysQC(tasks.Task):
 
     def _run(self, overwrite=False):
         eid = self.one.path2eid(self.session_path)
-        pids = [x['id'] for x in self.one.alyx.rest('insertions', 'list', session=eid)]
+        probes = [(x['id'], x['name']) for x in self.one.alyx.rest('insertions', 'list', session=eid)]
         # Usually there should be two probes, if there are less, check if all probes are registered
-        if len(pids) < 2:
-            _logger.warning(f"{len(pids)} probes registered for session {eid}, trying to register from local data")
-            pids = [p['id'] for p in create_alyx_probe_insertions(self.session_path, one=self.one)]
+        if len(probes) < 2:
+            _logger.warning(f"{len(probes)} probes registered for session {eid}, trying to register from local data")
+            probes = [(p['id'], p['name']) for p in create_alyx_probe_insertions(self.session_path, one=self.one)]
         qc_files = []
-        for pid in pids:
+        for pid, pname in probes:
+            _logger.info(f"\nRunning QC for probe insertion {pname}")
             try:
                 eqc = ephysqc.EphysQC(pid, session_path=self.session_path, one=self.one)
                 qc_files.extend(eqc.run(update=True, overwrite=overwrite))
             except AssertionError:
+                _logger.error(traceback.format_exc())
                 self.status = -1
                 continue
         return qc_files
