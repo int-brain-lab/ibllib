@@ -268,7 +268,7 @@ class SpikeSorting(tasks.Task):
         else:
             self.signature['input_files'], self.signature['output_files'] = self.spike_sorting_signature(probes[0])
 
-        super().setUp(probes=probes)
+        return super().setUp(probes=probes)
 
     def _run_pykilosort(self, ap_file):
         """
