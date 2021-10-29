@@ -182,13 +182,13 @@ class Task(abc.ABC):
 
             if not self.force:
                 self.data_handler = self.get_data_handler()
-                _logger.warning('All input files not found locally: attempting to rerun task')
+                _logger.warning('Not all input files found locally: will still attempt to rerun task')
                 # TODO in the future once we are sure that input output task signatures work properly should return False
                 # _logger.info('All output files found but input files required not available locally: task not rerun')
                 return True
             else:
                 # Attempts to download missing data using globus
-                _logger.info('All input files not found locally: attempting to re-download required files')
+                _logger.info('Not all input files found locally: attempting to re-download required files')
                 self.data_handler = self.get_data_handler(location='serverglobus')
                 self.data_handler.setup()
                 # Double check we now have the required files to run the task

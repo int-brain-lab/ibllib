@@ -486,9 +486,10 @@ class EphysVideoSyncQc(tasks.Task):
 
     def _run(self, **kwargs):
 
-        output_files = self.session_path.joinpath('raw_video_data').rglob('*.mp4')
-        labels = [label_from_path(x) for x in output_files]
+        mp4_files = self.session_path.joinpath('raw_video_data').rglob('*.mp4')
+        labels = [label_from_path(x) for x in mp4_files]
         # Video timestamps extraction
+        output_files = []
         data, files = camera.extract_all(self.session_path, save=True, labels=labels)
         output_files.extend(files)
 
