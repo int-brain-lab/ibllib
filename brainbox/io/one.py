@@ -108,7 +108,8 @@ def _channels_alf2bunch(channels, brain_regions=None):
     return channels_
 
 
-def _load_spike_sorting(eid, one=None, collection=None, revision=None, return_channels=True, dataset_types=None):
+def _load_spike_sorting(eid, one=None, collection=None, revision=None, return_channels=True, dataset_types=None,
+                        brain_regions=None):
     """
     Generic function to load spike sortin according to one searchwords
     Will try to load one spike sorting for any probe present for the eid matching the collection
@@ -121,6 +122,7 @@ def _load_spike_sorting(eid, one=None, collection=None, revision=None, return_ch
     :param collection: collection filter word - accepts wildcard - can be a combination of spike sorter and probe
     :param revision: revision to load
     :param return_channels: True
+    :param brain_regions: ibllib.atlas.regions.BrainRegions object - will label acronyms if provided
     :return:
     """
     one = one or ONE()
@@ -140,7 +142,8 @@ def _load_spike_sorting(eid, one=None, collection=None, revision=None, return_ch
         clusters[pname] = one.load_object(eid, collection=probe_collection, obj='clusters',
                                           attribute=cluster_attributes)
 
-    channels = _load_channels_locations_from_disk(eid, collection=collection, one=one, revision=revision)
+    channels = _load_channels_locations_from_disk(eid, collection=collection, one=one, revision=revision,
+                                                  brain_regions=brain_regions)
 
     if return_channels:
         return spikes, clusters, channels
@@ -179,28 +182,39 @@ def _load_channels_locations_from_disk(eid, collection=None, one=None, revision=
             _logger.debug(f"looking for a resolved alignment dataset in {aligned_channel_collections}")
             ac_collection = _get_spike_sorting_collection(aligned_channel_collections, probe)
             channels_aligned = one.load_object(eid, 'channels', collection=ac_collection)
-            # oftentimes the channel map for different spike sorters may be different so interpolate the alignment onto
-            nch = channels[probe]['localCoordinates'].shape[0]
-            # if there is no spike sorting in the base folder, the alignment doesn't have the localCoordinates field
-            # so we reconstruct from the Neuropixel map. This only happens for early pykilosort sorts
-            if 'localCoordinates' in channels_aligned.keys():
-                aligned_depths = channels_aligned['localCoordinates'][:, 1]
-            else:
-                assert channels_aligned['mlapdv'].shape[0] == 384
-                NEUROPIXEL_VERSION = 1
-                from ibllib.ephys.neuropixel import trace_header
-                aligned_depths = trace_header(version=NEUROPIXEL_VERSION)['y']
-            depth_aligned, ind_aligned = np.unique(aligned_depths, return_index=True)
-            depths, ind, iinv = np.unique(channels[probe]['localCoordinates'][:, 1], return_index=True, return_inverse=True)
-            channels[probe]['mlapdv'] = np.zeros((nch, 3))
-            for i in np.arange(3):
-                channels[probe]['mlapdv'][:, i] = np.interp(
-                    depths, depth_aligned, channels_aligned['mlapdv'][ind_aligned, i])[iinv]
-            # the brain locations have to be interpolated by nearest neighbour
-            fcn_interp = interp1d(depth_aligned, channels_aligned['brainLocationIds_ccf_2017'][ind_aligned], kind='nearest')
-            channels[probe]['brainLocationIds_ccf_2017'] = fcn_interp(depths)[iinv].astype(np.int32)
+            channels[probe] = channel_locations_interpolation(channels_aligned, channels[probe])
             # only have to reformat channels if we were able to load coordinates from disk
             channels[probe] = _channels_alf2bunch(channels[probe], brain_regions=brain_regions)
+    return channels
+
+
+def channel_locations_interpolation(channels_aligned, channels):
+    """
+    oftentimes the channel map for different spike sorters may be different so interpolate the alignment onto
+    if there is no spike sorting in the base folder, the alignment doesn't have the localCoordinates field
+    so we reconstruct from the Neuropixel map. This only happens for early pykilosort sorts
+    :param channels_aligned: Bunch or dictionary of aligned channels containing at least keys
+     'mlapdv' and 'brainLocationIds_ccf_2017' - those are the guide for the interpolation
+    :param channels: Bunch or dictionary of aligned channels containing at least keys 'localCoordinates'
+    :return: Bunch or dictionary of channels with extra keys 'mlapdv' and 'brainLocationIds_ccf_2017'
+    """
+    nch = channels['localCoordinates'].shape[0]
+    if 'localCoordinates' in channels_aligned.keys():
+        aligned_depths = channels_aligned['localCoordinates'][:, 1]
+    else:
+        assert channels_aligned['mlapdv'].shape[0] == 384
+        NEUROPIXEL_VERSION = 1
+        from ibllib.ephys.neuropixel import trace_header
+        aligned_depths = trace_header(version=NEUROPIXEL_VERSION)['y']
+    depth_aligned, ind_aligned = np.unique(aligned_depths, return_index=True)
+    depths, ind, iinv = np.unique(channels['localCoordinates'][:, 1], return_index=True, return_inverse=True)
+    channels['mlapdv'] = np.zeros((nch, 3))
+    for i in np.arange(3):
+        channels['mlapdv'][:, i] = np.interp(
+            depths, depth_aligned, channels_aligned['mlapdv'][ind_aligned, i])[iinv]
+    # the brain locations have to be interpolated by nearest neighbour
+    fcn_interp = interp1d(depth_aligned, channels_aligned['brainLocationIds_ccf_2017'][ind_aligned], kind='nearest')
+    channels['brainLocationIds_ccf_2017'] = fcn_interp(depths)[iinv].astype(np.int32)
     return channels
 
 
@@ -309,17 +323,8 @@ def load_channel_locations(eid, probe=None, one=None, aligned=False, brain_atlas
     return channels
 
 
-def load_spike_sorting_fast(eid, probe=None, spike_sorter=None, **kwargs):
-    """
-    Same as load_spike_sorting but with return_channels=True
-    """
-    collection = _collection_filter_from_args(probe, spike_sorter)
-    _logger.debug(f"load spike sorting with collection filter {collection}")
-    return _load_spike_sorting(eid, collection=collection, return_channels=True, **kwargs)
-
-
-def load_spike_sorting(eid, one=None, probe=None, dataset_types=None,
-                       spike_sorter=None, revision=None, return_channels=False):
+def load_spike_sorting_fast(eid, one=None, probe=None, dataset_types=None, spike_sorter=None, revision=None,
+                            brain_regions=None, nested=True):
     """
     From an eid, loads spikes and clusters for all probes
     The following set of dataset types are loaded:
@@ -335,12 +340,50 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None,
     :param dataset_types: additional spikes/clusters objects to add to the standard default list
     :param spike_sorter: name of the spike sorting you want to load (None for default)
     :param return_channels: (bool) defaults to False otherwise tries and load channels from disk
-    :return: spikes, clusters, channels (dict of bunch, 1 bunch per probe)
+    :param brain_regions: ibllib.atlas.regions.BrainRegions object - will label acronyms if provided
+    :param nested: if a single probe is required, do not output a dictionary with the probe name as key
+    :return: spikes, clusters (dict of bunch, 1 bunch per probe)
     """
     collection = _collection_filter_from_args(probe, spike_sorter)
     _logger.debug(f"load spike sorting with collection filter {collection}")
-    return _load_spike_sorting(eid=eid, one=one, collection=collection, revision=revision,
-                               return_channels=return_channels, dataset_types=dataset_types)
+    kwargs = dict(eid=eid, one=one, collection=collection, revision=revision, dataset_types=dataset_types,
+                  brain_regions=brain_regions)
+    spikes, clusters, channels = _load_spike_sorting(**kwargs, return_channels=True)
+    clusters = merge_clusters_channels(clusters, channels, keys_to_add_extra=None)
+    if nested is False:
+        k = list(spikes.keys())[0]
+        channels = channels[k]
+        clusters = clusters[k]
+        spikes = spikes[k]
+    return spikes, clusters, channels
+
+
+def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sorter=None, revision=None,
+                       brain_regions=None):
+    """
+    From an eid, loads spikes and clusters for all probes
+    The following set of dataset types are loaded:
+        'clusters.channels',
+        'clusters.depths',
+        'clusters.metrics',
+        'spikes.clusters',
+        'spikes.times',
+        'probes.description'
+    :param eid: experiment UUID or pathlib.Path of the local session
+    :param one: an instance of OneAlyx
+    :param probe: name of probe to load in, if not given all probes for session will be loaded
+    :param dataset_types: additional spikes/clusters objects to add to the standard default list
+    :param spike_sorter: name of the spike sorting you want to load (None for default)
+    :param return_channels: (bool) defaults to False otherwise tries and load channels from disk
+    :param brain_regions: ibllib.atlas.regions.BrainRegions object - will label acronyms if provided
+    :return: spikes, clusters (dict of bunch, 1 bunch per probe)
+    """
+    collection = _collection_filter_from_args(probe, spike_sorter)
+    _logger.debug(f"load spike sorting with collection filter {collection}")
+    spikes, clusters = _load_spike_sorting(eid=eid, one=one, collection=collection, revision=revision,
+                                           return_channels=False, dataset_types=dataset_types,
+                                           brain_regions=brain_regions)
+    return spikes, clusters
 
 
 def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False, dataset_types=None,

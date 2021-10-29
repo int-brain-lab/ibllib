@@ -418,19 +418,48 @@ SITES_COORDINATES = np.array([
 NC = 384
 
 
-def rc2xy(row, col):
-    "converts the row/col indices from "
-    x = col * 16 + 11
-    y = (row * 20) + 20
+def rc2xy(row, col, version=1):
+    """
+    converts the row/col indices to um coordinates.
+    :param row: row index on the probe
+    :param col: col index on the probe
+    :param version: neuropixel major version 1 or 2
+    :return: dictionary with keys x and y
+    """
+    if version == 1:
+        x = col * 16 + 11
+        y = (row * 20) + 20
+    elif np.floor(version) == 2:
+        x = col * 32
+        y = row * 15
     return {'x': x, 'y': y}
 
 
-def dense_layout():
-    """Dictionary containing local coordinates of a Neuropixel 3 dense layout"""
+def dense_layout(version=1):
+    """
+    Returns a dense layout indices map for neuropixel, as used at IBL
+    :param version: major version number: 1 or 2 or 2.4
+    :return: dictionary with keys 'ind', 'col', 'row', 'x', 'y'
+    """
     ch = {'ind': np.arange(NC),
-          'col': np.tile(np.array([2, 0, 3, 1]), int(NC / 4)),
-          'row': np.floor(np.arange(NC) / 2)}
-    ch.update(rc2xy(ch['row'], ch['col']))
+          'row': np.floor(np.arange(NC) / 2),
+          'shank': np.zeros(NC)}
+
+    if version == 2:
+        ch.update({'col': np.tile(np.array([0, 1]), int(NC / 2))})
+    elif version == 2.4:
+        # the 4 shank version default is rather complicated
+        shank_row = np.tile(np.arange(NC / 16), (2, 1)).T[:, np.newaxis].flatten()
+        shank_row = np.tile(shank_row, 8)
+        shank_row += np.tile(np.array([0, 0, 1, 1, 0, 0, 1, 1])[:, np.newaxis], (1, int(NC / 8))).flatten() * 24
+        ch.update({
+            'col': np.tile(np.array([0, 1]), int(NC / 2)),
+            'shank': np.tile(np.array([0, 1, 0, 1, 2, 3, 2, 3])[:, np.newaxis], (1, int(NC / 8))).flatten(),
+            'row': shank_row})
+    elif version == 1:
+        ch.update({'col': np.tile(np.array([2, 0, 3, 1]), int(NC / 4))})
+    # for all, get coordinates
+    ch.update(rc2xy(ch['row'], ch['col'], version=version))
     return ch
 
 
@@ -449,7 +478,7 @@ def adc_shifts(version=1):
     if version == 1:
         adc_channels = 12
         # version 1 uses 32 ADC that sample 12 channels each
-    elif version == 2:
+    elif np.floor(version) == 2:
         # version 2 uses 24 ADC that sample 16 channels each
         adc_channels = 16
     adc = np.floor(np.arange(NC) / (adc_channels * 2)) * 2 + np.mod(np.arange(NC), 2)
@@ -461,9 +490,11 @@ def adc_shifts(version=1):
 
 def trace_header(version=1):
     """
-    For the dense layout used at IBL, returns a dictionary with keys
+    Returns the channel map for the dense layout used at IBL
+    :param version: major version number: 1 or 2
+    :return: , returns a dictionary with keys
     x, y, row, col, ind, adc and sampleshift vectors corresponding to each site
     """
-    h = dense_layout()
+    h = dense_layout(version=version)
     h['sample_shift'], h['adc'] = adc_shifts(version=version)
     return h
