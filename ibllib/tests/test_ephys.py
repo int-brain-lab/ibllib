@@ -12,10 +12,10 @@ from one.api import ONE
 
 
 class TestNeuropixel(unittest.TestCase):
-
+    """Comprehensive tests about geometry are run as part of the spikeglx reader testing suite"""
     def test_layouts(self):
         dense = neuropixel.dense_layout()
-        assert set(dense.keys()) == set(['x', 'y', 'row', 'col', 'ind'])
+        assert set(dense.keys()) == set(['x', 'y', 'row', 'col', 'ind', 'shank'])
         xu = np.unique(dense['x'])
         yu = np.unique(dense['y'])
         assert np.all(np.diff(xu) == 16)
@@ -24,7 +24,7 @@ class TestNeuropixel(unittest.TestCase):
 
     def tests_headers(self):
         th = neuropixel.trace_header()
-        assert set(th.keys()) == set(['x', 'y', 'row', 'col', 'ind', 'adc', 'sample_shift'])
+        assert set(th.keys()) == set(['x', 'y', 'row', 'col', 'ind', 'adc', 'sample_shift', 'shank'])
 
 
 class TestFpgaTask(unittest.TestCase):
@@ -180,8 +180,8 @@ class TestDetectSpikes(unittest.TestCase):
                 continue
             xcor[tr] = np.corrcoef(data[:, tr], data_out[:, tr])[1, 0]
 
-        assert np.all(xcor > .80)
-        assert np.nanmedian(xcor)
+        assert np.mean(xcor > .8) > .95
+        assert np.nanmedian(xcor) > .99
 
 
 if __name__ == "__main__":
