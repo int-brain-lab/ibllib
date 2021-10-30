@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import shutil
+import os
 import abc
 from time import time
 
@@ -130,27 +131,30 @@ class ServerGlobusDataHandler(DataHandler):
             # using globus
             return
 
-        #TODO check for space
+        # Check for space on local server. If less that 500 GB don't download new data
+        space_free = shutil.disk_usage(self.globus.endpoints['local']['root_path'])[2]
+        if space_free < 500e9:
+            _logger.warning('Space left on server is < 500GB, wont redownload new data')
+            return
 
         rel_sess_path = '/'.join(df.iloc[0]['session_path'].split('/')[-3:])
         assert (rel_sess_path.split('/')[0] == self.one.path2ref(self.session_path)['subject'])
 
-        target_paths = []
+        self.target_paths = []
         source_paths = []
         for _, d in df.iterrows():
             sess_path = Path(rel_sess_path).joinpath(d['rel_path'])
             full_local_path = Path(self.globus.endpoints['local']['root_path']).joinpath(sess_path)
             if not full_local_path.exists():
-                target_paths.append(sess_path)
+                self.target_paths.append(sess_path)
                 source_paths.append(add_uuid_string(sess_path, np2str(np.r_[d.name[0], d.name[1]])))
 
-        if len(target_paths) != 0:
+        if len(self.target_paths) != 0:
             ts = time()
-            for sp, tp in zip(source_paths, target_paths):
+            for sp, tp in zip(source_paths, self.target_paths):
                 _logger.info(f'Downloading {sp} to {tp}')
-            self.globus.mv(f'flatiron_{self.lab}', 'local', source_paths, target_paths)
+            self.globus.mv(f'flatiron_{self.lab}', 'local', source_paths, self.target_paths)
             _logger.debug(f'Complete. Time elapsed {time() - ts}')
-
 
     def uploadData(self, outputs, version, **kwargs):
         """
@@ -162,6 +166,14 @@ class ServerGlobusDataHandler(DataHandler):
         versions = super().uploadData(outputs, version)
 
         return register_dataset(outputs, one=self.one, versions=versions, **kwargs)
+
+    def cleanUp(self):
+        """
+        Clean up, remove the files that were downloaded from globus once task has completed
+        :return:
+        """
+        for file in self.target_paths:
+            os.unlink(file)
 
 
 class RemoteHttpDataHandler(DataHandler):
@@ -310,4 +322,3 @@ class SDSCDataHandler(DataHandler):
         """
         assert SDSC_PATCH_PATH.parts[0:4] == self.task.session_path.parts[0:4]
         shutil.rmtree(self.task.session_path)
-
