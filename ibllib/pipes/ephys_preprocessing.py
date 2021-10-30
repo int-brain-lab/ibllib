@@ -49,7 +49,7 @@ class EphysPulses(tasks.Task):
                          ('_spikeglx_sync.times*.npy', 'raw_ephys_data*', True)]
     }
 
-    def get_signatures(self):
+    def get_signatures(self, **kwargs):
         """
         Find the input and output signatures specific for local filesystem
         :return:
@@ -382,7 +382,7 @@ class SpikeSorting(tasks.Task):
         probe_files = spikes.probes_description(self.session_path, one=self.one)
         return out_files + probe_files
 
-    def get_signatures(self, probes=None):
+    def get_signatures(self, probes=None, **kwargs):
         """
         This transforms all wildcards in collection to exact match
         :param probes:
@@ -441,7 +441,7 @@ class EphysVideoCompress(tasks.Task):
 
         return output_files
 
-    def get_signatures(self):
+    def get_signatures(self, **kwargs):
         # need to detect the number of cameras
         output_files = Path(self.session_path).joinpath('raw_video_data').glob('*')
         labels = np.unique([label_from_path(x) for x in output_files])
@@ -498,7 +498,7 @@ class EphysVideoSyncQc(tasks.Task):
 
         return output_files
 
-    def get_signatures(self):
+    def get_signatures(self, **kwargs):
         neuropixel_version = spikeglx.get_neuropixel_version_from_folder(self.session_path)
         probes = spikeglx.get_probes_from_folder(self.session_path)
         # need to detect the number of cameras
@@ -606,7 +606,7 @@ class EphysTrials(tasks.Task):
         qc.run(update=True)
         return out_files
 
-    def get_signatures(self):
+    def get_signatures(self, **kwargs):
         neuropixel_version = spikeglx.get_neuropixel_version_from_folder(self.session_path)
         probes = spikeglx.get_probes_from_folder(self.session_path)
 
@@ -718,7 +718,7 @@ class EphysCellsQc(tasks.Task):
                 continue
         return out_files
 
-    def get_signatures(self):
+    def get_signatures(self, **kwargs):
         files_spikes = Path(self.session_path).joinpath('alf').rglob('spikes.times.npy')
         folder_probes = [f.parent for f in files_spikes]
 
@@ -800,7 +800,7 @@ class EphysMtscomp(tasks.Task):
 
         return out_files
 
-    def get_signatures(self):
+    def get_signatures(self, **kwargs):
         neuropixel_version = spikeglx.get_neuropixel_version_from_folder(self.session_path)
         probes = spikeglx.get_probes_from_folder(self.session_path)
 
@@ -864,7 +864,7 @@ class EphysPassive(tasks.Task):
         # Register?
         return paths
 
-    def get_signatures(self):
+    def get_signatures(self, **kwargs):
         neuropixel_version = spikeglx.get_neuropixel_version_from_folder(self.session_path)
         probes = spikeglx.get_probes_from_folder(self.session_path)
 
