@@ -140,20 +140,22 @@ class ServerGlobusDataHandler(DataHandler):
         rel_sess_path = '/'.join(df.iloc[0]['session_path'].split('/')[-3:])
         assert (rel_sess_path.split('/')[0] == self.one.path2ref(self.session_path)['subject'])
 
-        self.target_paths = []
+        target_paths = []
         source_paths = []
+        self.local_paths = []
         for _, d in df.iterrows():
             sess_path = Path(rel_sess_path).joinpath(d['rel_path'])
             full_local_path = Path(self.globus.endpoints['local']['root_path']).joinpath(sess_path)
             if not full_local_path.exists():
-                self.target_paths.append(sess_path)
+                self.local_paths.append(full_local_path)
+                target_paths.append(sess_path)
                 source_paths.append(add_uuid_string(sess_path, np2str(np.r_[d.name[0], d.name[1]])))
 
-        if len(self.target_paths) != 0:
+        if len(target_paths) != 0:
             ts = time()
-            for sp, tp in zip(source_paths, self.target_paths):
+            for sp, tp in zip(source_paths, target_paths):
                 _logger.info(f'Downloading {sp} to {tp}')
-            self.globus.mv(f'flatiron_{self.lab}', 'local', source_paths, self.target_paths)
+            self.globus.mv(f'flatiron_{self.lab}', 'local', source_paths, target_paths)
             _logger.debug(f'Complete. Time elapsed {time() - ts}')
 
     def uploadData(self, outputs, version, **kwargs):
@@ -172,7 +174,7 @@ class ServerGlobusDataHandler(DataHandler):
         Clean up, remove the files that were downloaded from globus once task has completed
         :return:
         """
-        for file in self.target_paths:
+        for file in self.local_paths:
             os.unlink(file)
 
 
