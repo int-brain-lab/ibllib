@@ -40,11 +40,13 @@ def reject_channels(x, fs, butt_kwargs=None, threshold=0.6, trx=1):
 def agc(x, wl=.5, si=.002, epsilon=1e-8):
     """
     Automatic gain control
+    w_agc, gain = agc(w, wl=.5, si=.002, epsilon=1e-8)
+    such as w_agc / gain = w
     :param x: seismic array (sample last dimension)
     :param wl: window length (secs)
     :param si: sampling interval (secs)
     :param epsilon: whitening (useful mainly for synthetic data)
-    :return:
+    :return: AGC data array, gain applied to data
     """
     ns_win = np.round(wl / si / 2) * 2 + 1
     w = np.hanning(ns_win)
