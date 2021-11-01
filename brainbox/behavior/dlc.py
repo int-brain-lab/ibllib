@@ -4,6 +4,7 @@ Set of functions to deal with dlc data
 import numpy as np
 import scipy.interpolate as interpolate
 import logging
+import warnings
 from one.api import ONE
 from ibllib.dsp.smooth import smooth_interpolate_savgol
 
@@ -151,7 +152,7 @@ def get_pupil_diameter(dlc):
     The two most straightforward estimates: d1 = top - bottom, d2 = left - right
     In addition, assume the pupil is a circle and estimate diameter from other pairs of points
 
-    :param dlc: dlc pqt table with pupil estimates
+    :param dlc: dlc pqt table with pupil estimates, should be likelihood thresholded (e.g. at 0.9)
     :return: np.array, pupil diameter estimate for each time point, shape (n_frames,)
     """
     diameters = []
@@ -166,14 +167,16 @@ def get_pupil_diameter(dlc):
     for pair in [(top, left), (top, right), (bottom, left), (bottom, right)]:
         diameters.append(np.linalg.norm(pair[0] - pair[1], axis=0) * 2 ** 0.5)
 
-    return np.nanmedian(diameters, axis=0)
+    # Ignore all nan runtime warning
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        return np.nanmedian(diameters, axis=0)
 
 
-def get_smooth_pupil_diameter(dlc, camera, likelihood_thresh=0.9, std_thresh=5, nan_thresh=1):
+def get_smooth_pupil_diameter(diameter_raw, camera, std_thresh=5, nan_thresh=1):
     """
-    :param dlc:
-    :param camera:
-    :param likelihood_thresh:
+    :param diameter_raw: np.array, raw pupil diameters, calculated from (thresholded) dlc traces
+    :param camera: str ('left', 'right'), which camera to run the smoothing for
     :param std_thresh: threshold (in standard deviations) beyond which a point is labeled as an outlier
     :param nan_thresh: threshold (in seconds) above which we will not interpolate nans, but keep them
                        (for long stretches interpolation may not be appropriate)
@@ -189,10 +192,6 @@ def get_smooth_pupil_diameter(dlc, camera, likelihood_thresh=0.9, std_thresh=5, 
     else:
         raise NotImplementedError("camera has to be 'left' or 'right")
 
-    # threshold dlc values
-    dlc_thr = likelihood_threshold(dlc, likelihood_thresh)
-    # compute diameter using raw values of 4 markers (will be noisy and have missing data)
-    diameter_raw = get_pupil_diameter(dlc_thr)
     # run savitzy-golay filter on non-nan time points to denoise
     diameter_smoothed = smooth_interpolate_savgol(diameter_raw, window=window, order=3, interp_kind='linear')
 

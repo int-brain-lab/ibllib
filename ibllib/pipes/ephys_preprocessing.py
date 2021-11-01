@@ -24,7 +24,7 @@ from ibllib.qc.camera import run_all_qc as run_camera_qc
 from ibllib.qc.dlc import DlcQC
 from ibllib.dsp import rms
 from ibllib.io.extractors import signatures
-from brainbox.behavior.dlc import get_licks, get_pupil_diameter, get_smooth_pupil_diameter
+from brainbox.behavior.dlc import likelihood_threshold, get_licks, get_pupil_diameter, get_smooth_pupil_diameter
 
 _logger = logging.getLogger("ibllib")
 
@@ -477,6 +477,8 @@ class EphysPostDLC(tasks.Task):
     def _run(self):
         # Find all available dlc traces and dlc times
         dlc_files = list(Path(self.session_path).joinpath('alf').glob('_ibl_*Camera.dlc.*'))
+        for dlc_file in dlc_files:
+            _logger.debug(dlc_file)
         output_files = []
         combined_licks = []
 
@@ -486,6 +488,7 @@ class EphysPostDLC(tasks.Task):
                 cam = label_from_path(dlc_file)
                 # load dlc trace
                 dlc = pd.read_parquet(dlc_file)
+                dlc_thresh = likelihood_threshold(dlc, 0.9)
                 # try to load respective camera times
                 try:
                     dlc_t = np.load(next(Path(self.session_path).joinpath('alf').glob(f'_ibl_{cam}Camera.times.*npy')))
@@ -501,12 +504,15 @@ class EphysPostDLC(tasks.Task):
                     features = pd.DataFrame()
                     # If camera times are available, get the lick time stamps for combined array
                     if times:
-                        combined_licks.append(get_licks(dlc, dlc_t))
+                        _logger.info(f"Computing lick times for {cam} camera.")
+                        combined_licks.append(get_licks(dlc_thresh, dlc_t))
                     else:
-                        _logger.warning(f"Skipping lick times for {cam} camera as no camera.times available")
+                        _logger.warning(f"Skipping lick times for {cam} camera as no camera.times available.")
                     # Compute pupil diameter, raw and smoothed
-                    features['pupilDiameter_raw'] = get_pupil_diameter(dlc)
-                    features['pupilDiameter_smooth'] = get_smooth_pupil_diameter(dlc, cam)
+                    _logger.info(f"Computing raw pupil diameter for {cam} camera.")
+                    features['pupilDiameter_raw'] = get_pupil_diameter(dlc_thresh)
+                    _logger.info(f"Computing smooth pupil diameter for {cam} camera.")
+                    features['pupilDiameter_smooth'] = get_smooth_pupil_diameter(features['pupilDiameter_raw'], cam)
                     # Safe to pqt
                     features_file = Path(self.session_path).joinpath('alf', f'_ibl_{cam}Camera.features.pqt')
                     features.to_parquet(features_file)
@@ -521,11 +527,13 @@ class EphysPostDLC(tasks.Task):
                     _logger.warning(f"Skipping QC for {cam} camera as no camera.times available")
 
             except BaseException:
+                _logger.error(traceback.format_exc())
                 self.status = -1
                 continue
+
         # Combined lick times
         if len(combined_licks) > 0:
-            lick_times_file = Path(self.session_path).joinpath('alf', f'_ibl_{cam}Camera.features.pqt')
+            lick_times_file = Path(self.session_path).joinpath('alf', 'licks.times.npy')
             np.save(lick_times_file, sorted(np.concatenate(combined_licks)))
             output_files.append(lick_times_file)
         else:
