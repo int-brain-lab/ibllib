@@ -1,4 +1,7 @@
 ## Release Notes 2.2
+### Release Notes 2.2.0 2021-11-02
+- allows more than 2 probes in ephys computer probe creation
+
 ### Release Notes 2.2.0 2021-10-29
 - brainbox.io.one load_spike_sorting fast: merge channel info in clusters
 - brainbox.io.one generic function to interpolate channels after alignment
