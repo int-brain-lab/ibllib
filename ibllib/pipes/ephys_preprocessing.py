@@ -469,7 +469,10 @@ class EphysPostDLC(tasks.Task):
     level = 3
     signature = {'input_files': [('_ibl_leftCamera.dlc.pqt', 'raw_video_data', True),
                                  ('_ibl_bodyCamera.dlc.pqt', 'raw_video_data', True),
-                                 ('_ibl_rightCamera.dlc.pqt', 'raw_video_data', True)],
+                                 ('_ibl_rightCamera.dlc.pqt', 'raw_video_data', True),
+                                 ('_ibl_rightCamera.times.npy', 'alf', True),
+                                 ('_ibl_leftCamera.times.npy', 'alf', True),
+                                 ('_ibl_bodyCamera.times.npy', 'alf', True)],
                  'output_files': [('_ibl_leftCamera.features.pqt', 'alf', True),
                                   ('_ibl_rightCamera.features.pqt', 'alf', True),]
                  }
