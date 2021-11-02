@@ -230,11 +230,16 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
     print("LOCAL:", local_folder)
     print("REMOTE:", remote_folder)
     src_session_paths = [x.parent for x in local_folder.rglob("transfer_me.flag")]
+    # TODO: Create source file list and destination paths for all files
+    # TODO: If no folder/files exist in destination folder, copy all files from source folder
 
+    # TODO: If some files exist, or all files exist: for each file check size and ask if they should be overwritten in bulk
+    # TODO: Skip properly completed file transfers
+    # TODO: If all files exist, ask if they should be overwritten warn that it might be the wrong session
     if not src_session_paths:
         print("Nothing to transfer, exiting...")
         return
-
+    # TODO: check remote folder files existence and if exist ask if they should be overwritten
     for session_path in src_session_paths:
         print(f"\nFound session: {session_path}")
         msg = f"Transfer to {remote_folder} with the same name?"
@@ -397,7 +402,7 @@ def create_alyx_probe_insertions(
     return insertions
 
 
-def create_ephys_flags(session_folder: str):
+def create_ephys_flags(session_folder: str):  #XXX: deprecated not in use any more
     """
     Create flags for processing an ephys session.  Should be called after move_ephys_files
     :param session_folder: A path to an ephys session
@@ -564,7 +569,8 @@ def copy_wiring_files(session_folder, iblscripts_folder):
     # Determine system
     ephys_system = PARAMS["PROBE_TYPE_00"]
     # Define where to get the files from (determine if custom wiring applies)
-    src_wiring_path = iblscripts_params_path if iblscripts_params_path.exists() else wirings_path
+    custom_wiring_exist = iblscripts_params_path.exists()
+    src_wiring_path = iblscripts_params_path if custom_wiring_exist else wirings_path
     probe_wiring_file_path = src_wiring_path / f"{ephys_system}{termination}"
 
     if ephys_system == "3B":
@@ -582,4 +588,8 @@ def copy_wiring_files(session_folder, iblscripts_folder):
         if probe_label:
             wiring_name = ".".join(str(binf.name).split(".")[:-2]) + termination
             dst_path = session_path / "raw_ephys_data" / probe_label.group() / wiring_name
+            if custom_wiring_exist:
+                probe_wiring_file_path = src_wiring_path / f"{ephys_system}_{probe_label}{termination}"
+            else:
+                probe_wiring_file_path = src_wiring_path / f"{ephys_system}{termination}"
             shutil.copy(probe_wiring_file_path, dst_path)
