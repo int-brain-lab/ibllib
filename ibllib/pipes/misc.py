@@ -3,7 +3,7 @@ import logging
 import shutil
 from pathlib import Path
 import re
-from typing import Union
+from typing import Union, List
 
 import iblutil.io.params as params
 from one.alf.spec import is_uuid_string, is_session_path
@@ -347,7 +347,7 @@ def confirm_ephys_remote_folder(
         check_create_raw_session_flag(remote_session_path)
 
 
-def probe_labels_from_session_path(session_path: Union[str, Path]) -> list[str]:
+def probe_labels_from_session_path(session_path: Union[str, Path]) -> List[str]:
     """
     Finds ephys probes according to the metadata spikeglx files. Only returns first subfolder
     name under raw_ephys_data folder, ie. raw_ephys_data/probe00/copy_of_probe00 won't be returned
