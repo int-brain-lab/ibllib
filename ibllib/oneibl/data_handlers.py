@@ -7,7 +7,6 @@ import os
 import abc
 from time import time
 
-from one.globus import Globus, get_lab_from_endpoint_id
 from one.api import ONE
 from one.util import filter_datasets
 from one.alf.files import add_uuid_string
@@ -105,6 +104,7 @@ class ServerGlobusDataHandler(DataHandler):
         :param signature: input and output file signatures
         :param one: ONE instance
         """
+        from one.globus import Globus, get_lab_from_endpoint_id  # noqa
         super().__init__(session_path, signatures, one=one)
         self.globus = Globus()
 
@@ -253,7 +253,6 @@ class RemoteGlobusDataHandler(DataHandler):
     """
     def __init__(self, session_path, signature, one=None):
         super().__init__(session_path, signature, one=one)
-        self.globus = Globus()
 
     def setUp(self):
         """
