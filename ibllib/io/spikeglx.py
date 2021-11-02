@@ -588,6 +588,7 @@ def get_neuropixel_version_from_files(ephys_files):
     else:
         return '3A'
 
+
 def get_probes_from_folder(session_path):
     # should glob the ephys files and get out the labels
 
@@ -599,6 +600,7 @@ def get_probes_from_folder(session_path):
             probes.append(files['label'])
 
     return probes
+
 
 def glob_ephys_files(session_path, suffix='.meta', ext='bin', recursive=True, bin_exists=True):
     """
