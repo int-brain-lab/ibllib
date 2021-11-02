@@ -207,7 +207,7 @@ def _load_channels_locations_from_disk(eid, collection=None, one=None, revision=
             channels_aligned = one.load_object(eid, 'channels', collection=ac_collection)
             channels[probe] = channel_locations_interpolation(channels_aligned, channels[probe])
             # only have to reformat channels if we were able to load coordinates from disk
-            channels[probe] = _channels_alf2bunch(channels[probe], brain_regions=brain_regions)
+        channels[probe] = _channels_alf2bunch(channels[probe], brain_regions=brain_regions)
     return channels
 
 
