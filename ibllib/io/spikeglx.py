@@ -591,7 +591,6 @@ def get_neuropixel_version_from_files(ephys_files):
 
 def get_probes_from_folder(session_path):
     # should glob the ephys files and get out the labels
-
     # This assumes the meta files exist on the server (this is the case for now but should it be?)
     ephys_files = glob_ephys_files(session_path, ext='meta')
     probes = []

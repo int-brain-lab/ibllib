@@ -1,6 +1,7 @@
 import json
 import logging
 import shutil
+import hashlib
 from pathlib import Path
 import re
 from typing import Union, List
@@ -10,6 +11,7 @@ from one.alf.spec import is_uuid_string, is_session_path
 from one.alf.files import get_session_path
 from one.api import ONE
 
+from iblutil.io import hashfile
 import ibllib.io.flags as flags
 import ibllib.io.raw_data_loaders as raw
 import ibllib.io.spikeglx as spikeglx
@@ -592,3 +594,43 @@ def copy_wiring_files(session_folder, iblscripts_folder):
             wiring_name = ".".join(str(binf.name).split(".")[:-2]) + termination
             dst_path = session_path / "raw_ephys_data" / probe_label.group() / wiring_name
             shutil.copy(probe_wiring_file_path, dst_path)
+
+
+def multi_parts_flags_creation(root_paths: Union[list, str, Path]) -> List[Path]:
+    """
+    Creates the sequence files to run spike sorting in batches
+    :param root_paths:
+    :return:
+    """
+    from one.alf import io as alfio
+    # "001/raw_ephys_data/probe00/_spikeglx_ephysData_g0_t0.imec0.ap.meta",
+    if isinstance(root_paths, str) or isinstance(root_paths, Path):
+        root_paths = [root_paths]
+    recordings = {}
+    for root_path in root_paths:
+        for meta_file in root_path.rglob("*.ap.meta"):
+            # we want to make sure that the file is just under session_path/raw_ephys_data/{probe_label}
+            session_path = alfio.files.get_session_path(meta_file)
+            raw_ephys_path = session_path.joinpath('raw_ephys_data')
+            if meta_file.parents[1] != raw_ephys_path:
+                log.warning(f"{meta_file} is not in a probe directory and will be skipped")
+                continue
+            # stack the meta-file in the probe label key of the recordings dictionary
+            plabel = meta_file.parts[-2]
+            recordings[plabel] = recordings.get(plabel, []) + [meta_file]
+    # once we have all of the files
+    for k in recordings:
+        nrecs = len(recordings[k])
+        recordings[k].sort()
+        # the identifier of the overarching recording sequence is the hash of hashes of the files
+        m = hashlib.sha1()
+        for i, meta_file in enumerate(recordings[k]):
+            hash = hashfile.sha1(meta_file)
+            m.update(hash.encode())
+        # writes the sequence files
+        for i, meta_file in enumerate(recordings[k]):
+            sequence_file = meta_file.parent.joinpath(meta_file.name.replace('ap.meta', 'sequence.json'))
+            with open(sequence_file, 'w+') as fid:
+                json.dump(dict(sha1=m.hexdigest(), part=i + 1, total=nrecs), fid)
+            log.info(f"{k}: {i}/{nrecs} written sequence file {recordings}")
+    return recordings
