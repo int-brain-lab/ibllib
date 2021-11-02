@@ -3,6 +3,7 @@ import logging
 import shutil
 from pathlib import Path
 import re
+from typing import Union
 
 import iblutil.io.params as params
 from one.alf.spec import is_uuid_string, is_session_path
@@ -346,6 +347,23 @@ def confirm_ephys_remote_folder(
         check_create_raw_session_flag(remote_session_path)
 
 
+def probe_labels_from_session_path(session_path: Union[str, Path]) -> list[str]:
+    """
+    Finds ephys probes according to the metadata spikeglx files. Only returns first subfolder
+    name under raw_ephys_data folder, ie. raw_ephys_data/probe00/copy_of_probe00 won't be returned
+    :param session_path:
+    :return: list of strings
+    """
+    plabels = []
+    raw_ephys_folder = session_path.joinpath('raw_ephys_data')
+    for meta_file in raw_ephys_folder.rglob('*.ap.meta'):
+        if meta_file.parents[1] != raw_ephys_folder:
+            continue
+        plabels.append(meta_file.parts[-2])
+    plabels.sort()
+    return plabels
+
+
 def create_alyx_probe_insertions(
     session_path: str,
     force: bool = False,
@@ -363,16 +381,7 @@ def create_alyx_probe_insertions(
         pmodel = "3B2" if probe_model == "3B" else probe_model
     else:
         pmodel = model
-    raw_ephys_data_path = Path(session_path) / "raw_ephys_data"
-    if labels is None:
-        probe_labels = [
-            x.name
-            for x in Path(raw_ephys_data_path).glob("*")
-            if x.is_dir() and ("00" in x.name or "01" in x.name)
-        ]
-    else:
-        probe_labels = labels
-
+    labels = labels or probe_labels_from_session_path(session_path)
     # create the qc fields in the json field
     qc_dict = {}
     qc_dict.update({"qc": "NOT_SET"})
@@ -380,7 +389,7 @@ def create_alyx_probe_insertions(
 
     # create the dictionary
     insertions = []
-    for plabel in probe_labels:
+    for plabel in labels:
         insdict = {"session": eid, "name": plabel, "model": pmodel, "json": qc_dict}
         # search for the corresponding insertion in Alyx
         alyx_insertion = one.alyx.get(f'/insertions?&session={eid}&name={plabel}', clobber=True)
