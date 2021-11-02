@@ -136,7 +136,7 @@ class Task(abc.ABC):
         :param kwargs: directly passed to the register_dataset function
         :return:
         """
-        self.data_handler.uploadData(self.outputs, self.version, **kwargs)
+        return self.data_handler.uploadData(self.outputs, self.version, **kwargs)
 
     def rerun(self):
         self.run(overwrite=True)
