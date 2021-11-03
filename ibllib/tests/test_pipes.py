@@ -404,5 +404,28 @@ class TestScanFixPassiveFiles(unittest.TestCase):
         self.tmp_dir.cleanup()
 
 
+class TestMultiPartsRecordings(unittest.TestCase):
+
+    def test_create_multiparts_flags(self):
+        meta_files = [
+            "001/raw_ephys_data/probe00/_spikeglx_ephysData_g0_t0.imec0.ap.meta",
+            "001/raw_ephys_data/probe01/_spikeglx_ephysData_g0_t0.imec1.ap.meta",
+            "003/raw_ephys_data/probe00/_spikeglx_ephysData_g2_t0.imec0.ap.meta",
+            "003/raw_ephys_data/probe01/_spikeglx_ephysData_g2_t0.imec1.ap.meta",
+            "002/raw_ephys_data/probe00/_spikeglx_ephysData_g1_t0.imec0.ap.meta",
+            "002/raw_ephys_data/probe01/_spikeglx_ephysData_g1_t0.imec1.ap.meta",
+            "004/raw_ephys_data/probe00/_spikeglx_ephysData_g3_t0.imec0.ap.meta",
+            "004/raw_ephys_data/probe01/_spikeglx_ephysData_g3_t0.imec1.ap.meta"]
+
+        with tempfile.TemporaryDirectory() as tdir:
+            root_path = Path(tdir).joinpath('Algernon', '2021-02-12')
+            for meta_file in meta_files:
+                root_path.joinpath(meta_file).parent.mkdir(parents=True)
+                root_path.joinpath(meta_file).touch()
+            recordings = misc.multi_parts_flags_creation(root_path)
+        assert len(recordings['probe00']) == 4
+        assert len(recordings['probe01']) == 4
+
+
 if __name__ == "__main__":
     unittest.main(exit=False, verbosity=2)

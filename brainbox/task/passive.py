@@ -200,6 +200,8 @@ def get_stim_aligned_activity(stim_events, spike_times, spike_depths, z_score_fl
     stim_activity = {}
     for stim_type, stim_times in stim_events.items():
 
+        # Get rid of any nan values
+        stim_times = stim_times[~np.isnan(stim_times)]
         stim_intervals = np.c_[stim_times - pre_stim, stim_times + post_stim]
         base_intervals = np.c_[stim_times - base_stim, stim_times - pre_stim]
         out_intervals = stim_intervals[:, 1] > times[-1]
