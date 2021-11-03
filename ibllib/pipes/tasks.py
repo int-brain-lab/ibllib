@@ -90,6 +90,7 @@ class Task(abc.ABC):
         _logger.info(f"running ibllib version {version.ibllib()}")
         # setup
         setup = self.setUp(**kwargs)
+        _logger.info(f"Setup value is: {setup}")
         if not setup:
             # case where outputs are present but don't have input files locally to rerun task
             # label task as complete
