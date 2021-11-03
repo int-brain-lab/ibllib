@@ -108,6 +108,9 @@ class ServerGlobusDataHandler(DataHandler):
         super().__init__(session_path, signatures, one=one)
         self.globus = Globus()
 
+        # on local servers set up the local root path manually as some have different globus config paths
+        self.globus['local']['root_path'] = '/mnt/s0/Data/Subjects'
+
         # Find the lab
         labs = get_lab_from_endpoint_id(one=self.one)
         if len(labs) == 2:
