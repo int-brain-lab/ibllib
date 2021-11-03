@@ -4,6 +4,7 @@
 - Spike sorting and EphysVideoSyncQc download data on local servers if not available
 - brainbox.io.one load_spike_sorting_fast: bugfix returns acronyms
 - creates sequence files for spikesorting
+- GPU tasks have a lock - local data handler doesn't instanciate one
 
 ## Release Notes 2.2
 ### Release Notes 2.2.1 2021-11-02

@@ -7,7 +7,6 @@ import os
 import abc
 from time import time
 
-from one.api import ONE
 from one.util import filter_datasets
 from one.alf.files import add_uuid_string
 from iblutil.io.parquet import np2str
@@ -27,10 +26,10 @@ class DataHandler(abc.ABC):
         :param one: ONE instance
         """
         self.session_path = session_path
-        self.one = one or ONE()
         self.signature = signature
+        self.one = one
 
-    def setup(self):
+    def setUp(self):
         """
         Function to optionally overload to download required data to run task
         :return:
@@ -42,7 +41,8 @@ class DataHandler(abc.ABC):
         Finds the datasets required for task based on input signatures
         :return:
         """
-
+        if self.one is None:
+            return
         session_datasets = self.one.list_datasets(self.one.path2eid(self.session_path), details=True)
         df = pd.DataFrame(columns=self.one._cache.datasets.columns)
         for file in self.signature['input_files']:
@@ -70,6 +70,17 @@ class DataHandler(abc.ABC):
         :return:
         """
         pass
+
+
+class LocalDataHandler(DataHandler):
+    def __init__(self, session_path, signatures, one=None):
+        """
+        Data handler for running tasks locally, with no architecture or db connection
+        :param session_path: path to session
+        :param signature: input and output file signatures
+        :param one: ONE instance
+        """
+        super().__init__(session_path, signatures, one=one)
 
 
 class ServerDataHandler(DataHandler):
