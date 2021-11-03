@@ -106,7 +106,7 @@ class ServerGlobusDataHandler(DataHandler):
         """
         from one.globus import Globus, get_lab_from_endpoint_id  # noqa
         super().__init__(session_path, signatures, one=one)
-        self.globus = Globus()
+        self.globus = Globus(client_name='server')
 
         # on local servers set up the local root path manually as some have different globus config paths
         self.globus['local']['root_path'] = '/mnt/s0/Data/Subjects'
