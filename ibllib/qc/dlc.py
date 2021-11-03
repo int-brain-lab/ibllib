@@ -8,8 +8,10 @@ Question:
     We're not extracting the audio based on TTL length.  Is this a problem?
 """
 import logging
+import warnings
 from inspect import getmembers, isfunction
 
+import numpy as np
 import numpy as np
 
 from ibllib.qc import base
@@ -185,8 +187,10 @@ class DlcQC(base.QC):
         '''
 
         dlc_coords = self.data['dlc_coords']
-        x_mean = np.nanmean([np.nanmean(dlc_coords[k][0]) for k in dlc_coords.keys()])
-        y_mean = np.nanmean([np.nanmean(dlc_coords[k][1]) for k in dlc_coords.keys()])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            x_mean = np.nanmean([np.nanmean(dlc_coords[k][0]) for k in dlc_coords.keys()])
+            y_mean = np.nanmean([np.nanmean(dlc_coords[k][1]) for k in dlc_coords.keys()])
 
         xrange = self.bbox[self.side]['xrange']
         yrange = self.bbox[self.side]['yrange']
@@ -222,24 +226,26 @@ class DlcQC(base.QC):
         wrong points are detected (spout edge, mouth edge)
         '''
 
-        if self.side != 'body':
-            dlc_coords = self.data['dlc_coords']
-            nan_l = np.mean(np.isnan(dlc_coords['tongue_end_l'][0]))
-            nan_r = np.mean(np.isnan(dlc_coords['tongue_end_r'][0]))
-            if (nan_l < 0.1) and (nan_r < 0.1):
-                return 'FAIL'
+        if self.side == 'body':
+            return 'NOT_SET'
+        dlc_coords = self.data['dlc_coords']
+        nan_l = np.mean(np.isnan(dlc_coords['tongue_end_l'][0]))
+        nan_r = np.mean(np.isnan(dlc_coords['tongue_end_r'][0]))
+        if (nan_l < 0.1) and (nan_r < 0.1):
+            return 'FAIL'
         return 'PASS'
 
     def check_pupil_diameter_snr(self):
         if self.side == 'body':
             return 'NOT_SET'
+        thresh = 5 if self.side == 'right' else 10
         if 'pupilDiameter_raw' not in self.data.keys() or 'pupilDiameter_smooth' not in self.data.keys():
             return 'NOT_SET'
         # compute signal to noise ratio between raw and smooth dia
         good_idxs = np.where(~np.isnan(self.data['pupilDiameter_smooth']) & ~np.isnan(self.data['pupilDiameter_raw']))[0]
         snr = (np.var(self.data['pupilDiameter_smooth'][good_idxs]) /
-               np.var(self.data['pupilDiameter_smooth'][good_idxs] - self.data['pupilDiameter_raw'][good_idxs]))
-        if snr < 10:
+               (np.var(self.data['pupilDiameter_smooth'][good_idxs] - self.data['pupilDiameter_raw'][good_idxs])))
+        if snr < thresh:
             return 'FAIL', float(round(snr, 3))
         return 'PASS', float(round(snr, 3))
 
