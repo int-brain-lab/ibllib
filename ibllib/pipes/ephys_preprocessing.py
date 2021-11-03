@@ -351,6 +351,12 @@ class SpikeSorting(tasks.Task):
             if isinstance(probes, list) and label not in probes:
                 continue
             try:
+                # if the file is part of  a sequence, handles the run accordingly
+                sequence_file = ap_file.parent.joinpath(ap_file.stem.replace('ap', 'sequence.json'))
+                # temporary just skips for now
+                if sequence_file.exists:
+                    self.status = 1  # toto check with Julia the status number for empty
+                    return
                 ks2_dir = self._run_pykilosort(ap_file)  # runs ks2, skips if it already ran
                 probe_out_path = self.session_path.joinpath("alf", label, self.SPIKE_SORTER_NAME)
                 shutil.rmtree(probe_out_path, ignore_errors=True)
