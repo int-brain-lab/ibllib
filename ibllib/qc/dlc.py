@@ -12,7 +12,6 @@ import warnings
 from inspect import getmembers, isfunction
 
 import numpy as np
-import numpy as np
 
 from ibllib.qc import base
 import one.alf.io as alfio
@@ -42,9 +41,9 @@ class DlcQC(base.QC):
     }
 
     dstypes = {
-        'left': [f'_ibl_leftCamera.dlc.*', f'_ibl_leftCamera.times.*', f'_ibl_leftCamera.features.*'],
-        'right': [f'_ibl_rightCamera.dlc.*', f'_ibl_rightCamera.times.*', f'_ibl_rightCamera.features.*'],
-        'body': [f'_ibl_bodyCamera.dlc.*', f'_ibl_bodyCamera.times.*'],
+        'left': ['_ibl_leftCamera.dlc.*', '_ibl_leftCamera.times.*', '_ibl_leftCamera.features.*'],
+        'right': ['_ibl_rightCamera.dlc.*', '_ibl_rightCamera.times.*', '_ibl_rightCamera.features.*'],
+        'body': ['_ibl_bodyCamera.dlc.*', '_ibl_bodyCamera.times.*'],
     }
 
     def __init__(self, session_path_or_eid, side, **kwargs):

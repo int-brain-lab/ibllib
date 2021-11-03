@@ -474,7 +474,7 @@ class EphysPostDLC(tasks.Task):
                                  ('_ibl_leftCamera.times.npy', 'alf', True),
                                  ('_ibl_bodyCamera.times.npy', 'alf', True)],
                  'output_files': [('_ibl_leftCamera.features.pqt', 'alf', True),
-                                  ('_ibl_rightCamera.features.pqt', 'alf', True),]
+                                  ('_ibl_rightCamera.features.pqt', 'alf', True)]
                  }
 
     def _run(self):
