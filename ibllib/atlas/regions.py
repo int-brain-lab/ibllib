@@ -149,6 +149,17 @@ class BrainRegions(_BrainRegions):
             mapind = mapind[iregion]
         return mapind
 
+    def remap(self, region_ids, source_map='Allen', target_map='Beryl'):
+        """
+        Remap atlas regions ids from source map to target map
+        :param region_ids:
+        :param source_map:
+        :param target_map:
+        :return:
+        """
+        _, inds = ismember(region_ids, self.id[self.mappings[source_map]])
+        return self.id[self.mappings[target_map][inds]]
+
 
 def regions_from_allen_csv():
     """
