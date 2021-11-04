@@ -376,6 +376,15 @@ def line_amp_plot(spike_amps, spike_depths, spike_times, chn_coords, d_bin=10, d
 
 
 def plot_brain_regions(channel_ids, channel_depths=None, brain_regions=None, display=True, ax=None):
+    """
+    Plot brain regions along probe, if channel depths is provided will plot along depth otherwise along channel idx
+    :param channel_ids: atlas ids for each channel
+    :param channel_depths: depth along probe for each channel
+    :param brain_regions: BrainRegions object
+    :param display: whether to output plot
+    :param ax: axis to plot on
+    :return:
+    """
 
     if channel_depths is not None:
         assert channel_ids.shape[0] == channel_depths.shape[0]
@@ -414,7 +423,20 @@ def plot_brain_regions(channel_ids, channel_depths=None, brain_regions=None, dis
 
 
 def plot_cdf(spike_amps, spike_depths, spike_times, n_amp_bins=10, d_bin=40, amp_range=None, d_range=None,
-                         display=False, cmap='hot'):
+             display=False, cmap='hot'):
+    """
+    Plot cumulative amplitude of spikes across depth
+    :param spike_amps:
+    :param spike_depths:
+    :param spike_times:
+    :param n_amp_bins: number of amplitude bins to use
+    :param d_bin: the value of the depth bins in um (default is 40 um)
+    :param amp_range: amp range to use [amp_min, amp_max], if not given automatically computed from spike_amps
+    :param d_range: depth range to use, by default [0, 3840]
+    :param display: whether or not to display plot
+    :param cmap:
+    :return:
+    """
 
     amp_range = amp_range or np.quantile(spike_amps, (0, 0.9))
     amp_bins = np.linspace(amp_range[0], amp_range[1], n_amp_bins)

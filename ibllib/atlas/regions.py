@@ -152,9 +152,9 @@ class BrainRegions(_BrainRegions):
     def remap(self, region_ids, source_map='Allen', target_map='Beryl'):
         """
         Remap atlas regions ids from source map to target map
-        :param region_ids:
-        :param source_map:
-        :param target_map:
+        :param region_ids: atlas ids to map
+        :param source_map: map name which original region_ids are in
+        :param target_map: map name onto which to map
         :return:
         """
         _, inds = ismember(region_ids, self.id[self.mappings[source_map]])
