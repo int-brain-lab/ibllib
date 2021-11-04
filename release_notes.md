@@ -1,10 +1,12 @@
-## Develop
+## Release Notes 2.3
+### Release Notes 2.3.0 2021-11-4
 - Add input and output signatures to all ephys tasks
 - Add datahandler to task to download and upload data based on location where task is run
 - Spike sorting and EphysVideoSyncQc download data on local servers if not available
 - brainbox.io.one load_spike_sorting_fast: bugfix returns acronyms
 - creates sequence files for spikesorting
-- GPU tasks have a lock - local data handler doesn't instanciate one
+- GPU tasks have a lock - local data handler doesn't instantiate one
+
 
 ## Release Notes 2.2
 ### Release Notes 2.2.1 2021-11-02
