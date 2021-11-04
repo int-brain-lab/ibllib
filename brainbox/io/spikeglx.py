@@ -128,9 +128,9 @@ def stream(pid, t0, nsecs=1, one=None, cache_folder=None, remove_cached=False, t
         samples_folder = Path(one.alyx._par.CACHE_DIR).joinpath('cache', typ)
 
     eid, pname = one.pid2eid(pid)
-    cbin_rec = one.list_datasets(eid, collection=f"*{pname}", filename='*ap.*bin', details=True)
-    ch_rec = one.list_datasets(eid, collection=f"*{pname}", filename='*ap.ch', details=True)
-    meta_rec = one.list_datasets(eid, collection=f"*{pname}", filename='*ap.meta', details=True)
+    cbin_rec = one.list_datasets(eid, collection=f"*{pname}", filename=f'*{typ}.*bin', details=True)
+    ch_rec = one.list_datasets(eid, collection=f"*{pname}", filename=f'*{typ}.ch', details=True)
+    meta_rec = one.list_datasets(eid, collection=f"*{pname}", filename=f'*{typ}.meta', details=True)
     ch_file = one._download_datasets(ch_rec)[0]
     one._download_datasets(meta_rec)[0]
 

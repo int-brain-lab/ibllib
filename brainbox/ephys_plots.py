@@ -1,9 +1,10 @@
 import numpy as np
 from matplotlib import cm
-
+import matplotlib.pyplot as plt
 from brainbox.plot_base import (ImagePlot, ScatterPlot, ProbePlot, LinePlot, plot_line,
                                 plot_image, plot_probe, plot_scatter, arrange_channels2banks)
 from brainbox.processing import bincount2D, compute_cluster_average
+from ibllib.atlas.regions import BrainRegions
 
 
 def image_lfp_spectrum_plot(lfp_power, lfp_freq, chn_coords, chn_inds, freq_range=(0, 300),
@@ -371,4 +372,101 @@ def line_amp_plot(spike_amps, spike_depths, spike_times, chn_coords, d_bin=10, d
     if display:
         fig, ax = plot_line(data.convert2dict())
         return data.convert2dict(), fig, ax
+    return data
+
+
+def plot_brain_regions(channel_ids, channel_depths=None, brain_regions=None, display=True, ax=None):
+    """
+    Plot brain regions along probe, if channel depths is provided will plot along depth otherwise along channel idx
+    :param channel_ids: atlas ids for each channel
+    :param channel_depths: depth along probe for each channel
+    :param brain_regions: BrainRegions object
+    :param display: whether to output plot
+    :param ax: axis to plot on
+    :return:
+    """
+
+    if channel_depths is not None:
+        assert channel_ids.shape[0] == channel_depths.shape[0]
+
+    br = brain_regions or BrainRegions()
+
+    region_info = br.get(channel_ids)
+    boundaries = np.where(np.diff(region_info.id) != 0)[0]
+    boundaries = np.r_[0, boundaries, region_info.id.shape[0] - 1]
+
+    regions = np.c_[boundaries[0:-1], boundaries[1:]]
+    if channel_depths is not None:
+        regions = channel_depths[regions]
+    region_labels = np.c_[np.mean(regions, axis=1), region_info.acronym[boundaries[1:]]]
+    region_colours = region_info.rgb[boundaries[1:]]
+
+    if display:
+        if ax is None:
+            fig, ax = plt.subplots()
+
+        for reg, col in zip(regions, region_colours):
+            height = np.abs(reg[1] - reg[0])
+            color = col / 255
+            ax.bar(x=0.5, height=height, width=1, color=color, bottom=reg[0], edgecolor='w')
+        ax.set_yticks(region_labels[:, 0].astype(int))
+        ax.yaxis.set_tick_params(labelsize=8)
+        ax.get_xaxis().set_visible(False)
+        ax.set_yticklabels(region_labels[:, 1])
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+
+        return fig, ax
+    else:
+        return regions, region_labels, region_colours
+
+
+def plot_cdf(spike_amps, spike_depths, spike_times, n_amp_bins=10, d_bin=40, amp_range=None, d_range=None,
+             display=False, cmap='hot'):
+    """
+    Plot cumulative amplitude of spikes across depth
+    :param spike_amps:
+    :param spike_depths:
+    :param spike_times:
+    :param n_amp_bins: number of amplitude bins to use
+    :param d_bin: the value of the depth bins in um (default is 40 um)
+    :param amp_range: amp range to use [amp_min, amp_max], if not given automatically computed from spike_amps
+    :param d_range: depth range to use, by default [0, 3840]
+    :param display: whether or not to display plot
+    :param cmap:
+    :return:
+    """
+
+    amp_range = amp_range or np.quantile(spike_amps, (0, 0.9))
+    amp_bins = np.linspace(amp_range[0], amp_range[1], n_amp_bins)
+    d_range = d_range or [0, 3840]
+    depth_bins = np.arange(d_range[0], d_range[1] + d_bin, d_bin)
+    t_bin = np.max(spike_times)
+
+    def histc(x, bins):
+        map_to_bins = np.digitize(x, bins)  # Get indices of the bins to which each value in input array belongs.
+        res = np.zeros(bins.shape)
+
+        for el in map_to_bins:
+            res[el - 1] += 1  # Increment appropriate bin.
+        return res
+
+    cdfs = np.empty((len(depth_bins) - 1, n_amp_bins))
+    for d in range(len(depth_bins) - 1):
+        spikes = np.bitwise_and(spike_depths > depth_bins[d], spike_depths <= depth_bins[d + 1])
+        h = histc(spike_amps[spikes], amp_bins) / t_bin
+        hcsum = np.cumsum(h[::-1])
+        cdfs[d, :] = hcsum[::-1]
+
+    cdfs[cdfs == 0] = np.nan
+
+    data = ImagePlot(cdfs.T, x=amp_bins * 1e6, y=depth_bins[:-1], cmap=cmap)
+    data.set_labels(title='Cumulative Amplitude', xlabel='Spike amplitude (uV)',
+                    ylabel='Distance from probe tip (um)', clabel='Firing Rate (Hz)')
+
+    if display:
+        fig, ax = plot_image(data.convert2dict(), fig_kwargs={'figsize': [3, 7]})
+        return data.convert2dict(), fig, ax
+
     return data
