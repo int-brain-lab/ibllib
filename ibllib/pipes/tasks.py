@@ -6,29 +6,30 @@ import importlib
 import time
 from _collections import OrderedDict
 import traceback
+import json
 
 from graphviz import Digraph
 
 from ibllib.misc import version
-import one.params
 from ibllib.oneibl import data_handlers
-
+import one.params
+from one.api import ONE
 
 _logger = logging.getLogger('ibllib')
 
 
 class Task(abc.ABC):
-    log = ""
-    cpu = 1
-    gpu = 0
+    log = ""  # place holder to keep the log of the task for registratoin
+    cpu = 1   # CPU resource
+    gpu = 0   # GPU resources: as of now, either 0 or 1
     io_charge = 5  # integer percentage
     priority = 30  # integer percentage, 100 means highest priority
     ram = 4  # RAM needed to run (Go)
     one = None  # one instance (optional)
-    level = 0
-    outputs = None
+    level = 0  # level in the pipeline hierarchy: level 0 means there is no parent task
+    outputs = None  # place holder for a list of Path containing output files
     time_elapsed_secs = None
-    time_out_secs = None
+    time_out_secs = 3600 * 2  # time-out after which a task is considered dead
     version = version.ibllib()
     signature = {'input_files': [], 'output_files': []}  # list of tuples (filename, collection, required_flag)
     force = False  # whether or not to re-download missing input files on local server if not present
@@ -69,6 +70,11 @@ class Task(abc.ABC):
         wraps the _run() method with
         -   error management
         -   logging to variable
+        -   writing a lock file if the GPU is used
+        -   labels the status property of the object. The status value is labeled as:
+            0: Complete
+            -1: Errored
+            -2: Didn't run as a lock was encountered
         """
         # if taskid of one properties are not available, local run only without alyx
         use_alyx = self.one is not None and self.taskid is not None
@@ -91,17 +97,20 @@ class Task(abc.ABC):
         # setup
         setup = self.setUp(**kwargs)
         _logger.info(f"Setup value is: {setup}")
+        self.status = 0
         if not setup:
             # case where outputs are present but don't have input files locally to rerun task
             # label task as complete
-            self.status = 0
             _, self.outputs = self.assert_expected_outputs()
-
         else:
             # run task
-            self.status = 0
             start_time = time.time()
             try:
+                if self.gpu >= 1:
+                    if not self._creates_lock():
+                        self.status = -2
+                        _logger.info(f"Job {self.__class__} exited as a lock was found")
+                        return
                 self.outputs = self._run(**kwargs)
                 _logger.info(f"Job {self.__class__} complete")
             except BaseException:
@@ -169,7 +178,6 @@ class Task(abc.ABC):
         :param kwargs:
         :return:
         """
-
         if self.location == 'server':
             self.get_signatures(**kwargs)
 
@@ -196,7 +204,6 @@ class Task(abc.ABC):
                 # TODO in future should raise error if even after downloading don't have the correct files
                 self.assert_expected_inputs(raise_error=False)
                 return True
-
         else:
             self.data_handler = self.get_data_handler()
             self.data_handler.setUp()
@@ -206,9 +213,10 @@ class Task(abc.ABC):
 
     def tearDown(self):
         """
-        Function to optionally overload to check results
+        Function after runs()
         """
-        pass
+        if self.gpu >= 1:
+            self._lock_file_path().unlink()
 
     def cleanUp(self):
         """
@@ -270,7 +278,9 @@ class Task(abc.ABC):
         :return:
         """
         location = location or self.location
-
+        if location == 'local':
+            return data_handlers.LocalDataHandler(self.session_path, self.signature, one=self.one)
+        self.one = self.one or ONE()
         if location == 'server':
             dhandler = data_handlers.ServerDataHandler(self.session_path, self.signature, one=self.one)
         elif location == 'serverglobus':
@@ -281,8 +291,48 @@ class Task(abc.ABC):
             dhandler = data_handlers.RemoteAwsDataHandler(self.session_path, self.signature, one=self.one)
         elif location == 'SDSC':
             dhandler = data_handlers.SDSCDataHandler(self, self.session_path, self.signature, one=self.one)
-
         return dhandler
+
+    @staticmethod
+    def make_lock_file(taskname="", time_out_secs=7200):
+        """Creates a GPU lock file with a timeout of"""
+        d = {'start': time.time(), 'name': taskname, 'time_out_secs': time_out_secs}
+        with open(Task._lock_file_path(), 'w+') as fid:
+            json.dump(d, fid)
+        return d
+
+    @staticmethod
+    def _lock_file_path():
+        """the lock file is in ~/.one/gpu.lock"""
+        folder = Path.home().joinpath('.one')
+        folder.mkdir(exist_ok=True)
+        return folder.joinpath('gpu.lock')
+
+    def _make_lock_file(self):
+        """creates a lock file with the current time"""
+        return Task.make_lock_file(self.name, self.time_out_secs)
+
+    def is_locked(self):
+        """Checks if there is a lock file for this given task"""
+        lock_file = self._lock_file_path()
+        if not lock_file.exists():
+            return False
+
+        with open(lock_file) as fid:
+            d = json.load(fid)
+        now = time.time()
+        if (now - d['start']) > d['time_out_secs']:
+            lock_file.unlink()
+            return False
+        else:
+            return True
+
+    def _creates_lock(self):
+        if self.is_locked():
+            return False
+        else:
+            self._make_lock_file()
+            return True
 
 
 class Pipeline(abc.ABC):
