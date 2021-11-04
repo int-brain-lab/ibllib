@@ -57,6 +57,13 @@ class TestBrainRegions(unittest.TestCase):
         inds_[0] = 0
         assert np.all(inds == inds_)
 
+    def test_remap(self):
+        # Test mapping atlas ids from one map to another
+        atlas_id = np.array([463, 685])  # CA3 and PO
+        cosmos_atlas_id = self.brs.remap(atlas_id, source_map='Allen', target_map='Cosmos')
+        expectd_cosmos_id = [1089, 549]  # HPF and TH
+        assert np.all(cosmos_atlas_id == expectd_cosmos_id)
+
 
 class TestAtlasSlicesConversion(unittest.TestCase):
 
