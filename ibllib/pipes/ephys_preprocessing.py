@@ -841,9 +841,9 @@ class EphysPostDLC(tasks.Task):
     """
     io_charge = 90
     level = 3
-    signature = {'input_files': [('_ibl_leftCamera.dlc.pqt', 'raw_video_data', True),
-                                 ('_ibl_bodyCamera.dlc.pqt', 'raw_video_data', True),
-                                 ('_ibl_rightCamera.dlc.pqt', 'raw_video_data', True),
+    signature = {'input_files': [('_ibl_leftCamera.dlc.pqt', 'alf', True),
+                                 ('_ibl_bodyCamera.dlc.pqt', 'alf', True),
+                                 ('_ibl_rightCamera.dlc.pqt', 'alf', True),
                                  ('_ibl_rightCamera.times.npy', 'alf', True),
                                  ('_ibl_leftCamera.times.npy', 'alf', True),
                                  ('_ibl_bodyCamera.times.npy', 'alf', True)],
@@ -851,7 +851,7 @@ class EphysPostDLC(tasks.Task):
                                   ('_ibl_rightCamera.features.pqt', 'alf', True)]
                  }
 
-    def _run(self):
+    def _run(self, run_qc=True):
         # Find all available dlc traces and dlc times
         dlc_files = list(Path(self.session_path).joinpath('alf').glob('_ibl_*Camera.dlc.*'))
         for dlc_file in dlc_files:
@@ -863,7 +863,7 @@ class EphysPostDLC(tasks.Task):
             # Catch unforeseen exceptions and move on to next cam
             try:
                 cam = label_from_path(dlc_file)
-                # load dlc trace
+                # load dlc trace and camera times
                 dlc = pd.read_parquet(dlc_file)
                 dlc_thresh = likelihood_threshold(dlc, 0.9)
                 # try to load respective camera times
@@ -896,12 +896,15 @@ class EphysPostDLC(tasks.Task):
                     output_files.append(features_file)
 
                 # For all cams, compute DLC qc if times available
-                if times:
+                if times and run_qc:
                     # Setting download_data to False because at this point the data should be there
                     qc = DlcQC(self.session_path, side=cam, one=self.one, download_data=False)
                     qc.run(update=True)
                 else:
-                    _logger.warning(f"Skipping QC for {cam} camera as no camera.times available")
+                    if not times:
+                        _logger.warning(f"Skipping QC for {cam} camera as no camera.times available")
+                    if not run_qc:
+                        _logger.warning(f"Skipping QC for {cam} camera as run_qc=False")
 
             except BaseException:
                 _logger.error(traceback.format_exc())
@@ -989,4 +992,6 @@ class EphysExtractionPipeline(tasks.Pipeline):
             self.session_path, parents=[tasks["EphysVideoCompress"], tasks["EphysPulses"], tasks["EphysTrials"]])
         tasks["EphysCellsQc"] = EphysCellsQc(self.session_path, parents=[tasks["SpikeSorting"]])
         tasks["EphysDLC"] = EphysDLC(self.session_path, parents=[tasks["EphysVideoCompress"]])
+        # level 3
+        tasks["EphysPostDLC"] = EphysPostDLC(self.session_path, parents=[tasks["EphysDLC"]])
         self.tasks = tasks
