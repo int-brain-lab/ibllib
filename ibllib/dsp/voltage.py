@@ -206,7 +206,8 @@ def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, k_kwa
     x = scipy.signal.sosfiltfilt(sos, x)
     # apply ADC shift
     if neuropixel_version is not None:
-        x = fshift(x, h['sample_shift'], axis=1)
+        sample_shift = h['sample_shift'] if (30000 / fs) < 10 else h['sample_shift'] * fs / 30000
+        x = fshift(x, sample_shift, axis=1)
     # apply spatial filter on good channel selection only
     x_ = kfilt(x, **k_kwargs)
     return x_
