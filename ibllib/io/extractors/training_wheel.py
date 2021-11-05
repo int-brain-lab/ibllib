@@ -4,6 +4,7 @@ from collections.abc import Sized
 import numpy as np
 from scipy import interpolate
 
+from ibllib.dsp.utils import sync_timestamps
 from ibllib.io.extractors import training_trials
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
 import ibllib.io.raw_data_loaders as raw
@@ -73,6 +74,12 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
     else:
         bp, re = raw.sync_trials_robust(bpod['closed_loop'], rote['closed_loop'],
                                         diff_threshold=DIFF_THRESHOLD, max_shift=5)
+        # we dont' want to change the extractor, but in rare cases the following method may save the day
+        if len(bp) == 0:
+            _, _, ib, ir = sync_timestamps(bpod['closed_loop'], rote['closed_loop'], return_indices=True)
+            bp = bpod['closed_loop'][ib]
+            re = rote['closed_loop'][ir]
+
         indko = np.array([])
         # raise ValueError("Can't sync bpod and rotary encoder: non-contiguous sync pulses")
     # remove faulty indices due to missing or bad syncs
