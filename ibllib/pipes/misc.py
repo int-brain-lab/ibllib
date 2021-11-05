@@ -631,6 +631,7 @@ def multi_parts_flags_creation(root_paths: Union[list, str, Path]) -> List[Path]
         for i, meta_file in enumerate(recordings[k]):
             sequence_file = meta_file.parent.joinpath(meta_file.name.replace('ap.meta', 'sequence.json'))
             with open(sequence_file, 'w+') as fid:
-                json.dump(dict(sha1=m.hexdigest(), part=i + 1, total=nrecs), fid)
+                json.dump(dict(sha1=m.hexdigest(), probe=k, index=i,
+                               files=list(map(str, recordings[k]))), fid)
             log.info(f"{k}: {i}/{nrecs} written sequence file {recordings}")
     return recordings
