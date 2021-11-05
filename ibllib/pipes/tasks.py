@@ -95,17 +95,17 @@ class Task(abc.ABC):
             _logger.info(f"Running on machine: {self.machine}")
         _logger.info(f"running ibllib version {version.ibllib()}")
         # setup
-        setup = self.setUp(**kwargs)
-        _logger.info(f"Setup value is: {setup}")
-        self.status = 0
-        if not setup:
-            # case where outputs are present but don't have input files locally to rerun task
-            # label task as complete
-            _, self.outputs = self.assert_expected_outputs()
-        else:
-            # run task
+        try:
             start_time = time.time()
-            try:
+            setup = self.setUp(**kwargs)
+            _logger.info(f"Setup value is: {setup}")
+            self.status = 0
+            if not setup:
+                # case where outputs are present but don't have input files locally to rerun task
+                # label task as complete
+                _, self.outputs = self.assert_expected_outputs()
+            else:
+                # run task
                 if self.gpu >= 1:
                     if not self._creates_lock():
                         self.status = -2
@@ -113,10 +113,10 @@ class Task(abc.ABC):
                         return
                 self.outputs = self._run(**kwargs)
                 _logger.info(f"Job {self.__class__} complete")
-            except BaseException:
-                _logger.error(traceback.format_exc())
-                _logger.info(f"Job {self.__class__} errored")
-                self.status = -1
+        except BaseException:
+            _logger.error(traceback.format_exc())
+            _logger.info(f"Job {self.__class__} errored")
+            self.status = -1
             self.time_elapsed_secs = time.time() - start_time
 
         # log the outputs
