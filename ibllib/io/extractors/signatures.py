@@ -163,13 +163,13 @@ DLC_TASKS = ['EphysDLC']
 # DATA REQUIRED FOR TASKS
 EPHYSTRIALS = [('_iblrig_taskData.raw.*', 'raw_behavior_data', True),
                ('_iblrig_taskSettings.raw.*', 'raw_behavior_data', True),
-               ('_spikeglx_sync.npy', 'raw_ephys_data/**', True),
-               ('_spikeglx_sync.polarities.npy', 'raw_ephys_data/**', True),
-               ('_spikeglx_sync.times.npy', 'raw_ephys_data/**', True),
+               ('_spikeglx_sync.npy', 'raw_ephys_data*', True),
+               ('_spikeglx_sync.polarities.npy', 'raw_ephys_data*', True),
+               ('_spikeglx_sync.times.npy', 'raw_ephys_data*', True),
                ('_iblrig_encoderEvents.raw', 'raw_behavior_data', True),
                ('_iblrig_encoderPositions.raw', 'raw_behavior_data', True),
-               ('*wiring.json', 'raw_ephys_data/**', False),
-               ('*.meta', 'raw_ephys_data/**', True)]
+               ('*wiring.json', 'raw_ephys_data*', False),
+               ('*.meta', 'raw_ephys_data*', True)]
 
 EPHYSPASSIVE = [('_iblrig_taskSettings.raw*', 'raw_behavior_data', True),
                 ('_spikeglx_sync.channels.*', 'raw_ephys_data*', True),

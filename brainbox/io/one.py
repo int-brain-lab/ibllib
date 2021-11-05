@@ -95,6 +95,14 @@ def _channels_traj2bunch(xyz_chans, brain_atlas):
     return channels
 
 
+def _channels_bunch2alf(channels):
+    channels_ = {
+        'mlapdv': np.c_[channels['x'], channels['y'], channels['z']] * 1e6,
+        'brainLocationIds_ccf_2017': channels['atlas_id'],
+        'localCoordinates': np.c_[channels['lateral_um'], channels['axial_um']]}
+    return channels_
+
+
 def _channels_alf2bunch(channels, brain_regions=None):
     # reformat the dictionary according to the standard that comes out of Alyx
     channels_ = {
@@ -102,7 +110,9 @@ def _channels_alf2bunch(channels, brain_regions=None):
         'y': channels['mlapdv'][:, 1].astype(np.float64) / 1e6,
         'z': channels['mlapdv'][:, 2].astype(np.float64) / 1e6,
         'acronym': None,
-        'atlas_id': channels['brainLocationIds_ccf_2017']
+        'atlas_id': channels['brainLocationIds_ccf_2017'],
+        'axial_um': channels['localCoordinates'][:, 1],
+        'lateral_um': channels['localCoordinates'][:, 0],
     }
     if brain_regions:
         channels_['acronym'] = brain_regions.get(channels_['atlas_id'])['acronym']
@@ -207,24 +217,33 @@ def _load_channels_locations_from_disk(eid, collection=None, one=None, revision=
             channels_aligned = one.load_object(eid, 'channels', collection=ac_collection)
             channels[probe] = channel_locations_interpolation(channels_aligned, channels[probe])
             # only have to reformat channels if we were able to load coordinates from disk
-            channels[probe] = _channels_alf2bunch(channels[probe], brain_regions=brain_regions)
+        channels[probe] = _channels_alf2bunch(channels[probe], brain_regions=brain_regions)
     return channels
 
 
-def channel_locations_interpolation(channels_aligned, channels):
+def channel_locations_interpolation(channels_aligned, channels, brain_regions=None):
     """
     oftentimes the channel map for different spike sorters may be different so interpolate the alignment onto
     if there is no spike sorting in the base folder, the alignment doesn't have the localCoordinates field
     so we reconstruct from the Neuropixel map. This only happens for early pykilosort sorts
     :param channels_aligned: Bunch or dictionary of aligned channels containing at least keys
-     'mlapdv' and 'brainLocationIds_ccf_2017' - those are the guide for the interpolation
+     'localCoordinates', 'mlapdv' and 'brainLocationIds_ccf_2017'
+     OR
+      'x', 'y', 'z', 'acronym', 'axial_um'
+      those are the guide for the interpolation
     :param channels: Bunch or dictionary of aligned channels containing at least keys 'localCoordinates'
-    :return: Bunch or dictionary of channels with extra keys 'mlapdv' and 'brainLocationIds_ccf_2017'
+    :param brain_regions: None (default) or ibllib.atlas.BrainRegions object
+     if None will return a dict with keys 'localCoordinates', 'mlapdv', 'brainLocationIds_ccf_2017
+     if a brain region object is provided, outputts a dict with keys
+      'x', 'y', 'z', 'acronym', 'atlas_id', 'axial_um', 'lateral_um'
+    :return: Bunch or dictionary of channels with brain coordinates keys
     """
     nch = channels['localCoordinates'].shape[0]
+    if set(['x', 'y', 'z']).issubset(set(channels_aligned.keys())):
+        channels_aligned = _channels_bunch2alf(channels_aligned)
     if 'localCoordinates' in channels_aligned.keys():
         aligned_depths = channels_aligned['localCoordinates'][:, 1]
-    else:
+    else:  # this is a edge case for a few spike sorting sessions
         assert channels_aligned['mlapdv'].shape[0] == 384
         NEUROPIXEL_VERSION = 1
         from ibllib.ephys.neuropixel import trace_header
@@ -238,7 +257,10 @@ def channel_locations_interpolation(channels_aligned, channels):
     # the brain locations have to be interpolated by nearest neighbour
     fcn_interp = interp1d(depth_aligned, channels_aligned['brainLocationIds_ccf_2017'][ind_aligned], kind='nearest')
     channels['brainLocationIds_ccf_2017'] = fcn_interp(depths)[iinv].astype(np.int32)
-    return channels
+    if brain_regions is not None:
+        return _channels_alf2bunch(channels, brain_regions=brain_regions)
+    else:
+        return channels
 
 
 def _load_channel_locations_traj(eid, probe=None, one=None, revision=None, aligned=False,
@@ -531,7 +553,7 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
     dic_clus : dict of one.alf.io.AlfBunch
         1 bunch per probe, containing cluster information
     channels : dict of one.alf.io.AlfBunch
-        1 bunch per probe, containing channels bunch with keys ('acronym', 'atlas_id')
+        1 bunch per probe, containing channels bunch with keys ('acronym', 'atlas_id', 'x', 'y', z', 'localCoordinates')
     keys_to_add_extra : list of str
         Any extra keys to load into channels bunches
 
@@ -541,7 +563,7 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
         clusters (1 bunch per probe) with new keys values.
     """
     probe_labels = list(channels.keys())  # Convert dict_keys into list
-    keys_to_add_default = ['acronym', 'atlas_id', 'x', 'y', 'z']
+    keys_to_add_default = ['acronym', 'atlas_id', 'x', 'y', 'z', 'axial_um', 'lateral_um']
 
     if keys_to_add_extra is None:
         keys_to_add = keys_to_add_default
@@ -550,10 +572,9 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
         keys_to_add = list(set(keys_to_add_extra + keys_to_add_default))
 
     for label in probe_labels:
-        try:
-            clu_ch = dic_clus[label]['channels']
-
-            for key in keys_to_add:
+        clu_ch = dic_clus[label]['channels']
+        for key in keys_to_add:
+            try:
                 assert key in channels[label].keys()  # Check key is in channels
                 ch_key = channels[label][key]
                 nch_key = len(ch_key) if ch_key is not None else 0
@@ -564,11 +585,9 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
                         f'Probe {label}: merging channels and clusters for key "{key}" has {nch_key} on channels'
                         f' but expected {max(clu_ch)}. Data in new cluster key "{key}" is returned empty.')
                     dic_clus[label][key] = []
-        except AssertionError:
-            _logger.warning(
-                f'Either clusters or channels does not have key {label}, could not'
-                f' merge')
-            continue
+            except AssertionError:
+                _logger.warning(f'Either clusters or channels does not have key {key}, could not merge')
+                continue
 
     return dic_clus
 
