@@ -214,4 +214,3 @@ def get_smooth_pupil_diameter(diameter_raw, camera, std_thresh=5, nan_thresh=1):
             diameter_smoothed[(b + 1):(e + 1)] = np.nan  # offset by 1 due to earlier diff
 
     return diameter_smoothed
-
