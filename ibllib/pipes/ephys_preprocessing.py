@@ -848,10 +848,18 @@ class EphysPostDLC(tasks.Task):
                                  ('_ibl_leftCamera.times.npy', 'alf', True),
                                  ('_ibl_bodyCamera.times.npy', 'alf', True)],
                  'output_files': [('_ibl_leftCamera.features.pqt', 'alf', True),
-                                  ('_ibl_rightCamera.features.pqt', 'alf', True)]
+                                  ('_ibl_rightCamera.features.pqt', 'alf', True),
+                                  ('licks.times.npy', 'alf', True)]
                  }
 
-    def _run(self, run_qc=True):
+    def _run(self, overwrite=False, run_qc=True):
+        # Check if output files exist locally
+        exist, output_files = self.assert_expected(self.signature['output_files'])
+        if exist and not overwrite:
+            _logger.warning('EphysPostDLC outputs exist and overwrite=False, skipping.')
+            return output_files
+        if exist and overwrite:
+            _logger.warning('EphysPostDLC outputs exist and overwrite=True, overwriting existing outputs.')
         # Find all available dlc traces and dlc times
         dlc_files = list(Path(self.session_path).joinpath('alf').glob('_ibl_*Camera.dlc.*'))
         for dlc_file in dlc_files:
