@@ -1,4 +1,7 @@
 ## Release Notes 2.3
+### Release Notes 2.3.1 2021-11-5
+- Add setup method in tasks.py into try except to catch globus download errors
+
 ### Release Notes 2.3.0 2021-11-4
 - Add input and output signatures to all ephys tasks
 - Add datahandler to task to download and upload data based on location where task is run
