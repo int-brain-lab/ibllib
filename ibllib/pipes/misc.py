@@ -599,6 +599,12 @@ def copy_wiring_files(session_folder, iblscripts_folder):
 def multi_parts_flags_creation(root_paths: Union[list, str, Path]) -> List[Path]:
     """
     Creates the sequence files to run spike sorting in batches
+    A sequence file is a json file with the following fields:
+     sha1: a unique hash of the metafiles involved
+     probe: a string with the probe name
+     index: the index within the sequence
+     nrecs: the length of the sequence
+     files: a list of files
     :param root_paths:
     :return:
     """
@@ -631,7 +637,7 @@ def multi_parts_flags_creation(root_paths: Union[list, str, Path]) -> List[Path]
         for i, meta_file in enumerate(recordings[k]):
             sequence_file = meta_file.parent.joinpath(meta_file.name.replace('ap.meta', 'sequence.json'))
             with open(sequence_file, 'w+') as fid:
-                json.dump(dict(sha1=m.hexdigest(), probe=k, index=i,
+                json.dump(dict(sha1=m.hexdigest(), probe=k, index=i, nrecs=len(recordings[k]),
                                files=list(map(str, recordings[k]))), fid)
             log.info(f"{k}: {i}/{nrecs} written sequence file {recordings}")
     return recordings
