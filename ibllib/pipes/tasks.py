@@ -111,7 +111,11 @@ class Task(abc.ABC):
                     if not self._creates_lock():
                         self.status = -2
                         _logger.info(f"Job {self.__class__} exited as a lock was found")
-                        return
+                        new_log = log_capture_string.getvalue()
+                        self.log = new_log if self.clobber else self.log + new_log
+                        log_capture_string.close()
+                        _logger.removeHandler(ch)
+                        return self.status
                 self.outputs = self._run(**kwargs)
                 _logger.info(f"Job {self.__class__} complete")
         except BaseException:
@@ -216,6 +220,7 @@ class Task(abc.ABC):
     def tearDown(self):
         """
         Function after runs()
+        Does not run if a lock is encountered by the task (status -2)
         """
         if self.gpu >= 1:
             self._lock_file_path().unlink()
@@ -460,7 +465,7 @@ class Pipeline(abc.ABC):
         return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty'], **kwargs)
 
     def rerun(self, **kwargs):
-        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete'],
+        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete', 'Incomplete'],
                         **kwargs)
 
     @property
