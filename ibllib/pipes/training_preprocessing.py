@@ -25,6 +25,31 @@ class TrainingRegisterRaw(tasks.Task):
 class TrainingTrials(tasks.Task):
     priority = 90
     level = 0
+    force = False
+    signature = {
+        'input_files': [('_iblrig_taskData.raw.*', 'raw_behavior_data', True),
+                        ('_iblrig_taskSettings.raw.*', 'raw_behavior_data', True),
+                        ('_iblrig_encoderEvents.raw*', 'raw_behavior_data', True),
+                        ('_iblrig_encoderPositions.raw*', 'raw_behavior_data', True)],
+        'output_files': [('*trials.choice.npy', 'alf', True),
+                         ('*trials.contrastLeft.npy', 'alf', True),
+                         ('*trials.contrastRight.npy', 'alf', True),
+                         ('*trials.feedbackType.npy', 'alf', True),
+                         ('*trials.feedback_times.npy', 'alf', True),
+                         ('*trials.firstMovement_times.npy', 'alf', True),
+                         ('*trials.goCueTrigger_times.npy', 'alf', True),
+                         ('*trials.goCue_times.npy', 'alf', True),
+                         ('*trials.intervals.npy', 'alf', True),
+                         ('*trials.itiDuration.npy', 'alf', False),
+                         ('*trials.probabilityLeft.npy', 'alf', True),
+                         ('*trials.response_times.npy', 'alf', True),
+                         ('*trials.rewardVolume.npy', 'alf', True),
+                         ('*trials.stimOn_times.npy', 'alf', True),
+                         ('*wheel.position.npy', 'alf', True),
+                         ('*wheel.timestamps.npy', 'alf', True),
+                         ('*wheelMoves.intervals.npy', 'alf', True),
+                         ('*wheelMoves.peakAmplitude.npy', 'alf', True)]
+    }
 
     def _run(self):
         """
