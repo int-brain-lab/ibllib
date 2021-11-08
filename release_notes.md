@@ -1,4 +1,8 @@
 ## Release Notes 2.3
+### Release Notes 2.3.1 2021-11-08
+- Trial wheel extraction: use alternative sync method when first on fails
+- bugfix: timer for tasks was returning None
+
 ### Release Notes 2.3.1 2021-11-5
 - Add setup method in tasks.py into try except to catch globus download errors
 
