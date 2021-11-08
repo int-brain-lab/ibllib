@@ -72,9 +72,10 @@ class Task(abc.ABC):
         -   logging to variable
         -   writing a lock file if the GPU is used
         -   labels the status property of the object. The status value is labeled as:
-            0: Complete
+             0: Complete
             -1: Errored
             -2: Didn't run as a lock was encountered
+            -3: Incomplete
         """
         # if taskid of one properties are not available, local run only without alyx
         use_alyx = self.one is not None and self.taskid is not None
@@ -526,6 +527,12 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     # overwrite status to errored
     if status == -1:
         patch_data['status'] = 'Errored'
+    # Status -2 means a lock was encountered during run, should be rerun
+    if status == -2:
+        patch_data['status'] = 'Waiting'
+    # Status -3 should be returned if a task is Incomplete
+    if status == -3:
+        patch_data['status'] = 'Incomplete'
     # update task status on Alyx
     t = one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data=patch_data)
     task.cleanUp()
