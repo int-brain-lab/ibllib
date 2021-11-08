@@ -854,7 +854,7 @@ class EphysPostDLC(tasks.Task):
 
     def _run(self, overwrite=False, run_qc=True):
         # Check if output files exist locally
-        exist, output_files = self.assert_expected(self.signature['output_files'])
+        exist, output_files = self.assert_expected(self.signature['output_files'], silent=True)
         if exist and not overwrite:
             _logger.warning('EphysPostDLC outputs exist and overwrite=False, skipping.')
             return output_files
