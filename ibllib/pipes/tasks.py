@@ -96,8 +96,8 @@ class Task(abc.ABC):
             _logger.info(f"Running on machine: {self.machine}")
         _logger.info(f"running ibllib version {version.ibllib()}")
         # setup
+        start_time = time.time()
         try:
-            start_time = time.time()
             setup = self.setUp(**kwargs)
             _logger.info(f"Setup value is: {setup}")
             self.status = 0
@@ -118,7 +118,8 @@ class Task(abc.ABC):
             _logger.error(traceback.format_exc())
             _logger.info(f"Job {self.__class__} errored")
             self.status = -1
-            self.time_elapsed_secs = time.time() - start_time
+
+        self.time_elapsed_secs = time.time() - start_time
 
         # log the outputs
         if isinstance(self.outputs, list):
