@@ -492,10 +492,10 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     :return:
     """
     registered_dsets = []
+    # here we need to check parents status, get the job_deck if not available
+    if not job_deck:
+        job_deck = one.alyx.rest('tasks', 'list', session=tdict['session'], no_cache=True)
     if len(tdict['parents']):
-        # here we need to check parents status, get the job_deck if not available
-        if not job_deck:
-            job_deck = one.alyx.rest('tasks', 'list', session=tdict['session'], no_cache=True)
         # check the dependencies
         parent_tasks = filter(lambda x: x['id'] in tdict['parents'], job_deck)
         parent_statuses = [j['status'] for j in parent_tasks]
