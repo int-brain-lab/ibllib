@@ -214,6 +214,7 @@ class SpikeSorting(tasks.Task):
         input_signature = [('*ap.meta', f'raw_ephys_data/{pname}', True),
                            ('*ap.ch', f'raw_ephys_data/{pname}', True),
                            ('*ap.cbin', f'raw_ephys_data/{pname}', True),
+                           ('*nidq.meta', 'raw_ephys_data', False),
                            ('_spikeglx_sync.channels.*', 'raw_ephys_data*', True),
                            ('_spikeglx_sync.polarities.*', 'raw_ephys_data*', True),
                            ('_spikeglx_sync.times.*', 'raw_ephys_data*', True),
@@ -409,7 +410,9 @@ class SpikeSorting(tasks.Task):
             elif 'raw_ephys_data/probe*' in sig[1]:
                 for probe in probes:
                     full_input_files.append((sig[0], f'raw_ephys_data/{probe}', sig[2]))
-
+            elif 'raw_ephys_data' in sig[1]:
+                if neuropixel_version != '3A':
+                    full_input_files.append((sig[0], 'raw_ephys_data', sig[2]))
             else:
                 full_input_files.append(sig)
 
