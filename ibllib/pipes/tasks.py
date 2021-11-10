@@ -410,7 +410,7 @@ class Pipeline(abc.ABC):
         tasks_alyx = []
         # creates all the tasks by iterating through the ordered dict
         for k, t in self.tasks.items():
-            # get the parents alyx ids to reference in the database
+            # get the parents' alyx ids to reference in the database
             if len(t.parents):
                 pnames = [p.name for p in t.parents]
                 parents_ids = [ta['id'] for ta in tasks_alyx if ta['name'] in pnames]
@@ -492,7 +492,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     :return:
     """
     registered_dsets = []
-    # here we need to check parents status, get the job_deck if not available
+    # here we need to check parents' status, get the job_deck if not available
     if not job_deck:
         job_deck = one.alyx.rest('tasks', 'list', session=tdict['session'], no_cache=True)
     if len(tdict['parents']):

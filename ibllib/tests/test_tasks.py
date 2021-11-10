@@ -32,8 +32,7 @@ desired_statuses = {
 desired_datasets = ['spikes.times.npy', 'spikes.amps.npy', 'spikes.clusters.npy']
 desired_versions = {'spikes.times.npy': 'custom_job00',
                     'spikes.amps.npy': version.ibllib(),
-                    'spikes.clusters.npy': version.ibllib(),
-                    'spikes.templates.npy': version.ibllib()}
+                    'spikes.clusters.npy': version.ibllib()}
 desired_logs = 'Running on machine: testmachine'
 desired_logs_rerun = {
     'Task00': 1,
