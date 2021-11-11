@@ -297,3 +297,22 @@ def decompress_destripe_cbin(sr, output_file=None, h=None, wrot=None, append=Fal
                     np.tile(chunk[-1, :nc_out].astype(dtype), (ns2add, 1)).tofile(fid)
                 break
     pbar.close()
+
+
+def rcoeff(x, y):
+    """
+    Computes pairwise Person correlation coefficients for matrices.
+    That is for 2 matrices the same size, computes the row to row coefficients and outputs
+    a vector corresponding to the number of rows of the first matrix
+    If the second array is a vector then computes the correlation coefficient for all rows
+    :param x: np array [nc, ns]
+    :param y: np array [nc, ns] or [ns]
+    :return: r [nc]
+    """
+    def normalize(z):
+        mean = np.mean(z, axis=-1)
+        return z - mean if mean.size == 1 else z - mean[:, np.newaxis]
+    xnorm = normalize(x)
+    ynorm = normalize(y)
+    rcor = np.sum(xnorm * ynorm, axis=-1) / np.sqrt(np.sum(np.square(xnorm), axis=-1) * np.sum(np.square(ynorm), axis=-1))
+    return rcor

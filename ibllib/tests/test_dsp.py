@@ -365,6 +365,16 @@ class TestVoltage(unittest.TestCase):
         assert np.mean(20 * np.log10(rms(fk - data_v1 - fknoise)) < -40) > .9
 
 
+    def test_rcoeff(self):
+        x = np.random.rand(2, 1000)
+        y = x[0, :]
+        r = np.corrcoef(x[1, :], y)
+        assert voltage.rcoeff(x[0, :], y) == 1
+        assert np.isclose(voltage.rcoeff(x[1, :], y), r[1, 0])
+        assert np.all(np.isclose(voltage.rcoeff(x, y), r[0, :]))
+        assert np.all(np.isclose(voltage.rcoeff(y, x), r[0, :]))
+
+
 class TestCadzow(unittest.TestCase):
 
     def trajectory_matrixes(self):
