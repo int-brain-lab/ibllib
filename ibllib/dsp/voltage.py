@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from ibllib.io import spikeglx
 import ibllib.dsp.fourier as fdsp
-from ibllib.dsp import fshift
+from ibllib.dsp import fshift, rms
 from ibllib.ephys import neuropixel
 
 
@@ -316,3 +316,97 @@ def rcoeff(x, y):
     ynorm = normalize(y)
     rcor = np.sum(xnorm * ynorm, axis=-1) / np.sqrt(np.sum(np.square(xnorm), axis=-1) * np.sum(np.square(ynorm), axis=-1))
     return rcor
+
+
+def detect_bad_channels(raw, fs, similarity_threshold=-0.5, psd_hf_threshold=0.04):
+    """
+    Bad channels detection for Neuropixel probes
+    Labels channels
+     0: all clear
+     1: dead low coherence / amplitude
+     2: noisy
+     3: outside of the brain
+    :param raw: [nc, ns]
+    :param fs: sampling frequency
+    :param similarity_threshold:
+    :param psd_hf_threshold:
+    :return: labels (numpy vector [nc]), xfeats: dictionary of features [nc]
+    """
+
+    def rneighbours(raw, n=1):  # noqa
+        """
+        Computes Pearson correlation with the sum of neighbouring traces
+        :param raw: nc, ns
+        :param n:
+        :return:
+        """
+        nc = raw.shape[0]
+        mixer = np.triu(np.ones((nc, nc)), 1) - np.triu(np.ones((nc, nc)), 1 + n)
+        mixer += np.tril(np.ones((nc, nc)), -1) - np.tril(np.ones((nc, nc)), - n - 1)
+        r = rcoeff(raw, np.matmul(raw.T, mixer).T)
+        r[np.isnan(r)] = 0
+        return r
+
+    def detrend(x, nmed):
+        ntap = int(np.ceil(nmed / 2))
+        xf = np.r_[np.zeros(ntap) + x[0], x, np.zeros(ntap) + x[-1]]
+        # assert np.all(xcorf[ntap:-ntap] == xcor)
+        xf = scipy.signal.medfilt(xf, nmed)[ntap:-ntap]
+        return x - xf
+
+    def channels_similarity(raw, nmed=0):
+        """
+        Computes the similarity based on zero-lag crosscorrelation of each channel with the median
+        trace referencing
+        :param raw: [nc, ns]
+        :param nmed:
+        :return:
+        """
+        def fxcor(x, y):
+            return scipy.fft.irfft(scipy.fft.rfft(x) * np.conj(scipy.fft.rfft(y)), n=raw.shape[-1])
+
+        def nxcor(x, ref):
+            ref = ref - np.mean(ref)
+            apeak = fxcor(ref, ref)[0]
+            x = x - np.mean(x, axis=-1)[:, np.newaxis]
+            return fxcor(x, ref)[:, 0] / apeak
+
+        ref = np.median(raw, axis=0)
+        xcor = nxcor(raw, ref)
+
+        if nmed > 0:
+            xcor = detrend(xcor, nmed) + 1
+        return xcor
+
+    nc, _ = raw.shape
+    xcor = channels_similarity(raw)
+    fscale, psd = scipy.signal.welch(raw * 1e6, fs=fs)  # units; uV ** 2 / Hz
+
+    sos_hp = scipy.signal.butter(**{'N': 3, 'Wn': 1000 / fs / 2, 'btype': 'highpass'}, output='sos')
+    hf = scipy.signal.sosfiltfilt(sos_hp, raw)
+    xcorf = channels_similarity(hf)
+
+    xfeats = ({
+        'ind': np.arange(nc),
+        'rms_raw': rms(raw - np.mean(raw, axis=-1)[:, np.newaxis]),  # very similar to the rms avfter butterworth filter
+        'xcor_hf': detrend(xcor, 11),
+        'xcor_lf': xcorf - detrend(xcorf, 11) - 1,
+        'psd_hf': np.mean(psd[:, fscale > 12000], axis=-1),
+    })
+
+    # make recommendation
+    ichannels = np.zeros(nc)
+
+    idead = np.where(xfeats['xcor_hf'] < similarity_threshold)[0]
+    inoisy = np.where(xfeats['psd_hf'] > psd_hf_threshold)[0]
+    # the channels outside of the brains are the contiguous channels below the threshold on the trend coherency
+    ioutside = np.where(xfeats['xcor_lf'] < -0.75)[0]
+    if ioutside.size > 0 and ioutside[-1] == nc:
+        a = np.cumsum(np.r_[0, np.diff(ioutside) - 1])
+        ioutside = ioutside[a == np.max(a)]
+        ichannels[ioutside] = 3
+
+    # indices
+    ichannels[idead] = 1
+    ichannels[inoisy] = 2
+    return ichannels, xfeats
