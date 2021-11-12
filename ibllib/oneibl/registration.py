@@ -165,10 +165,16 @@ class RegistrationClient:
             if dry:
                 print(flag_file)
                 continue
-            _logger.info('creating session for ' + str(flag_file.parent))
-            # providing a false flag stops the registration after session creation
-            self.create_session(flag_file.parent)
-            flag_file.unlink()
+            try:
+                _logger.info('creating session for ' + str(flag_file.parent))
+                # providing a false flag stops the registration after session creation
+                self.create_session(flag_file.parent)
+                flag_file.unlink()
+            except BaseException as e:
+                _logger.error(f'Error creating session for {flag_file.parent}\n{e}')
+                _logger.warning(f'Skipping {flag_file.parent}')
+                continue
+
         return [ff.parent for ff in flag_files]
 
     def create_session(self, session_path):
