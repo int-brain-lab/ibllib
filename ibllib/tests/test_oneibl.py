@@ -240,7 +240,7 @@ class TestRegistration(unittest.TestCase):
         with open(settings_file, 'w') as fid:
             json.dump(MOCK_SESSION_SETTINGS, fid)
         rc = registration.RegistrationClient(one=self.one)
-        rc.register_session(self.session_path)
+        rc.register_session(str(self.session_path))
         eid = self.one.search(subject=SUBJECT, date_range=['2018-04-01', '2018-04-01'],
                               query_type='remote')[0]
         datasets = self.one.alyx.rest('datasets', 'list', session=eid)
