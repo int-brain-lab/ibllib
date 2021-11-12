@@ -233,6 +233,13 @@ class TestRegistration(unittest.TestCase):
         with self.assertRaises(HTTPError):
             registration.register_dataset(file_list=flist, one=self.one)
 
+    def test_create_sessionS(self):
+        flag_file = self.session_path.joinpath('create_me.flag')
+        flag_file.touch()
+        rc = registration.RegistrationClient(one=self.one)
+        rc.create_sessions(self.session_path, dry=True)
+        rc.create_sessions(self.session_path)
+
     def test_registration_session(self):
         behavior_path = self.session_path.joinpath('raw_behavior_data')
         behavior_path.mkdir()
