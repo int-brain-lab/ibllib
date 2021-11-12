@@ -301,7 +301,7 @@ def decompress_destripe_cbin(sr, output_file=None, h=None, wrot=None, append=Fal
 
 
 def decompress_destripe_parallel(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None,
-                                 dtype=np.int16, ns2add=0, nprocesses=4):
+                                 dtype=np.int16, ns2add=0, nbatch=None, nprocesses=4):
     """
     From a spikeglx Reader object, decompresses and apply ADC.
     Saves output as a flat binary file in int16
@@ -320,7 +320,7 @@ def decompress_destripe_parallel(sr_file, output_file=None, h=None, wrot=None, a
     """
 
     SAMPLES_TAPER = 128
-    NBATCH = 6556
+    NBATCH = nbatch or 65536
     # handles input parameters
     assert isinstance(sr_file, str) or isinstance(sr_file, Path)
     sr = spikeglx.Reader(sr_file, open=True)
@@ -339,219 +339,27 @@ def decompress_destripe_parallel(sr_file, output_file=None, h=None, wrot=None, a
     nbytes = dtype(1).nbytes
 
     if append:
-        # need to find the end of the file and fseek the offset
-        sr_out = spikeglx.Reader(output_file)
-        offset = sr.ns * sr.nc * nbytes
-    else:
-        offset = 0
-
-    f = open(output_file, 'wb')
-
-    def my_function(i_batch, n_batch):
-        _sr = spikeglx.Reader(sr_file)
-        batch_size = int(_sr.ns / n_batch)
-        print(i_batch)
-        # Get the first sample for the batch
-        first_s = 0 if i_batch == 0 else i_batch * batch_size - SAMPLES_TAPER
-        max_s = _sr.ns if i_batch == n_batch - 1 else (i_batch + 1) * batch_size + SAMPLES_TAPER
-
-        with open(output_file, 'r+b') as fid:
-            fid.seek(offset + (i_batch * batch_size * _sr.nc * nbytes))
-
-            while True:
-                last_s = np.minimum(NBATCH + first_s, _sr.ns)
-
-                print([first_s, last_s])
-
-                # Apply tapers
-                chunk = _sr[first_s:last_s, :ncv].T
-                chunk[:, :SAMPLES_TAPER] *= taper[:SAMPLES_TAPER]
-                chunk[:, -SAMPLES_TAPER:] *= taper[SAMPLES_TAPER:]
-
-                # Apply filters
-                chunk = scipy.signal.sosfiltfilt(sos, chunk)
-                chunk = fshift(chunk, s=h['sample_shift'])
-                chunk = kfilt(chunk, **k_kwargs)
-
-                ind2save = [SAMPLES_TAPER, NBATCH - SAMPLES_TAPER]
-
-                if first_s == 0:
-                    # for the first batch save the start with taper applied
-                    ind2save[0] = 0
-
-                if last_s >= max_s:
-                    # for the last part of each batch only save up the batch number
-                    ind2save[1] = max_s - first_s - SAMPLES_TAPER
-
-                if last_s == _sr.ns:
-                    # for the very last batch save the end with taper applied
-                    ind2save[1] = NBATCH
-
-                print([first_s, last_s])
-                print(ind2save)
-                # add back sync trace and save
-                chunk = np.r_[chunk, _sr[first_s:last_s, ncv:].T].T
-                intnorm = 1 / _sr.channel_conversion_sample2v['ap'] if dtype == np.int16 else 1.
-                chunk = chunk[slice(*ind2save), :] * intnorm
-
-                if wrot is not None:
-                    chunk[:, :ncv] = np.dot(chunk[:, :ncv], wrot)
-
-                chunk[:, :nc_out].astype(np.int16).tofile(fid)
-                first_s += NBATCH - SAMPLES_TAPER * 2
-                if last_s >= max_s:
-                    if last_s == _sr.ns:
-                        print('ime here at the very end')
-                        if ns2add > 0:
-                            np.tile(chunk[-1, :nc_out].astype(dtype), (ns2add, 1)).tofile(fid)
-                    break
-
-    import time as time
-    ts = time.time()
-    results = Parallel(n_jobs=nprocesses)(delayed(my_function)(i, 8) for i in range(8))
-    print(time.time() - ts)
-
-
-def decompress_destripe_cbin_fft(sr, output_file=None, h=None, wrot=None, append=False, nc_out=None,
-                                 dtype=np.int16, ns2add=0):
-    """
-    From a spikeglx Reader object, decompresses and apply ADC.
-    Saves output as a flat binary file in int16
-    Production version with optimized FFTs - requires pyfftw
-    :param sr: seismic reader object (spikeglx.Reader)
-    :param output_file: (optional, defaults to .bin extension of the compressed bin file)
-    :param h: (optional)
-    :param wrot: (optional) whitening matrix [nc x nc] or amplitude scalar to apply to the output
-    :param append: (optional, False) for chronic recordings, append to end of file
-    :param nc_out: (optional, True) saves non selected channels (synchronisation trace) in output
-    :param dtype: (optional, np.int16) output sample format
-    :param ns2add: (optional) for kilosort, adds padding samples at the end of the file so the total
-    number of samples is a multiple of the batchsize
-    :return:
-    """
-    import pyfftw
-
-    SAMPLES_TAPER = 128
-    NBATCH = 65536
-    # handles input parameters
-    if isinstance(sr, str) or isinstance(sr, Path):
-        sr = spikeglx.Reader(sr, open=True)
-    butter_kwargs = {'N': 3, 'Wn': 300 / sr.fs / 2, 'btype': 'highpass'}
-    k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
-                'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
-    h = neuropixel.trace_header(version=1) if h is None else h
-    output_file = sr.file_bin.with_suffix('.bin') if output_file is None else output_file
-    assert output_file != sr.file_bin
-    taper = np.r_[0, scipy.signal.windows.cosine((SAMPLES_TAPER - 1) * 2), 0]
-    # create the FFT stencils
-    ncv = h['x'].size  # number of channels
-    nc_out = nc_out or sr.nc
-    # compute LP filter coefficients
-    sos = scipy.signal.butter(**butter_kwargs, output='sos')
-    # compute fft stencil for batchsize
-
-    pbar = tqdm(total=sr.ns / sr.fs)
-    with open(output_file, 'ab' if append else 'wb') as fid:
-        first_s = 0
-        while True:
-            last_s = np.minimum(NBATCH + first_s, sr.ns)
-            # transpose to get faster processing for all trace based process
-            chunk = sr[first_s:last_s, :ncv].T
-            chunk[:, :SAMPLES_TAPER] *= taper[:SAMPLES_TAPER]
-            chunk[:, -SAMPLES_TAPER:] *= taper[SAMPLES_TAPER:]
-            # apply butterworth
-            chunk = scipy.signal.sosfiltfilt(sos, chunk)
-            # apply adc
-            ind2save = [SAMPLES_TAPER, NBATCH - SAMPLES_TAPER]
-            chunk = fshift(chunk, s=h['sample_shift'])
-            if last_s == sr.ns:
-                # for the last batch just use the normal fft as the stencil doesn't fit
-                # chunk = fshift(chunk, s=h['sample_shift'])
-                ind2save[1] = NBATCH
-                # apply precomputed fshift of the proper length
-            if first_s == 0:
-                # for the first batch save the start with taper applied
-                ind2save[0] = 0
-
-            # apply K-filter
-            chunk = kfilt(chunk, **k_kwargs)
-            # add back sync trace and save
-            chunk = np.r_[chunk, sr[first_s:last_s, ncv:].T].T
-            intnorm = 1 / sr.channel_conversion_sample2v['ap'] if dtype == np.int16 else 1.
-            chunk = chunk[slice(*ind2save), :] * intnorm
-            if wrot is not None:
-                chunk[:, :ncv] = np.dot(chunk[:, :ncv], wrot)
-            chunk[:, :nc_out].astype(dtype).tofile(fid)
-            first_s += NBATCH - SAMPLES_TAPER * 2
-            pbar.update(NBATCH / sr.fs)
-            if last_s == sr.ns:
-                if ns2add > 0:
-                    np.tile(chunk[-1, :nc_out].astype(dtype), (ns2add, 1)).tofile(fid)
-                break
-    pbar.close()
-
-
-from ibllib.dsp.utils import WindowGenerator
-def decompress_destripe_parallel_with_window(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None,
-                                 dtype=np.int16, ns2add=0, nprocesses=4):
-    """
-    From a spikeglx Reader object, decompresses and apply ADC.
-    Saves output as a flat binary file in int16
-    Production version with optimized FFTs - requires pyfftw
-    :param sr: seismic reader object (spikeglx.Reader)
-    :param output_file: (optional, defaults to .bin extension of the compressed bin file)
-    :param h: (optional)
-    :param wrot: (optional) whitening matrix [nc x nc] or amplitude scalar to apply to the output
-    :param append: (optional, False) for chronic recordings, append to end of file
-    :param nc_out: (optional, True) saves non selected channels (synchronisation trace) in output
-    :param dtype: (optional, np.int16) output sample format
-    :param ns2add: (optional) for kilosort, adds padding samples at the end of the file so the total
-    number of samples is a multiple of the batchsize
-    :param nprocesses: (optional) number of
-    :return:
-    """
-
-    SAMPLES_TAPER = 128
-    NBATCH = 65536
-    # handles input parameters
-    assert isinstance(sr_file, str) or isinstance(sr_file, Path)
-    sr = spikeglx.Reader(sr_file, open=True)
-    butter_kwargs = {'N': 3, 'Wn': 300 / sr.fs / 2, 'btype': 'highpass'}
-    k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
-                'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
-    h = neuropixel.trace_header(version=1) if h is None else h
-    output_file = sr.file_bin.with_suffix('.bin') if output_file is None else output_file
-    assert output_file != sr.file_bin
-    taper = np.r_[0, scipy.signal.windows.cosine((SAMPLES_TAPER - 1) * 2), 0]
-    # create the FFT stencils
-    ncv = h['x'].size  # number of channels
-    nc_out = nc_out or sr.nc
-    # compute LP filter coefficients
-    sos = scipy.signal.butter(**butter_kwargs, output='sos')
-    nbytes = dtype(1).nbytes
-
-    if append:
-        # need to find the end of the file and fseek the offset
+        # need to find the end of the file and the offset
         sr_out = spikeglx.Reader(output_file)
         offset = sr_out.ns * sr_out.nc * nbytes
     else:
         offset = 0
+        open(output_file, 'wb')
 
-    f = open(output_file, 'wb')
-    batch_size = int(sr.ns / 8)
+    # chunks to split the file into, dependent on number of parallel processes
+    CHUNK_SIZE = int(sr.ns / nprocesses)
 
-    def my_function(i_batch, n_batch):
+    def my_function(i_chunk, n_chunk):
         _sr = spikeglx.Reader(sr_file)
 
-        la = i_batch * batch_size
-        fa = int(np.ceil(la/NBATCH))
-        first_s = (NBATCH - SAMPLES_TAPER * 2) * fa
+        n_batch = int(np.ceil(i_chunk * CHUNK_SIZE/NBATCH))
+        first_s = (NBATCH - SAMPLES_TAPER * 2) * n_batch
 
-        # Get the first sample for the batch
-        max_s = _sr.ns if i_batch == n_batch - 1 else (i_batch + 1) * batch_size
+        # Find the maximum sample for each chunk
+        max_s = _sr.ns if i_chunk == n_chunk - 1 else (i_chunk + 1) * CHUNK_SIZE
 
         with open(output_file, 'r+b') as fid:
-            if i_batch == 0:
+            if i_chunk == 0:
                 fid.seek(offset)
             else:
                 fid.seek(offset + ((first_s + SAMPLES_TAPER) * _sr.nc * nbytes))
@@ -569,6 +377,7 @@ def decompress_destripe_parallel_with_window(sr_file, output_file=None, h=None, 
                 chunk = fshift(chunk, s=h['sample_shift'])
                 chunk = kfilt(chunk, **k_kwargs)
 
+                # Find the indices to save
                 ind2save = [SAMPLES_TAPER, NBATCH - SAMPLES_TAPER]
 
                 if first_s == 0:
@@ -589,16 +398,16 @@ def decompress_destripe_parallel_with_window(sr_file, output_file=None, h=None, 
 
                 chunk[:, :nc_out].astype(np.int16).tofile(fid)
                 first_s += NBATCH - SAMPLES_TAPER * 2
+
                 if last_s >= max_s:
                     if last_s == _sr.ns:
-                        print('ime here at the very end')
                         if ns2add > 0:
                             np.tile(chunk[-1, :nc_out].astype(dtype), (ns2add, 1)).tofile(fid)
                     break
 
     import time as time
     ts = time.time()
-    results = Parallel(n_jobs=nprocesses)(delayed(my_function)(i, 8) for i in range(8))
+    results = Parallel(n_jobs=nprocesses)(delayed(my_function)(i, nprocesses) for i in range(nprocesses))
     print(time.time() - ts)
 
 
