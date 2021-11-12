@@ -223,7 +223,8 @@ class Task(abc.ABC):
         Does not run if a lock is encountered by the task (status -2)
         """
         if self.gpu >= 1:
-            self._lock_file_path().unlink()
+            if self._lock_file_path().exists():
+                self._lock_file_path().unlink()
 
     def cleanUp(self):
         """
