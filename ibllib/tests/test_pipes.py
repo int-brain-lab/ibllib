@@ -32,6 +32,7 @@ class TestExtractors2Tasks(unittest.TestCase):
             ("mock_ephys", "ephys"),
             ("sync_ephys", "ephys"),
             ("ephys", "ephys"),
+            ("ephys_passive_opto", "ephys_passive_opto")
         ]
         for typ, exp in pipe_out:
             assert ibllib.io.extractors.base._get_pipeline_from_task_type(typ) == exp
@@ -300,6 +301,22 @@ class TestPipesMisc(unittest.TestCase):
         one.alyx.rest("insertions", "delete", id=alyx_insertion[0]["id"])
         one.alyx.rest("insertions", "delete", id=alyx_insertion[1]["id"])
 
+    def test_probe_names_from_session_path(self):
+        pnames = ['probe01', 'probe03', 'just_a_probe']
+
+        with tempfile.TemporaryDirectory() as tdir:
+            session_path = Path(tdir).joinpath('Algernon', '2021-02-12', '001')
+            raw_ephys_path = session_path.joinpath('raw_ephys_data')
+            raw_ephys_path.mkdir(parents=True, exist_ok=True)
+            raw_ephys_path.joinpath("_spikeglx_ephysData_g0_t0.nidq.meta").touch()
+            for pname in pnames:
+                probe_path = raw_ephys_path.joinpath(pname)
+                probe_path.mkdir()
+                probe_path.joinpath('_spikeglx_ephysData_g0_t0.imec0.ap.meta').touch()
+                probe_path.joinpath('nested_folder').mkdir()
+                probe_path.joinpath('nested_folder', 'toto.ap.meta').touch()
+            assert set(misc.probe_labels_from_session_path(session_path)) == set(pnames)
+
     def test_rename_session(self):
         self._inputs = ('foo', '2020-02-02', '002')
         with mock.patch('builtins.input', self._input_side_effect):
@@ -385,6 +402,29 @@ class TestScanFixPassiveFiles(unittest.TestCase):
 
     def tearDown(self):
         self.tmp_dir.cleanup()
+
+
+class TestMultiPartsRecordings(unittest.TestCase):
+
+    def test_create_multiparts_flags(self):
+        meta_files = [
+            "001/raw_ephys_data/probe00/_spikeglx_ephysData_g0_t0.imec0.ap.meta",
+            "001/raw_ephys_data/probe01/_spikeglx_ephysData_g0_t0.imec1.ap.meta",
+            "003/raw_ephys_data/probe00/_spikeglx_ephysData_g2_t0.imec0.ap.meta",
+            "003/raw_ephys_data/probe01/_spikeglx_ephysData_g2_t0.imec1.ap.meta",
+            "002/raw_ephys_data/probe00/_spikeglx_ephysData_g1_t0.imec0.ap.meta",
+            "002/raw_ephys_data/probe01/_spikeglx_ephysData_g1_t0.imec1.ap.meta",
+            "004/raw_ephys_data/probe00/_spikeglx_ephysData_g3_t0.imec0.ap.meta",
+            "004/raw_ephys_data/probe01/_spikeglx_ephysData_g3_t0.imec1.ap.meta"]
+
+        with tempfile.TemporaryDirectory() as tdir:
+            root_path = Path(tdir).joinpath('Algernon', '2021-02-12')
+            for meta_file in meta_files:
+                root_path.joinpath(meta_file).parent.mkdir(parents=True)
+                root_path.joinpath(meta_file).touch()
+            recordings = misc.multi_parts_flags_creation(root_path)
+        assert len(recordings['probe00']) == 4
+        assert len(recordings['probe01']) == 4
 
 
 if __name__ == "__main__":

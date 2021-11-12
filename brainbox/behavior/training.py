@@ -1,12 +1,11 @@
-import logging
 from one.api import ONE
 import datetime
 import re
 import numpy as np
 from iblutil.util import Bunch
 import brainbox.behavior.pyschofit as psy
-
-logger = logging.getLogger('ibllib')
+import logging
+_logger = logging.getLogger('ibllib')
 
 
 def get_lab_training_status(lab, date=None, details=True, one=None):
@@ -110,7 +109,7 @@ def get_sessions(subj, date=None, one=None):
 
         # If still 0 sessions then return with warning
         if len(sessions) == 0:
-            logger.warning(f"No training sessions detected for {subj}")
+            _logger.warning(f"No training sessions detected for {subj}")
             return [None] * 4
 
     trials = Bunch()
@@ -274,30 +273,30 @@ def display_status(subj, sess_dates, status, perf_easy=None, n_trials=None, psyc
     """
 
     if perf_easy is None:
-        logger.info(f"\n{subj} : {status} \nSession dates=[{sess_dates[0]}, {sess_dates[1]}, "
-                    f"{sess_dates[2]}]")
+        print(f"\n{subj} : {status} \nSession dates=[{sess_dates[0]}, {sess_dates[1]}, "
+              f"{sess_dates[2]}]")
     elif psych_20 is None:
-        logger.info(f"\n{subj} : {status} \nSession dates={[x for x in sess_dates]}, "
-                    f"Perf easy={[np.around(pe,2) for pe in perf_easy]}, "
-                    f"N trials={[nt for nt in n_trials]} "
-                    f"\nPsych fit over last 3 sessions: "
-                    f"bias={np.around(psych[0],2)}, thres={np.around(psych[1],2)}, "
-                    f"lapse_low={np.around(psych[2],2)}, lapse_high={np.around(psych[3],2)} "
-                    f"\nMedian reaction time at 0 contrast over last 3 sessions = "
-                    f"{np.around(rt,2)}")
+        print(f"\n{subj} : {status} \nSession dates={[x for x in sess_dates]}, "
+              f"Perf easy={[np.around(pe,2) for pe in perf_easy]}, "
+              f"N trials={[nt for nt in n_trials]} "
+              f"\nPsych fit over last 3 sessions: "
+              f"bias={np.around(psych[0],2)}, thres={np.around(psych[1],2)}, "
+              f"lapse_low={np.around(psych[2],2)}, lapse_high={np.around(psych[3],2)} "
+              f"\nMedian reaction time at 0 contrast over last 3 sessions = "
+              f"{np.around(rt,2)}")
 
     else:
-        logger.info(f"\n{subj} : {status} \nSession dates={[x for x in sess_dates]}, "
-                    f"Perf easy={[np.around(pe,2) for pe in perf_easy]}, "
-                    f"N trials={[nt for nt in n_trials]} "
-                    f"\nPsych fit over last 3 sessions (20): "
-                    f"bias={np.around(psych_20[0],2)}, thres={np.around(psych_20[1],2)}, "
-                    f"lapse_low={np.around(psych_20[2],2)}, lapse_high={np.around(psych_20[3],2)} "
-                    f"\nPsych fit over last 3 sessions (80): bias={np.around(psych_80[0],2)}, "
-                    f"thres={np.around(psych_80[1],2)}, lapse_low={np.around(psych_80[2],2)}, "
-                    f"lapse_high={np.around(psych_80[3],2)} "
-                    f"\nMedian reaction time at 0 contrast over last 3 sessions = "
-                    f"{np.around(rt, 2)}")
+        print(f"\n{subj} : {status} \nSession dates={[x for x in sess_dates]}, "
+              f"Perf easy={[np.around(pe,2) for pe in perf_easy]}, "
+              f"N trials={[nt for nt in n_trials]} "
+              f"\nPsych fit over last 3 sessions (20): "
+              f"bias={np.around(psych_20[0],2)}, thres={np.around(psych_20[1],2)}, "
+              f"lapse_low={np.around(psych_20[2],2)}, lapse_high={np.around(psych_20[3],2)} "
+              f"\nPsych fit over last 3 sessions (80): bias={np.around(psych_80[0],2)}, "
+              f"thres={np.around(psych_80[1],2)}, lapse_low={np.around(psych_80[2],2)}, "
+              f"lapse_high={np.around(psych_80[3],2)} "
+              f"\nMedian reaction time at 0 contrast over last 3 sessions = "
+              f"{np.around(rt, 2)}")
 
 
 def concatenate_trials(trials):

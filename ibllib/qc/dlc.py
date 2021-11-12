@@ -14,6 +14,7 @@ import numpy as np
 
 from ibllib.qc import base
 import one.alf.io as alfio
+from one.alf.exceptions import ALFObjectNotFound
 from one.alf.spec import is_session_path
 from iblutil.util import Bunch
 
@@ -23,7 +24,6 @@ _log = logging.getLogger('ibllib')
 class DlcQC(base.QC):
     """A class for computing camera QC metrics"""
 
-    dstypes = ['camera.dlc', 'camera.times']
     bbox = {
         'body': {
             'xrange': range(201, 500),
@@ -42,16 +42,17 @@ class DlcQC(base.QC):
     def __init__(self, session_path_or_eid, side, **kwargs):
         """
         :param session_path_or_eid: A session eid or path
+        :param side: The camera to run QC on
         :param log: A logging.Logger instance, if None the 'ibllib' logger is used
         :param one: An ONE instance for fetching and setting the QC on Alyx
-        :param camera: The camera to run QC on, if None QC is run for all three cameras.
         """
+        # Make sure the type of camera is chosen
+        self.side = side
         # When an eid is provided, we will download the required data by default (if necessary)
         download_data = not is_session_path(session_path_or_eid)
         self.download_data = kwargs.pop('download_data', download_data)
         super().__init__(session_path_or_eid, **kwargs)
         self.data = Bunch()
-        self.side = side
 
         # QC outcomes map
         self.metrics = None
@@ -95,15 +96,18 @@ class DlcQC(base.QC):
         it an exception is raised.
         :return:
         """
-        assert self.one is not None, 'ONE required to download data'
-        for dstype in self.dstypes:
-            dataset = self.one.type2datasets(self.eid, dstype, details=True)
-            present = (
-                self.one._download_datasets(dataset)
-                if self.download_data
-                else (next(self.session_path.rglob(d), None) for d in dataset['rel_path'])
-            )
-            assert (not dataset.empty and all(present)), f'Dataset {dstype} not found'
+        # Check if data available locally
+        for ds in [f'_ibl_{self.side}Camera.dlc.*', f'_ibl_{self.side}Camera.times.*']:
+            if not next(self.session_path.rglob(ds), None):
+                # If download is allowed, try to download
+                if self.download_data is True:
+                    assert self.one is not None, 'ONE required to download data'
+                    try:
+                        self.one.load_dataset(self.eid, ds, download_only=True)
+                    except ALFObjectNotFound:
+                        raise AssertionError(f'Dataset {ds} not found locally and failed to download')
+                else:
+                    raise AssertionError(f'Dataset {ds} not found locally and download_data is False')
 
     def run(self, update: bool = False, **kwargs) -> (str, dict):
         """

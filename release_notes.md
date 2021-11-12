@@ -1,11 +1,51 @@
+### Develop
+- Setting tasks to Waiting if they encountered lock (status -2)
+- Setting tasks to Incomplete if they return status -3
+- Completed tasks set held dependent tasks to waiting
+
+## Release Notes 2.3
+### Release Notes 2.3.1 2021-11-08
+- Trial wheel extraction: use alternative sync method when first on fails
+- bugfix: timer for tasks was returning None
+
+### Release Notes 2.3.1 2021-11-5
+- Add setup method in tasks.py into try except to catch globus download errors
+
+### Release Notes 2.3.0 2021-11-4
+- Add input and output signatures to all ephys tasks
+- Add datahandler to task to download and upload data based on location where task is run
+- Spike sorting and EphysVideoSyncQc download data on local servers if not available
+- brainbox.io.one load_spike_sorting_fast: bugfix returns acronyms
+- creates sequence files for spikesorting
+- GPU tasks have a lock - local data handler doesn't instantiate one
+
+
+## Release Notes 2.2
+### Release Notes 2.2.1 2021-11-02
+- allows more than 2 probes in ephys computer probe creation
+
+### Release Notes 2.2.0 2021-10-29
+- brainbox.io.one load_spike_sorting fast: merge channel info in clusters
+- brainbox.io.one generic function to interpolate channels after alignment
+- dsp: spike detection by voltage thresholding and cadzow filtering docs
+- ibllib.io.spikeglx: get geometry from metadata
+- RawEphysQC outputs basic detection spike rates
+- ibllib.atlas.regions: add new mapping cosmos and revise Beryl
+
 ## Release Notes 2.1
 ### Release Notes 2.1.0 2021-10-05
 - destriping as pykilosort internal pre-processing 
 - NP2 probe framework for splitting shanks and LFP band
 - Extension of task module to rerun from different locations
-### Release Notes 2.1.0 2021-10-06
+### Release Notes 2.1.1 2021-10-06
 - RawEphysQC tasks computes median RMS from samples for .ap data (stored in _iblqc_ephysChannels.RMS)
 - New EphysQC class
+### Release Notes 2.1.2 2021-10-14
+- Fix issue with RawEphysQC that was not looking in local Subjects folder for data
+- Fix ensure_required_data in DlcQc
+### Release Notes 2.1.3 2021-10-19
+- Split jobs.py run function in two, one running large tasks (video compression, dlc, spike sorting), one the rest
+- Ensure RawEphysQC runs both probes if one fails
 
 ## Release Notes 2.0
 ### Release Notes 2.0.1 2021-08-07

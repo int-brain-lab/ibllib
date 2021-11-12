@@ -40,11 +40,13 @@ def reject_channels(x, fs, butt_kwargs=None, threshold=0.6, trx=1):
 def agc(x, wl=.5, si=.002, epsilon=1e-8):
     """
     Automatic gain control
+    w_agc, gain = agc(w, wl=.5, si=.002, epsilon=1e-8)
+    such as w_agc / gain = w
     :param x: seismic array (sample last dimension)
     :param wl: window length (secs)
     :param si: sampling interval (secs)
     :param epsilon: whitening (useful mainly for synthetic data)
-    :return:
+    :return: AGC data array, gain applied to data
     """
     ns_win = np.round(wl / si / 2) * 2 + 1
     w = np.hanning(ns_win)
@@ -204,13 +206,15 @@ def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, k_kwa
     x = scipy.signal.sosfiltfilt(sos, x)
     # apply ADC shift
     if neuropixel_version is not None:
-        x = fshift(x, h['sample_shift'], axis=1)
+        sample_shift = h['sample_shift'] if (30000 / fs) < 10 else h['sample_shift'] * fs / 30000
+        x = fshift(x, sample_shift, axis=1)
     # apply spatial filter on good channel selection only
     x_ = kfilt(x, **k_kwargs)
     return x_
 
 
-def decompress_destripe_cbin(sr, output_file=None, h=None, wrot=None, append=False, nc_out=None, ns2add=0):
+def decompress_destripe_cbin(sr, output_file=None, h=None, wrot=None, append=False, nc_out=None,
+                             dtype=np.int16, ns2add=0):
     """
     From a spikeglx Reader object, decompresses and apply ADC.
     Saves output as a flat binary file in int16
@@ -221,6 +225,7 @@ def decompress_destripe_cbin(sr, output_file=None, h=None, wrot=None, append=Fal
     :param wrot: (optional) whitening matrix [nc x nc] or amplitude scalar to apply to the output
     :param append: (optional, False) for chronic recordings, append to end of file
     :param nc_out: (optional, True) saves non selected channels (synchronisation trace) in output
+    :param dtype: (optional, np.int16) output sample format
     :param ns2add: (optional) for kilosort, adds padding samples at the end of the file so the total
     number of samples is a multiple of the batchsize
     :return:
@@ -280,14 +285,15 @@ def decompress_destripe_cbin(sr, output_file=None, h=None, wrot=None, append=Fal
             chunk = kfilt(chunk, **k_kwargs)
             # add back sync trace and save
             chunk = np.r_[chunk, sr[first_s:last_s, ncv:].T].T
-            chunk = chunk[slice(*ind2save), :] / sr.channel_conversion_sample2v['ap']
+            intnorm = 1 / sr.channel_conversion_sample2v['ap'] if dtype == np.int16 else 1.
+            chunk = chunk[slice(*ind2save), :] * intnorm
             if wrot is not None:
                 chunk[:, :ncv] = np.dot(chunk[:, :ncv], wrot)
-            chunk[:, :nc_out].astype(np.int16).tofile(fid)
+            chunk[:, :nc_out].astype(dtype).tofile(fid)
             first_s += NBATCH - SAMPLES_TAPER * 2
             pbar.update(NBATCH / sr.fs)
             if last_s == sr.ns:
                 if ns2add > 0:
-                    np.tile(chunk[-1, :nc_out].astype(np.int16), (ns2add, 1)).tofile(fid)
+                    np.tile(chunk[-1, :nc_out].astype(dtype), (ns2add, 1)).tofile(fid)
                 break
     pbar.close()
