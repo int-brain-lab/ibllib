@@ -214,8 +214,8 @@ def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, k_kwa
     return x_
 
 
-def decompress_destripe_cbin(sr, output_file=None, h=None, wrot=None, append=False, nc_out=None,
-                             dtype=np.int16, ns2add=0):
+def decompress_destripe_cbin_pyfft(sr, output_file=None, h=None, wrot=None, append=False, nc_out=None,
+                                   dtype=np.int16, ns2add=0):
     """
     From a spikeglx Reader object, decompresses and apply ADC.
     Saves output as a flat binary file in int16
@@ -300,8 +300,8 @@ def decompress_destripe_cbin(sr, output_file=None, h=None, wrot=None, append=Fal
     pbar.close()
 
 
-def decompress_destripe_parallel(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None,
-                                 dtype=np.int16, ns2add=0, nbatch=None, nprocesses=4):
+def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None,
+                             dtype=np.int16, ns2add=0, nbatch=None, nprocesses=8):
     """
     From a spikeglx Reader object, decompresses and apply ADC.
     Saves output as a flat binary file in int16
@@ -315,7 +315,8 @@ def decompress_destripe_parallel(sr_file, output_file=None, h=None, wrot=None, a
     :param dtype: (optional, np.int16) output sample format
     :param ns2add: (optional) for kilosort, adds padding samples at the end of the file so the total
     number of samples is a multiple of the batchsize
-    :param nprocesses: (optional) number of
+    :param nbatch: (optional) batch size
+    :param nprocesses: (optional) number of parallel processes to run
     :return:
     """
 
@@ -344,7 +345,7 @@ def decompress_destripe_parallel(sr_file, output_file=None, h=None, wrot=None, a
         offset = sr_out.ns * sr_out.nc * nbytes
     else:
         offset = 0
-        open(output_file, 'wb')
+        open(output_file, 'wb').close()
 
     # chunks to split the file into, dependent on number of parallel processes
     CHUNK_SIZE = int(sr.ns / nprocesses)
@@ -352,12 +353,12 @@ def decompress_destripe_parallel(sr_file, output_file=None, h=None, wrot=None, a
     def my_function(i_chunk, n_chunk):
         _sr = spikeglx.Reader(sr_file)
 
-        n_batch = int(np.ceil(i_chunk * CHUNK_SIZE/NBATCH))
+        n_batch = int(np.ceil(i_chunk * CHUNK_SIZE / NBATCH))
         first_s = (NBATCH - SAMPLES_TAPER * 2) * n_batch
 
         # Find the maximum sample for each chunk
         max_s = _sr.ns if i_chunk == n_chunk - 1 else (i_chunk + 1) * CHUNK_SIZE
-
+        pbar = tqdm(total=CHUNK_SIZE / _sr.fs)
         with open(output_file, 'r+b') as fid:
             if i_chunk == 0:
                 fid.seek(offset)
@@ -398,16 +399,13 @@ def decompress_destripe_parallel(sr_file, output_file=None, h=None, wrot=None, a
 
                 chunk[:, :nc_out].astype(np.int16).tofile(fid)
                 first_s += NBATCH - SAMPLES_TAPER * 2
-
+                pbar.update(NBATCH / _sr.fs)
                 if last_s >= max_s:
                     if last_s == _sr.ns:
                         if ns2add > 0:
                             np.tile(chunk[-1, :nc_out].astype(dtype), (ns2add, 1)).tofile(fid)
                     break
+        pbar.close()
 
-    import time as time
-    ts = time.time()
-    results = Parallel(n_jobs=nprocesses)(delayed(my_function)(i, nprocesses) for i in range(nprocesses))
-    print(time.time() - ts)
-
-
+    _ = Parallel(n_jobs=nprocesses)(delayed(my_function)(i, nprocesses) for i in range(nprocesses))
+    sr.close()
