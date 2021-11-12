@@ -301,7 +301,7 @@ def decompress_destripe_cbin_pyfft(sr, output_file=None, h=None, wrot=None, appe
 
 
 def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None,
-                             dtype=np.int16, ns2add=0, nbatch=None, nprocesses=1):
+                             dtype=np.int16, ns2add=0, nbatch=None, nprocesses=8):
     """
     From a spikeglx Reader object, decompresses and apply ADC.
     Saves output as a flat binary file in int16
@@ -363,7 +363,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
             if i_chunk == 0:
                 fid.seek(offset)
             else:
-                fid.seek(offset + ((first_s + SAMPLES_TAPER) * _sr.nc * nbytes))
+                fid.seek(offset + ((first_s + SAMPLES_TAPER) * nc_out * nbytes))
 
             while True:
                 last_s = np.minimum(NBATCH + first_s, _sr.ns)
