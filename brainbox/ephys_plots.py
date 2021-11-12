@@ -404,6 +404,8 @@ def plot_brain_regions(channel_ids, channel_depths=None, brain_regions=None, dis
     if display:
         if ax is None:
             fig, ax = plt.subplots()
+        else:
+            fig = ax.get_figure()
 
         for reg, col in zip(regions, region_colours):
             height = np.abs(reg[1] - reg[0])
