@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import scipy.signal
 from tqdm import tqdm
-from joblib import Parallel, delayed
+from joblib import Parallel, delayed, cpu_count
+
 
 from ibllib.io import spikeglx
 import ibllib.dsp.fourier as fdsp
@@ -235,6 +236,7 @@ def decompress_destripe_cbin_pyfft(sr, output_file=None, h=None, wrot=None, appe
 
     SAMPLES_TAPER = 128
     NBATCH = 65536
+
     # handles input parameters
     if isinstance(sr, str) or isinstance(sr, Path):
         sr = spikeglx.Reader(sr, open=True)
@@ -301,7 +303,7 @@ def decompress_destripe_cbin_pyfft(sr, output_file=None, h=None, wrot=None, appe
 
 
 def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None,
-                             dtype=np.int16, ns2add=0, nbatch=None, nprocesses=8):
+                             dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None):
     """
     From a spikeglx Reader object, decompresses and apply ADC.
     Saves output as a flat binary file in int16
@@ -316,7 +318,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     :param ns2add: (optional) for kilosort, adds padding samples at the end of the file so the total
     number of samples is a multiple of the batchsize
     :param nbatch: (optional) batch size
-    :param nprocesses: (optional) number of parallel processes to run
+    :param nprocesses: (optional) number of parallel processes to run, defaults to number or processes detected with joblib
     :return:
     """
 
@@ -338,6 +340,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     # compute LP filter coefficients
     sos = scipy.signal.butter(**butter_kwargs, output='sos')
     nbytes = dtype(1).nbytes
+    nprocesses = nprocesses or cpu_count()
 
     if append:
         # need to find the end of the file and the offset
@@ -390,6 +393,134 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
                     ind2save[1] = NBATCH
 
                 # add back sync trace and save
+                chunk = np.r_[chunk, _sr[first_s:last_s, ncv:].T].T
+                intnorm = 1 / _sr.channel_conversion_sample2v['ap'] if dtype == np.int16 else 1.
+                chunk = chunk[slice(*ind2save), :] * intnorm
+
+                if wrot is not None:
+                    chunk[:, :ncv] = np.dot(chunk[:, :ncv], wrot)
+
+                chunk[:, :nc_out].astype(np.int16).tofile(fid)
+                first_s += NBATCH - SAMPLES_TAPER * 2
+                pbar.update(NBATCH / _sr.fs)
+                if last_s >= max_s:
+                    if last_s == _sr.ns:
+                        if ns2add > 0:
+                            np.tile(chunk[-1, :nc_out].astype(dtype), (ns2add, 1)).tofile(fid)
+                    break
+        pbar.close()
+
+    _ = Parallel(n_jobs=nprocesses)(delayed(my_function)(i, nprocesses) for i in range(nprocesses))
+    sr.close()
+
+
+def decompress_destripe_cbin_pyfft_parallel(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None,
+                                            dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None):
+    """
+    From a spikeglx Reader object, decompresses and apply ADC.
+    Saves output as a flat binary file in int16
+    Production version with optimized FFTs - requires pyfftw
+    :param sr: seismic reader object (spikeglx.Reader)
+    :param output_file: (optional, defaults to .bin extension of the compressed bin file)
+    :param h: (optional)
+    :param wrot: (optional) whitening matrix [nc x nc] or amplitude scalar to apply to the output
+    :param append: (optional, False) for chronic recordings, append to end of file
+    :param nc_out: (optional, True) saves non selected channels (synchronisation trace) in output
+    :param dtype: (optional, np.int16) output sample format
+    :param ns2add: (optional) for kilosort, adds padding samples at the end of the file so the total
+    number of samples is a multiple of the batchsize
+    :param nbatch: (optional) batch size
+    :param nprocesses: (optional) number of parallel processes to run, defaults to number or processes detected with joblib
+    :return:
+    """
+    import pyfftw
+    SAMPLES_TAPER = 128
+    NBATCH = nbatch or 65536
+    # handles input parameters
+    assert isinstance(sr_file, str) or isinstance(sr_file, Path)
+    sr = spikeglx.Reader(sr_file, open=True)
+    butter_kwargs = {'N': 3, 'Wn': 300 / sr.fs / 2, 'btype': 'highpass'}
+    k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
+                'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
+    h = neuropixel.trace_header(version=1) if h is None else h
+    output_file = sr.file_bin.with_suffix('.bin') if output_file is None else output_file
+    assert output_file != sr.file_bin
+    taper = np.r_[0, scipy.signal.windows.cosine((SAMPLES_TAPER - 1) * 2), 0]
+    # create the FFT stencils
+    ncv = h['x'].size  # number of channels
+    nc_out = nc_out or sr.nc
+    # compute LP filter coefficients
+    sos = scipy.signal.butter(**butter_kwargs, output='sos')
+    nbytes = dtype(1).nbytes
+    nprocesses = nprocesses or cpu_count()
+
+    win = pyfftw.empty_aligned((ncv, NBATCH), dtype='float32')
+    WIN = pyfftw.empty_aligned((ncv, int(NBATCH / 2 + 1)), dtype='complex64')
+    fft_object = pyfftw.FFTW(win, WIN, axes=(1,), direction='FFTW_FORWARD', threads=4)
+    dephas = np.zeros((ncv, NBATCH), dtype=np.float32)
+    dephas[:, 1] = 1.
+    DEPHAS = np.exp(1j * np.angle(fft_object(dephas)) * h['sample_shift'][:, np.newaxis])
+
+    if append:
+        # need to find the end of the file and the offset
+        sr_out = spikeglx.Reader(output_file)
+        offset = sr_out.ns * sr_out.nc * nbytes
+    else:
+        offset = 0
+        open(output_file, 'wb').close()
+
+    # chunks to split the file into, dependent on number of parallel processes
+    CHUNK_SIZE = int(sr.ns / nprocesses)
+
+    def my_function(i_chunk, n_chunk):
+        _sr = spikeglx.Reader(sr_file)
+
+        n_batch = int(np.ceil(i_chunk * CHUNK_SIZE / NBATCH))
+        first_s = (NBATCH - SAMPLES_TAPER * 2) * n_batch
+
+        # Find the maximum sample for each chunk
+        max_s = _sr.ns if i_chunk == n_chunk - 1 else (i_chunk + 1) * CHUNK_SIZE
+        pbar = tqdm(total=CHUNK_SIZE / _sr.fs)
+
+        win = pyfftw.empty_aligned((ncv, NBATCH), dtype='float32')
+        WIN = pyfftw.empty_aligned((ncv, int(NBATCH / 2 + 1)), dtype='complex64')
+        fft_object = pyfftw.FFTW(win, WIN, axes=(1,), direction='FFTW_FORWARD', threads=4)
+        ifft_object = pyfftw.FFTW(WIN, win, axes=(1,), direction='FFTW_BACKWARD', threads=4)
+
+        with open(output_file, 'r+b') as fid:
+            if i_chunk == 0:
+                fid.seek(offset)
+            else:
+                fid.seek(offset + ((first_s + SAMPLES_TAPER) * nc_out * nbytes))
+
+            while True:
+                last_s = np.minimum(NBATCH + first_s, _sr.ns)
+
+                # Apply tapers
+                chunk = _sr[first_s:last_s, :ncv].T
+                chunk[:, :SAMPLES_TAPER] *= taper[:SAMPLES_TAPER]
+                chunk[:, -SAMPLES_TAPER:] *= taper[SAMPLES_TAPER:]
+
+                # Apply filters
+                chunk = scipy.signal.sosfiltfilt(sos, chunk)
+
+                # Find the indices to save
+                ind2save = [SAMPLES_TAPER, NBATCH - SAMPLES_TAPER]
+
+                if last_s == _sr.ns:
+                    # for the last batch just use the normal fft as the stencil doesn't fit
+                    chunk = fshift(chunk, s=h['sample_shift'])
+                    ind2save[1] = NBATCH
+                else:
+                    # apply precomputed fshift of the proper length
+                    chunk = ifft_object(fft_object(chunk) * DEPHAS)
+
+                if first_s == 0:
+                    # for the first batch save the start with taper applied
+                    ind2save[0] = 0
+
+                # add back sync trace and save
+                chunk = kfilt(chunk, **k_kwargs)
                 chunk = np.r_[chunk, _sr[first_s:last_s, ncv:].T].T
                 intnorm = 1 / _sr.channel_conversion_sample2v['ap'] if dtype == np.int16 else 1.
                 chunk = chunk[slice(*ind2save), :] * intnorm
