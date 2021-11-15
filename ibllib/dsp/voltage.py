@@ -402,7 +402,6 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
                 pbar.update(NBATCH / _sr.fs)
                 if last_s >= max_s:
                     if last_s == _sr.ns:
-                        print('ima here at the very end')
                         if ns2add > 0:
                             np.tile(chunk[-1, :nc_out].astype(dtype), (ns2add, 1)).tofile(fid)
                     break
