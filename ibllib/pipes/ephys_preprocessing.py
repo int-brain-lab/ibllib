@@ -5,6 +5,7 @@ import subprocess
 from collections import OrderedDict
 import traceback
 from pathlib import Path
+import packaging.version
 
 import numpy as np
 import pandas as pd
@@ -245,6 +246,14 @@ class SpikeSorting(tasks.Task):
         return f"pykilosort_{version}"
 
     @staticmethod
+    def _fetch_pykilosort_run_version(log_file):
+        with open(log_file) as fid:
+            line = fid.readline()
+        version = re.search('version (.*), output', line).group(1)
+
+        return f"pykilosort_{version}"
+
+    @staticmethod
     def _fetch_ks2_commit_hash(repo_path):
         command2run = f"git --git-dir {repo_path}/.git rev-parse --verify HEAD"
         process = subprocess.Popen(
@@ -284,10 +293,13 @@ class SpikeSorting(tasks.Task):
         sorter_dir = self.session_path.joinpath("spike_sorters", self.SPIKE_SORTER_NAME, label)
         FORCE_RERUN = False
         if not FORCE_RERUN:
-            if sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log").exists():
-                _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
-                             f" found in {sorter_dir}, skipping.")
-                return sorter_dir
+            log_file = sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
+            if log_file.exists():
+                run_version = self._fetch_pykilosort_run_version(log_file)
+                if packaging.version.parse(run_version) >= packaging.version.parse('pykilosort_ibl_1.1.0'):
+                    _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
+                                 f" found in {sorter_dir}, skipping.")
+                    return sorter_dir
         print(sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log"))
         # get the scratch drive from the shell script
         with open(self.SHELL_SCRIPT) as fid:

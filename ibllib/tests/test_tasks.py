@@ -37,9 +37,9 @@ desired_logs = 'Running on machine: testmachine'
 desired_logs_rerun = {
     'Task00': 1,
     'Task01_void': 2,
-    'Task02_error': 2,
+    'Task02_error': 1,
     'Task10': 1,
-    'Task11': None,
+    'Task11': 1,
     'TaskIncomplete': 1,
     'TaskGpuLock': 2
 }
@@ -63,12 +63,17 @@ class Task01_void(ibllib.pipes.tasks.Task):
         return out_files
 
 
-# job that raises an error
+# job that raises an error on first run
 class Task02_error(ibllib.pipes.tasks.Task):
-    level = 0
+    run_count = 0
 
     def _run(self, overwrite=False):
-        raise Exception("Something dumb happened")
+        Task02_error.run_count += 1
+        if Task02_error.run_count == 1:
+            raise Exception('Something dumb happened')
+        out_files = self.session_path.joinpath('alf', 'spikes.templates.npy')
+        out_files.touch()
+        return out_files
 
 
 # job that outputs a list of files
@@ -127,6 +132,7 @@ class SomePipeline(ibllib.pipes.tasks.Pipeline):
         tasks['TaskGpuLock'] = TaskGpuLock(self.session_path)
         tasks['TaskIncomplete'] = TaskIncomplete(self.session_path)
         tasks['Task10'] = Task10(self.session_path, parents=[tasks['Task00']])
+        # When both its parents Complete, this task should be set to Waiting and should finally complete
         tasks['Task11'] = Task11(self.session_path, parents=[tasks['Task02_error'],
                                                              tasks['Task00']])
         self.tasks = tasks
@@ -197,8 +203,11 @@ class TestPipelineAlyx(unittest.TestCase):
 
         # test the rerun option
         task_deck, dsets = pipeline.rerun_failed(machine='testmachine')
-        check_statuses = [desired_statuses[t['name']] == t['status'] for t in task_deck]
-        self.assertTrue(all(check_statuses))
+        task_02 = next(t for t in task_deck if t['name'] == 'Task02_error')
+        self.assertEqual('Complete', task_02['status'])
+        dep_task = next(x for x in task_deck if task_02['id'] in x['parents'])
+        assert dep_task['name'] == 'Task11'
+        self.assertEqual('Complete', dep_task['status'], 'Failed to set dependent task from "Held" to "Waiting"')
 
         # check that logs were correctly overwritten
         check_logs = [t['log'].count(desired_logs) == 1 if t['log'] else True for t in task_deck]
