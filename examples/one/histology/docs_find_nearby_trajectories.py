@@ -15,7 +15,6 @@ import ibllib.pipes.histology as histology
 import ibllib.atlas as atlas
 from atlaselectrophysiology import rendering
 
-mlab.init_notebook()
 # Instantiate brain atlas and one
 brain_atlas = atlas.AllenAtlas(25)
 one = ONE(base_url='https://openalyx.internationalbrainlab.org')
