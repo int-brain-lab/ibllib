@@ -12,9 +12,11 @@ import matplotlib.pyplot as plt
 import scipy.interpolate as interpolate
 
 from one.api import ONE
-import ibllib.io.video as vidio
+from one.alf.exceptions import ALFObjectNotFound
+from ibllib.io.video import get_video_frame, url_from_eid
 from ibllib.dsp.smooth import smooth_interpolate_savgol
 import brainbox.behavior.wheel as bbox_wheel
+from brainbox.processing import bincount2D
 
 logger = logging.getLogger('ibllib')
 
@@ -25,10 +27,21 @@ RESOLUTION = {'left': 2,
               'right': 1,
               'body': 1}
 
-T_BIN = 0.02
-WINDOW_LEN = 2 # rt
-WINDOW_LAG = -0.5 # st
+T_BIN = 0.02 # sec
+WINDOW_LEN = 2 # sec
+WINDOW_LAG = -0.5 # sec
 
+# For plotting we use a window around the event the data is aligned to WINDOW_LAG before and WINDOW_LEN after the event
+plt_window = lambda x: (x+WINDOW_LAG, x+WINDOW_LEN)
+
+def insert_idx(array, values):
+    idx = np.searchsorted(array, values, side="left")
+    # Choose lower index if insertion would be after last index or if lower index is closer
+    idx[idx == len(array)] -= 1
+    idx[np.where(abs(values - array[idx - 1]) < abs(values - array[idx]))] -= 1
+    # If 0 index was reduced, revert
+    idx[idx == -1] = 0
+    return idx
 
 def likelihood_threshold(dlc, threshold=0.9):
     """
@@ -226,52 +239,36 @@ def get_smooth_pupil_diameter(diameter_raw, camera, std_thresh=5, nan_thresh=1):
     return diameter_smoothed
 
 
-def trial_event_times(eid, event_type='goCue_times', one=None):
+def get_trial_info(trials):
     """
-    For each trial get timing of event_type, contrast, side of contrast, choice and feedbackType
+    Extract relevant information from trials and clean up a bit
 
-    :param eid: string, session ID
-    :param event_type: string, type of event to extract timing for ('goCue_times', 'feedback_times', 'wheelMoves')
-    :param one: ONE instance, if none is passed, defaults to instantiating ONE()
+    :param trials: dict, ALF trials object
+    :returns: dataframe with relevant, digested trials info
     """
-    one = one or ONE()
-    trials = one.load_object(eid, 'trials')
-    if event_type == 'wheelMoves':
-        wheel_moves = one.load_object(eid, event_type)['intervals'][:, 0]
-    # dictionary, trial number and still interval
-    d = dict()
-    events = ['goCue_times', 'feedback_times', 'choice', 'feedbackType']
-    for trial in range(len(trials['intervals'])):
-        # discard nan events
-        if any(np.isnan([trials[k][trial] for k in events])):
-            continue
-        # discard too long trials
-        if (trials['feedback_times'][trial] - trials['goCue_times'][trial]) > 10:
-            continue
-
-        contrast, side = trials['contrastLeft'][trial], 1
-        if np.isnan(contrast):
-            contrast, side = trials['contrastRight'][trial], 0
-
-        if event_type == 'wheelMoves':
-            # make sure the motion onset time is in a coupled interval
-            coupled = (wheel_moves > trials['goCue_times'][trial]) & (wheel_moves < trials['feedback_times'][trial])
-            if not any(coupled):
-                continue
-            d[trial] = [wheel_moves[coupled][0], contrast, side, trials['choice'][trial], trials['feedbackType'][trial]]
-        else:
-            d[trial] = [trials[event_type][trial], contrast, side, trials['choice'][trial], trials['feedbackType'][trial]]
-    return d
+    trials_df = pd.DataFrame({k: trials[k] for k in ['stimOn_times', 'feedback_times', 'choice', 'feedbackType']})
+    # Translate choice and feedback type
+    trials_df.loc[trials_df['choice'] == 1, 'choice'] = 'left'
+    trials_df.loc[trials_df['choice'] == -1, 'choice'] = 'right'
+    trials_df.loc[trials_df['feedbackType'] == -1, 'feedbackType'] = 'incorrect'
+    trials_df.loc[trials_df['feedbackType'] == 1, 'feedbackType'] = 'correct'
+    # Discard nan events
+    trials_df = trials_df.dropna()
+    # Discard too long trials
+    idcs = trials_df[(trials_df['feedback_times'] - trials_df['stimOn_times']) > 10].index
+    trials_df = trials_df.drop(idcs)
+    return trials_df
 
 
-def plot_trace_on_frame(eid, cam, one=None):
+def plot_trace_on_frame(frame, dlc_df, cam):
     """
     Plots dlc traces as scatter plots on a frame of the video.
     For left and right video also plots whisker pad and eye and tongue zoom.
 
-    :param eid: string, session ID
+    :param frame: frame to plot on
+    :param dlc_df: thresholded dlc dataframe
     :param cam: string, which camera to process ('left', 'right', 'body')
-    :param one: ONE instance, if none is passed, defaults to instantiating ONE()
+    :returns: matplolib axis
     """
     # Define colors
     colors = {'tail_start': '#636EFA',
@@ -285,15 +282,6 @@ def plot_trace_on_frame(eid, cam, one=None):
               'tongue_end_l': '#B6E880',
               'tongue_end_r': '#FF97FF'}
 
-    one = one or ONE()
-    # Load a single image to plot traces on
-    url = vidio.url_from_eid(eid, one=one)[cam]
-    frame_idx = [5 * 60 * SAMPLING[cam]]
-    frame = np.squeeze(vidio.get_video_frames_preload(url, frame_idx, mask=np.s_[:, :, 0], quiet=True))
-    # Load dlc trace
-    dlc_df = one.load_dataset(eid, f'_ibl_{cam}Camera.dlc.pqt')
-    # Threshold traces
-    dlc_df = likelihood_threshold(dlc_df)
     # Features without tube
     features = np.unique(['_'.join(x.split('_')[:-1]) for x in dlc_df.keys() if 'tube' not in x])
     # Normalize the number of points across cameras
@@ -318,11 +306,9 @@ def plot_trace_on_frame(eid, cam, one=None):
     p_pupil = np.array(dlc_df[['pupil_top_r_x', 'pupil_top_r_y']].mean())
     p_anchor = np.mean([p_nose, p_pupil], axis=0)
     dist = np.linalg.norm(p_nose - p_pupil)
-
     rect = matplotlib.patches.Rectangle((int(p_anchor[0] - dist/4), int(p_anchor[1])), int(dist/2), int(dist/3),
                                         linewidth=1, edgecolor='lime', facecolor='none')
     ax.add_patch(rect)
-
     # Plot eye region zoom
     inset_anchor = 0 if cam == 'right' else 0.5
     ax_ins = ax.inset_axes([inset_anchor, -0.5, 0.5, 0.5])
@@ -332,7 +318,6 @@ def plot_trace_on_frame(eid, cam, one=None):
     ax_ins.set_xlim(int(p_pupil[0] - 33 * RESOLUTION[cam] / 2), int(p_pupil[0] + 33 * RESOLUTION[cam] / 2))
     ax_ins.set_ylim(int(p_pupil[1] + 38 * RESOLUTION[cam] / 2), int(p_pupil[1] - 28 * RESOLUTION[cam] / 2))
     ax_ins.axis('off')
-
     # Plot tongue region zoom
     p1 = np.array(dlc_df[['tube_top_x', 'tube_top_y']].mean())
     p2 = np.array(dlc_df[['tube_bottom_x', 'tube_bottom_y']].mean())
@@ -342,7 +327,6 @@ def plot_trace_on_frame(eid, cam, one=None):
     ax_ins.imshow(frame, cmap='gray', origin="upper")
     for feat in features:
         ax_ins.scatter(dlc_df_norm[f'{feat}_x'], dlc_df_norm[f'{feat}_y'], alpha=1, s=0.001, label=feat, c=colors[feat])
-
     ax_ins.set_xlim(int(p_tongue[0] - 60 * RESOLUTION[cam] / 2), int(p_tongue[0] + 100 * RESOLUTION[cam] / 2))
     ax_ins.set_ylim(int(p_tongue[1] + 60 * RESOLUTION[cam] / 2), int(p_tongue[1] - 100 * RESOLUTION[cam] / 2))
     ax_ins.axis('off')
@@ -351,43 +335,30 @@ def plot_trace_on_frame(eid, cam, one=None):
     return ax
 
 
-def _find_idx(array, value):
-    idx = np.searchsorted(array, value, side="left")
-    if idx > 0 and (idx == len(array) or abs(value - array[idx-1]) < abs(value - array[idx])):
-        return idx-1
-    return idx
-
-
-def plot_wheel_position(eid, one=None):
+def plot_wheel_position(wheel_position, wheel_time, trials_df):
     """
-    Plot wheel position across trials, color by choice
-    :param eid: string, session ID
+    Plots wheel position across trials, color by which side was chosen
+
+    :param wheel_position: Interpolated wheel position
+    :param wheel_time: Interpolated wheel timestamps
+    :param trials_df: Dataframe with trials info
+    :return: matplotlib axis
     """
-    one = one or ONE()
-
-    go_cues = trial_event_times(eid)
-    wheel = one.load_object(eid, 'wheel')
-    position, time = bbox_wheel.interpolate_position(wheel.timestamps, wheel.position, freq=1/T_BIN)
-
-    plot_dict = {'wheel_left': [], 'wheel_right': []}
-    for trial in go_cues.keys():
-        start_idx = _find_idx(time, go_cues[trial][0] + WINDOW_LAG)
-        wheel_pos = position[start_idx:(start_idx + int(WINDOW_LEN / T_BIN))]
-        wheel_pos -= wheel_pos[0]
-
-        if go_cues[trial][3] == -1:
-            plot_dict['wheel_left'].append(wheel_pos)
-        elif go_cues[trial][3] == 1:
-            plot_dict['wheel_right'].append(wheel_pos)
-
-    xs = np.arange(len(plot_dict['wheel_left'][0])) * T_BIN
-    times = np.concatenate([-np.array(list(reversed(xs[:int(len(xs) * abs(WINDOW_LAG / WINDOW_LEN))]))),
-                            np.array(xs[:int(len(xs) * (1 - abs(WINDOW_LAG / WINDOW_LEN)))])])
-
+    # Create a window around the stimulus onset
+    start_window, end_window = plt_window(trials_df['stimOn_times'])
+    # Translating the time window into an index window
+    start_idx = insert_idx(wheel_time, start_window)
+    end_idx = np.array(start_idx + int(WINDOW_LEN / T_BIN), dtype='int64')
+    # Getting the wheel position for each window, normalize to first value of each window
+    trials_df['wheel_position'] = [wheel_position[start_idx[w] : end_idx[w]] - wheel_position[start_idx[w]]
+                                   for w in range(len(start_idx))]
+    # Plotting
+    times = np.arange(len(trials_df['wheel_position'][0])) * T_BIN + WINDOW_LAG
     for side, color in zip(['left', 'right'], ['#1f77b4', 'darkred']):
-        for trajectory in plot_dict[f'wheel_{side}']:
-            plt.plot(times, trajectory, c=color, alpha=0.5, linewidth=0.05)
-        plt.plot(times, np.mean(plot_dict[f'wheel_{side}'], axis=0), c=color, linewidth=2, label=side)
+        side_df = trials_df[trials_df['choice'] == side]
+        for idx in side_df.index:
+            plt.plot(times, side_df.loc[idx, 'wheel_position'], c=color, alpha=0.5, linewidth=0.05)
+        plt.plot(times, side_df['wheel_position'].mean(), c=color, linewidth=2, label=side)
 
     plt.axhline(y=-0.26, linestyle='--', c='k', label='reward boundary')
     plt.axvline(x=0, linestyle='--', c='g', label='stimOn')
@@ -401,74 +372,178 @@ def plot_wheel_position(eid, one=None):
     return plt.gca()
 
 
-def plot_paw_speed(eid, one=None):
+def _bin_window_licks(lick_times, trials_df):
+    """
+    Helper function to bin and window the lick times and get them into trials df for plotting
 
-    one = one or ONE()
-    # fs = {'right': 150, 'left': 60}
-    line_specs = {'left': {'1': ['darkred', '--'], '-1': ['#1f77b4', '--']},
-                  'right': {'1': ['darkred', '-'], '-1': ['#1f77b4', '-']}}
+    :param lick_times: licks.times loaded into numpy array
+    :param trials_df: dataframe with info about trials
+    :returns: dataframe with binned, windowed lick times for plotting
+    """
+    # Bin the licks
+    lick_bins, bin_times, _ = bincount2D(lick_times, np.ones(len(lick_times)), T_BIN)
+    lick_bins = np.squeeze(lick_bins)
+    start_window, end_window = plt_window(trials_df['feedback_times'])
+    # Translating the time window into an index window
+    start_idx = insert_idx(bin_times, start_window)
+    end_idx = np.array(start_idx + int(WINDOW_LEN / T_BIN), dtype='int64')
+    # Get the binned licks for each window
+    trials_df['lick_bins'] = [lick_bins[start_idx[l]:end_idx[l]] for l in range(len(start_idx))]
+    # Remove windows that the exceed bins
+    trials_df['end_idx'] = end_idx
+    trials_df = trials_df[trials_df['end_idx'] <= len(lick_bins)]
+    return trials_df
 
-    go_cues = trial_event_times(eid)
 
-    sc = {'left': {'1': [], '-1': []}, 'right': {'1': [], '-1': []}}
-    for cam in ['right', 'left']:
-        dlc = one.load_dataset(eid, f'_ibl_{cam}Camera.dlc.pqt')
-        dlc = likelihood_threshold(dlc)
-        dlc_t = one.load_dataset(eid, f'_ibl_{cam}Camera.times.npy')
-        # take speed from right paw only, i.e. closer to cam
-        speeds = get_speed(dlc, dlc_t, feature='paw_r')
-        for trial in go_cues:
-            start_idx = _find_idx(dlc_t, go_cues[trial][0] + WINDOW_LAG)
-            end_idx = _find_idx(dlc_t, go_cues[trial][0] + WINDOW_LAG + WINDOW_LEN)
-            sc[cam][str(go_cues[trial][3])].append(speeds[start_idx:end_idx])
-        # trim on e frame if necessary
-        for choice in ['-1', '1']:
-            m = min([len(x) for x in sc[cam][choice]])
-            q = [x[:m] for x in sc[cam][choice]]
-            xs = np.arange(m) / SAMPLING[cam]
-            xs = np.concatenate([
-                -1 * np.array(list(reversed(xs[:int(abs(WINDOW_LAG) * SAMPLING[cam])]))),
-                np.array(xs[:int((WINDOW_LEN - abs(WINDOW_LAG)) * SAMPLING[cam])])])
-            m = min(len(xs), m)
+def plot_lick_psth(lick_times, trials_df):
+    """
+    Peristimulus histogram and licks raster of licks as estimated from dlc traces
 
-            c = line_specs[cam][choice][0]
-            ls = line_specs[cam][choice][1]
-
-            qm = np.nanmean(q, axis=0)
-            plt.plot(xs[:m], qm[:m], c=c, linestyle=ls,
-                     linewidth=1,
-                     label=f'paw {cam[0]},' + ' choice ' + choice)
-
-    ax = plt.gca()
-    ax.axvline(x=0, label='stimOn', linestyle='--', c='g')
-    plt.title('paw speed PSTH')
+    :param lick_times: licks.times loaded into numpy array
+    :param trials_df: dataframe with info about trials
+    :returns: matplotlib axis
+    """
+    licks_df = _bin_window_licks(lick_times, trials_df)
+    # Plot
+    times = np.arange(len(licks_df['lick_bins'][0])) * T_BIN + WINDOW_LAG
+    plt.plot(times, licks_df[licks_df['feedbackType']=='correct']['lick_bins'].mean(), c='k', label='correct trial')
+    plt.plot(times, licks_df[licks_df['feedbackType']=='incorrect']['lick_bins'].mean(), c='gray', label='incorrect trial')
+    plt.axvline(x=0, label='feedback time', linestyle='--', c='r')
+    plt.title('licks')
     plt.xlabel('time [sec]')
-    plt.ylabel('speed [px/sec]')
-    plt.legend()  # bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.ylabel('lick events \n [a.u.]')
+    plt.legend(loc='lower right')
+    return plt.gca()
 
 
-def dlc_qc_plot(eid, one=None, dlc_df=None):
+def plot_lick_raster(lick_times, trials_df):
+    """
+    Lick raster for correct licks
+
+    :param lick_times: licks.times loaded into numpy array
+    :param trials_df: dataframe with info about trials
+    :returns: matplotlib axis
+    """
+    licks_df = _bin_window_licks(lick_times, trials_df)
+    plt.imshow(list(licks_df[licks_df['feedbackType']=='correct']['lick_bins']), aspect='auto',
+               extent=[-0.5, 1.5, len(licks_df['lick_bins'][0]), 0], cmap='gray_r')
+    plt.xticks([-0.5, 0, 0.5, 1, 1.5])
+    plt.ylabel('trials')
+    plt.xlabel('time [sec]')
+    plt.axvline(x=0, label='feedback time', linestyle='--', c='r')
+    plt.title('lick events per correct trial')
+    plt.tight_layout()
+    return plt.gca()
+
+
+# def plot_speed_psth(eid, feature='paw_r', align_to='goCue_times', cam='left', one=None):
+#     """
+#     Peristimulus histogramm of different dlc features
+#     :param eid:
+#     :param one:
+#     """
+#
+#     one = one or ONE()
+#     aligned_trials = align_trials_to_event(eid, align_to=align_to)
+#     dlc = one.load_dataset(eid, f'_ibl_{cam}Camera.dlc.pqt')
+#     dlc = likelihood_threshold(dlc)
+#     dlc_t = one.load_dataset(eid, f'_ibl_{cam}Camera.times.npy')
+#     speeds = get_speed(dlc, dlc_t, camera=cam, feature=feature)
+#
+#     speeds_sorted = {'correct': [], 'incorrect': []}
+#     for trial in aligned_trials:
+#         start_idx = _find_idx(dlc_t, aligned_trials[trial][0] + WINDOW_LAG)
+#         end_idx = _find_idx(dlc_t, aligned_trials[trial][0] + WINDOW_LAG + WINDOW_LEN)
+#         if aligned_trials[trial][3] == 1:
+#             speeds_sorted['correct'].append(speeds[start_idx:end_idx])
+#         elif aligned_trials[trial][3] == -1:
+#             speeds_sorted['incorrect'].append(speeds[start_idx:end_idx])
+#     # trim on e frame if necessary
+#     for color, choice in zip(['k', 'gray'], ['correct', 'incorrect']):
+#         m = min([len(x) for x in speeds_sorted[choice]])
+#         q = [x[:m] for x in speeds_sorted[choice]]
+#         xs = np.arange(m) / SAMPLING[cam]
+#         xs = np.concatenate([-np.array(list(reversed(xs[:int(abs(WINDOW_LAG) * SAMPLING[cam])]))),
+#                              np.array(xs[:int((WINDOW_LEN - abs(WINDOW_LAG)) * SAMPLING[cam])])])
+#         m = min(len(xs), m)
+#         qm = np.nanmean(q, axis=0)
+#         plt.plot(xs[:m], qm[:m], c=color, linestyle='-', linewidth=1, label=choice)
+#     plt.axvline(x=0, label=f'{align_to}', linestyle='--', c='g')
+#     plt.title(f'{feature.split("_")[0].capitalize()} speed PSTH')
+#     plt.xlabel('time [sec]')
+#     plt.ylabel('speed [px/sec]')
+#     plt.legend()  # bbox_to_anchor=(1.05, 1), loc='upper left')
+
+
+def dlc_qc_plot(eid, one=None, cams=('left', 'right', 'body')):
 
     one = one or ONE()
-    panels = [(plot_trace_on_frame, {'eid': eid, 'cam': 'left', 'one': one}),
-              (plot_trace_on_frame, {'eid': eid, 'cam': 'right', 'one': one}),
-              (plot_trace_on_frame, {'eid': eid, 'cam': 'body', 'one': one}),
-              (plot_wheel_position, {'eid': eid, 'one': one})]
 
+    ''' Data loading '''
+    dlc_traces = dict()
+    video_frames = dict()
+    for cam in cams:
+        # Load and threshold the dlc traces
+        dlc_traces[cam] = likelihood_threshold(one.load_dataset(eid, f'_ibl_{cam}Camera.dlc.pqt'))
+        # Load a single frame for each video, first check if data is local, otherwise stream
+        video_path = one.eid2path(eid).joinpath('raw_video_data', f'_iblrig_{cam}Camera.raw.mp4')
+        if not video_path.exists():
+            video_path = url_from_eid(eid, one=one)[cam]
+        try:
+            video_frames[cam] = get_video_frame(video_path, frame_number=5 * 60 * SAMPLING[cam])[:, :, 0]
+        except TypeError:
+            logger.warning(f"Could not load video frame for {cam} camera, some DLC QC plots have to be skipped.")
+            video_frames[cam] = None
+    # Load and extract trial info
+    try:
+        trials_df = get_trial_info(one.load_object(eid, 'trials'))
+    except ALFObjectNotFound:
+        logger.warning(f"Could not load trials object for session {eid}, some DLC QC plots have to be skipped.")
+        trials_df = None
+    # Load wheel data
+    try:
+        wheel_obj = one.load_object(eid, 'wheel')
+        wheel_position, wheel_time = bbox_wheel.interpolate_position(wheel_obj.timestamps, wheel_obj.position,
+                                                                     freq=1 / T_BIN)
+    except ALFObjectNotFound:
+        logger.warning(f"Could not load wheel object for session {eid}, some DLC QC plots have to be skipped.")
+        wheel_position, wheel_time = None, None
+    # Load lick data
+    try:
+        lick_times = one.load_dataset(eid, 'licks.times.npy')
+    except ALFObjectNotFound:
+        logger.warning(f"Could not load lick times for session {eid}, some DLC QC plots have to be skipped.")
+        lick_times = None
+
+    '''Create the list of panels'''
+    panels = []
+    for cam in cams:
+        panels.append((plot_trace_on_frame, {'frame': video_frames[cam], 'dlc_df': dlc_traces[cam], 'cam': cam}))
+    panels.append((plot_wheel_position,
+                   {'wheel_position': wheel_position, 'wheel_time': wheel_time, 'trials_df': trials_df}))
+    # Motion energy
+    panels.append((plot_lick_psth, {'lick_times': lick_times, 'trials_df': trials_df}))
+    panels.append((plot_lick_raster, {'lick_times': lick_times, 'trials_df': trials_df}))
+
+    ''' Plotting'''
     matplotlib.rcParams.update({'font.size': 10})
     fig = plt.figure(figsize=(17, 10))
-
     for i, panel in enumerate(panels):
-        plt.subplot(2, 5, i+1)
+        plt.subplot(2, 5, i + 1)
         ax = plt.gca()
         ax.text(-0.1, 1.15, string.ascii_uppercase[i], transform=ax.transAxes,
                 fontsize=16, fontweight='bold', va='top', ha='right')
-        # try:
-        panel[0](**panel[1])
-            # continue
-        # except BaseException:
-        #     plt.text(.5, .5, f'error in \n {panel}', color='r', fontweight='bold',
-        #              bbox=dict(facecolor='white', alpha=0.5), fontsize=10, transform=ax.transAxes)
+        # Check if any of the inputs is None
+        if any([v is None for v in panel[1].values()]):
+            ax.text(.5, .5, f'Data incomplete for \n {panel[0]}', color='r', fontweight='bold',
+                    bbox=dict(facecolor='white', alpha=0.5), fontsize=10, transform=ax.transAxes)
+        else:
+            # Run the function to plot
+            try:
+                panel[0](**panel[1])
+            except BaseException:
+                ax.text(.5, .5, f'Error in \n{panel[0]}', color='r', fontweight='bold',
+                         bbox=dict(facecolor='white', alpha=0.5), fontsize=10, transform=ax.transAxes)
     plt.tight_layout()
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
