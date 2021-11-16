@@ -425,7 +425,7 @@ def plot_brain_regions(channel_ids, channel_depths=None, brain_regions=None, dis
 
 
 def plot_cdf(spike_amps, spike_depths, spike_times, n_amp_bins=10, d_bin=40, amp_range=None, d_range=None,
-             display=False, cmap='hot'):
+             display=False, cmap='hot', ax=None):
     """
     Plot cumulative amplitude of spikes across depth
     :param spike_amps:
@@ -468,7 +468,7 @@ def plot_cdf(spike_amps, spike_depths, spike_times, n_amp_bins=10, d_bin=40, amp
                     ylabel='Distance from probe tip (um)', clabel='Firing Rate (Hz)')
 
     if display:
-        fig, ax = plot_image(data.convert2dict(), fig_kwargs={'figsize': [3, 7]})
+        fig, ax = plot_image(data.convert2dict(), fig_kwargs={'figsize': [3, 7]}, ax=ax)
         return data.convert2dict(), fig, ax
 
     return data
