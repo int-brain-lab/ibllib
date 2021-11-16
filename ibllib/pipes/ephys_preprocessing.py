@@ -22,7 +22,9 @@ from ibllib.pipes.misc import create_alyx_probe_insertions
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
+from ibllib.qc.dlc import DlcQC
 from ibllib.dsp import rms
+from brainbox.behavior.dlc import likelihood_threshold, get_licks, get_pupil_diameter, get_smooth_pupil_diameter
 
 _logger = logging.getLogger("ibllib")
 
@@ -845,6 +847,101 @@ class EphysDLC(tasks.Task):
         pass
 
 
+class EphysPostDLC(tasks.Task):
+    """
+    The post_dlc task takes dlc traces as input and computes useful quantities, as well as qc.
+    """
+    io_charge = 90
+    level = 3
+    signature = {'input_files': [('_ibl_leftCamera.dlc.pqt', 'alf', True),
+                                 ('_ibl_bodyCamera.dlc.pqt', 'alf', True),
+                                 ('_ibl_rightCamera.dlc.pqt', 'alf', True),
+                                 ('_ibl_rightCamera.times.npy', 'alf', True),
+                                 ('_ibl_leftCamera.times.npy', 'alf', True),
+                                 ('_ibl_bodyCamera.times.npy', 'alf', True)],
+                 'output_files': [('_ibl_leftCamera.features.pqt', 'alf', True),
+                                  ('_ibl_rightCamera.features.pqt', 'alf', True),
+                                  ('licks.times.npy', 'alf', True)]
+                 }
+
+    def _run(self, overwrite=False, run_qc=True):
+        # Check if output files exist locally
+        exist, output_files = self.assert_expected(self.signature['output_files'], silent=True)
+        if exist and not overwrite:
+            _logger.warning('EphysPostDLC outputs exist and overwrite=False, skipping.')
+            return output_files
+        if exist and overwrite:
+            _logger.warning('EphysPostDLC outputs exist and overwrite=True, overwriting existing outputs.')
+        # Find all available dlc traces and dlc times
+        dlc_files = list(Path(self.session_path).joinpath('alf').glob('_ibl_*Camera.dlc.*'))
+        for dlc_file in dlc_files:
+            _logger.debug(dlc_file)
+        output_files = []
+        combined_licks = []
+
+        for dlc_file in dlc_files:
+            # Catch unforeseen exceptions and move on to next cam
+            try:
+                cam = label_from_path(dlc_file)
+                # load dlc trace and camera times
+                dlc = pd.read_parquet(dlc_file)
+                dlc_thresh = likelihood_threshold(dlc, 0.9)
+                # try to load respective camera times
+                try:
+                    dlc_t = np.load(next(Path(self.session_path).joinpath('alf').glob(f'_ibl_{cam}Camera.times.*npy')))
+                    times = True
+                except StopIteration:
+                    _logger.error(f'No camera.times found for {cam} camera. '
+                                  f'Computations using camera.times will be skipped')
+                    self.status = -1
+                    times = False
+
+                # These features are only computed from left and right cam
+                if cam in ('left', 'right'):
+                    features = pd.DataFrame()
+                    # If camera times are available, get the lick time stamps for combined array
+                    if times:
+                        _logger.info(f"Computing lick times for {cam} camera.")
+                        combined_licks.append(get_licks(dlc_thresh, dlc_t))
+                    else:
+                        _logger.warning(f"Skipping lick times for {cam} camera as no camera.times available.")
+                    # Compute pupil diameter, raw and smoothed
+                    _logger.info(f"Computing raw pupil diameter for {cam} camera.")
+                    features['pupilDiameter_raw'] = get_pupil_diameter(dlc_thresh)
+                    _logger.info(f"Computing smooth pupil diameter for {cam} camera.")
+                    features['pupilDiameter_smooth'] = get_smooth_pupil_diameter(features['pupilDiameter_raw'], cam)
+                    # Safe to pqt
+                    features_file = Path(self.session_path).joinpath('alf', f'_ibl_{cam}Camera.features.pqt')
+                    features.to_parquet(features_file)
+                    output_files.append(features_file)
+
+                # For all cams, compute DLC qc if times available
+                if times and run_qc:
+                    # Setting download_data to False because at this point the data should be there
+                    qc = DlcQC(self.session_path, side=cam, one=self.one, download_data=False)
+                    qc.run(update=True)
+                else:
+                    if not times:
+                        _logger.warning(f"Skipping QC for {cam} camera as no camera.times available")
+                    if not run_qc:
+                        _logger.warning(f"Skipping QC for {cam} camera as run_qc=False")
+
+            except BaseException:
+                _logger.error(traceback.format_exc())
+                self.status = -1
+                continue
+
+        # Combined lick times
+        if len(combined_licks) > 0:
+            lick_times_file = Path(self.session_path).joinpath('alf', 'licks.times.npy')
+            np.save(lick_times_file, sorted(np.concatenate(combined_licks)))
+            output_files.append(lick_times_file)
+        else:
+            _logger.warning("No lick times computed for this session.")
+
+        return output_files
+
+
 class EphysPassive(tasks.Task):
     cpu = 1
     io_charge = 90
@@ -915,4 +1012,6 @@ class EphysExtractionPipeline(tasks.Pipeline):
             self.session_path, parents=[tasks["EphysVideoCompress"], tasks["EphysPulses"], tasks["EphysTrials"]])
         tasks["EphysCellsQc"] = EphysCellsQc(self.session_path, parents=[tasks["SpikeSorting"]])
         tasks["EphysDLC"] = EphysDLC(self.session_path, parents=[tasks["EphysVideoCompress"]])
+        # level 3
+        tasks["EphysPostDLC"] = EphysPostDLC(self.session_path, parents=[tasks["EphysDLC"]])
         self.tasks = tasks
