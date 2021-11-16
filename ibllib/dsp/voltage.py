@@ -318,7 +318,7 @@ def rcoeff(x, y):
     return rcor
 
 
-def detect_bad_channels(raw, fs, similarity_threshold=-0.5, psd_hf_threshold=0.04):
+def detect_bad_channels(raw, fs, similarity_threshold=-0.2, psd_hf_threshold=0.04):
     """
     Bad channels detection for Neuropixel probes
     Labels channels
@@ -401,7 +401,7 @@ def detect_bad_channels(raw, fs, similarity_threshold=-0.5, psd_hf_threshold=0.0
     inoisy = np.where(xfeats['psd_hf'] > psd_hf_threshold)[0]
     # the channels outside of the brains are the contiguous channels below the threshold on the trend coherency
     ioutside = np.where(xfeats['xcor_lf'] < -0.75)[0]
-    if ioutside.size > 0 and ioutside[-1] == nc:
+    if ioutside.size > 0 and ioutside[-1] == (nc - 1):
         a = np.cumsum(np.r_[0, np.diff(ioutside) - 1])
         ioutside = ioutside[a == np.max(a)]
         ichannels[ioutside] = 3

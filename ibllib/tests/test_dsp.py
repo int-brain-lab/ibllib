@@ -364,7 +364,6 @@ class TestVoltage(unittest.TestCase):
                         kfilt={'bounds': [0, .01], 'btype': 'hp'})
         assert np.mean(20 * np.log10(rms(fk - data_v1 - fknoise)) < -40) > .9
 
-
     def test_rcoeff(self):
         x = np.random.rand(2, 1000)
         y = x[0, :]
