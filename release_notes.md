@@ -1,3 +1,8 @@
+### Develop
+- Setting tasks to Waiting if they encountered lock (status -2)
+- Setting tasks to Incomplete if they return status -3
+- Completed tasks set held dependent tasks to waiting
+
 ## Release Notes 2.3
 ### Release Notes 2.3.1 2021-11-08
 - Trial wheel extraction: use alternative sync method when first on fails

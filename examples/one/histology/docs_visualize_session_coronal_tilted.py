@@ -29,4 +29,4 @@ ins = atlas.Insertion.from_dict(traj)
 
 cax = ba.plot_tilted_slice(xyz=picks, axis=1, volume='image')
 cax.plot(picks[:, 0] * 1e6, picks[:, 2] * 1e6)
-cax.plot(channels[probe_label].x * 1e6, channels[probe_label].z * 1e6, 'g*')
+cax.plot(channels[probe_label]['x'] * 1e6, channels[probe_label]['z'] * 1e6, 'g*')

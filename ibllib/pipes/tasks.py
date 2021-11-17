@@ -72,9 +72,10 @@ class Task(abc.ABC):
         -   logging to variable
         -   writing a lock file if the GPU is used
         -   labels the status property of the object. The status value is labeled as:
-            0: Complete
+             0: Complete
             -1: Errored
             -2: Didn't run as a lock was encountered
+            -3: Incomplete
         """
         # if taskid of one properties are not available, local run only without alyx
         use_alyx = self.one is not None and self.taskid is not None
@@ -110,10 +111,14 @@ class Task(abc.ABC):
                     if not self._creates_lock():
                         self.status = -2
                         _logger.info(f"Job {self.__class__} exited as a lock was found")
-                        return
+                        new_log = log_capture_string.getvalue()
+                        self.log = new_log if self.clobber else self.log + new_log
+                        log_capture_string.close()
+                        _logger.removeHandler(ch)
+                        return self.status
                 self.outputs = self._run(**kwargs)
                 _logger.info(f"Job {self.__class__} complete")
-        except BaseException:
+        except Exception:
             _logger.error(traceback.format_exc())
             _logger.info(f"Job {self.__class__} errored")
             self.status = -1
@@ -215,9 +220,11 @@ class Task(abc.ABC):
     def tearDown(self):
         """
         Function after runs()
+        Does not run if a lock is encountered by the task (status -2)
         """
         if self.gpu >= 1:
-            self._lock_file_path().unlink()
+            if self._lock_file_path().exists():
+                self._lock_file_path().unlink()
 
     def cleanUp(self):
         """
@@ -404,7 +411,7 @@ class Pipeline(abc.ABC):
         tasks_alyx = []
         # creates all the tasks by iterating through the ordered dict
         for k, t in self.tasks.items():
-            # get the parents alyx ids to reference in the database
+            # get the parents' alyx ids to reference in the database
             if len(t.parents):
                 pnames = [p.name for p in t.parents]
                 parents_ids = [ta['id'] for ta in tasks_alyx if ta['name'] in pnames]
@@ -459,7 +466,7 @@ class Pipeline(abc.ABC):
         return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty'], **kwargs)
 
     def rerun(self, **kwargs):
-        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete'],
+        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete', 'Incomplete'],
                         **kwargs)
 
     @property
@@ -486,10 +493,10 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     :return:
     """
     registered_dsets = []
+    # here we need to check parents' status, get the job_deck if not available
+    if not job_deck:
+        job_deck = one.alyx.rest('tasks', 'list', session=tdict['session'], no_cache=True)
     if len(tdict['parents']):
-        # here we need to check parents status, get the job_deck if not available
-        if not job_deck:
-            job_deck = one.alyx.rest('tasks', 'list', session=tdict['session'], no_cache=True)
         # check the dependencies
         parent_tasks = filter(lambda x: x['id'] in tdict['parents'], job_deck)
         parent_statuses = [j['status'] for j in parent_tasks]
@@ -520,14 +527,30 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     else:
         try:
             registered_dsets = task.register_datasets(one=one, max_md5_size=max_md5_size)
-        except BaseException:
+        except Exception:
             _logger.error(traceback.format_exc())
             patch_data['status'] = 'Errored'
         patch_data['status'] = 'Complete'
     # overwrite status to errored
     if status == -1:
         patch_data['status'] = 'Errored'
+    # Status -2 means a lock was encountered during run, should be rerun
+    if status == -2:
+        patch_data['status'] = 'Waiting'
+    # Status -3 should be returned if a task is Incomplete
+    if status == -3:
+        patch_data['status'] = 'Incomplete'
     # update task status on Alyx
     t = one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data=patch_data)
+    # check for dependent held tasks
+    # NB: Assumes dependent tasks are all part of the same session!
+    next(x for x in job_deck if x['id'] == t['id'])['status'] = t['status']  # Update status in job deck
+    dependent_tasks = filter(lambda x: t['id'] in x['parents'] and x['status'] == 'Held', job_deck)
+    for d in dependent_tasks:
+        assert d['id'] != t['id'], 'task its own parent'
+        # if all their parent tasks now complete, set to waiting
+        parent_status = [next(x['status'] for x in job_deck if x['id'] == y) for y in d['parents']]
+        if all(x == 'Complete' for x in parent_status):
+            one.alyx.rest('tasks', 'partial_update', id=d['id'], data={'status': 'Waiting'})
     task.cleanUp()
     return t, registered_dsets
