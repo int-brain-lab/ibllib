@@ -8,6 +8,7 @@ Question:
     We're not extracting the audio based on TTL length.  Is this a problem?
 """
 import logging
+import warnings
 from inspect import getmembers, isfunction
 
 import numpy as np
@@ -37,6 +38,12 @@ class DlcQC(base.QC):
             'xrange': range(301, 600),
             'yrange': range(110, 275)
         },
+    }
+
+    dstypes = {
+        'left': ['_ibl_leftCamera.dlc.*', '_ibl_leftCamera.times.*', '_ibl_leftCamera.features.*'],
+        'right': ['_ibl_rightCamera.dlc.*', '_ibl_rightCamera.times.*', '_ibl_rightCamera.features.*'],
+        'body': ['_ibl_bodyCamera.dlc.*', '_ibl_bodyCamera.times.*'],
     }
 
     def __init__(self, session_path_or_eid, side, **kwargs):
@@ -72,7 +79,6 @@ class DlcQC(base.QC):
             self.download_data = download_data
         if self.one and not self.one.offline:
             self._ensure_required_data()
-        _log.info('Gathering data for QC')
 
         alf_path = self.session_path / 'alf'
 
@@ -81,13 +87,19 @@ class DlcQC(base.QC):
         # Load dlc traces
         dlc_df = alfio.load_object(alf_path, f'{self.side}Camera', namespace='ibl')['dlc']
         targets = np.unique(['_'.join(col.split('_')[:-1]) for col in dlc_df.columns])
-        # Set values to nan if likelyhood is too low
+        # Set values to nan if likelihood is too low
         dlc_coords = {}
         for t in targets:
             idx = dlc_df.loc[dlc_df[f'{t}_likelihood'] < 0.9].index
             dlc_df.loc[idx, [f'{t}_x', f'{t}_y']] = np.nan
             dlc_coords[t] = np.array((dlc_df[f'{t}_x'], dlc_df[f'{t}_y']))
         self.data['dlc_coords'] = dlc_coords
+
+        # load pupil diameters
+        if self.side in ['left', 'right']:
+            features = alfio.load_object(alf_path, f'{self.side}Camera', namespace='ibl')['features']
+            self.data['pupilDiameter_raw'] = features['pupilDiameter_raw']
+            self.data['pupilDiameter_smooth'] = features['pupilDiameter_smooth']
 
     def _ensure_required_data(self):
         """
@@ -96,8 +108,8 @@ class DlcQC(base.QC):
         it an exception is raised.
         :return:
         """
-        # Check if data available locally
-        for ds in [f'_ibl_{self.side}Camera.dlc.*', f'_ibl_{self.side}Camera.times.*']:
+        for ds in self.dstypes[self.side]:
+            # Check if data available locally
             if not next(self.session_path.rglob(ds), None):
                 # If download is allowed, try to download
                 if self.download_data is True:
@@ -116,7 +128,7 @@ class DlcQC(base.QC):
         :param download_data: if True, downloads any missing data if required
         :returns: overall outcome as a str, a dict of checks and their outcomes
         """
-        _log.info(f'Computing DLC QC outcome for {self.side} camera, session {self.eid}')
+        _log.info(f'Running DLC QC for {self.side} camera, session {self.eid}')
         namespace = f'dlc{self.side.capitalize()}'
         if all(x is None for x in self.data.values()):
             self.load_data(**kwargs)
@@ -135,7 +147,7 @@ class DlcQC(base.QC):
             extended = {
                 k: None if v is None or v == 'NOT_SET'
                 else base.CRITERIA[v] < 3 if isinstance(v, str)
-                else v[1:] if len(v) > 2 else v[-1]  # Otherwise store custom value(s)
+                else (base.CRITERIA[v[0]] < 3, *v[1:])  # Convert first value to bool if array
                 for k, v in self.metrics.items()
             }
             self.update_extended_qc(extended)
@@ -150,8 +162,8 @@ class DlcQC(base.QC):
         times = self.data['camera_times']
         for target in dlc_coords.keys():
             if times.shape[0] != dlc_coords[target].shape[1]:
-                _log.error(f'{self.side}Camera length of camera.times does not match '
-                           f'length of camera.dlc {target}')
+                _log.warning(f'{self.side}Camera length of camera.times does not match '
+                             f'length of camera.dlc {target}')
                 return 'FAIL'
         return 'PASS'
 
@@ -163,7 +175,7 @@ class DlcQC(base.QC):
         for target in dlc_coords.keys():
             if 'tube' not in target:
                 if all(np.isnan(dlc_coords[target][0])) or all(np.isnan(dlc_coords[target][1])):
-                    _log.error(f'{self.side}Camera dlc trace {target} all NaN')
+                    _log.warning(f'{self.side}Camera dlc trace {target} all NaN')
                     return 'FAIL'
         return 'PASS'
 
@@ -174,8 +186,10 @@ class DlcQC(base.QC):
         '''
 
         dlc_coords = self.data['dlc_coords']
-        x_mean = np.nanmean([np.nanmean(dlc_coords[k][0]) for k in dlc_coords.keys()])
-        y_mean = np.nanmean([np.nanmean(dlc_coords[k][1]) for k in dlc_coords.keys()])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            x_mean = np.nanmean([np.nanmean(dlc_coords[k][0]) for k in dlc_coords.keys()])
+            y_mean = np.nanmean([np.nanmean(dlc_coords[k][1]) for k in dlc_coords.keys()])
 
         xrange = self.bbox[self.side]['xrange']
         yrange = self.bbox[self.side]['yrange']
@@ -184,17 +198,6 @@ class DlcQC(base.QC):
         else:
             return 'PASS'
 
-    def get_diameter(self):
-        '''get mean of both pupil diameters d1 = top - bottom, d2 = left - right
-        '''
-        dlc_coords = self.data['dlc_coords']
-        d1 = ((dlc_coords['pupil_top_r'][0] - dlc_coords['pupil_bottom_r'][0])**2 +
-              (dlc_coords['pupil_top_r'][1] - dlc_coords['pupil_bottom_r'][1])**2)**0.5
-        d2 = ((dlc_coords['pupil_left_r'][0] - dlc_coords['pupil_right_r'][0])**2 +
-              (dlc_coords['pupil_left_r'][1] - dlc_coords['pupil_right_r'][1])**2)**0.5
-
-        return np.nanmean([d1, d2], axis=0)
-
     def check_pupil_blocked(self):
         '''
         Check if pupil diameter is nan for more than 60 % of the frames
@@ -202,16 +205,18 @@ class DlcQC(base.QC):
         Check if standard deviation is above a threshold, found for bad sessions
         '''
 
-        if self.side != 'body':
-            d = self.get_diameter()
-            if np.mean(np.isnan(d)) > 0.9:
-                _log.error(f'{self.eid}, {self.side}Camera, pupil diameter too often NaN')
-                return 'FAIL'
+        if self.side == 'body':
+            return 'NOT_SET'
 
-            thr = 5 if self.side == 'right' else 10
-            if np.nanstd(d) > thr:
-                _log.error(f'{self.eid}, {self.side}Camera, pupil diameter too unstable')
-                return 'FAIL'
+        if np.mean(np.isnan(self.data['pupilDiameter_raw'])) > 0.9:
+            _log.warning(f'{self.eid}, {self.side}Camera, pupil diameter too often NaN')
+            return 'FAIL'
+
+        thr = 5 if self.side == 'right' else 10
+        if np.nanstd(self.data['pupilDiameter_raw']) > thr:
+            _log.warning(f'{self.eid}, {self.side}Camera, pupil diameter too unstable')
+            return 'FAIL'
+
         return 'PASS'
 
     def check_lick_detection(self):
@@ -220,13 +225,28 @@ class DlcQC(base.QC):
         wrong points are detected (spout edge, mouth edge)
         '''
 
-        if self.side != 'body':
-            dlc_coords = self.data['dlc_coords']
-            nan_l = np.mean(np.isnan(dlc_coords['tongue_end_l'][0]))
-            nan_r = np.mean(np.isnan(dlc_coords['tongue_end_r'][0]))
-            if (nan_l < 0.1) and (nan_r < 0.1):
-                return 'FAIL'
+        if self.side == 'body':
+            return 'NOT_SET'
+        dlc_coords = self.data['dlc_coords']
+        nan_l = np.mean(np.isnan(dlc_coords['tongue_end_l'][0]))
+        nan_r = np.mean(np.isnan(dlc_coords['tongue_end_r'][0]))
+        if (nan_l < 0.1) and (nan_r < 0.1):
+            return 'FAIL'
         return 'PASS'
+
+    def check_pupil_diameter_snr(self):
+        if self.side == 'body':
+            return 'NOT_SET'
+        thresh = 5 if self.side == 'right' else 10
+        if 'pupilDiameter_raw' not in self.data.keys() or 'pupilDiameter_smooth' not in self.data.keys():
+            return 'NOT_SET'
+        # compute signal to noise ratio between raw and smooth dia
+        good_idxs = np.where(~np.isnan(self.data['pupilDiameter_smooth']) & ~np.isnan(self.data['pupilDiameter_raw']))[0]
+        snr = (np.var(self.data['pupilDiameter_smooth'][good_idxs]) /
+               (np.var(self.data['pupilDiameter_smooth'][good_idxs] - self.data['pupilDiameter_raw'][good_idxs])))
+        if snr < thresh:
+            return 'FAIL', float(round(snr, 3))
+        return 'PASS', float(round(snr, 3))
 
 
 def run_all_qc(session, cameras=('left', 'right', 'body'), one=None, **kwargs):

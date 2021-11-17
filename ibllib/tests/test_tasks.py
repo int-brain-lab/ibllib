@@ -24,7 +24,9 @@ desired_statuses = {
     'Task01_void': 'Empty',
     'Task02_error': 'Errored',
     'Task10': 'Complete',
-    'Task11': 'Held'
+    'Task11': 'Held',
+    'TaskIncomplete': 'Incomplete',
+    'TaskGpuLock': 'Waiting'
 }
 
 desired_datasets = ['spikes.times.npy', 'spikes.amps.npy', 'spikes.clusters.npy']
@@ -35,9 +37,11 @@ desired_logs = 'Running on machine: testmachine'
 desired_logs_rerun = {
     'Task00': 1,
     'Task01_void': 2,
-    'Task02_error': 2,
+    'Task02_error': 1,
     'Task10': 1,
-    'Task11': None
+    'Task11': 1,
+    'TaskIncomplete': 1,
+    'TaskGpuLock': 2
 }
 
 
@@ -59,12 +63,17 @@ class Task01_void(ibllib.pipes.tasks.Task):
         return out_files
 
 
-# job that raises an error
+# job that raises an error on first run
 class Task02_error(ibllib.pipes.tasks.Task):
-    level = 0
+    run_count = 0
 
     def _run(self, overwrite=False):
-        raise Exception("Something dumb happened")
+        Task02_error.run_count += 1
+        if Task02_error.run_count == 1:
+            raise Exception('Something dumb happened')
+        out_files = self.session_path.joinpath('alf', 'spikes.templates.npy')
+        out_files.touch()
+        return out_files
 
 
 # job that outputs a list of files
@@ -89,6 +98,27 @@ class Task11(ibllib.pipes.tasks.Task):
         return out_files
 
 
+#  Job that encounters a GPU lock and is set to Waiting
+class TaskGpuLock(ibllib.pipes.tasks.Task):
+    gpu = 1
+
+    # Overwrite setUp to create a lock file before running the task and remove it after
+    def setUp(self):
+        self.make_lock_file()
+        self.data_handler = self.get_data_handler()
+        return True
+
+    def _run(self, overwrite=False):
+        pass
+
+
+#  Job that encounters a GPU lock and is set to Waiting
+class TaskIncomplete(ibllib.pipes.tasks.Task):
+
+    def _run(self, overwrite=False):
+        self.status = -3
+
+
 class SomePipeline(ibllib.pipes.tasks.Pipeline):
 
     def __init__(self, session_path=None, **kwargs):
@@ -99,44 +129,13 @@ class SomePipeline(ibllib.pipes.tasks.Pipeline):
         tasks['Task00'] = Task00(self.session_path)
         tasks['Task01_void'] = Task01_void(self.session_path)
         tasks['Task02_error'] = Task02_error(self.session_path)
+        tasks['TaskGpuLock'] = TaskGpuLock(self.session_path)
+        tasks['TaskIncomplete'] = TaskIncomplete(self.session_path)
         tasks['Task10'] = Task10(self.session_path, parents=[tasks['Task00']])
+        # When both its parents Complete, this task should be set to Waiting and should finally complete
         tasks['Task11'] = Task11(self.session_path, parents=[tasks['Task02_error'],
                                                              tasks['Task00']])
         self.tasks = tasks
-
-
-#  job to output a single file (pathlib.Path)
-class GpuTask(ibllib.pipes.tasks.Task):
-    gpu = 1
-
-    def _run(self, overwrite=False):
-        out_files = self.session_path.joinpath('alf', 'gpu.times.npy')
-        out_files.touch()
-        return out_files
-
-
-class TestLocks(unittest.TestCase):
-
-    def test_gpu_lock_and_local_data_handler(self) -> None:
-        with tempfile.TemporaryDirectory() as td:
-            session_path = Path(td).joinpath('algernon', '2021/02/12', '001')
-            session_path.joinpath('alf').mkdir(parents=True)
-            task = GpuTask(session_path, one=None, location='local')
-            assert task.is_locked() is False
-            task.run()
-            assert task.status == 0
-            assert task.is_locked() is False
-            # then make a lock file and make sure it fails and is still locked afterwards
-            task._make_lock_file()
-            task.run()
-            assert task.status == - 2
-            assert task.is_locked()
-            # test the time out feature
-            task.time_out_secs = - 1
-            task._make_lock_file()
-            assert not task.is_locked()
-            task.run()
-            assert task.status == 0
 
 
 class TestPipelineAlyx(unittest.TestCase):
@@ -204,8 +203,11 @@ class TestPipelineAlyx(unittest.TestCase):
 
         # test the rerun option
         task_deck, dsets = pipeline.rerun_failed(machine='testmachine')
-        check_statuses = [desired_statuses[t['name']] == t['status'] for t in task_deck]
-        self.assertTrue(all(check_statuses))
+        task_02 = next(t for t in task_deck if t['name'] == 'Task02_error')
+        self.assertEqual('Complete', task_02['status'])
+        dep_task = next(x for x in task_deck if task_02['id'] in x['parents'])
+        assert dep_task['name'] == 'Task11'
+        self.assertEqual('Complete', dep_task['status'], 'Failed to set dependent task from "Held" to "Waiting"')
 
         # check that logs were correctly overwritten
         check_logs = [t['log'].count(desired_logs) == 1 if t['log'] else True for t in task_deck]
@@ -213,7 +215,7 @@ class TestPipelineAlyx(unittest.TestCase):
         self.assertTrue(all(check_logs))
         self.assertTrue(all(check_rerun))
 
-        # Rerun without clobber and check that logs are overwritten
+        # Rerun without clobber and check that logs are not overwritten
         task_deck, dsets = pipeline.rerun_failed(machine='testmachine', clobber=False)
         check_logs = [t['log'].count(desired_logs) == desired_logs_rerun[t['name']] if t['log']
                       else t['log'] == desired_logs_rerun[t['name']] for t in task_deck]
@@ -221,6 +223,45 @@ class TestPipelineAlyx(unittest.TestCase):
                        else True for t in task_deck]
         self.assertTrue(all(check_logs))
         self.assertTrue(all(check_rerun))
+
+        # Remove the lock file
+        Path.home().joinpath('.one', 'gpu.lock').unlink()
+
+
+class GpuTask(ibllib.pipes.tasks.Task):
+    gpu = 1
+
+    def _run(self, overwrite=False):
+        out_files = self.session_path.joinpath('alf', 'gpu.times.npy')
+        out_files.touch()
+        return out_files
+
+
+class TestLocks(unittest.TestCase):
+
+    def test_gpu_lock_and_local_data_handler(self) -> None:
+        # Remove any existing locks first
+        if Path.home().joinpath('.one', 'gpu.lock').exists():
+            Path.home().joinpath('.one', 'gpu.lock').unlink()
+        with tempfile.TemporaryDirectory() as td:
+            session_path = Path(td).joinpath('algernon', '2021/02/12', '001')
+            session_path.joinpath('alf').mkdir(parents=True)
+            task = GpuTask(session_path, one=None, location='local')
+            assert task.is_locked() is False
+            task.run()
+            assert task.status == 0
+            assert task.is_locked() is False
+            # then make a lock file and make sure it fails and is still locked afterwards
+            task._make_lock_file()
+            task.run()
+            assert task.status == - 2
+            assert task.is_locked()
+            # test the time out feature
+            task.time_out_secs = - 1
+            task._make_lock_file()
+            assert not task.is_locked()
+            task.run()
+            assert task.status == 0
 
 
 if __name__ == "__main__":
