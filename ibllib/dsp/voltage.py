@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 import scipy.signal
 from tqdm import tqdm
+from joblib import Parallel, delayed, cpu_count
+
 
 from ibllib.io import spikeglx
 import ibllib.dsp.fourier as fdsp
@@ -213,8 +215,8 @@ def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, k_kwa
     return x_
 
 
-def decompress_destripe_cbin(sr, output_file=None, h=None, wrot=None, append=False, nc_out=None,
-                             dtype=np.int16, ns2add=0):
+def decompress_destripe_cbin_pyfft(sr, output_file=None, h=None, wrot=None, append=False, nc_out=None,
+                                   dtype=np.int16, ns2add=0):
     """
     From a spikeglx Reader object, decompresses and apply ADC.
     Saves output as a flat binary file in int16
@@ -234,6 +236,7 @@ def decompress_destripe_cbin(sr, output_file=None, h=None, wrot=None, append=Fal
 
     SAMPLES_TAPER = 128
     NBATCH = 65536
+
     # handles input parameters
     if isinstance(sr, str) or isinstance(sr, Path):
         sr = spikeglx.Reader(sr, open=True)
