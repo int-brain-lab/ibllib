@@ -1,11 +1,12 @@
-### Develop
+## Release Notes 2.4
+### Release Notes 2.4.0
 - Setting tasks to Waiting if they encountered lock (status -2)
 - Setting tasks to Incomplete if they return status -3
 - Completed tasks set held dependent tasks to waiting
 - Adding PostDLC task to compute pupil diameters, licks and DLC QC
 
 ## Release Notes 2.3
-### Release Notes 2.3.1 2021-11-08
+### Release Notes 2.3.2 2021-11-08
 - Trial wheel extraction: use alternative sync method when first on fails
 - bugfix: timer for tasks was returning None
 
