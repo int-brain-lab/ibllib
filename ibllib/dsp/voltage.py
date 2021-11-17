@@ -11,7 +11,7 @@ from joblib import Parallel, delayed, cpu_count
 
 from ibllib.io import spikeglx
 import ibllib.dsp.fourier as fdsp
-from ibllib.dsp import fshift
+from ibllib.dsp import fshift, rms
 from ibllib.ephys import neuropixel
 
 
@@ -302,241 +302,114 @@ def decompress_destripe_cbin_pyfft(sr, output_file=None, h=None, wrot=None, appe
     pbar.close()
 
 
-def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None,
-                             dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None):
+def rcoeff(x, y):
     """
-    From a spikeglx Reader object, decompresses and apply ADC.
-    Saves output as a flat binary file in int16
-    Production version with optimized FFTs - requires pyfftw
-    :param sr: seismic reader object (spikeglx.Reader)
-    :param output_file: (optional, defaults to .bin extension of the compressed bin file)
-    :param h: (optional)
-    :param wrot: (optional) whitening matrix [nc x nc] or amplitude scalar to apply to the output
-    :param append: (optional, False) for chronic recordings, append to end of file
-    :param nc_out: (optional, True) saves non selected channels (synchronisation trace) in output
-    :param dtype: (optional, np.int16) output sample format
-    :param ns2add: (optional) for kilosort, adds padding samples at the end of the file so the total
-    number of samples is a multiple of the batchsize
-    :param nbatch: (optional) batch size
-    :param nprocesses: (optional) number of parallel processes to run, defaults to number or processes detected with joblib
-    :return:
+    Computes pairwise Person correlation coefficients for matrices.
+    That is for 2 matrices the same size, computes the row to row coefficients and outputs
+    a vector corresponding to the number of rows of the first matrix
+    If the second array is a vector then computes the correlation coefficient for all rows
+    :param x: np array [nc, ns]
+    :param y: np array [nc, ns] or [ns]
+    :return: r [nc]
+    """
+    def normalize(z):
+        mean = np.mean(z, axis=-1)
+        return z - mean if mean.size == 1 else z - mean[:, np.newaxis]
+    xnorm = normalize(x)
+    ynorm = normalize(y)
+    rcor = np.sum(xnorm * ynorm, axis=-1) / np.sqrt(np.sum(np.square(xnorm), axis=-1) * np.sum(np.square(ynorm), axis=-1))
+    return rcor
+
+
+def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshold=0.02):
+    """
+    Bad channels detection for Neuropixel probes
+    Labels channels
+     0: all clear
+     1: dead low coherence / amplitude
+     2: noisy
+     3: outside of the brain
+    :param raw: [nc, ns]
+    :param fs: sampling frequency
+    :param similarity_threshold:
+    :param psd_hf_threshold:
+    :return: labels (numpy vector [nc]), xfeats: dictionary of features [nc]
     """
 
-    SAMPLES_TAPER = 128
-    NBATCH = nbatch or 65536
-    # handles input parameters
-    assert isinstance(sr_file, str) or isinstance(sr_file, Path)
-    sr = spikeglx.Reader(sr_file, open=True)
-    butter_kwargs = {'N': 3, 'Wn': 300 / sr.fs / 2, 'btype': 'highpass'}
-    k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
-                'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
-    h = neuropixel.trace_header(version=1) if h is None else h
-    output_file = sr.file_bin.with_suffix('.bin') if output_file is None else output_file
-    assert output_file != sr.file_bin
-    taper = np.r_[0, scipy.signal.windows.cosine((SAMPLES_TAPER - 1) * 2), 0]
-    # create the FFT stencils
-    ncv = h['x'].size  # number of channels
-    nc_out = nc_out or sr.nc
-    # compute LP filter coefficients
-    sos = scipy.signal.butter(**butter_kwargs, output='sos')
-    nbytes = dtype(1).nbytes
-    nprocesses = nprocesses or cpu_count()
+    def rneighbours(raw, n=1):  # noqa
+        """
+        Computes Pearson correlation with the sum of neighbouring traces
+        :param raw: nc, ns
+        :param n:
+        :return:
+        """
+        nc = raw.shape[0]
+        mixer = np.triu(np.ones((nc, nc)), 1) - np.triu(np.ones((nc, nc)), 1 + n)
+        mixer += np.tril(np.ones((nc, nc)), -1) - np.tril(np.ones((nc, nc)), - n - 1)
+        r = rcoeff(raw, np.matmul(raw.T, mixer).T)
+        r[np.isnan(r)] = 0
+        return r
 
-    if append:
-        # need to find the end of the file and the offset
-        sr_out = spikeglx.Reader(output_file)
-        offset = sr_out.ns * sr_out.nc * nbytes
-    else:
-        offset = 0
-        open(output_file, 'wb').close()
+    def detrend(x, nmed):
+        ntap = int(np.ceil(nmed / 2))
+        xf = np.r_[np.zeros(ntap) + x[0], x, np.zeros(ntap) + x[-1]]
+        # assert np.all(xcorf[ntap:-ntap] == xcor)
+        xf = scipy.signal.medfilt(xf, nmed)[ntap:-ntap]
+        return x - xf
 
-    # chunks to split the file into, dependent on number of parallel processes
-    CHUNK_SIZE = int(sr.ns / nprocesses)
+    def channels_similarity(raw, nmed=0):
+        """
+        Computes the similarity based on zero-lag crosscorrelation of each channel with the median
+        trace referencing
+        :param raw: [nc, ns]
+        :param nmed:
+        :return:
+        """
+        def fxcor(x, y):
+            return scipy.fft.irfft(scipy.fft.rfft(x) * np.conj(scipy.fft.rfft(y)), n=raw.shape[-1])
 
-    def my_function(i_chunk, n_chunk):
-        _sr = spikeglx.Reader(sr_file)
+        def nxcor(x, ref):
+            ref = ref - np.mean(ref)
+            apeak = fxcor(ref, ref)[0]
+            x = x - np.mean(x, axis=-1)[:, np.newaxis]
+            return fxcor(x, ref)[:, 0] / apeak
 
-        n_batch = int(np.ceil(i_chunk * CHUNK_SIZE / NBATCH))
-        first_s = (NBATCH - SAMPLES_TAPER * 2) * n_batch
+        ref = np.median(raw, axis=0)
+        xcor = nxcor(raw, ref)
 
-        # Find the maximum sample for each chunk
-        max_s = _sr.ns if i_chunk == n_chunk - 1 else (i_chunk + 1) * CHUNK_SIZE
-        pbar = tqdm(total=CHUNK_SIZE / _sr.fs)
-        with open(output_file, 'r+b') as fid:
-            if i_chunk == 0:
-                fid.seek(offset)
-            else:
-                fid.seek(offset + ((first_s + SAMPLES_TAPER) * nc_out * nbytes))
+        if nmed > 0:
+            xcor = detrend(xcor, nmed) + 1
+        return xcor
 
-            while True:
-                last_s = np.minimum(NBATCH + first_s, _sr.ns)
+    nc, _ = raw.shape
+    raw = raw - np.mean(raw, axis=-1)[:, np.newaxis]  # removes DC offset
+    xcor = channels_similarity(raw)
+    fscale, psd = scipy.signal.welch(raw * 1e6, fs=fs)  # units; uV ** 2 / Hz
 
-                # Apply tapers
-                chunk = _sr[first_s:last_s, :ncv].T
-                chunk[:, :SAMPLES_TAPER] *= taper[:SAMPLES_TAPER]
-                chunk[:, -SAMPLES_TAPER:] *= taper[SAMPLES_TAPER:]
+    sos_hp = scipy.signal.butter(**{'N': 3, 'Wn': 1000 / fs / 2, 'btype': 'highpass'}, output='sos')
+    hf = scipy.signal.sosfiltfilt(sos_hp, raw)
+    xcorf = channels_similarity(hf)
 
-                # Apply filters
-                chunk = scipy.signal.sosfiltfilt(sos, chunk)
-                chunk = fshift(chunk, s=h['sample_shift'])
-                chunk = kfilt(chunk, **k_kwargs)
+    xfeats = ({
+        'ind': np.arange(nc),
+        'rms_raw': rms(raw),  # very similar to the rms avfter butterworth filter
+        'xcor_hf': detrend(xcor, 11),
+        'xcor_lf': xcorf - detrend(xcorf, 11) - 1,
+        'psd_hf': np.mean(psd[:, fscale > 12000], axis=-1),
+    })
 
-                # Find the indices to save
-                ind2save = [SAMPLES_TAPER, NBATCH - SAMPLES_TAPER]
+    # make recommendation
+    ichannels = np.zeros(nc)
+    idead = np.where(similarity_threshold[0] > xfeats['xcor_hf'])[0]
+    inoisy = np.where(np.logical_or(xfeats['psd_hf'] > psd_hf_threshold, xfeats['xcor_hf'] > similarity_threshold[1]))[0]
+    # the channels outside of the brains are the contiguous channels below the threshold on the trend coherency
+    ioutside = np.where(xfeats['xcor_lf'] < -0.75)[0]
+    if ioutside.size > 0 and ioutside[-1] == (nc - 1):
+        a = np.cumsum(np.r_[0, np.diff(ioutside) - 1])
+        ioutside = ioutside[a == np.max(a)]
+        ichannels[ioutside] = 3
 
-                if first_s == 0:
-                    # for the first batch save the start with taper applied
-                    ind2save[0] = 0
-
-                if last_s == _sr.ns:
-                    # for the very last batch save the end with taper applied
-                    ind2save[1] = NBATCH
-
-                # add back sync trace and save
-                chunk = np.r_[chunk, _sr[first_s:last_s, ncv:].T].T
-                intnorm = 1 / _sr.channel_conversion_sample2v['ap'] if dtype == np.int16 else 1.
-                chunk = chunk[slice(*ind2save), :] * intnorm
-
-                if wrot is not None:
-                    chunk[:, :ncv] = np.dot(chunk[:, :ncv], wrot)
-
-                chunk[:, :nc_out].astype(np.int16).tofile(fid)
-                first_s += NBATCH - SAMPLES_TAPER * 2
-                pbar.update(NBATCH / _sr.fs)
-                if last_s >= max_s:
-                    if last_s == _sr.ns:
-                        if ns2add > 0:
-                            np.tile(chunk[-1, :nc_out].astype(dtype), (ns2add, 1)).tofile(fid)
-                    break
-        pbar.close()
-
-    _ = Parallel(n_jobs=nprocesses)(delayed(my_function)(i, nprocesses) for i in range(nprocesses))
-    sr.close()
-
-
-def decompress_destripe_cbin_pyfft_parallel(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None,
-                                            dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None):
-    """
-    From a spikeglx Reader object, decompresses and apply ADC.
-    Saves output as a flat binary file in int16
-    Production version with optimized FFTs - requires pyfftw
-    :param sr: seismic reader object (spikeglx.Reader)
-    :param output_file: (optional, defaults to .bin extension of the compressed bin file)
-    :param h: (optional)
-    :param wrot: (optional) whitening matrix [nc x nc] or amplitude scalar to apply to the output
-    :param append: (optional, False) for chronic recordings, append to end of file
-    :param nc_out: (optional, True) saves non selected channels (synchronisation trace) in output
-    :param dtype: (optional, np.int16) output sample format
-    :param ns2add: (optional) for kilosort, adds padding samples at the end of the file so the total
-    number of samples is a multiple of the batchsize
-    :param nbatch: (optional) batch size
-    :param nprocesses: (optional) number of parallel processes to run, defaults to number or processes detected with joblib
-    :return:
-    """
-    import pyfftw
-    SAMPLES_TAPER = 128
-    NBATCH = nbatch or 65536
-    # handles input parameters
-    assert isinstance(sr_file, str) or isinstance(sr_file, Path)
-    sr = spikeglx.Reader(sr_file, open=True)
-    butter_kwargs = {'N': 3, 'Wn': 300 / sr.fs / 2, 'btype': 'highpass'}
-    k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
-                'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
-    h = neuropixel.trace_header(version=1) if h is None else h
-    output_file = sr.file_bin.with_suffix('.bin') if output_file is None else output_file
-    assert output_file != sr.file_bin
-    taper = np.r_[0, scipy.signal.windows.cosine((SAMPLES_TAPER - 1) * 2), 0]
-    # create the FFT stencils
-    ncv = h['x'].size  # number of channels
-    nc_out = nc_out or sr.nc
-    # compute LP filter coefficients
-    sos = scipy.signal.butter(**butter_kwargs, output='sos')
-    nbytes = dtype(1).nbytes
-    nprocesses = nprocesses or cpu_count()
-
-    win = pyfftw.empty_aligned((ncv, NBATCH), dtype='float32')
-    WIN = pyfftw.empty_aligned((ncv, int(NBATCH / 2 + 1)), dtype='complex64')
-    fft_object = pyfftw.FFTW(win, WIN, axes=(1,), direction='FFTW_FORWARD', threads=4)
-    dephas = np.zeros((ncv, NBATCH), dtype=np.float32)
-    dephas[:, 1] = 1.
-    DEPHAS = np.exp(1j * np.angle(fft_object(dephas)) * h['sample_shift'][:, np.newaxis])
-
-    if append:
-        # need to find the end of the file and the offset
-        sr_out = spikeglx.Reader(output_file)
-        offset = sr_out.ns * sr_out.nc * nbytes
-    else:
-        offset = 0
-        open(output_file, 'wb').close()
-
-    # chunks to split the file into, dependent on number of parallel processes
-    CHUNK_SIZE = int(sr.ns / nprocesses)
-
-    def my_function(i_chunk, n_chunk):
-        _sr = spikeglx.Reader(sr_file)
-
-        n_batch = int(np.ceil(i_chunk * CHUNK_SIZE / NBATCH))
-        first_s = (NBATCH - SAMPLES_TAPER * 2) * n_batch
-
-        # Find the maximum sample for each chunk
-        max_s = _sr.ns if i_chunk == n_chunk - 1 else (i_chunk + 1) * CHUNK_SIZE
-        pbar = tqdm(total=CHUNK_SIZE / _sr.fs)
-
-        win = pyfftw.empty_aligned((ncv, NBATCH), dtype='float32')
-        WIN = pyfftw.empty_aligned((ncv, int(NBATCH / 2 + 1)), dtype='complex64')
-        fft_object = pyfftw.FFTW(win, WIN, axes=(1,), direction='FFTW_FORWARD', threads=4)
-        ifft_object = pyfftw.FFTW(WIN, win, axes=(1,), direction='FFTW_BACKWARD', threads=4)
-
-        with open(output_file, 'r+b') as fid:
-            if i_chunk == 0:
-                fid.seek(offset)
-            else:
-                fid.seek(offset + ((first_s + SAMPLES_TAPER) * nc_out * nbytes))
-
-            while True:
-                last_s = np.minimum(NBATCH + first_s, _sr.ns)
-
-                # Apply tapers
-                chunk = _sr[first_s:last_s, :ncv].T
-                chunk[:, :SAMPLES_TAPER] *= taper[:SAMPLES_TAPER]
-                chunk[:, -SAMPLES_TAPER:] *= taper[SAMPLES_TAPER:]
-
-                # Apply filters
-                chunk = scipy.signal.sosfiltfilt(sos, chunk)
-
-                # Find the indices to save
-                ind2save = [SAMPLES_TAPER, NBATCH - SAMPLES_TAPER]
-
-                if last_s == _sr.ns:
-                    # for the last batch just use the normal fft as the stencil doesn't fit
-                    chunk = fshift(chunk, s=h['sample_shift'])
-                    ind2save[1] = NBATCH
-                else:
-                    # apply precomputed fshift of the proper length
-                    chunk = ifft_object(fft_object(chunk) * DEPHAS)
-
-                if first_s == 0:
-                    # for the first batch save the start with taper applied
-                    ind2save[0] = 0
-
-                # add back sync trace and save
-                chunk = kfilt(chunk, **k_kwargs)
-                chunk = np.r_[chunk, _sr[first_s:last_s, ncv:].T].T
-                intnorm = 1 / _sr.channel_conversion_sample2v['ap'] if dtype == np.int16 else 1.
-                chunk = chunk[slice(*ind2save), :] * intnorm
-
-                if wrot is not None:
-                    chunk[:, :ncv] = np.dot(chunk[:, :ncv], wrot)
-
-                chunk[:, :nc_out].astype(np.int16).tofile(fid)
-                first_s += NBATCH - SAMPLES_TAPER * 2
-                pbar.update(NBATCH / _sr.fs)
-                if last_s >= max_s:
-                    if last_s == _sr.ns:
-                        if ns2add > 0:
-                            np.tile(chunk[-1, :nc_out].astype(dtype), (ns2add, 1)).tofile(fid)
-                    break
-        pbar.close()
-
-    _ = Parallel(n_jobs=nprocesses)(delayed(my_function)(i, nprocesses) for i in range(nprocesses))
-    sr.close()
+    # indices
+    ichannels[idead] = 1
+    ichannels[inoisy] = 2
+    return ichannels, xfeats
