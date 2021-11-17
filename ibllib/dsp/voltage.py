@@ -318,7 +318,7 @@ def rcoeff(x, y):
     return rcor
 
 
-def detect_bad_channels(raw, fs, similarity_threshold=-0.2, psd_hf_threshold=0.04):
+def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshold=0.02):
     """
     Bad channels detection for Neuropixel probes
     Labels channels
@@ -379,6 +379,7 @@ def detect_bad_channels(raw, fs, similarity_threshold=-0.2, psd_hf_threshold=0.0
         return xcor
 
     nc, _ = raw.shape
+    raw = raw - np.mean(raw, axis=-1)[:, np.newaxis]  # removes DC offset
     xcor = channels_similarity(raw)
     fscale, psd = scipy.signal.welch(raw * 1e6, fs=fs)  # units; uV ** 2 / Hz
 
@@ -388,7 +389,7 @@ def detect_bad_channels(raw, fs, similarity_threshold=-0.2, psd_hf_threshold=0.0
 
     xfeats = ({
         'ind': np.arange(nc),
-        'rms_raw': rms(raw - np.mean(raw, axis=-1)[:, np.newaxis]),  # very similar to the rms avfter butterworth filter
+        'rms_raw': rms(raw),  # very similar to the rms avfter butterworth filter
         'xcor_hf': detrend(xcor, 11),
         'xcor_lf': xcorf - detrend(xcorf, 11) - 1,
         'psd_hf': np.mean(psd[:, fscale > 12000], axis=-1),
@@ -396,9 +397,8 @@ def detect_bad_channels(raw, fs, similarity_threshold=-0.2, psd_hf_threshold=0.0
 
     # make recommendation
     ichannels = np.zeros(nc)
-
-    idead = np.where(xfeats['xcor_hf'] < similarity_threshold)[0]
-    inoisy = np.where(xfeats['psd_hf'] > psd_hf_threshold)[0]
+    idead = np.where(similarity_threshold[0] > xfeats['xcor_hf'])[0]
+    inoisy = np.where(np.logical_or(xfeats['psd_hf'] > psd_hf_threshold, xfeats['xcor_hf'] > similarity_threshold[1]))[0]
     # the channels outside of the brains are the contiguous channels below the threshold on the trend coherency
     ioutside = np.where(xfeats['xcor_lf'] < -0.75)[0]
     if ioutside.size > 0 and ioutside[-1] == (nc - 1):
