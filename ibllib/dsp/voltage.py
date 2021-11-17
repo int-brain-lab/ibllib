@@ -216,7 +216,7 @@ def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, k_kwa
 
 
 def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None,
-                             dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None):
+                             dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None, compute_rms=True):
     """
     From a spikeglx Reader object, decompresses and apply ADC.
     Saves output as a flat binary file in int16
@@ -263,13 +263,18 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     dephas[:, 1] = 1.
     DEPHAS = np.exp(1j * np.angle(fft_object(dephas)) * h['sample_shift'][:, np.newaxis])
 
+    ap_rms_file = output_file.parent.joinpath('ap_rms.bin')
+    rms_nbytes = np.float32(1).nbytes
+
     if append:
         # need to find the end of the file and the offset
-        sr_out = spikeglx.Reader(output_file)
-        offset = sr_out.ns * sr_out.nc * nbytes
+        offset = Path(output_file).stat().st_size
+        rms_offset = Path(ap_rms_file).stat().st_size
     else:
         offset = 0
+        rms_offset = 0
         open(output_file, 'wb').close()
+        open(ap_rms_file, 'wb').close()
 
     # chunks to split the file into, dependent on number of parallel processes
     CHUNK_SIZE = int(sr.ns / nprocesses)
@@ -289,16 +294,22 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
         fft_object = pyfftw.FFTW(win, WIN, axes=(1,), direction='FFTW_FORWARD', threads=4)
         ifft_object = pyfftw.FFTW(WIN, win, axes=(1,), direction='FFTW_BACKWARD', threads=4)
 
-        with open(output_file, 'r+b') as fid:
+        with open(output_file, 'r+b') as fid, open(ap_rms_file, 'r+b') as aid:
             if i_chunk == 0:
                 fid.seek(offset)
+                aid.seek(rms_offset)
             else:
                 fid.seek(offset + ((first_s + SAMPLES_TAPER) * nc_out * nbytes))
+                aid.seek(rms_offset + (i_chunk * nc_out * rms_nbytes))
 
             while True:
                 last_s = np.minimum(NBATCH + first_s, _sr.ns)
 
                 # Apply tapers
+                ap_rms = rms(_sr[first_s:last_s, :ncv] - np.mean(_sr[first_s:last_s, :ncv], axis=0))
+                ap_rms.astype(np.float32).tofile(aid)
+
+
                 chunk = _sr[first_s:last_s, :ncv].T
                 chunk[:, :SAMPLES_TAPER] *= taper[:SAMPLES_TAPER]
                 chunk[:, -SAMPLES_TAPER:] *= taper[SAMPLES_TAPER:]
