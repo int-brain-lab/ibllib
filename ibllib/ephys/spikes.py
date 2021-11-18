@@ -159,7 +159,7 @@ def ks2_to_alf(ks_path, bin_path, out_path, bin_file=None, ampfactor=1, label=No
     ac.convert(out_path, label=label, force=force, ampfactor=ampfactor)
 
 
-def ks2_to_tar(ks_path, out_path):
+def ks2_to_tar(ks_path, out_path, force=False):
     """
     Compress output from kilosort 2 into tar file in order to register to flatiron and move to
     spikesorters/ks2_matlab/probexx path. Output file to register
@@ -199,7 +199,7 @@ def ks2_to_tar(ks_path, out_path):
                   'whitening_mat_inv.npy']
 
     out_file = Path(out_path).joinpath('_kilosort_raw.output.tar')
-    if out_file.exists():
+    if out_file.exists() and not force:
         _logger.info(f"Already converted ks2 to tar: for {ks_path}, skipping.")
         return [out_file]
 

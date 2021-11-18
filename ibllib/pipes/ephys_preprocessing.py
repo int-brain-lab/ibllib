@@ -291,8 +291,8 @@ class SpikeSorting(tasks.Task):
         self.version = self._fetch_pykilosort_version(self.PYKILOSORT_REPO)
         label = ap_file.parts[-2]  # this is usually the probe name
         sorter_dir = self.session_path.joinpath("spike_sorters", self.SPIKE_SORTER_NAME, label)
-        FORCE_RERUN = False
-        if not FORCE_RERUN:
+        self.FORCE_RERUN = False
+        if not self.FORCE_RERUN:
             log_file = sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
             if log_file.exists():
                 run_version = self._fetch_pykilosort_run_version(log_file)
@@ -300,6 +300,9 @@ class SpikeSorting(tasks.Task):
                     _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
                                  f" found in {sorter_dir}, skipping.")
                     return sorter_dir
+                else:
+                    self.FORCE_RERUN = True
+
         print(sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log"))
         # get the scratch drive from the shell script
         with open(self.SHELL_SCRIPT) as fid:
@@ -392,7 +395,7 @@ class SpikeSorting(tasks.Task):
                 tar_dir = self.session_path.joinpath(
                     'spike_sorters', self.SPIKE_SORTER_NAME, label)
                 tar_dir.mkdir(parents=True, exist_ok=True)
-                out = spikes.ks2_to_tar(ks2_dir, tar_dir)
+                out = spikes.ks2_to_tar(ks2_dir, tar_dir, force=self.FORCE_RERUN)
                 out_files.extend(out)
             except BaseException:
                 _logger.error(traceback.format_exc())

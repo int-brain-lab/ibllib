@@ -272,7 +272,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
         if append:
             rms_offset = Path(ap_rms_file).stat().st_size
             time_offset = Path(ap_time_file).stat().st_size
-            with open(ap_time_file) as tid:
+            with open(ap_time_file, 'rb') as tid:
                 t = tid.read()
             time_data = np.frombuffer(t, dtype=np.float32)
             t0 = time_data[-1]
@@ -301,7 +301,9 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
 
         # Find the maximum sample for each chunk
         max_s = _sr.ns if i_chunk == n_chunk - 1 else (i_chunk + 1) * CHUNK_SIZE
-
+        # need to redefine this here to avoid 4 byte boundary error
+        win = pyfftw.empty_aligned((ncv, NBATCH), dtype='float32')
+        WIN = pyfftw.empty_aligned((ncv, int(NBATCH / 2 + 1)), dtype='complex64')
         fft_object = pyfftw.FFTW(win, WIN, axes=(1,), direction='FFTW_FORWARD', threads=4)
         ifft_object = pyfftw.FFTW(WIN, win, axes=(1,), direction='FFTW_BACKWARD', threads=4)
 
