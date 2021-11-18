@@ -263,18 +263,32 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     dephas[:, 1] = 1.
     DEPHAS = np.exp(1j * np.angle(fft_object(dephas)) * h['sample_shift'][:, np.newaxis])
 
-    ap_rms_file = output_file.parent.joinpath('ap_rms.bin')
-    rms_nbytes = np.float32(1).nbytes
+    # if we want to compute the rms ap across the session
+    if compute_rms:
+        ap_rms_file = output_file.parent.joinpath('ap_rms.bin')
+        ap_time_file = output_file.parent.joinpath('ap_time.bin')
+        rms_nbytes = np.float32(1).nbytes
+
+        if append:
+            rms_offset = Path(ap_rms_file).stat().st_size
+            time_offset = Path(ap_time_file).stat().st_size
+            with open(ap_time_file) as tid:
+                t = tid.read()
+            time_data = np.frombuffer(t, dtype=np.float32)
+            t0 = time_data[-1]
+        else:
+            rms_offset = 0
+            time_offset = 0
+            t0 = 0
+            open(ap_rms_file, 'wb').close()
+            open(ap_time_file, 'wb').close()
 
     if append:
         # need to find the end of the file and the offset
         offset = Path(output_file).stat().st_size
-        rms_offset = Path(ap_rms_file).stat().st_size
     else:
         offset = 0
-        rms_offset = 0
         open(output_file, 'wb').close()
-        open(ap_rms_file, 'wb').close()
 
     # chunks to split the file into, dependent on number of parallel processes
     CHUNK_SIZE = int(sr.ns / nprocesses)
@@ -287,72 +301,86 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
 
         # Find the maximum sample for each chunk
         max_s = _sr.ns if i_chunk == n_chunk - 1 else (i_chunk + 1) * CHUNK_SIZE
-        pbar = tqdm(total=CHUNK_SIZE / _sr.fs)
 
-        win = pyfftw.empty_aligned((ncv, NBATCH), dtype='float32')
-        WIN = pyfftw.empty_aligned((ncv, int(NBATCH / 2 + 1)), dtype='complex64')
         fft_object = pyfftw.FFTW(win, WIN, axes=(1,), direction='FFTW_FORWARD', threads=4)
         ifft_object = pyfftw.FFTW(WIN, win, axes=(1,), direction='FFTW_BACKWARD', threads=4)
 
-        with open(output_file, 'r+b') as fid, open(ap_rms_file, 'r+b') as aid:
+        fid = open(output_file, 'r+b')
+        if i_chunk == 0:
+            fid.seek(offset)
+        else:
+            fid.seek(offset + ((first_s + SAMPLES_TAPER) * nc_out * nbytes))
+
+        if compute_rms:
+            aid = open(ap_rms_file, 'r+b')
+            tid = open(ap_time_file, 'r+b')
             if i_chunk == 0:
-                fid.seek(offset)
                 aid.seek(rms_offset)
+                tid.seek(time_offset)
             else:
-                fid.seek(offset + ((first_s + SAMPLES_TAPER) * nc_out * nbytes))
-                aid.seek(rms_offset + (i_chunk * nc_out * rms_nbytes))
+                aid.seek(rms_offset + (n_batch * nc_out * rms_nbytes))
+                tid.seek(time_offset + (n_batch * rms_nbytes))
 
-            while True:
-                last_s = np.minimum(NBATCH + first_s, _sr.ns)
-
-                # Apply tapers
-                ap_rms = rms(_sr[first_s:last_s, :ncv] - np.mean(_sr[first_s:last_s, :ncv], axis=0))
+        while True:
+            last_s = np.minimum(NBATCH + first_s, _sr.ns)
+            # Compute rms
+            if compute_rms:
+                ap_rms = rms(_sr[first_s:last_s, :nc_out] - np.mean(_sr[first_s:last_s, :nc_out], axis=0), axis=0)
+                ap_t = t0 + (first_s + (last_s - first_s - 1) / 2) / _sr.fs
                 ap_rms.astype(np.float32).tofile(aid)
+                ap_t.astype(np.float32).tofile(tid)
 
-
-                chunk = _sr[first_s:last_s, :ncv].T
-                chunk[:, :SAMPLES_TAPER] *= taper[:SAMPLES_TAPER]
-                chunk[:, -SAMPLES_TAPER:] *= taper[SAMPLES_TAPER:]
-
-                # Apply filters
-                chunk = scipy.signal.sosfiltfilt(sos, chunk)
-
-                # Find the indices to save
-                ind2save = [SAMPLES_TAPER, NBATCH - SAMPLES_TAPER]
-
+            # Apply tapers
+            chunk = _sr[first_s:last_s, :ncv].T
+            chunk[:, :SAMPLES_TAPER] *= taper[:SAMPLES_TAPER]
+            chunk[:, -SAMPLES_TAPER:] *= taper[SAMPLES_TAPER:]
+            # Apply filters
+            chunk = scipy.signal.sosfiltfilt(sos, chunk)
+            # Find the indices to save
+            ind2save = [SAMPLES_TAPER, NBATCH - SAMPLES_TAPER]
+            if last_s == _sr.ns:
+                # for the last batch just use the normal fft as the stencil doesn't fit
+                chunk = fshift(chunk, s=h['sample_shift'])
+                ind2save[1] = NBATCH
+            else:
+                # apply precomputed fshift of the proper length
+                chunk = ifft_object(fft_object(chunk) * DEPHAS)
+            if first_s == 0:
+                # for the first batch save the start with taper applied
+                ind2save[0] = 0
+            # add back sync trace and save
+            chunk = kfilt(chunk, **k_kwargs)
+            chunk = np.r_[chunk, _sr[first_s:last_s, ncv:].T].T
+            intnorm = 1 / _sr.channel_conversion_sample2v['ap'] if dtype == np.int16 else 1.
+            chunk = chunk[slice(*ind2save), :] * intnorm
+            if wrot is not None:
+                chunk[:, :ncv] = np.dot(chunk[:, :ncv], wrot)
+            chunk[:, :nc_out].astype(np.int16).tofile(fid)
+            first_s += NBATCH - SAMPLES_TAPER * 2
+            if last_s >= max_s:
                 if last_s == _sr.ns:
-                    # for the last batch just use the normal fft as the stencil doesn't fit
-                    chunk = fshift(chunk, s=h['sample_shift'])
-                    ind2save[1] = NBATCH
-                else:
-                    # apply precomputed fshift of the proper length
-                    chunk = ifft_object(fft_object(chunk) * DEPHAS)
-
-                if first_s == 0:
-                    # for the first batch save the start with taper applied
-                    ind2save[0] = 0
-
-                # add back sync trace and save
-                chunk = kfilt(chunk, **k_kwargs)
-                chunk = np.r_[chunk, _sr[first_s:last_s, ncv:].T].T
-                intnorm = 1 / _sr.channel_conversion_sample2v['ap'] if dtype == np.int16 else 1.
-                chunk = chunk[slice(*ind2save), :] * intnorm
-
-                if wrot is not None:
-                    chunk[:, :ncv] = np.dot(chunk[:, :ncv], wrot)
-
-                chunk[:, :nc_out].astype(np.int16).tofile(fid)
-                first_s += NBATCH - SAMPLES_TAPER * 2
-                pbar.update(NBATCH / _sr.fs)
-                if last_s >= max_s:
-                    if last_s == _sr.ns:
-                        if ns2add > 0:
-                            np.tile(chunk[-1, :nc_out].astype(dtype), (ns2add, 1)).tofile(fid)
-                    break
-        pbar.close()
+                    if ns2add > 0:
+                        np.tile(chunk[-1, :nc_out].astype(dtype), (ns2add, 1)).tofile(fid)
+                fid.close()
+                if compute_rms:
+                    aid.close()
+                    tid.close()
+                break
 
     _ = Parallel(n_jobs=nprocesses)(delayed(my_function)(i, nprocesses) for i in range(nprocesses))
     sr.close()
+
+    # Here convert the ap_rms bin files to the ibl format and save
+    if compute_rms:
+        with open(ap_rms_file, 'rb') as aid, open(ap_time_file, 'rb') as tid:
+            rms_data = aid.read()
+            time_data = tid.read()
+        time_data = np.frombuffer(time_data, dtype=np.float32)
+        rms_data = np.frombuffer(rms_data, dtype=np.float32)
+        assert(rms_data.shape[0] == time_data.shape[0] * nc_out)
+        rms_data = rms_data.reshape(time_data.shape[0], nc_out)
+        np.save(Path(sr_file).parent.joinpath('_iblqc_ephysTimeRmsAP.rms.npy'), rms_data)
+        np.save(Path(sr_file).parent.joinpath('_iblqc_ephysTimeRmsAP.timestamps.npy'), time_data)
 
 
 def rcoeff(x, y):
