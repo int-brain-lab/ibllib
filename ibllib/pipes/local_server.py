@@ -16,7 +16,7 @@ from ibllib.time import date2isostr
 import ibllib.oneibl.registration as registration
 
 _logger = logging.getLogger('ibllib')
-LARGE_TASKS = ['EphysVideoCompress', 'TrainingVideoCompress', 'EphysDLC', 'TrainingDLC', 'SpikeSorting']
+LARGE_TASKS = ['EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting']  # 'EphysDLC', 'TrainingDLC',
 
 
 def _get_pipeline_class(session_path, one):
