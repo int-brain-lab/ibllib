@@ -26,7 +26,7 @@ class Snapshot:
 		self.figures.append(fig_path)
 		return fig_path
 
-	def register_figure(self, figure, text='', width=800):
+	def register_figure(self, figure, text='', width=None):
 		fig_open = open(figure, 'rb')
 		note = {
 			'user': self.one.alyx.user, 'content_type': self.content_type, 'object_id': self.object_id,
@@ -39,8 +39,10 @@ class Snapshot:
 			if "matching query does not exist.'" in str(e):
 				_logger.error(f'The object_id {self.object_id} does not match an object of type {self.content_type}')
 				_logger.debug(traceback.format_exc())
+			else:
+				raise
 
-	def register_figures(self, figures=None, texts=[''], widths=[800]):
+	def register_figures(self, figures=None, texts=[''], widths=[None]):
 		if not figures or len(figures) == 0:
 			if len(self.figures) == 0:
 				_logger.warning(
