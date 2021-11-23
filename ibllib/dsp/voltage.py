@@ -53,7 +53,7 @@ def agc(x, wl=.5, si=.002, epsilon=1e-8):
     ns_win = np.round(wl / si / 2) * 2 + 1
     w = np.hanning(ns_win)
     w /= np.sum(w)
-    gain = np.sqrt(fdsp.convolve(x ** 2, w, mode='same'))
+    gain = fdsp.convolve(np.abs(x), w, mode='same')
     gain += (np.sum(gain, axis=1) * epsilon / x.shape[-1])[:, np.newaxis]
     gain = 1 / gain
     return x * gain, gain
