@@ -131,8 +131,8 @@ class EphysQC(base.QC):
         if self.data.ap_meta:
             rms_file = self.probe_path.joinpath("_iblqc_ephysChannels.apRMS.npy")
             spike_rate_file = self.probe_path.joinpath("_iblqc_ephysChannels.rawSpikeRates.npy")
-            channel_ok_file = self.probe_path.joinpath("_iblqc_ephysChannels.labels.npy'")
-            if all([rms_file.exists(), spike_rate_file.exists()]) and not overwrite:
+            channel_ok_file = self.probe_path.joinpath("_iblqc_ephysChannels.labels.npy")
+            if all([rms_file.exists(), spike_rate_file.exists(), channel_ok_file.exists()]) and not overwrite:
                 _logger.warning(f'RMS map already exists for .ap data in {self.probe_path}, skipping. '
                                 f'Use overwrite option.')
                 median_rms = np.load(rms_file)
@@ -174,8 +174,8 @@ class EphysQC(base.QC):
                 mode_channel_ok, _ = stats.mode(channel_ok, axis=1)
                 np.save(rms_file, median_rms)
                 np.save(spike_rate_file, median_spike_rate)
-                np.save(channel_ok_file, mode_channel_ok)
-            qc_files.extend([rms_file, spike_rate_file])
+                np.save(channel_ok_file, mode_channel_ok.flatten())
+            qc_files.extend([rms_file, spike_rate_file, channel_ok_file])
 
             for p in [10, 90]:
                 self.metrics[f'apRms_p{p}_raw'] = np.format_float_scientific(np.percentile(median_rms[0, :], p),

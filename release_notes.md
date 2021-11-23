@@ -1,3 +1,5 @@
+## Unreleased
+- Ephys pipeline: RawEphysQC: outputs channels labels as part of pipelin
 ## Release Notes 2.4
 ### Release Notes 2.4.0
 - Setting tasks to Waiting if they encountered lock (status -2)
