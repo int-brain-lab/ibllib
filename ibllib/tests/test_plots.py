@@ -89,13 +89,16 @@ class TestSnapshot(unittest.TestCase):
                 self.assertEqual(im.size, expected_sizes[i])
         # Registering multiple figures by adding to self.figures
         self.assertEqual(len(snp.images), 0)
+        with self.assertLogs('ibllib', 'WARNING'):
+            out = snp.register_images()
+            self.assertIsNone(out)
         snp.images.extend([self.img_file, self.img_file, self.img_file])
-        self.notes.extend(snp.register_images(texts=['0', '1', '2'], widths=[None, 'orig', 200]))
+        self.notes.extend(snp.register_images(texts=['always the same'], widths=[200]))
         for i in range(3):
-            self.assertEqual(self.notes[i + 3]['text'], str(i))
+            self.assertEqual(self.notes[i + 3]['text'], 'always the same')
             img_db = http_download_file(self.notes[i + 3]['image'], **self.download_kwargs)
             with Image.open(img_db) as im:
-                self.assertEqual(im.size, expected_sizes[i])
+                self.assertEqual(im.size, expected_sizes[2])
 
     def test_generate_image(self):
         snp = Snapshot(str(uuid.uuid4()), one=self.one)
