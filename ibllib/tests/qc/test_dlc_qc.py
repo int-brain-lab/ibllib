@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import numpy as np
@@ -86,32 +87,53 @@ class TestDlcQC(unittest.TestCase):
         self.qc.side = 'left'
 
     def test_check_pupil_blocked(self):
-        self.qc.data['dlc_coords'] = {'pupil_top_r': np.array(([500, 20, 0], [1, 500, 20])),
-                                      'pupil_bottom_r': np.array(([2, 0, 500], [500, 0, 0])),
-                                      'pupil_left_r': np.array(([1, 500, 0], [1, 1, 100])),
-                                      'pupil_right_r': np.array(([20, 0, 500], [0, 500, 0]))}
+        rng = np.random.default_rng(2021)
+        self.qc.data['pupilDiameter_raw'] = rng.normal(scale=7, size=100)
+        # Body camera, no pupil diameter calculated, return not set
         self.qc.side = 'body'
         outcome = self.qc.check_pupil_blocked()
-        self.assertEqual('PASS', outcome)
+        self.assertEqual('NOT_SET', outcome)
+        # Left camera, np.std threshold is 10 should pass
         self.qc.side = 'left'
         outcome = self.qc.check_pupil_blocked()
+        self.assertEqual('PASS', outcome)
+        # Right camera, np.std threshold is 5, should fail
+        self.qc.side = 'right'
+        outcome = self.qc.check_pupil_blocked()
         self.assertEqual('FAIL', outcome)
-        self.qc.data['dlc_coords'] = {'pupil_top_r': np.ones((2, 10)) * np.nan,
-                                      'pupil_bottom_r': np.ones((2, 10)) * np.nan,
-                                      'pupil_left_r': np.ones((2, 10)) * np.nan,
-                                      'pupil_right_r': np.ones((2, 10)) * np.nan}
+        # Too many nans, should fail
+        self.qc.data['pupilDiameter_raw'] *= np.nan
+        self.qc.side = 'left'
         outcome = self.qc.check_pupil_blocked()
         self.assertEqual('FAIL', outcome)
 
     def test_check_lick_detection(self):
         self.qc.side = 'body'
         outcome = self.qc.check_lick_detection()
-        self.assertEqual('PASS', outcome)
+        self.assertEqual('NOT_SET', outcome)
         self.qc.side = 'left'
         self.qc.data['dlc_coords'] = {'tongue_end_l': np.ones((2, 10)),
                                       'tongue_end_r': np.ones((2, 10))}
         outcome = self.qc.check_lick_detection()
         self.assertEqual('FAIL', outcome)
+        self.qc.data['dlc_coords']['tongue_end_l'] *= np.nan
+        outcome = self.qc.check_lick_detection()
+        self.assertEqual('PASS', outcome)
+
+    def test_check_pupil_diameter_snr(self):
+        pupil_path = Path(__file__).parent.joinpath('..', 'fixtures', 'qc').resolve()
+        pupil_data = np.load(pupil_path.joinpath('pupil_diameter.npy'))
+        self.qc.data['pupilDiameter_raw'] = pupil_data[:, 0]
+        self.qc.data['pupilDiameter_smooth'] = pupil_data[:, 1]
+        self.qc.side = 'body'
+        outcome = self.qc.check_pupil_diameter_snr()
+        self.assertEqual('NOT_SET', outcome)
+        self.qc.side = 'left'
+        outcome = self.qc.check_pupil_diameter_snr()
+        self.assertEqual(('FAIL', 6.624), outcome)
+        self.qc.side = 'right'
+        outcome = self.qc.check_pupil_diameter_snr()
+        self.assertEqual(('PASS', 6.624), outcome)
 
 
 if __name__ == "__main__":
