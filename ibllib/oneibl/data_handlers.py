@@ -37,15 +37,17 @@ class DataHandler(abc.ABC):
         """
         pass
 
-    def getData(self):
+    def getData(self, one=None):
         """
         Finds the datasets required for task based on input signatures
         :return:
         """
-        if self.one is None:
+        if self.one is None and one is None:
             return
-        session_datasets = self.one.list_datasets(self.one.path2eid(self.session_path), details=True)
-        df = pd.DataFrame(columns=self.one._cache.datasets.columns)
+
+        one = one or self.one
+        session_datasets = one.list_datasets(one.path2eid(self.session_path), details=True)
+        df = pd.DataFrame(columns=one._cache.datasets.columns)
         for file in self.signature['input_files']:
             df = df.append(filter_datasets(session_datasets, filename=file[0], collection=file[1],
                            wildcards=True, assert_unique=False))
@@ -143,7 +145,10 @@ class ServerGlobusDataHandler(DataHandler):
         Function to download necessary data to run tasks using globus-sdk
         :return:
         """
-        df = super().getData()
+        if self.lab == 'cortexlab':
+            df = super().getData(one=ONE(base_url='https://alyx.internationalbrainlab.org'))
+        else:
+            df = super().getData()
 
         if len(df) == 0:
             # If no datasets found in the cache only work off local file system do not attempt to download any missing data
