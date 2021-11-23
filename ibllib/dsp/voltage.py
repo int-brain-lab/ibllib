@@ -198,7 +198,7 @@ def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, k_kwa
     :return: x, filtered array
     """
     if butter_kwargs is None:
-        butter_kwargs = {'N': 3, 'Wn': 300 / fs / 2, 'btype': 'highpass'}
+        butter_kwargs = {'N': 3, 'Wn': 300 / fs * 2, 'btype': 'highpass'}
     if k_kwargs is None:
         k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
                     'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
@@ -215,7 +215,7 @@ def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, k_kwa
     return x_
 
 
-def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None,
+def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None, butter_kwargs=None,
                              dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None, compute_rms=True):
     """
     From a spikeglx Reader object, decompresses and apply ADC.
@@ -227,6 +227,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     :param wrot: (optional) whitening matrix [nc x nc] or amplitude scalar to apply to the output
     :param append: (optional, False) for chronic recordings, append to end of file
     :param nc_out: (optional, True) saves non selected channels (synchronisation trace) in output
+    :param butterworth filter parameters: {'N': 3, 'Wn': 300 / sr.fs * 2, 'btype': 'highpass'}
     :param dtype: (optional, np.int16) output sample format
     :param ns2add: (optional) for kilosort, adds padding samples at the end of the file so the total
     number of samples is a multiple of the batchsize
@@ -236,12 +237,13 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     """
     import pyfftw
 
-    SAMPLES_TAPER = 128
+    SAMPLES_TAPER = 1024
     NBATCH = nbatch or 65536
     # handles input parameters
     assert isinstance(sr_file, str) or isinstance(sr_file, Path)
     sr = spikeglx.Reader(sr_file, open=True)
     butter_kwargs = {'N': 3, 'Wn': 300 / sr.fs / 2, 'btype': 'highpass'}
+    butter_kwargs = butter_kwargs or {'N': 3, 'Wn': 300 / sr.fs * 2, 'btype': 'highpass'}
     k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
                 'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
     h = neuropixel.trace_header(version=1) if h is None else h
