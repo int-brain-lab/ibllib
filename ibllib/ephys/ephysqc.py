@@ -7,7 +7,7 @@ import shutil
 
 import numpy as np
 import pandas as pd
-from scipy import signal
+from scipy import signal, stats
 from tqdm import tqdm
 import one.alf.io as alfio
 from iblutil.util import Bunch
@@ -101,11 +101,14 @@ class EphysQC(base.QC):
         :return: 3 numpy vectors nchannels length
         """
         destripe = dsp.destripe(raw, fs=fs, neuropixel_version=1)
+        # TODO: remove DC component before computing RMS
         rms_raw = dsp.rms(raw)
         rms_pre_proc = dsp.rms(destripe)
+        # TODO: filter array and remove bad channels
         detections = spikes.detection(data=destripe.T, fs=fs, h=h, detect_threshold=SPIKE_THRESHOLD_UV * 1e-6)
         spike_rate = np.bincount(detections.trace, minlength=raw.shape[0]).astype(np.float32)
-        return rms_raw, rms_pre_proc, spike_rate
+        channel_labels, _ = dsp.voltage.detect_bad_channels(raw, fs=fs)
+        return rms_raw, rms_pre_proc, spike_rate, channel_labels
 
     def run(self, update: bool = False, overwrite: bool = True, stream: bool = None, **kwargs) -> (str, dict):
         """
@@ -128,6 +131,7 @@ class EphysQC(base.QC):
         if self.data.ap_meta:
             rms_file = self.probe_path.joinpath("_iblqc_ephysChannels.apRMS.npy")
             spike_rate_file = self.probe_path.joinpath("_iblqc_ephysChannels.rawSpikeRates.npy")
+            channel_ok_file = self.probe_path.joinpath("_iblqc_ephysChannels.labels.npy'")
             if all([rms_file.exists(), spike_rate_file.exists()]) and not overwrite:
                 _logger.warning(f'RMS map already exists for .ap data in {self.probe_path}, skipping. '
                                 f'Use overwrite option.')
@@ -145,14 +149,15 @@ class EphysQC(base.QC):
                     raise ValueError("Wrong Neuropixel channel mapping used - ABORT")
                 t0s = np.arange(TMIN, rl - SAMPLE_LENGTH, BATCHES_SPACING)
                 all_rms = np.zeros((2, nc, t0s.shape[0]))
-                all_srs = np.zeros((nc, t0s.shape[0]))
+                all_srs, channel_ok = (np.zeros((nc, t0s.shape[0])) for _ in range(2))
                 # If the ap.bin file is not present locally, stream it
                 if self.data.ap is None and self.stream is True:
                     _logger.warning(f'Streaming .ap data to compute RMS samples for probe {self.pid}')
                     for i, t0 in enumerate(tqdm(t0s)):
                         sr, _ = sglx_streamer(self.pid, t0=t0, nsecs=1, one=self.one, remove_cached=True)
                         raw = sr[:, :-nsync].T
-                        all_rms[0, :, i], all_rms[1, :, i], all_srs[:, i] = self._compute_metrics_array(raw, sr.fs, h)
+                        all_rms[0, :, i], all_rms[1, :, i], all_srs[:, i], channel_ok[:, i] =\
+                            self._compute_metrics_array(raw, sr.fs, h)
                 elif self.data.ap is None and self.stream is not True:
                     _logger.warning('Raw .ap data is not available locally. Run with stream=True in order to stream '
                                     'data for calculating RMS samples.')
@@ -161,12 +166,15 @@ class EphysQC(base.QC):
                     for i, t0 in enumerate(t0s):
                         sl = slice(int(t0 * self.data.ap.fs), int((t0 + SAMPLE_LENGTH) * self.data.ap.fs))
                         raw = self.data.ap[sl, :-nsync].T
-                        all_rms[0, :, i], all_rms[1, :, i], all_srs[:, i] = self._compute_metrics_array(raw, self.data.ap.fs, h)
+                        all_rms[0, :, i], all_rms[1, :, i], all_srs[:, i], channel_ok[:, i] =\
+                            self._compute_metrics_array(raw, self.data.ap.fs, h)
                 # Calculate the median RMS across all samples per channel
                 median_rms = np.median(all_rms, axis=-1)
                 median_spike_rate = np.median(all_srs, axis=-1)
+                mode_channel_ok, _ = stats.mode(channel_ok, axis=1)
                 np.save(rms_file, median_rms)
                 np.save(spike_rate_file, median_spike_rate)
+                np.save(channel_ok_file, mode_channel_ok)
             qc_files.extend([rms_file, spike_rate_file])
 
             for p in [10, 90]:

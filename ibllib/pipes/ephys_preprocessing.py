@@ -106,6 +106,7 @@ class RawEphysQC(tasks.Task):
                         ('*lf.*bin', 'raw_ephys_data/probe*', True)],  # not necessary to run task as optional computation
         'output_files': [('_iblqc_ephysChannels.apRMS.npy', 'raw_ephys_data/probe*', True),
                          ('_iblqc_ephysChannels.rawSpikeRates.npy', 'raw_ephys_data/probe*', True),
+                         ('_iblqc_ephysChannels.labels.npy', 'raw_ephys_data/probe*', True),
                          ('_iblqc_ephysSpectralDensityLF.freqs.npy', 'raw_ephys_data/probe*', True),
                          ('_iblqc_ephysSpectralDensityLF.power.npy', 'raw_ephys_data/probe*', True),
                          ('_iblqc_ephysTimeRmsLF.rms.npy', 'raw_ephys_data/probe*', True),

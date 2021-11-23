@@ -5,38 +5,13 @@ from pathlib import Path
 
 import numpy as np
 import scipy.signal
-from tqdm import tqdm
+import scipy.stats
 from joblib import Parallel, delayed, cpu_count
-
 
 from ibllib.io import spikeglx
 import ibllib.dsp.fourier as fdsp
 from ibllib.dsp import fshift, rms
 from ibllib.ephys import neuropixel
-
-
-def reject_channels(x, fs, butt_kwargs=None, threshold=0.6, trx=1):
-    """
-    Computes the
-    :param x: demultiplexed array (ntraces, nsample)
-    :param fs: sampling frequency (Hz)
-    :param trx: number of traces each side (1)
-    :param butt kwargs (optional, None), butt_kwargs = {'N': 4, 'Wn': 0.05, 'btype': 'lp'}
-    :param threshold: r value below which a channel is rejected
-    :return:
-    """
-    ntr, ns = x.shape
-    # mirror padding by taking care of not repeating first/last trace
-    x = np.r_[x[1:trx + 1, :], x, x[-2 - trx:-2, :]]
-    # apply butterworth
-    if butt_kwargs is not None:
-        sos = scipy.signal.butter(**butt_kwargs, output='sos')
-        x = scipy.signal.sosfiltfilt(sos, x)
-    r = np.zeros(ntr)
-    for ix in np.arange(trx, ntr + trx):
-        ref = np.median(x[ix - trx: ix + trx + 1, :], axis=0)
-        r[ix - trx] = np.corrcoef(x[ix, :], ref)[1, 0]
-    return r >= threshold, r
 
 
 def agc(x, wl=.5, si=.002, epsilon=1e-8):
@@ -216,7 +191,7 @@ def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, k_kwa
 
 
 def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None, butter_kwargs=None,
-                             dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None, compute_rms=True):
+                             dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None, compute_rms=True, channel_labels=None):
     """
     From a spikeglx Reader object, decompresses and apply ADC.
     Saves output as a flat binary file in int16
@@ -233,6 +208,8 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     number of samples is a multiple of the batchsize
     :param nbatch: (optional) batch size
     :param nprocesses: (optional) number of parallel processes to run, defaults to number or processes detected with joblib
+    :param channel_labels (optional): nc numpy array of ints corresponding to channel labeling, 0: ok, 1/2: noisy and will\
+     interp 3:outside of brain and discard
     :return:
     """
     import pyfftw
@@ -240,19 +217,19 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     SAMPLES_TAPER = 1024
     NBATCH = nbatch or 65536
     # handles input parameters
-    assert isinstance(sr_file, str) or isinstance(sr_file, Path)
     sr = spikeglx.Reader(sr_file, open=True)
-    butter_kwargs = {'N': 3, 'Wn': 300 / sr.fs / 2, 'btype': 'highpass'}
+    assert isinstance(sr_file, str) or isinstance(sr_file, Path)
     butter_kwargs = butter_kwargs or {'N': 3, 'Wn': 300 / sr.fs * 2, 'btype': 'highpass'}
     k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
                 'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
     h = neuropixel.trace_header(version=1) if h is None else h
+    ncv = h['x'].size  # number of channels
     output_file = sr.file_bin.with_suffix('.bin') if output_file is None else output_file
     assert output_file != sr.file_bin
     taper = np.r_[0, scipy.signal.windows.cosine((SAMPLES_TAPER - 1) * 2), 0]
     # create the FFT stencils
-    ncv = h['x'].size  # number of channels
     nc_out = nc_out or sr.nc
+
     # compute LP filter coefficients
     sos = scipy.signal.butter(**butter_kwargs, output='sos')
     nbytes = dtype(1).nbytes
@@ -359,7 +336,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
             chunk = chunk[slice(*ind2save), :] * intnorm
             if wrot is not None:
                 chunk[:, :ncv] = np.dot(chunk[:, :ncv], wrot)
-            chunk[:, :nc_out].astype(np.int16).tofile(fid)
+            chunk[:, :nc_out].astype(dtype).tofile(fid)
             first_s += NBATCH - SAMPLES_TAPER * 2
             if last_s >= max_s:
                 if last_s == _sr.ns:
@@ -498,3 +475,34 @@ def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshol
     ichannels[idead] = 1
     ichannels[inoisy] = 2
     return ichannels, xfeats
+
+
+def detect_bad_channels_cbin(bin_file, n_batches=10, batch_duration=0.3, display=False):
+    """
+    Runs a ap-binary file scan to automatically detect faulty channels
+    :param bin_file: full file path to the binary or compressed binary file from spikeglx
+    :param n_batches: number of batches throughout the file (defaults to 10)
+    :param batch_duration: batch length in seconds, defaults to 0.3
+    :param display: if True will return a figure with features and an excerpt of the raw data
+    :return: channel_labels: nc int array with 0:ok, 1:dead, 2:high noise, 3:outside of the brain
+    """
+    sr = spikeglx.Reader(bin_file)
+    nc = sr.nc - sr.nsync
+    channel_labels = np.zeros((nc, n_batches))
+    # loop over the file and take the mode of detections
+    for i, t0 in enumerate(np.linspace(0, sr.rl - batch_duration, n_batches)):
+        sl = slice(int(t0 * sr.fs), int((t0 + batch_duration) * sr.fs))
+        channel_labels[:, i], _xfeats = detect_bad_channels(sr[sl, :nc].T, fs=sr.fs)
+        if i == 0:  # init the features dictionary if necessary
+            xfeats = {k: np.zeros((nc, n_batches)) for k in _xfeats}
+        for k in xfeats:
+            xfeats[k][:, i] = _xfeats[k]
+    # the features are averaged  so there may be a discrepancy between the mode and applying
+    # the thresholds to the average of the features - the goal of those features is for display only
+    xfeats_med = {k: np.median(xfeats[k], axis=-1) for k in xfeats}
+    ind_ok, _ = scipy.stats.mode(channel_labels, axis=1)
+    if display:
+        raw = sr[sl, :nc].T
+        from ibllib.plots.figures import ephys_bad_channels
+        ephys_bad_channels(raw, sr.fs, ind_ok, xfeats_med)
+    return channel_labels
