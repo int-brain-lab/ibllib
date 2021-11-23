@@ -158,16 +158,55 @@ def kfilt(x, collection=None, ntr_pad=0, ntr_tap=None, lagc=300, butter_kwargs=N
     return xf / gain
 
 
-def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, k_kwargs=None):
+def interpolate_bad_channels(data, channel_labels=None, h=None, p=1.3, kriging_distance_um=20):
+    """
+    Interpolate the channel labeled as bad channels using linear interpolation.
+    The weights applied to neighbouring channels come from an exponential decay function
+    :param data: (nc, ns) np.ndarray
+    :param channel_labels; (nc) np.ndarray: 0: channel is good, 1: dead, 2:noisy, 3: out of the brain
+    :param h: dict with fields 'x' and 'y', np.ndarrays
+    :param p:
+    :param kriging_distance_um:
+    :return:
+    """
+    # from ibllib.plots.figures import ephys_bad_channels
+    # ephys_bad_channels(x, 30000, channel_labels[0], channel_labels[1])
+    x = h['x']
+    y = h['y']
+    # we interpolate only noisy channels or dead channels (0: good), out of the brain channels are left
+    bad_channels = np.where(np.logical_or(channel_labels == 1, channel_labels == 2))[0]
+    for i in bad_channels:
+        # compute the weights to apply to neighbouring traces
+        offset = np.abs(x - x[i] + 1j * (y - y[i]))
+        weights = np.exp(-(offset / kriging_distance_um) ** p)
+        weights[bad_channels] = 0
+        weights[weights < 0.005] = 0
+        weights = weights / np.sum(weights)
+        imult = np.where(weights > 0.005)[0]
+        if imult.size == 0:
+            data[i, :] = 0
+            continue
+        data[i, :] = np.matmul(weights[imult], data[imult, :])
+    # from easyqc.gui import viewseis
+    # f = viewseis(data.T, si=1/30, h=h, title='interp2', taxis=0)
+    return data
+
+
+def destripe(x, fs, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, channel_labels=None):
     """Super Car (super slow also...) - far from being set in stone but a good workflow example
-    :param x: demultiplexed array (ntraces, nsample)
+    :param x: demultiplexed array (nc, ns)
     :param fs: sampling frequency
     :param neuropixel_version (optional): 1 or 2. Useful for the ADC shift correction. If None,
      no correction is applied
-    :param tr_sel: index array for the first axis of x indicating the selected traces.
+    :param channel_labels:
+      None: (default) keep all channels
+     OR (recommended to pre-compute)
+        index array for the first axis of x indicating the selected traces.
      On a full workflow, one should scan sparingly the full file to get a robust estimate of the
      selection. If None, and estimation is done using only the current batch is provided for
      convenience but should be avoided in production.
+      OR (only for quick display or as an example)
+       True: deduces the bad channels from the data provided
     :param butter_kwargs: (optional, None) butterworth params, see the code for the defaults dict
     :param k_kwargs: (optional, None) K-filter params, see the code for the defaults dict
     :return: x, filtered array
@@ -178,20 +217,28 @@ def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, k_kwa
         k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
                     'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
     h = neuropixel.trace_header(version=neuropixel_version)
+    if channel_labels is True:
+        channel_labels, _ = detect_bad_channels(x, fs)
     # butterworth
     sos = scipy.signal.butter(**butter_kwargs, output='sos')
     x = scipy.signal.sosfiltfilt(sos, x)
+    # channel interpolation
     # apply ADC shift
     if neuropixel_version is not None:
         sample_shift = h['sample_shift'] if (30000 / fs) < 10 else h['sample_shift'] * fs / 30000
         x = fshift(x, sample_shift, axis=1)
-    # apply spatial filter on good channel selection only
-    x_ = kfilt(x, **k_kwargs)
-    return x_
+    # apply spatial filter only on channels that are inside of the brain
+    if channel_labels is not None:
+        x = interpolate_bad_channels(x, channel_labels, h)
+        inside_brain = np.where(channel_labels != 3)[0]
+        x[inside_brain, :] = kfilt(x[inside_brain, :], **k_kwargs)  # apply the k-filter
+    else:
+        x = kfilt(x, **k_kwargs)
+    return x
 
 
 def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None, butter_kwargs=None,
-                             dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None, compute_rms=True):
+                             dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None, compute_rms=True, reject_channels=True):
     """
     From a spikeglx Reader object, decompresses and apply ADC.
     Saves output as a flat binary file in int16
@@ -209,6 +256,8 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     :param nbatch: (optional) batch size
     :param nprocesses: (optional) number of parallel processes to run, defaults to number or processes detected with joblib
      interp 3:outside of brain and discard
+    :param reject_channels: (True) detects noisy or bad channels and interpolate them. Channels outside of the brain are left
+     untouched
     :return:
     """
     import pyfftw
@@ -217,7 +266,8 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     NBATCH = nbatch or 65536
     # handles input parameters
     sr = spikeglx.Reader(sr_file, open=True)
-    # channel_labels = detect_bad_channels_cbin(sr)
+    if reject_channels:  # get bad channels if option is on
+        channel_labels = detect_bad_channels_cbin(sr)
     assert isinstance(sr_file, str) or isinstance(sr_file, Path)
     butter_kwargs = butter_kwargs or {'N': 3, 'Wn': 300 / sr.fs * 2, 'btype': 'highpass'}
     k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
@@ -229,12 +279,10 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     taper = np.r_[0, scipy.signal.windows.cosine((SAMPLES_TAPER - 1) * 2), 0]
     # create the FFT stencils
     nc_out = nc_out or sr.nc
-
     # compute LP filter coefficients
     sos = scipy.signal.butter(**butter_kwargs, output='sos')
     nbytes = dtype(1).nbytes
     nprocesses = nprocesses or int(cpu_count() - cpu_count() / 4)
-
     win = pyfftw.empty_aligned((ncv, NBATCH), dtype='float32')
     WIN = pyfftw.empty_aligned((ncv, int(NBATCH / 2 + 1)), dtype='complex64')
     fft_object = pyfftw.FFTW(win, WIN, axes=(1,), direction='FFTW_FORWARD', threads=4)
@@ -299,7 +347,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
                 aid.seek(rms_offset)
                 tid.seek(time_offset)
             else:
-                aid.seek(rms_offset + (n_batch * nc_out * rms_nbytes))
+                aid.seek(rms_offset + (n_batch * ncv * rms_nbytes))
                 tid.seek(time_offset + (n_batch * rms_nbytes))
 
         while True:
@@ -322,8 +370,14 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
             if first_s == 0:
                 # for the first batch save the start with taper applied
                 ind2save[0] = 0
-            # apply the k-filter
-            chunk = kfilt(chunk, **k_kwargs)
+            # interpolate missing traces after the low-cut filter it's important to leave the
+            # channels outside of the brain outside of the computation
+            if reject_channels:
+                chunk = interpolate_bad_channels(chunk, channel_labels, h=h)
+                inside_brain = np.where(channel_labels != 3)[0]
+                chunk[inside_brain, :] = kfilt(chunk[inside_brain, :], **k_kwargs)  # apply the k-filter
+            else:
+                chunk = kfilt(chunk, **k_kwargs)  # apply the k-filter
             # add back sync trace and save
             chunk = np.r_[chunk, _sr[first_s:last_s, ncv:].T].T
             intnorm = 1 / _sr.channel_conversion_sample2v['ap'] if dtype == np.int16 else 1.
@@ -360,8 +414,8 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
             time_data = tid.read()
         time_data = np.frombuffer(time_data, dtype=np.float32)
         rms_data = np.frombuffer(rms_data, dtype=np.float32)
-        assert(rms_data.shape[0] == time_data.shape[0] * nc_out)
-        rms_data = rms_data.reshape(time_data.shape[0], nc_out)
+        assert(rms_data.shape[0] == time_data.shape[0] * ncv)
+        rms_data = rms_data.reshape(time_data.shape[0], ncv)
         np.save(Path(sr_file).parent.joinpath('_iblqc_ephysTimeRmsAP.rms.npy'), rms_data)
         np.save(Path(sr_file).parent.joinpath('_iblqc_ephysTimeRmsAP.timestamps.npy'), time_data)
 
@@ -476,6 +530,8 @@ def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshol
     # indices
     ichannels[idead] = 1
     ichannels[inoisy] = 2
+    # from ibllib.plots.figures import ephys_bad_channels
+    # ephys_bad_channels(x, 30000, ichannels, xfeats)
     return ichannels, xfeats
 
 
