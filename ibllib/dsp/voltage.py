@@ -191,7 +191,7 @@ def destripe(x, fs, tr_sel=None, neuropixel_version=1, butter_kwargs=None, k_kwa
 
 
 def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None, butter_kwargs=None,
-                             dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None, compute_rms=True, channel_labels=None):
+                             dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None, compute_rms=True):
     """
     From a spikeglx Reader object, decompresses and apply ADC.
     Saves output as a flat binary file in int16
@@ -208,7 +208,6 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     number of samples is a multiple of the batchsize
     :param nbatch: (optional) batch size
     :param nprocesses: (optional) number of parallel processes to run, defaults to number or processes detected with joblib
-    :param channel_labels (optional): nc numpy array of ints corresponding to channel labeling, 0: ok, 1/2: noisy and will\
      interp 3:outside of brain and discard
     :return:
     """
@@ -218,6 +217,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     NBATCH = nbatch or 65536
     # handles input parameters
     sr = spikeglx.Reader(sr_file, open=True)
+    # channel_labels = detect_bad_channels_cbin(sr)
     assert isinstance(sr_file, str) or isinstance(sr_file, Path)
     butter_kwargs = butter_kwargs or {'N': 3, 'Wn': 300 / sr.fs * 2, 'btype': 'highpass'}
     k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
@@ -304,13 +304,6 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
 
         while True:
             last_s = np.minimum(NBATCH + first_s, _sr.ns)
-            # Compute rms
-            if compute_rms:
-                ap_rms = rms(_sr[first_s:last_s, :nc_out] - np.mean(_sr[first_s:last_s, :nc_out], axis=0), axis=0)
-                ap_t = t0 + (first_s + (last_s - first_s - 1) / 2) / _sr.fs
-                ap_rms.astype(np.float32).tofile(aid)
-                ap_t.astype(np.float32).tofile(tid)
-
             # Apply tapers
             chunk = _sr[first_s:last_s, :ncv].T
             chunk[:, :SAMPLES_TAPER] *= taper[:SAMPLES_TAPER]
@@ -329,15 +322,24 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
             if first_s == 0:
                 # for the first batch save the start with taper applied
                 ind2save[0] = 0
-            # add back sync trace and save
+            # apply the k-filter
             chunk = kfilt(chunk, **k_kwargs)
+            # add back sync trace and save
             chunk = np.r_[chunk, _sr[first_s:last_s, ncv:].T].T
             intnorm = 1 / _sr.channel_conversion_sample2v['ap'] if dtype == np.int16 else 1.
             chunk = chunk[slice(*ind2save), :] * intnorm
+            # Compute rms - we get it before applying the whitening
+            if compute_rms:
+                ap_rms = rms(chunk[:, :ncv], axis=0)
+                ap_t = t0 + (first_s + (last_s - first_s - 1) / 2) / _sr.fs
+                ap_rms.astype(np.float32).tofile(aid)
+                ap_t.astype(np.float32).tofile(tid)
+            # apply the whitening matrix if necessary
             if wrot is not None:
                 chunk[:, :ncv] = np.dot(chunk[:, :ncv], wrot)
             chunk[:, :nc_out].astype(dtype).tofile(fid)
             first_s += NBATCH - SAMPLES_TAPER * 2
+
             if last_s >= max_s:
                 if last_s == _sr.ns:
                     if ns2add > 0:
@@ -486,7 +488,7 @@ def detect_bad_channels_cbin(bin_file, n_batches=10, batch_duration=0.3, display
     :param display: if True will return a figure with features and an excerpt of the raw data
     :return: channel_labels: nc int array with 0:ok, 1:dead, 2:high noise, 3:outside of the brain
     """
-    sr = spikeglx.Reader(bin_file)
+    sr = bin_file if isinstance(bin_file, spikeglx.Reader) else spikeglx.Reader(bin_file)
     nc = sr.nc - sr.nsync
     channel_labels = np.zeros((nc, n_batches))
     # loop over the file and take the mode of detections
@@ -500,9 +502,9 @@ def detect_bad_channels_cbin(bin_file, n_batches=10, batch_duration=0.3, display
     # the features are averaged  so there may be a discrepancy between the mode and applying
     # the thresholds to the average of the features - the goal of those features is for display only
     xfeats_med = {k: np.median(xfeats[k], axis=-1) for k in xfeats}
-    ind_ok, _ = scipy.stats.mode(channel_labels, axis=1)
+    channel_flags, _ = scipy.stats.mode(channel_labels, axis=1)
     if display:
         raw = sr[sl, :nc].T
         from ibllib.plots.figures import ephys_bad_channels
-        ephys_bad_channels(raw, sr.fs, ind_ok, xfeats_med)
-    return channel_labels
+        ephys_bad_channels(raw, sr.fs, channel_flags, xfeats_med)
+    return channel_flags
