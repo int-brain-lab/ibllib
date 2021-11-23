@@ -7,6 +7,7 @@ import os
 import abc
 from time import time
 
+from one.api import ONE
 from one.util import filter_datasets
 from one.alf.files import add_uuid_string, session_path_parts
 from iblutil.io.parquet import np2str
@@ -131,7 +132,11 @@ class ServerGlobusDataHandler(DataHandler):
         else:
             self.lab = labs[0]
 
-        self.globus.add_endpoint(f'flatiron_{self.lab}')
+        # For cortex lab we need to get the endpoint from the ibl alyx
+        if self.lab == 'cortexlab':
+            self.globus.add_endpoint(f'flatiron_{self.lab}', one=ONE(base_url='https://alyx.internationalbrainlab.org'))
+        else:
+            self.globus.add_endpoint(f'flatiron_{self.lab}')
 
     def setUp(self):
         """
