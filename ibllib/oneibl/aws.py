@@ -32,6 +32,7 @@ class AWS:
 
     def _download_datasets(self, datasets):
 
+        files = []
         for _, d in datasets.iterrows():
             rel_file_path = Path(d['session_path']).joinpath(d['rel_path'])
             file_path = Path(self.one.cache_dir).joinpath(rel_file_path)
@@ -54,5 +55,8 @@ class AWS:
                 _logger.info(f'Downloading {aws_path} to {file_path}')
                 self.bucket.download_file(aws_path, file_path.as_posix())
                 _logger.debug(f'Complete. Time elapsed {time() - ts} for {file_path}')
+                files.append(file_path)
             else:
                 _logger.warning(f'{aws_path} not found on s3 bucket: {self.bucket.name}')
+
+        return files

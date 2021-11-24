@@ -106,8 +106,11 @@ class RawEphysQC(tasks.Task):
                         ('*lf.*bin', 'raw_ephys_data/probe*', True)],  # not necessary to run task as optional computation
         'output_files': [('_iblqc_ephysChannels.apRMS.npy', 'raw_ephys_data/probe*', True),
                          ('_iblqc_ephysChannels.rawSpikeRates.npy', 'raw_ephys_data/probe*', True),
+                         ('_iblqc_ephysChannels.labels.npy', 'raw_ephys_data/probe*', True),
                          ('_iblqc_ephysSpectralDensityLF.freqs.npy', 'raw_ephys_data/probe*', True),
                          ('_iblqc_ephysSpectralDensityLF.power.npy', 'raw_ephys_data/probe*', True),
+                         ('_iblqc_ephysSpectralDensityAP.freqs.npy', 'raw_ephys_data/probe*', True),
+                         ('_iblqc_ephysSpectralDensityAP.power.npy', 'raw_ephys_data/probe*', True),
                          ('_iblqc_ephysTimeRmsLF.rms.npy', 'raw_ephys_data/probe*', True),
                          ('_iblqc_ephysTimeRmsLF.timestamps.npy', 'raw_ephys_data/probe*', True)]
     }
@@ -217,13 +220,15 @@ class SpikeSorting(tasks.Task):
         input_signature = [('*ap.meta', f'raw_ephys_data/{pname}', True),
                            ('*ap.ch', f'raw_ephys_data/{pname}', True),
                            ('*ap.cbin', f'raw_ephys_data/{pname}', True),
+                           ('*nidq.meta', 'raw_ephys_data', False),
                            ('_spikeglx_sync.channels.*', 'raw_ephys_data*', True),
                            ('_spikeglx_sync.polarities.*', 'raw_ephys_data*', True),
                            ('_spikeglx_sync.times.*', 'raw_ephys_data*', True),
                            ('_iblrig_taskData.raw.*', 'raw_behavior_data', True),
                            ('_iblrig_taskSettings.raw.*', 'raw_behavior_data', True)]
-        output_signature = [('spike_sorting_pykilosort.log', f'spike_sorters/pykilosort/{pname}', True)]
-
+        output_signature = [('spike_sorting_pykilosort.log', f'spike_sorters/pykilosort/{pname}', True),
+                            ('_iblqc_ephysTimeRmsAP.rms.npy', f'raw_ephys_data/{pname}', True),  # new ibllib 2.5
+                            ('_iblqc_ephysTimeRmsAP.timestamps.npy', f'raw_ephys_data/{pname}', True)]  # new ibllib 2.5
         return input_signature, output_signature
 
     @staticmethod
@@ -292,15 +297,18 @@ class SpikeSorting(tasks.Task):
         self.version = self._fetch_pykilosort_version(self.PYKILOSORT_REPO)
         label = ap_file.parts[-2]  # this is usually the probe name
         sorter_dir = self.session_path.joinpath("spike_sorters", self.SPIKE_SORTER_NAME, label)
-        FORCE_RERUN = False
-        if not FORCE_RERUN:
+        self.FORCE_RERUN = False
+        if not self.FORCE_RERUN:
             log_file = sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
             if log_file.exists():
                 run_version = self._fetch_pykilosort_run_version(log_file)
-                if packaging.version.parse(run_version) >= packaging.version.parse('pykilosort_ibl_1.1.0'):
+                if packaging.version.parse(run_version) > packaging.version.parse('pykilosort_ibl_1.1.0'):
                     _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
                                  f" found in {sorter_dir}, skipping.")
                     return sorter_dir
+                else:
+                    self.FORCE_RERUN = True
+
         print(sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log"))
         # get the scratch drive from the shell script
         with open(self.SHELL_SCRIPT) as fid:
@@ -393,7 +401,7 @@ class SpikeSorting(tasks.Task):
                 tar_dir = self.session_path.joinpath(
                     'spike_sorters', self.SPIKE_SORTER_NAME, label)
                 tar_dir.mkdir(parents=True, exist_ok=True)
-                out = spikes.ks2_to_tar(ks2_dir, tar_dir)
+                out = spikes.ks2_to_tar(ks2_dir, tar_dir, force=self.FORCE_RERUN)
                 out_files.extend(out)
             except BaseException:
                 _logger.error(traceback.format_exc())
@@ -423,7 +431,9 @@ class SpikeSorting(tasks.Task):
             elif 'raw_ephys_data/probe*' in sig[1]:
                 for probe in probes:
                     full_input_files.append((sig[0], f'raw_ephys_data/{probe}', sig[2]))
-
+            elif 'raw_ephys_data' in sig[1]:
+                if neuropixel_version != '3A':
+                    full_input_files.append((sig[0], 'raw_ephys_data', sig[2]))
             else:
                 full_input_files.append(sig)
 
@@ -433,7 +443,8 @@ class SpikeSorting(tasks.Task):
         for sig in self.signature['output_files']:
             if 'probe*' in sig[1]:
                 for probe in probes:
-                    full_output_files.append((sig[0], f'spike_sorters/pykilosort/{probe}', sig[2]))
+                    col = sig[1].split('/')[:-1] + [probe]
+                    full_output_files.append((sig[0], '/'.join(col), sig[2]))
             else:
                 full_input_files.append(sig)
 
