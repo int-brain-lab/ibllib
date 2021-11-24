@@ -31,8 +31,11 @@ T_BIN = 0.02 # sec
 WINDOW_LEN = 2 # sec
 WINDOW_LAG = -0.5 # sec
 
+
 # For plotting we use a window around the event the data is aligned to WINDOW_LAG before and WINDOW_LEN after the event
-plt_window = lambda x: (x+WINDOW_LAG, x+WINDOW_LEN)
+def plt_window(x):
+    return x+WINDOW_LAG, x+WINDOW_LEN
+
 
 def insert_idx(array, values):
     idx = np.searchsorted(array, values, side="left")
@@ -42,6 +45,7 @@ def insert_idx(array, values):
     # If 0 index was reduced, revert
     idx[idx == -1] = 0
     return idx
+
 
 def likelihood_threshold(dlc, threshold=0.9):
     """
@@ -518,12 +522,13 @@ def dlc_qc_plot(eid, one=None, cams=('left', 'right', 'body')):
     '''Create the list of panels'''
     panels = []
     for cam in cams:
-        panels.append((plot_trace_on_frame, {'frame': video_frames[cam], 'dlc_df': dlc_traces[cam], 'cam': cam}))
-    panels.append((plot_wheel_position,
-                   {'wheel_position': wheel_position, 'wheel_time': wheel_time, 'trials_df': trials_df}))
+        panels.append((plot_trace_on_frame, {'frame': video_frames[cam], 'dlc_df': dlc_traces[cam], 'cam': cam},
+                       f'Traces on {cam} video'))
+    panels.append((plot_wheel_position, {'wheel_position': wheel_position, 'wheel_time': wheel_time, 'trials_df': trials_df},
+                   'Wheel position'))
     # Motion energy
-    panels.append((plot_lick_psth, {'lick_times': lick_times, 'trials_df': trials_df}))
-    panels.append((plot_lick_raster, {'lick_times': lick_times, 'trials_df': trials_df}))
+    panels.append((plot_lick_psth, {'lick_times': lick_times, 'trials_df': trials_df}, 'Lick histogram'))
+    panels.append((plot_lick_raster, {'lick_times': lick_times, 'trials_df': trials_df}, 'Lick raster'))
 
     ''' Plotting'''
     matplotlib.rcParams.update({'font.size': 10})
@@ -535,8 +540,9 @@ def dlc_qc_plot(eid, one=None, cams=('left', 'right', 'body')):
                 fontsize=16, fontweight='bold', va='top', ha='right')
         # Check if any of the inputs is None
         if any([v is None for v in panel[1].values()]):
-            ax.text(.5, .5, f'Data incomplete for \n {panel[0]}', color='r', fontweight='bold',
-                    bbox=dict(facecolor='white', alpha=0.5), fontsize=10, transform=ax.transAxes)
+            ax.text(.5, .5, f"Data incomplete\nfor panel\n'{panel[2]}'", color='r', fontweight='bold', fontsize=12,
+                    horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+            plt.axis('off')
         else:
             # Run the function to plot
             try:
