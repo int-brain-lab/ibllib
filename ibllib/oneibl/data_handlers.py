@@ -7,8 +7,9 @@ import os
 import abc
 from time import time
 
+from one.api import ONE
 from one.util import filter_datasets
-from one.alf.files import add_uuid_string
+from one.alf.files import add_uuid_string, session_path_parts
 from iblutil.io.parquet import np2str
 from ibllib.oneibl.registration import register_dataset
 from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_PATCH_PATH
@@ -36,15 +37,17 @@ class DataHandler(abc.ABC):
         """
         pass
 
-    def getData(self):
+    def getData(self, one=None):
         """
         Finds the datasets required for task based on input signatures
         :return:
         """
-        if self.one is None:
+        if self.one is None and one is None:
             return
-        session_datasets = self.one.list_datasets(self.one.path2eid(self.session_path), details=True)
-        df = pd.DataFrame(columns=self.one._cache.datasets.columns)
+
+        one = one or self.one
+        session_datasets = one.list_datasets(one.path2eid(self.session_path), details=True)
+        df = pd.DataFrame(columns=one._cache.datasets.columns)
         for file in self.signature['input_files']:
             df = df.append(filter_datasets(session_datasets, filename=file[0], collection=file[1],
                            wildcards=True, assert_unique=False))
@@ -131,14 +134,21 @@ class ServerGlobusDataHandler(DataHandler):
         else:
             self.lab = labs[0]
 
-        self.globus.add_endpoint(f'flatiron_{self.lab}')
+        # For cortex lab we need to get the endpoint from the ibl alyx
+        if self.lab == 'cortexlab':
+            self.globus.add_endpoint(f'flatiron_{self.lab}', one=ONE(base_url='https://alyx.internationalbrainlab.org'))
+        else:
+            self.globus.add_endpoint(f'flatiron_{self.lab}')
 
     def setUp(self):
         """
         Function to download necessary data to run tasks using globus-sdk
         :return:
         """
-        df = super().getData()
+        if self.lab == 'cortexlab':
+            df = super().getData(one=ONE(base_url='https://alyx.internationalbrainlab.org'))
+        else:
+            df = super().getData()
 
         if len(df) == 0:
             # If no datasets found in the cache only work off local file system do not attempt to download any missing data
@@ -225,7 +235,7 @@ class RemoteHttpDataHandler(DataHandler):
 
 
 class RemoteAwsDataHandler(DataHandler):
-    def __init__(self, session_path, signature, one=None):
+    def __init__(self, task, session_path, signature, one=None):
         """
         Data handler for running tasks on remote compute node. Will download missing data from private ibl s3 AWS data bucket
 
@@ -233,8 +243,13 @@ class RemoteAwsDataHandler(DataHandler):
         :param signature: input and output file signatures
         :param one: ONE instance
         """
+        from one.globus import Globus # noqa
         super().__init__(session_path, signature, one=one)
+        self.task = task
         self.aws = AWS(one=self.one)
+        self.globus = Globus(client_name='server')
+        self.lab = session_path_parts(self.session_path, as_dict=True)['lab']
+        self.globus.add_endpoint(f'flatiron_{self.lab}')
 
     def setUp(self):
         """
@@ -242,7 +257,7 @@ class RemoteAwsDataHandler(DataHandler):
         :return:
         """
         df = super().getData()
-        self.aws._download_datasets(df)
+        self.local_paths = self.aws._download_datasets(df)
 
     def uploadData(self, outputs, version, **kwargs):
         """
@@ -251,10 +266,70 @@ class RemoteAwsDataHandler(DataHandler):
         :param version: ibllib version
         :return: output info of registered datasets
         """
+
+        # register datasets
         versions = super().uploadData(outputs, version)
-        ftp_patcher = FTPPatcher(one=self.one)
-        return ftp_patcher.create_dataset(path=outputs, created_by=self.one.alyx.user,
-                                          versions=versions, **kwargs)
+        response = register_dataset(outputs, one=self.one, server_only=True, versions=versions, **kwargs)
+
+        # upload directly via globus
+        source_paths = []
+        target_paths = []
+        collections = {}
+
+        for dset, out in zip(response, outputs):
+            assert (Path(out).name == dset['name'])
+            # set flag to false
+            fr = next(fr for fr in dset['file_records'] if 'flatiron' in fr['data_repository'])
+            collection = '/'.join(fr['relative_path'].split('/')[:-1])
+            if collection in collections.keys():
+                collections[collection].update({f'{dset["name"]}': {'fr_id': fr['id'], 'size': dset['file_size']}})
+            else:
+                collections[collection] = {f'{dset["name"]}': {'fr_id': fr['id'], 'size': dset['file_size']}}
+
+            # Set all exists status to false for server file records
+            self.one.alyx.rest('files', 'partial_update', id=fr['id'], data={'exists': False})
+
+            source_paths.append(out)
+            target_paths.append(add_uuid_string(fr['relative_path'], dset['id']))
+
+        if len(target_paths) != 0:
+            ts = time()
+            for sp, tp in zip(source_paths, target_paths):
+                _logger.info(f'Uploading {sp} to {tp}')
+            self.globus.mv('local', f'flatiron_{self.lab}', source_paths, target_paths)
+            _logger.debug(f'Complete. Time elapsed {time() - ts}')
+
+        for collection, files in collections.items():
+            globus_files = self.globus.ls(f'flatiron_{self.lab}', collection, remove_uuid=True, return_size=True)
+            file_names = [gl[0] for gl in globus_files]
+            file_sizes = [gl[1] for gl in globus_files]
+
+            for name, details in files.items():
+                try:
+                    idx = file_names.index(name)
+                    size = file_sizes[idx]
+                    if size == details['size']:
+                        # update the file record if sizes match
+                        self.one.alyx.rest('files', 'partial_update', id=details['fr_id'], data={'exists': True})
+                    else:
+                        _logger.warning(f'File {name} found on SDSC but sizes do not match')
+                except ValueError:
+                    _logger.warning(f'File {name} not found on SDSC')
+
+        return response
+
+        # ftp_patcher = FTPPatcher(one=self.one)
+        # return ftp_patcher.create_dataset(path=outputs, created_by=self.one.alyx.user,
+        #                                   versions=versions, **kwargs)
+
+    def cleanUp(self):
+        """
+        Clean up, remove the files that were downloaded from globus once task has completed
+        :return:
+        """
+        if self.task.status == 0:
+            for file in self.local_paths:
+                os.unlink(file)
 
 
 class RemoteGlobusDataHandler(DataHandler):
