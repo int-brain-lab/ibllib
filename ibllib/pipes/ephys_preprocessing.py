@@ -109,6 +109,8 @@ class RawEphysQC(tasks.Task):
                          ('_iblqc_ephysChannels.labels.npy', 'raw_ephys_data/probe*', True),
                          ('_iblqc_ephysSpectralDensityLF.freqs.npy', 'raw_ephys_data/probe*', True),
                          ('_iblqc_ephysSpectralDensityLF.power.npy', 'raw_ephys_data/probe*', True),
+                         ('_iblqc_ephysSpectralDensityAP.freqs.npy', 'raw_ephys_data/probe*', True),
+                         ('_iblqc_ephysSpectralDensityAP.power.npy', 'raw_ephys_data/probe*', True),
                          ('_iblqc_ephysTimeRmsLF.rms.npy', 'raw_ephys_data/probe*', True),
                          ('_iblqc_ephysTimeRmsLF.timestamps.npy', 'raw_ephys_data/probe*', True)]
     }
