@@ -101,10 +101,8 @@ class EphysQC(base.QC):
         :return: 3 numpy vectors nchannels length
         """
         destripe = dsp.destripe(raw, fs=fs, neuropixel_version=1)
-        # TODO: remove DC component before computing RMS
         rms_raw = dsp.rms(raw)
         rms_pre_proc = dsp.rms(destripe)
-        # TODO: filter array and remove bad channels
         detections = spikes.detection(data=destripe.T, fs=fs, h=h, detect_threshold=SPIKE_THRESHOLD_UV * 1e-6)
         spike_rate = np.bincount(detections.trace, minlength=raw.shape[0]).astype(np.float32)
         channel_labels, _ = dsp.voltage.detect_bad_channels(raw, fs=fs)
@@ -140,7 +138,7 @@ class EphysQC(base.QC):
             if all([files[k].exists() for k in files]) and not overwrite:
                 _logger.warning(f'RMS map already exists for .ap data in {self.probe_path}, skipping. '
                                 f'Use overwrite option.')
-                median_rms = np.load(files['rms'])
+                results = {k: np.load(files[k]) for k in files}
             else:
                 rl = self.data.ap_meta.fileTimeSecs
                 nsync = len(spikeglx._get_sync_trace_indices_from_meta(self.data.ap_meta))
@@ -190,13 +188,11 @@ class EphysQC(base.QC):
             qc_files.extend([files[k] for k in files])
             for p in [10, 90]:
                 self.metrics[f'apRms_p{p}_raw'] = np.format_float_scientific(
-                    np.percentile(median_rms[0, :], p), precision=2)
+                    np.percentile(results['rms'][0, :], p), precision=2)
                 self.metrics[f'apRms_p{p}_proc'] = np.format_float_scientific(
-                    np.percentile(median_rms[1, :], p), precision=2)
+                    np.percentile(results['rms'][1, :], p), precision=2)
             if update:
                 self.update_extended_qc(self.metrics)
-                # self.update(outcome)
-
         # If lf meta and bin file present, run the old qc on LF data
         if self.data.lf_meta and self.data.lf:
             qc_files.extend(extract_rmsmap(self.data.lf, out_folder=self.probe_path, overwrite=overwrite))
