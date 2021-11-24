@@ -4,6 +4,7 @@ import uuid
 
 from pathlib import Path
 from PIL import Image
+from urllib.parse import urlparse
 
 from one.api import ONE
 from one.webclient import http_download_file
@@ -25,11 +26,18 @@ class TestSnapshot(unittest.TestCase):
         image.close()
         # set up ONE
         self.one = ONE(**TEST_DB)
-        self.download_kwargs = {
-            'cache_dir': Path(self.tmp_dir.name), 'username': TEST_DB['username'],
-            'password': TEST_DB['password'], 'silent': True}
         # Collect all notes to delete them later
         self.notes = []
+
+    def _get_image(self, url):
+        # This is a bit of a hack because when running a the server locally, the request to the media folder fail
+        if 'localhost' in url or '127.0.0.1' in url:
+            rel_path = urlparse(url).path[1:]
+            img_file = list(Path('/var/www/').rglob(rel_path))[0]
+        else:
+            img_file = http_download_file(url, cache_dir=Path(self.tmp_dir.name), username=TEST_DB['username'],
+                                          password=TEST_DB['password'], silent=True)
+        return img_file
 
     def test_class_setup(self):
         # Tests that the creation of the class works and that the defaults are working
@@ -51,7 +59,7 @@ class TestSnapshot(unittest.TestCase):
         with self.assertLogs('ibllib', 'INFO'):
             self.notes.append(snp.register_image(self.img_file, text='default size'))
         # Check image size is scaled to default width (defined in alyx settings.py)
-        img_db = http_download_file(self.notes[-1]['image'], **self.download_kwargs)
+        img_db = self._get_image(self.notes[-1]['image'])
         with Image.open(img_db) as im:
             self.assertEqual(im.size, (800, HEIGHT * 800 / WIDTH))
         # Test a case where they don't match
@@ -65,12 +73,12 @@ class TestSnapshot(unittest.TestCase):
         snp = Snapshot(object_id, content_type='session', one=self.one)
         # Image in original size
         self.notes.append(snp.register_image(self.img_file, text='original size', width='orig'))
-        img_db = http_download_file(self.notes[-1]['image'], **self.download_kwargs)
+        img_db = self._get_image(self.notes[-1]['image'])
         with Image.open(img_db) as im:
             self.assertEqual(im.size, (WIDTH, HEIGHT))
         # Scale to width 100
         self.notes.append(snp.register_image(self.img_file, text='original size', width=100))
-        img_db = http_download_file(self.notes[-1]['image'], **self.download_kwargs)
+        img_db = self._get_image(self.notes[-1]['image'])
         with Image.open(img_db) as im:
             self.assertEqual(im.size, (100, HEIGHT * 100 / WIDTH))
 
@@ -84,7 +92,7 @@ class TestSnapshot(unittest.TestCase):
                                               texts=['first', 'second', 'third'], widths=[None, 'orig', 200]))
         for i in range(3):
             self.assertEqual(self.notes[i]['text'], expected_texts[i])
-            img_db = http_download_file(self.notes[i]['image'], **self.download_kwargs)
+            img_db = self._get_image(self.notes[i]['image'])
             with Image.open(img_db) as im:
                 self.assertEqual(im.size, expected_sizes[i])
         # Registering multiple figures by adding to self.figures
@@ -96,7 +104,7 @@ class TestSnapshot(unittest.TestCase):
         self.notes.extend(snp.register_images(texts=['always the same'], widths=[200]))
         for i in range(3):
             self.assertEqual(self.notes[i + 3]['text'], 'always the same')
-            img_db = http_download_file(self.notes[i + 3]['image'], **self.download_kwargs)
+            img_db = self._get_image(self.notes[i + 3]['image'])
             with Image.open(img_db) as im:
                 self.assertEqual(im.size, expected_sizes[2])
 
