@@ -441,7 +441,8 @@ class SpikeSorting(tasks.Task):
         for sig in self.signature['output_files']:
             if 'probe*' in sig[1]:
                 for probe in probes:
-                    full_output_files.append((sig[0], f'spike_sorters/pykilosort/{probe}', sig[2]))
+                    col = sig[1].split('/')[:-1] + [probe]
+                    full_output_files.append((sig[0], '/'.join(col), sig[2]))
             else:
                 full_input_files.append(sig)
 
