@@ -118,7 +118,7 @@ class Task(abc.ABC):
                         return self.status
                 self.outputs = self._run(**kwargs)
                 _logger.info(f"Job {self.__class__} complete")
-        except BaseException:
+        except Exception:
             _logger.error(traceback.format_exc())
             _logger.info(f"Job {self.__class__} errored")
             self.status = -1
@@ -223,7 +223,8 @@ class Task(abc.ABC):
         Does not run if a lock is encountered by the task (status -2)
         """
         if self.gpu >= 1:
-            self._lock_file_path().unlink()
+            if self._lock_file_path().exists():
+                self._lock_file_path().unlink()
 
     def cleanUp(self):
         """
@@ -410,7 +411,7 @@ class Pipeline(abc.ABC):
         tasks_alyx = []
         # creates all the tasks by iterating through the ordered dict
         for k, t in self.tasks.items():
-            # get the parents alyx ids to reference in the database
+            # get the parents' alyx ids to reference in the database
             if len(t.parents):
                 pnames = [p.name for p in t.parents]
                 parents_ids = [ta['id'] for ta in tasks_alyx if ta['name'] in pnames]
@@ -492,10 +493,10 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     :return:
     """
     registered_dsets = []
+    # here we need to check parents' status, get the job_deck if not available
+    if not job_deck:
+        job_deck = one.alyx.rest('tasks', 'list', session=tdict['session'], no_cache=True)
     if len(tdict['parents']):
-        # here we need to check parents status, get the job_deck if not available
-        if not job_deck:
-            job_deck = one.alyx.rest('tasks', 'list', session=tdict['session'], no_cache=True)
         # check the dependencies
         parent_tasks = filter(lambda x: x['id'] in tdict['parents'], job_deck)
         parent_statuses = [j['status'] for j in parent_tasks]
@@ -526,7 +527,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     else:
         try:
             registered_dsets = task.register_datasets(one=one, max_md5_size=max_md5_size)
-        except BaseException:
+        except Exception:
             _logger.error(traceback.format_exc())
             patch_data['status'] = 'Errored'
         patch_data['status'] = 'Complete'
@@ -541,5 +542,15 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
         patch_data['status'] = 'Incomplete'
     # update task status on Alyx
     t = one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data=patch_data)
+    # check for dependent held tasks
+    # NB: Assumes dependent tasks are all part of the same session!
+    next(x for x in job_deck if x['id'] == t['id'])['status'] = t['status']  # Update status in job deck
+    dependent_tasks = filter(lambda x: t['id'] in x['parents'] and x['status'] == 'Held', job_deck)
+    for d in dependent_tasks:
+        assert d['id'] != t['id'], 'task its own parent'
+        # if all their parent tasks now complete, set to waiting
+        parent_status = [next(x['status'] for x in job_deck if x['id'] == y) for y in d['parents']]
+        if all(x == 'Complete' for x in parent_status):
+            one.alyx.rest('tasks', 'partial_update', id=d['id'], data={'status': 'Waiting'})
     task.cleanUp()
     return t, registered_dsets

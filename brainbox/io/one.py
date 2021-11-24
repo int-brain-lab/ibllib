@@ -331,6 +331,9 @@ def _load_channel_locations_traj(eid, probe=None, one=None, revision=None, align
 
             channels[probe] = _channels_traj2bunch(chans, brain_atlas)
 
+        channels[probe]['axial_um'] = chn_coords[:, 1]
+        channels[probe]['lateral_um'] = chn_coords[:, 0]
+
     else:
         _logger.warning(f'Histology tracing for {probe} does not exist. '
                         f'No channels for {probe}')
