@@ -31,10 +31,10 @@ class TestSnapshot(unittest.TestCase):
 
     def _get_image(self, url):
         # This is a bit of a hack because when running a the server locally, the request to the media folder fail
-        if 'localhost' in url or '127.0.0.1' in url:
-            rel_path = urlparse(url).path[1:]
+        rel_path = urlparse(url).path[1:]
+        try:
             img_file = list(Path('/var/www/').rglob(rel_path))[0]
-        else:
+        except IndexError:
             img_file = http_download_file(url, cache_dir=Path(self.tmp_dir.name), username=TEST_DB['username'],
                                           password=TEST_DB['password'], silent=True)
         return img_file
