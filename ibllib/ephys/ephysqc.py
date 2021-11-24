@@ -129,7 +129,7 @@ class EphysQC(base.QC):
         self.load_data()
         qc_files = []
         # If ap meta file present, calculate median RMS per channel before and after destriping
-        # TODO: This should go a a separate function once we have a spikeglx.Streamer that behaves like the Reader
+        # NB: ideally this should go a a separate function once we have a spikeglx.Streamer that behaves like the Reader
         if self.data.ap_meta:
             files = {'rms': self.probe_path.joinpath("_iblqc_ephysChannels.apRMS.npy"),
                      'spike_rate': self.probe_path.joinpath("_iblqc_ephysChannels.rawSpikeRates.npy"),
