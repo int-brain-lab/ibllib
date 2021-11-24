@@ -7,7 +7,7 @@ import shutil
 
 import numpy as np
 import pandas as pd
-from scipy import signal
+from scipy import signal, stats
 from tqdm import tqdm
 import one.alf.io as alfio
 from iblutil.util import Bunch
@@ -105,7 +105,10 @@ class EphysQC(base.QC):
         rms_pre_proc = dsp.rms(destripe)
         detections = spikes.detection(data=destripe.T, fs=fs, h=h, detect_threshold=SPIKE_THRESHOLD_UV * 1e-6)
         spike_rate = np.bincount(detections.trace, minlength=raw.shape[0]).astype(np.float32)
-        return rms_raw, rms_pre_proc, spike_rate
+        channel_labels, _ = dsp.voltage.detect_bad_channels(raw, fs=fs)
+        _, psd = signal.welch(destripe, fs=fs, window='hanning', nperseg=WELCH_WIN_LENGTH_SAMPLES,
+                              detrend='constant', return_onesided=True, scaling='density', axis=-1)
+        return rms_raw, rms_pre_proc, spike_rate, channel_labels, psd
 
     def run(self, update: bool = False, overwrite: bool = True, stream: bool = None, **kwargs) -> (str, dict):
         """
@@ -124,14 +127,18 @@ class EphysQC(base.QC):
         self.load_data()
         qc_files = []
         # If ap meta file present, calculate median RMS per channel before and after destriping
-        # TODO: This should go a a separate function once we have a spikeglx.Streamer that behaves like the Reader
+        # NB: ideally this should go a a separate function once we have a spikeglx.Streamer that behaves like the Reader
         if self.data.ap_meta:
-            rms_file = self.probe_path.joinpath("_iblqc_ephysChannels.apRMS.npy")
-            spike_rate_file = self.probe_path.joinpath("_iblqc_ephysChannels.rawSpikeRates.npy")
-            if all([rms_file.exists(), spike_rate_file.exists()]) and not overwrite:
+            files = {'rms': self.probe_path.joinpath("_iblqc_ephysChannels.apRMS.npy"),
+                     'spike_rate': self.probe_path.joinpath("_iblqc_ephysChannels.rawSpikeRates.npy"),
+                     'channel_labels': self.probe_path.joinpath("_iblqc_ephysChannels.labels.npy"),
+                     'ap_freqs': self.probe_path.joinpath("_iblqc_ephysSpectralDensityAP.freqs.npy"),
+                     'ap_power': self.probe_path.joinpath("_iblqc_ephysSpectralDensityAP.power.npy"),
+                     }
+            if all([files[k].exists() for k in files]) and not overwrite:
                 _logger.warning(f'RMS map already exists for .ap data in {self.probe_path}, skipping. '
                                 f'Use overwrite option.')
-                median_rms = np.load(rms_file)
+                results = {k: np.load(files[k]) for k in files}
             else:
                 rl = self.data.ap_meta.fileTimeSecs
                 nsync = len(spikeglx._get_sync_trace_indices_from_meta(self.data.ap_meta))
@@ -145,14 +152,18 @@ class EphysQC(base.QC):
                     raise ValueError("Wrong Neuropixel channel mapping used - ABORT")
                 t0s = np.arange(TMIN, rl - SAMPLE_LENGTH, BATCHES_SPACING)
                 all_rms = np.zeros((2, nc, t0s.shape[0]))
-                all_srs = np.zeros((nc, t0s.shape[0]))
+                all_srs, channel_ok = (np.zeros((nc, t0s.shape[0])) for _ in range(2))
+                psds = np.zeros((nc, dsp.fscale(WELCH_WIN_LENGTH_SAMPLES, 1, one_sided=True).size))
                 # If the ap.bin file is not present locally, stream it
                 if self.data.ap is None and self.stream is True:
                     _logger.warning(f'Streaming .ap data to compute RMS samples for probe {self.pid}')
                     for i, t0 in enumerate(tqdm(t0s)):
                         sr, _ = sglx_streamer(self.pid, t0=t0, nsecs=1, one=self.one, remove_cached=True)
                         raw = sr[:, :-nsync].T
-                        all_rms[0, :, i], all_rms[1, :, i], all_srs[:, i] = self._compute_metrics_array(raw, sr.fs, h)
+                        all_rms[0, :, i], all_rms[1, :, i], all_srs[:, i], channel_ok[:, i], psd =\
+                            self._compute_metrics_array(raw, sr.fs, h)
+                        psds += psd
+                        fs = sr.fs
                 elif self.data.ap is None and self.stream is not True:
                     _logger.warning('Raw .ap data is not available locally. Run with stream=True in order to stream '
                                     'data for calculating RMS samples.')
@@ -161,23 +172,27 @@ class EphysQC(base.QC):
                     for i, t0 in enumerate(t0s):
                         sl = slice(int(t0 * self.data.ap.fs), int((t0 + SAMPLE_LENGTH) * self.data.ap.fs))
                         raw = self.data.ap[sl, :-nsync].T
-                        all_rms[0, :, i], all_rms[1, :, i], all_srs[:, i] = self._compute_metrics_array(raw, self.data.ap.fs, h)
+                        all_rms[0, :, i], all_rms[1, :, i], all_srs[:, i], channel_ok[:, i], psd =\
+                            self._compute_metrics_array(raw, self.data.ap.fs, h)
+                        fs = self.data.ap.fs
+                        psds += psd
                 # Calculate the median RMS across all samples per channel
-                median_rms = np.median(all_rms, axis=-1)
-                median_spike_rate = np.median(all_srs, axis=-1)
-                np.save(rms_file, median_rms)
-                np.save(spike_rate_file, median_spike_rate)
-            qc_files.extend([rms_file, spike_rate_file])
-
+                results = {'rms': np.median(all_rms, axis=-1),
+                           'spike_rate': np.median(all_srs, axis=-1),
+                           'channel_labels': stats.mode(channel_ok, axis=1)[0],
+                           'ap_freqs': dsp.fscale(WELCH_WIN_LENGTH_SAMPLES, 1 / fs, one_sided=True),
+                           'ap_power': psds.T / len(t0s),  # shape: (nfreqs, nchannels)
+                           }
+                for k in files:
+                    np.save(files[k], results[k])
+            qc_files.extend([files[k] for k in files])
             for p in [10, 90]:
-                self.metrics[f'apRms_p{p}_raw'] = np.format_float_scientific(np.percentile(median_rms[0, :], p),
-                                                                             precision=2)
-                self.metrics[f'apRms_p{p}_proc'] = np.format_float_scientific(np.percentile(median_rms[1, :], p),
-                                                                              precision=2)
+                self.metrics[f'apRms_p{p}_raw'] = np.format_float_scientific(
+                    np.percentile(results['rms'][0, :], p), precision=2)
+                self.metrics[f'apRms_p{p}_proc'] = np.format_float_scientific(
+                    np.percentile(results['rms'][1, :], p), precision=2)
             if update:
                 self.update_extended_qc(self.metrics)
-                # self.update(outcome)
-
         # If lf meta and bin file present, run the old qc on LF data
         if self.data.lf_meta and self.data.lf:
             qc_files.extend(extract_rmsmap(self.data.lf, out_folder=self.probe_path, overwrite=overwrite))
