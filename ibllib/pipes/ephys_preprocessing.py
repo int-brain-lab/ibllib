@@ -224,8 +224,9 @@ class SpikeSorting(tasks.Task):
                            ('_spikeglx_sync.times.*', 'raw_ephys_data*', True),
                            ('_iblrig_taskData.raw.*', 'raw_behavior_data', True),
                            ('_iblrig_taskSettings.raw.*', 'raw_behavior_data', True)]
-        output_signature = [('spike_sorting_pykilosort.log', f'spike_sorters/pykilosort/{pname}', True)]
-
+        output_signature = [('spike_sorting_pykilosort.log', f'spike_sorters/pykilosort/{pname}', True),
+                            ('_iblqc_ephysTimeRmsAP.rms.npy', f'raw_ephys_data/{pname}', True),  # new ibllib 2.5
+                            ('_iblqc_ephysTimeRmsAP.timestamps.npy', f'raw_ephys_data/{pname}', True)]  # new ibllib 2.5
         return input_signature, output_signature
 
     @staticmethod
