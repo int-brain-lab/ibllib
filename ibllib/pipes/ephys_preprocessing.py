@@ -299,7 +299,7 @@ class SpikeSorting(tasks.Task):
             log_file = sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
             if log_file.exists():
                 run_version = self._fetch_pykilosort_run_version(log_file)
-                if packaging.version.parse(run_version) >= packaging.version.parse('pykilosort_ibl_1.1.0'):
+                if packaging.version.parse(run_version) > packaging.version.parse('pykilosort_ibl_1.1.0'):
                     _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
                                  f" found in {sorter_dir}, skipping.")
                     return sorter_dir
