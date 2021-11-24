@@ -864,6 +864,7 @@ class EphysPostDLC(tasks.Task):
     """
     io_charge = 90
     level = 3
+    force = True
     signature = {'input_files': [('_ibl_leftCamera.dlc.pqt', 'alf', True),
                                  ('_ibl_bodyCamera.dlc.pqt', 'alf', True),
                                  ('_ibl_rightCamera.dlc.pqt', 'alf', True),

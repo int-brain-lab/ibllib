@@ -1,4 +1,5 @@
 ## Unreleased
+- Adding Snapshot class to register images as notes in Alyx
 - Ephys pipeline: RawEphysQC: outputs channels labels as part of pipeline
 - Ephys pipeline: spike sorting
     - dsp.voltage: destripe detects bad channels and interpolate them
