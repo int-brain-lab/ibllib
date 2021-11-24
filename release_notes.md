@@ -1,5 +1,9 @@
 ## Unreleased
-- Ephys pipeline: RawEphysQC: outputs channels labels as part of pipelin
+- Ephys pipeline: RawEphysQC: outputs channels labels as part of pipeline
+- Ephys pipeline: spike sorting
+    - dsp.voltage: destripe detects bad channels and interpolate them
+    - synchronisation 3B: gives a 10% leeway to throw exception
+
 ## Release Notes 2.4
 ### Release Notes 2.4.0
 - Setting tasks to Waiting if they encountered lock (status -2)
