@@ -205,7 +205,7 @@ def ks2_to_tar(ks_path, out_path, force=False):
         _logger.info(f"Already converted ks2 to tar: for {ks_path}, skipping.")
         return [out_file]
 
-    with tarfile.open(out_file, 'x') as tar_dir:
+    with tarfile.open(out_file, 'w') as tar_dir:
         for file in Path(ks_path).iterdir():
             if file.name in ks2_output:
                 tar_dir.add(file, file.name)
