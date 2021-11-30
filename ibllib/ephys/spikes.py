@@ -143,6 +143,8 @@ def sync_spike_sorting(ap_file, out_path):
     out_files.extend([f for f in out_path.glob("*.*") if
                       f.name.startswith(('channels.', 'drift', 'clusters.', 'spikes.', 'templates.',
                                          '_kilosort_', '_phy_spikes_subset', '_ibl_log.info'))])
+    # the QC files computed during spike sorting stay within the raw ephys data folder
+    out_files.extend(list(ap_file.parent.glob('_iblqc_*AP.*.npy')))
     return out_files, 0
 
 
@@ -159,7 +161,7 @@ def ks2_to_alf(ks_path, bin_path, out_path, bin_file=None, ampfactor=1, label=No
     ac.convert(out_path, label=label, force=force, ampfactor=ampfactor)
 
 
-def ks2_to_tar(ks_path, out_path):
+def ks2_to_tar(ks_path, out_path, force=False):
     """
     Compress output from kilosort 2 into tar file in order to register to flatiron and move to
     spikesorters/ks2_matlab/probexx path. Output file to register
@@ -199,11 +201,11 @@ def ks2_to_tar(ks_path, out_path):
                   'whitening_mat_inv.npy']
 
     out_file = Path(out_path).joinpath('_kilosort_raw.output.tar')
-    if out_file.exists():
+    if out_file.exists() and not force:
         _logger.info(f"Already converted ks2 to tar: for {ks_path}, skipping.")
         return [out_file]
 
-    with tarfile.open(out_file, 'x') as tar_dir:
+    with tarfile.open(out_file, 'w') as tar_dir:
         for file in Path(ks_path).iterdir():
             if file.name in ks2_output:
                 tar_dir.add(file, file.name)

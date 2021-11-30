@@ -347,11 +347,11 @@ def create_channel_dict(traj, brain_locations):
     channel_dict = []
     for i in np.arange(brain_locations.id.size):
         channel_dict.append({
-            'x': brain_locations.xyz[i, 0] * 1e6,
-            'y': brain_locations.xyz[i, 1] * 1e6,
-            'z': brain_locations.xyz[i, 2] * 1e6,
-            'axial': brain_locations.axial[i],
-            'lateral': brain_locations.lateral[i],
+            'x': np.float64(brain_locations.xyz[i, 0] * 1e6),
+            'y': np.float64(brain_locations.xyz[i, 1] * 1e6),
+            'z': np.float64(brain_locations.xyz[i, 2] * 1e6),
+            'axial': np.float64(brain_locations.axial[i]),
+            'lateral': np.float64(brain_locations.lateral[i]),
             'brain_region': int(brain_locations.id[i]),
             'trajectory_estimate': traj['id']
         })
