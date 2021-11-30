@@ -70,3 +70,83 @@ def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_b
             eqc.grab().save(str(Path(save_dir).joinpath(f"{title}_data_{eqc.windowTitle()}.png")))
 
     return fig, eqcs[0]
+
+
+def raw_destripe(raw, fs, t0, i_plt, n_plt,
+                 fig=None, axs=None, savedir=None, detect_badch=True,
+                 SAMPLE_SKIP=200, DISPLAY_TIME=0.05, N_CHAN=384,
+                 MIN_X=-0.00011, MAX_X=0.00011):
+    '''
+    :param raw: raw ephys data, Ns x Nc, x-axis: time (s), y-axis: channel
+    :param fs: sampling freq (Hz) of the raw ephys data
+    :param t0: time (s) of ephys sample beginning from session start
+    :param i_plt: increment of plot to display image one (start from 0, has to be < n_plt)
+    :param n_plt: total number of subplot on figure
+    :param fig: figure handle
+    :param axs: axis handle
+    :param savedir: filename, including directory, to save figure to
+    :param detect_badch: boolean, to detect or not bad channels
+    :param SAMPLE_SKIP: number of samples to skip at origin of ephsy sample for display
+    :param DISPLAY_TIME: time (s) to display
+    :param N_CHAN: number of expected channels on the probe
+    :param MIN_X: max voltage for color range
+    :param MAX_X: min voltage for color range
+    :return: fig, axs
+    '''
+
+    # Import
+    import matplotlib.pyplot as plt
+    from ibllib.dsp import voltage
+    from ibllib.plots import Density
+    import numpy as np
+
+    # Init fig
+    if fig is None or axs is None:
+        fig, axs = plt.subplots(nrows=1, ncols=n_plt, figsize=(14, 5), gridspec_kw={'width_ratios': 4 * n_plt})
+
+    if i_plt > len(axs)-1:  # Error
+        raise ValueError(f'The given increment of subplot ({i_plt+1}) '
+                         f'is larger than the total number of subplots ({len(axs)})')
+
+    [nc, ns] = raw.shape
+    if nc == N_CHAN:
+        destripe = voltage.destripe(raw, fs=fs)
+        X = destripe[:, :int(DISPLAY_TIME * fs)].T
+        Xs = X[SAMPLE_SKIP:].T  # Remove artifact at beginning
+        Tplot = Xs.shape[1]/fs
+
+        # PLOT RAW DATA
+        d = Density(-Xs, fs=fs, taxis=1, ax=axs[i_plt],  vmin=MIN_X, vmax=MAX_X, cmap='Greys')
+        axs[i_plt].set_ylabel('')
+        axs[i_plt].set_xlim((0, Tplot * 1e3))
+        axs[i_plt].set_ylim((0, nc))
+
+        # Init title
+        title_plt = f't0 = {int(t0 / 60)} min'
+
+        if detect_badch:
+            # Detect and remove bad channels prior to spike detection
+            labels, xfeats = voltage.detect_bad_channels(raw, fs)
+            idx_badchan = np.where(labels != 0)[0]
+            # Plot bad channels on raw data
+            x, y = np.meshgrid(idx_badchan, np.linspace(0, Tplot * 1e3, 20))
+            axs[i_plt].plot(y.flatten(), x.flatten(), '.k', markersize=1)
+            # Append title
+            title_plt += f', n={len(idx_badchan)} bad ch'
+
+        # Set title
+        axs[i_plt].title.set_text(title_plt)
+
+    else:
+        axs[i_plt].title.set_text(f'CANNOT DESTRIPE, N CHAN = {nc}')
+
+    # Amend some axis style
+    if i_plt > 0:
+        axs[i_plt].set_yticklabels('')
+
+    # Fig layout
+    fig.tight_layout()
+    if savedir is not None:
+        fig.savefig(fname=savedir)
+
+    return fig, axs
