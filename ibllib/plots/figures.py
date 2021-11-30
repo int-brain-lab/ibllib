@@ -6,8 +6,10 @@ from pathlib import Path
 import numpy as np
 import scipy.signal
 
+from ibllib.dsp import voltage
 
-def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_bad_channels", save_dir=None):
+
+def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_bad_channels", save_dir=None, destripe=False):
     nc = raw.shape[0]
     inoisy = np.where(channel_labels == 2)[0]
     idead = np.where(channel_labels == 1)[0]
@@ -22,6 +24,9 @@ def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_b
     sos = scipy.signal.butter(**butter_kwargs, output='sos')
     butt = scipy.signal.sosfiltfilt(sos, raw)
     eqcs.append(viewseis(butt.T, si=1 / fs * 1e3, title='butt', taxis=0))
+    if destripe:
+        dest = voltage.destripe(raw, fs=fs, channel_labels=channel_labels)
+        eqcs.append(viewseis(dest.T, si=1 / fs * 1e3, title='destripe', taxis=0))
     for eqc in eqcs:
         y, x = np.meshgrid(ioutside, np.linspace(0, 1 * 1e3, 500))
         eqc.ctrl.add_scatter(x.flatten(), y.flatten(), rgb=(164, 142, 35), label='outside')

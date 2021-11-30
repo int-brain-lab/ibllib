@@ -23,6 +23,13 @@ class Snapshot:
         self.content_type = content_type
         self.images = []
 
+    def plot(self):
+        """
+        Placeholder method to be overriden by child object
+        :return:
+        """
+        pass
+
     def generate_image(self, plt_func, plt_kwargs):
         """
         Takes a plotting function and adds the output to the Snapshot.images list for registration
@@ -31,7 +38,10 @@ class Snapshot:
         :param plt_kwargs: Dictionary with keyword arguments for the plotting function
         """
         img_path = plt_func(**plt_kwargs)
-        self.images.append(img_path)
+        if isinstance(img_path, list):
+            self.images.extend(img_path)
+        else:
+            self.images.append(img_path)
         return img_path
 
     def register_image(self, image_file, text='', width=None):
