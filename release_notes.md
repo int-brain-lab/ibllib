@@ -1,5 +1,8 @@
-## Unreleased
-- Adding Snapshot class to register images as notes in Alyx
+## Release Notes 2.5
+### Release Notes 2.5.1 2021-11-25
+- SpikeSorting task overwrites old tar file on rerun
+### Release Notes 2.5.0 2021-11-24
+- Snapshot class to register images as notes in Alyx
 - Ephys pipeline: RawEphysQC: outputs channels labels as part of pipeline
 - Ephys pipeline: spike sorting
     - dsp.voltage: destripe detects bad channels and interpolate them
