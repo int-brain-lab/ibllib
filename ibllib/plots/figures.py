@@ -104,7 +104,7 @@ def raw_destripe(raw, fs, t0, i_plt, n_plt,
     if fig is None or axs is None:
         fig, axs = plt.subplots(nrows=1, ncols=n_plt, figsize=(14, 5), gridspec_kw={'width_ratios': 4 * n_plt})
 
-    if i_plt > len(axs)-1:  # Error
+    if i_plt > len(axs) - 1:  # Error
         raise ValueError(f'The given increment of subplot ({i_plt+1}) '
                          f'is larger than the total number of subplots ({len(axs)})')
 
@@ -113,10 +113,10 @@ def raw_destripe(raw, fs, t0, i_plt, n_plt,
         destripe = voltage.destripe(raw, fs=fs)
         X = destripe[:, :int(DISPLAY_TIME * fs)].T
         Xs = X[SAMPLE_SKIP:].T  # Remove artifact at beginning
-        Tplot = Xs.shape[1]/fs
+        Tplot = Xs.shape[1] / fs
 
         # PLOT RAW DATA
-        d = Density(-Xs, fs=fs, taxis=1, ax=axs[i_plt],  vmin=MIN_X, vmax=MAX_X, cmap='Greys')
+        d = Density(-Xs, fs=fs, taxis=1, ax=axs[i_plt], vmin=MIN_X, vmax=MAX_X, cmap='Greys') # noqa
         axs[i_plt].set_ylabel('')
         axs[i_plt].set_xlim((0, Tplot * 1e3))
         axs[i_plt].set_ylim((0, nc))
