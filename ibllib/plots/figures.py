@@ -1,10 +1,19 @@
 """
 Module that produces figures, usually for the extraction pipeline
 """
+import logging
 from pathlib import Path
+from string import ascii_uppercase
 
 import numpy as np
+import pandas as pd
 import scipy.signal
+
+from one.api import ONE
+from one.alf.exceptions import ALFObjectNotFound
+from ibllib.io.video import get_video_frame, url_from_eid
+
+logger = logging.getLogger('ibllib')
 
 
 def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_bad_channels", save_dir=None):
@@ -98,7 +107,6 @@ def raw_destripe(raw, fs, t0, i_plt, n_plt,
     import matplotlib.pyplot as plt
     from ibllib.dsp import voltage
     from ibllib.plots import Density
-    import numpy as np
 
     # Init fig
     if fig is None or axs is None:
@@ -150,3 +158,87 @@ def raw_destripe(raw, fs, t0, i_plt, n_plt,
         fig.savefig(fname=savedir)
 
     return fig, axs
+
+
+def dlc_qc(eid, one=None):
+    
+    import matplotlib.pyplot as plt
+    import brainbox.behavior.wheel as bbox_wheel
+    from brainbox.behavior.dlc import SAMPLING, T_BIN, plot_trace_on_frame, plot_wheel_position, plot_lick_psth, \
+        plot_lick_raster, plot_motion_energy_psth, plot_speed_psth, plot_pupil_diameter_psth
+
+    one = one or ONE()
+    # Load data
+    data = {}
+    for cam in ['left', 'right', 'body']:
+        # Load camera data (at least dlc should exist)
+        data[f'vid_{cam}'] = one.load_object(eid, f'{cam}Camera', collection='alf')
+        # Load a single frame for each video, first check if data is local, otherwise stream
+        video_path = one.eid2path(eid).joinpath('raw_video_data', f'_iblrig_{cam}Camera.raw.mp4')
+        if not video_path.exists():
+            video_path = url_from_eid(eid, one=one)[cam]
+        try:
+            data[f'frame_{cam}'] = get_video_frame(video_path, frame_number=5 * 60 * SAMPLING[cam])[:, :, 0]
+        except TypeError:
+            logger.warning(f"Could not load video frame for {cam} camera, some DLC QC plots have to be skipped.")
+            data[f'frame_{cam}'] = None
+    # Try to load alf objects
+    for alf_object in ['trials', 'wheel', 'licks']:
+        try:
+            data[f'{alf_object}'] = one.load_object(eid, alf_object)
+        except ALFObjectNotFound:
+            logger.warning(f"Could not load {alf_object} object for session {eid}, some plots have to be skipped.")
+            data[f'{alf_object}'] = None
+            
+    # Load / clean up data from alf objects
+    data['licks'] = data['licks'].times if data['licks'] else None
+    data['wheel'] = bbox_wheel.interpolate_position(data['wheel'].timestamps, data['wheel'].position,
+                                                    freq=1 / T_BIN) if data['wheel'] else (None, None)
+    if data['trials']:
+        data['trials'] = pd.DataFrame({k: data['trials'][k] for k in ['stimOn_times', 'feedback_times', 'choice', 'feedbackType']})
+        # Discard nan events and too long trials
+        data['trials'] = data['trials'].dropna()
+        data['trials'] = data['trials'].drop(data['trials'][(data['trials']['feedback_times']
+                                                             - data['trials']['stimOn_times']) > 10].index)
+    
+    # List panels: axis functions and inputs
+    panels = [(plot_trace_on_frame, {'frame': data['frame_left'], 'dlc_df': data['vid_left'].dlc, 'cam': 'left'}),
+              (plot_trace_on_frame, {'frame': data['frame_right'], 'dlc_df': data['vid_right'].dlc, 'cam': 'right'}),
+              (plot_trace_on_frame, {'frame': data['frame_body'], 'dlc_df': data['vid_body'].dlc, 'cam': 'body'}),
+              (plot_wheel_position,
+               {'wheel_position': data['wheel'][0], 'wheel_time': data['wheel'][1], 'trials_df': data['trials']}),
+              (plot_motion_energy_psth,
+               {'vid_data_dict': {'left': data['vid_left'], 'right': data['vid_right'], 'body': data['vid_body']},
+                'trials_df': data['trials']}),
+              (plot_speed_psth,
+               {'dlc_df': data['vid_left'].dlc, 'cam_times': data['vid_left'].times, 'trials_df': data['trials'],
+                'feature': 'paw_r', 'cam': 'left'}),
+              (plot_speed_psth,
+               {'dlc_df': data['vid_left'].dlc, 'cam_times': data['vid_left'].times, 'trials_df': data['trials'],
+                'feature': 'nose_tip', 'cam': 'left', 'legend': False}),
+              (plot_lick_psth, {'lick_times': data['licks'], 'trials_df': data['trials']}),
+              (plot_lick_raster, {'lick_times': data['licks'], 'trials_df': data['trials']}),
+              (plot_pupil_diameter_psth, {'vid_data': data['vid_left'], 'trials_df': data['trials'], 'cam': 'left'})
+              ]
+
+    # Plotting
+    plt.rcParams.update({'font.size': 10})
+    fig = plt.figure(figsize=(17, 10))
+    for i, panel in enumerate(panels):
+        ax = plt.subplot(2, 5, i + 1)
+        ax.text(-0.1, 1.15, ascii_uppercase[i], transform=ax.transAxes, fontsize=16, fontweight='bold')
+        # Check if any of the inputs is None
+        if any([v is None for v in panel[1].values()]):
+            ax.text(.5, .5, f"Data incomplete\n{panel[0].__name__}", color='r', fontweight='bold',
+                    fontsize=12, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+            plt.axis('off')
+        else:
+            try:
+                panel[0](**panel[1])
+            except BaseException:
+                ax.text(.5, .5, f'Error in \n{panel[0].__name__}', color='r', fontweight='bold',
+                        fontsize=12, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+                plt.axis('off')
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    
+    return fig
