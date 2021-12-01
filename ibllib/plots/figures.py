@@ -10,6 +10,7 @@ import pandas as pd
 import scipy.signal
 
 from one.api import ONE
+import one.alf.io as alfio
 from one.alf.exceptions import ALFObjectNotFound
 from ibllib.io.video import get_video_frame, url_from_eid
 
@@ -168,59 +169,76 @@ def dlc_qc(eid, one=None):
         plot_lick_raster, plot_motion_energy_psth, plot_speed_psth, plot_pupil_diameter_psth
 
     one = one or ONE()
-    # Load data
     data = {}
+    # Camera data
     for cam in ['left', 'right', 'body']:
-        # Load camera data (at least dlc should exist)
-        data[f'vid_{cam}'] = one.load_object(eid, f'{cam}Camera', collection='alf')
         # Load a single frame for each video, first check if data is local, otherwise stream
         video_path = one.eid2path(eid).joinpath('raw_video_data', f'_iblrig_{cam}Camera.raw.mp4')
-        if not video_path.exists():
-            video_path = url_from_eid(eid, one=one)[cam]
+        video_path = url_from_eid(eid, one=one)[cam] if not video_path.exists() else video_path
         try:
-            data[f'frame_{cam}'] = get_video_frame(video_path, frame_number=5 * 60 * SAMPLING[cam])[:, :, 0]
+            data[f'{cam}_frame'] = get_video_frame(video_path, frame_number=5 * 60 * SAMPLING[cam])[:, :, 0]
         except TypeError:
             logger.warning(f"Could not load video frame for {cam} camera, some DLC QC plots have to be skipped.")
-            data[f'frame_{cam}'] = None
-    # Try to load alf objects
+            data[f'{cam}_frame'] = None
+        # Load other video associated data
+        for feat in ['dlc', 'times', 'features', 'ROIMotionEnergy']:
+            # Check locally first, then try to load from alyx, if nothing works, set to None
+            local_file = list(one.eid2path(eid).joinpath('alf').glob(f'*{cam}Camera.{feat}*'))
+            alyx_file = [ds for ds in one.list_datasets(eid) if f'{cam}Camera.{feat}' in ds]
+            if feat == 'features' and cam == 'body':
+                continue
+            elif len(local_file) > 0:
+                data[f'{cam}_{feat}'] = alfio.load_file_content(local_file[0])
+            elif len(alyx_file) > 0:
+                data[f'{cam}_{feat}'] = one.load_dataset(eid, alyx_file[0])
+            else:
+                logger.warning(f"Could not load _ibl_{cam}Camera.{feat} some DLC QC plots have to be skipped.")
+                data[f'{cam}_{feat}'] = None
+    # Session data
     for alf_object in ['trials', 'wheel', 'licks']:
+        try:
+            data[f'{alf_object}'] = alfio.load_object(one.eid2path(eid).joinpath('alf'), alf_object)
+            continue
+        except ALFObjectNotFound:
+            pass
         try:
             data[f'{alf_object}'] = one.load_object(eid, alf_object)
         except ALFObjectNotFound:
             logger.warning(f"Could not load {alf_object} object for session {eid}, some plots have to be skipped.")
             data[f'{alf_object}'] = None
-            
-    # Load / clean up data from alf objects
+    # Simplify to what we actually need
     data['licks'] = data['licks'].times if data['licks'] else None
     data['wheel'] = bbox_wheel.interpolate_position(data['wheel'].timestamps, data['wheel'].position,
                                                     freq=1 / T_BIN) if data['wheel'] else (None, None)
     if data['trials']:
-        data['trials'] = pd.DataFrame({k: data['trials'][k] for k in ['stimOn_times', 'feedback_times', 'choice', 'feedbackType']})
+        data['trials'] = pd.DataFrame(
+            {k: data['trials'][k] for k in ['stimOn_times', 'feedback_times', 'choice', 'feedbackType']})
         # Discard nan events and too long trials
         data['trials'] = data['trials'].dropna()
-        data['trials'] = data['trials'].drop(data['trials'][(data['trials']['feedback_times']
-                                                             - data['trials']['stimOn_times']) > 10].index)
-    
+        data['trials'] = data['trials'].drop(
+            data['trials'][(data['trials']['feedback_times'] - data['trials']['stimOn_times']) > 10].index)
     # List panels: axis functions and inputs
-    panels = [(plot_trace_on_frame, {'frame': data['frame_left'], 'dlc_df': data['vid_left'].dlc, 'cam': 'left'}),
-              (plot_trace_on_frame, {'frame': data['frame_right'], 'dlc_df': data['vid_right'].dlc, 'cam': 'right'}),
-              (plot_trace_on_frame, {'frame': data['frame_body'], 'dlc_df': data['vid_body'].dlc, 'cam': 'body'}),
+    panels = [(plot_trace_on_frame, {'frame': data['left_frame'], 'dlc_df': data['left_dlc'], 'cam': 'left'}),
+              (plot_trace_on_frame, {'frame': data['right_frame'], 'dlc_df': data['right_dlc'], 'cam': 'right'}),
+              (plot_trace_on_frame, {'frame': data['body_frame'], 'dlc_df': data['body_dlc'], 'cam': 'body'}),
               (plot_wheel_position,
                {'wheel_position': data['wheel'][0], 'wheel_time': data['wheel'][1], 'trials_df': data['trials']}),
               (plot_motion_energy_psth,
-               {'vid_data_dict': {'left': data['vid_left'], 'right': data['vid_right'], 'body': data['vid_body']},
+               {'camera_dict': {'left': {'motion_energy': data['left_ROIMotionEnergy'], 'times': data['left_times']},
+                                'right': {'motion_energy': data['right_ROIMotionEnergy'], 'times': data['right_times']},
+                                'body': {'motion_energy': data['body_ROIMotionEnergy'], 'times': data['body_times']}},
                 'trials_df': data['trials']}),
               (plot_speed_psth,
-               {'dlc_df': data['vid_left'].dlc, 'cam_times': data['vid_left'].times, 'trials_df': data['trials'],
-                'feature': 'paw_r', 'cam': 'left'}),
+               {'dlc_df': data['left_dlc'], 'cam_times': data['left_times'], 'trials_df': data['trials']}),
               (plot_speed_psth,
-               {'dlc_df': data['vid_left'].dlc, 'cam_times': data['vid_left'].times, 'trials_df': data['trials'],
-                'feature': 'nose_tip', 'cam': 'left', 'legend': False}),
+               {'dlc_df': data['left_dlc'], 'cam_times': data['left_times'], 'trials_df': data['trials'],
+                'feature': 'nose_tip', 'legend': False}),
               (plot_lick_psth, {'lick_times': data['licks'], 'trials_df': data['trials']}),
               (plot_lick_raster, {'lick_times': data['licks'], 'trials_df': data['trials']}),
-              (plot_pupil_diameter_psth, {'vid_data': data['vid_left'], 'trials_df': data['trials'], 'cam': 'left'})
+              (plot_pupil_diameter_psth,
+               {'pupil_diameter': data['left_features']['pupilDiameter_smooth'], 'cam_times': data['left_times'],
+                'trials_df': data['trials']})
               ]
-
     # Plotting
     plt.rcParams.update({'font.size': 10})
     fig = plt.figure(figsize=(17, 10))

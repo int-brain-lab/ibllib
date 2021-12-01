@@ -245,8 +245,8 @@ def plot_trace_on_frame(frame, dlc_df, cam):
     Plots dlc traces as scatter plots on a frame of the video.
     For left and right video also plots whisker pad and eye and tongue zoom.
 
-    :param frame: frame to plot on
-    :param dlc_df: thresholded dlc dataframe
+    :param frame: single video frame to plot on
+    :param dlc_df: dlc dataframe
     :param cam: string, which camera to process ('left', 'right', 'body')
     :returns: matplolib axis
     """
@@ -261,7 +261,6 @@ def plot_trace_on_frame(frame, dlc_df, cam):
               'pupil_top_r': '#FF6692',
               'tongue_end_l': '#B6E880',
               'tongue_end_r': '#FF97FF'}
-
     # Threshold the dlc traces
     dlc_df = likelihood_threshold(dlc_df)
     # Features without tube
@@ -422,17 +421,17 @@ def plot_lick_raster(lick_times, trials_df):
     return plt.gca()
 
 
-def plot_motion_energy_psth(vid_data_dict, trials_df):
+def plot_motion_energy_psth(camera_dict, trials_df):
 
     colors = {'left': '#bd7a98',
               'right': '#2b6f39',
               'body': '#035382'}
 
     start_window, end_window = plt_window(trials_df['stimOn_times'])
-    for cam in vid_data_dict.keys():
+    for cam in camera_dict.keys():
         try:
-            motion_energy = zscore(vid_data_dict[cam].ROIMotionEnergy, nan_policy='omit')
-            start_idx = insert_idx(vid_data_dict[cam].times, start_window)
+            motion_energy = zscore(camera_dict[cam]['motion_energy'], nan_policy='omit')
+            start_idx = insert_idx(camera_dict[cam]['times'], start_window)
             end_idx = np.array(start_idx + int(WINDOW_LEN * SAMPLING[cam]), dtype='int64')
             me_all = [motion_energy[start_idx[i]:end_idx[i]] for i in range(len(start_idx))]
             times = np.arange(len(me_all[0])) / SAMPLING[cam] + WINDOW_LAG
@@ -483,30 +482,23 @@ def plot_speed_psth(dlc_df, cam_times, trials_df, feature='paw_r', cam='left', l
     return plt.gca()
 
 
-def plot_pupil_diameter_psth(vid_data, trials_df, cam='left'):
-    try:
-        pupil = vid_data.features['pupilDiameter_smooth']
-    except AttributeError:
-        logger.warning(f"No features['pupilDiameter_smooth'] in {cam} video data object")
-        raise
-
+def plot_pupil_diameter_psth(pupil_diameter, cam_times, trials_df, cam='left'):
     for align_to, color in zip(['stimOn_times', 'feedback_times'], ['red', 'purple']):
         start_window, end_window = plt_window(trials_df[align_to])
-        start_idx = insert_idx(vid_data.times, start_window)
+        start_idx = insert_idx(cam_times, start_window)
         end_idx = np.array(start_idx + int(WINDOW_LEN * SAMPLING[cam]), dtype='int64')
         # Per trial norm
-        pupil_all = [zscore(list(pupil[start_idx[i]:end_idx[i]])) for i in range(len(start_idx))]
+        pupil_all = [zscore(list(pupil_diameter[start_idx[i]:end_idx[i]])) for i in range(len(start_idx))]
         pupil_all_norm = [trial - trial[0] for trial in pupil_all]
 
-        pupil_mean = np.mean(pupil_all_norm, axis=0)
-        pupil_std = np.std(pupil_all_norm, axis=0) / np.sqrt(len(pupil_all_norm))
-
+        pupil_mean = np.nanmean(pupil_all_norm, axis=0)
+        pupil_std = np.nanstd(pupil_all_norm, axis=0) / np.sqrt(len(pupil_all_norm))
         times = np.arange(len(pupil_all_norm[0])) / SAMPLING[cam] + WINDOW_LAG
 
         plt.plot(times, pupil_mean, label=align_to.split("_")[0], color=color)
         plt.fill_between(times, pupil_mean + pupil_std, pupil_mean - pupil_std, color=color, alpha=0.5)
     plt.axvline(x=0, linestyle='--', c='k')
-    plt.title('Smoothed pupil diameter')
+    plt.title('Pupil diameter')
     plt.xlabel('time [sec]')
     plt.xticks([-0.5, 0, 0.5, 1, 1.5])
     plt.ylabel('pupil diameter [px]')
