@@ -1,4 +1,6 @@
 ## Release Notes 2.5
+### Release Notes 2.5.2 2021-12-01
+- Fix typo in camera extractor
 ### Release Notes 2.5.1 2021-11-25
 - SpikeSorting task overwrites old tar file on rerun
 ### Release Notes 2.5.0 2021-11-24
