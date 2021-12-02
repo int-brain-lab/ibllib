@@ -162,11 +162,40 @@ def raw_destripe(raw, fs, t0, i_plt, n_plt,
 
 
 def dlc_qc_plot(eid, one=None):
+    """
+    Creates DLC QC plot.
+    Data is searched first locally, then on Alyx. Panels that lack required data are skipped.
+
+    Required data to create all panels
+     'raw_video_data/_iblrig_bodyCamera.raw.mp4',
+     'raw_video_data/_iblrig_leftCamera.raw.mp4',
+     'raw_video_data/_iblrig_rightCamera.raw.mp4',
+     'alf/_ibl_bodyCamera.dlc.pqt',
+     'alf/_ibl_leftCamera.dlc.pqt',
+     'alf/_ibl_rightCamera.dlc.pqt',
+     'alf/_ibl_bodyCamera.times.npy',
+     'alf/_ibl_leftCamera.times.npy',
+     'alf/_ibl_rightCamera.times.npy',
+     'alf/_ibl_leftCamera.features.pqt',
+     'alf/rightROIMotionEnergy.position.npy',
+     'alf/leftROIMotionEnergy.position.npy',
+     'alf/bodyROIMotionEnergy.position.npy',
+     'alf/_ibl_trials.choice.npy',
+     'alf/_ibl_trials.feedbackType.npy',
+     'alf/_ibl_trials.feedback_times.npy',
+     'alf/_ibl_trials.stimOn_times.npy',
+     'alf/_ibl_wheel.position.npy',
+     'alf/_ibl_wheel.timestamps.npy',
+     'alf/licks.times.npy',
+
+    :params eid: Session ID
+    :params one: ONE instance, if None is given, default ONE is instantiated
+    :returns: Matplotlib figure
+    """
 
     import matplotlib.pyplot as plt
-    import brainbox.behavior.wheel as bbox_wheel
-    from brainbox.behavior.dlc import SAMPLING, T_BIN, plot_trace_on_frame, plot_wheel_position, plot_lick_psth, \
-        plot_lick_raster, plot_motion_energy_psth, plot_speed_psth, plot_pupil_diameter_psth
+    from brainbox.behavior.dlc import SAMPLING, plot_trace_on_frame, plot_wheel_position, plot_lick_hist, \
+        plot_lick_raster, plot_motion_energy_hist, plot_speed_hist, plot_pupil_diameter_hist
 
     one = one or ONE()
     data = {}
@@ -213,9 +242,9 @@ def dlc_qc_plot(eid, one=None):
             data[f'{alf_object}'] = None
     # Simplify to what we actually need
     data['licks'] = data['licks'].times if data['licks'] else None
-    data['left_pupil'] = data['left_features'].pupilDiameter_smooth if data['left_features'] else None
-    data['wheel'] = bbox_wheel.interpolate_position(data['wheel'].timestamps, data['wheel'].position,
-                                                    freq=1 / T_BIN) if data['wheel'] else (None, None)
+    data['left_pupil'] = data['left_features'].pupilDiameter_smooth if data['left_features'] is not None else None
+    data['wheel_time'] = data['wheel'].timestamps if data['wheel'] is not None else None
+    data['wheel_position'] = data['wheel'].position if data['wheel'] is not None else None
     if data['trials']:
         data['trials'] = pd.DataFrame(
             {k: data['trials'][k] for k in ['stimOn_times', 'feedback_times', 'choice', 'feedbackType']})
@@ -228,20 +257,20 @@ def dlc_qc_plot(eid, one=None):
               (plot_trace_on_frame, {'frame': data['right_frame'], 'dlc_df': data['right_dlc'], 'cam': 'right'}),
               (plot_trace_on_frame, {'frame': data['body_frame'], 'dlc_df': data['body_dlc'], 'cam': 'body'}),
               (plot_wheel_position,
-               {'wheel_position': data['wheel'][0], 'wheel_time': data['wheel'][1], 'trials_df': data['trials']}),
-              (plot_motion_energy_psth,
+               {'wheel_position': data['wheel_time'], 'wheel_time': data['wheel_position'], 'trials_df': data['trials']}),
+              (plot_motion_energy_hist,
                {'camera_dict': {'left': {'motion_energy': data['left_ROIMotionEnergy'], 'times': data['left_times']},
                                 'right': {'motion_energy': data['right_ROIMotionEnergy'], 'times': data['right_times']},
                                 'body': {'motion_energy': data['body_ROIMotionEnergy'], 'times': data['body_times']}},
                 'trials_df': data['trials']}),
-              (plot_speed_psth,
+              (plot_speed_hist,
                {'dlc_df': data['left_dlc'], 'cam_times': data['left_times'], 'trials_df': data['trials']}),
-              (plot_speed_psth,
+              (plot_speed_hist,
                {'dlc_df': data['left_dlc'], 'cam_times': data['left_times'], 'trials_df': data['trials'],
                 'feature': 'nose_tip', 'legend': False}),
-              (plot_lick_psth, {'lick_times': data['licks'], 'trials_df': data['trials']}),
+              (plot_lick_hist, {'lick_times': data['licks'], 'trials_df': data['trials']}),
               (plot_lick_raster, {'lick_times': data['licks'], 'trials_df': data['trials']}),
-              (plot_pupil_diameter_psth,
+              (plot_pupil_diameter_hist,
                {'pupil_diameter': data['left_pupil'], 'cam_times': data['left_times'], 'trials_df': data['trials']})
               ]
     # Plotting

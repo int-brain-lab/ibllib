@@ -13,6 +13,7 @@ from scipy.stats import zscore
 
 from ibllib.dsp.smooth import smooth_interpolate_savgol
 from brainbox.processing import bincount2D
+import brainbox.behavior.wheel as bbox_wheel
 
 logger = logging.getLogger('ibllib')
 
@@ -244,10 +245,10 @@ def plot_trace_on_frame(frame, dlc_df, cam):
     Plots dlc traces as scatter plots on a frame of the video.
     For left and right video also plots whisker pad and eye and tongue zoom.
 
-    :param frame: single video frame to plot on
-    :param dlc_df: dlc dataframe
-    :param cam: string, which camera to process ('left', 'right', 'body')
-    :returns: matplolib axis
+    :param frame: np.array, single video frame to plot on
+    :param dlc_df: pd.Dataframe, dlc traces with _x, _y and _likelihood info for each trace
+    :param cam: str, which camera to process ('left', 'right', 'body')
+    :returns: matplolib.axis
     """
     # Define colors
     colors = {'tail_start': '#636EFA',
@@ -319,11 +320,13 @@ def plot_wheel_position(wheel_position, wheel_time, trials_df):
     """
     Plots wheel position across trials, color by which side was chosen
 
-    :param wheel_position: Interpolated wheel position
-    :param wheel_time: Interpolated wheel timestamps
-    :param trials_df: Dataframe with trials info
-    :return: matplotlib axis
+    :param wheel_position: np.array, interpolated wheel position
+    :param wheel_time: np.array, interpolated wheel timestamps
+    :param trials_df: pd.DataFrame, with column 'stimOn_times' (time of stimulus onset times for each trial)
+    :returns: matplotlib.axis
     """
+    # Interpolate wheel data
+    wheel_position, wheel_time = bbox_wheel.interpolate_position(wheel_time, wheel_position, freq=1 / T_BIN)
     # Create a window around the stimulus onset
     start_window, end_window = plt_window(trials_df['stimOn_times'])
     # Translating the time window into an index window
@@ -356,9 +359,9 @@ def _bin_window_licks(lick_times, trials_df):
     """
     Helper function to bin and window the lick times and get them into trials df for plotting
 
-    :param lick_times: licks.times loaded into numpy array
-    :param trials_df: dataframe with info about trials
-    :returns: dataframe with binned, windowed lick times for plotting
+    :param lick_times: np.array, timestamps of lick events
+    :param trials_df: pd.DataFrame, with column 'feedback_times' (time of feedback for each trial)
+    :returns: pd.DataFrame with binned, windowed lick times for plotting
     """
     # Bin the licks
     lick_bins, bin_times, _ = bincount2D(lick_times, np.ones(len(lick_times)), T_BIN)
@@ -375,12 +378,13 @@ def _bin_window_licks(lick_times, trials_df):
     return trials_df
 
 
-def plot_lick_psth(lick_times, trials_df):
+def plot_lick_hist(lick_times, trials_df):
     """
-    Peristimulus histogram and licks raster of licks as estimated from dlc traces
+    Plots histogramm of lick events aligned to feedback time, separate for correct and incorrect trials
 
-    :param lick_times: licks.times loaded into numpy array
-    :param trials_df: dataframe with info about trials
+    :param lick_times: np.array, timestamps of lick events
+    :param trials_df: pd.DataFrame, with column 'feedback_times' (time of feedback for each trial) and
+                      'feedbackType' (1 for correct, -1 for incorrect trials)
     :returns: matplotlib axis
     """
     licks_df = _bin_window_licks(lick_times, trials_df)
@@ -402,11 +406,12 @@ def plot_lick_psth(lick_times, trials_df):
 
 def plot_lick_raster(lick_times, trials_df):
     """
-    Lick raster for correct licks
+    Plots lick raster for correct trials
 
-    :param lick_times: licks.times loaded into numpy array
-    :param trials_df: dataframe with info about trials
-    :returns: matplotlib axis
+    :param lick_times: np.array, timestamps of lick events
+    :param trials_df: pd.DataFrame, with column 'feedback_times' (time of feedback for each trial) and
+                      feedbackType (1 for correct, -1 for incorrect trials)
+    :returns: matplotlib.axis
     """
     licks_df = _bin_window_licks(lick_times, trials_df)
     plt.imshow(list(licks_df[licks_df['feedbackType'] == 1]['lick_bins']), aspect='auto',
@@ -420,8 +425,16 @@ def plot_lick_raster(lick_times, trials_df):
     return plt.gca()
 
 
-def plot_motion_energy_psth(camera_dict, trials_df):
+def plot_motion_energy_hist(camera_dict, trials_df):
+    """
+    Plots mean motion energy of given cameras, aligned to stimulus onset.
 
+    :param camera_dict: dict, one key for each camera to be plotted (e.g. 'left'), value is another dict with items
+                        'motion_energy' (np.array, motion energy calculated from this camera) and
+                        'times' (np.array, camera timestamps)
+    :param trials_df: pd.DataFrame, with column 'stimOn_times' (time of stimulus onset for each trial)
+    :returns: matplotlib.axis
+    """
     colors = {'left': '#bd7a98',
               'right': '#2b6f39',
               'body': '#035382'}
@@ -450,7 +463,18 @@ def plot_motion_energy_psth(camera_dict, trials_df):
     return plt.gca()
 
 
-def plot_speed_psth(dlc_df, cam_times, trials_df, feature='paw_r', cam='left', legend=True):
+def plot_speed_hist(dlc_df, cam_times, trials_df, feature='paw_r', cam='left', legend=True):
+    """
+    Plots speed histogram of a given dlc feature, aligned to stimulus onset, separate for correct and incorrect trials
+
+    :param dlc_df: pd.Dataframe, dlc traces with _x, _y and _likelihood info for each trace
+    :param cam_times: np.array, camera timestamps
+    :param trials_df: pd.DataFrame, with column 'stimOn_times' (time of stimulus onset for each trial)
+    :param feature: str, feature with trace in dlc_df for which to plot speed hist, default is 'paw_r'
+    :param cam: str, camera to use ('body', 'left', 'right') default is 'left'
+    :param legend: bool, whether to add legend to the plot, default is True
+    :returns: matplotlib.axis
+    """
     # Threshold the dlc traces
     dlc_df = likelihood_threshold(dlc_df)
     # Get speeds
@@ -481,7 +505,17 @@ def plot_speed_psth(dlc_df, cam_times, trials_df, feature='paw_r', cam='left', l
     return plt.gca()
 
 
-def plot_pupil_diameter_psth(pupil_diameter, cam_times, trials_df, cam='left'):
+def plot_pupil_diameter_hist(pupil_diameter, cam_times, trials_df, cam='left'):
+    """
+    Plots histogram of pupil diameter aligned to simulus onset and feedback time.
+
+    :param pupil_diameter: np.array, (smoothed) pupil diameter estimate
+    :param cam_times: np.array, camera timestamps
+    :param trials_df: pd.DataFrame, with column 'stimOn_times' (time of stimulus onset for each trial) and
+                      feedback_times (time of feedback for each trial)
+    :param cam: str, camera to use ('body', 'left', 'right') default is 'left'
+    :returns: matplotlib.axis
+    """
     for align_to, color in zip(['stimOn_times', 'feedback_times'], ['red', 'purple']):
         start_window, end_window = plt_window(trials_df[align_to])
         start_idx = insert_idx(cam_times, start_window)
