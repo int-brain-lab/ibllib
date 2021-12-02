@@ -4,7 +4,6 @@ Set of functions to deal with dlc data
 import logging
 import pandas as pd
 import warnings
-import string
 
 import numpy as np
 import matplotlib
@@ -31,7 +30,7 @@ WINDOW_LAG = -0.5  # sec
 
 # For plotting we use a window around the event the data is aligned to WINDOW_LAG before and WINDOW_LEN after the event
 def plt_window(x):
-    return x+WINDOW_LAG, x+WINDOW_LEN
+    return x + WINDOW_LAG, x + WINDOW_LEN
 
 
 def insert_idx(array, values):
@@ -287,7 +286,7 @@ def plot_trace_on_frame(frame, dlc_df, cam):
     p_pupil = np.array(dlc_df[['pupil_top_r_x', 'pupil_top_r_y']].mean())
     p_anchor = np.mean([p_nose, p_pupil], axis=0)
     dist = np.linalg.norm(p_nose - p_pupil)
-    rect = matplotlib.patches.Rectangle((int(p_anchor[0] - dist/4), int(p_anchor[1])), int(dist/2), int(dist/3),
+    rect = matplotlib.patches.Rectangle((int(p_anchor[0] - dist / 4), int(p_anchor[1])), int(dist / 2), int(dist / 3),
                                         linewidth=1, edgecolor='lime', facecolor='none')
     ax.add_patch(rect)
     # Plot eye region zoom
@@ -331,7 +330,7 @@ def plot_wheel_position(wheel_position, wheel_time, trials_df):
     start_idx = insert_idx(wheel_time, start_window)
     end_idx = np.array(start_idx + int(WINDOW_LEN / T_BIN), dtype='int64')
     # Getting the wheel position for each window, normalize to first value of each window
-    trials_df['wheel_position'] = [wheel_position[start_idx[w] : end_idx[w]] - wheel_position[start_idx[w]]
+    trials_df['wheel_position'] = [wheel_position[start_idx[w]: end_idx[w]] - wheel_position[start_idx[w]]
                                    for w in range(len(start_idx))]
     # Plotting
     times = np.arange(len(trials_df['wheel_position'][0])) * T_BIN + WINDOW_LAG
@@ -369,7 +368,7 @@ def _bin_window_licks(lick_times, trials_df):
     start_idx = insert_idx(bin_times, start_window)
     end_idx = np.array(start_idx + int(WINDOW_LEN / T_BIN), dtype='int64')
     # Get the binned licks for each window
-    trials_df['lick_bins'] = [lick_bins[start_idx[l]:end_idx[l]] for l in range(len(start_idx))]
+    trials_df['lick_bins'] = [lick_bins[start_idx[i]:end_idx[i]] for i in range(len(start_idx))]
     # Remove windows that the exceed bins
     trials_df['end_idx'] = end_idx
     trials_df = trials_df[trials_df['end_idx'] <= len(lick_bins)]
@@ -438,10 +437,10 @@ def plot_motion_energy_psth(camera_dict, trials_df):
             me_mean = np.mean(me_all, axis=0)
             me_std = np.std(me_all, axis=0) / np.sqrt(len(me_all))
             plt.plot(times, me_mean, label=f'{cam} cam', color=colors[cam], linewidth=2)
-            plt.fill_between(times, me_mean + me_std,  me_mean - me_std, color=colors[cam], alpha=0.2)
+            plt.fill_between(times, me_mean + me_std, me_mean - me_std, color=colors[cam], alpha=0.2)
         except AttributeError:
             logger.warning(f"Cannot load motion energy AND times data for {cam} camera")
-   
+
     plt.xticks([-0.5, 0, 0.5, 1, 1.5])
     plt.ylabel('z-scored motion energy [a.u.]')
     plt.xlabel('time [sec]')
@@ -449,7 +448,7 @@ def plot_motion_energy_psth(camera_dict, trials_df):
     plt.legend(loc='lower right')
     plt.title('Motion Energy')
     return plt.gca()
-    
+
 
 def plot_speed_psth(dlc_df, cam_times, trials_df, feature='paw_r', cam='left', legend=True):
     # Threshold the dlc traces
@@ -471,14 +470,14 @@ def plot_speed_psth(dlc_df, cam_times, trials_df, feature='paw_r', cam='left', l
              c='k', label='correct trial')
     plt.plot(times, pd.DataFrame.from_dict(dict(zip(incorrect.index, incorrect.values))).mean(axis=1),
              c='gray', label='incorrect trial')
-    plt.axvline(x=0, label=f'stimOn', linestyle='--', c='r')
+    plt.axvline(x=0, label='stimOn', linestyle='--', c='r')
     plt.title(f'{feature.split("_")[0].capitalize()} speed')
     plt.xticks([-0.5, 0, 0.5, 1, 1.5])
     plt.xlabel('time [sec]')
     plt.ylabel('speed [px/sec]')
     if legend:
         plt.legend()
-    
+
     return plt.gca()
 
 

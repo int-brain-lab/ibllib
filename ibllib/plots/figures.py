@@ -161,8 +161,8 @@ def raw_destripe(raw, fs, t0, i_plt, n_plt,
     return fig, axs
 
 
-def dlc_qc(eid, one=None):
-    
+def dlc_qc_plot(eid, one=None):
+
     import matplotlib.pyplot as plt
     import brainbox.behavior.wheel as bbox_wheel
     from brainbox.behavior.dlc import SAMPLING, T_BIN, plot_trace_on_frame, plot_wheel_position, plot_lick_psth, \
@@ -174,7 +174,12 @@ def dlc_qc(eid, one=None):
     for cam in ['left', 'right', 'body']:
         # Load a single frame for each video, first check if data is local, otherwise stream
         video_path = one.eid2path(eid).joinpath('raw_video_data', f'_iblrig_{cam}Camera.raw.mp4')
-        video_path = url_from_eid(eid, one=one)[cam] if not video_path.exists() else video_path
+        if not video_path.exists():
+            try:
+                video_path = url_from_eid(eid, one=one)[cam]
+            except KeyError:
+                logger.warning(f"No raw video data found for {cam} camera, some DLC QC plots have to be skipped.")
+                data[f'{cam}_frame'] = None
         try:
             data[f'{cam}_frame'] = get_video_frame(video_path, frame_number=5 * 60 * SAMPLING[cam])[:, :, 0]
         except TypeError:
@@ -185,7 +190,7 @@ def dlc_qc(eid, one=None):
             # Check locally first, then try to load from alyx, if nothing works, set to None
             local_file = list(one.eid2path(eid).joinpath('alf').glob(f'*{cam}Camera.{feat}*'))
             alyx_file = [ds for ds in one.list_datasets(eid) if f'{cam}Camera.{feat}' in ds]
-            if feat == 'features' and cam == 'body':
+            if feat == 'features' and cam in ['body', 'right']:
                 continue
             elif len(local_file) > 0:
                 data[f'{cam}_{feat}'] = alfio.load_file_content(local_file[0])
@@ -208,6 +213,7 @@ def dlc_qc(eid, one=None):
             data[f'{alf_object}'] = None
     # Simplify to what we actually need
     data['licks'] = data['licks'].times if data['licks'] else None
+    data['left_pupil'] = data['left_features'].pupilDiameter_smooth if data['left_features'] else None
     data['wheel'] = bbox_wheel.interpolate_position(data['wheel'].timestamps, data['wheel'].position,
                                                     freq=1 / T_BIN) if data['wheel'] else (None, None)
     if data['trials']:
@@ -236,8 +242,7 @@ def dlc_qc(eid, one=None):
               (plot_lick_psth, {'lick_times': data['licks'], 'trials_df': data['trials']}),
               (plot_lick_raster, {'lick_times': data['licks'], 'trials_df': data['trials']}),
               (plot_pupil_diameter_psth,
-               {'pupil_diameter': data['left_features']['pupilDiameter_smooth'], 'cam_times': data['left_times'],
-                'trials_df': data['trials']})
+               {'pupil_diameter': data['left_pupil'], 'cam_times': data['left_times'], 'trials_df': data['trials']})
               ]
     # Plotting
     plt.rcParams.update({'font.size': 10})
@@ -258,5 +263,5 @@ def dlc_qc(eid, one=None):
                         fontsize=12, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
                 plt.axis('off')
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    
+
     return fig

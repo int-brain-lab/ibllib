@@ -24,6 +24,8 @@ from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
 from ibllib.qc.dlc import DlcQC
 from ibllib.dsp import rms
+from ibllib.plots.figures import dlc_qc_plot
+from ibllib.plots.snapshot import Snapshot
 from brainbox.behavior.dlc import likelihood_threshold, get_licks, get_pupil_diameter, get_smooth_pupil_diameter
 
 _logger = logging.getLogger("ibllib")
@@ -871,12 +873,13 @@ class EphysPostDLC(tasks.Task):
                                  ('_ibl_rightCamera.times.npy', 'alf', True),
                                  ('_ibl_leftCamera.times.npy', 'alf', True),
                                  ('_ibl_bodyCamera.times.npy', 'alf', True)],
+                 # More files are required for all panels of the DLC QC plot to function
                  'output_files': [('_ibl_leftCamera.features.pqt', 'alf', True),
                                   ('_ibl_rightCamera.features.pqt', 'alf', True),
                                   ('licks.times.npy', 'alf', True)]
                  }
 
-    def _run(self, overwrite=False, run_qc=True):
+    def _run(self, overwrite=False, run_qc=True, plot_qc=True):
         # Check if output files exist locally
         exist, output_files = self.assert_expected(self.signature['output_files'], silent=True)
         if exist and not overwrite:
@@ -950,6 +953,19 @@ class EphysPostDLC(tasks.Task):
             output_files.append(lick_times_file)
         else:
             _logger.warning("No lick times computed for this session.")
+
+        if plot_qc:
+            try:
+                session_id = self.one.path2eid(self.session_path)
+                fig_path = self.session_path.joinpath('alf', 'dlc_qc_plot.png')
+                fig = dlc_qc_plot(self.one.path2eid(self.session_path), one=self.one)
+                fig.savefig(fig_path)
+                snp = Snapshot(session_id, one=self.one)
+                snp.register_image(fig_path, width='orig', text='dlc_qc_plot.png')
+            except BaseException:
+                _logger.error('Could not create and/or upload DLC QC Plot')
+                _logger.error(traceback.format_exc())
+                self.status = -1
 
         return output_files
 
