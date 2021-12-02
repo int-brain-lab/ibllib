@@ -257,7 +257,7 @@ def dlc_qc_plot(eid, one=None):
               (plot_trace_on_frame, {'frame': data['right_frame'], 'dlc_df': data['right_dlc'], 'cam': 'right'}),
               (plot_trace_on_frame, {'frame': data['body_frame'], 'dlc_df': data['body_dlc'], 'cam': 'body'}),
               (plot_wheel_position,
-               {'wheel_position': data['wheel_time'], 'wheel_time': data['wheel_position'], 'trials_df': data['trials']}),
+               {'wheel_position': data['wheel_position'], 'wheel_time': data['wheel_time'], 'trials_df': data['trials']}),
               (plot_motion_energy_hist,
                {'camera_dict': {'left': {'motion_energy': data['left_ROIMotionEnergy'], 'times': data['left_times']},
                                 'right': {'motion_energy': data['right_ROIMotionEnergy'], 'times': data['right_times']},
