@@ -245,7 +245,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     Production version with optimized FFTs - requires pyfftw
     :param sr: seismic reader object (spikeglx.Reader)
     :param output_file: (optional, defaults to .bin extension of the compressed bin file)
-    :param h: (optional)
+    :param h: (optional) neuropixel trace header. Dictionary with key 'sample_shift'
     :param wrot: (optional) whitening matrix [nc x nc] or amplitude scalar to apply to the output
     :param append: (optional, False) for chronic recordings, append to end of file
     :param nc_out: (optional, True) saves non selected channels (synchronisation trace) in output
@@ -273,7 +273,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
                 'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
     h = neuropixel.trace_header(version=1) if h is None else h
-    ncv = h['x'].size  # number of channels
+    ncv = h['sample_shift'].size  # number of channels
     output_file = sr.file_bin.with_suffix('.bin') if output_file is None else output_file
     assert output_file != sr.file_bin
     taper = np.r_[0, scipy.signal.windows.cosine((SAMPLES_TAPER - 1) * 2), 0]
