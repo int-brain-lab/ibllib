@@ -72,7 +72,7 @@ def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=
 
 
 class Density:
-    def __init__(self, w, fs=1, cmap='bone', ax=None, **kwargs):
+    def __init__(self, w, fs=1, cmap='bone', ax=None, taxis=0, **kwargs):
         """
         Matplotlib display of traces as a density display
 
@@ -82,16 +82,23 @@ class Density:
         :return: None
         """
         w = w.reshape(w.shape[0], -1)
-        nech, ntr = w.shape
-        tscale = np.array([0, nech - 1]) / fs * 1e3
+        if taxis == 0:
+            nech, ntr = w.shape
+            tscale = np.array([0, nech - 1]) / fs * 1e3
+            extent = [-0.5, ntr - 0.5, tscale[1], tscale[0]]
+            xlabel, ylabel, origin = ('Trace', 'Time (ms)', 'upper')
+        elif taxis == 1:
+            ntr, nech = w.shape
+            tscale = np.array([0, nech - 1]) / fs * 1e3
+            extent = [tscale[0], tscale[1], -0.5, ntr - 0.5]
+            ylabel, xlabel, origin = ('Trace', 'Time (ms)', 'lower')
         if ax is None:
             self.figure, ax = plt.subplots()
         else:
             self.figure = ax.get_figure()
-        extent = [-0.5, ntr - 0.5, tscale[1], tscale[0]]
-        self.im = ax.imshow(w, aspect='auto', cmap=cmap, extent=extent, origin='upper', **kwargs)
-        ax.set_ylabel('Time (ms)')
-        ax.set_xlabel('Trace')
+        self.im = ax.imshow(w, aspect='auto', cmap=cmap, extent=extent, origin=origin, **kwargs)
+        ax.set_ylabel(ylabel)
+        ax.set_xlabel(xlabel)
         self.cid_key = self.figure.canvas.mpl_connect('key_press_event', self.on_key_press)
         self.ax = ax
 

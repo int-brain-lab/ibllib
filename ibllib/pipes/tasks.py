@@ -6,42 +6,48 @@ import importlib
 import time
 from _collections import OrderedDict
 import traceback
-import pandas as pd
-import numpy as np
-import shutil
+import json
 
 from graphviz import Digraph
 
 from ibllib.misc import version
+from ibllib.oneibl import data_handlers
 import one.params
-from one.alf.files import add_uuid_string
-from iblutil.io.parquet import np2str
-from ibllib.oneibl.registration import register_dataset
-from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_PATCH_PATH
-from one.util import filter_datasets
-
+from one.api import ONE
 
 _logger = logging.getLogger('ibllib')
 
 
 class Task(abc.ABC):
-    log = ""
-    cpu = 1
-    gpu = 0
+    log = ""  # place holder to keep the log of the task for registratoin
+    cpu = 1   # CPU resource
+    gpu = 0   # GPU resources: as of now, either 0 or 1
     io_charge = 5  # integer percentage
     priority = 30  # integer percentage, 100 means highest priority
     ram = 4  # RAM needed to run (Go)
     one = None  # one instance (optional)
-    level = 0
-    outputs = None
+    level = 0  # level in the pipeline hierarchy: level 0 means there is no parent task
+    outputs = None  # place holder for a list of Path containing output files
     time_elapsed_secs = None
-    time_out_secs = None
+    time_out_secs = 3600 * 2  # time-out after which a task is considered dead
     version = version.ibllib()
-    log = ''
-    signature = {'input_files': (), 'output_files': ()}  # tuple (filename, collection, required_flag)
+    signature = {'input_files': [], 'output_files': []}  # list of tuples (filename, collection, required_flag)
+    force = False  # whether or not to re-download missing input files on local server if not present
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
-                 machine=None, clobber=True, aws=None, location='server'):
+                 machine=None, clobber=True, location='server'):
+        """
+        Base task class
+        :param session_path: session path
+        :param parents: parents
+        :param taskid: alyx task id
+        :param one: one instance
+        :param machine:
+        :param clobber: whether or not to overwrite log on rerun
+        :param location: location where task is run. Options are 'server' (lab local servers'), 'remote' (remote compute node,
+        data required for task downloaded via one), 'AWS' (remote compute node, data required for task downloaded via AWS),
+        or 'SDSC' (SDSC flatiron compute node) # TODO 'Globus' (remote compute node, data required for task downloaded via Globus)
+        """
         self.taskid = taskid
         self.one = one
         self.session_path = session_path
@@ -53,7 +59,6 @@ class Task(abc.ABC):
         self.machine = machine
         self.clobber = clobber
         self.location = location
-        self.aws = aws
 
     @property
     def name(self):
@@ -65,6 +70,12 @@ class Task(abc.ABC):
         wraps the _run() method with
         -   error management
         -   logging to variable
+        -   writing a lock file if the GPU is used
+        -   labels the status property of the object. The status value is labeled as:
+             0: Complete
+            -1: Errored
+            -2: Didn't run as a lock was encountered
+            -3: Incomplete
         """
         # if taskid of one properties are not available, local run only without alyx
         use_alyx = self.one is not None and self.taskid is not None
@@ -73,8 +84,7 @@ class Task(abc.ABC):
                                        data={'status': 'Started'})
             self.log = ('' if not tdict['log'] else tdict['log'] +
                         '\n\n=============================RERUN=============================\n')
-        # setup
-        self.setUp()
+
         # Setup the console handler with a StringIO object
         log_capture_string = io.StringIO()
         ch = logging.StreamHandler(log_capture_string)
@@ -85,24 +95,44 @@ class Task(abc.ABC):
         if self.machine:
             _logger.info(f"Running on machine: {self.machine}")
         _logger.info(f"running ibllib version {version.ibllib()}")
-        # run
+        # setup
         start_time = time.time()
-        self.status = 0
         try:
-            self.outputs = self._run(**kwargs)
-            _logger.info(f"Job {self.__class__} complete")
-        except BaseException:
+            setup = self.setUp(**kwargs)
+            _logger.info(f"Setup value is: {setup}")
+            self.status = 0
+            if not setup:
+                # case where outputs are present but don't have input files locally to rerun task
+                # label task as complete
+                _, self.outputs = self.assert_expected_outputs()
+            else:
+                # run task
+                if self.gpu >= 1:
+                    if not self._creates_lock():
+                        self.status = -2
+                        _logger.info(f"Job {self.__class__} exited as a lock was found")
+                        new_log = log_capture_string.getvalue()
+                        self.log = new_log if self.clobber else self.log + new_log
+                        log_capture_string.close()
+                        _logger.removeHandler(ch)
+                        return self.status
+                self.outputs = self._run(**kwargs)
+                _logger.info(f"Job {self.__class__} complete")
+        except Exception:
             _logger.error(traceback.format_exc())
             _logger.info(f"Job {self.__class__} errored")
             self.status = -1
+
         self.time_elapsed_secs = time.time() - start_time
-        # log the outputs-+
+
+        # log the outputs
         if isinstance(self.outputs, list):
             nout = len(self.outputs)
         elif self.outputs is None:
             nout = 0
         else:
             nout = 1
+
         _logger.info(f"N outputs: {nout}")
         _logger.info(f"--- {self.time_elapsed_secs} seconds run-time ---")
         # after the run, capture the log output, amend to any existing logs if not overwrite
@@ -122,64 +152,18 @@ class Task(abc.ABC):
         :param kwargs: directly passed to the register_dataset function
         :return:
         """
-        assert one
-        if self.location == 'server':
-            return self._register_datasets_server(one=one, **kwargs)
-        elif self.location == 'remote':
-            return self._register_datasets_remote(one=one, **kwargs)
-        elif self.location == 'SDSC':
-            return self._register_datasets_SDSC(one=one, **kwargs)
-        elif self.location == 'AWS':
-            return self._register_datasets_AWS(one=one, **kwargs)
-
-    def _register_datasets_server(self, one=None, **kwargs):
-
-        if self.outputs:
-            if isinstance(self.outputs, list):
-                versions = [self.version for _ in self.outputs]
-            else:
-                versions = [self.version]
-
-            return register_dataset(self.outputs, one=one, versions=versions, **kwargs)
-
-    def _register_datasets_remote(self, one=None, **kwargs):
-
-        if self.outputs:
-            if isinstance(self.outputs, list):
-                versions = [self.version for _ in self.outputs]
-            else:
-                versions = [self.version]
-
-            ftp_patcher = FTPPatcher(one=one)
-            return ftp_patcher.create_dataset(path=self.outputs, created_by=self.one.alyx.user,
-                                              versions=versions, **kwargs)
-
-    def _register_datasets_SDSC(self, one=None, **kwargs):
-
-        if self.outputs:
-            if isinstance(self.outputs, list):
-                versions = [self.version for _ in self.outputs]
-            else:
-                versions = [self.version]
-
-            sdsc_patcher = SDSCPatcher(one=one)
-            return sdsc_patcher.patch_datasets(self.outputs, dry=False, versions=versions,
-                                               **kwargs)
-
-    def _register_datasets_AWS(self, one=None, **kwargs):
-        # GO through FTP patcher
-        if self.outputs:
-            if isinstance(self.outputs, list):
-                versions = [self.version for _ in self.outputs]
-            else:
-                versions = [self.version]
-
-            ftp_patcher = FTPPatcher(one=one)
-            return ftp_patcher.create_dataset(path=self.outputs, created_by=self.one.alyx.user,
-                                              versions=versions, **kwargs)
+        return self.data_handler.uploadData(self.outputs, self.version, **kwargs)
 
     def rerun(self):
         self.run(overwrite=True)
+
+    def get_signatures(self, **kwargs):
+        """
+        This is the default but should be overwritten for each task
+        :return:
+        """
+        self.input_files = self.signature['input_files']
+        self.output_files = self.signature['output_files']
 
     @abc.abstractmethod
     def _run(self, overwrite=False):
@@ -194,104 +178,169 @@ class Task(abc.ABC):
           returning any dataset.
         """
 
-    def setUp(self):
+    def setUp(self, **kwargs):
         """
-        Function to optionally overload to check inputs.
+        Setup method to get the data handler and ensure all data is available locally to run task
+        :param kwargs:
         :return:
         """
-        # if on local server don't do anything
         if self.location == 'server':
-            self._setUp_server()
-        elif self.location == 'remote':
-            self._setUp_remote()
-        elif self.location == 'SDSC':
-            self._setUp_SDSC()
-        elif self.location == 'AWS':
-            self._setUp_AWS()
+            self.get_signatures(**kwargs)
 
-    def _setUp_server(self):
-        pass
+            input_status, _ = self.assert_expected_inputs(raise_error=False)
+            output_status, _ = self.assert_expected(self.output_files, silent=True)
 
-    def _setUp_remote(self):
+            if input_status:
+                self.data_handler = self.get_data_handler()
+                _logger.info('All input files found: running task')
+                return True
 
-        assert self.one
-        df = self._getData()
-        self.one._download_datasets(df)
-
-    def _setUp_SDSC(self):
-        assert self.one
-        df = self._getData()
-
-        SDSC_TMP = Path(SDSC_PATCH_PATH.joinpath(self.__class__.__name__))
-
-        for _, d in df.iterrows():
-            file_path = Path(d['session_path']).joinpath(d['rel_path'])
-            file_uuid = add_uuid_string(file_path, np2str(np.r_[d.name[0], d.name[1]]))
-            file_link = SDSC_TMP.joinpath(file_path)
-            file_link.parent.mkdir(exist_ok=True, parents=True)
-            file_link.symlink_to(
-                Path(SDSC_ROOT_PATH.joinpath(file_uuid)))
-
-        self.session_path = SDSC_TMP.joinpath(d['session_path'])
-
-    def _setUp_AWS(self):
-        assert self.aws
-        assert self.one
-
-        df = self._getData()
-        self.aws._download_datasets(df)
+            if not self.force:
+                self.data_handler = self.get_data_handler()
+                _logger.warning('Not all input files found locally: will still attempt to rerun task')
+                # TODO in the future once we are sure that input output task signatures work properly should return False
+                # _logger.info('All output files found but input files required not available locally: task not rerun')
+                return True
+            else:
+                # Attempts to download missing data using globus
+                _logger.info('Not all input files found locally: attempting to re-download required files')
+                self.data_handler = self.get_data_handler(location='serverglobus')
+                self.data_handler.setUp()
+                # Double check we now have the required files to run the task
+                # TODO in future should raise error if even after downloading don't have the correct files
+                self.assert_expected_inputs(raise_error=False)
+                return True
+        else:
+            self.data_handler = self.get_data_handler()
+            self.data_handler.setUp()
+            self.get_signatures(**kwargs)
+            self.assert_expected_inputs()
+            return True
 
     def tearDown(self):
         """
-        Function to optionally overload to check results
+        Function after runs()
+        Does not run if a lock is encountered by the task (status -2)
         """
-        pass
-
-    def _getData(self):
-        """
-        Funtcion to optionally overload to download/ create links to data
-        Important when running tasks in remote or SDSC locations
-        :return:
-        """
-        assert self.one
-        session_datasets = self.one.list_datasets(self.one.path2eid(self.session_path), details=True)
-        df = pd.DataFrame(columns=self.one._cache.datasets.columns)
-        for file in self.signature['input_files']:
-            df = df.append(filter_datasets(session_datasets, filename=file[0], collection=file[1],
-                           wildcards=True, assert_unique=False))
-        return df
+        if self.gpu >= 1:
+            if self._lock_file_path().exists():
+                self._lock_file_path().unlink()
 
     def cleanUp(self):
         """
         Function to optionally overload to clean up
         :return:
         """
-        if self.location == 'SDSC':
-            self._cleanUp_SDSC()
+        self.data_handler.cleanUp()
 
-    def _cleanUp_SDSC(self):
-
-        # Double check we are dealing with the SDSC temp folder
-        assert SDSC_PATCH_PATH.parts[0:4] == self.session_path.parts[0:4]
-        shutil.rmtree(self.session_path)
-
-    def assert_expected_outputs(self):
+    def assert_expected_outputs(self, raise_error=True):
         """
         After a run, asserts that all signature files are present at least once in the output files
         Mainly useful for integration tests
         :return:
         """
         assert self.status == 0
-        everthing_is_fine = True
-        for expected_file in self.signature['output_files']:
-            actual_files = list(self.session_path.rglob(str(Path(expected_file[1]).joinpath(expected_file[0]))))
-            if len(actual_files) == 0:
-                everthing_is_fine = False
-                _logger.error(f"Signature file expected {expected_file} not found in the output")
-        if not everthing_is_fine:
+        _logger.info('Checking output files')
+        everything_is_fine, files = self.assert_expected(self.output_files)
+
+        if not everything_is_fine:
             for out in self.outputs:
                 _logger.error(f"{out}")
-            raise FileNotFoundError("Missing outputs after task completion")
+            if raise_error:
+                raise FileNotFoundError("Missing outputs after task completion")
+
+        return everything_is_fine, files
+
+    def assert_expected_inputs(self, raise_error=True):
+        """
+        Before running a task, check that all the files necessary to run the task have been downloaded/ are on the local file
+        system already
+        :return:
+        """
+        _logger.info('Checking input files')
+        everything_is_fine, files = self.assert_expected(self.input_files)
+
+        if not everything_is_fine and raise_error:
+            raise FileNotFoundError("Missing inputs to run task")
+
+        return everything_is_fine, files
+
+    def assert_expected(self, expected_files, silent=False):
+        everything_is_fine = True
+        files = []
+        for expected_file in expected_files:
+            actual_files = list(Path(self.session_path).rglob(str(Path(expected_file[1]).joinpath(expected_file[0]))))
+            if len(actual_files) == 0 and expected_file[2]:
+                everything_is_fine = False
+                if not silent:
+                    _logger.error(f"Signature file expected {expected_file} not found")
+            else:
+                if len(actual_files) != 0:
+                    files.append(actual_files[0])
+
+        return everything_is_fine, files
+
+    def get_data_handler(self, location=None):
+        """
+        Gets the relevant data handler based on location argument
+        :return:
+        """
+        location = location or self.location
+        if location == 'local':
+            return data_handlers.LocalDataHandler(self.session_path, self.signature, one=self.one)
+        self.one = self.one or ONE()
+        if location == 'server':
+            dhandler = data_handlers.ServerDataHandler(self.session_path, self.signature, one=self.one)
+        elif location == 'serverglobus':
+            dhandler = data_handlers.ServerGlobusDataHandler(self.session_path, self.signature, one=self.one)
+        elif location == 'remote':
+            dhandler = data_handlers.RemoteHttpDataHandler(self.session_path, self.signature, one=self.one)
+        elif location == 'AWS':
+            dhandler = data_handlers.RemoteAwsDataHandler(self, self.session_path, self.signature, one=self.one)
+        elif location == 'SDSC':
+            dhandler = data_handlers.SDSCDataHandler(self, self.session_path, self.signature, one=self.one)
+        return dhandler
+
+    @staticmethod
+    def make_lock_file(taskname="", time_out_secs=7200):
+        """Creates a GPU lock file with a timeout of"""
+        d = {'start': time.time(), 'name': taskname, 'time_out_secs': time_out_secs}
+        with open(Task._lock_file_path(), 'w+') as fid:
+            json.dump(d, fid)
+        return d
+
+    @staticmethod
+    def _lock_file_path():
+        """the lock file is in ~/.one/gpu.lock"""
+        folder = Path.home().joinpath('.one')
+        folder.mkdir(exist_ok=True)
+        return folder.joinpath('gpu.lock')
+
+    def _make_lock_file(self):
+        """creates a lock file with the current time"""
+        return Task.make_lock_file(self.name, self.time_out_secs)
+
+    def is_locked(self):
+        """Checks if there is a lock file for this given task"""
+        lock_file = self._lock_file_path()
+        if not lock_file.exists():
+            return False
+
+        with open(lock_file) as fid:
+            d = json.load(fid)
+        now = time.time()
+        if (now - d['start']) > d['time_out_secs']:
+            lock_file.unlink()
+            return False
+        else:
+            return True
+
+    def _creates_lock(self):
+        if self.is_locked():
+            return False
+        else:
+            self._make_lock_file()
+            return True
 
 
 class Pipeline(abc.ABC):
@@ -362,7 +411,7 @@ class Pipeline(abc.ABC):
         tasks_alyx = []
         # creates all the tasks by iterating through the ordered dict
         for k, t in self.tasks.items():
-            # get the parents alyx ids to reference in the database
+            # get the parents' alyx ids to reference in the database
             if len(t.parents):
                 pnames = [p.name for p in t.parents]
                 parents_ids = [ta['id'] for ta in tasks_alyx if ta['name'] in pnames]
@@ -417,7 +466,7 @@ class Pipeline(abc.ABC):
         return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty'], **kwargs)
 
     def rerun(self, **kwargs):
-        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete'],
+        return self.run(status__in=['Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete', 'Incomplete'],
                         **kwargs)
 
     @property
@@ -444,10 +493,10 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     :return:
     """
     registered_dsets = []
+    # here we need to check parents' status, get the job_deck if not available
+    if not job_deck:
+        job_deck = one.alyx.rest('tasks', 'list', session=tdict['session'], no_cache=True)
     if len(tdict['parents']):
-        # here we need to check parents status, get the job_deck if not available
-        if not job_deck:
-            job_deck = one.alyx.rest('tasks', 'list', session=tdict['session'], no_cache=True)
         # check the dependencies
         parent_tasks = filter(lambda x: x['id'] in tdict['parents'], job_deck)
         parent_statuses = [j['status'] for j in parent_tasks]
@@ -478,13 +527,30 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     else:
         try:
             registered_dsets = task.register_datasets(one=one, max_md5_size=max_md5_size)
-        except BaseException:
+        except Exception:
+            _logger.error(traceback.format_exc())
             patch_data['status'] = 'Errored'
         patch_data['status'] = 'Complete'
     # overwrite status to errored
     if status == -1:
         patch_data['status'] = 'Errored'
+    # Status -2 means a lock was encountered during run, should be rerun
+    if status == -2:
+        patch_data['status'] = 'Waiting'
+    # Status -3 should be returned if a task is Incomplete
+    if status == -3:
+        patch_data['status'] = 'Incomplete'
     # update task status on Alyx
     t = one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data=patch_data)
+    # check for dependent held tasks
+    # NB: Assumes dependent tasks are all part of the same session!
+    next(x for x in job_deck if x['id'] == t['id'])['status'] = t['status']  # Update status in job deck
+    dependent_tasks = filter(lambda x: t['id'] in x['parents'] and x['status'] == 'Held', job_deck)
+    for d in dependent_tasks:
+        assert d['id'] != t['id'], 'task its own parent'
+        # if all their parent tasks now complete, set to waiting
+        parent_status = [next(x['status'] for x in job_deck if x['id'] == y) for y in d['parents']]
+        if all(x == 'Complete' for x in parent_status):
+            one.alyx.rest('tasks', 'partial_update', id=d['id'], data={'status': 'Waiting'})
     task.cleanUp()
     return t, registered_dsets

@@ -1,3 +1,4 @@
+"""Functions for loading IBL ephys and trial data using the Open Neurophysiology Environment."""
 import logging
 import os
 
@@ -94,6 +95,14 @@ def _channels_traj2bunch(xyz_chans, brain_atlas):
     return channels
 
 
+def _channels_bunch2alf(channels):
+    channels_ = {
+        'mlapdv': np.c_[channels['x'], channels['y'], channels['z']] * 1e6,
+        'brainLocationIds_ccf_2017': channels['atlas_id'],
+        'localCoordinates': np.c_[channels['lateral_um'], channels['axial_um']]}
+    return channels_
+
+
 def _channels_alf2bunch(channels, brain_regions=None):
     # reformat the dictionary according to the standard that comes out of Alyx
     channels_ = {
@@ -101,27 +110,55 @@ def _channels_alf2bunch(channels, brain_regions=None):
         'y': channels['mlapdv'][:, 1].astype(np.float64) / 1e6,
         'z': channels['mlapdv'][:, 2].astype(np.float64) / 1e6,
         'acronym': None,
-        'atlas_id': channels['brainLocationIds_ccf_2017']
+        'atlas_id': channels['brainLocationIds_ccf_2017'],
+        'axial_um': channels['localCoordinates'][:, 1],
+        'lateral_um': channels['localCoordinates'][:, 0],
     }
     if brain_regions:
         channels_['acronym'] = brain_regions.get(channels_['atlas_id'])['acronym']
     return channels_
 
 
-def _load_spike_sorting(eid, one=None, collection=None, revision=None, return_channels=True, dataset_types=None):
+def _load_spike_sorting(eid, one=None, collection=None, revision=None, return_channels=True, dataset_types=None,
+                        brain_regions=None):
     """
-    Generic function to load spike sortin according to one searchwords
+    Generic function to load spike sorting according data using ONE.
+
     Will try to load one spike sorting for any probe present for the eid matching the collection
     For each probe it will load a spike sorting:
         - if there is one version: loads this one
         - if there are several versions: loads pykilosort, if not found the shortest collection (alf/probeXX)
 
-    :param eid: experiment ID
-    :param one: one instance
-    :param collection: collection filter word - accepts wildcard - can be a combination of spike sorter and probe
-    :param revision: revision to load
-    :param return_channels: True
-    :return:
+    Parameters
+    ----------
+    eid : [str, UUID, Path, dict]
+        Experiment session identifier; may be a UUID, URL, experiment reference string
+        details dict or Path
+    one : one.api.OneAlyx
+        An instance of ONE (may be in 'local' mode)
+    collection : str
+        collection filter word - accepts wildcards - can be a combination of spike sorter and
+        probe.  See `ALF documentation`_ for details.
+    revision : str
+        A particular revision return (defaults to latest revision).  See `ALF documentation`_ for
+        details.
+    return_channels : bool
+        Defaults to False otherwise loads channels from disk (takes longer)
+
+    .. _ALF documentation: https://one.internationalbrainlab.org/alf_intro.html#optional-components
+
+    Returns
+    -------
+    spikes : dict of one.alf.io.AlfBunch
+        A dict with probe labels as keys, contains bunch(es) of spike data for the provided
+        session and spike sorter, with keys ('clusters', 'times')
+    clusters : dict of one.alf.io.AlfBunch
+        A dict with probe labels as keys, contains bunch(es) of cluster data, with keys
+        ('channels', 'depths', 'metrics')
+    channels : dict of one.alf.io.AlfBunch
+        A dict with probe labels as keys, contains channel locations with keys ('acronym',
+        'atlas_id', 'x', 'y', 'z').  Only returned when return_channels is True.  Atlas IDs
+        non-lateralized.
     """
     one = one or ONE()
     # enumerate probes and load according to the name
@@ -139,10 +176,9 @@ def _load_spike_sorting(eid, one=None, collection=None, revision=None, return_ch
                                         attribute=spike_attributes)
         clusters[pname] = one.load_object(eid, collection=probe_collection, obj='clusters',
                                           attribute=cluster_attributes)
-
-    channels = _load_channels_locations_from_disk(eid, collection=collection, one=one, revision=revision)
-
     if return_channels:
+        channels = _load_channels_locations_from_disk(
+            eid, collection=collection, one=one, revision=revision, brain_regions=brain_regions)
         return spikes, clusters, channels
     else:
         return spikes, clusters
@@ -179,29 +215,52 @@ def _load_channels_locations_from_disk(eid, collection=None, one=None, revision=
             _logger.debug(f"looking for a resolved alignment dataset in {aligned_channel_collections}")
             ac_collection = _get_spike_sorting_collection(aligned_channel_collections, probe)
             channels_aligned = one.load_object(eid, 'channels', collection=ac_collection)
-            # oftentimes the channel map for different spike sorters may be different so interpolate the alignment onto
-            nch = channels[probe]['localCoordinates'].shape[0]
-            # if there is no spike sorting in the base folder, the alignment doesn't have the localCoordinates field
-            # so we reconstruct from the Neuropixel map. This only happens for early pykilosort sorts
-            if 'localCoordinates' in channels_aligned.keys():
-                aligned_depths = channels_aligned['localCoordinates'][:, 1]
-            else:
-                assert channels_aligned['mlapdv'].shape[0] == 384
-                NEUROPIXEL_VERSION = 1
-                from ibllib.ephys.neuropixel import trace_header
-                aligned_depths = trace_header(version=NEUROPIXEL_VERSION)['y']
-            depth_aligned, ind_aligned = np.unique(aligned_depths, return_index=True)
-            depths, ind, iinv = np.unique(channels[probe]['localCoordinates'][:, 1], return_index=True, return_inverse=True)
-            channels[probe]['mlapdv'] = np.zeros((nch, 3))
-            for i in np.arange(3):
-                channels[probe]['mlapdv'][:, i] = np.interp(
-                    depths, depth_aligned, channels_aligned['mlapdv'][ind_aligned, i])[iinv]
-            # the brain locations have to be interpolated by nearest neighbour
-            fcn_interp = interp1d(depth_aligned, channels_aligned['brainLocationIds_ccf_2017'][ind_aligned], kind='nearest')
-            channels[probe]['brainLocationIds_ccf_2017'] = fcn_interp(depths)[iinv].astype(np.int32)
+            channels[probe] = channel_locations_interpolation(channels_aligned, channels[probe])
             # only have to reformat channels if we were able to load coordinates from disk
-            channels[probe] = _channels_alf2bunch(channels[probe], brain_regions=brain_regions)
+        channels[probe] = _channels_alf2bunch(channels[probe], brain_regions=brain_regions)
     return channels
+
+
+def channel_locations_interpolation(channels_aligned, channels, brain_regions=None):
+    """
+    oftentimes the channel map for different spike sorters may be different so interpolate the alignment onto
+    if there is no spike sorting in the base folder, the alignment doesn't have the localCoordinates field
+    so we reconstruct from the Neuropixel map. This only happens for early pykilosort sorts
+    :param channels_aligned: Bunch or dictionary of aligned channels containing at least keys
+     'localCoordinates', 'mlapdv' and 'brainLocationIds_ccf_2017'
+     OR
+      'x', 'y', 'z', 'acronym', 'axial_um'
+      those are the guide for the interpolation
+    :param channels: Bunch or dictionary of aligned channels containing at least keys 'localCoordinates'
+    :param brain_regions: None (default) or ibllib.atlas.BrainRegions object
+     if None will return a dict with keys 'localCoordinates', 'mlapdv', 'brainLocationIds_ccf_2017
+     if a brain region object is provided, outputts a dict with keys
+      'x', 'y', 'z', 'acronym', 'atlas_id', 'axial_um', 'lateral_um'
+    :return: Bunch or dictionary of channels with brain coordinates keys
+    """
+    nch = channels['localCoordinates'].shape[0]
+    if set(['x', 'y', 'z']).issubset(set(channels_aligned.keys())):
+        channels_aligned = _channels_bunch2alf(channels_aligned)
+    if 'localCoordinates' in channels_aligned.keys():
+        aligned_depths = channels_aligned['localCoordinates'][:, 1]
+    else:  # this is a edge case for a few spike sorting sessions
+        assert channels_aligned['mlapdv'].shape[0] == 384
+        NEUROPIXEL_VERSION = 1
+        from ibllib.ephys.neuropixel import trace_header
+        aligned_depths = trace_header(version=NEUROPIXEL_VERSION)['y']
+    depth_aligned, ind_aligned = np.unique(aligned_depths, return_index=True)
+    depths, ind, iinv = np.unique(channels['localCoordinates'][:, 1], return_index=True, return_inverse=True)
+    channels['mlapdv'] = np.zeros((nch, 3))
+    for i in np.arange(3):
+        channels['mlapdv'][:, i] = np.interp(
+            depths, depth_aligned, channels_aligned['mlapdv'][ind_aligned, i])[iinv]
+    # the brain locations have to be interpolated by nearest neighbour
+    fcn_interp = interp1d(depth_aligned, channels_aligned['brainLocationIds_ccf_2017'][ind_aligned], kind='nearest')
+    channels['brainLocationIds_ccf_2017'] = fcn_interp(depths)[iinv].astype(np.int32)
+    if brain_regions is not None:
+        return _channels_alf2bunch(channels, brain_regions=brain_regions)
+    else:
+        return channels
 
 
 def _load_channel_locations_traj(eid, probe=None, one=None, revision=None, aligned=False,
@@ -272,6 +331,9 @@ def _load_channel_locations_traj(eid, probe=None, one=None, revision=None, align
 
             channels[probe] = _channels_traj2bunch(chans, brain_atlas)
 
+        channels[probe]['axial_um'] = chn_coords[:, 1]
+        channels[probe]['lateral_um'] = chn_coords[:, 0]
+
     else:
         _logger.warning(f'Histology tracing for {probe} does not exist. '
                         f'No channels for {probe}')
@@ -282,13 +344,27 @@ def _load_channel_locations_traj(eid, probe=None, one=None, revision=None, align
 
 def load_channel_locations(eid, probe=None, one=None, aligned=False, brain_atlas=None):
     """
-    TODO
-    :param eid:
-    :param probe:
-    :param one:
-    :param aligned:
-    :param brain_regions:
-    :return:
+    Load the brain locations of each channel for a given session/probe
+
+    Parameters
+    ----------
+    eid : [str, UUID, Path, dict]
+        Experiment session identifier; may be a UUID, URL, experiment reference string
+        details dict or Path
+    probe : [str, list of str]
+        The probe label(s), e.g. 'probe01'
+    one : one.api.OneAlyx
+        An instance of ONE (shouldn't be in 'local' mode)
+    aligned : bool
+        Whether to get the latest user aligned channel when not resolved or use histology track
+    brain_atlas : ibllib.atlas.BrainAtlas
+        Brain atlas object (default: Allen atlas)
+
+    Returns
+    -------
+    dict of one.alf.io.AlfBunch
+        A dict with probe labels as keys, contains channel locations with keys ('acronym',
+        'atlas_id', 'x', 'y', 'z').  Atlas IDs non-lateralized.
     """
     one = one or ONE()
     brain_atlas = brain_atlas or AllenAtlas()
@@ -309,7 +385,8 @@ def load_channel_locations(eid, probe=None, one=None, aligned=False, brain_atlas
     return channels
 
 
-def load_spike_sorting_fast(eid, one=None, probe=None, dataset_types=None, spike_sorter=None, revision=None):
+def load_spike_sorting_fast(eid, one=None, probe=None, dataset_types=None, spike_sorter=None, revision=None,
+                            brain_regions=None, nested=True):
     """
     From an eid, loads spikes and clusters for all probes
     The following set of dataset types are loaded:
@@ -325,16 +402,26 @@ def load_spike_sorting_fast(eid, one=None, probe=None, dataset_types=None, spike
     :param dataset_types: additional spikes/clusters objects to add to the standard default list
     :param spike_sorter: name of the spike sorting you want to load (None for default)
     :param return_channels: (bool) defaults to False otherwise tries and load channels from disk
+    :param brain_regions: ibllib.atlas.regions.BrainRegions object - will label acronyms if provided
+    :param nested: if a single probe is required, do not output a dictionary with the probe name as key
     :return: spikes, clusters (dict of bunch, 1 bunch per probe)
     """
     collection = _collection_filter_from_args(probe, spike_sorter)
     _logger.debug(f"load spike sorting with collection filter {collection}")
-    kwargs = dict(eid=eid, one=one, collection=collection, revision=revision, dataset_types=dataset_types)
+    kwargs = dict(eid=eid, one=one, collection=collection, revision=revision, dataset_types=dataset_types,
+                  brain_regions=brain_regions)
     spikes, clusters, channels = _load_spike_sorting(**kwargs, return_channels=True)
+    clusters = merge_clusters_channels(clusters, channels, keys_to_add_extra=None)
+    if nested is False:
+        k = list(spikes.keys())[0]
+        channels = channels[k]
+        clusters = clusters[k]
+        spikes = spikes[k]
     return spikes, clusters, channels
 
 
-def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sorter=None, revision=None):
+def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sorter=None, revision=None,
+                       brain_regions=None):
     """
     From an eid, loads spikes and clusters for all probes
     The following set of dataset types are loaded:
@@ -350,12 +437,14 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sort
     :param dataset_types: additional spikes/clusters objects to add to the standard default list
     :param spike_sorter: name of the spike sorting you want to load (None for default)
     :param return_channels: (bool) defaults to False otherwise tries and load channels from disk
+    :param brain_regions: ibllib.atlas.regions.BrainRegions object - will label acronyms if provided
     :return: spikes, clusters (dict of bunch, 1 bunch per probe)
     """
     collection = _collection_filter_from_args(probe, spike_sorter)
     _logger.debug(f"load spike sorting with collection filter {collection}")
     spikes, clusters = _load_spike_sorting(eid=eid, one=one, collection=collection, revision=revision,
-                                           return_channels=False, dataset_types=dataset_types)
+                                           return_channels=False, dataset_types=dataset_types,
+                                           brain_regions=brain_regions)
     return spikes, clusters
 
 
@@ -364,15 +453,37 @@ def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False, da
     """
     For a given eid, get spikes, clusters and channels information, and merges clusters
     and channels information before returning all three variables.
-    :param eid:
-    :param one:
-    :param aligned: whether to get the latest user aligned channel when not resolved or use
-    histology track
-    :param dataset_types: additional spikes/clusters objects to add to the standard default list
-    :param spike_sorter: name of the spike sorting you want to load (None for default which is
-                         pykilosort if it's available otherwise the default matlab kilosort)
-    :param brain_atlas: allen atlas object
-    :return: spikes, clusters, channels (dict of bunch, 1 bunch per probe)
+
+    Parameters
+    ----------
+    eid : [str, UUID, Path, dict]
+        Experiment session identifier; may be a UUID, URL, experiment reference string
+        details dict or Path
+    one : one.api.OneAlyx
+        An instance of ONE (shouldn't be in 'local' mode)
+    probe : [str, list of str]
+        The probe label(s), e.g. 'probe01'
+    aligned : bool
+        Whether to get the latest user aligned channel when not resolved or use histology track
+    dataset_types : list of str
+        Optional additional spikes/clusters objects to add to the standard default list
+    spike_sorter : str
+        Name of the spike sorting you want to load (None for default which is pykilosort if it's
+        available otherwise the default MATLAB kilosort)
+    brain_atlas : ibllib.atlas.BrainAtlas
+        Brain atlas object (default: Allen atlas)
+
+    Returns
+    -------
+    spikes : dict of one.alf.io.AlfBunch
+        A dict with probe labels as keys, contains bunch(es) of spike data for the provided
+        session and spike sorter, with keys ('clusters', 'times')
+    clusters : dict of one.alf.io.AlfBunch
+        A dict with probe labels as keys, contains bunch(es) of cluster data, with keys
+        ('channels', 'depths', 'metrics')
+    channels : dict of one.alf.io.AlfBunch
+        A dict with probe labels as keys, contains channel locations with keys ('acronym',
+        'atlas_id', 'x', 'y', 'z').  Atlas IDs non-lateralized.
     """
     # --- Get spikes and clusters data
     one = one or ONE()
@@ -397,15 +508,29 @@ def load_ephys_session(eid, one=None):
         'spikes.clusters',
         'spikes.times',
         'probes.description'
-    :param eid: experiment UUID or pathlib.Path of the local session
-    :param one: one instance
-    :return: spikes, clusters, trials (dict of bunch, 1 bunch per probe)
+
+    Parameters
+    ----------
+    eid : [str, UUID, Path, dict]
+        Experiment session identifier; may be a UUID, URL, experiment reference string
+        details dict or Path
+    one : oneibl.one.OneAlyx, optional
+        ONE object to use for loading. Will generate internal one if not used, by default None
+
+    Returns
+    -------
+    spikes : dict of one.alf.io.AlfBunch
+        A dict with probe labels as keys, contains bunch(es) of spike data for the provided
+        session and spike sorter, with keys ('clusters', 'times')
+    clusters : dict of one.alf.io.AlfBunch
+        A dict with probe labels as keys, contains bunch(es) of cluster data, with keys
+        ('channels', 'depths', 'metrics')
+    trials : one.alf.io.AlfBunch of numpy.ndarray
+        The session trials data
     """
     assert one
-
     spikes, clusters = load_spike_sorting(eid, one=one)
     trials = one.load_object(eid, 'trials')
-
     return spikes, clusters, trials
 
 
@@ -425,14 +550,23 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
     """
     Takes (default and any extra) values in given keys from channels and assign them to clusters.
     If channels does not contain any data, the new keys are added to clusters but left empty.
-    :param dic_clus: dict of bunch, 1 bunch per probe, containing cluster information
-    :param channels: dict of bunch, 1 bunch per probe, containing channels information
-    :param keys_to_add_extra: Any extra keys contained in channels (will be added to default
-    ['acronym', 'atlas_id'])
-    :return: clusters (dict of bunch, 1 bunch per probe), with new keys values.
+
+    Parameters
+    ----------
+    dic_clus : dict of one.alf.io.AlfBunch
+        1 bunch per probe, containing cluster information
+    channels : dict of one.alf.io.AlfBunch
+        1 bunch per probe, containing channels bunch with keys ('acronym', 'atlas_id', 'x', 'y', z', 'localCoordinates')
+    keys_to_add_extra : list of str
+        Any extra keys to load into channels bunches
+
+    Returns
+    -------
+    dict of one.alf.io.AlfBunch
+        clusters (1 bunch per probe) with new keys values.
     """
     probe_labels = list(channels.keys())  # Convert dict_keys into list
-    keys_to_add_default = ['acronym', 'atlas_id', 'x', 'y', 'z']
+    keys_to_add_default = ['acronym', 'atlas_id', 'x', 'y', 'z', 'axial_um', 'lateral_um']
 
     if keys_to_add_extra is None:
         keys_to_add = keys_to_add_default
@@ -441,10 +575,9 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
         keys_to_add = list(set(keys_to_add_extra + keys_to_add_default))
 
     for label in probe_labels:
-        try:
-            clu_ch = dic_clus[label]['channels']
-
-            for key in keys_to_add:
+        clu_ch = dic_clus[label]['channels']
+        for key in keys_to_add:
+            try:
                 assert key in channels[label].keys()  # Check key is in channels
                 ch_key = channels[label][key]
                 nch_key = len(ch_key) if ch_key is not None else 0
@@ -455,11 +588,9 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
                         f'Probe {label}: merging channels and clusters for key "{key}" has {nch_key} on channels'
                         f' but expected {max(clu_ch)}. Data in new cluster key "{key}" is returned empty.')
                     dic_clus[label][key] = []
-        except AssertionError:
-            _logger.warning(
-                f'Either clusters or channels does not have key {label}, could not'
-                f' merge')
-            continue
+            except AssertionError:
+                _logger.warning(f'Either clusters or channels does not have key {key}, could not merge')
+                continue
 
     return dic_clus
 
@@ -467,9 +598,19 @@ def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
 def load_passive_rfmap(eid, one=None):
     """
     For a given eid load in the passive receptive field mapping protocol data
-    :param eid: eid or pathlib.Path of the local session
-    :param one:
-    :return: rf_map
+
+    Parameters
+    ----------
+    eid : [str, UUID, Path, dict]
+        Experiment session identifier; may be a UUID, URL, experiment reference string
+        details dict or Path
+    one : oneibl.one.OneAlyx, optional
+        An instance of ONE (may be in 'local' - offline - mode)
+
+    Returns
+    -------
+    one.alf.io.AlfBunch
+        Passive receptive field mapping data
     """
     one = one or ONE()
 
@@ -497,10 +638,11 @@ def load_wheel_reaction_times(eid, one=None):
 
     Parameters
     ----------
-    eid : str
-        Session UUID
-    one : oneibl.ONE
-        An instance of ONE for loading data.  If None a new one is instantiated using the defaults.
+    eid : [str, UUID, Path, dict]
+        Experiment session identifier; may be a UUID, URL, experiment reference string
+        details dict or Path
+    one : oneibl.one.OneAlyx, optional
+        one object to use for loading. Will generate internal one if not used, by default None
 
     Returns
     ----------
@@ -526,9 +668,8 @@ def load_wheel_reaction_times(eid, one=None):
 
 
 def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_wheel=False,
-                   ret_abswheel=False, ext_DLC=False, wheel_binsize=0.02, addtl_types=[]):
+                   ret_abswheel=False, wheel_binsize=0.02, addtl_types=[]):
     """
-    TODO Test this with new ONE
     Generate a pandas dataframe of per-trial timing information about a given session.
     Each row in the frame will correspond to a single trial, with timing values indicating timing
     session-wide (i.e. time in seconds since session start). Can optionally return a resampled
@@ -540,8 +681,9 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
 
     Parameters
     ----------
-    eid : str
-        Session UUID string to pass to ONE
+    eid : [str, UUID, Path, dict]
+        Experiment session identifier; may be a UUID, URL, experiment reference string
+        details dict or Path
     one : oneibl.one.OneAlyx, optional
         one object to use for loading. Will generate internal one if not used, by default None
     maxlen : float, optional
@@ -557,8 +699,6 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
         Whether to return the time-resampled wheel velocity trace, by default False
     ret_abswheel : bool, optional
         Whether to return the time-resampled absolute wheel velocity trace, by default False
-    ext_DLC : bool, optional
-        Whether to extract DLC data, by default False
     wheel_binsize : float, optional
         Time bins to resample wheel velocity to, by default 0.02
     addtl_types : list, optional
@@ -598,7 +738,7 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
         maps = diffs.argmin(axis=1)
         return validvals[maps]
 
-    trials = one.load_object(eid, 'trials')
+    trials = one.load_object(eid, 'trials', collection='alf')
     starttimes = trials.stimOn_times
     endtimes = trials.feedback_times
     tmp = {key: value for key, value in trials.items() if key in trialstypes}
@@ -622,7 +762,7 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
     if not ret_wheel and not ret_abswheel:
         return trialsdf
 
-    wheel = one.load_object(eid, 'wheel')
+    wheel = one.load_object(eid, 'wheel', collection='alf')
     whlpos, whlt = wheel.position, wheel.timestamps
     starttimes = trialsdf['trial_start']
     endtimes = trialsdf['trial_end']

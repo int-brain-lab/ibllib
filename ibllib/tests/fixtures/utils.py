@@ -164,6 +164,8 @@ def create_fake_alf_folder_dlc_data(session_path, populate=True):
             "_ibl_leftCamera.times.npy",
             "_ibl_rightCamera.times.npy",
             "_ibl_bodyCamera.times.npy",
+            "_ibl_leftCamera.features.npy",
+            "_ibl_rightCamera.features.npy",
         ]
         for f in file_list:
             fpath = alf_path / Path(f)

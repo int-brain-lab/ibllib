@@ -174,7 +174,8 @@ def load_camera_ssv_times(session_path, camera: str):
 
     file = next(video_path.glob(f'_iblrig_{camera.lower()}Camera.timestamps*.ssv'), None)
     if not file:
-        raise FileNotFoundError()
+        file = str(video_path.joinpath(f'_iblrig_{camera.lower()}Camera.timestamps.ssv'))
+        raise FileNotFoundError(file + ' not found')
     # NB: Numpy has deprecated support for non-naive timestamps.
     # Converting them is extremely slow: 6000 timestamps takes 0.8615s vs 0.0352s.
     # from datetime import timezone

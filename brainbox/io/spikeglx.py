@@ -1,3 +1,4 @@
+import shutil
 import logging
 from pathlib import Path
 import time
@@ -106,7 +107,7 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, car=T
     return waveforms
 
 
-def stream(pid, t0, nsecs=1, one=None, cache_folder=None, dsets=None, typ='ap'):
+def stream(pid, t0, nsecs=1, one=None, cache_folder=None, remove_cached=False, typ='ap'):
     """
     NB: returned Reader object must be closed after use
     :param pid: Probe UUID
@@ -125,18 +126,11 @@ def stream(pid, t0, nsecs=1, one=None, cache_folder=None, dsets=None, typ='ap'):
     t0 = np.floor(t0 / CHUNK_DURATION_SECS) * CHUNK_DURATION_SECS
     if cache_folder is None:
         samples_folder = Path(one.alyx._par.CACHE_DIR).joinpath('cache', typ)
-    sample_file_name = Path(f"{pid}_{str(int(t0)).zfill(5)}.meta")
-
-    if samples_folder.joinpath(sample_file_name).exists():
-        _logger.info(f'loading {sample_file_name} from cache')
-        sr = spikeglx.Reader(samples_folder.joinpath(sample_file_name).with_suffix('.bin'),
-                             open=True)
-        return sr, t0
 
     eid, pname = one.pid2eid(pid)
-    cbin_rec = one.list_datasets(eid, collection=f"*{pname}", filename='*ap.*bin', details=True)
-    ch_rec = one.list_datasets(eid, collection=f"*{pname}", filename='*ap.ch', details=True)
-    meta_rec = one.list_datasets(eid, collection=f"*{pname}", filename='*ap.meta', details=True)
+    cbin_rec = one.list_datasets(eid, collection=f"*{pname}", filename=f'*{typ}.*bin', details=True)
+    ch_rec = one.list_datasets(eid, collection=f"*{pname}", filename=f'*{typ}.ch', details=True)
+    meta_rec = one.list_datasets(eid, collection=f"*{pname}", filename=f'*{typ}.meta', details=True)
     ch_file = one._download_datasets(ch_rec)[0]
     one._download_datasets(meta_rec)[0]
 
@@ -151,5 +145,10 @@ def stream(pid, t0, nsecs=1, one=None, cache_folder=None, dsets=None, typ='ap'):
         first_chunk=first_chunk,
         last_chunk=last_chunk,
         cache_dir=samples_folder)
+
+    if remove_cached:
+        probe_cache = samples_folder.joinpath(one.eid2path(eid).relative_to(one.alyx._par.CACHE_DIR),
+                                              'raw_ephys_data', f'{pname}')
+        shutil.rmtree(probe_cache, ignore_errors=True)
 
     return sr, t0
