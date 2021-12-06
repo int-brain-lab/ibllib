@@ -23,7 +23,7 @@ class NeuralModel:
     """
 
     def __init__(self, design_matrix, spk_times, spk_clu,
-                 binwidth=0.02, train=0.8, blocktrain=False, mintrials=100, stepwise=False):
+                 binwidth=0.02, mintrials=100, stepwise=False):
         """
         Construct GLM object using information about all trials, and the relevant spike times.
         Only ingests data, and further object methods must be called to describe kernels, gain
@@ -38,10 +38,8 @@ class NeuralModel:
         spk_clu: numpy.array of integers
             1-D array of same shape as spk_times, with integer cluster IDs identifying which
             cluster a spike time belonged to.
-        train: float
-            Float in (0, 1] indicating proportion of data to use for training GLM vs testing
-            (using the NeuralGLM.score method). Trials to keep will be randomly sampled, by default
-            0.8
+        binwidth : float
+            Size of bins to put spikes in to, in seconds.
         mintrials: int
             Minimum number of trials in which neurons fired a spike in order to be fit. Defaults
             to 100 trials.
@@ -54,10 +52,6 @@ class NeuralModel:
         # Data checks #
         if not len(spk_times) == len(spk_clu):
             raise IndexError("Spike times and cluster IDs are not same length")
-        if not isinstance(train, float) and not train == 1:
-            raise TypeError('train must be a float between 0 and 1')
-        if not ((train > 0) & (train <= 1)):
-            raise ValueError('train must be between 0 and 1')
         if not design_matrix.compiled:
             raise AttributeError('Design matrix object must be compiled before passing to fit')
 
@@ -83,29 +77,11 @@ class NeuralModel:
             spks[i] = spk_times[st_startind:st_endind] - start
             clu[i] = spk_clu[st_startind:st_endind]
 
-        # Break the data into test and train sections for cross-validation
-        if train == 1:
-            print('Training fraction set to 1. Training on all data.')
-            traininds = base_df.index
-            testinds = base_df.index
-        else:
-            trainlen = int(np.floor(len(base_df) * train))
-            if blocktrain:
-                testlen, midpoint = len(base_df) - trainlen, len(base_df) // 2
-                starttest, endtest = midpoint - (testlen // 2), midpoint + (testlen // 2)
-                testinds = base_df.index[starttest:endtest]
-                traininds = base_df.index[~np.isin(base_df.index, testinds)]
-            else:
-                traininds = sorted(np.random.choice(base_df.index, trainlen, replace=False))
-                testinds = base_df.index[~base_df.index.isin(traininds)]
-
         # Set model parameters to begin with
         self.design = design_matrix
         self.spikes = spks
         self.clu = clu
         self.clu_ids = np.argwhere(np.sum(trialspiking, axis=0) > mintrials).flatten()
-        self.traininds = traininds
-        self.testinds = testinds
         self.stepwise = stepwise
         self.binwidth = binwidth
 
@@ -168,7 +144,7 @@ class NeuralModel:
         """
         Score a single target y
         """
-        pred = (dm @ wt + bias).flatten()
+        pred = self.link(dm @ wt + bias).flatten()
         if self.metric == 'dsq':
             null_pred = np.ones_like(pred) * np.mean(y)
             null_deviance = 2 * np.sum(xlogy(y, y / null_pred.flat) - y + null_pred.flat)
@@ -186,7 +162,7 @@ class NeuralModel:
         else:
             raise AttributeError('No valid metric exists in the instance for use by _scorer()')
 
-    def fit(self, printcond=True):
+    def fit(self, train_idx=None, printcond=True):
         """
         Fit the current set of binned spikes as a function of the current design matrix. Requires
         NeuralGLM.bin_spike_trains and NeuralGLM.compile_design_matrix to be run first. Will store
@@ -195,6 +171,9 @@ class NeuralModel:
 
         Parameters
         ----------
+        train_idx : array-like of trial indices, optional
+            List of which trials to use to train the model. Defaults to None, which indicates all
+            indices in the trialsdf will be used (100% train)
         printcond : bool
             Whether or not to print the condition number of the design matrix. Defaults to True
 
@@ -204,10 +183,21 @@ class NeuralModel:
             List of coefficients fit. Not recommended to use these for interpretation. Use
             the .combine_weights() method instead.
         intercepts : list
-            List of intercepts (bias terms) fit. Not recommended to use these for interpretation.
+            List of intercepts (bias terms) fit.
         """
+        # Input checks
+        if train_idx is None:
+            train_idx = self.design.trialsdf.index
+        if not np.all(np.isin(train_idx, self.design.trialsdf.index)):
+            raise IndexError('Not all train indices in the trials of design matrix')
+
+        # Store training and test indices for self so that .score() method will know what to
+        # operate on
+        self.traininds = train_idx
+        self.testinds = self.trialsdf.index[~self.trialsdf.index.isin(train_idx)]
+
         # Mask for training data
-        trainmask = np.isin(self.design.trlabels, self.traininds).flatten()
+        trainmask = np.isin(self.design.trlabels, train_idx).flatten()
         trainbinned = self.binnedspikes[trainmask]
         if printcond:
             print(f'Condition of design matrix is {np.linalg.cond(self.design[trainmask])}')
@@ -216,6 +206,31 @@ class NeuralModel:
         coefs, intercepts, = self._fit(traindm, trainbinned)
         self.coefs, self.intercepts = coefs, intercepts
         return
+
+    def score(self, testinds=None):
+        """
+        Score model using chosen metric
+
+        Returns
+        -------
+        pandas.Series
+            Score using chosen metric (defined at instantiation) for each unit fit by the model.
+        """
+        if not hasattr(self, 'coefs'):
+            raise AttributeError('Model has not been fit yet.')
+        if testinds is None:
+            testinds = self.testinds
+        testmask = np.isin(self.design.trlabels, testinds).flatten()
+        dm, binned = self.design[testmask, :], self.binnedspikes[testmask]
+
+        scores = pd.Series(index=self.coefs.index, name='scores')
+        for cell in self.coefs.index:
+            cell_idx = np.argwhere(self.clu_ids == cell)[0, 0]
+            wt = self.coefs.loc[cell].reshape(-1, 1)
+            bias = self.intercepts.loc[cell]
+            y = binned[:, cell_idx]
+            scores.at[cell] = self._scorer(wt, bias, dm, y)
+        return scores
 
     def binf(self, t):
         """

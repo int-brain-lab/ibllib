@@ -58,7 +58,7 @@ class DesignMatrix:
 
         # Filter out cells which don't meet the criteria for minimum spiking, while doing trial
         # assignment
-        self.vartypes = vartypes
+        self.vartypes = vartypes if vartypes is not None else {}
         if vartypes is not None:
             self.vartypes['duration'] = 'value'
         base_df = trialsdf.copy()
@@ -66,7 +66,14 @@ class DesignMatrix:
         trbounds = trialsdf[['trial_start', 'trial_end']]  # Get the start/end of trials
         # Empty trial duration value to use later
         trialsdf['duration'] = np.nan
-        timingvars = [col for col in trialsdf.columns if vartypes[col] == 'timing']
+        # Figure out which columns are timing variables if vartypes was passed
+        if vartypes is not None:
+            timingvars = [col for col in trialsdf.columns if vartypes[col] == 'timing']
+            self.timingsub = {x: True if x in timingvars else False for x in trialsdf.columns}
+        else:
+            timingvars = []
+            self.timingsub = {x: False for x in trialsdf.columns}
+
         for i, (start, end) in trbounds.iterrows():
             if any(np.isnan((start, end))):
                 warn(f"NaN values found in trial start or end at trial number {i}. "
@@ -74,6 +81,8 @@ class DesignMatrix:
                 trialsdf.drop(i, inplace=True)
                 continue
             for col in timingvars:
+                # Round values for the timing variables to the 5th decimal place and subtract
+                # trial start time.
                 trialsdf.at[i, col] = np.round(trialsdf.at[i, col] - start, decimals=5)
             trialsdf.at[i, 'duration'] = end - start
 
@@ -158,6 +167,15 @@ class DesignMatrix:
         if eventname in self.vartypes and self.vartypes[eventname] != 'timing':
             raise TypeError(f'Column {eventname} in trialsdf is not registered as a timing')
 
+        if not self.timingsub[eventname]:
+            self.timingsub[eventname] = True
+            col = eventname
+            for i, (start, end) in self.trialsdf[['trial_start', 'trial_end']].iterrows():
+                # Round values for the timing variables to the 5th decimal place and subtract
+                # trial start time.
+                self.trialsdf.at[i, col] = np.round(self.trialsdf.at[i, col] - start, decimals=5)
+                self.trialsdf.at[i, 'duration'] = end - start
+
         vecsizes = self.trialsdf['duration'].apply(self.binf)
         stiminds = self.trialsdf[eventname].apply(self.binf)
         stimvecs = []
@@ -174,15 +192,42 @@ class DesignMatrix:
 
     def add_covariate_boxcar(self, covlabel, boxstart, boxend,
                              cond=None, height=None, desc=''):
+        """
+        Convenience wrapped on add_covariate to add a boxcar covariate on the given start and end
+        variables, such that the covariate is a step function with non-zero value between those
+        values.
+
+        Note: This has not been tested yet and is not guaranteed to work, or work correctly.
+
+        Parameters
+        ----------
+        covlabel : str
+            Name of the covariate for accessing later. Can be accessed via dot syntax of the
+            instance usually.
+        boxstart : str
+            Column name in trialsdf which will be used to define the start of the boxcar
+        boxend : str
+            Column name in trialsdf which defines the end of boxcar variable
+        cond : None, list, or func, optional
+            Condition in which to apply this covariate. Can either be a list of trial indices, or
+            a function which takes in a row of the trialsdf and returns a boolen on inclusion,
+            by default None
+        height : None, str, or pandas series, optional
+            Values for the height of the boxcar during the period defined per trial. Can be a
+            reference to a column in trialsdf or a separate series, by default None
+        desc : str, optional
+            Additional information about the covariate to store as a string, by default ''
+
+        """
         if covlabel in self.covar:
             raise AttributeError(f'Covariate {covlabel} already exists in model.')
         self._compile_check()
         if boxstart not in self.trialsdf.columns or boxend not in self.trialsdf.columns:
             raise KeyError('boxstart or boxend not found in trialsdf columns.')
-        if self.vartypes[boxstart] != 'timing':
+        if boxstart in self.vartypes and self.vartypes[boxstart] != 'timing':
             raise TypeError(f'Column {boxstart} in trialsdf is not registered as a timing. '
                             'boxstart and boxend need to refer to timing events in trialsdf.')
-        if self.vartypes[boxend] != 'timing':
+        if boxend in self.vartypes and self.vartypes[boxend] != 'timing':
             raise TypeError(f'Column {boxend} in trialsdf is not registered as a timing. '
                             'boxstart and boxend need to refer to timing events in trialsdf.')
 
@@ -210,6 +255,27 @@ class DesignMatrix:
 
     def add_covariate_raw(self, covlabel, raw,
                           cond=None, desc=''):
+        """
+        Convenience wrapper to add a 'raw' covariate, that is to say a covariate which is a
+        continuous value that changes with time during the course of a trial.
+
+        Note: This has not been tested and is not guaranteed to work or to work correctly.
+
+        Parameters
+        ----------
+        covlabel : str
+            String used to reference covariate, can usually be accessed by instance's dot syntax
+        raw : str, func, or pandas series
+            The covariate to add to the design matrix. Can be a str reference to a column in
+            trialsdf, a function which takes in rows of trialsdf and produces a vector for each
+            row of the appropriate size given binwidth and trial duration, or a pandas series
+            of vectors of said appropriate type.
+        cond : None, list, or func, optional
+            Trials in which to apply the given covariate. Can be a list of trial numbers,
+            or a function which accepts rows of the trialsdf and returns a boolean, by default None
+        desc : str, optional
+            Additional information about the covariate for access later, by default ''
+        """
         stimlens = self.trialsdf.duration.apply(self.binf)
         if isinstance(raw, str):
             if raw not in self.trialsdf.columns:
@@ -354,7 +420,6 @@ class DesignMatrix:
             assert self.binnedspikes.shape[0] == dm.shape[0], "Oh shit. Indexing error."
         self.dm = dm
         self.trlabels = trlabels
-        # self.dm = np.roll(dm, -1, axis=0)  # Fix weird +1 offset bug in design matrix
         self.compiled = True
         return
 
