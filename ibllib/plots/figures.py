@@ -9,8 +9,24 @@ import scipy.signal
 from ibllib.dsp import voltage
 
 
-def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_bad_channels", save_dir=None, destripe=False):
-    nc = raw.shape[0]
+def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_bad_channels", save_dir=None,
+                       destripe=False, eqcs=None):
+    nc, ns = raw.shape
+    rl = ns / fs
+    if fs >= 2600:  # AP band
+        ylim_rms = [0, 100]
+        ylim_psd_hf = [0, 0.1]
+        eqc_xrange = [450, 500]
+        butter_kwargs = {'N': 3, 'Wn': 300 / fs * 2, 'btype': 'highpass'}
+        eqc_gain = - 90
+    else:
+        # we are working with the LFP
+        ylim_rms = [0, 1000]
+        ylim_psd_hf = [0, 1]
+        eqc_xrange = [450, 950]
+        butter_kwargs = {'N': 3, 'Wn': np.array([2, 125]) / fs * 2, 'btype': 'bandpass'}
+        eqc_gain = - 78
+
     inoisy = np.where(channel_labels == 2)[0]
     idead = np.where(channel_labels == 1)[0]
     ioutside = np.where(channel_labels == 3)[0]
@@ -18,8 +34,7 @@ def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_b
     import matplotlib.pyplot as plt
 
     # display voltage traces
-    eqcs = []
-    butter_kwargs = {'N': 3, 'Wn': 300 / fs * 2, 'btype': 'highpass'}
+    eqcs = [] if eqcs is None else eqcs
     # butterworth, for display only
     sos = scipy.signal.butter(**butter_kwargs, output='sos')
     butt = scipy.signal.sosfiltfilt(sos, raw)
@@ -28,11 +43,11 @@ def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_b
         dest = voltage.destripe(raw, fs=fs, channel_labels=channel_labels)
         eqcs.append(viewseis(dest.T, si=1 / fs * 1e3, title='destripe', taxis=0))
     for eqc in eqcs:
-        y, x = np.meshgrid(ioutside, np.linspace(0, 1 * 1e3, 500))
+        y, x = np.meshgrid(ioutside, np.linspace(0, rl * 1e3, 500))
         eqc.ctrl.add_scatter(x.flatten(), y.flatten(), rgb=(164, 142, 35), label='outside')
-        y, x = np.meshgrid(inoisy, np.linspace(0, 1 * 1e3, 500))
+        y, x = np.meshgrid(inoisy, np.linspace(0, rl * 1e3, 500))
         eqc.ctrl.add_scatter(x.flatten(), y.flatten(), rgb=(255, 0, 0), label='noisy')
-        y, x = np.meshgrid(idead, np.linspace(0, 1 * 1e3, 500))
+        y, x = np.meshgrid(idead, np.linspace(0, rl * 1e3, 500))
         eqc.ctrl.add_scatter(x.flatten(), y.flatten(), rgb=(0, 0, 255), label='dead')
     # display features
     fig, axs = plt.subplots(2, 2, sharex=True, figsize=[16, 9], tight_layout=True)
@@ -40,11 +55,11 @@ def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_b
     # fig.suptitle(f"pid:{pid}, \n eid:{eid}, \n {one.eid2path(eid).parts[-3:]}, {pname}")
     fig.suptitle(title)
     axs[0, 0].plot(channel_features['rms_raw'] * 1e6)
-    axs[0, 0].set(title='rms', xlabel='channel number', ylabel='rms (uV)', ylim=[0, 100])
+    axs[0, 0].set(title='rms', xlabel='channel number', ylabel='rms (uV)', ylim=ylim_rms)
 
     axs[1, 0].plot(channel_features['psd_hf'])
     axs[1, 0].plot(inoisy, np.minimum(channel_features['psd_hf'][inoisy], 0.0999), 'xr')
-    axs[1, 0].set(title='PSD above 12kHz', xlabel='channel number', ylabel='PSD (uV ** 2 / Hz)', ylim=[0, 0.1])
+    axs[1, 0].set(title='PSD above 80% Nyquist', xlabel='channel number', ylabel='PSD (uV ** 2 / Hz)', ylim=ylim_psd_hf)
     axs[1, 0].legend = ['psd', 'noisy']
 
     axs[0, 1].plot(channel_features['xcor_hf'])
@@ -59,13 +74,13 @@ def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_b
     axs[1, 1].imshow(20 * np.log10(psd).T, extent=[0, nc - 1, fscale[0], fscale[-1]], origin='lower', aspect='auto',
                      vmin=-50, vmax=-20)
     axs[1, 1].set(title='PSD', xlabel='channel number', ylabel="Frequency (Hz)")
-    axs[1, 1].plot(idead, idead * 0 + fs / 2 - 500, 'xb')
-    axs[1, 1].plot(inoisy, inoisy * 0 + fs / 2 - 500, 'xr')
-    axs[1, 1].plot(ioutside, ioutside * 0 + fs / 2 - 500, 'xy')
+    axs[1, 1].plot(idead, idead * 0 + fs / 4, 'xb')
+    axs[1, 1].plot(inoisy, inoisy * 0 + fs / 4, 'xr')
+    axs[1, 1].plot(ioutside, ioutside * 0 + fs / 4, 'xy')
 
-    eqcs[0].ctrl.set_gain(-90)
+    eqcs[0].ctrl.set_gain(eqc_gain)
     eqcs[0].resize(1960, 1200)
-    eqcs[0].viewBox_seismic.setXRange(450, 500)
+    eqcs[0].viewBox_seismic.setXRange(*eqc_xrange)
     eqcs[0].viewBox_seismic.setYRange(0, nc)
     eqcs[0].ctrl.propagate()
 
@@ -74,7 +89,7 @@ def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_b
         for eqc in eqcs:
             eqc.grab().save(str(Path(save_dir).joinpath(f"{title}_data_{eqc.windowTitle()}.png")))
 
-    return fig, eqcs[0]
+    return fig, eqcs
 
 
 def raw_destripe(raw, fs, t0, i_plt, n_plt,
