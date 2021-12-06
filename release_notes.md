@@ -1,10 +1,23 @@
-### Develop
+## Release Notes 2.5
+### Release Notes 2.5.1 2021-11-25
+- SpikeSorting task overwrites old tar file on rerun
+### Release Notes 2.5.0 2021-11-24
+- Snapshot class to register images as notes in Alyx
+- Ephys pipeline: RawEphysQC: outputs channels labels as part of pipeline
+- Ephys pipeline: spike sorting
+    - dsp.voltage: destripe detects bad channels and interpolate them
+    - synchronisation 3B: gives a 10% leeway to throw exception
+    - spikes sorting task outputs the RMS plot
+
+## Release Notes 2.4
+### Release Notes 2.4.0
 - Setting tasks to Waiting if they encountered lock (status -2)
 - Setting tasks to Incomplete if they return status -3
 - Completed tasks set held dependent tasks to waiting
+- Adding PostDLC task to compute pupil diameters, licks and DLC QC
 
 ## Release Notes 2.3
-### Release Notes 2.3.1 2021-11-08
+### Release Notes 2.3.2 2021-11-08
 - Trial wheel extraction: use alternative sync method when first on fails
 - bugfix: timer for tasks was returning None
 

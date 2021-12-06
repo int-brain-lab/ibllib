@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from unittest import mock
 from pathlib import Path
+import json
 
 from one.api import ONE
 
@@ -416,13 +417,16 @@ class TestMultiPartsRecordings(unittest.TestCase):
             "002/raw_ephys_data/probe01/_spikeglx_ephysData_g1_t0.imec1.ap.meta",
             "004/raw_ephys_data/probe00/_spikeglx_ephysData_g3_t0.imec0.ap.meta",
             "004/raw_ephys_data/probe01/_spikeglx_ephysData_g3_t0.imec1.ap.meta"]
-
         with tempfile.TemporaryDirectory() as tdir:
             root_path = Path(tdir).joinpath('Algernon', '2021-02-12')
             for meta_file in meta_files:
                 root_path.joinpath(meta_file).parent.mkdir(parents=True)
                 root_path.joinpath(meta_file).touch()
             recordings = misc.multi_parts_flags_creation(root_path)
+            for sf in root_path.rglob('*.sequence.json'):
+                with open(sf) as fid:
+                    d = json.load(fid)
+                    assert len(d['files']) == 4
         assert len(recordings['probe00']) == 4
         assert len(recordings['probe01']) == 4
 

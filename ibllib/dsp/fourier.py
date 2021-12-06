@@ -20,7 +20,7 @@ def convolve(x, w, mode='full'):
     ns = ns_optim_fft(nsx + nsw)
     x_ = np.concatenate((x, np.zeros([*x.shape[:-1], ns - nsx], dtype=x.dtype)), axis=-1)
     w_ = np.concatenate((w, np.zeros([*w.shape[:-1], ns - nsw], dtype=w.dtype)), axis=-1)
-    xw = np.fft.irfft(np.fft.rfft(x_, axis=-1) * np.fft.rfft(w_, axis=-1), axis=-1)
+    xw = np.real(np.fft.irfft(np.fft.rfft(x_, axis=-1) * np.fft.rfft(w_, axis=-1), axis=-1))
     xw = xw[..., :(nsx + nsw)]  # remove 0 padding
     if mode == 'full':
         return xw

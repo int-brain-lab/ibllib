@@ -22,7 +22,9 @@ from ibllib.pipes.misc import create_alyx_probe_insertions
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
+from ibllib.qc.dlc import DlcQC
 from ibllib.dsp import rms
+from brainbox.behavior.dlc import likelihood_threshold, get_licks, get_pupil_diameter, get_smooth_pupil_diameter
 
 _logger = logging.getLogger("ibllib")
 
@@ -104,8 +106,11 @@ class RawEphysQC(tasks.Task):
                         ('*lf.*bin', 'raw_ephys_data/probe*', True)],  # not necessary to run task as optional computation
         'output_files': [('_iblqc_ephysChannels.apRMS.npy', 'raw_ephys_data/probe*', True),
                          ('_iblqc_ephysChannels.rawSpikeRates.npy', 'raw_ephys_data/probe*', True),
+                         ('_iblqc_ephysChannels.labels.npy', 'raw_ephys_data/probe*', True),
                          ('_iblqc_ephysSpectralDensityLF.freqs.npy', 'raw_ephys_data/probe*', True),
                          ('_iblqc_ephysSpectralDensityLF.power.npy', 'raw_ephys_data/probe*', True),
+                         ('_iblqc_ephysSpectralDensityAP.freqs.npy', 'raw_ephys_data/probe*', True),
+                         ('_iblqc_ephysSpectralDensityAP.power.npy', 'raw_ephys_data/probe*', True),
                          ('_iblqc_ephysTimeRmsLF.rms.npy', 'raw_ephys_data/probe*', True),
                          ('_iblqc_ephysTimeRmsLF.timestamps.npy', 'raw_ephys_data/probe*', True)]
     }
@@ -215,13 +220,15 @@ class SpikeSorting(tasks.Task):
         input_signature = [('*ap.meta', f'raw_ephys_data/{pname}', True),
                            ('*ap.ch', f'raw_ephys_data/{pname}', True),
                            ('*ap.cbin', f'raw_ephys_data/{pname}', True),
+                           ('*nidq.meta', 'raw_ephys_data', False),
                            ('_spikeglx_sync.channels.*', 'raw_ephys_data*', True),
                            ('_spikeglx_sync.polarities.*', 'raw_ephys_data*', True),
                            ('_spikeglx_sync.times.*', 'raw_ephys_data*', True),
                            ('_iblrig_taskData.raw.*', 'raw_behavior_data', True),
                            ('_iblrig_taskSettings.raw.*', 'raw_behavior_data', True)]
-        output_signature = [('spike_sorting_pykilosort.log', f'spike_sorters/pykilosort/{pname}', True)]
-
+        output_signature = [('spike_sorting_pykilosort.log', f'spike_sorters/pykilosort/{pname}', True),
+                            ('_iblqc_ephysTimeRmsAP.rms.npy', f'raw_ephys_data/{pname}', True),  # new ibllib 2.5
+                            ('_iblqc_ephysTimeRmsAP.timestamps.npy', f'raw_ephys_data/{pname}', True)]  # new ibllib 2.5
         return input_signature, output_signature
 
     @staticmethod
@@ -290,15 +297,18 @@ class SpikeSorting(tasks.Task):
         self.version = self._fetch_pykilosort_version(self.PYKILOSORT_REPO)
         label = ap_file.parts[-2]  # this is usually the probe name
         sorter_dir = self.session_path.joinpath("spike_sorters", self.SPIKE_SORTER_NAME, label)
-        FORCE_RERUN = False
-        if not FORCE_RERUN:
+        self.FORCE_RERUN = False
+        if not self.FORCE_RERUN:
             log_file = sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
             if log_file.exists():
                 run_version = self._fetch_pykilosort_run_version(log_file)
-                if packaging.version.parse(run_version) >= packaging.version.parse('pykilosort_ibl_1.1.0'):
+                if packaging.version.parse(run_version) > packaging.version.parse('pykilosort_ibl_1.1.0'):
                     _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
                                  f" found in {sorter_dir}, skipping.")
                     return sorter_dir
+                else:
+                    self.FORCE_RERUN = True
+
         print(sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log"))
         # get the scratch drive from the shell script
         with open(self.SHELL_SCRIPT) as fid:
@@ -391,7 +401,7 @@ class SpikeSorting(tasks.Task):
                 tar_dir = self.session_path.joinpath(
                     'spike_sorters', self.SPIKE_SORTER_NAME, label)
                 tar_dir.mkdir(parents=True, exist_ok=True)
-                out = spikes.ks2_to_tar(ks2_dir, tar_dir)
+                out = spikes.ks2_to_tar(ks2_dir, tar_dir, force=self.FORCE_RERUN)
                 out_files.extend(out)
             except BaseException:
                 _logger.error(traceback.format_exc())
@@ -421,7 +431,9 @@ class SpikeSorting(tasks.Task):
             elif 'raw_ephys_data/probe*' in sig[1]:
                 for probe in probes:
                     full_input_files.append((sig[0], f'raw_ephys_data/{probe}', sig[2]))
-
+            elif 'raw_ephys_data' in sig[1]:
+                if neuropixel_version != '3A':
+                    full_input_files.append((sig[0], 'raw_ephys_data', sig[2]))
             else:
                 full_input_files.append(sig)
 
@@ -431,7 +443,8 @@ class SpikeSorting(tasks.Task):
         for sig in self.signature['output_files']:
             if 'probe*' in sig[1]:
                 for probe in probes:
-                    full_output_files.append((sig[0], f'spike_sorters/pykilosort/{probe}', sig[2]))
+                    col = sig[1].split('/')[:-1] + [probe]
+                    full_output_files.append((sig[0], '/'.join(col), sig[2]))
             else:
                 full_input_files.append(sig)
 
@@ -845,6 +858,102 @@ class EphysDLC(tasks.Task):
         pass
 
 
+class EphysPostDLC(tasks.Task):
+    """
+    The post_dlc task takes dlc traces as input and computes useful quantities, as well as qc.
+    """
+    io_charge = 90
+    level = 3
+    force = True
+    signature = {'input_files': [('_ibl_leftCamera.dlc.pqt', 'alf', True),
+                                 ('_ibl_bodyCamera.dlc.pqt', 'alf', True),
+                                 ('_ibl_rightCamera.dlc.pqt', 'alf', True),
+                                 ('_ibl_rightCamera.times.npy', 'alf', True),
+                                 ('_ibl_leftCamera.times.npy', 'alf', True),
+                                 ('_ibl_bodyCamera.times.npy', 'alf', True)],
+                 'output_files': [('_ibl_leftCamera.features.pqt', 'alf', True),
+                                  ('_ibl_rightCamera.features.pqt', 'alf', True),
+                                  ('licks.times.npy', 'alf', True)]
+                 }
+
+    def _run(self, overwrite=False, run_qc=True):
+        # Check if output files exist locally
+        exist, output_files = self.assert_expected(self.signature['output_files'], silent=True)
+        if exist and not overwrite:
+            _logger.warning('EphysPostDLC outputs exist and overwrite=False, skipping.')
+            return output_files
+        if exist and overwrite:
+            _logger.warning('EphysPostDLC outputs exist and overwrite=True, overwriting existing outputs.')
+        # Find all available dlc traces and dlc times
+        dlc_files = list(Path(self.session_path).joinpath('alf').glob('_ibl_*Camera.dlc.*'))
+        for dlc_file in dlc_files:
+            _logger.debug(dlc_file)
+        output_files = []
+        combined_licks = []
+
+        for dlc_file in dlc_files:
+            # Catch unforeseen exceptions and move on to next cam
+            try:
+                cam = label_from_path(dlc_file)
+                # load dlc trace and camera times
+                dlc = pd.read_parquet(dlc_file)
+                dlc_thresh = likelihood_threshold(dlc, 0.9)
+                # try to load respective camera times
+                try:
+                    dlc_t = np.load(next(Path(self.session_path).joinpath('alf').glob(f'_ibl_{cam}Camera.times.*npy')))
+                    times = True
+                except StopIteration:
+                    _logger.error(f'No camera.times found for {cam} camera. '
+                                  f'Computations using camera.times will be skipped')
+                    self.status = -1
+                    times = False
+
+                # These features are only computed from left and right cam
+                if cam in ('left', 'right'):
+                    features = pd.DataFrame()
+                    # If camera times are available, get the lick time stamps for combined array
+                    if times:
+                        _logger.info(f"Computing lick times for {cam} camera.")
+                        combined_licks.append(get_licks(dlc_thresh, dlc_t))
+                    else:
+                        _logger.warning(f"Skipping lick times for {cam} camera as no camera.times available.")
+                    # Compute pupil diameter, raw and smoothed
+                    _logger.info(f"Computing raw pupil diameter for {cam} camera.")
+                    features['pupilDiameter_raw'] = get_pupil_diameter(dlc_thresh)
+                    _logger.info(f"Computing smooth pupil diameter for {cam} camera.")
+                    features['pupilDiameter_smooth'] = get_smooth_pupil_diameter(features['pupilDiameter_raw'], cam)
+                    # Safe to pqt
+                    features_file = Path(self.session_path).joinpath('alf', f'_ibl_{cam}Camera.features.pqt')
+                    features.to_parquet(features_file)
+                    output_files.append(features_file)
+
+                # For all cams, compute DLC qc if times available
+                if times and run_qc:
+                    # Setting download_data to False because at this point the data should be there
+                    qc = DlcQC(self.session_path, side=cam, one=self.one, download_data=False)
+                    qc.run(update=True)
+                else:
+                    if not times:
+                        _logger.warning(f"Skipping QC for {cam} camera as no camera.times available")
+                    if not run_qc:
+                        _logger.warning(f"Skipping QC for {cam} camera as run_qc=False")
+
+            except BaseException:
+                _logger.error(traceback.format_exc())
+                self.status = -1
+                continue
+
+        # Combined lick times
+        if len(combined_licks) > 0:
+            lick_times_file = Path(self.session_path).joinpath('alf', 'licks.times.npy')
+            np.save(lick_times_file, sorted(np.concatenate(combined_licks)))
+            output_files.append(lick_times_file)
+        else:
+            _logger.warning("No lick times computed for this session.")
+
+        return output_files
+
+
 class EphysPassive(tasks.Task):
     cpu = 1
     io_charge = 90
@@ -915,4 +1024,6 @@ class EphysExtractionPipeline(tasks.Pipeline):
             self.session_path, parents=[tasks["EphysVideoCompress"], tasks["EphysPulses"], tasks["EphysTrials"]])
         tasks["EphysCellsQc"] = EphysCellsQc(self.session_path, parents=[tasks["SpikeSorting"]])
         tasks["EphysDLC"] = EphysDLC(self.session_path, parents=[tasks["EphysVideoCompress"]])
+        # level 3
+        tasks["EphysPostDLC"] = EphysPostDLC(self.session_path, parents=[tasks["EphysDLC"]])
         self.tasks = tasks

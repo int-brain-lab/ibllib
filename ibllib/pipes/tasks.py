@@ -296,7 +296,7 @@ class Task(abc.ABC):
         elif location == 'remote':
             dhandler = data_handlers.RemoteHttpDataHandler(self.session_path, self.signature, one=self.one)
         elif location == 'AWS':
-            dhandler = data_handlers.RemoteAwsDataHandler(self.session_path, self.signature, one=self.one)
+            dhandler = data_handlers.RemoteAwsDataHandler(self, self.session_path, self.signature, one=self.one)
         elif location == 'SDSC':
             dhandler = data_handlers.SDSCDataHandler(self, self.session_path, self.signature, one=self.one)
         return dhandler

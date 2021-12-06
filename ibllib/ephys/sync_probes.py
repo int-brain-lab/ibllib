@@ -140,7 +140,8 @@ def version3B(ses_path, display=True, type=None, tol=2.5):
         sync_probe = get_sync_fronts(ef.sync, ef.sync_map['imec_sync'])
         sr = _get_sr(ef)
         try:
-            assert(sync_nidq.times.size == sync_probe.times.size)
+            # we say that the number of pulses should be within 10 %
+            assert(np.isclose(sync_nidq.times.size, sync_probe.times.size, rtol=0.1))
         except AssertionError:
             raise Neuropixel3BSyncFrontsNonMatching(f"{ses_path}")
         # if the qc of the diff finds anomalies, do not attempt to smooth the interp function

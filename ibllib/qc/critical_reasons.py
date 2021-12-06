@@ -15,7 +15,7 @@ REASONS_SESS_CRIT = (
     'synching impossible',
     'dud or mock session',
     'essential dataset missing',
-    'other'
+    'Other'
 )
 
 # Reasons for marking an insertion as critical
@@ -245,7 +245,7 @@ def main(eid, one=None):
                                                ins_or_sess=ins_or_sess)
 
     # check if 'other' reason has been selected, inquire why
-    if 'other' in reasons_selected:
+    if 'Other' in reasons_selected:
         reason_for_other = _enquire_why_other()
     else:
         reason_for_other = []
