@@ -7,6 +7,51 @@ import numpy as np
 import scipy.signal
 
 from ibllib.dsp import voltage
+from ibllib.plots.snapshot import ReportSnapshot
+
+
+class BadChannelsAp(ReportSnapshot):
+    """
+    Plots raw electrophysiology AP band
+    """
+    signature = {
+        'input_files': [],  # see setUp method for declaration of inputs
+        'output_files': []  # see setUp method for declaration of inputs
+    }
+    object_id = None  # alyx UUID of the object
+    content_type = 'probeinsertion'
+
+    @staticmethod
+    def spike_sorting_signature(pname=None):
+        pname = pname if pname is not None else "probe*"
+        input_signature = [('*ap.meta', f'raw_ephys_data/{pname}', True),
+                           ('*ap.ch', f'raw_ephys_data/{pname}', False),
+                           ('*ap.cbin', f'raw_ephys_data/{pname}', False)]
+        output_signature = [('destripe.png', f'snapshot/{pname}', True),
+                            ('highpass.png', f'snapshot/{pname}', True)]
+        return input_signature, output_signature
+
+    def _run(self, pid=None):
+        """runs from a PID, streams data, destripe and check bad channels"""
+        assert pid
+        self.object_id = pid
+        SNAPSHOT_LABEL = "raw_ephys_bad_channels"
+        eid, pname = self.one.pid2eid(pid)
+        session_path = self.one.eid2path(eid)
+        output_directory = session_path.joinpath('snapshot', pname)
+        output_files = list(output_directory.glob(f'{SNAPSHOT_LABEL}*'))
+        if len(output_files) == 4:
+            return output_files
+        output_directory.mkdir(exist_ok=True, parents=True)
+        from brainbox.io.spikeglx import stream
+        T0 = 60 * 30
+        sr, t0 = stream(pid, T0, nsecs=1, one=self.one)
+        raw = sr[:, :-sr.nsync].T
+        channel_labels, channel_features = voltage.detect_bad_channels(raw, sr.fs)
+        _, _, output_files = ephys_bad_channels(
+            raw=raw, fs=sr.fs, channel_labels=channel_labels, channel_features=channel_features,
+            title=SNAPSHOT_LABEL, destripe=True, save_dir=output_directory)
+        return output_files
 
 
 def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_bad_channels", save_dir=None,
@@ -38,10 +83,11 @@ def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_b
     # butterworth, for display only
     sos = scipy.signal.butter(**butter_kwargs, output='sos')
     butt = scipy.signal.sosfiltfilt(sos, raw)
-    eqcs.append(viewseis(butt.T, si=1 / fs * 1e3, title='butt', taxis=0))
+    eqcs.append(viewseis(butt.T, si=1 / fs * 1e3, title='highpass', taxis=0))
     if destripe:
         dest = voltage.destripe(raw, fs=fs, channel_labels=channel_labels)
         eqcs.append(viewseis(dest.T, si=1 / fs * 1e3, title='destripe', taxis=0))
+        eqcs.append(viewseis((butt - dest).T, si=1 / fs * 1e3, title='difference', taxis=0))
     for eqc in eqcs:
         y, x = np.meshgrid(ioutside, np.linspace(0, rl * 1e3, 500))
         eqc.ctrl.add_scatter(x.flatten(), y.flatten(), rgb=(164, 142, 35), label='outside')
@@ -85,11 +131,14 @@ def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_b
     eqcs[0].ctrl.propagate()
 
     if save_dir is not None:
-        fig.savefig(Path(save_dir).joinpath(f"{title}.png"))
+        output_files = [Path(save_dir).joinpath(f"{title}.png")]
+        fig.savefig(output_files[0])
         for eqc in eqcs:
-            eqc.grab().save(str(Path(save_dir).joinpath(f"{title}_data_{eqc.windowTitle()}.png")))
-
-    return fig, eqcs
+            output_files.append(Path(save_dir).joinpath(f"{title}_{eqc.windowTitle()}.png"))
+            eqc.grab().save(str(output_files[-1]))
+        return fig, eqcs, output_files
+    else:
+        return fig, eqcs
 
 
 def raw_destripe(raw, fs, t0, i_plt, n_plt,

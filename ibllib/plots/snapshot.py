@@ -3,8 +3,27 @@ import requests
 import traceback
 
 from one.api import ONE
-
+from ibllib.pipes import tasks
+from ibllib.misc import version
 _logger = logging.getLogger('ibllib')
+
+
+class ReportSnapshot(tasks.Task):
+
+    object_id = None  # alyx UUID of the object
+    content_type = None  # alyx content type as per the endpoint name example: 'probeinsertions'
+
+    def register_images(self, widths=None):
+        REPORT_TAG = '## report ##'
+        snapshot = Snapshot(one=self.one, object_id=self.object_id, content_type=self.content_type)
+        # snapshot.register_images(self.outputs, widths=1200, jsons={})
+        jsons = []
+        texts = []
+        for f in self.outputs:
+            jsons.append(dict(tag='reports', version=version.ibllib(),
+                              function=str(self.__class__), name=f.stem))
+            texts.append(f"{REPORT_TAG}  {f.stem}")
+        return snapshot.register_images(self.outputs, jsons=jsons, texts=texts)
 
 
 class Snapshot:
@@ -12,7 +31,7 @@ class Snapshot:
     A class to register images in form of Notes, linked to an object on Alyx.
 
     :param object_id: The id of the object the image should be linked to
-    :param content_type: Which type of object to link to, e.g. 'session', 'probeinsertions', 'subject',
+    :param content_type: Which type of object to link to, e.g. 'session', 'probeinsertion', 'subject',
     default is 'session'
     :param one: An ONE instance, if None is given it will be instantiated.
     """
@@ -44,7 +63,7 @@ class Snapshot:
             self.images.append(img_path)
         return img_path
 
-    def register_image(self, image_file, text='', width=None):
+    def register_image(self, image_file, text='', json=None, width=None):
         """
         Registers an image as a Note, attached to the object specified by Snapshot.object_id
 
@@ -58,10 +77,13 @@ class Snapshot:
         fig_open = open(image_file, 'rb')
         note = {
             'user': self.one.alyx.user, 'content_type': self.content_type, 'object_id': self.object_id,
-            'text': text, 'width': width}
+            'text': text, 'width': width, 'json': json}
         _logger.info(f'Registering image to {self.content_type} with id {self.object_id}')
         # Catch error that results from object_id - content_type mismatch
         try:
+            existing_note = self.one.alyx.rest('notes', 'list', django=f"object_id,{self.object_id},text,{text}", no_cache=True)
+            if len(existing_note) == 1:
+                self.one.alyx.rest('notes', 'delete', id=existing_note[0]['id'])
             note_db = self.one.alyx.rest('notes', 'create', data=note, files={'image': fig_open})
             fig_open.close()
             return note_db
@@ -74,7 +96,7 @@ class Snapshot:
                 fig_open.close()
                 raise
 
-    def register_images(self, image_list=None, texts=[''], widths=[None]):
+    def register_images(self, image_list=None, texts=None, widths=None, jsons=None):
         """
         Registers a list of images as Notes, attached to the object specified by Snapshot.object_id.
         The images can be passed as image_list. If None are passed, will try to register the images in Snapshot.images.
@@ -84,7 +106,8 @@ class Snapshot:
         :param texts: List of text to describe the images. If len(texts)==1, the same text will be used for all images
         :param widths: List of width to scale the figure to (see Snapshot.register_image). If len(widths)==1,
                        the same width will be used for all images
-
+        :param jsons: List of dictionaries to populate the json field of the note in Alyx. If len(jsons)==1,
+                       the same dict will be used for all images
         :returns: list of dicts, notes as registered in database
         """
         if not image_list or len(image_list) == 0:
@@ -94,11 +117,15 @@ class Snapshot:
                 return
             else:
                 image_list = self.images
+        widths = widths or [None]
+        texts = texts or ['']
+        jsons = jsons or [None]
+
         if len(texts) == 1:
             texts = len(image_list) * texts
         if len(widths) == 1:
             widths = len(image_list) * widths
         note_dbs = []
-        for figure, text, width in zip(image_list, texts, widths):
-            note_dbs.append(self.register_image(figure, text=text, width=width))
+        for figure, text, width, json in zip(image_list, texts, widths, jsons):
+            note_dbs.append(self.register_image(figure, text=text, width=width, json=json))
         return note_dbs
