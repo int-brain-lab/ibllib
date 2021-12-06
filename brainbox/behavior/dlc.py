@@ -4,7 +4,9 @@ Set of functions to deal with dlc data
 import numpy as np
 import scipy.interpolate as interpolate
 import logging
+import warnings
 from one.api import ONE
+from ibllib.dsp.smooth import smooth_interpolate_savgol
 
 logger = logging.getLogger('ibllib')
 
@@ -141,3 +143,74 @@ def get_dlc_everything(dlc_cam, camera):
     dlc_cam['aligned'] = aligned
 
     return dlc_cam
+
+
+def get_pupil_diameter(dlc):
+    """
+    Estimates pupil diameter by taking median of different computations.
+
+    The two most straightforward estimates: d1 = top - bottom, d2 = left - right
+    In addition, assume the pupil is a circle and estimate diameter from other pairs of points
+
+    :param dlc: dlc pqt table with pupil estimates, should be likelihood thresholded (e.g. at 0.9)
+    :return: np.array, pupil diameter estimate for each time point, shape (n_frames,)
+    """
+    diameters = []
+    # Get the x,y coordinates of the four pupil points
+    top, bottom, left, right = [np.vstack((dlc[f'pupil_{point}_r_x'], dlc[f'pupil_{point}_r_y']))
+                                for point in ['top', 'bottom', 'left', 'right']]
+    # First compute direct diameters
+    diameters.append(np.linalg.norm(top - bottom, axis=0))
+    diameters.append(np.linalg.norm(left - right, axis=0))
+
+    # For non-crossing edges, estimate diameter via circle assumption
+    for pair in [(top, left), (top, right), (bottom, left), (bottom, right)]:
+        diameters.append(np.linalg.norm(pair[0] - pair[1], axis=0) * 2 ** 0.5)
+
+    # Ignore all nan runtime warning
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        return np.nanmedian(diameters, axis=0)
+
+
+def get_smooth_pupil_diameter(diameter_raw, camera, std_thresh=5, nan_thresh=1):
+    """
+    :param diameter_raw: np.array, raw pupil diameters, calculated from (thresholded) dlc traces
+    :param camera: str ('left', 'right'), which camera to run the smoothing for
+    :param std_thresh: threshold (in standard deviations) beyond which a point is labeled as an outlier
+    :param nan_thresh: threshold (in seconds) above which we will not interpolate nans, but keep them
+                       (for long stretches interpolation may not be appropriate)
+    :return:
+    """
+    # set framerate of camera
+    if camera == 'left':
+        fr = 60  # set by hardware
+        window = 31  # works well empirically
+    elif camera == 'right':
+        fr = 150  # set by hardware
+        window = 75  # works well empirically
+    else:
+        raise NotImplementedError("camera has to be 'left' or 'right")
+
+    # run savitzy-golay filter on non-nan time points to denoise
+    diameter_smoothed = smooth_interpolate_savgol(diameter_raw, window=window, order=3, interp_kind='linear')
+
+    # find outliers and set them to nan
+    difference = diameter_raw - diameter_smoothed
+    outlier_thresh = std_thresh * np.nanstd(difference)
+    without_outliers = np.copy(diameter_raw)
+    without_outliers[(difference < -outlier_thresh) | (difference > outlier_thresh)] = np.nan
+    # run savitzy-golay filter again on (possibly reduced) non-nan timepoints to denoise
+    diameter_smoothed = smooth_interpolate_savgol(without_outliers, window=window, order=3, interp_kind='linear')
+
+    # don't interpolate long strings of nans
+    t = np.diff(np.isnan(without_outliers).astype(int))
+    begs = np.where(t == 1)[0]
+    ends = np.where(t == -1)[0]
+    if begs.shape[0] > ends.shape[0]:
+        begs = begs[:ends.shape[0]]
+    for b, e in zip(begs, ends):
+        if (e - b) > (fr * nan_thresh):
+            diameter_smoothed[(b + 1):(e + 1)] = np.nan  # offset by 1 due to earlier diff
+
+    return diameter_smoothed

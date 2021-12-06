@@ -167,6 +167,18 @@ def _get_task_types_json_config():
     return task_types
 
 
+def get_task_protocol(session_path):
+    try:
+        settings = load_settings(get_session_path(session_path))
+    except json.decoder.JSONDecodeError:
+        _logger.error(f"Can't read settings for {session_path}")
+        return
+    if settings:
+        return settings.get('PYBPOD_PROTOCOL', None)
+    else:
+        return
+
+
 def get_task_extractor_type(task_name):
     """
     Returns the task type string from the full pybpod task name:
@@ -176,13 +188,8 @@ def get_task_extractor_type(task_name):
     :return: one of ['biased', 'habituation', 'training', 'ephys', 'mock_ephys', 'sync_ephys']
     """
     if isinstance(task_name, Path):
-        try:
-            settings = load_settings(get_session_path(task_name))
-        except json.decoder.JSONDecodeError:
-            return
-        if settings:
-            task_name = settings.get('PYBPOD_PROTOCOL', None)
-        else:
+        task_name = get_task_protocol(task_name)
+        if task_name is None:
             return
     task_types = _get_task_types_json_config()
     task_type = next((task_types[tt] for tt in task_types if tt in task_name), None)
@@ -220,7 +227,14 @@ def get_pipeline(session_path):
 
 
 def _get_pipeline_from_task_type(stype):
-    if 'ephys' in stype:
+    """
+    Returns the pipeline from the task type. Some tasks types directly define the pipeline
+    :param stype: session_type or task extractor type
+    :return:
+    """
+    if stype in ['ephys_biased_opto', 'ephys', 'ephys_training', 'mock_ephys', 'sync_ephys']:
         return 'ephys'
     elif stype in ['habituation', 'training', 'biased', 'biased_opto']:
         return 'training'
+    else:
+        return stype

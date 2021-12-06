@@ -59,8 +59,8 @@ class TestIO_ALF(unittest.TestCase):
     def test_load_ephys(self):
         # straight test
         spikes, clusters, trials = bbone.load_ephys_session(self.session_path, one=self.one)
-        self.assertTrue(list(spikes.keys()) == self.probes)
-        self.assertTrue(list(clusters.keys()) == self.probes)
+        self.assertTrue(set(spikes.keys()) == set(self.probes))
+        self.assertTrue(set(clusters.keys()) == set(self.probes))
 
     def tearDown(self) -> None:
         shutil.rmtree(self.tmpdir)

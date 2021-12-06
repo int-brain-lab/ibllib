@@ -10,12 +10,28 @@ import traceback
 
 from one.api import ONE
 
-from ibllib.io.extractors.base import get_session_extractor_type, get_pipeline
-from ibllib.pipes import ephys_preprocessing, training_preprocessing, tasks
+from ibllib.io.extractors.base import get_pipeline, get_task_protocol, get_session_extractor_type
+from ibllib.pipes import tasks, training_preprocessing, ephys_preprocessing
 from ibllib.time import date2isostr
 import ibllib.oneibl.registration as registration
 
 _logger = logging.getLogger('ibllib')
+LARGE_TASKS = ['EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting']  # 'EphysDLC', 'TrainingDLC',
+
+
+def _get_pipeline_class(session_path, one):
+    pipeline = get_pipeline(session_path)
+    if pipeline == 'training':
+        PipelineClass = training_preprocessing.TrainingExtractionPipeline
+    elif pipeline == 'ephys':
+        PipelineClass = ephys_preprocessing.EphysExtractionPipeline
+    else:
+        # try and look if there is a custom extractor in the personal projects extraction class
+        import projects.base
+        task_type = get_session_extractor_type(session_path)
+        PipelineClass = projects.base.get_pipeline(task_type)
+    _logger.info(f"Using {PipelineClass} pipeline for {session_path}")
+    return PipelineClass(session_path=session_path, one=one)
 
 
 def _get_lab(one):
@@ -101,16 +117,10 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
                 session_path, one=one, max_md5_size=max_md5_size)
             if dsets is not None:
                 all_datasets.extend(dsets)
-            pipeline = get_pipeline(session_path)
-            if pipeline == 'training':
-                pipe = training_preprocessing.TrainingExtractionPipeline(session_path, one=one)
-            # only start extracting ephys on a raw_session.flag
-            elif pipeline == 'ephys' and flag_file.name == 'raw_session.flag':
-                pipe = ephys_preprocessing.EphysExtractionPipeline(session_path, one=one)
-            else:
-                _logger.info(f'Session type {get_session_extractor_type(session_path)}'
-                             f'as no matching pipeline pattern {session_path}')
-                continue
+            pipe = _get_pipeline_class(session_path, one)
+            if pipe is None:
+                task_protocol = get_task_protocol(session_path)
+                _logger.info(f'Session task protocol {task_protocol} has no matching pipeline pattern {session_path}')
             if rerun:
                 rerun__status__in = '__all__'
             else:
@@ -125,11 +135,12 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
     return all_datasets
 
 
-def job_runner(subjects_path, lab=None, dry=False, one=None, count=5):
+def job_runner(subjects_path, mode='all', lab=None, dry=False, one=None, count=5):
     """
     Function to be used as a process to run the jobs as they are created on the database
     This will query waiting jobs from the specified Lab
     :param subjects_path: on servers: /mnt/s0/Data/Subjects. Contains sessions
+    :param mode: Whether to run all jobs, or only small or large (video compression, DLC, spike sorting) jobs
     :param lab: lab name as per Alyx
     :param dry:
     :param count:
@@ -141,8 +152,18 @@ def job_runner(subjects_path, lab=None, dry=False, one=None, count=5):
         lab = _get_lab(one)
     if lab is None:
         return  # if the lab is none, this will return empty tasks each time
-    tasks = one.alyx.rest('tasks', 'list', status='Waiting',
-                          django=f'session__lab__name__in,{lab}')
+    # Filter for tasks
+    if mode == 'all':
+        tasks = one.alyx.rest('tasks', 'list', status='Waiting',
+                              django=f'session__lab__name__in,{lab}', no_cache=True)
+    elif mode == 'small':
+        tasks_all = one.alyx.rest('tasks', 'list', status='Waiting',
+                                  django=f'session__lab__name__in,{lab}', no_cache=True)
+        tasks = [t for t in tasks_all if t['name'] not in LARGE_TASKS]
+    elif mode == 'large':
+        tasks = one.alyx.rest('tasks', 'list', status='Waiting',
+                              django=f'session__lab__name__in,{lab},name__in,{LARGE_TASKS}', no_cache=True)
+
     tasks_runner(subjects_path, tasks, one=one, count=count, time_out=3600, dry=dry)
 
 

@@ -24,7 +24,7 @@ class QC:
         :param endpoint_id: Eid for endpoint. If using sessions can also be a session path
         :param log: A logging.Logger instance, if None the 'ibllib' logger is used
         :param one: An ONE instance for fetching and setting the QC on Alyx
-        :param endpoint: The enpoint name to apply qc to. Default is 'sessions'
+        :param endpoint: The endpoint name to apply qc to. Default is 'sessions'
         """
         self.one = one or ONE()
         self.log = log or logging.getLogger('ibllib')
@@ -69,7 +69,7 @@ class QC:
             self._outcome = value
 
     @staticmethod
-    def overall_outcome(outcomes: iter) -> str:
+    def overall_outcome(outcomes: iter, agg=max) -> str:
         """
         Given an iterable of QC outcomes, returns the overall (i.e. worst) outcome.
 
@@ -77,10 +77,11 @@ class QC:
           QC.overall_outcome(['PASS', 'NOT_SET', None, 'FAIL'])  # Returns 'FAIL'
 
         :param outcomes: An iterable of QC outcomes
+        :param agg: outcome code aggregate function, default is max (i.e. worst)
         :return: The overall outcome string
         """
         outcomes = filter(lambda x: x or (isinstance(x, float) and not np.isnan(x)), outcomes)
-        code = max(CRITERIA.get(x, 0) if isinstance(x, str) else x for x in outcomes)
+        code = agg(CRITERIA.get(x, 0) if isinstance(x, str) else x for x in outcomes)
         return next(k for k, v in CRITERIA.items() if v == code)
 
     @staticmethod
@@ -188,8 +189,11 @@ class QC:
 
         # Ensure None instead of NaNs
         for k, v in data.items():
-            if (v is not None and not isinstance(v, str)) and np.isnan(v).all():
-                data[k] = None
+            if v is not None and not isinstance(v, str):
+                if isinstance(v, tuple):
+                    data[k] = tuple(None if np.isnan(i) else i for i in v)
+                else:
+                    data[k] = None if np.isnan(v).all() else v
 
         details = self.one.alyx.get(f'/{self.endpoint}/{self.eid}', clobber=True)
         if self.json:
@@ -207,3 +211,11 @@ class QC:
         self.log.info(f'Extended QC field successfully updated for {self.endpoint[:-1]} '
                       f'{self.eid}')
         return out
+
+    def compute_outcome_from_extended_qc(self) -> str:
+        """
+        Returns the session outcome computed from aggregating the extended QC
+        """
+        details = self.one.alyx.get(f'/{self.endpoint}/{self.eid}', clobber=True)
+        extended_qc = details['json']['extended_qc'] if self.json else details['extended_qc']
+        return self.overall_outcome(v for k, v in extended_qc or {} if k[0] != '_')

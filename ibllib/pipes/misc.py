@@ -1,14 +1,17 @@
 import json
 import logging
 import shutil
+import hashlib
 from pathlib import Path
 import re
+from typing import Union, List
 
 import iblutil.io.params as params
 from one.alf.spec import is_uuid_string, is_session_path
 from one.alf.files import get_session_path
 from one.api import ONE
 
+from iblutil.io import hashfile
 import ibllib.io.flags as flags
 import ibllib.io.raw_data_loaders as raw
 import ibllib.io.spikeglx as spikeglx
@@ -346,6 +349,23 @@ def confirm_ephys_remote_folder(
         check_create_raw_session_flag(remote_session_path)
 
 
+def probe_labels_from_session_path(session_path: Union[str, Path]) -> List[str]:
+    """
+    Finds ephys probes according to the metadata spikeglx files. Only returns first subfolder
+    name under raw_ephys_data folder, ie. raw_ephys_data/probe00/copy_of_probe00 won't be returned
+    :param session_path:
+    :return: list of strings
+    """
+    plabels = []
+    raw_ephys_folder = session_path.joinpath('raw_ephys_data')
+    for meta_file in raw_ephys_folder.rglob('*.ap.meta'):
+        if meta_file.parents[1] != raw_ephys_folder:
+            continue
+        plabels.append(meta_file.parts[-2])
+    plabels.sort()
+    return plabels
+
+
 def create_alyx_probe_insertions(
     session_path: str,
     force: bool = False,
@@ -355,7 +375,7 @@ def create_alyx_probe_insertions(
 ):
     if one is None:
         one = ONE(cache_rest=None)
-    eid = session_path if is_uuid_string(session_path) else one.eid_from_path(session_path)
+    eid = session_path if is_uuid_string(session_path) else one.path2eid(session_path)
     if eid is None:
         print("Session not found on Alyx: please create session before creating insertions")
     if model is None:
@@ -363,16 +383,7 @@ def create_alyx_probe_insertions(
         pmodel = "3B2" if probe_model == "3B" else probe_model
     else:
         pmodel = model
-    raw_ephys_data_path = Path(session_path) / "raw_ephys_data"
-    if labels is None:
-        probe_labels = [
-            x.name
-            for x in Path(raw_ephys_data_path).glob("*")
-            if x.is_dir() and ("00" in x.name or "01" in x.name)
-        ]
-    else:
-        probe_labels = labels
-
+    labels = labels or probe_labels_from_session_path(session_path)
     # create the qc fields in the json field
     qc_dict = {}
     qc_dict.update({"qc": "NOT_SET"})
@@ -380,7 +391,7 @@ def create_alyx_probe_insertions(
 
     # create the dictionary
     insertions = []
-    for plabel in probe_labels:
+    for plabel in labels:
         insdict = {"session": eid, "name": plabel, "model": pmodel, "json": qc_dict}
         # search for the corresponding insertion in Alyx
         alyx_insertion = one.alyx.get(f'/insertions?&session={eid}&name={plabel}', clobber=True)
@@ -583,3 +594,50 @@ def copy_wiring_files(session_folder, iblscripts_folder):
             wiring_name = ".".join(str(binf.name).split(".")[:-2]) + termination
             dst_path = session_path / "raw_ephys_data" / probe_label.group() / wiring_name
             shutil.copy(probe_wiring_file_path, dst_path)
+
+
+def multi_parts_flags_creation(root_paths: Union[list, str, Path]) -> List[Path]:
+    """
+    Creates the sequence files to run spike sorting in batches
+    A sequence file is a json file with the following fields:
+     sha1: a unique hash of the metafiles involved
+     probe: a string with the probe name
+     index: the index within the sequence
+     nrecs: the length of the sequence
+     files: a list of files
+    :param root_paths:
+    :return:
+    """
+    from one.alf import io as alfio
+    # "001/raw_ephys_data/probe00/_spikeglx_ephysData_g0_t0.imec0.ap.meta",
+    if isinstance(root_paths, str) or isinstance(root_paths, Path):
+        root_paths = [root_paths]
+    recordings = {}
+    for root_path in root_paths:
+        for meta_file in root_path.rglob("*.ap.meta"):
+            # we want to make sure that the file is just under session_path/raw_ephys_data/{probe_label}
+            session_path = alfio.files.get_session_path(meta_file)
+            raw_ephys_path = session_path.joinpath('raw_ephys_data')
+            if meta_file.parents[1] != raw_ephys_path:
+                log.warning(f"{meta_file} is not in a probe directory and will be skipped")
+                continue
+            # stack the meta-file in the probe label key of the recordings dictionary
+            plabel = meta_file.parts[-2]
+            recordings[plabel] = recordings.get(plabel, []) + [meta_file]
+    # once we have all of the files
+    for k in recordings:
+        nrecs = len(recordings[k])
+        recordings[k].sort()
+        # the identifier of the overarching recording sequence is the hash of hashes of the files
+        m = hashlib.sha1()
+        for i, meta_file in enumerate(recordings[k]):
+            hash = hashfile.sha1(meta_file)
+            m.update(hash.encode())
+        # writes the sequence files
+        for i, meta_file in enumerate(recordings[k]):
+            sequence_file = meta_file.parent.joinpath(meta_file.name.replace('ap.meta', 'sequence.json'))
+            with open(sequence_file, 'w+') as fid:
+                json.dump(dict(sha1=m.hexdigest(), probe=k, index=i, nrecs=len(recordings[k]),
+                               files=list(map(str, recordings[k]))), fid)
+            log.info(f"{k}: {i}/{nrecs} written sequence file {recordings}")
+    return recordings

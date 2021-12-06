@@ -618,7 +618,7 @@ def peri_event_time_histogram(
 
 
 def driftmap(ts, feat, ax=None, plot_style='bincount',
-             t_bin=0.01, d_bin=20, weights=None, **kwargs):
+             t_bin=0.01, d_bin=20, weights=None, vmax=None, **kwargs):
     """
     Plots the values of a spike feature array (y-axis) over time (x-axis).
     Two arguments can be given for the plot_style of the drift map:
@@ -636,6 +636,7 @@ def driftmap(ts, feat, ax=None, plot_style='bincount',
     t_bin: time bin used when plot_style='bincount'
     d_bin: depth bin used when plot_style='bincount'
     plot_style: 'scatter', 'bincount'
+    **kwargs: matplotlib.imshow arguments
 
     Returns
     -------
@@ -674,7 +675,7 @@ def driftmap(ts, feat, ax=None, plot_style='bincount',
         R, times, depths = bincount2D(
             ts[iok], feat[iok], t_bin, d_bin, weights=weights)
         # plot raster map
-        ax.imshow(R, aspect='auto', cmap='binary', vmin=0, vmax=np.std(R) * 4,
+        ax.imshow(R, aspect='auto', cmap='binary', vmin=0, vmax=vmax or np.std(R) * 4,
                   extent=np.r_[times[[0, -1]], depths[[0, -1]]], origin='lower', **kwargs)
     ax.set_xlabel('time (secs)')
     ax.set_ylabel('depth (um)')

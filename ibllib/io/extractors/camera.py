@@ -91,6 +91,14 @@ class CameraTimestampsFPGA(BaseExtractor):
         """
         fpga_times = extract_camera_sync(sync=sync, chmap=chmap)
         count, (*_, gpio) = raw.load_embedded_frame_data(self.session_path, self.label)
+        raw_ts = fpga_times[self.label]
+
+        if video_path is None:
+            filename = f'_iblrig_{self.label}Camera.raw.mp4'
+            video_path = self.session_path.joinpath('raw_video_data', filename)
+        # Permit the video path to be the length for development and debugging purposes
+        length = (video_path if isinstance(video_path, int) else get_video_length(video_path))
+        _logger.debug(f'Number of video frames = {length}')
 
         if gpio is not None and gpio['indices'].size > 1:
             _logger.info('Aligning to audio TTLs')
@@ -111,19 +119,13 @@ class CameraTimestampsFPGA(BaseExtractor):
                 right at the end of the video.  We therefore simply shorten the arrays to match
                 the length of the video.
                 """
-                if video_path is None:
-                    filename = f'_iblrig_{self.label}Camera.raw.mp4'
-                    video_path = self.session_path.joinpath('raw_video_data', filename)
-                # Permit the video path to be the length for development and debugging purposes
-                length = (video_path
-                          if isinstance(video_path, int)
-                          else get_video_length(video_path))
-                _logger.debug(f'Number of video frames = {length}')
                 if count.size > length:
                     count = count[:length]
                 else:
                     assert length == count.size, 'fewer counts than frames'
                 raw_ts = fpga_times[self.label]
+                assert raw_ts.shape[0] > 0, 'no timestamps found in channel indicated for ' \
+                                            f'{self.label} camera'
                 return align_with_audio(raw_ts, audio, gpio, count,
                                         display=display,
                                         extrapolate_missing=extrapolate_missing)
@@ -132,7 +134,11 @@ class CameraTimestampsFPGA(BaseExtractor):
 
         # If you reach here extracting using audio TTLs was not possible
         _logger.warning('Alignment by wheel data not yet implemented')
-        return fpga_times[self.label]
+        if length < raw_ts.size:
+            df = raw_ts.size - length
+            _logger.info(f'Discarding first {df} pulses')
+            raw_ts = raw_ts[df:]
+        return raw_ts
 
 
 class CameraTimestampsBpod(BaseBpodTrialsExtractor):
@@ -219,6 +225,8 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
             raw_ts = np.r_[raw_ts, to_app]  # Append the missing times
         elif n_missing < 0:
             _logger.warning(f'{abs(n_missing)} fewer frames than Bpod timestamps')
+            _logger.info(f'Discarding first {abs(n_missing)} pulses')
+            raw_ts = raw_ts[abs(n_missing):]
 
         return raw_ts
 

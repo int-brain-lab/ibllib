@@ -245,7 +245,7 @@ def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, rad
         return t, p
 
 
-def _assign_events_audio(audio_t, audio_polarities, return_indices=False):
+def _assign_events_audio(audio_t, audio_polarities, return_indices=False, display=False):
     """
     From detected fronts on the audio sync traces, outputs the synchronisation events
     related to tone in
@@ -253,20 +253,26 @@ def _assign_events_audio(audio_t, audio_polarities, return_indices=False):
     :param audio_t: numpy vector containing times of fronts
     :param audio_fronts: numpy vector containing polarity of fronts (1 rise, -1 fall)
     :param return_indices (False): returns indices of tones
+    :param display (False): for debug mode, displays the raw fronts overlaid with detections
     :return: numpy arrays t_ready_tone_in, t_error_tone_in
     :return: numpy arrays ind_ready_tone_in, ind_error_tone_in if return_indices=True
     """
     # make sure that there are no 2 consecutive fall or consecutive rise events
     assert(np.all(np.abs(np.diff(audio_polarities)) == 2))
     # take only even time differences: ie. from rising to falling fronts
-    i0 = 0 if audio_polarities[0] == 1 else 1
-    dt = np.diff(audio_t)[i0::2]
+    dt = np.diff(audio_t)
     # detect ready tone by length below 110 ms
-    i_ready_tone_in = np.r_[np.where(dt <= 0.11)[0] * 2]
+    i_ready_tone_in = np.where(np.logical_and(dt <= 0.11, audio_polarities[:-1] == 1))[0]
     t_ready_tone_in = audio_t[i_ready_tone_in]
-    # error tones are events lasting from 400ms to 600ms
-    i_error_tone_in = np.where(np.logical_and(0.4 < dt, dt < 1.2))[0] * 2
+    # error tones are events lasting from 400ms to 1200ms
+    i_error_tone_in = np.where(np.logical_and(np.logical_and(0.4 < dt, dt < 1.2), audio_polarities[:-1] == 1))[0]
     t_error_tone_in = audio_t[i_error_tone_in]
+    if display:  # pragma: no cover
+        from ibllib.plots import squares, vertical_lines
+        squares(audio_t, audio_polarities, yrange=[-1, 1],)
+        vertical_lines(t_ready_tone_in, ymin=-.8, ymax=.8)
+        vertical_lines(t_error_tone_in, ymin=-.8, ymax=.8)
+
     if return_indices:
         return t_ready_tone_in, t_error_tone_in, i_ready_tone_in, i_error_tone_in
     else:
@@ -280,7 +286,6 @@ def _assign_events_to_trial(t_trial_start, t_event, take='last'):
     Trials without an event
     result in nan value in output time vector.
     The output has a consistent size with t_trial_start and ready to output to alf.
-
     :param t_trial_start: numpy vector of trial start times
     :param t_event: numpy vector of event times to assign to trials
     :param take: 'last' or 'first' (optional, default 'last'): index to take in case of duplicates
@@ -323,6 +328,37 @@ def get_sync_fronts(sync, channel_nb, tmin=None, tmax=None):
     selection = np.logical_and(selection, sync['times'] >= tmin) if tmin else selection
     return Bunch({'times': sync['times'][selection],
                   'polarities': sync['polarities'][selection]})
+
+
+def _clean_audio(audio, display=False):
+    """
+    one guy wired the 150 Hz camera output onto the soundcard. The effect is to get 150 Hz periodic
+    square pulses, 2ms up and 4.666 ms down. When this happens we remove all of the intermediate
+    pulses to repair the audio trace
+    Here is some helper code
+        dd = np.diff(audio['times'])
+        1 / np.median(dd[::2]) # 2ms up
+        1 / np.median(dd[1::2])  # 4.666 ms down
+        1 / (np.median(dd[::2]) + np.median(dd[1::2])) # both sum to 150 Hx
+    This only runs on sessions when the bug is detected and leaves others untouched
+    """
+    DISCARD_THRESHOLD = 0.01
+    average_150_hz = np.mean(1 / np.diff(audio['times'][audio['polarities'] == 1]) > 140)
+    naudio = audio['times'].size
+    if average_150_hz > 0.7 and naudio > 100:
+        _logger.warning("Soundcard signal on FPGA seems to have been mixed with 150Hz camera")
+        keep_ind = np.r_[np.diff(audio['times']) > DISCARD_THRESHOLD, False]
+        keep_ind = np.logical_and(keep_ind, audio['polarities'] == -1)
+        keep_ind = np.where(keep_ind)[0]
+        keep_ind = np.sort(np.r_[0, keep_ind, keep_ind + 1, naudio - 1])
+
+        if display:  # pragma: no cover
+            from ibllib.plots import squares
+            squares(audio['times'], audio['polarities'], ax=None, yrange=[-1, 1])
+            squares(audio['times'][keep_ind], audio['polarities'][keep_ind], yrange=[-1, 1])
+        audio = {'times': audio['times'][keep_ind],
+                 'polarities': audio['polarities'][keep_ind]}
+    return audio
 
 
 def _clean_frame2ttl(frame2ttl, display=False):
@@ -387,6 +423,7 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None):
     frame2ttl = get_sync_fronts(sync, chmap['frame2ttl'])
     frame2ttl = _clean_frame2ttl(frame2ttl)
     audio = get_sync_fronts(sync, chmap['audio'])
+    audio = _clean_audio(audio)
     # extract events from the fronts for each trace
     t_trial_start, t_valve_open, t_iti_in = _assign_events_bpod(bpod['times'], bpod['polarities'])
     # one issue is that sometimes bpod pulses may not have been detected, in this case
@@ -507,6 +544,20 @@ def _get_all_probes_sync(session_path, bin_exists=True):
     return ephys_files
 
 
+def get_wheel_positions(sync, chmap):
+    """
+    Gets the wheel position from synchronisation pulses
+    :param sync:
+    :param chmap:
+    :return:wheel: dictionary with keys 'timestamps' and 'position'
+            moves: dictionary with keys 'intervals' and 'peakAmplitude'
+    """
+    ts, pos = extract_wheel_sync(sync=sync, chmap=chmap)
+    moves = extract_wheel_moves(ts, pos)
+    wheel = {'timestamps': ts, 'position': pos}
+    return wheel, moves
+
+
 def get_main_probe_sync(session_path, bin_exists=False):
     """
     From 3A or 3B multiprobe session, returns the main probe (3A) or nidq sync pulses
@@ -524,7 +575,6 @@ def get_main_probe_sync(session_path, bin_exists=False):
     elif version == '3B':
         # the sync master is the nidq breakout box
         sync_box_ind = np.argmax([1 if ef.get('nidq') else 0 for ef in ephys_files])
-
     sync = ephys_files[sync_box_ind].sync
     sync_chmap = ephys_files[sync_box_ind].sync_map
     return sync, sync_chmap
@@ -647,16 +697,16 @@ class FpgaTrials(extractors_base.BaseExtractor):
         out.update({k: self.bpod2fpga(bpod_trials[k][ibpod]) for k in bpod_rsync_fields})
         out.update({k: fpga_trials[k][ifpga] for k in sorted(fpga_trials.keys())})
         # extract the wheel data
+        wheel, moves = get_wheel_positions(sync=sync, chmap=chmap)
         from ibllib.io.extractors.training_wheel import extract_first_movement_times
-        ts, pos = extract_wheel_sync(sync=sync, chmap=chmap)
-        moves = extract_wheel_moves(ts, pos)
         settings = raw_data_loaders.load_settings(session_path=self.session_path)
         min_qt = settings.get('QUIESCENT_PERIOD', None)
         first_move_onsets, *_ = extract_first_movement_times(moves, out, min_qt=min_qt)
         out.update({'firstMovement_times': first_move_onsets})
 
         assert tuple(filter(lambda x: 'wheel' not in x, self.var_names)) == tuple(out.keys())
-        return [out[k] for k in out] + [ts, pos, moves['intervals'], moves['peakAmplitude']]
+        return [out[k] for k in out] + [wheel['timestamps'], wheel['position'],
+                                        moves['intervals'], moves['peakAmplitude']]
 
 
 def extract_all(session_path, save=True, bin_exists=False):
