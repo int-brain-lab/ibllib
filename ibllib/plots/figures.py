@@ -8,6 +8,7 @@ from string import ascii_uppercase
 import numpy as np
 import pandas as pd
 import scipy.signal
+import matplotlib.pyplot as plt
 
 from ibllib.dsp import voltage
 from ibllib.plots.snapshot import ReportSnapshot
@@ -15,19 +16,28 @@ from one.api import ONE
 import one.alf.io as alfio
 from one.alf.exceptions import ALFObjectNotFound
 from ibllib.io.video import get_video_frame, url_from_eid
+from brainbox.behavior.dlc import SAMPLING, plot_trace_on_frame, plot_wheel_position, plot_lick_hist, \
+    plot_lick_raster, plot_motion_energy_hist, plot_speed_hist, plot_pupil_diameter_hist
 
 logger = logging.getLogger('ibllib')
+
 
 class BadChannelsAp(ReportSnapshot):
     """
     Plots raw electrophysiology AP band
+    :param session_path: session path
+    :param probe_id: str, UUID of the probe insertion for which to create the plot
+    :param **kwargs: keyword arguments passed to tasks.Task
     """
     signature = {
         'input_files': [],  # see setUp method for declaration of inputs
         'output_files': []  # see setUp method for declaration of inputs
     }
-    object_id = None  # alyx UUID of the object
-    content_type = 'probeinsertion'
+
+    def __init__(self, session_path, probe_id, **kwargs):
+        self.content_type = 'probeinsertion'
+        self.pid = probe_id
+        super(BadChannelsAp, self).__init__(session_path, probe_id, content_type=self.content_type, **kwargs)
 
     @staticmethod
     def spike_sorting_signature(pname=None):
@@ -39,21 +49,19 @@ class BadChannelsAp(ReportSnapshot):
                             ('highpass.png', f'snapshot/{pname}', True)]
         return input_signature, output_signature
 
-    def _run(self, pid=None):
-        """runs from a PID, streams data, destripe and check bad channels"""
-        assert pid
-        self.object_id = pid
+    def _run(self):
+        """runs for initiated PID, streams data, destripe and check bad channels"""
+        assert self.pid
         SNAPSHOT_LABEL = "raw_ephys_bad_channels"
-        eid, pname = self.one.pid2eid(pid)
-        session_path = self.one.eid2path(eid)
-        output_directory = session_path.joinpath('snapshot', pname)
+        eid, pname = self.one.pid2eid(self.pid)
+        output_directory = self.session_path.joinpath('snapshot', pname)
         output_files = list(output_directory.glob(f'{SNAPSHOT_LABEL}*'))
         if len(output_files) == 4:
             return output_files
         output_directory.mkdir(exist_ok=True, parents=True)
         from brainbox.io.spikeglx import stream
         T0 = 60 * 30
-        sr, t0 = stream(pid, T0, nsecs=1, one=self.one)
+        sr, t0 = stream(self.pid, T0, nsecs=1, one=self.one)
         raw = sr[:, :-sr.nsync].T
         channel_labels, channel_features = voltage.detect_bad_channels(raw, sr.fs)
         _, _, output_files = ephys_bad_channels(
@@ -84,7 +92,6 @@ def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_b
     idead = np.where(channel_labels == 1)[0]
     ioutside = np.where(channel_labels == 3)[0]
     from easyqc.gui import viewseis
-    import matplotlib.pyplot as plt
 
     # display voltage traces
     eqcs = [] if eqcs is None else eqcs
@@ -172,7 +179,6 @@ def raw_destripe(raw, fs, t0, i_plt, n_plt,
     '''
 
     # Import
-    import matplotlib.pyplot as plt
     from ibllib.dsp import voltage
     from ibllib.plots import Density
 
@@ -259,10 +265,6 @@ def dlc_qc_plot(eid, one=None):
     :params one: ONE instance, if None is given, default ONE is instantiated
     :returns: Matplotlib figure
     """
-
-    import matplotlib.pyplot as plt
-    from brainbox.behavior.dlc import SAMPLING, plot_trace_on_frame, plot_wheel_position, plot_lick_hist, \
-        plot_lick_raster, plot_motion_energy_hist, plot_speed_hist, plot_pupil_diameter_hist
 
     one = one or ONE()
     data = {}

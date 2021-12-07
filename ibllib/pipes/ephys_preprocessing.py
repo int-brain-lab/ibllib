@@ -9,6 +9,8 @@ import packaging.version
 
 import numpy as np
 import pandas as pd
+
+import ibllib.plots.figures
 import one.alf.io as alfio
 
 from ibllib.misc import check_nvidia_driver
@@ -25,7 +27,7 @@ from ibllib.qc.camera import run_all_qc as run_camera_qc
 from ibllib.qc.dlc import DlcQC
 from ibllib.dsp import rms
 from ibllib.plots.figures import dlc_qc_plot
-from ibllib.plots.snapshot import Snapshot
+from ibllib.plots.snapshot import ReportSnapshot
 from brainbox.behavior.dlc import likelihood_threshold, get_licks, get_pupil_diameter, get_smooth_pupil_diameter
 
 _logger = logging.getLogger("ibllib")
@@ -962,8 +964,9 @@ class EphysPostDLC(tasks.Task):
                     fig_path.parent.mkdir(parents=True, exist_ok=True)
                 fig = dlc_qc_plot(self.one.path2eid(self.session_path), one=self.one)
                 fig.savefig(fig_path)
-                snp = Snapshot(session_id, one=self.one)
-                snp.register_image(fig_path, width='orig', text='dlc_qc_plot.png')
+                snp = ReportSnapshot(session_id, one=self.one)
+                snp.outputs = [fig_path]
+                snp.register_images(widths=['orig'], function=ibllib.plots.figures.dlc_qc_plot)
             except BaseException:
                 _logger.error('Could not create and/or upload DLC QC Plot')
                 _logger.error(traceback.format_exc())

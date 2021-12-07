@@ -10,20 +10,26 @@ _logger = logging.getLogger('ibllib')
 
 class ReportSnapshot(tasks.Task):
 
-    object_id = None  # alyx UUID of the object
-    content_type = None  # alyx content type as per the endpoint name example: 'probeinsertions'
+    def __init__(self, session_path, object_id, content_type='session', **kwargs):
+        self.object_id = object_id
+        self.content_type = content_type
+        self.images = []
+        super(ReportSnapshot, self).__init__(session_path, **kwargs)
 
-    def register_images(self, widths=None):
-        REPORT_TAG = '## report ##'
+    def _run(self, overwrite=False):
+        # Can be used to generate the image if desired
+        pass
+
+    def register_images(self, widths=None, function=None):
+        report_tag = '## report ##'
         snapshot = Snapshot(one=self.one, object_id=self.object_id, content_type=self.content_type)
-        # snapshot.register_images(self.outputs, widths=1200, jsons={})
         jsons = []
         texts = []
         for f in self.outputs:
-            jsons.append(dict(tag=REPORT_TAG, version=version.ibllib(),
-                              function=str(self.__class__), name=f.stem))
+            jsons.append(dict(tag=report_tag, version=version.ibllib(),
+                              function=(function or str(self.__class__)), name=f.stem))
             texts.append(f"{f.stem}")
-        return snapshot.register_images(self.outputs, jsons=jsons, texts=texts)
+        return snapshot.register_images(self.outputs, jsons=jsons, texts=texts, widths=widths)
 
 
 class Snapshot:
@@ -68,7 +74,8 @@ class Snapshot:
         Registers an image as a Note, attached to the object specified by Snapshot.object_id
 
         :param image_file: Path to the image to to registered
-        :param text: Text to describe the image, defaults ot empty string
+        :param text: str, text to describe the image, defaults ot empty string
+        :param json: dict, to be added to the json field of the Note
         :param width: width to scale the image to, defaults to None (scale to UPLOADED_IMAGE_WIDTH in alyx.settings.py),
         other options are 'orig' (don't change size) or any integer (scale to width=int, aspect ratios won't be changed)
 
@@ -125,6 +132,8 @@ class Snapshot:
             texts = len(image_list) * texts
         if len(widths) == 1:
             widths = len(image_list) * widths
+        if len(jsons) == 1:
+            jsons = len(image_list) * jsons
         note_dbs = []
         for figure, text, width, json in zip(image_list, texts, widths, jsons):
             note_dbs.append(self.register_image(figure, text=text, width=width, json=json))
