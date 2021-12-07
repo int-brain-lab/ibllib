@@ -478,6 +478,11 @@ def _geometry_from_meta(meta_data):
     """
     cm = _map_channels_from_meta(meta_data)
     major_version = _get_neuropixel_major_version_from_meta(meta_data)
+    if cm is None:
+        _logger.warning("Meta data doesn't have geometry (snsShankMap field), returning defaults")
+        th = neuropixel.trace_header(version=major_version)
+        th['flag'] = th['x'] * 0 + 1.
+        return th
     th = cm.copy()
     if major_version == 1:
         # the spike sorting channel maps have a flipped version of the channel map

@@ -12,7 +12,7 @@ from iblutil.util import Bunch
 
 from ibllib.io import spikeglx
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
-from ibllib.ephys.neuropixel import SITES_COORDINATES, TIP_SIZE_UM
+from ibllib.ephys.neuropixel import SITES_COORDINATES, TIP_SIZE_UM, trace_header
 from ibllib.atlas import atlas
 from ibllib.atlas import AllenAtlas
 from ibllib.pipes import histology
@@ -221,7 +221,7 @@ def _load_channels_locations_from_disk(eid, collection=None, one=None, revision=
     return channels
 
 
-def channel_locations_interpolation(channels_aligned, channels, brain_regions=None):
+def channel_locations_interpolation(channels_aligned, channels=None, brain_regions=None):
     """
     oftentimes the channel map for different spike sorters may be different so interpolate the alignment onto
     if there is no spike sorting in the base folder, the alignment doesn't have the localCoordinates field
@@ -238,6 +238,10 @@ def channel_locations_interpolation(channels_aligned, channels, brain_regions=No
       'x', 'y', 'z', 'acronym', 'atlas_id', 'axial_um', 'lateral_um'
     :return: Bunch or dictionary of channels with brain coordinates keys
     """
+    NEUROPIXEL_VERSION = 1
+    h = trace_header(version=NEUROPIXEL_VERSION)
+    if channels is None:
+        channels = {'localCoordinates': np.c_[h['x'], h['y']]}
     nch = channels['localCoordinates'].shape[0]
     if set(['x', 'y', 'z']).issubset(set(channels_aligned.keys())):
         channels_aligned = _channels_bunch2alf(channels_aligned)
@@ -245,9 +249,7 @@ def channel_locations_interpolation(channels_aligned, channels, brain_regions=No
         aligned_depths = channels_aligned['localCoordinates'][:, 1]
     else:  # this is a edge case for a few spike sorting sessions
         assert channels_aligned['mlapdv'].shape[0] == 384
-        NEUROPIXEL_VERSION = 1
-        from ibllib.ephys.neuropixel import trace_header
-        aligned_depths = trace_header(version=NEUROPIXEL_VERSION)['y']
+        aligned_depths = h['y']
     depth_aligned, ind_aligned = np.unique(aligned_depths, return_index=True)
     depths, ind, iinv = np.unique(channels['localCoordinates'][:, 1], return_index=True, return_inverse=True)
     channels['mlapdv'] = np.zeros((nch, 3))
