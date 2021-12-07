@@ -20,9 +20,9 @@ class ReportSnapshot(tasks.Task):
         jsons = []
         texts = []
         for f in self.outputs:
-            jsons.append(dict(tag='reports', version=version.ibllib(),
+            jsons.append(dict(tag=REPORT_TAG, version=version.ibllib(),
                               function=str(self.__class__), name=f.stem))
-            texts.append(f"{REPORT_TAG}  {f.stem}")
+            texts.append(f"{f.stem}")
         return snapshot.register_images(self.outputs, jsons=jsons, texts=texts)
 
 
