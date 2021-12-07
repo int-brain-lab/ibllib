@@ -957,7 +957,9 @@ class EphysPostDLC(tasks.Task):
         if plot_qc:
             try:
                 session_id = self.one.path2eid(self.session_path)
-                fig_path = self.session_path.joinpath('alf', 'dlc_qc_plot.png')
+                fig_path = self.session_path.joinpath('snapshot', 'dlc_qc_plot.png')
+                if not fig_path.parent.exists():
+                    fig_path.parent.mkdir(parents=True, exist_ok=True)
                 fig = dlc_qc_plot(self.one.path2eid(self.session_path), one=self.one)
                 fig.savefig(fig_path)
                 snp = Snapshot(session_id, one=self.one)
