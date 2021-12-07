@@ -496,4 +496,7 @@ def get_impostor_target(targets, labels, current_label=None,
     if verbose:
         print('%s targets stitched together with shift of %s\n' % (number_of_tiles_needed,
                                                                    start_ind))
+
+    np.random.seed(None)  # reset numpy seed to None
+
     return impostor_final
