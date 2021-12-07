@@ -1,6 +1,7 @@
 import logging
 import requests
 import traceback
+import json
 
 from one.api import ONE
 from ibllib.pipes import tasks
@@ -69,7 +70,7 @@ class Snapshot:
             self.images.append(img_path)
         return img_path
 
-    def register_image(self, image_file, text='', json=None, width=None):
+    def register_image(self, image_file, text='', json_field=None, width=None):
         """
         Registers an image as a Note, attached to the object specified by Snapshot.object_id
 
@@ -82,12 +83,14 @@ class Snapshot:
         :returns: dict, note as registered in database
         """
         fig_open = open(image_file, 'rb')
+        # the protocol is not compatible with byte streaming and json, so serialize the json object here
         note = {
             'user': self.one.alyx.user, 'content_type': self.content_type, 'object_id': self.object_id,
-            'text': text, 'width': width, 'json': json}
+            'text': text, 'width': width, 'json': json.dumps(json_field)}
         _logger.info(f'Registering image to {self.content_type} with id {self.object_id}')
         # Catch error that results from object_id - content_type mismatch
         try:
+            # to make sure an eventual note gets deleted with the image call the delete REST endpoint first
             existing_note = self.one.alyx.rest('notes', 'list', django=f"object_id,{self.object_id},text,{text}", no_cache=True)
             if len(existing_note) == 1:
                 self.one.alyx.rest('notes', 'delete', id=existing_note[0]['id'])
@@ -135,6 +138,6 @@ class Snapshot:
         if len(jsons) == 1:
             jsons = len(image_list) * jsons
         note_dbs = []
-        for figure, text, width, json in zip(image_list, texts, widths, jsons):
-            note_dbs.append(self.register_image(figure, text=text, width=width, json=json))
+        for figure, text, width, json_field in zip(image_list, texts, widths, jsons):
+            note_dbs.append(self.register_image(figure, text=text, width=width, json_field=json_field))
         return note_dbs
