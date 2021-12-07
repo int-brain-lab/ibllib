@@ -427,6 +427,7 @@ def generate_pseudo_session(trials, generate_choices=True):
                       'signed_contrast'] = -pseudo_trials['contrastLeft']
     return pseudo_trials
 
+
 def get_impostor_target(targets, labels, current_label=None,
                         seed_idx=None, verbose=False):
     """
