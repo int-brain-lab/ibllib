@@ -10,7 +10,6 @@ import packaging.version
 import numpy as np
 import pandas as pd
 
-import ibllib.plots.figures
 import one.alf.io as alfio
 
 from ibllib.misc import check_nvidia_driver
@@ -895,7 +894,7 @@ class EphysPostDLC(tasks.Task):
                 _logger.debug(dlc_file)
             output_files = []
             combined_licks = []
-    
+
             for dlc_file in dlc_files:
                 # Catch unforeseen exceptions and move on to next cam
                 try:
@@ -912,7 +911,7 @@ class EphysPostDLC(tasks.Task):
                                       f'Computations using camera.times will be skipped')
                         self.status = -1
                         times = False
-    
+
                     # These features are only computed from left and right cam
                     if cam in ('left', 'right'):
                         features = pd.DataFrame()
@@ -931,7 +930,7 @@ class EphysPostDLC(tasks.Task):
                         features_file = Path(self.session_path).joinpath('alf', f'_ibl_{cam}Camera.features.pqt')
                         features.to_parquet(features_file)
                         output_files.append(features_file)
-    
+
                     # For all cams, compute DLC qc if times available
                     if times and run_qc:
                         # Setting download_data to False because at this point the data should be there
@@ -942,7 +941,7 @@ class EphysPostDLC(tasks.Task):
                             _logger.warning(f"Skipping QC for {cam} camera as no camera.times available")
                         if not run_qc:
                             _logger.warning(f"Skipping QC for {cam} camera as run_qc=False")
-    
+
                 except BaseException:
                     _logger.error(traceback.format_exc())
                     self.status = -1
