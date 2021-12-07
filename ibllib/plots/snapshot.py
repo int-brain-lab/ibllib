@@ -28,7 +28,7 @@ class ReportSnapshot(tasks.Task):
         texts = []
         for f in self.outputs:
             jsons.append(dict(tag=report_tag, version=version.ibllib(),
-                              function=(function or str(self.__class__)), name=f.stem))
+                              function=(function or str(self.__class__).split("'")[1]), name=f.stem))
             texts.append(f"{f.stem}")
         return snapshot.register_images(self.outputs, jsons=jsons, texts=texts, widths=widths)
 
@@ -76,7 +76,7 @@ class Snapshot:
 
         :param image_file: Path to the image to to registered
         :param text: str, text to describe the image, defaults ot empty string
-        :param json: dict, to be added to the json field of the Note
+        :param json_field: dict, to be added to the json field of the Note
         :param width: width to scale the image to, defaults to None (scale to UPLOADED_IMAGE_WIDTH in alyx.settings.py),
         other options are 'orig' (don't change size) or any integer (scale to width=int, aspect ratios won't be changed)
 
@@ -91,9 +91,9 @@ class Snapshot:
         # Catch error that results from object_id - content_type mismatch
         try:
             # to make sure an eventual note gets deleted with the image call the delete REST endpoint first
-            existing_note = self.one.alyx.rest('notes', 'list', django=f"object_id,{self.object_id},text,{text}", no_cache=True)
-            if len(existing_note) == 1:
-                self.one.alyx.rest('notes', 'delete', id=existing_note[0]['id'])
+            # existing_note = self.one.alyx.rest('notes', 'list', django=f"object_id,{self.object_id},text,{text}", no_cache=True)
+            # if len(existing_note) == 1:
+            #     self.one.alyx.rest('notes', 'delete', id=existing_note[0]['id'])
             note_db = self.one.alyx.rest('notes', 'create', data=note, files={'image': fig_open})
             fig_open.close()
             return note_db
