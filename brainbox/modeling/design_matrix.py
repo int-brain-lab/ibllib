@@ -54,7 +54,8 @@ class DesignMatrix:
         # Filter out cells which don't meet the criteria for minimum spiking, while doing trial
         # assignment
         vartypes['duration'] = 'value'
-        base_df = trialsdf.copy()  # Make sure we don't modify the original dataframe
+        base_df = trialsdf.copy()
+        trialsdf = trialsdf.copy()  # Make sure we don't modify the original dataframe
         trbounds = trialsdf[['trial_start', 'trial_end']]  # Get the start/end of trials
         # Empty trial duration value to use later
         trialsdf['duration'] = np.nan
@@ -428,7 +429,7 @@ def denseconv(X, bases):
         A = np.zeros((T + TB - 1, int(np.sum(indices[kCov, :]))))
         for i, j in enumerate(np.argwhere(indices[kCov, :]).flat):
             A[:, i] = np.convolve(X[:, kCov], bases[:, j])
-        BX[:, k: sI[kCov]] = A[: T, :]
+        BX[:, k: sI[kCov]] = A[:T, :]
         k = sI[kCov]
     return BX
 
@@ -444,5 +445,5 @@ def convbasis(stim, bases, offset=0):
     if offset < 0:
         X = X[-offset:, :]
     elif offset > 0:
-        X = X[: -(1 + offset), :]
+        X = X[:-offset, :]
     return X
