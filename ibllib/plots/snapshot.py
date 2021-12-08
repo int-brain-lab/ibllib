@@ -82,7 +82,6 @@ class Snapshot:
 
         :returns: dict, note as registered in database
         """
-        fig_open = open(image_file, 'rb')
         # the protocol is not compatible with byte streaming and json, so serialize the json object here
         note = {
             'user': self.one.alyx.user, 'content_type': self.content_type, 'object_id': self.object_id,
@@ -91,11 +90,13 @@ class Snapshot:
         # Catch error that results from object_id - content_type mismatch
         try:
             # to make sure an eventual note gets deleted with the image call the delete REST endpoint first
-            # existing_note = self.one.alyx.rest('notes', 'list', django=f"object_id,{self.object_id},text,{text}", no_cache=True)
-            # if len(existing_note) == 1:
-            #     self.one.alyx.rest('notes', 'delete', id=existing_note[0]['id'])
-            note_db = self.one.alyx.rest('notes', 'create', data=note, files={'image': fig_open})
-            fig_open.close()
+            current_note = self.one.alyx.rest('notes', 'list',
+                                              django=f"object_id,{self.object_id},text,{text},json__name,{text}",
+                                              no_cache=True)
+            if len(current_note) == 1:
+                self.one.alyx.rest('notes', 'delete', id=current_note[0]['id'])
+            with open(image_file, 'rb') as fig_open:
+                note_db = self.one.alyx.rest('notes', 'create', data=note, files={'image': fig_open})
             return note_db
         except requests.HTTPError as e:
             if "matching query does not exist.'" in str(e):
