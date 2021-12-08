@@ -11,7 +11,7 @@ class DesignMatrix:
     and allow the generation of a design matrix with specified regressors
     """
 
-    def __init__(self, trialsdf, vartypes=None, binwidth=0.02):
+    def __init__(self, trialsdf, vartypes, binwidth=0.02):
         """
         Class for generating design matrices to model neural data. Provides handy routines for
         describing neural spiking activity using basis functions and other primitives.
@@ -31,7 +31,7 @@ class DesignMatrix:
 
             Obligatory columns for the dataframe are "trial_start" and "trial_end", which tell the
             constructor which time points to associate with that trial.
-        vartypes : dict, optional
+        vartypes : dict
             Dictionary of types for each of the columns in trialsdf. Columns must be of the types:
             -- timing: timing events, in which the column values are times since the start of the
                 session of an event within that trial, e.g. stimulus onset.
@@ -41,38 +41,25 @@ class DesignMatrix:
                 changes within the trial. e.g. pupil diameter.
             Dictionary keys should be columns in trialsdf, values should be strings that are equal
             to one of the above.
-
-            If vartypes is not passed, the constructor will assume you know what you are doing. Be
-            warned that this can result in the class failing in spectacular and vindictive ways.
-            by default None
         binwidth : float, optional
             Length of time bins which will be used for design matrix, by default 0.02
         """
         # Data checks #
-        if vartypes is not None:
-            validtypes = ('timing', 'continuous', 'value')
-            if not all([name in vartypes for name in trialsdf.columns]):
-                raise KeyError("Some columns were not described in vartypes")
-            if not all([value in validtypes for value in vartypes.values()]):
-                raise ValueError("Invalid values were passed in vartypes")
+        validtypes = ('timing', 'continuous', 'value')
+        if not all([name in vartypes for name in trialsdf.columns]):
+            raise KeyError("Some columns were not described in vartypes")
+        if not all([value in validtypes for value in vartypes.values()]):
+            raise ValueError("Invalid values were passed in vartypes")
 
         # Filter out cells which don't meet the criteria for minimum spiking, while doing trial
         # assignment
-        self.vartypes = vartypes if vartypes is not None else {}
-        if vartypes is not None:
-            self.vartypes['duration'] = 'value'
-        base_df = trialsdf.copy()
-        trialsdf = trialsdf.copy()  # Make sure we don't modify the original dataframe
+        vartypes['duration'] = 'value'
+        base_df = trialsdf.copy()  # Make sure we don't modify the original dataframe
         trbounds = trialsdf[['trial_start', 'trial_end']]  # Get the start/end of trials
         # Empty trial duration value to use later
         trialsdf['duration'] = np.nan
         # Figure out which columns are timing variables if vartypes was passed
-        if vartypes is not None:
-            timingvars = [col for col in trialsdf.columns if vartypes[col] == 'timing']
-            self.timingsub = {x: True if x in timingvars else False for x in trialsdf.columns}
-        else:
-            timingvars = []
-            self.timingsub = {x: False for x in trialsdf.columns}
+        timingvars = [col for col in trialsdf.columns if vartypes[col] == 'timing']
 
         for i, (start, end) in trbounds.iterrows():
             if any(np.isnan((start, end))):
@@ -90,6 +77,7 @@ class DesignMatrix:
         self.binwidth = binwidth
         self.covar = {}
         self.trialsdf = trialsdf
+        self.vartypes = vartypes
         self.base_df = base_df
         self.compiled = False
         return
@@ -164,17 +152,8 @@ class DesignMatrix:
         else:
             raise TypeError('deltaval must be None, pandas series, or string reference'
                             f' to trialsdf column. {type(deltaval)} was passed instead.')
-        if eventname in self.vartypes and self.vartypes[eventname] != 'timing':
+        if self.vartypes[eventname] != 'timing':
             raise TypeError(f'Column {eventname} in trialsdf is not registered as a timing')
-
-        if not self.timingsub[eventname]:
-            self.timingsub[eventname] = True
-            col = eventname
-            for i, (start, end) in self.trialsdf[['trial_start', 'trial_end']].iterrows():
-                # Round values for the timing variables to the 5th decimal place and subtract
-                # trial start time.
-                self.trialsdf.at[i, col] = np.round(self.trialsdf.at[i, col] - start, decimals=5)
-                self.trialsdf.at[i, 'duration'] = end - start
 
         vecsizes = self.trialsdf['duration'].apply(self.binf)
         stiminds = self.trialsdf[eventname].apply(self.binf)
@@ -224,10 +203,10 @@ class DesignMatrix:
         self._compile_check()
         if boxstart not in self.trialsdf.columns or boxend not in self.trialsdf.columns:
             raise KeyError('boxstart or boxend not found in trialsdf columns.')
-        if boxstart in self.vartypes and self.vartypes[boxstart] != 'timing':
+        if self.vartypes[boxstart] != 'timing':
             raise TypeError(f'Column {boxstart} in trialsdf is not registered as a timing. '
                             'boxstart and boxend need to refer to timing events in trialsdf.')
-        if boxend in self.vartypes and self.vartypes[boxend] != 'timing':
+        if self.vartypes[boxend] != 'timing':
             raise TypeError(f'Column {boxend} in trialsdf is not registered as a timing. '
                             'boxstart and boxend need to refer to timing events in trialsdf.')
 
