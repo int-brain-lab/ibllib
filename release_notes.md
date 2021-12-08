@@ -1,6 +1,11 @@
-## Release Notes 2.5
-### Release Notes 2.5.2 2021-12-01
+## Release Notes 2.6 
+### Release Notes 2.6.0 2021-12-08
+- New ReportSnapshot class
+- DLC QC plots, as part of EphysPostDLC task
+- BadChannelsAP plots for ephys QC
 - Fix typo in camera extractor
+
+## Release Notes 2.5
 ### Release Notes 2.5.1 2021-11-25
 - SpikeSorting task overwrites old tar file on rerun
 ### Release Notes 2.5.0 2021-11-24
