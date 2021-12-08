@@ -1,33 +1,114 @@
 """
 Module that produces figures, usually for the extraction pipeline
 """
+import logging
 from pathlib import Path
+from string import ascii_uppercase
 
 import numpy as np
+import pandas as pd
 import scipy.signal
+import matplotlib.pyplot as plt
+
+from ibllib.dsp import voltage
+from ibllib.plots.snapshot import ReportSnapshot
+from one.api import ONE
+import one.alf.io as alfio
+from one.alf.exceptions import ALFObjectNotFound
+from ibllib.io.video import get_video_frame, url_from_eid
+from brainbox.behavior.dlc import SAMPLING, plot_trace_on_frame, plot_wheel_position, plot_lick_hist, \
+    plot_lick_raster, plot_motion_energy_hist, plot_speed_hist, plot_pupil_diameter_hist
+
+logger = logging.getLogger('ibllib')
 
 
-def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_bad_channels", save_dir=None):
-    nc = raw.shape[0]
+class BadChannelsAp(ReportSnapshot):
+    """
+    Plots raw electrophysiology AP band
+    :param session_path: session path
+    :param probe_id: str, UUID of the probe insertion for which to create the plot
+    :param **kwargs: keyword arguments passed to tasks.Task
+    """
+    signature = {
+        'input_files': [],  # see setUp method for declaration of inputs
+        'output_files': []  # see setUp method for declaration of inputs
+    }
+
+    def __init__(self, session_path, probe_id, **kwargs):
+        self.content_type = 'probeinsertion'
+        self.pid = probe_id
+        super(BadChannelsAp, self).__init__(session_path, probe_id, content_type=self.content_type, **kwargs)
+
+    @staticmethod
+    def spike_sorting_signature(pname=None):
+        pname = pname if pname is not None else "probe*"
+        input_signature = [('*ap.meta', f'raw_ephys_data/{pname}', True),
+                           ('*ap.ch', f'raw_ephys_data/{pname}', False),
+                           ('*ap.cbin', f'raw_ephys_data/{pname}', False)]
+        output_signature = [('destripe.png', f'snapshot/{pname}', True),
+                            ('highpass.png', f'snapshot/{pname}', True)]
+        return input_signature, output_signature
+
+    def _run(self):
+        """runs for initiated PID, streams data, destripe and check bad channels"""
+        assert self.pid
+        SNAPSHOT_LABEL = "raw_ephys_bad_channels"
+        eid, pname = self.one.pid2eid(self.pid)
+        output_directory = self.session_path.joinpath('snapshot', pname)
+        output_files = list(output_directory.glob(f'{SNAPSHOT_LABEL}*'))
+        if len(output_files) == 4:
+            return output_files
+        output_directory.mkdir(exist_ok=True, parents=True)
+        from brainbox.io.spikeglx import stream
+        T0 = 60 * 30
+        sr, t0 = stream(self.pid, T0, nsecs=1, one=self.one)
+        raw = sr[:, :-sr.nsync].T
+        channel_labels, channel_features = voltage.detect_bad_channels(raw, sr.fs)
+        _, _, output_files = ephys_bad_channels(
+            raw=raw, fs=sr.fs, channel_labels=channel_labels, channel_features=channel_features,
+            title=SNAPSHOT_LABEL, destripe=True, save_dir=output_directory)
+        return output_files
+
+
+def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_bad_channels", save_dir=None,
+                       destripe=False, eqcs=None):
+    nc, ns = raw.shape
+    rl = ns / fs
+    if fs >= 2600:  # AP band
+        ylim_rms = [0, 100]
+        ylim_psd_hf = [0, 0.1]
+        eqc_xrange = [450, 500]
+        butter_kwargs = {'N': 3, 'Wn': 300 / fs * 2, 'btype': 'highpass'}
+        eqc_gain = - 90
+    else:
+        # we are working with the LFP
+        ylim_rms = [0, 1000]
+        ylim_psd_hf = [0, 1]
+        eqc_xrange = [450, 950]
+        butter_kwargs = {'N': 3, 'Wn': np.array([2, 125]) / fs * 2, 'btype': 'bandpass'}
+        eqc_gain = - 78
+
     inoisy = np.where(channel_labels == 2)[0]
     idead = np.where(channel_labels == 1)[0]
     ioutside = np.where(channel_labels == 3)[0]
     from easyqc.gui import viewseis
-    import matplotlib.pyplot as plt
 
     # display voltage traces
-    eqcs = []
-    butter_kwargs = {'N': 3, 'Wn': 300 / fs * 2, 'btype': 'highpass'}
+    eqcs = [] if eqcs is None else eqcs
     # butterworth, for display only
     sos = scipy.signal.butter(**butter_kwargs, output='sos')
     butt = scipy.signal.sosfiltfilt(sos, raw)
-    eqcs.append(viewseis(butt.T, si=1 / fs * 1e3, title='butt', taxis=0))
+    eqcs.append(viewseis(butt.T, si=1 / fs * 1e3, title='highpass', taxis=0))
+    if destripe:
+        dest = voltage.destripe(raw, fs=fs, channel_labels=channel_labels)
+        eqcs.append(viewseis(dest.T, si=1 / fs * 1e3, title='destripe', taxis=0))
+        eqcs.append(viewseis((butt - dest).T, si=1 / fs * 1e3, title='difference', taxis=0))
     for eqc in eqcs:
-        y, x = np.meshgrid(ioutside, np.linspace(0, 1 * 1e3, 500))
+        y, x = np.meshgrid(ioutside, np.linspace(0, rl * 1e3, 500))
         eqc.ctrl.add_scatter(x.flatten(), y.flatten(), rgb=(164, 142, 35), label='outside')
-        y, x = np.meshgrid(inoisy, np.linspace(0, 1 * 1e3, 500))
+        y, x = np.meshgrid(inoisy, np.linspace(0, rl * 1e3, 500))
         eqc.ctrl.add_scatter(x.flatten(), y.flatten(), rgb=(255, 0, 0), label='noisy')
-        y, x = np.meshgrid(idead, np.linspace(0, 1 * 1e3, 500))
+        y, x = np.meshgrid(idead, np.linspace(0, rl * 1e3, 500))
         eqc.ctrl.add_scatter(x.flatten(), y.flatten(), rgb=(0, 0, 255), label='dead')
     # display features
     fig, axs = plt.subplots(2, 2, sharex=True, figsize=[16, 9], tight_layout=True)
@@ -35,11 +116,11 @@ def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_b
     # fig.suptitle(f"pid:{pid}, \n eid:{eid}, \n {one.eid2path(eid).parts[-3:]}, {pname}")
     fig.suptitle(title)
     axs[0, 0].plot(channel_features['rms_raw'] * 1e6)
-    axs[0, 0].set(title='rms', xlabel='channel number', ylabel='rms (uV)', ylim=[0, 100])
+    axs[0, 0].set(title='rms', xlabel='channel number', ylabel='rms (uV)', ylim=ylim_rms)
 
     axs[1, 0].plot(channel_features['psd_hf'])
     axs[1, 0].plot(inoisy, np.minimum(channel_features['psd_hf'][inoisy], 0.0999), 'xr')
-    axs[1, 0].set(title='PSD above 12kHz', xlabel='channel number', ylabel='PSD (uV ** 2 / Hz)', ylim=[0, 0.1])
+    axs[1, 0].set(title='PSD above 80% Nyquist', xlabel='channel number', ylabel='PSD (uV ** 2 / Hz)', ylim=ylim_psd_hf)
     axs[1, 0].legend = ['psd', 'noisy']
 
     axs[0, 1].plot(channel_features['xcor_hf'])
@@ -54,22 +135,25 @@ def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_b
     axs[1, 1].imshow(20 * np.log10(psd).T, extent=[0, nc - 1, fscale[0], fscale[-1]], origin='lower', aspect='auto',
                      vmin=-50, vmax=-20)
     axs[1, 1].set(title='PSD', xlabel='channel number', ylabel="Frequency (Hz)")
-    axs[1, 1].plot(idead, idead * 0 + fs / 2 - 500, 'xb')
-    axs[1, 1].plot(inoisy, inoisy * 0 + fs / 2 - 500, 'xr')
-    axs[1, 1].plot(ioutside, ioutside * 0 + fs / 2 - 500, 'xy')
+    axs[1, 1].plot(idead, idead * 0 + fs / 4, 'xb')
+    axs[1, 1].plot(inoisy, inoisy * 0 + fs / 4, 'xr')
+    axs[1, 1].plot(ioutside, ioutside * 0 + fs / 4, 'xy')
 
-    eqcs[0].ctrl.set_gain(-90)
+    eqcs[0].ctrl.set_gain(eqc_gain)
     eqcs[0].resize(1960, 1200)
-    eqcs[0].viewBox_seismic.setXRange(450, 500)
+    eqcs[0].viewBox_seismic.setXRange(*eqc_xrange)
     eqcs[0].viewBox_seismic.setYRange(0, nc)
     eqcs[0].ctrl.propagate()
 
     if save_dir is not None:
-        fig.savefig(Path(save_dir).joinpath(f"{title}.png"))
+        output_files = [Path(save_dir).joinpath(f"{title}.png")]
+        fig.savefig(output_files[0])
         for eqc in eqcs:
-            eqc.grab().save(str(Path(save_dir).joinpath(f"{title}_data_{eqc.windowTitle()}.png")))
-
-    return fig, eqcs[0]
+            output_files.append(Path(save_dir).joinpath(f"{title}_{eqc.windowTitle()}.png"))
+            eqc.grab().save(str(output_files[-1]))
+        return fig, eqcs, output_files
+    else:
+        return fig, eqcs
 
 
 def raw_destripe(raw, fs, t0, i_plt, n_plt,
@@ -95,10 +179,8 @@ def raw_destripe(raw, fs, t0, i_plt, n_plt,
     '''
 
     # Import
-    import matplotlib.pyplot as plt
     from ibllib.dsp import voltage
     from ibllib.plots import Density
-    import numpy as np
 
     # Init fig
     if fig is None or axs is None:
@@ -150,3 +232,134 @@ def raw_destripe(raw, fs, t0, i_plt, n_plt,
         fig.savefig(fname=savedir)
 
     return fig, axs
+
+
+def dlc_qc_plot(eid, one=None):
+    """
+    Creates DLC QC plot.
+    Data is searched first locally, then on Alyx. Panels that lack required data are skipped.
+
+    Required data to create all panels
+     'raw_video_data/_iblrig_bodyCamera.raw.mp4',
+     'raw_video_data/_iblrig_leftCamera.raw.mp4',
+     'raw_video_data/_iblrig_rightCamera.raw.mp4',
+     'alf/_ibl_bodyCamera.dlc.pqt',
+     'alf/_ibl_leftCamera.dlc.pqt',
+     'alf/_ibl_rightCamera.dlc.pqt',
+     'alf/_ibl_bodyCamera.times.npy',
+     'alf/_ibl_leftCamera.times.npy',
+     'alf/_ibl_rightCamera.times.npy',
+     'alf/_ibl_leftCamera.features.pqt',
+     'alf/rightROIMotionEnergy.position.npy',
+     'alf/leftROIMotionEnergy.position.npy',
+     'alf/bodyROIMotionEnergy.position.npy',
+     'alf/_ibl_trials.choice.npy',
+     'alf/_ibl_trials.feedbackType.npy',
+     'alf/_ibl_trials.feedback_times.npy',
+     'alf/_ibl_trials.stimOn_times.npy',
+     'alf/_ibl_wheel.position.npy',
+     'alf/_ibl_wheel.timestamps.npy',
+     'alf/licks.times.npy',
+
+    :params eid: Session ID
+    :params one: ONE instance, if None is given, default ONE is instantiated
+    :returns: Matplotlib figure
+    """
+
+    one = one or ONE()
+    data = {}
+    # Camera data
+    for cam in ['left', 'right', 'body']:
+        # Load a single frame for each video, first check if data is local, otherwise stream
+        video_path = one.eid2path(eid).joinpath('raw_video_data', f'_iblrig_{cam}Camera.raw.mp4')
+        if not video_path.exists():
+            try:
+                video_path = url_from_eid(eid, one=one)[cam]
+            except KeyError:
+                logger.warning(f"No raw video data found for {cam} camera, some DLC QC plots have to be skipped.")
+                data[f'{cam}_frame'] = None
+        try:
+            data[f'{cam}_frame'] = get_video_frame(video_path, frame_number=5 * 60 * SAMPLING[cam])[:, :, 0]
+        except TypeError:
+            logger.warning(f"Could not load video frame for {cam} camera, some DLC QC plots have to be skipped.")
+            data[f'{cam}_frame'] = None
+        # Load other video associated data
+        for feat in ['dlc', 'times', 'features', 'ROIMotionEnergy']:
+            # Check locally first, then try to load from alyx, if nothing works, set to None
+            local_file = list(one.eid2path(eid).joinpath('alf').glob(f'*{cam}Camera.{feat}*'))
+            alyx_file = [ds for ds in one.list_datasets(eid) if f'{cam}Camera.{feat}' in ds]
+            if feat == 'features' and cam in ['body', 'right']:
+                continue
+            elif len(local_file) > 0:
+                data[f'{cam}_{feat}'] = alfio.load_file_content(local_file[0])
+            elif len(alyx_file) > 0:
+                data[f'{cam}_{feat}'] = one.load_dataset(eid, alyx_file[0])
+            else:
+                logger.warning(f"Could not load _ibl_{cam}Camera.{feat} some DLC QC plots have to be skipped.")
+                data[f'{cam}_{feat}'] = None
+    # Session data
+    for alf_object in ['trials', 'wheel', 'licks']:
+        try:
+            data[f'{alf_object}'] = alfio.load_object(one.eid2path(eid).joinpath('alf'), alf_object)
+            continue
+        except ALFObjectNotFound:
+            pass
+        try:
+            data[f'{alf_object}'] = one.load_object(eid, alf_object)
+        except ALFObjectNotFound:
+            logger.warning(f"Could not load {alf_object} object for session {eid}, some plots have to be skipped.")
+            data[f'{alf_object}'] = None
+    # Simplify to what we actually need
+    data['licks'] = data['licks'].times if data['licks'] else None
+    data['left_pupil'] = data['left_features'].pupilDiameter_smooth if data['left_features'] is not None else None
+    data['wheel_time'] = data['wheel'].timestamps if data['wheel'] is not None else None
+    data['wheel_position'] = data['wheel'].position if data['wheel'] is not None else None
+    if data['trials']:
+        data['trials'] = pd.DataFrame(
+            {k: data['trials'][k] for k in ['stimOn_times', 'feedback_times', 'choice', 'feedbackType']})
+        # Discard nan events and too long trials
+        data['trials'] = data['trials'].dropna()
+        data['trials'] = data['trials'].drop(
+            data['trials'][(data['trials']['feedback_times'] - data['trials']['stimOn_times']) > 10].index)
+    # List panels: axis functions and inputs
+    panels = [(plot_trace_on_frame, {'frame': data['left_frame'], 'dlc_df': data['left_dlc'], 'cam': 'left'}),
+              (plot_trace_on_frame, {'frame': data['right_frame'], 'dlc_df': data['right_dlc'], 'cam': 'right'}),
+              (plot_trace_on_frame, {'frame': data['body_frame'], 'dlc_df': data['body_dlc'], 'cam': 'body'}),
+              (plot_wheel_position,
+               {'wheel_position': data['wheel_position'], 'wheel_time': data['wheel_time'], 'trials_df': data['trials']}),
+              (plot_motion_energy_hist,
+               {'camera_dict': {'left': {'motion_energy': data['left_ROIMotionEnergy'], 'times': data['left_times']},
+                                'right': {'motion_energy': data['right_ROIMotionEnergy'], 'times': data['right_times']},
+                                'body': {'motion_energy': data['body_ROIMotionEnergy'], 'times': data['body_times']}},
+                'trials_df': data['trials']}),
+              (plot_speed_hist,
+               {'dlc_df': data['left_dlc'], 'cam_times': data['left_times'], 'trials_df': data['trials']}),
+              (plot_speed_hist,
+               {'dlc_df': data['left_dlc'], 'cam_times': data['left_times'], 'trials_df': data['trials'],
+                'feature': 'nose_tip', 'legend': False}),
+              (plot_lick_hist, {'lick_times': data['licks'], 'trials_df': data['trials']}),
+              (plot_lick_raster, {'lick_times': data['licks'], 'trials_df': data['trials']}),
+              (plot_pupil_diameter_hist,
+               {'pupil_diameter': data['left_pupil'], 'cam_times': data['left_times'], 'trials_df': data['trials']})
+              ]
+    # Plotting
+    plt.rcParams.update({'font.size': 10})
+    fig = plt.figure(figsize=(17, 10))
+    for i, panel in enumerate(panels):
+        ax = plt.subplot(2, 5, i + 1)
+        ax.text(-0.1, 1.15, ascii_uppercase[i], transform=ax.transAxes, fontsize=16, fontweight='bold')
+        # Check if any of the inputs is None
+        if any([v is None for v in panel[1].values()]):
+            ax.text(.5, .5, f"Data incomplete\n{panel[0].__name__}", color='r', fontweight='bold',
+                    fontsize=12, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+            plt.axis('off')
+        else:
+            try:
+                panel[0](**panel[1])
+            except BaseException:
+                ax.text(.5, .5, f'Error in \n{panel[0].__name__}', color='r', fontweight='bold',
+                        fontsize=12, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+                plt.axis('off')
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+
+    return fig
