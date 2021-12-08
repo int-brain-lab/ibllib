@@ -87,16 +87,18 @@ class Snapshot:
             'user': self.one.alyx.user, 'content_type': self.content_type, 'object_id': self.object_id,
             'text': text, 'width': width, 'json': json.dumps(json_field)}
         _logger.info(f'Registering image to {self.content_type} with id {self.object_id}')
+        # to make sure an eventual note gets deleted with the image call the delete REST endpoint first
+        current_note = self.one.alyx.rest('notes', 'list',
+                                          django=f"object_id,{self.object_id},text,{text},json__name,{text}",
+                                          no_cache=True)
+        if len(current_note) == 1:
+            self.one.alyx.rest('notes', 'delete', id=current_note[0]['id'])
+        # Open image for upload
+        fig_open = open(image_file, 'rb')
         # Catch error that results from object_id - content_type mismatch
         try:
-            # to make sure an eventual note gets deleted with the image call the delete REST endpoint first
-            current_note = self.one.alyx.rest('notes', 'list',
-                                              django=f"object_id,{self.object_id},text,{text},json__name,{text}",
-                                              no_cache=True)
-            if len(current_note) == 1:
-                self.one.alyx.rest('notes', 'delete', id=current_note[0]['id'])
-            with open(image_file, 'rb') as fig_open:
-                note_db = self.one.alyx.rest('notes', 'create', data=note, files={'image': fig_open})
+            note_db = self.one.alyx.rest('notes', 'create', data=note, files={'image': fig_open})
+            fig_open.close()
             return note_db
         except requests.HTTPError as e:
             if "matching query does not exist.'" in str(e):
