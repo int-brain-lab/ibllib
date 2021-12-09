@@ -275,7 +275,8 @@ def destripe(x, fs, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, cha
 
 
 def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None, butter_kwargs=None,
-                             dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None, compute_rms=True, reject_channels=True):
+                             dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None, compute_rms=True, reject_channels=True,
+                             k_kwargs=None):
     """
     From a spikeglx Reader object, decompresses and apply ADC.
     Saves output as a flat binary file in int16
@@ -295,6 +296,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
      interp 3:outside of brain and discard
     :param reject_channels: (True) detects noisy or bad channels and interpolate them. Channels outside of the brain are left
      untouched
+    :param k_kwargs: (True) arguments for the kfilter function
     :return:
     """
     import pyfftw
@@ -306,9 +308,11 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     if reject_channels:  # get bad channels if option is on
         channel_labels = detect_bad_channels_cbin(sr)
     assert isinstance(sr_file, str) or isinstance(sr_file, Path)
-    butter_kwargs = butter_kwargs or {'N': 3, 'Wn': 300 / sr.fs * 2, 'btype': 'highpass'}
-    k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
-                'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
+    if butter_kwargs is None:
+        butter_kwargs = butter_kwargs or {'N': 3, 'Wn': 300 / sr.fs * 2, 'btype': 'highpass'}
+    if k_kwargs is None:
+        k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
+                    'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
     h = neuropixel.trace_header(version=1) if h is None else h
     ncv = h['sample_shift'].size  # number of channels
     output_file = sr.file_bin.with_suffix('.bin') if output_file is None else output_file
