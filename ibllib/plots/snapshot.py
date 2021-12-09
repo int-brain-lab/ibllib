@@ -2,6 +2,7 @@ import logging
 import requests
 import traceback
 import json
+import abc
 
 from one.api import ONE
 from ibllib.pipes import tasks
@@ -31,6 +32,25 @@ class ReportSnapshot(tasks.Task):
                               function=(function or str(self.__class__).split("'")[1]), name=f.stem))
             texts.append(f"{f.stem}")
         return snapshot.register_images(self.outputs, jsons=jsons, texts=texts, widths=widths)
+
+
+class ReportSnapshotProbe(ReportSnapshot):
+
+    def __init__(self, pid, one=None, **kwargs):
+        assert one
+        self.one = one
+        self.content_type = 'probeinsertion'
+        self.pid = pid
+        self.eid, self.pname = self.one.pid2eid(self.pid)
+        self.session_path = self.one.eid2path(self.eid)
+        self.signature = self.get_probe_signature()
+        super(ReportSnapshotProbe, self).__init__(self.session_path, object_id=pid, content_type=self.content_type, **kwargs)
+
+    @abc.abstractmethod
+    def get_probe_signature(pname=None):
+        # method that gets input and output signatures from the probe name. The format is a dictionary as follows:
+        # return {'input_files': input_signature, 'output_files': output_signature}
+        pass
 
 
 class Snapshot:
