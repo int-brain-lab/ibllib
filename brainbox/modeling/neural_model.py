@@ -192,9 +192,12 @@ class NeuralModel:
             raise IndexError('Not all train indices in the trials of design matrix')
 
         # Store training and test indices for self so that .score() method will know what to
-        # operate on
+        # operate on. If all data indices are in train indices, train and test are the same set.
         self.traininds = train_idx
-        self.testinds = self.trialsdf.index[~self.trialsdf.index.isin(train_idx)]
+        if not np.all(np.isin(self.design.trialsdf.index, train_idx)):
+            self.testinds = self.design.trialsdf.index[~self.trialsdf.index.isin(train_idx)]
+        else:
+            self.testinds = train_idx
 
         # Mask for training data
         trainmask = np.isin(self.design.trlabels, train_idx).flatten()
