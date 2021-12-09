@@ -109,7 +109,7 @@ def fk(x, si=.002, dx=1, vbounds=None, btype='highpass', ntr_pad=0, ntr_tap=None
     return xf / gain
 
 
-def car(x, collection=None, lagc=300, butter_kwargs=None):
+def car(x, collection=None, lagc=300, butter_kwargs=None, **kwargs):
     """
     Applies common average referencing with optional automatic gain control
     :param x: the input array to be filtered. dimension, the filtering is considering
@@ -223,7 +223,7 @@ def interpolate_bad_channels(data, channel_labels=None, h=None, p=1.3, kriging_d
     return data
 
 
-def destripe(x, fs, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, channel_labels=None):
+def destripe(x, fs, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, channel_labels=None, k_filter=True):
     """Super Car (super slow also...) - far from being set in stone but a good workflow example
     :param x: demultiplexed array (nc, ns)
     :param fs: sampling frequency
@@ -241,6 +241,7 @@ def destripe(x, fs, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, cha
     :param butter_kwargs: (optional, None) butterworth params, see the code for the defaults dict
     :param k_kwargs: (optional, None) K-filter params, see the code for the defaults dict
         can also be set to 'car', in which case the median accross channels will be subtracted
+    :param k_filter (True): applies k-filter by default, otherwise, apply CAR.
     :return: x, filtered array
     """
     if butter_kwargs is None:
@@ -248,11 +249,10 @@ def destripe(x, fs, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, cha
     if k_kwargs is None:
         k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
                     'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
-        spatial_fcn = lambda dat: kfilt(dat, **k_kwargs)  # noqa
-    elif isinstance(k_kwargs, dict):
+    if k_filter:
         spatial_fcn = lambda dat: kfilt(dat, **k_kwargs)  # noqa
     else:
-        spatial_fcn = lambda dat: car(dat, lagc=int(0.1 * fs))  # noqa
+        spatial_fcn = lambda dat: car(dat, **k_kwargs)  # noqa
     h = neuropixel.trace_header(version=neuropixel_version)
     if channel_labels is True:
         channel_labels, _ = detect_bad_channels(x, fs)
