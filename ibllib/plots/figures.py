@@ -18,8 +18,58 @@ from one.alf.exceptions import ALFObjectNotFound
 from ibllib.io.video import get_video_frame, url_from_eid
 from brainbox.behavior.dlc import SAMPLING, plot_trace_on_frame, plot_wheel_position, plot_lick_hist, \
     plot_lick_raster, plot_motion_energy_hist, plot_speed_hist, plot_pupil_diameter_hist
+from brainbox.ephys_plots import image_lfp_spectrum_plot, image_rms_plot
 
 logger = logging.getLogger('ibllib')
+
+
+class LFPAP(ReportSnapshotProbe):
+    """
+    Plots LFP spectrum and AP RMS AND LF RMS plots
+    """
+    def _run(self):
+        assert self.pid
+        output_directory = self.session_path.joinpath('snapshot', self.pname)
+        output_files = []
+
+        # lfp spectrum
+        lfp = self.one.load_object(self.eid, 'ephysSpectralDensityLF', collection=f'raw_ephys_data/{self.pname}')
+        _, fig, ax = image_lfp_spectrum_plot(lfp.power, lfp.freqs, clim=[-20, -80], fig_kwargs={'figsize': (8, 6)},
+                                             display=True, title=f"{self.pid_label}, {self.pid}")
+        save_path = Path(output_directory).joinpath("lfp_spectrum.png")
+        output_files.append(save_path)
+        fig.savefig(save_path)
+        # plt.close(fig)
+
+        # lfp rms
+        lfp = self.one.load_object(self.eid, 'ephysephysTimeRmsLF', collection=f'raw_ephys_data/{self.pname}')
+        _, fig, ax = image_rms_plot(lfp.rms, lfp.timestamps, median_subtract=False, band='LFP', clim=None, cmap='inferno',
+                                    fig_kwargs={'figsize': (8, 6)}, display=True, title=f"{self.pid_label}, {self.pid}")
+        save_path = Path(output_directory).joinpath("lfp_rms.png")
+        output_files.append(save_path)
+        fig.savefig(save_path)
+        # plt.close(fig)
+
+        ap = self.one.load_object(self.eid, 'ephysephysTimeRmsAP', collection=f'raw_ephys_data/{self.pname}')
+        _, fig, ax = image_rms_plot(lfp.rms, lfp.timestamps, median_subtract=False, band='AP', clim=None,
+                                    fig_kwargs={'figsize': (8, 6)}, display=True, title=f"{self.pid_label}, {self.pid}")
+        save_path = Path(output_directory).joinpath("ap_rms.png")
+        output_files.append(save_path)
+        fig.savefig(save_path)
+        # plt.close(fig)
+
+        return output_files
+
+
+    def get_probe_signature(self):
+        input_signature = [('_iblqc_ephysTimeRmsAP.rms.npy', f'raw_ephys_data/{self.pname}', True),
+                            ('_iblqc_ephysTimeRmsAP.timestamps.npy', f'raw_ephys_data/{self.pname}', True),
+                            ('_iblqc_ephysSpectralDensityLF.freqs.npy', f'raw_ephys_data/{self.pname}', True),
+                            ('_iblqc_ephysSpectralDensityLF.power.npy', f'raw_ephys_data/{self.pname}', True)]
+        output_signature = [('lfp_spectrum.png', f'snapshot/{self.pname}', True),
+                            ('ap_rms.png', f'snapshot/{self.pname}', True)]
+        self.signature = {'input_files': input_signature, 'output_files': output_signature}
+
 
 
 class SpikeSorting(ReportSnapshotProbe):

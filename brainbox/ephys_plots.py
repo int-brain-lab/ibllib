@@ -7,14 +7,14 @@ from brainbox.processing import bincount2D, compute_cluster_average
 from ibllib.atlas.regions import BrainRegions
 
 
-def image_lfp_spectrum_plot(lfp_power, lfp_freq, chn_coords, chn_inds, freq_range=(0, 300),
-                            avg_across_depth=False, cmap='viridis', display=False):
+def image_lfp_spectrum_plot(lfp_power, lfp_freq, chn_coords=None, chn_inds=None, freq_range=(0, 300),
+                            avg_across_depth=False, clim=None, cmap='viridis', display=False, title=None, **kwargs):
     """
     Prepare data for 2D image plot of LFP power spectrum along depth of probe
 
     :param lfp_power:
     :param lfp_freq:
-    :param chn_coords:
+    :param chn_depths:
     :param chn_inds:
     :param freq_range:
     :param avg_across_depth: Whether to average across channels at same depth
@@ -23,17 +23,21 @@ def image_lfp_spectrum_plot(lfp_power, lfp_freq, chn_coords, chn_inds, freq_rang
     :return: ImagePlot object, if display=True also returns matplotlib fig and ax objects
     """
 
+    ylabel = 'Channel index' if chn_coords is None else 'Distance from probe tip (um)'
+    title = title or 'LFP Power Spectrum'
+    chn_inds = chn_inds or np.arange(lfp_power.shape[1])
+    y = np.arange(lfp_power.shape[1]) if chn_coords is None else chn_coords[:, 1]
+
     freq_idx = np.where((lfp_freq >= freq_range[0]) & (lfp_freq < freq_range[1]))[0]
     freqs = lfp_freq[freq_idx]
     lfp = np.take(lfp_power[freq_idx], chn_inds, axis=1)
     lfp_db = 10 * np.log10(lfp)
     lfp_db[np.isinf(lfp_db)] = np.nan
     x = freqs
-    y = chn_coords[:, 1]
 
     # Average across channels that are at the same depth
     if avg_across_depth:
-        chn_depth, chn_idx, chn_count = np.unique(chn_coords[:, 1], return_index=True,
+        chn_depth, chn_idx, chn_count = np.unique(y, return_index=True,
                                                   return_counts=True)
         chn_idx_eq = np.copy(chn_idx)
         chn_idx_eq[np.where(chn_count == 2)] += 1
@@ -45,19 +49,20 @@ def image_lfp_spectrum_plot(lfp_power, lfp_freq, chn_coords, chn_inds, freq_rang
         y = chn_depth
 
     data = ImagePlot(lfp_db, x=x, y=y, cmap=cmap)
-    data.set_labels(title='LFP Power Spectrum', xlabel='Frequency (Hz)',
-                    ylabel='Distance from probe tip (um)', clabel='LFP Power (dB)')
-    data.set_clim(clim=np.quantile(lfp_db, [0.1, 0.9]))
+    data.set_labels(title=title, xlabel='Frequency (Hz)',
+                    ylabel=ylabel, clabel='LFP Power (dB)')
+    clim = clim or np.quantile(lfp_db, [0.1, 0.9])
+    data.set_clim(clim=clim)
 
     if display:
-        fig, ax = plot_image(data.convert2dict())
+        fig, ax = plot_image(data.convert2dict(), **kwargs)
         return data.convert2dict(), fig, ax
 
     return data
 
 
-def image_rms_plot(rms_amps, rms_times, chn_coords, chn_inds, avg_across_depth=False,
-                   median_subtract=True, cmap='plasma', band='AP', display=False):
+def image_rms_plot(rms_amps, rms_times, chn_coords=None, chn_inds=None, avg_across_depth=False,
+                   median_subtract=True, clim=None, cmap='plasma', band='AP', display=False, title=None, **kwargs):
     """
     Prepare data for 2D image plot of RMS data along depth of probe
 
@@ -73,13 +78,16 @@ def image_rms_plot(rms_amps, rms_times, chn_coords, chn_inds, avg_across_depth=F
     :return: ImagePlot object, if display=True also returns matplotlib fig and ax objects
     """
 
+    ylabel = 'Channel index' if chn_coords is None else 'Distance from probe tip (um)'
+    title = title or f'{band} RMS'
+    chn_inds = chn_inds or np.arange(rms_amps.shape[1])
+    y = np.arange(rms_amps.shape[1]) if chn_coords is None else chn_coords[:, 1]
+
     rms = rms_amps[:, chn_inds] * 1e6
     x = rms_times
-    y = chn_coords[:, 1]
 
     if avg_across_depth:
-        chn_depth, chn_idx, chn_count = np.unique(chn_coords[:, 1], return_index=True,
-                                                  return_counts=True)
+        chn_depth, chn_idx, chn_count = np.unique(y, return_index=True, return_counts=True)
         chn_idx_eq = np.copy(chn_idx)
         chn_idx_eq[np.where(chn_count == 2)] += 1
         rms = np.apply_along_axis(lambda a: np.mean([a[chn_idx], a[chn_idx_eq]], axis=0), 1, rms)
@@ -92,10 +100,11 @@ def image_rms_plot(rms_amps, rms_times, chn_coords, chn_inds, avg_across_depth=F
     data = ImagePlot(rms, x=x, y=y, cmap=cmap)
     data.set_labels(title=f'{band} RMS', xlabel='Time (s)',
                     ylabel='Distance from probe tip (um)', clabel=f'{band} RMS (uV)')
-    data.set_clim(clim=np.quantile(rms, [0.1, 0.9]))
+    clim = clim or np.quantile(rms, [0.1, 0.9])
+    data.set_clim(clim=clim)
 
     if display:
-        fig, ax = plot_image(data.convert2dict())
+        fig, ax = plot_image(data.convert2dict(), **kwargs)
         return data.convert2dict(), fig, ax
 
     return data
