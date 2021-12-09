@@ -29,10 +29,6 @@ class SpikeSorting(ReportSnapshotProbe):
     :param probe_id: str, UUID of the probe insertion for which to create the plot
     :param **kwargs: keyword arguments passed to tasks.Task
     """
-    signature = {
-        'input_files': [],  # see setUp method for declaration of inputs
-        'output_files': []  # see setUp method for declaration of inputs
-    }
 
     def _run(self):
         """runs for initiated PID, streams data, destripe and check bad channels"""
@@ -43,7 +39,7 @@ class SpikeSorting(ReportSnapshotProbe):
                            ('spikes.amps.npy', f'alf/{self.pname}', True),
                            ('spikes.depths.npy', f'alf/{self.pname}', True)]
         output_signature = [('spike_sorting_raster.png', f'snapshot/{self.pname}', True)]
-        self.signature = {'input_files': input_signature, 'output_file': output_signature}
+        self.signature = {'input_files': input_signature, 'output_files': output_signature}
 
 
 class BadChannelsAp(ReportSnapshotProbe):
@@ -54,24 +50,19 @@ class BadChannelsAp(ReportSnapshotProbe):
     :param probe_id: str, UUID of the probe insertion for which to create the plot
     :param **kwargs: keyword arguments passed to tasks.Task
     """
-    signature = {
-        'input_files': [],  # see setUp method for declaration of inputs
-        'output_files': []  # see setUp method for declaration of inputs
-    }
 
-    @staticmethod
-    def get_probe_signature(pname=None):
-        pname = pname if pname is not None else "probe*"
+    def get_probe_signature(self):
+        pname = self.pname
         input_signature = [('*ap.meta', f'raw_ephys_data/{pname}', True),
-                           ('*ap.ch', f'raw_ephys_data/{pname}', False),
-                           ('*ap.cbin', f'raw_ephys_data/{pname}', False)]
+                           ('*ap.ch', f'raw_ephys_data/{pname}', False)]
+                           # ('*ap.cbin', f'raw_ephys_data/{pname}', False)]
         output_signature = [('raw_ephys_bad_channels.png', f'snapshot/{pname}', True),
                             ('raw_ephys_bad_channels_highpass.png', f'snapshot/{pname}', True),
                             ('raw_ephys_bad_channels_highpass.png', f'snapshot/{pname}', True),
                             ('raw_ephys_bad_channels_destripe.png', f'snapshot/{pname}', True),
                             ('raw_ephys_bad_channels_difference.png', f'snapshot/{pname}', True),
                             ]
-        return {'input_files': input_signature, 'output_files': output_signature}
+        self.signature = {'input_files': input_signature, 'output_files': output_signature}
 
     def _run(self):
         """runs for initiated PID, streams data, destripe and check bad channels"""

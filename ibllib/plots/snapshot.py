@@ -36,6 +36,11 @@ class ReportSnapshot(tasks.Task):
 
 class ReportSnapshotProbe(ReportSnapshot):
 
+    signature = {
+        'input_files': [],  # see setUp method for declaration of inputs
+        'output_files': []  # see setUp method for declaration of inputs
+    }
+
     def __init__(self, pid, one=None, **kwargs):
         assert one
         self.one = one
@@ -43,11 +48,11 @@ class ReportSnapshotProbe(ReportSnapshot):
         self.pid = pid
         self.eid, self.pname = self.one.pid2eid(self.pid)
         self.session_path = self.one.eid2path(self.eid)
-        self.signature = self.get_probe_signature()
+        self.get_probe_signature()
         super(ReportSnapshotProbe, self).__init__(self.session_path, object_id=pid, content_type=self.content_type, **kwargs)
 
     @abc.abstractmethod
-    def get_probe_signature(pname=None):
+    def get_probe_signature(self):
         # method that gets input and output signatures from the probe name. The format is a dictionary as follows:
         # return {'input_files': input_signature, 'output_files': output_signature}
         pass
