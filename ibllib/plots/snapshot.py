@@ -35,21 +35,33 @@ class ReportSnapshot(tasks.Task):
 
 
 class ReportSnapshotProbe(ReportSnapshot):
-
     signature = {
         'input_files': [],  # see setUp method for declaration of inputs
         'output_files': []  # see setUp method for declaration of inputs
     }
 
-    def __init__(self, pid, one=None, **kwargs):
+    def __init__(self, pid, one=None, brain_regions=None, **kwargs):
+        """
+        :param pid: probe insertion UUID from Alyx
+        :param one: one instance
+        :param brain_regions: (optional) ibllib.atlas.BrainRegion object
+        :param kwargs:
+        """
         assert one
         self.one = one
+        self.brain_regions = brain_regions
         self.content_type = 'probeinsertion'
         self.pid = pid
         self.eid, self.pname = self.one.pid2eid(self.pid)
         self.session_path = self.one.eid2path(self.eid)
+        self.output_directory = self.session_path.joinpath('snapshot', self.pname)
         self.get_probe_signature()
         super(ReportSnapshotProbe, self).__init__(self.session_path, object_id=pid, content_type=self.content_type, **kwargs)
+
+    @property
+    def pid_label(self):
+        """returns a probe insertion stub to label titles, for example: 'SWC_054_2020-10-05_001_probe01'"""
+        return '_'.join(list(self.session_path.parts[-3:]) + [self.pname])
 
     @abc.abstractmethod
     def get_probe_signature(self):
