@@ -59,4 +59,4 @@ class TestModeling(unittest.TestCase):
         npy_file = Path(__file__).parent.joinpath('fixtures', 'design_matrix_test.npy')
         if npy_file.exists():
             ref_dm = np.load(npy_file)
-            self.assertEqual(self.design.dm, ref_dm)
+            self.assertTrue(np.all(self.design.dm == ref_dm))
