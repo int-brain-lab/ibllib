@@ -11,17 +11,17 @@ class TestModeling(unittest.TestCase):
     def setUp(self):
         # Params for test
         self.binwidth = 0.02
-        self.rng = np.random.default_rng(seed=112358)
 
         # Generate fake trial start, stimon, feedback, and end times
         starts = np.array([0, 1.48, 2.93, 4.67, 6.01, 7.31, 8.68, 9.99, 11.43, 12.86])
         ends = np.array([1.35, 2.09, 3.53, 5.23, 6.58, 7.95, 9.37, 11.31, 12.14, 13.26])
         stons = starts + 0.1
-        fdbks = stons + self.rng.normal(loc=0.1, scale=0.05, size=10)
+        fdbks = np.array([0.24, 1.64, 3.15, 4.81, 6.23, 7.50, 8.91, 10.16, 11.64, 13.05])
 
         # Figure out how many bins each trial is and generate non-monotonic trace of fake wheel
-        trlens = self.binf(ends - starts)
-        fakewheels = [np.cumsum(self.rng.normal(loc=0.01, scale=0.01, size=(x))) for x in trlens]
+        whlpath = Path(__file__).parent.joinpath('fixtures', 'design_wheel_traces_test.p')
+        if whlpath.exists():
+            fakewheels = np.load(whlpath, allow_pickle=True)
 
         # Store trialsdf for later use
         self.trialsdf = pd.DataFrame({'trial_start': starts,
