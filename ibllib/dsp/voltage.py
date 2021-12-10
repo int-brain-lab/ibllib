@@ -109,6 +109,37 @@ def fk(x, si=.002, dx=1, vbounds=None, btype='highpass', ntr_pad=0, ntr_tap=None
     return xf / gain
 
 
+def car(x, collection=None, lagc=300, butter_kwargs=None):
+    """
+    Applies common average referencing with optional automatic gain control
+    :param x: the input array to be filtered. dimension, the filtering is considering
+    axis=0: spatial dimension, axis=1 temporal dimension. (ntraces, ns)
+    :param collection:
+    :param lagc: window size for time domain automatic gain control (no agc otherwise)
+    :param butter_kwargs: filtering parameters: defaults: {'N': 3, 'Wn': 0.1, 'btype': 'highpass'}
+    :return:
+    """
+    if butter_kwargs is None:
+        butter_kwargs = {'N': 3, 'Wn': 0.1, 'btype': 'highpass'}
+    if collection is not None:
+        xout = np.zeros_like(x)
+        for c in np.unique(collection):
+            sel = collection == c
+            xout[sel, :] = kfilt(x=x[sel, :], ntr_pad=0, ntr_tap=None, collection=None,
+                                 butter_kwargs=butter_kwargs)
+        return xout
+
+    # apply agc and keep the gain in handy
+    if not lagc:
+        xf = np.copy(x)
+        gain = 1
+    else:
+        xf, gain = agc(x, wl=lagc, si=1.0)
+    # apply CAR and then un-apply the gain
+    xf = xf - np.median(xf, axis=0)
+    return xf / gain
+
+
 def kfilt(x, collection=None, ntr_pad=0, ntr_tap=None, lagc=300, butter_kwargs=None):
     """
     Applies a butterworth filter on the 0-axis with tapering / padding
@@ -209,6 +240,7 @@ def destripe(x, fs, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, cha
        True: deduces the bad channels from the data provided
     :param butter_kwargs: (optional, None) butterworth params, see the code for the defaults dict
     :param k_kwargs: (optional, None) K-filter params, see the code for the defaults dict
+        can also be set to 'car', in which case the median accross channels will be subtracted
     :return: x, filtered array
     """
     if butter_kwargs is None:
@@ -216,6 +248,11 @@ def destripe(x, fs, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, cha
     if k_kwargs is None:
         k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
                     'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
+        spatial_fcn = lambda dat: kfilt(dat, **k_kwargs)  # noqa
+    elif isinstance(k_kwargs, dict):
+        spatial_fcn = lambda dat: kfilt(dat, **k_kwargs)  # noqa
+    else:
+        spatial_fcn = lambda dat: car(dat, lagc=int(0.1 * fs))  # noqa
     h = neuropixel.trace_header(version=neuropixel_version)
     if channel_labels is True:
         channel_labels, _ = detect_bad_channels(x, fs)
@@ -231,9 +268,9 @@ def destripe(x, fs, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, cha
     if channel_labels is not None:
         x = interpolate_bad_channels(x, channel_labels, h)
         inside_brain = np.where(channel_labels != 3)[0]
-        x[inside_brain, :] = kfilt(x[inside_brain, :], **k_kwargs)  # apply the k-filter
+        x[inside_brain, :] = spatial_fcn(x[inside_brain, :])  # apply the k-filter
     else:
-        x = kfilt(x, **k_kwargs)
+        x = spatial_fcn(x)
     return x
 
 
@@ -245,7 +282,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     Production version with optimized FFTs - requires pyfftw
     :param sr: seismic reader object (spikeglx.Reader)
     :param output_file: (optional, defaults to .bin extension of the compressed bin file)
-    :param h: (optional)
+    :param h: (optional) neuropixel trace header. Dictionary with key 'sample_shift'
     :param wrot: (optional) whitening matrix [nc x nc] or amplitude scalar to apply to the output
     :param append: (optional, False) for chronic recordings, append to end of file
     :param nc_out: (optional, True) saves non selected channels (synchronisation trace) in output
@@ -273,7 +310,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
                 'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
     h = neuropixel.trace_header(version=1) if h is None else h
-    ncv = h['x'].size  # number of channels
+    ncv = h['sample_shift'].size  # number of channels
     output_file = sr.file_bin.with_suffix('.bin') if output_file is None else output_file
     assert output_file != sr.file_bin
     taper = np.r_[0, scipy.signal.windows.cosine((SAMPLES_TAPER - 1) * 2), 0]
@@ -504,7 +541,7 @@ def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshol
     xcor = channels_similarity(raw)
     fscale, psd = scipy.signal.welch(raw * 1e6, fs=fs)  # units; uV ** 2 / Hz
 
-    sos_hp = scipy.signal.butter(**{'N': 3, 'Wn': 1000 / fs / 2, 'btype': 'highpass'}, output='sos')
+    sos_hp = scipy.signal.butter(**{'N': 3, 'Wn': 300 / fs * 2, 'btype': 'highpass'}, output='sos')
     hf = scipy.signal.sosfiltfilt(sos_hp, raw)
     xcorf = channels_similarity(hf)
 
@@ -513,7 +550,7 @@ def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshol
         'rms_raw': rms(raw),  # very similar to the rms avfter butterworth filter
         'xcor_hf': detrend(xcor, 11),
         'xcor_lf': xcorf - detrend(xcorf, 11) - 1,
-        'psd_hf': np.mean(psd[:, fscale > 12000], axis=-1),
+        'psd_hf': np.mean(psd[:, fscale > (fs / 2 * 0.8)], axis=-1),  # 80% nyquists
     })
 
     # make recommendation
