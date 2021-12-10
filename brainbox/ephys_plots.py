@@ -55,7 +55,7 @@ def image_lfp_spectrum_plot(lfp_power, lfp_freq, chn_coords=None, chn_inds=None,
     data.set_clim(clim=clim)
 
     if display:
-        fig, ax = plot_image(data.convert2dict(), **kwargs)
+        ax, fig = plot_image(data.convert2dict(), **kwargs)
         return data.convert2dict(), fig, ax
 
     return data
@@ -83,7 +83,8 @@ def image_rms_plot(rms_amps, rms_times, chn_coords=None, chn_inds=None, avg_acro
     chn_inds = chn_inds or np.arange(rms_amps.shape[1])
     y = np.arange(rms_amps.shape[1]) if chn_coords is None else chn_coords[:, 1]
 
-    rms = rms_amps[:, chn_inds] * 1e6
+    rms = rms_amps[:, chn_inds]
+    rms = 10 * np.log10(rms)
     x = rms_times
 
     if avg_across_depth:
@@ -98,13 +99,12 @@ def image_rms_plot(rms_amps, rms_times, chn_coords=None, chn_inds=None, avg_acro
         rms = np.apply_along_axis(lambda a: a - np.median(a), 1, rms) + median
 
     data = ImagePlot(rms, x=x, y=y, cmap=cmap)
-    data.set_labels(title=f'{band} RMS', xlabel='Time (s)',
-                    ylabel='Distance from probe tip (um)', clabel=f'{band} RMS (uV)')
+    data.set_labels(title=title, xlabel='Time (s)', ylabel=ylabel, clabel=f'{band} RMS (dB)')
     clim = clim or np.quantile(rms, [0.1, 0.9])
     data.set_clim(clim=clim)
 
     if display:
-        fig, ax = plot_image(data.convert2dict(), **kwargs)
+        ax, fig = plot_image(data.convert2dict(), **kwargs)
         return data.convert2dict(), fig, ax
 
     return data
@@ -155,7 +155,7 @@ def scatter_raster_plot(spike_amps, spike_depths, spike_times, n_amp_bins=10, cm
                     ylabel='Distance from probe tip (um)', clabel='Spike amplitude (uV)')
 
     if display:
-        fig, ax = plot_scatter(data.convert2dict())
+        ax, fig = plot_scatter(data.convert2dict())
         return data.convert2dict(), fig, ax
 
     return data
@@ -185,7 +185,7 @@ def image_fr_plot(spike_depths, spike_times, chn_coords, t_bin=0.05, d_bin=5, cm
                     ylabel='Distance from probe tip (um)', clabel='Firing Rate (Hz)')
     data.set_clim(clim=(np.min(np.mean(fr, axis=0)), np.max(np.mean(fr, axis=0))))
     if display:
-        fig, ax = plot_image(data.convert2dict())
+        ax, fig = plot_image(data.convert2dict())
         return data.convert2dict(), fig, ax
 
     return data
@@ -216,7 +216,7 @@ def image_crosscorr_plot(spike_depths, spike_times, chn_coords, t_bin=0.05, d_bi
                     ylabel='Distance from probe tip (um)', clabel='Correlation')
 
     if display:
-        fig, ax = plot_image(data.convert2dict())
+        ax, fig = plot_image(data.convert2dict())
         return data.convert2dict(), fig, ax
 
     return data
@@ -246,7 +246,7 @@ def scatter_amp_depth_fr_plot(spike_amps, spike_clusters, spike_depths, spike_ti
     data.set_xlim((0.9 * np.min(cluster_amp), 1.1 * np.max(cluster_amp)))
 
     if display:
-        fig, ax = plot_scatter(data.convert2dict())
+        ax, fig = plot_scatter(data.convert2dict())
         return data.convert2dict(), fig, ax
 
     return data
@@ -284,7 +284,7 @@ def probe_lfp_spectrum_plot(lfp_power, lfp_freq, chn_coords, chn_inds, freq_rang
     data.set_clim(clim)
 
     if display:
-        fig, ax = plot_probe(data.convert2dict())
+        ax, fig = plot_probe(data.convert2dict())
         return data.convert2dict(), fig, ax
 
     return data
@@ -318,7 +318,7 @@ def probe_rms_plot(rms_amps, chn_coords, chn_inds, cmap='plasma', band='AP',
     data.set_clim(clim)
 
     if display:
-        fig, ax = plot_probe(data.convert2dict())
+        ax, fig = plot_probe(data.convert2dict())
         return data.convert2dict(), fig, ax
 
     return data
@@ -346,7 +346,7 @@ def line_fr_plot(spike_depths, spike_times, chn_coords, d_bin=10, display=False)
                     ylabel='Distance from probe tip (um)')
 
     if display:
-        fig, ax = plot_line(data.convert2dict())
+        ax, fig = plot_line(data.convert2dict())
         return data.convert2dict(), fig, ax
 
     return data
@@ -379,7 +379,7 @@ def line_amp_plot(spike_amps, spike_depths, spike_times, chn_coords, d_bin=10, d
     data.set_labels(title='Avg Amplitude', xlabel='Amplitude (uV)',
                     ylabel='Distance from probe tip (um)')
     if display:
-        fig, ax = plot_line(data.convert2dict())
+        ax, fig = plot_line(data.convert2dict())
         return data.convert2dict(), fig, ax
     return data
 
@@ -477,7 +477,7 @@ def plot_cdf(spike_amps, spike_depths, spike_times, n_amp_bins=10, d_bin=40, amp
                     ylabel='Distance from probe tip (um)', clabel='Firing Rate (Hz)')
 
     if display:
-        fig, ax = plot_image(data.convert2dict(), fig_kwargs={'figsize': [3, 7]}, ax=ax)
+        ax, fig = plot_image(data.convert2dict(), fig_kwargs={'figsize': [3, 7]}, ax=ax)
         return data.convert2dict(), fig, ax
 
     return data
