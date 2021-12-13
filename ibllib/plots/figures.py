@@ -297,6 +297,11 @@ def dlc_qc_plot(eid, one=None):
             else:
                 logger.warning(f"Could not load _ibl_{cam}Camera.{feat} some DLC QC plots have to be skipped.")
                 data[f'{cam}_{feat}'] = None
+            # Sometimes there is a file but the object is empty
+            if len(data[f'{cam}_{feat}']) == 0:
+                logger.warning(f"Object loaded from _ibl_{cam}Camera.{feat} is empty, some plots have to be skipped.")
+                data[f'{cam}_{feat}'] = None
+                
     # Session data
     for alf_object in ['trials', 'wheel', 'licks']:
         try:
@@ -349,7 +354,7 @@ def dlc_qc_plot(eid, one=None):
         ax = plt.subplot(2, 5, i + 1)
         ax.text(-0.1, 1.15, ascii_uppercase[i], transform=ax.transAxes, fontsize=16, fontweight='bold')
         # Check if any of the inputs is None
-        if any([v is None for v in panel[1].values()]):
+        if any([v is None for v in panel[1].values()]) or any([v.values() is None for v in panel[1].values() if isinstance(v, dict)]):
             ax.text(.5, .5, f"Data incomplete\n{panel[0].__name__}", color='r', fontweight='bold',
                     fontsize=12, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
             plt.axis('off')
