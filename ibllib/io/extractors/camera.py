@@ -553,7 +553,7 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
         downs = ts[high2low] - ts[high2low][0]
         offsets = audio_times[1::2] - audio_times[1]
         assigned = attribute_times(offsets, downs, tol=tolerance, take=take)
-        unassigned = np.setdiff1d(np.arange(onsets.size), assigned[assigned > -1])
+        unassigned = np.setdiff1d(np.arange(offsets.size), assigned[assigned > -1])
         if unassigned.size > 0:
             _logger.debug(f'{unassigned.size} audio TTL falls were not detected by the camera')
         # Check that all pin state downticks could be attributed to an offset TTL
