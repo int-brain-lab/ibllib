@@ -480,7 +480,7 @@ def rcoeff(x, y):
     return rcor
 
 
-def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshold=0.02):
+def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshold=None):
     """
     Bad channels detection for Neuropixel probes
     Labels channels
@@ -544,7 +544,9 @@ def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshol
     raw = raw - np.mean(raw, axis=-1)[:, np.newaxis]  # removes DC offset
     xcor = channels_similarity(raw)
     fscale, psd = scipy.signal.welch(raw * 1e6, fs=fs)  # units; uV ** 2 / Hz
-
+    if psd_hf_threshold is None:
+        # the LFP band data is obviously much stronger so auto-adjust the default threshold
+        psd_hf_threshold = 1.4 if fs < 5000 else 0.02
     sos_hp = scipy.signal.butter(**{'N': 3, 'Wn': 300 / fs * 2, 'btype': 'highpass'}, output='sos')
     hf = scipy.signal.sosfiltfilt(sos_hp, raw)
     xcorf = channels_similarity(hf)
