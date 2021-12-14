@@ -4,7 +4,7 @@ Set of functions to handle wheel data
 import numpy as np
 from numpy import pi
 import scipy.interpolate as interpolate
-from scipy.signal import convolve, gaussian
+from scipy.signal import convolve, windows
 from scipy.linalg import hankel
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
@@ -114,7 +114,7 @@ def velocity_smoothed(pos, freq, smooth_size=0.03):
     std_samps = np.round(smooth_size * freq)  # Standard deviation relative to sampling frequency
     N = std_samps * 6  # Number of points in the Gaussian covering +/-3 standard deviations
     gauss_std = (N - 1) / 6
-    win = gaussian(N, gauss_std)
+    win = windows.gaussian(N, gauss_std)
     win = win / win.sum()  # Normalize amplitude
 
     # Convolve and multiply by sampling frequency to restore original units
@@ -274,7 +274,7 @@ def movements(t, pos, freq=1000, pos_thresh=8, t_thresh=.2, min_gap=.1, pos_thre
     peak_amps = np.fromiter(peaks, dtype=float, count=onsets.size)
     N = 10  # Number of points in the Gaussian
     STDEV = 1.8  # Equivalent to a width factor (alpha value) of 2.5
-    gauss = gaussian(N, STDEV)  # A 10-point Gaussian window of a given s.d.
+    gauss = windows.gaussian(N, STDEV)  # A 10-point Gaussian window of a given s.d.
     vel = convolve(np.diff(np.insert(pos, 0, 0)), gauss, mode='same')
     # For each movement period, find the timestamp where the absolute velocity was greatest
     peaks = (t[m + np.abs(vel[m:n]).argmax()] for m, n in zip(onset_samps, offset_samps))
