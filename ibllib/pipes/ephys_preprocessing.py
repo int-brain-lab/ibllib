@@ -1045,5 +1045,6 @@ class EphysExtractionPipeline(tasks.Pipeline):
         tasks["EphysCellsQc"] = EphysCellsQc(self.session_path, parents=[tasks["SpikeSorting"]])
         tasks["EphysDLC"] = EphysDLC(self.session_path, parents=[tasks["EphysVideoCompress"]])
         # level 3
-        tasks["EphysPostDLC"] = EphysPostDLC(self.session_path, parents=[tasks["EphysDLC"]])
+        tasks["EphysPostDLC"] = EphysPostDLC(self.session_path, parents=[tasks["EphysDLC"], tasks["EphysTrials"],
+                                                                         tasks["EphysVideoSyncQc"]])
         self.tasks = tasks
