@@ -34,31 +34,40 @@ class SpikeSorting(ReportSnapshotProbe):
     :param **kwargs: keyword arguments passed to tasks.Task
     """
 
-    def _run(self):
+    def _run(self, collection=None):
         """runs for initiated PID, streams data, destripe and check bad channels"""
         all_here, output_files = self.assert_expected(self.output_files, silent=True)
-        if all_here:
+        spike_sorting_runs = self.one.list_datasets(self.eid, filename='spikes.times.npy', collection=f'alf/{self.pname}*')
+        if all_here and len(output_files) == len(spike_sorting_runs):
             return output_files
-        spikes, clusters, channels = load_spike_sorting_fast(
-            eid=self.eid, probe=self.pname, one=self.one, nested=False,
-            dataset_types=['spikes.depths'], brain_regions=self.brain_regions)
-        fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, sharey=True, figsize=(16, 9))
-        driftmap(spikes.times, spikes.depths, t_bin=0.007, d_bin=10, vmax=0.5, ax=axs[0])
-        if 'atlas_id' in channels.keys():
-            plot_brain_regions(channels['atlas_id'], channel_depths=channels['axial_um'],
-                               brain_regions=None, display=True, ax=axs[1])
-        title_str = f"{self.pid_label}, {self.pid}, {spikes.clusters.size:_} spikes, {clusters.depths.size:_} clusters"
-        axs[0].set(ylim=[0, 3800], title=title_str)
-        output_files = [self.output_directory.joinpath("spike_sorting_raster.png")]
-        fig.savefig(output_files[0])
-        plt.close(fig)
+        logger.info(self.output_directory)
+        output_files = []
+        for run in spike_sorting_runs:
+            collection = str(Path(run).parent)
+            spikes, clusters, channels = load_spike_sorting_fast(
+                eid=self.eid, probe=self.pname, one=self.one, nested=False, collection=collection,
+                dataset_types=['spikes.depths'], brain_regions=self.brain_regions)
+
+            fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, sharey=True, figsize=(16, 9))
+            driftmap(spikes.times, spikes.depths, t_bin=0.007, d_bin=10, vmax=0.5, ax=axs[0])
+            if 'atlas_id' in channels.keys():
+                plot_brain_regions(channels['atlas_id'], channel_depths=channels['axial_um'],
+                                   brain_regions=None, display=True, ax=axs[1])
+            title_str = f"{self.pid_label}, {collection}, {self.pid} \n {spikes.clusters.size:_} spikes, {clusters.depths.size:_} clusters"
+            logger.info(title_str.replace("\n", ""))
+            axs[0].set(ylim=[0, 3800], title=title_str)
+            run_label = str(Path(collection).relative_to(f'alf/{self.pname}'))
+            run_label = "" if run_label == '.' else run_label
+            output_files.append(self.output_directory.joinpath(f"spike_sorting_raster_{run_label}.png"))
+            fig.savefig(output_files[-1])
+            plt.close(fig)
         return output_files
 
     def get_probe_signature(self):
         input_signature = [('spikes.times.npy', f'alf/{self.pname}', True),
                            ('spikes.amps.npy', f'alf/{self.pname}', True),
                            ('spikes.depths.npy', f'alf/{self.pname}', True)]
-        output_signature = [('spike_sorting_raster.png', f'snapshot/{self.pname}', True)]
+        output_signature = [('spike_sorting_raster*.png', f'snapshot/{self.pname}', True)]
         self.signature = {'input_files': input_signature, 'output_files': output_signature}
 
 
