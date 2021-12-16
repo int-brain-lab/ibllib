@@ -53,7 +53,8 @@ class SpikeSorting(ReportSnapshotProbe):
             if 'atlas_id' in channels.keys():
                 plot_brain_regions(channels['atlas_id'], channel_depths=channels['axial_um'],
                                    brain_regions=None, display=True, ax=axs[1])
-            title_str = f"{self.pid_label}, {collection}, {self.pid} \n {spikes.clusters.size:_} spikes, {clusters.depths.size:_} clusters"
+            title_str = f"{self.pid_label}, {collection}, {self.pid} \n " \
+                        f"{spikes.clusters.size:_} spikes, {clusters.depths.size:_} clusters"
             logger.info(title_str.replace("\n", ""))
             axs[0].set(ylim=[0, 3800], title=title_str)
             run_label = str(Path(collection).relative_to(f'alf/{self.pname}'))
