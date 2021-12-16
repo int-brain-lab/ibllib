@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import logging
 import matplotlib.pyplot as plt
 from pathlib import Path, PurePosixPath
-
+from functools import lru_cache
 import numpy as np
 import nrrd
 
@@ -710,6 +710,7 @@ class Insertion:
         return Insertion._get_surface_intersection(traj, brain_atlas, surface='top')
 
 
+@lru_cache(maxsize=1)
 class AllenAtlas(BrainAtlas):
     """
     Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution

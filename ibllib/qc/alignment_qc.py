@@ -307,7 +307,8 @@ class AlignmentQC(base.QC):
             if alignment_key != self.align_keys_sorted[0]:
                 histology.register_aligned_track(self.eid, channels_mlapdv / 1e6,
                                                  chn_coords=chns, one=self.one,
-                                                 overwrite=True, channels=self.channels_flag)
+                                                 overwrite=True, channels=self.channels_flag,
+                                                 brain_atlas=self.brain_atlas)
 
                 ephys_traj = self.one.alyx.get(f'/trajectories?&probe_insertion={self.eid}'
                                                '&provenance=Ephys aligned histology track',

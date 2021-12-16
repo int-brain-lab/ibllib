@@ -56,7 +56,7 @@ class TestTracingQc(unittest.TestCase):
 
     def test_tracing_exists(self):
         register_track(self.probe00_id, picks=self.xyz_picks, one=one, overwrite=True,
-                       channels=False)
+                       channels=False, brain_atlas=brain_atlas)
         insertion = one.alyx.get('/insertions/' + self.probe00_id, clobber=True)
 
         assert (insertion['json']['qc'] == 'NOT_SET')
@@ -64,7 +64,7 @@ class TestTracingQc(unittest.TestCase):
 
     def test_tracing_not_exists(self):
         register_track(self.probe01_id, picks=None, one=one, overwrite=True,
-                       channels=False)
+                       channels=False, brain_atlas=brain_atlas)
         insertion = one.alyx.get('/insertions/' + self.probe01_id, clobber=True)
         assert (insertion['json']['qc'] == 'CRITICAL')
         assert (insertion['json']['extended_qc']['tracing_exists'] == 0)
