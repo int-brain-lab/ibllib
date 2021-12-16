@@ -1,6 +1,7 @@
 import logging
 
 import numpy as np
+from pathlib import Path
 
 from ibllib.atlas import AllenAtlas
 from ibllib.pipes import histology
@@ -387,3 +388,32 @@ class AlignmentQC(base.QC):
         else:
             self.log.warning(f'No experimenter qc found, qc field of probe insertion {self.eid} '
                              f'will not be updated')
+
+
+def get_aligned_channels(ins, chn_coords, one, ba=None, save_dir=None):
+
+    ba = ba or AllenAtlas(25)
+    depths = chn_coords[:, 1]
+    xyz = np.array(ins['json']['xyz_picks']) / 1e6
+    traj = one.alyx.rest('trajectories', 'list', probe_insertion=ins['id'],
+                         provenance='Ephys aligned histology track')[0]
+    align_key = ins['json']['extended_qc']['alignment_stored']
+    feature = traj['json'][align_key][0]
+    track = traj['json'][align_key][1]
+    ephysalign = EphysAlignment(xyz, depths, track_prev=track,
+                                feature_prev=feature,
+                                brain_atlas=ba, speedy=True)
+    channels_mlapdv = np.int32(ephysalign.get_channel_locations(feature, track) * 1e6)
+    channels_atlas_ids = ephysalign.get_brain_locations(channels_mlapdv / 1e6)['id']
+
+    out_files = []
+    if save_dir is not None:
+        f_name = Path(save_dir).joinpath('channels.mlapdv.npy')
+        np.save(f_name, channels_mlapdv)
+        out_files.append(f_name)
+
+        f_name = Path(save_dir).joinpath('channels.brainLocationIds_ccf_2017.npy')
+        np.save(f_name, channels_atlas_ids)
+        out_files.append(f_name)
+
+    return out_files
