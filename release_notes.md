@@ -1,37 +1,49 @@
-## Release Notes 2.6 
+## Release Notes 2.6
+
 ### Release Notes 2.6.0 2021-12-08
+
 - New ReportSnapshot class
 - DLC QC plots, as part of EphysPostDLC task
 - BadChannelsAP plots for ephys QC
 - Fix typo in camera extractor
 
 ## Release Notes 2.5
+
 ### Release Notes 2.5.1 2021-11-25
+
 - SpikeSorting task overwrites old tar file on rerun
+
 ### Release Notes 2.5.0 2021-11-24
+
 - Snapshot class to register images as notes in Alyx
 - Ephys pipeline: RawEphysQC: outputs channels labels as part of pipeline
 - Ephys pipeline: spike sorting
-    - dsp.voltage: destripe detects bad channels and interpolate them
-    - synchronisation 3B: gives a 10% leeway to throw exception
-    - spikes sorting task outputs the RMS plot
+  - dsp.voltage: destripe detects bad channels and interpolate them
+  - synchronisation 3B: gives a 10% leeway to throw exception
+  - spikes sorting task outputs the RMS plot
 
 ## Release Notes 2.4
+
 ### Release Notes 2.4.0
+
 - Setting tasks to Waiting if they encountered lock (status -2)
 - Setting tasks to Incomplete if they return status -3
 - Completed tasks set held dependent tasks to waiting
 - Adding PostDLC task to compute pupil diameters, licks and DLC QC
 
 ## Release Notes 2.3
+
 ### Release Notes 2.3.2 2021-11-08
+
 - Trial wheel extraction: use alternative sync method when first on fails
 - bugfix: timer for tasks was returning None
 
 ### Release Notes 2.3.1 2021-11-5
+
 - Add setup method in tasks.py into try except to catch globus download errors
 
 ### Release Notes 2.3.0 2021-11-4
+
 - Add input and output signatures to all ephys tasks
 - Add datahandler to task to download and upload data based on location where task is run
 - Spike sorting and EphysVideoSyncQc download data on local servers if not available
@@ -39,12 +51,14 @@
 - creates sequence files for spikesorting
 - GPU tasks have a lock - local data handler doesn't instantiate one
 
-
 ## Release Notes 2.2
+
 ### Release Notes 2.2.1 2021-11-02
+
 - allows more than 2 probes in ephys computer probe creation
 
 ### Release Notes 2.2.0 2021-10-29
+
 - brainbox.io.one load_spike_sorting fast: merge channel info in clusters
 - brainbox.io.one generic function to interpolate channels after alignment
 - dsp: spike detection by voltage thresholding and cadzow filtering docs
@@ -53,35 +67,57 @@
 - ibllib.atlas.regions: add new mapping cosmos and revise Beryl
 
 ## Release Notes 2.1
+
 ### Release Notes 2.1.0 2021-10-05
-- destriping as pykilosort internal pre-processing 
+
+- destriping as pykilosort internal pre-processing
 - NP2 probe framework for splitting shanks and LFP band
 - Extension of task module to rerun from different locations
+
 ### Release Notes 2.1.1 2021-10-06
-- RawEphysQC tasks computes median RMS from samples for .ap data (stored in _iblqc_ephysChannels.RMS)
+
+- RawEphysQC tasks computes median RMS from samples for .ap data (stored in \_iblqc_ephysChannels.RMS)
 - New EphysQC class
+
 ### Release Notes 2.1.2 2021-10-14
+
 - Fix issue with RawEphysQC that was not looking in local Subjects folder for data
 - Fix ensure_required_data in DlcQc
+
 ### Release Notes 2.1.3 2021-10-19
+
 - Split jobs.py run function in two, one running large tasks (video compression, dlc, spike sorting), one the rest
 - Ensure RawEphysQC runs both probes if one fails
 
 ## Release Notes 2.0
+
 ### Release Notes 2.0.1 2021-08-07
+
 - pykilosort error handling
+
 ### Release Notes 2.0.2 2021-08-31
+
 - passive extraction robust to frame2ttl flickers
+
 ### Release Notes 2.0.3 2021-09-03
+
 - pykilosort bugfix after low yield results
+
 ### Release Notes 2.0.4 2021-09-10
+
 - ephys trials extraction when audio FPGA starts on up state
+
 ### Release Notes 2.0.5 2021-09-13
+
 - pykilosort pipeline: output correct version number / fix log file name
+
 ### Release Notes 2.0.6 2021-09-14
+
 - extraction fixes: passive extraction spacers and camera times format
 - small bugfix for the sequential selection
+
 ### Release Notes 2.0.7 2021-09-15
+
 - ephys trials extraction: audio from FPGA: up-state and TTLs cleanup from camera wiring
 - passive extraction: improved spacers detection
 - ephyscellsqc: bugfix on probe creation for pykilosort subfolder
